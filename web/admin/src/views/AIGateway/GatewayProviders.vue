@@ -4,12 +4,11 @@ import { ElMessage } from 'element-plus'
 import { Edit, Plus, Refresh, Switch } from '@element-plus/icons-vue'
 import {
   checkProviderEndpointHealth,
-  centsToYuan,
   createProviderModelPrice,
   createProvider,
   createProviderEndpoint,
+  formatCredits,
   formatTimestamp,
-  formatYuan,
   listProviderModelPrices,
   listProviderEndpoints,
   listProviders,
@@ -21,8 +20,7 @@ import {
   updateProviderEndpointStatus,
   updateProviderModelPrice,
   updateProviderModelPriceStatus,
-  updateProviderStatus,
-  yuanToCents
+  updateProviderStatus
 } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
@@ -69,6 +67,7 @@ const priceForm = reactive({
   request_cost: 0,
   image_cost: 0,
   video_cost_per_second: 0,
+  effective_from: '',
   status: 'active'
 })
 
@@ -104,6 +103,7 @@ const resetPriceForm = () => {
     request_cost: 0,
     image_cost: 0,
     video_cost_per_second: 0,
+    effective_from: String(nowTimestamp()),
     status: 'active'
   })
 }
@@ -167,11 +167,12 @@ const applyPriceForm = (row) => {
     upstream_model: row.upstream_model,
     capability_type: row.capability_type,
     currency: row.currency,
-    input_cost_per_1m: centsToYuan(row.input_cost_per_1m),
-    output_cost_per_1m: centsToYuan(row.output_cost_per_1m),
-    request_cost: centsToYuan(row.request_cost),
-    image_cost: centsToYuan(row.image_cost),
-    video_cost_per_second: centsToYuan(row.video_cost_per_second),
+    input_cost_per_1m: row.input_cost_per_1m,
+    output_cost_per_1m: row.output_cost_per_1m,
+    request_cost: row.request_cost,
+    image_cost: row.image_cost,
+    video_cost_per_second: row.video_cost_per_second,
+    effective_from: row.effective_from ? String(row.effective_from) : String(nowTimestamp()),
     status: row.status
   })
 }
@@ -301,13 +302,8 @@ const submitEndpoint = async () => {
 const submitProviderPrice = async () => {
   const payload = {
     ...priceForm,
-    input_cost_per_1m: yuanToCents(priceForm.input_cost_per_1m),
-    output_cost_per_1m: yuanToCents(priceForm.output_cost_per_1m),
-    request_cost: yuanToCents(priceForm.request_cost),
-    image_cost: yuanToCents(priceForm.image_cost),
-    video_cost_per_second: yuanToCents(priceForm.video_cost_per_second),
     endpoint_id: priceForm.endpoint_id || '',
-    effective_from: nowTimestamp()
+    effective_from: priceForm.effective_from ? Number(priceForm.effective_from) : nowTimestamp()
   }
   if (editingPriceId.value) {
     await updateProviderModelPrice(selectedProviderId.value, editingPriceId.value, payload)
@@ -451,20 +447,20 @@ onMounted(fetchProviders)
         <el-table-column prop="upstream_model" label="上游模型" min-width="160" />
         <el-table-column prop="capability_type" label="能力" width="90" />
         <el-table-column prop="endpoint_id" label="接入点" min-width="220" show-overflow-tooltip />
-        <el-table-column label="输入/1M(元)" width="130" align="right">
-          <template #default="{ row }">{{ formatYuan(row.input_cost_per_1m) }}</template>
+        <el-table-column label="输入/1M(积分)" width="150" align="right">
+          <template #default="{ row }">{{ formatCredits(row.input_cost_per_1m) }}</template>
         </el-table-column>
-        <el-table-column label="输出/1M(元)" width="130" align="right">
-          <template #default="{ row }">{{ formatYuan(row.output_cost_per_1m) }}</template>
+        <el-table-column label="输出/1M(积分)" width="150" align="right">
+          <template #default="{ row }">{{ formatCredits(row.output_cost_per_1m) }}</template>
         </el-table-column>
-        <el-table-column label="请求(元)" width="100" align="right">
-          <template #default="{ row }">{{ formatYuan(row.request_cost) }}</template>
+        <el-table-column label="请求(积分)" width="120" align="right">
+          <template #default="{ row }">{{ formatCredits(row.request_cost) }}</template>
         </el-table-column>
-        <el-table-column label="单图(元)" width="100" align="right">
-          <template #default="{ row }">{{ formatYuan(row.image_cost) }}</template>
+        <el-table-column label="单图(积分)" width="120" align="right">
+          <template #default="{ row }">{{ formatCredits(row.image_cost) }}</template>
         </el-table-column>
-        <el-table-column label="视频/秒(元)" width="120" align="right">
-          <template #default="{ row }">{{ formatYuan(row.video_cost_per_second) }}</template>
+        <el-table-column label="视频/秒(积分)" width="140" align="right">
+          <template #default="{ row }">{{ formatCredits(row.video_cost_per_second) }}</template>
         </el-table-column>
         <el-table-column label="生效时间" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ formatTimestamp(row.effective_from) }}</template>
@@ -540,7 +536,7 @@ onMounted(fetchProviders)
             <el-input v-model="endpointForm.custom_path" placeholder="/chat/completions" />
           </el-form-item>
           <el-form-item label="权重">
-            <el-input-number v-model="endpointForm.weight" :min="0" class="w-full" />
+            <el-input-number v-model="endpointForm.weight" :min="0" :precision="0" class="w-full" />
           </el-form-item>
           <el-form-item label="超时">
             <el-input-number v-model="endpointForm.timeout_ms" :min="1000" class="w-full" />
@@ -566,22 +562,31 @@ onMounted(fetchProviders)
           </el-form-item>
         </div>
         <div class="grid grid-cols-3 gap-4">
-          <el-form-item label="输入成本/1M(元)">
-            <el-input-number v-model="priceForm.input_cost_per_1m" :min="0" class="w-full" />
+          <el-form-item label="输入成本/1M(积分)">
+            <el-input-number v-model="priceForm.input_cost_per_1m" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="输出成本/1M(元)">
-            <el-input-number v-model="priceForm.output_cost_per_1m" :min="0" class="w-full" />
+          <el-form-item label="输出成本/1M(积分)">
+            <el-input-number v-model="priceForm.output_cost_per_1m" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="请求成本(元)">
-            <el-input-number v-model="priceForm.request_cost" :min="0" class="w-full" />
+          <el-form-item label="请求成本(积分)">
+            <el-input-number v-model="priceForm.request_cost" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="单图成本(元)">
-            <el-input-number v-model="priceForm.image_cost" :min="0" class="w-full" />
+          <el-form-item label="单图成本(积分)">
+            <el-input-number v-model="priceForm.image_cost" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="视频每秒成本(元)">
-            <el-input-number v-model="priceForm.video_cost_per_second" :min="0" class="w-full" />
+          <el-form-item label="视频每秒成本(积分)">
+            <el-input-number v-model="priceForm.video_cost_per_second" :min="0" :precision="0" class="w-full" />
           </el-form-item>
         </div>
+        <el-form-item label="生效时间">
+          <el-date-picker
+            v-model="priceForm.effective_from"
+            type="datetime"
+            value-format="x"
+            clearable
+            class="w-full"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="priceDialogVisible = false">取消</el-button>

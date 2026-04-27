@@ -222,19 +222,8 @@ export function formatTimestamp(value) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
-export function centsToYuan(value) {
-  return Number(((Number(value) || 0) / 100).toFixed(2))
-}
-
-export function yuanToCents(value) {
-  return Math.round((Number(value) || 0) * 100)
-}
-
-export function formatYuan(value) {
-  return centsToYuan(value).toLocaleString('zh-CN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  })
+export function formatCredits(value) {
+  return (Number(value) || 0).toLocaleString('zh-CN')
 }
 
 export function listUsageLogs(params) {

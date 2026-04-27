@@ -7,9 +7,8 @@ import {
   createModel,
   createModelDeployment,
   createModelPrice,
-  centsToYuan,
+  formatCredits,
   formatTimestamp,
-  formatYuan,
   listModelDeployments,
   listModelPrices,
   listModels,
@@ -23,8 +22,7 @@ import {
   updateModelDeploymentStatus,
   updateModelPrice,
   updateModelPriceStatus,
-  updateModelStatus,
-  yuanToCents
+  updateModelStatus
 } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
@@ -73,6 +71,7 @@ const priceForm = reactive({
   tenant_input_price_per_1m: 0,
   tenant_output_price_per_1m: 0,
   tenant_image_price: 0,
+  effective_from: '',
   status: 'active'
 })
 
@@ -105,6 +104,7 @@ const resetPriceForm = () => {
     tenant_input_price_per_1m: 0,
     tenant_output_price_per_1m: 0,
     tenant_image_price: 0,
+    effective_from: String(nowTimestamp()),
     status: 'active'
   })
 }
@@ -169,12 +169,13 @@ const applyDeploymentForm = (row) => {
 const applyPriceForm = (row) => {
   editingPriceId.value = row.id
   Object.assign(priceForm, {
-    platform_input_price_per_1m: centsToYuan(row.platform_input_price_per_1m),
-    platform_output_price_per_1m: centsToYuan(row.platform_output_price_per_1m),
-    platform_image_price: centsToYuan(row.platform_image_price),
-    tenant_input_price_per_1m: centsToYuan(row.tenant_input_price_per_1m),
-    tenant_output_price_per_1m: centsToYuan(row.tenant_output_price_per_1m),
-    tenant_image_price: centsToYuan(row.tenant_image_price),
+    platform_input_price_per_1m: row.platform_input_price_per_1m,
+    platform_output_price_per_1m: row.platform_output_price_per_1m,
+    platform_image_price: row.platform_image_price,
+    tenant_input_price_per_1m: row.tenant_input_price_per_1m,
+    tenant_output_price_per_1m: row.tenant_output_price_per_1m,
+    tenant_image_price: row.tenant_image_price,
+    effective_from: row.effective_from ? String(row.effective_from) : String(nowTimestamp()),
     status: row.status
   })
 }
@@ -343,13 +344,13 @@ const submitDeployment = async () => {
 
 const submitModelPrice = async () => {
   const payload = {
-    platform_input_price_per_1m: yuanToCents(priceForm.platform_input_price_per_1m),
-    platform_output_price_per_1m: yuanToCents(priceForm.platform_output_price_per_1m),
-    platform_image_price: yuanToCents(priceForm.platform_image_price),
-    tenant_input_price_per_1m: yuanToCents(priceForm.tenant_input_price_per_1m),
-    tenant_output_price_per_1m: yuanToCents(priceForm.tenant_output_price_per_1m),
-    tenant_image_price: yuanToCents(priceForm.tenant_image_price),
-    effective_from: nowTimestamp(),
+    platform_input_price_per_1m: priceForm.platform_input_price_per_1m,
+    platform_output_price_per_1m: priceForm.platform_output_price_per_1m,
+    platform_image_price: priceForm.platform_image_price,
+    tenant_input_price_per_1m: priceForm.tenant_input_price_per_1m,
+    tenant_output_price_per_1m: priceForm.tenant_output_price_per_1m,
+    tenant_image_price: priceForm.tenant_image_price,
+    effective_from: priceForm.effective_from ? Number(priceForm.effective_from) : nowTimestamp(),
     status: priceForm.status
   }
   if (editingPriceId.value) {
@@ -451,23 +452,23 @@ onMounted(async () => {
       </div>
 
       <el-table v-loading="priceLoading" :data="modelPrices" border stripe class="w-full">
-        <el-table-column label="平台输入/1M(元)" width="150" align="right">
-          <template #default="{ row }">{{ formatYuan(row.platform_input_price_per_1m) }}</template>
+        <el-table-column label="平台输入/1M(积分)" width="160" align="right">
+          <template #default="{ row }">{{ formatCredits(row.platform_input_price_per_1m) }}</template>
         </el-table-column>
-        <el-table-column label="平台输出/1M(元)" width="150" align="right">
-          <template #default="{ row }">{{ formatYuan(row.platform_output_price_per_1m) }}</template>
+        <el-table-column label="平台输出/1M(积分)" width="160" align="right">
+          <template #default="{ row }">{{ formatCredits(row.platform_output_price_per_1m) }}</template>
         </el-table-column>
-        <el-table-column label="平台单图(元)" width="130" align="right">
-          <template #default="{ row }">{{ formatYuan(row.platform_image_price) }}</template>
+        <el-table-column label="平台单图(积分)" width="140" align="right">
+          <template #default="{ row }">{{ formatCredits(row.platform_image_price) }}</template>
         </el-table-column>
-        <el-table-column label="租户输入/1M(元)" width="150" align="right">
-          <template #default="{ row }">{{ formatYuan(row.tenant_input_price_per_1m) }}</template>
+        <el-table-column label="租户输入/1M(积分)" width="160" align="right">
+          <template #default="{ row }">{{ formatCredits(row.tenant_input_price_per_1m) }}</template>
         </el-table-column>
-        <el-table-column label="租户输出/1M(元)" width="150" align="right">
-          <template #default="{ row }">{{ formatYuan(row.tenant_output_price_per_1m) }}</template>
+        <el-table-column label="租户输出/1M(积分)" width="160" align="right">
+          <template #default="{ row }">{{ formatCredits(row.tenant_output_price_per_1m) }}</template>
         </el-table-column>
-        <el-table-column label="租户单图(元)" width="130" align="right">
-          <template #default="{ row }">{{ formatYuan(row.tenant_image_price) }}</template>
+        <el-table-column label="租户单图(积分)" width="140" align="right">
+          <template #default="{ row }">{{ formatCredits(row.tenant_image_price) }}</template>
         </el-table-column>
         <el-table-column label="生效时间" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ formatTimestamp(row.effective_from) }}</template>
@@ -544,13 +545,13 @@ onMounted(async () => {
         </div>
         <div class="grid grid-cols-3 gap-4">
           <el-form-item label="上下文窗口">
-            <el-input-number v-model="modelForm.context_window" :min="0" class="w-full" />
+            <el-input-number v-model="modelForm.context_window" :min="0" :precision="0" class="w-full" />
           </el-form-item>
           <el-form-item label="默认输出 Token">
             <el-input-number v-model="modelForm.default_max_output_tokens" :min="1" class="w-full" />
           </el-form-item>
           <el-form-item label="最大输出 Token">
-            <el-input-number v-model="modelForm.max_output_tokens" :min="0" class="w-full" />
+            <el-input-number v-model="modelForm.max_output_tokens" :min="0" :precision="0" class="w-full" />
           </el-form-item>
         </div>
       </el-form>
@@ -586,10 +587,10 @@ onMounted(async () => {
         </div>
         <div class="grid grid-cols-4 gap-4">
           <el-form-item label="优先级">
-            <el-input-number v-model="deploymentForm.priority" :min="0" class="w-full" />
+            <el-input-number v-model="deploymentForm.priority" :min="0" :precision="0" class="w-full" />
           </el-form-item>
           <el-form-item label="权重">
-            <el-input-number v-model="deploymentForm.weight" :min="0" class="w-full" />
+            <el-input-number v-model="deploymentForm.weight" :min="0" :precision="0" class="w-full" />
           </el-form-item>
           <el-form-item label="流式">
             <el-switch v-model="deploymentForm.supports_stream" />
@@ -613,25 +614,34 @@ onMounted(async () => {
     <el-dialog v-model="priceDialogVisible" :title="isEditingPrice ? '编辑模型销售价' : '新增模型销售价'" width="680px">
       <el-form :model="priceForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="平台输入/1M(元)">
-            <el-input-number v-model="priceForm.platform_input_price_per_1m" :min="0" class="w-full" />
+          <el-form-item label="平台输入/1M(积分)">
+            <el-input-number v-model="priceForm.platform_input_price_per_1m" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="平台输出/1M(元)">
-            <el-input-number v-model="priceForm.platform_output_price_per_1m" :min="0" class="w-full" />
+          <el-form-item label="平台输出/1M(积分)">
+            <el-input-number v-model="priceForm.platform_output_price_per_1m" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="平台单图(元)">
-            <el-input-number v-model="priceForm.platform_image_price" :min="0" class="w-full" />
+          <el-form-item label="平台单图(积分)">
+            <el-input-number v-model="priceForm.platform_image_price" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="租户输入/1M(元)">
-            <el-input-number v-model="priceForm.tenant_input_price_per_1m" :min="0" class="w-full" />
+          <el-form-item label="租户输入/1M(积分)">
+            <el-input-number v-model="priceForm.tenant_input_price_per_1m" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="租户输出/1M(元)">
-            <el-input-number v-model="priceForm.tenant_output_price_per_1m" :min="0" class="w-full" />
+          <el-form-item label="租户输出/1M(积分)">
+            <el-input-number v-model="priceForm.tenant_output_price_per_1m" :min="0" :precision="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="租户单图(元)">
-            <el-input-number v-model="priceForm.tenant_image_price" :min="0" class="w-full" />
+          <el-form-item label="租户单图(积分)">
+            <el-input-number v-model="priceForm.tenant_image_price" :min="0" :precision="0" class="w-full" />
           </el-form-item>
         </div>
+        <el-form-item label="生效时间">
+          <el-date-picker
+            v-model="priceForm.effective_from"
+            type="datetime"
+            value-format="x"
+            clearable
+            class="w-full"
+          />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="priceDialogVisible = false">取消</el-button>

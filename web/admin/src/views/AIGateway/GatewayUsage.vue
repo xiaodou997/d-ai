@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { formatTimestamp, formatYuan, listUsageLogs } from '@/api/aiGateway'
+import { formatCredits, formatTimestamp, listUsageLogs } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const logs = shallowRef([])
@@ -80,11 +80,11 @@ onMounted(fetchLogs)
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="平台成本(元)" width="120" align="right">
-        <template #default="{ row }">{{ formatYuan(row.platform_cost) }}</template>
+      <el-table-column label="平台成本(积分)" width="130" align="right">
+        <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
       </el-table-column>
-      <el-table-column label="用户计费(元)" width="120" align="right">
-        <template #default="{ row }">{{ formatYuan(row.user_cost) }}</template>
+      <el-table-column label="用户计费(积分)" width="130" align="right">
+        <template #default="{ row }">{{ formatCredits(row.user_cost) }}</template>
       </el-table-column>
       <el-table-column prop="latency_ms" label="耗时(ms)" width="100" align="right" />
       <el-table-column label="状态" width="110">
