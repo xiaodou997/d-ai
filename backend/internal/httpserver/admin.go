@@ -59,9 +59,6 @@ type createEndpointRequest struct {
 	CustomPath        *string         `json:"custom_path"`
 	ProtocolOverrides json.RawMessage `json:"protocol_overrides"`
 	Weight            *int32          `json:"weight"`
-	RPMLimit          *int32          `json:"rpm_limit"`
-	TPMLimit          *int32          `json:"tpm_limit"`
-	ConcurrencyLimit  *int32          `json:"concurrency_limit"`
 	TimeoutMs         *int32          `json:"timeout_ms"`
 	Status            string          `json:"status"`
 }
@@ -120,17 +117,12 @@ type grantModelToTenantRequest struct {
 }
 
 type createTenantAPIKeyRequest struct {
-	Name             string   `json:"name"`
-	QuotaLimit       *int64   `json:"quota_limit"`
-	DailyQuota       *int64   `json:"daily_quota"`
-	MonthlyQuota     *int64   `json:"monthly_quota"`
-	AllowedModels    []string `json:"allowed_models"`
-	RPMLimit         *int32   `json:"rpm_limit"`
-	TPMLimit         *int32   `json:"tpm_limit"`
-	ConcurrencyLimit *int32   `json:"concurrency_limit"`
-	Status           string   `json:"status"`
-	ExpiresAt        *string  `json:"expires_at"`
-	CreatedBy        string   `json:"created_by"`
+	Name          string   `json:"name"`
+	QuotaLimit    *int64   `json:"quota_limit"`
+	AllowedModels []string `json:"allowed_models"`
+	Status        string   `json:"status"`
+	ExpiresAt     *string  `json:"expires_at"`
+	CreatedBy     string   `json:"created_by"`
 }
 
 type createTenantAPIKeyResponse struct {
@@ -254,6 +246,39 @@ func (s *Server) handleAdminCreateProvider(w http.ResponseWriter, r *http.Reques
 	writeAdminJSON(w, http.StatusCreated, row)
 }
 
+func (s *Server) handleAdminUpdateProvider(w http.ResponseWriter, r *http.Request) {
+	providerID, ok := parseUUIDParam(w, r, "providerID")
+	if !ok {
+		return
+	}
+	var req createProviderRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.Code == "" || req.Name == "" {
+		writeAdminError(w, http.StatusBadRequest, "code and name are required")
+		return
+	}
+	if req.ProviderType == "" {
+		req.ProviderType = req.Code
+	}
+	if req.ProtocolType == "" {
+		req.ProtocolType = defaultProtocol
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	row, err := s.queries.UpdateProvider(r.Context(), dbgen.UpdateProviderParams{
+		ID: providerID, Code: req.Code, Name: req.Name, ProviderType: req.ProviderType, ProtocolType: req.ProtocolType,
+		IsCustom: req.IsCustom, Config: jsonObjectOrDefault(req.Config), Status: req.Status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
+}
+
 func (s *Server) handleAdminUpdateProviderStatus(w http.ResponseWriter, r *http.Request) {
 	providerID, ok := parseUUIDParam(w, r, "providerID")
 	if !ok {
@@ -326,9 +351,6 @@ func (s *Server) handleAdminCreateProviderEndpoint(w http.ResponseWriter, r *htt
 		CustomPath:        optionalTextParam(req.CustomPath),
 		ProtocolOverrides: jsonObjectOrDefault(req.ProtocolOverrides),
 		Weight:            int32OrDefault(req.Weight, defaultEndpointWeight),
-		RpmLimit:          optionalInt4(req.RPMLimit),
-		TpmLimit:          optionalInt4(req.TPMLimit),
-		ConcurrencyLimit:  optionalInt4(req.ConcurrencyLimit),
 		TimeoutMs:         int32OrDefault(req.TimeoutMs, defaultTimeoutMs),
 		Status:            req.Status,
 	})
@@ -337,6 +359,55 @@ func (s *Server) handleAdminCreateProviderEndpoint(w http.ResponseWriter, r *htt
 		return
 	}
 	writeAdminJSON(w, http.StatusCreated, row)
+}
+
+func (s *Server) handleAdminUpdateProviderEndpoint(w http.ResponseWriter, r *http.Request) {
+	providerID, ok := parseUUIDParam(w, r, "providerID")
+	if !ok {
+		return
+	}
+	endpointID, ok := parseUUIDParam(w, r, "endpointID")
+	if !ok {
+		return
+	}
+	var req createEndpointRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.Name == "" || req.BaseURL == "" {
+		writeAdminError(w, http.StatusBadRequest, "name and base_url are required")
+		return
+	}
+	if req.ProtocolType == "" {
+		req.ProtocolType = defaultProtocol
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	current, err := s.queries.GetProviderEndpoint(r.Context(), dbgen.GetProviderEndpointParams{ProviderID: providerID, ID: endpointID})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	ciphertext := current.ApiKeyCiphertext
+	if req.APIKey != "" {
+		ciphertext, err = secret.EncryptProviderKey(s.security.ProviderKeyMaster, req.APIKey)
+		if err != nil {
+			writeAdminError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	row, err := s.queries.UpdateProviderEndpoint(r.Context(), dbgen.UpdateProviderEndpointParams{
+		ProviderID: providerID, ID: endpointID, Name: req.Name, BaseUrl: req.BaseURL, ProtocolType: req.ProtocolType,
+		ApiKeyCiphertext: ciphertext, ExtraHeaders: jsonObjectOrDefault(req.ExtraHeaders), CustomPath: optionalTextParam(req.CustomPath),
+		ProtocolOverrides: jsonObjectOrDefault(req.ProtocolOverrides), Weight: int32OrDefault(req.Weight, defaultEndpointWeight),
+		TimeoutMs: int32OrDefault(req.TimeoutMs, defaultTimeoutMs), Status: req.Status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
 }
 
 func (s *Server) handleAdminUpdateProviderEndpointStatus(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +461,7 @@ func (s *Server) handleAdminCheckProviderEndpointHealth(w http.ResponseWriter, r
 		status = "unhealthy"
 		if errors.Is(checkErr, pgx.ErrNoRows) {
 			status = "unknown"
-			checkErr = errors.New("endpoint has no active chat deployment to probe")
+			checkErr = errors.New("endpoint has no active low-cost deployment to probe")
 		}
 		s.recordEndpointHealthFailure(r.Context(), endpointID, checkErr.Error())
 	}
@@ -426,15 +497,15 @@ func (s *Server) recordEndpointHealthFailure(ctx context.Context, endpointID pgt
 }
 
 func (s *Server) checkProviderEndpointReachable(r *http.Request, endpointID pgtype.UUID, endpoint dbgen.GetProviderEndpointRow) error {
-	deployment, err := s.queries.GetFirstActiveChatDeploymentForEndpoint(r.Context(), endpointID)
+	deployment, err := s.queries.GetFirstActiveProbeDeploymentForEndpoint(r.Context(), endpointID)
 	if err != nil {
 		return err
 	}
-	if deployment.UpstreamProtocol != upstream.ProtocolOpenAIChatCompletions {
-		return errors.New("active chat deployment uses unsupported probe protocol")
+	path, body, err := healthProbeRequest(endpoint.ProtocolOverrides, deployment.UpstreamModel, deployment.UpstreamProtocol)
+	if err != nil {
+		return err
 	}
-
-	url, err := upstream.BuildEndpointURL(endpoint.BaseUrl, optionalText(endpoint.CustomPath), "/chat/completions")
+	url, err := upstream.BuildEndpointURL(endpoint.BaseUrl, optionalText(endpoint.CustomPath), path)
 	if err != nil {
 		return err
 	}
@@ -447,10 +518,6 @@ func (s *Server) checkProviderEndpointReachable(r *http.Request, endpointID pgty
 	ctx, cancel = context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	body, err := healthProbeBody(endpoint.ProtocolOverrides, deployment.UpstreamModel)
-	if err != nil {
-		return err
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -474,34 +541,65 @@ func (s *Server) checkProviderEndpointReachable(r *http.Request, endpointID pgty
 	return nil
 }
 
-func healthProbeBody(overrides []byte, upstreamModel string) ([]byte, error) {
+func healthProbeRequest(overrides []byte, upstreamModel string, protocol string) (string, []byte, error) {
 	if len(overrides) > 0 {
 		var wrapper struct {
 			HealthProbe json.RawMessage `json:"health_probe"`
 		}
 		if err := json.Unmarshal(overrides, &wrapper); err != nil {
-			return nil, fmt.Errorf("parse protocol_overrides: %w", err)
+			return "", nil, fmt.Errorf("parse protocol_overrides: %w", err)
 		}
 		if len(wrapper.HealthProbe) > 0 {
 			var body map[string]json.RawMessage
 			if err := json.Unmarshal(wrapper.HealthProbe, &body); err != nil {
-				return nil, fmt.Errorf("parse health_probe: %w", err)
+				return "", nil, fmt.Errorf("parse health_probe: %w", err)
 			}
 			model, err := json.Marshal(upstreamModel)
 			if err != nil {
-				return nil, err
+				return "", nil, err
 			}
 			if _, ok := body["model"]; !ok {
 				body["model"] = model
 			}
-			return json.Marshal(body)
+			encoded, err := json.Marshal(body)
+			return healthProbePath(protocol), encoded, err
 		}
 	}
-	return json.Marshal(map[string]any{
-		"model":      upstreamModel,
-		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
-		"max_tokens": 1,
-	})
+	switch protocol {
+	case upstream.ProtocolOpenAIChatCompletions:
+		body, err := json.Marshal(map[string]any{
+			"model":      upstreamModel,
+			"messages":   []map[string]string{{"role": "user", "content": "ping"}},
+			"max_tokens": 1,
+		})
+		return "/chat/completions", body, err
+	case upstream.ProtocolOpenAIResponses:
+		body, err := json.Marshal(map[string]any{
+			"model":             upstreamModel,
+			"input":             "ping",
+			"max_output_tokens": 1,
+		})
+		return "/responses", body, err
+	case upstream.ProtocolOpenAIEmbeddings:
+		body, err := json.Marshal(map[string]any{
+			"model": upstreamModel,
+			"input": "ping",
+		})
+		return "/embeddings", body, err
+	default:
+		return "", nil, errors.New("active deployment uses unsupported probe protocol")
+	}
+}
+
+func healthProbePath(protocol string) string {
+	switch protocol {
+	case upstream.ProtocolOpenAIResponses:
+		return "/responses"
+	case upstream.ProtocolOpenAIEmbeddings:
+		return "/embeddings"
+	default:
+		return "/chat/completions"
+	}
 }
 
 func applyAdminExtraHeaders(headers http.Header, raw []byte) error {
@@ -564,6 +662,37 @@ func (s *Server) handleAdminCreateModel(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeAdminJSON(w, http.StatusCreated, row)
+}
+
+func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) {
+	modelID, ok := parseUUIDParam(w, r, "modelID")
+	if !ok {
+		return
+	}
+	var req createModelRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.ModelCode == "" || req.DisplayName == "" {
+		writeAdminError(w, http.StatusBadRequest, "model_code and display_name are required")
+		return
+	}
+	if req.CapabilityType == "" {
+		req.CapabilityType = defaultCapability
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	row, err := s.queries.UpdateModel(r.Context(), dbgen.UpdateModelParams{
+		ID: modelID, ModelCode: req.ModelCode, DisplayName: req.DisplayName, CapabilityType: req.CapabilityType,
+		ContextWindow: optionalInt4(req.ContextWindow), DefaultMaxOutputTokens: int32OrDefault(req.DefaultMaxOutputTokens, 2048),
+		MaxOutputTokens: optionalInt4(req.MaxOutputTokens), Status: req.Status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
 }
 
 func (s *Server) handleAdminUpdateModelStatus(w http.ResponseWriter, r *http.Request) {
@@ -636,6 +765,39 @@ func (s *Server) handleAdminCreateModelPrice(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeAdminJSON(w, http.StatusCreated, row)
+}
+
+func (s *Server) handleAdminUpdateModelPrice(w http.ResponseWriter, r *http.Request) {
+	modelID, ok := parseUUIDParam(w, r, "modelID")
+	if !ok {
+		return
+	}
+	priceID, ok := parseUUIDParam(w, r, "priceID")
+	if !ok {
+		return
+	}
+	var req createModelPriceRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	effectiveFrom, err := parseEffectiveFrom(req.EffectiveFrom)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid effective_from")
+		return
+	}
+	row, err := s.queries.UpdateModelPrice(r.Context(), dbgen.UpdateModelPriceParams{
+		ModelID: modelID, ID: priceID, PlatformInputPricePer1m: req.PlatformInputPricePer1M, PlatformOutputPricePer1m: req.PlatformOutputPricePer1M,
+		PlatformImagePrice: req.PlatformImagePrice, TenantInputPricePer1m: req.TenantInputPricePer1M, TenantOutputPricePer1m: req.TenantOutputPricePer1M,
+		TenantImagePrice: req.TenantImagePrice, EffectiveFrom: effectiveFrom, Status: req.Status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
 }
 
 func (s *Server) handleAdminUpdateModelPriceStatus(w http.ResponseWriter, r *http.Request) {
@@ -724,6 +886,49 @@ func (s *Server) handleAdminCreateModelDeployment(w http.ResponseWriter, r *http
 		return
 	}
 	writeAdminJSON(w, http.StatusCreated, row)
+}
+
+func (s *Server) handleAdminUpdateModelDeployment(w http.ResponseWriter, r *http.Request) {
+	modelID, ok := parseUUIDParam(w, r, "modelID")
+	if !ok {
+		return
+	}
+	deploymentID, ok := parseUUIDParam(w, r, "deploymentID")
+	if !ok {
+		return
+	}
+	var req createDeploymentRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.EndpointID == "" || req.UpstreamModel == "" {
+		writeAdminError(w, http.StatusBadRequest, "endpoint_id and upstream_model are required")
+		return
+	}
+	endpointID, err := parseUUID(req.EndpointID)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid endpoint_id")
+		return
+	}
+	if req.CapabilityType == "" {
+		req.CapabilityType = defaultCapability
+	}
+	if req.UpstreamProtocol == "" {
+		req.UpstreamProtocol = defaultProtocol
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	row, err := s.queries.UpdateModelDeployment(r.Context(), dbgen.UpdateModelDeploymentParams{
+		ModelID: modelID, ID: deploymentID, EndpointID: endpointID, UpstreamModel: req.UpstreamModel, CapabilityType: req.CapabilityType,
+		UpstreamProtocol: req.UpstreamProtocol, UpstreamParameters: jsonObjectOrDefault(req.UpstreamParameters), Priority: int32OrDefault(req.Priority, 100),
+		Weight: int32OrDefault(req.Weight, 100), SupportsStream: boolOrDefault(req.SupportsStream, true), Status: req.Status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
 }
 
 func (s *Server) handleAdminUpdateModelDeploymentStatus(w http.ResponseWriter, r *http.Request) {
@@ -819,6 +1024,54 @@ func (s *Server) handleAdminCreateProviderModelPrice(w http.ResponseWriter, r *h
 		return
 	}
 	writeAdminJSON(w, http.StatusCreated, row)
+}
+
+func (s *Server) handleAdminUpdateProviderModelPrice(w http.ResponseWriter, r *http.Request) {
+	providerID, ok := parseUUIDParam(w, r, "providerID")
+	if !ok {
+		return
+	}
+	priceID, ok := parseUUIDParam(w, r, "priceID")
+	if !ok {
+		return
+	}
+	var req createProviderModelPriceRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.UpstreamModel == "" {
+		writeAdminError(w, http.StatusBadRequest, "upstream_model is required")
+		return
+	}
+	if req.CapabilityType == "" {
+		req.CapabilityType = defaultCapability
+	}
+	if req.Currency == "" {
+		req.Currency = "CNY_CREDITS"
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	endpointID, err := optionalUUIDString(req.EndpointID)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid endpoint_id")
+		return
+	}
+	effectiveFrom, err := parseEffectiveFrom(req.EffectiveFrom)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid effective_from")
+		return
+	}
+	row, err := s.queries.UpdateProviderModelPrice(r.Context(), dbgen.UpdateProviderModelPriceParams{
+		ProviderID: providerID, ID: priceID, EndpointID: endpointID, UpstreamModel: req.UpstreamModel, CapabilityType: req.CapabilityType,
+		Currency: req.Currency, InputCostPer1m: req.InputCostPer1M, OutputCostPer1m: req.OutputCostPer1M, RequestCost: req.RequestCost,
+		ImageCost: req.ImageCost, VideoCostPerSecond: req.VideoCostPerSecond, EffectiveFrom: effectiveFrom, Status: req.Status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
 }
 
 func (s *Server) handleAdminUpdateProviderModelPriceStatus(w http.ResponseWriter, r *http.Request) {
@@ -1058,20 +1311,15 @@ func (s *Server) handleAdminCreateTenantAPIKey(w http.ResponseWriter, r *http.Re
 	}
 
 	row, err := s.queries.CreateTenantAPIKey(r.Context(), dbgen.CreateTenantAPIKeyParams{
-		TenantID:         tenantID,
-		KeyHash:          apikey.Hash(key),
-		KeyPrefix:        apikey.PrefixForDisplay(key),
-		Name:             req.Name,
-		QuotaLimit:       optionalInt8(req.QuotaLimit),
-		DailyQuota:       optionalInt8(req.DailyQuota),
-		MonthlyQuota:     optionalInt8(req.MonthlyQuota),
-		AllowedModels:    allowedModels,
-		RpmLimit:         optionalInt4(req.RPMLimit),
-		TpmLimit:         optionalInt4(req.TPMLimit),
-		ConcurrencyLimit: optionalInt4(req.ConcurrencyLimit),
-		Status:           req.Status,
-		ExpiresAt:        expiresAt,
-		CreatedBy:        optionalTextValue(req.CreatedBy),
+		TenantID:      tenantID,
+		KeyHash:       apikey.Hash(key),
+		KeyPrefix:     apikey.PrefixForDisplay(key),
+		Name:          req.Name,
+		QuotaLimit:    optionalInt8(req.QuotaLimit),
+		AllowedModels: allowedModels,
+		Status:        req.Status,
+		ExpiresAt:     expiresAt,
+		CreatedBy:     optionalTextValue(req.CreatedBy),
 	})
 	if err != nil {
 		writeAdminDBError(w, err)
@@ -1102,6 +1350,48 @@ func (s *Server) handleAdminUpdateTenantAPIKeyStatus(w http.ResponseWriter, r *h
 		TenantID: tenantID,
 		ID:       apiKeyID,
 		Status:   status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
+}
+
+func (s *Server) handleAdminUpdateTenantAPIKey(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "tenantID")
+	if tenantID == "" {
+		writeAdminError(w, http.StatusBadRequest, "tenantID is required")
+		return
+	}
+	apiKeyID, ok := parseUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	var req createTenantAPIKeyRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.Name == "" {
+		writeAdminError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	allowedModels, err := json.Marshal(req.AllowedModels)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid allowed_models")
+		return
+	}
+	expiresAt, err := optionalTime(req.ExpiresAt)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid expires_at")
+		return
+	}
+	row, err := s.queries.UpdateTenantAPIKey(r.Context(), dbgen.UpdateTenantAPIKeyParams{
+		TenantID: tenantID, ID: apiKeyID, Name: req.Name, QuotaLimit: optionalInt8(req.QuotaLimit), AllowedModels: allowedModels,
+		Status: req.Status, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		writeAdminDBError(w, err)
@@ -1162,21 +1452,16 @@ func (s *Server) handleAdminCreateUserAPIKey(w http.ResponseWriter, r *http.Requ
 	}
 
 	row, err := s.queries.CreateUserAPIKey(r.Context(), dbgen.CreateUserAPIKeyParams{
-		TenantID:         tenantID,
-		UserID:           optionalTextValue(userID),
-		KeyHash:          apikey.Hash(key),
-		KeyPrefix:        apikey.PrefixForDisplay(key),
-		Name:             req.Name,
-		QuotaLimit:       optionalInt8(req.QuotaLimit),
-		DailyQuota:       optionalInt8(req.DailyQuota),
-		MonthlyQuota:     optionalInt8(req.MonthlyQuota),
-		AllowedModels:    allowedModels,
-		RpmLimit:         optionalInt4(req.RPMLimit),
-		TpmLimit:         optionalInt4(req.TPMLimit),
-		ConcurrencyLimit: optionalInt4(req.ConcurrencyLimit),
-		Status:           req.Status,
-		ExpiresAt:        expiresAt,
-		CreatedBy:        optionalTextValue(req.CreatedBy),
+		TenantID:      tenantID,
+		UserID:        optionalTextValue(userID),
+		KeyHash:       apikey.Hash(key),
+		KeyPrefix:     apikey.PrefixForDisplay(key),
+		Name:          req.Name,
+		QuotaLimit:    optionalInt8(req.QuotaLimit),
+		AllowedModels: allowedModels,
+		Status:        req.Status,
+		ExpiresAt:     expiresAt,
+		CreatedBy:     optionalTextValue(req.CreatedBy),
 	})
 	if err != nil {
 		writeAdminDBError(w, err)
@@ -1207,6 +1492,47 @@ func (s *Server) handleAdminUpdateUserAPIKeyStatus(w http.ResponseWriter, r *htt
 		UserID:   optionalTextValue(userID),
 		ID:       apiKeyID,
 		Status:   status,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
+}
+
+func (s *Server) handleAdminUpdateUserAPIKey(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, ok := tenantUserParams(w, r)
+	if !ok {
+		return
+	}
+	apiKeyID, ok := parseUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	var req createTenantAPIKeyRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if req.Name == "" {
+		writeAdminError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.Status == "" {
+		req.Status = defaultStatus
+	}
+	allowedModels, err := json.Marshal(req.AllowedModels)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid allowed_models")
+		return
+	}
+	expiresAt, err := optionalTime(req.ExpiresAt)
+	if err != nil {
+		writeAdminError(w, http.StatusBadRequest, "invalid expires_at")
+		return
+	}
+	row, err := s.queries.UpdateUserAPIKey(r.Context(), dbgen.UpdateUserAPIKeyParams{
+		TenantID: tenantID, UserID: optionalTextValue(userID), ID: apiKeyID, Name: req.Name, QuotaLimit: optionalInt8(req.QuotaLimit),
+		AllowedModels: allowedModels, Status: req.Status, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		writeAdminDBError(w, err)

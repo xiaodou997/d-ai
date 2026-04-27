@@ -2,14 +2,16 @@
 
 Management APIs are under `/admin`.
 
-MVP authentication uses an optional header token:
+Authentication uses URM admin JWT when configured, or an optional local header token for development:
 
 ```http
 X-Admin-Token: local-admin-token
 ```
 
 Set it in config as `security.adminToken` or env `UNI_AI_API_ADMIN_TOKEN`.
-If it is empty, admin routes are open for local development. This will be replaced by URM JWT middleware.
+If both `security.adminToken` and URM are empty, admin routes are open for local development.
+
+The current database source of truth is `backend/migrations/00001_init.sql`. This iteration intentionally changes the initial schema; rebuild local databases from scratch before using the seed.
 
 ## Providers
 
@@ -63,6 +65,7 @@ curl -X POST http://127.0.0.1:13010/admin/providers/{provider_id}/endpoints \
 ```
 
 The `api_key` is encrypted before storage. Endpoint list responses do not return it.
+When editing an endpoint, omit `api_key` to keep the stored provider key; send a non-empty `api_key` only when rotating it.
 
 List provider endpoints:
 
@@ -262,7 +265,6 @@ curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/api-keys \
     "name": "Tenant test key",
     "quota_limit": 1000000000,
     "allowed_models": ["deepseek-v4-pro"],
-    "rpm_limit": 60,
     "created_by": "admin"
   }'
 ```
@@ -330,7 +332,6 @@ curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/
     "name": "User test key",
     "quota_limit": 100000000,
     "allowed_models": ["deepseek-v4-pro"],
-    "rpm_limit": 30,
     "created_by": "admin"
   }'
 ```
@@ -355,6 +356,14 @@ curl -X PATCH http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local
 
 ## Usage Logs
 
+Runtime paths currently supported:
+
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/embeddings`
+- `POST /v1/images/generations`
+- `GET /v1/models`
+
 List latest usage logs:
 
 ```bash
@@ -364,20 +373,29 @@ curl 'http://127.0.0.1:13010/admin/usage-logs?limit=100' \
 
 `limit` defaults to `100` and is capped at `500`.
 
+Usage rows include token fields plus unified billable units:
+
+- Chat/Responses: `billable_unit_type=token`, `billable_units=total_tokens`.
+- Embeddings: `billable_unit_type=input_token`, `billable_units=prompt_tokens`.
+- Images: `billable_unit_type=image`, `billable_units=n`.
+- `usage_source=upstream` means provider usage was available; `estimated_length` marks fallback estimation.
+
 ## Runtime Limits
 
-Runtime API keys support RPM limiting and quota fields:
+Runtime limits are configured only through `/admin/limit-policies`; legacy API-key and endpoint limit columns were removed.
 
-- `rpm_limit` is enforced with Redis per API key per minute.
+- Supported scopes: `tenant`, `user`, `api_key`, `provider`, `endpoint`.
+- Supported metrics: `rpm_limit`, `tpm_limit`, and `concurrency_limit`.
+- Policies are additive; any matching active policy can reject the request.
 - `quota_limit` is checked before chat calls.
-- Chat calls reserve an estimated output-token quota in Redis before calling upstream.
-- The reservation estimate uses request `max_tokens`, `max_completion_tokens`, or the model `default_max_output_tokens`.
+- Token calls reserve estimated quota in Redis before calling upstream.
+- The reservation estimate uses request `max_tokens`, `max_completion_tokens`, `max_output_tokens`, or the model `default_max_output_tokens`.
 - After a successful upstream response, actual `usage` tokens confirm `quota_used` in PostgreSQL.
 
 Redis keys:
 
 ```text
-uni_ai_api:rate:key:{api_key_id}:rpm:{minute}
+uni_ai_api:rate:{scope_type}:{scope_id}:{capability_type}:...
 uni_ai_api:quota:key:{api_key_id}:reserved
 ```
 

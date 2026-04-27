@@ -153,6 +153,10 @@ func (c cancelReadCloser) Close() error {
 }
 
 func buildOpenAIChatBody(raw map[string]json.RawMessage, upstreamModel string, upstreamParameters []byte) ([]byte, error) {
+	return buildOpenAIJSONBody(raw, upstreamModel, upstreamParameters)
+}
+
+func buildOpenAIJSONBody(raw map[string]json.RawMessage, upstreamModel string, upstreamParameters []byte) ([]byte, error) {
 	body := make(map[string]json.RawMessage, len(raw)+1)
 	for key, value := range raw {
 		body[key] = value

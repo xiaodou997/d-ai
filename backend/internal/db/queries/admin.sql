@@ -69,6 +69,29 @@ RETURNING
   created_at,
   updated_at;
 
+-- name: UpdateProvider :one
+UPDATE ai_providers
+SET code = $2,
+    name = $3,
+    provider_type = $4,
+    protocol_type = $5,
+    is_custom = $6,
+    config = $7,
+    status = $8,
+    updated_at = now()
+WHERE id = $1
+RETURNING
+  id,
+  code,
+  name,
+  provider_type,
+  protocol_type,
+  is_custom,
+  config,
+  status,
+  created_at,
+  updated_at;
+
 -- name: CreateProviderEndpoint :one
 INSERT INTO ai_provider_endpoints (
   provider_id,
@@ -80,14 +103,11 @@ INSERT INTO ai_provider_endpoints (
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'unknown'
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unknown'
 )
 RETURNING
   id,
@@ -99,9 +119,6 @@ RETURNING
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -119,9 +136,6 @@ SELECT
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -143,9 +157,6 @@ SELECT
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -171,9 +182,37 @@ RETURNING
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
+  timeout_ms,
+  status,
+  health_status,
+  created_at,
+  updated_at;
+
+-- name: UpdateProviderEndpoint :one
+UPDATE ai_provider_endpoints
+SET name = $3,
+    base_url = $4,
+    protocol_type = $5,
+    api_key_ciphertext = $6,
+    extra_headers = $7,
+    custom_path = $8,
+    protocol_overrides = $9,
+    weight = $10,
+    timeout_ms = $11,
+    status = $12,
+    updated_at = now()
+WHERE provider_id = $1
+  AND id = $2
+RETURNING
+  id,
+  provider_id,
+  name,
+  base_url,
+  protocol_type,
+  extra_headers,
+  custom_path,
+  protocol_overrides,
+  weight,
   timeout_ms,
   status,
   health_status,
@@ -197,16 +236,13 @@ RETURNING
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
   created_at,
   updated_at;
 
--- name: GetFirstActiveChatDeploymentForEndpoint :one
+-- name: GetFirstActiveProbeDeploymentForEndpoint :one
 SELECT
   d.id,
   d.upstream_model,
@@ -215,7 +251,7 @@ SELECT
   d.capability_type
 FROM ai_model_deployments d
 WHERE d.endpoint_id = $1
-  AND d.capability_type = 'chat'
+  AND d.upstream_protocol IN ('openai_chat_completions', 'openai_responses', 'openai_embeddings')
   AND d.status = 'active'
 ORDER BY d.priority ASC, d.weight DESC, d.created_at ASC
 LIMIT 1;
@@ -276,6 +312,37 @@ ORDER BY upstream_model ASC, capability_type ASC, effective_from DESC;
 -- name: UpdateProviderModelPriceStatus :one
 UPDATE ai_provider_model_prices
 SET status = $3
+WHERE provider_id = $1
+  AND id = $2
+RETURNING
+  id,
+  provider_id,
+  endpoint_id,
+  upstream_model,
+  capability_type,
+  currency,
+  input_cost_per_1m,
+  output_cost_per_1m,
+  request_cost,
+  image_cost,
+  video_cost_per_second,
+  effective_from,
+  status,
+  created_at;
+
+-- name: UpdateProviderModelPrice :one
+UPDATE ai_provider_model_prices
+SET endpoint_id = $3,
+    upstream_model = $4,
+    capability_type = $5,
+    currency = $6,
+    input_cost_per_1m = $7,
+    output_cost_per_1m = $8,
+    request_cost = $9,
+    image_cost = $10,
+    video_cost_per_second = $11,
+    effective_from = $12,
+    status = $13
 WHERE provider_id = $1
   AND id = $2
 RETURNING
@@ -365,6 +432,29 @@ RETURNING
   created_at,
   updated_at;
 
+-- name: UpdateModel :one
+UPDATE ai_models
+SET model_code = $2,
+    display_name = $3,
+    capability_type = $4,
+    context_window = $5,
+    default_max_output_tokens = $6,
+    max_output_tokens = $7,
+    status = $8,
+    updated_at = now()
+WHERE id = $1
+RETURNING
+  id,
+  model_code,
+  display_name,
+  capability_type,
+  context_window,
+  default_max_output_tokens,
+  max_output_tokens,
+  status,
+  created_at,
+  updated_at;
+
 -- name: CreateModelPrice :one
 INSERT INTO ai_model_prices (
   model_id,
@@ -412,6 +502,31 @@ ORDER BY effective_from DESC;
 -- name: UpdateModelPriceStatus :one
 UPDATE ai_model_prices
 SET status = $3
+WHERE model_id = $1
+  AND id = $2
+RETURNING
+  id,
+  model_id,
+  platform_input_price_per_1m,
+  platform_output_price_per_1m,
+  platform_image_price,
+  tenant_input_price_per_1m,
+  tenant_output_price_per_1m,
+  tenant_image_price,
+  effective_from,
+  status,
+  created_at;
+
+-- name: UpdateModelPrice :one
+UPDATE ai_model_prices
+SET platform_input_price_per_1m = $3,
+    platform_output_price_per_1m = $4,
+    platform_image_price = $5,
+    tenant_input_price_per_1m = $6,
+    tenant_output_price_per_1m = $7,
+    tenant_image_price = $8,
+    effective_from = $9,
+    status = $10
 WHERE model_id = $1
   AND id = $2
 RETURNING
@@ -485,6 +600,35 @@ ORDER BY d.priority ASC, d.weight DESC, p.code ASC, e.name ASC;
 -- name: UpdateModelDeploymentStatus :one
 UPDATE ai_model_deployments
 SET status = $3,
+    updated_at = now()
+WHERE model_id = $1
+  AND id = $2
+RETURNING
+  id,
+  model_id,
+  endpoint_id,
+  upstream_model,
+  capability_type,
+  upstream_protocol,
+  upstream_parameters,
+  priority,
+  weight,
+  supports_stream,
+  status,
+  created_at,
+  updated_at;
+
+-- name: UpdateModelDeployment :one
+UPDATE ai_model_deployments
+SET endpoint_id = $3,
+    upstream_model = $4,
+    capability_type = $5,
+    upstream_protocol = $6,
+    upstream_parameters = $7,
+    priority = $8,
+    weight = $9,
+    supports_stream = $10,
+    status = $11,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
@@ -617,18 +761,13 @@ INSERT INTO ai_api_keys (
   key_prefix,
   name,
   quota_limit,
-  daily_quota,
-  monthly_quota,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by
 ) VALUES (
   'tenant',
-  $1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, NULL, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING
   id,
@@ -640,14 +779,7 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -665,14 +797,7 @@ SELECT
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -700,14 +825,35 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: UpdateTenantAPIKey :one
+UPDATE ai_api_keys
+SET name = $3,
+    quota_limit = $4,
+    allowed_models = $5,
+    status = $6,
+    expires_at = $7,
+    updated_at = now()
+WHERE tenant_id = $1
+  AND id = $2
+  AND owner_type = 'tenant'
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
   status,
   expires_at,
   created_by,
@@ -723,18 +869,13 @@ INSERT INTO ai_api_keys (
   key_prefix,
   name,
   quota_limit,
-  daily_quota,
-  monthly_quota,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by
 ) VALUES (
   'user',
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING
   id,
@@ -746,14 +887,7 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -771,14 +905,7 @@ SELECT
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -808,14 +935,36 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: UpdateUserAPIKey :one
+UPDATE ai_api_keys
+SET name = $4,
+    quota_limit = $5,
+    allowed_models = $6,
+    status = $7,
+    expires_at = $8,
+    updated_at = now()
+WHERE tenant_id = $1
+  AND user_id = $2
+  AND id = $3
+  AND owner_type = 'user'
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
   status,
   expires_at,
   created_by,
@@ -843,6 +992,8 @@ SELECT
   prompt_tokens,
   completion_tokens,
   total_tokens,
+  billable_unit_type,
+  billable_units,
   provider_cost,
   platform_cost,
   user_cost,

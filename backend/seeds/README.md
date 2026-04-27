@@ -1,85 +1,55 @@
-# Local Seeds
+# Local Database Setup
 
-Manual initialization for a local PostgreSQL database on port `5432`.
+Manual PostgreSQL initialization is split into two Navicat-friendly files:
 
-Use the built-in Go migration command when `psql` is not installed:
+- `db/init.sql`: schema only.
+- `db/local_seed.sql`: local development data.
 
-```bash
-UNI_AI_API_POSTGRES_DSN='postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public' \
-UNI_AI_API_PROVIDER_KEY_MASTER='change-me-32-byte-minimum-secret' \
-go run ./cmd/migrate up
-```
+The local seed uses `tenant-local` and runtime key `sk-ai-local-dev`. The `openai_compatible` provider points to the fake upstream at `http://127.0.0.1:18080/v1` for chat, responses, embeddings, and images. DeepSeek is included only as a real-provider sample.
 
-Or run the SQL manually with `psql`:
+## Config
 
-```bash
-createdb -h 127.0.0.1 -p 5432 -U postgres uni_ai_api
-sed '/^-- +goose Down$/,$d' backend/migrations/00001_init.sql | \
-  psql 'postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public'
-```
-
-Current local DSN:
-
-```text
-postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public
-```
-
-The database name is `uni_ai_api`. The schema is controlled by PostgreSQL `search_path`; use `search_path=public` for the default schema or replace it with another schema name after creating that schema.
-
-Do not run the whole goose migration file directly with `psql -f`; it also contains the Down section.
-
-Edit `backend/seeds/local_dev.sql` and replace provider keys and Ali model names:
-
-- `REPLACE_ME_DEEPSEEK_API_KEY`
-- `REPLACE_ME_ALI_CODING_PLAN_API_KEY`
-- `REPLACE_ME_ALI_TOKEN_PLAN_API_KEY`
-- `REPLACE_ME_ALI_CODING_PLAN_MODEL`
-- `REPLACE_ME_ALI_TOKEN_PLAN_MODEL`
-
-Then seed local providers, endpoints, models, deployments, grants, and one tenant runtime key:
-
-Use the built-in Go seed command when `psql` is not installed:
+Create a private local config from the checked-in example:
 
 ```bash
-UNI_AI_API_POSTGRES_DSN='postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public' \
-UNI_AI_API_PROVIDER_KEY_MASTER='change-me-32-byte-minimum-secret' \
-go run ./cmd/seed
+cp backend/config.local.example.yaml backend/config.local.yaml
 ```
 
-Or run the SQL manually with `psql`:
+Edit the PostgreSQL DSN if needed. `backend/config.local.yaml` is ignored by git.
+
+## Schema And Seed
+
+With Navicat, run:
+
+1. `db/init.sql`
+2. `db/local_seed.sql`
+
+With the Go commands:
 
 ```bash
-psql 'postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public' \
-  -f backend/seeds/local_dev.sql
+cd backend
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
 ```
 
-The seeded runtime key is:
+## URM Bypass
 
-```text
-sk-ai-local-dev
+The seed uses non-zero prices so local smoke calls exercise URM `Freeze -> Confirm/Cancel` against `http://127.0.0.1:6900`.
+
+If URM is not running, temporarily bypass settlement by setting local prices to zero:
+
+```sql
+UPDATE ai_model_prices
+SET platform_input_price_per_1m = 0,
+    platform_output_price_per_1m = 0,
+    platform_image_price = 0,
+    tenant_input_price_per_1m = 0,
+    tenant_output_price_per_1m = 0,
+    tenant_image_price = 0
+WHERE model_id IN (
+  SELECT id FROM ai_models
+  WHERE model_code IN ('local-chat-test', 'local-responses-test', 'local-embedding-test', 'local-image-test')
+);
 ```
 
-Useful checks:
-
-```bash
-curl http://127.0.0.1:13010/v1/models \
-  -H 'Authorization: Bearer sk-ai-local-dev'
-
-curl http://127.0.0.1:13010/v1/chat/completions \
-  -H 'Authorization: Bearer sk-ai-local-dev' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "deepseek-v4-pro",
-    "messages": [{"role": "user", "content": "hello"}],
-    "stream": false
-  }'
-```
-
-DashScope Coding Plan and Token Plan OpenAI-compatible endpoints are seeded as separate endpoints:
-
-| Endpoint | Base URL |
-| --- | --- |
-| DashScope Coding Plan OpenAI | `https://coding.dashscope.aliyuncs.com/v1` |
-| DashScope Token Plan OpenAI | `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` |
-
-Their Anthropic-compatible endpoints are seeded for later adapter support, but runtime forwarding currently supports only `openai_chat_completions`.
+Re-run `db/local_seed.sql` to restore the URM-on smoke data.

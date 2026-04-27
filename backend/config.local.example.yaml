@@ -4,7 +4,7 @@ app:
   logLevel: info
 
 postgres:
-  dsn: "postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public"
+  dsn: "postgres://postgres:postgres@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public"
   maxConns: 10
   minConns: 1
   maxConnLifetime: 1h
@@ -17,10 +17,10 @@ redis:
 
 urm:
   baseUrl: "http://127.0.0.1:6900"
-  appKey: "UNI_AI_API"
-  appSecret: "change-me"
+  appKey: "UNI_AI_API_LOCAL"
+  appSecret: "change-me-local-urm-secret"
   timeout: 10s
 
 security:
-  providerKeyMaster: "change-me-32-byte-minimum-secret"
+  providerKeyMaster: "change-me-local-provider-key-master"
   adminToken: "local-admin-token"

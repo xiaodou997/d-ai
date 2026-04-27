@@ -44,8 +44,6 @@ const endpointForm = reactive({
   api_key: '',
   custom_path: '',
   weight: 100,
-  rpm_limit: null,
-  tpm_limit: null,
   timeout_ms: 60000,
   status: 'active'
 })
@@ -109,8 +107,6 @@ const resetEndpointForm = () => {
     api_key: '',
     custom_path: '',
     weight: 100,
-    rpm_limit: null,
-    tpm_limit: null,
     timeout_ms: 60000,
     status: 'active'
   })
@@ -197,8 +193,6 @@ const submitProvider = async () => {
 const submitEndpoint = async () => {
   const payload = {
     ...endpointForm,
-    rpm_limit: endpointForm.rpm_limit || undefined,
-    tpm_limit: endpointForm.tpm_limit || undefined,
     custom_path: endpointForm.custom_path || undefined
   }
   await createProviderEndpoint(selectedProviderId.value, payload)
@@ -415,15 +409,12 @@ onMounted(fetchProviders)
         <el-form-item label="上游 API Key" required>
           <el-input v-model="endpointForm.api_key" type="password" show-password placeholder="只在创建时提交，后端加密保存" />
         </el-form-item>
-        <div class="grid grid-cols-4 gap-4">
+        <div class="grid grid-cols-3 gap-4">
           <el-form-item label="Custom Path">
             <el-input v-model="endpointForm.custom_path" placeholder="/chat/completions" />
           </el-form-item>
           <el-form-item label="权重">
             <el-input-number v-model="endpointForm.weight" :min="0" class="w-full" />
-          </el-form-item>
-          <el-form-item label="RPM">
-            <el-input-number v-model="endpointForm.rpm_limit" :min="0" class="w-full" />
           </el-form-item>
           <el-form-item label="超时">
             <el-input-number v-model="endpointForm.timeout_ms" :min="1000" class="w-full" />

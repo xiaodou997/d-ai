@@ -44,6 +44,7 @@ export const protocolOptions = [
   { label: 'OpenAI Chat Completions', value: 'openai_chat_completions' },
   { label: 'OpenAI Images Generations', value: 'openai_images_generations' },
   { label: 'OpenAI Responses', value: 'openai_responses' },
+  { label: 'OpenAI Embeddings', value: 'openai_embeddings' },
   { label: 'Anthropic Messages', value: 'anthropic_messages' }
 ]
 

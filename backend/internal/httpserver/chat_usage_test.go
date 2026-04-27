@@ -79,3 +79,40 @@ func TestEstimateNonStreamChatUsage(t *testing.T) {
 		t.Fatalf("TotalTokens = %d, want %d", usage.TotalTokens, usage.PromptTokens+usage.CompletionTokens)
 	}
 }
+
+func TestParseOpenAIResponsesUsage(t *testing.T) {
+	resp := &upstream.Response{
+		StatusCode: 200,
+		Body:       []byte(`{"usage":{"input_tokens":12,"output_tokens":8,"total_tokens":20}}`),
+	}
+	usage := parseOpenAIResponsesUsage(resp)
+	if usage.PromptTokens != 12 || usage.CompletionTokens != 8 || usage.TotalTokens != 20 {
+		t.Fatalf("usage = %+v, want 12/8/20", usage)
+	}
+}
+
+func TestResponsesSSEUsageParser(t *testing.T) {
+	parser := newResponsesSSEUsageParser()
+	parser.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"hel\"}\n\n"))
+	parser.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"lo\"}\n\n"))
+	parser.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":2,\"total_tokens\":5}}}\n\n"))
+	parser.Close()
+	usage := parser.Usage()
+	if parser.OutputText() != "hello" {
+		t.Fatalf("output = %q, want hello", parser.OutputText())
+	}
+	if usage.PromptTokens != 3 || usage.CompletionTokens != 2 || usage.TotalTokens != 5 {
+		t.Fatalf("usage = %+v, want 3/2/5", usage)
+	}
+}
+
+func TestParseOpenAIEmbeddingsUsage(t *testing.T) {
+	resp := &upstream.Response{
+		StatusCode: 200,
+		Body:       []byte(`{"usage":{"prompt_tokens":9,"total_tokens":9}}`),
+	}
+	usage := parseOpenAIEmbeddingsUsage(resp)
+	if usage.PromptTokens != 9 || usage.TotalTokens != 9 {
+		t.Fatalf("usage = %+v, want prompt/total 9", usage)
+	}
+}

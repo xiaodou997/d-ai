@@ -59,7 +59,7 @@ func estimateChatQuotaCost(raw map[string]json.RawMessage, defaultMaxOutputToken
 }
 
 func requestedOutputTokens(raw map[string]json.RawMessage, defaultMaxOutputTokens int32) int32 {
-	for _, key := range []string{"max_tokens", "max_completion_tokens"} {
+	for _, key := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
 		if value, ok := raw[key]; ok {
 			var parsed int32
 			if err := json.Unmarshal(value, &parsed); err == nil && parsed > 0 {

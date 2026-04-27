@@ -11,7 +11,7 @@ import (
 	"uni-ai-api/backend/internal/db"
 )
 
-const defaultSeedFile = "seeds/local_dev.sql"
+const defaultSeedFile = "../db/local_seed.sql"
 
 func main() {
 	seedFile := defaultSeedFile

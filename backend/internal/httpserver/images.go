@@ -267,6 +267,8 @@ func (s *Server) recordImageUsage(r *http.Request, input imageUsageInput) {
 		ErrorCode:        input.ErrorCode,
 		ErrorMessage:     input.ErrorMessage,
 		Usage:            usage,
+		BillableUnitType: "image",
+		BillableUnits:    int64(input.ImageCount),
 		UsageEstimated:   false,
 		UsageSource:      "image_count",
 		Costs:            input.Costs,

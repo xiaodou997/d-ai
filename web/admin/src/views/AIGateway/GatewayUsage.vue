@@ -73,6 +73,11 @@ onMounted(fetchLogs)
       <el-table-column prop="upstream_model" label="上游模型" min-width="150" show-overflow-tooltip />
       <el-table-column prop="capability_type" label="能力" width="90" />
       <el-table-column prop="total_tokens" label="Tokens" width="100" align="right" />
+      <el-table-column label="计费量" width="130" align="right">
+        <template #default="{ row }">
+          {{ row.billable_units }} {{ row.billable_unit_type }}
+        </template>
+      </el-table-column>
       <el-table-column label="Usage" width="110">
         <template #default="{ row }">
           <el-tag :type="row.usage_estimated ? 'warning' : 'success'" size="small">

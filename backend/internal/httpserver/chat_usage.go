@@ -39,6 +39,8 @@ type usageLogInput struct {
 	ErrorCode         string
 	ErrorMessage      string
 	Usage             upstreamUsage
+	BillableUnitType  string
+	BillableUnits     int64
 	UsageEstimated    bool
 	UsageSource       string
 	Costs             *chatCosts
@@ -175,6 +177,14 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 	if usageSource == "" {
 		usageSource = "upstream"
 	}
+	billableUnitType := input.BillableUnitType
+	if billableUnitType == "" {
+		billableUnitType = "token"
+	}
+	billableUnits := input.BillableUnits
+	if billableUnits == 0 && billableUnitType == "token" {
+		billableUnits = int64(input.Usage.TotalTokens)
+	}
 	_, err := s.queries.CreateUsageLog(ctx, dbgen.CreateUsageLogParams{
 		RequestID:           input.RequestID,
 		TraceID:             optionalTextString(input.TraceID),
@@ -194,6 +204,8 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 		PromptTokens:        input.Usage.PromptTokens,
 		CompletionTokens:    input.Usage.CompletionTokens,
 		TotalTokens:         input.Usage.TotalTokens,
+		BillableUnitType:    billableUnitType,
+		BillableUnits:       billableUnits,
 		ProviderCost:        costs.ProviderCost,
 		PlatformCost:        costs.PlatformCost,
 		UserCost:            costs.UserCost,
@@ -228,6 +240,10 @@ func (s *Server) calculateChatCosts(ctx context.Context, input usageLogInput) ch
 	if input.RequestStatus != "success" || input.Deployment == nil {
 		return chatCosts{}
 	}
+	capabilityType := input.CapabilityType
+	if capabilityType == "" {
+		capabilityType = "chat"
+	}
 
 	var costs chatCosts
 	modelPrice, err := s.queries.GetActiveModelPrice(ctx, input.ModelID)
@@ -250,7 +266,7 @@ func (s *Server) calculateChatCosts(ctx context.Context, input usageLogInput) ch
 		ProviderID:     input.Deployment.ProviderID,
 		EndpointID:     input.Deployment.EndpointID,
 		UpstreamModel:  input.Deployment.UpstreamModel,
-		CapabilityType: "chat",
+		CapabilityType: capabilityType,
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		s.logger.Error("get provider model price failed", "error", err, "request_id", input.RequestID)

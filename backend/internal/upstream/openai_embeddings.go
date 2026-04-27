@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-const ProtocolOpenAIImagesGenerations = "openai_images_generations"
+const ProtocolOpenAIEmbeddings = "openai_embeddings"
 
-type OpenAIImageRequest struct {
+type OpenAIEmbeddingsRequest struct {
 	BaseURL            string
 	CustomPath         string
 	APIKey             string
@@ -24,13 +24,13 @@ type OpenAIImageRequest struct {
 	Body               map[string]json.RawMessage
 }
 
-func ForwardOpenAIImageGeneration(ctx context.Context, client *http.Client, req OpenAIImageRequest) (*Response, error) {
+func ForwardOpenAIEmbeddings(ctx context.Context, client *http.Client, req OpenAIEmbeddingsRequest) (*Response, error) {
 	if req.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
 		defer cancel()
 	}
-	httpReq, err := NewOpenAIImageHTTPRequest(ctx, req)
+	httpReq, err := NewOpenAIEmbeddingsHTTPRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -48,15 +48,10 @@ func ForwardOpenAIImageGeneration(ctx context.Context, client *http.Client, req 
 	if err != nil {
 		return nil, fmt.Errorf("read upstream response: %w", err)
 	}
-
-	return &Response{
-		StatusCode: resp.StatusCode,
-		Header:     resp.Header.Clone(),
-		Body:       respBody,
-	}, nil
+	return &Response{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: respBody}, nil
 }
 
-func NewOpenAIImageHTTPRequest(ctx context.Context, req OpenAIImageRequest) (*http.Request, error) {
+func NewOpenAIEmbeddingsHTTPRequest(ctx context.Context, req OpenAIEmbeddingsRequest) (*http.Request, error) {
 	if req.BaseURL == "" {
 		return nil, errors.New("upstream base url is required")
 	}
@@ -67,11 +62,11 @@ func NewOpenAIImageHTTPRequest(ctx context.Context, req OpenAIImageRequest) (*ht
 		return nil, errors.New("upstream model is required")
 	}
 
-	body, err := buildOpenAIImageBody(req.Body, req.UpstreamModel, req.UpstreamParameters)
+	body, err := buildOpenAIEmbeddingsBody(req.Body, req.UpstreamModel, req.UpstreamParameters)
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := BuildEndpointURL(req.BaseURL, req.CustomPath, "/images/generations")
+	endpoint, err := BuildEndpointURL(req.BaseURL, req.CustomPath, "/embeddings")
 	if err != nil {
 		return nil, err
 	}
@@ -86,10 +81,9 @@ func NewOpenAIImageHTTPRequest(ctx context.Context, req OpenAIImageRequest) (*ht
 	if err := applyExtraHeaders(httpReq.Header, req.ExtraHeaders); err != nil {
 		return nil, err
 	}
-
 	return httpReq, nil
 }
 
-func buildOpenAIImageBody(raw map[string]json.RawMessage, upstreamModel string, upstreamParameters []byte) ([]byte, error) {
+func buildOpenAIEmbeddingsBody(raw map[string]json.RawMessage, upstreamModel string, upstreamParameters []byte) ([]byte, error) {
 	return buildOpenAIJSONBody(raw, upstreamModel, upstreamParameters)
 }

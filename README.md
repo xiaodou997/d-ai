@@ -1,46 +1,73 @@
 # uni-ai-api
 
-Uni AI API Gateway provides an OpenAI-compatible API surface for internal AI services.
+Uni AI API Gateway provides OpenAI-compatible runtime APIs for internal AI services, with provider routing, local API keys, usage logging, and URM settlement.
 
-## MVP Scope
+## Current Runtime Surface
 
-- `POST /v1/chat/completions`
+- `GET /health`
+- `GET /ready`
 - `GET /v1/models`
-- OpenAI-compatible upstream providers
-- PostgreSQL for configuration and usage ledgers
-- Redis for conversation stickiness, rate limits, health state, and quota reservations
-- URM JWT for management APIs
-- Local AI API keys for OpenAI-compatible runtime calls
-- URM pre-authorization billing for tenant and user credit settlement
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/embeddings`
+- `POST /v1/images/generations`
+
+The backend supports OpenAI-compatible chat, responses, embeddings, and image generation upstream protocols. Chat and responses support both non-streaming and SSE streaming relay.
+
+## Local E2E
+
+Use the fake upstream first; real provider keys are not needed for the default local smoke path.
+
+```bash
+cp backend/config.local.example.yaml backend/config.local.yaml
+```
+
+Run `db/init.sql` and `db/local_seed.sql` in Navicat, then start:
+
+```bash
+cd backend
+go run ./cmd/fake-upstream
+```
+
+In another shell:
+
+```bash
+cd backend
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/server
+```
+
+Runtime key:
+
+```text
+sk-ai-local-dev
+```
+
+Full smoke commands are in `docs/LOCAL_SMOKE.md`.
 
 ## Project Layout
 
 ```text
 backend/        Go service, API gateway, provider routing, billing integration
-web/admin/      Platform admin console, copied from URM admin foundation
-web/tenant/     Tenant console, copied from URM tenant foundation
-web/customer/   End-user console, copied from URM customer foundation
-docs/           Product and technical design documents
+db/             Navicat-friendly schema and local seed SQL
+web/admin/      Platform admin console
+web/tenant/     Tenant console
+web/customer/   End-user console
+docs/           Product, API, and smoke verification docs
 deployments/    Deployment manifests and environment examples
 ```
 
 Useful docs:
 
-- `docs/MVP_TECH_DESIGN.md`
+- `docs/LOCAL_SMOKE.md`
 - `docs/ADMIN_API.md`
 - `backend/seeds/README.md`
 
-## Confirmed Product Decisions
+## Product Decisions
 
-- Platform admins configure providers, endpoints, public models, platform pricing, and tenant model grants.
-- Public model codes are canonical. Provider-specific model names are mapped per deployment.
-- Provider model cost prices are recorded for audit and margin reports, while runtime billing uses platform and tenant prices.
-- Tenants view granted models, set tenant-to-user prices, grant models to users, and create tenant-owned API keys.
-- End users create their own API keys, set key quotas, select allowed models, and view their balance and usage.
-- User-owned API keys charge both tenant and user through URM.
-- Tenant-owned API keys charge only the tenant through URM, while local API key quota is still calculated at the tenant sale price.
+- Public model codes are canonical; provider model names are mapped per deployment.
+- Provider model cost prices are recorded for audit and margin reports.
+- Runtime billing uses platform and tenant model prices.
 - API key quotas are local to `uni-ai-api`; URM remains the source of account balances and credit settlement.
+- Tenant-owned API keys charge the tenant through URM.
+- User-owned API keys charge both tenant and user through URM.
 - Runtime API keys use the `sk-ai-` prefix.
-- Backend Go module path is `uni-ai-api/backend`.
-- Provider API keys are encrypted with an environment-provided master key in MVP.
-- Providers support a custom provider mode with selectable protocol type. MVP implements `openai_chat_completions` first and reserves `openai_responses` and `anthropic_messages` in the adapter design.

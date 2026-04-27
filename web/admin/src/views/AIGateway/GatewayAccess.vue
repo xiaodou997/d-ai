@@ -43,12 +43,7 @@ const grantForm = reactive({
 const keyForm = reactive({
   name: '',
   quota_limit: 100000000,
-  daily_quota: null,
-  monthly_quota: null,
   allowed_models: [],
-  rpm_limit: 60,
-  tpm_limit: null,
-  concurrency_limit: null,
   status: 'active',
   created_by: 'admin'
 })
@@ -121,12 +116,7 @@ const openKeyDialog = (owner) => {
   Object.assign(keyForm, {
     name: owner === 'tenant' ? 'Tenant runtime key' : 'User runtime key',
     quota_limit: 100000000,
-    daily_quota: null,
-    monthly_quota: null,
     allowed_models: [],
-    rpm_limit: 60,
-    tpm_limit: null,
-    concurrency_limit: null,
     status: 'active',
     created_by: 'admin'
   })
@@ -136,12 +126,7 @@ const openKeyDialog = (owner) => {
 const submitKey = async () => {
   const payload = {
     ...keyForm,
-    quota_limit: keyForm.quota_limit || undefined,
-    daily_quota: keyForm.daily_quota || undefined,
-    monthly_quota: keyForm.monthly_quota || undefined,
-    rpm_limit: keyForm.rpm_limit || undefined,
-    tpm_limit: keyForm.tpm_limit || undefined,
-    concurrency_limit: keyForm.concurrency_limit || undefined
+    quota_limit: keyForm.quota_limit || undefined
   }
   const response =
     activeOwner.value === 'tenant'
@@ -345,8 +330,8 @@ onMounted(async () => {
           <el-form-item label="名称" required>
             <el-input v-model="keyForm.name" />
           </el-form-item>
-          <el-form-item label="RPM">
-            <el-input-number v-model="keyForm.rpm_limit" :min="0" class="w-full" />
+          <el-form-item label="总额度">
+            <el-input-number v-model="keyForm.quota_limit" :min="0" class="w-full" />
           </el-form-item>
         </div>
         <el-form-item label="允许模型">
@@ -354,17 +339,6 @@ onMounted(async () => {
             <el-option v-for="item in modelCodeOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <div class="grid grid-cols-3 gap-4">
-          <el-form-item label="总额度">
-            <el-input-number v-model="keyForm.quota_limit" :min="0" class="w-full" />
-          </el-form-item>
-          <el-form-item label="日额度">
-            <el-input-number v-model="keyForm.daily_quota" :min="0" class="w-full" />
-          </el-form-item>
-          <el-form-item label="月额度">
-            <el-input-number v-model="keyForm.monthly_quota" :min="0" class="w-full" />
-          </el-form-item>
-        </div>
       </el-form>
       <template #footer>
         <el-button @click="keyDialogVisible = false">取消</el-button>

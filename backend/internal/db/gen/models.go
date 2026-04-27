@@ -21,29 +21,22 @@ type AiAdminAuditLog struct {
 }
 
 type AiApiKey struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyHash          string             `json:"key_hash"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyHash       string             `json:"key_hash"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiConversationBinding struct {
@@ -125,9 +118,6 @@ type AiProviderEndpoint struct {
 	CustomPath        pgtype.Text        `json:"custom_path"`
 	ProtocolOverrides []byte             `json:"protocol_overrides"`
 	Weight            int32              `json:"weight"`
-	RpmLimit          pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	TimeoutMs         int32              `json:"timeout_ms"`
 	Status            string             `json:"status"`
 	HealthStatus      string             `json:"health_status"`
@@ -197,6 +187,8 @@ type AiUsageLog struct {
 	PromptTokens        int32              `json:"prompt_tokens"`
 	CompletionTokens    int32              `json:"completion_tokens"`
 	TotalTokens         int32              `json:"total_tokens"`
+	BillableUnitType    string             `json:"billable_unit_type"`
+	BillableUnits       int64              `json:"billable_units"`
 	ProviderCost        int64              `json:"provider_cost"`
 	PlatformCost        int64              `json:"platform_cost"`
 	UserCost            int64              `json:"user_cost"`

@@ -329,14 +329,11 @@ INSERT INTO ai_provider_endpoints (
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'unknown'
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'unknown'
 )
 RETURNING
   id,
@@ -348,9 +345,6 @@ RETURNING
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -368,9 +362,6 @@ type CreateProviderEndpointParams struct {
 	CustomPath        pgtype.Text `json:"custom_path"`
 	ProtocolOverrides []byte      `json:"protocol_overrides"`
 	Weight            int32       `json:"weight"`
-	RpmLimit          pgtype.Int4 `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4 `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4 `json:"concurrency_limit"`
 	TimeoutMs         int32       `json:"timeout_ms"`
 	Status            string      `json:"status"`
 }
@@ -385,9 +376,6 @@ type CreateProviderEndpointRow struct {
 	CustomPath        pgtype.Text        `json:"custom_path"`
 	ProtocolOverrides []byte             `json:"protocol_overrides"`
 	Weight            int32              `json:"weight"`
-	RpmLimit          pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	TimeoutMs         int32              `json:"timeout_ms"`
 	Status            string             `json:"status"`
 	HealthStatus      string             `json:"health_status"`
@@ -406,9 +394,6 @@ func (q *Queries) CreateProviderEndpoint(ctx context.Context, arg CreateProvider
 		arg.CustomPath,
 		arg.ProtocolOverrides,
 		arg.Weight,
-		arg.RpmLimit,
-		arg.TpmLimit,
-		arg.ConcurrencyLimit,
 		arg.TimeoutMs,
 		arg.Status,
 	)
@@ -423,9 +408,6 @@ func (q *Queries) CreateProviderEndpoint(ctx context.Context, arg CreateProvider
 		&i.CustomPath,
 		&i.ProtocolOverrides,
 		&i.Weight,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.TimeoutMs,
 		&i.Status,
 		&i.HealthStatus,
@@ -599,18 +581,13 @@ INSERT INTO ai_api_keys (
   key_prefix,
   name,
   quota_limit,
-  daily_quota,
-  monthly_quota,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by
 ) VALUES (
   'tenant',
-  $1, NULL, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, NULL, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING
   id,
@@ -622,14 +599,7 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -638,45 +608,33 @@ RETURNING
 `
 
 type CreateTenantAPIKeyParams struct {
-	TenantID         string             `json:"tenant_id"`
-	KeyHash          string             `json:"key_hash"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
+	TenantID      string             `json:"tenant_id"`
+	KeyHash       string             `json:"key_hash"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
 }
 
 type CreateTenantAPIKeyRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) CreateTenantAPIKey(ctx context.Context, arg CreateTenantAPIKeyParams) (CreateTenantAPIKeyRow, error) {
@@ -686,12 +644,7 @@ func (q *Queries) CreateTenantAPIKey(ctx context.Context, arg CreateTenantAPIKey
 		arg.KeyPrefix,
 		arg.Name,
 		arg.QuotaLimit,
-		arg.DailyQuota,
-		arg.MonthlyQuota,
 		arg.AllowedModels,
-		arg.RpmLimit,
-		arg.TpmLimit,
-		arg.ConcurrencyLimit,
 		arg.Status,
 		arg.ExpiresAt,
 		arg.CreatedBy,
@@ -707,14 +660,7 @@ func (q *Queries) CreateTenantAPIKey(ctx context.Context, arg CreateTenantAPIKey
 		&i.QuotaLimit,
 		&i.QuotaUsed,
 		&i.QuotaReserved,
-		&i.DailyQuota,
-		&i.DailyUsed,
-		&i.MonthlyQuota,
-		&i.MonthlyUsed,
 		&i.AllowedModels,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.Status,
 		&i.ExpiresAt,
 		&i.CreatedBy,
@@ -733,18 +679,13 @@ INSERT INTO ai_api_keys (
   key_prefix,
   name,
   quota_limit,
-  daily_quota,
-  monthly_quota,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by
 ) VALUES (
   'user',
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING
   id,
@@ -756,14 +697,7 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -772,46 +706,34 @@ RETURNING
 `
 
 type CreateUserAPIKeyParams struct {
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyHash          string             `json:"key_hash"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyHash       string             `json:"key_hash"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
 }
 
 type CreateUserAPIKeyRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) CreateUserAPIKey(ctx context.Context, arg CreateUserAPIKeyParams) (CreateUserAPIKeyRow, error) {
@@ -822,12 +744,7 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg CreateUserAPIKeyPara
 		arg.KeyPrefix,
 		arg.Name,
 		arg.QuotaLimit,
-		arg.DailyQuota,
-		arg.MonthlyQuota,
 		arg.AllowedModels,
-		arg.RpmLimit,
-		arg.TpmLimit,
-		arg.ConcurrencyLimit,
 		arg.Status,
 		arg.ExpiresAt,
 		arg.CreatedBy,
@@ -843,14 +760,7 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg CreateUserAPIKeyPara
 		&i.QuotaLimit,
 		&i.QuotaUsed,
 		&i.QuotaReserved,
-		&i.DailyQuota,
-		&i.DailyUsed,
-		&i.MonthlyQuota,
-		&i.MonthlyUsed,
 		&i.AllowedModels,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.Status,
 		&i.ExpiresAt,
 		&i.CreatedBy,
@@ -860,7 +770,7 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg CreateUserAPIKeyPara
 	return i, err
 }
 
-const getFirstActiveChatDeploymentForEndpoint = `-- name: GetFirstActiveChatDeploymentForEndpoint :one
+const getFirstActiveProbeDeploymentForEndpoint = `-- name: GetFirstActiveProbeDeploymentForEndpoint :one
 SELECT
   d.id,
   d.upstream_model,
@@ -869,13 +779,13 @@ SELECT
   d.capability_type
 FROM ai_model_deployments d
 WHERE d.endpoint_id = $1
-  AND d.capability_type = 'chat'
+  AND d.upstream_protocol IN ('openai_chat_completions', 'openai_responses', 'openai_embeddings')
   AND d.status = 'active'
 ORDER BY d.priority ASC, d.weight DESC, d.created_at ASC
 LIMIT 1
 `
 
-type GetFirstActiveChatDeploymentForEndpointRow struct {
+type GetFirstActiveProbeDeploymentForEndpointRow struct {
 	ID                 pgtype.UUID `json:"id"`
 	UpstreamModel      string      `json:"upstream_model"`
 	UpstreamParameters []byte      `json:"upstream_parameters"`
@@ -883,9 +793,9 @@ type GetFirstActiveChatDeploymentForEndpointRow struct {
 	CapabilityType     string      `json:"capability_type"`
 }
 
-func (q *Queries) GetFirstActiveChatDeploymentForEndpoint(ctx context.Context, endpointID pgtype.UUID) (GetFirstActiveChatDeploymentForEndpointRow, error) {
-	row := q.db.QueryRow(ctx, getFirstActiveChatDeploymentForEndpoint, endpointID)
-	var i GetFirstActiveChatDeploymentForEndpointRow
+func (q *Queries) GetFirstActiveProbeDeploymentForEndpoint(ctx context.Context, endpointID pgtype.UUID) (GetFirstActiveProbeDeploymentForEndpointRow, error) {
+	row := q.db.QueryRow(ctx, getFirstActiveProbeDeploymentForEndpoint, endpointID)
+	var i GetFirstActiveProbeDeploymentForEndpointRow
 	err := row.Scan(
 		&i.ID,
 		&i.UpstreamModel,
@@ -976,9 +886,6 @@ SELECT
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -1005,9 +912,6 @@ type GetProviderEndpointRow struct {
 	CustomPath        pgtype.Text        `json:"custom_path"`
 	ProtocolOverrides []byte             `json:"protocol_overrides"`
 	Weight            int32              `json:"weight"`
-	RpmLimit          pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	TimeoutMs         int32              `json:"timeout_ms"`
 	Status            string             `json:"status"`
 	HealthStatus      string             `json:"health_status"`
@@ -1029,9 +933,6 @@ func (q *Queries) GetProviderEndpoint(ctx context.Context, arg GetProviderEndpoi
 		&i.CustomPath,
 		&i.ProtocolOverrides,
 		&i.Weight,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.TimeoutMs,
 		&i.Status,
 		&i.HealthStatus,
@@ -1479,9 +1380,6 @@ SELECT
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -1502,9 +1400,6 @@ type ListProviderEndpointsRow struct {
 	CustomPath        pgtype.Text        `json:"custom_path"`
 	ProtocolOverrides []byte             `json:"protocol_overrides"`
 	Weight            int32              `json:"weight"`
-	RpmLimit          pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	TimeoutMs         int32              `json:"timeout_ms"`
 	Status            string             `json:"status"`
 	HealthStatus      string             `json:"health_status"`
@@ -1531,9 +1426,6 @@ func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.U
 			&i.CustomPath,
 			&i.ProtocolOverrides,
 			&i.Weight,
-			&i.RpmLimit,
-			&i.TpmLimit,
-			&i.ConcurrencyLimit,
 			&i.TimeoutMs,
 			&i.Status,
 			&i.HealthStatus,
@@ -1737,14 +1629,7 @@ SELECT
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -1757,28 +1642,21 @@ ORDER BY created_at DESC
 `
 
 type ListTenantAPIKeysRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListTenantAPIKeys(ctx context.Context, tenantID string) ([]ListTenantAPIKeysRow, error) {
@@ -1800,14 +1678,7 @@ func (q *Queries) ListTenantAPIKeys(ctx context.Context, tenantID string) ([]Lis
 			&i.QuotaLimit,
 			&i.QuotaUsed,
 			&i.QuotaReserved,
-			&i.DailyQuota,
-			&i.DailyUsed,
-			&i.MonthlyQuota,
-			&i.MonthlyUsed,
 			&i.AllowedModels,
-			&i.RpmLimit,
-			&i.TpmLimit,
-			&i.ConcurrencyLimit,
 			&i.Status,
 			&i.ExpiresAt,
 			&i.CreatedBy,
@@ -1904,6 +1775,8 @@ SELECT
   prompt_tokens,
   completion_tokens,
   total_tokens,
+  billable_unit_type,
+  billable_units,
   provider_cost,
   platform_cost,
   user_cost,
@@ -1972,6 +1845,8 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.PromptTokens,
 			&i.CompletionTokens,
 			&i.TotalTokens,
+			&i.BillableUnitType,
+			&i.BillableUnits,
 			&i.ProviderCost,
 			&i.PlatformCost,
 			&i.UserCost,
@@ -2010,14 +1885,7 @@ SELECT
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -2036,28 +1904,21 @@ type ListUserAPIKeysParams struct {
 }
 
 type ListUserAPIKeysRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListUserAPIKeys(ctx context.Context, arg ListUserAPIKeysParams) ([]ListUserAPIKeysRow, error) {
@@ -2079,14 +1940,7 @@ func (q *Queries) ListUserAPIKeys(ctx context.Context, arg ListUserAPIKeysParams
 			&i.QuotaLimit,
 			&i.QuotaUsed,
 			&i.QuotaReserved,
-			&i.DailyQuota,
-			&i.DailyUsed,
-			&i.MonthlyQuota,
-			&i.MonthlyUsed,
 			&i.AllowedModels,
-			&i.RpmLimit,
-			&i.TpmLimit,
-			&i.ConcurrencyLimit,
 			&i.Status,
 			&i.ExpiresAt,
 			&i.CreatedBy,
@@ -2171,6 +2025,145 @@ func (q *Queries) ListUserModelGrants(ctx context.Context, arg ListUserModelGran
 	return items, nil
 }
 
+const updateModel = `-- name: UpdateModel :one
+UPDATE ai_models
+SET model_code = $2,
+    display_name = $3,
+    capability_type = $4,
+    context_window = $5,
+    default_max_output_tokens = $6,
+    max_output_tokens = $7,
+    status = $8,
+    updated_at = now()
+WHERE id = $1
+RETURNING
+  id,
+  model_code,
+  display_name,
+  capability_type,
+  context_window,
+  default_max_output_tokens,
+  max_output_tokens,
+  status,
+  created_at,
+  updated_at
+`
+
+type UpdateModelParams struct {
+	ID                     pgtype.UUID `json:"id"`
+	ModelCode              string      `json:"model_code"`
+	DisplayName            string      `json:"display_name"`
+	CapabilityType         string      `json:"capability_type"`
+	ContextWindow          pgtype.Int4 `json:"context_window"`
+	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
+	Status                 string      `json:"status"`
+}
+
+func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (AiModel, error) {
+	row := q.db.QueryRow(ctx, updateModel,
+		arg.ID,
+		arg.ModelCode,
+		arg.DisplayName,
+		arg.CapabilityType,
+		arg.ContextWindow,
+		arg.DefaultMaxOutputTokens,
+		arg.MaxOutputTokens,
+		arg.Status,
+	)
+	var i AiModel
+	err := row.Scan(
+		&i.ID,
+		&i.ModelCode,
+		&i.DisplayName,
+		&i.CapabilityType,
+		&i.ContextWindow,
+		&i.DefaultMaxOutputTokens,
+		&i.MaxOutputTokens,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateModelDeployment = `-- name: UpdateModelDeployment :one
+UPDATE ai_model_deployments
+SET endpoint_id = $3,
+    upstream_model = $4,
+    capability_type = $5,
+    upstream_protocol = $6,
+    upstream_parameters = $7,
+    priority = $8,
+    weight = $9,
+    supports_stream = $10,
+    status = $11,
+    updated_at = now()
+WHERE model_id = $1
+  AND id = $2
+RETURNING
+  id,
+  model_id,
+  endpoint_id,
+  upstream_model,
+  capability_type,
+  upstream_protocol,
+  upstream_parameters,
+  priority,
+  weight,
+  supports_stream,
+  status,
+  created_at,
+  updated_at
+`
+
+type UpdateModelDeploymentParams struct {
+	ModelID            pgtype.UUID `json:"model_id"`
+	ID                 pgtype.UUID `json:"id"`
+	EndpointID         pgtype.UUID `json:"endpoint_id"`
+	UpstreamModel      string      `json:"upstream_model"`
+	CapabilityType     string      `json:"capability_type"`
+	UpstreamProtocol   string      `json:"upstream_protocol"`
+	UpstreamParameters []byte      `json:"upstream_parameters"`
+	Priority           int32       `json:"priority"`
+	Weight             int32       `json:"weight"`
+	SupportsStream     bool        `json:"supports_stream"`
+	Status             string      `json:"status"`
+}
+
+func (q *Queries) UpdateModelDeployment(ctx context.Context, arg UpdateModelDeploymentParams) (AiModelDeployment, error) {
+	row := q.db.QueryRow(ctx, updateModelDeployment,
+		arg.ModelID,
+		arg.ID,
+		arg.EndpointID,
+		arg.UpstreamModel,
+		arg.CapabilityType,
+		arg.UpstreamProtocol,
+		arg.UpstreamParameters,
+		arg.Priority,
+		arg.Weight,
+		arg.SupportsStream,
+		arg.Status,
+	)
+	var i AiModelDeployment
+	err := row.Scan(
+		&i.ID,
+		&i.ModelID,
+		&i.EndpointID,
+		&i.UpstreamModel,
+		&i.CapabilityType,
+		&i.UpstreamProtocol,
+		&i.UpstreamParameters,
+		&i.Priority,
+		&i.Weight,
+		&i.SupportsStream,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateModelDeploymentStatus = `-- name: UpdateModelDeploymentStatus :one
 UPDATE ai_model_deployments
 SET status = $3,
@@ -2216,6 +2209,75 @@ func (q *Queries) UpdateModelDeploymentStatus(ctx context.Context, arg UpdateMod
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateModelPrice = `-- name: UpdateModelPrice :one
+UPDATE ai_model_prices
+SET platform_input_price_per_1m = $3,
+    platform_output_price_per_1m = $4,
+    platform_image_price = $5,
+    tenant_input_price_per_1m = $6,
+    tenant_output_price_per_1m = $7,
+    tenant_image_price = $8,
+    effective_from = $9,
+    status = $10
+WHERE model_id = $1
+  AND id = $2
+RETURNING
+  id,
+  model_id,
+  platform_input_price_per_1m,
+  platform_output_price_per_1m,
+  platform_image_price,
+  tenant_input_price_per_1m,
+  tenant_output_price_per_1m,
+  tenant_image_price,
+  effective_from,
+  status,
+  created_at
+`
+
+type UpdateModelPriceParams struct {
+	ModelID                  pgtype.UUID        `json:"model_id"`
+	ID                       pgtype.UUID        `json:"id"`
+	PlatformInputPricePer1m  int64              `json:"platform_input_price_per_1m"`
+	PlatformOutputPricePer1m int64              `json:"platform_output_price_per_1m"`
+	PlatformImagePrice       int64              `json:"platform_image_price"`
+	TenantInputPricePer1m    int64              `json:"tenant_input_price_per_1m"`
+	TenantOutputPricePer1m   int64              `json:"tenant_output_price_per_1m"`
+	TenantImagePrice         int64              `json:"tenant_image_price"`
+	EffectiveFrom            pgtype.Timestamptz `json:"effective_from"`
+	Status                   string             `json:"status"`
+}
+
+func (q *Queries) UpdateModelPrice(ctx context.Context, arg UpdateModelPriceParams) (AiModelPrice, error) {
+	row := q.db.QueryRow(ctx, updateModelPrice,
+		arg.ModelID,
+		arg.ID,
+		arg.PlatformInputPricePer1m,
+		arg.PlatformOutputPricePer1m,
+		arg.PlatformImagePrice,
+		arg.TenantInputPricePer1m,
+		arg.TenantOutputPricePer1m,
+		arg.TenantImagePrice,
+		arg.EffectiveFrom,
+		arg.Status,
+	)
+	var i AiModelPrice
+	err := row.Scan(
+		&i.ID,
+		&i.ModelID,
+		&i.PlatformInputPricePer1m,
+		&i.PlatformOutputPricePer1m,
+		&i.PlatformImagePrice,
+		&i.TenantInputPricePer1m,
+		&i.TenantOutputPricePer1m,
+		&i.TenantImagePrice,
+		&i.EffectiveFrom,
+		&i.Status,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -2305,6 +2367,167 @@ func (q *Queries) UpdateModelStatus(ctx context.Context, arg UpdateModelStatusPa
 	return i, err
 }
 
+const updateProvider = `-- name: UpdateProvider :one
+UPDATE ai_providers
+SET code = $2,
+    name = $3,
+    provider_type = $4,
+    protocol_type = $5,
+    is_custom = $6,
+    config = $7,
+    status = $8,
+    updated_at = now()
+WHERE id = $1
+RETURNING
+  id,
+  code,
+  name,
+  provider_type,
+  protocol_type,
+  is_custom,
+  config,
+  status,
+  created_at,
+  updated_at
+`
+
+type UpdateProviderParams struct {
+	ID           pgtype.UUID `json:"id"`
+	Code         string      `json:"code"`
+	Name         string      `json:"name"`
+	ProviderType string      `json:"provider_type"`
+	ProtocolType string      `json:"protocol_type"`
+	IsCustom     bool        `json:"is_custom"`
+	Config       []byte      `json:"config"`
+	Status       string      `json:"status"`
+}
+
+func (q *Queries) UpdateProvider(ctx context.Context, arg UpdateProviderParams) (AiProvider, error) {
+	row := q.db.QueryRow(ctx, updateProvider,
+		arg.ID,
+		arg.Code,
+		arg.Name,
+		arg.ProviderType,
+		arg.ProtocolType,
+		arg.IsCustom,
+		arg.Config,
+		arg.Status,
+	)
+	var i AiProvider
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Name,
+		&i.ProviderType,
+		&i.ProtocolType,
+		&i.IsCustom,
+		&i.Config,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateProviderEndpoint = `-- name: UpdateProviderEndpoint :one
+UPDATE ai_provider_endpoints
+SET name = $3,
+    base_url = $4,
+    protocol_type = $5,
+    api_key_ciphertext = $6,
+    extra_headers = $7,
+    custom_path = $8,
+    protocol_overrides = $9,
+    weight = $10,
+    timeout_ms = $11,
+    status = $12,
+    updated_at = now()
+WHERE provider_id = $1
+  AND id = $2
+RETURNING
+  id,
+  provider_id,
+  name,
+  base_url,
+  protocol_type,
+  extra_headers,
+  custom_path,
+  protocol_overrides,
+  weight,
+  timeout_ms,
+  status,
+  health_status,
+  created_at,
+  updated_at
+`
+
+type UpdateProviderEndpointParams struct {
+	ProviderID        pgtype.UUID `json:"provider_id"`
+	ID                pgtype.UUID `json:"id"`
+	Name              string      `json:"name"`
+	BaseUrl           string      `json:"base_url"`
+	ProtocolType      string      `json:"protocol_type"`
+	ApiKeyCiphertext  string      `json:"api_key_ciphertext"`
+	ExtraHeaders      []byte      `json:"extra_headers"`
+	CustomPath        pgtype.Text `json:"custom_path"`
+	ProtocolOverrides []byte      `json:"protocol_overrides"`
+	Weight            int32       `json:"weight"`
+	TimeoutMs         int32       `json:"timeout_ms"`
+	Status            string      `json:"status"`
+}
+
+type UpdateProviderEndpointRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ProviderID        pgtype.UUID        `json:"provider_id"`
+	Name              string             `json:"name"`
+	BaseUrl           string             `json:"base_url"`
+	ProtocolType      string             `json:"protocol_type"`
+	ExtraHeaders      []byte             `json:"extra_headers"`
+	CustomPath        pgtype.Text        `json:"custom_path"`
+	ProtocolOverrides []byte             `json:"protocol_overrides"`
+	Weight            int32              `json:"weight"`
+	TimeoutMs         int32              `json:"timeout_ms"`
+	Status            string             `json:"status"`
+	HealthStatus      string             `json:"health_status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateProviderEndpoint(ctx context.Context, arg UpdateProviderEndpointParams) (UpdateProviderEndpointRow, error) {
+	row := q.db.QueryRow(ctx, updateProviderEndpoint,
+		arg.ProviderID,
+		arg.ID,
+		arg.Name,
+		arg.BaseUrl,
+		arg.ProtocolType,
+		arg.ApiKeyCiphertext,
+		arg.ExtraHeaders,
+		arg.CustomPath,
+		arg.ProtocolOverrides,
+		arg.Weight,
+		arg.TimeoutMs,
+		arg.Status,
+	)
+	var i UpdateProviderEndpointRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProviderID,
+		&i.Name,
+		&i.BaseUrl,
+		&i.ProtocolType,
+		&i.ExtraHeaders,
+		&i.CustomPath,
+		&i.ProtocolOverrides,
+		&i.Weight,
+		&i.TimeoutMs,
+		&i.Status,
+		&i.HealthStatus,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateProviderEndpointHealth = `-- name: UpdateProviderEndpointHealth :one
 UPDATE ai_provider_endpoints
 SET health_status = $3,
@@ -2322,9 +2545,6 @@ RETURNING
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -2348,9 +2568,6 @@ type UpdateProviderEndpointHealthRow struct {
 	CustomPath        pgtype.Text        `json:"custom_path"`
 	ProtocolOverrides []byte             `json:"protocol_overrides"`
 	Weight            int32              `json:"weight"`
-	RpmLimit          pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	TimeoutMs         int32              `json:"timeout_ms"`
 	Status            string             `json:"status"`
 	HealthStatus      string             `json:"health_status"`
@@ -2371,9 +2588,6 @@ func (q *Queries) UpdateProviderEndpointHealth(ctx context.Context, arg UpdatePr
 		&i.CustomPath,
 		&i.ProtocolOverrides,
 		&i.Weight,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.TimeoutMs,
 		&i.Status,
 		&i.HealthStatus,
@@ -2399,9 +2613,6 @@ RETURNING
   custom_path,
   protocol_overrides,
   weight,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   timeout_ms,
   status,
   health_status,
@@ -2425,9 +2636,6 @@ type UpdateProviderEndpointStatusRow struct {
 	CustomPath        pgtype.Text        `json:"custom_path"`
 	ProtocolOverrides []byte             `json:"protocol_overrides"`
 	Weight            int32              `json:"weight"`
-	RpmLimit          pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit          pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit  pgtype.Int4        `json:"concurrency_limit"`
 	TimeoutMs         int32              `json:"timeout_ms"`
 	Status            string             `json:"status"`
 	HealthStatus      string             `json:"health_status"`
@@ -2448,14 +2656,95 @@ func (q *Queries) UpdateProviderEndpointStatus(ctx context.Context, arg UpdatePr
 		&i.CustomPath,
 		&i.ProtocolOverrides,
 		&i.Weight,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.TimeoutMs,
 		&i.Status,
 		&i.HealthStatus,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateProviderModelPrice = `-- name: UpdateProviderModelPrice :one
+UPDATE ai_provider_model_prices
+SET endpoint_id = $3,
+    upstream_model = $4,
+    capability_type = $5,
+    currency = $6,
+    input_cost_per_1m = $7,
+    output_cost_per_1m = $8,
+    request_cost = $9,
+    image_cost = $10,
+    video_cost_per_second = $11,
+    effective_from = $12,
+    status = $13
+WHERE provider_id = $1
+  AND id = $2
+RETURNING
+  id,
+  provider_id,
+  endpoint_id,
+  upstream_model,
+  capability_type,
+  currency,
+  input_cost_per_1m,
+  output_cost_per_1m,
+  request_cost,
+  image_cost,
+  video_cost_per_second,
+  effective_from,
+  status,
+  created_at
+`
+
+type UpdateProviderModelPriceParams struct {
+	ProviderID         pgtype.UUID        `json:"provider_id"`
+	ID                 pgtype.UUID        `json:"id"`
+	EndpointID         pgtype.UUID        `json:"endpoint_id"`
+	UpstreamModel      string             `json:"upstream_model"`
+	CapabilityType     string             `json:"capability_type"`
+	Currency           string             `json:"currency"`
+	InputCostPer1m     int64              `json:"input_cost_per_1m"`
+	OutputCostPer1m    int64              `json:"output_cost_per_1m"`
+	RequestCost        int64              `json:"request_cost"`
+	ImageCost          int64              `json:"image_cost"`
+	VideoCostPerSecond int64              `json:"video_cost_per_second"`
+	EffectiveFrom      pgtype.Timestamptz `json:"effective_from"`
+	Status             string             `json:"status"`
+}
+
+func (q *Queries) UpdateProviderModelPrice(ctx context.Context, arg UpdateProviderModelPriceParams) (AiProviderModelPrice, error) {
+	row := q.db.QueryRow(ctx, updateProviderModelPrice,
+		arg.ProviderID,
+		arg.ID,
+		arg.EndpointID,
+		arg.UpstreamModel,
+		arg.CapabilityType,
+		arg.Currency,
+		arg.InputCostPer1m,
+		arg.OutputCostPer1m,
+		arg.RequestCost,
+		arg.ImageCost,
+		arg.VideoCostPerSecond,
+		arg.EffectiveFrom,
+		arg.Status,
+	)
+	var i AiProviderModelPrice
+	err := row.Scan(
+		&i.ID,
+		&i.ProviderID,
+		&i.EndpointID,
+		&i.UpstreamModel,
+		&i.CapabilityType,
+		&i.Currency,
+		&i.InputCostPer1m,
+		&i.OutputCostPer1m,
+		&i.RequestCost,
+		&i.ImageCost,
+		&i.VideoCostPerSecond,
+		&i.EffectiveFrom,
+		&i.Status,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -2666,6 +2955,94 @@ func (q *Queries) UpdateRuntimeLimitPolicyStatus(ctx context.Context, arg Update
 	return i, err
 }
 
+const updateTenantAPIKey = `-- name: UpdateTenantAPIKey :one
+UPDATE ai_api_keys
+SET name = $3,
+    quota_limit = $4,
+    allowed_models = $5,
+    status = $6,
+    expires_at = $7,
+    updated_at = now()
+WHERE tenant_id = $1
+  AND id = $2
+  AND owner_type = 'tenant'
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at
+`
+
+type UpdateTenantAPIKeyParams struct {
+	TenantID      string             `json:"tenant_id"`
+	ID            pgtype.UUID        `json:"id"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+type UpdateTenantAPIKeyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateTenantAPIKey(ctx context.Context, arg UpdateTenantAPIKeyParams) (UpdateTenantAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, updateTenantAPIKey,
+		arg.TenantID,
+		arg.ID,
+		arg.Name,
+		arg.QuotaLimit,
+		arg.AllowedModels,
+		arg.Status,
+		arg.ExpiresAt,
+	)
+	var i UpdateTenantAPIKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.KeyPrefix,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateTenantAPIKeyStatus = `-- name: UpdateTenantAPIKeyStatus :one
 UPDATE ai_api_keys
 SET status = $3,
@@ -2683,14 +3060,7 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -2705,28 +3075,21 @@ type UpdateTenantAPIKeyStatusParams struct {
 }
 
 type UpdateTenantAPIKeyStatusRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) UpdateTenantAPIKeyStatus(ctx context.Context, arg UpdateTenantAPIKeyStatusParams) (UpdateTenantAPIKeyStatusRow, error) {
@@ -2742,14 +3105,7 @@ func (q *Queries) UpdateTenantAPIKeyStatus(ctx context.Context, arg UpdateTenant
 		&i.QuotaLimit,
 		&i.QuotaUsed,
 		&i.QuotaReserved,
-		&i.DailyQuota,
-		&i.DailyUsed,
-		&i.MonthlyQuota,
-		&i.MonthlyUsed,
 		&i.AllowedModels,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.Status,
 		&i.ExpiresAt,
 		&i.CreatedBy,
@@ -2793,6 +3149,97 @@ func (q *Queries) UpdateTenantModelGrantStatus(ctx context.Context, arg UpdateTe
 	return i, err
 }
 
+const updateUserAPIKey = `-- name: UpdateUserAPIKey :one
+UPDATE ai_api_keys
+SET name = $4,
+    quota_limit = $5,
+    allowed_models = $6,
+    status = $7,
+    expires_at = $8,
+    updated_at = now()
+WHERE tenant_id = $1
+  AND user_id = $2
+  AND id = $3
+  AND owner_type = 'user'
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at
+`
+
+type UpdateUserAPIKeyParams struct {
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	ID            pgtype.UUID        `json:"id"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+type UpdateUserAPIKeyRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateUserAPIKey(ctx context.Context, arg UpdateUserAPIKeyParams) (UpdateUserAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, updateUserAPIKey,
+		arg.TenantID,
+		arg.UserID,
+		arg.ID,
+		arg.Name,
+		arg.QuotaLimit,
+		arg.AllowedModels,
+		arg.Status,
+		arg.ExpiresAt,
+	)
+	var i UpdateUserAPIKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.KeyPrefix,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUserAPIKeyStatus = `-- name: UpdateUserAPIKeyStatus :one
 UPDATE ai_api_keys
 SET status = $4,
@@ -2811,14 +3258,7 @@ RETURNING
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -2834,28 +3274,21 @@ type UpdateUserAPIKeyStatusParams struct {
 }
 
 type UpdateUserAPIKeyStatusRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) UpdateUserAPIKeyStatus(ctx context.Context, arg UpdateUserAPIKeyStatusParams) (UpdateUserAPIKeyStatusRow, error) {
@@ -2876,14 +3309,7 @@ func (q *Queries) UpdateUserAPIKeyStatus(ctx context.Context, arg UpdateUserAPIK
 		&i.QuotaLimit,
 		&i.QuotaUsed,
 		&i.QuotaReserved,
-		&i.DailyQuota,
-		&i.DailyUsed,
-		&i.MonthlyQuota,
-		&i.MonthlyUsed,
 		&i.AllowedModels,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.Status,
 		&i.ExpiresAt,
 		&i.CreatedBy,

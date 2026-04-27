@@ -1,4 +1,6 @@
-# Uni AI API Gateway MVP Technical Design
+# Uni AI API Gateway Technical Design
+
+This document describes the current operating baseline. Local databases must be rebuilt from `backend/migrations/00001_init.sql`; historical migration compatibility is not maintained in this iteration.
 
 ## 1. Goal
 
@@ -6,26 +8,28 @@
 
 It is not a generic HTTP proxy. The domain model is AI-specific: provider, endpoint, model, deployment, price, API key, usage, and settlement.
 
-## 2. MVP Scope
+## 2. Current Scope
 
-Supported in the first version:
+Supported runtime APIs:
 
 - `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/embeddings`
+- `POST /v1/images/generations`
 - `GET /v1/models`
-- OpenAI Chat Completions-compatible upstream providers first
-- Protocol design reserves OpenAI Responses API and Anthropic Messages API
+- OpenAI-compatible Chat Completions, Responses, Embeddings, and Images upstreams
 - Canonical model mapping from public model code to provider upstream model name
 - Provider model cost prices for audit and margin reports
-- Streaming and non-streaming chat completions
+- Streaming and non-streaming chat/responses
 - PostgreSQL for persistent configuration, quota ledgers, and usage logs
-- Redis for conversation stickiness, endpoint health state, rate limits, and quota reservations
+- Redis for conversation stickiness, endpoint health state, runtime limit policies, concurrency, and quota reservations
 - URM JWT for management APIs
 - Local AI API keys for runtime OpenAI-compatible calls
 - URM `Freeze -> Confirm -> Cancel` settlement
 
 Deferred:
 
-- Image, video, audio, embedding, and rerank APIs
+- Video, audio, rerank APIs
 - Full native Claude/Gemini protocol adapters
 - Prompt templates and response caching
 - Cost-optimized routing
@@ -135,14 +139,7 @@ CREATE TABLE ai_api_keys (
   quota_limit BIGINT,
   quota_used BIGINT NOT NULL DEFAULT 0,
   quota_reserved BIGINT NOT NULL DEFAULT 0,
-  daily_quota BIGINT,
-  daily_used BIGINT NOT NULL DEFAULT 0,
-  monthly_quota BIGINT,
-  monthly_used BIGINT NOT NULL DEFAULT 0,
   allowed_models JSONB NOT NULL DEFAULT '[]',
-  rpm_limit INTEGER,
-  tpm_limit INTEGER,
-  concurrency_limit INTEGER,
   status TEXT NOT NULL DEFAULT 'active',
   expires_at TIMESTAMPTZ,
   created_by TEXT,
@@ -171,7 +168,9 @@ CREATE TABLE ai_providers (
 `protocol_type` values:
 
 - `openai_chat_completions`: OpenAI Chat Completions protocol.
-- `openai_responses`: OpenAI Responses protocol. Reserved until we expose `/v1/responses` or need an upstream-only adapter for OpenAI-native models.
+- `openai_responses`: OpenAI Responses protocol.
+- `openai_embeddings`: OpenAI-compatible Embeddings protocol.
+- `openai_images_generations`: OpenAI-compatible Images Generations protocol.
 - `anthropic_messages`: Anthropic Messages protocol. Reserved in MVP schema; implementation can follow after the OpenAI Chat Completions path is stable.
 
 `is_custom = true` allows tenants or platform admins to configure a custom provider with its own request base URL, model names, and protocol type.
@@ -190,9 +189,6 @@ CREATE TABLE ai_provider_endpoints (
   custom_path TEXT,
   protocol_overrides JSONB NOT NULL DEFAULT '{}',
   weight INTEGER NOT NULL DEFAULT 100,
-  rpm_limit INTEGER,
-  tpm_limit INTEGER,
-  concurrency_limit INTEGER,
   timeout_ms INTEGER NOT NULL DEFAULT 30000,
   status TEXT NOT NULL DEFAULT 'active',
   health_status TEXT NOT NULL DEFAULT 'unknown',
@@ -210,6 +206,8 @@ Default paths by protocol:
 | --- | --- |
 | `openai_chat_completions` | `/chat/completions` |
 | `openai_responses` | `/responses` |
+| `openai_embeddings` | `/embeddings` |
+| `openai_images_generations` | `/images/generations` |
 | `anthropic_messages` | `/messages` |
 
 `base_url` should be the protocol base. For example, OpenAI can use `https://api.openai.com/v1`, while DeepSeek OpenAI-compatible chat can use `https://api.deepseek.com`.
@@ -350,6 +348,8 @@ CREATE TABLE ai_usage_logs (
   prompt_tokens INTEGER NOT NULL DEFAULT 0,
   completion_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens INTEGER NOT NULL DEFAULT 0,
+  billable_unit_type TEXT NOT NULL DEFAULT 'token',
+  billable_units BIGINT NOT NULL DEFAULT 0,
   provider_cost BIGINT NOT NULL DEFAULT 0,
   platform_cost BIGINT NOT NULL DEFAULT 0,
   user_cost BIGINT NOT NULL DEFAULT 0,
@@ -371,9 +371,8 @@ CREATE TABLE ai_usage_logs (
 
 ```text
 uni_ai_api:conv:{tenant_id}:{identity}:{model_code}:{conversation_id}
-uni_ai_api:rate:key:{api_key_id}:rpm
-uni_ai_api:rate:key:{api_key_id}:tpm
-uni_ai_api:quota:key:{api_key_id}:reserved:{request_id}
+uni_ai_api:rate:{scope_type}:{scope_id}:{capability_type}:...
+uni_ai_api:quota:key:{api_key_id}:reserved
 uni_ai_api:endpoint:{endpoint_id}:health
 uni_ai_api:endpoint:{endpoint_id}:cooldown
 ```

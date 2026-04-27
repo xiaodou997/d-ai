@@ -2,43 +2,41 @@
 
 Go service for Uni AI API Gateway.
 
-Planned responsibilities:
+## Runtime APIs
 
-- OpenAI-compatible runtime APIs
-- Provider endpoint routing
-- Stream and non-stream upstream calls
-- API key authentication and local quota ledgers
-- PostgreSQL persistence
-- Redis stickiness, health state, rate limits, and quota reservations
-- URM HMAC client integration for `Freeze -> Confirm -> Cancel`
+- `GET /health`
+- `GET /ready`
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/embeddings`
+- `POST /v1/images/generations`
 
-The backend implementation should stay AI-domain-specific and avoid becoming a generic HTTP proxy.
+Implemented backend responsibilities:
 
-Current MVP-0 status:
+- Runtime API key authentication with `sk-ai-` bearer tokens
+- Tenant/user model grant and key allowed-model checks
+- OpenAI-compatible provider routing through model deployments
+- Chat and responses non-streaming and SSE streaming relay
+- Embeddings and image generation relay
+- PostgreSQL configuration and usage ledgers
+- Redis stickiness, rate limiting, endpoint cooldowns, and quota reservations
+- URM HMAC `Freeze -> Confirm -> Cancel` settlement integration
+- Admin APIs for providers, endpoints, models, deployments, prices, grants, API keys, limits, audit logs, and usage logs
 
-- `GET /health` and `GET /ready`
-- Runtime API Key authentication with `sk-ai-` bearer tokens
-- `GET /v1/models`, filtered by tenant/user grants and key allowed models
-- `POST /v1/chat/completions` request entrypoint with model access checks, quota exhaustion precheck, and deployment lookup
-- Non-streaming OpenAI Chat Completions provider forwarding
-- Public model to upstream model mapping through deployments
-- Local PostgreSQL seed script for DeepSeek and DashScope Coding/Token Plan endpoints
-- Admin provider, endpoint, model, and deployment configuration APIs
-- Admin tenant model grant and tenant-owned API key APIs
-- Basic chat usage logging and admin usage log query API
-- Model sale price and provider cost price configuration APIs
-- Chat token cost calculation and local API key quota usage confirmation
-- Redis RPM limiting and estimated quota reservation for chat calls
-- Redis endpoint cooldown after upstream failures
-- Priority and weighted deployment routing
+## Local Commands
 
-Not implemented yet:
+From `backend/`:
 
-- Streaming response relay
-- Redis stickiness and rate limiting
-- URM freeze/confirm/cancel integration in the request lifecycle
-- TPM and concurrency limiting
-- Periodic active health checks
+```bash
+go run ./cmd/fake-upstream
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/server
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
+```
 
-Local initialization notes live in `backend/seeds/README.md`.
+The seed command reads `../db/local_seed.sql` by default.
+
+Local setup details live in `backend/seeds/README.md`.
+Smoke verification lives in `docs/LOCAL_SMOKE.md`.
 Admin API examples live in `docs/ADMIN_API.md`.

@@ -22,14 +22,7 @@ SELECT
   quota_limit,
   quota_used,
   quota_reserved,
-  daily_quota,
-  daily_used,
-  monthly_quota,
-  monthly_used,
   allowed_models,
-  rpm_limit,
-  tpm_limit,
-  concurrency_limit,
   status,
   expires_at,
   created_by,
@@ -42,28 +35,21 @@ WHERE key_hash = $1
 `
 
 type GetAPIKeyByHashRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	OwnerType        string             `json:"owner_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	KeyPrefix        string             `json:"key_prefix"`
-	Name             string             `json:"name"`
-	QuotaLimit       pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed        int64              `json:"quota_used"`
-	QuotaReserved    int64              `json:"quota_reserved"`
-	DailyQuota       pgtype.Int8        `json:"daily_quota"`
-	DailyUsed        int64              `json:"daily_used"`
-	MonthlyQuota     pgtype.Int8        `json:"monthly_quota"`
-	MonthlyUsed      int64              `json:"monthly_used"`
-	AllowedModels    []byte             `json:"allowed_models"`
-	RpmLimit         pgtype.Int4        `json:"rpm_limit"`
-	TpmLimit         pgtype.Int4        `json:"tpm_limit"`
-	ConcurrencyLimit pgtype.Int4        `json:"concurrency_limit"`
-	Status           string             `json:"status"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	CreatedBy        pgtype.Text        `json:"created_by"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	KeyPrefix     string             `json:"key_prefix"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (GetAPIKeyByHashRow, error) {
@@ -79,14 +65,7 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (GetAPIKe
 		&i.QuotaLimit,
 		&i.QuotaUsed,
 		&i.QuotaReserved,
-		&i.DailyQuota,
-		&i.DailyUsed,
-		&i.MonthlyQuota,
-		&i.MonthlyUsed,
 		&i.AllowedModels,
-		&i.RpmLimit,
-		&i.TpmLimit,
-		&i.ConcurrencyLimit,
 		&i.Status,
 		&i.ExpiresAt,
 		&i.CreatedBy,

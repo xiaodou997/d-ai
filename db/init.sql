@@ -1,4 +1,3 @@
--- +goose Up
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE IF NOT EXISTS ai_api_keys (
@@ -264,17 +263,3 @@ CREATE TABLE IF NOT EXISTS ai_conversation_bindings (
 
 CREATE INDEX IF NOT EXISTS idx_ai_conversation_bindings_expires ON ai_conversation_bindings (expires_at);
 
--- +goose Down
-DROP TABLE IF EXISTS ai_conversation_bindings;
-DROP TABLE IF EXISTS ai_admin_audit_logs;
-DROP TABLE IF EXISTS ai_runtime_limit_policies;
-DROP TABLE IF EXISTS ai_usage_logs;
-DROP TABLE IF EXISTS ai_user_model_grants;
-DROP TABLE IF EXISTS ai_tenant_model_grants;
-DROP TABLE IF EXISTS ai_model_prices;
-DROP TABLE IF EXISTS ai_provider_model_prices;
-DROP TABLE IF EXISTS ai_model_deployments;
-DROP TABLE IF EXISTS ai_models;
-DROP TABLE IF EXISTS ai_provider_endpoints;
-DROP TABLE IF EXISTS ai_providers;
-DROP TABLE IF EXISTS ai_api_keys;

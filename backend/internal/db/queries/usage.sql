@@ -18,6 +18,8 @@ INSERT INTO ai_usage_logs (
   prompt_tokens,
   completion_tokens,
   total_tokens,
+  billable_unit_type,
+  billable_units,
   provider_cost,
   platform_cost,
   user_cost,
@@ -37,7 +39,7 @@ INSERT INTO ai_usage_logs (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-  $31, $32, $33
+  $31, $32, $33, $34, $35
 )
 RETURNING id;
 

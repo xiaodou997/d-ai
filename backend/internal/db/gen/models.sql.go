@@ -123,9 +123,6 @@ SELECT
   e.api_key_ciphertext,
   e.custom_path,
   e.extra_headers,
-  e.rpm_limit AS endpoint_rpm_limit,
-  e.tpm_limit AS endpoint_tpm_limit,
-  e.concurrency_limit AS endpoint_concurrency_limit,
   e.timeout_ms,
   e.weight AS endpoint_weight,
   p.id AS provider_id,
@@ -149,28 +146,25 @@ type ListDeploymentsForModelParams struct {
 }
 
 type ListDeploymentsForModelRow struct {
-	DeploymentID             pgtype.UUID `json:"deployment_id"`
-	UpstreamModel            string      `json:"upstream_model"`
-	CapabilityType           string      `json:"capability_type"`
-	UpstreamProtocol         string      `json:"upstream_protocol"`
-	UpstreamParameters       []byte      `json:"upstream_parameters"`
-	Priority                 int32       `json:"priority"`
-	DeploymentWeight         int32       `json:"deployment_weight"`
-	SupportsStream           bool        `json:"supports_stream"`
-	EndpointID               pgtype.UUID `json:"endpoint_id"`
-	BaseUrl                  string      `json:"base_url"`
-	EndpointProtocolType     string      `json:"endpoint_protocol_type"`
-	ApiKeyCiphertext         string      `json:"api_key_ciphertext"`
-	CustomPath               pgtype.Text `json:"custom_path"`
-	ExtraHeaders             []byte      `json:"extra_headers"`
-	EndpointRpmLimit         pgtype.Int4 `json:"endpoint_rpm_limit"`
-	EndpointTpmLimit         pgtype.Int4 `json:"endpoint_tpm_limit"`
-	EndpointConcurrencyLimit pgtype.Int4 `json:"endpoint_concurrency_limit"`
-	TimeoutMs                int32       `json:"timeout_ms"`
-	EndpointWeight           int32       `json:"endpoint_weight"`
-	ProviderID               pgtype.UUID `json:"provider_id"`
-	ProviderCode             string      `json:"provider_code"`
-	ProviderProtocolType     string      `json:"provider_protocol_type"`
+	DeploymentID         pgtype.UUID `json:"deployment_id"`
+	UpstreamModel        string      `json:"upstream_model"`
+	CapabilityType       string      `json:"capability_type"`
+	UpstreamProtocol     string      `json:"upstream_protocol"`
+	UpstreamParameters   []byte      `json:"upstream_parameters"`
+	Priority             int32       `json:"priority"`
+	DeploymentWeight     int32       `json:"deployment_weight"`
+	SupportsStream       bool        `json:"supports_stream"`
+	EndpointID           pgtype.UUID `json:"endpoint_id"`
+	BaseUrl              string      `json:"base_url"`
+	EndpointProtocolType string      `json:"endpoint_protocol_type"`
+	ApiKeyCiphertext     string      `json:"api_key_ciphertext"`
+	CustomPath           pgtype.Text `json:"custom_path"`
+	ExtraHeaders         []byte      `json:"extra_headers"`
+	TimeoutMs            int32       `json:"timeout_ms"`
+	EndpointWeight       int32       `json:"endpoint_weight"`
+	ProviderID           pgtype.UUID `json:"provider_id"`
+	ProviderCode         string      `json:"provider_code"`
+	ProviderProtocolType string      `json:"provider_protocol_type"`
 }
 
 func (q *Queries) ListDeploymentsForModel(ctx context.Context, arg ListDeploymentsForModelParams) ([]ListDeploymentsForModelRow, error) {
@@ -197,9 +191,6 @@ func (q *Queries) ListDeploymentsForModel(ctx context.Context, arg ListDeploymen
 			&i.ApiKeyCiphertext,
 			&i.CustomPath,
 			&i.ExtraHeaders,
-			&i.EndpointRpmLimit,
-			&i.EndpointTpmLimit,
-			&i.EndpointConcurrencyLimit,
 			&i.TimeoutMs,
 			&i.EndpointWeight,
 			&i.ProviderID,

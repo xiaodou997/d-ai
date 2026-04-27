@@ -217,41 +217,7 @@ func (s *Server) runtimePolicies(ctx context.Context, auth RuntimeAuth, modelCod
 		})
 	}
 
-	policies = appendLegacyAPIKeyPolicy(policies, auth, capabilityType, modelCode)
-	policies = appendLegacyEndpointPolicy(policies, deployment, capabilityType, modelCode)
 	return policies, nil
-}
-
-func appendLegacyAPIKeyPolicy(policies []runtimePolicySnapshot, auth RuntimeAuth, capabilityType string, modelCode string) []runtimePolicySnapshot {
-	if !auth.APIKey.RpmLimit.Valid && !auth.APIKey.TpmLimit.Valid && !auth.APIKey.ConcurrencyLimit.Valid {
-		return policies
-	}
-	return append(policies, runtimePolicySnapshot{
-		ID:               "legacy-api-key-" + auth.APIKey.ID.String(),
-		ScopeType:        "api_key",
-		ScopeID:          auth.APIKey.ID.String(),
-		CapabilityType:   capabilityType,
-		ModelCode:        modelCode,
-		RPMLimit:         auth.APIKey.RpmLimit,
-		TPMLimit:         auth.APIKey.TpmLimit,
-		ConcurrencyLimit: auth.APIKey.ConcurrencyLimit,
-	})
-}
-
-func appendLegacyEndpointPolicy(policies []runtimePolicySnapshot, deployment dbgen.ListDeploymentsForModelRow, capabilityType string, modelCode string) []runtimePolicySnapshot {
-	if !deployment.EndpointRpmLimit.Valid && !deployment.EndpointTpmLimit.Valid && !deployment.EndpointConcurrencyLimit.Valid {
-		return policies
-	}
-	return append(policies, runtimePolicySnapshot{
-		ID:               "legacy-endpoint-" + deployment.EndpointID.String(),
-		ScopeType:        "endpoint",
-		ScopeID:          deployment.EndpointID.String(),
-		CapabilityType:   capabilityType,
-		ModelCode:        modelCode,
-		RPMLimit:         deployment.EndpointRpmLimit,
-		TPMLimit:         deployment.EndpointTpmLimit,
-		ConcurrencyLimit: deployment.EndpointConcurrencyLimit,
-	})
 }
 
 func runtimeLimitRedisKey(policy runtimePolicySnapshot, metric string, window int64) string {
