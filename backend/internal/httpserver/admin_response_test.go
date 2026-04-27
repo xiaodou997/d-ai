@@ -101,3 +101,30 @@ func TestNormalizeAdminJSONConvertsNonJSONBytesToString(t *testing.T) {
 		t.Fatalf("non-JSON bytes should be emitted as a string, got %q", got.Value)
 	}
 }
+
+func TestAdminRequestAllowedScopesTenantAndUser(t *testing.T) {
+	tenantAdmin := adminContext{Role: adminRoleTenant, TenantID: "tenant-a", UserID: "tenant-admin"}
+	if !adminRequestAllowed(tenantAdmin, "GET", "/admin/tenants/tenant-a/model-grants") {
+		t.Fatal("tenant admin should list own tenant grants")
+	}
+	if adminRequestAllowed(tenantAdmin, "POST", "/admin/tenants/tenant-a/model-grants") {
+		t.Fatal("tenant admin should not grant models to tenant")
+	}
+	if adminRequestAllowed(tenantAdmin, "GET", "/admin/tenants/tenant-b/api-keys") {
+		t.Fatal("tenant admin should not access another tenant")
+	}
+	if !adminRequestAllowed(tenantAdmin, "POST", "/admin/tenants/tenant-a/users/user-b/model-grants") {
+		t.Fatal("tenant admin should grant own tenant users")
+	}
+
+	endUser := adminContext{Role: adminRoleUser, TenantID: "tenant-a", UserID: "user-a"}
+	if !adminRequestAllowed(endUser, "POST", "/admin/tenants/tenant-a/users/user-a/api-keys") {
+		t.Fatal("user should manage own api keys")
+	}
+	if adminRequestAllowed(endUser, "POST", "/admin/tenants/tenant-a/users/user-b/api-keys") {
+		t.Fatal("user should not manage another user's api keys")
+	}
+	if adminRequestAllowed(endUser, "PATCH", "/admin/tenants/tenant-a/users/user-a/model-grants/model-id/status") {
+		t.Fatal("user should not update own model grants")
+	}
+}

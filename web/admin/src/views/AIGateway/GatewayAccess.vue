@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Key, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
 import {
   createTenantAPIKey,
   createUserAPIKey,
@@ -21,6 +22,7 @@ import {
   updateUserModelGrantStatus
 } from '@/api/aiGateway'
 
+const authStore = useAuthStore()
 const loading = shallowRef(false)
 const keyDialogVisible = shallowRef(false)
 const lastKeyDialogVisible = shallowRef(false)
@@ -34,8 +36,8 @@ const userGrants = shallowRef([])
 const userKeys = shallowRef([])
 
 const scope = reactive({
-  tenantId: 'tenant-local',
-  userId: 'user-local'
+  tenantId: authStore.tenantId || 'tenant-local',
+  userId: authStore.isEndUser ? authStore.userId : 'user-local'
 })
 
 const grantForm = reactive({
@@ -54,21 +56,32 @@ const keyForm = reactive({
 })
 
 const isEditingKey = computed(() => Boolean(editingKeyId.value))
+const canEditTenantAccess = computed(() => authStore.isPlatformAdmin)
+const canManageTenantKeys = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin)
+const canManageUserAccess = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin)
+const canManageUserKeys = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin || authStore.isEndUser)
+const showTenantSections = computed(() => !authStore.isEndUser)
+const showScopeSearch = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin)
 
 const modelOptions = computed(() =>
-  models.value.map((item) => ({
+  (authStore.isPlatformAdmin ? models.value : tenantGrants.value).map((item) => ({
     label: `${item.model_code} · ${item.display_name}`,
-    value: item.id,
+    value: item.id || item.model_id,
     code: item.model_code
   }))
 )
 
-const modelCodeOptions = computed(() =>
-  models.value.map((item) => ({
+const modelCodeOptions = computed(() => {
+  const source = authStore.isPlatformAdmin
+    ? models.value
+    : activeOwner.value === 'tenant'
+      ? tenantGrants.value
+      : userGrants.value
+  return source.map((item) => ({
     label: `${item.model_code} · ${item.display_name}`,
     value: item.model_code
   }))
-)
+})
 
 const statusTagType = (status) => {
   const map = { active: 'success', inactive: 'warning', disabled: 'danger' }
@@ -76,18 +89,33 @@ const statusTagType = (status) => {
 }
 
 const fetchModels = async () => {
+  if (!authStore.isPlatformAdmin) {
+    models.value = []
+    return
+  }
   models.value = await listModels()
 }
 
 const fetchAll = async () => {
+  if (!authStore.isPlatformAdmin && authStore.tenantId) {
+    scope.tenantId = authStore.tenantId
+  }
+  if (authStore.isEndUser && authStore.userId) {
+    scope.userId = authStore.userId
+  }
   if (!scope.tenantId) {
     ElMessage.warning('请输入租户 ID')
     return
   }
   loading.value = true
   try {
-    tenantGrants.value = await listTenantModelGrants(scope.tenantId)
-    tenantKeys.value = await listTenantAPIKeys(scope.tenantId)
+    if (showTenantSections.value) {
+      tenantGrants.value = await listTenantModelGrants(scope.tenantId)
+      tenantKeys.value = await listTenantAPIKeys(scope.tenantId)
+    } else {
+      tenantGrants.value = []
+      tenantKeys.value = []
+    }
     if (scope.userId) {
       userGrants.value = await listUserModelGrants(scope.tenantId, scope.userId)
       userKeys.value = await listUserAPIKeys(scope.tenantId, scope.userId)
@@ -106,8 +134,16 @@ const submitGrant = async (owner) => {
     return
   }
   if (owner === 'tenant') {
+    if (!canEditTenantAccess.value) {
+      ElMessage.warning('只有平台管理员可以授权模型给租户')
+      return
+    }
     await grantModelToTenant(scope.tenantId, grantForm)
   } else {
+    if (!canManageUserAccess.value) {
+      ElMessage.warning('当前角色不能调整用户模型授权')
+      return
+    }
     if (!scope.userId) {
       ElMessage.warning('请输入用户 ID')
       return
@@ -119,6 +155,14 @@ const submitGrant = async (owner) => {
 }
 
 const openKeyDialog = (owner) => {
+  if (owner === 'tenant' && !canManageTenantKeys.value) {
+    ElMessage.warning('当前角色不能管理租户 Key')
+    return
+  }
+  if (owner === 'user' && !canManageUserKeys.value) {
+    ElMessage.warning('当前角色不能管理用户 Key')
+    return
+  }
   activeOwner.value = owner
   editingKeyId.value = ''
   Object.assign(keyForm, {
@@ -147,6 +191,10 @@ const openKeyEditDialog = (owner, row) => {
 }
 
 const submitKey = async () => {
+  if (activeOwner.value === 'user' && !scope.userId) {
+    ElMessage.warning('请输入用户 ID')
+    return
+  }
   const payload = {
     ...keyForm,
     quota_limit: keyForm.quota_limit || undefined,
@@ -177,8 +225,10 @@ const submitKey = async () => {
 const toggleGrant = async (owner, row) => {
   const nextStatus = row.status === 'active' ? 'disabled' : 'active'
   if (owner === 'tenant') {
+    if (!canEditTenantAccess.value) return
     await updateTenantModelGrantStatus(scope.tenantId, row.model_id, nextStatus)
   } else {
+    if (!canManageUserAccess.value) return
     await updateUserModelGrantStatus(scope.tenantId, scope.userId, row.model_id, nextStatus)
   }
   ElMessage.success('授权状态已更新')
@@ -188,8 +238,10 @@ const toggleGrant = async (owner, row) => {
 const toggleKey = async (owner, row) => {
   const nextStatus = row.status === 'active' ? 'disabled' : 'active'
   if (owner === 'tenant') {
+    if (!canManageTenantKeys.value) return
     await updateTenantAPIKeyStatus(scope.tenantId, row.id, nextStatus)
   } else {
+    if (!canManageUserKeys.value) return
     await updateUserAPIKeyStatus(scope.tenantId, scope.userId, row.id, nextStatus)
   }
   ElMessage.success('API Key 状态已更新')
@@ -221,10 +273,10 @@ onMounted(async () => {
 
 <template>
   <div class="space-y-4">
-    <section class="panel">
+    <section v-if="showScopeSearch" class="panel">
       <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
         <el-form-item label="租户 ID" class="!mb-0">
-          <el-input v-model="scope.tenantId" placeholder="tenant-local" />
+          <el-input v-model="scope.tenantId" :disabled="!authStore.isPlatformAdmin" placeholder="tenant-local" />
         </el-form-item>
         <el-form-item label="用户 ID" class="!mb-0">
           <el-input v-model="scope.userId" placeholder="user-local" />
@@ -237,22 +289,22 @@ onMounted(async () => {
       <div class="section-head">
         <div>
           <h3>模型授权</h3>
-          <p>租户授权控制可售模型，用户授权控制可创建 Key 的模型范围</p>
+          <p>{{ authStore.isEndUser ? '查看当前用户可用模型' : '租户授权控制可售模型，用户授权控制可创建 Key 的模型范围' }}</p>
         </div>
         <el-button :icon="Refresh" circle @click="fetchAll" />
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px_160px] gap-3 items-end mb-4">
+      <div v-if="canEditTenantAccess || canManageUserAccess" class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px_160px] gap-3 items-end mb-4">
         <el-form-item label="模型" class="!mb-0">
           <el-select v-model="grantForm.model_id" class="w-full" filterable>
             <el-option v-for="item in modelOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-button type="primary" :icon="Plus" @click="submitGrant('tenant')">授权给租户</el-button>
-        <el-button type="success" :icon="Plus" @click="submitGrant('user')">授权给用户</el-button>
+        <el-button v-if="canEditTenantAccess" type="primary" :icon="Plus" @click="submitGrant('tenant')">授权给租户</el-button>
+        <el-button v-if="canManageUserAccess" type="success" :icon="Plus" @click="submitGrant('user')">授权给用户</el-button>
       </div>
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div>
+        <div v-if="showTenantSections">
           <h4 class="table-title">租户模型</h4>
           <el-table :data="tenantGrants" border stripe class="w-full">
             <el-table-column prop="model_code" label="模型" min-width="150" />
@@ -262,7 +314,7 @@ onMounted(async () => {
                 <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="90">
+            <el-table-column v-if="canEditTenantAccess" label="操作" width="90">
               <template #default="{ row }">
                 <el-button link @click="toggleGrant('tenant', row)">
                   {{ row.status === 'active' ? '禁用' : '启用' }}
@@ -281,7 +333,7 @@ onMounted(async () => {
                 <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="90">
+            <el-table-column v-if="canManageUserAccess" label="操作" width="90">
               <template #default="{ row }">
                 <el-button link @click="toggleGrant('user', row)">
                   {{ row.status === 'active' ? '禁用' : '启用' }}
@@ -297,16 +349,16 @@ onMounted(async () => {
       <div class="section-head">
         <div>
           <h3>API Key</h3>
-          <p>租户 Key 适合匿名售卖，用户 Key 绑定终端用户账本</p>
+          <p>{{ authStore.isEndUser ? '用户 Key 绑定你的终端用户账本' : '租户 Key 适合匿名售卖，用户 Key 绑定终端用户账本' }}</p>
         </div>
         <div class="flex gap-2">
-          <el-button type="primary" :icon="Key" @click="openKeyDialog('tenant')">租户 Key</el-button>
-          <el-button type="success" :icon="Key" @click="openKeyDialog('user')">用户 Key</el-button>
+          <el-button v-if="canManageTenantKeys" type="primary" :icon="Key" @click="openKeyDialog('tenant')">租户 Key</el-button>
+          <el-button v-if="canManageUserKeys" type="success" :icon="Key" @click="openKeyDialog('user')">用户 Key</el-button>
         </div>
       </div>
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div>
+        <div v-if="showTenantSections">
           <h4 class="table-title">租户 Key</h4>
           <el-table :data="tenantKeys" border stripe class="w-full">
             <el-table-column prop="key_prefix" label="前缀" width="130" />
@@ -325,7 +377,7 @@ onMounted(async () => {
                 <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="130">
+            <el-table-column v-if="canManageTenantKeys" label="操作" width="130">
               <template #default="{ row }">
                 <el-button link type="primary" :icon="Edit" @click="openKeyEditDialog('tenant', row)">编辑</el-button>
                 <el-button link @click="toggleKey('tenant', row)">

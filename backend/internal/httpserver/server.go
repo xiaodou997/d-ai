@@ -72,6 +72,7 @@ func New(cfg Config) *Server {
 	router.Route("/admin", func(r chi.Router) {
 		r.Use(s.adminAuth)
 		r.Use(s.adminAudit)
+		r.Use(s.adminScope)
 		r.Get("/providers", s.handleAdminListProviders)
 		r.Post("/providers", s.handleAdminCreateProvider)
 		r.Patch("/providers/{providerID}", s.handleAdminUpdateProvider)

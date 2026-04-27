@@ -22,66 +22,66 @@
         class="modern-menu border-none"
       >
         <!-- 数据监控 -->
-        <div class="menu-divider">数据监控</div>
-        <el-menu-item index="/dashboard">
+        <div v-if="authStore.isPlatformAdmin" class="menu-divider">数据监控</div>
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/dashboard">
           <el-icon><Odometer /></el-icon>
           <span>控制概览</span>
         </el-menu-item>
 
-        <el-menu-item index="/finance/account-overview">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/account-overview">
           <el-icon><Wallet /></el-icon>
           <span>账户全景</span>
         </el-menu-item>
 
         <!-- 业务管理 -->
-        <div class="menu-divider">业务管理</div>
-        <el-menu-item index="/tenants">
+        <div class="menu-divider">{{ authStore.isPlatformAdmin ? '业务管理' : '工作台' }}</div>
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/tenants">
           <el-icon><OfficeBuilding /></el-icon>
           <span>租户管理</span>
         </el-menu-item>
-        <el-menu-item index="/users">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/users">
           <el-icon><User /></el-icon>
           <span>终端用户</span>
         </el-menu-item>
-        <el-menu-item index="/apps">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/apps">
           <el-icon><Connection /></el-icon>
           <span>应用系统</span>
         </el-menu-item>
         <el-menu-item index="/ai-gateway">
           <el-icon><Cpu /></el-icon>
-          <span>AI 网关</span>
+          <span>{{ authStore.isPlatformAdmin ? 'AI 网关' : '我的 AI 网关' }}</span>
         </el-menu-item>
 
         <!-- 财务中心 -->
-        <div class="menu-divider">财务中心</div>
-        <el-menu-item index="/finance/recharge-records">
+        <div v-if="authStore.isPlatformAdmin" class="menu-divider">财务中心</div>
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/recharge-records">
           <el-icon><List /></el-icon>
           <span>充值记录</span>
         </el-menu-item>
-        <el-menu-item index="/finance/transactions">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/transactions">
           <el-icon><DataLine /></el-icon>
           <span>交易流水</span>
         </el-menu-item>
-        <el-menu-item index="/finance/tenant/grant-logs">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/tenant/grant-logs">
           <el-icon><Present /></el-icon>
           <span>租户补发记录</span>
         </el-menu-item>
-        <el-menu-item index="/finance/user/grant-logs">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/user/grant-logs">
           <el-icon><Present /></el-icon>
           <span>用户补发记录</span>
         </el-menu-item>
 
         <!-- 系统审计 -->
-        <div class="menu-divider">系统审计</div>
-        <el-menu-item v-if="authStore.userType === 1" index="/system/audit-log">
+        <div v-if="authStore.isPlatformAdmin" class="menu-divider">系统审计</div>
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/system/audit-log">
           <el-icon><DocumentChecked /></el-icon>
           <span>操作日志</span>
         </el-menu-item>
-        <el-menu-item v-if="authStore.userType === 1" index="/system/admins">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/system/admins">
           <el-icon><Stamp /></el-icon>
           <span>平台管理员</span>
         </el-menu-item>
-        <el-menu-item v-if="authStore.userType === 1" index="/system/jwt-keys">
+        <el-menu-item v-if="authStore.isPlatformAdmin" index="/system/jwt-keys">
           <el-icon><Key /></el-icon>
           <span>JWT 密钥</span>
         </el-menu-item>
@@ -101,7 +101,7 @@
           <p class="text-xs font-bold text-slate-800 truncate">
             {{ authStore.username || 'Admin' }}
           </p>
-          <p class="text-[10px] text-slate-400 truncate">系统管理员</p>
+          <p class="text-[10px] text-slate-400 truncate">{{ authStore.roleName }}</p>
         </div>
         <el-icon
           class="text-slate-300 group-hover:text-rose-500 transition-colors"

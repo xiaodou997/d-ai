@@ -35,6 +35,23 @@ type adminErrorResponse struct {
 }
 
 type adminActorContextKey struct{}
+type adminContextKey struct{}
+
+type adminRole string
+
+const (
+	adminRolePlatform adminRole = "platform"
+	adminRoleTenant   adminRole = "tenant"
+	adminRoleUser     adminRole = "user"
+)
+
+type adminContext struct {
+	Actor    string    `json:"actor"`
+	Role     adminRole `json:"role"`
+	TenantID string    `json:"tenant_id"`
+	UserID   string    `json:"user_id"`
+	UserType int       `json:"user_type"`
+}
 
 type createProviderRequest struct {
 	Code         string          `json:"code"`
@@ -171,11 +188,16 @@ type createUserAPIKeyResponse struct {
 func (s *Server) adminAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.validLocalAdminToken(r) {
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), adminActorContextKey{}, "local_admin")))
+			ctx := adminContext{
+				Actor:    "local_admin",
+				Role:     adminRolePlatform,
+				UserType: 1,
+			}
+			next.ServeHTTP(w, r.WithContext(withAdminContext(r.Context(), ctx)))
 			return
 		}
-		if actor, ok := s.validURMAdminToken(r); ok {
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), adminActorContextKey{}, actor)))
+		if ctx, ok := s.validURMAdminToken(r); ok {
+			next.ServeHTTP(w, r.WithContext(withAdminContext(r.Context(), ctx)))
 			return
 		}
 
@@ -192,14 +214,14 @@ func (s *Server) validLocalAdminToken(r *http.Request) bool {
 	return s.security.AdminToken != "" && r.Header.Get("X-Admin-Token") == s.security.AdminToken
 }
 
-func (s *Server) validURMAdminToken(r *http.Request) (string, bool) {
+func (s *Server) validURMAdminToken(r *http.Request) (adminContext, bool) {
 	if s.urmClient == nil {
-		return "", false
+		return adminContext{}, false
 	}
 
 	token := bearerToken(r.Header.Get("Authorization"))
 	if token == "" {
-		return "", false
+		return adminContext{}, false
 	}
 
 	userInfo, err := s.urmClient.UserInfo(r.Context(), token)
@@ -208,20 +230,27 @@ func (s *Server) validURMAdminToken(r *http.Request) (string, bool) {
 			"error", err,
 			"request_id", requestIDFromContext(r.Context()),
 		)
-		return "", false
+		return adminContext{}, false
 	}
 
-	if userInfo.UserType == 1 || userInfo.UserType == 2 {
-		actor := userInfo.Subject
-		if actor == "" {
-			actor = userInfo.Username
-		}
-		if actor == "" {
-			actor = "urm_admin"
-		}
-		return actor, true
+	role, ok := adminRoleForUserType(userInfo.UserType)
+	if !ok {
+		return adminContext{}, false
 	}
-	return "", false
+	actor := userInfo.Subject
+	if actor == "" {
+		actor = userInfo.Username
+	}
+	if actor == "" {
+		actor = "urm_admin"
+	}
+	return adminContext{
+		Actor:    actor,
+		Role:     role,
+		TenantID: userInfo.TenantID,
+		UserID:   userInfo.Subject,
+		UserType: userInfo.UserType,
+	}, true
 }
 
 func bearerToken(header string) string {
@@ -233,6 +262,107 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return parts[1]
+}
+
+func adminRoleForUserType(userType int) (adminRole, bool) {
+	switch userType {
+	case 1:
+		return adminRolePlatform, true
+	case 2:
+		return adminRoleTenant, true
+	case 3:
+		return adminRoleUser, true
+	default:
+		return "", false
+	}
+}
+
+func withAdminContext(ctx context.Context, admin adminContext) context.Context {
+	ctx = context.WithValue(ctx, adminContextKey{}, admin)
+	ctx = context.WithValue(ctx, adminActorContextKey{}, admin.Actor)
+	return ctx
+}
+
+func adminFromContext(ctx context.Context) (adminContext, bool) {
+	admin, ok := ctx.Value(adminContextKey{}).(adminContext)
+	return admin, ok
+}
+
+func (s *Server) adminScope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		admin, ok := adminFromContext(r.Context())
+		if !ok || admin.Role == "" || admin.Role == adminRolePlatform {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if adminRequestAllowed(admin, r.Method, r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeAdminError(w, http.StatusForbidden, "forbidden")
+	})
+}
+
+func adminRequestAllowed(admin adminContext, method string, path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) < 2 || parts[0] != "admin" {
+		return false
+	}
+	if method == http.MethodGet && (parts[1] == "usage-logs" || parts[1] == "usage-summary") {
+		return true
+	}
+	if len(parts) >= 3 && parts[1] == "tenants" {
+		return tenantScopedAdminRequestAllowed(admin, method, parts[2], parts[3:])
+	}
+	return false
+}
+
+func tenantScopedAdminRequestAllowed(admin adminContext, method string, tenantID string, rest []string) bool {
+	if tenantID == "" || tenantID != admin.TenantID {
+		return false
+	}
+	switch admin.Role {
+	case adminRoleTenant:
+		return tenantAdminRequestAllowed(method, rest)
+	case adminRoleUser:
+		return userAdminRequestAllowed(admin, method, rest)
+	default:
+		return false
+	}
+}
+
+func tenantAdminRequestAllowed(method string, rest []string) bool {
+	if len(rest) == 1 && rest[0] == "model-grants" {
+		return method == http.MethodGet
+	}
+	if len(rest) >= 1 && rest[0] == "api-keys" {
+		return method == http.MethodGet || method == http.MethodPost || method == http.MethodPatch
+	}
+	if len(rest) >= 3 && rest[0] == "users" {
+		switch rest[2] {
+		case "model-grants":
+			return method == http.MethodGet || method == http.MethodPost || method == http.MethodPatch
+		case "api-keys":
+			return method == http.MethodGet || method == http.MethodPost || method == http.MethodPatch
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+func userAdminRequestAllowed(admin adminContext, method string, rest []string) bool {
+	if len(rest) < 3 || rest[0] != "users" || rest[1] != admin.UserID {
+		return false
+	}
+	switch rest[2] {
+	case "model-grants":
+		return method == http.MethodGet
+	case "api-keys":
+		return method == http.MethodGet || method == http.MethodPost || method == http.MethodPatch
+	default:
+		return false
+	}
 }
 
 func (s *Server) handleAdminListProviders(w http.ResponseWriter, r *http.Request) {
@@ -1604,11 +1734,15 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		limit = int32(parsed)
 	}
 
+	filters, ok := scopedUsageFilters(w, r)
+	if !ok {
+		return
+	}
 	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
-		TenantID:      optionalTextValue(r.URL.Query().Get("tenant_id")),
-		UserID:        optionalTextValue(r.URL.Query().Get("user_id")),
-		ModelCode:     optionalTextValue(r.URL.Query().Get("model_code")),
-		RequestStatus: optionalTextValue(r.URL.Query().Get("request_status")),
+		TenantID:      optionalTextValue(filters.tenantID),
+		UserID:        optionalTextValue(filters.userID),
+		ModelCode:     optionalTextValue(filters.modelCode),
+		RequestStatus: optionalTextValue(filters.requestStatus),
 		Limit:         limit,
 	})
 	if err != nil {
@@ -1619,17 +1753,74 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Request) {
+	filters, ok := scopedUsageFilters(w, r)
+	if !ok {
+		return
+	}
 	rows, err := s.queries.ListUsageSummary(r.Context(), dbgen.ListUsageSummaryParams{
-		TenantID:      optionalTextValue(r.URL.Query().Get("tenant_id")),
-		UserID:        optionalTextValue(r.URL.Query().Get("user_id")),
-		ModelCode:     optionalTextValue(r.URL.Query().Get("model_code")),
-		RequestStatus: optionalTextValue(r.URL.Query().Get("request_status")),
+		TenantID:      optionalTextValue(filters.tenantID),
+		UserID:        optionalTextValue(filters.userID),
+		ModelCode:     optionalTextValue(filters.modelCode),
+		RequestStatus: optionalTextValue(filters.requestStatus),
 	})
 	if err != nil {
 		s.writeAdminServerError(w, r, "list usage summary failed", err)
 		return
 	}
 	writeAdminJSON(w, http.StatusOK, rows)
+}
+
+type usageFilters struct {
+	tenantID      string
+	userID        string
+	modelCode     string
+	requestStatus string
+}
+
+func scopedUsageFilters(w http.ResponseWriter, r *http.Request) (usageFilters, bool) {
+	filters := usageFilters{
+		tenantID:      r.URL.Query().Get("tenant_id"),
+		userID:        r.URL.Query().Get("user_id"),
+		modelCode:     r.URL.Query().Get("model_code"),
+		requestStatus: r.URL.Query().Get("request_status"),
+	}
+	admin, ok := adminFromContext(r.Context())
+	if !ok {
+		return filters, true
+	}
+	switch admin.Role {
+	case adminRolePlatform, "":
+		return filters, true
+	case adminRoleTenant:
+		if admin.TenantID == "" {
+			writeAdminError(w, http.StatusForbidden, "tenant scope is required")
+			return usageFilters{}, false
+		}
+		if filters.tenantID != "" && filters.tenantID != admin.TenantID {
+			writeAdminError(w, http.StatusForbidden, "forbidden")
+			return usageFilters{}, false
+		}
+		filters.tenantID = admin.TenantID
+	case adminRoleUser:
+		if admin.TenantID == "" || admin.UserID == "" {
+			writeAdminError(w, http.StatusForbidden, "user scope is required")
+			return usageFilters{}, false
+		}
+		if filters.tenantID != "" && filters.tenantID != admin.TenantID {
+			writeAdminError(w, http.StatusForbidden, "forbidden")
+			return usageFilters{}, false
+		}
+		if filters.userID != "" && filters.userID != admin.UserID {
+			writeAdminError(w, http.StatusForbidden, "forbidden")
+			return usageFilters{}, false
+		}
+		filters.tenantID = admin.TenantID
+		filters.userID = admin.UserID
+	default:
+		writeAdminError(w, http.StatusForbidden, "forbidden")
+		return usageFilters{}, false
+	}
+	return filters, true
 }
 
 func decodeAdminJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

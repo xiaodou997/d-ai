@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
 import { formatCredits, formatTimestamp, listUsageLogs, listUsageSummary } from '@/api/aiGateway'
 
+const authStore = useAuthStore()
 const loading = shallowRef(false)
 const summaryLoading = shallowRef(false)
 const logs = shallowRef([])
@@ -45,8 +47,8 @@ const capabilityLabel = (capability) => {
 }
 
 const usageParams = computed(() => ({
-  tenant_id: filters.tenant_id || undefined,
-  user_id: filters.user_id || undefined,
+  tenant_id: authStore.isPlatformAdmin ? filters.tenant_id || undefined : authStore.tenantId || undefined,
+  user_id: authStore.isEndUser ? authStore.userId || undefined : filters.user_id || undefined,
   model_code: filters.model_code || undefined,
   request_status: filters.request_status || undefined
 }))
@@ -96,8 +98,8 @@ onMounted(fetchUsage)
         <p>按创建时间倒序，最多读取 500 条</p>
       </div>
       <div class="toolbar">
-        <el-input v-model="filters.tenant_id" clearable placeholder="租户" />
-        <el-input v-model="filters.user_id" clearable placeholder="用户" />
+        <el-input v-if="authStore.isPlatformAdmin" v-model="filters.tenant_id" clearable placeholder="租户" />
+        <el-input v-if="!authStore.isEndUser" v-model="filters.user_id" clearable placeholder="用户" />
         <el-input v-model="filters.model_code" clearable placeholder="模型" />
         <el-select v-model="filters.request_status" clearable placeholder="状态">
           <el-option label="success" value="success" />

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   login as loginApi,
   refreshToken as refreshApi,
@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('admin_accessToken') || '')
   const refreshToken = ref(localStorage.getItem('admin_refreshToken') || '')
   const userId = ref(localStorage.getItem('admin_userId') || '')
+  const tenantId = ref(localStorage.getItem('admin_tenantId') || '')
   const username = ref(localStorage.getItem('admin_username') || '')
   const userType = ref(parseInt(localStorage.getItem('admin_userType') || '0'))
   const expiresIn = ref(
@@ -35,6 +36,7 @@ export const useAuthStore = defineStore('auth', () => {
       // 获取用户信息
       const userInfo = await request.get('/urm/oauth2/userinfo')
       userId.value = userInfo.sub
+      tenantId.value = userInfo.tenantId || ''
       username.value = userInfo.username
       userType.value = userInfo.userType
 
@@ -44,8 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
       // 启动自动刷新
       startAutoRefresh()
 
-      // 跳转到 Dashboard
-      router.push('/dashboard')
+      router.push(defaultRoute.value)
 
       return {
         ...response,
@@ -119,6 +120,19 @@ export const useAuthStore = defineStore('auth', () => {
     return !!accessToken.value
   }
 
+  const isPlatformAdmin = computed(() => userType.value === 1)
+  const isTenantAdmin = computed(() => userType.value === 2)
+  const isEndUser = computed(() => userType.value === 3)
+
+  const roleName = computed(() => {
+    if (isPlatformAdmin.value) return '平台管理员'
+    if (isTenantAdmin.value) return '租户管理员'
+    if (isEndUser.value) return '终端用户'
+    return '未识别角色'
+  })
+
+  const defaultRoute = computed(() => (isPlatformAdmin.value ? '/dashboard' : '/ai-gateway'))
+
   const isTokenExpiring = () => {
     // 如果 Token 剩余时间少于 5 分钟，认为即将过期
     return expiresIn.value < 300
@@ -129,6 +143,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('admin_accessToken', accessToken.value)
     localStorage.setItem('admin_refreshToken', refreshToken.value)
     localStorage.setItem('admin_userId', userId.value)
+    localStorage.setItem('admin_tenantId', tenantId.value)
     localStorage.setItem('admin_username', username.value)
     localStorage.setItem('admin_userType', userType.value.toString())
     localStorage.setItem('admin_expiresIn', expiresIn.value.toString())
@@ -139,6 +154,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken.value = ''
     refreshToken.value = ''
     userId.value = ''
+    tenantId.value = ''
     username.value = ''
     userType.value = 0
     expiresIn.value = 7200
@@ -146,6 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('admin_accessToken')
     localStorage.removeItem('admin_refreshToken')
     localStorage.removeItem('admin_userId')
+    localStorage.removeItem('admin_tenantId')
     localStorage.removeItem('admin_username')
     localStorage.removeItem('admin_userType')
     localStorage.removeItem('admin_expiresIn')
@@ -189,9 +206,15 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     refreshToken,
     userId,
+    tenantId,
     username,
     userType,
     expiresIn,
+    isPlatformAdmin,
+    isTenantAdmin,
+    isEndUser,
+    roleName,
+    defaultRoute,
 
     // Actions
     login,

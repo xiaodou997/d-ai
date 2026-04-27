@@ -1,5 +1,5 @@
 <script setup>
-import { shallowRef } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { Connection, Cpu, Key, Lock, Tickets, DocumentChecked } from '@element-plus/icons-vue'
 import GatewayProviders from './GatewayProviders.vue'
 import GatewayModels from './GatewayModels.vue'
@@ -7,8 +7,25 @@ import GatewayAccess from './GatewayAccess.vue'
 import GatewayUsage from './GatewayUsage.vue'
 import GatewayLimits from './GatewayLimits.vue'
 import GatewayAudit from './GatewayAudit.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const activeTab = shallowRef('providers')
+const authStore = useAuthStore()
+
+const tabAccess = computed(() => ({
+  providers: authStore.isPlatformAdmin,
+  models: authStore.isPlatformAdmin,
+  access: true,
+  usage: true,
+  limits: authStore.isPlatformAdmin,
+  audit: authStore.isPlatformAdmin
+}))
+
+watch(tabAccess, (access) => {
+  if (!access[activeTab.value]) {
+    activeTab.value = 'access'
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -17,9 +34,11 @@ const activeTab = shallowRef('providers')
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p class="text-xs font-black text-slate-400 uppercase">AI Gateway</p>
-          <h2 class="mt-1 text-xl font-black text-slate-900">统一模型接入</h2>
+          <h2 class="mt-1 text-xl font-black text-slate-900">
+            {{ authStore.isPlatformAdmin ? '统一模型接入' : '我的 AI 网关' }}
+          </h2>
           <p class="mt-2 text-sm text-slate-500">
-            维护厂商接入点、模型映射、租户授权和运行时 API Key。
+            {{ authStore.isPlatformAdmin ? '维护厂商接入点、模型映射、租户授权和运行时 API Key。' : '管理授权模型、运行时 API Key 和调用记录。' }}
           </p>
         </div>
         <el-alert
@@ -34,14 +53,14 @@ const activeTab = shallowRef('providers')
 
     <section class="bg-white border border-slate-100 rounded-2xl shadow-soft p-4">
       <el-tabs v-model="activeTab" class="gateway-tabs">
-        <el-tab-pane name="providers">
+        <el-tab-pane v-if="tabAccess.providers" name="providers">
           <template #label>
             <span class="tab-label"><el-icon><Connection /></el-icon>厂商接入</span>
           </template>
           <GatewayProviders />
         </el-tab-pane>
 
-        <el-tab-pane name="models">
+        <el-tab-pane v-if="tabAccess.models" name="models">
           <template #label>
             <span class="tab-label"><el-icon><Cpu /></el-icon>模型映射</span>
           </template>
@@ -62,14 +81,14 @@ const activeTab = shallowRef('providers')
           <GatewayUsage />
         </el-tab-pane>
 
-        <el-tab-pane name="limits">
+        <el-tab-pane v-if="tabAccess.limits" name="limits">
           <template #label>
             <span class="tab-label"><el-icon><Lock /></el-icon>限流策略</span>
           </template>
           <GatewayLimits />
         </el-tab-pane>
 
-        <el-tab-pane name="audit">
+        <el-tab-pane v-if="tabAccess.audit" name="audit">
           <template #label>
             <span class="tab-label"><el-icon><DocumentChecked /></el-icon>网关审计</span>
           </template>
