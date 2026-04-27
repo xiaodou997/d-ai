@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+:root {
+  /* Element Plus 核心变量覆盖 - sky blue 风格 */
+  --el-color-primary: #0ea5e9;
+  --el-color-primary-light-3: #38bdf8;
+  --el-color-primary-light-5: #7dd3fc;
+  --el-color-primary-light-7: #bae6fd;
+  --el-color-primary-light-8: #e0f2fe;
+  --el-color-primary-light-9: #f0f9ff;
+  --el-color-primary-dark-2: #0284c7;
+
+  /* 调大圆角，符合现代审美 */
+  --el-border-radius-base: 12px;
+  --el-border-radius-small: 8px;
+  --el-border-radius-round: 24px;
+
+  /* 弱化边框，增强呼吸感 */
+  --el-border-color-lighter: #f1f5f9;
+  --el-border-color-light: #e2e8f0;
+  --el-border-color: #cbd5e1;
+
+  /* 全局背景色 */
+  --el-bg-color-page: #f8fafc;
+}
+
+/* 全局基础样式 */
+html, body, #app {
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--el-bg-color-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 现代滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Element Plus 组件深度定制 */
+
+.el-card {
+  --el-card-border-color: #f1f5f9;
+  --el-card-border-radius: 16px;
+  --el-card-padding: 24px;
+  border: none !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.02), 0 8px 10px -6px rgba(0, 0, 0, 0.02) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &.is-hover-shadow:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02) !important;
+    transform: translateY(-2px);
+  }
+
+  .el-card__header {
+    border-bottom: 1px solid #f1f5f9;
+    padding: 16px 24px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+}
+
+.el-button {
+  font-weight: 500;
+  padding: 10px 20px;
+  height: auto;
+  transition: all 0.2s;
+
+  &--primary {
+    box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.2), 0 2px 4px -1px rgba(14, 165, 233, 0.1);
+    &:hover {
+      box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3);
+    }
+  }
+}
+
+.el-menu {
+  border-right: none !important;
+  background-color: transparent !important;
+
+  .el-menu-item {
+    border-radius: 12px;
+    margin: 4px 12px;
+    height: 48px;
+    line-height: 48px;
+    color: #64748b !important;
+
+    &.is-active {
+      background-color: #f0f9ff !important;
+      color: #0ea5e9 !important;
+      font-weight: 600;
+    }
+
+    &:hover {
+      background-color: #f1f5f9 !important;
+      color: #1e293b !important;
+    }
+  }
+}
+
+.el-table {
+  --el-table-border-color: #f1f5f9;
+  --el-table-header-bg-color: #f8fafc;
+  --el-table-header-text-color: #64748b;
+  border-radius: 12px;
+  overflow: hidden;
+
+  th.el-table__cell {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 12px;
+    letter-spacing: 0.025em;
+  }
+}
+
+/* 常用工具类（作为 Tailwind 的补充） */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Tailwind v4 自定义配置 */
+@theme {
+  --color-primary-50: #f0f9ff;
+  --color-primary-100: #e0f2fe;
+  --color-primary-200: #bae6fd;
+  --color-primary-300: #7dd3fc;
+  --color-primary-400: #38bdf8;
+  --color-primary-500: #0ea5e9;
+  --color-primary-600: #0284c7;
+  --color-primary-700: #0369a1;
+  --color-primary-800: #075985;
+  --color-primary-900: #0c4a6e;
+
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+
+  --shadow-soft: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+}

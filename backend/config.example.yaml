@@ -1,0 +1,26 @@
+app:
+  env: development
+  httpAddr: ":13010"
+  logLevel: info
+
+postgres:
+  dsn: "postgres://<user>:<password>@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public"
+  maxConns: 10
+  minConns: 1
+  maxConnLifetime: 1h
+
+redis:
+  enabled: true
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+urm:
+  baseUrl: "http://127.0.0.1:8081"
+  appKey: "UNI_AI_API"
+  appSecret: "change-me"
+  timeout: 10s
+
+security:
+  providerKeyMaster: "change-me-32-byte-minimum-secret"
+  adminToken: "local-admin-token"

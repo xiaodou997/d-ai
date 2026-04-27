@@ -1,0 +1,32 @@
+{
+  "name": "uni-ai-api-tenant",
+  "version": "1.0.0",
+  "description": "Uni AI API 租户门户",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.5.32",
+    "vue-router": "^5.0.4",
+    "pinia": "^3.0.4",
+    "pinia-plugin-persistedstate": "^4.7.1",
+    "element-plus": "^2.13.7",
+    "axios": "^1.15.0",
+    "dayjs": "^1.11.20",
+    "@element-plus/icons-vue": "^2.3.2",
+    "echarts": "^6.0.0"
+  },
+  "packageManager": "bun@latest",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.10",
+    "prettier": "3.8.3",
+    "tailwindcss": "^4.2.2",
+    "vite": "8.0.8"
+  }
+}

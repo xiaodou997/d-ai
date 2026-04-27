@@ -1,0 +1,68 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/',
+    component: () => import('@/views/Layout/Layout.vue'),
+    redirect: '/dashboard',
+    meta: { requiresAuth: true },
+    children: [
+      // 我的账户
+      {
+        path: '/dashboard',
+        name: 'MyAccount',
+        component: () => import('@/views/Dashboard/MyAccount.vue'),
+        meta: { title: '我的账户', requiresAuth: true }
+      },
+      // 财务中心
+      {
+        path: '/finance/transactions',
+        name: 'Transactions',
+        component: () => import('@/views/Finance/Transactions.vue'),
+        meta: { title: '积分流水', requiresAuth: true }
+      },
+      {
+        path: '/finance/recharge',
+        name: 'Recharge',
+        component: () => import('@/views/Finance/Recharge.vue'),
+        meta: { title: '充值记录', requiresAuth: true }
+      },
+      // 个人中心
+      {
+        path: '/profile',
+        name: 'Profile',
+        component: () => import('@/views/Profile/index.vue'),
+        meta: { title: '个人中心', requiresAuth: true }
+      }
+    ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/dashboard'
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+router.beforeEach((to, from) => {
+  const authStore = useAuthStore()
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
+
+  if (requiresAuth && !authStore.isAuthenticated()) {
+    return '/login'
+  } else if (to.path === '/login' && authStore.isAuthenticated()) {
+    return '/dashboard'
+  }
+})
+
+export default router

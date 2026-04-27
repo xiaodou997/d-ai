@@ -1,0 +1,33 @@
+{
+  "name": "uni-ai-api-admin",
+  "version": "1.0.0",
+  "description": "Uni AI API 平台管理后台",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "axios": "^1.15.0",
+    "dayjs": "^1.11.20",
+    "echarts": "^6.0.0",
+    "element-plus": "^2.13.7",
+    "mockjs": "^1.1.0",
+    "pinia": "^3.0.4",
+    "pinia-plugin-persistedstate": "^4.7.1",
+    "vue": "^3.5.32",
+    "vue-router": "^5.0.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.10",
+    "prettier": "3.8.3",
+    "sass-embedded": "^1.99.0",
+    "tailwindcss": "^4.2.2",
+    "vite": "8.0.8"
+  }
+}
