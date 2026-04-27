@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { listUsageLogs } from '@/api/aiGateway'
+import { formatTimestamp, formatYuan, listUsageLogs } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const logs = shallowRef([])
@@ -33,11 +33,6 @@ const fetchLogs = async () => {
   }
 }
 
-const formatTime = (value) => {
-  if (!value) return ''
-  return new Date(value).toLocaleString()
-}
-
 onMounted(fetchLogs)
 </script>
 
@@ -64,7 +59,7 @@ onMounted(fetchLogs)
 
     <el-table v-loading="loading" :data="logs" border stripe class="w-full">
       <el-table-column prop="created_at" label="时间" width="170">
-        <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        <template #default="{ row }">{{ formatTimestamp(row.created_at) }}</template>
       </el-table-column>
       <el-table-column prop="tenant_id" label="租户" min-width="120" show-overflow-tooltip />
       <el-table-column prop="user_id" label="用户" min-width="120" show-overflow-tooltip />
@@ -85,8 +80,12 @@ onMounted(fetchLogs)
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="platform_cost" label="平台成本" width="110" align="right" />
-      <el-table-column prop="user_cost" label="用户计费" width="110" align="right" />
+      <el-table-column label="平台成本(元)" width="120" align="right">
+        <template #default="{ row }">{{ formatYuan(row.platform_cost) }}</template>
+      </el-table-column>
+      <el-table-column label="用户计费(元)" width="120" align="right">
+        <template #default="{ row }">{{ formatYuan(row.user_cost) }}</template>
+      </el-table-column>
       <el-table-column prop="latency_ms" label="耗时(ms)" width="100" align="right" />
       <el-table-column label="状态" width="110">
         <template #default="{ row }">

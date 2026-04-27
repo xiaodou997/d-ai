@@ -1,20 +1,28 @@
 <script setup>
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Refresh, Switch } from '@element-plus/icons-vue'
+import { Edit, Plus, Refresh, Switch } from '@element-plus/icons-vue'
 import {
   checkProviderEndpointHealth,
+  centsToYuan,
   createProviderModelPrice,
   createProvider,
   createProviderEndpoint,
+  formatTimestamp,
+  formatYuan,
   listProviderModelPrices,
   listProviderEndpoints,
   listProviders,
+  nowTimestamp,
   protocolOptions,
   statusOptions,
+  updateProvider,
+  updateProviderEndpoint,
   updateProviderEndpointStatus,
+  updateProviderModelPrice,
   updateProviderModelPriceStatus,
-  updateProviderStatus
+  updateProviderStatus,
+  yuanToCents
 } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
@@ -23,6 +31,9 @@ const priceLoading = shallowRef(false)
 const providerDialogVisible = shallowRef(false)
 const endpointDialogVisible = shallowRef(false)
 const priceDialogVisible = shallowRef(false)
+const editingProviderId = shallowRef('')
+const editingEndpointId = shallowRef('')
+const editingPriceId = shallowRef('')
 const providers = shallowRef([])
 const endpoints = shallowRef([])
 const providerPrices = shallowRef([])
@@ -56,12 +67,18 @@ const priceForm = reactive({
   input_cost_per_1m: 0,
   output_cost_per_1m: 0,
   request_cost: 0,
+  image_cost: 0,
+  video_cost_per_second: 0,
   status: 'active'
 })
 
 const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === selectedProviderId.value)
 )
+
+const isEditingProvider = computed(() => Boolean(editingProviderId.value))
+const isEditingEndpoint = computed(() => Boolean(editingEndpointId.value))
+const isEditingPrice = computed(() => Boolean(editingPriceId.value))
 
 const endpointOptions = computed(() =>
   endpoints.value.map((item) => ({
@@ -76,6 +93,7 @@ const statusTagType = (status) => {
 }
 
 const resetPriceForm = () => {
+  editingPriceId.value = ''
   Object.assign(priceForm, {
     endpoint_id: '',
     upstream_model: '',
@@ -84,11 +102,14 @@ const resetPriceForm = () => {
     input_cost_per_1m: 0,
     output_cost_per_1m: 0,
     request_cost: 0,
+    image_cost: 0,
+    video_cost_per_second: 0,
     status: 'active'
   })
 }
 
 const resetProviderForm = () => {
+  editingProviderId.value = ''
   Object.assign(providerForm, {
     code: '',
     name: '',
@@ -100,6 +121,7 @@ const resetProviderForm = () => {
 }
 
 const resetEndpointForm = () => {
+  editingEndpointId.value = ''
   Object.assign(endpointForm, {
     name: '',
     base_url: '',
@@ -109,6 +131,48 @@ const resetEndpointForm = () => {
     weight: 100,
     timeout_ms: 60000,
     status: 'active'
+  })
+}
+
+const applyProviderForm = (row) => {
+  editingProviderId.value = row.id
+  Object.assign(providerForm, {
+    code: row.code,
+    name: row.name,
+    provider_type: row.provider_type,
+    protocol_type: row.protocol_type,
+    is_custom: row.is_custom,
+    status: row.status
+  })
+}
+
+const applyEndpointForm = (row) => {
+  editingEndpointId.value = row.id
+  Object.assign(endpointForm, {
+    name: row.name,
+    base_url: row.base_url,
+    protocol_type: row.protocol_type,
+    api_key: '',
+    custom_path: row.custom_path || '',
+    weight: row.weight,
+    timeout_ms: row.timeout_ms,
+    status: row.status
+  })
+}
+
+const applyPriceForm = (row) => {
+  editingPriceId.value = row.id
+  Object.assign(priceForm, {
+    endpoint_id: row.endpoint_id || '',
+    upstream_model: row.upstream_model,
+    capability_type: row.capability_type,
+    currency: row.currency,
+    input_cost_per_1m: centsToYuan(row.input_cost_per_1m),
+    output_cost_per_1m: centsToYuan(row.output_cost_per_1m),
+    request_cost: centsToYuan(row.request_cost),
+    image_cost: centsToYuan(row.image_cost),
+    video_cost_per_second: centsToYuan(row.video_cost_per_second),
+    status: row.status
   })
 }
 
@@ -165,12 +229,26 @@ const openProviderDialog = () => {
   providerDialogVisible.value = true
 }
 
+const openProviderEditDialog = (row) => {
+  applyProviderForm(row)
+  providerDialogVisible.value = true
+}
+
 const openEndpointDialog = () => {
   if (!selectedProviderId.value) {
     ElMessage.warning('请先选择厂商')
     return
   }
   resetEndpointForm()
+  endpointDialogVisible.value = true
+}
+
+const openEndpointEditDialog = (row) => {
+  if (!selectedProviderId.value) {
+    ElMessage.warning('请先选择厂商')
+    return
+  }
+  applyEndpointForm(row)
   endpointDialogVisible.value = true
 }
 
@@ -183,9 +261,23 @@ const openPriceDialog = () => {
   priceDialogVisible.value = true
 }
 
+const openPriceEditDialog = (row) => {
+  if (!selectedProviderId.value) {
+    ElMessage.warning('请先选择厂商')
+    return
+  }
+  applyPriceForm(row)
+  priceDialogVisible.value = true
+}
+
 const submitProvider = async () => {
-  await createProvider(providerForm)
-  ElMessage.success('厂商已创建')
+  if (editingProviderId.value) {
+    await updateProvider(editingProviderId.value, providerForm)
+    ElMessage.success('厂商已保存')
+  } else {
+    await createProvider(providerForm)
+    ElMessage.success('厂商已创建')
+  }
   providerDialogVisible.value = false
   await fetchProviders()
 }
@@ -195,19 +287,35 @@ const submitEndpoint = async () => {
     ...endpointForm,
     custom_path: endpointForm.custom_path || undefined
   }
-  await createProviderEndpoint(selectedProviderId.value, payload)
-  ElMessage.success('接入点已创建')
+  if (editingEndpointId.value) {
+    await updateProviderEndpoint(selectedProviderId.value, editingEndpointId.value, payload)
+    ElMessage.success('接入点已保存')
+  } else {
+    await createProviderEndpoint(selectedProviderId.value, payload)
+    ElMessage.success('接入点已创建')
+  }
   endpointDialogVisible.value = false
   await fetchEndpoints()
 }
 
 const submitProviderPrice = async () => {
-  await createProviderModelPrice(selectedProviderId.value, {
+  const payload = {
     ...priceForm,
+    input_cost_per_1m: yuanToCents(priceForm.input_cost_per_1m),
+    output_cost_per_1m: yuanToCents(priceForm.output_cost_per_1m),
+    request_cost: yuanToCents(priceForm.request_cost),
+    image_cost: yuanToCents(priceForm.image_cost),
+    video_cost_per_second: yuanToCents(priceForm.video_cost_per_second),
     endpoint_id: priceForm.endpoint_id || '',
-    effective_from: new Date().toISOString()
-  })
-  ElMessage.success('成本价已创建')
+    effective_from: nowTimestamp()
+  }
+  if (editingPriceId.value) {
+    await updateProviderModelPrice(selectedProviderId.value, editingPriceId.value, payload)
+    ElMessage.success('成本价已保存')
+  } else {
+    await createProviderModelPrice(selectedProviderId.value, payload)
+    ElMessage.success('成本价已创建')
+  }
   priceDialogVisible.value = false
   await fetchProviderPrices()
 }
@@ -278,8 +386,9 @@ onMounted(fetchProviders)
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="88" fixed="right">
+        <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openProviderEditDialog(row)">编辑</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleProvider(row)">
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
@@ -313,8 +422,9 @@ onMounted(fetchProviders)
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openEndpointEditDialog(row)">编辑</el-button>
             <el-button link type="primary" @click="checkEndpoint(row)">检查</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleEndpoint(row)">
               <el-icon><Switch /></el-icon>
@@ -341,16 +451,32 @@ onMounted(fetchProviders)
         <el-table-column prop="upstream_model" label="上游模型" min-width="160" />
         <el-table-column prop="capability_type" label="能力" width="90" />
         <el-table-column prop="endpoint_id" label="接入点" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="input_cost_per_1m" label="输入/1M" width="110" align="right" />
-        <el-table-column prop="output_cost_per_1m" label="输出/1M" width="110" align="right" />
-        <el-table-column prop="request_cost" label="请求" width="90" align="right" />
+        <el-table-column label="输入/1M(元)" width="130" align="right">
+          <template #default="{ row }">{{ formatYuan(row.input_cost_per_1m) }}</template>
+        </el-table-column>
+        <el-table-column label="输出/1M(元)" width="130" align="right">
+          <template #default="{ row }">{{ formatYuan(row.output_cost_per_1m) }}</template>
+        </el-table-column>
+        <el-table-column label="请求(元)" width="100" align="right">
+          <template #default="{ row }">{{ formatYuan(row.request_cost) }}</template>
+        </el-table-column>
+        <el-table-column label="单图(元)" width="100" align="right">
+          <template #default="{ row }">{{ formatYuan(row.image_cost) }}</template>
+        </el-table-column>
+        <el-table-column label="视频/秒(元)" width="120" align="right">
+          <template #default="{ row }">{{ formatYuan(row.video_cost_per_second) }}</template>
+        </el-table-column>
+        <el-table-column label="生效时间" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ formatTimestamp(row.effective_from) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="95">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="88" fixed="right">
+        <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openPriceEditDialog(row)">编辑</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleProviderPrice(row)">
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
@@ -359,7 +485,7 @@ onMounted(fetchProviders)
       </el-table>
     </section>
 
-    <el-dialog v-model="providerDialogVisible" title="新增服务商" width="560px">
+    <el-dialog v-model="providerDialogVisible" :title="isEditingProvider ? '编辑服务商' : '新增服务商'" width="560px">
       <el-form :model="providerForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="厂商编码" required>
@@ -387,11 +513,11 @@ onMounted(fetchProviders)
       </el-form>
       <template #footer>
         <el-button @click="providerDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProvider">创建</el-button>
+        <el-button type="primary" @click="submitProvider">{{ isEditingProvider ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="endpointDialogVisible" title="新增接入点" width="640px">
+    <el-dialog v-model="endpointDialogVisible" :title="isEditingEndpoint ? '编辑接入点' : '新增接入点'" width="640px">
       <el-form :model="endpointForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="接入点名称" required>
@@ -406,8 +532,8 @@ onMounted(fetchProviders)
         <el-form-item label="Base URL" required>
           <el-input v-model="endpointForm.base_url" placeholder="https://example.com/v1" />
         </el-form-item>
-        <el-form-item label="上游 API Key" required>
-          <el-input v-model="endpointForm.api_key" type="password" show-password placeholder="只在创建时提交，后端加密保存" />
+        <el-form-item :label="isEditingEndpoint ? '上游 API Key（留空不修改）' : '上游 API Key'" :required="!isEditingEndpoint">
+          <el-input v-model="endpointForm.api_key" type="password" show-password placeholder="后端加密保存" />
         </el-form-item>
         <div class="grid grid-cols-3 gap-4">
           <el-form-item label="Custom Path">
@@ -423,11 +549,11 @@ onMounted(fetchProviders)
       </el-form>
       <template #footer>
         <el-button @click="endpointDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitEndpoint">创建</el-button>
+        <el-button type="primary" @click="submitEndpoint">{{ isEditingEndpoint ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="priceDialogVisible" title="新增 Provider 成本价" width="680px">
+    <el-dialog v-model="priceDialogVisible" :title="isEditingPrice ? '编辑 Provider 成本价' : '新增 Provider 成本价'" width="680px">
       <el-form :model="priceForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="接入点">
@@ -440,20 +566,26 @@ onMounted(fetchProviders)
           </el-form-item>
         </div>
         <div class="grid grid-cols-3 gap-4">
-          <el-form-item label="输入成本/1M">
+          <el-form-item label="输入成本/1M(元)">
             <el-input-number v-model="priceForm.input_cost_per_1m" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="输出成本/1M">
+          <el-form-item label="输出成本/1M(元)">
             <el-input-number v-model="priceForm.output_cost_per_1m" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="请求成本">
+          <el-form-item label="请求成本(元)">
             <el-input-number v-model="priceForm.request_cost" :min="0" class="w-full" />
+          </el-form-item>
+          <el-form-item label="单图成本(元)">
+            <el-input-number v-model="priceForm.image_cost" :min="0" class="w-full" />
+          </el-form-item>
+          <el-form-item label="视频每秒成本(元)">
+            <el-input-number v-model="priceForm.video_cost_per_second" :min="0" class="w-full" />
           </el-form-item>
         </div>
       </el-form>
       <template #footer>
         <el-button @click="priceDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProviderPrice">创建</el-button>
+        <el-button type="primary" @click="submitProviderPrice">{{ isEditingPrice ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
   </div>

@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func writeAdminJSON(w http.ResponseWriter, status int, v any) {
@@ -30,6 +33,15 @@ func normalizeAdminJSONValue(v reflect.Value) any {
 	if v.CanInterface() {
 		if raw, ok := v.Interface().(json.RawMessage); ok {
 			return raw
+		}
+		if ts, ok := v.Interface().(pgtype.Timestamptz); ok {
+			return timestampMillis(ts)
+		}
+		if ts, ok := v.Interface().(time.Time); ok {
+			if ts.IsZero() {
+				return nil
+			}
+			return ts.UnixMilli()
 		}
 		if marshaler, ok := v.Interface().(json.Marshaler); ok && !isAdminResponseStruct(v.Type()) {
 			return marshaler
@@ -73,6 +85,13 @@ func normalizeAdminJSONValue(v reflect.Value) any {
 	default:
 		return v.Interface()
 	}
+}
+
+func timestampMillis(value pgtype.Timestamptz) any {
+	if !value.Valid || value.Time.IsZero() {
+		return nil
+	}
+	return value.Time.UnixMilli()
 }
 
 func normalizeAdminStruct(v reflect.Value) map[string]any {

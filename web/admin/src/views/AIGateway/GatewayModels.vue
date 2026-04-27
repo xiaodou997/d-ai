@@ -1,22 +1,30 @@
 <script setup>
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Edit, Plus, Refresh } from '@element-plus/icons-vue'
 import {
   capabilityOptions,
   createModel,
   createModelDeployment,
   createModelPrice,
+  centsToYuan,
+  formatTimestamp,
+  formatYuan,
   listModelDeployments,
   listModelPrices,
   listModels,
   listProviderEndpoints,
   listProviders,
+  nowTimestamp,
   protocolOptions,
   statusOptions,
+  updateModel,
+  updateModelDeployment,
   updateModelDeploymentStatus,
+  updateModelPrice,
   updateModelPriceStatus,
-  updateModelStatus
+  updateModelStatus,
+  yuanToCents
 } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
@@ -25,6 +33,9 @@ const priceLoading = shallowRef(false)
 const modelDialogVisible = shallowRef(false)
 const deploymentDialogVisible = shallowRef(false)
 const priceDialogVisible = shallowRef(false)
+const editingModelId = shallowRef('')
+const editingDeploymentId = shallowRef('')
+const editingPriceId = shallowRef('')
 const models = shallowRef([])
 const deployments = shallowRef([])
 const modelPrices = shallowRef([])
@@ -65,6 +76,10 @@ const priceForm = reactive({
   status: 'active'
 })
 
+const isEditingModel = computed(() => Boolean(editingModelId.value))
+const isEditingDeployment = computed(() => Boolean(editingDeploymentId.value))
+const isEditingPrice = computed(() => Boolean(editingPriceId.value))
+
 const selectedModel = computed(() =>
   models.value.find((item) => item.id === selectedModelId.value)
 )
@@ -82,6 +97,7 @@ const statusTagType = (status) => {
 }
 
 const resetPriceForm = () => {
+  editingPriceId.value = ''
   Object.assign(priceForm, {
     platform_input_price_per_1m: 0,
     platform_output_price_per_1m: 0,
@@ -94,6 +110,7 @@ const resetPriceForm = () => {
 }
 
 const resetModelForm = () => {
+  editingModelId.value = ''
   Object.assign(modelForm, {
     model_code: '',
     display_name: '',
@@ -106,6 +123,7 @@ const resetModelForm = () => {
 }
 
 const resetDeploymentForm = () => {
+  editingDeploymentId.value = ''
   const capabilityType = selectedModel.value?.capability_type || 'chat'
   Object.assign(deploymentForm, {
     endpoint_id: '',
@@ -117,6 +135,47 @@ const resetDeploymentForm = () => {
     weight: 100,
     supports_stream: true,
     status: 'active'
+  })
+}
+
+const applyModelForm = (row) => {
+  editingModelId.value = row.id
+  Object.assign(modelForm, {
+    model_code: row.model_code,
+    display_name: row.display_name,
+    capability_type: row.capability_type,
+    context_window: row.context_window ?? null,
+    default_max_output_tokens: row.default_max_output_tokens,
+    max_output_tokens: row.max_output_tokens ?? null,
+    status: row.status
+  })
+}
+
+const applyDeploymentForm = (row) => {
+  editingDeploymentId.value = row.id
+  Object.assign(deploymentForm, {
+    endpoint_id: row.endpoint_id,
+    upstream_model: row.upstream_model,
+    capability_type: row.capability_type,
+    upstream_protocol: row.upstream_protocol,
+    upstream_parameters_text: JSON.stringify(row.upstream_parameters || {}, null, 2),
+    priority: row.priority,
+    weight: row.weight,
+    supports_stream: row.supports_stream,
+    status: row.status
+  })
+}
+
+const applyPriceForm = (row) => {
+  editingPriceId.value = row.id
+  Object.assign(priceForm, {
+    platform_input_price_per_1m: centsToYuan(row.platform_input_price_per_1m),
+    platform_output_price_per_1m: centsToYuan(row.platform_output_price_per_1m),
+    platform_image_price: centsToYuan(row.platform_image_price),
+    tenant_input_price_per_1m: centsToYuan(row.tenant_input_price_per_1m),
+    tenant_output_price_per_1m: centsToYuan(row.tenant_output_price_per_1m),
+    tenant_image_price: centsToYuan(row.tenant_image_price),
+    status: row.status
   })
 }
 
@@ -189,6 +248,11 @@ const openModelDialog = () => {
   modelDialogVisible.value = true
 }
 
+const openModelEditDialog = (row) => {
+  applyModelForm(row)
+  modelDialogVisible.value = true
+}
+
 const openDeploymentDialog = async () => {
   if (!selectedModelId.value) {
     ElMessage.warning('请先选择模型')
@@ -196,6 +260,21 @@ const openDeploymentDialog = async () => {
   }
   resetDeploymentForm()
   await fetchProviders()
+  deploymentDialogVisible.value = true
+}
+
+const openDeploymentEditDialog = async (row) => {
+  if (!selectedModelId.value) {
+    ElMessage.warning('请先选择模型')
+    return
+  }
+  await fetchProviders()
+  const provider = providers.value.find((item) => item.code === row.provider_code || item.name === row.provider_name)
+  if (provider) {
+    selectedProviderId.value = provider.id
+    await fetchEndpoints()
+  }
+  applyDeploymentForm(row)
   deploymentDialogVisible.value = true
 }
 
@@ -208,13 +287,25 @@ const openPriceDialog = () => {
   priceDialogVisible.value = true
 }
 
+const openPriceEditDialog = (row) => {
+  applyPriceForm(row)
+  priceDialogVisible.value = true
+}
+
+const modelPayload = () => ({
+  ...modelForm,
+  context_window: modelForm.context_window || undefined,
+  max_output_tokens: modelForm.max_output_tokens || undefined
+})
+
 const submitModel = async () => {
-  await createModel({
-    ...modelForm,
-    context_window: modelForm.context_window || undefined,
-    max_output_tokens: modelForm.max_output_tokens || undefined
-  })
-  ElMessage.success('模型已创建')
+  if (editingModelId.value) {
+    await updateModel(editingModelId.value, modelPayload())
+    ElMessage.success('模型已保存')
+  } else {
+    await createModel(modelPayload())
+    ElMessage.success('模型已创建')
+  }
   modelDialogVisible.value = false
   await fetchModels()
 }
@@ -228,7 +319,7 @@ const submitDeployment = async () => {
     return
   }
 
-  await createModelDeployment(selectedModelId.value, {
+  const payload = {
     endpoint_id: deploymentForm.endpoint_id,
     upstream_model: deploymentForm.upstream_model,
     capability_type: deploymentForm.capability_type,
@@ -238,18 +329,36 @@ const submitDeployment = async () => {
     weight: deploymentForm.weight,
     supports_stream: deploymentForm.supports_stream,
     status: deploymentForm.status
-  })
-  ElMessage.success('部署映射已创建')
+  }
+  if (editingDeploymentId.value) {
+    await updateModelDeployment(selectedModelId.value, editingDeploymentId.value, payload)
+    ElMessage.success('部署映射已保存')
+  } else {
+    await createModelDeployment(selectedModelId.value, payload)
+    ElMessage.success('部署映射已创建')
+  }
   deploymentDialogVisible.value = false
   await fetchDeployments()
 }
 
 const submitModelPrice = async () => {
-  await createModelPrice(selectedModelId.value, {
-    ...priceForm,
-    effective_from: new Date().toISOString()
-  })
-  ElMessage.success('销售价已创建')
+  const payload = {
+    platform_input_price_per_1m: yuanToCents(priceForm.platform_input_price_per_1m),
+    platform_output_price_per_1m: yuanToCents(priceForm.platform_output_price_per_1m),
+    platform_image_price: yuanToCents(priceForm.platform_image_price),
+    tenant_input_price_per_1m: yuanToCents(priceForm.tenant_input_price_per_1m),
+    tenant_output_price_per_1m: yuanToCents(priceForm.tenant_output_price_per_1m),
+    tenant_image_price: yuanToCents(priceForm.tenant_image_price),
+    effective_from: nowTimestamp(),
+    status: priceForm.status
+  }
+  if (editingPriceId.value) {
+    await updateModelPrice(selectedModelId.value, editingPriceId.value, payload)
+    ElMessage.success('销售价已保存')
+  } else {
+    await createModelPrice(selectedModelId.value, payload)
+    ElMessage.success('销售价已创建')
+  }
   priceDialogVisible.value = false
   await fetchModelPrices()
 }
@@ -318,8 +427,9 @@ onMounted(async () => {
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="88" fixed="right">
+        <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openModelEditDialog(row)">编辑</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleModel(row)">
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
@@ -341,20 +451,35 @@ onMounted(async () => {
       </div>
 
       <el-table v-loading="priceLoading" :data="modelPrices" border stripe class="w-full">
-        <el-table-column prop="platform_input_price_per_1m" label="平台输入/1M" width="130" align="right" />
-        <el-table-column prop="platform_output_price_per_1m" label="平台输出/1M" width="130" align="right" />
-        <el-table-column prop="platform_image_price" label="平台单图" width="110" align="right" />
-        <el-table-column prop="tenant_input_price_per_1m" label="租户输入/1M" width="130" align="right" />
-        <el-table-column prop="tenant_output_price_per_1m" label="租户输出/1M" width="130" align="right" />
-        <el-table-column prop="tenant_image_price" label="租户单图" width="110" align="right" />
-        <el-table-column prop="effective_from" label="生效时间" min-width="180" show-overflow-tooltip />
+        <el-table-column label="平台输入/1M(元)" width="150" align="right">
+          <template #default="{ row }">{{ formatYuan(row.platform_input_price_per_1m) }}</template>
+        </el-table-column>
+        <el-table-column label="平台输出/1M(元)" width="150" align="right">
+          <template #default="{ row }">{{ formatYuan(row.platform_output_price_per_1m) }}</template>
+        </el-table-column>
+        <el-table-column label="平台单图(元)" width="130" align="right">
+          <template #default="{ row }">{{ formatYuan(row.platform_image_price) }}</template>
+        </el-table-column>
+        <el-table-column label="租户输入/1M(元)" width="150" align="right">
+          <template #default="{ row }">{{ formatYuan(row.tenant_input_price_per_1m) }}</template>
+        </el-table-column>
+        <el-table-column label="租户输出/1M(元)" width="150" align="right">
+          <template #default="{ row }">{{ formatYuan(row.tenant_output_price_per_1m) }}</template>
+        </el-table-column>
+        <el-table-column label="租户单图(元)" width="130" align="right">
+          <template #default="{ row }">{{ formatYuan(row.tenant_image_price) }}</template>
+        </el-table-column>
+        <el-table-column label="生效时间" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ formatTimestamp(row.effective_from) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="95">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="88" fixed="right">
+        <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openPriceEditDialog(row)">编辑</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleModelPrice(row)">
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
@@ -384,8 +509,9 @@ onMounted(async () => {
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openDeploymentEditDialog(row)">编辑</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleDeployment(row)">
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
@@ -394,7 +520,7 @@ onMounted(async () => {
       </el-table>
     </section>
 
-    <el-dialog v-model="modelDialogVisible" title="新增对外模型" width="620px">
+    <el-dialog v-model="modelDialogVisible" :title="isEditingModel ? '编辑对外模型' : '新增对外模型'" width="620px">
       <el-form :model="modelForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="模型编码" required>
@@ -430,11 +556,11 @@ onMounted(async () => {
       </el-form>
       <template #footer>
         <el-button @click="modelDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitModel">创建</el-button>
+        <el-button type="primary" @click="submitModel">{{ isEditingModel ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="deploymentDialogVisible" title="新增部署映射" width="680px">
+    <el-dialog v-model="deploymentDialogVisible" :title="isEditingDeployment ? '编辑部署映射' : '新增部署映射'" width="680px">
       <el-form :model="deploymentForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="厂商">
@@ -480,36 +606,36 @@ onMounted(async () => {
       </el-form>
       <template #footer>
         <el-button @click="deploymentDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitDeployment">创建</el-button>
+        <el-button type="primary" @click="submitDeployment">{{ isEditingDeployment ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="priceDialogVisible" title="新增模型销售价" width="680px">
+    <el-dialog v-model="priceDialogVisible" :title="isEditingPrice ? '编辑模型销售价' : '新增模型销售价'" width="680px">
       <el-form :model="priceForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="平台输入/1M">
+          <el-form-item label="平台输入/1M(元)">
             <el-input-number v-model="priceForm.platform_input_price_per_1m" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="平台输出/1M">
+          <el-form-item label="平台输出/1M(元)">
             <el-input-number v-model="priceForm.platform_output_price_per_1m" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="平台单图">
+          <el-form-item label="平台单图(元)">
             <el-input-number v-model="priceForm.platform_image_price" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="租户输入/1M">
+          <el-form-item label="租户输入/1M(元)">
             <el-input-number v-model="priceForm.tenant_input_price_per_1m" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="租户输出/1M">
+          <el-form-item label="租户输出/1M(元)">
             <el-input-number v-model="priceForm.tenant_output_price_per_1m" :min="0" class="w-full" />
           </el-form-item>
-          <el-form-item label="租户单图">
+          <el-form-item label="租户单图(元)">
             <el-input-number v-model="priceForm.tenant_image_price" :min="0" class="w-full" />
           </el-form-item>
         </div>
       </el-form>
       <template #footer>
         <el-button @click="priceDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitModelPrice">创建</el-button>
+        <el-button type="primary" @click="submitModelPrice">{{ isEditingPrice ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
   </div>

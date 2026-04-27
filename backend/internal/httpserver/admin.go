@@ -74,28 +74,28 @@ type createModelRequest struct {
 }
 
 type createModelPriceRequest struct {
-	PlatformInputPricePer1M  int64  `json:"platform_input_price_per_1m"`
-	PlatformOutputPricePer1M int64  `json:"platform_output_price_per_1m"`
-	PlatformImagePrice       int64  `json:"platform_image_price"`
-	TenantInputPricePer1M    int64  `json:"tenant_input_price_per_1m"`
-	TenantOutputPricePer1M   int64  `json:"tenant_output_price_per_1m"`
-	TenantImagePrice         int64  `json:"tenant_image_price"`
-	EffectiveFrom            string `json:"effective_from"`
-	Status                   string `json:"status"`
+	PlatformInputPricePer1M  int64          `json:"platform_input_price_per_1m"`
+	PlatformOutputPricePer1M int64          `json:"platform_output_price_per_1m"`
+	PlatformImagePrice       int64          `json:"platform_image_price"`
+	TenantInputPricePer1M    int64          `json:"tenant_input_price_per_1m"`
+	TenantOutputPricePer1M   int64          `json:"tenant_output_price_per_1m"`
+	TenantImagePrice         int64          `json:"tenant_image_price"`
+	EffectiveFrom            adminTimestamp `json:"effective_from"`
+	Status                   string         `json:"status"`
 }
 
 type createProviderModelPriceRequest struct {
-	EndpointID         string `json:"endpoint_id"`
-	UpstreamModel      string `json:"upstream_model"`
-	CapabilityType     string `json:"capability_type"`
-	Currency           string `json:"currency"`
-	InputCostPer1M     int64  `json:"input_cost_per_1m"`
-	OutputCostPer1M    int64  `json:"output_cost_per_1m"`
-	RequestCost        int64  `json:"request_cost"`
-	ImageCost          int64  `json:"image_cost"`
-	VideoCostPerSecond int64  `json:"video_cost_per_second"`
-	EffectiveFrom      string `json:"effective_from"`
-	Status             string `json:"status"`
+	EndpointID         string         `json:"endpoint_id"`
+	UpstreamModel      string         `json:"upstream_model"`
+	CapabilityType     string         `json:"capability_type"`
+	Currency           string         `json:"currency"`
+	InputCostPer1M     int64          `json:"input_cost_per_1m"`
+	OutputCostPer1M    int64          `json:"output_cost_per_1m"`
+	RequestCost        int64          `json:"request_cost"`
+	ImageCost          int64          `json:"image_cost"`
+	VideoCostPerSecond int64          `json:"video_cost_per_second"`
+	EffectiveFrom      adminTimestamp `json:"effective_from"`
+	Status             string         `json:"status"`
 }
 
 type createDeploymentRequest struct {
@@ -117,12 +117,12 @@ type grantModelToTenantRequest struct {
 }
 
 type createTenantAPIKeyRequest struct {
-	Name          string   `json:"name"`
-	QuotaLimit    *int64   `json:"quota_limit"`
-	AllowedModels []string `json:"allowed_models"`
-	Status        string   `json:"status"`
-	ExpiresAt     *string  `json:"expires_at"`
-	CreatedBy     string   `json:"created_by"`
+	Name          string          `json:"name"`
+	QuotaLimit    *int64          `json:"quota_limit"`
+	AllowedModels []string        `json:"allowed_models"`
+	Status        string          `json:"status"`
+	ExpiresAt     *adminTimestamp `json:"expires_at"`
+	CreatedBy     string          `json:"created_by"`
 }
 
 type createTenantAPIKeyResponse struct {
@@ -1671,26 +1671,68 @@ func optionalInt8(value *int64) pgtype.Int8 {
 	return pgtype.Int8{Int64: *value, Valid: true}
 }
 
-func optionalTime(value *string) (pgtype.Timestamptz, error) {
-	if value == nil || *value == "" {
-		return pgtype.Timestamptz{}, nil
-	}
-	parsed, err := time.Parse(time.RFC3339, *value)
-	if err != nil {
-		return pgtype.Timestamptz{}, err
-	}
-	return pgtype.Timestamptz{Time: parsed, Valid: true}, nil
+type adminTimestamp struct {
+	Time  time.Time
+	Valid bool
 }
 
-func parseEffectiveFrom(value string) (pgtype.Timestamptz, error) {
-	if value == "" {
+func (t *adminTimestamp) UnmarshalJSON(b []byte) error {
+	raw := strings.TrimSpace(string(b))
+	if raw == "" || raw == "null" || raw == `""` {
+		t.Valid = false
+		t.Time = time.Time{}
+		return nil
+	}
+	if strings.HasPrefix(raw, `"`) {
+		var value string
+		if err := json.Unmarshal(b, &value); err != nil {
+			return err
+		}
+		if strings.TrimSpace(value) == "" {
+			t.Valid = false
+			t.Time = time.Time{}
+			return nil
+		}
+		if millis, err := strconv.ParseInt(value, 10, 64); err == nil {
+			t.Time = time.UnixMilli(millis).UTC()
+			t.Valid = true
+			return nil
+		}
+		parsed, err := time.Parse(time.RFC3339, value)
+		if err != nil {
+			return err
+		}
+		t.Time = parsed.UTC()
+		t.Valid = true
+		return nil
+	}
+
+	var millis int64
+	if err := json.Unmarshal(b, &millis); err != nil {
+		return err
+	}
+	if millis == 0 {
+		t.Valid = false
+		t.Time = time.Time{}
+		return nil
+	}
+	t.Time = time.UnixMilli(millis).UTC()
+	t.Valid = true
+	return nil
+}
+
+func optionalTime(value *adminTimestamp) (pgtype.Timestamptz, error) {
+	if value == nil || !value.Valid {
+		return pgtype.Timestamptz{}, nil
+	}
+	return pgtype.Timestamptz{Time: value.Time, Valid: true}, nil
+}
+
+func parseEffectiveFrom(value adminTimestamp) (pgtype.Timestamptz, error) {
+	if !value.Valid {
 		return pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, nil
 	}
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		return pgtype.Timestamptz{}, err
-	}
-	return pgtype.Timestamptz{Time: parsed, Valid: true}, nil
+	return pgtype.Timestamptz{Time: value.Time, Valid: true}, nil
 }
 
 func int32OrDefault(value *int32, defaultValue int32) int32 {

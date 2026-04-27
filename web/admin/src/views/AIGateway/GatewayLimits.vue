@@ -4,6 +4,7 @@ import { Edit, Plus, Refresh } from '@element-plus/icons-vue'
 import {
   capabilityOptions,
   createRuntimeLimitPolicy,
+  formatTimestamp,
   listRuntimeLimitPolicies,
   statusOptions,
   updateRuntimeLimitPolicy,
@@ -118,11 +119,6 @@ const changeStatus = async (row, status) => {
   await fetchPolicies()
 }
 
-const formatTime = (value) => {
-  if (!value) return ''
-  return new Date(value).toLocaleString()
-}
-
 onMounted(fetchPolicies)
 </script>
 
@@ -170,7 +166,7 @@ onMounted(fetchPolicies)
         </template>
       </el-table-column>
       <el-table-column prop="updated_at" label="更新时间" width="170">
-        <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
+        <template #default="{ row }">{{ formatTimestamp(row.updated_at) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="90" fixed="right">
         <template #default="{ row }">

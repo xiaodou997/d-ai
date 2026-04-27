@@ -3,6 +3,9 @@ package httpserver
 import (
 	"encoding/json"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func TestNormalizeAdminJSONConvertsJSONBBytes(t *testing.T) {
@@ -51,6 +54,30 @@ func TestNormalizeAdminJSONConvertsJSONBBytes(t *testing.T) {
 	}
 	if got.Items[0].AllowedModels[0] != "deepseek-v4-pro" {
 		t.Fatalf("slice JSONB was not emitted as JSON array: %s", body)
+	}
+}
+
+func TestNormalizeAdminJSONConvertsTimestampsToUnixMillis(t *testing.T) {
+	type sampleResponse struct {
+		CreatedAt pgtype.Timestamptz `json:"created_at"`
+	}
+
+	ts := time.Date(2026, 4, 27, 8, 30, 0, 123000000, time.UTC)
+	body, err := json.Marshal(normalizeAdminJSON(sampleResponse{
+		CreatedAt: pgtype.Timestamptz{Time: ts, Valid: true},
+	}))
+	if err != nil {
+		t.Fatalf("marshal normalized response: %v", err)
+	}
+
+	var got struct {
+		CreatedAt int64 `json:"created_at"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal normalized body: %v", err)
+	}
+	if got.CreatedAt != ts.UnixMilli() {
+		t.Fatalf("created_at = %d, want %d", got.CreatedAt, ts.UnixMilli())
 	}
 }
 

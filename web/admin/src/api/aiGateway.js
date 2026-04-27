@@ -65,6 +65,10 @@ export function createProvider(data) {
   return gatewayRequest.post('/admin/providers', data)
 }
 
+export function updateProvider(providerId, data) {
+  return gatewayRequest.patch(`/admin/providers/${providerId}`, data)
+}
+
 export function updateProviderStatus(providerId, status) {
   return gatewayRequest.patch(`/admin/providers/${providerId}/status`, { status })
 }
@@ -75,6 +79,10 @@ export function listProviderEndpoints(providerId) {
 
 export function createProviderEndpoint(providerId, data) {
   return gatewayRequest.post(`/admin/providers/${providerId}/endpoints`, data)
+}
+
+export function updateProviderEndpoint(providerId, endpointId, data) {
+  return gatewayRequest.patch(`/admin/providers/${providerId}/endpoints/${endpointId}`, data)
 }
 
 export function updateProviderEndpointStatus(providerId, endpointId, status) {
@@ -93,6 +101,10 @@ export function createProviderModelPrice(providerId, data) {
   return gatewayRequest.post(`/admin/providers/${providerId}/model-prices`, data)
 }
 
+export function updateProviderModelPrice(providerId, priceId, data) {
+  return gatewayRequest.patch(`/admin/providers/${providerId}/model-prices/${priceId}`, data)
+}
+
 export function updateProviderModelPriceStatus(providerId, priceId, status) {
   return gatewayRequest.patch(`/admin/providers/${providerId}/model-prices/${priceId}/status`, { status })
 }
@@ -103,6 +115,10 @@ export function listModels() {
 
 export function createModel(data) {
   return gatewayRequest.post('/admin/models', data)
+}
+
+export function updateModel(modelId, data) {
+  return gatewayRequest.patch(`/admin/models/${modelId}`, data)
 }
 
 export function updateModelStatus(modelId, status) {
@@ -117,6 +133,10 @@ export function createModelPrice(modelId, data) {
   return gatewayRequest.post(`/admin/models/${modelId}/prices`, data)
 }
 
+export function updateModelPrice(modelId, priceId, data) {
+  return gatewayRequest.patch(`/admin/models/${modelId}/prices/${priceId}`, data)
+}
+
 export function updateModelPriceStatus(modelId, priceId, status) {
   return gatewayRequest.patch(`/admin/models/${modelId}/prices/${priceId}/status`, { status })
 }
@@ -127,6 +147,10 @@ export function listModelDeployments(modelId) {
 
 export function createModelDeployment(modelId, data) {
   return gatewayRequest.post(`/admin/models/${modelId}/deployments`, data)
+}
+
+export function updateModelDeployment(modelId, deploymentId, data) {
+  return gatewayRequest.patch(`/admin/models/${modelId}/deployments/${deploymentId}`, data)
 }
 
 export function updateModelDeploymentStatus(modelId, deploymentId, status) {
@@ -153,6 +177,10 @@ export function createTenantAPIKey(tenantId, data) {
   return gatewayRequest.post(`/admin/tenants/${tenantId}/api-keys`, data)
 }
 
+export function updateTenantAPIKey(tenantId, apiKeyId, data) {
+  return gatewayRequest.patch(`/admin/tenants/${tenantId}/api-keys/${apiKeyId}`, data)
+}
+
 export function updateTenantAPIKeyStatus(tenantId, apiKeyId, status) {
   return gatewayRequest.patch(`/admin/tenants/${tenantId}/api-keys/${apiKeyId}/status`, { status })
 }
@@ -177,8 +205,36 @@ export function createUserAPIKey(tenantId, userId, data) {
   return gatewayRequest.post(`/admin/tenants/${tenantId}/users/${userId}/api-keys`, data)
 }
 
+export function updateUserAPIKey(tenantId, userId, apiKeyId, data) {
+  return gatewayRequest.patch(`/admin/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}`, data)
+}
+
 export function updateUserAPIKeyStatus(tenantId, userId, apiKeyId, status) {
   return gatewayRequest.patch(`/admin/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}/status`, { status })
+}
+
+export function nowTimestamp() {
+  return Date.now()
+}
+
+export function formatTimestamp(value) {
+  if (!value) return ''
+  return new Date(value).toLocaleString('zh-CN', { hour12: false })
+}
+
+export function centsToYuan(value) {
+  return Number(((Number(value) || 0) / 100).toFixed(2))
+}
+
+export function yuanToCents(value) {
+  return Math.round((Number(value) || 0) * 100)
+}
+
+export function formatYuan(value) {
+  return centsToYuan(value).toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
 }
 
 export function listUsageLogs(params) {

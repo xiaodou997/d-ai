@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Key, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Edit, Key, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
   createTenantAPIKey,
   createUserAPIKey,
+  formatTimestamp,
   grantModelToTenant,
   grantModelToUser,
   listModels,
@@ -12,8 +13,10 @@ import {
   listTenantModelGrants,
   listUserAPIKeys,
   listUserModelGrants,
+  updateTenantAPIKey,
   updateTenantAPIKeyStatus,
   updateTenantModelGrantStatus,
+  updateUserAPIKey,
   updateUserAPIKeyStatus,
   updateUserModelGrantStatus
 } from '@/api/aiGateway'
@@ -22,6 +25,7 @@ const loading = shallowRef(false)
 const keyDialogVisible = shallowRef(false)
 const lastKeyDialogVisible = shallowRef(false)
 const activeOwner = shallowRef('tenant')
+const editingKeyId = shallowRef('')
 const lastPlainKey = shallowRef('')
 const models = shallowRef([])
 const tenantGrants = shallowRef([])
@@ -45,8 +49,11 @@ const keyForm = reactive({
   quota_limit: 100000000,
   allowed_models: [],
   status: 'active',
+  expires_at: '',
   created_by: 'admin'
 })
+
+const isEditingKey = computed(() => Boolean(editingKeyId.value))
 
 const modelOptions = computed(() =>
   models.value.map((item) => ({
@@ -113,11 +120,27 @@ const submitGrant = async (owner) => {
 
 const openKeyDialog = (owner) => {
   activeOwner.value = owner
+  editingKeyId.value = ''
   Object.assign(keyForm, {
     name: owner === 'tenant' ? 'Tenant runtime key' : 'User runtime key',
     quota_limit: 100000000,
     allowed_models: [],
     status: 'active',
+    expires_at: '',
+    created_by: 'admin'
+  })
+  keyDialogVisible.value = true
+}
+
+const openKeyEditDialog = (owner, row) => {
+  activeOwner.value = owner
+  editingKeyId.value = row.id
+  Object.assign(keyForm, {
+    name: row.name,
+    quota_limit: row.quota_limit ?? null,
+    allowed_models: row.allowed_models || [],
+    status: row.status,
+    expires_at: row.expires_at ? String(row.expires_at) : '',
     created_by: 'admin'
   })
   keyDialogVisible.value = true
@@ -126,7 +149,19 @@ const openKeyDialog = (owner) => {
 const submitKey = async () => {
   const payload = {
     ...keyForm,
-    quota_limit: keyForm.quota_limit || undefined
+    quota_limit: keyForm.quota_limit || undefined,
+    expires_at: keyForm.expires_at ? Number(keyForm.expires_at) : undefined
+  }
+  if (editingKeyId.value) {
+    if (activeOwner.value === 'tenant') {
+      await updateTenantAPIKey(scope.tenantId, editingKeyId.value, payload)
+    } else {
+      await updateUserAPIKey(scope.tenantId, scope.userId, editingKeyId.value, payload)
+    }
+    ElMessage.success('API Key 已保存')
+    keyDialogVisible.value = false
+    await fetchAll()
+    return
   }
   const response =
     activeOwner.value === 'tenant'
@@ -282,13 +317,17 @@ onMounted(async () => {
             <el-table-column label="额度" width="130" align="right">
               <template #default="{ row }">{{ row.quota_used }} / {{ row.quota_limit || '不限' }}</template>
             </el-table-column>
+            <el-table-column label="过期时间" width="170">
+              <template #default="{ row }">{{ formatTimestamp(row.expires_at) || '永不过期' }}</template>
+            </el-table-column>
             <el-table-column label="状态" width="95">
               <template #default="{ row }">
                 <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="90">
+            <el-table-column label="操作" width="130">
               <template #default="{ row }">
+                <el-button link type="primary" :icon="Edit" @click="openKeyEditDialog('tenant', row)">编辑</el-button>
                 <el-button link @click="toggleKey('tenant', row)">
                   {{ row.status === 'active' ? '禁用' : '启用' }}
                 </el-button>
@@ -307,13 +346,17 @@ onMounted(async () => {
             <el-table-column label="额度" width="130" align="right">
               <template #default="{ row }">{{ row.quota_used }} / {{ row.quota_limit || '不限' }}</template>
             </el-table-column>
+            <el-table-column label="过期时间" width="170">
+              <template #default="{ row }">{{ formatTimestamp(row.expires_at) || '永不过期' }}</template>
+            </el-table-column>
             <el-table-column label="状态" width="95">
               <template #default="{ row }">
                 <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="90">
+            <el-table-column label="操作" width="130">
               <template #default="{ row }">
+                <el-button link type="primary" :icon="Edit" @click="openKeyEditDialog('user', row)">编辑</el-button>
                 <el-button link @click="toggleKey('user', row)">
                   {{ row.status === 'active' ? '禁用' : '启用' }}
                 </el-button>
@@ -324,7 +367,11 @@ onMounted(async () => {
       </div>
     </section>
 
-    <el-dialog v-model="keyDialogVisible" :title="activeOwner === 'tenant' ? '创建租户 Key' : '创建用户 Key'" width="640px">
+    <el-dialog
+      v-model="keyDialogVisible"
+      :title="`${isEditingKey ? '编辑' : '创建'}${activeOwner === 'tenant' ? '租户' : '用户'} Key`"
+      width="640px"
+    >
       <el-form :model="keyForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="名称" required>
@@ -334,6 +381,16 @@ onMounted(async () => {
             <el-input-number v-model="keyForm.quota_limit" :min="0" class="w-full" />
           </el-form-item>
         </div>
+        <el-form-item label="过期时间">
+          <el-date-picker
+            v-model="keyForm.expires_at"
+            type="datetime"
+            value-format="x"
+            clearable
+            class="w-full"
+            placeholder="不选表示永不过期"
+          />
+        </el-form-item>
         <el-form-item label="允许模型">
           <el-select v-model="keyForm.allowed_models" class="w-full" multiple filterable>
             <el-option v-for="item in modelCodeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -342,7 +399,7 @@ onMounted(async () => {
       </el-form>
       <template #footer>
         <el-button @click="keyDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitKey">创建</el-button>
+        <el-button type="primary" @click="submitKey">{{ isEditingKey ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 

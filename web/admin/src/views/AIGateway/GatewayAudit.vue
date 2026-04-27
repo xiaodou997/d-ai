@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { listGatewayAuditLogs } from '@/api/aiGateway'
+import { formatTimestamp, listGatewayAuditLogs } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const logs = shallowRef([])
@@ -31,11 +31,6 @@ const fetchLogs = async () => {
 const resultTagType = (result) => {
   const map = { success: 'success', failed: 'danger' }
   return map[result] || 'info'
-}
-
-const formatTime = (value) => {
-  if (!value) return ''
-  return new Date(value).toLocaleString()
 }
 
 const formatSummary = (value) => {
@@ -69,7 +64,7 @@ onMounted(fetchLogs)
 
     <el-table v-loading="loading" :data="logs" border stripe class="w-full">
       <el-table-column prop="created_at" label="时间" width="170">
-        <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        <template #default="{ row }">{{ formatTimestamp(row.created_at) }}</template>
       </el-table-column>
       <el-table-column prop="actor" label="操作者" min-width="140" show-overflow-tooltip />
       <el-table-column prop="action" label="动作" min-width="220" show-overflow-tooltip />
