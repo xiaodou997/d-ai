@@ -118,11 +118,13 @@ CREATE TABLE IF NOT EXISTS ai_provider_model_prices (
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (capability_type IN ('chat', 'image', 'video', 'embedding', 'audio', 'rerank')),
-  CHECK (input_cost_per_1m >= 0),
-  CHECK (output_cost_per_1m >= 0),
-  CHECK (request_cost >= 0),
-  CHECK (image_cost >= 0),
-  CHECK (video_cost_per_second >= 0)
+  CONSTRAINT ai_provider_model_prices_nonnegative_credits CHECK (
+    input_cost_per_1m >= 0
+    AND output_cost_per_1m >= 0
+    AND request_cost >= 0
+    AND image_cost >= 0
+    AND video_cost_per_second >= 0
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_provider_model_prices_lookup
@@ -140,12 +142,14 @@ CREATE TABLE IF NOT EXISTS ai_model_prices (
   effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (platform_input_price_per_1m >= 0),
-  CHECK (platform_output_price_per_1m >= 0),
-  CHECK (platform_image_price >= 0),
-  CHECK (tenant_input_price_per_1m >= 0),
-  CHECK (tenant_output_price_per_1m >= 0),
-  CHECK (tenant_image_price >= 0)
+  CONSTRAINT ai_model_prices_nonnegative_credits CHECK (
+    platform_input_price_per_1m >= 0
+    AND platform_output_price_per_1m >= 0
+    AND platform_image_price >= 0
+    AND tenant_input_price_per_1m >= 0
+    AND tenant_output_price_per_1m >= 0
+    AND tenant_image_price >= 0
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_model_prices_model_effective ON ai_model_prices (model_id, status, effective_from DESC);
@@ -215,11 +219,13 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   usage_source TEXT NOT NULL DEFAULT 'upstream',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (billable_unit_type IN ('token', 'input_token', 'output_token', 'image', 'second', 'request')),
-  CHECK (billable_units >= 0),
-  CHECK (provider_cost >= 0),
-  CHECK (platform_cost >= 0),
-  CHECK (user_cost >= 0),
-  CHECK (api_key_quota_cost >= 0)
+  CONSTRAINT ai_usage_logs_nonnegative_billing CHECK (
+    billable_units >= 0
+    AND provider_cost >= 0
+    AND platform_cost >= 0
+    AND user_cost >= 0
+    AND api_key_quota_cost >= 0
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_time ON ai_usage_logs (tenant_id, created_at DESC);
@@ -227,6 +233,49 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_time ON ai_usage_logs (user_id
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_key_time ON ai_usage_logs (api_key_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_model_time ON ai_usage_logs (model_code, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_urm_transaction ON ai_usage_logs (urm_transaction_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ai_provider_model_prices_nonnegative_credits'
+  ) THEN
+    ALTER TABLE ai_provider_model_prices
+      ADD CONSTRAINT ai_provider_model_prices_nonnegative_credits CHECK (
+        input_cost_per_1m >= 0
+        AND output_cost_per_1m >= 0
+        AND request_cost >= 0
+        AND image_cost >= 0
+        AND video_cost_per_second >= 0
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ai_model_prices_nonnegative_credits'
+  ) THEN
+    ALTER TABLE ai_model_prices
+      ADD CONSTRAINT ai_model_prices_nonnegative_credits CHECK (
+        platform_input_price_per_1m >= 0
+        AND platform_output_price_per_1m >= 0
+        AND platform_image_price >= 0
+        AND tenant_input_price_per_1m >= 0
+        AND tenant_output_price_per_1m >= 0
+        AND tenant_image_price >= 0
+      );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ai_usage_logs_nonnegative_billing'
+  ) THEN
+    ALTER TABLE ai_usage_logs
+      ADD CONSTRAINT ai_usage_logs_nonnegative_billing CHECK (
+        billable_units >= 0
+        AND provider_cost >= 0
+        AND platform_cost >= 0
+        AND user_cost >= 0
+        AND api_key_quota_cost >= 0
+      );
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS ai_runtime_limit_policies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
