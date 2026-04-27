@@ -118,7 +118,12 @@ CREATE TABLE IF NOT EXISTS ai_provider_model_prices (
   effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (capability_type IN ('chat', 'image', 'video', 'embedding', 'audio', 'rerank'))
+  CHECK (capability_type IN ('chat', 'image', 'video', 'embedding', 'audio', 'rerank')),
+  CHECK (input_cost_per_1m >= 0),
+  CHECK (output_cost_per_1m >= 0),
+  CHECK (request_cost >= 0),
+  CHECK (image_cost >= 0),
+  CHECK (video_cost_per_second >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_provider_model_prices_lookup
@@ -135,7 +140,13 @@ CREATE TABLE IF NOT EXISTS ai_model_prices (
   tenant_image_price BIGINT NOT NULL DEFAULT 0,
   effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
   status TEXT NOT NULL DEFAULT 'active',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (platform_input_price_per_1m >= 0),
+  CHECK (platform_output_price_per_1m >= 0),
+  CHECK (platform_image_price >= 0),
+  CHECK (tenant_input_price_per_1m >= 0),
+  CHECK (tenant_output_price_per_1m >= 0),
+  CHECK (tenant_image_price >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_model_prices_model_effective ON ai_model_prices (model_id, status, effective_from DESC);
@@ -204,7 +215,12 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   usage_estimated BOOLEAN NOT NULL DEFAULT false,
   usage_source TEXT NOT NULL DEFAULT 'upstream',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (billable_unit_type IN ('token', 'input_token', 'output_token', 'image', 'second', 'request'))
+  CHECK (billable_unit_type IN ('token', 'input_token', 'output_token', 'image', 'second', 'request')),
+  CHECK (billable_units >= 0),
+  CHECK (provider_cost >= 0),
+  CHECK (platform_cost >= 0),
+  CHECK (user_cost >= 0),
+  CHECK (api_key_quota_cost >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_time ON ai_usage_logs (tenant_id, created_at DESC);
