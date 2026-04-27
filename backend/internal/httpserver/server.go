@@ -116,6 +116,7 @@ func New(cfg Config) *Server {
 		r.Patch("/limit-policies/{policyID}", s.handleAdminUpdateRuntimeLimitPolicy)
 		r.Patch("/limit-policies/{policyID}/status", s.handleAdminUpdateRuntimeLimitPolicyStatus)
 		r.Get("/usage-logs", s.handleAdminListUsageLogs)
+		r.Get("/usage-summary", s.handleAdminListUsageSummary)
 		r.Get("/audit-logs", s.handleAdminListAuditLogs)
 	})
 	router.Route("/v1", func(r chi.Router) {

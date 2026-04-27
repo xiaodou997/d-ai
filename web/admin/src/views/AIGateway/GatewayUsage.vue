@@ -1,10 +1,12 @@
 <script setup>
-import { onMounted, reactive, shallowRef } from 'vue'
+import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { formatCredits, formatTimestamp, listUsageLogs } from '@/api/aiGateway'
+import { formatCredits, formatTimestamp, listUsageLogs, listUsageSummary } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
+const summaryLoading = shallowRef(false)
 const logs = shallowRef([])
+const summaryRows = shallowRef([])
 const limit = shallowRef(100)
 const filters = reactive({
   tenant_id: '',
@@ -18,22 +20,72 @@ const statusTagType = (status) => {
   return map[status] || 'info'
 }
 
-const fetchLogs = async () => {
+const unitLabel = (unit) => {
+  const map = {
+    token: 'Token',
+    input_token: '输入 Token',
+    output_token: '输出 Token',
+    image: '图片',
+    second: '秒',
+    request: '请求'
+  }
+  return map[unit] || unit || '-'
+}
+
+const capabilityLabel = (capability) => {
+  const map = {
+    chat: '文本',
+    embedding: 'Embedding',
+    image: '图片',
+    video: '视频',
+    audio: '音频',
+    rerank: '重排'
+  }
+  return map[capability] || capability || '-'
+}
+
+const usageParams = computed(() => ({
+  tenant_id: filters.tenant_id || undefined,
+  user_id: filters.user_id || undefined,
+  model_code: filters.model_code || undefined,
+  request_status: filters.request_status || undefined
+}))
+
+const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
+  acc.requestCount += Number(row.request_count) || 0
+  acc.billableUnits += Number(row.billable_units) || 0
+  acc.providerCost += Number(row.provider_cost) || 0
+  acc.platformCost += Number(row.platform_cost) || 0
+  acc.userCost += Number(row.user_cost) || 0
+  acc.quotaCost += Number(row.api_key_quota_cost) || 0
+  return acc
+}, {
+  requestCount: 0,
+  billableUnits: 0,
+  providerCost: 0,
+  platformCost: 0,
+  userCost: 0,
+  quotaCost: 0
+}))
+
+const fetchUsage = async () => {
   loading.value = true
+  summaryLoading.value = true
   try {
-    logs.value = await listUsageLogs({
-      limit: limit.value,
-      tenant_id: filters.tenant_id || undefined,
-      user_id: filters.user_id || undefined,
-      model_code: filters.model_code || undefined,
-      request_status: filters.request_status || undefined
-    })
+    const params = usageParams.value
+    const [nextSummary, nextLogs] = await Promise.all([
+      listUsageSummary(params),
+      listUsageLogs({ ...params, limit: limit.value })
+    ])
+    summaryRows.value = nextSummary
+    logs.value = nextLogs
   } finally {
     loading.value = false
+    summaryLoading.value = false
   }
 }
 
-onMounted(fetchLogs)
+onMounted(fetchUsage)
 </script>
 
 <template>
@@ -53,9 +105,74 @@ onMounted(fetchLogs)
           <el-option label="rejected" value="rejected" />
         </el-select>
         <el-input-number v-model="limit" :min="1" :max="500" :step="50" />
-        <el-button type="primary" :icon="Refresh" :loading="loading" @click="fetchLogs">刷新</el-button>
+        <el-button type="primary" :icon="Refresh" :loading="loading || summaryLoading" @click="fetchUsage">刷新</el-button>
       </div>
     </div>
+
+    <div v-loading="summaryLoading" class="summary-grid">
+      <div class="metric-item">
+        <span>请求数</span>
+        <strong>{{ formatCredits(summaryTotals.requestCount) }}</strong>
+      </div>
+      <div class="metric-item">
+        <span>计费量</span>
+        <strong>{{ formatCredits(summaryTotals.billableUnits) }}</strong>
+      </div>
+      <div class="metric-item">
+        <span>平台成本</span>
+        <strong>{{ formatCredits(summaryTotals.platformCost) }}</strong>
+      </div>
+      <div class="metric-item">
+        <span>用户计费</span>
+        <strong>{{ formatCredits(summaryTotals.userCost) }}</strong>
+      </div>
+      <div class="metric-item">
+        <span>供应商成本</span>
+        <strong>{{ formatCredits(summaryTotals.providerCost) }}</strong>
+      </div>
+      <div class="metric-item">
+        <span>Key 额度消耗</span>
+        <strong>{{ formatCredits(summaryTotals.quotaCost) }}</strong>
+      </div>
+    </div>
+
+    <el-table v-loading="summaryLoading" :data="summaryRows" border stripe class="w-full summary-table">
+      <el-table-column label="能力" width="100">
+        <template #default="{ row }">{{ capabilityLabel(row.capability_type) }}</template>
+      </el-table-column>
+      <el-table-column label="计费单位" width="120">
+        <template #default="{ row }">{{ unitLabel(row.billable_unit_type) }}</template>
+      </el-table-column>
+      <el-table-column label="状态" width="110">
+        <template #default="{ row }">
+          <el-tag :type="statusTagType(row.request_status)" size="small">{{ row.request_status }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="请求数" width="100" align="right">
+        <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
+      </el-table-column>
+      <el-table-column label="Prompt" width="110" align="right">
+        <template #default="{ row }">{{ formatCredits(row.prompt_tokens) }}</template>
+      </el-table-column>
+      <el-table-column label="Completion" width="120" align="right">
+        <template #default="{ row }">{{ formatCredits(row.completion_tokens) }}</template>
+      </el-table-column>
+      <el-table-column label="计费量" width="120" align="right">
+        <template #default="{ row }">{{ formatCredits(row.billable_units) }}</template>
+      </el-table-column>
+      <el-table-column label="平台成本(积分)" width="140" align="right">
+        <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
+      </el-table-column>
+      <el-table-column label="用户计费(积分)" width="140" align="right">
+        <template #default="{ row }">{{ formatCredits(row.user_cost) }}</template>
+      </el-table-column>
+      <el-table-column label="供应商成本(积分)" width="150" align="right">
+        <template #default="{ row }">{{ formatCredits(row.provider_cost) }}</template>
+      </el-table-column>
+      <el-table-column label="平均耗时(ms)" width="130" align="right">
+        <template #default="{ row }">{{ formatCredits(row.avg_latency_ms) }}</template>
+      </el-table-column>
+    </el-table>
 
     <el-table v-loading="loading" :data="logs" border stripe class="w-full">
       <el-table-column prop="created_at" label="时间" width="170">
@@ -133,6 +250,40 @@ onMounted(fetchLogs)
   align-items: center;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 0;
+  background: #f8fafc;
+}
+
+.metric-item span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metric-item strong {
+  display: block;
+  margin-top: 6px;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.summary-table {
+  margin-bottom: 14px;
+}
+
 @media (max-width: 1180px) {
   .section-head {
     align-items: stretch;
@@ -140,6 +291,10 @@ onMounted(fetchLogs)
   }
 
   .toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

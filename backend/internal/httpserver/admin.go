@@ -1618,6 +1618,20 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 	writeAdminJSON(w, http.StatusOK, rows)
 }
 
+func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.queries.ListUsageSummary(r.Context(), dbgen.ListUsageSummaryParams{
+		TenantID:      optionalTextValue(r.URL.Query().Get("tenant_id")),
+		UserID:        optionalTextValue(r.URL.Query().Get("user_id")),
+		ModelCode:     optionalTextValue(r.URL.Query().Get("model_code")),
+		RequestStatus: optionalTextValue(r.URL.Query().Get("request_status")),
+	})
+	if err != nil {
+		s.writeAdminServerError(w, r, "list usage summary failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, rows)
+}
+
 func decodeAdminJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()

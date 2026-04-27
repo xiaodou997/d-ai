@@ -1874,6 +1874,92 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 	return items, nil
 }
 
+const listUsageSummary = `-- name: ListUsageSummary :many
+SELECT
+  capability_type,
+  billable_unit_type,
+  request_status,
+  COUNT(*)::bigint AS request_count,
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units), 0)::bigint AS billable_units,
+  COALESCE(SUM(provider_cost), 0)::bigint AS provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS user_cost,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost,
+  COALESCE(AVG(latency_ms)::bigint, 0)::bigint AS avg_latency_ms
+FROM ai_usage_logs
+WHERE ($1::text IS NULL OR tenant_id = $1)
+  AND ($2::text IS NULL OR user_id = $2)
+  AND ($3::text IS NULL OR model_code = $3)
+  AND ($4::text IS NULL OR request_status = $4)
+GROUP BY capability_type, billable_unit_type, request_status
+ORDER BY request_count DESC, capability_type ASC, billable_unit_type ASC, request_status ASC
+`
+
+type ListUsageSummaryParams struct {
+	TenantID      pgtype.Text `json:"tenant_id"`
+	UserID        pgtype.Text `json:"user_id"`
+	ModelCode     pgtype.Text `json:"model_code"`
+	RequestStatus pgtype.Text `json:"request_status"`
+}
+
+type ListUsageSummaryRow struct {
+	CapabilityType   string `json:"capability_type"`
+	BillableUnitType string `json:"billable_unit_type"`
+	RequestStatus    string `json:"request_status"`
+	RequestCount     int64  `json:"request_count"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+	TotalTokens      int64  `json:"total_tokens"`
+	BillableUnits    int64  `json:"billable_units"`
+	ProviderCost     int64  `json:"provider_cost"`
+	PlatformCost     int64  `json:"platform_cost"`
+	UserCost         int64  `json:"user_cost"`
+	ApiKeyQuotaCost  int64  `json:"api_key_quota_cost"`
+	AvgLatencyMs     int64  `json:"avg_latency_ms"`
+}
+
+func (q *Queries) ListUsageSummary(ctx context.Context, arg ListUsageSummaryParams) ([]ListUsageSummaryRow, error) {
+	rows, err := q.db.Query(ctx, listUsageSummary,
+		arg.TenantID,
+		arg.UserID,
+		arg.ModelCode,
+		arg.RequestStatus,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsageSummaryRow{}
+	for rows.Next() {
+		var i ListUsageSummaryRow
+		if err := rows.Scan(
+			&i.CapabilityType,
+			&i.BillableUnitType,
+			&i.RequestStatus,
+			&i.RequestCount,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.TotalTokens,
+			&i.BillableUnits,
+			&i.ProviderCost,
+			&i.PlatformCost,
+			&i.UserCost,
+			&i.ApiKeyQuotaCost,
+			&i.AvgLatencyMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserAPIKeys = `-- name: ListUserAPIKeys :many
 SELECT
   id,

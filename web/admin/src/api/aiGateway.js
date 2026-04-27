@@ -230,6 +230,10 @@ export function listUsageLogs(params) {
   return gatewayRequest.get('/admin/usage-logs', { params })
 }
 
+export function listUsageSummary(params) {
+  return gatewayRequest.get('/admin/usage-summary', { params })
+}
+
 export function listRuntimeLimitPolicies(params) {
   return gatewayRequest.get('/admin/limit-policies', { params })
 }

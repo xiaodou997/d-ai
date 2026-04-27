@@ -378,6 +378,15 @@ curl 'http://127.0.0.1:13010/admin/usage-logs?limit=100' \
 
 `limit` defaults to `100` and is capped at `500`.
 
+List usage summary grouped by capability, billable unit, and request status:
+
+```bash
+curl 'http://127.0.0.1:13010/admin/usage-summary' \
+  -H 'X-Admin-Token: local-admin-token'
+```
+
+Both endpoints support `tenant_id`, `user_id`, `model_code`, and `request_status` filters. Summary totals are calculated across all matching rows, not only the latest `limit` rows.
+
 Usage rows include token fields plus unified billable units:
 
 - Chat/Responses: `billable_unit_type=token`, `billable_units=total_tokens`.
