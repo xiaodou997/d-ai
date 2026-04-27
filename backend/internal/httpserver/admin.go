@@ -98,6 +98,39 @@ type createProviderModelPriceRequest struct {
 	Status             string         `json:"status"`
 }
 
+func validateModelPriceCredits(req createModelPriceRequest) string {
+	fields := map[string]int64{
+		"platform_input_price_per_1m":  req.PlatformInputPricePer1M,
+		"platform_output_price_per_1m": req.PlatformOutputPricePer1M,
+		"platform_image_price":         req.PlatformImagePrice,
+		"tenant_input_price_per_1m":    req.TenantInputPricePer1M,
+		"tenant_output_price_per_1m":   req.TenantOutputPricePer1M,
+		"tenant_image_price":           req.TenantImagePrice,
+	}
+	for name, value := range fields {
+		if value < 0 {
+			return fmt.Sprintf("%s must be a non-negative integer credit value", name)
+		}
+	}
+	return ""
+}
+
+func validateProviderModelPriceCredits(req createProviderModelPriceRequest) string {
+	fields := map[string]int64{
+		"input_cost_per_1m":     req.InputCostPer1M,
+		"output_cost_per_1m":    req.OutputCostPer1M,
+		"request_cost":          req.RequestCost,
+		"image_cost":            req.ImageCost,
+		"video_cost_per_second": req.VideoCostPerSecond,
+	}
+	for name, value := range fields {
+		if value < 0 {
+			return fmt.Sprintf("%s must be a non-negative integer credit value", name)
+		}
+	}
+	return ""
+}
+
 type createDeploymentRequest struct {
 	EndpointID         string          `json:"endpoint_id"`
 	UpstreamModel      string          `json:"upstream_model"`
@@ -743,6 +776,10 @@ func (s *Server) handleAdminCreateModelPrice(w http.ResponseWriter, r *http.Requ
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
+	if message := validateModelPriceCredits(req); message != "" {
+		writeAdminError(w, http.StatusBadRequest, message)
+		return
+	}
 	effectiveFrom, err := parseEffectiveFrom(req.EffectiveFrom)
 	if err != nil {
 		writeAdminError(w, http.StatusBadRequest, "invalid effective_from")
@@ -782,6 +819,10 @@ func (s *Server) handleAdminUpdateModelPrice(w http.ResponseWriter, r *http.Requ
 	}
 	if req.Status == "" {
 		req.Status = defaultStatus
+	}
+	if message := validateModelPriceCredits(req); message != "" {
+		writeAdminError(w, http.StatusBadRequest, message)
+		return
 	}
 	effectiveFrom, err := parseEffectiveFrom(req.EffectiveFrom)
 	if err != nil {
@@ -994,6 +1035,10 @@ func (s *Server) handleAdminCreateProviderModelPrice(w http.ResponseWriter, r *h
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
+	if message := validateProviderModelPriceCredits(req); message != "" {
+		writeAdminError(w, http.StatusBadRequest, message)
+		return
+	}
 	endpointID, err := optionalUUIDString(req.EndpointID)
 	if err != nil {
 		writeAdminError(w, http.StatusBadRequest, "invalid endpoint_id")
@@ -1051,6 +1096,10 @@ func (s *Server) handleAdminUpdateProviderModelPrice(w http.ResponseWriter, r *h
 	}
 	if req.Status == "" {
 		req.Status = defaultStatus
+	}
+	if message := validateProviderModelPriceCredits(req); message != "" {
+		writeAdminError(w, http.StatusBadRequest, message)
+		return
 	}
 	endpointID, err := optionalUUIDString(req.EndpointID)
 	if err != nil {

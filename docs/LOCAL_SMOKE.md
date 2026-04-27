@@ -122,9 +122,11 @@ LIMIT 20;
 
 Expected billable units:
 
-- `local-chat-test` and `local-responses-test`: `billable_unit_type = token`
-- `local-embedding-test`: `billable_unit_type = input_token`
-- `local-image-test`: `billable_unit_type = image`
+- `local-chat-test` and `local-responses-test`: `billable_unit_type = token`, `billable_units = total_tokens`
+- `local-embedding-test`: `billable_unit_type = input_token`, `billable_units = prompt_tokens`
+- `local-image-test`: `billable_unit_type = image`, `billable_units = image_count`
+
+All cost columns are integer credits. For image calls, the local seed charges one credit per generated image, so `api_key_quota_cost`, `platform_cost`, and `user_cost` should match the requested image count for user-owned keys.
 
 With URM running on `:6900`, successful billed requests should move through `confirmed`. If URM is unavailable, use the zero-price bypass in `backend/seeds/README.md`.
 

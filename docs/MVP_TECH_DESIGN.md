@@ -62,6 +62,8 @@ API keys are local to `uni-ai-api`. Only hashes are stored. Plaintext keys are s
 | User key | End user | `tenant_id + user_id` | `tenantAmount = platform price`, `userAmount = tenant sale price` | Charged at tenant sale price |
 | Tenant key | Tenant | `tenant_id` | `tenantAmount = platform price`, `userAmount = 0` | Charged at tenant sale price |
 
+All billing values are integer credits. URM recharge flows convert money into credits before this service is called, so Uni AI API never converts cents to yuan or yuan to credits in runtime billing. Frontend and backend admin time fields are exchanged as Unix millisecond timestamps; the frontend owns display formatting.
+
 Tenant-owned keys support anonymous resale scenarios. Optional request fields such as `user` or `X-End-User` may be logged for tenant analytics but do not participate in URM user billing.
 
 ## 6. Model Authorization
@@ -434,12 +436,25 @@ Pre-estimate:
 ```text
 estimated_input_tokens = tokenizer(messages)
 estimated_output_tokens = request.max_tokens OR model.default_max_output_tokens
-provider_estimated = input * provider_input_cost + output * provider_output_cost
-platform_estimated = input * platform_input_price + output * platform_output_price
-user_estimated = input * tenant_input_price + output * tenant_output_price
+provider_estimated = input_tokens * provider_input_cost_per_1m + output_tokens * provider_output_cost_per_1m
+platform_estimated = input_tokens * platform_input_price_per_1m + output_tokens * platform_output_price_per_1m
+user_estimated = input_tokens * tenant_input_price_per_1m + output_tokens * tenant_output_price_per_1m
 ```
 
-`provider_estimated` is recorded for cost audit and margin reporting. It does not participate in URM settlement.
+Token prices are integer credits per 1M tokens and round up to whole credits. `provider_estimated` is recorded for cost audit and margin reporting. It does not participate in URM settlement.
+
+Images use a different billable unit:
+
+```text
+billable_unit_type = image
+billable_units = image_count
+provider_cost = request_cost + image_count * image_cost
+platform_cost = image_count * platform_image_price
+user_cost = image_count * tenant_image_price for user-owned keys, otherwise 0
+api_key_quota_cost = image_count * tenant_image_price
+```
+
+Chat and Responses record `billable_unit_type=token`; Embeddings record `billable_unit_type=input_token`; Images record `billable_unit_type=image`.
 
 For user-owned keys:
 
@@ -462,9 +477,10 @@ customerId = empty
 On success:
 
 ```text
-actual costs are calculated from prompt_tokens and completion_tokens.
+actual token costs are calculated from prompt_tokens and completion_tokens.
+actual image costs are calculated from image_count.
 URM Confirm uses platform_actual and user_actual.
-Local API key quota confirms api_key_quota_actual = user_actual.
+Local API key quota confirms `api_key_quota_cost`, which is the consumed tenant sale credits for the request.
 Provider cost is recorded separately from the selected provider price row.
 ```
 

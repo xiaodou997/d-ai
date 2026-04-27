@@ -66,7 +66,8 @@ Useful docs:
 
 - Public model codes are canonical; provider model names are mapped per deployment.
 - Provider model cost prices are recorded for audit and margin reports.
-- Runtime billing uses platform and tenant model prices.
+- Runtime billing uses platform and tenant model prices, always in integer credits.
+- Token interfaces bill by token units; image interfaces bill by generated image count.
 - API key quotas are local to `uni-ai-api`; URM remains the source of account balances and credit settlement.
 - Tenant-owned API keys charge the tenant through URM.
 - User-owned API keys charge both tenant and user through URM.

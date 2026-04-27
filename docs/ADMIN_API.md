@@ -155,7 +155,7 @@ curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/deployments/{deploy
 
 ## Model Prices
 
-Create a model sale price. Unit is credits per 1M tokens.
+Create a model sale price. All price fields are non-negative integer credits. Token prices are credits per 1M tokens; image prices are credits per generated image. `effective_from` and other admin timestamps use Unix milliseconds in API requests and responses.
 
 ```bash
 curl -X POST http://127.0.0.1:13010/admin/models/{model_id}/prices \
@@ -164,8 +164,11 @@ curl -X POST http://127.0.0.1:13010/admin/models/{model_id}/prices \
   -d '{
     "platform_input_price_per_1m": 1000,
     "platform_output_price_per_1m": 2000,
+    "platform_image_price": 50,
     "tenant_input_price_per_1m": 1500,
     "tenant_output_price_per_1m": 3000,
+    "tenant_image_price": 80,
+    "effective_from": 1777248000000,
     "status": "active"
   }'
 ```
@@ -188,7 +191,7 @@ curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/prices/{price_id}/s
 
 ## Provider Cost Prices
 
-Create a provider model cost price. This is for audit and margin reporting, not user billing.
+Create a provider model cost price. This is for audit and margin reporting, not user billing. All cost fields are non-negative integer credits. Token costs are credits per 1M tokens; `image_cost` is credits per generated image; `request_cost` is credits per request.
 
 ```bash
 curl -X POST http://127.0.0.1:13010/admin/providers/{provider_id}/model-prices \
@@ -202,6 +205,8 @@ curl -X POST http://127.0.0.1:13010/admin/providers/{provider_id}/model-prices \
     "input_cost_per_1m": 800,
     "output_cost_per_1m": 1600,
     "request_cost": 0,
+    "image_cost": 0,
+    "effective_from": 1777248000000,
     "status": "active"
   }'
 ```
@@ -377,8 +382,14 @@ Usage rows include token fields plus unified billable units:
 
 - Chat/Responses: `billable_unit_type=token`, `billable_units=total_tokens`.
 - Embeddings: `billable_unit_type=input_token`, `billable_units=prompt_tokens`.
-- Images: `billable_unit_type=image`, `billable_units=n`.
+- Images: `billable_unit_type=image`, `billable_units=image_count`.
 - `usage_source=upstream` means provider usage was available; `estimated_length` marks fallback estimation.
+
+Cost fields in usage logs are integer credits:
+
+- Token capabilities calculate token costs from prompt/completion tokens and per-1M-token prices, rounded up to whole credits.
+- Image capability calculates `api_key_quota_cost`, `platform_cost`, and `user_cost` as `image_count * image_price`.
+- Provider image cost is recorded as `request_cost + image_count * image_cost`.
 
 ## Runtime Limits
 

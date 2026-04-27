@@ -33,6 +33,37 @@ func TestTokenCost(t *testing.T) {
 	}
 }
 
+func TestImageCost(t *testing.T) {
+	tests := []struct {
+		name  string
+		count int32
+		unit  int64
+		want  int64
+	}{
+		{name: "zero images", count: 0, unit: 10, want: 0},
+		{name: "zero price", count: 3, unit: 0, want: 0},
+		{name: "multiplies image count by unit price", count: 4, unit: 7, want: 28},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := imageCost(tt.count, tt.unit)
+			if got != tt.want {
+				t.Fatalf("imageCost(%d, %d) = %d, want %d", tt.count, tt.unit, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidatePriceCreditsRejectsNegativeValues(t *testing.T) {
+	if got := validateModelPriceCredits(createModelPriceRequest{TenantImagePrice: -1}); got == "" {
+		t.Fatal("validateModelPriceCredits accepted a negative credit value")
+	}
+	if got := validateProviderModelPriceCredits(createProviderModelPriceRequest{ImageCost: -1}); got == "" {
+		t.Fatal("validateProviderModelPriceCredits accepted a negative credit value")
+	}
+}
+
 func TestRequestedOutputTokens(t *testing.T) {
 	raw := map[string]json.RawMessage{
 		"max_tokens": json.RawMessage(`123`),
