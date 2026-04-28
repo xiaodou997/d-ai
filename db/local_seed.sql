@@ -6,11 +6,15 @@
 -- Default local route:
 --   openai_compatible -> http://127.0.0.1:18080/v1
 --
--- DeepSeek is included as a real-provider sample but is not required for
--- the local smoke path.
+-- Data Model:
+--   Provider -> Endpoint -> Upstream Deployment -> (Model Route -> Model)
+--   Cost prices bind to upstream deployment, sale prices bind to model.
 
 BEGIN;
 
+-- ============================================================================
+-- 1. Providers
+-- ============================================================================
 INSERT INTO ai_providers (
   code,
   name,
@@ -29,96 +33,158 @@ ON CONFLICT (code) DO UPDATE SET
   status = EXCLUDED.status,
   updated_at = now();
 
+-- ============================================================================
+-- 2. Endpoints
+-- ============================================================================
 INSERT INTO ai_provider_endpoints (
   provider_id,
   name,
   base_url,
-  protocol_type,
   api_key_ciphertext,
   extra_headers,
-  custom_path,
   weight,
   timeout_ms,
-  status,
-  health_status
+  status
 ) VALUES
   (
     (SELECT id FROM ai_providers WHERE code = 'deepseek'),
     'DeepSeek OpenAI Chat',
     'https://api.deepseek.com',
-    'openai_chat_completions',
     'plain:REPLACE_ME_DEEPSEEK_API_KEY',
     '{}',
-    NULL,
     100,
     60000,
-    'active',
-    'unknown'
+    'active'
   ),
   (
     (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    'Local Fake Chat',
+    'Local Fake Endpoint',
     'http://127.0.0.1:18080/v1',
-    'openai_chat_completions',
     'plain:fake-local-token',
     '{}',
-    NULL,
     100,
     30000,
-    'active',
-    'unknown'
-  ),
-  (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    'Local Fake Responses',
-    'http://127.0.0.1:18080/v1',
-    'openai_responses',
-    'plain:fake-local-token',
-    '{}',
-    NULL,
-    100,
-    30000,
-    'active',
-    'unknown'
-  ),
-  (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    'Local Fake Embeddings',
-    'http://127.0.0.1:18080/v1',
-    'openai_embeddings',
-    'plain:fake-local-token',
-    '{}',
-    NULL,
-    100,
-    30000,
-    'active',
-    'unknown'
-  ),
-  (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    'Local Fake Images',
-    'http://127.0.0.1:18080/v1',
-    'openai_images_generations',
-    'plain:fake-local-token',
-    '{}',
-    NULL,
-    100,
-    30000,
-    'active',
-    'unknown'
+    'active'
   )
 ON CONFLICT (provider_id, name) DO UPDATE SET
   base_url = EXCLUDED.base_url,
-  protocol_type = EXCLUDED.protocol_type,
   api_key_ciphertext = EXCLUDED.api_key_ciphertext,
   extra_headers = EXCLUDED.extra_headers,
-  custom_path = EXCLUDED.custom_path,
   weight = EXCLUDED.weight,
   timeout_ms = EXCLUDED.timeout_ms,
   status = EXCLUDED.status,
-  health_status = EXCLUDED.health_status,
   updated_at = now();
 
+-- ============================================================================
+-- 3. Upstream Deployments
+-- ============================================================================
+-- Clean up old deployments first
+DELETE FROM ai_upstream_deployment_cost_prices
+WHERE upstream_deployment_id IN (
+  SELECT ud.id
+  FROM ai_upstream_deployments ud
+  JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+  WHERE e.name IN ('DeepSeek OpenAI Chat', 'Local Fake Endpoint')
+);
+
+DELETE FROM ai_model_routes
+WHERE upstream_deployment_id IN (
+  SELECT ud.id
+  FROM ai_upstream_deployments ud
+  JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+  WHERE e.name IN ('DeepSeek OpenAI Chat', 'Local Fake Endpoint')
+);
+
+DELETE FROM ai_upstream_deployments ud
+USING ai_provider_endpoints e
+WHERE ud.endpoint_id = e.id
+  AND e.name IN ('DeepSeek OpenAI Chat', 'Local Fake Endpoint');
+
+INSERT INTO ai_upstream_deployments (
+  endpoint_id,
+  name,
+  upstream_model,
+  capability_type,
+  upstream_protocol,
+  request_path,
+  upstream_parameters,
+  tags,
+  health_status,
+  status
+) VALUES
+  (
+    (SELECT id FROM ai_provider_endpoints WHERE name = 'DeepSeek OpenAI Chat'),
+    'DeepSeek V4 Pro',
+    'deepseek-v4-pro',
+    'chat',
+    'openai_chat_completions',
+    NULL,
+    '{}',
+    '{"tier": "premium"}',
+    'unknown',
+    'active'
+  ),
+  (
+    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Endpoint'),
+    'Local Fake Chat',
+    'fake-chat-model',
+    'chat',
+    'openai_chat_completions',
+    NULL,
+    '{}',
+    '{"tier": "test"}',
+    'unknown',
+    'active'
+  ),
+  (
+    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Endpoint'),
+    'Local Fake Responses',
+    'fake-responses-model',
+    'chat',
+    'openai_responses',
+    NULL,
+    '{}',
+    '{"tier": "test"}',
+    'unknown',
+    'active'
+  ),
+  (
+    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Endpoint'),
+    'Local Fake Embeddings',
+    'fake-embedding-model',
+    'embedding',
+    'openai_embeddings',
+    NULL,
+    '{}',
+    '{"tier": "test"}',
+    'unknown',
+    'active'
+  ),
+  (
+    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Endpoint'),
+    'Local Fake Images',
+    'fake-image-model',
+    'image',
+    'openai_images_generations',
+    NULL,
+    '{}',
+    '{"tier": "test"}',
+    'unknown',
+    'active'
+  )
+ON CONFLICT (endpoint_id, upstream_model, upstream_protocol) DO UPDATE SET
+  name = EXCLUDED.name,
+  capability_type = EXCLUDED.capability_type,
+  request_path = EXCLUDED.request_path,
+  upstream_parameters = EXCLUDED.upstream_parameters,
+  tags = EXCLUDED.tags,
+  health_status = EXCLUDED.health_status,
+  status = EXCLUDED.status,
+  updated_at = now();
+
+-- ============================================================================
+-- 4. Public Models
+-- ============================================================================
 INSERT INTO ai_models (
   model_code,
   display_name,
@@ -140,19 +206,11 @@ ON CONFLICT (model_code) DO UPDATE SET
   status = EXCLUDED.status,
   updated_at = now();
 
-DELETE FROM ai_provider_model_prices
-WHERE provider_id IN (
-  SELECT id FROM ai_providers WHERE code IN ('deepseek', 'openai_compatible')
-)
-AND upstream_model IN (
-  'deepseek-v4-pro',
-  'fake-chat-model',
-  'fake-responses-model',
-  'fake-embedding-model',
-  'fake-image-model'
-);
-
-DELETE FROM ai_model_prices
+-- ============================================================================
+-- 5. Model Routes (Public Model -> Upstream Deployment)
+-- ============================================================================
+-- Clean up old routes first
+DELETE FROM ai_model_routes
 WHERE model_id IN (
   SELECT id FROM ai_models
   WHERE model_code IN (
@@ -164,40 +222,9 @@ WHERE model_id IN (
   )
 );
 
-DELETE FROM ai_runtime_limit_policies
-WHERE created_by = 'local_seed'
-AND (
-  scope_id = 'tenant-local'
-  OR scope_id IN (SELECT id::text FROM ai_providers WHERE code = 'openai_compatible')
-  OR scope_id IN (SELECT id::text FROM ai_api_keys WHERE key_hash = '62d55f3f491606f677561e3b8cbc2774f6e01b935d03fec25484cb0f090c3e1f')
-);
-
-DELETE FROM ai_model_deployments d
-USING ai_models m, ai_provider_endpoints e
-WHERE d.model_id = m.id
-  AND d.endpoint_id = e.id
-  AND m.model_code IN (
-    'deepseek-v4-pro',
-    'local-chat-test',
-    'local-responses-test',
-    'local-embedding-test',
-    'local-image-test'
-  )
-  AND e.name IN (
-    'DeepSeek OpenAI Chat',
-    'Local Fake Chat',
-    'Local Fake Responses',
-    'Local Fake Embeddings',
-    'Local Fake Images'
-  );
-
-INSERT INTO ai_model_deployments (
+INSERT INTO ai_model_routes (
   model_id,
-  endpoint_id,
-  upstream_model,
-  capability_type,
-  upstream_protocol,
-  upstream_parameters,
+  upstream_deployment_id,
   priority,
   weight,
   supports_stream,
@@ -205,11 +232,7 @@ INSERT INTO ai_model_deployments (
 ) VALUES
   (
     (SELECT id FROM ai_models WHERE model_code = 'deepseek-v4-pro'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'DeepSeek OpenAI Chat'),
-    'deepseek-v4-pro',
-    'chat',
-    'openai_chat_completions',
-    '{}',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'deepseek-v4-pro' AND e.name = 'DeepSeek OpenAI Chat'),
     100,
     100,
     true,
@@ -217,11 +240,7 @@ INSERT INTO ai_model_deployments (
   ),
   (
     (SELECT id FROM ai_models WHERE model_code = 'local-chat-test'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Chat'),
-    'fake-chat-model',
-    'chat',
-    'openai_chat_completions',
-    '{}',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-chat-model' AND e.name = 'Local Fake Endpoint'),
     100,
     100,
     true,
@@ -229,11 +248,7 @@ INSERT INTO ai_model_deployments (
   ),
   (
     (SELECT id FROM ai_models WHERE model_code = 'local-responses-test'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Responses'),
-    'fake-responses-model',
-    'chat',
-    'openai_responses',
-    '{}',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-responses-model' AND e.name = 'Local Fake Endpoint'),
     100,
     100,
     true,
@@ -241,11 +256,7 @@ INSERT INTO ai_model_deployments (
   ),
   (
     (SELECT id FROM ai_models WHERE model_code = 'local-embedding-test'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Embeddings'),
-    'fake-embedding-model',
-    'embedding',
-    'openai_embeddings',
-    '{}',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-embedding-model' AND e.name = 'Local Fake Endpoint'),
     100,
     100,
     false,
@@ -253,45 +264,39 @@ INSERT INTO ai_model_deployments (
   ),
   (
     (SELECT id FROM ai_models WHERE model_code = 'local-image-test'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Images'),
-    'fake-image-model',
-    'image',
-    'openai_images_generations',
-    '{}',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-image-model' AND e.name = 'Local Fake Endpoint'),
     100,
     100,
     false,
     'active'
   )
-ON CONFLICT (model_id, endpoint_id, upstream_model) DO UPDATE SET
-  capability_type = EXCLUDED.capability_type,
-  upstream_protocol = EXCLUDED.upstream_protocol,
-  upstream_parameters = EXCLUDED.upstream_parameters,
+ON CONFLICT (model_id, upstream_deployment_id) DO UPDATE SET
   priority = EXCLUDED.priority,
   weight = EXCLUDED.weight,
   supports_stream = EXCLUDED.supports_stream,
   status = EXCLUDED.status,
   updated_at = now();
 
+-- ============================================================================
+-- 6. Model Prices (Sale Prices - bind to Model, 1:1 upsert)
+-- ============================================================================
 INSERT INTO ai_model_prices (
   model_id,
-  platform_input_price_per_1m,
-  platform_output_price_per_1m,
-  platform_image_price,
-  tenant_input_price_per_1m,
-  tenant_output_price_per_1m,
-  tenant_image_price,
-  status
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
 )
 SELECT
   id,
   CASE WHEN capability_type IN ('chat', 'embedding') THEN 1 ELSE 0 END,
   CASE WHEN capability_type = 'chat' THEN 1 ELSE 0 END,
-  CASE WHEN capability_type = 'image' THEN 1 ELSE 0 END,
-  CASE WHEN capability_type IN ('chat', 'embedding') THEN 1 ELSE 0 END,
-  CASE WHEN capability_type = 'chat' THEN 1 ELSE 0 END,
-  CASE WHEN capability_type = 'image' THEN 1 ELSE 0 END,
-  'active'
+  CASE WHEN capability_type = 'image' THEN '{"256x256": 1, "512x512": 2, "1024x1024": 4}'::jsonb ELSE '{}'::jsonb END,
+  0,
+  0,
+  0
 FROM ai_models
 WHERE model_code IN (
   'deepseek-v4-pro',
@@ -299,81 +304,95 @@ WHERE model_code IN (
   'local-responses-test',
   'local-embedding-test',
   'local-image-test'
-);
+)
+ON CONFLICT (model_id) DO UPDATE SET
+  input_price_per_1m           = EXCLUDED.input_price_per_1m,
+  output_price_per_1m          = EXCLUDED.output_price_per_1m,
+  image_size_prices            = EXCLUDED.image_size_prices,
+  video_price_per_second       = EXCLUDED.video_price_per_second,
+  audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
+  updated_at                   = now();
 
-INSERT INTO ai_provider_model_prices (
-  provider_id,
-  endpoint_id,
-  upstream_model,
+-- ============================================================================
+-- 7. Upstream Deployment Cost Prices (bind to Upstream Deployment)
+-- ============================================================================
+INSERT INTO ai_upstream_deployment_cost_prices (
+  upstream_deployment_id,
   capability_type,
   currency,
   input_cost_per_1m,
   output_cost_per_1m,
   request_cost,
   image_cost,
+  image_size_prices,
+  video_cost_per_second,
   status
 ) VALUES
   (
-    (SELECT id FROM ai_providers WHERE code = 'deepseek'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'DeepSeek OpenAI Chat'),
-    'deepseek-v4-pro',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'deepseek-v4-pro' AND e.name = 'DeepSeek OpenAI Chat'),
     'chat',
     'CNY_CREDITS',
     1,
     1,
     0,
     0,
+    '{}',
+    0,
     'active'
   ),
   (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Chat'),
-    'fake-chat-model',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-chat-model' AND e.name = 'Local Fake Endpoint'),
     'chat',
     'CNY_CREDITS',
     1,
     1,
     0,
     0,
+    '{}',
+    0,
     'active'
   ),
   (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Responses'),
-    'fake-responses-model',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-responses-model' AND e.name = 'Local Fake Endpoint'),
     'chat',
     'CNY_CREDITS',
     1,
     1,
     0,
     0,
+    '{}',
+    0,
     'active'
   ),
   (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Embeddings'),
-    'fake-embedding-model',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-embedding-model' AND e.name = 'Local Fake Endpoint'),
     'embedding',
     'CNY_CREDITS',
     1,
     0,
     0,
     0,
+    '{}',
+    0,
     'active'
   ),
   (
-    (SELECT id FROM ai_providers WHERE code = 'openai_compatible'),
-    (SELECT id FROM ai_provider_endpoints WHERE name = 'Local Fake Images'),
-    'fake-image-model',
+    (SELECT ud.id FROM ai_upstream_deployments ud JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id WHERE ud.upstream_model = 'fake-image-model' AND e.name = 'Local Fake Endpoint'),
     'image',
     'CNY_CREDITS',
     0,
     0,
     0,
     1,
+    '{"256x256": 1, "512x512": 2, "1024x1024": 4}',
+    0,
     'active'
   );
 
+-- ============================================================================
+-- 8. Tenant Model Grants
+-- ============================================================================
 INSERT INTO ai_tenant_model_grants (
   tenant_id,
   model_id,
@@ -392,6 +411,9 @@ WHERE model_code IN (
 ON CONFLICT (tenant_id, model_id) DO UPDATE SET
   status = EXCLUDED.status;
 
+-- ============================================================================
+-- 9. API Keys
+-- ============================================================================
 INSERT INTO ai_api_keys (
   owner_type,
   tenant_id,
@@ -420,6 +442,12 @@ ON CONFLICT (key_hash) DO UPDATE SET
   allowed_models = EXCLUDED.allowed_models,
   status = EXCLUDED.status,
   updated_at = now();
+
+-- ============================================================================
+-- 10. Limit Policies
+-- ============================================================================
+DELETE FROM ai_runtime_limit_policies
+WHERE created_by = 'local_seed';
 
 INSERT INTO ai_runtime_limit_policies (
   scope_type,
