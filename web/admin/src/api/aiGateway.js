@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import router from '@/router'
 
 const gatewayRequest = axios.create({
   baseURL: import.meta.env.VITE_AI_GATEWAY_BASE_URL || '',
@@ -8,6 +10,32 @@ const gatewayRequest = axios.create({
     'Content-Type': 'application/json'
   }
 })
+
+// 刷新锁，防止并发请求时多次刷新 Token
+let isRefreshing = false
+// 刷新队列
+let refreshSubscribers = []
+
+// 添加到刷新队列
+const subscribeTokenRefresh = (resolve, reject) => {
+  refreshSubscribers.push({ resolve, reject })
+}
+
+// 执行刷新队列
+const onRefreshed = (accessToken) => {
+  refreshSubscribers.forEach((callback) => {
+    callback.resolve(accessToken)
+  })
+  refreshSubscribers = []
+}
+
+// 刷新队列失败
+const onRefreshFailed = (error) => {
+  refreshSubscribers.forEach((callback) => {
+    callback.reject(error)
+  })
+  refreshSubscribers = []
+}
 
 gatewayRequest.interceptors.request.use((config) => {
   const adminToken =
@@ -27,9 +55,68 @@ gatewayRequest.interceptors.request.use((config) => {
 
 gatewayRequest.interceptors.response.use(
   (response) => response.data,
-  (error) => {
-    const message = error.response?.data?.error || error.response?.data?.message || 'AI Gateway 请求失败'
-    ElMessage.error(message)
+  async (error) => {
+    // 处理 HTTP 错误
+    if (error.response) {
+      const { status, data } = error.response
+
+      if (status === 401) {
+        const authStore = useAuthStore()
+        const refreshToken = localStorage.getItem('admin_refreshToken')
+
+        // 没有 refresh token，直接跳转登录
+        if (!refreshToken) {
+          ElMessage.error('登录已过期，请重新登录')
+          authStore.clearState()
+          router.push('/login')
+          return Promise.reject(error)
+        }
+
+        // 如果正在刷新，将请求加入队列
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            subscribeTokenRefresh((newToken) => {
+              const config = error.config
+              config.headers['Authorization'] = `Bearer ${newToken}`
+              resolve(gatewayRequest(config))
+            }, reject)
+          })
+        }
+
+        // 开始刷新 token
+        isRefreshing = true
+        try {
+          const newToken = await authStore.refreshAccessToken()
+          isRefreshing = false
+          onRefreshed(newToken.accessToken)
+
+          // 重试之前的请求
+          const config = error.config
+          config.headers['Authorization'] = `Bearer ${newToken.accessToken}`
+          return gatewayRequest(config)
+        } catch (refreshError) {
+          isRefreshing = false
+          onRefreshFailed(refreshError)
+
+          // 刷新失败，清理状态并跳转
+          ElMessage.error('登录已过期，请重新登录')
+          authStore.clearState()
+          authStore.stopAutoRefresh()
+          router.push('/login')
+
+          return Promise.reject(refreshError)
+        }
+      }
+
+      // 其他错误
+      const message = data?.error || data?.message || 'AI Gateway 请求失败'
+      ElMessage.error(message)
+    } else if (error.request) {
+      ElMessage.error('网络错误，请检查网络连接')
+    } else {
+      ElMessage.error('请求配置错误')
+    }
+
     return Promise.reject(error)
   }
 )
@@ -60,9 +147,14 @@ export const capabilityOptions = [
   { label: '生图', value: 'image' },
   { label: '视频', value: 'video' },
   { label: 'Embedding', value: 'embedding' },
-  { label: '音频', value: 'audio' },
+  { label: '语音合成 TTS', value: 'audio_tts' },
+  { label: '语音识别 STT', value: 'audio_stt' },
   { label: '重排', value: 'rerank' }
 ]
+
+// ============================================================================
+// Provider APIs
+// ============================================================================
 
 export function listProviders() {
   return gatewayRequest.get('/admin/providers')
@@ -96,25 +188,57 @@ export function updateProviderEndpointStatus(providerId, endpointId, status) {
   return gatewayRequest.patch(`/admin/providers/${providerId}/endpoints/${endpointId}/status`, { status })
 }
 
-export function checkProviderEndpointHealth(providerId, endpointId) {
-  return gatewayRequest.post(`/admin/providers/${providerId}/endpoints/${endpointId}/health-check`)
+// ============================================================================
+// Upstream Deployment APIs (替代旧的 Model Deployment)
+// ============================================================================
+
+export function listUpstreamDeployments(params) {
+  return gatewayRequest.get('/admin/upstream-deployments', { params })
 }
 
-export function listProviderModelPrices(providerId) {
-  return gatewayRequest.get(`/admin/providers/${providerId}/model-prices`)
+export function createUpstreamDeployment(data) {
+  return gatewayRequest.post('/admin/upstream-deployments', data)
 }
 
-export function createProviderModelPrice(providerId, data) {
-  return gatewayRequest.post(`/admin/providers/${providerId}/model-prices`, data)
+export function getUpstreamDeployment(deploymentId) {
+  return gatewayRequest.get(`/admin/upstream-deployments/${deploymentId}`)
 }
 
-export function updateProviderModelPrice(providerId, priceId, data) {
-  return gatewayRequest.patch(`/admin/providers/${providerId}/model-prices/${priceId}`, data)
+export function updateUpstreamDeployment(deploymentId, data) {
+  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}`, data)
 }
 
-export function updateProviderModelPriceStatus(providerId, priceId, status) {
-  return gatewayRequest.patch(`/admin/providers/${providerId}/model-prices/${priceId}/status`, { status })
+export function updateUpstreamDeploymentStatus(deploymentId, status) {
+  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}/status`, { status })
 }
+
+export function checkUpstreamDeploymentHealth(deploymentId) {
+  return gatewayRequest.post(`/admin/upstream-deployments/${deploymentId}/health-check`)
+}
+
+// ============================================================================
+// Upstream Deployment Cost Price APIs
+// ============================================================================
+
+export function listUpstreamDeploymentCostPrices(deploymentId) {
+  return gatewayRequest.get(`/admin/upstream-deployments/${deploymentId}/cost-prices`)
+}
+
+export function createUpstreamDeploymentCostPrice(deploymentId, data) {
+  return gatewayRequest.post(`/admin/upstream-deployments/${deploymentId}/cost-prices`, data)
+}
+
+export function updateUpstreamDeploymentCostPrice(deploymentId, priceId, data) {
+  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}/cost-prices/${priceId}`, data)
+}
+
+export function updateUpstreamDeploymentCostPriceStatus(deploymentId, priceId, status) {
+  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}/cost-prices/${priceId}/status`, { status })
+}
+
+// ============================================================================
+// Model APIs
+// ============================================================================
 
 export function listModels() {
   return gatewayRequest.get('/admin/models')
@@ -132,37 +256,69 @@ export function updateModelStatus(modelId, status) {
   return gatewayRequest.patch(`/admin/models/${modelId}/status`, { status })
 }
 
-export function listModelPrices(modelId) {
-  return gatewayRequest.get(`/admin/models/${modelId}/prices`)
+// ============================================================================
+// Model Price APIs (1:1 with model, upsert pattern)
+// ============================================================================
+
+export function getModelPrice(modelId) {
+  return gatewayRequest.get(`/admin/models/${modelId}/price`)
 }
 
-export function createModelPrice(modelId, data) {
-  return gatewayRequest.post(`/admin/models/${modelId}/prices`, data)
+export function upsertModelPrice(modelId, data) {
+  return gatewayRequest.put(`/admin/models/${modelId}/price`, data)
 }
 
-export function updateModelPrice(modelId, priceId, data) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/prices/${priceId}`, data)
+// ============================================================================
+// Tenant Model Price Override APIs
+// ============================================================================
+
+export function listTenantModelPriceOverrides(tenantId) {
+  return gatewayRequest.get(`/admin/tenants/${tenantId}/model-price-overrides`)
 }
 
-export function updateModelPriceStatus(modelId, priceId, status) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/prices/${priceId}/status`, { status })
+export function getTenantModelPriceOverride(tenantId, modelId) {
+  return gatewayRequest.get(`/admin/tenants/${tenantId}/model-price-overrides/${modelId}`)
 }
 
-export function listModelDeployments(modelId) {
-  return gatewayRequest.get(`/admin/models/${modelId}/deployments`)
+export function upsertTenantModelPriceOverride(tenantId, modelId, data) {
+  return gatewayRequest.put(`/admin/tenants/${tenantId}/model-price-overrides/${modelId}`, data)
 }
 
-export function createModelDeployment(modelId, data) {
-  return gatewayRequest.post(`/admin/models/${modelId}/deployments`, data)
+export function deleteTenantModelPriceOverride(tenantId, modelId) {
+  return gatewayRequest.delete(`/admin/tenants/${tenantId}/model-price-overrides/${modelId}`)
 }
 
-export function updateModelDeployment(modelId, deploymentId, data) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/deployments/${deploymentId}`, data)
+// ============================================================================
+// Model Route APIs (新增)
+// ============================================================================
+
+export function listModelRoutes(modelId) {
+  return gatewayRequest.get(`/admin/models/${modelId}/routes`)
 }
 
-export function updateModelDeploymentStatus(modelId, deploymentId, status) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/deployments/${deploymentId}/status`, { status })
+export function createModelRoute(modelId, data) {
+  return gatewayRequest.post(`/admin/models/${modelId}/routes`, data)
 }
+
+export function getModelRoute(modelId, routeId) {
+  return gatewayRequest.get(`/admin/models/${modelId}/routes/${routeId}`)
+}
+
+export function updateModelRoute(modelId, routeId, data) {
+  return gatewayRequest.patch(`/admin/models/${modelId}/routes/${routeId}`, data)
+}
+
+export function updateModelRouteStatus(modelId, routeId, status) {
+  return gatewayRequest.patch(`/admin/models/${modelId}/routes/${routeId}/status`, { status })
+}
+
+export function deleteModelRoute(modelId, routeId) {
+  return gatewayRequest.delete(`/admin/models/${modelId}/routes/${routeId}`)
+}
+
+// ============================================================================
+// Tenant Model Grant APIs (只保留 tenant grant)
+// ============================================================================
 
 export function listTenantModelGrants(tenantId) {
   return gatewayRequest.get(`/admin/tenants/${tenantId}/model-grants`)
@@ -175,6 +331,10 @@ export function grantModelToTenant(tenantId, data) {
 export function updateTenantModelGrantStatus(tenantId, modelId, status) {
   return gatewayRequest.patch(`/admin/tenants/${tenantId}/model-grants/${modelId}/status`, { status })
 }
+
+// ============================================================================
+// Tenant API Key APIs
+// ============================================================================
 
 export function listTenantAPIKeys(tenantId) {
   return gatewayRequest.get(`/admin/tenants/${tenantId}/api-keys`)
@@ -192,17 +352,9 @@ export function updateTenantAPIKeyStatus(tenantId, apiKeyId, status) {
   return gatewayRequest.patch(`/admin/tenants/${tenantId}/api-keys/${apiKeyId}/status`, { status })
 }
 
-export function listUserModelGrants(tenantId, userId) {
-  return gatewayRequest.get(`/admin/tenants/${tenantId}/users/${userId}/model-grants`)
-}
-
-export function grantModelToUser(tenantId, userId, data) {
-  return gatewayRequest.post(`/admin/tenants/${tenantId}/users/${userId}/model-grants`, data)
-}
-
-export function updateUserModelGrantStatus(tenantId, userId, modelId, status) {
-  return gatewayRequest.patch(`/admin/tenants/${tenantId}/users/${userId}/model-grants/${modelId}/status`, { status })
-}
+// ============================================================================
+// User API Key APIs (删除了 User Model Grant)
+// ============================================================================
 
 export function listUserAPIKeys(tenantId, userId) {
   return gatewayRequest.get(`/admin/tenants/${tenantId}/users/${userId}/api-keys`)
@@ -220,6 +372,10 @@ export function updateUserAPIKeyStatus(tenantId, userId, apiKeyId, status) {
   return gatewayRequest.patch(`/admin/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}/status`, { status })
 }
 
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
 export function nowTimestamp() {
   return Date.now()
 }
@@ -232,6 +388,10 @@ export function formatTimestamp(value) {
 export function formatCredits(value) {
   return (Number(value) || 0).toLocaleString('zh-CN')
 }
+
+// ============================================================================
+// Usage & Dashboard APIs
+// ============================================================================
 
 export function listUsageLogs(params) {
   return gatewayRequest.get('/admin/usage-logs', { params })
@@ -261,6 +421,10 @@ export function listDashboardRecentErrors(params) {
   return gatewayRequest.get('/admin/dashboard/recent-errors', { params })
 }
 
+// ============================================================================
+// Runtime Limit Policy APIs
+// ============================================================================
+
 export function listRuntimeLimitPolicies(params) {
   return gatewayRequest.get('/admin/limit-policies', { params })
 }
@@ -276,6 +440,10 @@ export function updateRuntimeLimitPolicy(policyId, data) {
 export function updateRuntimeLimitPolicyStatus(policyId, status) {
   return gatewayRequest.patch(`/admin/limit-policies/${policyId}/status`, { status })
 }
+
+// ============================================================================
+// Audit Log APIs
+// ============================================================================
 
 export function listGatewayAuditLogs(params) {
   return gatewayRequest.get('/admin/audit-logs', { params })

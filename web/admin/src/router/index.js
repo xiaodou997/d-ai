@@ -78,7 +78,7 @@ const routes = [
             path: 'access',
             name: 'GatewayAccess',
             component: () => import('@/views/AIGateway/GatewayAccess.vue'),
-            meta: { title: '授权与 Key', requiresAuth: true, roles: [1, 2, 3] }
+            meta: { title: '模型授权', requiresAuth: true, roles: [1] }
           },
           {
             path: 'usage',

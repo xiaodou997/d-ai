@@ -124,15 +124,14 @@ onMounted(fetchPolicies)
 
 <template>
   <section class="panel">
-    <div class="section-head">
-      <div>
-        <h3>限流策略</h3>
-        <p>策略按 scope、能力和模型叠加生效，任一超限即拒绝</p>
-      </div>
-      <div class="actions">
-        <el-button :icon="Plus" type="primary" @click="openCreate">新增策略</el-button>
-        <el-button :icon="Refresh" :loading="loading" @click="fetchPolicies">刷新</el-button>
-      </div>
+    <div class="header">
+      <h3>限流策略</h3>
+      <p>策略按 scope、能力和模型叠加生效，任一超限即拒绝</p>
+    </div>
+
+    <div class="toolbar">
+      <el-button :icon="Plus" type="primary" @click="openCreate">新增策略</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="fetchPolicies">刷新</el-button>
     </div>
 
     <div class="filters">
@@ -147,7 +146,7 @@ onMounted(fetchPolicies)
       <el-select v-model="filters.status" clearable placeholder="状态">
         <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
-      <el-button :loading="loading" @click="fetchPolicies">查询</el-button>
+      <el-button :loading="loading" type="primary" @click="fetchPolicies">查询</el-button>
     </div>
 
     <el-table v-loading="loading" :data="policies" border stripe class="w-full">
@@ -218,51 +217,46 @@ onMounted(fetchPolicies)
 
 <style scoped>
 .panel {
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  padding: 16px;
   min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
 }
 
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+.header {
+  margin-bottom: 12px;
 }
 
-.section-head h3 {
+.header h3 {
   margin: 0;
   color: #0f172a;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.section-head p {
+.header p {
   margin: 4px 0 0;
   color: #64748b;
   font-size: 12px;
+  font-weight: 700;
 }
 
-.actions {
+.toolbar {
   display: flex;
   gap: 8px;
+  margin-bottom: 12px;
 }
 
 .filters {
   display: grid;
   grid-template-columns: 130px minmax(180px, 1fr) 130px minmax(160px, 1fr) 130px auto;
   gap: 8px;
+  align-items: center;
   margin-bottom: 14px;
 }
 
 @media (max-width: 1180px) {
-  .section-head {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

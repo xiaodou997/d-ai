@@ -44,22 +44,21 @@ onMounted(fetchLogs)
 
 <template>
   <section class="panel">
-    <div class="section-head">
-      <div>
-        <h3>网关审计</h3>
-        <p>记录 AI Gateway 管理侧写操作</p>
-      </div>
-      <div class="toolbar">
-        <el-input v-model="filters.actor" clearable placeholder="操作者" />
-        <el-input v-model="filters.object_type" clearable placeholder="对象类型" />
-        <el-input v-model="filters.object_id" clearable placeholder="对象 ID" />
-        <el-select v-model="filters.result" clearable placeholder="结果">
-          <el-option label="success" value="success" />
-          <el-option label="failed" value="failed" />
-        </el-select>
-        <el-input-number v-model="limit" :min="1" :max="500" :step="50" />
-        <el-button type="primary" :icon="Refresh" :loading="loading" @click="fetchLogs">刷新</el-button>
-      </div>
+    <div class="header">
+      <h3>网关审计</h3>
+      <p>记录 AI Gateway 管理侧写操作</p>
+    </div>
+
+    <div class="toolbar">
+      <el-input v-model="filters.actor" clearable placeholder="操作者" />
+      <el-input v-model="filters.object_type" clearable placeholder="对象类型" />
+      <el-input v-model="filters.object_id" clearable placeholder="对象 ID" />
+      <el-select v-model="filters.result" clearable placeholder="结果">
+        <el-option label="success" value="success" />
+        <el-option label="failed" value="failed" />
+      </el-select>
+      <el-input-number v-model="limit" :min="1" :max="500" :step="50" class="limit-input" controls-position="right" />
+      <el-button type="primary" :icon="Refresh" :loading="loading" @click="fetchLogs">刷新</el-button>
     </div>
 
     <el-table v-loading="loading" :data="logs" border stripe class="w-full">
@@ -85,46 +84,44 @@ onMounted(fetchLogs)
 
 <style scoped>
 .panel {
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  padding: 16px;
   min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
 }
 
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+.header {
+  margin-bottom: 12px;
 }
 
-.section-head h3 {
+.header h3 {
   margin: 0;
   color: #0f172a;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.section-head p {
+.header p {
   margin: 4px 0 0;
   color: #64748b;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr)) 120px auto;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) 100px auto;
   gap: 8px;
   align-items: center;
+  margin-bottom: 14px;
+}
+
+.limit-input {
+  width: 100px;
 }
 
 @media (max-width: 1180px) {
-  .section-head {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

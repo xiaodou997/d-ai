@@ -8,8 +8,8 @@ const authStore = useAuthStore()
 
 const pageTitle = computed(() => route.meta.title || (authStore.isPlatformAdmin ? 'AI 网关' : '我的 AI 网关'))
 const pageDescription = computed(() => {
-  if (route.path.endsWith('/providers')) return '维护上游厂商、Endpoint 和连通性探测。'
-  if (route.path.endsWith('/models')) return '维护公共模型、部署映射、租户价格和供应商成本。'
+  if (route.path.endsWith('/providers')) return '维护上游厂商和连接配置。'
+  if (route.path.endsWith('/models')) return '维护对外模型、调用配置、销售价和上游成本价。'
   if (route.path.endsWith('/access')) return '管理模型授权与运行时 API Key。'
   if (route.path.endsWith('/usage')) return '查看调用日志、计费单位和积分消耗。'
   if (route.path.endsWith('/limits')) return '维护租户、用户和 Key 级限流策略。'

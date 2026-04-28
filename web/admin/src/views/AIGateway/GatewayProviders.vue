@@ -3,39 +3,38 @@ import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Edit, Plus, Refresh, Search, Switch } from '@element-plus/icons-vue'
 import {
-  checkProviderEndpointHealth,
-  createProviderModelPrice,
+  capabilityOptions,
+  checkUpstreamDeploymentHealth,
   createProvider,
   createProviderEndpoint,
-  formatCredits,
-  formatTimestamp,
-  listProviderModelPrices,
+  createUpstreamDeployment,
+  getUpstreamDeployment,
   listProviderEndpoints,
   listProviders,
-  nowTimestamp,
-  providerTypeOptions,
+  listUpstreamDeployments,
   protocolOptions,
+  providerTypeOptions,
   statusOptions,
   updateProvider,
   updateProviderEndpoint,
   updateProviderEndpointStatus,
-  updateProviderModelPrice,
-  updateProviderModelPriceStatus,
-  updateProviderStatus
+  updateProviderStatus,
+  updateUpstreamDeployment,
+  updateUpstreamDeploymentStatus
 } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const endpointLoading = shallowRef(false)
-const priceLoading = shallowRef(false)
+const deploymentLoading = shallowRef(false)
 const providerDialogVisible = shallowRef(false)
 const endpointDialogVisible = shallowRef(false)
-const priceDialogVisible = shallowRef(false)
+const deploymentDialogVisible = shallowRef(false)
 const editingProviderId = shallowRef('')
 const editingEndpointId = shallowRef('')
-const editingPriceId = shallowRef('')
+const editingDeploymentId = shallowRef('')
 const providers = shallowRef([])
 const endpoints = shallowRef([])
-const providerPrices = shallowRef([])
+const deployments = shallowRef([])
 const selectedProviderId = shallowRef('')
 const providerKeyword = shallowRef('')
 
@@ -50,25 +49,21 @@ const providerForm = reactive({
 const endpointForm = reactive({
   name: '',
   base_url: '',
-  protocol_type: 'openai_chat_completions',
   api_key: '',
-  custom_path: '',
   weight: 100,
   timeout_ms: 60000,
   status: 'active'
 })
 
-const priceForm = reactive({
+const deploymentForm = reactive({
   endpoint_id: '',
+  name: '',
   upstream_model: '',
   capability_type: 'chat',
-  currency: 'CNY_CREDITS',
-  input_cost_per_1m: 0,
-  output_cost_per_1m: 0,
-  request_cost: 0,
-  image_cost: 0,
-  video_cost_per_second: 0,
-  effective_from: '',
+  upstream_protocol: 'openai_chat_completions',
+  request_path: '',
+  upstream_parameters: '',
+  tags: '',
   status: 'active'
 })
 
@@ -89,34 +84,20 @@ const filteredProviders = computed(() => {
 
 const isEditingProvider = computed(() => Boolean(editingProviderId.value))
 const isEditingEndpoint = computed(() => Boolean(editingEndpointId.value))
-const isEditingPrice = computed(() => Boolean(editingPriceId.value))
-
-const endpointOptions = computed(() =>
-  endpoints.value.map((item) => ({
-    label: item.name,
-    value: item.id
-  }))
-)
-
-const endpointNameById = computed(() =>
-  endpoints.value.reduce((map, item) => {
-    map[item.id] = item.name
-    return map
-  }, {})
-)
+const isEditingDeployment = computed(() => Boolean(editingDeploymentId.value))
 
 const providerSummary = computed(() => ({
   endpointCount: endpoints.value.length,
   activeEndpointCount: endpoints.value.filter((item) => item.status === 'active').length,
-  priceCount: providerPrices.value.length,
-  activePriceCount: providerPrices.value.filter((item) => item.status === 'active').length
+  deploymentCount: deployments.value.length,
+  activeDeploymentCount: deployments.value.filter((item) => item.status === 'active').length
 }))
 
 const setupSteps = [
   '创建厂商分组，标记上游归属和厂商类型。',
-  '添加接入点，配置 Base URL、Key、权重和超时。',
-  '维护 Provider 成本价，平台成本和毛利统计以这里为准。',
-  '到模型映射页面绑定公开模型和部署，再进入授权与 Key 分配调用权限。'
+  '添加连接配置，配置 Base URL、Key、额外 Headers、权重和超时。',
+  '到模型映射页面维护调用配置、协议、请求路径和上游成本价。',
+  '在授权与 Key 页面分配对外模型调用权限。'
 ]
 
 const statusTagType = (status) => {
@@ -127,23 +108,15 @@ const statusTagType = (status) => {
 const providerTypeLabel = (type) =>
   providerTypeOptions.find((item) => item.value === type)?.label || type || '-'
 
-const endpointLabel = (endpointId) => endpointNameById.value[endpointId] || endpointId || '全局'
+const protocolLabel = (value) =>
+  protocolOptions.find((item) => item.value === value)?.label || value || '-'
 
-const resetPriceForm = () => {
-  editingPriceId.value = ''
-  Object.assign(priceForm, {
-    endpoint_id: '',
-    upstream_model: '',
-    capability_type: 'chat',
-    currency: 'CNY_CREDITS',
-    input_cost_per_1m: 0,
-    output_cost_per_1m: 0,
-    request_cost: 0,
-    image_cost: 0,
-    video_cost_per_second: 0,
-    effective_from: String(nowTimestamp()),
-    status: 'active'
-  })
+const capabilityLabel = (value) =>
+  capabilityOptions.find((item) => item.value === value)?.label || value || '-'
+
+const getEndpointName = (endpointId) => {
+  const endpoint = endpoints.value.find((item) => item.id === endpointId)
+  return endpoint?.name || endpointId || '-'
 }
 
 const resetProviderForm = () => {
@@ -162,11 +135,24 @@ const resetEndpointForm = () => {
   Object.assign(endpointForm, {
     name: '',
     base_url: '',
-    protocol_type: 'openai_chat_completions',
     api_key: '',
-    custom_path: '',
     weight: 100,
     timeout_ms: 60000,
+    status: 'active'
+  })
+}
+
+const resetDeploymentForm = () => {
+  editingDeploymentId.value = ''
+  Object.assign(deploymentForm, {
+    endpoint_id: '',
+    name: '',
+    upstream_model: '',
+    capability_type: 'chat',
+    upstream_protocol: 'openai_chat_completions',
+    request_path: '',
+    upstream_parameters: '',
+    tags: '',
     status: 'active'
   })
 }
@@ -187,29 +173,25 @@ const applyEndpointForm = (row) => {
   Object.assign(endpointForm, {
     name: row.name,
     base_url: row.base_url,
-    protocol_type: row.protocol_type,
     api_key: '',
-    custom_path: row.custom_path || '',
     weight: row.weight,
     timeout_ms: row.timeout_ms,
     status: row.status
   })
 }
 
-const applyPriceForm = (row) => {
-  editingPriceId.value = row.id
-  Object.assign(priceForm, {
+const applyDeploymentForm = (row) => {
+  editingDeploymentId.value = row.id
+  Object.assign(deploymentForm, {
     endpoint_id: row.endpoint_id || '',
-    upstream_model: row.upstream_model,
-    capability_type: row.capability_type,
-    currency: row.currency,
-    input_cost_per_1m: row.input_cost_per_1m,
-    output_cost_per_1m: row.output_cost_per_1m,
-    request_cost: row.request_cost,
-    image_cost: row.image_cost,
-    video_cost_per_second: row.video_cost_per_second,
-    effective_from: row.effective_from ? String(row.effective_from) : String(nowTimestamp()),
-    status: row.status
+    name: row.name || '',
+    upstream_model: row.upstream_model || '',
+    capability_type: row.capability_type || 'chat',
+    upstream_protocol: row.upstream_protocol || 'openai_chat_completions',
+    request_path: row.request_path || '',
+    upstream_parameters: typeof row.upstream_parameters === 'object' ? JSON.stringify(row.upstream_parameters, null, 2) : (row.upstream_parameters || ''),
+    tags: typeof row.tags === 'object' ? JSON.stringify(row.tags, null, 2) : (row.tags || ''),
+    status: row.status || 'active'
   })
 }
 
@@ -220,7 +202,7 @@ const fetchProviders = async () => {
     if (providers.value.length === 0) {
       selectedProviderId.value = ''
       endpoints.value = []
-      providerPrices.value = []
+      deployments.value = []
       return
     }
     if (!providers.value.some((item) => item.id === selectedProviderId.value)) {
@@ -233,7 +215,7 @@ const fetchProviders = async () => {
 }
 
 const fetchSelectedProviderDetail = async () => {
-  await Promise.all([fetchEndpoints(), fetchProviderPrices()])
+  await Promise.all([fetchEndpoints(), fetchDeployments()])
 }
 
 const fetchEndpoints = async () => {
@@ -249,16 +231,16 @@ const fetchEndpoints = async () => {
   }
 }
 
-const fetchProviderPrices = async () => {
+const fetchDeployments = async () => {
   if (!selectedProviderId.value) {
-    providerPrices.value = []
+    deployments.value = []
     return
   }
-  priceLoading.value = true
+  deploymentLoading.value = true
   try {
-    providerPrices.value = await listProviderModelPrices(selectedProviderId.value)
+    deployments.value = await listUpstreamDeployments({ provider_id: selectedProviderId.value })
   } finally {
-    priceLoading.value = false
+    deploymentLoading.value = false
   }
 }
 
@@ -299,22 +281,26 @@ const openEndpointEditDialog = (row) => {
   endpointDialogVisible.value = true
 }
 
-const openPriceDialog = () => {
+const openDeploymentDialog = () => {
   if (!selectedProviderId.value) {
     ElMessage.warning('请先选择厂商')
     return
   }
-  resetPriceForm()
-  priceDialogVisible.value = true
+  if (endpoints.value.length === 0) {
+    ElMessage.warning('请先创建接入点')
+    return
+  }
+  resetDeploymentForm()
+  deploymentDialogVisible.value = true
 }
 
-const openPriceEditDialog = (row) => {
+const openDeploymentEditDialog = async (row) => {
   if (!selectedProviderId.value) {
     ElMessage.warning('请先选择厂商')
     return
   }
-  applyPriceForm(row)
-  priceDialogVisible.value = true
+  applyDeploymentForm(row)
+  deploymentDialogVisible.value = true
 }
 
 const submitProvider = async () => {
@@ -330,10 +316,7 @@ const submitProvider = async () => {
 }
 
 const submitEndpoint = async () => {
-  const payload = {
-    ...endpointForm,
-    custom_path: endpointForm.custom_path || undefined
-  }
+  const payload = { ...endpointForm }
   if (editingEndpointId.value) {
     await updateProviderEndpoint(selectedProviderId.value, editingEndpointId.value, payload)
     ElMessage.success('接入点已保存')
@@ -345,21 +328,27 @@ const submitEndpoint = async () => {
   await fetchEndpoints()
 }
 
-const submitProviderPrice = async () => {
+const submitDeployment = async () => {
   const payload = {
-    ...priceForm,
-    endpoint_id: priceForm.endpoint_id || '',
-    effective_from: priceForm.effective_from ? Number(priceForm.effective_from) : nowTimestamp()
+    endpoint_id: deploymentForm.endpoint_id,
+    name: deploymentForm.name,
+    upstream_model: deploymentForm.upstream_model,
+    capability_type: deploymentForm.capability_type,
+    upstream_protocol: deploymentForm.upstream_protocol,
+    request_path: deploymentForm.request_path || null,
+    upstream_parameters: deploymentForm.upstream_parameters ? JSON.parse(deploymentForm.upstream_parameters) : null,
+    tags: deploymentForm.tags ? JSON.parse(deploymentForm.tags) : null,
+    status: deploymentForm.status
   }
-  if (editingPriceId.value) {
-    await updateProviderModelPrice(selectedProviderId.value, editingPriceId.value, payload)
-    ElMessage.success('成本价已保存')
+  if (editingDeploymentId.value) {
+    await updateUpstreamDeployment(editingDeploymentId.value, payload)
+    ElMessage.success('上游部署已保存')
   } else {
-    await createProviderModelPrice(selectedProviderId.value, payload)
-    ElMessage.success('成本价已创建')
+    await createUpstreamDeployment(payload)
+    ElMessage.success('上游部署已创建')
   }
-  priceDialogVisible.value = false
-  await fetchProviderPrices()
+  deploymentDialogVisible.value = false
+  await fetchDeployments()
 }
 
 const toggleProvider = async (row) => {
@@ -376,17 +365,24 @@ const toggleEndpoint = async (row) => {
   await fetchEndpoints()
 }
 
-const toggleProviderPrice = async (row) => {
+const toggleDeployment = async (row) => {
   const nextStatus = row.status === 'active' ? 'disabled' : 'active'
-  await updateProviderModelPriceStatus(selectedProviderId.value, row.id, nextStatus)
-  ElMessage.success('成本价状态已更新')
-  await fetchProviderPrices()
+  await updateUpstreamDeploymentStatus(row.id, nextStatus)
+  ElMessage.success('上游部署状态已更新')
+  await fetchDeployments()
 }
 
-const checkEndpoint = async (row) => {
-  await checkProviderEndpointHealth(selectedProviderId.value, row.id)
-  ElMessage.success('健康检查完成')
-  await fetchEndpoints()
+const handleHealthCheck = async (row) => {
+  try {
+    const result = await checkUpstreamDeploymentHealth(row.id)
+    if (result.healthy) {
+      ElMessage.success(`健康检查通过: ${result.message || '连接正常'}`)
+    } else {
+      ElMessage.warning(`健康检查失败: ${result.message || '连接异常'}`)
+    }
+  } catch {
+    // Error already handled by interceptor
+  }
 }
 
 onMounted(fetchProviders)
@@ -465,19 +461,19 @@ onMounted(fetchProviders)
             <small>{{ providerSummary.activeEndpointCount }} active</small>
           </div>
           <div class="metric-cell">
-            <span>成本价</span>
-            <strong>{{ providerSummary.priceCount }}</strong>
-            <small>{{ providerSummary.activePriceCount }} active</small>
+            <span>上游部署</span>
+            <strong>{{ providerSummary.deploymentCount }}</strong>
+            <small>{{ providerSummary.activeDeploymentCount }} active</small>
           </div>
           <div class="metric-cell">
             <span>厂商类型</span>
             <strong>{{ providerTypeLabel(selectedProvider.provider_type) }}</strong>
-            <small>协议由接入点决定</small>
+            <small>Provider 只表示归属</small>
           </div>
           <div class="metric-cell">
             <span>计费单位</span>
             <strong>积分</strong>
-            <small>整数积分，按能力区分</small>
+            <small>成本价在部署维护</small>
           </div>
         </div>
       </section>
@@ -497,7 +493,7 @@ onMounted(fetchProviders)
         <div class="section-head">
           <div>
             <h3>接入点管理</h3>
-            <p>配置当前厂商的上游地址、密钥、权重、超时和健康检查</p>
+            <p>配置当前厂商的连接配置：Base URL、密钥、额外 Headers、权重和超时</p>
           </div>
           <el-button type="primary" :icon="Plus" @click="openEndpointDialog">新增接入点</el-button>
         </div>
@@ -505,14 +501,8 @@ onMounted(fetchProviders)
         <el-table v-loading="endpointLoading" :data="endpoints" border stripe class="w-full">
           <el-table-column prop="name" label="名称" min-width="160" />
           <el-table-column prop="base_url" label="Base URL" min-width="280" show-overflow-tooltip />
-          <el-table-column prop="protocol_type" label="协议" min-width="190" show-overflow-tooltip />
           <el-table-column prop="weight" label="权重" width="80" align="right" />
           <el-table-column prop="timeout_ms" label="超时(ms)" width="110" align="right" />
-          <el-table-column label="健康" width="95">
-            <template #default="{ row }">
-              <el-tag size="small" type="info">{{ row.health_status }}</el-tag>
-            </template>
-          </el-table-column>
           <el-table-column label="状态" width="95">
             <template #default="{ row }">
               <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
@@ -521,7 +511,6 @@ onMounted(fetchProviders)
           <el-table-column label="操作" width="190" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openEndpointEditDialog(row)">编辑</el-button>
-              <el-button link type="primary" @click="checkEndpoint(row)">检查</el-button>
               <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleEndpoint(row)">
                 <el-icon><Switch /></el-icon>
                 {{ row.status === 'active' ? '禁用' : '启用' }}
@@ -534,50 +523,43 @@ onMounted(fetchProviders)
       <section class="panel">
         <div class="section-head">
           <div>
-            <h3>Provider 成本价管理</h3>
-            <p>维护上游模型成本价，平台成本、毛利和用量报表使用这里的积分价格</p>
+            <h3>上游部署管理</h3>
+            <p>配置当前厂商的上游模型映射：协议类型、请求路径和上游模型名</p>
           </div>
-          <div class="flex gap-2">
-            <el-button :icon="Refresh" circle @click="fetchProviderPrices" />
-            <el-button type="primary" :icon="Plus" @click="openPriceDialog">新增成本价</el-button>
-          </div>
+          <el-button type="primary" :icon="Plus" @click="openDeploymentDialog">新增部署</el-button>
         </div>
 
-        <el-table v-loading="priceLoading" :data="providerPrices" border stripe class="w-full">
-          <el-table-column prop="upstream_model" label="上游模型" min-width="170" />
-          <el-table-column prop="capability_type" label="能力" width="90" />
-          <el-table-column label="接入点" min-width="180" show-overflow-tooltip>
-            <template #default="{ row }">{{ endpointLabel(row.endpoint_id) }}</template>
+        <el-table v-loading="deploymentLoading" :data="deployments" border stripe class="w-full">
+          <el-table-column prop="name" label="名称" min-width="140" />
+          <el-table-column label="关联接入点" min-width="140">
+            <template #default="{ row }">
+              {{ getEndpointName(row.endpoint_id) }}
+            </template>
           </el-table-column>
-          <el-table-column label="输入/1M(积分)" width="150" align="right">
-            <template #default="{ row }">{{ formatCredits(row.input_cost_per_1m) }}</template>
+          <el-table-column prop="upstream_model" label="上游模型" min-width="160" show-overflow-tooltip />
+          <el-table-column label="能力类型" width="110">
+            <template #default="{ row }">
+              <el-tag size="small">{{ capabilityLabel(row.capability_type) }}</el-tag>
+            </template>
           </el-table-column>
-          <el-table-column label="输出/1M(积分)" width="150" align="right">
-            <template #default="{ row }">{{ formatCredits(row.output_cost_per_1m) }}</template>
-          </el-table-column>
-          <el-table-column label="请求(积分)" width="120" align="right">
-            <template #default="{ row }">{{ formatCredits(row.request_cost) }}</template>
-          </el-table-column>
-          <el-table-column label="单图(积分)" width="120" align="right">
-            <template #default="{ row }">{{ formatCredits(row.image_cost) }}</template>
-          </el-table-column>
-          <el-table-column label="视频/秒(积分)" width="140" align="right">
-            <template #default="{ row }">{{ formatCredits(row.video_cost_per_second) }}</template>
-          </el-table-column>
-          <el-table-column label="生效时间" min-width="170" show-overflow-tooltip>
-            <template #default="{ row }">{{ formatTimestamp(row.effective_from) }}</template>
+          <el-table-column label="协议类型" width="180">
+            <template #default="{ row }">
+              <span class="protocol-text">{{ protocolLabel(row.upstream_protocol) }}</span>
+            </template>
           </el-table-column>
           <el-table-column label="状态" width="95">
             <template #default="{ row }">
               <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="130" fixed="right">
+          <el-table-column label="操作" width="240" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" :icon="Edit" @click="openPriceEditDialog(row)">编辑</el-button>
-              <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleProviderPrice(row)">
+              <el-button link type="primary" :icon="Edit" @click="openDeploymentEditDialog(row)">编辑</el-button>
+              <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleDeployment(row)">
+                <el-icon><Switch /></el-icon>
                 {{ row.status === 'active' ? '禁用' : '启用' }}
               </el-button>
+              <el-button link type="info" @click="handleHealthCheck(row)">健康检查</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -587,7 +569,7 @@ onMounted(fetchProviders)
     <main v-else class="empty-workspace">
       <p class="eyebrow">No Provider</p>
       <h2>先创建一个服务商</h2>
-      <p>服务商是接入点、成本价和后续模型映射的上游归属。创建后即可在右侧完成完整配置。</p>
+      <p>服务商是连接配置和后续模型映射的上游归属。创建后即可在右侧完成接入点配置。</p>
       <el-button type="primary" :icon="Plus" @click="openProviderDialog">新增服务商</el-button>
     </main>
 
@@ -626,9 +608,9 @@ onMounted(fetchProviders)
           <el-form-item label="接入点名称" required>
             <el-input v-model="endpointForm.name" placeholder="OpenAI Compatible Endpoint" />
           </el-form-item>
-          <el-form-item label="请求协议">
-            <el-select v-model="endpointForm.protocol_type" class="w-full">
-              <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-form-item label="状态">
+            <el-select v-model="endpointForm.status" class="w-full">
+              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
         </div>
@@ -638,10 +620,7 @@ onMounted(fetchProviders)
         <el-form-item :label="isEditingEndpoint ? '上游 API Key（留空不修改）' : '上游 API Key'" :required="!isEditingEndpoint">
           <el-input v-model="endpointForm.api_key" type="password" show-password placeholder="后端加密保存" />
         </el-form-item>
-        <div class="grid grid-cols-3 gap-4">
-          <el-form-item label="Custom Path">
-            <el-input v-model="endpointForm.custom_path" placeholder="/chat/completions" />
-          </el-form-item>
+        <div class="grid grid-cols-2 gap-4">
           <el-form-item label="权重">
             <el-input-number v-model="endpointForm.weight" :min="0" :precision="0" class="w-full" />
           </el-form-item>
@@ -656,48 +635,53 @@ onMounted(fetchProviders)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="priceDialogVisible" :title="isEditingPrice ? '编辑 Provider 成本价' : '新增 Provider 成本价'" width="680px">
-      <el-form :model="priceForm" label-position="top">
+    <el-dialog v-model="deploymentDialogVisible" :title="isEditingDeployment ? '编辑上游部署' : '新增上游部署'" width="640px">
+      <el-form :model="deploymentForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="接入点">
-            <el-select v-model="priceForm.endpoint_id" class="w-full" clearable>
-              <el-option v-for="item in endpointOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-form-item label="关联接入点" required>
+            <el-select v-model="deploymentForm.endpoint_id" placeholder="选择接入点" class="w-full">
+              <el-option v-for="item in endpoints" :key="item.id" :label="item.name" :value="item.id" />
             </el-select>
           </el-form-item>
-          <el-form-item label="上游模型" required>
-            <el-input v-model="priceForm.upstream_model" placeholder="provider-model-name" />
+          <el-form-item label="部署名称" required>
+            <el-input v-model="deploymentForm.name" placeholder="GPT-4o Deployment" />
           </el-form-item>
         </div>
-        <div class="grid grid-cols-3 gap-4">
-          <el-form-item label="输入成本/1M(积分)">
-            <el-input-number v-model="priceForm.input_cost_per_1m" :min="0" :precision="0" class="w-full" />
+        <div class="grid grid-cols-2 gap-4">
+          <el-form-item label="上游模型名" required>
+            <el-input v-model="deploymentForm.upstream_model" placeholder="gpt-4o" />
           </el-form-item>
-          <el-form-item label="输出成本/1M(积分)">
-            <el-input-number v-model="priceForm.output_cost_per_1m" :min="0" :precision="0" class="w-full" />
-          </el-form-item>
-          <el-form-item label="请求成本(积分)">
-            <el-input-number v-model="priceForm.request_cost" :min="0" :precision="0" class="w-full" />
-          </el-form-item>
-          <el-form-item label="单图成本(积分)">
-            <el-input-number v-model="priceForm.image_cost" :min="0" :precision="0" class="w-full" />
-          </el-form-item>
-          <el-form-item label="视频每秒成本(积分)">
-            <el-input-number v-model="priceForm.video_cost_per_second" :min="0" :precision="0" class="w-full" />
+          <el-form-item label="状态">
+            <el-select v-model="deploymentForm.status" class="w-full">
+              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
           </el-form-item>
         </div>
-        <el-form-item label="生效时间">
-          <el-date-picker
-            v-model="priceForm.effective_from"
-            type="datetime"
-            value-format="x"
-            clearable
-            class="w-full"
-          />
+        <div class="grid grid-cols-2 gap-4">
+          <el-form-item label="能力类型">
+            <el-select v-model="deploymentForm.capability_type" class="w-full">
+              <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="协议类型">
+            <el-select v-model="deploymentForm.upstream_protocol" class="w-full">
+              <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item label="请求路径（可选）">
+          <el-input v-model="deploymentForm.request_path" placeholder="/v1/chat/completions" />
+        </el-form-item>
+        <el-form-item label="上游参数 JSON（可选）">
+          <el-input v-model="deploymentForm.upstream_parameters" type="textarea" :rows="3" placeholder='{"temperature": 0.7}' />
+        </el-form-item>
+        <el-form-item label="标签 JSON（可选）">
+          <el-input v-model="deploymentForm.tags" type="textarea" :rows="2" placeholder='{"env": "prod", "tier": "premium"}' />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="priceDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitProviderPrice">{{ isEditingPrice ? '保存' : '创建' }}</el-button>
+        <el-button @click="deploymentDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitDeployment">{{ isEditingDeployment ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -979,6 +963,13 @@ onMounted(fetchProviders)
 .section-head p {
   margin: 4px 0 0;
   color: #64748b;
+}
+
+.protocol-text {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .empty-workspace {

@@ -1,91 +1,129 @@
 <script setup>
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Key, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { queryTenants } from '@/api/tenant'
 import {
-  createTenantAPIKey,
-  createUserAPIKey,
-  formatTimestamp,
+  capabilityOptions,
+  deleteTenantModelPriceOverride,
+  getModelPrice,
+  getTenantModelPriceOverride,
   grantModelToTenant,
-  grantModelToUser,
   listModels,
-  listTenantAPIKeys,
   listTenantModelGrants,
-  listUserAPIKeys,
-  listUserModelGrants,
-  updateTenantAPIKey,
-  updateTenantAPIKeyStatus,
   updateTenantModelGrantStatus,
-  updateUserAPIKey,
-  updateUserAPIKeyStatus,
-  updateUserModelGrantStatus
+  upsertTenantModelPriceOverride,
+  formatCredits
 } from '@/api/aiGateway'
 
 const authStore = useAuthStore()
 const loading = shallowRef(false)
-const keyDialogVisible = shallowRef(false)
-const lastKeyDialogVisible = shallowRef(false)
-const activeOwner = shallowRef('tenant')
-const editingKeyId = shallowRef('')
-const lastPlainKey = shallowRef('')
+const tenantLoading = shallowRef(false)
+const grantDialogVisible = shallowRef(false)
+const priceOverrideDialogVisible = shallowRef(false)
+const editingGrantId = shallowRef('')
+const overrideTargetGrant = shallowRef(null) // the grant row we're setting override for
+const overridePublicPrice = shallowRef(null)  // public price for reference
+const overrideLoading = shallowRef(false)
 const models = shallowRef([])
 const tenantGrants = shallowRef([])
-const tenantKeys = shallowRef([])
-const userGrants = shallowRef([])
-const userKeys = shallowRef([])
 
-const scope = reactive({
-  tenantId: authStore.tenantId || 'tenant-local',
-  userId: authStore.isEndUser ? authStore.userId : 'user-local'
+const priceOverrideForm = reactive({
+  input_price_per_1m: 0,
+  output_price_per_1m: 0,
+  image_size_prices: [],
+  video_price_per_second: 0,
+  audio_tts_price_per_1m_chars: 0,
+  audio_stt_price_per_minute: 0
+})
+const tenantSearchResults = shallowRef([])
+
+const selectedTenant = reactive({
+  tenantId: '',
+  tenantName: '',
+  contactPerson: '',
+  contactEmail: ''
 })
 
 const grantForm = reactive({
+  model_ids: [],
   model_id: '',
   status: 'active',
   created_by: 'admin'
 })
 
-const keyForm = reactive({
-  name: '',
-  quota_limit: 100000000,
-  allowed_models: [],
-  status: 'active',
-  expires_at: '',
-  created_by: 'admin'
-})
-
-const isEditingKey = computed(() => Boolean(editingKeyId.value))
-const canEditTenantAccess = computed(() => authStore.isPlatformAdmin)
-const canManageTenantKeys = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin)
-const canManageUserAccess = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin)
-const canManageUserKeys = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin || authStore.isEndUser)
-const showTenantSections = computed(() => !authStore.isEndUser)
-const showScopeSearch = computed(() => authStore.isPlatformAdmin || authStore.isTenantAdmin)
+const isEditingGrant = computed(() => Boolean(editingGrantId.value))
+const hasSelectedTenant = computed(() => Boolean(selectedTenant.tenantId))
 
 const modelOptions = computed(() =>
-  (authStore.isPlatformAdmin ? models.value : tenantGrants.value).map((item) => ({
+  models.value.map((item) => ({
     label: `${item.model_code} · ${item.display_name}`,
-    value: item.id || item.model_id,
-    code: item.model_code
+    value: item.id,
+    code: item.model_code,
+    capability: item.capability_type
   }))
 )
 
-const modelCodeOptions = computed(() => {
-  const source = authStore.isPlatformAdmin
-    ? models.value
-    : activeOwner.value === 'tenant'
-      ? tenantGrants.value
-      : userGrants.value
-  return source.map((item) => ({
-    label: `${item.model_code} · ${item.display_name}`,
-    value: item.model_code
-  }))
-})
+const grantSummary = computed(() => ({
+  totalGrants: tenantGrants.value.length,
+  activeGrants: tenantGrants.value.filter((item) => item.status === 'active').length,
+  chatModels: tenantGrants.value.filter((item) => item.capability_type === 'chat').length,
+  imageModels: tenantGrants.value.filter((item) => item.capability_type === 'image').length
+}))
 
 const statusTagType = (status) => {
   const map = { active: 'success', inactive: 'warning', disabled: 'danger' }
   return map[status] || 'info'
+}
+
+const capabilityLabel = (value) =>
+  capabilityOptions.find((o) => o.value === value)?.label || value || '-'
+
+const parseSizePrices = (raw) => {
+  if (!raw) return []
+  try {
+    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Object.entries(obj).map(([size, price]) => ({ size, price: Number(price) }))
+  } catch { return [] }
+}
+
+const serializeSizePrices = (arr) => {
+  const obj = {}
+  for (const { size, price } of arr) {
+    if (size && size.trim()) obj[size.trim()] = Number(price) || 0
+  }
+  return obj
+}
+
+const addSizePrice = () => priceOverrideForm.image_size_prices.push({ size: '', price: 0 })
+const removeSizePrice = (idx) => priceOverrideForm.image_size_prices.splice(idx, 1)
+
+const showTokenPrice = (capabilityType) => ['chat', 'embedding', 'rerank'].includes(capabilityType)
+const showOutputPrice = (capabilityType) => capabilityType === 'chat'
+const showImagePrice = (capabilityType) => capabilityType === 'image'
+const showVideoPrice = (capabilityType) => capabilityType === 'video'
+const showAudioTTSPrice = (capabilityType) => capabilityType === 'audio_tts'
+const showAudioSTTPrice = (capabilityType) => capabilityType === 'audio_stt'
+
+const resetGrantForm = () => {
+  editingGrantId.value = ''
+  Object.assign(grantForm, {
+    model_ids: [],
+    model_id: '',
+    status: 'active',
+    created_by: 'admin'
+  })
+}
+
+const applyGrantForm = (row) => {
+  editingGrantId.value = row.model_id
+  Object.assign(grantForm, {
+    model_ids: [],
+    model_id: row.model_id,
+    status: row.status,
+    created_by: 'admin'
+  })
 }
 
 const fetchModels = async () => {
@@ -96,385 +134,530 @@ const fetchModels = async () => {
   models.value = await listModels()
 }
 
-const fetchAll = async () => {
-  if (!authStore.isPlatformAdmin && authStore.tenantId) {
-    scope.tenantId = authStore.tenantId
+const searchTenants = async (query) => {
+  const keyword = (query || '').trim()
+  if (!keyword) {
+    tenantSearchResults.value = []
+    return
   }
-  if (authStore.isEndUser && authStore.userId) {
-    scope.userId = authStore.userId
+  tenantLoading.value = true
+  try {
+    const data = await queryTenants({ keyword, page: 1, size: 20 })
+    tenantSearchResults.value = (data.records || []).map((item) => ({
+      tenantId: item.tenantId,
+      tenantName: item.tenantName,
+      contactPerson: item.contactPerson,
+      contactEmail: item.contactEmail,
+      label: `${item.tenantName} · ${item.tenantId} · ${item.contactPerson || '未知联系人'}`
+    }))
+  } catch {
+    tenantSearchResults.value = []
+  } finally {
+    tenantLoading.value = false
   }
-  if (!scope.tenantId) {
-    ElMessage.warning('请输入租户 ID')
+}
+
+const selectTenant = (tenantId) => {
+  if (!tenantId) {
+    selectedTenant.tenantId = ''
+    selectedTenant.tenantName = ''
+    selectedTenant.contactPerson = ''
+    selectedTenant.contactEmail = ''
+    tenantGrants.value = []
+    return
+  }
+  const found = tenantSearchResults.value.find((item) => item.tenantId === tenantId)
+  if (found) {
+    Object.assign(selectedTenant, {
+      tenantId: found.tenantId,
+      tenantName: found.tenantName,
+      contactPerson: found.contactPerson,
+      contactEmail: found.contactEmail
+    })
+  }
+  fetchGrants()
+}
+
+const fetchGrants = async () => {
+  if (!selectedTenant.tenantId) {
+    tenantGrants.value = []
     return
   }
   loading.value = true
   try {
-    if (showTenantSections.value) {
-      tenantGrants.value = await listTenantModelGrants(scope.tenantId)
-      tenantKeys.value = await listTenantAPIKeys(scope.tenantId)
-    } else {
-      tenantGrants.value = []
-      tenantKeys.value = []
-    }
-    if (scope.userId) {
-      userGrants.value = await listUserModelGrants(scope.tenantId, scope.userId)
-      userKeys.value = await listUserAPIKeys(scope.tenantId, scope.userId)
-    } else {
-      userGrants.value = []
-      userKeys.value = []
-    }
+    tenantGrants.value = await listTenantModelGrants(selectedTenant.tenantId)
   } finally {
     loading.value = false
   }
 }
 
-const submitGrant = async (owner) => {
-  if (!grantForm.model_id) {
-    ElMessage.warning('请选择模型')
+const openGrantDialog = () => {
+  if (!selectedTenant.tenantId) {
+    ElMessage.warning('请先选择租户')
     return
   }
-  if (owner === 'tenant') {
-    if (!canEditTenantAccess.value) {
-      ElMessage.warning('只有平台管理员可以授权模型给租户')
+  resetGrantForm()
+  grantDialogVisible.value = true
+}
+
+const openGrantEditDialog = (row) => {
+  applyGrantForm(row)
+  grantDialogVisible.value = true
+}
+
+const submitGrant = async () => {
+  if (isEditingGrant.value) {
+    if (!grantForm.model_id) {
+      ElMessage.warning('请选择模型')
       return
     }
-    await grantModelToTenant(scope.tenantId, grantForm)
-  } else {
-    if (!canManageUserAccess.value) {
-      ElMessage.warning('当前角色不能调整用户模型授权')
-      return
-    }
-    if (!scope.userId) {
-      ElMessage.warning('请输入用户 ID')
-      return
-    }
-    await grantModelToUser(scope.tenantId, scope.userId, grantForm)
-  }
-  ElMessage.success('模型授权已保存')
-  await fetchAll()
-}
-
-const openKeyDialog = (owner) => {
-  if (owner === 'tenant' && !canManageTenantKeys.value) {
-    ElMessage.warning('当前角色不能管理租户 Key')
-    return
-  }
-  if (owner === 'user' && !canManageUserKeys.value) {
-    ElMessage.warning('当前角色不能管理用户 Key')
-    return
-  }
-  activeOwner.value = owner
-  editingKeyId.value = ''
-  Object.assign(keyForm, {
-    name: owner === 'tenant' ? 'Tenant runtime key' : 'User runtime key',
-    quota_limit: 100000000,
-    allowed_models: [],
-    status: 'active',
-    expires_at: '',
-    created_by: 'admin'
-  })
-  keyDialogVisible.value = true
-}
-
-const openKeyEditDialog = (owner, row) => {
-  activeOwner.value = owner
-  editingKeyId.value = row.id
-  Object.assign(keyForm, {
-    name: row.name,
-    quota_limit: row.quota_limit ?? null,
-    allowed_models: row.allowed_models || [],
-    status: row.status,
-    expires_at: row.expires_at ? String(row.expires_at) : '',
-    created_by: 'admin'
-  })
-  keyDialogVisible.value = true
-}
-
-const submitKey = async () => {
-  if (activeOwner.value === 'user' && !scope.userId) {
-    ElMessage.warning('请输入用户 ID')
-    return
-  }
-  const payload = {
-    ...keyForm,
-    quota_limit: keyForm.quota_limit || undefined,
-    expires_at: keyForm.expires_at ? Number(keyForm.expires_at) : undefined
-  }
-  if (editingKeyId.value) {
-    if (activeOwner.value === 'tenant') {
-      await updateTenantAPIKey(scope.tenantId, editingKeyId.value, payload)
-    } else {
-      await updateUserAPIKey(scope.tenantId, scope.userId, editingKeyId.value, payload)
-    }
-    ElMessage.success('API Key 已保存')
-    keyDialogVisible.value = false
-    await fetchAll()
-    return
-  }
-  const response =
-    activeOwner.value === 'tenant'
-      ? await createTenantAPIKey(scope.tenantId, payload)
-      : await createUserAPIKey(scope.tenantId, scope.userId, payload)
-
-  lastPlainKey.value = response.api_key
-  keyDialogVisible.value = false
-  lastKeyDialogVisible.value = true
-  await fetchAll()
-}
-
-const toggleGrant = async (owner, row) => {
-  const nextStatus = row.status === 'active' ? 'disabled' : 'active'
-  if (owner === 'tenant') {
-    if (!canEditTenantAccess.value) return
-    await updateTenantModelGrantStatus(scope.tenantId, row.model_id, nextStatus)
-  } else {
-    if (!canManageUserAccess.value) return
-    await updateUserModelGrantStatus(scope.tenantId, scope.userId, row.model_id, nextStatus)
-  }
-  ElMessage.success('授权状态已更新')
-  await fetchAll()
-}
-
-const toggleKey = async (owner, row) => {
-  const nextStatus = row.status === 'active' ? 'disabled' : 'active'
-  if (owner === 'tenant') {
-    if (!canManageTenantKeys.value) return
-    await updateTenantAPIKeyStatus(scope.tenantId, row.id, nextStatus)
-  } else {
-    if (!canManageUserKeys.value) return
-    await updateUserAPIKeyStatus(scope.tenantId, scope.userId, row.id, nextStatus)
-  }
-  ElMessage.success('API Key 状态已更新')
-  await fetchAll()
-}
-
-const copyPlainKey = async () => {
-  await navigator.clipboard.writeText(lastPlainKey.value)
-  ElMessage.success('已复制')
-}
-
-const closePlainKey = async () => {
-  try {
-    await ElMessageBox.confirm('关闭后将无法再次查看明文 API Key，确认关闭？', '确认', {
-      confirmButtonText: '关闭',
-      cancelButtonText: '返回',
-      type: 'warning'
+    await grantModelToTenant(selectedTenant.tenantId, {
+      model_id: grantForm.model_id,
+      status: grantForm.status,
+      created_by: grantForm.created_by
     })
-    lastPlainKey.value = ''
-    lastKeyDialogVisible.value = false
-  } catch {}
+    ElMessage.success('模型授权已更新')
+  } else {
+    if (!grantForm.model_ids.length) {
+      ElMessage.warning('请选择模型')
+      return
+    }
+    const results = []
+    for (const modelId of grantForm.model_ids) {
+      try {
+        await grantModelToTenant(selectedTenant.tenantId, {
+          model_id: modelId,
+          status: grantForm.status,
+          created_by: grantForm.created_by
+        })
+        results.push({ success: true, modelId })
+      } catch (e) {
+        results.push({ success: false, modelId })
+      }
+    }
+    const successCount = results.filter((r) => r.success).length
+    const failCount = results.filter((r) => !r.success).length
+    if (failCount === 0) {
+      ElMessage.success(`已授权 ${successCount} 个模型`)
+    } else {
+      ElMessage.warning(`授权完成：${successCount} 成功，${failCount} 失败`)
+    }
+  }
+  grantDialogVisible.value = false
+  await fetchGrants()
+}
+
+const openPriceOverrideDialog = async (row) => {
+  overrideTargetGrant.value = row
+  overrideLoading.value = true
+  priceOverrideDialogVisible.value = true
+  try {
+    // Load public price for reference
+    overridePublicPrice.value = await getModelPrice(row.model_id).catch(() => null)
+    // Try to load existing override
+    const existing = await getTenantModelPriceOverride(selectedTenant.tenantId, row.model_id).catch(() => null)
+    const src = existing || overridePublicPrice.value
+    Object.assign(priceOverrideForm, {
+      input_price_per_1m: src?.input_price_per_1m ?? 0,
+      output_price_per_1m: src?.output_price_per_1m ?? 0,
+      image_size_prices: parseSizePrices(src?.image_size_prices),
+      video_price_per_second: src?.video_price_per_second ?? 0,
+      audio_tts_price_per_1m_chars: src?.audio_tts_price_per_1m_chars ?? 0,
+      audio_stt_price_per_minute: src?.audio_stt_price_per_minute ?? 0
+    })
+  } finally {
+    overrideLoading.value = false
+  }
+}
+
+const submitPriceOverride = async () => {
+  const grant = overrideTargetGrant.value
+  if (!grant) return
+  const payload = {
+    input_price_per_1m: priceOverrideForm.input_price_per_1m,
+    output_price_per_1m: priceOverrideForm.output_price_per_1m,
+    image_size_prices: serializeSizePrices(priceOverrideForm.image_size_prices),
+    video_price_per_second: priceOverrideForm.video_price_per_second,
+    audio_tts_price_per_1m_chars: priceOverrideForm.audio_tts_price_per_1m_chars,
+    audio_stt_price_per_minute: priceOverrideForm.audio_stt_price_per_minute
+  }
+  await upsertTenantModelPriceOverride(selectedTenant.tenantId, grant.model_id, payload)
+  ElMessage.success('租户价格已保存')
+  priceOverrideDialogVisible.value = false
+  await fetchGrants()
+}
+
+const removePriceOverride = async (row) => {
+  try {
+    await ElMessageBox.confirm('删除后该租户将使用公共价格，确定删除？', '删除确认', {
+      confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning'
+    })
+    await deleteTenantModelPriceOverride(selectedTenant.tenantId, row.model_id)
+    ElMessage.success('租户价格已恢复为公共价格')
+    await fetchGrants()
+  } catch { /* cancelled */ }
+}
+
+const toggleGrant = async (row) => {
+  const nextStatus = row.status === 'active' ? 'disabled' : 'active'
+  await updateTenantModelGrantStatus(selectedTenant.tenantId, row.model_id, nextStatus)
+  ElMessage.success('授权状态已更新')
+  await fetchGrants()
 }
 
 onMounted(async () => {
   await fetchModels()
-  await fetchAll()
 })
 </script>
 
 <template>
-  <div class="space-y-4">
-    <section v-if="showScopeSearch" class="panel">
-      <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4 items-end">
-        <el-form-item label="租户 ID" class="!mb-0">
-          <el-input v-model="scope.tenantId" :disabled="!authStore.isPlatformAdmin" placeholder="tenant-local" />
-        </el-form-item>
-        <el-form-item label="用户 ID" class="!mb-0">
-          <el-input v-model="scope.userId" placeholder="user-local" />
-        </el-form-item>
-        <el-button type="primary" :icon="Search" :loading="loading" @click="fetchAll">查询</el-button>
+  <div class="access-page">
+    <!-- 搜索栏 -->
+    <section class="search-panel">
+      <div class="search-row">
+        <el-select
+          v-model="selectedTenant.tenantId"
+          filterable
+          remote
+          :remote-method="searchTenants"
+          :loading="tenantLoading"
+          placeholder="输入租户名称、联系人或邮箱搜索"
+          class="tenant-select"
+          clearable
+          @change="selectTenant"
+        >
+          <el-option
+            v-for="item in tenantSearchResults"
+            :key="item.tenantId"
+            :label="item.label"
+            :value="item.tenantId"
+          />
+        </el-select>
+        <el-button type="primary" :icon="Search" :loading="loading" :disabled="!hasSelectedTenant" @click="fetchGrants">查询授权</el-button>
+        <el-button :icon="Refresh" circle :disabled="!hasSelectedTenant" @click="fetchGrants" />
+      </div>
+      <p v-if="hasSelectedTenant" class="tenant-info">
+        {{ selectedTenant.tenantName }} · {{ selectedTenant.contactPerson || '无联系人' }} · {{ selectedTenant.contactEmail || '无邮箱' }}
+      </p>
+    </section>
+
+    <!-- 统计卡片 -->
+    <section class="metric-grid">
+      <div class="metric-cell">
+        <span>已授权模型</span>
+        <strong>{{ grantSummary.totalGrants }}</strong>
+        <small>{{ grantSummary.activeGrants }} active</small>
+      </div>
+      <div class="metric-cell">
+        <span>对话模型</span>
+        <strong>{{ grantSummary.chatModels }}</strong>
+        <small>Chat capability</small>
+      </div>
+      <div class="metric-cell">
+        <span>图像模型</span>
+        <strong>{{ grantSummary.imageModels }}</strong>
+        <small>Image capability</small>
+      </div>
+      <div class="metric-cell">
+        <span>计费单位</span>
+        <strong>积分</strong>
+        <small>按租户价格结算</small>
       </div>
     </section>
 
+    <!-- 配置流程 -->
+    <section class="guide-panel">
+      <div>
+        <p class="eyebrow">Access Flow</p>
+        <h3>配置流程</h3>
+      </div>
+      <ol>
+        <li>在模型页面创建对外模型和配置路由。</li>
+        <li>在此页面将模型授权给租户，使其可调用。</li>
+        <li>租户在自有后台设置销售价格和创建 API Key。</li>
+        <li>终端用户在用户后台创建自己的 API Key。</li>
+      </ol>
+      <p class="guide-note">平台管理员只负责模型授权，API Key 由租户和用户自行管理。</p>
+    </section>
+
+    <!-- 授权列表 -->
     <section class="panel">
       <div class="section-head">
         <div>
-          <h3>模型授权</h3>
-          <p>{{ authStore.isEndUser ? '查看当前用户可用模型' : '租户授权控制可售模型，用户授权控制可创建 Key 的模型范围' }}</p>
+          <h3>已授权模型</h3>
+          <p>{{ selectedTenant.tenantId ? `${selectedTenant.tenantName} (${selectedTenant.tenantId}) - 可调用的模型列表` : '请先选择租户' }}</p>
         </div>
-        <el-button :icon="Refresh" circle @click="fetchAll" />
+        <el-button type="primary" :icon="Plus" :disabled="!hasSelectedTenant" @click="openGrantDialog">新增授权</el-button>
       </div>
-      <div v-if="canEditTenantAccess || canManageUserAccess" class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px_160px] gap-3 items-end mb-4">
-        <el-form-item label="模型" class="!mb-0">
-          <el-select v-model="grantForm.model_id" class="w-full" filterable>
+
+      <el-table v-loading="loading" :data="tenantGrants" border stripe class="w-full">
+        <el-table-column label="模型" min-width="200">
+          <template #default="{ row }">
+            <div class="model-cell">
+              <strong>{{ row.display_name }}</strong>
+              <small>{{ row.model_code }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="能力类型" width="120">
+          <template #default="{ row }">
+            <el-tag size="small">{{ capabilityLabel(row.capability_type) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="租户价格" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.has_price_override" type="warning" size="small" effect="plain">自定义</el-tag>
+            <span v-else class="price-tag-public">公共价格</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openGrantEditDialog(row)">编辑</el-button>
+            <el-button link type="primary" @click="openPriceOverrideDialog(row)">定价</el-button>
+            <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleGrant(row)">
+              {{ row.status === 'active' ? '禁用' : '启用' }}
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <!-- 租户价格覆盖对话框 -->
+    <el-dialog
+      v-model="priceOverrideDialogVisible"
+      :title="`租户定价 · ${overrideTargetGrant?.display_name || ''}`"
+      width="520px"
+    >
+      <div v-if="overridePublicPrice" class="public-price-hint">
+        <span class="hint-label">公共价格参考</span>
+        <span v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
+          输入 {{ formatCredits(overridePublicPrice.input_price_per_1m) }} /
+          输出 {{ formatCredits(overridePublicPrice.output_price_per_1m) }} 积分/1M tokens
+        </span>
+        <span v-else-if="showImagePrice(overrideTargetGrant?.capability_type)">
+          按尺寸定价
+        </span>
+        <span v-else-if="showVideoPrice(overrideTargetGrant?.capability_type)">
+          {{ formatCredits(overridePublicPrice.video_price_per_second) }} 积分/秒
+        </span>
+        <span v-else-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)">
+          {{ formatCredits(overridePublicPrice.audio_tts_price_per_1m_chars) }} 积分/1M字符
+        </span>
+        <span v-else-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)">
+          {{ formatCredits(overridePublicPrice.audio_stt_price_per_minute) }} 积分/分钟
+        </span>
+      </div>
+
+      <el-form v-loading="overrideLoading" :model="priceOverrideForm" label-position="top">
+        <template v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
+          <div class="grid grid-cols-2 gap-4">
+            <el-form-item label="输入价格 / 1M tokens（积分）">
+              <el-input-number v-model="priceOverrideForm.input_price_per_1m" :min="0" :precision="0" class="w-full" />
+            </el-form-item>
+            <el-form-item v-if="showOutputPrice(overrideTargetGrant?.capability_type)" label="输出价格 / 1M tokens（积分）">
+              <el-input-number v-model="priceOverrideForm.output_price_per_1m" :min="0" :precision="0" class="w-full" />
+            </el-form-item>
+          </div>
+        </template>
+        <template v-if="showImagePrice(overrideTargetGrant?.capability_type)">
+          <el-form-item label="尺寸定价（积分/张）">
+            <div class="size-price-editor">
+              <div v-for="(entry, idx) in priceOverrideForm.image_size_prices" :key="idx" class="size-price-row">
+                <el-input v-model="entry.size" placeholder="1024x1024" class="size-input" />
+                <el-input-number v-model="entry.price" :min="0" :precision="0" class="price-input" />
+                <el-button link type="danger" :icon="Delete" @click="removeSizePrice(idx)" />
+              </div>
+              <el-button :icon="Plus" size="small" @click="addSizePrice">添加尺寸</el-button>
+            </div>
+          </el-form-item>
+        </template>
+        <el-form-item v-if="showVideoPrice(overrideTargetGrant?.capability_type)" label="视频价格 / 秒（积分）">
+          <el-input-number v-model="priceOverrideForm.video_price_per_second" :min="0" :precision="0" class="w-full" />
+        </el-form-item>
+        <el-form-item v-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)" label="TTS 价格 / 1M 字符（积分）">
+          <el-input-number v-model="priceOverrideForm.audio_tts_price_per_1m_chars" :min="0" :precision="0" class="w-full" />
+        </el-form-item>
+        <el-form-item v-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)" label="STT 价格 / 分钟（积分）">
+          <el-input-number v-model="priceOverrideForm.audio_stt_price_per_minute" :min="0" :precision="0" class="w-full" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="priceOverrideDialogVisible = false">取消</el-button>
+        <el-button type="danger" plain @click="removePriceOverride(overrideTargetGrant)">恢复公共价格</el-button>
+        <el-button type="primary" @click="submitPriceOverride">保存租户价格</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 授权对话框 -->
+    <el-dialog v-model="grantDialogVisible" :title="isEditingGrant ? '编辑模型授权' : '新增模型授权'" width="480px">
+      <el-form :model="grantForm" label-position="top">
+        <el-form-item :label="isEditingGrant ? '模型' : '选择模型（可多选）'" required>
+          <!-- 新增：多选 -->
+          <el-select
+            v-if="!isEditingGrant"
+            v-model="grantForm.model_ids"
+            multiple
+            class="w-full"
+            filterable
+            placeholder="可选择多个模型批量授权"
+          >
+            <el-option v-for="item in modelOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+          <!-- 编辑：单选 -->
+          <el-select
+            v-else
+            v-model="grantForm.model_id"
+            class="w-full"
+            filterable
+            placeholder="选择要授权的模型"
+          >
             <el-option v-for="item in modelOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
-        <el-button v-if="canEditTenantAccess" type="primary" :icon="Plus" @click="submitGrant('tenant')">授权给租户</el-button>
-        <el-button v-if="canManageUserAccess" type="success" :icon="Plus" @click="submitGrant('user')">授权给用户</el-button>
-      </div>
-
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div v-if="showTenantSections">
-          <h4 class="table-title">租户模型</h4>
-          <el-table :data="tenantGrants" border stripe class="w-full">
-            <el-table-column prop="model_code" label="模型" min-width="150" />
-            <el-table-column prop="capability_type" label="能力" width="90" />
-            <el-table-column label="状态" width="95">
-              <template #default="{ row }">
-                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column v-if="canEditTenantAccess" label="操作" width="90">
-              <template #default="{ row }">
-                <el-button link @click="toggleGrant('tenant', row)">
-                  {{ row.status === 'active' ? '禁用' : '启用' }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-        <div>
-          <h4 class="table-title">用户模型</h4>
-          <el-table :data="userGrants" border stripe class="w-full">
-            <el-table-column prop="model_code" label="模型" min-width="150" />
-            <el-table-column prop="capability_type" label="能力" width="90" />
-            <el-table-column label="状态" width="95">
-              <template #default="{ row }">
-                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column v-if="canManageUserAccess" label="操作" width="90">
-              <template #default="{ row }">
-                <el-button link @click="toggleGrant('user', row)">
-                  {{ row.status === 'active' ? '禁用' : '启用' }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="section-head">
-        <div>
-          <h3>API Key</h3>
-          <p>{{ authStore.isEndUser ? '用户 Key 绑定你的终端用户账本' : '租户 Key 适合匿名售卖，用户 Key 绑定终端用户账本' }}</p>
-        </div>
-        <div class="flex gap-2">
-          <el-button v-if="canManageTenantKeys" type="primary" :icon="Key" @click="openKeyDialog('tenant')">租户 Key</el-button>
-          <el-button v-if="canManageUserKeys" type="success" :icon="Key" @click="openKeyDialog('user')">用户 Key</el-button>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div v-if="showTenantSections">
-          <h4 class="table-title">租户 Key</h4>
-          <el-table :data="tenantKeys" border stripe class="w-full">
-            <el-table-column prop="key_prefix" label="前缀" width="130" />
-            <el-table-column prop="name" label="名称" min-width="160" />
-            <el-table-column label="模型" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.allowed_models?.join(', ') || '全部' }}</template>
-            </el-table-column>
-            <el-table-column label="额度" width="130" align="right">
-              <template #default="{ row }">{{ row.quota_used }} / {{ row.quota_limit || '不限' }}</template>
-            </el-table-column>
-            <el-table-column label="过期时间" width="170">
-              <template #default="{ row }">{{ formatTimestamp(row.expires_at) || '永不过期' }}</template>
-            </el-table-column>
-            <el-table-column label="状态" width="95">
-              <template #default="{ row }">
-                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column v-if="canManageTenantKeys" label="操作" width="130">
-              <template #default="{ row }">
-                <el-button link type="primary" :icon="Edit" @click="openKeyEditDialog('tenant', row)">编辑</el-button>
-                <el-button link @click="toggleKey('tenant', row)">
-                  {{ row.status === 'active' ? '禁用' : '启用' }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-        <div>
-          <h4 class="table-title">用户 Key</h4>
-          <el-table :data="userKeys" border stripe class="w-full">
-            <el-table-column prop="key_prefix" label="前缀" width="130" />
-            <el-table-column prop="name" label="名称" min-width="160" />
-            <el-table-column label="模型" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.allowed_models?.join(', ') || '全部' }}</template>
-            </el-table-column>
-            <el-table-column label="额度" width="130" align="right">
-              <template #default="{ row }">{{ row.quota_used }} / {{ row.quota_limit || '不限' }}</template>
-            </el-table-column>
-            <el-table-column label="过期时间" width="170">
-              <template #default="{ row }">{{ formatTimestamp(row.expires_at) || '永不过期' }}</template>
-            </el-table-column>
-            <el-table-column label="状态" width="95">
-              <template #default="{ row }">
-                <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="130">
-              <template #default="{ row }">
-                <el-button link type="primary" :icon="Edit" @click="openKeyEditDialog('user', row)">编辑</el-button>
-                <el-button link @click="toggleKey('user', row)">
-                  {{ row.status === 'active' ? '禁用' : '启用' }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </div>
-    </section>
-
-    <el-dialog
-      v-model="keyDialogVisible"
-      :title="`${isEditingKey ? '编辑' : '创建'}${activeOwner === 'tenant' ? '租户' : '用户'} Key`"
-      width="640px"
-    >
-      <el-form :model="keyForm" label-position="top">
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="名称" required>
-            <el-input v-model="keyForm.name" />
-          </el-form-item>
-          <el-form-item label="总额度">
-            <el-input-number v-model="keyForm.quota_limit" :min="0" class="w-full" />
-          </el-form-item>
-        </div>
-        <el-form-item label="过期时间">
-          <el-date-picker
-            v-model="keyForm.expires_at"
-            type="datetime"
-            value-format="x"
-            clearable
-            class="w-full"
-            placeholder="不选表示永不过期"
-          />
-        </el-form-item>
-        <el-form-item label="允许模型">
-          <el-select v-model="keyForm.allowed_models" class="w-full" multiple filterable>
-            <el-option v-for="item in modelCodeOptions" :key="item.value" :label="item.label" :value="item.value" />
+        <el-form-item label="状态">
+          <el-select v-model="grantForm.status" class="w-full">
+            <el-option label="启用" value="active" />
+            <el-option label="停用" value="inactive" />
+            <el-option label="禁用" value="disabled" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="keyDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitKey">{{ isEditingKey ? '保存' : '创建' }}</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="lastKeyDialogVisible" title="API Key 明文" width="680px" :close-on-click-modal="false" :show-close="false">
-      <el-alert type="warning" :closable="false" show-icon title="明文只显示一次，关闭后无法再次查看。" />
-      <el-input :model-value="lastPlainKey" class="mt-4" readonly>
-        <template #append>
-          <el-button @click="copyPlainKey">复制</el-button>
-        </template>
-      </el-input>
-      <template #footer>
-        <el-button type="primary" @click="closePlainKey">我已保存，关闭</el-button>
+        <el-button @click="grantDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitGrant">{{ isEditingGrant ? '保存' : '授权' }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.panel {
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  padding: 16px;
+.access-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-panel,
+.panel,
+.guide-panel {
   min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.search-panel {
+  padding: 16px;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tenant-select {
+  width: 360px;
+}
+
+.tenant-info {
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.metric-cell span,
+.metric-cell small {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.metric-cell strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guide-panel {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.guide-panel h3,
+.section-head h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.guide-panel ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.guide-panel li,
+.guide-note,
+.section-head p {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.65;
+}
+
+.guide-note {
+  grid-column: 2;
+  margin: 2px 0 0;
+  color: #0369a1;
+}
+
+.panel {
+  padding: 16px;
 }
 
 .section-head {
@@ -485,21 +668,85 @@ onMounted(async () => {
   margin-bottom: 14px;
 }
 
-.section-head h3 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.section-head p,
-.table-title {
-  margin: 4px 0 12px;
+.section-head p {
+  margin: 4px 0 0;
   color: #64748b;
-  font-size: 12px;
 }
 
-.table-title {
-  font-weight: 800;
+.model-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.model-cell strong {
+  color: #334155;
+  font-weight: 700;
+}
+
+.model-cell small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.price-tag-public {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.public-price-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  margin-bottom: 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.hint-label {
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.size-price-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.size-price-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.size-input { width: 140px; }
+.price-input { flex: 1; }
+
+@media (max-width: 900px) {
+  .metric-grid,
+  .guide-panel,
+  .guide-panel ol {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-note {
+    grid-column: auto;
+  }
+
+  .search-row {
+    flex-wrap: wrap;
+  }
+
+  .tenant-select {
+    width: 100%;
+  }
 }
 </style>

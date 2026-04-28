@@ -125,23 +125,22 @@ onMounted(fetchUsage)
 
 <template>
   <section class="panel">
-    <div class="section-head">
-      <div>
-        <h3>调用日志</h3>
-        <p>按创建时间倒序，最多读取 500 条</p>
-      </div>
-      <div class="toolbar">
-        <el-input v-if="authStore.isPlatformAdmin" v-model="filters.tenant_id" clearable placeholder="租户" />
-        <el-input v-if="!authStore.isEndUser" v-model="filters.user_id" clearable placeholder="用户" />
-        <el-input v-model="filters.model_code" clearable placeholder="模型" />
-        <el-select v-model="filters.request_status" clearable placeholder="状态">
-          <el-option label="success" value="success" />
-          <el-option label="failed" value="failed" />
-          <el-option label="rejected" value="rejected" />
-        </el-select>
-        <el-input-number v-model="limit" :min="1" :max="500" :step="50" />
-        <el-button type="primary" :icon="Refresh" :loading="loading || summaryLoading" @click="fetchUsage">刷新</el-button>
-      </div>
+    <div class="header">
+      <h3>调用日志</h3>
+      <p>按创建时间倒序，最多读取 500 条</p>
+    </div>
+
+    <div class="toolbar">
+      <el-input v-if="authStore.isPlatformAdmin" v-model="filters.tenant_id" clearable placeholder="租户" />
+      <el-input v-if="!authStore.isEndUser" v-model="filters.user_id" clearable placeholder="用户" />
+      <el-input v-model="filters.model_code" clearable placeholder="模型" />
+      <el-select v-model="filters.request_status" clearable placeholder="状态">
+        <el-option label="success" value="success" />
+        <el-option label="failed" value="failed" />
+        <el-option label="rejected" value="rejected" />
+      </el-select>
+      <el-input-number v-model="limit" :min="1" :max="500" :step="50" class="limit-input" controls-position="right" />
+      <el-button type="primary" :icon="Refresh" :loading="loading || summaryLoading" @click="fetchUsage">刷新</el-button>
     </div>
 
     <div v-loading="summaryLoading" class="summary-grid">
@@ -172,7 +171,7 @@ onMounted(fetchUsage)
     </div>
 
     <el-table v-loading="summaryLoading" :data="unitRows" border stripe class="w-full unit-table">
-      <el-table-column label="计费单位" width="130">
+      <el-table-column label="计费单位" min-width="130">
         <template #default="{ row }">
           <div class="unit-cell">
             <span>{{ unitLabel(row.billable_unit_type) }}</span>
@@ -213,10 +212,10 @@ onMounted(fetchUsage)
     </el-table>
 
     <el-table v-loading="summaryLoading" :data="summaryRows" border stripe class="w-full summary-table">
-      <el-table-column label="能力" width="100">
+      <el-table-column label="能力" min-width="100">
         <template #default="{ row }">{{ capabilityLabel(row.capability_type) }}</template>
       </el-table-column>
-      <el-table-column label="计费单位" width="120">
+      <el-table-column label="计费单位" min-width="120">
         <template #default="{ row }">{{ unitLabel(row.billable_unit_type) }}</template>
       </el-table-column>
       <el-table-column label="状态" width="110">
@@ -292,38 +291,41 @@ onMounted(fetchUsage)
 
 <style scoped>
 .panel {
-  border: 1px solid #f1f5f9;
-  border-radius: 14px;
-  padding: 16px;
   min-width: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
 }
 
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+.header {
+  margin-bottom: 12px;
 }
 
-.section-head h3 {
+.header h3 {
   margin: 0;
   color: #0f172a;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 900;
 }
 
-.section-head p {
+.header p {
   margin: 4px 0 0;
   color: #64748b;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr)) 120px auto;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) 100px auto;
   gap: 8px;
   align-items: center;
+  margin-bottom: 14px;
+}
+
+.limit-input {
+  width: 100px;
 }
 
 .summary-grid {
@@ -379,11 +381,6 @@ onMounted(fetchUsage)
 }
 
 @media (max-width: 1180px) {
-  .section-head {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
