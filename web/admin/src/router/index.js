@@ -25,7 +25,7 @@ const routes = [
         path: '/finance/account-overview',
         name: 'AccountOverview',
         component: () => import('@/views/Finance/AccountOverview.vue'),
-        meta: { title: '账户全景', requiresAuth: true, roles: [1] }
+        meta: { title: '账户全景', requiresAuth: true, roles: [1], businessHidden: true }
       },
       // 业务管理
       {
@@ -50,7 +50,7 @@ const routes = [
         path: '/apps',
         name: 'Apps',
         component: () => import('@/views/Apps/AppList.vue'),
-        meta: { title: '应用系统', requiresAuth: true, roles: [1] }
+        meta: { title: '应用系统', requiresAuth: true, roles: [1], businessHidden: true }
       },
       {
         path: '/ai-gateway',
@@ -63,50 +63,50 @@ const routes = [
         path: '/finance/recharge',
         name: 'Recharge',
         component: () => import('@/views/Finance/Recharge.vue'),
-        meta: { title: '租户充值', requiresAuth: true, roles: [1] }
+        meta: { title: '租户充值', requiresAuth: true, roles: [1], businessHidden: true }
       },
       {
         path: '/finance/recharge-records',
         name: 'RechargeRecords',
         component: () => import('@/views/Finance/RechargeRecords.vue'),
-        meta: { title: '充值记录', requiresAuth: true, roles: [1] }
+        meta: { title: '充值记录', requiresAuth: true, roles: [1], businessHidden: true }
       },
       {
         path: '/finance/transactions',
         name: 'Transactions',
         component: () => import('@/views/Finance/TransactionList.vue'),
-        meta: { title: '交易流水', requiresAuth: true, roles: [1] }
+        meta: { title: '交易流水', requiresAuth: true, roles: [1], businessHidden: true }
       },
       {
         path: '/finance/tenant/grant-logs',
         name: 'TenantGrantLogs',
         component: () => import('@/views/Finance/tenant/GrantLogs.vue'),
-        meta: { title: '租户补发记录', requiresAuth: true, roles: [1] }
+        meta: { title: '租户补发记录', requiresAuth: true, roles: [1], businessHidden: true }
       },
       {
         path: '/finance/user/grant-logs',
         name: 'UserGrantLogs',
         component: () => import('@/views/Finance/user/GrantLogs.vue'),
-        meta: { title: '用户补发记录', requiresAuth: true, roles: [1] }
+        meta: { title: '用户补发记录', requiresAuth: true, roles: [1], businessHidden: true }
       },
       // 系统审计
       {
         path: '/system/audit-log',
         name: 'AuditLog',
         component: () => import('@/views/System/AuditLog.vue'),
-        meta: { title: '操作审计', requiresAuth: true, roles: [1], superAdminOnly: true }
+        meta: { title: '操作审计', requiresAuth: true, roles: [1], superAdminOnly: true, businessHidden: true }
       },
       {
         path: '/system/admins',
         name: 'AdminList',
         component: () => import('@/views/System/AdminUserList.vue'),
-        meta: { title: '系统管理员', requiresAuth: true, roles: [1], superAdminOnly: true }
+        meta: { title: '系统管理员', requiresAuth: true, roles: [1], superAdminOnly: true, businessHidden: true }
       },
       {
         path: '/system/jwt-keys',
         name: 'JwtKeys',
         component: () => import('@/views/System/JwtKeys.vue'),
-        meta: { title: 'JWT 密钥', requiresAuth: true, roles: [1], superAdminOnly: true }
+        meta: { title: 'JWT 密钥', requiresAuth: true, roles: [1], superAdminOnly: true, businessHidden: true }
       }
     ]
   }
@@ -126,6 +126,11 @@ router.beforeEach((to, from) => {
   }
 
   if (to.path === '/login' && authStore.isAuthenticated()) {
+    return authStore.defaultRoute
+  }
+
+  const businessHidden = to.matched.some(record => record.meta.businessHidden)
+  if (businessHidden) {
     return authStore.defaultRoute
   }
 

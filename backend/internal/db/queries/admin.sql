@@ -1041,6 +1041,82 @@ WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'
 GROUP BY capability_type, billable_unit_type, request_status
 ORDER BY request_count DESC, capability_type ASC, billable_unit_type ASC, request_status ASC;
 
+-- name: GetDashboardSummary :one
+SELECT
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COUNT(DISTINCT tenant_id)::bigint AS active_tenant_count,
+  COUNT(DISTINCT api_key_id)::bigint AS active_api_key_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units) FILTER (WHERE billable_unit_type = 'image'), 0)::bigint AS image_count,
+  COALESCE(SUM(provider_cost), 0)::bigint AS provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS user_cost,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost,
+  COALESCE(AVG(latency_ms)::bigint, 0)::bigint AS avg_latency_ms,
+  COUNT(*) FILTER (WHERE request_status <> 'success')::bigint AS error_count
+FROM ai_usage_logs
+WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'));
+
+-- name: ListDashboardTopModels :many
+SELECT
+  model_code,
+  capability_type,
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units), 0)::bigint AS billable_units,
+  COALESCE(SUM(billable_units) FILTER (WHERE billable_unit_type = 'image'), 0)::bigint AS image_count,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost
+FROM ai_usage_logs
+WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'))
+GROUP BY model_code, capability_type
+ORDER BY api_key_quota_cost DESC, request_count DESC, model_code ASC
+LIMIT sqlc.arg('limit');
+
+-- name: ListDashboardTopTenants :many
+SELECT
+  tenant_id,
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COUNT(DISTINCT api_key_id)::bigint AS active_api_key_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units) FILTER (WHERE billable_unit_type = 'image'), 0)::bigint AS image_count,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost
+FROM ai_usage_logs
+WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'))
+GROUP BY tenant_id
+ORDER BY api_key_quota_cost DESC, request_count DESC, tenant_id ASC
+LIMIT sqlc.arg('limit');
+
+-- name: ListDashboardRecentErrors :many
+SELECT
+  created_at,
+  request_id,
+  tenant_id,
+  user_id,
+  model_code,
+  provider_code,
+  upstream_model,
+  request_status,
+  http_status,
+  upstream_status,
+  error_code,
+  error_message
+FROM ai_usage_logs
+WHERE request_status <> 'success'
+  AND (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'))
+ORDER BY created_at DESC
+LIMIT sqlc.arg('limit');
+
 -- name: ListRuntimeLimitPolicies :many
 SELECT
   id,

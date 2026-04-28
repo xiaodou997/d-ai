@@ -28,7 +28,7 @@
           <el-dropdown-menu class="modern-dropdown">
             <div class="px-4 py-3 border-b border-slate-50">
               <p class="text-xs text-slate-400">当前身份</p>
-              <p class="text-sm font-semibold text-slate-700">系统管理员</p>
+              <p class="text-sm font-semibold text-slate-700">{{ authStore.roleName }}</p>
             </div>
             <el-dropdown-item command="changePassword" class="mt-1">
               <el-icon><Lock /></el-icon>修改密码
@@ -155,7 +155,7 @@ const handleCommand = (command) => {
 
 const handleLogout = async () => {
   try {
-    await ElMessageBox.confirm('您确定要退出 UniCore 控制台管理系统吗？', '确认退出', {
+    await ElMessageBox.confirm('您确定要退出 Uni AI API 管理后台吗？', '确认退出', {
       confirmButtonText: '立即退出',
       cancelButtonText: '再想想',
       type: 'warning',

@@ -36,8 +36,8 @@
             </div>
             <div class="logo-glow"></div>
           </div>
-          <h1 class="title">URM 管理后台</h1>
-          <p class="subtitle">平台管理员专用入口</p>
+          <h1 class="title">Uni AI API</h1>
+          <p class="subtitle">AI Gateway 管理后台</p>
         </div>
 
         <!-- 登录表单 -->

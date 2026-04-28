@@ -21,13 +21,12 @@
           <p class="text-[10px] font-black text-slate-400 uppercase">平台积分</p>
           <p class="text-2xl font-black text-slate-800">{{ (tenantInfo.credits || 0).toLocaleString() }} 积分</p>
         </div>
-        <el-button type="primary" class="!rounded-2xl px-6 h-12 font-bold ml-4" @click="handleRecharge">账户充值</el-button>
       </div>
     </div>
 
     <!-- 标签页内容 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-2">
-      <el-tabs v-model="activeTab" class="modern-tabs" @tab-change="handleTabChange">
+      <el-tabs v-model="activeTab" class="modern-tabs">
         <!-- 组织用户 Tab -->
         <el-tab-pane label="组织用户" name="orgUsers">
           <div class="p-4">
@@ -100,51 +99,6 @@
           </div>
         </el-tab-pane>
 
-        <!-- 接入应用 Tab -->
-        <el-tab-pane label="接入应用" name="apps">
-          <div class="p-4">
-            <div v-if="tenantAppsLoading" class="text-center py-12 text-slate-400">加载中...</div>
-            <template v-else>
-              <div v-if="tenantAppsIsAll" class="mb-4">
-                <el-tag type="success" class="!rounded-2xl font-bold">已授权全部应用</el-tag>
-              </div>
-              <el-empty v-if="tenantApps.length === 0" description="暂无接入的应用系统" />
-              <el-table v-else :data="tenantApps" border stripe class="modern-table">
-                <el-table-column prop="appKey" label="AppKey" min-width="180" show-overflow-tooltip />
-                <el-table-column prop="appName" label="应用名称" min-width="160" />
-                <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip>
-                  <template #default="{ row }">
-                    <span class="text-slate-400 text-xs" v-if="!row.description">—</span>
-                    <span v-else>{{ row.description }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="状态" width="90">
-                  <template #default="{ row }">
-                    <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small" class="rounded-2xl font-bold">
-                      {{ row.status === 1 ? '启用' : '禁用' }}
-                    </el-tag>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </template>
-          </div>
-        </el-tab-pane>
-
-        <!-- 财务流水 Tab -->
-        <el-tab-pane label="财务流水" name="transactions">
-          <div class="p-4">
-            <el-table :data="transactions" border stripe class="modern-table">
-              <el-table-column prop="transactionId" label="交易流水" />
-              <el-table-column label="积分" align="right">
-                <template #default="{ row }">
-                  <span class="font-black text-slate-700">{{ ((row.tenantCredits || 0) + (row.userCredits || 0)).toLocaleString() }} 积分</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="statusDisplay" label="状态" />
-              <el-table-column prop="createdTime" label="时间" />
-            </el-table>
-          </div>
-        </el-tab-pane>
       </el-tabs>
     </div>
 
@@ -169,23 +123,20 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { OfficeBuilding, Plus } from '@element-plus/icons-vue'
 import {
-  queryUsers, queryTransactions, queryTenants,
-  listTenantUsers, createTenantUser, disableTenantUser, enableTenantUser, resetTenantUserPassword,
-  listTenantApps
+  queryUsers, queryTenants,
+  listTenantUsers, createTenantUser, disableTenantUser, enableTenantUser, resetTenantUserPassword
 } from '@/api/tenant'
 
 const route = useRoute()
-const router = useRouter()
 const tenantId = route.params.id
 const activeTab = ref('orgUsers')
 
 const tenantInfo = ref({})
 const users = ref([])
-const transactions = ref([])
 
 // 组织用户
 const orgUsers = ref([])
@@ -200,16 +151,6 @@ const createOrgUserRules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }]
 }
 
-// 接入应用
-const tenantApps = ref([])
-const tenantAppsIsAll = ref(false)
-const tenantAppsLoading = ref(false)
-const tenantAppsLoaded = ref(false)
-
-const handleRecharge = () => {
-  router.push(`/finance/recharge?tenantId=${tenantId}&tenantName=${encodeURIComponent(tenantInfo.value.tenantName || '')}`)
-}
-
 const fetchTenantInfo = async () => {
   const data = await queryTenants({ tenantId })
   if (data.records && data.records.length > 0) {
@@ -222,11 +163,6 @@ const fetchUsers = async () => {
   users.value = data.records
 }
 
-const fetchTransactions = async () => {
-  const data = await queryTransactions({ accountId: tenantId, page: 1, size: 20 })
-  transactions.value = data.records
-}
-
 const fetchOrgUsers = async () => {
   orgUsersLoading.value = true
   try {
@@ -235,25 +171,6 @@ const fetchOrgUsers = async () => {
     orgUserPagination.total = data.total || 0
   } finally {
     orgUsersLoading.value = false
-  }
-}
-
-const fetchTenantApps = async () => {
-  if (tenantAppsLoaded.value) return
-  tenantAppsLoading.value = true
-  try {
-    const data = await listTenantApps({ tenantId })
-    tenantApps.value = data.apps || []
-    tenantAppsIsAll.value = data.isAll || false
-    tenantAppsLoaded.value = true
-  } finally {
-    tenantAppsLoading.value = false
-  }
-}
-
-const handleTabChange = (tab) => {
-  if (tab === 'apps') {
-    fetchTenantApps()
   }
 }
 
@@ -320,7 +237,6 @@ const formatTime = (ts) => {
 onMounted(() => {
   fetchTenantInfo()
   fetchUsers()
-  fetchTransactions()
   fetchOrgUsers()
 })
 </script>

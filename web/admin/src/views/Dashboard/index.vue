@@ -1,397 +1,395 @@
-<template>
-  <div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-    <!-- 顶部：标题 + 时间筛选 + 刷新 -->
-    <div class="bg-white p-6 rounded-3xl border border-slate-50 shadow-soft flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-          URM 系统概览
-          <span class="px-2 py-1 bg-primary-50 text-primary-600 text-[10px] font-black uppercase rounded-2xl tracking-widest">Live</span>
-        </h1>
-        <p class="text-slate-400 text-sm font-medium mt-1">实时资产计费监控看板</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <!-- 时间段选择 -->
-        <div class="flex items-center bg-slate-50 rounded-2xl p-1 gap-1">
-          <button
-            v-for="opt in DAY_OPTIONS" :key="opt.value"
-            @click="handleDaysChange(opt.value)"
-            class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-            :class="selectedDays === opt.value
-              ? 'bg-white text-primary-600 shadow-sm'
-              : 'text-slate-400 hover:text-slate-600'"
-          >{{ opt.label }}</button>
-        </div>
-        <!-- 自动刷新状态 -->
-        <div class="flex items-center bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100">
-          <div class="w-2 h-2 rounded-full mr-2 bg-emerald-500 animate-pulse"></div>
-          <span class="text-xs font-bold text-slate-500">{{ countdown }}s</span>
-        </div>
-        <el-button type="primary" class="!rounded-2xl !px-5 font-bold" :loading="loading" @click="fetchAll">
-          <el-icon class="mr-1"><Refresh /></el-icon>刷新
-        </el-button>
-      </div>
-    </div>
-
-    <!-- ① 平台 → 租户（平台积分体系） -->
-    <div class="space-y-3">
-      <div class="flex items-center gap-2 px-1">
-        <div class="w-1 h-4 bg-indigo-500 rounded-full"></div>
-        <span class="text-xs font-black text-slate-500 uppercase tracking-widest">平台 → 租户（平台积分体系）</span>
-        <span class="text-[10px] text-slate-300 font-medium">充值类数据为{{ periodLabel }}汇总，余额为当前实时值</span>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">租户充值金额</p>
-          <h3 class="text-2xl font-black text-slate-800 tracking-tighter">
-            ¥ {{ fmtYuan(stats.tenantRechargeAmount) }}
-          </h3>
-          <p class="text-[10px] text-indigo-500 font-bold mt-2">{{ periodLabel }}平台向租户实收</p>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">租户充值积分</p>
-          <h3 class="text-2xl font-black text-slate-800 tracking-tighter">
-            {{ fmtNum(stats.tenantRechargeCredits) }} <span class="text-sm text-slate-400">积分</span>
-          </h3>
-          <p class="text-[10px] text-indigo-500 font-bold mt-2">{{ periodLabel }}向租户发放</p>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">活跃租户数</p>
-          <h3 class="text-2xl font-black text-slate-800 tracking-tighter">
-            {{ stats.activeTenants }} <span class="text-sm text-slate-400">个</span>
-          </h3>
-          <p class="text-[10px] text-slate-400 font-bold mt-2">当前状态正常的租户</p>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">租户积分余额</p>
-          <h3 class="text-2xl font-black text-indigo-600 tracking-tighter">
-            {{ fmtNum(stats.tenantTotalCredits) }} <span class="text-sm text-slate-400">积分</span>
-          </h3>
-          <p class="text-[10px] text-slate-400 font-bold mt-2">所有租户当前余额合计</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- ② 租户 → 用户（用户积分体系） -->
-    <div class="space-y-3">
-      <div class="flex items-center gap-2 px-1">
-        <div class="w-1 h-4 bg-emerald-500 rounded-full"></div>
-        <span class="text-xs font-black text-slate-500 uppercase tracking-widest">租户 → 用户（用户积分体系）</span>
-        <span class="text-[10px] text-slate-300 font-medium">充值类数据为{{ periodLabel }}汇总，余额为当前实时值</span>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">用户充值金额</p>
-          <h3 class="text-2xl font-black text-slate-800 tracking-tighter">
-            ¥ {{ fmtYuan(stats.userRechargeAmount) }}
-          </h3>
-          <p class="text-[10px] text-emerald-500 font-bold mt-2">{{ periodLabel }}租户向用户实收</p>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">用户充值积分</p>
-          <h3 class="text-2xl font-black text-slate-800 tracking-tighter">
-            {{ fmtNum(stats.userRechargeCredits) }} <span class="text-sm text-slate-400">积分</span>
-          </h3>
-          <p class="text-[10px] text-emerald-500 font-bold mt-2">{{ periodLabel }}向用户发放</p>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">新增终端用户</p>
-          <h3 class="text-2xl font-black text-slate-800 tracking-tighter">
-            {{ fmtNum(stats.newUsers) }} <span class="text-sm text-slate-400">名</span>
-          </h3>
-          <p class="text-[10px] text-emerald-500 font-bold mt-2">{{ periodLabel }}注册用户数</p>
-        </div>
-        <div class="bg-white p-5 rounded-3xl border border-slate-50 shadow-soft">
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">用户积分余额</p>
-          <h3 class="text-2xl font-black text-emerald-600 tracking-tighter">
-            {{ fmtNum(stats.userTotalCredits) }} <span class="text-sm text-slate-400">积分</span>
-          </h3>
-          <p class="text-[10px] text-slate-400 font-bold mt-2">所有用户当前余额合计</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- ③ 消费趋势 + 运营告警 -->
-    <div class="grid grid-cols-12 gap-6">
-      <!-- 消费趋势图 -->
-      <div class="col-span-12 lg:col-span-8">
-        <div class="bg-white p-8 rounded-2xl border border-slate-50 shadow-soft">
-          <div class="flex items-center justify-between mb-6">
-            <div>
-              <h3 class="text-base font-bold text-slate-800">资产消费趋势</h3>
-              <p class="text-xs text-slate-400 mt-0.5">{{ periodLabel }}业务流水扣减曲线</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <el-select v-model="trendAccountType" style="width:110px" class="modern-select" size="small" @change="fetchTrend">
-                <el-option label="全部" value="" />
-                <el-option label="租户" value="1" />
-                <el-option label="终端用户" value="2" />
-              </el-select>
-            </div>
-          </div>
-          <div v-loading="trendLoading">
-            <div ref="trendChartRef" style="width:100%;height:320px" />
-          </div>
-        </div>
-      </div>
-
-      <!-- 运营告警 -->
-      <div class="col-span-12 lg:col-span-4">
-        <AlertList
-          class="h-full"
-          :timeout-pre-auths="alerts.timeoutPreAuths"
-          :failed-transactions="alerts.failedTransactions"
-        />
-      </div>
-    </div>
-
-    <!-- ④ 业务系统消耗分布 -->
-    <div class="bg-white p-8 rounded-2xl border border-slate-50 shadow-soft">
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <h3 class="text-base font-bold text-slate-800">业务系统消耗分布</h3>
-          <p class="text-xs text-slate-400 mt-0.5">{{ periodLabel }}各业务系统消耗分布</p>
-        </div>
-      </div>
-      <div v-loading="resourceLoading" class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        <div ref="resourceChartRef" class="lg:col-span-7" style="height:360px" />
-        <div class="lg:col-span-5 space-y-3">
-          <div
-            v-for="(item, index) in resourceData?.resources"
-            :key="item.appKey || item.appName"
-            class="p-4 rounded-2xl bg-slate-50 flex items-center justify-between"
-          >
-            <div class="flex items-center gap-3">
-              <span class="w-3 h-3 rounded-full flex-shrink-0" :style="{ backgroundColor: COLORS[index % COLORS.length] }"></span>
-              <span class="text-sm font-bold text-slate-700">{{ item.appName || '—' }}</span>
-            </div>
-            <div class="text-right">
-              <p class="text-sm font-black text-slate-800">{{ fmtNum(item.credits) }} <span class="text-xs text-slate-400">积分</span></p>
-              <p class="text-[10px] text-slate-400 font-bold">{{ item.percentage }}%</p>
-            </div>
-          </div>
-          <div v-if="!resourceData?.resources?.length" class="text-center text-xs text-slate-300 py-8">暂无消耗数据</div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</template>
-
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
-import { getGlobalStats, getConsumptionTrend, getResourceStatistics } from '@/api/dashboard'
-import { getDashboardAlerts } from '@/api/dashboard'
-import AlertList from '@/components/AlertList.vue'
-
-const COLORS = ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#4f46e5', '#4338ca']
+import {
+  formatCredits,
+  formatTimestamp,
+  getDashboardSummary,
+  listDashboardRecentErrors,
+  listDashboardTopModels,
+  listDashboardTopTenants
+} from '@/api/aiGateway'
 
 const DAY_OPTIONS = [
+  { label: '近24小时', value: 1 },
   { label: '近7天', value: 7 },
   { label: '近30天', value: 30 },
   { label: '近90天', value: 90 },
-  { label: '全部', value: 0 },
+  { label: '全部', value: 0 }
 ]
 
-const selectedDays = ref(30)
-const trendAccountType = ref('')
-const loading = ref(false)
-const trendLoading = ref(false)
-const resourceLoading = ref(false)
+const selectedDays = shallowRef(1)
+const loading = shallowRef(false)
+const topModels = shallowRef([])
+const topTenants = shallowRef([])
+const recentErrors = shallowRef([])
 
-const stats = reactive({
-  tenantRechargeAmount: 0,
-  tenantRechargeCredits: 0,
-  activeTenants: 0,
-  tenantTotalCredits: 0,
-  userRechargeAmount: 0,
-  userRechargeCredits: 0,
-  newUsers: 0,
-  userTotalCredits: 0,
+const summary = reactive({
+  request_count: 0,
+  success_count: 0,
+  active_tenant_count: 0,
+  active_api_key_count: 0,
+  total_tokens: 0,
+  image_count: 0,
+  provider_cost: 0,
+  platform_cost: 0,
+  user_cost: 0,
+  api_key_quota_cost: 0,
+  avg_latency_ms: 0,
+  error_count: 0
 })
 
-const alerts = reactive({
-  timeoutPreAuths: [],
-  failedTransactions: [],
+const periodLabel = computed(() => DAY_OPTIONS.find((item) => item.value === selectedDays.value)?.label || '近24小时')
+
+const successRate = computed(() => {
+  const requests = Number(summary.request_count) || 0
+  if (requests === 0) return '0%'
+  return `${((Number(summary.success_count) || 0) * 100 / requests).toFixed(1)}%`
 })
 
-const trendData = ref(null)
-const resourceData = ref(null)
-
-const trendChartRef = ref(null)
-const resourceChartRef = ref(null)
-let trendChart = null
-let resourceChart = null
-
-// ── 计算属性 ──────────────────────────────────────────
-const periodLabel = computed(() => {
-  const map = { 7: '近7天', 30: '近30天', 90: '近90天', 0: '全部' }
-  return map[selectedDays.value] ?? '近30天'
-})
-
-const fmtYuan = (cents) =>
-  ((cents || 0) / 100).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-
-const fmtNum = (n) => (n || 0).toLocaleString()
-
-// ── 数据加载 ──────────────────────────────────────────
-const fetchStats = async () => {
-  const data = await getGlobalStats({ days: selectedDays.value })
-  Object.assign(stats, data)
+const capabilityLabel = (capability) => {
+  const map = {
+    chat: '文本',
+    embedding: 'Embedding',
+    image: '图片',
+    video: '视频',
+    audio: '音频',
+    rerank: '重排'
+  }
+  return map[capability] || capability || '-'
 }
 
-const fetchAlerts = async () => {
-  try {
-    const data = await getDashboardAlerts()
-    alerts.timeoutPreAuths = Array.isArray(data?.timeoutPreAuths) ? data.timeoutPreAuths : []
-    alerts.failedTransactions = Array.isArray(data?.failedTransactions) ? data.failedTransactions : []
-  } catch {
-    alerts.timeoutPreAuths = []
-    alerts.failedTransactions = []
-  }
-}
-
-const fetchTrend = async () => {
-  trendLoading.value = true
-  try {
-    const params = { days: selectedDays.value }
-    if (trendAccountType.value) params.accountType = trendAccountType.value
-    const res = await getConsumptionTrend(params)
-    trendData.value = res
-    updateTrendChart(res)
-  } finally {
-    trendLoading.value = false
-  }
-}
-
-const fetchResource = async () => {
-  resourceLoading.value = true
-  try {
-    const res = await getResourceStatistics({ days: selectedDays.value })
-    resourceData.value = res
-    updateResourceChart(res)
-  } finally {
-    resourceLoading.value = false
-  }
+const statusType = (status) => {
+  const map = { success: 'success', failed: 'danger', rejected: 'warning', partial: 'warning' }
+  return map[status] || 'info'
 }
 
 const fetchAll = async () => {
   loading.value = true
   try {
-    await Promise.all([fetchStats(), fetchAlerts(), fetchTrend(), fetchResource()])
+    const params = { days: selectedDays.value }
+    const [nextSummary, nextModels, nextTenants, nextErrors] = await Promise.all([
+      getDashboardSummary(params),
+      listDashboardTopModels({ ...params, limit: 8 }),
+      listDashboardTopTenants({ ...params, limit: 8 }),
+      listDashboardRecentErrors({ ...params, limit: 8 })
+    ])
+    Object.assign(summary, nextSummary || {})
+    topModels.value = nextModels || []
+    topTenants.value = nextTenants || []
+    recentErrors.value = nextErrors || []
   } finally {
     loading.value = false
   }
 }
 
-const handleDaysChange = (val) => {
-  selectedDays.value = val
+const handleDaysChange = (days) => {
+  selectedDays.value = days
   fetchAll()
 }
 
-// ── 图表 ──────────────────────────────────────────────
-const updateTrendChart = (data) => {
-  if (!trendChart) return
-  trendChart.setOption({
-    grid: { left: '2%', right: '2%', bottom: '3%', top: '8%', containLabel: true },
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(255,255,255,0.95)',
-      borderRadius: 12,
-      padding: 12,
-      textStyle: { color: '#1e293b', fontWeight: 600, fontSize: 12 },
-      shadowBlur: 10,
-      shadowColor: 'rgba(0,0,0,0.05)',
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: (data?.dataPoints || []).map(p => p.timeLabel),
-      axisLine: { lineStyle: { color: '#f1f5f9' } },
-      axisLabel: { color: '#94a3b8', fontSize: 11, fontWeight: 600 },
-    },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' } },
-      axisLabel: { color: '#94a3b8', fontSize: 11, fontWeight: 600 },
-    },
-    series: [{
-      type: 'line',
-      smooth: 0.4,
-      showSymbol: false,
-      data: (data?.dataPoints || []).map(p => p.credits || 0),
-      lineStyle: { width: 4, color: '#6366f1' },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: 'rgba(99,102,241,0.15)' },
-          { offset: 1, color: 'rgba(99,102,241,0)' },
-        ]),
-      },
-    }],
-  })
-}
-
-const updateResourceChart = (data) => {
-  if (!resourceChart) return
-  resourceChart.setOption({
-    color: COLORS,
-    tooltip: { trigger: 'item' },
-    series: [{
-      type: 'pie',
-      radius: ['50%', '80%'],
-      center: ['50%', '50%'],
-      avoidLabelOverlap: false,
-      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 4 },
-      label: { show: false },
-      data: (data?.resources || []).map(r => ({ name: r.appName, value: r.credits || 0 })),
-    }],
-  })
-}
-
-const handleResize = () => {
-  trendChart?.resize()
-  resourceChart?.resize()
-}
-
-// ── 自动刷新 ──────────────────────────────────────────
-const countdown = ref(30)
-let countdownTimer = null
-let refreshTimer = null
-
-const startAutoRefresh = () => {
-  countdown.value = 30
-  countdownTimer = setInterval(() => {
-    countdown.value--
-    if (countdown.value <= 0) countdown.value = 30
-  }, 1000)
-  refreshTimer = setInterval(fetchAll, 30000)
-}
-
-// ── 生命周期 ──────────────────────────────────────────
-onMounted(() => {
-  if (trendChartRef.value) trendChart = echarts.init(trendChartRef.value)
-  if (resourceChartRef.value) resourceChart = echarts.init(resourceChartRef.value)
-  fetchAll()
-  startAutoRefresh()
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  clearInterval(countdownTimer)
-  clearInterval(refreshTimer)
-  window.removeEventListener('resize', handleResize)
-  trendChart?.dispose()
-  resourceChart?.dispose()
-})
+onMounted(fetchAll)
 </script>
 
+<template>
+  <div class="page-container space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <section class="page-head">
+      <div>
+        <p class="eyebrow">Uni AI API</p>
+        <h1>AI Gateway 业务概览</h1>
+        <p class="subtitle">基于调用日志统计请求、积分消耗、模型热度和上游异常。</p>
+      </div>
+      <div class="head-actions">
+        <div class="segmented">
+          <button
+            v-for="option in DAY_OPTIONS"
+            :key="option.value"
+            class="segment-button"
+            :class="{ active: selectedDays === option.value }"
+            @click="handleDaysChange(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <el-button type="primary" :icon="Refresh" :loading="loading" @click="fetchAll">刷新</el-button>
+      </div>
+    </section>
+
+    <section v-loading="loading" class="metric-grid">
+      <div class="metric">
+        <span>请求数</span>
+        <strong>{{ formatCredits(summary.request_count) }}</strong>
+        <p>{{ periodLabel }}总调用</p>
+      </div>
+      <div class="metric">
+        <span>成功率</span>
+        <strong>{{ successRate }}</strong>
+        <p>{{ formatCredits(summary.success_count) }} 次成功</p>
+      </div>
+      <div class="metric">
+        <span>积分消耗</span>
+        <strong>{{ formatCredits(summary.api_key_quota_cost) }}</strong>
+        <p>按 Key 额度口径统计</p>
+      </div>
+      <div class="metric">
+        <span>Token</span>
+        <strong>{{ formatCredits(summary.total_tokens) }}</strong>
+        <p>Chat / Responses / Embedding</p>
+      </div>
+      <div class="metric">
+        <span>图片</span>
+        <strong>{{ formatCredits(summary.image_count) }}</strong>
+        <p>按 image_count 统计</p>
+      </div>
+      <div class="metric">
+        <span>活跃租户</span>
+        <strong>{{ formatCredits(summary.active_tenant_count) }}</strong>
+        <p>有调用记录的租户</p>
+      </div>
+      <div class="metric">
+        <span>活跃 Key</span>
+        <strong>{{ formatCredits(summary.active_api_key_count) }}</strong>
+        <p>产生调用的 API Key</p>
+      </div>
+      <div class="metric">
+        <span>异常数</span>
+        <strong>{{ formatCredits(summary.error_count) }}</strong>
+        <p>平均 {{ formatCredits(summary.avg_latency_ms) }} ms</p>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h2>Top 模型</h2>
+            <p>按积分消耗和请求量排序</p>
+          </div>
+        </div>
+        <el-table v-loading="loading" :data="topModels" border stripe class="w-full">
+          <el-table-column prop="model_code" label="模型" min-width="150" show-overflow-tooltip />
+          <el-table-column label="能力" width="100">
+            <template #default="{ row }">{{ capabilityLabel(row.capability_type) }}</template>
+          </el-table-column>
+          <el-table-column label="请求数" width="100" align="right">
+            <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
+          </el-table-column>
+          <el-table-column label="积分" width="110" align="right">
+            <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
+          </el-table-column>
+          <el-table-column label="Token" width="110" align="right">
+            <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="panel">
+        <div class="section-head">
+          <div>
+            <h2>Top 租户</h2>
+            <p>按积分消耗和请求量排序</p>
+          </div>
+        </div>
+        <el-table v-loading="loading" :data="topTenants" border stripe class="w-full">
+          <el-table-column prop="tenant_id" label="租户" min-width="170" show-overflow-tooltip />
+          <el-table-column label="请求数" width="100" align="right">
+            <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
+          </el-table-column>
+          <el-table-column label="活跃 Key" width="100" align="right">
+            <template #default="{ row }">{{ formatCredits(row.active_api_key_count) }}</template>
+          </el-table-column>
+          <el-table-column label="积分" width="110" align="right">
+            <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
+          </el-table-column>
+          <el-table-column label="图片" width="90" align="right">
+            <template #default="{ row }">{{ formatCredits(row.image_count) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <h2>最近错误</h2>
+          <p>用于快速定位上游失败、鉴权拒绝和计费异常。</p>
+        </div>
+      </div>
+      <el-table v-loading="loading" :data="recentErrors" border stripe class="w-full">
+        <el-table-column prop="created_at" label="时间" width="170">
+          <template #default="{ row }">{{ formatTimestamp(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column prop="tenant_id" label="租户" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="model_code" label="模型" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="provider_code" label="厂商" width="120" show-overflow-tooltip />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.request_status)" size="small">{{ row.request_status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="http_status" label="HTTP" width="90" align="right" />
+        <el-table-column prop="error_code" label="错误码" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="error_message" label="错误信息" min-width="260" show-overflow-tooltip />
+      </el-table>
+    </section>
+  </div>
+</template>
+
 <style scoped>
-:deep(.modern-select) .el-input__wrapper {
-  border-radius: 12px !important;
-  background-color: #f8fafc !important;
-  box-shadow: none !important;
-  border: 1px solid #f1f5f9 !important;
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.page-head h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 4px;
+}
+
+.segment-button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.segment-button.active {
+  background: #ffffff;
+  color: #4f46e5;
+  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.08);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric,
+.panel {
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.metric {
+  min-width: 0;
+  padding: 18px;
+}
+
+.metric span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.metric p {
+  margin: 8px 0 0;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.panel {
+  min-width: 0;
+  padding: 18px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-head h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.section-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .page-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .head-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .segmented {
+    overflow-x: auto;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

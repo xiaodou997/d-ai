@@ -9,9 +9,9 @@
       >
         <el-icon color="#fff" :size="20"><Management /></el-icon>
       </div>
-      <span class="text-xl font-bold tracking-tight text-slate-800"
-        >URM<span class="text-primary-500">控制台</span></span
-      >
+      <span class="text-xl font-bold tracking-tight text-slate-800">
+        Uni<span class="text-primary-500">AI API</span>
+      </span>
     </div>
 
     <!-- 菜单导航 -->
@@ -27,12 +27,6 @@
           <el-icon><Odometer /></el-icon>
           <span>控制概览</span>
         </el-menu-item>
-
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/account-overview">
-          <el-icon><Wallet /></el-icon>
-          <span>账户全景</span>
-        </el-menu-item>
-
         <!-- 业务管理 -->
         <div class="menu-divider">{{ authStore.isPlatformAdmin ? '业务管理' : '工作台' }}</div>
         <el-menu-item v-if="authStore.isPlatformAdmin" index="/tenants">
@@ -43,47 +37,9 @@
           <el-icon><User /></el-icon>
           <span>终端用户</span>
         </el-menu-item>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/apps">
-          <el-icon><Connection /></el-icon>
-          <span>应用系统</span>
-        </el-menu-item>
         <el-menu-item index="/ai-gateway">
           <el-icon><Cpu /></el-icon>
           <span>{{ authStore.isPlatformAdmin ? 'AI 网关' : '我的 AI 网关' }}</span>
-        </el-menu-item>
-
-        <!-- 财务中心 -->
-        <div v-if="authStore.isPlatformAdmin" class="menu-divider">财务中心</div>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/recharge-records">
-          <el-icon><List /></el-icon>
-          <span>充值记录</span>
-        </el-menu-item>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/transactions">
-          <el-icon><DataLine /></el-icon>
-          <span>交易流水</span>
-        </el-menu-item>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/tenant/grant-logs">
-          <el-icon><Present /></el-icon>
-          <span>租户补发记录</span>
-        </el-menu-item>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/finance/user/grant-logs">
-          <el-icon><Present /></el-icon>
-          <span>用户补发记录</span>
-        </el-menu-item>
-
-        <!-- 系统审计 -->
-        <div v-if="authStore.isPlatformAdmin" class="menu-divider">系统审计</div>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/system/audit-log">
-          <el-icon><DocumentChecked /></el-icon>
-          <span>操作日志</span>
-        </el-menu-item>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/system/admins">
-          <el-icon><Stamp /></el-icon>
-          <span>平台管理员</span>
-        </el-menu-item>
-        <el-menu-item v-if="authStore.isPlatformAdmin" index="/system/jwt-keys">
-          <el-icon><Key /></el-icon>
-          <span>JWT 密钥</span>
         </el-menu-item>
       </el-menu>
     </nav>
@@ -119,15 +75,7 @@ import {
   Odometer,
   OfficeBuilding,
   User,
-  Connection,
   Cpu,
-  List,
-  DataLine,
-  Present,
-  Wallet,
-  DocumentChecked,
-  Stamp,
-  Key,
   SwitchButton
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -136,7 +84,7 @@ import { ElMessageBox, ElMessage } from 'element-plus'
 const authStore = useAuthStore()
 
 const handleLogout = () => {
-  ElMessageBox.confirm('您确定要退出 URM 控制台吗？', '提示', {
+  ElMessageBox.confirm('您确定要退出 Uni AI API 管理后台吗？', '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',

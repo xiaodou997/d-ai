@@ -308,7 +308,7 @@ func adminRequestAllowed(admin adminContext, method string, path string) bool {
 	if len(parts) < 2 || parts[0] != "admin" {
 		return false
 	}
-	if method == http.MethodGet && (parts[1] == "usage-logs" || parts[1] == "usage-summary") {
+	if method == http.MethodGet && (parts[1] == "usage-logs" || parts[1] == "usage-summary" || parts[1] == "dashboard") {
 		return true
 	}
 	if len(parts) >= 3 && parts[1] == "tenants" {
@@ -1770,11 +1770,148 @@ func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Requ
 	writeAdminJSON(w, http.StatusOK, rows)
 }
 
+func (s *Server) handleAdminDashboardSummary(w http.ResponseWriter, r *http.Request) {
+	params, ok := scopedDashboardParams(w, r)
+	if !ok {
+		return
+	}
+	row, err := s.queries.GetDashboardSummary(r.Context(), dbgen.GetDashboardSummaryParams{
+		TenantID: optionalTextValue(params.tenantID),
+		UserID:   optionalTextValue(params.userID),
+		Since:    params.since,
+	})
+	if err != nil {
+		s.writeAdminServerError(w, r, "get dashboard summary failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
+}
+
+func (s *Server) handleAdminDashboardTopModels(w http.ResponseWriter, r *http.Request) {
+	params, ok := scopedDashboardParams(w, r)
+	if !ok {
+		return
+	}
+	limit, ok := parseAdminLimit(w, r, 10, 50)
+	if !ok {
+		return
+	}
+	rows, err := s.queries.ListDashboardTopModels(r.Context(), dbgen.ListDashboardTopModelsParams{
+		TenantID: optionalTextValue(params.tenantID),
+		UserID:   optionalTextValue(params.userID),
+		Since:    params.since,
+		Limit:    limit,
+	})
+	if err != nil {
+		s.writeAdminServerError(w, r, "list dashboard top models failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) handleAdminDashboardTopTenants(w http.ResponseWriter, r *http.Request) {
+	params, ok := scopedDashboardParams(w, r)
+	if !ok {
+		return
+	}
+	limit, ok := parseAdminLimit(w, r, 10, 50)
+	if !ok {
+		return
+	}
+	rows, err := s.queries.ListDashboardTopTenants(r.Context(), dbgen.ListDashboardTopTenantsParams{
+		TenantID: optionalTextValue(params.tenantID),
+		UserID:   optionalTextValue(params.userID),
+		Since:    params.since,
+		Limit:    limit,
+	})
+	if err != nil {
+		s.writeAdminServerError(w, r, "list dashboard top tenants failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) handleAdminDashboardRecentErrors(w http.ResponseWriter, r *http.Request) {
+	params, ok := scopedDashboardParams(w, r)
+	if !ok {
+		return
+	}
+	limit, ok := parseAdminLimit(w, r, 10, 50)
+	if !ok {
+		return
+	}
+	rows, err := s.queries.ListDashboardRecentErrors(r.Context(), dbgen.ListDashboardRecentErrorsParams{
+		TenantID: optionalTextValue(params.tenantID),
+		UserID:   optionalTextValue(params.userID),
+		Since:    params.since,
+		Limit:    limit,
+	})
+	if err != nil {
+		s.writeAdminServerError(w, r, "list dashboard recent errors failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, rows)
+}
+
 type usageFilters struct {
 	tenantID      string
 	userID        string
 	modelCode     string
 	requestStatus string
+}
+
+type dashboardParams struct {
+	tenantID string
+	userID   string
+	since    pgtype.Timestamptz
+}
+
+func scopedDashboardParams(w http.ResponseWriter, r *http.Request) (dashboardParams, bool) {
+	filters, ok := scopedUsageFilters(w, r)
+	if !ok {
+		return dashboardParams{}, false
+	}
+	since, ok := parseDashboardSince(w, r)
+	if !ok {
+		return dashboardParams{}, false
+	}
+	return dashboardParams{
+		tenantID: filters.tenantID,
+		userID:   filters.userID,
+		since:    since,
+	}, true
+}
+
+func parseDashboardSince(w http.ResponseWriter, r *http.Request) (pgtype.Timestamptz, bool) {
+	raw := r.URL.Query().Get("days")
+	if raw == "" {
+		raw = "1"
+	}
+	days, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || days < 0 || days > 3650 {
+		writeAdminError(w, http.StatusBadRequest, "invalid days")
+		return pgtype.Timestamptz{}, false
+	}
+	if days == 0 {
+		return pgtype.Timestamptz{}, true
+	}
+	return pgtype.Timestamptz{Time: time.Now().UTC().AddDate(0, 0, -int(days)), Valid: true}, true
+}
+
+func parseAdminLimit(w http.ResponseWriter, r *http.Request, defaultLimit int32, maxLimit int32) (int32, bool) {
+	limit := defaultLimit
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || parsed <= 0 {
+			writeAdminError(w, http.StatusBadRequest, "invalid limit")
+			return 0, false
+		}
+		if parsed > int64(maxLimit) {
+			parsed = int64(maxLimit)
+		}
+		limit = int32(parsed)
+	}
+	return limit, true
 }
 
 func scopedUsageFilters(w http.ResponseWriter, r *http.Request) (usageFilters, bool) {

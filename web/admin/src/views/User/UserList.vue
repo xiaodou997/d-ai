@@ -65,17 +65,6 @@
             <span class="text-xs text-slate-400">{{ formatTime(row.createdTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="100">
-          <template #default="{ row }">
-            <el-button 
-              link 
-              :type="row.status === 1 ? 'warning' : 'success'"
-              @click="handleToggleStatus(row)"
-            >
-              {{ row.status === 1 ? '禁用' : '启用' }}
-            </el-button>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div class="p-6 border-t border-slate-50 flex justify-end">
@@ -94,38 +83,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { queryUsers, disableEndUser, enableEndUser } from '@/api/tenant'
+import { ElMessage } from 'element-plus'
+import { queryUsers } from '@/api/tenant'
 
 const queryForm = reactive({ tenantId: '', userId: '', username: '', status: '' })
 const pagination = reactive({ page: 1, size: 15, total: 0 })
 const tableData = ref([])
 const loading = ref(false)
-
-const handleToggleStatus = async (row) => {
-  const targetStatus = row.status === 1 ? 2 : 1
-  const actionText = targetStatus === 1 ? '启用' : '禁用'
-  
-  try {
-    await ElMessageBox.confirm(`确定要${actionText}该用户吗？`, '状态变更确认', { 
-      confirmButtonText: `立即${actionText}`,
-      cancelButtonText: '取消',
-      type: 'warning',
-      roundButton: true
-    })
-    
-    if (targetStatus === 2) {
-      await disableEndUser(row.userId)
-    } else {
-      await enableEndUser(row.userId)
-    }
-    
-    ElMessage.success(`${actionText}成功`)
-    fetchData()
-  } catch (error) {
-    if (error !== 'cancel') ElMessage.error(`${actionText}失败`)
-  }
-}
 
 const getStatusTag = (status) => {
   const map = { 1: 'success', 2: 'info', 3: 'danger', 4: 'warning' }

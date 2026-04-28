@@ -234,6 +234,22 @@ export function listUsageSummary(params) {
   return gatewayRequest.get('/admin/usage-summary', { params })
 }
 
+export function getDashboardSummary(params) {
+  return gatewayRequest.get('/admin/dashboard/summary', { params })
+}
+
+export function listDashboardTopModels(params) {
+  return gatewayRequest.get('/admin/dashboard/top-models', { params })
+}
+
+export function listDashboardTopTenants(params) {
+  return gatewayRequest.get('/admin/dashboard/top-tenants', { params })
+}
+
+export function listDashboardRecentErrors(params) {
+  return gatewayRequest.get('/admin/dashboard/recent-errors', { params })
+}
+
 export function listRuntimeLimitPolicies(params) {
   return gatewayRequest.get('/admin/limit-policies', { params })
 }

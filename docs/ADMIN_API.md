@@ -13,6 +13,26 @@ If both `security.adminToken` and URM are empty, admin routes are open for local
 
 The current database source of truth is `backend/migrations/00001_init.sql`. This iteration intentionally changes the initial schema; rebuild local databases from scratch before using the seed.
 
+## Dashboard
+
+The business dashboard is AI Gateway scoped. It does not read URM recharge, grant, transaction, platform-admin, JWT-key, or system-application data.
+
+```bash
+curl 'http://127.0.0.1:13010/admin/dashboard/summary?days=1' \
+  -H 'X-Admin-Token: local-admin-token'
+
+curl 'http://127.0.0.1:13010/admin/dashboard/top-models?days=7&limit=10' \
+  -H 'X-Admin-Token: local-admin-token'
+
+curl 'http://127.0.0.1:13010/admin/dashboard/top-tenants?days=7&limit=10' \
+  -H 'X-Admin-Token: local-admin-token'
+
+curl 'http://127.0.0.1:13010/admin/dashboard/recent-errors?days=7&limit=10' \
+  -H 'X-Admin-Token: local-admin-token'
+```
+
+`days=0` means all time. Tenant and user roles are automatically scoped by backend authorization.
+
 ## Providers
 
 Create provider:

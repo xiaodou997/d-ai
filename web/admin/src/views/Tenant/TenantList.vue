@@ -64,10 +64,9 @@
             <span class="text-xs text-slate-400">{{ formatTime(row.createdTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="240">
+        <el-table-column label="操作" fixed="right" width="190">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-button link type="success" @click="handleRecharge(row)">充值</el-button>
             <el-button
               link
               :type="row.status === 1 ? 'warning' : 'success'"
@@ -126,21 +125,6 @@
         <!-- 创建时才显示以下选项 -->
         <template v-if="!isEdit">
           <el-divider content-position="left" class="!my-4">
-            <span class="text-xs text-slate-400">关联应用（可选）</span>
-          </el-divider>
-          <el-form-item prop="appKeys">
-            <el-select v-model="form.appKeys" multiple placeholder="选择可访问的应用系统，不选则不关联" class="w-full" clearable>
-              <el-option label="全部应用（ALL）" value="ALL" />
-              <el-option
-                v-for="app in availableApps"
-                :key="app.appKey"
-                :label="app.appName"
-                :value="app.appKey"
-              />
-            </el-select>
-          </el-form-item>
-
-          <el-divider content-position="left" class="!my-4">
             <span class="text-xs text-slate-400">初始管理员账号（可选）</span>
           </el-divider>
           <div class="grid grid-cols-2 gap-4">
@@ -168,17 +152,12 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
 import { queryTenants, createTenant, updateTenant, deleteTenant, disableTenant, enableTenant } from '@/api/tenant'
-import { getApps } from '@/api/apps'
-
-const router = useRouter()
 
 const queryForm = reactive({ keyword: '', status: '' })
 const pagination = reactive({ page: 1, size: 15, total: 0 })
 const tableData = ref([])
 const loading = ref(false)
-const availableApps = ref([])
 
 // 表单相关
 const dialogVisible = ref(false)
@@ -232,17 +211,6 @@ const handleCreate = () => {
   isEdit.value = false
   Object.assign(form, { tenantId: '', tenantName: '', contactPerson: '', contactEmail: '', status: 1, appKeys: [], initUsername: '', initEmail: '' })
   dialogVisible.value = true
-}
-
-const handleRecharge = (row) => {
-  router.push({ path: '/finance/recharge', query: { tenantId: row.tenantId, tenantName: row.tenantName } })
-}
-
-const loadApps = async () => {
-  try {
-    const data = await getApps({ page: 1, size: 100 })
-    availableApps.value = data.records || []
-  } catch {}
 }
 
 const handleEdit = (row) => {
@@ -315,7 +283,7 @@ const handleDelete = async (id) => {
   }
 }
 
-onMounted(() => { fetchData(); loadApps() })
+onMounted(fetchData)
 </script>
 
 <style scoped lang="scss">

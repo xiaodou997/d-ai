@@ -770,6 +770,67 @@ func (q *Queries) CreateUserAPIKey(ctx context.Context, arg CreateUserAPIKeyPara
 	return i, err
 }
 
+const getDashboardSummary = `-- name: GetDashboardSummary :one
+SELECT
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COUNT(DISTINCT tenant_id)::bigint AS active_tenant_count,
+  COUNT(DISTINCT api_key_id)::bigint AS active_api_key_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units) FILTER (WHERE billable_unit_type = 'image'), 0)::bigint AS image_count,
+  COALESCE(SUM(provider_cost), 0)::bigint AS provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS user_cost,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost,
+  COALESCE(AVG(latency_ms)::bigint, 0)::bigint AS avg_latency_ms,
+  COUNT(*) FILTER (WHERE request_status <> 'success')::bigint AS error_count
+FROM ai_usage_logs
+WHERE ($1::text IS NULL OR tenant_id = $1)
+  AND ($2::text IS NULL OR user_id = $2)
+  AND ($3::timestamptz IS NULL OR created_at >= $3)
+`
+
+type GetDashboardSummaryParams struct {
+	TenantID pgtype.Text        `json:"tenant_id"`
+	UserID   pgtype.Text        `json:"user_id"`
+	Since    pgtype.Timestamptz `json:"since"`
+}
+
+type GetDashboardSummaryRow struct {
+	RequestCount      int64 `json:"request_count"`
+	SuccessCount      int64 `json:"success_count"`
+	ActiveTenantCount int64 `json:"active_tenant_count"`
+	ActiveApiKeyCount int64 `json:"active_api_key_count"`
+	TotalTokens       int64 `json:"total_tokens"`
+	ImageCount        int64 `json:"image_count"`
+	ProviderCost      int64 `json:"provider_cost"`
+	PlatformCost      int64 `json:"platform_cost"`
+	UserCost          int64 `json:"user_cost"`
+	ApiKeyQuotaCost   int64 `json:"api_key_quota_cost"`
+	AvgLatencyMs      int64 `json:"avg_latency_ms"`
+	ErrorCount        int64 `json:"error_count"`
+}
+
+func (q *Queries) GetDashboardSummary(ctx context.Context, arg GetDashboardSummaryParams) (GetDashboardSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getDashboardSummary, arg.TenantID, arg.UserID, arg.Since)
+	var i GetDashboardSummaryRow
+	err := row.Scan(
+		&i.RequestCount,
+		&i.SuccessCount,
+		&i.ActiveTenantCount,
+		&i.ActiveApiKeyCount,
+		&i.TotalTokens,
+		&i.ImageCount,
+		&i.ProviderCost,
+		&i.PlatformCost,
+		&i.UserCost,
+		&i.ApiKeyQuotaCost,
+		&i.AvgLatencyMs,
+		&i.ErrorCount,
+	)
+	return i, err
+}
+
 const getFirstActiveProbeDeploymentForEndpoint = `-- name: GetFirstActiveProbeDeploymentForEndpoint :one
 SELECT
   d.id,
@@ -1224,6 +1285,228 @@ func (q *Queries) ListAdminModels(ctx context.Context) ([]AiModel, error) {
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardRecentErrors = `-- name: ListDashboardRecentErrors :many
+SELECT
+  created_at,
+  request_id,
+  tenant_id,
+  user_id,
+  model_code,
+  provider_code,
+  upstream_model,
+  request_status,
+  http_status,
+  upstream_status,
+  error_code,
+  error_message
+FROM ai_usage_logs
+WHERE request_status <> 'success'
+  AND ($1::text IS NULL OR tenant_id = $1)
+  AND ($2::text IS NULL OR user_id = $2)
+  AND ($3::timestamptz IS NULL OR created_at >= $3)
+ORDER BY created_at DESC
+LIMIT $4
+`
+
+type ListDashboardRecentErrorsParams struct {
+	TenantID pgtype.Text        `json:"tenant_id"`
+	UserID   pgtype.Text        `json:"user_id"`
+	Since    pgtype.Timestamptz `json:"since"`
+	Limit    int32              `json:"limit"`
+}
+
+type ListDashboardRecentErrorsRow struct {
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	RequestID      string             `json:"request_id"`
+	TenantID       string             `json:"tenant_id"`
+	UserID         pgtype.Text        `json:"user_id"`
+	ModelCode      string             `json:"model_code"`
+	ProviderCode   pgtype.Text        `json:"provider_code"`
+	UpstreamModel  pgtype.Text        `json:"upstream_model"`
+	RequestStatus  string             `json:"request_status"`
+	HttpStatus     pgtype.Int4        `json:"http_status"`
+	UpstreamStatus pgtype.Int4        `json:"upstream_status"`
+	ErrorCode      pgtype.Text        `json:"error_code"`
+	ErrorMessage   pgtype.Text        `json:"error_message"`
+}
+
+func (q *Queries) ListDashboardRecentErrors(ctx context.Context, arg ListDashboardRecentErrorsParams) ([]ListDashboardRecentErrorsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardRecentErrors,
+		arg.TenantID,
+		arg.UserID,
+		arg.Since,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDashboardRecentErrorsRow{}
+	for rows.Next() {
+		var i ListDashboardRecentErrorsRow
+		if err := rows.Scan(
+			&i.CreatedAt,
+			&i.RequestID,
+			&i.TenantID,
+			&i.UserID,
+			&i.ModelCode,
+			&i.ProviderCode,
+			&i.UpstreamModel,
+			&i.RequestStatus,
+			&i.HttpStatus,
+			&i.UpstreamStatus,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardTopModels = `-- name: ListDashboardTopModels :many
+SELECT
+  model_code,
+  capability_type,
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units), 0)::bigint AS billable_units,
+  COALESCE(SUM(billable_units) FILTER (WHERE billable_unit_type = 'image'), 0)::bigint AS image_count,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost
+FROM ai_usage_logs
+WHERE ($1::text IS NULL OR tenant_id = $1)
+  AND ($2::text IS NULL OR user_id = $2)
+  AND ($3::timestamptz IS NULL OR created_at >= $3)
+GROUP BY model_code, capability_type
+ORDER BY api_key_quota_cost DESC, request_count DESC, model_code ASC
+LIMIT $4
+`
+
+type ListDashboardTopModelsParams struct {
+	TenantID pgtype.Text        `json:"tenant_id"`
+	UserID   pgtype.Text        `json:"user_id"`
+	Since    pgtype.Timestamptz `json:"since"`
+	Limit    int32              `json:"limit"`
+}
+
+type ListDashboardTopModelsRow struct {
+	ModelCode       string `json:"model_code"`
+	CapabilityType  string `json:"capability_type"`
+	RequestCount    int64  `json:"request_count"`
+	SuccessCount    int64  `json:"success_count"`
+	TotalTokens     int64  `json:"total_tokens"`
+	BillableUnits   int64  `json:"billable_units"`
+	ImageCount      int64  `json:"image_count"`
+	ApiKeyQuotaCost int64  `json:"api_key_quota_cost"`
+}
+
+func (q *Queries) ListDashboardTopModels(ctx context.Context, arg ListDashboardTopModelsParams) ([]ListDashboardTopModelsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardTopModels,
+		arg.TenantID,
+		arg.UserID,
+		arg.Since,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDashboardTopModelsRow{}
+	for rows.Next() {
+		var i ListDashboardTopModelsRow
+		if err := rows.Scan(
+			&i.ModelCode,
+			&i.CapabilityType,
+			&i.RequestCount,
+			&i.SuccessCount,
+			&i.TotalTokens,
+			&i.BillableUnits,
+			&i.ImageCount,
+			&i.ApiKeyQuotaCost,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardTopTenants = `-- name: ListDashboardTopTenants :many
+SELECT
+  tenant_id,
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COUNT(DISTINCT api_key_id)::bigint AS active_api_key_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units) FILTER (WHERE billable_unit_type = 'image'), 0)::bigint AS image_count,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost
+FROM ai_usage_logs
+WHERE ($1::text IS NULL OR tenant_id = $1)
+  AND ($2::text IS NULL OR user_id = $2)
+  AND ($3::timestamptz IS NULL OR created_at >= $3)
+GROUP BY tenant_id
+ORDER BY api_key_quota_cost DESC, request_count DESC, tenant_id ASC
+LIMIT $4
+`
+
+type ListDashboardTopTenantsParams struct {
+	TenantID pgtype.Text        `json:"tenant_id"`
+	UserID   pgtype.Text        `json:"user_id"`
+	Since    pgtype.Timestamptz `json:"since"`
+	Limit    int32              `json:"limit"`
+}
+
+type ListDashboardTopTenantsRow struct {
+	TenantID          string `json:"tenant_id"`
+	RequestCount      int64  `json:"request_count"`
+	SuccessCount      int64  `json:"success_count"`
+	ActiveApiKeyCount int64  `json:"active_api_key_count"`
+	TotalTokens       int64  `json:"total_tokens"`
+	ImageCount        int64  `json:"image_count"`
+	ApiKeyQuotaCost   int64  `json:"api_key_quota_cost"`
+}
+
+func (q *Queries) ListDashboardTopTenants(ctx context.Context, arg ListDashboardTopTenantsParams) ([]ListDashboardTopTenantsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardTopTenants,
+		arg.TenantID,
+		arg.UserID,
+		arg.Since,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDashboardTopTenantsRow{}
+	for rows.Next() {
+		var i ListDashboardTopTenantsRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.RequestCount,
+			&i.SuccessCount,
+			&i.ActiveApiKeyCount,
+			&i.TotalTokens,
+			&i.ImageCount,
+			&i.ApiKeyQuotaCost,
 		); err != nil {
 			return nil, err
 		}
