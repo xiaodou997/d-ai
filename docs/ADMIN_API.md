@@ -45,7 +45,6 @@ curl -X POST http://127.0.0.1:13010/admin/providers \
     "code": "custom_vendor",
     "name": "Custom Vendor",
     "provider_type": "custom",
-    "protocol_type": "openai_chat_completions",
     "is_custom": true
   }'
 ```
@@ -77,7 +76,6 @@ curl -X POST http://127.0.0.1:13010/admin/providers/{provider_id}/endpoints \
   -d '{
     "name": "Custom OpenAI Chat",
     "base_url": "https://example.com/v1",
-    "protocol_type": "openai_chat_completions",
     "api_key": "upstream-provider-key",
     "weight": 100,
     "timeout_ms": 60000
@@ -101,6 +99,66 @@ curl -X PATCH http://127.0.0.1:13010/admin/providers/{provider_id}/endpoints/{en
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{"status": "disabled"}'
+```
+
+## Upstream Deployments
+
+Upstream deployments define how to call a specific upstream model through an endpoint. They are independent of public models and can be reused across multiple model routes.
+
+Create upstream deployment:
+
+```bash
+curl -X POST http://127.0.0.1:13010/admin/upstream-deployments \
+  -H 'X-Admin-Token: local-admin-token' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "endpoint_id": "{endpoint_id}",
+    "name": "DeepSeek V4 Pro",
+    "upstream_model": "deepseek-v4-pro",
+    "capability_type": "chat",
+    "upstream_protocol": "openai_chat_completions",
+    "request_path": "",
+    "upstream_parameters": {
+      "reasoning_effort": "high"
+    },
+    "tags": {"tier": "premium"},
+    "status": "active"
+  }'
+```
+
+List upstream deployments (supports optional `provider_id` or `endpoint_id` filter):
+
+```bash
+curl http://127.0.0.1:13010/admin/upstream-deployments \
+  -H 'X-Admin-Token: local-admin-token'
+
+curl 'http://127.0.0.1:13010/admin/upstream-deployments?provider_id={provider_id}' \
+  -H 'X-Admin-Token: local-admin-token'
+```
+
+Update upstream deployment:
+
+```bash
+curl -X PATCH http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id} \
+  -H 'X-Admin-Token: local-admin-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"upstream_parameters": {"reasoning_effort": "medium"}}'
+```
+
+Update upstream deployment status:
+
+```bash
+curl -X PATCH http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/status \
+  -H 'X-Admin-Token: local-admin-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"status": "disabled"}'
+```
+
+Run a deployment health check. Active probes are supported for `openai_chat_completions`, `openai_responses`, and `openai_embeddings`; image, video, audio, and rerank deployments return an unsupported probe error without marking the deployment unhealthy.
+
+```bash
+curl -X POST http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/health-check \
+  -H 'X-Admin-Token: local-admin-token'
 ```
 
 ## Models
@@ -135,56 +193,68 @@ curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/status \
   -d '{"status": "inactive"}'
 ```
 
-## Deployments
+## Model Routes
 
-Create deployment:
+Model routes connect public models to upstream deployments. Each route defines priority, weight, and streaming support.
+
+Create model route:
 
 ```bash
-curl -X POST http://127.0.0.1:13010/admin/models/{model_id}/deployments \
+curl -X POST http://127.0.0.1:13010/admin/models/{model_id}/routes \
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{
-    "endpoint_id": "{endpoint_id}",
-    "upstream_model": "provider-model-name",
-    "capability_type": "chat",
-    "upstream_protocol": "openai_chat_completions",
-    "upstream_parameters": {
-      "reasoning_effort": "high"
-    },
+    "upstream_deployment_id": "{deployment_id}",
     "priority": 100,
     "weight": 100,
-    "supports_stream": true
+    "supports_stream": true,
+    "status": "active"
   }'
 ```
 
-List deployments:
+List model routes:
 
 ```bash
-curl http://127.0.0.1:13010/admin/models/{model_id}/deployments \
+curl http://127.0.0.1:13010/admin/models/{model_id}/routes \
   -H 'X-Admin-Token: local-admin-token'
 ```
 
-Update deployment status:
+Update model route:
 
 ```bash
-curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/deployments/{deployment_id}/status \
+curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/routes/{route_id} \
+  -H 'X-Admin-Token: local-admin-token' \
+  -H 'Content-Type: application/json' \
+  -d '{"priority": 50, "weight": 200}'
+```
+
+Update model route status:
+
+```bash
+curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/routes/{route_id}/status \
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{"status": "disabled"}'
 ```
 
+Delete model route:
+
+```bash
+curl -X DELETE http://127.0.0.1:13010/admin/models/{model_id}/routes/{route_id} \
+  -H 'X-Admin-Token: local-admin-token'
+```
+
 ## Model Prices
 
-Create a model sale price. All price fields are non-negative integer credits. Token prices are credits per 1M tokens; image prices are credits per generated image. `effective_from` and other admin timestamps use Unix milliseconds in API requests and responses.
+Model prices define tenant sale prices. All price fields are non-negative integer credits. Token prices are credits per 1M tokens; image prices are credits per generated image. `effective_from` and other admin timestamps use Unix milliseconds in API requests and responses.
+
+Create a model sale price:
 
 ```bash
 curl -X POST http://127.0.0.1:13010/admin/models/{model_id}/prices \
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{
-    "platform_input_price_per_1m": 1000,
-    "platform_output_price_per_1m": 2000,
-    "platform_image_price": 50,
     "tenant_input_price_per_1m": 1500,
     "tenant_output_price_per_1m": 3000,
     "tenant_image_price": 80,
@@ -209,39 +279,40 @@ curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/prices/{price_id}/s
   -d '{"status": "inactive"}'
 ```
 
-## Provider Cost Prices
+## Upstream Deployment Cost Prices
 
-Create a provider model cost price. This is for audit and margin reporting, not user billing. All cost fields are non-negative integer credits. Token costs are credits per 1M tokens; `image_cost` is credits per generated image; `request_cost` is credits per request.
+Upstream deployment cost prices define provider-side costs for audit and margin reporting. This is not used for user billing. All cost fields are non-negative integer credits.
+
+Create a deployment cost price:
 
 ```bash
-curl -X POST http://127.0.0.1:13010/admin/providers/{provider_id}/model-prices \
+curl -X POST http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/cost-prices \
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{
-    "endpoint_id": "{optional_endpoint_id}",
-    "upstream_model": "provider-model-name",
     "capability_type": "chat",
     "currency": "CNY_CREDITS",
     "input_cost_per_1m": 800,
     "output_cost_per_1m": 1600,
     "request_cost": 0,
     "image_cost": 0,
+    "image_size_prices": {"256x256": 1, "512x512": 2, "1024x1024": 4},
     "effective_from": 1777248000000,
     "status": "active"
   }'
 ```
 
-List provider model cost prices:
+List deployment cost prices:
 
 ```bash
-curl http://127.0.0.1:13010/admin/providers/{provider_id}/model-prices \
+curl http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/cost-prices \
   -H 'X-Admin-Token: local-admin-token'
 ```
 
-Update provider cost price status:
+Update deployment cost price status:
 
 ```bash
-curl -X PATCH http://127.0.0.1:13010/admin/providers/{provider_id}/model-prices/{price_id}/status \
+curl -X PATCH http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/cost-prices/{price_id}/status \
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{"status": "inactive"}'
@@ -314,40 +385,9 @@ curl -X PATCH http://127.0.0.1:13010/admin/tenants/tenant-local/api-keys/{api_ke
 
 Supported status values are `active`, `inactive`, and `disabled`.
 
-## User Grants
-
-Grant a model to a user under a tenant:
-
-```bash
-curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/model-grants \
-  -H 'X-Admin-Token: local-admin-token' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model_id": "{model_id}",
-    "status": "active",
-    "created_by": "admin"
-  }'
-```
-
-List user model grants:
-
-```bash
-curl http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/model-grants \
-  -H 'X-Admin-Token: local-admin-token'
-```
-
-Update user model grant status:
-
-```bash
-curl -X PATCH http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/model-grants/{model_id}/status \
-  -H 'X-Admin-Token: local-admin-token' \
-  -H 'Content-Type: application/json' \
-  -d '{"status": "disabled"}'
-```
-
 ## User API Keys
 
-Create a user-owned runtime API key:
+Create a user-owned runtime API key. User-owned keys require an active tenant grant for the requested model.
 
 ```bash
 curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/api-keys \
@@ -361,7 +401,7 @@ curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/
   }'
 ```
 
-The response includes the plaintext `api_key` once. User-owned keys require both an active tenant grant and an active user grant for the requested model.
+The response includes the plaintext `api_key` once.
 
 List user-owned API keys:
 
@@ -424,8 +464,8 @@ Usage rows include token fields plus unified billable units:
 Cost fields in usage logs are integer credits:
 
 - Token capabilities calculate token costs from prompt/completion tokens and per-1M-token prices, rounded up to whole credits.
-- Image capability calculates `api_key_quota_cost`, `platform_cost`, and `user_cost` as `image_count * image_price`.
-- Provider image cost is recorded as `request_cost + image_count * image_cost`.
+- Image capability calculates `api_key_quota_cost` and `user_cost` as `image_count * image_price` (using tenant sale price).
+- Provider image cost is recorded from `image_size_prices` based on the requested image size.
 
 ## Runtime Limits
 
@@ -446,16 +486,18 @@ uni_ai_api:rate:{scope_type}:{scope_id}:{capability_type}:...
 uni_ai_api:quota:key:{api_key_id}:reserved
 ```
 
-Endpoint failures are also tracked in Redis:
+Deployment failures are tracked in Redis:
 
 ```text
-uni_ai_api:endpoint:{endpoint_id}:cooldown
+uni_ai_api:deployment:{deployment_id}:cooldown
 ```
 
-Runtime routing skips endpoints in cooldown. The current cooldown TTL is 60 seconds. Upstream network errors, HTTP 429, and HTTP 5xx mark an endpoint as cooling down. HTTP 4xx other than 429 does not, because it is usually a request or credential problem rather than provider capacity.
+Runtime routing skips deployments in cooldown. The current cooldown TTL is 60 seconds. Upstream network errors, HTTP 429, and HTTP 5xx mark a deployment as cooling down. HTTP 4xx other than 429 does not, because it is usually a request or credential problem rather than provider capacity.
 
-Deployment routing:
+Route-based routing:
 
-- Filter out endpoints in Redis cooldown.
-- Use the lowest `priority` value among remaining deployments.
-- Within that priority group, choose by `deployment.weight * endpoint.weight`.
+- Resolve public model → get active model routes.
+- Filter out deployments in Redis cooldown.
+- Use the lowest `priority` value among remaining routes.
+- Within that priority group, choose by `route.weight * endpoint.weight` weighted random.
+- Conversation stickiness binds to `upstream_deployment_id` instead of deployment.
