@@ -122,6 +122,7 @@ func New(cfg Config) *Server {
 		r.Get("/dashboard/recent-errors", s.handleAdminDashboardRecentErrors)
 		r.Get("/usage-logs", s.handleAdminListUsageLogs)
 		r.Get("/usage-summary", s.handleAdminListUsageSummary)
+		r.Get("/usage-unit-summary", s.handleAdminListUsageUnitSummary)
 		r.Get("/audit-logs", s.handleAdminListAuditLogs)
 	})
 	router.Route("/v1", func(r chi.Router) {

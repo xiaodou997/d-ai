@@ -1041,6 +1041,30 @@ WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'
 GROUP BY capability_type, billable_unit_type, request_status
 ORDER BY request_count DESC, capability_type ASC, billable_unit_type ASC, request_status ASC;
 
+-- name: ListUsageUnitSummary :many
+SELECT
+  billable_unit_type,
+  COUNT(*)::bigint AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success')::bigint AS success_count,
+  COUNT(DISTINCT tenant_id)::bigint AS active_tenant_count,
+  COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL AND user_id <> '')::bigint AS active_user_count,
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(billable_units), 0)::bigint AS billable_units,
+  COALESCE(SUM(provider_cost), 0)::bigint AS provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS user_cost,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS api_key_quota_cost,
+  COALESCE(AVG(latency_ms)::bigint, 0)::bigint AS avg_latency_ms
+FROM ai_usage_logs
+WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
+  AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status'))
+GROUP BY billable_unit_type
+ORDER BY api_key_quota_cost DESC, request_count DESC, billable_unit_type ASC;
+
 -- name: GetDashboardSummary :one
 SELECT
   COUNT(*)::bigint AS request_count,

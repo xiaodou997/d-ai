@@ -2,13 +2,20 @@
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { formatCredits, formatTimestamp, listUsageLogs, listUsageSummary } from '@/api/aiGateway'
+import {
+  formatCredits,
+  formatTimestamp,
+  listUsageLogs,
+  listUsageSummary,
+  listUsageUnitSummary
+} from '@/api/aiGateway'
 
 const authStore = useAuthStore()
 const loading = shallowRef(false)
 const summaryLoading = shallowRef(false)
 const logs = shallowRef([])
 const summaryRows = shallowRef([])
+const unitRows = shallowRef([])
 const limit = shallowRef(100)
 const filters = reactive({
   tenant_id: '',
@@ -32,6 +39,18 @@ const unitLabel = (unit) => {
     request: '请求'
   }
   return map[unit] || unit || '-'
+}
+
+const billableFieldLabel = (unit) => {
+  const map = {
+    token: 'token_count',
+    input_token: 'input_token_count',
+    output_token: 'output_token_count',
+    image: 'image_count',
+    second: 'second_count',
+    request: 'request_count'
+  }
+  return map[unit] || 'billable_units'
 }
 
 const capabilityLabel = (capability) => {
@@ -70,15 +89,29 @@ const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
   quotaCost: 0
 }))
 
+const unitCostShare = (row) => {
+  const total = summaryTotals.value.quotaCost
+  if (!total) return '0%'
+  return `${((Number(row.api_key_quota_cost) || 0) * 100 / total).toFixed(1)}%`
+}
+
+const successRate = (row) => {
+  const requestCount = Number(row.request_count) || 0
+  if (!requestCount) return '0%'
+  return `${((Number(row.success_count) || 0) * 100 / requestCount).toFixed(1)}%`
+}
+
 const fetchUsage = async () => {
   loading.value = true
   summaryLoading.value = true
   try {
     const params = usageParams.value
-    const [nextSummary, nextLogs] = await Promise.all([
+    const [nextUnitSummary, nextSummary, nextLogs] = await Promise.all([
+      listUsageUnitSummary(params),
       listUsageSummary(params),
       listUsageLogs({ ...params, limit: limit.value })
     ])
+    unitRows.value = nextUnitSummary
     summaryRows.value = nextSummary
     logs.value = nextLogs
   } finally {
@@ -137,6 +170,47 @@ onMounted(fetchUsage)
         <strong>{{ formatCredits(summaryTotals.quotaCost) }}</strong>
       </div>
     </div>
+
+    <el-table v-loading="summaryLoading" :data="unitRows" border stripe class="w-full unit-table">
+      <el-table-column label="计费单位" width="130">
+        <template #default="{ row }">
+          <div class="unit-cell">
+            <span>{{ unitLabel(row.billable_unit_type) }}</span>
+            <small>{{ billableFieldLabel(row.billable_unit_type) }}</small>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="请求数" width="100" align="right">
+        <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
+      </el-table-column>
+      <el-table-column label="成功率" width="100" align="right">
+        <template #default="{ row }">{{ successRate(row) }}</template>
+      </el-table-column>
+      <el-table-column label="活跃租户" width="100" align="right">
+        <template #default="{ row }">{{ formatCredits(row.active_tenant_count) }}</template>
+      </el-table-column>
+      <el-table-column label="活跃用户" width="100" align="right">
+        <template #default="{ row }">{{ formatCredits(row.active_user_count) }}</template>
+      </el-table-column>
+      <el-table-column label="Token" width="110" align="right">
+        <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
+      </el-table-column>
+      <el-table-column label="计费量" width="120" align="right">
+        <template #default="{ row }">{{ formatCredits(row.billable_units) }}</template>
+      </el-table-column>
+      <el-table-column label="Key 额度消耗" width="130" align="right">
+        <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
+      </el-table-column>
+      <el-table-column label="成本占比" width="100" align="right">
+        <template #default="{ row }">{{ unitCostShare(row) }}</template>
+      </el-table-column>
+      <el-table-column label="平台成本" width="110" align="right">
+        <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
+      </el-table-column>
+      <el-table-column label="供应商成本" width="120" align="right">
+        <template #default="{ row }">{{ formatCredits(row.provider_cost) }}</template>
+      </el-table-column>
+    </el-table>
 
     <el-table v-loading="summaryLoading" :data="summaryRows" border stripe class="w-full summary-table">
       <el-table-column label="能力" width="100">
@@ -282,8 +356,26 @@ onMounted(fetchUsage)
   line-height: 1.1;
 }
 
+.unit-table,
 .summary-table {
   margin-bottom: 14px;
+}
+
+.unit-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.unit-cell span {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.unit-cell small {
+  color: #94a3b8;
+  font-size: 11px;
 }
 
 @media (max-width: 1180px) {

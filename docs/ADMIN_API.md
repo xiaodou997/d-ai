@@ -405,7 +405,14 @@ curl 'http://127.0.0.1:13010/admin/usage-summary' \
   -H 'X-Admin-Token: local-admin-token'
 ```
 
-Both endpoints support `tenant_id`, `user_id`, `model_code`, and `request_status` filters. Summary totals are calculated across all matching rows, not only the latest `limit` rows.
+List usage summary grouped only by billable unit type:
+
+```bash
+curl 'http://127.0.0.1:13010/admin/usage-unit-summary' \
+  -H 'X-Admin-Token: local-admin-token'
+```
+
+All three endpoints support `tenant_id`, `user_id`, `model_code`, and `request_status` filters. Summary totals are calculated across all matching rows, not only the latest `limit` rows.
 
 Usage rows include token fields plus unified billable units:
 

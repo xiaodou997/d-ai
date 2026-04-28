@@ -234,6 +234,10 @@ export function listUsageSummary(params) {
   return gatewayRequest.get('/admin/usage-summary', { params })
 }
 
+export function listUsageUnitSummary(params) {
+  return gatewayRequest.get('/admin/usage-unit-summary', { params })
+}
+
 export function getDashboardSummary(params) {
   return gatewayRequest.get('/admin/dashboard/summary', { params })
 }

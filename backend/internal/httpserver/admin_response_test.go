@@ -107,6 +107,9 @@ func TestAdminRequestAllowedScopesTenantAndUser(t *testing.T) {
 	if !adminRequestAllowed(tenantAdmin, "GET", "/admin/tenants/tenant-a/model-grants") {
 		t.Fatal("tenant admin should list own tenant grants")
 	}
+	if !adminRequestAllowed(tenantAdmin, "GET", "/admin/usage-unit-summary") {
+		t.Fatal("tenant admin should read scoped usage unit summary")
+	}
 	if adminRequestAllowed(tenantAdmin, "POST", "/admin/tenants/tenant-a/model-grants") {
 		t.Fatal("tenant admin should not grant models to tenant")
 	}

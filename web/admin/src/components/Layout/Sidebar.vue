@@ -66,7 +66,6 @@ const handleLogout = () => {
     <nav class="sidebar-nav custom-scrollbar">
       <el-menu
         :default-active="$route.path"
-        :default-openeds="['ai-gateway']"
         :router="true"
         class="modern-menu border-none"
       >
@@ -89,20 +88,14 @@ const handleLogout = () => {
         </template>
 
         <div class="menu-divider">{{ authStore.isPlatformAdmin ? 'AI 网关' : '工作台' }}</div>
-        <el-sub-menu index="ai-gateway">
-          <template #title>
-            <el-icon><Cpu /></el-icon>
-            <span>{{ authStore.isPlatformAdmin ? 'AI 网关' : '我的 AI 网关' }}</span>
-          </template>
-          <el-menu-item
-            v-for="item in gatewayMenuItems"
-            :key="item.index"
-            :index="item.index"
-          >
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
-          </el-menu-item>
-        </el-sub-menu>
+        <el-menu-item
+          v-for="item in gatewayMenuItems"
+          :key="item.index"
+          :index="item.index"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-menu-item>
       </el-menu>
     </nav>
 
@@ -176,8 +169,7 @@ const handleLogout = () => {
 }
 
 .modern-menu {
-  :deep(.el-menu-item),
-  :deep(.el-sub-menu__title) {
+  :deep(.el-menu-item) {
     height: 48px;
     margin: 4px 0;
     border-radius: 12px;
@@ -212,11 +204,6 @@ const handleLogout = () => {
       background-color: #8b5cf6;
       content: '';
     }
-  }
-
-  :deep(.el-sub-menu .el-menu-item) {
-    min-width: 0;
-    padding-left: 42px !important;
   }
 }
 

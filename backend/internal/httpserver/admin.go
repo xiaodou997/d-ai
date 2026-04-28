@@ -308,7 +308,7 @@ func adminRequestAllowed(admin adminContext, method string, path string) bool {
 	if len(parts) < 2 || parts[0] != "admin" {
 		return false
 	}
-	if method == http.MethodGet && (parts[1] == "usage-logs" || parts[1] == "usage-summary" || parts[1] == "dashboard") {
+	if method == http.MethodGet && (parts[1] == "usage-logs" || parts[1] == "usage-summary" || parts[1] == "usage-unit-summary" || parts[1] == "dashboard") {
 		return true
 	}
 	if len(parts) >= 3 && parts[1] == "tenants" {
@@ -1765,6 +1765,24 @@ func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Requ
 	})
 	if err != nil {
 		s.writeAdminServerError(w, r, "list usage summary failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) handleAdminListUsageUnitSummary(w http.ResponseWriter, r *http.Request) {
+	filters, ok := scopedUsageFilters(w, r)
+	if !ok {
+		return
+	}
+	rows, err := s.queries.ListUsageUnitSummary(r.Context(), dbgen.ListUsageUnitSummaryParams{
+		TenantID:      optionalTextValue(filters.tenantID),
+		UserID:        optionalTextValue(filters.userID),
+		ModelCode:     optionalTextValue(filters.modelCode),
+		RequestStatus: optionalTextValue(filters.requestStatus),
+	})
+	if err != nil {
+		s.writeAdminServerError(w, r, "list usage unit summary failed", err)
 		return
 	}
 	writeAdminJSON(w, http.StatusOK, rows)
