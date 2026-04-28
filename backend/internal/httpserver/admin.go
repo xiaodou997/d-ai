@@ -57,7 +57,6 @@ type createProviderRequest struct {
 	Code         string          `json:"code"`
 	Name         string          `json:"name"`
 	ProviderType string          `json:"provider_type"`
-	ProtocolType string          `json:"protocol_type"`
 	IsCustom     bool            `json:"is_custom"`
 	Config       json.RawMessage `json:"config"`
 	Status       string          `json:"status"`
@@ -152,7 +151,6 @@ type createDeploymentRequest struct {
 	EndpointID         string          `json:"endpoint_id"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
-	UpstreamProtocol   string          `json:"upstream_protocol"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
 	Priority           *int32          `json:"priority"`
 	Weight             *int32          `json:"weight"`
@@ -384,10 +382,7 @@ func (s *Server) handleAdminCreateProvider(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if req.ProviderType == "" {
-		req.ProviderType = req.Code
-	}
-	if req.ProtocolType == "" {
-		req.ProtocolType = defaultProtocol
+		req.ProviderType = "custom"
 	}
 	if req.Status == "" {
 		req.Status = defaultStatus
@@ -397,7 +392,6 @@ func (s *Server) handleAdminCreateProvider(w http.ResponseWriter, r *http.Reques
 		Code:         req.Code,
 		Name:         req.Name,
 		ProviderType: req.ProviderType,
-		ProtocolType: req.ProtocolType,
 		IsCustom:     req.IsCustom,
 		Config:       jsonObjectOrDefault(req.Config),
 		Status:       req.Status,
@@ -423,16 +417,13 @@ func (s *Server) handleAdminUpdateProvider(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if req.ProviderType == "" {
-		req.ProviderType = req.Code
-	}
-	if req.ProtocolType == "" {
-		req.ProtocolType = defaultProtocol
+		req.ProviderType = "custom"
 	}
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
 	row, err := s.queries.UpdateProvider(r.Context(), dbgen.UpdateProviderParams{
-		ID: providerID, Code: req.Code, Name: req.Name, ProviderType: req.ProviderType, ProtocolType: req.ProtocolType,
+		ID: providerID, Code: req.Code, Name: req.Name, ProviderType: req.ProviderType,
 		IsCustom: req.IsCustom, Config: jsonObjectOrDefault(req.Config), Status: req.Status,
 	})
 	if err != nil {
@@ -1033,9 +1024,6 @@ func (s *Server) handleAdminCreateModelDeployment(w http.ResponseWriter, r *http
 	if req.CapabilityType == "" {
 		req.CapabilityType = defaultCapability
 	}
-	if req.UpstreamProtocol == "" {
-		req.UpstreamProtocol = defaultProtocol
-	}
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
@@ -1045,7 +1033,6 @@ func (s *Server) handleAdminCreateModelDeployment(w http.ResponseWriter, r *http
 		EndpointID:         endpointID,
 		UpstreamModel:      req.UpstreamModel,
 		CapabilityType:     req.CapabilityType,
-		UpstreamProtocol:   req.UpstreamProtocol,
 		UpstreamParameters: jsonObjectOrDefault(req.UpstreamParameters),
 		Priority:           int32OrDefault(req.Priority, 100),
 		Weight:             int32OrDefault(req.Weight, 100),
@@ -1084,15 +1071,12 @@ func (s *Server) handleAdminUpdateModelDeployment(w http.ResponseWriter, r *http
 	if req.CapabilityType == "" {
 		req.CapabilityType = defaultCapability
 	}
-	if req.UpstreamProtocol == "" {
-		req.UpstreamProtocol = defaultProtocol
-	}
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
 	row, err := s.queries.UpdateModelDeployment(r.Context(), dbgen.UpdateModelDeploymentParams{
 		ModelID: modelID, ID: deploymentID, EndpointID: endpointID, UpstreamModel: req.UpstreamModel, CapabilityType: req.CapabilityType,
-		UpstreamProtocol: req.UpstreamProtocol, UpstreamParameters: jsonObjectOrDefault(req.UpstreamParameters), Priority: int32OrDefault(req.Priority, 100),
+		UpstreamParameters: jsonObjectOrDefault(req.UpstreamParameters), Priority: int32OrDefault(req.Priority, 100),
 		Weight: int32OrDefault(req.Weight, 100), SupportsStream: boolOrDefault(req.SupportsStream, true), Status: req.Status,
 	})
 	if err != nil {

@@ -40,6 +40,13 @@ export const statusOptions = [
   { label: '禁用', value: 'disabled' }
 ]
 
+export const providerTypeOptions = [
+  { label: '官方厂商', value: 'official' },
+  { label: '兼容协议', value: 'compatible' },
+  { label: '私有化', value: 'private' },
+  { label: '自定义', value: 'custom' }
+]
+
 export const protocolOptions = [
   { label: 'OpenAI Chat Completions', value: 'openai_chat_completions' },
   { label: 'OpenAI Images Generations', value: 'openai_images_generations' },

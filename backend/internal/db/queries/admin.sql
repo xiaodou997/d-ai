@@ -3,19 +3,17 @@ INSERT INTO ai_providers (
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
+  $1, $2, $3, $4, $5, $6
 )
 RETURNING
   id,
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status,
@@ -28,7 +26,6 @@ SELECT
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status,
@@ -43,7 +40,6 @@ SELECT
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status,
@@ -62,7 +58,6 @@ RETURNING
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status,
@@ -74,10 +69,9 @@ UPDATE ai_providers
 SET code = $2,
     name = $3,
     provider_type = $4,
-    protocol_type = $5,
-    is_custom = $6,
-    config = $7,
-    status = $8,
+    is_custom = $5,
+    config = $6,
+    status = $7,
     updated_at = now()
 WHERE id = $1
 RETURNING
@@ -85,7 +79,6 @@ RETURNING
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status,
@@ -555,7 +548,16 @@ INSERT INTO ai_model_deployments (
   supports_stream,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+  $1,
+  $2,
+  $3,
+  $4,
+  (SELECT protocol_type FROM ai_provider_endpoints WHERE ai_provider_endpoints.id = $2),
+  $5,
+  $6,
+  $7,
+  $8,
+  $9
 )
 RETURNING
   id,
@@ -623,15 +625,15 @@ UPDATE ai_model_deployments
 SET endpoint_id = $3,
     upstream_model = $4,
     capability_type = $5,
-    upstream_protocol = $6,
-    upstream_parameters = $7,
-    priority = $8,
-    weight = $9,
-    supports_stream = $10,
-    status = $11,
+    upstream_protocol = (SELECT protocol_type FROM ai_provider_endpoints WHERE ai_provider_endpoints.id = $3),
+    upstream_parameters = $6,
+    priority = $7,
+    weight = $8,
+    supports_stream = $9,
+    status = $10,
     updated_at = now()
 WHERE model_id = $1
-  AND id = $2
+  AND ai_model_deployments.id = $2
 RETURNING
   id,
   model_id,

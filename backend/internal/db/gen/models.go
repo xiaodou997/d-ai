@@ -99,7 +99,6 @@ type AiProvider struct {
 	Code         string             `json:"code"`
 	Name         string             `json:"name"`
 	ProviderType string             `json:"provider_type"`
-	ProtocolType string             `json:"protocol_type"`
 	IsCustom     bool               `json:"is_custom"`
 	Config       []byte             `json:"config"`
 	Status       string             `json:"status"`

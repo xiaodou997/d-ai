@@ -29,13 +29,12 @@ CREATE TABLE IF NOT EXISTS ai_providers (
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   provider_type TEXT NOT NULL,
-  protocol_type TEXT NOT NULL DEFAULT 'openai_chat_completions',
   is_custom BOOLEAN NOT NULL DEFAULT false,
   config JSONB NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (protocol_type IN ('openai_chat_completions', 'openai_images_generations', 'openai_responses', 'openai_embeddings', 'anthropic_messages'))
+  CHECK (provider_type IN ('official', 'compatible', 'private', 'custom'))
 );
 
 CREATE TABLE IF NOT EXISTS ai_provider_endpoints (

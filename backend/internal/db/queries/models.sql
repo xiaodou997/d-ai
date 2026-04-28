@@ -67,8 +67,7 @@ SELECT
   e.timeout_ms,
   e.weight AS endpoint_weight,
   p.id AS provider_id,
-  p.code AS provider_code,
-  p.protocol_type AS provider_protocol_type
+  p.code AS provider_code
 FROM ai_model_deployments d
 JOIN ai_provider_endpoints e ON e.id = d.endpoint_id
 JOIN ai_providers p ON p.id = e.provider_id

@@ -15,17 +15,15 @@ INSERT INTO ai_providers (
   code,
   name,
   provider_type,
-  protocol_type,
   is_custom,
   config,
   status
 ) VALUES
-  ('deepseek', 'DeepSeek', 'deepseek', 'openai_chat_completions', false, '{}', 'active'),
-  ('openai_compatible', 'OpenAI Compatible Local Fake', 'openai_compatible', 'openai_chat_completions', false, '{}', 'active')
+  ('deepseek', 'DeepSeek', 'official', false, '{}', 'active'),
+  ('openai_compatible', 'OpenAI Compatible Local Fake', 'compatible', false, '{}', 'active')
 ON CONFLICT (code) DO UPDATE SET
   name = EXCLUDED.name,
   provider_type = EXCLUDED.provider_type,
-  protocol_type = EXCLUDED.protocol_type,
   is_custom = EXCLUDED.is_custom,
   config = EXCLUDED.config,
   status = EXCLUDED.status,

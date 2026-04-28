@@ -13,6 +13,7 @@ import {
   listProviderEndpoints,
   listProviders,
   nowTimestamp,
+  providerTypeOptions,
   protocolOptions,
   statusOptions,
   updateProvider,
@@ -42,7 +43,6 @@ const providerForm = reactive({
   code: '',
   name: '',
   provider_type: 'custom',
-  protocol_type: 'openai_chat_completions',
   is_custom: true,
   status: 'active'
 })
@@ -82,8 +82,8 @@ const filteredProviders = computed(() => {
   return providers.value.filter((item) => {
     const name = item.name?.toLowerCase() || ''
     const code = item.code?.toLowerCase() || ''
-    const protocol = item.protocol_type?.toLowerCase() || ''
-    return name.includes(keyword) || code.includes(keyword) || protocol.includes(keyword)
+    const providerType = item.provider_type?.toLowerCase() || ''
+    return name.includes(keyword) || code.includes(keyword) || providerType.includes(keyword)
   })
 })
 
@@ -113,7 +113,7 @@ const providerSummary = computed(() => ({
 }))
 
 const setupSteps = [
-  '创建服务商，确定上游协议类型。',
+  '创建厂商分组，标记上游归属和厂商类型。',
   '添加接入点，配置 Base URL、Key、权重和超时。',
   '维护 Provider 成本价，平台成本和毛利统计以这里为准。',
   '到模型映射页面绑定公开模型和部署，再进入授权与 Key 分配调用权限。'
@@ -123,6 +123,9 @@ const statusTagType = (status) => {
   const map = { active: 'success', inactive: 'warning', disabled: 'danger' }
   return map[status] || 'info'
 }
+
+const providerTypeLabel = (type) =>
+  providerTypeOptions.find((item) => item.value === type)?.label || type || '-'
 
 const endpointLabel = (endpointId) => endpointNameById.value[endpointId] || endpointId || '全局'
 
@@ -149,7 +152,6 @@ const resetProviderForm = () => {
     code: '',
     name: '',
     provider_type: 'custom',
-    protocol_type: 'openai_chat_completions',
     is_custom: true,
     status: 'active'
   })
@@ -160,7 +162,7 @@ const resetEndpointForm = () => {
   Object.assign(endpointForm, {
     name: '',
     base_url: '',
-    protocol_type: selectedProvider.value?.protocol_type || 'openai_chat_completions',
+    protocol_type: 'openai_chat_completions',
     api_key: '',
     custom_path: '',
     weight: 100,
@@ -175,7 +177,6 @@ const applyProviderForm = (row) => {
     code: row.code,
     name: row.name,
     provider_type: row.provider_type,
-    protocol_type: row.protocol_type,
     is_custom: row.is_custom,
     status: row.status
   })
@@ -406,7 +407,7 @@ onMounted(fetchProviders)
         v-model="providerKeyword"
         :prefix-icon="Search"
         clearable
-        placeholder="搜索厂商、编码、协议"
+        placeholder="搜索厂商、编码、类型"
         class="provider-search"
       />
 
@@ -427,7 +428,7 @@ onMounted(fetchProviders)
               <el-tag :type="statusTagType(provider.status)" size="small">{{ provider.status }}</el-tag>
             </div>
             <span>{{ provider.code }}</span>
-            <small>{{ provider.protocol_type }}</small>
+            <small>{{ providerTypeLabel(provider.provider_type) }}</small>
           </div>
           <div class="provider-item-actions">
             <el-button link type="primary" :icon="Edit" @click.stop="openProviderEditDialog(provider)">编辑</el-button>
@@ -447,7 +448,7 @@ onMounted(fetchProviders)
             <h2>{{ selectedProvider.name }}</h2>
             <el-tag :type="statusTagType(selectedProvider.status)" effect="dark">{{ selectedProvider.status }}</el-tag>
           </div>
-          <p>{{ selectedProvider.code }} · {{ selectedProvider.protocol_type }}</p>
+          <p>{{ selectedProvider.code }} · {{ providerTypeLabel(selectedProvider.provider_type) }}</p>
         </div>
         <div class="hero-actions">
           <el-button :icon="Refresh" circle @click="fetchSelectedProviderDetail" />
@@ -469,9 +470,9 @@ onMounted(fetchProviders)
             <small>{{ providerSummary.activePriceCount }} active</small>
           </div>
           <div class="metric-cell">
-            <span>默认协议</span>
-            <strong>{{ selectedProvider.protocol_type }}</strong>
-            <small>endpoint 可单独覆盖</small>
+            <span>厂商类型</span>
+            <strong>{{ providerTypeLabel(selectedProvider.provider_type) }}</strong>
+            <small>协议由接入点决定</small>
           </div>
           <div class="metric-cell">
             <span>计费单位</span>
@@ -602,19 +603,16 @@ onMounted(fetchProviders)
         </div>
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="厂商类型">
-            <el-input v-model="providerForm.provider_type" placeholder="custom" />
+            <el-select v-model="providerForm.provider_type" class="w-full">
+              <el-option v-for="item in providerTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
           </el-form-item>
-          <el-form-item label="请求协议">
-            <el-select v-model="providerForm.protocol_type" class="w-full">
-              <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-form-item label="状态">
+            <el-select v-model="providerForm.status" class="w-full">
+              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item label="状态">
-          <el-select v-model="providerForm.status" class="w-full">
-            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="providerDialogVisible = false">取消</el-button>

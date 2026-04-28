@@ -15,7 +15,6 @@ import {
   listProviderEndpoints,
   listProviders,
   nowTimestamp,
-  protocolOptions,
   statusOptions,
   updateModel,
   updateModelDeployment,
@@ -56,7 +55,6 @@ const deploymentForm = reactive({
   endpoint_id: '',
   upstream_model: '',
   capability_type: 'chat',
-  upstream_protocol: 'openai_chat_completions',
   upstream_parameters_text: '{}',
   priority: 100,
   weight: 100,
@@ -85,7 +83,7 @@ const selectedModel = computed(() =>
 
 const endpointOptions = computed(() =>
   endpoints.value.map((item) => ({
-    label: `${item.name} · ${item.base_url}`,
+    label: `${item.name} · ${item.protocol_type} · ${item.base_url}`,
     value: item.id
   }))
 )
@@ -129,7 +127,6 @@ const resetDeploymentForm = () => {
     endpoint_id: '',
     upstream_model: selectedModel.value?.model_code || '',
     capability_type: capabilityType,
-    upstream_protocol: capabilityType === 'image' ? 'openai_images_generations' : 'openai_chat_completions',
     upstream_parameters_text: '{}',
     priority: 100,
     weight: 100,
@@ -157,7 +154,6 @@ const applyDeploymentForm = (row) => {
     endpoint_id: row.endpoint_id,
     upstream_model: row.upstream_model,
     capability_type: row.capability_type,
-    upstream_protocol: row.upstream_protocol,
     upstream_parameters_text: JSON.stringify(row.upstream_parameters || {}, null, 2),
     priority: row.priority,
     weight: row.weight,
@@ -324,7 +320,6 @@ const submitDeployment = async () => {
     endpoint_id: deploymentForm.endpoint_id,
     upstream_model: deploymentForm.upstream_model,
     capability_type: deploymentForm.capability_type,
-    upstream_protocol: deploymentForm.upstream_protocol,
     upstream_parameters: upstreamParameters,
     priority: deploymentForm.priority,
     weight: deploymentForm.weight,
@@ -502,7 +497,7 @@ onMounted(async () => {
         <el-table-column prop="upstream_model" label="上游模型" min-width="160" />
         <el-table-column prop="provider_code" label="厂商" width="120" />
         <el-table-column prop="endpoint_name" label="接入点" min-width="140" />
-        <el-table-column prop="upstream_protocol" label="协议" min-width="190" show-overflow-tooltip />
+        <el-table-column prop="upstream_protocol" label="继承协议" min-width="190" show-overflow-tooltip />
         <el-table-column prop="priority" label="优先级" width="90" align="right" />
         <el-table-column prop="weight" label="权重" width="80" align="right" />
         <el-table-column label="状态" width="95">
@@ -579,9 +574,9 @@ onMounted(async () => {
           <el-form-item label="上游模型名" required>
             <el-input v-model="deploymentForm.upstream_model" placeholder="provider-model-name" />
           </el-form-item>
-          <el-form-item label="上游协议">
-            <el-select v-model="deploymentForm.upstream_protocol" class="w-full">
-              <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-form-item label="能力类型">
+            <el-select v-model="deploymentForm.capability_type" class="w-full">
+              <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
         </div>
