@@ -70,7 +70,8 @@ Useful docs:
 - Runtime billing uses platform and tenant model prices, always in integer credits.
 - Token interfaces bill by token units; image interfaces bill by generated image count.
 - API key quotas are local to `uni-ai-api`; URM remains the source of account balances and credit settlement.
-- URM-owned account, recharge, grant, transaction, platform-admin, JWT-key, and system-application management stays in the URM console.
+- URM remains the source of truth for account, recharge, grant, transaction, platform-admin, JWT-key, and system-application data.
+- The admin console keeps AI Gateway business convenience entries for tenant/user management, tenant recharge from tenant operations, and tenant recharge records.
 - Tenant-owned API keys charge the tenant through URM.
 - User-owned API keys charge both tenant and user through URM.
 - Runtime API keys use the `sk-ai-` prefix.

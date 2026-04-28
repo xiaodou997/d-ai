@@ -64,9 +64,10 @@
             <span class="text-xs text-slate-400">{{ formatTime(row.createdTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="190">
+        <el-table-column label="操作" fixed="right" width="230">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="success" @click="handleRecharge(row)">充值</el-button>
             <el-button
               link
               :type="row.status === 1 ? 'warning' : 'success'"
@@ -150,10 +151,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { queryTenants, createTenant, updateTenant, deleteTenant, disableTenant, enableTenant } from '@/api/tenant'
 
+const router = useRouter()
 const queryForm = reactive({ keyword: '', status: '' })
 const pagination = reactive({ page: 1, size: 15, total: 0 })
 const tableData = ref([])
@@ -217,6 +220,16 @@ const handleEdit = (row) => {
   isEdit.value = true
   Object.assign(form, { ...row })
   dialogVisible.value = true
+}
+
+const handleRecharge = (row) => {
+  router.push({
+    path: '/finance/recharge',
+    query: {
+      tenantId: row.tenantId,
+      tenantName: row.tenantName
+    }
+  })
 }
 
 const handleToggleStatus = async (row) => {

@@ -16,11 +16,17 @@
           <p class="text-slate-400 font-medium mt-1">租户 ID: {{ tenantId }}</p>
         </div>
       </div>
-      <div class="flex gap-4">
+      <div class="flex items-start gap-4">
         <div class="text-right">
           <p class="text-[10px] font-black text-slate-400 uppercase">平台积分</p>
-          <p class="text-2xl font-black text-slate-800">{{ (tenantInfo.credits || 0).toLocaleString() }} 积分</p>
+          <p class="text-2xl font-black text-slate-800">
+            {{ displayTenantBalance }} 积分
+          </p>
         </div>
+        <el-button type="primary" class="!rounded-2xl font-bold" :loading="balanceLoading" @click="handleRecharge">
+          <el-icon class="mr-1"><Coin /></el-icon>
+          充值
+        </el-button>
       </div>
     </div>
 
@@ -122,20 +128,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, ref, reactive, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { OfficeBuilding, Plus } from '@element-plus/icons-vue'
+import { Coin, OfficeBuilding, Plus } from '@element-plus/icons-vue'
 import {
-  queryUsers, queryTenants,
+  queryUsers, queryTenants, getAccountInfo,
   listTenantUsers, createTenantUser, disableTenantUser, enableTenantUser, resetTenantUserPassword
 } from '@/api/tenant'
 
 const route = useRoute()
+const router = useRouter()
 const tenantId = route.params.id
 const activeTab = ref('orgUsers')
 
 const tenantInfo = ref({})
+const tenantBalance = ref(null)
+const balanceLoading = ref(false)
 const users = ref([])
 
 // 组织用户
@@ -158,6 +167,21 @@ const fetchTenantInfo = async () => {
   }
 }
 
+const displayTenantBalance = computed(() => {
+  const balance = tenantBalance.value ?? tenantInfo.value.credits ?? 0
+  return (Number(balance) || 0).toLocaleString('zh-CN')
+})
+
+const fetchTenantBalance = async () => {
+  balanceLoading.value = true
+  try {
+    const data = await getAccountInfo({ accountType: 1, accountId: tenantId })
+    tenantBalance.value = data?.availableCredits ?? data?.totalCredits ?? data?.credits ?? 0
+  } finally {
+    balanceLoading.value = false
+  }
+}
+
 const fetchUsers = async () => {
   const data = await queryUsers({ tenantId, page: 1, size: 100 })
   users.value = data.records
@@ -166,7 +190,12 @@ const fetchUsers = async () => {
 const fetchOrgUsers = async () => {
   orgUsersLoading.value = true
   try {
-    const data = await listTenantUsers({ tenantId, page: orgUserPagination.page, size: orgUserPagination.size })
+    const data = await listTenantUsers({
+      tenantId,
+      keyword: orgUserKeyword.value || undefined,
+      page: orgUserPagination.page,
+      size: orgUserPagination.size
+    })
     orgUsers.value = data.records || []
     orgUserPagination.total = data.total || 0
   } finally {
@@ -229,6 +258,16 @@ const handleResetOrgUserPwd = async (row) => {
   }
 }
 
+const handleRecharge = () => {
+  router.push({
+    path: '/finance/recharge',
+    query: {
+      tenantId,
+      tenantName: tenantInfo.value.tenantName || tenantId
+    }
+  })
+}
+
 const formatTime = (ts) => {
   if (!ts) return '—'
   return new Date(ts).toLocaleString('zh-CN', { hour12: false })
@@ -236,6 +275,7 @@ const formatTime = (ts) => {
 
 onMounted(() => {
   fetchTenantInfo()
+  fetchTenantBalance()
   fetchUsers()
   fetchOrgUsers()
 })

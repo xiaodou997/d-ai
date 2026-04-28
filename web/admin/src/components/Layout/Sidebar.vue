@@ -75,16 +75,6 @@ const handleLogout = () => {
             <el-icon><Odometer /></el-icon>
             <span>控制概览</span>
           </el-menu-item>
-
-          <div class="menu-divider">业务管理</div>
-          <el-menu-item index="/tenants">
-            <el-icon><OfficeBuilding /></el-icon>
-            <span>租户管理</span>
-          </el-menu-item>
-          <el-menu-item index="/users">
-            <el-icon><User /></el-icon>
-            <span>终端用户</span>
-          </el-menu-item>
         </template>
 
         <div class="menu-divider">{{ authStore.isPlatformAdmin ? 'AI 网关' : '工作台' }}</div>
@@ -96,6 +86,22 @@ const handleLogout = () => {
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.label }}</span>
         </el-menu-item>
+
+        <template v-if="authStore.isPlatformAdmin">
+          <div class="menu-divider">运营管理</div>
+          <el-menu-item index="/tenants">
+            <el-icon><OfficeBuilding /></el-icon>
+            <span>租户管理</span>
+          </el-menu-item>
+          <el-menu-item index="/users">
+            <el-icon><User /></el-icon>
+            <span>终端用户</span>
+          </el-menu-item>
+          <el-menu-item index="/finance/recharge-records">
+            <el-icon><Tickets /></el-icon>
+            <span>充值记录</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </nav>
 

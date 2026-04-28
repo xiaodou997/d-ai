@@ -83,6 +83,18 @@ export function queryUsers(params) {
 }
 
 /**
+ * 查询账户信息
+ * @param {Object} params - { accountType, accountId }
+ */
+export function getAccountInfo(params) {
+  return request({
+    url: '/urm/v1/account/balance',
+    method: 'get',
+    params
+  })
+}
+
+/**
  * 查询租户组织用户列表
  * @param {Object} params - { tenantId, page, size }
  */

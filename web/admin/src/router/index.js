@@ -42,6 +42,18 @@ const routes = [
         meta: { title: '终端用户', requiresAuth: true, roles: [1] }
       },
       {
+        path: '/finance/recharge',
+        name: 'TenantRecharge',
+        component: () => import('@/views/Finance/Recharge.vue'),
+        meta: { title: '租户充值', requiresAuth: true, hidden: true, roles: [1] }
+      },
+      {
+        path: '/finance/recharge-records',
+        name: 'TenantRechargeRecords',
+        component: () => import('@/views/Finance/RechargeRecords.vue'),
+        meta: { title: '充值记录', requiresAuth: true, roles: [1] }
+      },
+      {
         path: '/ai-gateway',
         component: () => import('@/views/AIGateway/index.vue'),
         redirect: () => {
