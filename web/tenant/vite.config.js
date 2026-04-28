@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { resolve } from 'path'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  root: __dirname,
+
   plugins: [vue()],
 
   resolve: {
@@ -16,8 +22,12 @@ export default defineConfig({
     port: 13012,
     host: '0.0.0.0',
     proxy: {
-      '/urm': {
+      '/api': {
         target: 'http://localhost:13010',
+        changeOrigin: true
+      },
+      '/urm': {
+        target: 'http://localhost:6900',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/urm/, '/api')
       }
