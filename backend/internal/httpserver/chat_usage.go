@@ -21,6 +21,64 @@ type upstreamUsage struct {
 	TotalTokens      int32
 }
 
+// modelPrice is a unified price view: tenant override takes precedence over model price.
+type modelPrice struct {
+	InputPricePer1m         int64
+	OutputPricePer1m        int64
+	ImageSizePrices         []byte
+	VideoPricePerSecond     int64
+	AudioTtsPricePer1mChars int64
+	AudioSttPricePerMinute  int64
+}
+
+// getEffectiveModelPrice returns the tenant-specific price override if it exists,
+// otherwise falls back to the public model price. Returns pgx.ErrNoRows if no price is configured.
+func (s *Server) getEffectiveModelPrice(ctx context.Context, auth RuntimeAuth, modelID pgtype.UUID) (modelPrice, error) {
+	override, err := s.queries.GetTenantModelPriceOverrideForRuntime(ctx, dbgen.GetTenantModelPriceOverrideForRuntimeParams{
+		TenantID: auth.APIKey.TenantID,
+		ModelID:  modelID,
+	})
+	if err == nil {
+		return modelPrice{
+			InputPricePer1m:         override.InputPricePer1m,
+			OutputPricePer1m:        override.OutputPricePer1m,
+			ImageSizePrices:         override.ImageSizePrices,
+			VideoPricePerSecond:     override.VideoPricePerSecond,
+			AudioTtsPricePer1mChars: override.AudioTtsPricePer1mChars,
+			AudioSttPricePerMinute:  override.AudioSttPricePerMinute,
+		}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return modelPrice{}, err
+	}
+	base, err := s.queries.GetActiveModelPrice(ctx, modelID)
+	if err != nil {
+		return modelPrice{}, err
+	}
+	return modelPrice{
+		InputPricePer1m:         base.InputPricePer1m,
+		OutputPricePer1m:        base.OutputPricePer1m,
+		ImageSizePrices:         base.ImageSizePrices,
+		VideoPricePerSecond:     base.VideoPricePerSecond,
+		AudioTtsPricePer1mChars: base.AudioTtsPricePer1mChars,
+		AudioSttPricePerMinute:  base.AudioSttPricePerMinute,
+	}, nil
+}
+
+// imagePriceForSize looks up the per-image price for a given size in the JSON map.
+// Returns (price, true) if found; (0, false) if size is missing or map is empty.
+func imagePriceForSize(imageSize string, sizePricesJSON []byte) (int64, bool) {
+	if len(sizePricesJSON) == 0 {
+		return 0, false
+	}
+	var sizePrices map[string]int64
+	if err := json.Unmarshal(sizePricesJSON, &sizePrices); err != nil {
+		return 0, false
+	}
+	price, ok := sizePrices[imageSize]
+	return price, ok
+}
+
 type usageLogInput struct {
 	Auth              RuntimeAuth
 	RequestID         string
@@ -30,7 +88,7 @@ type usageLogInput struct {
 	ModelCode         string
 	CapabilityType    string
 	ModelID           pgtype.UUID
-	Deployment        *dbgen.ListDeploymentsForModelRow
+	Route             *dbgen.ListRoutesForModelRow
 	Stream            bool
 	HTTPStatus        int
 	UpstreamStatus    int
@@ -47,6 +105,7 @@ type usageLogInput struct {
 	URMTransactionID  string
 	BillingStatus     string
 	FirstTokenLatency time.Duration
+	ImageSize         string
 }
 
 type chatCosts struct {
@@ -148,15 +207,17 @@ func externalUserID(raw map[string]json.RawMessage) string {
 }
 
 func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
-	deploymentID := pgtype.UUID{}
+	upstreamDeploymentID := pgtype.UUID{}
 	endpointID := pgtype.UUID{}
 	providerCode := pgtype.Text{}
 	upstreamModel := pgtype.Text{}
-	if input.Deployment != nil {
-		deploymentID = input.Deployment.DeploymentID
-		endpointID = input.Deployment.EndpointID
-		providerCode = pgtype.Text{String: input.Deployment.ProviderCode, Valid: true}
-		upstreamModel = pgtype.Text{String: input.Deployment.UpstreamModel, Valid: true}
+	modelRouteID := pgtype.UUID{}
+	if input.Route != nil {
+		upstreamDeploymentID = input.Route.UpstreamDeploymentID
+		endpointID = input.Route.EndpointID
+		providerCode = pgtype.Text{String: input.Route.ProviderCode, Valid: true}
+		upstreamModel = pgtype.Text{String: input.Route.UpstreamModel, Valid: true}
+		modelRouteID = input.Route.RouteID
 	}
 
 	costs := chatCosts{}
@@ -186,41 +247,42 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 		billableUnits = int64(input.Usage.TotalTokens)
 	}
 	_, err := s.queries.CreateUsageLog(ctx, dbgen.CreateUsageLogParams{
-		RequestID:           input.RequestID,
-		TraceID:             optionalTextString(input.TraceID),
-		ApiKeyID:            input.Auth.APIKey.ID,
-		KeyOwnerType:        input.Auth.APIKey.OwnerType,
-		TenantID:            input.Auth.APIKey.TenantID,
-		UserID:              input.Auth.APIKey.UserID,
-		ExternalUserID:      optionalTextString(input.ExternalUserID),
-		ModelCode:           input.ModelCode,
-		CapabilityType:      capabilityType,
-		DeploymentID:        deploymentID,
-		EndpointID:          endpointID,
-		ProviderCode:        providerCode,
-		UpstreamModel:       upstreamModel,
-		ConversationID:      optionalTextString(input.ConversationID),
-		Stream:              input.Stream,
-		PromptTokens:        input.Usage.PromptTokens,
-		CompletionTokens:    input.Usage.CompletionTokens,
-		TotalTokens:         input.Usage.TotalTokens,
-		BillableUnitType:    billableUnitType,
-		BillableUnits:       billableUnits,
-		ProviderCost:        costs.ProviderCost,
-		PlatformCost:        costs.PlatformCost,
-		UserCost:            costs.UserCost,
-		ApiKeyQuotaCost:     costs.APIKeyQuotaCost,
-		UrmTransactionID:    optionalTextString(input.URMTransactionID),
-		BillingStatus:       billingStatus,
-		RequestStatus:       input.RequestStatus,
-		HttpStatus:          optionalInt4Value(int32(input.HTTPStatus)),
-		UpstreamStatus:      optionalInt4Value(int32(input.UpstreamStatus)),
-		LatencyMs:           optionalInt4Value(int32(input.Latency.Milliseconds())),
-		FirstTokenLatencyMs: optionalInt4Value(int32(input.FirstTokenLatency.Milliseconds())),
-		ErrorCode:           optionalTextString(input.ErrorCode),
-		ErrorMessage:        optionalTextString(input.ErrorMessage),
-		UsageEstimated:      input.UsageEstimated,
-		UsageSource:         usageSource,
+		RequestID:            input.RequestID,
+		TraceID:              optionalTextString(input.TraceID),
+		ApiKeyID:             input.Auth.APIKey.ID,
+		KeyOwnerType:         input.Auth.APIKey.OwnerType,
+		TenantID:             input.Auth.APIKey.TenantID,
+		UserID:               input.Auth.APIKey.UserID,
+		ExternalUserID:       optionalTextString(input.ExternalUserID),
+		ModelID:              input.ModelID,
+		ModelCode:            input.ModelCode,
+		ModelRouteID:         modelRouteID,
+		UpstreamDeploymentID: upstreamDeploymentID,
+		EndpointID:           endpointID,
+		ProviderCode:         providerCode,
+		UpstreamModel:        upstreamModel,
+		ConversationID:       optionalTextString(input.ConversationID),
+		Stream:               input.Stream,
+		PromptTokens:         input.Usage.PromptTokens,
+		CompletionTokens:     input.Usage.CompletionTokens,
+		TotalTokens:          input.Usage.TotalTokens,
+		BillableUnitType:     billableUnitType,
+		BillableUnits:        billableUnits,
+		ProviderCost:         costs.ProviderCost,
+		PlatformCost:         costs.PlatformCost,
+		UserCost:             costs.UserCost,
+		ApiKeyQuotaCost:      costs.APIKeyQuotaCost,
+		UrmTransactionID:     optionalTextString(input.URMTransactionID),
+		BillingStatus:        billingStatus,
+		RequestStatus:        input.RequestStatus,
+		HttpStatus:           optionalInt4Value(int32(input.HTTPStatus)),
+		UpstreamStatus:       optionalInt4Value(int32(input.UpstreamStatus)),
+		LatencyMs:            optionalInt4Value(int32(input.Latency.Milliseconds())),
+		FirstTokenLatencyMs:  optionalInt4Value(int32(input.FirstTokenLatency.Milliseconds())),
+		ErrorCode:            optionalTextString(input.ErrorCode),
+		ErrorMessage:         optionalTextString(input.ErrorMessage),
+		UsageEstimated:       input.UsageEstimated,
+		UsageSource:          usageSource,
 	})
 	if err != nil {
 		s.logger.Error("record usage log failed", "error", err, "request_id", input.RequestID)
@@ -237,39 +299,28 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 }
 
 func (s *Server) calculateChatCosts(ctx context.Context, input usageLogInput) chatCosts {
-	if input.RequestStatus != "success" || input.Deployment == nil {
+	if input.RequestStatus != "success" || input.Route == nil {
 		return chatCosts{}
 	}
-	capabilityType := input.CapabilityType
-	if capabilityType == "" {
-		capabilityType = "chat"
-	}
-
 	var costs chatCosts
-	modelPrice, err := s.queries.GetActiveModelPrice(ctx, input.ModelID)
+
+	price, err := s.getEffectiveModelPrice(ctx, input.Auth, input.ModelID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		s.logger.Error("get model price failed", "error", err, "request_id", input.RequestID)
 	}
 	if err == nil {
-		platformCost := tokenCost(input.Usage.PromptTokens, modelPrice.PlatformInputPricePer1m) +
-			tokenCost(input.Usage.CompletionTokens, modelPrice.PlatformOutputPricePer1m)
-		tenantSaleCost := tokenCost(input.Usage.PromptTokens, modelPrice.TenantInputPricePer1m) +
-			tokenCost(input.Usage.CompletionTokens, modelPrice.TenantOutputPricePer1m)
-		costs.PlatformCost = platformCost
+		tenantSaleCost := tokenCost(input.Usage.PromptTokens, price.InputPricePer1m) +
+			tokenCost(input.Usage.CompletionTokens, price.OutputPricePer1m)
+		costs.PlatformCost = tenantSaleCost
 		costs.APIKeyQuotaCost = tenantSaleCost
 		if input.Auth.APIKey.OwnerType == "user" {
 			costs.UserCost = tenantSaleCost
 		}
 	}
 
-	providerPrice, err := s.queries.GetActiveProviderModelPrice(ctx, dbgen.GetActiveProviderModelPriceParams{
-		ProviderID:     input.Deployment.ProviderID,
-		EndpointID:     input.Deployment.EndpointID,
-		UpstreamModel:  input.Deployment.UpstreamModel,
-		CapabilityType: capabilityType,
-	})
+	providerPrice, err := s.queries.GetActiveUpstreamDeploymentCostPrice(ctx, input.Route.UpstreamDeploymentID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		s.logger.Error("get provider model price failed", "error", err, "request_id", input.RequestID)
+		s.logger.Error("get deployment cost price failed", "error", err, "request_id", input.RequestID)
 	}
 	if err == nil {
 		costs.ProviderCost = providerPrice.RequestCost +
@@ -278,6 +329,23 @@ func (s *Server) calculateChatCosts(ctx context.Context, input usageLogInput) ch
 	}
 
 	return costs
+}
+
+func calculateImageCost(imageSize string, providerPrice dbgen.GetActiveUpstreamDeploymentCostPriceRow) int64 {
+	if imageSize == "" {
+		return providerPrice.ImageCost
+	}
+	// Parse image_size_prices JSONB
+	var sizePrices map[string]int64
+	if len(providerPrice.ImageSizePrices) > 0 {
+		if err := json.Unmarshal(providerPrice.ImageSizePrices, &sizePrices); err == nil {
+			if cost, ok := sizePrices[imageSize]; ok {
+				return cost
+			}
+		}
+	}
+	// Fallback to default image_cost
+	return providerPrice.ImageCost
 }
 
 func tokenCost(tokens int32, pricePer1M int64) int64 {

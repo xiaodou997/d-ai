@@ -7,9 +7,10 @@ INSERT INTO ai_usage_logs (
   tenant_id,
   user_id,
   external_user_id,
+  model_id,
   model_code,
-  capability_type,
-  deployment_id,
+  model_route_id,
+  upstream_deployment_id,
   endpoint_id,
   provider_code,
   upstream_model,
@@ -39,42 +40,46 @@ INSERT INTO ai_usage_logs (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-  $31, $32, $33, $34, $35
+  $31, $32, $33, $34, $35, $36
 )
 RETURNING id;
 
 -- name: GetActiveModelPrice :one
 SELECT
-  platform_input_price_per_1m,
-  platform_output_price_per_1m,
-  platform_image_price,
-  tenant_input_price_per_1m,
-  tenant_output_price_per_1m,
-  tenant_image_price
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
 FROM ai_model_prices
-WHERE model_id = $1
-  AND status = 'active'
-  AND effective_from <= now()
-ORDER BY effective_from DESC
-LIMIT 1;
+WHERE model_id = $1;
 
--- name: GetActiveProviderModelPrice :one
+-- name: GetTenantModelPriceOverrideForRuntime :one
+SELECT
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
+FROM ai_tenant_model_price_overrides
+WHERE tenant_id = $1
+  AND model_id = $2;
+
+-- name: GetActiveUpstreamDeploymentCostPrice :one
 SELECT
   input_cost_per_1m,
   output_cost_per_1m,
   request_cost,
   image_cost,
+  image_size_prices,
   video_cost_per_second
-FROM ai_provider_model_prices
-WHERE provider_id = $1
-  AND (endpoint_id = $2 OR endpoint_id IS NULL)
-  AND upstream_model = $3
-  AND capability_type = $4
+FROM ai_upstream_deployment_cost_prices
+WHERE upstream_deployment_id = $1
   AND status = 'active'
   AND effective_from <= now()
-ORDER BY
-  CASE WHEN endpoint_id = $2 THEN 0 ELSE 1 END,
-  effective_from DESC
+ORDER BY effective_from DESC
 LIMIT 1;
 
 -- name: ConfirmAPIKeyQuotaUsage :exec

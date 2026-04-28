@@ -7,87 +7,92 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	dbgen "uni-ai-api/backend/internal/db/gen"
 )
 
-const endpointCooldownTTL = 60 * time.Second
+const upstreamDeploymentCooldownTTL = 60 * time.Second
 const conversationBindingTTL = 24 * time.Hour
 
 type conversationBinding struct {
-	DeploymentID string `json:"deployment_id"`
-	EndpointID   string `json:"endpoint_id"`
+	UpstreamDeploymentID string `json:"upstream_deployment_id"`
+	EndpointID           string `json:"endpoint_id"`
 }
 
-func (s *Server) chooseDeployment(ctx context.Context, deployments []dbgen.ListDeploymentsForModelRow, stickyKey string) (dbgen.ListDeploymentsForModelRow, bool) {
-	if len(deployments) == 0 {
-		return dbgen.ListDeploymentsForModelRow{}, false
+// chooseRoute selects a model route with weighted random selection
+// Routes are grouped by priority (lower = higher priority)
+// Within the same priority group, routes are selected by route_weight * endpoint_weight
+func (s *Server) chooseRoute(ctx context.Context, routes []dbgen.ListRoutesForModelRow, stickyKey string) (dbgen.ListRoutesForModelRow, bool) {
+	if len(routes) == 0 {
+		return dbgen.ListRoutesForModelRow{}, false
 	}
 	if s.redis == nil {
-		return chooseWeightedDeployment(deployments)
+		return chooseWeightedRoute(routes)
 	}
 
 	if stickyKey != "" {
-		if deployment, ok := s.getStickyDeployment(ctx, deployments, stickyKey); ok {
-			return deployment, true
+		if route, ok := s.getStickyRoute(ctx, routes, stickyKey); ok {
+			return route, true
 		}
 	}
 
-	candidates := make([]dbgen.ListDeploymentsForModelRow, 0, len(deployments))
-	for _, deployment := range deployments {
-		cooling, err := s.endpointInCooldown(ctx, deployment)
+	candidates := make([]dbgen.ListRoutesForModelRow, 0, len(routes))
+	for _, route := range routes {
+		cooling, err := s.upstreamDeploymentInCooldown(ctx, route)
 		if err != nil {
-			s.logger.Error("endpoint cooldown check failed", "error", err, "endpoint_id", deployment.EndpointID.String())
-			candidates = append(candidates, deployment)
+			s.logger.Error("deployment cooldown check failed", "error", err, "upstream_deployment_id", route.UpstreamDeploymentID.String())
+			candidates = append(candidates, route)
 			continue
 		}
 		if !cooling {
-			candidates = append(candidates, deployment)
+			candidates = append(candidates, route)
 		}
 	}
 
-	chosen, ok := chooseWeightedDeployment(candidates)
+	chosen, ok := chooseWeightedRoute(candidates)
 	if ok && stickyKey != "" {
-		s.setStickyDeployment(ctx, stickyKey, chosen)
+		s.setStickyRoute(ctx, stickyKey, chosen)
 	}
 	return chosen, ok
 }
 
-func (s *Server) getStickyDeployment(ctx context.Context, deployments []dbgen.ListDeploymentsForModelRow, stickyKey string) (dbgen.ListDeploymentsForModelRow, bool) {
+func (s *Server) getStickyRoute(ctx context.Context, routes []dbgen.ListRoutesForModelRow, stickyKey string) (dbgen.ListRoutesForModelRow, bool) {
 	raw, err := s.redis.Get(ctx, stickyKey).Result()
 	if err != nil {
-		return dbgen.ListDeploymentsForModelRow{}, false
+		return dbgen.ListRoutesForModelRow{}, false
 	}
 	var binding conversationBinding
 	if err := json.Unmarshal([]byte(raw), &binding); err != nil {
-		return dbgen.ListDeploymentsForModelRow{}, false
+		return dbgen.ListRoutesForModelRow{}, false
 	}
-	for _, deployment := range deployments {
-		if deployment.DeploymentID.String() != binding.DeploymentID || deployment.EndpointID.String() != binding.EndpointID {
+	for _, route := range routes {
+		if route.UpstreamDeploymentID.String() != binding.UpstreamDeploymentID || route.EndpointID.String() != binding.EndpointID {
 			continue
 		}
-		cooling, err := s.endpointInCooldown(ctx, deployment)
+		cooling, err := s.upstreamDeploymentInCooldown(ctx, route)
 		if err != nil {
-			s.logger.Error("sticky endpoint cooldown check failed", "error", err, "endpoint_id", deployment.EndpointID.String())
-			return deployment, true
+			s.logger.Error("sticky deployment cooldown check failed", "error", err, "upstream_deployment_id", route.UpstreamDeploymentID.String())
+			return route, true
 		}
 		if !cooling {
-			return deployment, true
+			return route, true
 		}
-		return dbgen.ListDeploymentsForModelRow{}, false
+		return dbgen.ListRoutesForModelRow{}, false
 	}
-	return dbgen.ListDeploymentsForModelRow{}, false
+	return dbgen.ListRoutesForModelRow{}, false
 }
 
-func (s *Server) setStickyDeployment(ctx context.Context, stickyKey string, deployment dbgen.ListDeploymentsForModelRow) {
+func (s *Server) setStickyRoute(ctx context.Context, stickyKey string, route dbgen.ListRoutesForModelRow) {
 	value, err := json.Marshal(conversationBinding{
-		DeploymentID: deployment.DeploymentID.String(),
-		EndpointID:   deployment.EndpointID.String(),
+		UpstreamDeploymentID: route.UpstreamDeploymentID.String(),
+		EndpointID:           route.EndpointID.String(),
 	})
 	if err != nil {
 		return
 	}
 	if err := s.redis.Set(ctx, stickyKey, value, conversationBindingTTL).Err(); err != nil {
-		s.logger.Error("set conversation binding failed", "error", err, "deployment_id", deployment.DeploymentID.String())
+		s.logger.Error("set conversation binding failed", "error", err, "upstream_deployment_id", route.UpstreamDeploymentID.String())
 	}
 }
 
@@ -102,63 +107,63 @@ func conversationStickyKey(auth RuntimeAuth, modelCode string, conversationID st
 	return "uni_ai_api:conv:" + auth.APIKey.TenantID + ":" + identity + ":" + modelCode + ":" + conversationID
 }
 
-func (s *Server) endpointInCooldown(ctx context.Context, deployment dbgen.ListDeploymentsForModelRow) (bool, error) {
+func (s *Server) upstreamDeploymentInCooldown(ctx context.Context, route dbgen.ListRoutesForModelRow) (bool, error) {
 	if s.redis == nil {
 		return false, nil
 	}
-	value, err := s.redis.Exists(ctx, endpointCooldownKey(deployment)).Result()
+	value, err := s.redis.Exists(ctx, upstreamDeploymentCooldownKey(route.UpstreamDeploymentID)).Result()
 	if err != nil {
 		return false, err
 	}
 	return value > 0, nil
 }
 
-func (s *Server) markEndpointCooldown(ctx context.Context, deployment dbgen.ListDeploymentsForModelRow, reason string) {
+func (s *Server) markUpstreamDeploymentCooldown(ctx context.Context, upstreamDeploymentID pgtype.UUID, reason string) {
 	if s.redis == nil {
 		return
 	}
-	err := s.redis.Set(ctx, endpointCooldownKey(deployment), reason, endpointCooldownTTL).Err()
+	err := s.redis.Set(ctx, upstreamDeploymentCooldownKey(upstreamDeploymentID), reason, upstreamDeploymentCooldownTTL).Err()
 	if err != nil {
-		s.logger.Error("mark endpoint cooldown failed", "error", err, "endpoint_id", deployment.EndpointID.String())
+		s.logger.Error("mark deployment cooldown failed", "error", err, "upstream_deployment_id", upstreamDeploymentID.String())
 	}
 }
 
-func endpointCooldownKey(deployment dbgen.ListDeploymentsForModelRow) string {
-	return "uni_ai_api:endpoint:" + deployment.EndpointID.String() + ":cooldown"
+func upstreamDeploymentCooldownKey(upstreamDeploymentID pgtype.UUID) string {
+	return "uni_ai_api:deployment:" + upstreamDeploymentID.String() + ":cooldown"
 }
 
 func shouldCooldownUpstreamStatus(status int) bool {
 	return status == http.StatusTooManyRequests || status >= 500
 }
 
-func chooseWeightedDeployment(deployments []dbgen.ListDeploymentsForModelRow) (dbgen.ListDeploymentsForModelRow, bool) {
-	if len(deployments) == 0 {
-		return dbgen.ListDeploymentsForModelRow{}, false
+func chooseWeightedRoute(routes []dbgen.ListRoutesForModelRow) (dbgen.ListRoutesForModelRow, bool) {
+	if len(routes) == 0 {
+		return dbgen.ListRoutesForModelRow{}, false
 	}
 
-	priority := deployments[0].Priority
-	for _, deployment := range deployments[1:] {
-		if deployment.Priority < priority {
-			priority = deployment.Priority
+	priority := routes[0].RoutePriority
+	for _, route := range routes[1:] {
+		if route.RoutePriority < priority {
+			priority = route.RoutePriority
 		}
 	}
 
-	candidates := make([]dbgen.ListDeploymentsForModelRow, 0, len(deployments))
+	candidates := make([]dbgen.ListRoutesForModelRow, 0, len(routes))
 	totalWeight := int64(0)
-	for _, deployment := range deployments {
-		if deployment.Priority != priority {
+	for _, route := range routes {
+		if route.RoutePriority != priority {
 			continue
 		}
-		weight := deploymentRouteWeight(deployment)
+		weight := routeWeight(route)
 		if weight <= 0 {
 			continue
 		}
-		candidates = append(candidates, deployment)
+		candidates = append(candidates, route)
 		totalWeight += weight
 	}
 
 	if len(candidates) == 0 {
-		return dbgen.ListDeploymentsForModelRow{}, false
+		return dbgen.ListRoutesForModelRow{}, false
 	}
 	if totalWeight <= 0 {
 		return candidates[0], true
@@ -167,7 +172,7 @@ func chooseWeightedDeployment(deployments []dbgen.ListDeploymentsForModelRow) (d
 	pick := rand.Int63n(totalWeight) + 1
 	running := int64(0)
 	for _, candidate := range candidates {
-		running += deploymentRouteWeight(candidate)
+		running += routeWeight(candidate)
 		if pick <= running {
 			return candidate, true
 		}
@@ -176,11 +181,21 @@ func chooseWeightedDeployment(deployments []dbgen.ListDeploymentsForModelRow) (d
 	return candidates[len(candidates)-1], true
 }
 
-func deploymentRouteWeight(deployment dbgen.ListDeploymentsForModelRow) int64 {
-	deploymentWeight := int64(deployment.DeploymentWeight)
-	endpointWeight := int64(deployment.EndpointWeight)
-	if deploymentWeight <= 0 || endpointWeight <= 0 {
+func routeWeight(route dbgen.ListRoutesForModelRow) int64 {
+	routeWeight := int64(route.RouteWeight)
+	endpointWeight := int64(route.EndpointWeight)
+	if routeWeight <= 0 || endpointWeight <= 0 {
 		return 0
 	}
-	return deploymentWeight * endpointWeight
+	return routeWeight * endpointWeight
+}
+
+func filterStreamingRoutes(routes []dbgen.ListRoutesForModelRow) []dbgen.ListRoutesForModelRow {
+	filtered := make([]dbgen.ListRoutesForModelRow, 0, len(routes))
+	for _, route := range routes {
+		if route.SupportsStream {
+			filtered = append(filtered, route)
+		}
+	}
+	return filtered
 }

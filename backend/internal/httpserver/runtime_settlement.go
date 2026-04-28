@@ -6,7 +6,6 @@ import (
 	"errors"
 	"strings"
 
-	dbgen "uni-ai-api/backend/internal/db/gen"
 	"uni-ai-api/backend/internal/urm"
 )
 
@@ -83,16 +82,17 @@ func isURMInsufficientBalance(err error) bool {
 		strings.Contains(message, "not enough")
 }
 
-func estimatedSettlementCosts(raw map[string]json.RawMessage, model callableModel, price dbgen.GetActiveModelPriceRow, auth RuntimeAuth) chatCosts {
+func estimatedSettlementCosts(raw map[string]json.RawMessage, model callableModel, price modelPrice, auth RuntimeAuth) chatCosts {
 	outputTokens := requestedOutputTokens(raw, model.DefaultMaxOutputTokens)
-	platform := tokenCost(outputTokens, price.PlatformOutputPricePer1m)
+	tenantSaleCost := tokenCost(outputTokens, price.OutputPricePer1m)
+	platform := tenantSaleCost
 	user := int64(0)
 	if auth.APIKey.OwnerType == "user" {
-		user = tokenCost(outputTokens, price.TenantOutputPricePer1m)
+		user = tenantSaleCost
 	}
 	return chatCosts{
 		PlatformCost:    platform,
 		UserCost:        user,
-		APIKeyQuotaCost: tokenCost(outputTokens, price.TenantOutputPricePer1m),
+		APIKeyQuotaCost: tenantSaleCost,
 	}
 }

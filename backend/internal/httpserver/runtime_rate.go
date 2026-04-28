@@ -38,12 +38,13 @@ type runtimePolicySnapshot struct {
 	ConcurrencyLimit pgtype.Int4
 }
 
-func (s *Server) acquireRuntimeLimits(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, modelCode string, capabilityType string, tokenEstimate int32, deployment dbgen.ListDeploymentsForModelRow) (*runtimeLimitLease, bool) {
+// acquireRuntimeLimits - updated to use ListRoutesForModelRow
+func (s *Server) acquireRuntimeLimits(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, modelCode string, capabilityType string, tokenEstimate int32, route dbgen.ListRoutesForModelRow) (*runtimeLimitLease, bool) {
 	if s.redis == nil {
 		return nil, true
 	}
 
-	policies, err := s.runtimePolicies(r.Context(), auth, modelCode, capabilityType, deployment)
+	policies, err := s.runtimePolicies(r.Context(), auth, modelCode, capabilityType, route)
 	if err != nil {
 		s.logger.Error("list runtime limit policies failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		writeOpenAIError(w, http.StatusInternalServerError, "Rate limit check failed.", "server_error", "rate_limit_check_failed")
@@ -181,7 +182,8 @@ return 1
 	return value == 1, nil
 }
 
-func (s *Server) runtimePolicies(ctx context.Context, auth RuntimeAuth, modelCode string, capabilityType string, deployment dbgen.ListDeploymentsForModelRow) ([]runtimePolicySnapshot, error) {
+// runtimePolicies - updated to use ListRoutesForModelRow
+func (s *Server) runtimePolicies(ctx context.Context, auth RuntimeAuth, modelCode string, capabilityType string, route dbgen.ListRoutesForModelRow) ([]runtimePolicySnapshot, error) {
 	userID := ""
 	if auth.APIKey.OwnerType == "user" && auth.APIKey.UserID.Valid {
 		userID = auth.APIKey.UserID.String
@@ -192,8 +194,8 @@ func (s *Server) runtimePolicies(ctx context.Context, auth RuntimeAuth, modelCod
 		ScopeID:        auth.APIKey.TenantID,
 		ScopeID_2:      userID,
 		ScopeID_3:      auth.APIKey.ID.String(),
-		ScopeID_4:      deployment.ProviderID.String(),
-		ScopeID_5:      deployment.EndpointID.String(),
+		ScopeID_4:      route.ProviderID.String(),
+		ScopeID_5:      route.EndpointID.String(),
 	})
 	if err != nil {
 		return nil, err

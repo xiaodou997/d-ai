@@ -64,6 +64,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve model - only need tenant grant, no user grant required
 	model, err := s.resolveCallableModel(r, auth, req.Model)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -76,33 +77,31 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	conversationID := chatConversationID(r, raw)
 
-	deployments, err := s.queries.ListDeploymentsForModel(r.Context(), dbgen.ListDeploymentsForModelParams{
-		ModelID:        model.ID,
-		CapabilityType: "chat",
-	})
+	// List routes instead of deployments
+	routes, err := s.queries.ListRoutesForModel(r.Context(), model.ID)
 	if err != nil {
-		s.logger.Error("list deployments failed", "error", err, "request_id", requestIDFromContext(r.Context()))
-		writeOpenAIError(w, http.StatusInternalServerError, "Failed to resolve model deployment.", "server_error", "server_error")
+		s.logger.Error("list routes failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		writeOpenAIError(w, http.StatusInternalServerError, "Failed to resolve model route.", "server_error", "server_error")
 		return
 	}
-	if len(deployments) == 0 {
-		writeOpenAIError(w, http.StatusServiceUnavailable, "No available deployment for the requested model.", "server_error", "model_unavailable")
+	if len(routes) == 0 {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
 	if req.Stream {
-		deployments = filterStreamingDeployments(deployments)
-		if len(deployments) == 0 {
-			writeOpenAIError(w, http.StatusServiceUnavailable, "No streaming deployment for the requested model.", "server_error", "model_unavailable")
+		routes = filterStreamingRoutes(routes)
+		if len(routes) == 0 {
+			writeOpenAIError(w, http.StatusServiceUnavailable, "No streaming route for the requested model.", "server_error", "model_unavailable")
 			return
 		}
 	}
 
-	deployment, ok := s.chooseDeployment(r.Context(), deployments, conversationStickyKey(auth, req.Model, conversationID))
+	route, ok := s.chooseRoute(r.Context(), routes, conversationStickyKey(auth, req.Model, conversationID))
 	if !ok {
-		writeOpenAIError(w, http.StatusServiceUnavailable, "No available deployment for the requested model.", "server_error", "model_unavailable")
+		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
-	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "chat", estimateChatRateTokens(raw, model.DefaultMaxOutputTokens), deployment)
+	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "chat", estimateChatRateTokens(raw, model.DefaultMaxOutputTokens), route)
 	if !ok {
 		return
 	}
@@ -114,7 +113,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.releaseAPIKeyQuotaReservation(r.Context(), reservation)
 
-	if deployment.UpstreamProtocol != upstream.ProtocolOpenAIChatCompletions {
+	if route.UpstreamProtocol != upstream.ProtocolOpenAIChatCompletions {
 		s.recordChatUsage(r.Context(), usageLogInput{
 			Auth:           auth,
 			RequestID:      requestIDFromContext(r.Context()),
@@ -123,19 +122,19 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			ConversationID: conversationID,
 			ModelCode:      req.Model,
 			ModelID:        model.ID,
-			Deployment:     &deployment,
+			Route:          &route,
 			Stream:         req.Stream,
 			HTTPStatus:     http.StatusBadGateway,
 			Latency:        time.Since(start),
 			RequestStatus:  "failed",
 			ErrorCode:      "unsupported_upstream_protocol",
-			ErrorMessage:   "Selected deployment protocol is not supported for chat completions.",
+			ErrorMessage:   "Selected route protocol is not supported for chat completions.",
 		})
-		writeOpenAIError(w, http.StatusBadGateway, "Selected deployment protocol is not supported for chat completions.", "server_error", "unsupported_upstream_protocol")
+		writeOpenAIError(w, http.StatusBadGateway, "Selected route protocol is not supported for chat completions.", "server_error", "unsupported_upstream_protocol")
 		return
 	}
 
-	providerKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, deployment.ApiKeyCiphertext)
+	providerKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, route.ApiKeyCiphertext)
 	if err != nil {
 		s.logger.Error("decrypt provider key failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		s.recordChatUsage(r.Context(), usageLogInput{
@@ -146,7 +145,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			ConversationID: conversationID,
 			ModelCode:      req.Model,
 			ModelID:        model.ID,
-			Deployment:     &deployment,
+			Route:          &route,
 			Stream:         req.Stream,
 			HTTPStatus:     http.StatusInternalServerError,
 			Latency:        time.Since(start),
@@ -170,7 +169,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			Raw:            raw,
 			Envelope:       req,
 			Model:          model,
-			Deployment:     deployment,
+			Route:          route,
 			ProviderKey:    providerKey,
 			Reservation:    settlementReservation,
 			Price:          price,
@@ -180,18 +179,18 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := upstream.ForwardOpenAIChatCompletions(r.Context(), s.httpClient, upstream.OpenAIChatRequest{
-		BaseURL:            deployment.BaseUrl,
-		CustomPath:         optionalText(deployment.CustomPath),
+		BaseURL:            route.BaseUrl,
+		RequestPath:        optionalText(route.RequestPath),
 		APIKey:             providerKey,
-		UpstreamModel:      deployment.UpstreamModel,
-		ExtraHeaders:       deployment.ExtraHeaders,
-		UpstreamParameters: deployment.UpstreamParameters,
-		Timeout:            time.Duration(deployment.TimeoutMs) * time.Millisecond,
+		UpstreamModel:      route.UpstreamModel,
+		ExtraHeaders:       route.ExtraHeaders,
+		UpstreamParameters: route.UpstreamParameters,
+		Timeout:            time.Duration(route.TimeoutMs) * time.Millisecond,
 		Body:               raw,
 	})
 	if err != nil {
 		s.logger.Error("forward chat completion failed", "error", err, "request_id", requestIDFromContext(r.Context()))
-		s.markEndpointCooldown(r.Context(), deployment, "upstream_request_failed")
+		s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_request_failed")
 		billingStatus := s.cancelChatSettlement(r.Context(), settlementReservation)
 		s.recordChatUsage(r.Context(), usageLogInput{
 			Auth:             auth,
@@ -201,7 +200,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			ConversationID:   conversationID,
 			ModelCode:        req.Model,
 			ModelID:          model.ID,
-			Deployment:       &deployment,
+			Route:            &route,
 			Stream:           req.Stream,
 			HTTPStatus:       http.StatusBadGateway,
 			Latency:          time.Since(start),
@@ -223,7 +222,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
-			s.markEndpointCooldown(r.Context(), deployment, "upstream_status_"+http.StatusText(resp.StatusCode))
+			s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
 	}
 	usage := ensureUsageTotal(parseOpenAIUsage(resp))
@@ -237,7 +236,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	costs := s.calculateChatCosts(r.Context(), usageLogInput{
-		Auth: auth, ModelID: model.ID, Deployment: &deployment, RequestStatus: requestStatus, Usage: usage,
+		Auth: auth, ModelID: model.ID, Route: &route, RequestStatus: requestStatus, Usage: usage,
 	})
 	billingStatus := "not_billed"
 	if requestStatus == "success" {
@@ -253,7 +252,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		ConversationID:   conversationID,
 		ModelCode:        req.Model,
 		ModelID:          model.ID,
-		Deployment:       &deployment,
+		Route:            &route,
 		Stream:           req.Stream,
 		HTTPStatus:       resp.StatusCode,
 		UpstreamStatus:   resp.StatusCode,
@@ -299,27 +298,27 @@ type streamChatInput struct {
 	Raw            map[string]json.RawMessage
 	Envelope       chatCompletionEnvelope
 	Model          callableModel
-	Deployment     dbgen.ListDeploymentsForModelRow
+	Route          dbgen.ListRoutesForModelRow
 	ProviderKey    string
 	Reservation    *settlementReservation
-	Price          *dbgen.GetActiveModelPriceRow
+	Price          *modelPrice
 	ConversationID string
 }
 
 func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, input streamChatInput) {
 	resp, err := upstream.ForwardOpenAIChatCompletionsStream(r.Context(), s.httpClient, upstream.OpenAIChatRequest{
-		BaseURL:            input.Deployment.BaseUrl,
-		CustomPath:         optionalText(input.Deployment.CustomPath),
+		BaseURL:            input.Route.BaseUrl,
+		RequestPath:        optionalText(input.Route.RequestPath),
 		APIKey:             input.ProviderKey,
-		UpstreamModel:      input.Deployment.UpstreamModel,
-		ExtraHeaders:       input.Deployment.ExtraHeaders,
-		UpstreamParameters: input.Deployment.UpstreamParameters,
-		Timeout:            time.Duration(input.Deployment.TimeoutMs) * time.Millisecond,
+		UpstreamModel:      input.Route.UpstreamModel,
+		ExtraHeaders:       input.Route.ExtraHeaders,
+		UpstreamParameters: input.Route.UpstreamParameters,
+		Timeout:            time.Duration(input.Route.TimeoutMs) * time.Millisecond,
 		Body:               input.Raw,
 	})
 	if err != nil {
 		s.logger.Error("forward streaming chat completion failed", "error", err, "request_id", requestIDFromContext(r.Context()))
-		s.markEndpointCooldown(r.Context(), input.Deployment, "upstream_request_failed")
+		s.markUpstreamDeploymentCooldown(r.Context(), input.Route.UpstreamDeploymentID, "upstream_request_failed")
 		billingStatus := s.cancelChatSettlement(r.Context(), input.Reservation)
 		s.recordChatUsage(r.Context(), usageLogInput{
 			Auth:             input.Auth,
@@ -329,7 +328,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 			ConversationID:   input.ConversationID,
 			ModelCode:        input.Envelope.Model,
 			ModelID:          input.Model.ID,
-			Deployment:       &input.Deployment,
+			Route:            &input.Route,
 			Stream:           true,
 			HTTPStatus:       http.StatusBadGateway,
 			Latency:          time.Since(input.Start),
@@ -347,7 +346,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
-			s.markEndpointCooldown(r.Context(), input.Deployment, "upstream_status_"+http.StatusText(resp.StatusCode))
+			s.markUpstreamDeploymentCooldown(r.Context(), input.Route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
 		billingStatus := s.cancelChatSettlement(r.Context(), input.Reservation)
 		s.recordChatUsage(r.Context(), usageLogInput{
@@ -358,7 +357,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 			ConversationID:   input.ConversationID,
 			ModelCode:        input.Envelope.Model,
 			ModelID:          input.Model.ID,
-			Deployment:       &input.Deployment,
+			Route:            &input.Route,
 			Stream:           true,
 			HTTPStatus:       resp.StatusCode,
 			UpstreamStatus:   resp.StatusCode,
@@ -436,7 +435,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 		}
 	}
 	costs := s.calculateChatCosts(r.Context(), usageLogInput{
-		Auth: input.Auth, ModelID: input.Model.ID, Deployment: &input.Deployment, RequestStatus: status, Usage: usage,
+		Auth: input.Auth, ModelID: input.Model.ID, Route: &input.Route, RequestStatus: status, Usage: usage,
 	})
 	billingStatus := "not_billed"
 	if status == "success" {
@@ -454,7 +453,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 		ConversationID:    input.ConversationID,
 		ModelCode:         input.Envelope.Model,
 		ModelID:           input.Model.ID,
-		Deployment:        &input.Deployment,
+		Route:             &input.Route,
 		Stream:            true,
 		HTTPStatus:        resp.StatusCode,
 		UpstreamStatus:    resp.StatusCode,
@@ -562,44 +561,31 @@ func (p *sseUsageParser) parseLine(line string) {
 	}
 }
 
+// resolveCallableModel - only checks tenant grant, no user grant required
 func (s *Server) resolveCallableModel(r *http.Request, auth RuntimeAuth, modelCode string) (callableModel, error) {
 	return s.resolveCallableModelForCapability(r, auth, modelCode, "chat")
 }
 
 func (s *Server) resolveCallableModelForCapability(r *http.Request, auth RuntimeAuth, modelCode string, capabilityType string) (callableModel, error) {
-	switch auth.APIKey.OwnerType {
-	case "tenant":
-		row, err := s.queries.GetTenantModel(r.Context(), dbgen.GetTenantModelParams{
-			TenantID:       auth.APIKey.TenantID,
-			ModelCode:      modelCode,
-			CapabilityType: capabilityType,
-		})
-		return callableModel{ID: row.ID, DefaultMaxOutputTokens: row.DefaultMaxOutputTokens}, err
-	case "user":
-		if !auth.APIKey.UserID.Valid {
-			return callableModel{}, errors.New("user api key missing user_id")
-		}
-		row, err := s.queries.GetUserModel(r.Context(), dbgen.GetUserModelParams{
-			TenantID:       auth.APIKey.TenantID,
-			UserID:         auth.APIKey.UserID.String,
-			ModelCode:      modelCode,
-			CapabilityType: capabilityType,
-		})
-		return callableModel{ID: row.ID, DefaultMaxOutputTokens: row.DefaultMaxOutputTokens}, err
-	default:
-		return callableModel{}, errors.New("unsupported api key owner_type")
-	}
+	// Only tenant grant is required, user grant is no longer needed
+	row, err := s.queries.GetTenantModel(r.Context(), dbgen.GetTenantModelParams{
+		TenantID:       auth.APIKey.TenantID,
+		ModelCode:      modelCode,
+		CapabilityType: capabilityType,
+	})
+	return callableModel{ID: row.ID, DefaultMaxOutputTokens: row.DefaultMaxOutputTokens}, err
 }
 
 func (s *Server) reserveEstimatedChatQuota(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, model callableModel, raw map[string]json.RawMessage) (*quotaReservation, bool) {
-	price, err := s.queries.GetActiveModelPrice(r.Context(), model.ID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	price, err := s.getEffectiveModelPrice(r.Context(), auth, model.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeOpenAIError(w, http.StatusPaymentRequired, "Model pricing not configured.", "insufficient_quota", "model_price_not_configured")
+			return nil, false
+		}
 		s.logger.Error("get model price for quota reservation failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		writeOpenAIError(w, http.StatusInternalServerError, "Quota reservation failed.", "server_error", "quota_reservation_failed")
 		return nil, false
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, true
 	}
 
 	estimated := estimateChatQuotaCost(raw, model.DefaultMaxOutputTokens, price)
@@ -616,11 +602,12 @@ func (s *Server) reserveEstimatedChatQuota(w http.ResponseWriter, r *http.Reques
 	return reservation, true
 }
 
-func (s *Server) freezeEstimatedChatSettlement(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, model callableModel, raw map[string]json.RawMessage) (*dbgen.GetActiveModelPriceRow, *settlementReservation, bool) {
-	price, err := s.queries.GetActiveModelPrice(r.Context(), model.ID)
+func (s *Server) freezeEstimatedChatSettlement(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, model callableModel, raw map[string]json.RawMessage) (*modelPrice, *settlementReservation, bool) {
+	price, err := s.getEffectiveModelPrice(r.Context(), auth, model.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, true
+			writeOpenAIError(w, http.StatusPaymentRequired, "Model pricing not configured.", "insufficient_quota", "model_price_not_configured")
+			return nil, nil, false
 		}
 		s.logger.Error("get model price for settlement failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		writeOpenAIError(w, http.StatusInternalServerError, "Settlement reservation failed.", "server_error", "settlement_reservation_failed")
@@ -653,16 +640,6 @@ func (s *Server) freezeEstimatedChatSettlement(w http.ResponseWriter, r *http.Re
 		return &price, nil, false
 	}
 	return &price, reservation, true
-}
-
-func filterStreamingDeployments(deployments []dbgen.ListDeploymentsForModelRow) []dbgen.ListDeploymentsForModelRow {
-	filtered := make([]dbgen.ListDeploymentsForModelRow, 0, len(deployments))
-	for _, deployment := range deployments {
-		if deployment.SupportsStream {
-			filtered = append(filtered, deployment)
-		}
-	}
-	return filtered
 }
 
 func chatConversationID(r *http.Request, raw map[string]json.RawMessage) string {

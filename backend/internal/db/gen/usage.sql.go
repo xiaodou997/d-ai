@@ -38,9 +38,10 @@ INSERT INTO ai_usage_logs (
   tenant_id,
   user_id,
   external_user_id,
+  model_id,
   model_code,
-  capability_type,
-  deployment_id,
+  model_route_id,
+  upstream_deployment_id,
   endpoint_id,
   provider_code,
   upstream_model,
@@ -70,47 +71,48 @@ INSERT INTO ai_usage_logs (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-  $31, $32, $33, $34, $35
+  $31, $32, $33, $34, $35, $36
 )
 RETURNING id
 `
 
 type CreateUsageLogParams struct {
-	RequestID           string      `json:"request_id"`
-	TraceID             pgtype.Text `json:"trace_id"`
-	ApiKeyID            pgtype.UUID `json:"api_key_id"`
-	KeyOwnerType        string      `json:"key_owner_type"`
-	TenantID            string      `json:"tenant_id"`
-	UserID              pgtype.Text `json:"user_id"`
-	ExternalUserID      pgtype.Text `json:"external_user_id"`
-	ModelCode           string      `json:"model_code"`
-	CapabilityType      string      `json:"capability_type"`
-	DeploymentID        pgtype.UUID `json:"deployment_id"`
-	EndpointID          pgtype.UUID `json:"endpoint_id"`
-	ProviderCode        pgtype.Text `json:"provider_code"`
-	UpstreamModel       pgtype.Text `json:"upstream_model"`
-	ConversationID      pgtype.Text `json:"conversation_id"`
-	Stream              bool        `json:"stream"`
-	PromptTokens        int32       `json:"prompt_tokens"`
-	CompletionTokens    int32       `json:"completion_tokens"`
-	TotalTokens         int32       `json:"total_tokens"`
-	BillableUnitType    string      `json:"billable_unit_type"`
-	BillableUnits       int64       `json:"billable_units"`
-	ProviderCost        int64       `json:"provider_cost"`
-	PlatformCost        int64       `json:"platform_cost"`
-	UserCost            int64       `json:"user_cost"`
-	ApiKeyQuotaCost     int64       `json:"api_key_quota_cost"`
-	UrmTransactionID    pgtype.Text `json:"urm_transaction_id"`
-	BillingStatus       string      `json:"billing_status"`
-	RequestStatus       string      `json:"request_status"`
-	HttpStatus          pgtype.Int4 `json:"http_status"`
-	UpstreamStatus      pgtype.Int4 `json:"upstream_status"`
-	LatencyMs           pgtype.Int4 `json:"latency_ms"`
-	FirstTokenLatencyMs pgtype.Int4 `json:"first_token_latency_ms"`
-	ErrorCode           pgtype.Text `json:"error_code"`
-	ErrorMessage        pgtype.Text `json:"error_message"`
-	UsageEstimated      bool        `json:"usage_estimated"`
-	UsageSource         string      `json:"usage_source"`
+	RequestID            string      `json:"request_id"`
+	TraceID              pgtype.Text `json:"trace_id"`
+	ApiKeyID             pgtype.UUID `json:"api_key_id"`
+	KeyOwnerType         string      `json:"key_owner_type"`
+	TenantID             string      `json:"tenant_id"`
+	UserID               pgtype.Text `json:"user_id"`
+	ExternalUserID       pgtype.Text `json:"external_user_id"`
+	ModelID              pgtype.UUID `json:"model_id"`
+	ModelCode            string      `json:"model_code"`
+	ModelRouteID         pgtype.UUID `json:"model_route_id"`
+	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
+	EndpointID           pgtype.UUID `json:"endpoint_id"`
+	ProviderCode         pgtype.Text `json:"provider_code"`
+	UpstreamModel        pgtype.Text `json:"upstream_model"`
+	ConversationID       pgtype.Text `json:"conversation_id"`
+	Stream               bool        `json:"stream"`
+	PromptTokens         int32       `json:"prompt_tokens"`
+	CompletionTokens     int32       `json:"completion_tokens"`
+	TotalTokens          int32       `json:"total_tokens"`
+	BillableUnitType     string      `json:"billable_unit_type"`
+	BillableUnits        int64       `json:"billable_units"`
+	ProviderCost         int64       `json:"provider_cost"`
+	PlatformCost         int64       `json:"platform_cost"`
+	UserCost             int64       `json:"user_cost"`
+	ApiKeyQuotaCost      int64       `json:"api_key_quota_cost"`
+	UrmTransactionID     pgtype.Text `json:"urm_transaction_id"`
+	BillingStatus        string      `json:"billing_status"`
+	RequestStatus        string      `json:"request_status"`
+	HttpStatus           pgtype.Int4 `json:"http_status"`
+	UpstreamStatus       pgtype.Int4 `json:"upstream_status"`
+	LatencyMs            pgtype.Int4 `json:"latency_ms"`
+	FirstTokenLatencyMs  pgtype.Int4 `json:"first_token_latency_ms"`
+	ErrorCode            pgtype.Text `json:"error_code"`
+	ErrorMessage         pgtype.Text `json:"error_message"`
+	UsageEstimated       bool        `json:"usage_estimated"`
+	UsageSource          string      `json:"usage_source"`
 }
 
 func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) (pgtype.UUID, error) {
@@ -122,9 +124,10 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.TenantID,
 		arg.UserID,
 		arg.ExternalUserID,
+		arg.ModelID,
 		arg.ModelCode,
-		arg.CapabilityType,
-		arg.DeploymentID,
+		arg.ModelRouteID,
+		arg.UpstreamDeploymentID,
 		arg.EndpointID,
 		arg.ProviderCode,
 		arg.UpstreamModel,
@@ -158,92 +161,115 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 
 const getActiveModelPrice = `-- name: GetActiveModelPrice :one
 SELECT
-  platform_input_price_per_1m,
-  platform_output_price_per_1m,
-  platform_image_price,
-  tenant_input_price_per_1m,
-  tenant_output_price_per_1m,
-  tenant_image_price
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
 FROM ai_model_prices
 WHERE model_id = $1
-  AND status = 'active'
-  AND effective_from <= now()
-ORDER BY effective_from DESC
-LIMIT 1
 `
 
 type GetActiveModelPriceRow struct {
-	PlatformInputPricePer1m  int64 `json:"platform_input_price_per_1m"`
-	PlatformOutputPricePer1m int64 `json:"platform_output_price_per_1m"`
-	PlatformImagePrice       int64 `json:"platform_image_price"`
-	TenantInputPricePer1m    int64 `json:"tenant_input_price_per_1m"`
-	TenantOutputPricePer1m   int64 `json:"tenant_output_price_per_1m"`
-	TenantImagePrice         int64 `json:"tenant_image_price"`
+	InputPricePer1m         int64  `json:"input_price_per_1m"`
+	OutputPricePer1m        int64  `json:"output_price_per_1m"`
+	ImageSizePrices         []byte `json:"image_size_prices"`
+	VideoPricePerSecond     int64  `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64  `json:"audio_stt_price_per_minute"`
 }
 
 func (q *Queries) GetActiveModelPrice(ctx context.Context, modelID pgtype.UUID) (GetActiveModelPriceRow, error) {
 	row := q.db.QueryRow(ctx, getActiveModelPrice, modelID)
 	var i GetActiveModelPriceRow
 	err := row.Scan(
-		&i.PlatformInputPricePer1m,
-		&i.PlatformOutputPricePer1m,
-		&i.PlatformImagePrice,
-		&i.TenantInputPricePer1m,
-		&i.TenantOutputPricePer1m,
-		&i.TenantImagePrice,
+		&i.InputPricePer1m,
+		&i.OutputPricePer1m,
+		&i.ImageSizePrices,
+		&i.VideoPricePerSecond,
+		&i.AudioTtsPricePer1mChars,
+		&i.AudioSttPricePerMinute,
 	)
 	return i, err
 }
 
-const getActiveProviderModelPrice = `-- name: GetActiveProviderModelPrice :one
+const getActiveUpstreamDeploymentCostPrice = `-- name: GetActiveUpstreamDeploymentCostPrice :one
 SELECT
   input_cost_per_1m,
   output_cost_per_1m,
   request_cost,
   image_cost,
+  image_size_prices,
   video_cost_per_second
-FROM ai_provider_model_prices
-WHERE provider_id = $1
-  AND (endpoint_id = $2 OR endpoint_id IS NULL)
-  AND upstream_model = $3
-  AND capability_type = $4
+FROM ai_upstream_deployment_cost_prices
+WHERE upstream_deployment_id = $1
   AND status = 'active'
   AND effective_from <= now()
-ORDER BY
-  CASE WHEN endpoint_id = $2 THEN 0 ELSE 1 END,
-  effective_from DESC
+ORDER BY effective_from DESC
 LIMIT 1
 `
 
-type GetActiveProviderModelPriceParams struct {
-	ProviderID     pgtype.UUID `json:"provider_id"`
-	EndpointID     pgtype.UUID `json:"endpoint_id"`
-	UpstreamModel  string      `json:"upstream_model"`
-	CapabilityType string      `json:"capability_type"`
+type GetActiveUpstreamDeploymentCostPriceRow struct {
+	InputCostPer1m     int64  `json:"input_cost_per_1m"`
+	OutputCostPer1m    int64  `json:"output_cost_per_1m"`
+	RequestCost        int64  `json:"request_cost"`
+	ImageCost          int64  `json:"image_cost"`
+	ImageSizePrices    []byte `json:"image_size_prices"`
+	VideoCostPerSecond int64  `json:"video_cost_per_second"`
 }
 
-type GetActiveProviderModelPriceRow struct {
-	InputCostPer1m     int64 `json:"input_cost_per_1m"`
-	OutputCostPer1m    int64 `json:"output_cost_per_1m"`
-	RequestCost        int64 `json:"request_cost"`
-	ImageCost          int64 `json:"image_cost"`
-	VideoCostPerSecond int64 `json:"video_cost_per_second"`
-}
-
-func (q *Queries) GetActiveProviderModelPrice(ctx context.Context, arg GetActiveProviderModelPriceParams) (GetActiveProviderModelPriceRow, error) {
-	row := q.db.QueryRow(ctx, getActiveProviderModelPrice,
-		arg.ProviderID,
-		arg.EndpointID,
-		arg.UpstreamModel,
-		arg.CapabilityType,
-	)
-	var i GetActiveProviderModelPriceRow
+func (q *Queries) GetActiveUpstreamDeploymentCostPrice(ctx context.Context, upstreamDeploymentID pgtype.UUID) (GetActiveUpstreamDeploymentCostPriceRow, error) {
+	row := q.db.QueryRow(ctx, getActiveUpstreamDeploymentCostPrice, upstreamDeploymentID)
+	var i GetActiveUpstreamDeploymentCostPriceRow
 	err := row.Scan(
 		&i.InputCostPer1m,
 		&i.OutputCostPer1m,
 		&i.RequestCost,
 		&i.ImageCost,
+		&i.ImageSizePrices,
 		&i.VideoCostPerSecond,
+	)
+	return i, err
+}
+
+const getTenantModelPriceOverrideForRuntime = `-- name: GetTenantModelPriceOverrideForRuntime :one
+SELECT
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
+FROM ai_tenant_model_price_overrides
+WHERE tenant_id = $1
+  AND model_id = $2
+`
+
+type GetTenantModelPriceOverrideForRuntimeParams struct {
+	TenantID string      `json:"tenant_id"`
+	ModelID  pgtype.UUID `json:"model_id"`
+}
+
+type GetTenantModelPriceOverrideForRuntimeRow struct {
+	InputPricePer1m         int64  `json:"input_price_per_1m"`
+	OutputPricePer1m        int64  `json:"output_price_per_1m"`
+	ImageSizePrices         []byte `json:"image_size_prices"`
+	VideoPricePerSecond     int64  `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64  `json:"audio_stt_price_per_minute"`
+}
+
+func (q *Queries) GetTenantModelPriceOverrideForRuntime(ctx context.Context, arg GetTenantModelPriceOverrideForRuntimeParams) (GetTenantModelPriceOverrideForRuntimeRow, error) {
+	row := q.db.QueryRow(ctx, getTenantModelPriceOverrideForRuntime, arg.TenantID, arg.ModelID)
+	var i GetTenantModelPriceOverrideForRuntimeRow
+	err := row.Scan(
+		&i.InputPricePer1m,
+		&i.OutputPricePer1m,
+		&i.ImageSizePrices,
+		&i.VideoPricePerSecond,
+		&i.AudioTtsPricePer1mChars,
+		&i.AudioSttPricePerMinute,
 	)
 	return i, err
 }

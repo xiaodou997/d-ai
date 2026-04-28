@@ -2,10 +2,7 @@ package httpserver
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
-
-	dbgen "uni-ai-api/backend/internal/db/gen"
 )
 
 type modelsResponse struct {
@@ -48,41 +45,23 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// callableModels - only check tenant grant, no user grant required
 func (s *Server) callableModels(r *http.Request, auth RuntimeAuth) ([]string, error) {
 	allowed, err := allowedModelSet(auth.APIKey.AllowedModels)
 	if err != nil {
 		return nil, err
 	}
 
-	var modelCodes []string
-	switch auth.APIKey.OwnerType {
-	case "tenant":
-		rows, err := s.queries.ListModelsForTenant(r.Context(), auth.APIKey.TenantID)
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			modelCodes = appendIfAllowed(modelCodes, row.ModelCode, allowed)
-		}
-		return modelCodes, nil
-	case "user":
-		if !auth.APIKey.UserID.Valid {
-			return nil, errors.New("user api key missing user_id")
-		}
-		rows, err := s.queries.ListModelsForUser(r.Context(), dbgen.ListModelsForUserParams{
-			TenantID: auth.APIKey.TenantID,
-			UserID:   auth.APIKey.UserID.String,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			modelCodes = appendIfAllowed(modelCodes, row.ModelCode, allowed)
-		}
-		return modelCodes, nil
-	default:
-		return nil, errors.New("unsupported api key owner_type")
+	// Only tenant grant is required, user grant is no longer needed
+	rows, err := s.queries.ListModelsForTenant(r.Context(), auth.APIKey.TenantID)
+	if err != nil {
+		return nil, err
 	}
+	modelCodes := make([]string, 0, len(rows))
+	for _, row := range rows {
+		modelCodes = appendIfAllowed(modelCodes, row.ModelCode, allowed)
+	}
+	return modelCodes, nil
 }
 
 func allowedModelSet(raw []byte) (map[string]struct{}, error) {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	dbgen "uni-ai-api/backend/internal/db/gen"
 )
 
 var errInsufficientQuotaReservation = errors.New("insufficient quota reservation")
@@ -53,9 +52,9 @@ func (s *Server) releaseAPIKeyQuotaReservation(ctx context.Context, reservation 
 	}
 }
 
-func estimateChatQuotaCost(raw map[string]json.RawMessage, defaultMaxOutputTokens int32, price dbgen.GetActiveModelPriceRow) int64 {
+func estimateChatQuotaCost(raw map[string]json.RawMessage, defaultMaxOutputTokens int32, price modelPrice) int64 {
 	outputTokens := requestedOutputTokens(raw, defaultMaxOutputTokens)
-	return tokenCost(outputTokens, price.TenantOutputPricePer1m)
+	return tokenCost(outputTokens, price.OutputPricePer1m)
 }
 
 func requestedOutputTokens(raw map[string]json.RawMessage, defaultMaxOutputTokens int32) int32 {

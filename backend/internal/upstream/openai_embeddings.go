@@ -15,7 +15,7 @@ const ProtocolOpenAIEmbeddings = "openai_embeddings"
 
 type OpenAIEmbeddingsRequest struct {
 	BaseURL            string
-	CustomPath         string
+	RequestPath        string
 	APIKey             string
 	UpstreamModel      string
 	ExtraHeaders       []byte
@@ -66,7 +66,7 @@ func NewOpenAIEmbeddingsHTTPRequest(ctx context.Context, req OpenAIEmbeddingsReq
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := BuildEndpointURL(req.BaseURL, req.CustomPath, "/embeddings")
+	endpoint, err := BuildEndpointURL(req.BaseURL, req.RequestPath, "/embeddings")
 	if err != nil {
 		return nil, err
 	}

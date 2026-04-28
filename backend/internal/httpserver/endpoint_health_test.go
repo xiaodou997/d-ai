@@ -29,58 +29,58 @@ func TestShouldCooldownUpstreamStatus(t *testing.T) {
 	}
 }
 
-func TestEndpointCooldownKey(t *testing.T) {
+func TestUpstreamDeploymentCooldownKey(t *testing.T) {
 	var id pgtype.UUID
 	if err := id.Scan("11111111-1111-1111-1111-111111111111"); err != nil {
 		t.Fatalf("scan uuid: %v", err)
 	}
-	got := endpointCooldownKey(dbgen.ListDeploymentsForModelRow{EndpointID: id})
-	want := "uni_ai_api:endpoint:11111111-1111-1111-1111-111111111111:cooldown"
+	got := upstreamDeploymentCooldownKey(id)
+	want := "uni_ai_api:deployment:11111111-1111-1111-1111-111111111111:cooldown"
 	if got != want {
-		t.Fatalf("endpointCooldownKey = %q, want %q", got, want)
+		t.Fatalf("upstreamDeploymentCooldownKey = %q, want %q", got, want)
 	}
 }
 
-func TestChooseWeightedDeploymentUsesLowestPriority(t *testing.T) {
+func TestChooseWeightedRouteUsesLowestPriority(t *testing.T) {
 	lowPriorityID := mustUUID(t, "11111111-1111-1111-1111-111111111111")
 	highPriorityID := mustUUID(t, "22222222-2222-2222-2222-222222222222")
-	got, ok := chooseWeightedDeployment([]dbgen.ListDeploymentsForModelRow{
+	got, ok := chooseWeightedRoute([]dbgen.ListRoutesForModelRow{
 		{
-			EndpointID:       highPriorityID,
-			Priority:         200,
-			DeploymentWeight: 100,
-			EndpointWeight:   100,
+			UpstreamDeploymentID: highPriorityID,
+			RoutePriority:        200,
+			RouteWeight:          100,
+			EndpointWeight:       100,
 		},
 		{
-			EndpointID:       lowPriorityID,
-			Priority:         100,
-			DeploymentWeight: 1,
-			EndpointWeight:   1,
+			UpstreamDeploymentID: lowPriorityID,
+			RoutePriority:        100,
+			RouteWeight:          1,
+			EndpointWeight:       1,
 		},
 	})
 	if !ok {
-		t.Fatal("chooseWeightedDeployment returned no deployment")
+		t.Fatal("chooseWeightedRoute returned no route")
 	}
-	if got.EndpointID.String() != lowPriorityID.String() {
-		t.Fatalf("EndpointID = %s, want %s", got.EndpointID.String(), lowPriorityID.String())
+	if got.UpstreamDeploymentID.String() != lowPriorityID.String() {
+		t.Fatalf("UpstreamDeploymentID = %s, want %s", got.UpstreamDeploymentID.String(), lowPriorityID.String())
 	}
 }
 
-func TestDeploymentRouteWeight(t *testing.T) {
-	got := deploymentRouteWeight(dbgen.ListDeploymentsForModelRow{
-		DeploymentWeight: 2,
-		EndpointWeight:   3,
+func TestRouteWeight(t *testing.T) {
+	got := routeWeight(dbgen.ListRoutesForModelRow{
+		RouteWeight:    2,
+		EndpointWeight: 3,
 	})
 	if got != 6 {
-		t.Fatalf("deploymentRouteWeight = %d, want 6", got)
+		t.Fatalf("routeWeight = %d, want 6", got)
 	}
 
-	got = deploymentRouteWeight(dbgen.ListDeploymentsForModelRow{
-		DeploymentWeight: 0,
-		EndpointWeight:   3,
+	got = routeWeight(dbgen.ListRoutesForModelRow{
+		RouteWeight:    0,
+		EndpointWeight: 3,
 	})
 	if got != 0 {
-		t.Fatalf("deploymentRouteWeight zero deployment = %d, want 0", got)
+		t.Fatalf("routeWeight zero route = %d, want 0", got)
 	}
 }
 

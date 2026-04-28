@@ -15,7 +15,7 @@ const ProtocolOpenAIResponses = "openai_responses"
 
 type OpenAIResponsesRequest struct {
 	BaseURL            string
-	CustomPath         string
+	RequestPath        string
 	APIKey             string
 	UpstreamModel      string
 	ExtraHeaders       []byte
@@ -97,7 +97,7 @@ func NewOpenAIResponsesHTTPRequest(ctx context.Context, req OpenAIResponsesReque
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := BuildEndpointURL(req.BaseURL, req.CustomPath, "/responses")
+	endpoint, err := BuildEndpointURL(req.BaseURL, req.RequestPath, "/responses")
 	if err != nil {
 		return nil, err
 	}

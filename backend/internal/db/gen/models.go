@@ -40,15 +40,15 @@ type AiApiKey struct {
 }
 
 type AiConversationBinding struct {
-	ConversationID string             `json:"conversation_id"`
-	TenantID       string             `json:"tenant_id"`
-	IdentityID     string             `json:"identity_id"`
-	ModelID        pgtype.UUID        `json:"model_id"`
-	DeploymentID   pgtype.UUID        `json:"deployment_id"`
-	EndpointID     pgtype.UUID        `json:"endpoint_id"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ConversationID       string             `json:"conversation_id"`
+	TenantID             string             `json:"tenant_id"`
+	IdentityID           string             `json:"identity_id"`
+	ModelID              pgtype.UUID        `json:"model_id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	EndpointID           pgtype.UUID        `json:"endpoint_id"`
+	ExpiresAt            pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiModel struct {
@@ -64,34 +64,29 @@ type AiModel struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AiModelDeployment struct {
-	ID                 pgtype.UUID        `json:"id"`
-	ModelID            pgtype.UUID        `json:"model_id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	UpstreamModel      string             `json:"upstream_model"`
-	CapabilityType     string             `json:"capability_type"`
-	UpstreamProtocol   string             `json:"upstream_protocol"`
-	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Priority           int32              `json:"priority"`
-	Weight             int32              `json:"weight"`
-	SupportsStream     bool               `json:"supports_stream"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+type AiModelPrice struct {
+	ID                      pgtype.UUID        `json:"id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AiModelPrice struct {
-	ID                       pgtype.UUID        `json:"id"`
-	ModelID                  pgtype.UUID        `json:"model_id"`
-	PlatformInputPricePer1m  int64              `json:"platform_input_price_per_1m"`
-	PlatformOutputPricePer1m int64              `json:"platform_output_price_per_1m"`
-	PlatformImagePrice       int64              `json:"platform_image_price"`
-	TenantInputPricePer1m    int64              `json:"tenant_input_price_per_1m"`
-	TenantOutputPricePer1m   int64              `json:"tenant_output_price_per_1m"`
-	TenantImagePrice         int64              `json:"tenant_image_price"`
-	EffectiveFrom            pgtype.Timestamptz `json:"effective_from"`
-	Status                   string             `json:"status"`
-	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+type AiModelRoute struct {
+	ID                   pgtype.UUID        `json:"id"`
+	ModelID              pgtype.UUID        `json:"model_id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	Priority             int32              `json:"priority"`
+	Weight               int32              `json:"weight"`
+	SupportsStream       bool               `json:"supports_stream"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiProvider struct {
@@ -107,39 +102,17 @@ type AiProvider struct {
 }
 
 type AiProviderEndpoint struct {
-	ID                pgtype.UUID        `json:"id"`
-	ProviderID        pgtype.UUID        `json:"provider_id"`
-	Name              string             `json:"name"`
-	BaseUrl           string             `json:"base_url"`
-	ProtocolType      string             `json:"protocol_type"`
-	ApiKeyCiphertext  string             `json:"api_key_ciphertext"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	CustomPath        pgtype.Text        `json:"custom_path"`
-	ProtocolOverrides []byte             `json:"protocol_overrides"`
-	Weight            int32              `json:"weight"`
-	TimeoutMs         int32              `json:"timeout_ms"`
-	Status            string             `json:"status"`
-	HealthStatus      string             `json:"health_status"`
-	LastHealthCheckAt pgtype.Timestamptz `json:"last_health_check_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiProviderModelPrice struct {
-	ID                 pgtype.UUID        `json:"id"`
-	ProviderID         pgtype.UUID        `json:"provider_id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	UpstreamModel      string             `json:"upstream_model"`
-	CapabilityType     string             `json:"capability_type"`
-	Currency           string             `json:"currency"`
-	InputCostPer1m     int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m    int64              `json:"output_cost_per_1m"`
-	RequestCost        int64              `json:"request_cost"`
-	ImageCost          int64              `json:"image_cost"`
-	VideoCostPerSecond int64              `json:"video_cost_per_second"`
-	EffectiveFrom      pgtype.Timestamptz `json:"effective_from"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ID               pgtype.UUID        `json:"id"`
+	ProviderID       pgtype.UUID        `json:"provider_id"`
+	Name             string             `json:"name"`
+	BaseUrl          string             `json:"base_url"`
+	ApiKeyCiphertext string             `json:"api_key_ciphertext"`
+	ExtraHeaders     []byte             `json:"extra_headers"`
+	Weight           int32              `json:"weight"`
+	TimeoutMs        int32              `json:"timeout_ms"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiRuntimeLimitPolicy struct {
@@ -166,52 +139,92 @@ type AiTenantModelGrant struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type AiUsageLog struct {
-	ID                  pgtype.UUID        `json:"id"`
-	RequestID           string             `json:"request_id"`
-	TraceID             pgtype.Text        `json:"trace_id"`
-	ApiKeyID            pgtype.UUID        `json:"api_key_id"`
-	KeyOwnerType        string             `json:"key_owner_type"`
-	TenantID            string             `json:"tenant_id"`
-	UserID              pgtype.Text        `json:"user_id"`
-	ExternalUserID      pgtype.Text        `json:"external_user_id"`
-	ModelCode           string             `json:"model_code"`
-	CapabilityType      string             `json:"capability_type"`
-	DeploymentID        pgtype.UUID        `json:"deployment_id"`
-	EndpointID          pgtype.UUID        `json:"endpoint_id"`
-	ProviderCode        pgtype.Text        `json:"provider_code"`
-	UpstreamModel       pgtype.Text        `json:"upstream_model"`
-	ConversationID      pgtype.Text        `json:"conversation_id"`
-	Stream              bool               `json:"stream"`
-	PromptTokens        int32              `json:"prompt_tokens"`
-	CompletionTokens    int32              `json:"completion_tokens"`
-	TotalTokens         int32              `json:"total_tokens"`
-	BillableUnitType    string             `json:"billable_unit_type"`
-	BillableUnits       int64              `json:"billable_units"`
-	ProviderCost        int64              `json:"provider_cost"`
-	PlatformCost        int64              `json:"platform_cost"`
-	UserCost            int64              `json:"user_cost"`
-	ApiKeyQuotaCost     int64              `json:"api_key_quota_cost"`
-	UrmTransactionID    pgtype.Text        `json:"urm_transaction_id"`
-	BillingStatus       string             `json:"billing_status"`
-	RequestStatus       string             `json:"request_status"`
-	HttpStatus          pgtype.Int4        `json:"http_status"`
-	UpstreamStatus      pgtype.Int4        `json:"upstream_status"`
-	LatencyMs           pgtype.Int4        `json:"latency_ms"`
-	FirstTokenLatencyMs pgtype.Int4        `json:"first_token_latency_ms"`
-	ErrorCode           pgtype.Text        `json:"error_code"`
-	ErrorMessage        pgtype.Text        `json:"error_message"`
-	UsageEstimated      bool               `json:"usage_estimated"`
-	UsageSource         string             `json:"usage_source"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+type AiTenantModelPriceOverride struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                string             `json:"tenant_id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedBy               pgtype.Text        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AiUserModelGrant struct {
-	ID        pgtype.UUID        `json:"id"`
-	TenantID  string             `json:"tenant_id"`
-	UserID    string             `json:"user_id"`
-	ModelID   pgtype.UUID        `json:"model_id"`
-	Status    string             `json:"status"`
-	CreatedBy pgtype.Text        `json:"created_by"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+type AiUpstreamDeployment struct {
+	ID                 pgtype.UUID        `json:"id"`
+	EndpointID         pgtype.UUID        `json:"endpoint_id"`
+	Name               string             `json:"name"`
+	UpstreamModel      string             `json:"upstream_model"`
+	CapabilityType     string             `json:"capability_type"`
+	UpstreamProtocol   string             `json:"upstream_protocol"`
+	RequestPath        pgtype.Text        `json:"request_path"`
+	UpstreamParameters []byte             `json:"upstream_parameters"`
+	Tags               []byte             `json:"tags"`
+	HealthStatus       string             `json:"health_status"`
+	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
+	LastHealthError    pgtype.Text        `json:"last_health_error"`
+	Status             string             `json:"status"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiUpstreamDeploymentCostPrice struct {
+	ID                   pgtype.UUID        `json:"id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	CapabilityType       string             `json:"capability_type"`
+	Currency             string             `json:"currency"`
+	InputCostPer1m       int64              `json:"input_cost_per_1m"`
+	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
+	RequestCost          int64              `json:"request_cost"`
+	ImageCost            int64              `json:"image_cost"`
+	ImageSizePrices      []byte             `json:"image_size_prices"`
+	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
+	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type AiUsageLog struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RequestID            string             `json:"request_id"`
+	TraceID              pgtype.Text        `json:"trace_id"`
+	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
+	KeyOwnerType         string             `json:"key_owner_type"`
+	TenantID             string             `json:"tenant_id"`
+	UserID               pgtype.Text        `json:"user_id"`
+	ExternalUserID       pgtype.Text        `json:"external_user_id"`
+	ModelID              pgtype.UUID        `json:"model_id"`
+	ModelCode            string             `json:"model_code"`
+	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	EndpointID           pgtype.UUID        `json:"endpoint_id"`
+	ProviderCode         pgtype.Text        `json:"provider_code"`
+	UpstreamModel        pgtype.Text        `json:"upstream_model"`
+	ConversationID       pgtype.Text        `json:"conversation_id"`
+	Stream               bool               `json:"stream"`
+	PromptTokens         int32              `json:"prompt_tokens"`
+	CompletionTokens     int32              `json:"completion_tokens"`
+	TotalTokens          int32              `json:"total_tokens"`
+	BillableUnitType     string             `json:"billable_unit_type"`
+	BillableUnits        int64              `json:"billable_units"`
+	ProviderCost         int64              `json:"provider_cost"`
+	PlatformCost         int64              `json:"platform_cost"`
+	UserCost             int64              `json:"user_cost"`
+	ApiKeyQuotaCost      int64              `json:"api_key_quota_cost"`
+	UrmTransactionID     pgtype.Text        `json:"urm_transaction_id"`
+	BillingStatus        string             `json:"billing_status"`
+	RequestStatus        string             `json:"request_status"`
+	HttpStatus           pgtype.Int4        `json:"http_status"`
+	UpstreamStatus       pgtype.Int4        `json:"upstream_status"`
+	LatencyMs            pgtype.Int4        `json:"latency_ms"`
+	FirstTokenLatencyMs  pgtype.Int4        `json:"first_token_latency_ms"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorMessage         pgtype.Text        `json:"error_message"`
+	UsageEstimated       bool               `json:"usage_estimated"`
+	UsageSource          string             `json:"usage_source"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }

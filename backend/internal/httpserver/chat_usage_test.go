@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	dbgen "uni-ai-api/backend/internal/db/gen"
 	"uni-ai-api/backend/internal/upstream"
 )
 
@@ -56,11 +55,11 @@ func TestImageCost(t *testing.T) {
 }
 
 func TestValidatePriceCreditsRejectsNegativeValues(t *testing.T) {
-	if got := validateModelPriceCredits(createModelPriceRequest{TenantImagePrice: -1}); got == "" {
+	if got := validateModelPriceCredits(modelPriceRequest{InputPricePer1M: -1}); got == "" {
 		t.Fatal("validateModelPriceCredits accepted a negative credit value")
 	}
-	if got := validateProviderModelPriceCredits(createProviderModelPriceRequest{ImageCost: -1}); got == "" {
-		t.Fatal("validateProviderModelPriceCredits accepted a negative credit value")
+	if got := validateUpstreamDeploymentCostPriceCredits(createUpstreamDeploymentCostPriceRequest{ImageCost: -1}); got == "" {
+		t.Fatal("validateUpstreamDeploymentCostPriceCredits accepted a negative credit value")
 	}
 }
 
@@ -82,8 +81,8 @@ func TestEstimateChatQuotaCost(t *testing.T) {
 	raw := map[string]json.RawMessage{
 		"max_completion_tokens": json.RawMessage(`1000`),
 	}
-	price := dbgen.GetActiveModelPriceRow{
-		TenantOutputPricePer1m: 2000,
+	price := modelPrice{
+		OutputPricePer1m: 2000,
 	}
 	if got := estimateChatQuotaCost(raw, 4096, price); got != 2 {
 		t.Fatalf("estimateChatQuotaCost = %d, want 2", got)

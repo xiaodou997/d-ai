@@ -71,59 +71,56 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	deployments, err := s.queries.ListDeploymentsForModel(r.Context(), dbgen.ListDeploymentsForModelParams{
-		ModelID:        model.ID,
-		CapabilityType: "image",
-	})
+	routes, err := s.queries.ListRoutesForModel(r.Context(), model.ID)
 	if err != nil {
-		s.logger.Error("list image deployments failed", "error", err, "request_id", requestIDFromContext(r.Context()))
-		writeOpenAIError(w, http.StatusInternalServerError, "Failed to resolve model deployment.", "server_error", "server_error")
+		s.logger.Error("list image routes failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		writeOpenAIError(w, http.StatusInternalServerError, "Failed to resolve model route.", "server_error", "server_error")
 		return
 	}
-	deployment, ok := s.chooseDeployment(r.Context(), deployments, "")
+	route, ok := s.chooseRoute(r.Context(), routes, "")
 	if !ok {
-		writeOpenAIError(w, http.StatusServiceUnavailable, "No available deployment for the requested model.", "server_error", "model_unavailable")
+		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
 
-	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "image", estimateImageRateTokens(raw), deployment)
+	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "image", estimateImageRateTokens(raw), route)
 	if !ok {
 		return
 	}
 	defer s.releaseRuntimeLimits(r.Context(), runtimeLease)
 
-	price, quotaReservation, settlementReservation, ok := s.reserveImageBilling(w, r, auth, model, req.N)
+	price, quotaReservation, settlementReservation, ok := s.reserveImageBilling(w, r, auth, model, req.N, req.Size)
 	if !ok {
 		return
 	}
 	defer s.releaseAPIKeyQuotaReservation(r.Context(), quotaReservation)
 
-	if deployment.UpstreamProtocol != upstream.ProtocolOpenAIImagesGenerations {
+	if route.UpstreamProtocol != upstream.ProtocolOpenAIImagesGenerations {
 		s.recordImageUsage(r, imageUsageInput{
 			Auth:             auth,
 			Model:            model,
 			ModelCode:        req.Model,
-			Deployment:       &deployment,
+			Route:            &route,
 			ImageCount:       req.N,
 			HTTPStatus:       http.StatusBadGateway,
 			Latency:          time.Since(start),
 			RequestStatus:    "failed",
 			ErrorCode:        "unsupported_upstream_protocol",
-			ErrorMessage:     "Selected deployment protocol is not supported for image generations.",
+			ErrorMessage:     "Selected route protocol is not supported for image generations.",
 			BillingStatus:    s.cancelChatSettlement(r.Context(), settlementReservation),
 			URMTransactionID: settlementTransactionID(settlementReservation),
 		})
-		writeOpenAIError(w, http.StatusBadGateway, "Selected deployment protocol is not supported for image generations.", "server_error", "unsupported_upstream_protocol")
+		writeOpenAIError(w, http.StatusBadGateway, "Selected route protocol is not supported for image generations.", "server_error", "unsupported_upstream_protocol")
 		return
 	}
 
-	providerKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, deployment.ApiKeyCiphertext)
+	providerKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, route.ApiKeyCiphertext)
 	if err != nil {
 		s.recordImageUsage(r, imageUsageInput{
 			Auth:             auth,
 			Model:            model,
 			ModelCode:        req.Model,
-			Deployment:       &deployment,
+			Route:            &route,
 			ImageCount:       req.N,
 			HTTPStatus:       http.StatusInternalServerError,
 			Latency:          time.Since(start),
@@ -138,23 +135,23 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 	}
 
 	resp, err := upstream.ForwardOpenAIImageGeneration(r.Context(), s.httpClient, upstream.OpenAIImageRequest{
-		BaseURL:            deployment.BaseUrl,
-		CustomPath:         optionalText(deployment.CustomPath),
+		BaseURL:            route.BaseUrl,
+		RequestPath:        optionalText(route.RequestPath),
 		APIKey:             providerKey,
-		UpstreamModel:      deployment.UpstreamModel,
-		ExtraHeaders:       deployment.ExtraHeaders,
-		UpstreamParameters: deployment.UpstreamParameters,
-		Timeout:            time.Duration(deployment.TimeoutMs) * time.Millisecond,
+		UpstreamModel:      route.UpstreamModel,
+		ExtraHeaders:       route.ExtraHeaders,
+		UpstreamParameters: route.UpstreamParameters,
+		Timeout:            time.Duration(route.TimeoutMs) * time.Millisecond,
 		Body:               raw,
 	})
 	if err != nil {
-		s.markEndpointCooldown(r.Context(), deployment, "upstream_request_failed")
+		s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_request_failed")
 		billingStatus := s.cancelChatSettlement(r.Context(), settlementReservation)
 		s.recordImageUsage(r, imageUsageInput{
 			Auth:             auth,
 			Model:            model,
 			ModelCode:        req.Model,
-			Deployment:       &deployment,
+			Route:            &route,
 			ImageCount:       req.N,
 			HTTPStatus:       http.StatusBadGateway,
 			Latency:          time.Since(start),
@@ -176,11 +173,11 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
-			s.markEndpointCooldown(r.Context(), deployment, "upstream_status_"+http.StatusText(resp.StatusCode))
+			s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
 	}
 
-	costs := s.calculateImageCosts(r.Context(), auth, model, &deployment, req.N, price)
+	costs := s.calculateImageCosts(r.Context(), auth, model, &route, req.N, req.Size, price)
 	billingStatus := "not_billed"
 	if requestStatus == "success" {
 		billingStatus = s.confirmChatSettlement(r.Context(), settlementReservation, costs)
@@ -191,8 +188,9 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		Auth:             auth,
 		Model:            model,
 		ModelCode:        req.Model,
-		Deployment:       &deployment,
+		Route:            &route,
 		ImageCount:       req.N,
+		ImageSize:        req.Size,
 		HTTPStatus:       resp.StatusCode,
 		UpstreamStatus:   resp.StatusCode,
 		Latency:          time.Since(start),
@@ -235,8 +233,9 @@ type imageUsageInput struct {
 	Auth             RuntimeAuth
 	Model            callableModel
 	ModelCode        string
-	Deployment       *dbgen.ListDeploymentsForModelRow
+	Route            *dbgen.ListRoutesForModelRow
 	ImageCount       int32
+	ImageSize        string
 	HTTPStatus       int
 	UpstreamStatus   int
 	Latency          time.Duration
@@ -258,7 +257,7 @@ func (s *Server) recordImageUsage(r *http.Request, input imageUsageInput) {
 		ModelCode:        input.ModelCode,
 		CapabilityType:   "image",
 		ModelID:          input.Model.ID,
-		Deployment:       input.Deployment,
+		Route:            input.Route,
 		Stream:           false,
 		HTTPStatus:       input.HTTPStatus,
 		UpstreamStatus:   input.UpstreamStatus,
@@ -274,21 +273,29 @@ func (s *Server) recordImageUsage(r *http.Request, input imageUsageInput) {
 		Costs:            input.Costs,
 		URMTransactionID: input.URMTransactionID,
 		BillingStatus:    input.BillingStatus,
+		ImageSize:        input.ImageSize,
 	})
 }
 
-func (s *Server) reserveImageBilling(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, model callableModel, imageCount int32) (*dbgen.GetActiveModelPriceRow, *quotaReservation, *settlementReservation, bool) {
-	price, err := s.queries.GetActiveModelPrice(r.Context(), model.ID)
+func (s *Server) reserveImageBilling(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, model callableModel, imageCount int32, imageSize string) (*modelPrice, *quotaReservation, *settlementReservation, bool) {
+	price, err := s.getEffectiveModelPrice(r.Context(), auth, model.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil, nil, true
+			writeOpenAIError(w, http.StatusPaymentRequired, "Model pricing not configured.", "insufficient_quota", "model_price_not_configured")
+			return nil, nil, nil, false
 		}
 		s.logger.Error("get image model price failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		writeOpenAIError(w, http.StatusInternalServerError, "Quota reservation failed.", "server_error", "quota_reservation_failed")
 		return nil, nil, nil, false
 	}
 
-	quotaCost := imageCost(imageCount, price.TenantImagePrice)
+	perImagePrice, ok := imagePriceForSize(imageSize, price.ImageSizePrices)
+	if !ok {
+		writeOpenAIError(w, http.StatusBadRequest, "Unsupported image size for this model.", "invalid_request_error", "unsupported_image_size")
+		return nil, nil, nil, false
+	}
+
+	quotaCost := imageCost(imageCount, perImagePrice)
 	quotaReservation, err := s.reserveAPIKeyQuota(r.Context(), auth, quotaCost)
 	if err != nil {
 		if errors.Is(err, errInsufficientQuotaReservation) {
@@ -300,11 +307,12 @@ func (s *Server) reserveImageBilling(w http.ResponseWriter, r *http.Request, aut
 		return &price, nil, nil, false
 	}
 
+	platformCost := quotaCost
 	userCost := int64(0)
 	if auth.APIKey.OwnerType == "user" {
 		userCost = quotaCost
 	}
-	settlementReservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), imageCost(imageCount, price.PlatformImagePrice), userCost)
+	settlementReservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), platformCost, userCost)
 	if err != nil {
 		s.releaseAPIKeyQuotaReservation(r.Context(), quotaReservation)
 		if isURMInsufficientBalance(err) {
@@ -318,27 +326,24 @@ func (s *Server) reserveImageBilling(w http.ResponseWriter, r *http.Request, aut
 	return &price, quotaReservation, settlementReservation, true
 }
 
-func (s *Server) calculateImageCosts(ctx context.Context, auth RuntimeAuth, model callableModel, deployment *dbgen.ListDeploymentsForModelRow, imageCount int32, price *dbgen.GetActiveModelPriceRow) chatCosts {
+func (s *Server) calculateImageCosts(ctx context.Context, auth RuntimeAuth, model callableModel, route *dbgen.ListRoutesForModelRow, imageCount int32, imageSize string, price *modelPrice) chatCosts {
 	costs := chatCosts{}
 	if price != nil {
-		costs.PlatformCost = imageCost(imageCount, price.PlatformImagePrice)
-		costs.APIKeyQuotaCost = imageCost(imageCount, price.TenantImagePrice)
+		perImagePrice, _ := imagePriceForSize(imageSize, price.ImageSizePrices)
+		costs.PlatformCost = imageCost(imageCount, perImagePrice)
+		costs.APIKeyQuotaCost = costs.PlatformCost
 		if auth.APIKey.OwnerType == "user" {
 			costs.UserCost = costs.APIKeyQuotaCost
 		}
 	}
-	if deployment != nil {
-		providerPrice, err := s.queries.GetActiveProviderModelPrice(ctx, dbgen.GetActiveProviderModelPriceParams{
-			ProviderID:     deployment.ProviderID,
-			EndpointID:     deployment.EndpointID,
-			UpstreamModel:  deployment.UpstreamModel,
-			CapabilityType: "image",
-		})
+	if route != nil {
+		providerPrice, err := s.queries.GetActiveUpstreamDeploymentCostPrice(ctx, route.UpstreamDeploymentID)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			s.logger.Error("get provider image price failed", "error", err)
+			s.logger.Error("get deployment image cost price failed", "error", err)
 		}
 		if err == nil {
-			costs.ProviderCost = providerPrice.RequestCost + imageCost(imageCount, providerPrice.ImageCost)
+			perImageCost := calculateImageCost(imageSize, providerPrice)
+			costs.ProviderCost = providerPrice.RequestCost + imageCost(imageCount, perImageCost)
 		}
 	}
 	return costs

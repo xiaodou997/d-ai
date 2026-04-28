@@ -17,7 +17,7 @@ const ProtocolOpenAIChatCompletions = "openai_chat_completions"
 
 type OpenAIChatRequest struct {
 	BaseURL            string
-	CustomPath         string
+	RequestPath        string
 	APIKey             string
 	UpstreamModel      string
 	ExtraHeaders       []byte
@@ -120,7 +120,7 @@ func NewOpenAIChatHTTPRequest(ctx context.Context, req OpenAIChatRequest, accept
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := BuildEndpointURL(req.BaseURL, req.CustomPath, "/chat/completions")
+	endpoint, err := BuildEndpointURL(req.BaseURL, req.RequestPath, "/chat/completions")
 	if err != nil {
 		return nil, err
 	}

@@ -64,23 +64,20 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deployments, err := s.queries.ListDeploymentsForModel(r.Context(), dbgen.ListDeploymentsForModelParams{
-		ModelID:        model.ID,
-		CapabilityType: "embedding",
-	})
+	routes, err := s.queries.ListRoutesForModel(r.Context(), model.ID)
 	if err != nil {
-		s.logger.Error("list embedding deployments failed", "error", err, "request_id", requestIDFromContext(r.Context()))
-		writeOpenAIError(w, http.StatusInternalServerError, "Failed to resolve model deployment.", "server_error", "server_error")
+		s.logger.Error("list embedding routes failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		writeOpenAIError(w, http.StatusInternalServerError, "Failed to resolve model route.", "server_error", "server_error")
 		return
 	}
-	deployment, ok := s.chooseDeployment(r.Context(), deployments, "")
+	route, ok := s.chooseRoute(r.Context(), routes, "")
 	if !ok {
-		writeOpenAIError(w, http.StatusServiceUnavailable, "No available deployment for the requested model.", "server_error", "model_unavailable")
+		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
 
 	estimatedUsage := ensureUsageTotal(upstreamUsage{PromptTokens: estimateEmbeddingInputTokens(raw)})
-	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "embedding", estimatedUsage.PromptTokens, deployment)
+	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "embedding", estimatedUsage.PromptTokens, route)
 	if !ok {
 		return
 	}
@@ -92,26 +89,26 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	}
 	defer s.releaseAPIKeyQuotaReservation(r.Context(), quotaReservation)
 
-	if deployment.UpstreamProtocol != upstream.ProtocolOpenAIEmbeddings {
+	if route.UpstreamProtocol != upstream.ProtocolOpenAIEmbeddings {
 		s.recordEmbeddingUsage(r, embeddingUsageInput{
 			start:            start,
 			auth:             auth,
 			raw:              raw,
 			model:            model,
 			modelCode:        req.Model,
-			deployment:       &deployment,
+			route:            &route,
 			httpStatus:       http.StatusBadGateway,
 			requestStatus:    "failed",
 			errorCode:        "unsupported_upstream_protocol",
-			errorMessage:     "Selected deployment protocol is not supported for embeddings.",
+			errorMessage:     "Selected route protocol is not supported for embeddings.",
 			billingStatus:    s.cancelChatSettlement(r.Context(), settlementReservation),
 			urmTransactionID: settlementTransactionID(settlementReservation),
 		})
-		writeOpenAIError(w, http.StatusBadGateway, "Selected deployment protocol is not supported for embeddings.", "server_error", "unsupported_upstream_protocol")
+		writeOpenAIError(w, http.StatusBadGateway, "Selected route protocol is not supported for embeddings.", "server_error", "unsupported_upstream_protocol")
 		return
 	}
 
-	providerKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, deployment.ApiKeyCiphertext)
+	providerKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, route.ApiKeyCiphertext)
 	if err != nil {
 		s.recordEmbeddingUsage(r, embeddingUsageInput{
 			start:            start,
@@ -119,7 +116,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 			raw:              raw,
 			model:            model,
 			modelCode:        req.Model,
-			deployment:       &deployment,
+			route:            &route,
 			httpStatus:       http.StatusInternalServerError,
 			requestStatus:    "failed",
 			errorCode:        "provider_credential_error",
@@ -132,20 +129,20 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := upstream.ForwardOpenAIEmbeddings(r.Context(), s.httpClient, upstream.OpenAIEmbeddingsRequest{
-		BaseURL:            deployment.BaseUrl,
-		CustomPath:         optionalText(deployment.CustomPath),
+		BaseURL:            route.BaseUrl,
+		RequestPath:        optionalText(route.RequestPath),
 		APIKey:             providerKey,
-		UpstreamModel:      deployment.UpstreamModel,
-		ExtraHeaders:       deployment.ExtraHeaders,
-		UpstreamParameters: deployment.UpstreamParameters,
-		Timeout:            time.Duration(deployment.TimeoutMs) * time.Millisecond,
+		UpstreamModel:      route.UpstreamModel,
+		ExtraHeaders:       route.ExtraHeaders,
+		UpstreamParameters: route.UpstreamParameters,
+		Timeout:            time.Duration(route.TimeoutMs) * time.Millisecond,
 		Body:               raw,
 	})
 	if err != nil {
-		s.markEndpointCooldown(r.Context(), deployment, "upstream_request_failed")
+		s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_request_failed")
 		billingStatus := s.cancelChatSettlement(r.Context(), settlementReservation)
 		s.recordEmbeddingUsage(r, embeddingUsageInput{
-			start: start, auth: auth, raw: raw, model: model, modelCode: req.Model, deployment: &deployment,
+			start: start, auth: auth, raw: raw, model: model, modelCode: req.Model, route: &route,
 			httpStatus: http.StatusBadGateway, requestStatus: "failed", errorCode: "upstream_error", errorMessage: err.Error(),
 			billingStatus: billingStatus, urmTransactionID: settlementTransactionID(settlementReservation),
 		})
@@ -161,7 +158,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
-			s.markEndpointCooldown(r.Context(), deployment, "upstream_status_"+http.StatusText(resp.StatusCode))
+			s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
 	}
 	usage := ensureUsageTotal(parseOpenAIEmbeddingsUsage(resp))
@@ -175,7 +172,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	costs := s.calculateChatCosts(r.Context(), usageLogInput{
-		Auth: auth, ModelID: model.ID, Deployment: &deployment, CapabilityType: "embedding", RequestStatus: requestStatus, Usage: usage,
+		Auth: auth, ModelID: model.ID, Route: &route, CapabilityType: "embedding", RequestStatus: requestStatus, Usage: usage,
 	})
 	billingStatus := "not_billed"
 	if requestStatus == "success" {
@@ -184,7 +181,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		billingStatus = s.cancelChatSettlement(r.Context(), settlementReservation)
 	}
 	s.recordEmbeddingUsage(r, embeddingUsageInput{
-		start: start, auth: auth, raw: raw, model: model, modelCode: req.Model, deployment: &deployment,
+		start: start, auth: auth, raw: raw, model: model, modelCode: req.Model, route: &route,
 		httpStatus: resp.StatusCode, upstreamStatus: resp.StatusCode, requestStatus: requestStatus, errorCode: errorCode, errorMessage: errorMessage,
 		usage: usage, usageEstimated: usageEstimated, usageSource: usageSource, costs: &costs, billingStatus: billingStatus,
 		urmTransactionID: settlementTransactionID(settlementReservation),
@@ -239,7 +236,7 @@ type embeddingUsageInput struct {
 	raw              map[string]json.RawMessage
 	model            callableModel
 	modelCode        string
-	deployment       *dbgen.ListDeploymentsForModelRow
+	route            *dbgen.ListRoutesForModelRow
 	httpStatus       int
 	upstreamStatus   int
 	requestStatus    string
@@ -263,7 +260,7 @@ func (s *Server) recordEmbeddingUsage(r *http.Request, input embeddingUsageInput
 		ModelCode:        input.modelCode,
 		CapabilityType:   "embedding",
 		ModelID:          input.model.ID,
-		Deployment:       input.deployment,
+		Route:            input.route,
 		Stream:           false,
 		HTTPStatus:       input.httpStatus,
 		UpstreamStatus:   input.upstreamStatus,

@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"net/http"
-	"strconv"
 
 	dbgen "uni-ai-api/backend/internal/db/gen"
 )
@@ -20,26 +19,7 @@ type runtimeLimitPolicyRequest struct {
 }
 
 func (s *Server) handleAdminListRuntimeLimitPolicies(w http.ResponseWriter, r *http.Request) {
-	limit := int32(100)
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		parsed, err := strconv.ParseInt(raw, 10, 32)
-		if err != nil || parsed <= 0 {
-			writeAdminError(w, http.StatusBadRequest, "invalid limit")
-			return
-		}
-		if parsed > 500 {
-			parsed = 500
-		}
-		limit = int32(parsed)
-	}
-	rows, err := s.queries.ListRuntimeLimitPolicies(r.Context(), dbgen.ListRuntimeLimitPoliciesParams{
-		ScopeType:      optionalTextValue(r.URL.Query().Get("scope_type")),
-		ScopeID:        optionalTextValue(r.URL.Query().Get("scope_id")),
-		CapabilityType: optionalTextValue(r.URL.Query().Get("capability_type")),
-		ModelCode:      optionalTextValue(r.URL.Query().Get("model_code")),
-		Status:         optionalTextValue(r.URL.Query().Get("status")),
-		Limit:          limit,
-	})
+	rows, err := s.queries.ListLimitPolicies(r.Context())
 	if err != nil {
 		s.writeAdminServerError(w, r, "list runtime limit policies failed", err)
 		return
@@ -55,7 +35,7 @@ func (s *Server) handleAdminCreateRuntimeLimitPolicy(w http.ResponseWriter, r *h
 	if !validateRuntimeLimitPolicyRequest(w, &req) {
 		return
 	}
-	row, err := s.queries.CreateRuntimeLimitPolicy(r.Context(), dbgen.CreateRuntimeLimitPolicyParams{
+	row, err := s.queries.CreateLimitPolicy(r.Context(), dbgen.CreateLimitPolicyParams{
 		ScopeType:        req.ScopeType,
 		ScopeID:          req.ScopeID,
 		CapabilityType:   req.CapabilityType,
@@ -85,7 +65,7 @@ func (s *Server) handleAdminUpdateRuntimeLimitPolicy(w http.ResponseWriter, r *h
 	if !validateRuntimeLimitPolicyRequest(w, &req) {
 		return
 	}
-	row, err := s.queries.UpdateRuntimeLimitPolicy(r.Context(), dbgen.UpdateRuntimeLimitPolicyParams{
+	row, err := s.queries.UpdateLimitPolicy(r.Context(), dbgen.UpdateLimitPolicyParams{
 		ID:               policyID,
 		ScopeType:        req.ScopeType,
 		ScopeID:          req.ScopeID,
@@ -112,7 +92,7 @@ func (s *Server) handleAdminUpdateRuntimeLimitPolicyStatus(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	row, err := s.queries.UpdateRuntimeLimitPolicyStatus(r.Context(), dbgen.UpdateRuntimeLimitPolicyStatusParams{
+	row, err := s.queries.UpdateLimitPolicyStatus(r.Context(), dbgen.UpdateLimitPolicyStatusParams{
 		ID:     policyID,
 		Status: status,
 	})

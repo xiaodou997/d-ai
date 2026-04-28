@@ -15,7 +15,7 @@ const ProtocolOpenAIImagesGenerations = "openai_images_generations"
 
 type OpenAIImageRequest struct {
 	BaseURL            string
-	CustomPath         string
+	RequestPath        string
 	APIKey             string
 	UpstreamModel      string
 	ExtraHeaders       []byte
@@ -71,7 +71,7 @@ func NewOpenAIImageHTTPRequest(ctx context.Context, req OpenAIImageRequest) (*ht
 	if err != nil {
 		return nil, err
 	}
-	endpoint, err := BuildEndpointURL(req.BaseURL, req.CustomPath, "/images/generations")
+	endpoint, err := BuildEndpointURL(req.BaseURL, req.RequestPath, "/images/generations")
 	if err != nil {
 		return nil, err
 	}

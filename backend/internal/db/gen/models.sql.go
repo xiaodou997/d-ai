@@ -54,157 +54,8 @@ func (q *Queries) GetTenantModel(ctx context.Context, arg GetTenantModelParams) 
 	return i, err
 }
 
-const getUserModel = `-- name: GetUserModel :one
-SELECT
-  m.id,
-  m.model_code,
-  m.display_name,
-  m.capability_type,
-  m.default_max_output_tokens
-FROM ai_models m
-JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
-JOIN ai_user_model_grants ug ON ug.model_id = m.id
-WHERE tg.tenant_id = $1
-  AND ug.tenant_id = $1
-  AND ug.user_id = $2
-  AND m.model_code = $3
-  AND m.capability_type = $4
-  AND tg.status = 'active'
-  AND ug.status = 'active'
-  AND m.status = 'active'
-`
-
-type GetUserModelParams struct {
-	TenantID       string `json:"tenant_id"`
-	UserID         string `json:"user_id"`
-	ModelCode      string `json:"model_code"`
-	CapabilityType string `json:"capability_type"`
-}
-
-type GetUserModelRow struct {
-	ID                     pgtype.UUID `json:"id"`
-	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
-	CapabilityType         string      `json:"capability_type"`
-	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
-}
-
-func (q *Queries) GetUserModel(ctx context.Context, arg GetUserModelParams) (GetUserModelRow, error) {
-	row := q.db.QueryRow(ctx, getUserModel,
-		arg.TenantID,
-		arg.UserID,
-		arg.ModelCode,
-		arg.CapabilityType,
-	)
-	var i GetUserModelRow
-	err := row.Scan(
-		&i.ID,
-		&i.ModelCode,
-		&i.DisplayName,
-		&i.CapabilityType,
-		&i.DefaultMaxOutputTokens,
-	)
-	return i, err
-}
-
-const listDeploymentsForModel = `-- name: ListDeploymentsForModel :many
-SELECT
-  d.id AS deployment_id,
-  d.upstream_model,
-  d.capability_type,
-  d.upstream_protocol,
-  d.upstream_parameters,
-  d.priority,
-  d.weight AS deployment_weight,
-  d.supports_stream,
-  e.id AS endpoint_id,
-  e.base_url,
-  e.protocol_type AS endpoint_protocol_type,
-  e.api_key_ciphertext,
-  e.custom_path,
-  e.extra_headers,
-  e.timeout_ms,
-  e.weight AS endpoint_weight,
-  p.id AS provider_id,
-  p.code AS provider_code
-FROM ai_model_deployments d
-JOIN ai_provider_endpoints e ON e.id = d.endpoint_id
-JOIN ai_providers p ON p.id = e.provider_id
-WHERE d.model_id = $1
-  AND d.capability_type = $2
-  AND d.status = 'active'
-  AND e.status = 'active'
-  AND e.health_status IN ('healthy', 'unknown')
-  AND p.status = 'active'
-ORDER BY d.priority ASC, d.weight DESC, e.weight DESC
-`
-
-type ListDeploymentsForModelParams struct {
-	ModelID        pgtype.UUID `json:"model_id"`
-	CapabilityType string      `json:"capability_type"`
-}
-
-type ListDeploymentsForModelRow struct {
-	DeploymentID         pgtype.UUID `json:"deployment_id"`
-	UpstreamModel        string      `json:"upstream_model"`
-	CapabilityType       string      `json:"capability_type"`
-	UpstreamProtocol     string      `json:"upstream_protocol"`
-	UpstreamParameters   []byte      `json:"upstream_parameters"`
-	Priority             int32       `json:"priority"`
-	DeploymentWeight     int32       `json:"deployment_weight"`
-	SupportsStream       bool        `json:"supports_stream"`
-	EndpointID           pgtype.UUID `json:"endpoint_id"`
-	BaseUrl              string      `json:"base_url"`
-	EndpointProtocolType string      `json:"endpoint_protocol_type"`
-	ApiKeyCiphertext     string      `json:"api_key_ciphertext"`
-	CustomPath           pgtype.Text `json:"custom_path"`
-	ExtraHeaders         []byte      `json:"extra_headers"`
-	TimeoutMs            int32       `json:"timeout_ms"`
-	EndpointWeight       int32       `json:"endpoint_weight"`
-	ProviderID           pgtype.UUID `json:"provider_id"`
-	ProviderCode         string      `json:"provider_code"`
-}
-
-func (q *Queries) ListDeploymentsForModel(ctx context.Context, arg ListDeploymentsForModelParams) ([]ListDeploymentsForModelRow, error) {
-	rows, err := q.db.Query(ctx, listDeploymentsForModel, arg.ModelID, arg.CapabilityType)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListDeploymentsForModelRow{}
-	for rows.Next() {
-		var i ListDeploymentsForModelRow
-		if err := rows.Scan(
-			&i.DeploymentID,
-			&i.UpstreamModel,
-			&i.CapabilityType,
-			&i.UpstreamProtocol,
-			&i.UpstreamParameters,
-			&i.Priority,
-			&i.DeploymentWeight,
-			&i.SupportsStream,
-			&i.EndpointID,
-			&i.BaseUrl,
-			&i.EndpointProtocolType,
-			&i.ApiKeyCiphertext,
-			&i.CustomPath,
-			&i.ExtraHeaders,
-			&i.TimeoutMs,
-			&i.EndpointWeight,
-			&i.ProviderID,
-			&i.ProviderCode,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listModelsForTenant = `-- name: ListModelsForTenant :many
+
 SELECT
   m.id,
   m.model_code,
@@ -231,6 +82,9 @@ type ListModelsForTenantRow struct {
 	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
 }
 
+// ============================================================================
+// Runtime Model Queries
+// ============================================================================
 func (q *Queries) ListModelsForTenant(ctx context.Context, tenantID string) ([]ListModelsForTenantRow, error) {
 	rows, err := q.db.Query(ctx, listModelsForTenant, tenantID)
 	if err != nil {
@@ -259,59 +113,92 @@ func (q *Queries) ListModelsForTenant(ctx context.Context, tenantID string) ([]L
 	return items, nil
 }
 
-const listModelsForUser = `-- name: ListModelsForUser :many
+const listRoutesForModel = `-- name: ListRoutesForModel :many
 SELECT
-  m.id,
-  m.model_code,
-  m.display_name,
-  m.capability_type,
-  m.context_window,
-  m.default_max_output_tokens,
-  m.max_output_tokens
-FROM ai_models m
-JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
-JOIN ai_user_model_grants ug ON ug.model_id = m.id
-WHERE tg.tenant_id = $1
-  AND ug.tenant_id = $1
-  AND ug.user_id = $2
-  AND tg.status = 'active'
-  AND ug.status = 'active'
-  AND m.status = 'active'
-ORDER BY m.model_code ASC
+  r.id AS route_id,
+  r.priority AS route_priority,
+  r.weight AS route_weight,
+  r.supports_stream,
+  ud.id AS upstream_deployment_id,
+  ud.upstream_model,
+  ud.capability_type,
+  ud.upstream_protocol,
+  ud.request_path,
+  ud.upstream_parameters,
+  ud.health_status,
+  e.id AS endpoint_id,
+  e.base_url,
+  e.api_key_ciphertext,
+  e.extra_headers,
+  e.timeout_ms,
+  e.weight AS endpoint_weight,
+  p.id AS provider_id,
+  p.code AS provider_code
+FROM ai_model_routes r
+JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
+JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+JOIN ai_providers p ON p.id = e.provider_id
+WHERE r.model_id = $1
+  AND r.status = 'active'
+  AND ud.status = 'active'
+  AND ud.health_status IN ('healthy', 'unknown')
+  AND e.status = 'active'
+  AND p.status = 'active'
+ORDER BY r.priority ASC, r.weight DESC, e.weight DESC
 `
 
-type ListModelsForUserParams struct {
-	TenantID string `json:"tenant_id"`
-	UserID   string `json:"user_id"`
+type ListRoutesForModelRow struct {
+	RouteID              pgtype.UUID `json:"route_id"`
+	RoutePriority        int32       `json:"route_priority"`
+	RouteWeight          int32       `json:"route_weight"`
+	SupportsStream       bool        `json:"supports_stream"`
+	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
+	UpstreamModel        string      `json:"upstream_model"`
+	CapabilityType       string      `json:"capability_type"`
+	UpstreamProtocol     string      `json:"upstream_protocol"`
+	RequestPath          pgtype.Text `json:"request_path"`
+	UpstreamParameters   []byte      `json:"upstream_parameters"`
+	HealthStatus         string      `json:"health_status"`
+	EndpointID           pgtype.UUID `json:"endpoint_id"`
+	BaseUrl              string      `json:"base_url"`
+	ApiKeyCiphertext     string      `json:"api_key_ciphertext"`
+	ExtraHeaders         []byte      `json:"extra_headers"`
+	TimeoutMs            int32       `json:"timeout_ms"`
+	EndpointWeight       int32       `json:"endpoint_weight"`
+	ProviderID           pgtype.UUID `json:"provider_id"`
+	ProviderCode         string      `json:"provider_code"`
 }
 
-type ListModelsForUserRow struct {
-	ID                     pgtype.UUID `json:"id"`
-	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
-	CapabilityType         string      `json:"capability_type"`
-	ContextWindow          pgtype.Int4 `json:"context_window"`
-	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
-	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
-}
-
-func (q *Queries) ListModelsForUser(ctx context.Context, arg ListModelsForUserParams) ([]ListModelsForUserRow, error) {
-	rows, err := q.db.Query(ctx, listModelsForUser, arg.TenantID, arg.UserID)
+// Runtime route lookup: model -> routes -> upstream_deployments -> endpoints -> providers
+func (q *Queries) ListRoutesForModel(ctx context.Context, modelID pgtype.UUID) ([]ListRoutesForModelRow, error) {
+	rows, err := q.db.Query(ctx, listRoutesForModel, modelID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListModelsForUserRow{}
+	items := []ListRoutesForModelRow{}
 	for rows.Next() {
-		var i ListModelsForUserRow
+		var i ListRoutesForModelRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ModelCode,
-			&i.DisplayName,
+			&i.RouteID,
+			&i.RoutePriority,
+			&i.RouteWeight,
+			&i.SupportsStream,
+			&i.UpstreamDeploymentID,
+			&i.UpstreamModel,
 			&i.CapabilityType,
-			&i.ContextWindow,
-			&i.DefaultMaxOutputTokens,
-			&i.MaxOutputTokens,
+			&i.UpstreamProtocol,
+			&i.RequestPath,
+			&i.UpstreamParameters,
+			&i.HealthStatus,
+			&i.EndpointID,
+			&i.BaseUrl,
+			&i.ApiKeyCiphertext,
+			&i.ExtraHeaders,
+			&i.TimeoutMs,
+			&i.EndpointWeight,
+			&i.ProviderID,
+			&i.ProviderCode,
 		); err != nil {
 			return nil, err
 		}

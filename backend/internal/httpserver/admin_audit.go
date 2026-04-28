@@ -36,11 +36,11 @@ func (s *Server) writeAdminAuditLog(r *http.Request, status int) {
 		"path":   r.URL.Path,
 		"query":  r.URL.RawQuery,
 	})
-	if _, err := s.queries.CreateAdminAuditLog(r.Context(), dbgen.CreateAdminAuditLogParams{
-		Actor:          optionalTextString(actor),
+	if _, err := s.queries.CreateAuditLog(r.Context(), dbgen.CreateAuditLogParams{
+		Actor:          optionalTextValue(actor),
 		Action:         action,
-		ObjectType:     optionalTextString(objectType),
-		ObjectID:       optionalTextString(objectID),
+		ObjectType:     optionalTextValue(objectType),
+		ObjectID:       optionalTextValue(objectID),
 		RequestSummary: summary,
 		Result:         result,
 		HttpStatus:     optionalInt4Value(int32(status)),
@@ -60,16 +60,21 @@ func adminAuditObject(path string) (string, string) {
 			if len(parts) >= 5 && parts[3] == "endpoints" {
 				return "provider_endpoint", parts[4]
 			}
-			if len(parts) >= 5 && parts[3] == "model-prices" {
-				return "provider_model_price", parts[4]
-			}
 			return "provider", parts[2]
 		}
 		return "provider", ""
+	case "upstream-deployments":
+		if len(parts) >= 3 {
+			if len(parts) >= 5 && parts[3] == "cost-prices" {
+				return "upstream_deployment_cost_price", parts[4]
+			}
+			return "upstream_deployment", parts[2]
+		}
+		return "upstream_deployment", ""
 	case "models":
 		if len(parts) >= 3 {
-			if len(parts) >= 5 && parts[3] == "deployments" {
-				return "model_deployment", parts[4]
+			if len(parts) >= 5 && parts[3] == "routes" {
+				return "model_route", parts[4]
 			}
 			if len(parts) >= 5 && parts[3] == "prices" {
 				return "model_price", parts[4]
@@ -104,14 +109,7 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 		limit = int32(parsed)
 	}
 
-	rows, err := s.queries.ListAdminAuditLogs(r.Context(), dbgen.ListAdminAuditLogsParams{
-		Actor:      optionalTextValue(r.URL.Query().Get("actor")),
-		Action:     optionalTextValue(r.URL.Query().Get("action")),
-		ObjectType: optionalTextValue(r.URL.Query().Get("object_type")),
-		ObjectID:   optionalTextValue(r.URL.Query().Get("object_id")),
-		Result:     optionalTextValue(r.URL.Query().Get("result")),
-		Limit:      limit,
-	})
+	rows, err := s.queries.ListAuditLogs(r.Context(), limit)
 	if err != nil {
 		s.writeAdminServerError(w, r, "list admin audit logs failed", err)
 		return
