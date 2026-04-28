@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-screen w-full bg-slate-50 overflow-hidden">
+  <div class="app-shell flex w-full bg-slate-50 overflow-hidden">
     <!-- 侧边栏固定宽度 -->
     <aside class="w-64 flex-shrink-0 z-20 shadow-sm">
       <Sidebar />
@@ -15,8 +15,8 @@
       </header>
 
       <!-- 页面主内容 -->
-      <main class="flex-1 overflow-y-auto custom-scrollbar p-6">
-        <div class="max-w-[1800px] mx-auto px-4">
+      <main class="min-h-0 flex-1 overflow-y-auto custom-scrollbar p-6">
+        <div class="min-h-full max-w-[1800px] mx-auto px-4 flex flex-col">
           <router-view v-slot="{ Component }">
             <transition name="page-fade" mode="out-in" appear>
               <component :is="Component" />
@@ -35,19 +35,22 @@ import Sidebar from './Sidebar.vue'
 
 <style scoped lang="scss">
 /* 页面切换动画 */
+.app-shell {
+  height: 100dvh;
+  min-height: 100vh;
+}
+
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity 0.3s ease;
 }
 
 .page-fade-enter-from {
   opacity: 0;
-  transform: translateY(10px);
 }
 
 .page-fade-leave-to {
   opacity: 0;
-  transform: translateY(-10px);
 }
 
 .custom-scrollbar {
@@ -81,10 +84,10 @@ import Sidebar from './Sidebar.vue'
 
 @keyframes slide-in-from-bottom {
   from {
-    transform: translateY(1rem);
+    opacity: 0;
   }
   to {
-    transform: translateY(0);
+    opacity: 1;
   }
 }
 

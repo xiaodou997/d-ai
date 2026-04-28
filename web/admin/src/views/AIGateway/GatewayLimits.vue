@@ -174,7 +174,7 @@ onMounted(fetchPolicies)
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑限流策略' : '新增限流策略'" width="560px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑限流策略' : '新增限流策略'" width="560px" append-to-body>
       <el-form :model="form" label-width="110px">
         <el-form-item label="Scope">
           <el-select v-model="form.scope_type">

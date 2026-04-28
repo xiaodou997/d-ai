@@ -573,7 +573,7 @@ onMounted(fetchProviders)
       <el-button type="primary" :icon="Plus" @click="openProviderDialog">新增服务商</el-button>
     </main>
 
-    <el-dialog v-model="providerDialogVisible" :title="isEditingProvider ? '编辑服务商' : '新增服务商'" width="560px">
+    <el-dialog v-model="providerDialogVisible" :title="isEditingProvider ? '编辑服务商' : '新增服务商'" width="560px" append-to-body>
       <el-form :model="providerForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="厂商编码" required>
@@ -602,7 +602,7 @@ onMounted(fetchProviders)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="endpointDialogVisible" :title="isEditingEndpoint ? '编辑接入点' : '新增接入点'" width="640px">
+    <el-dialog v-model="endpointDialogVisible" :title="isEditingEndpoint ? '编辑接入点' : '新增接入点'" width="640px" append-to-body>
       <el-form :model="endpointForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="接入点名称" required>
@@ -635,7 +635,7 @@ onMounted(fetchProviders)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="deploymentDialogVisible" :title="isEditingDeployment ? '编辑上游部署' : '新增上游部署'" width="640px">
+    <el-dialog v-model="deploymentDialogVisible" :title="isEditingDeployment ? '编辑上游部署' : '新增上游部署'" width="640px" append-to-body>
       <el-form :model="deploymentForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="关联接入点" required>

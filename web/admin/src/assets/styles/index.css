@@ -32,6 +32,10 @@ html, body, #app {
   -webkit-font-smoothing: antialiased;
 }
 
+body {
+  margin: 0;
+}
+
 /* 现代滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
@@ -125,6 +129,23 @@ html, body, #app {
     font-size: 12px;
     letter-spacing: 0.025em;
   }
+}
+
+.el-dialog {
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.el-dialog__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.page-container {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 常用工具类（作为 Tailwind 的补充） */

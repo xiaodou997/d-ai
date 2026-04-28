@@ -563,7 +563,7 @@ onMounted(fetchModels)
     </main>
 
     <!-- ── 模型对话框 ── -->
-    <el-dialog v-model="modelDialogVisible" :title="isEditingModel ? '编辑对外模型' : '新增对外模型'" width="620px">
+    <el-dialog v-model="modelDialogVisible" :title="isEditingModel ? '编辑对外模型' : '新增对外模型'" width="620px" append-to-body>
       <el-form :model="modelForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="模型编码" required>
@@ -604,7 +604,7 @@ onMounted(fetchModels)
     </el-dialog>
 
     <!-- ── 销售价对话框 ── -->
-    <el-dialog v-model="priceDialogVisible" title="设置销售价" width="580px">
+    <el-dialog v-model="priceDialogVisible" title="设置销售价" width="580px" append-to-body>
       <el-form :model="priceForm" label-position="top">
 
         <!-- Token prices -->
@@ -661,7 +661,7 @@ onMounted(fetchModels)
     </el-dialog>
 
     <!-- ── 路由对话框 ── -->
-    <el-dialog v-model="routeDialogVisible" :title="isEditingRoute ? '编辑模型路由' : '新增模型路由'" width="560px">
+    <el-dialog v-model="routeDialogVisible" :title="isEditingRoute ? '编辑模型路由' : '新增模型路由'" width="560px" append-to-body>
       <el-form :model="routeForm" label-position="top">
         <el-form-item label="上游部署" required>
           <el-select v-model="routeForm.upstream_deployment_id" class="w-full" filterable placeholder="选择上游部署">

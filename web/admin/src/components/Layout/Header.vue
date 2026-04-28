@@ -47,6 +47,7 @@
     v-model="showPasswordDialog"
     title="修改密码"
     width="400px"
+    append-to-body
     :close-on-click-modal="false"
     @close="resetPasswordForm"
   >

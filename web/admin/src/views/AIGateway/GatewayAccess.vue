@@ -432,6 +432,7 @@ onMounted(async () => {
       v-model="priceOverrideDialogVisible"
       :title="`租户定价 · ${overrideTargetGrant?.display_name || ''}`"
       width="520px"
+      append-to-body
     >
       <div v-if="overridePublicPrice" class="public-price-hint">
         <span class="hint-label">公共价格参考</span>
@@ -495,7 +496,7 @@ onMounted(async () => {
     </el-dialog>
 
     <!-- 授权对话框 -->
-    <el-dialog v-model="grantDialogVisible" :title="isEditingGrant ? '编辑模型授权' : '新增模型授权'" width="480px">
+    <el-dialog v-model="grantDialogVisible" :title="isEditingGrant ? '编辑模型授权' : '新增模型授权'" width="480px" append-to-body>
       <el-form :model="grantForm" label-position="top">
         <el-form-item :label="isEditingGrant ? '模型' : '选择模型（可多选）'" required>
           <!-- 新增：多选 -->
