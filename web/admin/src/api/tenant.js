@@ -1,30 +1,6 @@
 import request from '@/utils/request'
 
 /**
- * 查询账户详情
- * @param {Object} params - { accountType, accountId }
- */
-export function getAccountDetail(params) {
-  return request({
-    url: '/urm/v1/account/balance',
-    method: 'get',
-    params: { ...params, detail: true }
-  })
-}
-
-/**
- * 查询交易记录（分页）
- * @param {Object} params - { accountType, accountId, page, size }
- */
-export function queryTransactions(params) {
-  return request({
-    url: '/urm/v1/account/transactions',
-    method: 'get',
-    params
-  })
-}
-
-/**
  * 查询租户列表（分页）
  * @param {Object} params - 查询参数
  */
@@ -107,42 +83,6 @@ export function queryUsers(params) {
 }
 
 /**
- * 查询账户信息（用于充值前查询余额）
- * @param {Object} params - { accountType, accountId }
- */
-export function getAccountInfo(params) {
-  return request({
-    url: '/urm/v1/account/balance',
-    method: 'get',
-    params
-  })
-}
-
-/**
- * 查询全平台充值记录（分页）
- * @param {Object} params - { accountType, accountId, page, size }
- */
-export function getRechargeRecords(params) {
-  return request({
-    url: '/urm/v1/account/recharge-records',
-    method: 'get',
-    params
-  })
-}
-
-/**
- * 查询全平台资源补发记录（分页）
- * @param {Object} params - { tenantId, page, size }
- */
-export function getGrantLogs(params) {
-  return request({
-    url: '/urm/v1/account/resource-grants',
-    method: 'get',
-    params
-  })
-}
-
-/**
  * 查询租户组织用户列表
  * @param {Object} params - { tenantId, page, size }
  */
@@ -189,28 +129,6 @@ export function enableTenantUser(id) {
 }
 
 /**
- * 禁用终端用户
- * @param {string} id - 用户ID
- */
-export function disableEndUser(id) {
-  return request({
-    url: `/urm/v1/users/${id}/disable`,
-    method: 'post'
-  })
-}
-
-/**
- * 启用终端用户
- * @param {string} id - 用户ID
- */
-export function enableEndUser(id) {
-  return request({
-    url: `/urm/v1/users/${id}/enable`,
-    method: 'post'
-  })
-}
-
-/**
  * 重置租户组织用户密码为 123456
  * @param {string} id - 用户ID
  */
@@ -218,17 +136,5 @@ export function resetTenantUserPassword(id) {
   return request({
     url: `/urm/v1/admin/query/tenant-users/${id}/reset-password`,
     method: 'post'
-  })
-}
-
-/**
- * 查询租户已授权的应用列表
- * @param {Object} params - { tenantId }
- */
-export function listTenantApps(params) {
-  return request({
-    url: '/urm/v1/admin/query/tenant-app-grants',
-    method: 'get',
-    params
   })
 }

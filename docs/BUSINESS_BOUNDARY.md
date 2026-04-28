@@ -24,6 +24,6 @@ URM remains the identity, account, recharge, grant, transaction, platform-admin,
 ## Admin Console Rules
 
 - The Uni AI API admin console should not duplicate URM account or system administration pages.
-- Hidden URM-domain pages are kept in the codebase temporarily for rollback, but should not be exposed through the business console menu.
+- URM-domain console pages should be removed from the business console instead of kept behind hidden routes.
 - Dashboard statistics in this console must come from AI Gateway data, primarily `ai_usage_logs`.
 - Backend authorization remains the security boundary; frontend menu filtering is only an experience layer.

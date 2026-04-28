@@ -1,117 +1,77 @@
 <script setup>
-import { computed, shallowRef, watch } from 'vue'
-import { Connection, Cpu, Key, Lock, Tickets, DocumentChecked } from '@element-plus/icons-vue'
-import GatewayProviders from './GatewayProviders.vue'
-import GatewayModels from './GatewayModels.vue'
-import GatewayAccess from './GatewayAccess.vue'
-import GatewayUsage from './GatewayUsage.vue'
-import GatewayLimits from './GatewayLimits.vue'
-import GatewayAudit from './GatewayAudit.vue'
+import { computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-const activeTab = shallowRef('providers')
+const route = useRoute()
 const authStore = useAuthStore()
 
-const tabAccess = computed(() => ({
-  providers: authStore.isPlatformAdmin,
-  models: authStore.isPlatformAdmin,
-  access: true,
-  usage: true,
-  limits: authStore.isPlatformAdmin,
-  audit: authStore.isPlatformAdmin
-}))
-
-watch(tabAccess, (access) => {
-  if (!access[activeTab.value]) {
-    activeTab.value = 'access'
-  }
-}, { immediate: true })
+const pageTitle = computed(() => route.meta.title || (authStore.isPlatformAdmin ? 'AI 网关' : '我的 AI 网关'))
+const pageDescription = computed(() => {
+  if (route.path.endsWith('/providers')) return '维护上游厂商、Endpoint 和连通性探测。'
+  if (route.path.endsWith('/models')) return '维护公共模型、部署映射、租户价格和供应商成本。'
+  if (route.path.endsWith('/access')) return '管理模型授权与运行时 API Key。'
+  if (route.path.endsWith('/usage')) return '查看调用日志、计费单位和积分消耗。'
+  if (route.path.endsWith('/limits')) return '维护租户、用户和 Key 级限流策略。'
+  if (route.path.endsWith('/audit')) return '追踪 AI Gateway 后台配置变更。'
+  return authStore.isPlatformAdmin ? '统一维护 AI Gateway 业务能力。' : '管理你的模型授权、API Key 和调用记录。'
+})
 </script>
 
 <template>
   <div class="page-container space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <section class="bg-white border border-slate-100 rounded-2xl shadow-soft p-6">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p class="text-xs font-black text-slate-400 uppercase">AI Gateway</p>
-          <h2 class="mt-1 text-xl font-black text-slate-900">
-            {{ authStore.isPlatformAdmin ? '统一模型接入' : '我的 AI 网关' }}
-          </h2>
-          <p class="mt-2 text-sm text-slate-500">
-            {{ authStore.isPlatformAdmin ? '维护厂商接入点、模型映射、租户授权和运行时 API Key。' : '管理授权模型、运行时 API Key 和调用记录。' }}
-          </p>
-        </div>
-        <el-alert
-          class="gateway-alert"
-          type="info"
-          :closable="false"
-          show-icon
-          title="登录后默认使用 URM JWT；本地调试可设置 localStorage.uni-ai-api-admin-token。"
-        />
+    <section class="gateway-head">
+      <div>
+        <p class="gateway-eyebrow">AI Gateway</p>
+        <h2 class="gateway-title">{{ pageTitle }}</h2>
+        <p class="gateway-subtitle">{{ pageDescription }}</p>
       </div>
+      <el-tag type="info" effect="plain">{{ authStore.roleName }}</el-tag>
     </section>
 
-    <section class="bg-white border border-slate-100 rounded-2xl shadow-soft p-4">
-      <el-tabs v-model="activeTab" class="gateway-tabs">
-        <el-tab-pane v-if="tabAccess.providers" name="providers">
-          <template #label>
-            <span class="tab-label"><el-icon><Connection /></el-icon>厂商接入</span>
-          </template>
-          <GatewayProviders />
-        </el-tab-pane>
-
-        <el-tab-pane v-if="tabAccess.models" name="models">
-          <template #label>
-            <span class="tab-label"><el-icon><Cpu /></el-icon>模型映射</span>
-          </template>
-          <GatewayModels />
-        </el-tab-pane>
-
-        <el-tab-pane name="access">
-          <template #label>
-            <span class="tab-label"><el-icon><Key /></el-icon>授权与 Key</span>
-          </template>
-          <GatewayAccess />
-        </el-tab-pane>
-
-        <el-tab-pane name="usage">
-          <template #label>
-            <span class="tab-label"><el-icon><Tickets /></el-icon>调用日志</span>
-          </template>
-          <GatewayUsage />
-        </el-tab-pane>
-
-        <el-tab-pane v-if="tabAccess.limits" name="limits">
-          <template #label>
-            <span class="tab-label"><el-icon><Lock /></el-icon>限流策略</span>
-          </template>
-          <GatewayLimits />
-        </el-tab-pane>
-
-        <el-tab-pane v-if="tabAccess.audit" name="audit">
-          <template #label>
-            <span class="tab-label"><el-icon><DocumentChecked /></el-icon>网关审计</span>
-          </template>
-          <GatewayAudit />
-        </el-tab-pane>
-      </el-tabs>
-    </section>
+    <RouterView />
   </div>
 </template>
 
 <style scoped>
-.gateway-alert {
-  max-width: 520px;
-}
-
-.tab-label {
-  display: inline-flex;
+.gateway-head {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 700;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
 }
 
-.gateway-tabs :deep(.el-tabs__header) {
-  margin-bottom: 18px;
+.gateway-eyebrow {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.gateway-title {
+  margin: 6px 0 0;
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.gateway-subtitle {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .gateway-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

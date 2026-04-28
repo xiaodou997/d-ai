@@ -99,26 +99,3 @@ export function changePassword(oldPassword, newPassword) {
     data: { oldPassword, newPassword }
   })
 }
-
-/**
- * 获取 JWT 密钥列表（超级管理员）
- * @returns {Promise<{keys: Array, total: number}>}
- */
-export function listJwtKeys() {
-  return request({
-    url: '/urm/v1/admin/system/jwt-keys',
-    method: 'get'
-  })
-}
-
-/**
- * 轮换 JWT 密钥（超级管理员）
- * 生成新密钥，旧密钥进入 24 小时宽限期后自动退役
- * @returns {Promise<{message: string}>}
- */
-export function rotateJwtKey() {
-  return request({
-    url: '/urm/v1/admin/system/rotate-jwt-key',
-    method: 'post'
-  })
-}

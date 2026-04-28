@@ -25,9 +25,9 @@ export default defineConfig({
         changeOrigin: true
       },
       '/urm': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:6900',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/urm/, '/api'),
+        rewrite: (path) => path.replace(/^\/urm/, '/api')
       }
     }
   },

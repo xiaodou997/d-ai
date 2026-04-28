@@ -131,7 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
     return '未识别角色'
   })
 
-  const defaultRoute = computed(() => (isPlatformAdmin.value ? '/dashboard' : '/ai-gateway'))
+  const defaultRoute = computed(() => (isPlatformAdmin.value ? '/dashboard' : '/ai-gateway/access'))
 
   const isTokenExpiring = () => {
     // 如果 Token 剩余时间少于 5 分钟，认为即将过期
