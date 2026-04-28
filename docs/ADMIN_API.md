@@ -44,8 +44,7 @@ curl -X POST http://127.0.0.1:13010/admin/providers \
   -d '{
     "code": "custom_vendor",
     "name": "Custom Vendor",
-    "provider_type": "custom",
-    "is_custom": true
+    "status": "active"
   }'
 ```
 

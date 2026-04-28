@@ -383,19 +383,15 @@ const createProvider = `-- name: CreateProvider :one
 INSERT INTO ai_providers (
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4
 )
 RETURNING
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -403,12 +399,10 @@ RETURNING
 `
 
 type CreateProviderParams struct {
-	Code         string `json:"code"`
-	Name         string `json:"name"`
-	ProviderType string `json:"provider_type"`
-	IsCustom     bool   `json:"is_custom"`
-	Config       []byte `json:"config"`
-	Status       string `json:"status"`
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	Config []byte `json:"config"`
+	Status string `json:"status"`
 }
 
 // ============================================================================
@@ -418,8 +412,6 @@ func (q *Queries) CreateProvider(ctx context.Context, arg CreateProviderParams) 
 	row := q.db.QueryRow(ctx, createProvider,
 		arg.Code,
 		arg.Name,
-		arg.ProviderType,
-		arg.IsCustom,
 		arg.Config,
 		arg.Status,
 	)
@@ -428,8 +420,6 @@ func (q *Queries) CreateProvider(ctx context.Context, arg CreateProviderParams) 
 		&i.ID,
 		&i.Code,
 		&i.Name,
-		&i.ProviderType,
-		&i.IsCustom,
 		&i.Config,
 		&i.Status,
 		&i.CreatedAt,
@@ -1125,8 +1115,6 @@ SELECT
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -1142,8 +1130,6 @@ func (q *Queries) GetProvider(ctx context.Context, id pgtype.UUID) (AiProvider, 
 		&i.ID,
 		&i.Code,
 		&i.Name,
-		&i.ProviderType,
-		&i.IsCustom,
 		&i.Config,
 		&i.Status,
 		&i.CreatedAt,
@@ -2023,8 +2009,6 @@ SELECT
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -2046,8 +2030,6 @@ func (q *Queries) ListProviders(ctx context.Context) ([]AiProvider, error) {
 			&i.ID,
 			&i.Code,
 			&i.Name,
-			&i.ProviderType,
-			&i.IsCustom,
 			&i.Config,
 			&i.Status,
 			&i.CreatedAt,
@@ -3315,18 +3297,14 @@ const updateProvider = `-- name: UpdateProvider :one
 UPDATE ai_providers
 SET code = $2,
     name = $3,
-    provider_type = $4,
-    is_custom = $5,
-    config = $6,
-    status = $7,
+    config = $4,
+    status = $5,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -3334,13 +3312,11 @@ RETURNING
 `
 
 type UpdateProviderParams struct {
-	ID           pgtype.UUID `json:"id"`
-	Code         string      `json:"code"`
-	Name         string      `json:"name"`
-	ProviderType string      `json:"provider_type"`
-	IsCustom     bool        `json:"is_custom"`
-	Config       []byte      `json:"config"`
-	Status       string      `json:"status"`
+	ID     pgtype.UUID `json:"id"`
+	Code   string      `json:"code"`
+	Name   string      `json:"name"`
+	Config []byte      `json:"config"`
+	Status string      `json:"status"`
 }
 
 func (q *Queries) UpdateProvider(ctx context.Context, arg UpdateProviderParams) (AiProvider, error) {
@@ -3348,8 +3324,6 @@ func (q *Queries) UpdateProvider(ctx context.Context, arg UpdateProviderParams) 
 		arg.ID,
 		arg.Code,
 		arg.Name,
-		arg.ProviderType,
-		arg.IsCustom,
 		arg.Config,
 		arg.Status,
 	)
@@ -3358,8 +3332,6 @@ func (q *Queries) UpdateProvider(ctx context.Context, arg UpdateProviderParams) 
 		&i.ID,
 		&i.Code,
 		&i.Name,
-		&i.ProviderType,
-		&i.IsCustom,
 		&i.Config,
 		&i.Status,
 		&i.CreatedAt,
@@ -3511,8 +3483,6 @@ RETURNING
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -3531,8 +3501,6 @@ func (q *Queries) UpdateProviderStatus(ctx context.Context, arg UpdateProviderSt
 		&i.ID,
 		&i.Code,
 		&i.Name,
-		&i.ProviderType,
-		&i.IsCustom,
 		&i.Config,
 		&i.Status,
 		&i.CreatedAt,

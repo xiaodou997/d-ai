@@ -150,8 +150,6 @@ CREATE TABLE ai_providers (
   id UUID PRIMARY KEY,
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  provider_type TEXT NOT NULL,
-  is_custom BOOLEAN NOT NULL DEFAULT false,
   config JSONB NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -159,9 +157,7 @@ CREATE TABLE ai_providers (
 );
 ```
 
-`provider_type` values: `official`, `compatible`, `private`, `custom`.
-
-`is_custom = true` allows tenants or platform admins to configure a custom provider with its own request base URL, model names, and protocol type.
+Provider is a grouping entity for endpoints and deployments. The actual request behavior is determined by endpoint configuration (base_url, api_key) and deployment settings (upstream_protocol, upstream_model).
 
 ### ai_provider_endpoints
 

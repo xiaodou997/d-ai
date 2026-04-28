@@ -6,19 +6,15 @@
 INSERT INTO ai_providers (
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4
 )
 RETURNING
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -29,8 +25,6 @@ SELECT
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -43,8 +37,6 @@ SELECT
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -61,8 +53,6 @@ RETURNING
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,
@@ -72,18 +62,14 @@ RETURNING
 UPDATE ai_providers
 SET code = $2,
     name = $3,
-    provider_type = $4,
-    is_custom = $5,
-    config = $6,
-    status = $7,
+    config = $4,
+    status = $5,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   code,
   name,
-  provider_type,
-  is_custom,
   config,
   status,
   created_at,

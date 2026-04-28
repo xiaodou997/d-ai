@@ -54,12 +54,10 @@ type adminContext struct {
 }
 
 type createProviderRequest struct {
-	Code         string          `json:"code"`
-	Name         string          `json:"name"`
-	ProviderType string          `json:"provider_type"`
-	IsCustom     bool            `json:"is_custom"`
-	Config       json.RawMessage `json:"config"`
-	Status       string          `json:"status"`
+	Code   string          `json:"code"`
+	Name   string          `json:"name"`
+	Config json.RawMessage `json:"config"`
+	Status string          `json:"status"`
 }
 
 type updateStatusRequest struct {
@@ -383,20 +381,15 @@ func (s *Server) handleAdminCreateProvider(w http.ResponseWriter, r *http.Reques
 		writeAdminError(w, http.StatusBadRequest, "code and name are required")
 		return
 	}
-	if req.ProviderType == "" {
-		req.ProviderType = "custom"
-	}
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
 
 	row, err := s.queries.CreateProvider(r.Context(), dbgen.CreateProviderParams{
-		Code:         req.Code,
-		Name:         req.Name,
-		ProviderType: req.ProviderType,
-		IsCustom:     req.IsCustom,
-		Config:       jsonObjectOrDefault(req.Config),
-		Status:       req.Status,
+		Code:   req.Code,
+		Name:   req.Name,
+		Config: jsonObjectOrDefault(req.Config),
+		Status: req.Status,
 	})
 	if err != nil {
 		writeAdminDBError(w, err)
@@ -418,15 +411,15 @@ func (s *Server) handleAdminUpdateProvider(w http.ResponseWriter, r *http.Reques
 		writeAdminError(w, http.StatusBadRequest, "code and name are required")
 		return
 	}
-	if req.ProviderType == "" {
-		req.ProviderType = "custom"
-	}
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
 	row, err := s.queries.UpdateProvider(r.Context(), dbgen.UpdateProviderParams{
-		ID: providerID, Code: req.Code, Name: req.Name, ProviderType: req.ProviderType,
-		IsCustom: req.IsCustom, Config: jsonObjectOrDefault(req.Config), Status: req.Status,
+		ID:     providerID,
+		Code:   req.Code,
+		Name:   req.Name,
+		Config: jsonObjectOrDefault(req.Config),
+		Status: req.Status,
 	})
 	if err != nil {
 		writeAdminDBError(w, err)

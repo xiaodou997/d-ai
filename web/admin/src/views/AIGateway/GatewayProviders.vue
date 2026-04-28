@@ -13,7 +13,6 @@ import {
   listProviders,
   listUpstreamDeployments,
   protocolOptions,
-  providerTypeOptions,
   statusOptions,
   updateProvider,
   updateProviderEndpoint,
@@ -41,8 +40,6 @@ const providerKeyword = shallowRef('')
 const providerForm = reactive({
   code: '',
   name: '',
-  provider_type: 'custom',
-  is_custom: true,
   status: 'active'
 })
 
@@ -77,8 +74,7 @@ const filteredProviders = computed(() => {
   return providers.value.filter((item) => {
     const name = item.name?.toLowerCase() || ''
     const code = item.code?.toLowerCase() || ''
-    const providerType = item.provider_type?.toLowerCase() || ''
-    return name.includes(keyword) || code.includes(keyword) || providerType.includes(keyword)
+    return name.includes(keyword) || code.includes(keyword)
   })
 })
 
@@ -105,9 +101,6 @@ const statusTagType = (status) => {
   return map[status] || 'info'
 }
 
-const providerTypeLabel = (type) =>
-  providerTypeOptions.find((item) => item.value === type)?.label || type || '-'
-
 const protocolLabel = (value) =>
   protocolOptions.find((item) => item.value === value)?.label || value || '-'
 
@@ -124,8 +117,6 @@ const resetProviderForm = () => {
   Object.assign(providerForm, {
     code: '',
     name: '',
-    provider_type: 'custom',
-    is_custom: true,
     status: 'active'
   })
 }
@@ -162,8 +153,6 @@ const applyProviderForm = (row) => {
   Object.assign(providerForm, {
     code: row.code,
     name: row.name,
-    provider_type: row.provider_type,
-    is_custom: row.is_custom,
     status: row.status
   })
 }
@@ -424,7 +413,6 @@ onMounted(fetchProviders)
               <el-tag :type="statusTagType(provider.status)" size="small">{{ provider.status }}</el-tag>
             </div>
             <span>{{ provider.code }}</span>
-            <small>{{ providerTypeLabel(provider.provider_type) }}</small>
           </div>
           <div class="provider-item-actions">
             <el-button link type="primary" :icon="Edit" @click.stop="openProviderEditDialog(provider)">编辑</el-button>
@@ -444,7 +432,7 @@ onMounted(fetchProviders)
             <h2>{{ selectedProvider.name }}</h2>
             <el-tag :type="statusTagType(selectedProvider.status)" effect="dark">{{ selectedProvider.status }}</el-tag>
           </div>
-          <p>{{ selectedProvider.code }} · {{ providerTypeLabel(selectedProvider.provider_type) }}</p>
+          <p>{{ selectedProvider.code }}</p>
         </div>
         <div class="hero-actions">
           <el-button :icon="Refresh" circle @click="fetchSelectedProviderDetail" />
@@ -464,11 +452,6 @@ onMounted(fetchProviders)
             <span>上游部署</span>
             <strong>{{ providerSummary.deploymentCount }}</strong>
             <small>{{ providerSummary.activeDeploymentCount }} active</small>
-          </div>
-          <div class="metric-cell">
-            <span>厂商类型</span>
-            <strong>{{ providerTypeLabel(selectedProvider.provider_type) }}</strong>
-            <small>Provider 只表示归属</small>
           </div>
           <div class="metric-cell">
             <span>计费单位</span>
@@ -583,18 +566,11 @@ onMounted(fetchProviders)
             <el-input v-model="providerForm.name" placeholder="Custom Vendor" />
           </el-form-item>
         </div>
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="厂商类型">
-            <el-select v-model="providerForm.provider_type" class="w-full">
-              <el-option v-for="item in providerTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="providerForm.status" class="w-full">
-              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
-        </div>
+        <el-form-item label="状态">
+          <el-select v-model="providerForm.status" class="w-full">
+            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="providerDialogVisible = false">取消</el-button>

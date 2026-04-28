@@ -90,15 +90,13 @@ type AiModelRoute struct {
 }
 
 type AiProvider struct {
-	ID           pgtype.UUID        `json:"id"`
-	Code         string             `json:"code"`
-	Name         string             `json:"name"`
-	ProviderType string             `json:"provider_type"`
-	IsCustom     bool               `json:"is_custom"`
-	Config       []byte             `json:"config"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID        pgtype.UUID        `json:"id"`
+	Code      string             `json:"code"`
+	Name      string             `json:"name"`
+	Config    []byte             `json:"config"`
+	Status    string             `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiProviderEndpoint struct {
