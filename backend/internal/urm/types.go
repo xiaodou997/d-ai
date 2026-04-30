@@ -49,3 +49,10 @@ type UserInfoResponse struct {
 	TenantName string `json:"tenantName"`
 	AppKey     string `json:"appKey"`
 }
+
+type TokenPairResponse struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	TokenType    string `json:"tokenType"`
+	ExpiresIn    int64  `json:"expiresIn"`
+}

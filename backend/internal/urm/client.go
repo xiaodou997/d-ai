@@ -68,6 +68,20 @@ func (c *Client) Cancel(ctx context.Context, transactionID string) error {
 	return c.do(ctx, http.MethodPost, "/internal/v1/settle/cancel/"+url.PathEscape(transactionID), nil, &resp)
 }
 
+// ExchangeCode 用授权码换取 Token 对（SSO 授权码流程的后端兑换步骤）
+// redirectURI 必须与授权时传入的值完全一致
+func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (*TokenPairResponse, error) {
+	var resp Response[TokenPairResponse]
+	body := url.Values{
+		"code":         {code},
+		"redirect_uri": {redirectURI},
+	}
+	if err := c.doFormHMAC(ctx, http.MethodPost, "/api/oauth2/exchange", body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 func (c *Client) QueryBalance(ctx context.Context, accountType int, accountID string, detail bool) (*BalanceResponse, error) {
 	q := url.Values{}
 	q.Set("accountType", strconv.Itoa(accountType))
@@ -176,6 +190,48 @@ func (c *Client) doBearer(ctx context.Context, method, path, token string, out a
 		return fmt.Errorf("urm error %d: %s", envelope.Code, envelope.Message)
 	}
 
+	return nil
+}
+
+// doFormHMAC sends a form-encoded POST with HMAC authentication headers
+func (c *Client) doFormHMAC(ctx context.Context, method, path string, body url.Values, out any) error {
+	encoded := body.Encode()
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, strings.NewReader(encoded))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	for k, v := range c.signHeaders(method, path, encoded) {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("urm request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read urm response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("urm status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("parse urm response: %w", err)
+	}
+
+	var envelope responseEnvelope
+	if err := json.Unmarshal(respBody, &envelope); err != nil {
+		return fmt.Errorf("parse urm envelope: %w", err)
+	}
+	if envelope.Code != 0 && envelope.Code != 200 {
+		return fmt.Errorf("urm error %d: %s", envelope.Code, envelope.Message)
+	}
 	return nil
 }
 
