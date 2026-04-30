@@ -118,6 +118,67 @@
       </div>
     </div>
 
+    <!-- AI Gateway 统计区 -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-6">
+      <div class="flex items-center gap-3 mb-4">
+        <el-icon class="text-blue-600" :size="20"><Box /></el-icon>
+        <h2 class="text-base font-bold text-blue-800">AI Gateway 统计</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- 授权模型数 -->
+        <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <el-icon class="text-blue-500" :size="20"><Box /></el-icon>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 mb-1">授权模型</p>
+            <p class="text-2xl font-black text-blue-700">
+              <span v-if="aiLoading" class="text-slate-200">—</span>
+              <span v-else>{{ aiStats.modelCount ?? 0 }}</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">平台已授权的模型</p>
+          </div>
+        </div>
+
+        <!-- API Key 数 -->
+        <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
+            <el-icon class="text-green-500" :size="20"><Key /></el-icon>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 mb-1">租户 API Key</p>
+            <p class="text-2xl font-black text-green-700">
+              <span v-if="aiLoading" class="text-slate-200">—</span>
+              <span v-else>{{ aiStats.apiKeyCount ?? 0 }}</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">已创建的 API Key</p>
+          </div>
+        </div>
+
+        <!-- 本月消耗 -->
+        <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+            <el-icon class="text-purple-500" :size="20"><DataLine /></el-icon>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-slate-400 mb-1">本月 AI 消耗</p>
+            <p class="text-2xl font-black text-purple-700">
+              <span v-if="aiLoading" class="text-slate-200">—</span>
+              <span v-else>{{ aiStats.monthCost ?? 0 }}</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">积分 · 租户支付</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 flex justify-end">
+        <el-button text type="primary" size="small" @click="$router.push('/ai/models')">
+          查看 AI Gateway <el-icon class="ml-1"><ArrowRight /></el-icon>
+        </el-button>
+      </div>
+    </div>
+
     <!-- APP 消耗分布 + 近期用户充值记录 -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- APP 消耗分布饼状图 -->
@@ -258,9 +319,10 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
-import { Refresh, User, Avatar, Ticket, Coin, Wallet, TrendCharts, ArrowRight, Loading, PieChart } from '@element-plus/icons-vue'
+import { Refresh, User, Avatar, Ticket, Coin, Wallet, TrendCharts, ArrowRight, Loading, PieChart, Box, Key, DataLine } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getAnalyticsOverview, getAppConsumption, getAccountBalance, getTransactions, getUserRechargeRecords } from '@/api/tenant'
+import { listTenantModelGrants, listTenantAPIKeys, getDashboardSummary } from '@/api/aiGateway'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 
@@ -271,6 +333,7 @@ const balanceLoading = ref(false)
 const txLoading = ref(false)
 const rechargeLoading = ref(false)
 const appLoading = ref(false)
+const aiLoading = ref(false)
 
 const overview = reactive({
   endUserCount: 0,
@@ -289,6 +352,12 @@ const balance = reactive({
 const recentTransactions = ref([])
 const recentRecharges = ref([])
 const appConsumption = ref([])
+
+const aiStats = reactive({
+  modelCount: 0,
+  apiKeyCount: 0,
+  monthCost: 0
+})
 
 const pieChartRef = ref(null)
 let pieChartInstance = null
@@ -369,6 +438,24 @@ const fetchAppConsumption = async () => {
   }
 }
 
+const fetchAIStats = async () => {
+  aiLoading.value = true
+  try {
+    const [modelsRes, keysRes, summaryRes] = await Promise.all([
+      listTenantModelGrants().catch(() => ({ data: [] })),
+      listTenantAPIKeys().catch(() => ({ data: [] })),
+      getDashboardSummary().catch(() => ({ data: {} }))
+    ])
+    aiStats.modelCount = (modelsRes.data || []).length
+    aiStats.apiKeyCount = (keysRes.data || []).length
+    aiStats.monthCost = summaryRes.data?.total_cost || 0
+  } catch (e) {
+    console.error('获取AI统计失败:', e)
+  } finally {
+    aiLoading.value = false
+  }
+}
+
 const renderPieChart = () => {
   if (!pieChartRef.value || appConsumption.value.length === 0) return
 
@@ -433,7 +520,7 @@ const renderPieChart = () => {
 const fetchData = async () => {
   loading.value = true
   try {
-    await Promise.all([fetchOverview(), fetchBalance(), fetchTransactions(), fetchRecharges(), fetchAppConsumption()])
+    await Promise.all([fetchOverview(), fetchBalance(), fetchTransactions(), fetchRecharges(), fetchAppConsumption(), fetchAIStats()])
   } finally {
     loading.value = false
   }

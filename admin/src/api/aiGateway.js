@@ -150,35 +150,35 @@ export const capabilityOptions = [
 // ============================================================================
 
 export function listProviders() {
-  return gatewayRequest.get('/admin/providers')
+  return gatewayRequest.get('/api/v1/providers')
 }
 
 export function createProvider(data) {
-  return gatewayRequest.post('/admin/providers', data)
+  return gatewayRequest.post('/api/v1/providers', data)
 }
 
 export function updateProvider(providerId, data) {
-  return gatewayRequest.patch(`/admin/providers/${providerId}`, data)
+  return gatewayRequest.patch(`/api/v1/providers/${providerId}`, data)
 }
 
 export function updateProviderStatus(providerId, status) {
-  return gatewayRequest.patch(`/admin/providers/${providerId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/providers/${providerId}/status`, { status })
 }
 
 export function listProviderEndpoints(providerId) {
-  return gatewayRequest.get(`/admin/providers/${providerId}/endpoints`)
+  return gatewayRequest.get(`/api/v1/providers/${providerId}/endpoints`)
 }
 
 export function createProviderEndpoint(providerId, data) {
-  return gatewayRequest.post(`/admin/providers/${providerId}/endpoints`, data)
+  return gatewayRequest.post(`/api/v1/providers/${providerId}/endpoints`, data)
 }
 
 export function updateProviderEndpoint(providerId, endpointId, data) {
-  return gatewayRequest.patch(`/admin/providers/${providerId}/endpoints/${endpointId}`, data)
+  return gatewayRequest.patch(`/api/v1/providers/${providerId}/endpoints/${endpointId}`, data)
 }
 
 export function updateProviderEndpointStatus(providerId, endpointId, status) {
-  return gatewayRequest.patch(`/admin/providers/${providerId}/endpoints/${endpointId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/providers/${providerId}/endpoints/${endpointId}/status`, { status })
 }
 
 // ============================================================================
@@ -186,27 +186,27 @@ export function updateProviderEndpointStatus(providerId, endpointId, status) {
 // ============================================================================
 
 export function listUpstreamDeployments(params) {
-  return gatewayRequest.get('/admin/upstream-deployments', { params })
+  return gatewayRequest.get('/api/v1/upstream-deployments', { params })
 }
 
 export function createUpstreamDeployment(data) {
-  return gatewayRequest.post('/admin/upstream-deployments', data)
+  return gatewayRequest.post('/api/v1/upstream-deployments', data)
 }
 
 export function getUpstreamDeployment(deploymentId) {
-  return gatewayRequest.get(`/admin/upstream-deployments/${deploymentId}`)
+  return gatewayRequest.get(`/api/v1/upstream-deployments/${deploymentId}`)
 }
 
 export function updateUpstreamDeployment(deploymentId, data) {
-  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}`, data)
+  return gatewayRequest.patch(`/api/v1/upstream-deployments/${deploymentId}`, data)
 }
 
 export function updateUpstreamDeploymentStatus(deploymentId, status) {
-  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/upstream-deployments/${deploymentId}/status`, { status })
 }
 
 export function checkUpstreamDeploymentHealth(deploymentId) {
-  return gatewayRequest.post(`/admin/upstream-deployments/${deploymentId}/health-check`)
+  return gatewayRequest.post(`/api/v1/upstream-deployments/${deploymentId}/health-check`)
 }
 
 // ============================================================================
@@ -214,19 +214,19 @@ export function checkUpstreamDeploymentHealth(deploymentId) {
 // ============================================================================
 
 export function listUpstreamDeploymentCostPrices(deploymentId) {
-  return gatewayRequest.get(`/admin/upstream-deployments/${deploymentId}/cost-prices`)
+  return gatewayRequest.get(`/api/v1/upstream-deployments/${deploymentId}/cost-prices`)
 }
 
 export function createUpstreamDeploymentCostPrice(deploymentId, data) {
-  return gatewayRequest.post(`/admin/upstream-deployments/${deploymentId}/cost-prices`, data)
+  return gatewayRequest.post(`/api/v1/upstream-deployments/${deploymentId}/cost-prices`, data)
 }
 
 export function updateUpstreamDeploymentCostPrice(deploymentId, priceId, data) {
-  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}/cost-prices/${priceId}`, data)
+  return gatewayRequest.patch(`/api/v1/upstream-deployments/${deploymentId}/cost-prices/${priceId}`, data)
 }
 
 export function updateUpstreamDeploymentCostPriceStatus(deploymentId, priceId, status) {
-  return gatewayRequest.patch(`/admin/upstream-deployments/${deploymentId}/cost-prices/${priceId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/upstream-deployments/${deploymentId}/cost-prices/${priceId}/status`, { status })
 }
 
 // ============================================================================
@@ -234,19 +234,19 @@ export function updateUpstreamDeploymentCostPriceStatus(deploymentId, priceId, s
 // ============================================================================
 
 export function listModels() {
-  return gatewayRequest.get('/admin/models')
+  return gatewayRequest.get('/api/v1/models')
 }
 
 export function createModel(data) {
-  return gatewayRequest.post('/admin/models', data)
+  return gatewayRequest.post('/api/v1/models', data)
 }
 
 export function updateModel(modelId, data) {
-  return gatewayRequest.patch(`/admin/models/${modelId}`, data)
+  return gatewayRequest.patch(`/api/v1/models/${modelId}`, data)
 }
 
 export function updateModelStatus(modelId, status) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/models/${modelId}/status`, { status })
 }
 
 // ============================================================================
@@ -254,11 +254,11 @@ export function updateModelStatus(modelId, status) {
 // ============================================================================
 
 export function getModelPrice(modelId) {
-  return gatewayRequest.get(`/admin/models/${modelId}/price`)
+  return gatewayRequest.get(`/api/v1/models/${modelId}/price`)
 }
 
 export function upsertModelPrice(modelId, data) {
-  return gatewayRequest.put(`/admin/models/${modelId}/price`, data)
+  return gatewayRequest.put(`/api/v1/models/${modelId}/price`, data)
 }
 
 // ============================================================================
@@ -266,19 +266,19 @@ export function upsertModelPrice(modelId, data) {
 // ============================================================================
 
 export function listTenantModelPriceOverrides(tenantId) {
-  return gatewayRequest.get(`/admin/tenants/${tenantId}/model-price-overrides`)
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/model-price-overrides`)
 }
 
 export function getTenantModelPriceOverride(tenantId, modelId) {
-  return gatewayRequest.get(`/admin/tenants/${tenantId}/model-price-overrides/${modelId}`)
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/model-price-overrides/${modelId}`)
 }
 
 export function upsertTenantModelPriceOverride(tenantId, modelId, data) {
-  return gatewayRequest.put(`/admin/tenants/${tenantId}/model-price-overrides/${modelId}`, data)
+  return gatewayRequest.put(`/api/v1/tenants/${tenantId}/model-price-overrides/${modelId}`, data)
 }
 
 export function deleteTenantModelPriceOverride(tenantId, modelId) {
-  return gatewayRequest.delete(`/admin/tenants/${tenantId}/model-price-overrides/${modelId}`)
+  return gatewayRequest.delete(`/api/v1/tenants/${tenantId}/model-price-overrides/${modelId}`)
 }
 
 // ============================================================================
@@ -286,27 +286,27 @@ export function deleteTenantModelPriceOverride(tenantId, modelId) {
 // ============================================================================
 
 export function listModelRoutes(modelId) {
-  return gatewayRequest.get(`/admin/models/${modelId}/routes`)
+  return gatewayRequest.get(`/api/v1/models/${modelId}/routes`)
 }
 
 export function createModelRoute(modelId, data) {
-  return gatewayRequest.post(`/admin/models/${modelId}/routes`, data)
+  return gatewayRequest.post(`/api/v1/models/${modelId}/routes`, data)
 }
 
 export function getModelRoute(modelId, routeId) {
-  return gatewayRequest.get(`/admin/models/${modelId}/routes/${routeId}`)
+  return gatewayRequest.get(`/api/v1/models/${modelId}/routes/${routeId}`)
 }
 
 export function updateModelRoute(modelId, routeId, data) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/routes/${routeId}`, data)
+  return gatewayRequest.patch(`/api/v1/models/${modelId}/routes/${routeId}`, data)
 }
 
 export function updateModelRouteStatus(modelId, routeId, status) {
-  return gatewayRequest.patch(`/admin/models/${modelId}/routes/${routeId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/models/${modelId}/routes/${routeId}/status`, { status })
 }
 
 export function deleteModelRoute(modelId, routeId) {
-  return gatewayRequest.delete(`/admin/models/${modelId}/routes/${routeId}`)
+  return gatewayRequest.delete(`/api/v1/models/${modelId}/routes/${routeId}`)
 }
 
 // ============================================================================
@@ -314,15 +314,15 @@ export function deleteModelRoute(modelId, routeId) {
 // ============================================================================
 
 export function listTenantModelGrants(tenantId) {
-  return gatewayRequest.get(`/admin/tenants/${tenantId}/model-grants`)
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/model-grants`)
 }
 
 export function grantModelToTenant(tenantId, data) {
-  return gatewayRequest.post(`/admin/tenants/${tenantId}/model-grants`, data)
+  return gatewayRequest.post(`/api/v1/tenants/${tenantId}/model-grants`, data)
 }
 
 export function updateTenantModelGrantStatus(tenantId, modelId, status) {
-  return gatewayRequest.patch(`/admin/tenants/${tenantId}/model-grants/${modelId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/tenants/${tenantId}/model-grants/${modelId}/status`, { status })
 }
 
 // ============================================================================
@@ -330,19 +330,19 @@ export function updateTenantModelGrantStatus(tenantId, modelId, status) {
 // ============================================================================
 
 export function listTenantAPIKeys(tenantId) {
-  return gatewayRequest.get(`/admin/tenants/${tenantId}/api-keys`)
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/api-keys`)
 }
 
 export function createTenantAPIKey(tenantId, data) {
-  return gatewayRequest.post(`/admin/tenants/${tenantId}/api-keys`, data)
+  return gatewayRequest.post(`/api/v1/tenants/${tenantId}/api-keys`, data)
 }
 
 export function updateTenantAPIKey(tenantId, apiKeyId, data) {
-  return gatewayRequest.patch(`/admin/tenants/${tenantId}/api-keys/${apiKeyId}`, data)
+  return gatewayRequest.patch(`/api/v1/tenants/${tenantId}/api-keys/${apiKeyId}`, data)
 }
 
 export function updateTenantAPIKeyStatus(tenantId, apiKeyId, status) {
-  return gatewayRequest.patch(`/admin/tenants/${tenantId}/api-keys/${apiKeyId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/tenants/${tenantId}/api-keys/${apiKeyId}/status`, { status })
 }
 
 // ============================================================================
@@ -350,19 +350,19 @@ export function updateTenantAPIKeyStatus(tenantId, apiKeyId, status) {
 // ============================================================================
 
 export function listUserAPIKeys(tenantId, userId) {
-  return gatewayRequest.get(`/admin/tenants/${tenantId}/users/${userId}/api-keys`)
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/users/${userId}/api-keys`)
 }
 
 export function createUserAPIKey(tenantId, userId, data) {
-  return gatewayRequest.post(`/admin/tenants/${tenantId}/users/${userId}/api-keys`, data)
+  return gatewayRequest.post(`/api/v1/tenants/${tenantId}/users/${userId}/api-keys`, data)
 }
 
 export function updateUserAPIKey(tenantId, userId, apiKeyId, data) {
-  return gatewayRequest.patch(`/admin/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}`, data)
+  return gatewayRequest.patch(`/api/v1/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}`, data)
 }
 
 export function updateUserAPIKeyStatus(tenantId, userId, apiKeyId, status) {
-  return gatewayRequest.patch(`/admin/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/tenants/${tenantId}/users/${userId}/api-keys/${apiKeyId}/status`, { status })
 }
 
 // ============================================================================
@@ -387,31 +387,31 @@ export function formatCredits(value) {
 // ============================================================================
 
 export function listUsageLogs(params) {
-  return gatewayRequest.get('/admin/usage-logs', { params })
+  return gatewayRequest.get('/api/v1/usage-logs', { params })
 }
 
 export function listUsageSummary(params) {
-  return gatewayRequest.get('/admin/usage-summary', { params })
+  return gatewayRequest.get('/api/v1/usage-summary', { params })
 }
 
 export function listUsageUnitSummary(params) {
-  return gatewayRequest.get('/admin/usage-unit-summary', { params })
+  return gatewayRequest.get('/api/v1/usage-unit-summary', { params })
 }
 
 export function getDashboardSummary(params) {
-  return gatewayRequest.get('/admin/dashboard/summary', { params })
+  return gatewayRequest.get('/api/v1/dashboard/summary', { params })
 }
 
 export function listDashboardTopModels(params) {
-  return gatewayRequest.get('/admin/dashboard/top-models', { params })
+  return gatewayRequest.get('/api/v1/dashboard/top-models', { params })
 }
 
 export function listDashboardTopTenants(params) {
-  return gatewayRequest.get('/admin/dashboard/top-tenants', { params })
+  return gatewayRequest.get('/api/v1/dashboard/top-tenants', { params })
 }
 
 export function listDashboardRecentErrors(params) {
-  return gatewayRequest.get('/admin/dashboard/recent-errors', { params })
+  return gatewayRequest.get('/api/v1/dashboard/recent-errors', { params })
 }
 
 // ============================================================================
@@ -419,19 +419,19 @@ export function listDashboardRecentErrors(params) {
 // ============================================================================
 
 export function listRuntimeLimitPolicies(params) {
-  return gatewayRequest.get('/admin/limit-policies', { params })
+  return gatewayRequest.get('/api/v1/limit-policies', { params })
 }
 
 export function createRuntimeLimitPolicy(data) {
-  return gatewayRequest.post('/admin/limit-policies', data)
+  return gatewayRequest.post('/api/v1/limit-policies', data)
 }
 
 export function updateRuntimeLimitPolicy(policyId, data) {
-  return gatewayRequest.patch(`/admin/limit-policies/${policyId}`, data)
+  return gatewayRequest.patch(`/api/v1/limit-policies/${policyId}`, data)
 }
 
 export function updateRuntimeLimitPolicyStatus(policyId, status) {
-  return gatewayRequest.patch(`/admin/limit-policies/${policyId}/status`, { status })
+  return gatewayRequest.patch(`/api/v1/limit-policies/${policyId}/status`, { status })
 }
 
 // ============================================================================
@@ -439,5 +439,5 @@ export function updateRuntimeLimitPolicyStatus(policyId, status) {
 // ============================================================================
 
 export function listGatewayAuditLogs(params) {
-  return gatewayRequest.get('/admin/audit-logs', { params })
+  return gatewayRequest.get('/api/v1/audit-logs', { params })
 }

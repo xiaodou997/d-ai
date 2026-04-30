@@ -37,6 +37,17 @@
           <el-icon><Setting /></el-icon>
           <span>个人中心</span>
         </el-menu-item>
+
+        <!-- AI Gateway -->
+        <div class="menu-divider">AI Gateway</div>
+        <el-menu-item index="/ai/api-keys">
+          <el-icon><Key /></el-icon>
+          <span>我的 API Key</span>
+        </el-menu-item>
+        <el-menu-item index="/ai/usage">
+          <el-icon><TrendCharts /></el-icon>
+          <span>使用统计</span>
+        </el-menu-item>
       </el-menu>
     </nav>
 
@@ -57,7 +68,7 @@
 </template>
 
 <script setup>
-import { User, Wallet, DataLine, List, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { User, Wallet, DataLine, List, Setting, SwitchButton, Key, TrendCharts } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
 

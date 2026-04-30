@@ -51,6 +51,25 @@
           <el-icon><Money /></el-icon>
           <span>用户充值记录</span>
         </el-menu-item>
+
+        <!-- AI Gateway -->
+        <div class="menu-divider">AI Gateway</div>
+        <el-menu-item index="/ai/models">
+          <el-icon><Box /></el-icon>
+          <span>已授权模型</span>
+        </el-menu-item>
+        <el-menu-item index="/ai/prices">
+          <el-icon><PriceTag /></el-icon>
+          <span>租户定价</span>
+        </el-menu-item>
+        <el-menu-item index="/ai/api-keys">
+          <el-icon><Key /></el-icon>
+          <span>API Key</span>
+        </el-menu-item>
+        <el-menu-item index="/ai/user-consumption">
+          <el-icon><TrendCharts /></el-icon>
+          <span>用户消耗</span>
+        </el-menu-item>
       </el-menu>
     </nav>
 
@@ -93,7 +112,11 @@ import {
   Wallet,
   DataLine,
   SwitchButton,
-  Money
+  Money,
+  Box,
+  PriceTag,
+  Key,
+  TrendCharts
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'

@@ -16,9 +16,12 @@ export default defineConfig({
     port: 13013,
     host: '0.0.0.0',
     proxy: {
-      // URM 系统接口（/urm → /api）
-      '/urm': {
+      '/api': {
         target: 'http://localhost:13010',
+        changeOrigin: true
+      },
+      '/urm': {
+        target: 'http://localhost:6900',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/urm/, '/api')
       }
