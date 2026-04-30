@@ -42,45 +42,11 @@
           <p class="subtitle">租户管理员专用入口</p>
         </div>
 
-        <!-- 登录表单 -->
-        <form @submit.prevent="handleLogin" class="login-form">
-          <div class="form-item">
-            <div class="input-wrapper">
-              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
-              <input
-                v-model="loginForm.username"
-                type="text"
-                required
-                placeholder="请输入租户账号"
-                class="form-input"
-              />
-            </div>
-          </div>
-
-          <div class="form-item">
-            <div class="input-wrapper">
-              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
-              <input
-                v-model="loginForm.password"
-                type="password"
-                required
-                placeholder="请输入密码"
-                class="form-input"
-              />
-            </div>
-          </div>
-
-          <button type="submit" :disabled="loading" class="login-button">
-            <span v-if="loading" class="loading-spinner"></span>
-            {{ loading ? '登录中...' : '租户登录' }}
-          </button>
-        </form>
+        <!-- SSO 跳转提示 -->
+        <div class="sso-redirect">
+          <span class="loading-spinner"></span>
+          <span>正在跳转到统一登录...</span>
+        </div>
 
         <!-- 功能说明 -->
         <div class="tips-section">
@@ -117,43 +83,30 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
-const router = useRouter()
 const authStore = useAuthStore()
 
-const loading = ref(false)
+const URM_BASE_URL = import.meta.env.VITE_URM_BASE_URL || ''
+const APP_KEY = import.meta.env.VITE_URM_APP_KEY || ''
 
-const loginForm = reactive({
-  username: '',
-  password: ''
+onMounted(() => {
+  if (authStore.isAuthenticated()) return
+  if (!URM_BASE_URL || !APP_KEY) return
+
+  const callbackURL = window.location.origin + '/oauth/callback'
+  const state = crypto.randomUUID()
+  sessionStorage.setItem('oauth_state', state)
+  sessionStorage.setItem('oauth_redirect_uri', callbackURL)
+
+  const params = new URLSearchParams({
+    client_id: APP_KEY,
+    redirect_uri: callbackURL,
+    state,
+  })
+  window.location.href = URM_BASE_URL + '/login?' + params.toString()
 })
-
-const handleLogin = async () => {
-  if (!loginForm.username || !loginForm.password) {
-    return
-  }
-
-  loading.value = true
-
-  try {
-    await authStore.login(loginForm.username, loginForm.password)
-    ElMessage({
-      message: '欢迎回来，' + loginForm.username,
-      type: 'success',
-      plain: true,
-      duration: 3000
-    })
-    router.push('/dashboard')
-  } catch (err) {
-    // 错误已由 request.js 拦截器通过 ElMessage 弹窗提示
-  } finally {
-    loading.value = false
-  }
-}
 </script>
 
 <style scoped>
@@ -312,84 +265,16 @@ const handleLogin = async () => {
   margin: 0;
 }
 
-/* 表单 */
-.login-form {
-  margin-bottom: 24px;
-}
-
-.form-item {
-  margin-bottom: 16px;
-}
-
-.input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-icon {
-  position: absolute;
-  left: 14px;
-  width: 18px;
-  height: 18px;
-  color: #94a3b8;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.form-input {
-  width: 100%;
-  padding: 12px 16px 12px 44px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  color: #1e293b;
-  background: #fff;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  box-sizing: border-box;
-}
-
-.form-input::placeholder {
-  color: #94a3b8;
-}
-
-.form-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-}
-
-/* 登录按钮 */
-.login-button {
-  width: 100%;
-  padding: 13px;
-  background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
-  color: white;
-  font-size: 15px;
-  font-weight: 600;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
+/* SSO 跳转 */
+.sso-redirect {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  box-shadow: 0 4px 15px rgba(59,130,246,0.4);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.login-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(59,130,246,0.5);
-}
-
-.login-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.login-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+  gap: 10px;
+  padding: 20px 0;
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 24px;
 }
 
 .loading-spinner {

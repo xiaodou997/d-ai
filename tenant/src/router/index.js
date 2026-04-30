@@ -9,6 +9,12 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/oauth/callback',
+    name: 'OAuthCallback',
+    component: () => import('@/views/OAuthCallback.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/',
     component: () => import('@/views/Layout/Layout.vue'),
     redirect: '/dashboard',
@@ -53,6 +59,31 @@ const routes = [
         name: 'UserRechargeRecords',
         component: () => import('@/views/Finance/UserRechargeRecords.vue'),
         meta: { title: '用户充值记录', requiresAuth: true }
+      },
+      // AI Gateway
+      {
+        path: '/ai/models',
+        name: 'AIAvailableModels',
+        component: () => import('@/views/AIGateway/AvailableModels.vue'),
+        meta: { title: '已授权模型', requiresAuth: true }
+      },
+      {
+        path: '/ai/prices',
+        name: 'AITenantPrices',
+        component: () => import('@/views/AIGateway/TenantPrices.vue'),
+        meta: { title: '租户定价', requiresAuth: true }
+      },
+      {
+        path: '/ai/api-keys',
+        name: 'AIAPIKeys',
+        component: () => import('@/views/AIGateway/APIKeys.vue'),
+        meta: { title: 'API Key', requiresAuth: true }
+      },
+      {
+        path: '/ai/user-consumption',
+        name: 'AIUserConsumption',
+        component: () => import('@/views/AIGateway/UserConsumption.vue'),
+        meta: { title: '用户消耗', requiresAuth: true }
       }
     ]
   },

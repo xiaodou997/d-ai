@@ -60,6 +60,23 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const loginWithSSO = async (code, redirectUri) => {
+    const tokenData = await request.get('/api/auth/callback', { params: { code, redirect_uri: redirectUri } })
+    accessToken.value = tokenData.accessToken || tokenData.access_token || ''
+    refreshToken.value = tokenData.refreshToken || tokenData.refresh_token || ''
+    expiresIn.value = tokenData.expiresIn || tokenData.expires_in || 7200
+
+    const userInfo = await request.get('/urm/oauth2/userinfo')
+    userId.value = userInfo.sub
+    tenantId.value = userInfo.tenantId || ''
+    username.value = userInfo.username
+    userType.value = userInfo.userType
+
+    saveToLocalStorage()
+    startAutoRefresh()
+    return userInfo
+  }
+
   const logout = async () => {
     try {
       // 调用登出 API（如果 token 有效）
@@ -218,6 +235,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // Actions
     login,
+    loginWithSSO,
     logout,
     refreshAccessToken,
     isAuthenticated,

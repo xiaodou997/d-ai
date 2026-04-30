@@ -9,6 +9,12 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
+    path: '/oauth/callback',
+    name: 'OAuthCallback',
+    component: () => import('@/views/OAuthCallback.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
     path: '/',
     component: () => import('@/views/Layout/Layout.vue'),
     redirect: '/dashboard',
@@ -40,6 +46,19 @@ const routes = [
         name: 'Profile',
         component: () => import('@/views/Profile/index.vue'),
         meta: { title: '个人中心', requiresAuth: true }
+      },
+      // AI Gateway
+      {
+        path: '/ai/api-keys',
+        name: 'MyAPIKeys',
+        component: () => import('@/views/AIGateway/MyAPIKeys.vue'),
+        meta: { title: '我的 API Key', requiresAuth: true }
+      },
+      {
+        path: '/ai/usage',
+        name: 'MyUsage',
+        component: () => import('@/views/AIGateway/MyUsage.vue'),
+        meta: { title: '使用统计', requiresAuth: true }
       }
     ]
   },

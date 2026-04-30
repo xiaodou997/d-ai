@@ -44,42 +44,13 @@
           <p class="subtitle">URM 用户中心</p>
         </div>
 
-        <!-- 登录表单 -->
-        <form v-if="!isRegister" @submit.prevent="handleLogin" class="login-form">
-          <div class="form-item">
-            <div class="input-wrapper">
-              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
-              <input v-model="loginForm.username" type="text" required placeholder="请输入用户名" class="form-input" />
-            </div>
-          </div>
-
-          <div class="form-item">
-            <div class="input-wrapper">
-              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0110 0v4"/>
-              </svg>
-              <input v-model="loginForm.password" type="password" required placeholder="请输入密码" class="form-input" />
-            </div>
-          </div>
-
-          <div v-if="loginError" class="error-tip">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            {{ loginError }}
-          </div>
-
-          <button type="submit" :disabled="loginLoading" class="login-button">
-            <span v-if="loginLoading" class="loading-spinner"></span>
-            {{ loginLoading ? '登录中...' : '用户登录' }}
+        <!-- 登录：SSO 跳转 -->
+        <div v-if="!isRegister" class="sso-section">
+          <p class="sso-tip">使用统一账号登录</p>
+          <button class="login-button" @click="redirectToSSO">
+            前往统一登录
           </button>
-        </form>
+        </div>
 
         <!-- 注册表单 -->
         <form v-else @submit.prevent="handleRegister" class="login-form">
@@ -183,52 +154,33 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { useAuthStore } from '@/stores/auth'
 import { register } from '@/api/auth'
 
-const router = useRouter()
-const authStore = useAuthStore()
+const URM_BASE_URL = import.meta.env.VITE_URM_BASE_URL || ''
+const APP_KEY = import.meta.env.VITE_URM_APP_KEY || ''
 
 const isRegister = ref(false)
-
-// 登录
-const loginForm = reactive({ username: '', password: '' })
-const loginLoading = ref(false)
-const loginError = ref('')
 
 // 注册
 const registerForm = reactive({ username: '', password: '', confirmPassword: '', inviteCode: '' })
 const registerLoading = ref(false)
 const registerError = ref('')
 
-// 登录处理
-const handleLogin = async () => {
-  loginLoading.value = true
-  loginError.value = ''
-
-  try {
-    await authStore.login(loginForm.username, loginForm.password)
-    ElMessage({
-      message: '欢迎回来，' + loginForm.username,
-      type: 'success',
-      plain: true,
-      duration: 3000
-    })
-    router.push('/dashboard')
-  } catch (error) {
-    loginError.value = error.message || '登录失败，请检查用户名和密码'
-  } finally {
-    loginLoading.value = false
-  }
+const redirectToSSO = () => {
+  if (!URM_BASE_URL || !APP_KEY) return
+  const callbackURL = window.location.origin + '/oauth/callback'
+  const state = crypto.randomUUID()
+  sessionStorage.setItem('oauth_state', state)
+  sessionStorage.setItem('oauth_redirect_uri', callbackURL)
+  const params = new URLSearchParams({ client_id: APP_KEY, redirect_uri: callbackURL, state })
+  window.location.href = URM_BASE_URL + '/login?' + params.toString()
 }
 
 // 注册处理
 const handleRegister = async () => {
   registerError.value = ''
 
-  // 验证密码
   if (registerForm.password !== registerForm.confirmPassword) {
     registerError.value = '两次输入的密码不一致'
     return
@@ -251,25 +203,12 @@ const handleRegister = async () => {
       throw new Error(res.message || '注册失败')
     }
 
-    // 注册成功，自动登录
-    ElMessage.success('注册成功，正在自动登录...')
-    
-    try {
-      await authStore.login(registerForm.username, registerForm.password)
-      router.push('/dashboard')
-    } catch (loginError) {
-      // 自动登录失败，切换到登录界面并预填用户名
-      isRegister.value = false
-      loginForm.username = registerForm.username
-      loginForm.password = ''
-      loginError.value = '自动登录失败，请手动登录'
-    }
-    
-    // 清空注册表单
+    ElMessage.success('注册成功，请登录')
     registerForm.username = ''
     registerForm.password = ''
     registerForm.confirmPassword = ''
     registerForm.inviteCode = ''
+    isRegister.value = false
   } catch (err) {
     registerError.value = err.response?.data?.message || err.message || '注册失败'
   } finally {
@@ -430,6 +369,22 @@ const handleRegister = async () => {
 
 .subtitle {
   font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* SSO 登录区 */
+.sso-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 8px 0;
+}
+
+.sso-tip {
+  font-size: 13px;
   color: #64748b;
   margin: 0;
 }

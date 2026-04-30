@@ -43,6 +43,23 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     return { ...response, userId: userInfo.sub, username: userInfo.username }
   }
 
+  const loginWithSSO = async (code, redirectUri) => {
+    const tokenData = await request.get('/api/auth/callback', { params: { code, redirect_uri: redirectUri } })
+    accessToken.value = tokenData.accessToken || tokenData.access_token || ''
+    refreshToken.value = tokenData.refreshToken || tokenData.refresh_token || ''
+    expiresIn.value = tokenData.expiresIn || tokenData.expires_in || 7200
+
+    const userInfo = await request.get('/urm/oauth2/userinfo')
+    userId.value = userInfo.sub
+    username.value = userInfo.username
+    tenantId.value = userInfo.tenantId || ''
+    tenantName.value = userInfo.tenantName || ''
+
+    saveToLocalStorage()
+    startAutoRefresh()
+    return userInfo
+  }
+
   const logout = async () => {
     try {
       if (accessToken.value) {
@@ -146,6 +163,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     tenantName,
     expiresIn,
     login,
+    loginWithSSO,
     logout,
     refreshAccessToken,
     isAuthenticated,

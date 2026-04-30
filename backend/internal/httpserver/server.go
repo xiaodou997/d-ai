@@ -26,15 +26,21 @@ type Config struct {
 	URM           urmClient
 	URMAppKey     string // 本服务的 app_key，用于校验 JWT claims
 	JWKSValidator jwksValidator
+	BanSubscriber banChecker
 	Postgres      *pgxpool.Pool
 	Redis         *redis.Client
 	Logger        *slog.Logger
+}
+
+type banChecker interface {
+	IsBanned(userID string) bool
 }
 
 type urmClient interface {
 	Freeze(ctx context.Context, req urm.FreezeRequest) (*urm.FreezeResponse, error)
 	Confirm(ctx context.Context, req urm.ConfirmRequest) (*urm.ConfirmResponse, error)
 	Cancel(ctx context.Context, transactionID string) error
+	ExchangeCode(ctx context.Context, code, redirectURI string) (*urm.TokenPairResponse, error)
 }
 
 type jwksValidator interface {
@@ -51,6 +57,7 @@ type Server struct {
 	urmClient     urmClient
 	urmAppKey     string
 	jwksValidator jwksValidator
+	banSubscriber banChecker
 	httpClient    *http.Client
 	logging       config.LoggingConfig
 }
@@ -69,6 +76,7 @@ func New(cfg Config) *Server {
 		urmClient:     cfg.URM,
 		urmAppKey:     cfg.URMAppKey,
 		jwksValidator: cfg.JWKSValidator,
+		banSubscriber: cfg.BanSubscriber,
 		logging:       cfg.Logging,
 		httpClient: &http.Client{
 			Timeout: 0,
@@ -83,6 +91,7 @@ func New(cfg Config) *Server {
 
 	router.Get("/health", s.handleHealth)
 	router.Get("/ready", s.handleReady)
+	router.Get("/api/auth/callback", s.handleAuthCallback)
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Use(s.apiAuth)
 		r.Use(s.adminAudit)

@@ -11,30 +11,31 @@ import (
 	"uni-ai-api/backend/internal/urm"
 )
 
-type fakeURMUserInfoClient struct {
-	userInfo *urm.UserInfoResponse
-	err      error
-	token    string
-}
+// fakeURMClient satisfies urmClient interface for tests that don't need URM calls
+type fakeURMClient struct{}
 
-func (c *fakeURMUserInfoClient) UserInfo(_ context.Context, token string) (*urm.UserInfoResponse, error) {
-	c.token = token
-	if c.err != nil {
-		return nil, c.err
-	}
-	return c.userInfo, nil
-}
-
-func (c *fakeURMUserInfoClient) Freeze(context.Context, urm.FreezeRequest) (*urm.FreezeResponse, error) {
+func (c *fakeURMClient) Freeze(context.Context, urm.FreezeRequest) (*urm.FreezeResponse, error) {
 	return &urm.FreezeResponse{}, nil
 }
-
-func (c *fakeURMUserInfoClient) Confirm(context.Context, urm.ConfirmRequest) (*urm.ConfirmResponse, error) {
+func (c *fakeURMClient) Confirm(context.Context, urm.ConfirmRequest) (*urm.ConfirmResponse, error) {
 	return &urm.ConfirmResponse{}, nil
 }
+func (c *fakeURMClient) Cancel(context.Context, string) error               { return nil }
+func (c *fakeURMClient) ExchangeCode(context.Context, string, string) (*urm.TokenPairResponse, error) {
+	return nil, nil
+}
 
-func (c *fakeURMUserInfoClient) Cancel(context.Context, string) error {
-	return nil
+// fakeJWKSValidator satisfies jwksValidator for tests
+type fakeJWKSValidator struct {
+	claims *urm.Claims
+	err    error
+}
+
+func (v *fakeJWKSValidator) ValidateToken(_ context.Context, _ string) (*urm.Claims, error) {
+	if v.err != nil {
+		return nil, v.err
+	}
+	return v.claims, nil
 }
 
 func TestBearerToken(t *testing.T) {
@@ -50,13 +51,12 @@ func TestBearerToken(t *testing.T) {
 }
 
 func TestAdminAuthAcceptsURMAdminBearer(t *testing.T) {
-	fakeURM := &fakeURMUserInfoClient{
-		userInfo: &urm.UserInfoResponse{Subject: "admin-1", Username: "admin", UserType: 1},
-	}
-
 	server := &Server{
 		logger:    slog.Default(),
-		urmClient: fakeURM,
+		urmClient: &fakeURMClient{},
+		jwksValidator: &fakeJWKSValidator{
+			claims: &urm.Claims{UserID: "admin-1", Username: "admin", UserType: 1},
+		},
 	}
 
 	nextCalled := false
@@ -77,16 +77,14 @@ func TestAdminAuthAcceptsURMAdminBearer(t *testing.T) {
 	if !nextCalled {
 		t.Fatal("next handler was not called")
 	}
-	if fakeURM.token != "valid-token" {
-		t.Fatalf("URM token = %q, want valid-token", fakeURM.token)
-	}
 }
 
 func TestAdminAuthRejectsURMNonAdminBearer(t *testing.T) {
 	server := &Server{
-		logger: slog.Default(),
-		urmClient: &fakeURMUserInfoClient{
-			userInfo: &urm.UserInfoResponse{Subject: "user-1", Username: "user", UserType: 4},
+		logger:    slog.Default(),
+		urmClient: &fakeURMClient{},
+		jwksValidator: &fakeJWKSValidator{
+			claims: &urm.Claims{UserID: "user-1", Username: "user", UserType: 4},
 		},
 	}
 
@@ -108,7 +106,10 @@ func TestAdminAuthRejectsURMNonAdminBearer(t *testing.T) {
 func TestAdminAuthRejectsURMError(t *testing.T) {
 	server := &Server{
 		logger:    slog.Default(),
-		urmClient: &fakeURMUserInfoClient{err: errors.New("urm unavailable")},
+		urmClient: &fakeURMClient{},
+		jwksValidator: &fakeJWKSValidator{
+			err: errors.New("jwks unavailable"),
+		},
 	}
 
 	handler := server.adminAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
