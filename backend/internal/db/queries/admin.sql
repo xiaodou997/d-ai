@@ -870,6 +870,91 @@ WHERE o.tenant_id = $1
 ORDER BY m.model_code ASC;
 
 -- ============================================================================
+-- Tenant User Prices CRUD (租户售价 - 租户对用户的定价)
+-- ============================================================================
+
+-- name: GetTenantUserPrice :one
+SELECT
+  id,
+  tenant_id,
+  model_id,
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute,
+  created_by,
+  created_at,
+  updated_at
+FROM ai_tenant_user_prices
+WHERE tenant_id = $1
+  AND model_id = $2;
+
+-- name: UpsertTenantUserPrice :one
+INSERT INTO ai_tenant_user_prices (
+  tenant_id,
+  model_id,
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute,
+  created_by
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
+)
+ON CONFLICT (tenant_id, model_id) DO UPDATE SET
+  input_price_per_1m           = EXCLUDED.input_price_per_1m,
+  output_price_per_1m          = EXCLUDED.output_price_per_1m,
+  image_size_prices            = EXCLUDED.image_size_prices,
+  video_price_per_second       = EXCLUDED.video_price_per_second,
+  audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
+  updated_at                   = now()
+RETURNING
+  id,
+  tenant_id,
+  model_id,
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: DeleteTenantUserPrice :exec
+DELETE FROM ai_tenant_user_prices
+WHERE tenant_id = $1
+  AND model_id = $2;
+
+-- name: ListTenantUserPrices :many
+SELECT
+  p.id,
+  p.tenant_id,
+  p.model_id,
+  p.input_price_per_1m,
+  p.output_price_per_1m,
+  p.image_size_prices,
+  p.video_price_per_second,
+  p.audio_tts_price_per_1m_chars,
+  p.audio_stt_price_per_minute,
+  p.created_by,
+  p.created_at,
+  p.updated_at,
+  m.model_code,
+  m.display_name,
+  m.capability_type
+FROM ai_tenant_user_prices p
+JOIN ai_models m ON m.id = p.model_id
+WHERE p.tenant_id = $1
+ORDER BY m.model_code ASC;
+
+-- ============================================================================
 -- API Keys CRUD (Tenant)
 -- ============================================================================
 
@@ -1569,3 +1654,342 @@ SELECT
 FROM ai_admin_audit_logs
 ORDER BY created_at DESC
 LIMIT $1;
+
+-- ============================================================================
+-- API Queries for /api/v1/* routes (role-based filtering)
+-- ============================================================================
+
+-- name: ListAllTenantAPIKeys :many
+SELECT
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at
+FROM ai_api_keys
+WHERE owner_type = 'tenant'
+ORDER BY created_at DESC;
+
+-- name: ListUserAvailableModels :many
+-- 用户可用的模型 = 租户授权的模型
+SELECT
+  m.id,
+  m.model_code,
+  m.display_name,
+  m.capability_type,
+  m.context_window,
+  m.default_max_output_tokens,
+  m.max_output_tokens,
+  m.status,
+  tg.status AS grant_status,
+  tg.created_at AS granted_at
+FROM ai_models m
+JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
+WHERE tg.tenant_id = $1
+  AND tg.status = 'active'
+  AND m.status = 'active'
+ORDER BY m.display_name ASC;
+
+-- name: ListUsageLogsByTenantUser :many
+SELECT
+  id,
+  request_id,
+  trace_id,
+  tenant_id,
+  user_id,
+  model_id,
+  model_code,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens,
+  billable_unit_type,
+  billable_units,
+  user_cost,
+  request_status,
+  http_status,
+  latency_ms,
+  error_code,
+  error_message,
+  created_at
+FROM ai_usage_logs
+WHERE tenant_id = $1
+  AND user_id = $2
+ORDER BY created_at DESC
+LIMIT $3;
+
+-- name: CountUsageLogsByTenantUser :one
+SELECT COUNT(*) AS count
+FROM ai_usage_logs
+WHERE tenant_id = $1
+  AND user_id = $2;
+
+-- name: ListUsageSummaryByTenantUser :one
+SELECT
+  COUNT(*) AS request_count,
+  COUNT(*) FILTER (WHERE request_status = 'success') AS success_requests,
+  COUNT(*) FILTER (WHERE request_status = 'failed') AS failed_requests,
+  SUM(total_tokens) AS total_tokens,
+  SUM(prompt_tokens) AS total_prompt_tokens,
+  SUM(completion_tokens) AS total_completion_tokens,
+  SUM(user_cost) AS total_user_cost,
+  AVG(latency_ms) FILTER (WHERE request_status = 'success') AS avg_latency_ms
+FROM ai_usage_logs
+WHERE tenant_id = $1
+  AND user_id = $2;
+
+-- ============================================================================
+-- Tenant self-management via /tenants/me/* routes
+-- ============================================================================
+
+-- name: CreateTenantAPIKeySelf :one
+-- 租户创建自己的 API Key
+INSERT INTO ai_api_keys (
+  owner_type,
+  tenant_id,
+  key_hash,
+  key_prefix,
+  name,
+  quota_limit,
+  allowed_models,
+  status,
+  expires_at,
+  created_by
+) VALUES (
+  'tenant',
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9
+)
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: GetTenantAPIKeySelf :one
+-- 租户获取自己的 API Key
+SELECT
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at
+FROM ai_api_keys
+WHERE owner_type = 'tenant'
+  AND tenant_id = $1
+  AND id = $2;
+
+-- name: UpdateTenantAPIKeySelf :one
+-- 租户更新自己的 API Key
+UPDATE ai_api_keys
+SET name = $3,
+    quota_limit = $4,
+    allowed_models = $5,
+    updated_at = now()
+WHERE owner_type = 'tenant'
+  AND tenant_id = $1
+  AND id = $2
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: UpdateTenantAPIKeyStatusSelf :one
+-- 租户更新自己的 API Key 状态
+UPDATE ai_api_keys
+SET status = $3,
+    updated_at = now()
+WHERE owner_type = 'tenant'
+  AND tenant_id = $1
+  AND id = $2
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- ============================================================================
+-- User self-management via /users/me/* routes
+-- ============================================================================
+
+-- name: CreateUserAPIKeySelf :one
+-- 用户创建自己的 API Key
+INSERT INTO ai_api_keys (
+  owner_type,
+  tenant_id,
+  user_id,
+  key_hash,
+  key_prefix,
+  name,
+  quota_limit,
+  allowed_models,
+  status,
+  expires_at,
+  created_by
+) VALUES (
+  'user',
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10
+)
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: GetUserAPIKeySelf :one
+-- 用户获取自己的 API Key
+SELECT
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at
+FROM ai_api_keys
+WHERE owner_type = 'user'
+  AND tenant_id = $1
+  AND user_id = $2
+  AND id = $3;
+
+-- name: UpdateUserAPIKeySelf :one
+-- 用户更新自己的 API Key
+UPDATE ai_api_keys
+SET name = $4,
+    quota_limit = $5,
+    allowed_models = $6,
+    updated_at = now()
+WHERE owner_type = 'user'
+  AND tenant_id = $1
+  AND user_id = $2
+  AND id = $3
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;
+
+-- name: UpdateUserAPIKeyStatusSelf :one
+-- 用户更新自己的 API Key 状态
+UPDATE ai_api_keys
+SET status = $4,
+    updated_at = now()
+WHERE owner_type = 'user'
+  AND tenant_id = $1
+  AND user_id = $2
+  AND id = $3
+RETURNING
+  id,
+  owner_type,
+  tenant_id,
+  user_id,
+  key_prefix,
+  name,
+  quota_limit,
+  quota_used,
+  quota_reserved,
+  allowed_models,
+  status,
+  expires_at,
+  created_by,
+  created_at,
+  updated_at;

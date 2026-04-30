@@ -24,7 +24,8 @@ func (s *Server) adminAudit(next http.Handler) http.Handler {
 }
 
 func (s *Server) writeAdminAuditLog(r *http.Request, status int) {
-	actor, _ := r.Context().Value(adminActorContextKey{}).(string)
+	admin, _ := adminFromContext(r.Context())
+	actor := admin.Actor
 	action := strings.ToLower(r.Method) + " " + r.URL.Path
 	objectType, objectID := adminAuditObject(r.URL.Path)
 	result := "success"
@@ -32,9 +33,15 @@ func (s *Server) writeAdminAuditLog(r *http.Request, status int) {
 		result = "failed"
 	}
 	summary, _ := json.Marshal(map[string]any{
-		"method": r.Method,
-		"path":   r.URL.Path,
-		"query":  r.URL.RawQuery,
+		"request_id": requestIDFromContext(r.Context()),
+		"method":     r.Method,
+		"path":       r.URL.Path,
+		"query":      r.URL.RawQuery,
+		"role":       admin.Role,
+		"tenant_id":  admin.TenantID,
+		"user_id":    admin.UserID,
+		"remote_ip":  r.RemoteAddr,
+		"user_agent": r.UserAgent(),
 	})
 	if _, err := s.queries.CreateAuditLog(r.Context(), dbgen.CreateAuditLogParams{
 		Actor:          optionalTextValue(actor),
@@ -51,48 +58,51 @@ func (s *Server) writeAdminAuditLog(r *http.Request, status int) {
 
 func adminAuditObject(path string) (string, string) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "admin" {
+	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "v1" {
+		parts = parts[2:]
+	}
+	if len(parts) == 0 {
 		return "", ""
 	}
-	switch parts[1] {
+	switch parts[0] {
 	case "providers":
-		if len(parts) >= 3 {
-			if len(parts) >= 5 && parts[3] == "endpoints" {
-				return "provider_endpoint", parts[4]
+		if len(parts) >= 2 {
+			if len(parts) >= 4 && parts[2] == "endpoints" {
+				return "provider_endpoint", parts[3]
 			}
-			return "provider", parts[2]
+			return "provider", parts[1]
 		}
 		return "provider", ""
 	case "upstream-deployments":
-		if len(parts) >= 3 {
-			if len(parts) >= 5 && parts[3] == "cost-prices" {
-				return "upstream_deployment_cost_price", parts[4]
+		if len(parts) >= 2 {
+			if len(parts) >= 4 && parts[2] == "cost-prices" {
+				return "upstream_deployment_cost_price", parts[3]
 			}
-			return "upstream_deployment", parts[2]
+			return "upstream_deployment", parts[1]
 		}
 		return "upstream_deployment", ""
 	case "models":
-		if len(parts) >= 3 {
-			if len(parts) >= 5 && parts[3] == "routes" {
-				return "model_route", parts[4]
+		if len(parts) >= 2 {
+			if len(parts) >= 4 && parts[2] == "routes" {
+				return "model_route", parts[3]
 			}
-			if len(parts) >= 5 && parts[3] == "prices" {
-				return "model_price", parts[4]
+			if len(parts) >= 4 && parts[2] == "prices" {
+				return "model_price", parts[3]
 			}
-			return "model", parts[2]
+			return "model", parts[1]
 		}
 		return "model", ""
 	case "limit-policies":
-		if len(parts) >= 3 {
-			return "runtime_limit_policy", parts[2]
+		if len(parts) >= 2 {
+			return "runtime_limit_policy", parts[1]
 		}
 		return "runtime_limit_policy", ""
 	case "tenants":
-		if len(parts) >= 3 {
-			return "tenant", parts[2]
+		if len(parts) >= 2 {
+			return "tenant", parts[1]
 		}
 	}
-	return parts[1], ""
+	return parts[0], ""
 }
 
 func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request) {

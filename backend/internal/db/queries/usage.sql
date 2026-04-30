@@ -67,6 +67,18 @@ FROM ai_tenant_model_price_overrides
 WHERE tenant_id = $1
   AND model_id = $2;
 
+-- name: GetTenantUserPriceForRuntime :one
+SELECT
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
+FROM ai_tenant_user_prices
+WHERE tenant_id = $1
+  AND model_id = $2;
+
 -- name: GetActiveUpstreamDeploymentCostPrice :one
 SELECT
   input_cost_per_1m,

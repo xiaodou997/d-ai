@@ -152,6 +152,21 @@ type AiTenantModelPriceOverride struct {
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiTenantUserPrice struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                string             `json:"tenant_id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedBy               pgtype.Text        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AiUpstreamDeployment struct {
 	ID                 pgtype.UUID        `json:"id"`
 	EndpointID         pgtype.UUID        `json:"endpoint_id"`

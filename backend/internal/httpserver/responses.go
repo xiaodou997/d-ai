@@ -57,6 +57,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusPaymentRequired, "You exceeded your current quota.", "insufficient_quota", "insufficient_quota")
 		return
 	}
+	s.logGatewayRequestReceived(r, "chat", req.Model, req.Stream)
 
 	model, err := s.resolveCallableModelForCapability(r, auth, req.Model, "chat")
 	if err != nil {
@@ -83,6 +84,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
+	s.logGatewayRouteSelected(r, "chat", req.Model, route)
 
 	estimate := estimateResponsesUsage(raw, model.DefaultMaxOutputTokens)
 	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "chat", estimate.TotalTokens, route)
@@ -146,6 +148,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 
 	input := responsesForwardInput{start: start, auth: auth, raw: raw, req: req, model: model, route: route, providerKey: providerKey, price: price, quota: quotaReservation, settlement: settlementReservation}
 	if req.Stream {
+		s.logGatewayUpstreamStarted(r, "chat", req.Model, route)
 		s.forwardStreamingResponses(w, r, input)
 		return
 	}
@@ -166,6 +169,7 @@ type responsesForwardInput struct {
 }
 
 func (s *Server) forwardNonStreamingResponses(w http.ResponseWriter, r *http.Request, input responsesForwardInput) {
+	s.logGatewayUpstreamStarted(r, "chat", input.req.Model, input.route)
 	resp, err := upstream.ForwardOpenAIResponses(r.Context(), s.httpClient, upstream.OpenAIResponsesRequest{
 		BaseURL:            input.route.BaseUrl,
 		RequestPath:        optionalText(input.route.RequestPath),
@@ -191,6 +195,7 @@ func (s *Server) forwardNonStreamingResponses(w http.ResponseWriter, r *http.Req
 		requestStatus = "failed"
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
+		s.logGatewayUpstreamFailed(r, "chat", input.req.Model, input.route, resp.StatusCode, resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
 			s.markUpstreamDeploymentCooldown(r.Context(), input.route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
@@ -240,6 +245,7 @@ func (s *Server) forwardStreamingResponses(w http.ResponseWriter, r *http.Reques
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
+		s.logGatewayUpstreamFailed(r, "chat", input.req.Model, input.route, resp.StatusCode, body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
 			s.markUpstreamDeploymentCooldown(r.Context(), input.route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
@@ -416,13 +422,13 @@ func (s *Server) reserveTokenBilling(w http.ResponseWriter, r *http.Request, aut
 		writeOpenAIError(w, http.StatusInternalServerError, "Quota reservation failed.", "server_error", "quota_reservation_failed")
 		return &price, nil, nil, false
 	}
-	// Platform cost is now tenant sale price
-	platformCost := quotaCost
+	// Tenant cost (what tenant pays to platform)
+	tenantCost := quotaCost
 	userCost := int64(0)
 	if auth.APIKey.OwnerType == "user" {
 		userCost = quotaCost
 	}
-	settlementReservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), platformCost, userCost)
+	settlementReservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), tenantCost, userCost)
 	if err != nil {
 		s.releaseAPIKeyQuotaReservation(r.Context(), quotaReservation)
 		if isURMInsufficientBalance(err) {

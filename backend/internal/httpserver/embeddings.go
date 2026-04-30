@@ -52,6 +52,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusPaymentRequired, "You exceeded your current quota.", "insufficient_quota", "insufficient_quota")
 		return
 	}
+	s.logGatewayRequestReceived(r, "embedding", req.Model, false)
 
 	model, err := s.resolveCallableModelForCapability(r, auth, req.Model, "embedding")
 	if err != nil {
@@ -75,6 +76,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
+	s.logGatewayRouteSelected(r, "embedding", req.Model, route)
 
 	estimatedUsage := ensureUsageTotal(upstreamUsage{PromptTokens: estimateEmbeddingInputTokens(raw)})
 	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "embedding", estimatedUsage.PromptTokens, route)
@@ -128,6 +130,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logGatewayUpstreamStarted(r, "embedding", req.Model, route)
 	resp, err := upstream.ForwardOpenAIEmbeddings(r.Context(), s.httpClient, upstream.OpenAIEmbeddingsRequest{
 		BaseURL:            route.BaseUrl,
 		RequestPath:        optionalText(route.RequestPath),
@@ -157,6 +160,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		requestStatus = "failed"
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
+		s.logGatewayUpstreamFailed(r, "embedding", req.Model, route, resp.StatusCode, resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
 			s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}

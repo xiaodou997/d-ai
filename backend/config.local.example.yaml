@@ -1,7 +1,16 @@
 app:
   env: development
+  serviceName: uni-ai-api
+  version: dev
+
+server:
   httpAddr: ":13010"
-  logLevel: info
+
+logging:
+  level: debug
+  format: console
+  accessLog: true
+  slowRequestMs: 1000
 
 postgres:
   dsn: "postgres://postgres:postgres@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public"

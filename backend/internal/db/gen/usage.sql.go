@@ -273,3 +273,44 @@ func (q *Queries) GetTenantModelPriceOverrideForRuntime(ctx context.Context, arg
 	)
 	return i, err
 }
+
+const getTenantUserPriceForRuntime = `-- name: GetTenantUserPriceForRuntime :one
+SELECT
+  input_price_per_1m,
+  output_price_per_1m,
+  image_size_prices,
+  video_price_per_second,
+  audio_tts_price_per_1m_chars,
+  audio_stt_price_per_minute
+FROM ai_tenant_user_prices
+WHERE tenant_id = $1
+  AND model_id = $2
+`
+
+type GetTenantUserPriceForRuntimeParams struct {
+	TenantID string      `json:"tenant_id"`
+	ModelID  pgtype.UUID `json:"model_id"`
+}
+
+type GetTenantUserPriceForRuntimeRow struct {
+	InputPricePer1m         int64  `json:"input_price_per_1m"`
+	OutputPricePer1m        int64  `json:"output_price_per_1m"`
+	ImageSizePrices         []byte `json:"image_size_prices"`
+	VideoPricePerSecond     int64  `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64  `json:"audio_stt_price_per_minute"`
+}
+
+func (q *Queries) GetTenantUserPriceForRuntime(ctx context.Context, arg GetTenantUserPriceForRuntimeParams) (GetTenantUserPriceForRuntimeRow, error) {
+	row := q.db.QueryRow(ctx, getTenantUserPriceForRuntime, arg.TenantID, arg.ModelID)
+	var i GetTenantUserPriceForRuntimeRow
+	err := row.Scan(
+		&i.InputPricePer1m,
+		&i.OutputPricePer1m,
+		&i.ImageSizePrices,
+		&i.VideoPricePerSecond,
+		&i.AudioTtsPricePer1mChars,
+		&i.AudioSttPricePerMinute,
+	)
+	return i, err
+}

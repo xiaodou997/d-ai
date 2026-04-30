@@ -59,6 +59,7 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		writeOpenAIError(w, http.StatusPaymentRequired, "You exceeded your current quota.", "insufficient_quota", "insufficient_quota")
 		return
 	}
+	s.logGatewayRequestReceived(r, "image", req.Model, false)
 
 	model, err := s.resolveCallableModelForCapability(r, auth, req.Model, "image")
 	if err != nil {
@@ -82,6 +83,7 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
+	s.logGatewayRouteSelected(r, "image", req.Model, route)
 
 	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "image", estimateImageRateTokens(raw), route)
 	if !ok {
@@ -134,6 +136,7 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.logGatewayUpstreamStarted(r, "image", req.Model, route)
 	resp, err := upstream.ForwardOpenAIImageGeneration(r.Context(), s.httpClient, upstream.OpenAIImageRequest{
 		BaseURL:            route.BaseUrl,
 		RequestPath:        optionalText(route.RequestPath),
@@ -172,6 +175,7 @@ func (s *Server) handleImageGenerations(w http.ResponseWriter, r *http.Request) 
 		requestStatus = "failed"
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
+		s.logGatewayUpstreamFailed(r, "image", req.Model, route, resp.StatusCode, resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
 			s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
@@ -307,12 +311,12 @@ func (s *Server) reserveImageBilling(w http.ResponseWriter, r *http.Request, aut
 		return &price, nil, nil, false
 	}
 
-	platformCost := quotaCost
+	tenantCost := quotaCost
 	userCost := int64(0)
 	if auth.APIKey.OwnerType == "user" {
 		userCost = quotaCost
 	}
-	settlementReservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), platformCost, userCost)
+	settlementReservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), tenantCost, userCost)
 	if err != nil {
 		s.releaseAPIKeyQuotaReservation(r.Context(), quotaReservation)
 		if isURMInsufficientBalance(err) {
@@ -330,8 +334,8 @@ func (s *Server) calculateImageCosts(ctx context.Context, auth RuntimeAuth, mode
 	costs := chatCosts{}
 	if price != nil {
 		perImagePrice, _ := imagePriceForSize(imageSize, price.ImageSizePrices)
-		costs.PlatformCost = imageCost(imageCount, perImagePrice)
-		costs.APIKeyQuotaCost = costs.PlatformCost
+		costs.TenantCost = imageCost(imageCount, perImagePrice)
+		costs.APIKeyQuotaCost = costs.TenantCost
 		if auth.APIKey.OwnerType == "user" {
 			costs.UserCost = costs.APIKeyQuotaCost
 		}

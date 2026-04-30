@@ -90,6 +90,13 @@ func main() {
 		logger.Info("jwks loaded", "urm_base_url", cfg.URM.BaseURL)
 	}
 
+	var banSubscriber *urm.BanSubscriber
+	if redisClient != nil {
+		banSubscriber = urm.NewBanSubscriber(redisClient, logger)
+		banSubscriber.Start(ctx)
+		logger.Info("ban subscriber started")
+	}
+
 	server := httpserver.New(httpserver.Config{
 		App:           cfg.App,
 		Server:        cfg.Server,
@@ -98,6 +105,7 @@ func main() {
 		URM:           urmBillingClient,
 		URMAppKey:     cfg.URM.AppKey,
 		JWKSValidator: jwksValidator,
+		BanSubscriber: banSubscriber,
 		Postgres:      pg,
 		Redis:         redisClient,
 		Logger:        logger,

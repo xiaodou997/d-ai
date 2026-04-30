@@ -63,6 +63,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusPaymentRequired, "You exceeded your current quota.", "insufficient_quota", "insufficient_quota")
 		return
 	}
+	s.logGatewayRequestReceived(r, "chat", req.Model, req.Stream)
 
 	// Resolve model - only need tenant grant, no user grant required
 	model, err := s.resolveCallableModel(r, auth, req.Model)
@@ -101,6 +102,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusServiceUnavailable, "No available route for the requested model.", "server_error", "model_unavailable")
 		return
 	}
+	s.logGatewayRouteSelected(r, "chat", req.Model, route)
 	runtimeLease, ok := s.acquireRuntimeLimits(w, r, auth, req.Model, "chat", estimateChatRateTokens(raw, model.DefaultMaxOutputTokens), route)
 	if !ok {
 		return
@@ -163,6 +165,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Stream {
+		s.logGatewayUpstreamStarted(r, "chat", req.Model, route)
 		s.forwardStreamingChat(w, r, streamChatInput{
 			Start:          start,
 			Auth:           auth,
@@ -178,6 +181,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logGatewayUpstreamStarted(r, "chat", req.Model, route)
 	resp, err := upstream.ForwardOpenAIChatCompletions(r.Context(), s.httpClient, upstream.OpenAIChatRequest{
 		BaseURL:            route.BaseUrl,
 		RequestPath:        optionalText(route.RequestPath),
@@ -189,7 +193,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		Body:               raw,
 	})
 	if err != nil {
-		s.logger.Error("forward chat completion failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		s.logger.Error("forward chat completion failed", "error", err, "error_code", errorCodeUpstreamRequestFailed, "request_id", requestIDFromContext(r.Context()))
 		s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_request_failed")
 		billingStatus := s.cancelChatSettlement(r.Context(), settlementReservation)
 		s.recordChatUsage(r.Context(), usageLogInput{
@@ -221,6 +225,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		requestStatus = "failed"
 		errorCode = "upstream_error"
 		errorMessage = string(resp.Body)
+		s.logGatewayUpstreamFailed(r, "chat", req.Model, route, resp.StatusCode, resp.Body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
 			s.markUpstreamDeploymentCooldown(r.Context(), route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
@@ -317,7 +322,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 		Body:               input.Raw,
 	})
 	if err != nil {
-		s.logger.Error("forward streaming chat completion failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		s.logger.Error("forward streaming chat completion failed", "error", err, "error_code", errorCodeUpstreamRequestFailed, "request_id", requestIDFromContext(r.Context()))
 		s.markUpstreamDeploymentCooldown(r.Context(), input.Route.UpstreamDeploymentID, "upstream_request_failed")
 		billingStatus := s.cancelChatSettlement(r.Context(), input.Reservation)
 		s.recordChatUsage(r.Context(), usageLogInput{
@@ -345,6 +350,7 @@ func (s *Server) forwardStreamingChat(w http.ResponseWriter, r *http.Request, in
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
+		s.logGatewayUpstreamFailed(r, "chat", input.Envelope.Model, input.Route, resp.StatusCode, body)
 		if shouldCooldownUpstreamStatus(resp.StatusCode) {
 			s.markUpstreamDeploymentCooldown(r.Context(), input.Route.UpstreamDeploymentID, "upstream_status_"+http.StatusText(resp.StatusCode))
 		}
@@ -603,19 +609,26 @@ func (s *Server) reserveEstimatedChatQuota(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) freezeEstimatedChatSettlement(w http.ResponseWriter, r *http.Request, auth RuntimeAuth, model callableModel, raw map[string]json.RawMessage) (*modelPrice, *settlementReservation, bool) {
-	price, err := s.getEffectiveModelPrice(r.Context(), auth, model.ID)
+	// Get tenant cost price (what tenant pays to platform)
+	tenantCostPrice, err := s.getEffectiveModelPrice(r.Context(), auth, model.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeOpenAIError(w, http.StatusPaymentRequired, "Model pricing not configured.", "insufficient_quota", "model_price_not_configured")
 			return nil, nil, false
 		}
-		s.logger.Error("get model price for settlement failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		s.logger.Error("get tenant cost price for settlement failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		writeOpenAIError(w, http.StatusInternalServerError, "Settlement reservation failed.", "server_error", "settlement_reservation_failed")
 		return nil, nil, false
 	}
 
-	estimated := estimatedSettlementCosts(raw, model, price, auth)
-	reservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), estimated.PlatformCost, estimated.UserCost)
+	// Get user sale price (what user pays to tenant)
+	userSalePrice, err := s.getTenantUserPrice(r.Context(), auth, model.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		s.logger.Error("get user sale price for settlement failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+	}
+
+	estimated := estimatedSettlementCosts(raw, model, tenantCostPrice, userSalePrice, auth)
+	reservation, err := s.freezeChatSettlement(r.Context(), auth, requestIDFromContext(r.Context()), estimated.TenantCost, estimated.UserCost)
 	if err != nil {
 		if isURMInsufficientBalance(err) {
 			s.recordChatUsage(r.Context(), usageLogInput{
@@ -633,13 +646,13 @@ func (s *Server) freezeEstimatedChatSettlement(w http.ResponseWriter, r *http.Re
 				BillingStatus:  "rejected",
 			})
 			writeOpenAIError(w, http.StatusPaymentRequired, "Insufficient quota.", "insufficient_quota", "insufficient_quota")
-			return &price, nil, false
+			return &tenantCostPrice, nil, false
 		}
 		s.logger.Error("freeze urm settlement failed", "error", err, "request_id", requestIDFromContext(r.Context()))
 		writeOpenAIError(w, http.StatusServiceUnavailable, "Settlement reservation failed.", "server_error", "settlement_reservation_failed")
-		return &price, nil, false
+		return &tenantCostPrice, nil, false
 	}
-	return &price, reservation, true
+	return &tenantCostPrice, reservation, true
 }
 
 func chatConversationID(r *http.Request, raw map[string]json.RawMessage) string {

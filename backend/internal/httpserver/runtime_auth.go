@@ -2,6 +2,8 @@ package httpserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 
@@ -31,7 +33,12 @@ func (s *Server) runtimeAuth(next http.Handler) http.Handler {
 			return
 		}
 
+		userID := ""
+		if row.UserID.Valid {
+			userID = row.UserID.String
+		}
 		ctx := context.WithValue(r.Context(), runtimeAuthContextKey{}, RuntimeAuth{APIKey: row})
+		setRequestAPIKey(ctx, shortHash(row.ID.String()), row.TenantID, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -65,4 +72,9 @@ func writeOpenAIError(w http.ResponseWriter, status int, message, errorType, cod
 
 func requestIDFromContext(ctx context.Context) string {
 	return middleware.GetReqID(ctx)
+}
+
+func shortHash(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])[:12]
 }

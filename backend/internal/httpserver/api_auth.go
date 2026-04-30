@@ -80,6 +80,12 @@ func (s *Server) apiAuth(next http.Handler) http.Handler {
 			}
 		}
 
+		// 实时封禁检查
+		if s.banSubscriber != nil && claims.UserID != "" && s.banSubscriber.IsBanned(claims.UserID) {
+			writeAPIError(w, http.StatusUnauthorized, "account banned")
+			return
+		}
+
 		// 构建上下文
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, apiContextKey{}, apiContext{

@@ -188,6 +188,35 @@ CREATE INDEX IF NOT EXISTS idx_ai_tenant_model_price_overrides_lookup
   ON ai_tenant_model_price_overrides (tenant_id, model_id);
 
 -- ============================================================================
+-- AI Tenant User Prices (租户售价 - 租户对用户的定价)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_tenant_user_prices (
+  id                           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id                    TEXT NOT NULL,
+  model_id                     UUID NOT NULL,
+  input_price_per_1m           BIGINT NOT NULL DEFAULT 0,
+  output_price_per_1m          BIGINT NOT NULL DEFAULT 0,
+  image_size_prices            JSONB  NOT NULL DEFAULT '{}',
+  video_price_per_second       BIGINT NOT NULL DEFAULT 0,
+  audio_tts_price_per_1m_chars BIGINT NOT NULL DEFAULT 0,
+  audio_stt_price_per_minute   BIGINT NOT NULL DEFAULT 0,
+  created_by                   TEXT,
+  created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, model_id),
+  CONSTRAINT ai_tenant_user_prices_nonnegative CHECK (
+    input_price_per_1m >= 0
+    AND output_price_per_1m >= 0
+    AND video_price_per_second >= 0
+    AND audio_tts_price_per_1m_chars >= 0
+    AND audio_stt_price_per_minute >= 0
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_tenant_user_prices_lookup
+  ON ai_tenant_user_prices (tenant_id, model_id);
+
+-- ============================================================================
 -- AI Upstream Deployment Cost Prices (上游成本价)
 -- 重命名：原 ai_deployment_cost_prices
 -- 新增：image_size_prices JSONB 用于按尺寸定价
