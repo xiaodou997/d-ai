@@ -17,6 +17,12 @@ let isRefreshing = false
 // 刷新队列：等待刷新完成的请求
 let refreshSubscribers = []
 
+const redirectToLogin = () => {
+  if (router.currentRoute.value.path !== '/login') {
+    router.replace('/login')
+  }
+}
+
 const subscribeTokenRefresh = (resolve, reject) => {
   refreshSubscribers.push({ resolve, reject })
 }
@@ -89,7 +95,7 @@ request.interceptors.response.use(
           authStore.stopAutoRefresh()
           isRefreshing = false
           refreshSubscribers = []
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -97,7 +103,7 @@ request.interceptors.response.use(
         if (error.config.url?.includes('/oauth2/revoke')) {
           authStore.clearState()
           authStore.stopAutoRefresh()
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -128,7 +134,7 @@ request.interceptors.response.use(
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
           authStore.stopAutoRefresh()
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(refreshError)
         }
       } else if (status === 403) {

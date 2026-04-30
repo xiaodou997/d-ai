@@ -16,6 +16,12 @@ const request = axios.create({
 let isRefreshing = false
 let refreshSubscribers = []
 
+const redirectToLogin = () => {
+  if (router.currentRoute.value.path !== '/login') {
+    router.replace('/login')
+  }
+}
+
 // 添加重试请求到队列
 function subscribeTokenRefresh(cb) {
   refreshSubscribers.push(cb)
@@ -60,7 +66,7 @@ request.interceptors.response.use(
       if (res.code === 401) {
         const authStore = useAuthStore()
         authStore.clearState()
-        router.push('/login')
+        redirectToLogin()
       }
 
       return Promise.reject(new Error(res.message || '请求失败'))
@@ -92,7 +98,7 @@ request.interceptors.response.use(
           authStore.stopAutoRefresh()
           isRefreshing = false
           refreshSubscribers = []
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -100,7 +106,7 @@ request.interceptors.response.use(
         if (originalRequest.url?.includes('/oauth2/revoke')) {
           authStore.clearState()
           authStore.stopAutoRefresh()
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -111,7 +117,7 @@ request.interceptors.response.use(
           authStore.stopAutoRefresh()
           isRefreshing = false
           refreshSubscribers = []
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 

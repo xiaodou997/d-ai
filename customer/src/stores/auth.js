@@ -20,6 +20,12 @@ export const useAuthStore = defineStore('customerAuth', () => {
 
   let refreshTimer = null
 
+  const redirectToLogin = async () => {
+    if (router.currentRoute.value.path !== '/login') {
+      await router.replace('/login')
+    }
+  }
+
   const login = async (usernameVal, password) => {
     const response = await loginApi(usernameVal, password)
     accessToken.value = response.accessToken || ''
@@ -64,14 +70,14 @@ export const useAuthStore = defineStore('customerAuth', () => {
     } finally {
       clearState()
       stopAutoRefresh()
-      router.push('/login')
+      await redirectToLogin()
     }
   }
 
   const refreshAccessToken = async () => {
     if (!refreshToken.value) {
       clearState()
-      router.push('/login')
+      await redirectToLogin()
       return
     }
     try {
@@ -87,7 +93,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     } catch (error) {
       console.error('Token refresh failed:', error)
       clearState()
-      router.push('/login')
+      await redirectToLogin()
       throw error
     }
   }

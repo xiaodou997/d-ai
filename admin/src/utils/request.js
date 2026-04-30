@@ -17,6 +17,12 @@ let isRefreshing = false
 // 刷新队列
 let refreshSubscribers = []
 
+const redirectToLogin = () => {
+  if (router.currentRoute.value.path !== '/login') {
+    router.replace('/login')
+  }
+}
+
 // 添加到刷新队列
 const subscribeTokenRefresh = (resolve, reject) => {
   refreshSubscribers.push({ resolve, reject })
@@ -75,7 +81,7 @@ request.interceptors.response.use(
         ElMessage.error(res.message || '登录已过期，请重新登录')
         
         // 跳转到登录页
-        router.push('/login')
+        redirectToLogin()
         
         return Promise.reject(new Error(res.message || '登录已过期'))
       }
@@ -109,7 +115,7 @@ request.interceptors.response.use(
           authStore.stopAutoRefresh()
           isRefreshing = false
           refreshSubscribers = []
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -117,7 +123,7 @@ request.interceptors.response.use(
         if (error.config.url.includes('/oauth2/revoke')) {
           authStore.clearState()
           authStore.stopAutoRefresh()
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -152,7 +158,7 @@ request.interceptors.response.use(
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
           authStore.stopAutoRefresh()
-          router.push('/login')
+          redirectToLogin()
           
           return Promise.reject(refreshError)
         }

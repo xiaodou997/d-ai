@@ -16,6 +16,12 @@ let isRefreshing = false
 // 刷新队列
 let refreshSubscribers = []
 
+const redirectToLogin = () => {
+  if (router.currentRoute.value.path !== '/login') {
+    router.replace('/login')
+  }
+}
+
 // 添加到刷新队列
 const subscribeTokenRefresh = (resolve, reject) => {
   refreshSubscribers.push({ resolve, reject })
@@ -68,7 +74,7 @@ gatewayRequest.interceptors.response.use(
         if (!refreshToken) {
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
-          router.push('/login')
+          redirectToLogin()
           return Promise.reject(error)
         }
 
@@ -102,7 +108,7 @@ gatewayRequest.interceptors.response.use(
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
           authStore.stopAutoRefresh()
-          router.push('/login')
+          redirectToLogin()
 
           return Promise.reject(refreshError)
         }

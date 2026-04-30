@@ -23,6 +23,12 @@ export const useAuthStore = defineStore('tenantAuth', () => {
   // 刷新定时器
   let refreshTimer = null
 
+  const redirectToLogin = async () => {
+    if (router.currentRoute.value.path !== '/login') {
+      await router.replace('/login')
+    }
+  }
+
   // Actions
   const login = async (usernameVal, password) => {
     const response = await loginApi(usernameVal, password)
@@ -70,14 +76,14 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     } finally {
       clearState()
       stopAutoRefresh()
-      router.push('/login')
+      await redirectToLogin()
     }
   }
 
   const refreshAccessToken = async () => {
     if (!refreshToken.value) {
       clearState()
-      router.push('/login')
+      await redirectToLogin()
       return
     }
     try {
@@ -93,7 +99,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     } catch (error) {
       console.error('Token refresh failed:', error)
       clearState()
-      router.push('/login')
+      await redirectToLogin()
       throw error
     }
   }

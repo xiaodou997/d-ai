@@ -23,6 +23,12 @@ export const useAuthStore = defineStore('auth', () => {
   // 刷新定时器
   let refreshTimer = null
 
+  const redirectToLogin = async () => {
+    if (router.currentRoute.value.path !== '/login') {
+      await router.replace('/login')
+    }
+  }
+
   // Actions
   const login = async (user, password) => {
     try {
@@ -92,6 +98,7 @@ export const useAuthStore = defineStore('auth', () => {
       // 这里只清除本地状态和停止定时器
       clearState()
       stopAutoRefresh()
+      await redirectToLogin()
     }
   }
 
