@@ -5,23 +5,38 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	App      AppConfig      `yaml:"app"`
-	Postgres PostgresConfig `yaml:"postgres"`
-	Redis    RedisConfig    `yaml:"redis"`
-	URM      URMConfig      `yaml:"urm"`
-	Security SecurityConfig `yaml:"security"`
+	SourcePath string         `yaml:"-"`
+	App        AppConfig      `yaml:"app"`
+	Server     ServerConfig   `yaml:"server"`
+	Logging    LoggingConfig  `yaml:"logging"`
+	Postgres   PostgresConfig `yaml:"postgres"`
+	Redis      RedisConfig    `yaml:"redis"`
+	URM        URMConfig      `yaml:"urm"`
+	Security   SecurityConfig `yaml:"security"`
 }
 
 type AppConfig struct {
-	Env      string `yaml:"env"`
+	Env         string `yaml:"env"`
+	ServiceName string `yaml:"serviceName"`
+	Version     string `yaml:"version"`
+}
+
+type ServerConfig struct {
 	HTTPAddr string `yaml:"httpAddr"`
-	LogLevel string `yaml:"logLevel"`
+}
+
+type LoggingConfig struct {
+	Level         string `yaml:"level"`
+	Format        string `yaml:"format"`
+	AccessLog     bool   `yaml:"accessLog"`
+	SlowRequestMs int64  `yaml:"slowRequestMs"`
 }
 
 type PostgresConfig struct {
@@ -39,10 +54,11 @@ type RedisConfig struct {
 }
 
 type URMConfig struct {
-	BaseURL   string        `yaml:"baseUrl"`
-	AppKey    string        `yaml:"appKey"`
-	AppSecret string        `yaml:"appSecret"`
-	Timeout   time.Duration `yaml:"timeout"`
+	BaseURL             string        `yaml:"baseUrl"`
+	AppKey              string        `yaml:"appKey"`
+	AppSecret           string        `yaml:"appSecret"`
+	Timeout             time.Duration `yaml:"timeout"`
+	JWKSRefreshInterval time.Duration `yaml:"jwksRefreshInterval"`
 }
 
 type SecurityConfig struct {
@@ -58,15 +74,14 @@ func Load() (*Config, error) {
 		if err := loadYAML(configPath, cfg); err != nil {
 			return nil, err
 		}
+		cfg.SourcePath = configPath
 	}
 
 	applyEnv(cfg)
+	normalize(cfg)
 
-	if cfg.Postgres.DSN == "" {
-		return nil, errors.New("postgres dsn is required")
-	}
-	if cfg.Security.ProviderKeyMaster == "" {
-		return nil, errors.New("provider key master is required")
+	if err := validate(cfg); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil
@@ -75,9 +90,18 @@ func Load() (*Config, error) {
 func defaultConfig() *Config {
 	return &Config{
 		App: AppConfig{
-			Env:      "development",
+			Env:         "development",
+			ServiceName: "uni-ai-api",
+			Version:     "dev",
+		},
+		Server: ServerConfig{
 			HTTPAddr: ":13010",
-			LogLevel: "info",
+		},
+		Logging: LoggingConfig{
+			Level:         "info",
+			Format:        "json",
+			AccessLog:     true,
+			SlowRequestMs: 1000,
 		},
 		Postgres: PostgresConfig{
 			MaxConns:        10,
@@ -89,7 +113,8 @@ func defaultConfig() *Config {
 			Addr:    "127.0.0.1:6379",
 		},
 		URM: URMConfig{
-			Timeout: 10 * time.Second,
+			Timeout:             10 * time.Second,
+			JWKSRefreshInterval: 24 * time.Hour,
 		},
 	}
 }
@@ -107,8 +132,15 @@ func loadYAML(path string, cfg *Config) error {
 
 func applyEnv(cfg *Config) {
 	setString(&cfg.App.Env, "UNI_AI_API_ENV")
-	setString(&cfg.App.HTTPAddr, "UNI_AI_API_HTTP_ADDR")
-	setString(&cfg.App.LogLevel, "UNI_AI_API_LOG_LEVEL")
+	setString(&cfg.App.ServiceName, "UNI_AI_API_SERVICE_NAME")
+	setString(&cfg.App.Version, "UNI_AI_API_VERSION")
+
+	setString(&cfg.Server.HTTPAddr, "UNI_AI_API_SERVER_HTTP_ADDR")
+
+	setString(&cfg.Logging.Level, "UNI_AI_API_LOGGING_LEVEL")
+	setString(&cfg.Logging.Format, "UNI_AI_API_LOGGING_FORMAT")
+	setBool(&cfg.Logging.AccessLog, "UNI_AI_API_LOGGING_ACCESS_LOG")
+	setInt64(&cfg.Logging.SlowRequestMs, "UNI_AI_API_LOGGING_SLOW_REQUEST_MS")
 
 	setString(&cfg.Postgres.DSN, "UNI_AI_API_POSTGRES_DSN")
 	setInt32(&cfg.Postgres.MaxConns, "UNI_AI_API_POSTGRES_MAX_CONNS")
@@ -124,9 +156,51 @@ func applyEnv(cfg *Config) {
 	setString(&cfg.URM.AppKey, "UNI_AI_API_URM_APP_KEY")
 	setString(&cfg.URM.AppSecret, "UNI_AI_API_URM_APP_SECRET")
 	setDuration(&cfg.URM.Timeout, "UNI_AI_API_URM_TIMEOUT")
+	setDuration(&cfg.URM.JWKSRefreshInterval, "UNI_AI_API_URM_JWKS_REFRESH_INTERVAL")
 
 	setString(&cfg.Security.ProviderKeyMaster, "UNI_AI_API_PROVIDER_KEY_MASTER")
 	setString(&cfg.Security.AdminToken, "UNI_AI_API_ADMIN_TOKEN")
+}
+
+func normalize(cfg *Config) {
+	cfg.App.Env = strings.ToLower(strings.TrimSpace(cfg.App.Env))
+	cfg.App.ServiceName = strings.TrimSpace(cfg.App.ServiceName)
+	cfg.App.Version = strings.TrimSpace(cfg.App.Version)
+	cfg.Server.HTTPAddr = strings.TrimSpace(cfg.Server.HTTPAddr)
+	cfg.Logging.Level = strings.ToLower(strings.TrimSpace(cfg.Logging.Level))
+	cfg.Logging.Format = strings.ToLower(strings.TrimSpace(cfg.Logging.Format))
+	if cfg.Logging.Level == "" {
+		cfg.Logging.Level = "info"
+	}
+	if cfg.Logging.Format == "" {
+		cfg.Logging.Format = "json"
+	}
+}
+
+func validate(cfg *Config) error {
+	if cfg.App.ServiceName == "" {
+		return errors.New("app serviceName is required")
+	}
+	if cfg.Server.HTTPAddr == "" {
+		return errors.New("server httpAddr is required")
+	}
+	switch cfg.Logging.Level {
+	case "debug", "info", "warn", "error":
+	default:
+		return fmt.Errorf("invalid logging level %q", cfg.Logging.Level)
+	}
+	switch cfg.Logging.Format {
+	case "json", "console":
+	default:
+		return fmt.Errorf("invalid logging format %q", cfg.Logging.Format)
+	}
+	if cfg.Postgres.DSN == "" {
+		return errors.New("postgres dsn is required")
+	}
+	if cfg.Security.ProviderKeyMaster == "" {
+		return errors.New("provider key master is required")
+	}
+	return nil
 }
 
 func setString(target *string, key string) {
@@ -138,6 +212,15 @@ func setString(target *string, key string) {
 func setInt(target *int, key string) {
 	if v := os.Getenv(key); v != "" {
 		parsed, err := strconv.Atoi(v)
+		if err == nil {
+			*target = parsed
+		}
+	}
+}
+
+func setInt64(target *int64, key string) {
+	if v := os.Getenv(key); v != "" {
+		parsed, err := strconv.ParseInt(v, 10, 64)
 		if err == nil {
 			*target = parsed
 		}

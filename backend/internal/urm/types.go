@@ -42,10 +42,10 @@ type BalanceResponse struct {
 }
 
 type UserInfoResponse struct {
-	Subject     string   `json:"sub"`
-	Username    string   `json:"username"`
-	UserType    int      `json:"userType"`
-	TenantID    string   `json:"tenantId"`
-	TenantName  string   `json:"tenantName"`
-	AllowedApps []string `json:"allowedApps"`
+	Subject    string `json:"sub"`
+	Username   string `json:"username"`
+	UserType   int    `json:"userType"`
+	TenantID   string `json:"tenantId"`
+	TenantName string `json:"tenantName"`
+	AppKey     string `json:"appKey"`
 }

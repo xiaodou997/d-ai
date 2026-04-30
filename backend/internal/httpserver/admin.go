@@ -85,12 +85,12 @@ type createModelRequest struct {
 }
 
 type modelPriceRequest struct {
-	InputPricePer1M          int64           `json:"input_price_per_1m"`
-	OutputPricePer1M         int64           `json:"output_price_per_1m"`
-	ImageSizePrices          json.RawMessage `json:"image_size_prices"`
-	VideoPricePerSecond      int64           `json:"video_price_per_second"`
-	AudioTTSPricePer1MChars  int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSTTPricePerMinute   int64           `json:"audio_stt_price_per_minute"`
+	InputPricePer1M         int64           `json:"input_price_per_1m"`
+	OutputPricePer1M        int64           `json:"output_price_per_1m"`
+	ImageSizePrices         json.RawMessage `json:"image_size_prices"`
+	VideoPricePerSecond     int64           `json:"video_price_per_second"`
+	AudioTTSPricePer1MChars int64           `json:"audio_tts_price_per_1m_chars"`
+	AudioSTTPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 }
 
 type createUpstreamDeploymentCostPriceRequest struct {
@@ -213,7 +213,7 @@ func (s *Server) validLocalAdminToken(r *http.Request) bool {
 }
 
 func (s *Server) validURMAdminToken(r *http.Request) (adminContext, bool) {
-	if s.urmClient == nil {
+	if s.jwksValidator == nil {
 		return adminContext{}, false
 	}
 
@@ -222,7 +222,7 @@ func (s *Server) validURMAdminToken(r *http.Request) (adminContext, bool) {
 		return adminContext{}, false
 	}
 
-	userInfo, err := s.urmClient.UserInfo(r.Context(), token)
+	claims, err := s.jwksValidator.ValidateToken(r.Context(), token)
 	if err != nil {
 		s.logger.Warn("validate urm admin token failed",
 			"error", err,
@@ -231,13 +231,13 @@ func (s *Server) validURMAdminToken(r *http.Request) (adminContext, bool) {
 		return adminContext{}, false
 	}
 
-	role, ok := adminRoleForUserType(userInfo.UserType)
+	role, ok := adminRoleForUserType(claims.UserType)
 	if !ok {
 		return adminContext{}, false
 	}
-	actor := userInfo.Subject
+	actor := claims.UserID
 	if actor == "" {
-		actor = userInfo.Username
+		actor = claims.Username
 	}
 	if actor == "" {
 		actor = "urm_admin"
@@ -245,9 +245,9 @@ func (s *Server) validURMAdminToken(r *http.Request) (adminContext, bool) {
 	return adminContext{
 		Actor:    actor,
 		Role:     role,
-		TenantID: userInfo.TenantID,
-		UserID:   userInfo.Subject,
-		UserType: userInfo.UserType,
+		TenantID: claims.TenantID,
+		UserID:   claims.UserID,
+		UserType: claims.UserType,
 	}, true
 }
 
@@ -264,12 +264,10 @@ func bearerToken(header string) string {
 
 func adminRoleForUserType(userType int) (adminRole, bool) {
 	switch userType {
-	case 1:
+	case 1: // 超管
 		return adminRolePlatform, true
-	case 2:
-		return adminRoleTenant, true
-	case 3:
-		return adminRoleUser, true
+	case 2: // 平台管理员
+		return adminRolePlatform, true
 	default:
 		return "", false
 	}
@@ -332,6 +330,9 @@ func tenantScopedAdminRequestAllowed(admin adminContext, method string, tenantID
 func tenantAdminRequestAllowed(method string, rest []string) bool {
 	if len(rest) == 1 && rest[0] == "model-grants" {
 		return method == http.MethodGet
+	}
+	if len(rest) >= 1 && rest[0] == "user-prices" {
+		return method == http.MethodGet || method == http.MethodPut || method == http.MethodDelete
 	}
 	if len(rest) >= 1 && rest[0] == "api-keys" {
 		return method == http.MethodGet || method == http.MethodPost || method == http.MethodPatch
@@ -850,13 +851,13 @@ func (s *Server) handleAdminUpsertModelPrice(w http.ResponseWriter, r *http.Requ
 	}
 	imageSizePrices := jsonObjectOrDefault(req.ImageSizePrices)
 	row, err := s.queries.UpsertModelPrice(r.Context(), dbgen.UpsertModelPriceParams{
-		ModelID:                modelID,
-		InputPricePer1m:        req.InputPricePer1M,
-		OutputPricePer1m:       req.OutputPricePer1M,
-		ImageSizePrices:        imageSizePrices,
-		VideoPricePerSecond:    req.VideoPricePerSecond,
+		ModelID:                 modelID,
+		InputPricePer1m:         req.InputPricePer1M,
+		OutputPricePer1m:        req.OutputPricePer1M,
+		ImageSizePrices:         imageSizePrices,
+		VideoPricePerSecond:     req.VideoPricePerSecond,
 		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
-		AudioSttPricePerMinute: req.AudioSTTPricePerMinute,
+		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
 	})
 	if err != nil {
 		writeAdminDBError(w, err)
@@ -941,6 +942,92 @@ func (s *Server) handleAdminDeleteTenantModelPriceOverride(w http.ResponseWriter
 		return
 	}
 	err := s.queries.DeleteTenantModelPriceOverride(r.Context(), dbgen.DeleteTenantModelPriceOverrideParams{
+		TenantID: tenantID,
+		ModelID:  modelID,
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ============================================================================
+// Tenant User Price Handlers (租户售价 - 租户对用户的定价)
+// ============================================================================
+
+func (s *Server) handleAdminListTenantUserPrices(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.PathValue("tenantID")
+	rows, err := s.queries.ListTenantUserPrices(r.Context(), tenantID)
+	if err != nil {
+		s.writeAdminServerError(w, r, "list tenant user prices failed", err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) handleAdminGetTenantUserPrice(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.PathValue("tenantID")
+	modelID, ok := parseUUIDParam(w, r, "modelID")
+	if !ok {
+		return
+	}
+	row, err := s.queries.GetTenantUserPrice(r.Context(), dbgen.GetTenantUserPriceParams{
+		TenantID: tenantID,
+		ModelID:  modelID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeAdminJSON(w, http.StatusOK, nil)
+			return
+		}
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
+}
+
+func (s *Server) handleAdminUpsertTenantUserPrice(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.PathValue("tenantID")
+	modelID, ok := parseUUIDParam(w, r, "modelID")
+	if !ok {
+		return
+	}
+	var req modelPriceRequest
+	if !decodeAdminJSON(w, r, &req) {
+		return
+	}
+	if message := validateModelPriceCredits(req); message != "" {
+		writeAdminError(w, http.StatusBadRequest, message)
+		return
+	}
+	imageSizePrices := jsonObjectOrDefault(req.ImageSizePrices)
+	adminCtx, _ := adminFromContext(r.Context())
+	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
+		TenantID:                tenantID,
+		ModelID:                 modelID,
+		InputPricePer1m:         req.InputPricePer1M,
+		OutputPricePer1m:        req.OutputPricePer1M,
+		ImageSizePrices:         imageSizePrices,
+		VideoPricePerSecond:     req.VideoPricePerSecond,
+		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
+		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
+		CreatedBy:               optionalTextString(adminCtx.Actor),
+	})
+	if err != nil {
+		writeAdminDBError(w, err)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, row)
+}
+
+func (s *Server) handleAdminDeleteTenantUserPrice(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.PathValue("tenantID")
+	modelID, ok := parseUUIDParam(w, r, "modelID")
+	if !ok {
+		return
+	}
+	err := s.queries.DeleteTenantUserPrice(r.Context(), dbgen.DeleteTenantUserPriceParams{
 		TenantID: tenantID,
 		ModelID:  modelID,
 	})

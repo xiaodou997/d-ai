@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"uni-ai-api/backend/internal/config"
 	"uni-ai-api/backend/internal/db"
 	"uni-ai-api/backend/internal/httpserver"
+	obslogger "uni-ai-api/backend/internal/observability/logger"
 	"uni-ai-api/backend/internal/urm"
 )
 
@@ -22,8 +24,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := newLogger(cfg.App.LogLevel)
+	logger := obslogger.New(obslogger.Config{
+		ServiceName: cfg.App.ServiceName,
+		Env:         cfg.App.Env,
+		Version:     cfg.App.Version,
+		Logging:     cfg.Logging,
+	})
 	slog.SetDefault(logger)
+	logger.Info("configuration loaded",
+		"config_path", configPathForLog(cfg.SourcePath),
+		"env", cfg.App.Env,
+		"log_level", cfg.Logging.Level,
+		"log_format", cfg.Logging.Format,
+		"http_addr", cfg.Server.HTTPAddr,
+	)
+	logger.Debug("runtime configuration",
+		"go_version", runtime.Version(),
+		"postgres_max_conns", cfg.Postgres.MaxConns,
+		"postgres_min_conns", cfg.Postgres.MinConns,
+		"postgres_max_conn_lifetime", cfg.Postgres.MaxConnLifetime.String(),
+		"redis_enabled", cfg.Redis.Enabled,
+		"redis_addr", cfg.Redis.Addr,
+		"redis_db", cfg.Redis.DB,
+		"urm_base_url", cfg.URM.BaseURL,
+		"urm_timeout", cfg.URM.Timeout.String(),
+	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -34,6 +59,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer pg.Close()
+	logger.Info("postgres connected",
+		"max_conns", cfg.Postgres.MaxConns,
+		"min_conns", cfg.Postgres.MinConns,
+		"max_conn_lifetime", cfg.Postgres.MaxConnLifetime.String(),
+	)
 
 	redisClient, err := cache.Open(ctx, cfg.Redis)
 	if err != nil {
@@ -42,21 +72,41 @@ func main() {
 	}
 	if redisClient != nil {
 		defer redisClient.Close()
+		logger.Info("redis connected", "addr", cfg.Redis.Addr, "db", cfg.Redis.DB)
+	} else {
+		logger.Info("redis disabled")
+	}
+	logger.Info("urm client configured",
+		"base_url", cfg.URM.BaseURL,
+		"timeout", cfg.URM.Timeout.String(),
+	)
+
+	urmBillingClient := urm.NewClient(cfg.URM)
+
+	jwksValidator := urm.NewJWKSValidator(cfg.URM.BaseURL, cfg.URM.JWKSRefreshInterval, cfg.URM.Timeout)
+	if err := jwksValidator.Start(ctx); err != nil {
+		logger.Warn("jwks initial fetch failed, will retry on first request", "error", err)
+	} else {
+		logger.Info("jwks loaded", "urm_base_url", cfg.URM.BaseURL)
 	}
 
 	server := httpserver.New(httpserver.Config{
-		App:      cfg.App,
-		Security: cfg.Security,
-		URM:      urm.NewClient(cfg.URM),
-		Postgres: pg,
-		Redis:    redisClient,
-		Logger:   logger,
+		App:           cfg.App,
+		Server:        cfg.Server,
+		Logging:       cfg.Logging,
+		Security:      cfg.Security,
+		URM:           urmBillingClient,
+		URMAppKey:     cfg.URM.AppKey,
+		JWKSValidator: jwksValidator,
+		Postgres:      pg,
+		Redis:         redisClient,
+		Logger:        logger,
 	})
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("starting server", "addr", cfg.App.HTTPAddr)
-		errCh <- server.Start(cfg.App.HTTPAddr)
+		logger.Info("server starting", "addr", cfg.Server.HTTPAddr)
+		errCh <- server.Start(cfg.Server.HTTPAddr)
 	}()
 
 	select {
@@ -76,20 +126,9 @@ func main() {
 	}
 }
 
-func newLogger(level string) *slog.Logger {
-	var slogLevel slog.Level
-	switch level {
-	case "debug":
-		slogLevel = slog.LevelDebug
-	case "warn":
-		slogLevel = slog.LevelWarn
-	case "error":
-		slogLevel = slog.LevelError
-	default:
-		slogLevel = slog.LevelInfo
+func configPathForLog(path string) string {
+	if path == "" {
+		return "(defaults)"
 	}
-
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slogLevel,
-	}))
+	return path
 }
