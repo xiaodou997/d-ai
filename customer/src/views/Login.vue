@@ -44,12 +44,10 @@
           <p class="subtitle">URM 用户中心</p>
         </div>
 
-        <!-- 登录：SSO 跳转 -->
+        <!-- 登录：SSO 自动跳转 -->
         <div v-if="!isRegister" class="sso-section">
-          <p class="sso-tip">使用统一账号登录</p>
-          <button class="login-button" @click="redirectToSSO">
-            前往统一登录
-          </button>
+          <span class="loading-spinner"></span>
+          <p class="sso-tip">正在跳转到统一登录...</p>
         </div>
 
         <!-- 注册表单 -->
@@ -153,11 +151,14 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { register } from '@/api/auth'
+import { useAuthStore } from '@/stores/auth'
 
-const URM_BASE_URL = import.meta.env.VITE_URM_BASE_URL || ''
+const authStore = useAuthStore()
+
+const URM_LOGIN_URL = import.meta.env.VITE_URM_LOGIN_URL || ''
 const APP_KEY = import.meta.env.VITE_URM_APP_KEY || ''
 
 const isRegister = ref(false)
@@ -168,14 +169,19 @@ const registerLoading = ref(false)
 const registerError = ref('')
 
 const redirectToSSO = () => {
-  if (!URM_BASE_URL || !APP_KEY) return
+  if (!URM_LOGIN_URL || !APP_KEY) return
   const callbackURL = window.location.origin + '/oauth/callback'
   const state = crypto.randomUUID()
   sessionStorage.setItem('oauth_state', state)
   sessionStorage.setItem('oauth_redirect_uri', callbackURL)
   const params = new URLSearchParams({ client_id: APP_KEY, redirect_uri: callbackURL, state })
-  window.location.href = URM_BASE_URL + '/login?' + params.toString()
+  window.location.href = URM_LOGIN_URL + '?' + params.toString()
 }
+
+onMounted(() => {
+  if (authStore.isAuthenticated() || isRegister.value) return
+  redirectToSSO()
+})
 
 // 注册处理
 const handleRegister = async () => {

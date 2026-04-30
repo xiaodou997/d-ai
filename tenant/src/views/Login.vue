@@ -88,12 +88,12 @@ import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
 
-const URM_BASE_URL = import.meta.env.VITE_URM_BASE_URL || ''
+const URM_LOGIN_URL = import.meta.env.VITE_URM_LOGIN_URL || ''
 const APP_KEY = import.meta.env.VITE_URM_APP_KEY || ''
 
 onMounted(() => {
   if (authStore.isAuthenticated()) return
-  if (!URM_BASE_URL || !APP_KEY) return
+  if (!URM_LOGIN_URL || !APP_KEY) return
 
   const callbackURL = window.location.origin + '/oauth/callback'
   const state = crypto.randomUUID()
@@ -105,7 +105,7 @@ onMounted(() => {
     redirect_uri: callbackURL,
     state,
   })
-  window.location.href = URM_BASE_URL + '/login?' + params.toString()
+  window.location.href = URM_LOGIN_URL + '?' + params.toString()
 })
 </script>
 
