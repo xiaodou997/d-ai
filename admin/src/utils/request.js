@@ -67,8 +67,8 @@ request.interceptors.response.use(
   (response) => {
     const res = response.data
 
-    // 如果返回的 code 不是 200，则认为是错误
-    if (res.code !== 200) {
+    // 兼容 URM envelope（{ code, data }）和业务后端裸 JSON 响应。
+    if (res.code !== undefined && res.code !== 200) {
       // 401: Token 过期或无效
       if (res.code === 401) {
         const authStore = useAuthStore()
@@ -91,8 +91,7 @@ request.interceptors.response.use(
       return Promise.reject(new Error(res.message || '请求失败'))
     }
 
-    // 返回数据
-    return res.data
+    return res.data !== undefined ? res.data : res
   },
   async (error) => {
     console.error('Response error:', error)
