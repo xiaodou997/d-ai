@@ -151,15 +151,16 @@
 </template>
 
 <script setup>
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { register } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
 
-const URM_LOGIN_URL = import.meta.env.VITE_URM_LOGIN_URL || ''
-const APP_KEY = import.meta.env.VITE_URM_APP_KEY || ''
+const AUTHORIZE_URL = import.meta.env.VITE_SSO_AUTHORIZE_URL || ''
+const CLIENT_ID = import.meta.env.VITE_SSO_CLIENT_ID || ''
+const CLIENT_TYPE = import.meta.env.VITE_SSO_CLIENT_TYPE || 'customer'
 
 const isRegister = ref(false)
 
@@ -169,18 +170,29 @@ const registerLoading = ref(false)
 const registerError = ref('')
 
 const redirectToSSO = () => {
-  if (!URM_LOGIN_URL || !APP_KEY) return
+  if (!AUTHORIZE_URL || !CLIENT_ID) return
   const callbackURL = window.location.origin + '/oauth/callback'
   const state = crypto.randomUUID()
   sessionStorage.setItem('oauth_state', state)
   sessionStorage.setItem('oauth_redirect_uri', callbackURL)
-  const params = new URLSearchParams({ client_id: APP_KEY, redirect_uri: callbackURL, state })
-  window.location.href = URM_LOGIN_URL + '?' + params.toString()
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: callbackURL,
+    state,
+    client_type: CLIENT_TYPE
+  })
+  window.location.href = AUTHORIZE_URL + '?' + params.toString()
 }
 
 onMounted(() => {
   if (authStore.isAuthenticated() || isRegister.value) return
   redirectToSSO()
+})
+
+watch(isRegister, (value) => {
+  if (!value && !authStore.isAuthenticated()) {
+    redirectToSSO()
+  }
 })
 
 // 注册处理
@@ -199,15 +211,11 @@ const handleRegister = async () => {
   registerLoading.value = true
 
   try {
-    const res = await register({
+    await register({
       username: registerForm.username,
       password: registerForm.password,
       inviteCode: registerForm.inviteCode
     })
-
-    if (res.code !== 200) {
-      throw new Error(res.message || '注册失败')
-    }
 
     ElMessage.success('注册成功，请登录')
     registerForm.username = ''

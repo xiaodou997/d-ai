@@ -23,6 +23,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { exchangeCode } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -52,7 +53,9 @@ onMounted(async () => {
 
   try {
     const callbackURI = redirectUri || (window.location.origin + '/oauth/callback')
-    await authStore.loginWithSSO(code, callbackURI)
+    const tokenData = await exchangeCode(code, callbackURI)
+    authStore.setAuth(tokenData)
+    await authStore.fetchUserInfo()
     ElMessage({ message: '欢迎回来，' + authStore.username, type: 'success', plain: true, duration: 3000 })
     router.replace(authStore.defaultRoute || '/dashboard')
   } catch (err) {

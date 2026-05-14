@@ -1,19 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
-  login as loginApi,
-  refreshToken as refreshApi,
-  logout as logoutApi
+  refreshAccessToken as refreshAccessTokenApi,
+  logout as logoutApi,
+  getCurrentUser
 } from '@/api/auth'
-import request from '@/utils/request'
 import router from '@/router'
+
+const SSO_LOGOUT_URL = (import.meta.env.VITE_SSO_AUTHORIZE_URL || '').replace('/oauth2/authorize', '/oauth2/logout')
 
 export const useAuthStore = defineStore('customerAuth', () => {
   const accessToken = ref(localStorage.getItem('customer_accessToken') || '')
   const refreshToken = ref(localStorage.getItem('customer_refreshToken') || '')
-  const expiresIn = ref(
-    parseInt(localStorage.getItem('customer_expiresIn') || '7200')
-  )
+  const expiresIn = ref(parseInt(localStorage.getItem('customer_expiresIn') || '7200'))
   const username = ref(localStorage.getItem('customer_username') || '')
   const userId = ref(localStorage.getItem('customer_userId') || '')
   const tenantId = ref(localStorage.getItem('customer_tenantId') || '')
@@ -26,51 +25,39 @@ export const useAuthStore = defineStore('customerAuth', () => {
     }
   }
 
-  const login = async (usernameVal, password) => {
-    const response = await loginApi(usernameVal, password)
+  const setAuth = (response) => {
     accessToken.value = response.accessToken || ''
     refreshToken.value = response.refreshToken || ''
     expiresIn.value = response.expiresIn || 7200
-
-    // 获取用户信息
-    const userInfo = await request.get('/urm/oauth2/userinfo')
-    userId.value = userInfo.sub
-    username.value = userInfo.username
-    tenantId.value = userInfo.tenantId || ''
-
     saveToLocalStorage()
     startAutoRefresh()
-    router.push('/dashboard')
-    return { ...response, userId: userInfo.sub, username: userInfo.username }
   }
 
-  const loginWithSSO = async (code, redirectUri) => {
-    const tokenData = await request.get('/api/auth/callback', { params: { code, redirect_uri: redirectUri } })
-    accessToken.value = tokenData.accessToken || tokenData.access_token || ''
-    refreshToken.value = tokenData.refreshToken || tokenData.refresh_token || ''
-    expiresIn.value = tokenData.expiresIn || tokenData.expires_in || 7200
-
-    const userInfo = await request.get('/urm/oauth2/userinfo')
-    userId.value = userInfo.sub
-    username.value = userInfo.username
+  const fetchUserInfo = async () => {
+    const userInfo = await getCurrentUser()
+    userId.value = userInfo.sub || userInfo.userId || ''
+    username.value = userInfo.username || ''
     tenantId.value = userInfo.tenantId || ''
-
     saveToLocalStorage()
-    startAutoRefresh()
     return userInfo
   }
 
   const logout = async () => {
     try {
       if (accessToken.value) {
-        await logoutApi().catch(() => {})
+        await logoutApi()
       }
     } catch (error) {
       console.error('Logout failed:', error)
     } finally {
       clearState()
       stopAutoRefresh()
-      await redirectToLogin()
+      if (SSO_LOGOUT_URL) {
+        const postLogoutUri = encodeURIComponent(window.location.origin + '/login')
+        window.location.href = `${SSO_LOGOUT_URL}?post_logout_redirect_uri=${postLogoutUri}`
+      } else {
+        await redirectToLogin()
+      }
     }
   }
 
@@ -81,7 +68,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
       return
     }
     try {
-      const response = await refreshApi(refreshToken.value)
+      const response = await refreshAccessTokenApi(refreshToken.value)
       accessToken.value = response.accessToken
       if (response.refreshToken) {
         refreshToken.value = response.refreshToken
@@ -154,10 +141,10 @@ export const useAuthStore = defineStore('customerAuth', () => {
     username,
     tenantId,
     expiresIn,
-    login,
-    loginWithSSO,
     logout,
     refreshAccessToken,
+    fetchUserInfo,
+    setAuth,
     isAuthenticated,
     startAutoRefresh,
     stopAutoRefresh,

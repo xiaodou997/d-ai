@@ -3,7 +3,6 @@ import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import router from '@/router'
 
-// 创建 axios 实例
 const request = axios.create({
   baseURL: '',
   timeout: 30000,
@@ -12,7 +11,6 @@ const request = axios.create({
   }
 })
 
-// Token 刷新队列
 let isRefreshing = false
 let refreshSubscribers = []
 
@@ -22,76 +20,62 @@ const redirectToLogin = () => {
   }
 }
 
-// 添加重试请求到队列
-function subscribeTokenRefresh(cb) {
-  refreshSubscribers.push(cb)
+const subscribeTokenRefresh = (resolve, reject) => {
+  refreshSubscribers.push({ resolve, reject })
 }
 
-// 执行所有等待的请求
-function onRefreshed(token) {
-  refreshSubscribers.forEach(cb => cb(token))
+const onRefreshed = (accessToken) => {
+  refreshSubscribers.forEach((cb) => cb.resolve(accessToken))
   refreshSubscribers = []
 }
 
-// 拒绝所有等待的请求
-function onRefreshFailed() {
-  refreshSubscribers.forEach(cb => cb(null))
+const onRefreshFailed = (error) => {
+  refreshSubscribers.forEach((cb) => cb.reject(error))
   refreshSubscribers = []
 }
 
-// 请求拦截器
 request.interceptors.request.use(
   (config) => {
     const authStore = useAuthStore()
     if (authStore.accessToken) {
-      config.headers['Authorization'] = `Bearer ${authStore.accessToken}`
+      config.headers.Authorization = `Bearer ${authStore.accessToken}`
     }
     return config
   },
-  (error) => {
-    console.error('Request error:', error)
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
-// 响应拦截器
 request.interceptors.response.use(
   (response) => {
     const res = response.data
 
-    // 如果返回的 code 不是 200，则认为是错误
     if (res.code !== undefined && res.code !== 200) {
-      ElMessage.error(res.message || '请求失败')
-
       if (res.code === 401) {
         const authStore = useAuthStore()
         authStore.clearState()
+        authStore.stopAutoRefresh()
+        ElMessage.error(res.message || '登录已过期，请重新登录')
         redirectToLogin()
+        return Promise.reject(new Error(res.message || '登录已过期'))
       }
 
+      ElMessage.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message || '请求失败'))
     }
 
-    // 返回 data 字段，或直接返回整个 res（兼容不同后端格式）
     return res.data !== undefined ? res.data : res
   },
   async (error) => {
-    console.error('Response error:', error)
-
-    const originalRequest = error.config
-
     if (error.response) {
       const { status, data } = error.response
 
-      // 401 未授权，尝试刷新 token
       if (status === 401) {
         const authStore = useAuthStore()
 
-        // 如果是刷新 token 接口返回 401，说明 refresh token 也过期了
         const isRefreshRequest =
-          originalRequest.url?.includes('/oauth2/token') &&
-          typeof originalRequest.data === 'string' &&
-          originalRequest.data.includes('grant_type=refresh_token')
+          error.config.url?.includes('/oauth2/token') &&
+          error.config.data instanceof URLSearchParams &&
+          error.config.data.get('grant_type') === 'refresh_token'
         if (isRefreshRequest) {
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
@@ -102,60 +86,40 @@ request.interceptors.response.use(
           return Promise.reject(error)
         }
 
-        // 如果是登出接口，直接清理状态
-        if (originalRequest.url?.includes('/oauth2/revoke')) {
+        if (error.config.url?.includes('/oauth2/revoke')) {
           authStore.clearState()
           authStore.stopAutoRefresh()
           redirectToLogin()
           return Promise.reject(error)
         }
 
-        // 防止无限重试
-        if (originalRequest._retryCount >= 1) {
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            subscribeTokenRefresh((newToken) => {
+              const config = error.config
+              config.headers.Authorization = `Bearer ${newToken}`
+              resolve(request(config))
+            }, reject)
+          })
+        }
+
+        isRefreshing = true
+        try {
+          const newToken = await authStore.refreshAccessToken()
+          isRefreshing = false
+          onRefreshed(newToken.accessToken)
+
+          const config = error.config
+          config.headers.Authorization = `Bearer ${newToken.accessToken}`
+          return request(config)
+        } catch (refreshError) {
+          isRefreshing = false
+          onRefreshFailed(refreshError)
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
           authStore.stopAutoRefresh()
-          isRefreshing = false
-          refreshSubscribers = []
           redirectToLogin()
-          return Promise.reject(error)
-        }
-
-        originalRequest._retryCount = (originalRequest._retryCount || 0) + 1
-
-        if (!isRefreshing) {
-          isRefreshing = true
-
-          try {
-            // 尝试刷新 token
-            await authStore.refreshAccessToken()
-            isRefreshing = false
-
-            // 刷新成功，重试所有等待的请求
-            onRefreshed(authStore.accessToken)
-
-            // 重试原请求
-            originalRequest.headers['Authorization'] = `Bearer ${authStore.accessToken}`
-            return request(originalRequest)
-          } catch (refreshError) {
-            // 刷新失败，auth store 内部已处理 clearState 和跳转
-            isRefreshing = false
-            onRefreshFailed()
-            return Promise.reject(refreshError)
-          }
-        } else {
-          // 正在刷新中，将请求加入队列等待
-          return new Promise((resolve) => {
-            subscribeTokenRefresh((newToken) => {
-              if (newToken) {
-                originalRequest.headers['Authorization'] = `Bearer ${newToken}`
-                resolve(request(originalRequest))
-              } else {
-                // 刷新失败，拒绝请求
-                resolve(Promise.reject(new Error('Token refresh failed')))
-              }
-            })
-          })
+          return Promise.reject(refreshError)
         }
       } else if (status === 403) {
         ElMessage.error('没有权限访问')

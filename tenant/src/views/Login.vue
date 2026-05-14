@@ -88,12 +88,13 @@ import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
 
-const URM_LOGIN_URL = import.meta.env.VITE_URM_LOGIN_URL || ''
-const APP_KEY = import.meta.env.VITE_URM_APP_KEY || ''
+const AUTHORIZE_URL = import.meta.env.VITE_SSO_AUTHORIZE_URL || ''
+const CLIENT_ID = import.meta.env.VITE_SSO_CLIENT_ID || ''
+const CLIENT_TYPE = import.meta.env.VITE_SSO_CLIENT_TYPE || 'tenant'
 
 onMounted(() => {
   if (authStore.isAuthenticated()) return
-  if (!URM_LOGIN_URL || !APP_KEY) return
+  if (!AUTHORIZE_URL || !CLIENT_ID) return
 
   const callbackURL = window.location.origin + '/oauth/callback'
   const state = crypto.randomUUID()
@@ -101,11 +102,12 @@ onMounted(() => {
   sessionStorage.setItem('oauth_redirect_uri', callbackURL)
 
   const params = new URLSearchParams({
-    client_id: APP_KEY,
+    client_id: CLIENT_ID,
     redirect_uri: callbackURL,
     state,
+    client_type: CLIENT_TYPE
   })
-  window.location.href = URM_LOGIN_URL + '?' + params.toString()
+  window.location.href = AUTHORIZE_URL + '?' + params.toString()
 })
 </script>
 
