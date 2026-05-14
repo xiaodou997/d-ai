@@ -1,8 +1,10 @@
 <script setup>
-import { onMounted, shallowRef, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, watch } from 'vue'
+import { Refresh, Wallet, DataLine, TrendCharts } from '@element-plus/icons-vue'
 import { listMyUsageLogs, getMyUsageSummary, formatCredits } from '@/api/aiGateway'
 import * as echarts from 'echarts'
+
+const LOG_LIMIT = 500
 
 const loading = shallowRef(false)
 const usageLogs = shallowRef([])
@@ -13,23 +15,67 @@ const chartTimelineRef = shallowRef(null)
 let chartModel = null
 let chartTimeline = null
 
+const last7DayKeys = () => {
+  const keys = []
+  for (let i = 6; i >= 0; i -= 1) {
+    const date = new Date()
+    date.setHours(0, 0, 0, 0)
+    date.setDate(date.getDate() - i)
+    keys.push(date.toISOString().slice(0, 10))
+  }
+  return keys
+}
+
+const modelDistribution = computed(() => {
+  const grouped = new Map()
+  for (const row of usageLogs.value) {
+    const modelCode = row.model_code || 'unknown'
+    const cost = Number(row.user_cost) || 0
+    grouped.set(modelCode, (grouped.get(modelCode) || 0) + cost)
+  }
+  return Array.from(grouped.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
+})
+
+const timelineDayKeys = computed(() => last7DayKeys())
+
+const timelineLabels = computed(() =>
+  timelineDayKeys.value.map((dayKey) =>
+    new Date(`${dayKey}T00:00:00`).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  )
+)
+
+const timelineValues = computed(() => {
+  const grouped = new Map()
+  for (const row of usageLogs.value) {
+    if (!row.created_at) continue
+    const createdAt = new Date(row.created_at)
+    if (Number.isNaN(createdAt.getTime())) continue
+    const dayKey = createdAt.toISOString().slice(0, 10)
+    grouped.set(dayKey, (grouped.get(dayKey) || 0) + (Number(row.user_cost) || 0))
+  }
+  return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0)
+})
+
 const fetchUsageData = async () => {
   loading.value = true
   try {
     const [logsRes, summaryRes] = await Promise.all([
-      listMyUsageLogs(),
+      listMyUsageLogs({ limit: LOG_LIMIT }),
       getMyUsageSummary()
     ])
     usageLogs.value = logsRes || []
     summary.value = summaryRes || null
-    initCharts()
   } finally {
     loading.value = false
   }
 }
 
-const initCharts = () => {
-  // 模型分布饼图
+const renderCharts = async () => {
+  await nextTick()
+
   if (chartModelRef.value) {
     if (chartModel) chartModel.dispose()
     chartModel = echarts.init(chartModelRef.value)
@@ -45,13 +91,12 @@ const initCharts = () => {
           label: { show: false },
           emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
           labelLine: { show: false },
-          data: getModelDistribution()
+          data: modelDistribution.value
         }
       ]
     })
   }
 
-  // 时间趋势折线图
   if (chartTimelineRef.value) {
     if (chartTimeline) chartTimeline.dispose()
     chartTimeline = echarts.init(chartTimelineRef.value)
@@ -61,7 +106,7 @@ const initCharts = () => {
       xAxis: {
         type: 'category',
         boundaryGap: false,
-        data: getTimelineDates()
+        data: timelineLabels.value
       },
       yAxis: { type: 'value', name: '积分' },
       series: [
@@ -72,34 +117,11 @@ const initCharts = () => {
           areaStyle: { opacity: 0.3 },
           lineStyle: { width: 3 },
           emphasis: { focus: 'series' },
-          data: getTimelineValues()
+          data: timelineValues.value
         }
       ]
     })
   }
-}
-
-const getModelDistribution = () => {
-  // 模拟数据，实际需要从 API 获取模型分布
-  return [
-    { value: 1048, name: 'gpt-4' },
-    { value: 735, name: 'gpt-3.5-turbo' },
-    { value: 580, name: 'claude-3' }
-  ]
-}
-
-const getTimelineDates = () => {
-  const dates = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    dates.push(d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }))
-  }
-  return dates
-}
-
-const getTimelineValues = () => {
-  return [120, 132, 101, 134, 90, 230, 210]
 }
 
 const formatDate = (value) => {
@@ -107,29 +129,39 @@ const formatDate = (value) => {
   return new Date(value).toLocaleString()
 }
 
-onMounted(fetchUsageData)
-
-window.addEventListener('resize', () => {
+const handleResize = () => {
   chartModel?.resize()
   chartTimeline?.resize()
+}
+
+watch(usageLogs, () => {
+  renderCharts()
+})
+
+onMounted(() => {
+  fetchUsageData()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  chartModel?.dispose()
+  chartTimeline?.dispose()
 })
 </script>
 
 <template>
   <div class="page-container">
-    <!-- Header -->
     <header class="page-header">
       <div class="page-title">
         <p class="eyebrow">Usage Analytics</p>
         <h1>使用统计</h1>
-        <p>查看个人 AI 调用消耗、模型分布和时间趋势分析</p>
+        <p>查看个人 AI 调用消耗、模型分布和近 7 天趋势，图表基于最近 {{ LOG_LIMIT }} 条调用日志。</p>
       </div>
       <el-button :icon="Refresh" @click="fetchUsageData" :loading="loading">刷新</el-button>
     </header>
 
-    <!-- Content -->
     <main class="page-main">
-      <!-- Summary Stats -->
       <section class="summary-stats mb-6">
         <div class="stats-grid">
           <div class="stat-card">
@@ -138,7 +170,7 @@ window.addEventListener('resize', () => {
             </div>
             <div class="stat-content">
               <p class="stat-label">总消耗积分</p>
-              <p class="stat-value">{{ formatCredits(summary?.total_cost || 0) }}</p>
+              <p class="stat-value">{{ formatCredits(summary?.total_user_cost || 0) }}</p>
             </div>
           </div>
           <div class="stat-card">
@@ -162,7 +194,6 @@ window.addEventListener('resize', () => {
         </div>
       </section>
 
-      <!-- Charts -->
       <section class="charts-section mb-6">
         <div class="charts-grid">
           <div class="chart-card">
@@ -176,14 +207,13 @@ window.addEventListener('resize', () => {
         </div>
       </section>
 
-      <!-- Usage Logs Table -->
       <section class="logs-panel">
         <h3 class="panel-title">使用记录</h3>
         <el-table :data="usageLogs" v-loading="loading" stripe>
           <el-table-column prop="model_code" label="模型" min-width="140" />
           <el-table-column label="消耗积分" min-width="100">
             <template #default="{ row }">
-              {{ formatCredits(row.cost || 0) }}
+              {{ formatCredits(row.user_cost || 0) }}
             </template>
           </el-table-column>
           <el-table-column label="Token 数" min-width="100">
@@ -191,6 +221,7 @@ window.addEventListener('resize', () => {
               {{ formatCredits(row.total_tokens || 0) }}
             </template>
           </el-table-column>
+          <el-table-column prop="request_status" label="状态" width="100" />
           <el-table-column prop="request_id" label="请求 ID" min-width="160" show-overflow-tooltip />
           <el-table-column label="时间" min-width="160">
             <template #default="{ row }">
@@ -202,13 +233,6 @@ window.addEventListener('resize', () => {
     </main>
   </div>
 </template>
-
-<script>
-import { Wallet, DataLine, TrendCharts } from '@element-plus/icons-vue'
-export default {
-  components: { Wallet, DataLine, TrendCharts }
-}
-</script>
 
 <style scoped>
 .page-container {
@@ -318,7 +342,7 @@ export default {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
-  margin-bottom: 16px;
+  margin: 0 0 16px;
 }
 
 .chart {
@@ -333,9 +357,9 @@ export default {
 }
 
 .panel-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: #303133;
-  margin-bottom: 16px;
+  margin: 0 0 16px;
 }
 </style>

@@ -1,55 +1,127 @@
 <script setup>
-import { onMounted, shallowRef, ref, computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import { Refresh, TrendCharts } from '@element-plus/icons-vue'
-import { listUsageSummary, formatCredits } from '@/api/aiGateway'
+import { listUsageLogs, formatCredits } from '@/api/aiGateway'
 import { getUsers } from '@/api/tenant'
 import * as echarts from 'echarts'
 
+const LOG_LIMIT = 500
+
 const loading = shallowRef(false)
-const usageData = shallowRef([])
+const usageLogs = shallowRef([])
 const users = shallowRef([])
 const selectedUser = shallowRef(null)
 const detailDialogVisible = shallowRef(false)
-const activeTab = ref('model')
 
 const chartModelRef = shallowRef(null)
 const chartTimelineRef = shallowRef(null)
 let chartModel = null
 let chartTimeline = null
 
-const fetchUsageData = async () => {
-  loading.value = true
-  try {
-    // 获取用户列表（URM）
-    const usersRes = await getUsers({ page: 1, size: 100 })
-    users.value = usersRes.records || []
-    
-    // 获取 AI 使用汇总（按用户维度）
-    const usageRes = await listUsageSummary()
-    usageData.value = usageRes || []
-  } finally {
-    loading.value = false
+const normalizeUserId = (value) => {
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+const last7DayKeys = () => {
+  const keys = []
+  for (let i = 6; i >= 0; i -= 1) {
+    const date = new Date()
+    date.setHours(0, 0, 0, 0)
+    date.setDate(date.getDate() - i)
+    keys.push(date.toISOString().slice(0, 10))
   }
+  return keys
 }
 
-const openUserDetail = (user) => {
-  selectedUser.value = user
-  detailDialogVisible.value = true
-  // 延迟初始化图表
-  setTimeout(() => {
-    initCharts()
-  }, 100)
+const formatDayLabel = (dayKey) => {
+  const date = new Date(`${dayKey}T00:00:00`)
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-const initCharts = () => {
-  // 模型分布饼图
-  if (chartModelRef.value) {
-    if (chartModel) {
-      chartModel.dispose()
+const userStatsMap = computed(() => {
+  const stats = new Map()
+
+  for (const row of usageLogs.value) {
+    const userId = normalizeUserId(row.user_id)
+    if (!userId) continue
+
+    if (!stats.has(userId)) {
+      stats.set(userId, {
+        totalCost: 0,
+        totalTokens: 0,
+        requestCount: 0,
+        modelCosts: new Map(),
+        timelineCosts: new Map()
+      })
     }
+
+    const item = stats.get(userId)
+    const cost = Number(row.user_cost) || 0
+    const tokens = Number(row.total_tokens) || 0
+    const modelCode = row.model_code || 'unknown'
+    const createdAt = row.created_at ? new Date(row.created_at) : null
+    const dayKey = createdAt && !Number.isNaN(createdAt.getTime())
+      ? createdAt.toISOString().slice(0, 10)
+      : ''
+
+    item.totalCost += cost
+    item.totalTokens += tokens
+    item.requestCount += 1
+    item.modelCosts.set(modelCode, (item.modelCosts.get(modelCode) || 0) + cost)
+    if (dayKey) {
+      item.timelineCosts.set(dayKey, (item.timelineCosts.get(dayKey) || 0) + cost)
+    }
+  }
+
+  return stats
+})
+
+const selectedUserStats = computed(() => {
+  const userId = normalizeUserId(selectedUser.value?.id)
+  if (!userId) {
+    return {
+      totalCost: 0,
+      totalTokens: 0,
+      requestCount: 0,
+      modelCosts: new Map(),
+      timelineCosts: new Map()
+    }
+  }
+  return userStatsMap.value.get(userId) || {
+    totalCost: 0,
+    totalTokens: 0,
+    requestCount: 0,
+    modelCosts: new Map(),
+    timelineCosts: new Map()
+  }
+})
+
+const modelDistribution = computed(() =>
+  Array.from(selectedUserStats.value.modelCosts.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
+)
+
+const timelineDayKeys = computed(() => last7DayKeys())
+
+const timelineLabels = computed(() => timelineDayKeys.value.map(formatDayLabel))
+
+const timelineValues = computed(() =>
+  timelineDayKeys.value.map((key) => selectedUserStats.value.timelineCosts.get(key) || 0)
+)
+
+const renderCharts = async () => {
+  if (!detailDialogVisible.value || !selectedUser.value) return
+
+  await nextTick()
+
+  if (chartModelRef.value) {
+    if (chartModel) chartModel.dispose()
     chartModel = echarts.init(chartModelRef.value)
     chartModel.setOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      tooltip: { trigger: 'item', formatter: '{b}: {c} 积分 ({d}%)' },
       legend: { orient: 'vertical', right: 10, top: 'center' },
       series: [
         {
@@ -60,17 +132,14 @@ const initCharts = () => {
           label: { show: false },
           emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
           labelLine: { show: false },
-          data: getModelDistribution()
+          data: modelDistribution.value
         }
       ]
     })
   }
-  
-  // 时间趋势折线图
+
   if (chartTimelineRef.value) {
-    if (chartTimeline) {
-      chartTimeline.dispose()
-    }
+    if (chartTimeline) chartTimeline.dispose()
     chartTimeline = echarts.init(chartTimelineRef.value)
     chartTimeline.setOption({
       tooltip: { trigger: 'axis' },
@@ -78,7 +147,7 @@ const initCharts = () => {
       xAxis: {
         type: 'category',
         boundaryGap: false,
-        data: getTimelineDates()
+        data: timelineLabels.value
       },
       yAxis: { type: 'value', name: '积分' },
       series: [
@@ -89,83 +158,96 @@ const initCharts = () => {
           areaStyle: { opacity: 0.3 },
           lineStyle: { width: 3 },
           emphasis: { focus: 'series' },
-          data: getTimelineValues()
+          data: timelineValues.value
         }
       ]
     })
   }
 }
 
-const getModelDistribution = () => {
-  if (!selectedUser.value) return []
-  // 模拟数据，实际需要从 API 获取
-  const userId = selectedUser.value.id
-  const userUsage = usageData.value.filter((u) => u.user_id === userId)
-  
-  // 暂时返回模拟数据
-  return [
-    { value: 1048, name: 'gpt-4' },
-    { value: 735, name: 'gpt-3.5-turbo' },
-    { value: 580, name: 'claude-3' },
-    { value: 484, name: 'deepseek-chat' }
-  ]
-}
-
-const getTimelineDates = () => {
-  // 近7天日期
-  const dates = []
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    dates.push(d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }))
+const fetchUsageData = async () => {
+  loading.value = true
+  try {
+    const [usersRes, logsRes] = await Promise.all([
+      getUsers({ page: 1, size: 100 }),
+      listUsageLogs({ limit: LOG_LIMIT })
+    ])
+    users.value = usersRes.records || []
+    usageLogs.value = logsRes || []
+  } finally {
+    loading.value = false
   }
-  return dates
-}
-
-const getTimelineValues = () => {
-  // 模拟数据
-  return [120, 132, 101, 134, 90, 230, 210]
 }
 
 const getUserConsumption = (userId) => {
-  const data = usageData.value.find((u) => u.user_id === userId)
-  if (data) {
-    return {
-      totalCost: data.total_cost || 0,
-      totalTokens: data.total_tokens || 0,
-      requestCount: data.request_count || 0
-    }
+  const stats = userStatsMap.value.get(normalizeUserId(userId))
+  if (!stats) {
+    return { totalCost: 0, totalTokens: 0, requestCount: 0 }
   }
-  return { totalCost: 0, totalTokens: 0, requestCount: 0 }
+  return {
+    totalCost: stats.totalCost,
+    totalTokens: stats.totalTokens,
+    requestCount: stats.requestCount
+  }
 }
 
-const formatDate = (value) => {
-  if (!value) return '-'
-  return new Date(value).toLocaleString()
+const openUserDetail = (user) => {
+  selectedUser.value = user
+  detailDialogVisible.value = true
 }
 
-onMounted(fetchUsageData)
+const statusTagType = (status) => {
+  const map = {
+    1: 'success',
+    2: 'warning',
+    3: 'danger',
+    4: 'info'
+  }
+  return map[status] || 'info'
+}
 
-// 窗口大小变化时重新渲染图表
-window.addEventListener('resize', () => {
+const statusLabel = (status) => {
+  const map = {
+    1: '正常',
+    2: '禁用',
+    3: '冻结',
+    4: '级联停用'
+  }
+  return map[status] || String(status ?? '-')
+}
+
+const handleResize = () => {
   chartModel?.resize()
   chartTimeline?.resize()
+}
+
+watch([detailDialogVisible, selectedUser, usageLogs], () => {
+  renderCharts()
+})
+
+onMounted(() => {
+  fetchUsageData()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  chartModel?.dispose()
+  chartTimeline?.dispose()
 })
 </script>
 
 <template>
   <div class="page-container">
-    <!-- Header -->
     <header class="page-header">
       <div class="page-title">
         <p class="eyebrow">User Consumption</p>
         <h1>用户消耗统计</h1>
-        <p>查看终端用户的 AI 调用消耗、模型分布和趋势分析</p>
+        <p>基于最近 {{ LOG_LIMIT }} 条租户 AI 调用日志，查看终端用户消耗和模型分布。</p>
       </div>
       <el-button :icon="Refresh" @click="fetchUsageData" :loading="loading">刷新</el-button>
     </header>
 
-    <!-- Content -->
     <main class="page-main">
       <section class="list-panel">
         <el-table :data="users" v-loading="loading" stripe>
@@ -186,10 +268,10 @@ window.addEventListener('resize', () => {
               {{ getUserConsumption(row.id).requestCount }}
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" min-width="80">
+          <el-table-column prop="status" label="状态" min-width="90">
             <template #default="{ row }">
-              <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
-                {{ row.status === 1 ? '正常' : '停用' }}
+              <el-tag :type="statusTagType(row.status)" size="small">
+                {{ statusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -202,21 +284,21 @@ window.addEventListener('resize', () => {
       </section>
     </main>
 
-    <!-- User Detail Dialog -->
     <el-dialog v-model="detailDialogVisible" title="用户消耗详情" width="800px" append-to-body destroy-on-close>
       <template v-if="selectedUser">
         <div class="user-info mb-4">
           <p class="font-bold">{{ selectedUser.username }}</p>
           <p class="text-sm text-slate-500">{{ selectedUser.email }}</p>
+          <p class="text-xs text-slate-400 mt-1">图表基于最近 {{ LOG_LIMIT }} 条租户调用日志聚合。</p>
         </div>
 
-        <el-tabs v-model="activeTab">
+        <el-tabs>
           <el-tab-pane label="模型分布" name="model">
             <div class="chart-container">
               <div ref="chartModelRef" class="chart" style="height: 300px"></div>
             </div>
           </el-tab-pane>
-          <el-tab-pane label="时间趋势" name="timeline">
+          <el-tab-pane label="近 7 天趋势" name="timeline">
             <div class="chart-container">
               <div ref="chartTimelineRef" class="chart" style="height: 300px"></div>
             </div>
@@ -228,15 +310,15 @@ window.addEventListener('resize', () => {
         <div class="summary-stats">
           <div class="stat-item">
             <span class="label">总消耗积分</span>
-            <span class="value">{{ formatCredits(getUserConsumption(selectedUser.id).totalCost) }}</span>
+            <span class="value">{{ formatCredits(selectedUserStats.totalCost) }}</span>
           </div>
           <div class="stat-item">
             <span class="label">总 Token 数</span>
-            <span class="value">{{ formatCredits(getUserConsumption(selectedUser.id).totalTokens) }}</span>
+            <span class="value">{{ formatCredits(selectedUserStats.totalTokens) }}</span>
           </div>
           <div class="stat-item">
             <span class="label">总请求次数</span>
-            <span class="value">{{ getUserConsumption(selectedUser.id).requestCount }}</span>
+            <span class="value">{{ selectedUserStats.requestCount }}</span>
           </div>
         </div>
       </template>
@@ -318,18 +400,19 @@ window.addEventListener('resize', () => {
 }
 
 .stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex: 1;
+  text-align: center;
 }
 
-.stat-item .label {
+.label {
+  display: block;
   font-size: 12px;
   color: #909399;
+  margin-bottom: 4px;
 }
 
-.stat-item .value {
-  font-size: 18px;
+.value {
+  font-size: 20px;
   font-weight: 700;
   color: #303133;
 }
