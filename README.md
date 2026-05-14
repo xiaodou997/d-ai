@@ -56,7 +56,7 @@ Full smoke commands are in `docs/LOCAL_SMOKE.md`.
 
 ```text
 backend/        Go service, API gateway, provider routing, billing integration
-db/             Local seed SQL and optional SQL snapshots
+db/             Local seed SQL for development data
 web/admin/      Platform admin console
 web/tenant/     Tenant console
 web/customer/   End-user console
@@ -69,6 +69,8 @@ Useful docs:
 - `docs/LOCAL_SMOKE.md`
 - `docs/ADMIN_API.md`
 - `docs/BUSINESS_BOUNDARY.md`
+- `docs/frontend-auth.md`
+- `docs/backend-usage-architecture.md`
 - `backend/seeds/README.md`
 
 ## Product Decisions

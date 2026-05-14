@@ -32,5 +32,5 @@ URM remains the identity, account, recharge, grant, transaction, platform-admin,
 - The Uni AI API admin console should expose URM operations only when they are direct AI Gateway business conveniences.
 - Tenant recharge is not a standalone menu. It is available only from tenant management operation entries. Refund, user recharge, account overview, full transaction history, grant logs, platform administrator management, JWT key management, system application management, and global audit remain in the URM console.
 - Recharge records stay as a business operation menu because platform administrators need to review all tenant recharge records in this console.
-- Dashboard statistics in this console must come from AI Gateway data, primarily `ai_usage_logs`.
+- Dashboard statistics in this console must come from AI Gateway data. Request-level audit reads use `ai_usage_logs`; dashboard and summary statistics use `ai_usage_rollups_hourly`.
 - Backend authorization remains the security boundary; frontend menu filtering is only an experience layer.

@@ -4,7 +4,6 @@ Local PostgreSQL initialization now uses versioned migrations plus a separate lo
 
 - `backend/migrations/*.sql`: schema source of truth.
 - `db/local_seed.sql`: local development data.
-- `db/init.sql`: deprecated snapshot, not the source of truth.
 
 The local seed uses `tenant-local` and runtime key `sk-ai-local-dev`. The `openai_compatible` provider points to the fake upstream at `http://127.0.0.1:18080/v1` for chat, responses, embeddings, and images. DeepSeek is included only as a real-provider sample.
 
@@ -28,7 +27,7 @@ UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
 UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
 ```
 
-If you need manual inspection in Navicat, treat `db/init.sql` as a convenience snapshot only. Do not edit it as the schema source.
+If you need manual inspection in Navicat, inspect the database after `migrate up` and `seed`. Do not maintain a second schema SQL snapshot.
 
 ## URM Bypass
 

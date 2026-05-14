@@ -1,6 +1,6 @@
 # Uni AI API Gateway Technical Design
 
-This document describes the current operating baseline. Local databases must be rebuilt from `backend/migrations/00001_init.sql`; historical migration compatibility is not maintained in this iteration.
+This document describes the current operating baseline. Local databases must be rebuilt from `backend/migrations/*.sql`; historical migration compatibility is not maintained in this iteration.
 
 ## 1. Goal
 
