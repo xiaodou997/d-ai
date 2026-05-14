@@ -1,85 +1,109 @@
 <template>
-  <div class="space-y-6">
-    <!-- 筛选面板 -->
-    <div class="bg-white p-6 rounded-xl border border-slate-50 shadow-soft">
-      <div class="flex justify-between items-center mb-6">
-        <div>
-          <h1 class="text-2xl font-black text-slate-800 tracking-tight">交易流水</h1>
-          <p class="text-slate-400 text-sm font-medium mt-1">查看本租户所有积分扣费流水记录</p>
+  <div class="page-container space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[10px] font-black text-slate-400 uppercase">总流水数</div>
+          <el-icon class="text-slate-300"><Document /></el-icon>
         </div>
+        <div class="text-3xl font-black text-slate-700">{{ stats.totalCount }}</div>
       </div>
-      <el-form :model="queryForm" class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-        <div class="space-y-1">
-          <label class="text-[10px] font-black text-slate-400 uppercase ml-1 block">用户名</label>
-          <el-input v-model="queryForm.username" placeholder="搜索用户名" clearable class="modern-input" @keyup.enter="handleSearch" />
+
+      <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[10px] font-black text-slate-400 uppercase">租户总消耗</div>
+          <el-icon class="text-slate-300"><Coin /></el-icon>
         </div>
-        <div class="space-y-1">
-          <label class="text-[10px] font-black text-slate-400 uppercase ml-1 block">APP 名称</label>
-          <el-input v-model="queryForm.appName" placeholder="搜索 APP 名称" clearable class="modern-input" @keyup.enter="handleSearch" />
+        <div class="text-3xl font-black text-red-500">{{ stats.totalTenantCost }}</div>
+      </div>
+
+      <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[10px] font-black text-slate-400 uppercase">用户总消耗</div>
+          <el-icon class="text-slate-300"><Coin /></el-icon>
         </div>
-        <div class="flex gap-2">
-          <el-button type="primary" class="!rounded-2xl font-bold px-8 h-11" @click="handleSearch">
-            <el-icon class="mr-1"><Search /></el-icon>
-            筛选
-          </el-button>
-          <el-button @click="handleReset" class="!rounded-2xl h-11 px-6">重置</el-button>
+        <div class="text-3xl font-black text-amber-500">{{ stats.totalUserCost }}</div>
+      </div>
+
+      <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[10px] font-black text-slate-400 uppercase">成功率</div>
+          <el-icon class="text-slate-300"><CircleCheck /></el-icon>
         </div>
+        <div class="text-3xl font-black text-emerald-500">{{ stats.successRate }}%</div>
+      </div>
+    </div>
+
+    <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold text-slate-800">积分流水</h2>
+        <el-button @click="loadTransactions" :loading="loading" class="!rounded-xl h-11 px-6">
+          <el-icon class="mr-1"><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
+
+      <el-tabs v-model="activeTab" @tab-click="handleTabChange" class="mb-4">
+        <el-tab-pane label="全部流水" name="all" />
+        <el-tab-pane label="租户流水" name="tenant" />
+        <el-tab-pane label="用户流水" name="user" />
+      </el-tabs>
+
+      <el-form :model="queryForm" class="flex gap-4 items-end">
+        <div class="flex-1 max-w-md">
+          <label class="text-[10px] font-black text-slate-400 uppercase ml-1 block">描述搜索</label>
+          <el-input
+            v-model="queryForm.description"
+            placeholder="模糊搜索描述内容"
+            clearable
+            @keyup.enter="handleSearch"
+            class="modern-input"
+          />
+        </div>
+        <el-button type="primary" class="!rounded-xl font-bold px-6 h-11" @click="handleSearch">搜索</el-button>
+        <el-button @click="handleReset" class="!rounded-xl h-11 px-6">重置</el-button>
       </el-form>
     </div>
 
-    <!-- 数据表格 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
-      <el-table v-loading="loading" :data="list" border stripe empty-text="暂无数据" class="w-full">
-        <el-table-column prop="transactionId" label="交易流水" min-width="180" show-overflow-tooltip />
-        <el-table-column label="用户名" min-width="110" show-overflow-tooltip>
+      <el-table v-loading="loading" :data="displayList" border stripe class="modern-table w-full">
+        <el-table-column prop="createdTime" label="时间" width="180">
           <template #default="{ row }">
-            <span v-if="row.username">{{ row.username }}</span>
-            <span v-else class="text-slate-300">—</span>
+            <span class="text-xs text-slate-500">{{ formatTime(row.createdTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="APP 名称" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span v-if="row.appName" class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{{ row.appName }}</span>
-            <span v-else class="text-slate-300">—</span>
-          </template>
-        </el-table-column>
+        <el-table-column prop="eventId" label="流水号" width="200" show-overflow-tooltip />
         <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
-        <el-table-column label="租户积分" align="right" min-width="110">
+        <el-table-column label="租户扣费" width="100" align="right">
           <template #default="{ row }">
-            <span v-if="row.tenantCredits" class="font-black text-indigo-600">{{ (row.tenantCredits || 0).toLocaleString() }}</span>
-            <span v-else class="text-slate-300">—</span>
+            <span v-if="row.tenantCredits" class="font-black text-red-500">{{ row.tenantCredits }}</span>
+            <span v-else class="text-slate-400">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="用户积分" align="right" min-width="110">
+        <el-table-column label="用户扣费" width="100" align="right">
           <template #default="{ row }">
-            <span v-if="row.userCredits" class="font-black text-emerald-600">{{ (row.userCredits || 0).toLocaleString() }}</span>
-            <span v-else class="text-slate-300">—</span>
+            <span v-if="row.userCredits || row.credits" class="font-black text-amber-500">{{ row.userCredits || row.credits }}</span>
+            <span v-else class="text-slate-400">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="username" label="用户名" width="120" />
+        <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
-            <div class="flex items-center">
-              <span class="w-1.5 h-1.5 rounded-full mr-2" :class="statusDotClass(row.status)"></span>
-              <span class="text-xs font-bold">{{ statusText(row.status) }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="交易时间" width="170">
-          <template #default="{ row }">
-            <span class="text-xs text-slate-400 font-medium">{{ formatTime(row.createdTime) }}</span>
+            <el-tag :type="getStatusType(row.status)" size="small" class="rounded-lg font-bold">
+              {{ getStatusLabel(row.status) }}
+            </el-tag>
           </template>
         </el-table-column>
       </el-table>
 
-      <div class="p-6 border-t border-slate-50 flex justify-end" v-if="total > 0">
+      <div class="p-6 border-t border-slate-50 flex justify-end">
         <el-pagination
-          v-model:current-page="page"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next"
-          background
-          @change="fetchList"
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.size"
+          :total="pagination.total"
+          layout="total, prev, pager, next"
+          @current-change="loadTransactions"
+          class="modern-pagination"
         />
       </div>
     </div>
@@ -87,53 +111,96 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { Search } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Refresh, Document, Coin, CircleCheck } from '@element-plus/icons-vue'
 import { getTransactions } from '@/api/tenant'
-import dayjs from 'dayjs'
 
-const queryForm = reactive({ username: '', appName: '' })
-const page = ref(1)
-const pageSize = ref(20)
-const total = ref(0)
 const loading = ref(false)
-const list = ref([])
+const activeTab = ref('all')
+const transactions = ref([])
+const pagination = reactive({ page: 1, size: 20, total: 0 })
+const stats = reactive({ totalCount: 0, totalTenantCost: 0, totalUserCost: 0, successRate: 0 })
+const queryForm = reactive({ description: '' })
 
-const statusText = (s) => ({ 0: '进行中', 1: '成功', 2: '取消', 3: '退款', 4: '已释放' }[s] ?? '—')
-const statusDotClass = (s) => s === 1 ? 'bg-emerald-500' : s === 0 ? 'bg-amber-400' : 'bg-rose-500'
+const displayList = computed(() => {
+  let list = transactions.value
 
-const formatTime = (ts) => {
-  if (!ts) return '—'
-  return dayjs(ts).format('YYYY-MM-DD HH:mm:ss')
+  if (activeTab.value === 'tenant') {
+    list = list.filter(r => r.tenantCredits)
+  } else if (activeTab.value === 'user') {
+    list = list.filter(r => r.userCredits || r.credits)
+  }
+
+  if (queryForm.description) {
+    const keyword = queryForm.description.toLowerCase()
+    list = list.filter(r => r.description?.toLowerCase().includes(keyword))
+  }
+
+  return list
+})
+
+const formatTime = (time) => {
+  if (!time) return '-'
+  return new Date(time).toLocaleString('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  }).replace(/\//g, '-')
 }
 
-const fetchList = async () => {
+const getStatusType = (status) => {
+  const types = { pending: 'warning', succeeded: 'success', cancelled: 'info', refunded: 'info', released: 'info', reversed: 'info' }
+  return types[status] || 'danger'
+}
+
+const getStatusLabel = (status) => {
+  const labels = { pending: '处理中', succeeded: '成功', cancelled: '已取消', refunded: '已退款', released: '已释放', reversed: '已撤销' }
+  return labels[status] || status || '未知'
+}
+
+const loadTransactions = async () => {
   loading.value = true
   try {
-    const res = await getTransactions({
-      page: page.value,
-      size: pageSize.value,
-      username: queryForm.username || undefined,
-      appName: queryForm.appName || undefined
-    })
-    list.value = res?.records || []
-    total.value = res?.total || 0
-  } catch (e) {
-    console.error('获取流水列表失败:', e)
-    list.value = []
-    total.value = 0
+    const res = await getTransactions({ page: pagination.page, size: pagination.size })
+    const records = res?.records || []
+    transactions.value = records
+    pagination.total = res?.total || 0
+
+    stats.totalCount = pagination.total
+    stats.totalTenantCost = records.reduce((s, r) => s + (r.tenantCredits || 0), 0)
+    stats.totalUserCost = records.reduce((s, r) => s + (r.userCredits || r.credits || 0), 0)
+    const successCount = records.filter(r => r.status === 'succeeded').length
+    stats.successRate = records.length > 0 ? Math.round((successCount / records.length) * 100) : 0
+  } catch (error) {
+    console.error('加载流水失败:', error)
+    ElMessage.error('加载流水失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleSearch = () => { page.value = 1; fetchList() }
-const handleReset = () => {
-  queryForm.username = ''
-  queryForm.appName = ''
-  page.value = 1
-  fetchList()
+const handleTabChange = () => {
+  pagination.page = 1
 }
 
-onMounted(fetchList)
+const handleSearch = () => {
+  pagination.page = 1
+}
+
+const handleReset = () => {
+  queryForm.description = ''
+  pagination.page = 1
+}
+
+onMounted(() => { loadTransactions() })
 </script>
+
+<style scoped>
+.modern-table :deep(.el-table__header th) {
+  background-color: #f8fafc;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+</style>

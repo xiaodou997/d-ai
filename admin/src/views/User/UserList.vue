@@ -1,6 +1,5 @@
 <template>
   <div class="page-container space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <!-- 筛选面板 -->
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-lg font-bold text-slate-800">终端用户</h2>
@@ -30,7 +29,6 @@
       </el-form>
     </div>
 
-    <!-- 数据表格 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <el-table v-loading="loading" :data="tableData" border stripe class="modern-table w-full">
         <el-table-column prop="userId" label="用户 ID" min-width="120" />
@@ -65,6 +63,17 @@
             <span class="text-xs text-slate-400">{{ formatTime(row.createdTime) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="操作" fixed="right" width="100">
+          <template #default="{ row }">
+            <el-button
+              link
+              :type="row.status === 1 ? 'warning' : 'success'"
+              @click="handleToggleStatus(row)"
+            >
+              {{ row.status === 1 ? '禁用' : '启用' }}
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="p-6 border-t border-slate-50 flex justify-end">
@@ -83,13 +92,34 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { queryUsers } from '@/api/tenant'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { queryUsers, updateEndUserStatus } from '@/api/tenant'
 
 const queryForm = reactive({ tenantId: '', userId: '', username: '', status: '' })
 const pagination = reactive({ page: 1, size: 15, total: 0 })
 const tableData = ref([])
 const loading = ref(false)
+
+const handleToggleStatus = async (row) => {
+  const targetStatus = row.status === 1 ? 2 : 1
+  const actionText = targetStatus === 1 ? '启用' : '禁用'
+
+  try {
+    await ElMessageBox.confirm(`确定要${actionText}该用户吗？`, '状态变更确认', {
+      confirmButtonText: `立即${actionText}`,
+      cancelButtonText: '取消',
+      type: 'warning',
+      roundButton: true
+    })
+
+    await updateEndUserStatus(row.userId, targetStatus === 2 ? 'disabled' : 'active')
+
+    ElMessage.success(`${actionText}成功`)
+    fetchData()
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error(`${actionText}失败`)
+  }
+}
 
 const getStatusTag = (status) => {
   const map = { 1: 'success', 2: 'info', 3: 'danger', 4: 'warning' }
@@ -111,13 +141,12 @@ const fetchData = async () => {
   loading.value = true
   try {
     const data = await queryUsers({ ...queryForm, page: pagination.page, size: pagination.size })
-    // 前端转换状态显示
-    tableData.value = data.records.map(r => ({
-      ...r,
-      statusDisplay: getStatusDisplay(r.status)
+    tableData.value = (data.records || []).map(row => ({
+      ...row,
+      statusDisplay: getStatusDisplay(row.status)
     }))
     pagination.total = data.total
-  } catch (error) {
+  } catch {
     ElMessage.error('查询用户列表失败')
   } finally {
     loading.value = false

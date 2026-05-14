@@ -1,24 +1,21 @@
 <template>
   <div class="space-y-6">
-    <!-- 顶部欢迎栏 -->
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 class="text-2xl font-black text-slate-800 tracking-tight">我的账户</h1>
           <p class="text-slate-400 text-sm font-medium mt-1">查看我的积分余额和积分包详情</p>
         </div>
-        <el-button type="primary" class="!rounded-2xl font-bold" :loading="loading" @click="fetchData">
+        <el-button type="primary" class="rounded-2xl! font-bold" :loading="loading" @click="fetchData">
           <template #icon><el-icon><Refresh /></el-icon></template>
           立即刷新
         </el-button>
       </div>
     </div>
 
-    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <!-- 总积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4">
-        <div class="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center flex-shrink-0">
+        <div class="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center shrink-0">
           <el-icon class="text-primary-500" :size="24"><Coin /></el-icon>
         </div>
         <div>
@@ -31,9 +28,8 @@
         </div>
       </div>
 
-      <!-- 冻结积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4">
-        <div class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+        <div class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
           <el-icon class="text-amber-500" :size="24"><Lock /></el-icon>
         </div>
         <div>
@@ -46,9 +42,8 @@
         </div>
       </div>
 
-      <!-- 可用积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4">
-        <div class="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0">
           <el-icon class="text-emerald-500" :size="24"><Check /></el-icon>
         </div>
         <div>
@@ -62,7 +57,6 @@
       </div>
     </div>
 
-    <!-- 积分包列表 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <div class="flex items-center justify-between p-6 border-b border-slate-50">
         <div>
@@ -115,7 +109,6 @@
             </div>
           </div>
 
-          <!-- 进度条 -->
           <div class="mt-3">
             <el-progress
               :percentage="pkg.totalCredits > 0 ? Math.round((pkg.remainingCredits / pkg.totalCredits) * 100) : 0"
@@ -133,11 +126,9 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { Refresh, Coin, Lock, Check, Loading, Box } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
-import { getMyPackages, getBalance } from '@/api/customer'
+import { getBalance } from '@/api/customer'
 import dayjs from 'dayjs'
 
-const authStore = useAuthStore()
 const loading = ref(false)
 const pkgLoading = ref(false)
 
@@ -162,7 +153,6 @@ const fetchBalance = async () => {
       stats.totalCredits = data.totalCredits ?? 0
       stats.frozenCredits = data.frozenCredits ?? 0
       stats.availableCredits = data.availableCredits ?? 0
-      // 如果有积分包详情
       if (data.packages && Array.isArray(data.packages)) {
         packages.value = data.packages.map(pkg => ({
           packageId: pkg.packageId,
@@ -182,7 +172,6 @@ const fetchBalance = async () => {
 }
 
 const fetchPackages = async () => {
-  // 积分包详情已包含在 getBalance 中，此方法保留兼容
   pkgLoading.value = false
 }
 

@@ -1,309 +1,317 @@
+<template>
+  <div class="page-container space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <el-card class="!rounded-3xl border-none shadow-soft">
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center">
+            <div class="w-8 h-8 rounded-2xl bg-primary-50 flex items-center justify-center mr-3 text-primary-500">
+              <el-icon :size="18"><Coin /></el-icon>
+            </div>
+            <span class="text-lg font-bold text-slate-800">手动充值中心</span>
+          </div>
+          <el-tooltip content="有有效期的充值将作为'资源包'存入，系统扣费时会自动优先消耗最快到期的资产。" placement="left">
+            <el-icon class="text-slate-300 cursor-help"><QuestionFilled /></el-icon>
+          </el-tooltip>
+        </div>
+      </template>
+
+      <el-form
+        ref="rechargeFormRef"
+        :model="rechargeForm"
+        :rules="rechargeRules"
+        label-position="top"
+        size="large"
+        class="modern-form"
+      >
+        <div class="mb-8">
+          <el-form-item label="1. 目标账号搜索" prop="accountId">
+            <el-select
+              v-model="rechargeForm.accountId"
+              filterable
+              remote
+              reserve-keyword
+              placeholder="搜索租户名称 / 租户 ID"
+              :remote-method="handleRemoteSearch"
+              :loading="searchLoading"
+              class="w-full modern-select"
+              @change="handleTargetSelect"
+            >
+              <el-option v-for="item in searchOptions" :key="item.id" :label="item.label" :value="item.id" />
+            </el-select>
+            <p class="text-[10px] text-slate-400 mt-1">管理员仅可对租户账户充值，用户充值由租户操作</p>
+          </el-form-item>
+        </div>
+
+        <transition name="el-fade-in">
+          <div v-if="selectedTarget" class="bg-slate-50 border border-slate-100 rounded-[24px] p-6 mb-8 flex items-center gap-6">
+            <div class="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-xl font-black text-primary-500">
+              {{ selectedTarget.name?.[0]?.toUpperCase() }}
+            </div>
+            <div class="flex-1 grid grid-cols-2 gap-4">
+              <div>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target Account</p>
+                <p class="text-sm font-bold text-slate-700">{{ selectedTarget.name }}</p>
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">当前积分余额</p>
+                <p class="text-lg font-black" :class="selectedTarget.credits >= 0 ? 'text-emerald-600' : 'text-rose-600'">
+                  {{ selectedTarget.credits.toLocaleString() }} 积分
+                </p>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <div v-if="selectedTarget" class="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in duration-500">
+          <div class="space-y-6">
+            <el-form-item label="2. 实付金额（元）" prop="paidAmountYuan">
+              <el-input-number v-model="rechargeForm.paidAmountYuan" :min="0" :precision="2" :step="100" style="width: 100%" @change="isCreditAutoCalc = true" />
+              <div class="flex gap-2 mt-2">
+                <el-tag v-for="q in [100, 500, 1000]" :key="q" @click="handleAmountQuickPick(q)" class="cursor-pointer border-none !bg-slate-100 !text-slate-500 hover:!bg-primary-500 hover:!text-white transition-all">+{{ q }}</el-tag>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">实际收款金额，输入后自动计算到账积分（1元=100积分）</p>
+            </el-form-item>
+
+            <el-form-item label="3. 到账积分" prop="creditAmount">
+              <el-input-number v-model="rechargeForm.creditAmount" :min="1" :precision="0" :step="1000" style="width: 100%" @change="isCreditAutoCalc = false" />
+              <div class="flex gap-2 mt-2">
+                <el-tag v-for="q in [10000, 50000, 100000]" :key="q" @click="handleCreditQuickPick(q)" class="cursor-pointer border-none !bg-slate-100 !text-slate-500 hover:!bg-primary-500 hover:!text-white transition-all">+{{ q.toLocaleString() }}</el-tag>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">
+                <span v-if="isCreditAutoCalc && rechargeForm.paidAmountYuan > 0" class="text-primary-500 font-medium">
+                  已自动按 1元=100积分 计算，可手动修改
+                </span>
+                <span v-else>
+                  实际到账积分数，可独立设置支持促销比例
+                </span>
+              </p>
+            </el-form-item>
+
+            <el-form-item label="4. 设定有效期 (可选)" prop="expireTime">
+              <el-date-picker
+                v-model="rechargeForm.expireTime"
+                type="datetime"
+                placeholder="永久有效"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                style="width: 100%"
+                :disabled-date="d => d.getTime() < Date.now()"
+              />
+              <div class="flex gap-2 mt-2 flex-wrap">
+                <el-tag
+                  v-for="days in [7, 30, 90, 180, 365]"
+                  :key="days"
+                  @click="setExpireDays(days)"
+                  class="cursor-pointer border-none !bg-slate-100 !text-slate-500 hover:!bg-primary-500 hover:!text-white transition-all"
+                >
+                  {{ days }}天
+                </el-tag>
+                <el-tag
+                  @click="clearExpire"
+                  class="cursor-pointer border-none !bg-slate-100 !text-slate-500 hover:!bg-slate-300 hover:!text-white transition-all"
+                >
+                  永久有效
+                </el-tag>
+              </div>
+              <p class="text-[10px] text-primary-500 mt-2 font-bold" v-if="rechargeForm.expireTime">
+                <el-icon class="mr-1"><Clock /></el-icon> 该笔积分将在到期后自动失效，扣费时优先消耗。
+              </p>
+              <p class="text-[10px] text-slate-400 mt-2 font-medium" v-else>
+                不选则充入永久积分账户。
+              </p>
+            </el-form-item>
+          </div>
+
+          <el-form-item label="5. 备注说明与凭证" prop="reason">
+            <el-input v-model="rechargeForm.reason" type="textarea" :rows="6" :placeholder="isZeroAmount ? '实付金额为0，请详细说明免费充值原因（必填）' : '请输入充值原因（可选）'" maxlength="500" show-word-limit />
+            <p v-if="isZeroAmount" class="text-[10px] text-rose-500 mt-1 font-bold">
+              <el-icon class="mr-1"><WarningFilled /></el-icon>
+              实付金额为 ¥0 时，备注说明为必填项
+            </p>
+          </el-form-item>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-slate-50">
+          <el-button @click="handleReset" class="!rounded-2xl">清空</el-button>
+          <el-button type="primary" :loading="loading" :disabled="!selectedTarget" @click="handleRecharge" class="!rounded-2xl !px-10 font-bold shadow-lg shadow-primary-100">
+            确认执行入账
+          </el-button>
+        </div>
+      </el-form>
+    </el-card>
+
+    <transition name="el-zoom-in-top">
+      <el-card v-if="rechargeHistory.length > 0" class="!rounded-3xl border-none shadow-soft overflow-hidden">
+        <template #header>
+          <span class="text-base font-bold text-slate-700">本次操作审计流水</span>
+        </template>
+        <el-table :data="rechargeHistory" border stripe>
+          <el-table-column prop="targetName" label="充值对象" width="180" />
+          <el-table-column label="实付金额" width="130" align="right">
+            <template #default="{ row }">
+              <span class="font-bold text-slate-700">¥ {{ (row.paidAmount / 100).toFixed(2) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="到账积分" width="140" align="right">
+            <template #default="{ row }">
+              <span class="font-black text-emerald-600">{{ row.creditAmount.toLocaleString() }} 积分</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.expireTime ? 'warning' : 'success'" size="small" class="font-bold rounded-2xl">
+                {{ row.expireTime ? '限时' : '永久' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reason" label="备注" show-overflow-tooltip />
+          <el-table-column prop="operationTime" label="时间" width="180" />
+        </el-table>
+      </el-card>
+    </transition>
+  </div>
+</template>
+
 <script setup>
-import { onMounted, reactive, shallowRef } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Coin, Refresh, Select } from '@element-plus/icons-vue'
-import { rechargeTenant } from '@/api/finance'
-import { getAccountInfo, queryTenants } from '@/api/tenant'
+import { Coin, Clock, QuestionFilled, WarningFilled } from '@element-plus/icons-vue'
+import { useRoute } from 'vue-router'
+import { recharge, getAccountBalance } from '@/api/account'
+import { queryTenants } from '@/api/tenant'
 
 const route = useRoute()
-const formRef = shallowRef(null)
-const loading = shallowRef(false)
-const searchLoading = shallowRef(false)
-const searchOptions = shallowRef([])
-const selectedTenant = shallowRef(null)
-const history = shallowRef([])
+const rechargeFormRef = ref(null)
+const loading = ref(false)
+const searchLoading = ref(false)
+const isCreditAutoCalc = ref(true)
 
-const form = reactive({
-  tenantId: '',
-  paidAmountYuan: null,
-  creditAmount: null,
-  expireTime: null,
-  reason: ''
+const rechargeForm = reactive({ accountType: 1, accountId: '', paidAmountYuan: null, creditAmount: null, reason: '', expireTime: null })
+const searchOptions = ref([])
+const selectedTarget = ref(null)
+const rechargeHistory = ref([])
+
+const isZeroAmount = computed(() => rechargeForm.paidAmountYuan === 0)
+
+const rechargeRules = computed(() => ({
+  accountType: [{ required: true, message: '选择账户类型', trigger: 'change' }],
+  accountId: [{ required: true, message: '请搜索并选择目标', trigger: 'change' }],
+  paidAmountYuan: [{ required: true, message: '输入实付金额', trigger: 'blur' }, { type: 'number', min: 0, message: '金额不能为负数', trigger: 'blur' }],
+  creditAmount: [{ required: true, message: '输入到账积分', trigger: 'blur' }, { type: 'number', min: 1, message: '积分必须大于0', trigger: 'blur' }],
+  reason: isZeroAmount.value
+    ? [{ required: true, message: '实付金额为0时，备注说明必填', trigger: 'blur' }, { min: 5, message: '至少5个字符', trigger: 'blur' }]
+    : []
+}))
+
+watch(() => rechargeForm.paidAmountYuan, (newVal) => {
+  if (isCreditAutoCalc.value && newVal !== null && newVal >= 0) {
+    rechargeForm.creditAmount = Math.round(newVal * 100)
+  }
 })
 
-const rules = {
-  tenantId: [{ required: true, message: '请选择租户', trigger: 'change' }],
-  paidAmountYuan: [
-    { required: true, message: '请输入实付金额', trigger: 'blur' },
-    { type: 'number', min: 0, message: '金额不能小于 0', trigger: 'blur' }
-  ],
-  creditAmount: [
-    { required: true, message: '请输入到账积分', trigger: 'blur' },
-    { type: 'number', min: 1, message: '积分必须大于 0', trigger: 'blur' }
-  ],
-  reason: [
-    { required: true, message: '请输入充值原因', trigger: 'blur' },
-    { min: 5, message: '至少 5 个字符', trigger: 'blur' }
-  ]
-}
-
-const yuan = (cents) => ((Number(cents) || 0) / 100).toFixed(2)
-const credits = (value) => (Number(value) || 0).toLocaleString('zh-CN')
-const formatTime = (value) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : ''
-
-const fetchTenantBalance = async (tenantId) => {
-  const data = await getAccountInfo({ accountType: 1, accountId: tenantId })
-  return data?.availableCredits ?? data?.totalCredits ?? data?.credits ?? 0
-}
-
-const setSelectedTenant = async (tenant) => {
-  const balance = await fetchTenantBalance(tenant.tenantId)
-  selectedTenant.value = {
-    id: tenant.tenantId,
-    name: tenant.tenantName,
-    balance
+onMounted(async () => {
+  const { tenantId, tenantName } = route.query
+  if (tenantId && tenantName) {
+    rechargeForm.accountId = tenantId
+    let credits = 0
+    try {
+      const accountData = await getAccountBalance({ accountType: 1, accountId: tenantId })
+      credits = accountData?.totalCredits ?? 0
+    } catch {}
+    searchOptions.value = [{ id: tenantId, label: tenantName, fullData: { tenantId, tenantName, credits } }]
+    selectedTarget.value = { id: tenantId, name: tenantName, credits }
   }
-}
+})
 
-const handleRemoteSearch = async (keyword) => {
-  if (!keyword || keyword.length < 2) {
-    searchOptions.value = []
-    return
-  }
+const handleRemoteSearch = async (query) => {
+  if (query.length < 2) return
   searchLoading.value = true
   try {
-    const data = await queryTenants({ keyword, page: 1, size: 10 })
-    searchOptions.value = (data.records || []).map((item) => ({
-      id: item.tenantId,
-      label: `${item.tenantName} · ${item.tenantId}`,
-      tenant: item
-    }))
+    const res = await queryTenants({ keyword: query, page: 1, size: 10 })
+    searchOptions.value = res.records.map(i => ({ id: i.tenantId, label: i.tenantName, fullData: i }))
   } finally {
     searchLoading.value = false
   }
 }
 
-const handleTenantSelect = async (tenantId) => {
-  if (!tenantId) {
-    selectedTenant.value = null
-    return
+const handleTargetSelect = (val) => {
+  const opt = searchOptions.value.find(o => o.id === val)
+  if (opt) {
+    selectedTarget.value = { id: opt.id, name: opt.label, credits: opt.fullData.credits || 0 }
   }
-  const option = searchOptions.value.find((item) => item.id === tenantId)
-  if (option) {
-    await setSelectedTenant(option.tenant)
-  }
-}
-
-const setQuickAmount = (yuanAmount, creditAmount) => {
-  form.paidAmountYuan = yuanAmount
-  form.creditAmount = creditAmount
 }
 
 const setExpireDays = (days) => {
-  const next = new Date()
-  next.setDate(next.getDate() + days)
-  form.expireTime = next.getTime()
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  rechargeForm.expireTime = date.toISOString().slice(0, 19).replace('T', ' ')
 }
 
-const resetForm = () => {
-  formRef.value?.resetFields()
-  selectedTenant.value = null
-  searchOptions.value = []
+const clearExpire = () => {
+  rechargeForm.expireTime = null
 }
 
-const submitRecharge = async () => {
-  if (!formRef.value) return
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid || !selectedTenant.value) return
+const handleAmountQuickPick = (amount) => {
+  rechargeForm.paidAmountYuan = amount
+  isCreditAutoCalc.value = true
+}
 
-  const paidAmount = Math.round((Number(form.paidAmountYuan) || 0) * 100)
-  const creditAmount = Number(form.creditAmount) || 0
-  try {
-    if (paidAmount === 0) {
-      await ElMessageBox.confirm('实付金额为 0 元，确认执行免费入账？', '金额确认', {
-        confirmButtonText: '确认免费充值',
-        cancelButtonText: '取消',
-        type: 'warning'
-      })
+const handleCreditQuickPick = (amount) => {
+  rechargeForm.creditAmount = amount
+  isCreditAutoCalc.value = false
+}
+
+const handleRecharge = async () => {
+  if (!rechargeFormRef.value) return
+  await rechargeFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    if (rechargeForm.paidAmountYuan === 0) {
+      try {
+        await ElMessageBox.confirm('实付金额为 ¥0，确认执行免费充值？', '金额为零确认', { confirmButtonText: '确认免费充值', cancelButtonText: '取消', roundButton: true, type: 'warning' })
+      } catch { return }
     }
+    try {
+      await ElMessageBox.confirm(`确认执行${rechargeForm.expireTime ? '【限时】' : '【永久】'}入账操作？`, '财务安全确认', { confirmButtonText: '确定入账', roundButton: true, type: 'warning' })
+    } catch { return }
 
-    await ElMessageBox.confirm(
-      `确认给租户「${selectedTenant.value.name}」充值 ${credits(creditAmount)} 积分？`,
-      '租户充值确认',
-      {
-        confirmButtonText: '确认入账',
-        cancelButtonText: '取消',
-        type: 'warning'
+    loading.value = true
+    try {
+      const paidAmount = Math.round(rechargeForm.paidAmountYuan * 100)
+      const requestData = {
+        packageType: rechargeForm.accountType,
+        userId: rechargeForm.accountId,
+        tenantId: rechargeForm.accountType === 1 ? rechargeForm.accountId : '',
+        paidAmount,
+        creditAmount: rechargeForm.creditAmount,
+        reason: rechargeForm.reason,
+        expireTime: rechargeForm.expireTime ? new Date(rechargeForm.expireTime).getTime() : null,
       }
-    )
-  } catch {
-    return
-  }
 
-  loading.value = true
-  try {
-    const result = await rechargeTenant({
-      customerId: selectedTenant.value.id,
-      paidAmount,
-      creditAmount,
-      reason: form.reason,
-      expireTime: form.expireTime || null
-    })
-    ElMessage.success('充值成功')
-    history.value.unshift({
-      tenantName: selectedTenant.value.name,
-      paidAmount,
-      creditAmount,
-      reason: form.reason,
-      operationTime: result.operationTime || Date.now()
-    })
-    selectedTenant.value.balance = await fetchTenantBalance(selectedTenant.value.id)
-    form.paidAmountYuan = null
-    form.creditAmount = null
-    form.expireTime = null
-    form.reason = ''
-  } finally {
-    loading.value = false
-  }
+      const result = await recharge(requestData)
+      ElMessage.success('操作成功')
+      rechargeHistory.value.unshift({
+        targetName: selectedTarget.value.name,
+        paidAmount,
+        creditAmount: rechargeForm.creditAmount,
+        expireTime: rechargeForm.expireTime,
+        reason: rechargeForm.reason,
+        operationTime: result.operationTime
+      })
+      rechargeForm.paidAmountYuan = null
+      rechargeForm.creditAmount = null
+      rechargeForm.reason = ''
+      rechargeForm.expireTime = null
+      isCreditAutoCalc.value = true
+    } catch (e) {
+      ElMessage.error(e.message || '操作失败')
+    } finally {
+      loading.value = false
+    }
+  })
 }
 
-onMounted(async () => {
-  const { tenantId, tenantName } = route.query
-  if (tenantId) {
-    const tenant = { tenantId: String(tenantId), tenantName: String(tenantName || tenantId) }
-    form.tenantId = tenant.tenantId
-    searchOptions.value = [{ id: tenant.tenantId, label: `${tenant.tenantName} · ${tenant.tenantId}`, tenant }]
-    await setSelectedTenant(tenant)
-  }
-})
+const handleReset = () => {
+  rechargeFormRef.value?.resetFields()
+  selectedTarget.value = null
+  isCreditAutoCalc.value = true
+}
 </script>
-
-<template>
-  <div class="page-container space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <section class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
-      <div class="flex items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 class="text-lg font-black text-slate-800">租户充值</h2>
-          <p class="text-sm text-slate-400 mt-1">平台管理员快捷入口，仅支持租户账户充值；退款、用户充值和全量流水仍在 URM 处理。</p>
-        </div>
-        <el-icon class="text-primary-500" :size="28"><Coin /></el-icon>
-      </div>
-
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-        <el-form-item label="目标租户" prop="tenantId">
-          <el-select
-            v-model="form.tenantId"
-            filterable
-            remote
-            reserve-keyword
-            clearable
-            :remote-method="handleRemoteSearch"
-            :loading="searchLoading"
-            placeholder="搜索租户名称 / 租户 ID"
-            class="w-full"
-            @change="handleTenantSelect"
-          >
-            <el-option v-for="item in searchOptions" :key="item.id" :label="item.label" :value="item.id" />
-          </el-select>
-        </el-form-item>
-
-        <div v-if="selectedTenant" class="tenant-card">
-          <div>
-            <span>租户</span>
-            <strong>{{ selectedTenant.name }}</strong>
-            <small>{{ selectedTenant.id }}</small>
-          </div>
-          <div class="text-right">
-            <span>当前可用积分</span>
-            <strong>{{ credits(selectedTenant.balance) }}</strong>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <el-form-item label="实付金额（元）" prop="paidAmountYuan">
-            <el-input-number v-model="form.paidAmountYuan" :min="0" :precision="2" :step="100" class="w-full" />
-          </el-form-item>
-          <el-form-item label="到账积分" prop="creditAmount">
-            <el-input-number v-model="form.creditAmount" :min="1" :precision="0" :step="1000" class="w-full" />
-          </el-form-item>
-        </div>
-
-        <div class="quick-row">
-          <el-button @click="setQuickAmount(100, 10000)">100 元 / 10,000 积分</el-button>
-          <el-button @click="setQuickAmount(500, 50000)">500 元 / 50,000 积分</el-button>
-          <el-button @click="setQuickAmount(1000, 100000)">1,000 元 / 100,000 积分</el-button>
-        </div>
-
-        <el-form-item label="有效期">
-          <el-date-picker
-            v-model="form.expireTime"
-            type="datetime"
-            value-format="x"
-            clearable
-            placeholder="不选表示永久有效"
-            class="w-full"
-          />
-        </el-form-item>
-        <div class="quick-row">
-          <el-button @click="setExpireDays(30)">30 天</el-button>
-          <el-button @click="setExpireDays(90)">90 天</el-button>
-          <el-button @click="setExpireDays(365)">365 天</el-button>
-          <el-button @click="form.expireTime = null">永久有效</el-button>
-        </div>
-
-        <el-form-item label="充值原因" prop="reason">
-          <el-input v-model="form.reason" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="请输入业务原因，便于审计追踪" />
-        </el-form-item>
-
-        <div class="flex justify-end gap-3 pt-4 border-t border-slate-50">
-          <el-button :icon="Refresh" @click="resetForm">清空</el-button>
-          <el-button type="primary" :icon="Select" :loading="loading" :disabled="!selectedTenant" @click="submitRecharge">确认入账</el-button>
-        </div>
-      </el-form>
-    </section>
-
-    <section v-if="history.length" class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
-      <h3 class="text-base font-black text-slate-800 mb-4">本次操作记录</h3>
-      <el-table :data="history" border stripe>
-        <el-table-column prop="tenantName" label="租户" min-width="160" />
-        <el-table-column label="实付金额" width="120" align="right">
-          <template #default="{ row }">¥ {{ yuan(row.paidAmount) }}</template>
-        </el-table-column>
-        <el-table-column label="到账积分" width="140" align="right">
-          <template #default="{ row }">{{ credits(row.creditAmount) }}</template>
-        </el-table-column>
-        <el-table-column prop="reason" label="原因" min-width="220" show-overflow-tooltip />
-        <el-table-column label="时间" width="180">
-          <template #default="{ row }">{{ formatTime(row.operationTime) }}</template>
-        </el-table-column>
-      </el-table>
-    </section>
-  </div>
-</template>
-
-<style scoped>
-.tenant-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  background: #f8fafc;
-  margin-bottom: 18px;
-  padding: 18px;
-}
-
-.tenant-card span,
-.tenant-card small {
-  display: block;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tenant-card strong {
-  display: block;
-  color: #0f172a;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.quick-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: -8px 0 18px;
-}
-</style>

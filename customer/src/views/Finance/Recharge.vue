@@ -1,31 +1,29 @@
 <template>
   <div class="space-y-6">
-    <!-- 页面标题 -->
     <div class="bg-white p-6 rounded-3xl border border-slate-50 shadow-soft">
       <h1 class="text-2xl font-black text-slate-800 tracking-tight">充值记录</h1>
       <p class="text-slate-400 text-sm font-medium mt-1">查看我的的历史充值明细</p>
     </div>
 
-    <!-- 充值记录表格 -->
     <div class="bg-white rounded-[32px] border border-slate-50 shadow-soft overflow-hidden">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <el-icon class="text-slate-300 animate-spin" :size="36"><Loading /></el-icon>
       </div>
 
-      <el-table
-        v-else
-        :data="list"
-        empty-text="暂无数据"
-      >
-        <el-table-column prop="id" label="记录 ID" width="110" />
+      <el-table v-else :data="list" empty-text="暂无数据">
+        <el-table-column prop="orderId" label="充值单号" width="200">
+          <template #default="{ row }">
+            <span class="font-mono text-sm text-slate-600">{{ row.orderId }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="实付金额（元）" width="150">
           <template #default="{ row }">
-            <span class="font-bold text-slate-700">¥ {{ (row.paidAmount / 100).toFixed(2) }}</span>
+            <span class="font-bold text-slate-700">¥ {{ ((row.paidAmount || 0) / 100).toFixed(2) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="到账积分" width="160">
           <template #default="{ row }">
-            <span class="font-bold text-base text-emerald-600">+{{ row.creditAmount?.toLocaleString() }}</span>
+            <span class="font-bold text-base text-emerald-600">+{{ (row.creditAmount || 0).toLocaleString() }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="110">
@@ -35,7 +33,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
         <el-table-column prop="createdTime" label="充值时间" width="180">
           <template #default="{ row }">
             {{ formatTime(row.createdTime) }}
@@ -43,7 +41,6 @@
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
       <div class="flex justify-end px-6 py-4 border-t border-slate-50" v-if="total > 0">
         <el-pagination
           v-model:current-page="page"

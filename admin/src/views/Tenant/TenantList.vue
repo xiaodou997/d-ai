@@ -1,6 +1,5 @@
 <template>
   <div class="page-container space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <!-- 筛选面板 -->
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-lg font-bold text-slate-800">租户管理</h2>
@@ -31,7 +30,6 @@
       </el-form>
     </div>
 
-    <!-- 数据表格 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <el-table v-loading="loading" :data="tableData" border stripe class="modern-table w-full">
         <el-table-column prop="tenantId" label="租户 ID" width="150" />
@@ -64,7 +62,7 @@
             <span class="text-xs text-slate-400">{{ formatTime(row.createdTime) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="230">
+        <el-table-column label="操作" fixed="right" width="240">
           <template #default="{ row }">
             <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="success" @click="handleRecharge(row)">充值</el-button>
@@ -96,7 +94,6 @@
       </div>
     </div>
 
-    <!-- 租户表单对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑租户' : '创建租户'"
@@ -123,7 +120,21 @@
           </el-select>
         </el-form-item>
 
-        <!-- 创建时才显示以下选项 -->
+        <el-divider content-position="left" class="!my-4">
+          <span class="text-xs text-slate-400">关联业务系统</span>
+        </el-divider>
+        <el-form-item prop="clientIds">
+          <el-select v-model="form.clientIds" multiple placeholder="不选则关联所有业务系统" class="w-full" clearable>
+            <el-option label="全部业务系统（ALL）" value="ALL" />
+            <el-option
+              v-for="app in availableApps"
+              :key="app.clientId"
+              :label="`${app.clientId}${app.displayName ? ` (${app.displayName})` : ''}`"
+              :value="app.clientId"
+            />
+          </el-select>
+        </el-form-item>
+
         <template v-if="!isEdit">
           <el-divider content-position="left" class="!my-4">
             <span class="text-xs text-slate-400">初始管理员账号（可选）</span>
@@ -151,18 +162,20 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { queryTenants, createTenant, updateTenant, deleteTenant, disableTenant, enableTenant } from '@/api/tenant'
+import { useRouter } from 'vue-router'
+import { queryTenants, createTenant, updateTenant, deleteTenant, updateTenantStatus } from '@/api/tenant'
+import { listClients } from '@/api/governance'
 
 const router = useRouter()
+
 const queryForm = reactive({ keyword: '', status: '' })
 const pagination = reactive({ page: 1, size: 15, total: 0 })
 const tableData = ref([])
 const loading = ref(false)
+const availableApps = ref([])
 
-// 表单相关
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)
@@ -173,7 +186,7 @@ const form = reactive({
   contactPerson: '',
   contactEmail: '',
   status: 1,
-  appKeys: [],
+  clientIds: [],
   initUsername: '',
   initEmail: ''
 })
@@ -200,7 +213,7 @@ const fetchData = async () => {
     const data = await queryTenants({ ...queryForm, page: pagination.page, size: pagination.size })
     tableData.value = data.records
     pagination.total = data.total
-  } catch (error) {
+  } catch {
     ElMessage.error('获取列表失败')
   } finally {
     loading.value = false
@@ -212,8 +225,19 @@ const handleReset = () => { Object.assign(queryForm, { keyword: '', status: '' }
 
 const handleCreate = () => {
   isEdit.value = false
-  Object.assign(form, { tenantId: '', tenantName: '', contactPerson: '', contactEmail: '', status: 1, appKeys: [], initUsername: '', initEmail: '' })
+  Object.assign(form, { tenantId: '', tenantName: '', contactPerson: '', contactEmail: '', status: 1, clientIds: [], initUsername: '', initEmail: '' })
   dialogVisible.value = true
+}
+
+const handleRecharge = (row) => {
+  router.push({ path: '/finance/recharge', query: { tenantId: row.tenantId, tenantName: row.tenantName } })
+}
+
+const loadApps = async () => {
+  try {
+    const data = await listClients()
+    availableApps.value = Array.isArray(data) ? data : []
+  } catch {}
 }
 
 const handleEdit = (row) => {
@@ -222,20 +246,10 @@ const handleEdit = (row) => {
   dialogVisible.value = true
 }
 
-const handleRecharge = (row) => {
-  router.push({
-    path: '/finance/recharge',
-    query: {
-      tenantId: row.tenantId,
-      tenantName: row.tenantName
-    }
-  })
-}
-
 const handleToggleStatus = async (row) => {
   const isDisable = row.status === 1
   const actionText = isDisable ? '停用' : '启用'
-  const tips = isDisable ? '停用后将级联停用该租户下的所有组织用户和终端用户，确定继续吗？' : `确定要启用该租户吗？启用后将恢复被级联停用的用户。`
+  const tips = isDisable ? '停用后将级联停用该租户下的所有组织用户和终端用户，确定继续吗？' : '确定要启用该租户吗？启用后将恢复被级联停用的用户。'
 
   try {
     await ElMessageBox.confirm(tips, '状态变更确认', {
@@ -245,11 +259,7 @@ const handleToggleStatus = async (row) => {
       roundButton: true
     })
 
-    if (isDisable) {
-      await disableTenant(row.tenantId)
-    } else {
-      await enableTenant(row.tenantId)
-    }
+    await updateTenantStatus(row.tenantId, isDisable ? 'disabled' : 'active')
 
     ElMessage.success(`${actionText}成功`)
     fetchData()
@@ -291,23 +301,21 @@ const handleDelete = async (id) => {
     await deleteTenant(id)
     ElMessage.success('删除成功')
     fetchData()
-  } catch (error) {
+  } catch {
     ElMessage.error('删除失败')
   }
 }
 
-onMounted(fetchData)
+onMounted(() => { fetchData(); loadApps() })
 </script>
 
-<style scoped lang="scss">
-.modern-dialog {
-  :deep(.el-dialog__header) {
-    border-bottom: 1px solid #f8fafc;
-    margin-right: 0;
-    padding: 24px;
-  }
-  :deep(.el-dialog__body) {
-    padding: 24px;
-  }
+<style scoped>
+.modern-dialog :deep(.el-dialog__header) {
+  border-bottom: 1px solid #f8fafc;
+  margin-right: 0;
+  padding: 24px;
+}
+.modern-dialog :deep(.el-dialog__body) {
+  padding: 24px;
 }
 </style>

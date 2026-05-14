@@ -1,23 +1,17 @@
 <template>
   <div class="space-y-6">
-    <!-- 页面标题 -->
     <div class="bg-white p-6 rounded-3xl border border-slate-50 shadow-soft">
       <h1 class="text-2xl font-black text-slate-800 tracking-tight">积分流水</h1>
       <p class="text-slate-400 text-sm font-medium mt-1">查看我的积分扣费与充值流水记录</p>
     </div>
 
-    <!-- 流水表格 -->
     <div class="bg-white rounded-[32px] border border-slate-50 shadow-soft overflow-hidden">
       <div v-if="loading" class="flex items-center justify-center py-16">
         <el-icon class="text-slate-300 animate-spin" :size="36"><Loading /></el-icon>
       </div>
 
-      <el-table
-        v-else
-        :data="list"
-        empty-text="暂无数据"
-      >
-        <el-table-column prop="transactionId" label="流水 ID" min-width="180" show-overflow-tooltip />
+      <el-table v-else :data="list" empty-text="暂无数据">
+        <el-table-column prop="eventId" label="流水 ID" min-width="180" show-overflow-tooltip />
         <el-table-column label="扣减积分" width="140">
           <template #default="{ row }">
             <span class="font-bold text-base text-rose-500">
@@ -38,7 +32,6 @@
         </el-table-column>
       </el-table>
 
-      <!-- 分页 -->
       <div class="flex justify-end px-6 py-4 border-t border-slate-50" v-if="total > 0">
         <el-pagination
           v-model:current-page="page"
@@ -69,11 +62,6 @@ const list = ref([])
 const formatTime = (ts) => {
   if (!ts) return '—'
   return dayjs(ts).format('YYYY-MM-DD HH:mm:ss')
-}
-
-const txTypeTag = (type) => {
-  const map = { DEDUCT: 'danger', RECHARGE: 'success', GRANT: 'warning' }
-  return map[type] || 'info'
 }
 
 const fetchList = async () => {

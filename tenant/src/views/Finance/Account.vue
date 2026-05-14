@@ -1,6 +1,5 @@
 <template>
   <div class="space-y-6">
-    <!-- 顶部欢迎栏 -->
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -14,9 +13,7 @@
       </div>
     </div>
 
-    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <!-- 总积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4">
         <div class="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-primary-500" :size="24"><Coin /></el-icon>
@@ -31,7 +28,6 @@
         </div>
       </div>
 
-      <!-- 冻结积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4">
         <div class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-amber-500" :size="24"><Lock /></el-icon>
@@ -46,7 +42,6 @@
         </div>
       </div>
 
-      <!-- 可用积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4">
         <div class="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-emerald-500" :size="24"><Check /></el-icon>
@@ -62,7 +57,6 @@
       </div>
     </div>
 
-    <!-- 积分包列表 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <div class="flex items-center justify-between p-6 border-b border-slate-50">
         <div>
@@ -70,7 +64,6 @@
           <p class="text-xs text-slate-400 mt-0.5">共 {{ packages.length }} 个积分包</p>
         </div>
       </div>
-
 
       <div v-if="pkgLoading" class="flex items-center justify-center py-16">
         <el-icon class="text-slate-300 animate-spin" :size="36"><Loading /></el-icon>
@@ -116,7 +109,6 @@
             </div>
           </div>
 
-          <!-- 进度条 -->
           <div class="mt-3">
             <el-progress
               :percentage="pkg.totalCredits > 0 ? Math.round((pkg.remainingCredits / pkg.totalCredits) * 100) : 0"
@@ -129,11 +121,10 @@
       </div>
     </div>
 
-    <!-- 充值记录 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <div class="flex items-center justify-between p-6 border-b border-slate-50">
         <div>
-          <h2 class="text-base font-bold text-slate-800">充值记录</h2>
+          <h2 class="text-base font-bold text-slate-800">我的充值记录</h2>
           <p class="text-xs text-slate-400 mt-0.5">管理员对本租户的历史充值明细</p>
         </div>
       </div>
@@ -143,7 +134,7 @@
       </div>
 
       <el-table v-else :data="rechargeList" empty-text="暂无数据">
-        <el-table-column prop="rechargeNo" label="充值单号" width="140" show-overflow-tooltip />
+        <el-table-column prop="orderId" label="充值单号" width="140" show-overflow-tooltip />
         <el-table-column label="实付金额" width="140">
           <template #default="{ row }">
             <span class="font-bold text-slate-700">¥{{ (row.paidAmount / 100).toFixed(2) }}</span>
@@ -161,7 +152,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="note" label="备注" min-width="180" show-overflow-tooltip />
         <el-table-column prop="createdTime" label="充值时间" width="180">
           <template #default="{ row }">
             {{ formatTime(row.createdTime) }}
@@ -213,13 +204,13 @@ const formatTime = (ts) => {
 }
 
 const rechargeStatusTag = (status) => {
-  const map = { SUCCESS: 'success', PENDING: 'warning', FAILED: 'danger', 1: 'success', 0: 'warning', '-1': 'danger' }
+  const map = { active: 'success', reversed: 'info' }
   return map[status] || 'info'
 }
 
 const rechargeStatusText = (status) => {
-  const map = { SUCCESS: '成功', PENDING: '处理中', FAILED: '失败', 1: '成功', 0: '处理中', '-1': '失败' }
-  return map[status] || String(status)
+  const map = { active: '有效', reversed: '已撤销' }
+  return map[status] || status || '—'
 }
 
 const fetchRechargeRecords = async () => {
@@ -246,7 +237,6 @@ const fetchData = async () => {
       stats.totalCredits = data.totalCredits ?? 0
       stats.frozenCredits = data.frozenCredits ?? 0
       stats.availableCredits = data.availableCredits ?? 0
-      // 积分包详情
       if (data.packages && Array.isArray(data.packages)) {
         packages.value = data.packages.map(pkg => ({
           packageId: pkg.packageId,

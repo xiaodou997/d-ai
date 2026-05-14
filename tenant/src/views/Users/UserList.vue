@@ -1,7 +1,6 @@
 <template>
   <div>
     <div class="space-y-6">
-      <!-- 页面标题 -->
       <div class="bg-white p-6 rounded-xl border border-slate-50 shadow-soft">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -26,7 +25,6 @@
         </div>
       </div>
 
-      <!-- 用户表格 -->
       <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
         <div v-if="loading" class="flex items-center justify-center py-16">
           <el-icon class="text-slate-300 animate-spin" :size="36"><Loading /></el-icon>
@@ -46,7 +44,6 @@
           <el-table-column prop="createdTime" label="注册时间" width="170">
             <template #default="{ row }">{{ formatTime(row.createdTime) }}</template>
           </el-table-column>
-          <!-- 操作列 -->
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <div class="flex items-center">
@@ -91,7 +88,6 @@
       </div>
     </div>
 
-    <!-- 充值弹窗 -->
     <el-dialog v-model="showRechargeDialog" title="用户积分充值" width="520px" :close-on-click-modal="false" @close="resetRechargeForm">
       <el-form ref="rechargeFormRef" :model="rechargeForm" :rules="rechargeRules" label-width="90px">
         <el-form-item label="用户">
@@ -106,16 +102,17 @@
             :precision="2"
             :step="100"
             style="width: 100%"
+            @change="isCreditAutoCalc = true"
           />
           <div class="flex gap-2 mt-2">
             <el-tag
               v-for="q in [100, 500, 1000]"
               :key="q"
-              @click="rechargeForm.paidAmountYuan = q"
+              @click="handleAmountQuickPick(q)"
               class="cursor-pointer border-none !bg-slate-100 !text-slate-500 hover:!bg-primary-500 hover:!text-white transition-all"
             >¥{{ q }}</el-tag>
           </div>
-          <p class="text-[10px] text-slate-400 mt-1">输入金额（元），提交时自动转换为分</p>
+          <p class="text-[10px] text-slate-400 mt-1">输入金额（元），自动计算到账积分（1元=100积分）</p>
         </el-form-item>
 
         <el-form-item label="到账积分" prop="creditAmount">
@@ -125,16 +122,22 @@
             :precision="0"
             :step="1000"
             style="width: 100%"
+            @change="isCreditAutoCalc = false"
           />
           <div class="flex gap-2 mt-2">
             <el-tag
               v-for="q in [10000, 50000, 100000]"
               :key="q"
-              @click="rechargeForm.creditAmount = q"
+              @click="handleCreditQuickPick(q)"
               class="cursor-pointer border-none !bg-slate-100 !text-slate-500 hover:!bg-primary-500 hover:!text-white transition-all"
             >+{{ q.toLocaleString() }}</el-tag>
           </div>
-          <p class="text-[10px] text-slate-400 mt-1">默认按 1元 = 100积分 自动换算，可手动修改</p>
+          <p class="text-[10px] text-slate-400 mt-1">
+            <span v-if="isCreditAutoCalc && rechargeForm.paidAmountYuan > 0" class="text-primary-500 font-medium">
+              已自动按 1元=100积分 计算，可手动修改
+            </span>
+            <span v-else>默认按 1元 = 100积分 自动换算，可手动修改</span>
+          </p>
         </el-form-item>
 
         <el-form-item label="有效期">
@@ -163,8 +166,9 @@
           </p>
         </el-form-item>
 
-        <el-form-item label="备注">
-          <el-input v-model="rechargeForm.reason" placeholder="充值备注（可选）" maxlength="200" show-word-limit />
+        <el-form-item label="备注" prop="reason">
+          <el-input v-model="rechargeForm.reason" :placeholder="isZeroAmount ? '实付金额为0，请详细说明免费充值原因（必填）' : '充值备注（可选）'" maxlength="200" show-word-limit />
+          <p v-if="isZeroAmount" class="text-[10px] text-rose-500 mt-1 font-bold">实付金额为 ¥0 时，备注说明为必填项</p>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -176,10 +180,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, watch } from 'vue'
+import { ref, onMounted, reactive, watch, computed } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getUsers, disableUser, enableUser, resetUserPassword, rechargeUser } from '@/api/tenant'
+import { getUsers, updateUserStatus, resetUserPassword, rechargeUser } from '@/api/tenant'
 import dayjs from 'dayjs'
 
 const keyword = ref('')
@@ -214,7 +218,6 @@ const handleSearch = () => {
   fetchUsers()
 }
 
-// --- 停用 ---
 const handleDisable = async (row) => {
   try {
     await ElMessageBox.confirm(`确定要停用用户「${row.username}」吗？停用后该用户将立即无法登录。`, '确认停用', {
@@ -223,7 +226,7 @@ const handleDisable = async (row) => {
       type: 'warning',
       confirmButtonClass: 'el-button--danger'
     })
-    await disableUser(row.userId)
+    await updateUserStatus(row.userId, 'disabled')
     ElMessage.success('用户已停用')
     fetchUsers()
   } catch (e) {
@@ -231,7 +234,6 @@ const handleDisable = async (row) => {
   }
 }
 
-// --- 启用 ---
 const handleEnable = async (row) => {
   try {
     await ElMessageBox.confirm(`确定要启用用户「${row.username}」吗？`, '确认启用', {
@@ -239,7 +241,7 @@ const handleEnable = async (row) => {
       cancelButtonText: '取消',
       type: 'info'
     })
-    await enableUser(row.userId)
+    await updateUserStatus(row.userId, 'active')
     ElMessage.success('用户已启用')
     fetchUsers()
   } catch (e) {
@@ -247,7 +249,6 @@ const handleEnable = async (row) => {
   }
 }
 
-// --- 重置密码 ---
 const handleResetPassword = async (row) => {
   try {
     await ElMessageBox.confirm(
@@ -266,24 +267,28 @@ const handleResetPassword = async (row) => {
   }
 }
 
-// --- 充值 ---
 const showRechargeDialog = ref(false)
 const rechargeLoading = ref(false)
 const rechargeTarget = ref(null)
 const rechargeFormRef = ref(null)
+const isCreditAutoCalc = ref(true)
 const rechargeForm = reactive({
   paidAmountYuan: null,
   creditAmount: null,
   expireDate: null,
   reason: ''
 })
-const rechargeRules = {
+const isZeroAmount = computed(() => rechargeForm.paidAmountYuan === 0)
+const rechargeRules = computed(() => ({
   paidAmountYuan: [{ required: true, type: 'number', min: 0, message: '请填写实付金额（元）', trigger: 'blur' }],
-  creditAmount: [{ required: true, type: 'number', min: 1, message: '到账积分至少为 1', trigger: 'blur' }]
-}
+  creditAmount: [{ required: true, type: 'number', min: 1, message: '到账积分至少为 1', trigger: 'blur' }],
+  reason: isZeroAmount.value
+    ? [{ required: true, message: '实付金额为0时，备注说明必填', trigger: 'blur' }, { min: 5, message: '至少5个字符', trigger: 'blur' }]
+    : []
+}))
 
 watch(() => rechargeForm.paidAmountYuan, (val) => {
-  if (val != null && val > 0) {
+  if (isCreditAutoCalc.value && val != null && val >= 0) {
     rechargeForm.creditAmount = Math.round(val * 100)
   }
 })
@@ -300,11 +305,22 @@ const setExpireDays = (days) => {
 }
 const clearExpire = () => { rechargeForm.expireDate = null }
 
+const handleAmountQuickPick = (amount) => {
+  rechargeForm.paidAmountYuan = amount
+  isCreditAutoCalc.value = true
+}
+
+const handleCreditQuickPick = (amount) => {
+  rechargeForm.creditAmount = amount
+  isCreditAutoCalc.value = false
+}
+
 const resetRechargeForm = () => {
   rechargeForm.paidAmountYuan = null
   rechargeForm.creditAmount = null
   rechargeForm.expireDate = null
   rechargeForm.reason = ''
+  isCreditAutoCalc.value = true
   rechargeFormRef.value?.clearValidate()
 }
 

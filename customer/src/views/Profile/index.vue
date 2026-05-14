@@ -1,12 +1,10 @@
 <template>
   <div class="space-y-6">
-    <!-- 页面标题 -->
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
       <h1 class="text-2xl font-black text-slate-800 tracking-tight">个人中心</h1>
       <p class="text-slate-400 text-sm font-medium mt-1">查看个人信息、修改密码</p>
     </div>
 
-    <!-- 个人信息 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <div class="p-6 border-b border-slate-50">
         <h2 class="text-base font-bold text-slate-800">基本信息</h2>
@@ -27,7 +25,6 @@
       </div>
     </div>
 
-    <!-- 修改密码 -->
     <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
       <div class="p-6 border-b border-slate-50">
         <h2 class="text-base font-bold text-slate-800">修改密码</h2>
@@ -65,7 +62,7 @@
             />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" :loading="loading" class="!rounded-2xl font-bold" @click="handleChangePassword">
+            <el-button type="primary" :loading="loading" class="rounded-2xl! font-bold" @click="handleChangePassword">
               确认修改
             </el-button>
           </el-form-item>
@@ -79,7 +76,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { changePasswordApi } from '@/api/customer'
+import { changePassword } from '@/api/auth'
 import dayjs from 'dayjs'
 
 const authStore = useAuthStore()
@@ -131,13 +128,11 @@ const handleChangePassword = async () => {
 
     loading.value = true
     try {
-      await changePasswordApi(passwordForm.oldPassword, passwordForm.newPassword)
+      await changePassword(passwordForm.oldPassword, passwordForm.newPassword)
       ElMessage.success('密码修改成功，请重新登录')
-      // 清空表单
       passwordForm.oldPassword = ''
       passwordForm.newPassword = ''
       passwordForm.confirmPassword = ''
-      // 退出登录
       await authStore.logout()
     } catch (e) {
       ElMessage.error(e?.message || '修改失败，请检查旧密码是否正确')

@@ -1,79 +1,60 @@
 import request from '@/utils/request'
 
-/**
- * 查询租户列表（分页）
- * @param {Object} params - 查询参数
- */
-export function queryTenants(params) {
+export function getAccountDetail(params) {
   return request({
-    url: '/urm/v1/admin/query/tenants',
+    url: '/urm/v1/account/balance',
+    method: 'get',
+    params: { ...params, detail: true }
+  })
+}
+
+export function queryTransactions(params) {
+  return request({
+    url: '/urm/v1/account/transactions',
     method: 'get',
     params
   })
 }
 
-/**
- * 创建租户
- * @param {Object} data - 租户信息
- */
+export function queryTenants(params) {
+  return request({
+    url: '/urm/v1/tenants',
+    method: 'get',
+    params
+  })
+}
+
 export function createTenant(data) {
   return request({
-    url: '/urm/v1/admin/query/tenants',
+    url: '/urm/v1/tenants',
     method: 'post',
     data
   })
 }
 
-/**
- * 更新租户
- * @param {string} id - 租户ID
- * @param {Object} data - 更新内容
- */
 export function updateTenant(id, data) {
   return request({
-    url: `/urm/v1/admin/query/tenants/${id}`,
+    url: `/urm/v1/tenants/${id}`,
     method: 'put',
     data
   })
 }
 
-/**
- * 删除租户
- * @param {string} id - 租户ID
- */
 export function deleteTenant(id) {
   return request({
-    url: `/urm/v1/admin/query/tenants/${id}`,
+    url: `/urm/v1/tenants/${id}`,
     method: 'delete'
   })
 }
 
-/**
- * 停用租户（级联停用组织用户、终端用户、冻结账户）
- * @param {string} id - 租户ID
- */
-export function disableTenant(id) {
+export function updateTenantStatus(id, status) {
   return request({
-    url: `/urm/v1/admin/query/tenants/${id}/disable`,
-    method: 'post'
+    url: `/urm/v1/tenants/${id}/status`,
+    method: 'patch',
+    data: { status }
   })
 }
 
-/**
- * 启用租户（级联恢复组织用户、终端用户、解冻账户）
- * @param {string} id - 租户ID
- */
-export function enableTenant(id) {
-  return request({
-    url: `/urm/v1/admin/query/tenants/${id}/enable`,
-    method: 'post'
-  })
-}
-
-/**
- * 查询用户列表（分页）
- * @param {Object} params - 查询参数
- */
 export function queryUsers(params) {
   return request({
     url: '/urm/v1/users',
@@ -82,10 +63,6 @@ export function queryUsers(params) {
   })
 }
 
-/**
- * 查询账户信息
- * @param {Object} params - { accountType, accountId }
- */
 export function getAccountInfo(params) {
   return request({
     url: '/urm/v1/account/balance',
@@ -94,59 +71,64 @@ export function getAccountInfo(params) {
   })
 }
 
-/**
- * 查询租户组织用户列表
- * @param {Object} params - { tenantId, page, size }
- */
-export function listTenantUsers(params) {
+export function getRechargeRecords(params) {
   return request({
-    url: '/urm/v1/admin/query/tenant-users',
+    url: '/urm/v1/account/recharge-records',
     method: 'get',
     params
   })
 }
 
-/**
- * 创建租户组织用户
- * @param {Object} data - { tenantId, username, email }
- */
+export function getGrantLogs(params) {
+  return request({
+    url: '/urm/v1/account/resource-grants',
+    method: 'get',
+    params
+  })
+}
+
+export function listTenantUsers(params) {
+  return request({
+    url: '/urm/v1/tenant-users',
+    method: 'get',
+    params
+  })
+}
+
 export function createTenantUser(data) {
   return request({
-    url: '/urm/v1/admin/query/tenant-users',
+    url: '/urm/v1/tenant-users',
     method: 'post',
     data
   })
 }
 
-/**
- * 停用租户组织用户
- * @param {string} id - 用户ID
- */
-export function disableTenantUser(id) {
+export function updateTenantUserStatus(id, status) {
   return request({
-    url: `/urm/v1/admin/query/tenant-users/${id}/disable`,
-    method: 'post'
+    url: `/urm/v1/tenant-users/${id}/status`,
+    method: 'patch',
+    data: { status }
   })
 }
 
-/**
- * 启用租户组织用户
- * @param {string} id - 用户ID
- */
-export function enableTenantUser(id) {
+export function updateEndUserStatus(id, status) {
   return request({
-    url: `/urm/v1/admin/query/tenant-users/${id}/enable`,
-    method: 'post'
+    url: `/urm/v1/users/${id}/status`,
+    method: 'patch',
+    data: { status }
   })
 }
 
-/**
- * 重置租户组织用户密码为 123456
- * @param {string} id - 用户ID
- */
 export function resetTenantUserPassword(id) {
   return request({
-    url: `/urm/v1/admin/query/tenant-users/${id}/reset-password`,
+    url: `/urm/v1/tenant-users/${id}/reset-password`,
     method: 'post'
+  })
+}
+
+export function listTenantApps(tenantId) {
+  return request({
+    url: `/urm/v1/tenants/${tenantId}/client-services`,
+    method: 'get'
   })
 }
