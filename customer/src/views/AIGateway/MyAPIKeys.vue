@@ -40,7 +40,7 @@ const fetchAPIKeys = async () => {
   loading.value = true
   try {
     const res = await listUserAPIKeys()
-    apiKeys.value = res.data || []
+    apiKeys.value = res || []
   } finally {
     loading.value = false
   }
@@ -49,7 +49,7 @@ const fetchAPIKeys = async () => {
 const fetchModels = async () => {
   try {
     const res = await listUserModelGrants()
-    models.value = res.data || []
+    models.value = res || []
   } catch {}
 }
 
@@ -102,8 +102,8 @@ const submitForm = async () => {
         allowed_models: keyForm.allowed_models,
         status: keyForm.status
       })
-      if (res.data && res.data.key && res.data.key.key) {
-        generatedKey.value = res.data.key.key
+      if (res?.key) {
+        generatedKey.value = res.key
         showKeyDialog.value = true
         dialogVisible.value = false
       }

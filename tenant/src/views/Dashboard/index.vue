@@ -442,13 +442,13 @@ const fetchAIStats = async () => {
   aiLoading.value = true
   try {
     const [modelsRes, keysRes, summaryRes] = await Promise.all([
-      listTenantModelGrants().catch(() => ({ data: [] })),
-      listTenantAPIKeys().catch(() => ({ data: [] })),
-      getDashboardSummary().catch(() => ({ data: {} }))
+      listTenantModelGrants().catch(() => []),
+      listTenantAPIKeys().catch(() => []),
+      getDashboardSummary().catch(() => ({}))
     ])
-    aiStats.modelCount = (modelsRes.data || []).length
-    aiStats.apiKeyCount = (keysRes.data || []).length
-    aiStats.monthCost = summaryRes.data?.total_cost || 0
+    aiStats.modelCount = modelsRes.length
+    aiStats.apiKeyCount = keysRes.length
+    aiStats.monthCost = summaryRes.total_user_cost || 0
   } catch (e) {
     console.error('获取AI统计失败:', e)
   } finally {

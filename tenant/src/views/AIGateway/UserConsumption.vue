@@ -22,11 +22,11 @@ const fetchUsageData = async () => {
   try {
     // 获取用户列表（URM）
     const usersRes = await getUsers({ page: 1, size: 100 })
-    users.value = usersRes.data?.records || []
+    users.value = usersRes.records || []
     
     // 获取 AI 使用汇总（按用户维度）
     const usageRes = await listUsageSummary()
-    usageData.value = usageRes.data || []
+    usageData.value = usageRes || []
   } finally {
     loading.value = false
   }

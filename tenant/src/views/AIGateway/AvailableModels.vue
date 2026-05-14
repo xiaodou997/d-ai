@@ -14,7 +14,7 @@ const fetchModels = async () => {
   loading.value = true
   try {
     const res = await listTenantModelGrants()
-    models.value = res.data || []
+    models.value = res || []
   } finally {
     loading.value = false
   }
@@ -26,7 +26,7 @@ const selectModel = async (model) => {
   publicPrice.value = null
   try {
     const res = await getModelPrice(model.model_id)
-    publicPrice.value = res.data
+    publicPrice.value = res
   } catch {
     publicPrice.value = null
   } finally {

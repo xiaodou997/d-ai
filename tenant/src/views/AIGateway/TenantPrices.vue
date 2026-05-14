@@ -41,8 +41,8 @@ const fetchModels = async () => {
       listTenantModelGrants(),
       listTenantUserPrices()
     ])
-    models.value = grantsRes.data || []
-    userPrices.value = pricesRes.data || []
+    models.value = grantsRes || []
+    userPrices.value = pricesRes || []
   } finally {
     loading.value = false
   }
@@ -58,28 +58,28 @@ const selectModel = async (model) => {
   try {
     // 并行获取平台公价和租户售价
     const [pubRes, tenantRes] = await Promise.all([
-      getModelPrice(model.model_id).catch(() => ({ data: null })),
-      getTenantUserPrice(model.model_id).catch(() => ({ data: null }))
+      getModelPrice(model.model_id).catch(() => null),
+      getTenantUserPrice(model.model_id).catch(() => null)
     ])
-    publicPrice.value = pubRes.data
-    tenantPrice.value = tenantRes.data
+    publicPrice.value = pubRes
+    tenantPrice.value = tenantRes
 
-    if (tenantRes.data) {
+    if (tenantRes) {
       // 已有租户售价，填充表单
-      priceForm.input_price_per_1m = tenantRes.data.input_price_per_1m || 0
-      priceForm.output_price_per_1m = tenantRes.data.output_price_per_1m || 0
-      priceForm.video_price_per_second = tenantRes.data.video_price_per_second || 0
-      priceForm.audio_tts_price_per_1m_chars = tenantRes.data.audio_tts_price_per_1m_chars || 0
-      priceForm.audio_stt_price_per_minute = tenantRes.data.audio_stt_price_per_minute || 0
-      priceForm.image_size_prices = parseSizePrices(tenantRes.data.image_size_prices)
-    } else if (pubRes.data) {
+      priceForm.input_price_per_1m = tenantRes.input_price_per_1m || 0
+      priceForm.output_price_per_1m = tenantRes.output_price_per_1m || 0
+      priceForm.video_price_per_second = tenantRes.video_price_per_second || 0
+      priceForm.audio_tts_price_per_1m_chars = tenantRes.audio_tts_price_per_1m_chars || 0
+      priceForm.audio_stt_price_per_minute = tenantRes.audio_stt_price_per_minute || 0
+      priceForm.image_size_prices = parseSizePrices(tenantRes.image_size_prices)
+    } else if (pubRes) {
       // 无租户售价，使用平台公价作为默认值
-      priceForm.input_price_per_1m = pubRes.data.input_price_per_1m || 0
-      priceForm.output_price_per_1m = pubRes.data.output_price_per_1m || 0
-      priceForm.video_price_per_second = pubRes.data.video_price_per_second || 0
-      priceForm.audio_tts_price_per_1m_chars = pubRes.data.audio_tts_price_per_1m_chars || 0
-      priceForm.audio_stt_price_per_minute = pubRes.data.audio_stt_price_per_minute || 0
-      priceForm.image_size_prices = parseSizePrices(pubRes.data.image_size_prices)
+      priceForm.input_price_per_1m = pubRes.input_price_per_1m || 0
+      priceForm.output_price_per_1m = pubRes.output_price_per_1m || 0
+      priceForm.video_price_per_second = pubRes.video_price_per_second || 0
+      priceForm.audio_tts_price_per_1m_chars = pubRes.audio_tts_price_per_1m_chars || 0
+      priceForm.audio_stt_price_per_minute = pubRes.audio_stt_price_per_minute || 0
+      priceForm.image_size_prices = parseSizePrices(pubRes.image_size_prices)
     }
   } finally {
     priceLoading.value = false
@@ -140,8 +140,8 @@ const savePrice = async () => {
     ElMessage.success('售价已保存')
     await fetchModels()
     // 重新加载当前模型的售价
-    const tenantRes = await getTenantUserPrice(selectedModel.value.model_id).catch(() => ({ data: null }))
-    tenantPrice.value = tenantRes.data
+    const tenantRes = await getTenantUserPrice(selectedModel.value.model_id).catch(() => null)
+    tenantPrice.value = tenantRes
   } finally {
     saving.value = false
   }

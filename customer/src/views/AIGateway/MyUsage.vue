@@ -20,8 +20,8 @@ const fetchUsageData = async () => {
       listMyUsageLogs(),
       getMyUsageSummary()
     ])
-    usageLogs.value = logsRes.data || []
-    summary.value = summaryRes.data || null
+    usageLogs.value = logsRes || []
+    summary.value = summaryRes || null
     initCharts()
   } finally {
     loading.value = false
