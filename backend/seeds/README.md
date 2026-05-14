@@ -1,9 +1,10 @@
 # Local Database Setup
 
-Manual PostgreSQL initialization is split into two Navicat-friendly files:
+Local PostgreSQL initialization now uses versioned migrations plus a separate local seed:
 
-- `db/init.sql`: schema only.
+- `backend/migrations/*.sql`: schema source of truth.
 - `db/local_seed.sql`: local development data.
+- `db/init.sql`: deprecated snapshot, not the source of truth.
 
 The local seed uses `tenant-local` and runtime key `sk-ai-local-dev`. The `openai_compatible` provider points to the fake upstream at `http://127.0.0.1:18080/v1` for chat, responses, embeddings, and images. DeepSeek is included only as a real-provider sample.
 
@@ -19,18 +20,15 @@ Edit the PostgreSQL DSN if needed. `backend/config.local.yaml` is ignored by git
 
 ## Schema And Seed
 
-With Navicat, run:
-
-1. `db/init.sql`
-2. `db/local_seed.sql`
-
-With the Go commands:
+Use the Go commands:
 
 ```bash
 cd backend
 UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
 UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
 ```
+
+If you need manual inspection in Navicat, treat `db/init.sql` as a convenience snapshot only. Do not edit it as the schema source.
 
 ## URM Bypass
 

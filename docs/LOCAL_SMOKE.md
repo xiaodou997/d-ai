@@ -8,7 +8,13 @@ This smoke path uses PostgreSQL, Redis, URM on `http://127.0.0.1:6900`, the fake
 cp backend/config.local.example.yaml backend/config.local.yaml
 ```
 
-Run `db/init.sql`, then `db/local_seed.sql` in Navicat.
+Initialize schema and local data:
+
+```bash
+cd backend
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
+```
 
 Start the fake upstream:
 

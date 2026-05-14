@@ -22,7 +22,15 @@ Use the fake upstream first; real provider keys are not needed for the default l
 cp backend/config.local.example.yaml backend/config.local.yaml
 ```
 
-Run `db/init.sql` and `db/local_seed.sql` in Navicat, then start:
+Initialize schema and local data first:
+
+```bash
+cd backend
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
+```
+
+Then start:
 
 ```bash
 cd backend
@@ -48,7 +56,7 @@ Full smoke commands are in `docs/LOCAL_SMOKE.md`.
 
 ```text
 backend/        Go service, API gateway, provider routing, billing integration
-db/             Navicat-friendly schema and local seed SQL
+db/             Local seed SQL and optional SQL snapshots
 web/admin/      Platform admin console
 web/tenant/     Tenant console
 web/customer/   End-user console

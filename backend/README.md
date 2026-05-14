@@ -29,13 +29,14 @@ Implemented backend responsibilities:
 From `backend/`:
 
 ```bash
-go run ./cmd/fake-upstream
-UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/server
 UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
 UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
+go run ./cmd/fake-upstream
+UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/server
 ```
 
 The seed command reads `../db/local_seed.sql` by default.
+`migrate down` rolls back only the latest applied migration.
 
 Local setup details live in `backend/seeds/README.md`.
 Smoke verification lives in `docs/LOCAL_SMOKE.md`.
