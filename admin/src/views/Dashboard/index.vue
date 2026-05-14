@@ -25,39 +25,25 @@ const topTenants = shallowRef([])
 const recentErrors = shallowRef([])
 
 const summary = reactive({
-  request_count: 0,
-  success_count: 0,
-  active_tenant_count: 0,
-  active_api_key_count: 0,
+  total_requests: 0,
+  successful_requests: 0,
+  failed_requests: 0,
   total_tokens: 0,
-  image_count: 0,
-  provider_cost: 0,
-  platform_cost: 0,
-  user_cost: 0,
-  api_key_quota_cost: 0,
-  avg_latency_ms: 0,
-  error_count: 0
+  total_prompt_tokens: 0,
+  total_completion_tokens: 0,
+  total_provider_cost: 0,
+  total_platform_cost: 0,
+  total_user_cost: 0,
+  avg_latency_ms: 0
 })
 
 const periodLabel = computed(() => DAY_OPTIONS.find((item) => item.value === selectedDays.value)?.label || '近24小时')
 
 const successRate = computed(() => {
-  const requests = Number(summary.request_count) || 0
+  const requests = Number(summary.total_requests) || 0
   if (requests === 0) return '0%'
-  return `${((Number(summary.success_count) || 0) * 100 / requests).toFixed(1)}%`
+  return `${((Number(summary.successful_requests) || 0) * 100 / requests).toFixed(1)}%`
 })
-
-const capabilityLabel = (capability) => {
-  const map = {
-    chat: '文本',
-    embedding: 'Embedding',
-    image: '图片',
-    video: '视频',
-    audio: '音频',
-    rerank: '重排'
-  }
-  return map[capability] || capability || '-'
-}
 
 const statusType = (status) => {
   const map = { success: 'success', failed: 'danger', rejected: 'warning', partial: 'warning' }
@@ -118,18 +104,18 @@ onMounted(fetchAll)
     <section v-loading="loading" class="metric-grid">
       <div class="metric">
         <span>请求数</span>
-        <strong>{{ formatCredits(summary.request_count) }}</strong>
+        <strong>{{ formatCredits(summary.total_requests) }}</strong>
         <p>{{ periodLabel }}总调用</p>
       </div>
       <div class="metric">
         <span>成功率</span>
         <strong>{{ successRate }}</strong>
-        <p>{{ formatCredits(summary.success_count) }} 次成功</p>
+        <p>{{ formatCredits(summary.successful_requests) }} 次成功</p>
       </div>
       <div class="metric">
-        <span>积分消耗</span>
-        <strong>{{ formatCredits(summary.api_key_quota_cost) }}</strong>
-        <p>按 Key 额度口径统计</p>
+        <span>用户计费</span>
+        <strong>{{ formatCredits(summary.total_user_cost) }}</strong>
+        <p>按业务扣费口径统计</p>
       </div>
       <div class="metric">
         <span>Token</span>
@@ -137,23 +123,23 @@ onMounted(fetchAll)
         <p>Chat / Responses / Embedding</p>
       </div>
       <div class="metric">
-        <span>图片</span>
-        <strong>{{ formatCredits(summary.image_count) }}</strong>
-        <p>按 image_count 统计</p>
+        <span>Prompt Token</span>
+        <strong>{{ formatCredits(summary.total_prompt_tokens) }}</strong>
+        <p>输入侧 token 总量</p>
       </div>
       <div class="metric">
-        <span>活跃租户</span>
-        <strong>{{ formatCredits(summary.active_tenant_count) }}</strong>
-        <p>有调用记录的租户</p>
+        <span>Completion Token</span>
+        <strong>{{ formatCredits(summary.total_completion_tokens) }}</strong>
+        <p>输出侧 token 总量</p>
       </div>
       <div class="metric">
-        <span>活跃 Key</span>
-        <strong>{{ formatCredits(summary.active_api_key_count) }}</strong>
-        <p>产生调用的 API Key</p>
+        <span>平台成本</span>
+        <strong>{{ formatCredits(summary.total_platform_cost) }}</strong>
+        <p>平台承担成本</p>
       </div>
       <div class="metric">
         <span>异常数</span>
-        <strong>{{ formatCredits(summary.error_count) }}</strong>
+        <strong>{{ formatCredits(summary.failed_requests) }}</strong>
         <p>平均 {{ formatCredits(summary.avg_latency_ms) }} ms</p>
       </div>
     </section>
@@ -168,14 +154,11 @@ onMounted(fetchAll)
         </div>
         <el-table v-loading="loading" :data="topModels" border stripe class="w-full">
           <el-table-column prop="model_code" label="模型" min-width="150" show-overflow-tooltip />
-          <el-table-column label="能力" width="100">
-            <template #default="{ row }">{{ capabilityLabel(row.capability_type) }}</template>
-          </el-table-column>
           <el-table-column label="请求数" width="100" align="right">
             <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
           </el-table-column>
-          <el-table-column label="积分" width="110" align="right">
-            <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
+          <el-table-column label="业务计费" width="110" align="right">
+            <template #default="{ row }">{{ formatCredits(row.total_cost) }}</template>
           </el-table-column>
           <el-table-column label="Token" width="110" align="right">
             <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
@@ -195,14 +178,11 @@ onMounted(fetchAll)
           <el-table-column label="请求数" width="100" align="right">
             <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
           </el-table-column>
-          <el-table-column label="活跃 Key" width="100" align="right">
-            <template #default="{ row }">{{ formatCredits(row.active_api_key_count) }}</template>
+          <el-table-column label="Token" width="110" align="right">
+            <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
           </el-table-column>
-          <el-table-column label="积分" width="110" align="right">
-            <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
-          </el-table-column>
-          <el-table-column label="图片" width="90" align="right">
-            <template #default="{ row }">{{ formatCredits(row.image_count) }}</template>
+          <el-table-column label="业务计费" width="120" align="right">
+            <template #default="{ row }">{{ formatCredits(row.total_cost) }}</template>
           </el-table-column>
         </el-table>
       </div>
@@ -219,15 +199,14 @@ onMounted(fetchAll)
         <el-table-column prop="created_at" label="时间" width="170">
           <template #default="{ row }">{{ formatTimestamp(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="tenant_id" label="租户" min-width="130" show-overflow-tooltip />
         <el-table-column prop="model_code" label="模型" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="provider_code" label="厂商" width="120" show-overflow-tooltip />
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag :type="statusType(row.request_status)" size="small">{{ row.request_status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="http_status" label="HTTP" width="90" align="right" />
+        <el-table-column prop="request_id" label="请求 ID" min-width="180" show-overflow-tooltip />
         <el-table-column prop="error_code" label="错误码" min-width="150" show-overflow-tooltip />
         <el-table-column prop="error_message" label="错误信息" min-width="260" show-overflow-tooltip />
       </el-table>

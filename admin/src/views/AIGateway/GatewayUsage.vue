@@ -74,15 +74,19 @@ const usageParams = computed(() => ({
 
 const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
   acc.requestCount += Number(row.request_count) || 0
-  acc.billableUnits += Number(row.billable_units) || 0
-  acc.providerCost += Number(row.provider_cost) || 0
-  acc.platformCost += Number(row.platform_cost) || 0
-  acc.userCost += Number(row.user_cost) || 0
-  acc.quotaCost += Number(row.api_key_quota_cost) || 0
+  acc.promptTokens += Number(row.total_prompt_tokens) || 0
+  acc.completionTokens += Number(row.total_completion_tokens) || 0
+  acc.totalTokens += Number(row.total_tokens) || 0
+  acc.providerCost += Number(row.total_provider_cost) || 0
+  acc.platformCost += Number(row.total_platform_cost) || 0
+  acc.userCost += Number(row.total_user_cost) || 0
+  acc.quotaCost += Number(row.total_quota_cost) || 0
   return acc
 }, {
   requestCount: 0,
-  billableUnits: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
   providerCost: 0,
   platformCost: 0,
   userCost: 0,
@@ -90,15 +94,9 @@ const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
 }))
 
 const unitCostShare = (row) => {
-  const total = summaryTotals.value.quotaCost
+  const total = summaryTotals.value.userCost
   if (!total) return '0%'
-  return `${((Number(row.api_key_quota_cost) || 0) * 100 / total).toFixed(1)}%`
-}
-
-const successRate = (row) => {
-  const requestCount = Number(row.request_count) || 0
-  if (!requestCount) return '0%'
-  return `${((Number(row.success_count) || 0) * 100 / requestCount).toFixed(1)}%`
+  return `${((Number(row.total_user_cost) || 0) * 100 / total).toFixed(1)}%`
 }
 
 const fetchUsage = async () => {
@@ -149,20 +147,24 @@ onMounted(fetchUsage)
         <strong>{{ formatCredits(summaryTotals.requestCount) }}</strong>
       </div>
       <div class="metric-item">
-        <span>计费量</span>
-        <strong>{{ formatCredits(summaryTotals.billableUnits) }}</strong>
+        <span>Prompt Token</span>
+        <strong>{{ formatCredits(summaryTotals.promptTokens) }}</strong>
       </div>
       <div class="metric-item">
-        <span>平台成本</span>
-        <strong>{{ formatCredits(summaryTotals.platformCost) }}</strong>
+        <span>Completion Token</span>
+        <strong>{{ formatCredits(summaryTotals.completionTokens) }}</strong>
       </div>
       <div class="metric-item">
-        <span>用户计费</span>
-        <strong>{{ formatCredits(summaryTotals.userCost) }}</strong>
+        <span>Total Token</span>
+        <strong>{{ formatCredits(summaryTotals.totalTokens) }}</strong>
       </div>
       <div class="metric-item">
         <span>供应商成本</span>
         <strong>{{ formatCredits(summaryTotals.providerCost) }}</strong>
+      </div>
+      <div class="metric-item">
+        <span>平台成本</span>
+        <strong>{{ formatCredits(summaryTotals.platformCost) }}</strong>
       </div>
       <div class="metric-item">
         <span>Key 额度消耗</span>
@@ -182,70 +184,48 @@ onMounted(fetchUsage)
       <el-table-column label="请求数" width="100" align="right">
         <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
       </el-table-column>
-      <el-table-column label="成功率" width="100" align="right">
-        <template #default="{ row }">{{ successRate(row) }}</template>
-      </el-table-column>
-      <el-table-column label="活跃租户" width="100" align="right">
-        <template #default="{ row }">{{ formatCredits(row.active_tenant_count) }}</template>
-      </el-table-column>
-      <el-table-column label="活跃用户" width="100" align="right">
-        <template #default="{ row }">{{ formatCredits(row.active_user_count) }}</template>
-      </el-table-column>
-      <el-table-column label="Token" width="110" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
-      </el-table-column>
       <el-table-column label="计费量" width="120" align="right">
-        <template #default="{ row }">{{ formatCredits(row.billable_units) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_billable_units) }}</template>
       </el-table-column>
-      <el-table-column label="Key 额度消耗" width="130" align="right">
-        <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
+      <el-table-column label="用户计费" width="120" align="right">
+        <template #default="{ row }">{{ formatCredits(row.total_user_cost) }}</template>
       </el-table-column>
-      <el-table-column label="成本占比" width="100" align="right">
+      <el-table-column label="用户计费占比" width="120" align="right">
         <template #default="{ row }">{{ unitCostShare(row) }}</template>
       </el-table-column>
       <el-table-column label="平台成本" width="110" align="right">
-        <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_platform_cost) }}</template>
       </el-table-column>
       <el-table-column label="供应商成本" width="120" align="right">
-        <template #default="{ row }">{{ formatCredits(row.provider_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_provider_cost) }}</template>
       </el-table-column>
     </el-table>
 
     <el-table v-loading="summaryLoading" :data="summaryRows" border stripe class="w-full summary-table">
-      <el-table-column label="能力" min-width="100">
-        <template #default="{ row }">{{ capabilityLabel(row.capability_type) }}</template>
-      </el-table-column>
-      <el-table-column label="计费单位" min-width="120">
-        <template #default="{ row }">{{ unitLabel(row.billable_unit_type) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="110">
-        <template #default="{ row }">
-          <el-tag :type="statusTagType(row.request_status)" size="small">{{ row.request_status }}</el-tag>
-        </template>
-      </el-table-column>
+      <el-table-column prop="model_code" label="模型" min-width="150" show-overflow-tooltip />
       <el-table-column label="请求数" width="100" align="right">
         <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
       </el-table-column>
       <el-table-column label="Prompt" width="110" align="right">
-        <template #default="{ row }">{{ formatCredits(row.prompt_tokens) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_prompt_tokens) }}</template>
       </el-table-column>
       <el-table-column label="Completion" width="120" align="right">
-        <template #default="{ row }">{{ formatCredits(row.completion_tokens) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_completion_tokens) }}</template>
       </el-table-column>
-      <el-table-column label="计费量" width="120" align="right">
-        <template #default="{ row }">{{ formatCredits(row.billable_units) }}</template>
+      <el-table-column label="Token" width="110" align="right">
+        <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
+      </el-table-column>
+      <el-table-column label="Key 额度消耗" width="130" align="right">
+        <template #default="{ row }">{{ formatCredits(row.total_quota_cost) }}</template>
       </el-table-column>
       <el-table-column label="平台成本(积分)" width="140" align="right">
-        <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_platform_cost) }}</template>
       </el-table-column>
       <el-table-column label="用户计费(积分)" width="140" align="right">
-        <template #default="{ row }">{{ formatCredits(row.user_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_user_cost) }}</template>
       </el-table-column>
       <el-table-column label="供应商成本(积分)" width="150" align="right">
-        <template #default="{ row }">{{ formatCredits(row.provider_cost) }}</template>
-      </el-table-column>
-      <el-table-column label="平均耗时(ms)" width="130" align="right">
-        <template #default="{ row }">{{ formatCredits(row.avg_latency_ms) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_provider_cost) }}</template>
       </el-table-column>
     </el-table>
 
@@ -258,7 +238,6 @@ onMounted(fetchUsage)
       <el-table-column prop="model_code" label="模型" min-width="150" />
       <el-table-column prop="provider_code" label="厂商" width="120" />
       <el-table-column prop="upstream_model" label="上游模型" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="capability_type" label="能力" width="90" />
       <el-table-column prop="total_tokens" label="Tokens" width="100" align="right" />
       <el-table-column label="计费量" width="130" align="right">
         <template #default="{ row }">
@@ -271,6 +250,9 @@ onMounted(fetchUsage)
             {{ row.usage_estimated ? '估算' : row.usage_source }}
           </el-tag>
         </template>
+      </el-table-column>
+      <el-table-column label="Key 额度消耗" width="130" align="right">
+        <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
       </el-table-column>
       <el-table-column label="平台成本(积分)" width="130" align="right">
         <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
