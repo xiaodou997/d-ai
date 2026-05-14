@@ -1538,35 +1538,37 @@ RETURNING
 -- name: ListUsageSummary :many
 SELECT
   model_code,
-  COUNT(*) AS request_count,
-  SUM(prompt_tokens) AS total_prompt_tokens,
-  SUM(completion_tokens) AS total_completion_tokens,
-  SUM(total_tokens) AS total_tokens,
-  SUM(provider_cost) AS total_provider_cost,
-  SUM(platform_cost) AS total_platform_cost,
-  SUM(user_cost) AS total_user_cost,
-  SUM(api_key_quota_cost) AS total_quota_cost
-FROM ai_usage_logs
+  COALESCE(SUM(request_count), 0)::bigint AS request_count,
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(provider_cost), 0)::bigint AS total_provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS total_platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS total_user_cost,
+  COALESCE(SUM(api_key_quota_cost), 0)::bigint AS total_quota_cost
+FROM ai_usage_rollups_hourly
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
-  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz))
 GROUP BY model_code
 ORDER BY request_count DESC;
 
 -- name: ListUsageUnitSummary :many
 SELECT
   billable_unit_type,
-  COUNT(*) AS request_count,
-  SUM(billable_units) AS total_billable_units,
-  SUM(provider_cost) AS total_provider_cost,
-  SUM(platform_cost) AS total_platform_cost,
-  SUM(user_cost) AS total_user_cost
-FROM ai_usage_logs
+  COALESCE(SUM(request_count), 0)::bigint AS request_count,
+  COALESCE(SUM(billable_units), 0)::bigint AS total_billable_units,
+  COALESCE(SUM(provider_cost), 0)::bigint AS total_provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS total_platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS total_user_cost
+FROM ai_usage_rollups_hourly
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
-  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status'))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz))
 GROUP BY billable_unit_type
 ORDER BY request_count DESC;
 
@@ -1576,31 +1578,31 @@ ORDER BY request_count DESC;
 
 -- name: GetDashboardSummary :one
 SELECT
-  COUNT(*) AS total_requests,
-  COUNT(*) FILTER (WHERE request_status = 'success') AS successful_requests,
-  COUNT(*) FILTER (WHERE request_status = 'failed') AS failed_requests,
-  SUM(total_tokens) AS total_tokens,
-  SUM(prompt_tokens) AS total_prompt_tokens,
-  SUM(completion_tokens) AS total_completion_tokens,
-  SUM(provider_cost) AS total_provider_cost,
-  SUM(platform_cost) AS total_platform_cost,
-  SUM(user_cost) AS total_user_cost,
-  AVG(latency_ms) FILTER (WHERE request_status = 'success') AS avg_latency_ms
-FROM ai_usage_logs
+  COALESCE(SUM(request_count), 0)::bigint AS total_requests,
+  COALESCE(SUM(success_count), 0)::bigint AS successful_requests,
+  COALESCE(SUM(failed_count), 0)::bigint AS failed_requests,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(provider_cost), 0)::bigint AS total_provider_cost,
+  COALESCE(SUM(platform_cost), 0)::bigint AS total_platform_cost,
+  COALESCE(SUM(user_cost), 0)::bigint AS total_user_cost,
+  COALESCE(SUM(latency_success_sum_ms)::double precision / NULLIF(SUM(latency_success_count), 0), 0)::double precision AS avg_latency_ms
+FROM ai_usage_rollups_hourly
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
-  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
-  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'));
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz));
 
 -- name: ListDashboardTopModels :many
 SELECT
   model_code,
-  COUNT(*) AS request_count,
-  SUM(total_tokens) AS total_tokens,
-  SUM(platform_cost) AS total_cost
-FROM ai_usage_logs
+  COALESCE(SUM(request_count), 0)::bigint AS request_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(platform_cost), 0)::bigint AS total_cost
+FROM ai_usage_rollups_hourly
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
-  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
-  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz))
 GROUP BY model_code
 ORDER BY request_count DESC
 LIMIT sqlc.arg('limit');
@@ -1608,13 +1610,13 @@ LIMIT sqlc.arg('limit');
 -- name: ListDashboardTopTenants :many
 SELECT
   tenant_id,
-  COUNT(*) AS request_count,
-  SUM(total_tokens) AS total_tokens,
-  SUM(platform_cost) AS total_cost
-FROM ai_usage_logs
+  COALESCE(SUM(request_count), 0)::bigint AS request_count,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(platform_cost), 0)::bigint AS total_cost
+FROM ai_usage_rollups_hourly
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'))
-  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id'))
-  AND (sqlc.narg('since')::timestamptz IS NULL OR created_at >= sqlc.narg('since'))
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
+  AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz))
 GROUP BY tenant_id
 ORDER BY request_count DESC
 LIMIT sqlc.arg('limit');
@@ -1735,15 +1737,15 @@ WHERE tenant_id = $1
 
 -- name: ListUsageSummaryByTenantUser :one
 SELECT
-  COUNT(*) AS request_count,
-  COUNT(*) FILTER (WHERE request_status = 'success') AS success_requests,
-  COUNT(*) FILTER (WHERE request_status = 'failed') AS failed_requests,
-  SUM(total_tokens) AS total_tokens,
-  SUM(prompt_tokens) AS total_prompt_tokens,
-  SUM(completion_tokens) AS total_completion_tokens,
-  SUM(user_cost) AS total_user_cost,
-  AVG(latency_ms) FILTER (WHERE request_status = 'success') AS avg_latency_ms
-FROM ai_usage_logs
+  COALESCE(SUM(request_count), 0)::bigint AS request_count,
+  COALESCE(SUM(success_count), 0)::bigint AS success_requests,
+  COALESCE(SUM(failed_count), 0)::bigint AS failed_requests,
+  COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+  COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
+  COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+  COALESCE(SUM(user_cost), 0)::bigint AS total_user_cost,
+  COALESCE(SUM(latency_success_sum_ms)::double precision / NULLIF(SUM(latency_success_count), 0), 0)::double precision AS avg_latency_ms
+FROM ai_usage_rollups_hourly
 WHERE tenant_id = $1
   AND user_id = $2;
 

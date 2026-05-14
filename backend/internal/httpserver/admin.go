@@ -1963,11 +1963,16 @@ func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
+	since, ok := parseUsageSummarySince(w, r)
+	if !ok {
+		return
+	}
 	rows, err := s.queries.ListUsageSummary(r.Context(), dbgen.ListUsageSummaryParams{
 		TenantID:      optionalTextValue(filters.tenantID),
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		Since:         since,
 	})
 	if err != nil {
 		s.writeAdminServerError(w, r, "list usage summary failed", err)
@@ -1981,11 +1986,16 @@ func (s *Server) handleAdminListUsageUnitSummary(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
+	since, ok := parseUsageSummarySince(w, r)
+	if !ok {
+		return
+	}
 	rows, err := s.queries.ListUsageUnitSummary(r.Context(), dbgen.ListUsageUnitSummaryParams{
 		TenantID:      optionalTextValue(filters.tenantID),
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		Since:         since,
 	})
 	if err != nil {
 		s.writeAdminServerError(w, r, "list usage unit summary failed", err)
@@ -2110,6 +2120,22 @@ func parseDashboardSince(w http.ResponseWriter, r *http.Request) (pgtype.Timesta
 	raw := r.URL.Query().Get("days")
 	if raw == "" {
 		raw = "1"
+	}
+	days, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil || days < 0 || days > 3650 {
+		writeAdminError(w, http.StatusBadRequest, "invalid days")
+		return pgtype.Timestamptz{}, false
+	}
+	if days == 0 {
+		return pgtype.Timestamptz{}, true
+	}
+	return pgtype.Timestamptz{Time: time.Now().UTC().AddDate(0, 0, -int(days)), Valid: true}, true
+}
+
+func parseUsageSummarySince(w http.ResponseWriter, r *http.Request) (pgtype.Timestamptz, bool) {
+	raw := r.URL.Query().Get("days")
+	if raw == "" {
+		return pgtype.Timestamptz{}, true
 	}
 	days, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil || days < 0 || days > 3650 {

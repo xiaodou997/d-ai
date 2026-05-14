@@ -267,10 +267,6 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 	if billingStatus == "" {
 		billingStatus = "not_billed"
 	}
-	capabilityType := input.CapabilityType
-	if capabilityType == "" {
-		capabilityType = "chat"
-	}
 	usageSource := input.UsageSource
 	if usageSource == "" {
 		usageSource = "upstream"
@@ -283,7 +279,8 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 	if billableUnits == 0 && billableUnitType == "token" {
 		billableUnits = int64(input.Usage.TotalTokens)
 	}
-	_, err := s.queries.CreateUsageLog(ctx, dbgen.CreateUsageLogParams{
+
+	logParams := dbgen.CreateUsageLogParams{
 		RequestID:            input.RequestID,
 		TraceID:              optionalTextString(input.TraceID),
 		ApiKeyID:             input.Auth.APIKey.ID,
@@ -320,18 +317,56 @@ func (s *Server) recordChatUsage(ctx context.Context, input usageLogInput) {
 		ErrorMessage:         optionalTextString(input.ErrorMessage),
 		UsageEstimated:       input.UsageEstimated,
 		UsageSource:          usageSource,
-	})
+	}
+
+	tx, err := s.postgres.Begin(ctx)
 	if err != nil {
+		s.logger.Error("begin usage transaction failed", "error", err, "request_id", input.RequestID)
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := dbgen.New(tx)
+	if _, err := qtx.CreateUsageLog(ctx, logParams); err != nil {
 		s.logger.Error("record usage log failed", "error", err, "request_id", input.RequestID)
+		return
+	}
+
+	if err := qtx.UpsertUsageRollupHourly(ctx, dbgen.UpsertUsageRollupHourlyParams{
+		TenantID:         input.Auth.APIKey.TenantID,
+		UserID:           input.Auth.APIKey.UserID,
+		ApiKeyID:         input.Auth.APIKey.ID,
+		ModelCode:        input.ModelCode,
+		ProviderCode:     providerCode,
+		RequestStatus:    input.RequestStatus,
+		BillableUnitType: billableUnitType,
+		PromptTokens:     int64(input.Usage.PromptTokens),
+		CompletionTokens: int64(input.Usage.CompletionTokens),
+		TotalTokens:      int64(input.Usage.TotalTokens),
+		BillableUnits:    billableUnits,
+		ProviderCost:     costs.ProviderCost,
+		PlatformCost:     costs.TenantCost,
+		UserCost:         costs.UserCost,
+		ApiKeyQuotaCost:  costs.APIKeyQuotaCost,
+		LatencyMs:        logParams.LatencyMs,
+	}); err != nil {
+		s.logger.Error("upsert usage rollup failed", "error", err, "request_id", input.RequestID)
+		return
 	}
 
 	if input.RequestStatus == "success" && costs.APIKeyQuotaCost > 0 {
-		if err := s.queries.ConfirmAPIKeyQuotaUsage(ctx, dbgen.ConfirmAPIKeyQuotaUsageParams{
+		if err := qtx.ConfirmAPIKeyQuotaUsage(ctx, dbgen.ConfirmAPIKeyQuotaUsageParams{
 			ID:        input.Auth.APIKey.ID,
 			QuotaUsed: costs.APIKeyQuotaCost,
 		}); err != nil {
 			s.logger.Error("confirm api key quota usage failed", "error", err, "request_id", input.RequestID)
+			return
 		}
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		s.logger.Error("commit usage transaction failed", "error", err, "request_id", input.RequestID)
 	}
 }
 

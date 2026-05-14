@@ -319,6 +319,75 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_model_time ON ai_usage_logs (model_
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_urm_transaction ON ai_usage_logs (urm_transaction_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_route ON ai_usage_logs (model_route_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_deployment ON ai_usage_logs (upstream_deployment_id);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_error_time
+  ON ai_usage_logs (tenant_id, created_at DESC)
+  WHERE request_status = 'failed';
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_user_error_time
+  ON ai_usage_logs (tenant_id, user_id, created_at DESC)
+  WHERE request_status = 'failed';
+
+-- ============================================================================
+-- AI Usage Hourly Rollups (统计预聚合)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_usage_rollups_hourly (
+  bucket_start TIMESTAMPTZ NOT NULL,
+  tenant_id TEXT NOT NULL,
+  user_id TEXT NOT NULL DEFAULT '',
+  api_key_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+  model_code TEXT NOT NULL,
+  provider_code TEXT NOT NULL DEFAULT '',
+  request_status TEXT NOT NULL,
+  billable_unit_type TEXT NOT NULL,
+  request_count BIGINT NOT NULL DEFAULT 0,
+  success_count BIGINT NOT NULL DEFAULT 0,
+  failed_count BIGINT NOT NULL DEFAULT 0,
+  prompt_tokens BIGINT NOT NULL DEFAULT 0,
+  completion_tokens BIGINT NOT NULL DEFAULT 0,
+  total_tokens BIGINT NOT NULL DEFAULT 0,
+  billable_units BIGINT NOT NULL DEFAULT 0,
+  provider_cost BIGINT NOT NULL DEFAULT 0,
+  platform_cost BIGINT NOT NULL DEFAULT 0,
+  user_cost BIGINT NOT NULL DEFAULT 0,
+  api_key_quota_cost BIGINT NOT NULL DEFAULT 0,
+  latency_success_sum_ms BIGINT NOT NULL DEFAULT 0,
+  latency_success_count BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (
+    bucket_start,
+    tenant_id,
+    user_id,
+    api_key_id,
+    model_code,
+    provider_code,
+    request_status,
+    billable_unit_type
+  ),
+  CHECK (billable_unit_type IN ('token', 'input_token', 'output_token', 'image', 'second', 'request')),
+  CONSTRAINT ai_usage_rollups_hourly_nonnegative CHECK (
+    request_count >= 0
+    AND success_count >= 0
+    AND failed_count >= 0
+    AND prompt_tokens >= 0
+    AND completion_tokens >= 0
+    AND total_tokens >= 0
+    AND billable_units >= 0
+    AND provider_cost >= 0
+    AND platform_cost >= 0
+    AND user_cost >= 0
+    AND api_key_quota_cost >= 0
+    AND latency_success_sum_ms >= 0
+    AND latency_success_count >= 0
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_rollups_hourly_time
+  ON ai_usage_rollups_hourly (bucket_start DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_rollups_hourly_tenant_time
+  ON ai_usage_rollups_hourly (tenant_id, bucket_start DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_rollups_hourly_tenant_user_time
+  ON ai_usage_rollups_hourly (tenant_id, user_id, bucket_start DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_rollups_hourly_model_time
+  ON ai_usage_rollups_hourly (model_code, bucket_start DESC);
 
 -- ============================================================================
 -- AI Runtime Limit Policies (限流策略)
@@ -384,6 +453,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_conversation_bindings_expires ON ai_conversati
 DROP TABLE IF EXISTS ai_conversation_bindings;
 DROP TABLE IF EXISTS ai_admin_audit_logs;
 DROP TABLE IF EXISTS ai_runtime_limit_policies;
+DROP TABLE IF EXISTS ai_usage_rollups_hourly;
 DROP TABLE IF EXISTS ai_usage_logs;
 DROP TABLE IF EXISTS ai_tenant_model_grants;
 DROP TABLE IF EXISTS ai_tenant_model_price_overrides;

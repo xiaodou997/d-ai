@@ -44,6 +44,85 @@ INSERT INTO ai_usage_logs (
 )
 RETURNING id;
 
+-- name: UpsertUsageRollupHourly :exec
+INSERT INTO ai_usage_rollups_hourly (
+  bucket_start,
+  tenant_id,
+  user_id,
+  api_key_id,
+  model_code,
+  provider_code,
+  request_status,
+  billable_unit_type,
+  request_count,
+  success_count,
+  failed_count,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens,
+  billable_units,
+  provider_cost,
+  platform_cost,
+  user_cost,
+  api_key_quota_cost,
+  latency_success_sum_ms,
+  latency_success_count
+) VALUES (
+  date_trunc('hour', now()),
+  sqlc.arg('tenant_id'),
+  COALESCE(sqlc.narg('user_id')::text, ''),
+  sqlc.arg('api_key_id')::uuid,
+  sqlc.arg('model_code'),
+  COALESCE(sqlc.narg('provider_code')::text, ''),
+  sqlc.arg('request_status'),
+  sqlc.arg('billable_unit_type'),
+  1,
+  CASE WHEN sqlc.arg('request_status') = 'success' THEN 1 ELSE 0 END,
+  CASE WHEN sqlc.arg('request_status') = 'failed' THEN 1 ELSE 0 END,
+  sqlc.arg('prompt_tokens')::bigint,
+  sqlc.arg('completion_tokens')::bigint,
+  sqlc.arg('total_tokens')::bigint,
+  sqlc.arg('billable_units')::bigint,
+  sqlc.arg('provider_cost')::bigint,
+  sqlc.arg('platform_cost')::bigint,
+  sqlc.arg('user_cost')::bigint,
+  sqlc.arg('api_key_quota_cost')::bigint,
+  CASE
+    WHEN sqlc.arg('request_status') = 'success' AND sqlc.narg('latency_ms')::integer IS NOT NULL
+      THEN sqlc.narg('latency_ms')::bigint
+    ELSE 0
+  END,
+  CASE
+    WHEN sqlc.arg('request_status') = 'success' AND sqlc.narg('latency_ms')::integer IS NOT NULL
+      THEN 1
+    ELSE 0
+  END
+)
+ON CONFLICT (
+  bucket_start,
+  tenant_id,
+  user_id,
+  api_key_id,
+  model_code,
+  provider_code,
+  request_status,
+  billable_unit_type
+) DO UPDATE SET
+  request_count = ai_usage_rollups_hourly.request_count + EXCLUDED.request_count,
+  success_count = ai_usage_rollups_hourly.success_count + EXCLUDED.success_count,
+  failed_count = ai_usage_rollups_hourly.failed_count + EXCLUDED.failed_count,
+  prompt_tokens = ai_usage_rollups_hourly.prompt_tokens + EXCLUDED.prompt_tokens,
+  completion_tokens = ai_usage_rollups_hourly.completion_tokens + EXCLUDED.completion_tokens,
+  total_tokens = ai_usage_rollups_hourly.total_tokens + EXCLUDED.total_tokens,
+  billable_units = ai_usage_rollups_hourly.billable_units + EXCLUDED.billable_units,
+  provider_cost = ai_usage_rollups_hourly.provider_cost + EXCLUDED.provider_cost,
+  platform_cost = ai_usage_rollups_hourly.platform_cost + EXCLUDED.platform_cost,
+  user_cost = ai_usage_rollups_hourly.user_cost + EXCLUDED.user_cost,
+  api_key_quota_cost = ai_usage_rollups_hourly.api_key_quota_cost + EXCLUDED.api_key_quota_cost,
+  latency_success_sum_ms = ai_usage_rollups_hourly.latency_success_sum_ms + EXCLUDED.latency_success_sum_ms,
+  latency_success_count = ai_usage_rollups_hourly.latency_success_count + EXCLUDED.latency_success_count,
+  updated_at = now();
+
 -- name: GetActiveModelPrice :one
 SELECT
   input_price_per_1m,

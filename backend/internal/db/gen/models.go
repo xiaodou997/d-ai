@@ -241,3 +241,28 @@ type AiUsageLog struct {
 	UsageSource          string             `json:"usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
+
+type AiUsageRollupsHourly struct {
+	BucketStart         pgtype.Timestamptz `json:"bucket_start"`
+	TenantID            string             `json:"tenant_id"`
+	UserID              string             `json:"user_id"`
+	ApiKeyID            pgtype.UUID        `json:"api_key_id"`
+	ModelCode           string             `json:"model_code"`
+	ProviderCode        string             `json:"provider_code"`
+	RequestStatus       string             `json:"request_status"`
+	BillableUnitType    string             `json:"billable_unit_type"`
+	RequestCount        int64              `json:"request_count"`
+	SuccessCount        int64              `json:"success_count"`
+	FailedCount         int64              `json:"failed_count"`
+	PromptTokens        int64              `json:"prompt_tokens"`
+	CompletionTokens    int64              `json:"completion_tokens"`
+	TotalTokens         int64              `json:"total_tokens"`
+	BillableUnits       int64              `json:"billable_units"`
+	ProviderCost        int64              `json:"provider_cost"`
+	PlatformCost        int64              `json:"platform_cost"`
+	UserCost            int64              `json:"user_cost"`
+	ApiKeyQuotaCost     int64              `json:"api_key_quota_cost"`
+	LatencySuccessSumMs int64              `json:"latency_success_sum_ms"`
+	LatencySuccessCount int64              `json:"latency_success_count"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}

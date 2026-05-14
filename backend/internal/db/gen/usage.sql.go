@@ -314,3 +314,124 @@ func (q *Queries) GetTenantUserPriceForRuntime(ctx context.Context, arg GetTenan
 	)
 	return i, err
 }
+
+const upsertUsageRollupHourly = `-- name: UpsertUsageRollupHourly :exec
+INSERT INTO ai_usage_rollups_hourly (
+  bucket_start,
+  tenant_id,
+  user_id,
+  api_key_id,
+  model_code,
+  provider_code,
+  request_status,
+  billable_unit_type,
+  request_count,
+  success_count,
+  failed_count,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens,
+  billable_units,
+  provider_cost,
+  platform_cost,
+  user_cost,
+  api_key_quota_cost,
+  latency_success_sum_ms,
+  latency_success_count
+) VALUES (
+  date_trunc('hour', now()),
+  $1,
+  COALESCE($2::text, ''),
+  $3::uuid,
+  $4,
+  COALESCE($5::text, ''),
+  $6,
+  $7,
+  1,
+  CASE WHEN $6 = 'success' THEN 1 ELSE 0 END,
+  CASE WHEN $6 = 'failed' THEN 1 ELSE 0 END,
+  $8::bigint,
+  $9::bigint,
+  $10::bigint,
+  $11::bigint,
+  $12::bigint,
+  $13::bigint,
+  $14::bigint,
+  $15::bigint,
+  CASE
+    WHEN $6 = 'success' AND $16::integer IS NOT NULL
+      THEN $16::bigint
+    ELSE 0
+  END,
+  CASE
+    WHEN $6 = 'success' AND $16::integer IS NOT NULL
+      THEN 1
+    ELSE 0
+  END
+)
+ON CONFLICT (
+  bucket_start,
+  tenant_id,
+  user_id,
+  api_key_id,
+  model_code,
+  provider_code,
+  request_status,
+  billable_unit_type
+) DO UPDATE SET
+  request_count = ai_usage_rollups_hourly.request_count + EXCLUDED.request_count,
+  success_count = ai_usage_rollups_hourly.success_count + EXCLUDED.success_count,
+  failed_count = ai_usage_rollups_hourly.failed_count + EXCLUDED.failed_count,
+  prompt_tokens = ai_usage_rollups_hourly.prompt_tokens + EXCLUDED.prompt_tokens,
+  completion_tokens = ai_usage_rollups_hourly.completion_tokens + EXCLUDED.completion_tokens,
+  total_tokens = ai_usage_rollups_hourly.total_tokens + EXCLUDED.total_tokens,
+  billable_units = ai_usage_rollups_hourly.billable_units + EXCLUDED.billable_units,
+  provider_cost = ai_usage_rollups_hourly.provider_cost + EXCLUDED.provider_cost,
+  platform_cost = ai_usage_rollups_hourly.platform_cost + EXCLUDED.platform_cost,
+  user_cost = ai_usage_rollups_hourly.user_cost + EXCLUDED.user_cost,
+  api_key_quota_cost = ai_usage_rollups_hourly.api_key_quota_cost + EXCLUDED.api_key_quota_cost,
+  latency_success_sum_ms = ai_usage_rollups_hourly.latency_success_sum_ms + EXCLUDED.latency_success_sum_ms,
+  latency_success_count = ai_usage_rollups_hourly.latency_success_count + EXCLUDED.latency_success_count,
+  updated_at = now()
+`
+
+type UpsertUsageRollupHourlyParams struct {
+	TenantID         string      `json:"tenant_id"`
+	UserID           pgtype.Text `json:"user_id"`
+	ApiKeyID         pgtype.UUID `json:"api_key_id"`
+	ModelCode        string      `json:"model_code"`
+	ProviderCode     pgtype.Text `json:"provider_code"`
+	RequestStatus    string      `json:"request_status"`
+	BillableUnitType string      `json:"billable_unit_type"`
+	PromptTokens     int64       `json:"prompt_tokens"`
+	CompletionTokens int64       `json:"completion_tokens"`
+	TotalTokens      int64       `json:"total_tokens"`
+	BillableUnits    int64       `json:"billable_units"`
+	ProviderCost     int64       `json:"provider_cost"`
+	PlatformCost     int64       `json:"platform_cost"`
+	UserCost         int64       `json:"user_cost"`
+	ApiKeyQuotaCost  int64       `json:"api_key_quota_cost"`
+	LatencyMs        pgtype.Int4 `json:"latency_ms"`
+}
+
+func (q *Queries) UpsertUsageRollupHourly(ctx context.Context, arg UpsertUsageRollupHourlyParams) error {
+	_, err := q.db.Exec(ctx, upsertUsageRollupHourly,
+		arg.TenantID,
+		arg.UserID,
+		arg.ApiKeyID,
+		arg.ModelCode,
+		arg.ProviderCode,
+		arg.RequestStatus,
+		arg.BillableUnitType,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.TotalTokens,
+		arg.BillableUnits,
+		arg.ProviderCost,
+		arg.PlatformCost,
+		arg.UserCost,
+		arg.ApiKeyQuotaCost,
+		arg.LatencyMs,
+	)
+	return err
+}

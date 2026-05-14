@@ -183,6 +183,11 @@ func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Req
 
 	// 根据角色设置查询参数
 	params := dbgen.GetDashboardSummaryParams{}
+	since, ok := parseDashboardSince(w, r)
+	if !ok {
+		return
+	}
+	params.Since = since
 	if ac.Role == apiRoleTenant {
 		params.TenantID = pgtype.Text{String: ac.TenantID, Valid: true}
 	} else if ac.Role == apiRoleUser {
@@ -291,7 +296,7 @@ func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Reque
 
 	summary, err := s.queries.ListUsageSummaryByTenantUser(r.Context(), dbgen.ListUsageSummaryByTenantUserParams{
 		TenantID: ac.TenantID,
-		UserID:   pgtype.Text{String: ac.UserID, Valid: true},
+		UserID:   ac.UserID,
 	})
 	if err != nil {
 		s.logger.Error("list user usage summary failed", "error", err)
@@ -341,15 +346,15 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 	}
 
 	row, err := s.queries.CreateTenantAPIKeySelf(r.Context(), dbgen.CreateTenantAPIKeySelfParams{
-		TenantID:     ac.TenantID,
-		KeyHash:      hash,
-		KeyPrefix:    prefix,
-		Name:         req.Name,
-		QuotaLimit:   pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		TenantID:      ac.TenantID,
+		KeyHash:       hash,
+		KeyPrefix:     prefix,
+		Name:          req.Name,
+		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
-		Status:       defaultStatus,
-		ExpiresAt:    pgtype.Timestamptz{},
-		CreatedBy:    pgtype.Text{String: ac.UserID, Valid: true},
+		Status:        defaultStatus,
+		ExpiresAt:     pgtype.Timestamptz{},
+		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
 	})
 	if err != nil {
 		s.logger.Error("create tenant api key failed", "error", err)
@@ -359,12 +364,12 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 
 	// 返回创建结果 + 生成的完整 Key
 	writeAPIJSON(w, http.StatusCreated, map[string]interface{}{
-		"key":         key,
-		"id":          row.ID,
-		"key_prefix":  row.KeyPrefix,
-		"name":        row.Name,
-		"status":      row.Status,
-		"created_at":  row.CreatedAt,
+		"key":        key,
+		"id":         row.ID,
+		"key_prefix": row.KeyPrefix,
+		"name":       row.Name,
+		"status":     row.Status,
+		"created_at": row.CreatedAt,
 	})
 }
 
@@ -398,10 +403,10 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 	}
 
 	row, err := s.queries.UpdateTenantAPIKeySelf(r.Context(), dbgen.UpdateTenantAPIKeySelfParams{
-		TenantID:     ac.TenantID,
-		ID:           apiKeyID,
-		Name:         req.Name,
-		QuotaLimit:   pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		TenantID:      ac.TenantID,
+		ID:            apiKeyID,
+		Name:          req.Name,
+		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
 	})
 	if err != nil {
@@ -537,16 +542,16 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 	}
 
 	row, err := s.queries.CreateUserAPIKeySelf(r.Context(), dbgen.CreateUserAPIKeySelfParams{
-		TenantID:     ac.TenantID,
-		UserID:       pgtype.Text{String: ac.UserID, Valid: true},
-		KeyHash:      hash,
-		KeyPrefix:    prefix,
-		Name:         req.Name,
-		QuotaLimit:   pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		TenantID:      ac.TenantID,
+		UserID:        pgtype.Text{String: ac.UserID, Valid: true},
+		KeyHash:       hash,
+		KeyPrefix:     prefix,
+		Name:          req.Name,
+		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
-		Status:       defaultStatus,
-		ExpiresAt:    pgtype.Timestamptz{},
-		CreatedBy:    pgtype.Text{String: ac.UserID, Valid: true},
+		Status:        defaultStatus,
+		ExpiresAt:     pgtype.Timestamptz{},
+		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
 	})
 	if err != nil {
 		s.logger.Error("create user api key failed", "error", err)
@@ -555,12 +560,12 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeAPIJSON(w, http.StatusCreated, map[string]interface{}{
-		"key":         key,
-		"id":          row.ID,
-		"key_prefix":  row.KeyPrefix,
-		"name":        row.Name,
-		"status":      row.Status,
-		"created_at":  row.CreatedAt,
+		"key":        key,
+		"id":         row.ID,
+		"key_prefix": row.KeyPrefix,
+		"name":       row.Name,
+		"status":     row.Status,
+		"created_at": row.CreatedAt,
 	})
 }
 
@@ -594,11 +599,11 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 	}
 
 	row, err := s.queries.UpdateUserAPIKeySelf(r.Context(), dbgen.UpdateUserAPIKeySelfParams{
-		TenantID:     ac.TenantID,
-		UserID:       pgtype.Text{String: ac.UserID, Valid: true},
-		ID:           apiKeyID,
-		Name:         req.Name,
-		QuotaLimit:   pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		TenantID:      ac.TenantID,
+		UserID:        pgtype.Text{String: ac.UserID, Valid: true},
+		ID:            apiKeyID,
+		Name:          req.Name,
+		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
 	})
 	if err != nil {
@@ -653,22 +658,22 @@ func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Reque
 // ============================================================================
 
 type createAPIKeyRequest struct {
-	Name         string   `json:"name"`
-	QuotaLimit   int64    `json:"quota_limit"`
+	Name          string   `json:"name"`
+	QuotaLimit    int64    `json:"quota_limit"`
 	AllowedModels []string `json:"allowed_models"`
 }
 
 type updateAPIKeyRequest struct {
-	Name         string   `json:"name"`
-	QuotaLimit   int64    `json:"quota_limit"`
+	Name          string   `json:"name"`
+	QuotaLimit    int64    `json:"quota_limit"`
 	AllowedModels []string `json:"allowed_models"`
 }
 
 type upsertTenantUserPriceRequest struct {
-	InputPricePer1m  int64 `json:"input_price_per_1m"`
-	OutputPricePer1m int64 `json:"output_price_per_1m"`
-	RequestCost      int64 `json:"request_cost"`
-	ImageCost        int64 `json:"image_cost"`
+	InputPricePer1m  int64  `json:"input_price_per_1m"`
+	OutputPricePer1m int64  `json:"output_price_per_1m"`
+	RequestCost      int64  `json:"request_cost"`
+	ImageCost        int64  `json:"image_cost"`
 	ImageSizePrices  string `json:"image_size_prices"`
 }
 
