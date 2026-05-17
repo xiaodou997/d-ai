@@ -27,7 +27,7 @@ const routes = [
         path: '/dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard/index.vue'),
-        meta: { title: '控制概览', requiresAuth: true, roles: [1] }
+        meta: { title: '数据大盘', requiresAuth: true, roles: [1] }
       },
       {
         path: '/tenants',
@@ -58,18 +58,6 @@ const routes = [
         name: 'TenantRechargeRecords',
         component: () => import('@/views/Finance/RechargeRecords.vue'),
         meta: { title: '充值记录', requiresAuth: true, roles: [1] }
-      },
-      {
-        path: '/analytics',
-        name: 'Analytics',
-        component: () => import('@/views/Analytics/index.vue'),
-        meta: { title: '趋势分析', requiresAuth: true, roles: [1] }
-      },
-      {
-        path: '/system',
-        name: 'SystemStatus',
-        component: () => import('@/views/System/index.vue'),
-        meta: { title: '系统状态', requiresAuth: true, roles: [1] }
       },
       {
         path: '/ai-gateway',
@@ -133,7 +121,7 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 

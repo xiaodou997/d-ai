@@ -3,16 +3,14 @@ import { computed } from 'vue'
 import {
   Connection,
   Cpu,
+  DataAnalysis,
   DocumentChecked,
   Key,
   Lock,
   Management,
-  Odometer,
   OfficeBuilding,
-  SetUp,
   SwitchButton,
   Tickets,
-  TrendCharts,
   User,
   UserFilled
 } from '@element-plus/icons-vue'
@@ -76,16 +74,8 @@ const handleLogout = () => {
         <template v-if="authStore.isPlatformAdmin">
           <div class="menu-divider">数据监控</div>
           <el-menu-item index="/dashboard">
-            <el-icon><Odometer /></el-icon>
-            <span>控制概览</span>
-          </el-menu-item>
-          <el-menu-item index="/analytics">
-            <el-icon><TrendCharts /></el-icon>
-            <span>趋势分析</span>
-          </el-menu-item>
-          <el-menu-item index="/system">
-            <el-icon><SetUp /></el-icon>
-            <span>系统状态</span>
+            <el-icon><DataAnalysis /></el-icon>
+            <span>数据大盘</span>
           </el-menu-item>
         </template>
 
