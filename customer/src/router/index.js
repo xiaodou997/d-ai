@@ -49,6 +49,12 @@ const routes = [
       },
       // AI Gateway
       {
+        path: '/ai/models',
+        name: 'AvailableModels',
+        component: () => import('@/views/AIGateway/AvailableModels.vue'),
+        meta: { title: '可用模型', requiresAuth: true }
+      },
+      {
         path: '/ai/api-keys',
         name: 'MyAPIKeys',
         component: () => import('@/views/AIGateway/MyAPIKeys.vue'),

@@ -110,10 +110,22 @@ type CreateAuditLogParams struct {
 	HttpStatus     pgtype.Int4 `json:"http_status"`
 }
 
+type CreateAuditLogRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Actor          pgtype.Text        `json:"actor"`
+	Action         string             `json:"action"`
+	ObjectType     pgtype.Text        `json:"object_type"`
+	ObjectID       pgtype.Text        `json:"object_id"`
+	RequestSummary []byte             `json:"request_summary"`
+	Result         string             `json:"result"`
+	HttpStatus     pgtype.Int4        `json:"http_status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 // ============================================================================
 // Audit Logs
 // ============================================================================
-func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AiAdminAuditLog, error) {
+func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (CreateAuditLogRow, error) {
 	row := q.db.QueryRow(ctx, createAuditLog,
 		arg.Actor,
 		arg.Action,
@@ -123,7 +135,7 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.Result,
 		arg.HttpStatus,
 	)
-	var i AiAdminAuditLog
+	var i CreateAuditLogRow
 	err := row.Scan(
 		&i.ID,
 		&i.Actor,
@@ -869,10 +881,26 @@ type CreateUpstreamDeploymentCostPriceParams struct {
 	Status               string             `json:"status"`
 }
 
+type CreateUpstreamDeploymentCostPriceRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	CapabilityType       string             `json:"capability_type"`
+	Currency             string             `json:"currency"`
+	InputCostPer1m       int64              `json:"input_cost_per_1m"`
+	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
+	RequestCost          int64              `json:"request_cost"`
+	ImageCost            int64              `json:"image_cost"`
+	ImageSizePrices      []byte             `json:"image_size_prices"`
+	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
+	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
 // ============================================================================
 // Upstream Deployment Cost Price CRUD
 // ============================================================================
-func (q *Queries) CreateUpstreamDeploymentCostPrice(ctx context.Context, arg CreateUpstreamDeploymentCostPriceParams) (AiUpstreamDeploymentCostPrice, error) {
+func (q *Queries) CreateUpstreamDeploymentCostPrice(ctx context.Context, arg CreateUpstreamDeploymentCostPriceParams) (CreateUpstreamDeploymentCostPriceRow, error) {
 	row := q.db.QueryRow(ctx, createUpstreamDeploymentCostPrice,
 		arg.UpstreamDeploymentID,
 		arg.CapabilityType,
@@ -886,7 +914,7 @@ func (q *Queries) CreateUpstreamDeploymentCostPrice(ctx context.Context, arg Cre
 		arg.EffectiveFrom,
 		arg.Status,
 	)
-	var i AiUpstreamDeploymentCostPrice
+	var i CreateUpstreamDeploymentCostPriceRow
 	err := row.Scan(
 		&i.ID,
 		&i.UpstreamDeploymentID,
@@ -1316,12 +1344,25 @@ FROM ai_model_prices
 WHERE model_id = $1
 `
 
+type GetModelPriceRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
 // ============================================================================
 // Model Price CRUD (1:1 with model, upsert pattern)
 // ============================================================================
-func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (AiModelPrice, error) {
+func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (GetModelPriceRow, error) {
 	row := q.db.QueryRow(ctx, getModelPrice, modelID)
-	var i AiModelPrice
+	var i GetModelPriceRow
 	err := row.Scan(
 		&i.ID,
 		&i.ModelID,
@@ -1420,9 +1461,23 @@ type GetProviderEndpointParams struct {
 	ID         pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) GetProviderEndpoint(ctx context.Context, arg GetProviderEndpointParams) (AiProviderEndpoint, error) {
+type GetProviderEndpointRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	ProviderID       pgtype.UUID        `json:"provider_id"`
+	Name             string             `json:"name"`
+	BaseUrl          string             `json:"base_url"`
+	ApiKeyCiphertext string             `json:"api_key_ciphertext"`
+	ExtraHeaders     []byte             `json:"extra_headers"`
+	Weight           int32              `json:"weight"`
+	TimeoutMs        int32              `json:"timeout_ms"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetProviderEndpoint(ctx context.Context, arg GetProviderEndpointParams) (GetProviderEndpointRow, error) {
 	row := q.db.QueryRow(ctx, getProviderEndpoint, arg.ProviderID, arg.ID)
-	var i AiProviderEndpoint
+	var i GetProviderEndpointRow
 	err := row.Scan(
 		&i.ID,
 		&i.ProviderID,
@@ -1534,12 +1589,27 @@ type GetTenantModelPriceOverrideParams struct {
 	ModelID  pgtype.UUID `json:"model_id"`
 }
 
+type GetTenantModelPriceOverrideRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                string             `json:"tenant_id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedBy               pgtype.Text        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
 // ============================================================================
 // Tenant Model Price Overrides CRUD
 // ============================================================================
-func (q *Queries) GetTenantModelPriceOverride(ctx context.Context, arg GetTenantModelPriceOverrideParams) (AiTenantModelPriceOverride, error) {
+func (q *Queries) GetTenantModelPriceOverride(ctx context.Context, arg GetTenantModelPriceOverrideParams) (GetTenantModelPriceOverrideRow, error) {
 	row := q.db.QueryRow(ctx, getTenantModelPriceOverride, arg.TenantID, arg.ModelID)
-	var i AiTenantModelPriceOverride
+	var i GetTenantModelPriceOverrideRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -1582,12 +1652,27 @@ type GetTenantUserPriceParams struct {
 	ModelID  pgtype.UUID `json:"model_id"`
 }
 
+type GetTenantUserPriceRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                string             `json:"tenant_id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedBy               pgtype.Text        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
 // ============================================================================
 // Tenant User Prices CRUD (租户售价 - 租户对用户的定价)
 // ============================================================================
-func (q *Queries) GetTenantUserPrice(ctx context.Context, arg GetTenantUserPriceParams) (AiTenantUserPrice, error) {
+func (q *Queries) GetTenantUserPrice(ctx context.Context, arg GetTenantUserPriceParams) (GetTenantUserPriceRow, error) {
 	row := q.db.QueryRow(ctx, getTenantUserPrice, arg.TenantID, arg.ModelID)
-	var i AiTenantUserPrice
+	var i GetTenantUserPriceRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -2108,18 +2193,30 @@ ORDER BY created_at DESC
 LIMIT $1
 `
 
+type ListAuditLogsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Actor          pgtype.Text        `json:"actor"`
+	Action         string             `json:"action"`
+	ObjectType     pgtype.Text        `json:"object_type"`
+	ObjectID       pgtype.Text        `json:"object_id"`
+	RequestSummary []byte             `json:"request_summary"`
+	Result         string             `json:"result"`
+	HttpStatus     pgtype.Int4        `json:"http_status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 // ============================================================================
 // List Audit Logs
 // ============================================================================
-func (q *Queries) ListAuditLogs(ctx context.Context, limit int32) ([]AiAdminAuditLog, error) {
+func (q *Queries) ListAuditLogs(ctx context.Context, limit int32) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AiAdminAuditLog{}
+	items := []ListAuditLogsRow{}
 	for rows.Next() {
-		var i AiAdminAuditLog
+		var i ListAuditLogsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Actor,
@@ -2481,6 +2578,9 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
+  auth_type,
+  fixed_provider_type,
+  oauth_strategy,
   status,
   created_at,
   updated_at
@@ -2490,16 +2590,19 @@ ORDER BY name ASC
 `
 
 type ListProviderEndpointsRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	ProviderID   pgtype.UUID        `json:"provider_id"`
-	Name         string             `json:"name"`
-	BaseUrl      string             `json:"base_url"`
-	ExtraHeaders []byte             `json:"extra_headers"`
-	Weight       int32              `json:"weight"`
-	TimeoutMs    int32              `json:"timeout_ms"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                pgtype.UUID        `json:"id"`
+	ProviderID        pgtype.UUID        `json:"provider_id"`
+	Name              string             `json:"name"`
+	BaseUrl           string             `json:"base_url"`
+	ExtraHeaders      []byte             `json:"extra_headers"`
+	Weight            int32              `json:"weight"`
+	TimeoutMs         int32              `json:"timeout_ms"`
+	AuthType          string             `json:"auth_type"`
+	FixedProviderType pgtype.Text        `json:"fixed_provider_type"`
+	OauthStrategy     string             `json:"oauth_strategy"`
+	Status            string             `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.UUID) ([]ListProviderEndpointsRow, error) {
@@ -2519,6 +2622,9 @@ func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.U
 			&i.ExtraHeaders,
 			&i.Weight,
 			&i.TimeoutMs,
+			&i.AuthType,
+			&i.FixedProviderType,
+			&i.OauthStrategy,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -2884,15 +2990,31 @@ WHERE upstream_deployment_id = $1
 ORDER BY effective_from DESC
 `
 
-func (q *Queries) ListUpstreamDeploymentCostPrices(ctx context.Context, upstreamDeploymentID pgtype.UUID) ([]AiUpstreamDeploymentCostPrice, error) {
+type ListUpstreamDeploymentCostPricesRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	CapabilityType       string             `json:"capability_type"`
+	Currency             string             `json:"currency"`
+	InputCostPer1m       int64              `json:"input_cost_per_1m"`
+	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
+	RequestCost          int64              `json:"request_cost"`
+	ImageCost            int64              `json:"image_cost"`
+	ImageSizePrices      []byte             `json:"image_size_prices"`
+	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
+	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListUpstreamDeploymentCostPrices(ctx context.Context, upstreamDeploymentID pgtype.UUID) ([]ListUpstreamDeploymentCostPricesRow, error) {
 	rows, err := q.db.Query(ctx, listUpstreamDeploymentCostPrices, upstreamDeploymentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AiUpstreamDeploymentCostPrice{}
+	items := []ListUpstreamDeploymentCostPricesRow{}
 	for rows.Next() {
-		var i AiUpstreamDeploymentCostPrice
+		var i ListUpstreamDeploymentCostPricesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UpstreamDeploymentID,
@@ -3057,28 +3179,75 @@ SELECT
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
+  AND ($4 = '' OR user_id = $4)
+  AND ($5 = '' OR model_code = $5)
+  AND ($6 = '' OR request_status = $6)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListUsageLogsParams struct {
-	TenantID string `json:"tenant_id"`
-	Limit    int32  `json:"limit"`
-	Offset   int32  `json:"offset"`
+	TenantID      string `json:"tenant_id"`
+	Limit         int32  `json:"limit"`
+	Offset        int32  `json:"offset"`
+	UserID        string `json:"user_id"`
+	ModelCode     string `json:"model_code"`
+	RequestStatus string `json:"request_status"`
+}
+
+type ListUsageLogsRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RequestID            string             `json:"request_id"`
+	TraceID              pgtype.Text        `json:"trace_id"`
+	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
+	KeyOwnerType         string             `json:"key_owner_type"`
+	TenantID             string             `json:"tenant_id"`
+	UserID               pgtype.Text        `json:"user_id"`
+	ExternalUserID       pgtype.Text        `json:"external_user_id"`
+	ModelID              pgtype.UUID        `json:"model_id"`
+	ModelCode            string             `json:"model_code"`
+	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	EndpointID           pgtype.UUID        `json:"endpoint_id"`
+	ProviderCode         pgtype.Text        `json:"provider_code"`
+	UpstreamModel        pgtype.Text        `json:"upstream_model"`
+	ConversationID       pgtype.Text        `json:"conversation_id"`
+	Stream               bool               `json:"stream"`
+	PromptTokens         int32              `json:"prompt_tokens"`
+	CompletionTokens     int32              `json:"completion_tokens"`
+	TotalTokens          int32              `json:"total_tokens"`
+	BillableUnitType     string             `json:"billable_unit_type"`
+	BillableUnits        int64              `json:"billable_units"`
+	ProviderCost         int64              `json:"provider_cost"`
+	PlatformCost         int64              `json:"platform_cost"`
+	UserCost             int64              `json:"user_cost"`
+	ApiKeyQuotaCost      int64              `json:"api_key_quota_cost"`
+	UrmTransactionID     pgtype.Text        `json:"urm_transaction_id"`
+	BillingStatus        string             `json:"billing_status"`
+	RequestStatus        string             `json:"request_status"`
+	HttpStatus           pgtype.Int4        `json:"http_status"`
+	UpstreamStatus       pgtype.Int4        `json:"upstream_status"`
+	LatencyMs            pgtype.Int4        `json:"latency_ms"`
+	FirstTokenLatencyMs  pgtype.Int4        `json:"first_token_latency_ms"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorMessage         pgtype.Text        `json:"error_message"`
+	UsageEstimated       bool               `json:"usage_estimated"`
+	UsageSource          string             `json:"usage_source"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 // ============================================================================
 // Usage Logs Queries
 // ============================================================================
-func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([]AiUsageLog, error) {
-	rows, err := q.db.Query(ctx, listUsageLogs, arg.TenantID, arg.Limit, arg.Offset)
+func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([]ListUsageLogsRow, error) {
+	rows, err := q.db.Query(ctx, listUsageLogs, arg.TenantID, arg.Limit, arg.Offset, arg.UserID, arg.ModelCode, arg.RequestStatus)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AiUsageLog{}
+	items := []ListUsageLogsRow{}
 	for rows.Next() {
-		var i AiUsageLog
+		var i ListUsageLogsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.RequestID,
@@ -3181,15 +3350,56 @@ type ListUsageLogsByAPIKeyParams struct {
 	Offset   int32       `json:"offset"`
 }
 
-func (q *Queries) ListUsageLogsByAPIKey(ctx context.Context, arg ListUsageLogsByAPIKeyParams) ([]AiUsageLog, error) {
+type ListUsageLogsByAPIKeyRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RequestID            string             `json:"request_id"`
+	TraceID              pgtype.Text        `json:"trace_id"`
+	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
+	KeyOwnerType         string             `json:"key_owner_type"`
+	TenantID             string             `json:"tenant_id"`
+	UserID               pgtype.Text        `json:"user_id"`
+	ExternalUserID       pgtype.Text        `json:"external_user_id"`
+	ModelID              pgtype.UUID        `json:"model_id"`
+	ModelCode            string             `json:"model_code"`
+	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	EndpointID           pgtype.UUID        `json:"endpoint_id"`
+	ProviderCode         pgtype.Text        `json:"provider_code"`
+	UpstreamModel        pgtype.Text        `json:"upstream_model"`
+	ConversationID       pgtype.Text        `json:"conversation_id"`
+	Stream               bool               `json:"stream"`
+	PromptTokens         int32              `json:"prompt_tokens"`
+	CompletionTokens     int32              `json:"completion_tokens"`
+	TotalTokens          int32              `json:"total_tokens"`
+	BillableUnitType     string             `json:"billable_unit_type"`
+	BillableUnits        int64              `json:"billable_units"`
+	ProviderCost         int64              `json:"provider_cost"`
+	PlatformCost         int64              `json:"platform_cost"`
+	UserCost             int64              `json:"user_cost"`
+	ApiKeyQuotaCost      int64              `json:"api_key_quota_cost"`
+	UrmTransactionID     pgtype.Text        `json:"urm_transaction_id"`
+	BillingStatus        string             `json:"billing_status"`
+	RequestStatus        string             `json:"request_status"`
+	HttpStatus           pgtype.Int4        `json:"http_status"`
+	UpstreamStatus       pgtype.Int4        `json:"upstream_status"`
+	LatencyMs            pgtype.Int4        `json:"latency_ms"`
+	FirstTokenLatencyMs  pgtype.Int4        `json:"first_token_latency_ms"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorMessage         pgtype.Text        `json:"error_message"`
+	UsageEstimated       bool               `json:"usage_estimated"`
+	UsageSource          string             `json:"usage_source"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListUsageLogsByAPIKey(ctx context.Context, arg ListUsageLogsByAPIKeyParams) ([]ListUsageLogsByAPIKeyRow, error) {
 	rows, err := q.db.Query(ctx, listUsageLogsByAPIKey, arg.ApiKeyID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AiUsageLog{}
+	items := []ListUsageLogsByAPIKeyRow{}
 	for rows.Next() {
-		var i AiUsageLog
+		var i ListUsageLogsByAPIKeyRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.RequestID,
@@ -3390,7 +3600,48 @@ type ListUsageLogsByUserParams struct {
 	Offset   int32       `json:"offset"`
 }
 
-func (q *Queries) ListUsageLogsByUser(ctx context.Context, arg ListUsageLogsByUserParams) ([]AiUsageLog, error) {
+type ListUsageLogsByUserRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RequestID            string             `json:"request_id"`
+	TraceID              pgtype.Text        `json:"trace_id"`
+	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
+	KeyOwnerType         string             `json:"key_owner_type"`
+	TenantID             string             `json:"tenant_id"`
+	UserID               pgtype.Text        `json:"user_id"`
+	ExternalUserID       pgtype.Text        `json:"external_user_id"`
+	ModelID              pgtype.UUID        `json:"model_id"`
+	ModelCode            string             `json:"model_code"`
+	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	EndpointID           pgtype.UUID        `json:"endpoint_id"`
+	ProviderCode         pgtype.Text        `json:"provider_code"`
+	UpstreamModel        pgtype.Text        `json:"upstream_model"`
+	ConversationID       pgtype.Text        `json:"conversation_id"`
+	Stream               bool               `json:"stream"`
+	PromptTokens         int32              `json:"prompt_tokens"`
+	CompletionTokens     int32              `json:"completion_tokens"`
+	TotalTokens          int32              `json:"total_tokens"`
+	BillableUnitType     string             `json:"billable_unit_type"`
+	BillableUnits        int64              `json:"billable_units"`
+	ProviderCost         int64              `json:"provider_cost"`
+	PlatformCost         int64              `json:"platform_cost"`
+	UserCost             int64              `json:"user_cost"`
+	ApiKeyQuotaCost      int64              `json:"api_key_quota_cost"`
+	UrmTransactionID     pgtype.Text        `json:"urm_transaction_id"`
+	BillingStatus        string             `json:"billing_status"`
+	RequestStatus        string             `json:"request_status"`
+	HttpStatus           pgtype.Int4        `json:"http_status"`
+	UpstreamStatus       pgtype.Int4        `json:"upstream_status"`
+	LatencyMs            pgtype.Int4        `json:"latency_ms"`
+	FirstTokenLatencyMs  pgtype.Int4        `json:"first_token_latency_ms"`
+	ErrorCode            pgtype.Text        `json:"error_code"`
+	ErrorMessage         pgtype.Text        `json:"error_message"`
+	UsageEstimated       bool               `json:"usage_estimated"`
+	UsageSource          string             `json:"usage_source"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListUsageLogsByUser(ctx context.Context, arg ListUsageLogsByUserParams) ([]ListUsageLogsByUserRow, error) {
 	rows, err := q.db.Query(ctx, listUsageLogsByUser,
 		arg.TenantID,
 		arg.UserID,
@@ -3401,9 +3652,9 @@ func (q *Queries) ListUsageLogsByUser(ctx context.Context, arg ListUsageLogsByUs
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AiUsageLog{}
+	items := []ListUsageLogsByUserRow{}
 	for rows.Next() {
-		var i AiUsageLog
+		var i ListUsageLogsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.RequestID,
@@ -4799,7 +5050,23 @@ type UpdateUpstreamDeploymentCostPriceParams struct {
 	Status               string             `json:"status"`
 }
 
-func (q *Queries) UpdateUpstreamDeploymentCostPrice(ctx context.Context, arg UpdateUpstreamDeploymentCostPriceParams) (AiUpstreamDeploymentCostPrice, error) {
+type UpdateUpstreamDeploymentCostPriceRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	CapabilityType       string             `json:"capability_type"`
+	Currency             string             `json:"currency"`
+	InputCostPer1m       int64              `json:"input_cost_per_1m"`
+	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
+	RequestCost          int64              `json:"request_cost"`
+	ImageCost            int64              `json:"image_cost"`
+	ImageSizePrices      []byte             `json:"image_size_prices"`
+	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
+	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UpdateUpstreamDeploymentCostPrice(ctx context.Context, arg UpdateUpstreamDeploymentCostPriceParams) (UpdateUpstreamDeploymentCostPriceRow, error) {
 	row := q.db.QueryRow(ctx, updateUpstreamDeploymentCostPrice,
 		arg.UpstreamDeploymentID,
 		arg.ID,
@@ -4814,7 +5081,7 @@ func (q *Queries) UpdateUpstreamDeploymentCostPrice(ctx context.Context, arg Upd
 		arg.EffectiveFrom,
 		arg.Status,
 	)
-	var i AiUpstreamDeploymentCostPrice
+	var i UpdateUpstreamDeploymentCostPriceRow
 	err := row.Scan(
 		&i.ID,
 		&i.UpstreamDeploymentID,
@@ -4860,9 +5127,25 @@ type UpdateUpstreamDeploymentCostPriceStatusParams struct {
 	Status               string      `json:"status"`
 }
 
-func (q *Queries) UpdateUpstreamDeploymentCostPriceStatus(ctx context.Context, arg UpdateUpstreamDeploymentCostPriceStatusParams) (AiUpstreamDeploymentCostPrice, error) {
+type UpdateUpstreamDeploymentCostPriceStatusRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	CapabilityType       string             `json:"capability_type"`
+	Currency             string             `json:"currency"`
+	InputCostPer1m       int64              `json:"input_cost_per_1m"`
+	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
+	RequestCost          int64              `json:"request_cost"`
+	ImageCost            int64              `json:"image_cost"`
+	ImageSizePrices      []byte             `json:"image_size_prices"`
+	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
+	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) UpdateUpstreamDeploymentCostPriceStatus(ctx context.Context, arg UpdateUpstreamDeploymentCostPriceStatusParams) (UpdateUpstreamDeploymentCostPriceStatusRow, error) {
 	row := q.db.QueryRow(ctx, updateUpstreamDeploymentCostPriceStatus, arg.UpstreamDeploymentID, arg.ID, arg.Status)
-	var i AiUpstreamDeploymentCostPrice
+	var i UpdateUpstreamDeploymentCostPriceStatusRow
 	err := row.Scan(
 		&i.ID,
 		&i.UpstreamDeploymentID,
@@ -5365,7 +5648,20 @@ type UpsertModelPriceParams struct {
 	AudioSttPricePerMinute  int64       `json:"audio_stt_price_per_minute"`
 }
 
-func (q *Queries) UpsertModelPrice(ctx context.Context, arg UpsertModelPriceParams) (AiModelPrice, error) {
+type UpsertModelPriceRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertModelPrice(ctx context.Context, arg UpsertModelPriceParams) (UpsertModelPriceRow, error) {
 	row := q.db.QueryRow(ctx, upsertModelPrice,
 		arg.ModelID,
 		arg.InputPricePer1m,
@@ -5375,7 +5671,7 @@ func (q *Queries) UpsertModelPrice(ctx context.Context, arg UpsertModelPricePara
 		arg.AudioTtsPricePer1mChars,
 		arg.AudioSttPricePerMinute,
 	)
-	var i AiModelPrice
+	var i UpsertModelPriceRow
 	err := row.Scan(
 		&i.ID,
 		&i.ModelID,
@@ -5440,7 +5736,22 @@ type UpsertTenantModelPriceOverrideParams struct {
 	CreatedBy               pgtype.Text `json:"created_by"`
 }
 
-func (q *Queries) UpsertTenantModelPriceOverride(ctx context.Context, arg UpsertTenantModelPriceOverrideParams) (AiTenantModelPriceOverride, error) {
+type UpsertTenantModelPriceOverrideRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                string             `json:"tenant_id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedBy               pgtype.Text        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertTenantModelPriceOverride(ctx context.Context, arg UpsertTenantModelPriceOverrideParams) (UpsertTenantModelPriceOverrideRow, error) {
 	row := q.db.QueryRow(ctx, upsertTenantModelPriceOverride,
 		arg.TenantID,
 		arg.ModelID,
@@ -5452,7 +5763,7 @@ func (q *Queries) UpsertTenantModelPriceOverride(ctx context.Context, arg Upsert
 		arg.AudioSttPricePerMinute,
 		arg.CreatedBy,
 	)
-	var i AiTenantModelPriceOverride
+	var i UpsertTenantModelPriceOverrideRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
@@ -5519,7 +5830,22 @@ type UpsertTenantUserPriceParams struct {
 	CreatedBy               pgtype.Text `json:"created_by"`
 }
 
-func (q *Queries) UpsertTenantUserPrice(ctx context.Context, arg UpsertTenantUserPriceParams) (AiTenantUserPrice, error) {
+type UpsertTenantUserPriceRow struct {
+	ID                      pgtype.UUID        `json:"id"`
+	TenantID                string             `json:"tenant_id"`
+	ModelID                 pgtype.UUID        `json:"model_id"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImageSizePrices         []byte             `json:"image_size_prices"`
+	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
+	CreatedBy               pgtype.Text        `json:"created_by"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertTenantUserPrice(ctx context.Context, arg UpsertTenantUserPriceParams) (UpsertTenantUserPriceRow, error) {
 	row := q.db.QueryRow(ctx, upsertTenantUserPrice,
 		arg.TenantID,
 		arg.ModelID,
@@ -5531,7 +5857,7 @@ func (q *Queries) UpsertTenantUserPrice(ctx context.Context, arg UpsertTenantUse
 		arg.AudioSttPricePerMinute,
 		arg.CreatedBy,
 	)
-	var i AiTenantUserPrice
+	var i UpsertTenantUserPriceRow
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,

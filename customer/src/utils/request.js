@@ -49,8 +49,8 @@ request.interceptors.response.use(
   (response) => {
     const res = response.data
 
-    if (res.code !== undefined && res.code !== 200) {
-      if (res.code === 401) {
+    if (res.code !== undefined && res.code !== 0) {
+      if (res.code === 10001 || res.code === 10002) {
         const authStore = useAuthStore()
         authStore.clearState()
         authStore.stopAutoRefresh()

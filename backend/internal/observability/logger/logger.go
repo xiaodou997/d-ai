@@ -2,43 +2,24 @@ package logger
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
-
-	"uni-ai-api/backend/internal/config"
 )
 
-type Config struct {
-	ServiceName string
-	Env         string
-	Version     string
-	Logging     config.LoggingConfig
-}
+func New() *slog.Logger {
+	level := parseLevel(os.Getenv("LOG_LEVEL"))
+	handlerOptions := &slog.HandlerOptions{Level: level}
 
-func New(cfg Config) *slog.Logger {
-	handlerOptions := &slog.HandlerOptions{
-		Level: parseLevel(cfg.Logging.Level),
-	}
-
-	var output io.Writer = os.Stdout
 	var handler slog.Handler
-	switch cfg.Logging.Format {
-	case "console":
-		handler = slog.NewTextHandler(output, handlerOptions)
-	default:
-		handler = slog.NewJSONHandler(output, handlerOptions)
+	if strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV"))) == "development" {
+		handler = slog.NewTextHandler(os.Stdout, handlerOptions)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, handlerOptions)
 	}
 
 	handler = newRedactHandler(handler, defaultRedactFields())
-
-	return slog.New(handler).With(
-		"service", cfg.ServiceName,
-		"env", cfg.Env,
-		"version", cfg.Version,
-		"pid", os.Getpid(),
-	)
+	return slog.New(handler)
 }
 
 func defaultRedactFields() []string {
@@ -152,3 +133,4 @@ func attrsToAny(attrs []slog.Attr) []any {
 	}
 	return out
 }
+

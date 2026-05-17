@@ -110,7 +110,7 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || parsed <= 0 {
-			writeAdminError(w, http.StatusBadRequest, "invalid limit")
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid limit")
 			return
 		}
 		if parsed > 500 {
@@ -124,5 +124,5 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 		s.writeAdminServerError(w, r, "list admin audit logs failed", err)
 		return
 	}
-	writeAdminJSON(w, http.StatusOK, rows)
+	writeOK(w, fromAuditLogs(rows))
 }

@@ -113,6 +113,9 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
+  auth_type,
+  fixed_provider_type,
+  oauth_strategy,
   status,
   created_at,
   updated_at
@@ -1227,6 +1230,9 @@ SELECT
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
+  AND ($4 = '' OR user_id = $4)
+  AND ($5 = '' OR model_code = $5)
+  AND ($6 = '' OR request_status = $6)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 

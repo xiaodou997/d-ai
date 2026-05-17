@@ -60,6 +60,18 @@ const routes = [
         meta: { title: '充值记录', requiresAuth: true, roles: [1] }
       },
       {
+        path: '/analytics',
+        name: 'Analytics',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { title: '趋势分析', requiresAuth: true, roles: [1] }
+      },
+      {
+        path: '/system',
+        name: 'SystemStatus',
+        component: () => import('@/views/System/index.vue'),
+        meta: { title: '系统状态', requiresAuth: true, roles: [1] }
+      },
+      {
         path: '/ai-gateway',
         component: () => import('@/views/AIGateway/index.vue'),
         redirect: () => {
@@ -97,6 +109,12 @@ const routes = [
             name: 'GatewayLimits',
             component: () => import('@/views/AIGateway/GatewayLimits.vue'),
             meta: { title: '限流策略', requiresAuth: true, roles: [1] }
+          },
+          {
+            path: 'credential-pools',
+            name: 'GatewayCredentialPools',
+            component: () => import('@/views/AIGateway/GatewayCredentialPools.vue'),
+            meta: { title: '账号池', requiresAuth: true, roles: [1] }
           },
           {
             path: 'audit',

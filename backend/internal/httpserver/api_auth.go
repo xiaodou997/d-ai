@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -23,40 +22,18 @@ type apiContext struct {
 }
 
 type apiContextKey struct{}
-type apiTenantIDKey struct{}
-type apiUserIDKey struct{}
-type apiUserTypeKey struct{}
 
 func (s *Server) apiAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 如果配置了静态 AdminToken，允许直接访问
-		if s.validLocalAdminToken(r) {
-			ctx := r.Context()
-			setRequestIdentity(ctx, "", "", string(apiRolePlatform))
-			ctx = withAdminContext(ctx, adminContext{
-				Actor:    "local_admin",
-				Role:     adminRolePlatform,
-				UserType: 1,
-			})
-			ctx = context.WithValue(ctx, apiContextKey{}, apiContext{
-				UserType: 1,
-				TenantID: "",
-				UserID:   "",
-				Role:     apiRolePlatform,
-			})
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
-		// 本地 JWKS 验证 JWT Token
+		// 本地 JWKS 验证 JWT Token（URM 是唯一的 auth 来源）
 		if s.jwksValidator == nil {
-			writeAPIError(w, http.StatusUnauthorized, "authentication not configured")
+			writeErr(w, http.StatusUnauthorized, BizErrTokenInvalid, "authentication not configured")
 			return
 		}
 
 		token := bearerToken(r.Header.Get("Authorization"))
 		if token == "" {
-			writeAPIError(w, http.StatusUnauthorized, "missing token")
+			writeErr(w, http.StatusUnauthorized, BizErrTokenInvalid, "missing token")
 			return
 		}
 
@@ -66,23 +43,23 @@ func (s *Server) apiAuth(next http.Handler) http.Handler {
 				"error", err,
 				"request_id", requestIDFromContext(r.Context()),
 			)
-			writeAPIError(w, http.StatusUnauthorized, "invalid token")
+			writeErr(w, http.StatusUnauthorized, BizErrTokenInvalid, "invalid token")
 			return
 		}
 
 		role := roleForUserType(claims.UserType)
 
-		// app_key 校验：非平台管理员（userType 1/2）的 token 必须携带与本服务匹配的 app_key
-		if s.urmAppKey != "" && claims.UserType != 1 && claims.UserType != 2 {
-			if claims.AppKey != s.urmAppKey {
-				writeAPIError(w, http.StatusForbidden, "token not authorized for this service")
+		// client_id 校验：非平台管理员（userType 1/2）的 token 必须携带与本服务匹配的 client_id
+		if s.urmClientID != "" && claims.UserType != 1 && claims.UserType != 2 {
+			if claims.ClientID != s.urmClientID {
+				writeErr(w, http.StatusForbidden, BizErrForbidden, "token not authorized for this service")
 				return
 			}
 		}
 
 		// 实时封禁检查
 		if s.banSubscriber != nil && claims.UserID != "" && s.banSubscriber.IsBanned(claims.UserID) {
-			writeAPIError(w, http.StatusUnauthorized, "account banned")
+			writeErr(w, http.StatusForbidden, BizErrAccountBanned, "account banned")
 			return
 		}
 
@@ -94,9 +71,6 @@ func (s *Server) apiAuth(next http.Handler) http.Handler {
 			UserID:   claims.UserID,
 			Role:     role,
 		})
-		ctx = context.WithValue(ctx, apiTenantIDKey{}, claims.TenantID)
-		ctx = context.WithValue(ctx, apiUserIDKey{}, claims.UserID)
-		ctx = context.WithValue(ctx, apiUserTypeKey{}, claims.UserType)
 		setRequestIdentity(ctx, claims.TenantID, claims.UserID, string(role))
 		ctx = withAdminContext(ctx, adminContext{
 			Actor:    claims.UserID,
@@ -108,7 +82,7 @@ func (s *Server) apiAuth(next http.Handler) http.Handler {
 
 		// 权限检查
 		if !apiRequestAllowed(role, r.Method, r.URL.Path) {
-			writeAPIError(w, http.StatusForbidden, "forbidden")
+			writeErr(w, http.StatusForbidden, BizErrForbidden, "forbidden")
 			return
 		}
 
@@ -182,6 +156,12 @@ func tenantOrUserAPIRequestAllowed(role apiRole, method string, resourcePath []s
 		switch resource {
 		case "user-api-keys", "user-model-grants", "user-usage-logs", "user-usage-summary":
 			return true // 这些资源后端会自动过滤为该用户的数据
+		case "users":
+			// 用户可以访问 /api/v1/users/me/* 路径（自管理 api-keys 等）
+			if len(resourcePath) >= 2 && resourcePath[1] == "me" {
+				return true
+			}
+			return false
 		case "dashboard":
 			return method == http.MethodGet
 		case "models":
@@ -250,15 +230,3 @@ func resolveMePath(path string, ctx context.Context) string {
 	return path
 }
 
-func writeAPIError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	w.Write([]byte(`{"error":"` + message + `"}`))
-}
-
-func writeAPIJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	enc := json.NewEncoder(w)
-	enc.Encode(data)
-}

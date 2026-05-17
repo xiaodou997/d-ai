@@ -13,6 +13,7 @@ const pageDescription = computed(() => {
   if (route.path.endsWith('/access')) return '管理模型授权与运行时 API Key。'
   if (route.path.endsWith('/usage')) return '查看调用日志、计费单位和积分消耗。'
   if (route.path.endsWith('/limits')) return '维护租户、用户和 Key 级限流策略。'
+  if (route.path.endsWith('/credential-pools')) return '管理 Codex / Claude OAuth / Gemini CLI 的 OAuth Token 账号池。'
   if (route.path.endsWith('/audit')) return '追踪 AI Gateway 后台配置变更。'
   return authStore.isPlatformAdmin ? '统一维护 AI Gateway 业务能力。' : '管理你的模型授权、API Key 和调用记录。'
 })

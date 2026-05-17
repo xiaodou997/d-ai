@@ -10,6 +10,7 @@ import {
   formatCredits,
   formatTimestamp,
   getModelPrice,
+  listCredentialPools,
   listModelRoutes,
   listModels,
   listUpstreamDeployments,
@@ -67,8 +68,13 @@ const priceForm = reactive({
   audio_stt_price_per_minute: 0
 })
 
+const routeMode = shallowRef('deployment') // 'deployment' | 'pool'
+const credentialPools = shallowRef([])
+
 const routeForm = reactive({
   upstream_deployment_id: '',
+  credential_pool_id: '',
+  pool_upstream_model: '',
   priority: 100,
   weight: 100,
   supports_stream: true,
@@ -149,9 +155,19 @@ const resetPriceForm = () => {
   })
 }
 
+const fetchCredentialPools = async () => {
+  try {
+    credentialPools.value = (await listCredentialPools()) || []
+  } catch { /* ignore */ }
+}
+
 const resetRouteForm = () => {
   editingRouteId.value = ''
-  Object.assign(routeForm, { upstream_deployment_id: '', priority: 100, weight: 100, supports_stream: true, status: 'active' })
+  routeMode.value = 'deployment'
+  Object.assign(routeForm, {
+    upstream_deployment_id: '', credential_pool_id: '', pool_upstream_model: '',
+    priority: 100, weight: 100, supports_stream: true, status: 'active'
+  })
 }
 
 const applyModelForm = (row) => {
@@ -166,11 +182,24 @@ const applyModelForm = (row) => {
 
 const applyRouteForm = (row) => {
   editingRouteId.value = row.id
-  Object.assign(routeForm, {
-    upstream_deployment_id: row.upstream_deployment_id,
-    priority: row.priority, weight: row.weight,
-    supports_stream: row.supports_stream, status: row.status
-  })
+  if (row.credential_pool_id) {
+    routeMode.value = 'pool'
+    Object.assign(routeForm, {
+      upstream_deployment_id: '',
+      credential_pool_id: row.credential_pool_id,
+      pool_upstream_model: row.pool_upstream_model || '',
+      priority: row.priority, weight: row.weight,
+      supports_stream: row.supports_stream, status: row.status
+    })
+  } else {
+    routeMode.value = 'deployment'
+    Object.assign(routeForm, {
+      upstream_deployment_id: row.upstream_deployment_id || '',
+      credential_pool_id: '', pool_upstream_model: '',
+      priority: row.priority, weight: row.weight,
+      supports_stream: row.supports_stream, status: row.status
+    })
+  }
 }
 
 // ── Image size price helpers ──────────────────────────────────────────────────
@@ -304,11 +333,19 @@ const submitModelPrice = async () => {
 
 const submitModelRoute = async () => {
   const payload = {
-    upstream_deployment_id: routeForm.upstream_deployment_id,
     priority: routeForm.priority,
     weight: routeForm.weight,
     supports_stream: routeForm.supports_stream,
     status: routeForm.status
+  }
+  if (routeMode.value === 'pool') {
+    if (!routeForm.credential_pool_id) { ElMessage.error('请选择账号池'); return }
+    if (!routeForm.pool_upstream_model.trim()) { ElMessage.error('pool_upstream_model 不能为空'); return }
+    payload.credential_pool_id = routeForm.credential_pool_id
+    payload.pool_upstream_model = routeForm.pool_upstream_model
+  } else {
+    if (!routeForm.upstream_deployment_id) { ElMessage.error('请选择上游部署'); return }
+    payload.upstream_deployment_id = routeForm.upstream_deployment_id
   }
   if (editingRouteId.value) {
     await updateModelRoute(selectedModelId.value, editingRouteId.value, payload)
@@ -346,7 +383,7 @@ const deleteRoute = async (row) => {
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
-onMounted(fetchModels)
+onMounted(() => { fetchModels(); fetchCredentialPools() })
 </script>
 
 <template>
@@ -661,13 +698,40 @@ onMounted(fetchModels)
     </el-dialog>
 
     <!-- ── 路由对话框 ── -->
-    <el-dialog v-model="routeDialogVisible" :title="isEditingRoute ? '编辑模型路由' : '新增模型路由'" width="560px" append-to-body>
+    <el-dialog v-model="routeDialogVisible" :title="isEditingRoute ? '编辑模型路由' : '新增模型路由'" width="580px" append-to-body>
       <el-form :model="routeForm" label-position="top">
-        <el-form-item label="上游部署" required>
+        <!-- Route target mode -->
+        <el-form-item label="路由目标">
+          <el-radio-group v-model="routeMode">
+            <el-radio-button value="deployment">上游部署（API Key）</el-radio-button>
+            <el-radio-button value="pool">账号池（OAuth）</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- Deployment mode -->
+        <el-form-item v-if="routeMode === 'deployment'" label="上游部署" required>
           <el-select v-model="routeForm.upstream_deployment_id" class="w-full" filterable placeholder="选择上游部署">
             <el-option v-for="item in upstreamDeploymentOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
+
+        <!-- Pool mode -->
+        <template v-else>
+          <el-form-item label="账号池" required>
+            <el-select v-model="routeForm.credential_pool_id" class="w-full" filterable placeholder="选择账号池">
+              <el-option
+                v-for="pool in credentialPools"
+                :key="pool.id"
+                :label="`[${pool.fixed_provider_type}] ${pool.name}`"
+                :value="pool.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="上游模型名（pool_upstream_model）" required>
+            <el-input v-model="routeForm.pool_upstream_model" placeholder="例如 gpt-4o、claude-opus-4-5" />
+          </el-form-item>
+        </template>
+
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="优先级">
             <el-input-number v-model="routeForm.priority" :min="0" :precision="0" class="w-full" />

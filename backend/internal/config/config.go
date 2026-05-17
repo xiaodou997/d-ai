@@ -2,254 +2,230 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v2"
 )
 
 type Config struct {
-	SourcePath string         `yaml:"-"`
-	App        AppConfig      `yaml:"app"`
-	Server     ServerConfig   `yaml:"server"`
-	Logging    LoggingConfig  `yaml:"logging"`
-	Postgres   PostgresConfig `yaml:"postgres"`
-	Redis      RedisConfig    `yaml:"redis"`
-	URM        URMConfig      `yaml:"urm"`
-	Security   SecurityConfig `yaml:"security"`
-}
-
-type AppConfig struct {
-	Env         string `yaml:"env"`
-	ServiceName string `yaml:"serviceName"`
-	Version     string `yaml:"version"`
+	Server   ServerConfig
+	Postgres PostgresConfig
+	Redis    RedisConfig
+	URM      URMConfig
+	Security SecurityConfig
 }
 
 type ServerConfig struct {
-	HTTPAddr string `yaml:"httpAddr"`
-}
-
-type LoggingConfig struct {
-	Level         string `yaml:"level"`
-	Format        string `yaml:"format"`
-	AccessLog     bool   `yaml:"accessLog"`
-	SlowRequestMs int64  `yaml:"slowRequestMs"`
+	Addr string // e.g. ":13010"
 }
 
 type PostgresConfig struct {
-	DSN             string        `yaml:"dsn"`
-	MaxConns        int32         `yaml:"maxConns"`
-	MinConns        int32         `yaml:"minConns"`
-	MaxConnLifetime time.Duration `yaml:"maxConnLifetime"`
+	DSN             string
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
 }
 
 type RedisConfig struct {
-	Addr     string `yaml:"addr"`
-	Password string `yaml:"password"`
-	DB       int    `yaml:"db"`
-	Enabled  bool   `yaml:"enabled"`
+	Addr     string
+	Password string
 }
 
 type URMConfig struct {
-	BaseURL             string        `yaml:"baseUrl"`
-	AppKey              string        `yaml:"appKey"`
-	AppSecret           string        `yaml:"appSecret"`
-	Timeout             time.Duration `yaml:"timeout"`
-	JWKSRefreshInterval time.Duration `yaml:"jwksRefreshInterval"`
+	BaseURL     string
+	ClientID    string
+	DisplayName string
+	Description string
+	Timeout     time.Duration
 }
 
 type SecurityConfig struct {
-	ProviderKeyMaster string `yaml:"providerKeyMaster"`
-	AdminToken        string `yaml:"adminToken"`
+	ProviderKeyMaster string
 }
 
 func Load() (*Config, error) {
-	cfg := defaultConfig()
-
-	configPath := os.Getenv("UNI_AI_API_CONFIG")
-	if configPath != "" {
-		if err := loadYAML(configPath, cfg); err != nil {
-			return nil, err
-		}
-		cfg.SourcePath = configPath
+	cfg := &Config{
+		Server: ServerConfig{
+			Addr: ":13010",
+		},
+		Postgres: PostgresConfig{
+			MaxConns:        20,
+			MinConns:        2,
+			MaxConnLifetime: time.Hour,
+		},
+		URM: URMConfig{
+			Timeout: 10 * time.Second,
+		},
 	}
 
+	if err := applyYAML(cfg, "config.yaml"); err != nil {
+		return nil, err
+	}
 	applyEnv(cfg)
-	normalize(cfg)
 
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
-
 	return cfg, nil
 }
 
-func defaultConfig() *Config {
-	return &Config{
-		App: AppConfig{
-			Env:         "development",
-			ServiceName: "uni-ai-api",
-			Version:     "dev",
-		},
-		Server: ServerConfig{
-			HTTPAddr: ":13010",
-		},
-		Logging: LoggingConfig{
-			Level:         "info",
-			Format:        "json",
-			AccessLog:     true,
-			SlowRequestMs: 1000,
-		},
-		Postgres: PostgresConfig{
-			MaxConns:        10,
-			MinConns:        1,
-			MaxConnLifetime: time.Hour,
-		},
-		Redis: RedisConfig{
-			Enabled: true,
-			Addr:    "127.0.0.1:6379",
-		},
-		URM: URMConfig{
-			Timeout:             10 * time.Second,
-			JWKSRefreshInterval: 24 * time.Hour,
-		},
-	}
+type yamlFile struct {
+	Server struct {
+		Port int    `yaml:"port"`
+		Addr string `yaml:"addr"`
+	} `yaml:"server"`
+	Database struct {
+		DSN             string `yaml:"dsn"`
+		MaxConns        int32  `yaml:"max_conns"`
+		MinConns        int32  `yaml:"min_conns"`
+		MaxConnLifetime string `yaml:"max_conn_lifetime"`
+	} `yaml:"database"`
+	Redis struct {
+		Addr     string `yaml:"addr"`
+		Password string `yaml:"password"`
+	} `yaml:"redis"`
+	URM struct {
+		BaseURL     string `yaml:"base_url"`
+		ClientID    string `yaml:"client_id"`
+		DisplayName string `yaml:"display_name"`
+		Description string `yaml:"description"`
+		Timeout     string `yaml:"timeout"`
+	} `yaml:"urm"`
+	Security struct {
+		ProviderKeyMaster string `yaml:"provider_key_master"`
+	} `yaml:"security"`
 }
 
-func loadYAML(path string, cfg *Config) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("read config file: %w", err)
+func applyYAML(cfg *Config, path string) error {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
 	}
-	if err := yaml.Unmarshal(b, cfg); err != nil {
-		return fmt.Errorf("parse config file: %w", err)
+	if err != nil {
+		return err
+	}
+
+	var f yamlFile
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return err
+	}
+
+	if f.Server.Addr != "" {
+		cfg.Server.Addr = f.Server.Addr
+	} else if f.Server.Port != 0 {
+		cfg.Server.Addr = ":" + strconv.Itoa(f.Server.Port)
+	}
+	if f.Database.DSN != "" {
+		cfg.Postgres.DSN = f.Database.DSN
+	}
+	if f.Database.MaxConns != 0 {
+		cfg.Postgres.MaxConns = f.Database.MaxConns
+	}
+	if f.Database.MinConns != 0 {
+		cfg.Postgres.MinConns = f.Database.MinConns
+	}
+	if f.Database.MaxConnLifetime != "" {
+		if d, err := time.ParseDuration(f.Database.MaxConnLifetime); err == nil {
+			cfg.Postgres.MaxConnLifetime = d
+		}
+	}
+	if f.Redis.Addr != "" {
+		cfg.Redis.Addr = f.Redis.Addr
+	}
+	if f.Redis.Password != "" {
+		cfg.Redis.Password = f.Redis.Password
+	}
+	if f.URM.BaseURL != "" {
+		cfg.URM.BaseURL = f.URM.BaseURL
+	}
+	if f.URM.ClientID != "" {
+		cfg.URM.ClientID = f.URM.ClientID
+	}
+	if f.URM.DisplayName != "" {
+		cfg.URM.DisplayName = f.URM.DisplayName
+	}
+	if f.URM.Description != "" {
+		cfg.URM.Description = f.URM.Description
+	}
+	if f.URM.Timeout != "" {
+		if d, err := time.ParseDuration(f.URM.Timeout); err == nil {
+			cfg.URM.Timeout = d
+		}
+	}
+	if f.Security.ProviderKeyMaster != "" {
+		cfg.Security.ProviderKeyMaster = f.Security.ProviderKeyMaster
 	}
 	return nil
 }
 
 func applyEnv(cfg *Config) {
-	setString(&cfg.App.Env, "UNI_AI_API_ENV")
-	setString(&cfg.App.ServiceName, "UNI_AI_API_SERVICE_NAME")
-	setString(&cfg.App.Version, "UNI_AI_API_VERSION")
+	setStr(&cfg.Server.Addr, "PORT", func(v string) string {
+		if !strings.HasPrefix(v, ":") {
+			return ":" + v
+		}
+		return v
+	})
+	setStr(&cfg.Server.Addr, "SERVER_ADDR")
 
-	setString(&cfg.Server.HTTPAddr, "UNI_AI_API_SERVER_HTTP_ADDR")
+	setStr(&cfg.Postgres.DSN, "DATABASE_URL")
+	setI32(&cfg.Postgres.MaxConns, "DB_MAX_CONNS")
+	setI32(&cfg.Postgres.MinConns, "DB_MIN_CONNS")
+	setDur(&cfg.Postgres.MaxConnLifetime, "DB_MAX_CONN_LIFETIME")
 
-	setString(&cfg.Logging.Level, "UNI_AI_API_LOGGING_LEVEL")
-	setString(&cfg.Logging.Format, "UNI_AI_API_LOGGING_FORMAT")
-	setBool(&cfg.Logging.AccessLog, "UNI_AI_API_LOGGING_ACCESS_LOG")
-	setInt64(&cfg.Logging.SlowRequestMs, "UNI_AI_API_LOGGING_SLOW_REQUEST_MS")
+	setStr(&cfg.Redis.Addr, "REDIS_ADDR")
+	setStr(&cfg.Redis.Password, "REDIS_PASSWORD")
 
-	setString(&cfg.Postgres.DSN, "UNI_AI_API_POSTGRES_DSN")
-	setInt32(&cfg.Postgres.MaxConns, "UNI_AI_API_POSTGRES_MAX_CONNS")
-	setInt32(&cfg.Postgres.MinConns, "UNI_AI_API_POSTGRES_MIN_CONNS")
-	setDuration(&cfg.Postgres.MaxConnLifetime, "UNI_AI_API_POSTGRES_MAX_CONN_LIFETIME")
+	setStr(&cfg.URM.BaseURL, "URM_BASE_URL")
+	setStr(&cfg.URM.ClientID, "URM_CLIENT_ID")
+	setStr(&cfg.URM.DisplayName, "URM_DISPLAY_NAME")
+	setStr(&cfg.URM.Description, "URM_DESCRIPTION")
+	setDur(&cfg.URM.Timeout, "URM_TIMEOUT")
 
-	setBool(&cfg.Redis.Enabled, "UNI_AI_API_REDIS_ENABLED")
-	setString(&cfg.Redis.Addr, "UNI_AI_API_REDIS_ADDR")
-	setString(&cfg.Redis.Password, "UNI_AI_API_REDIS_PASSWORD")
-	setInt(&cfg.Redis.DB, "UNI_AI_API_REDIS_DB")
-
-	setString(&cfg.URM.BaseURL, "UNI_AI_API_URM_BASE_URL")
-	setString(&cfg.URM.AppKey, "UNI_AI_API_URM_APP_KEY")
-	setString(&cfg.URM.AppSecret, "UNI_AI_API_URM_APP_SECRET")
-	setDuration(&cfg.URM.Timeout, "UNI_AI_API_URM_TIMEOUT")
-	setDuration(&cfg.URM.JWKSRefreshInterval, "UNI_AI_API_URM_JWKS_REFRESH_INTERVAL")
-
-	setString(&cfg.Security.ProviderKeyMaster, "UNI_AI_API_PROVIDER_KEY_MASTER")
-	setString(&cfg.Security.AdminToken, "UNI_AI_API_ADMIN_TOKEN")
-}
-
-func normalize(cfg *Config) {
-	cfg.App.Env = strings.ToLower(strings.TrimSpace(cfg.App.Env))
-	cfg.App.ServiceName = strings.TrimSpace(cfg.App.ServiceName)
-	cfg.App.Version = strings.TrimSpace(cfg.App.Version)
-	cfg.Server.HTTPAddr = strings.TrimSpace(cfg.Server.HTTPAddr)
-	cfg.Logging.Level = strings.ToLower(strings.TrimSpace(cfg.Logging.Level))
-	cfg.Logging.Format = strings.ToLower(strings.TrimSpace(cfg.Logging.Format))
-	if cfg.Logging.Level == "" {
-		cfg.Logging.Level = "info"
-	}
-	if cfg.Logging.Format == "" {
-		cfg.Logging.Format = "json"
-	}
+	setStr(&cfg.Security.ProviderKeyMaster, "PROVIDER_KEY_MASTER")
 }
 
 func validate(cfg *Config) error {
-	if cfg.App.ServiceName == "" {
-		return errors.New("app serviceName is required")
-	}
-	if cfg.Server.HTTPAddr == "" {
-		return errors.New("server httpAddr is required")
-	}
-	switch cfg.Logging.Level {
-	case "debug", "info", "warn", "error":
-	default:
-		return fmt.Errorf("invalid logging level %q", cfg.Logging.Level)
-	}
-	switch cfg.Logging.Format {
-	case "json", "console":
-	default:
-		return fmt.Errorf("invalid logging format %q", cfg.Logging.Format)
-	}
 	if cfg.Postgres.DSN == "" {
-		return errors.New("postgres dsn is required")
+		return errors.New("DATABASE_URL is required")
+	}
+	if cfg.URM.BaseURL == "" {
+		return errors.New("URM_BASE_URL is required")
+	}
+	if cfg.URM.ClientID == "" {
+		return errors.New("URM_CLIENT_ID is required")
 	}
 	if cfg.Security.ProviderKeyMaster == "" {
-		return errors.New("provider key master is required")
+		return errors.New("PROVIDER_KEY_MASTER is required")
 	}
 	return nil
 }
 
-func setString(target *string, key string) {
-	if v := os.Getenv(key); v != "" {
-		*target = v
+func setStr(target *string, key string, transform ...func(string) string) {
+	v := os.Getenv(key)
+	if v == "" {
+		return
 	}
+	if len(transform) > 0 {
+		v = transform[0](v)
+	}
+	*target = v
 }
 
-func setInt(target *int, key string) {
+func setI32(target *int32, key string) {
 	if v := os.Getenv(key); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err == nil {
-			*target = parsed
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			*target = int32(n)
 		}
 	}
 }
 
-func setInt64(target *int64, key string) {
+func setDur(target *time.Duration, key string) {
 	if v := os.Getenv(key); v != "" {
-		parsed, err := strconv.ParseInt(v, 10, 64)
-		if err == nil {
-			*target = parsed
-		}
-	}
-}
-
-func setInt32(target *int32, key string) {
-	if v := os.Getenv(key); v != "" {
-		parsed, err := strconv.ParseInt(v, 10, 32)
-		if err == nil {
-			*target = int32(parsed)
-		}
-	}
-}
-
-func setBool(target *bool, key string) {
-	if v := os.Getenv(key); v != "" {
-		parsed, err := strconv.ParseBool(v)
-		if err == nil {
-			*target = parsed
-		}
-	}
-}
-
-func setDuration(target *time.Duration, key string) {
-	if v := os.Getenv(key); v != "" {
-		parsed, err := time.ParseDuration(v)
-		if err == nil {
-			*target = parsed
+		if d, err := time.ParseDuration(v); err == nil {
+			*target = d
 		}
 	}
 }

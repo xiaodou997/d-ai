@@ -13,18 +13,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	pgadapter "uni-ai-api/backend/internal/adapters/postgres"
+	redisadapter "uni-ai-api/backend/internal/adapters/redis"
+	urmadapter "uni-ai-api/backend/internal/adapters/urm"
 	"uni-ai-api/backend/internal/config"
 	dbgen "uni-ai-api/backend/internal/db/gen"
+	"uni-ai-api/backend/internal/domain"
+	"uni-ai-api/backend/internal/observability/metrics"
+	"uni-ai-api/backend/internal/serving"
+	"uni-ai-api/backend/internal/tokenrefresh"
+	"uni-ai-api/backend/internal/transport"
 	"uni-ai-api/backend/internal/urm"
 )
 
+
 type Config struct {
-	App           config.AppConfig
 	Server        config.ServerConfig
-	Logging       config.LoggingConfig
 	Security      config.SecurityConfig
 	URM           urmClient
-	URMAppKey     string // 本服务的 app_key，用于校验 JWT claims
+	URMClientID   string
 	JWKSValidator jwksValidator
 	BanSubscriber banChecker
 	Postgres      *pgxpool.Pool
@@ -55,11 +62,16 @@ type Server struct {
 	queries       *dbgen.Queries
 	security      config.SecurityConfig
 	urmClient     urmClient
-	urmAppKey     string
+	urmClientID   string
 	jwksValidator jwksValidator
 	banSubscriber banChecker
 	httpClient    *http.Client
-	logging       config.LoggingConfig
+	oauthCreds      *pgadapter.OAuthCredentialStore
+	tokenRefresher  *tokenrefresh.Refresher
+	routeSelector   *pgadapter.RouteSelector
+
+	// Serving pipeline — shared across requests (steps are stateless)
+	pipeline *serving.Pipeline
 }
 
 func New(cfg Config) *Server {
@@ -67,32 +79,83 @@ func New(cfg Config) *Server {
 		cfg.Logger = slog.Default()
 	}
 
+	q := dbgen.New(cfg.Postgres)
+	grantChecker := pgadapter.NewModelGrantChecker(q)
+	oauthCreds := pgadapter.NewOAuthCredentialStore(cfg.Postgres, cfg.Security.ProviderKeyMaster)
+	routeSelector := pgadapter.NewRouteSelector(q, cfg.Postgres, cfg.Security.ProviderKeyMaster, grantChecker).
+		WithOAuthCredentialStore(oauthCreds)
+	if cfg.Redis != nil {
+		routeSelector.WithRedis(cfg.Redis)
+	}
+	priceResolver := pgadapter.NewPriceResolver(q)
+	gw := metrics.NewGateway()
+
+	var rateLimiter serving.RateLimiter
+	if cfg.Redis != nil {
+		rateLimiter = redisadapter.NewRateLimiter(cfg.Redis, q, 4096)
+	}
+
+	var urmBiller serving.URMBiller
+	if cfg.URM != nil {
+		urmBiller = urmadapter.NewBiller(
+			cfg.URM,
+			priceResolver,
+			pgadapter.CalculateBilling,
+			4096,
+			cfg.Logger,
+		)
+	}
+
 	s := &Server{
 		postgres:      cfg.Postgres,
 		redis:         cfg.Redis,
 		logger:        cfg.Logger,
-		queries:       dbgen.New(cfg.Postgres),
+		queries:       q,
 		security:      cfg.Security,
 		urmClient:     cfg.URM,
-		urmAppKey:     cfg.URMAppKey,
+		urmClientID:   cfg.URMClientID,
 		jwksValidator: cfg.JWKSValidator,
 		banSubscriber: cfg.BanSubscriber,
-		logging:       cfg.Logging,
+		oauthCreds:     oauthCreds,
+		tokenRefresher: tokenrefresh.New(oauthCreds, cfg.Logger),
+		routeSelector:  routeSelector,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
+		pipeline: serving.NewPipeline(
+			&serving.AuthNStep{Resolver: pgadapter.NewAPIKeyResolver(q)},
+			&serving.AuthZStep{Checker: grantChecker},
+			&serving.QuotaCheckStep{},
+			&serving.RouteSelectStep{Selector: routeSelector},
+			&serving.RateLimitStep{Limiter: rateLimiter},
+			&serving.QuotaReserveStep{Reserver: pgadapter.NewQuotaReserver(q)},
+			&serving.URMFreezeStep{Biller: urmBiller},
+			&serving.ExecuteStep{
+				Transport: transport.NewClient(120 * time.Second),
+				Breaker:   routeSelector,
+				OAuthPool: oauthCreds,
+			},
+			&serving.URMConfirmStep{Biller: urmBiller},
+			&serving.UsageLogStep{Logger: pgadapter.NewUsageLogger(q), Metrics: gw},
+		),
 	}
 
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
-	router.Use(middleware.Timeout(120 * time.Second))
 	router.Use(s.requestLogger)
 
 	router.Get("/health", s.handleHealth)
 	router.Get("/ready", s.handleReady)
+	router.Get("/metrics", metrics.Handler().ServeHTTP)
 	router.Get("/api/auth/callback", s.handleAuthCallback)
 	router.Route("/api/v1", func(r chi.Router) {
+		// chi's Timeout middleware swaps the ResponseWriter for a buffered one
+		// that cancels the request after the deadline. It MUST NOT wrap the
+		// /v1/* runtime routes — long-running SSE streams would be killed
+		// mid-flight. Mounting it only on management /api/v1 is safe because
+		// those endpoints return JSON within a bounded time.
+		r.Use(middleware.Timeout(120 * time.Second))
 		r.Use(s.apiAuth)
 		r.Use(s.adminAudit)
 		// =============================================================
@@ -133,6 +196,24 @@ func New(cfg Config) *Server {
 		r.Patch("/limit-policies/{policyID}", s.handleAdminUpdateRuntimeLimitPolicy)
 		r.Patch("/limit-policies/{policyID}/status", s.handleAdminUpdateRuntimeLimitPolicyStatus)
 		r.Get("/audit-logs", s.handleAdminListAuditLogs)
+
+		// OAuth credential pool health (aggregate, all pools)
+		r.Get("/oauth-pool-health", s.handleAdminGetOAuthPoolHealth)
+
+		// System status: DB/Redis health + circuit breaker snapshot
+		r.Get("/system/status", s.handleAdminSystemStatus)
+
+		// Credential pool management
+		r.Get("/credential-pools", s.handleAdminListCredentialPools)
+		r.Post("/credential-pools", s.handleAdminCreateCredentialPool)
+		r.Patch("/credential-pools/{poolID}", s.handleAdminPatchCredentialPool)
+		r.Delete("/credential-pools/{poolID}", s.handleAdminDeleteCredentialPool)
+		r.Get("/credential-pools/{poolID}/credentials", s.handleAdminListPoolCredentials)
+		r.Post("/credential-pools/{poolID}/credentials", s.handleAdminCreatePoolCredential)
+		r.Patch("/credential-pools/{poolID}/credentials/{credID}", s.handleAdminPatchPoolCredential)
+		r.Delete("/credential-pools/{poolID}/credentials/{credID}", s.handleAdminDeletePoolCredential)
+		r.Post("/credential-pools/{poolID}/credentials/{credID}/refresh", s.handleAdminRefreshPoolCredential)
+		r.Get("/credential-pools/{poolID}/available-models", s.handleAdminGetPoolAvailableModels)
 
 		// =============================================================
 		// 平台管理指定租户（platform 角色专用）
@@ -187,6 +268,7 @@ func New(cfg Config) *Server {
 		r.Get("/usage-logs", s.handleUsageLogsByRole)
 		r.Get("/usage-summary", s.handleAdminListUsageSummary)
 		r.Get("/usage-unit-summary", s.handleAdminListUsageUnitSummary)
+		r.Get("/analytics/daily-trend", s.handleAdminListDailyTrend)
 
 		// =============================================================
 		// 租户专用（扁平路径，自动过滤）
@@ -202,10 +284,11 @@ func New(cfg Config) *Server {
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(s.runtimeAuth)
 		r.Get("/models", s.handleListModels)
-		r.Post("/chat/completions", s.handleChatCompletions)
-		r.Post("/responses", s.handleResponses)
-		r.Post("/embeddings", s.handleEmbeddings)
-		r.Post("/images/generations", s.handleImageGenerations)
+		r.Post("/chat/completions", s.handleRuntime(domain.CapabilityChat))
+		r.Post("/responses", s.handleRuntime(domain.CapabilityChat)) // Responses API uses chat capability
+		r.Post("/embeddings", s.handleRuntime(domain.CapabilityEmbedding))
+		r.Post("/images/generations", s.handleRuntime(domain.CapabilityImage))
+		r.Post("/messages", s.handleRuntime(domain.CapabilityChat)) // Native Anthropic client path
 	})
 
 	s.httpServer = &http.Server{
@@ -285,12 +368,7 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 				attrs = append(attrs, "api_key_id_hash", logCtx.APIKeyIDHash)
 			}
 
-			if s.logging.SlowRequestMs > 0 && elapsed.Milliseconds() >= s.logging.SlowRequestMs {
-				s.logger.Warn("slow http request", attrs...)
-			}
-			if s.logging.AccessLog {
-				s.logger.Info("http request", attrs...)
-			}
+			s.logger.Info("http request", attrs...)
 		}()
 
 		next.ServeHTTP(ww, r)

@@ -19,68 +19,72 @@ import (
 func (s *Server) handleTenantAPIKeysSelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
-	var rows interface{}
-	var err error
 
 	if ac.Role == apiRolePlatform {
-		// 平台可以查看所有，或通过查询参数过滤
 		tenantID := r.URL.Query().Get("tenant_id")
 		if tenantID != "" {
-			rows, err = s.queries.ListTenantAPIKeys(r.Context(), tenantID)
+			rows, err := s.queries.ListTenantAPIKeys(r.Context(), tenantID)
+			if err != nil {
+				s.logger.Error("list tenant api keys failed", "error", err)
+				writeDBErr(w, err)
+				return
+			}
+			writeOK(w, fromListTenantAPIKeys(rows))
 		} else {
-			rows, err = s.queries.ListAllTenantAPIKeys(r.Context())
+			rows, err := s.queries.ListAllTenantAPIKeys(r.Context())
+			if err != nil {
+				s.logger.Error("list all tenant api keys failed", "error", err)
+				writeDBErr(w, err)
+				return
+			}
+			writeOK(w, fromListAllTenantAPIKeys(rows))
 		}
 	} else if ac.Role == apiRoleTenant {
-		rows, err = s.queries.ListTenantAPIKeys(r.Context(), ac.TenantID)
+		rows, err := s.queries.ListTenantAPIKeys(r.Context(), ac.TenantID)
+		if err != nil {
+			s.logger.Error("list tenant api keys failed", "error", err)
+			writeDBErr(w, err)
+			return
+		}
+		writeOK(w, fromListTenantAPIKeys(rows))
 	} else {
-		writeAPIError(w, http.StatusForbidden, "forbidden")
-		return
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "forbidden")
 	}
-
-	if err != nil {
-		s.logger.Error("list tenant api keys failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, rows)
 }
 
 // handleTenantModelGrantsSelf - 租户查看自己的模型授权
 func (s *Server) handleTenantModelGrantsSelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	var tenantID string
 	if ac.Role == apiRolePlatform {
-		// 平台可以指定 tenant_id 查询
 		tenantID = r.URL.Query().Get("tenant_id")
 		if tenantID == "" {
-			writeAPIError(w, http.StatusBadRequest, "tenant_id required for platform")
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "tenant_id required for platform")
 			return
 		}
 	} else if ac.Role == apiRoleTenant {
 		tenantID = ac.TenantID
 	} else {
-		writeAPIError(w, http.StatusForbidden, "forbidden")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "forbidden")
 		return
 	}
 
 	rows, err := s.queries.ListTenantModelGrants(r.Context(), tenantID)
 	if err != nil {
 		s.logger.Error("list tenant model grants failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
+		writeDBErr(w, err)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, rows)
+	writeOK(w, fromListTenantModelGrants(rows))
 }
 
 // ============================================================================
@@ -91,27 +95,24 @@ func (s *Server) handleTenantModelGrantsSelf(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleUserAPIKeysSelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
-	// 根据角色过滤
 	if ac.Role == apiRoleUser {
-		// 用户只能查看自己的
 		rows, err := s.queries.ListUserAPIKeys(r.Context(), dbgen.ListUserAPIKeysParams{
 			TenantID: ac.TenantID,
 			UserID:   pgtype.Text{String: ac.UserID, Valid: true},
 		})
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "query failed")
+			writeDBErr(w, err)
 			return
 		}
-		writeAPIJSON(w, http.StatusOK, rows)
+		writeOK(w, fromListUserAPIKeys(rows))
 	} else if ac.Role == apiRoleTenant {
-		// 租户可以查看其租户下指定用户的
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			writeAPIError(w, http.StatusBadRequest, "user_id required for tenant")
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "user_id required for tenant")
 			return
 		}
 		rows, err := s.queries.ListUserAPIKeys(r.Context(), dbgen.ListUserAPIKeysParams{
@@ -119,16 +120,15 @@ func (s *Server) handleUserAPIKeysSelf(w http.ResponseWriter, r *http.Request) {
 			UserID:   pgtype.Text{String: userID, Valid: true},
 		})
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "query failed")
+			writeDBErr(w, err)
 			return
 		}
-		writeAPIJSON(w, http.StatusOK, rows)
+		writeOK(w, fromListUserAPIKeys(rows))
 	} else if ac.Role == apiRolePlatform {
-		// 平台需要指定 tenant_id 和 user_id
 		tenantID := r.URL.Query().Get("tenant_id")
 		userID := r.URL.Query().Get("user_id")
 		if tenantID == "" || userID == "" {
-			writeAPIError(w, http.StatusBadRequest, "tenant_id and user_id required for platform")
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "tenant_id and user_id required for platform")
 			return
 		}
 		rows, err := s.queries.ListUserAPIKeys(r.Context(), dbgen.ListUserAPIKeysParams{
@@ -136,12 +136,12 @@ func (s *Server) handleUserAPIKeysSelf(w http.ResponseWriter, r *http.Request) {
 			UserID:   pgtype.Text{String: userID, Valid: true},
 		})
 		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, "query failed")
+			writeDBErr(w, err)
 			return
 		}
-		writeAPIJSON(w, http.StatusOK, rows)
+		writeOK(w, fromListUserAPIKeys(rows))
 	} else {
-		writeAPIError(w, http.StatusForbidden, "forbidden")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "forbidden")
 	}
 }
 
@@ -149,24 +149,23 @@ func (s *Server) handleUserAPIKeysSelf(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUserModelGrantsSelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleUser {
-		writeAPIError(w, http.StatusForbidden, "only for end users")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only for end users")
 		return
 	}
 
-	// 用户可用的模型 = 租户授权的模型
 	rows, err := s.queries.ListUserAvailableModels(r.Context(), ac.TenantID)
 	if err != nil {
 		s.logger.Error("list user available models failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
+		writeDBErr(w, err)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, rows)
+	writeOK(w, fromListUserAvailableModels(rows))
 }
 
 // ============================================================================
@@ -177,11 +176,10 @@ func (s *Server) handleUserModelGrantsSelf(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
-	// 根据角色设置查询参数
 	params := dbgen.GetDashboardSummaryParams{}
 	since, ok := parseDashboardSince(w, r)
 	if !ok {
@@ -198,11 +196,11 @@ func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Req
 	summary, err := s.queries.GetDashboardSummary(r.Context(), params)
 	if err != nil {
 		s.logger.Error("dashboard summary failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
+		writeDBErr(w, err)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, summary)
+	writeOK(w, summary)
 }
 
 // ============================================================================
@@ -211,7 +209,6 @@ func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Req
 
 // handleUsageLogsByRole - 使用日志，根据角色返回不同范围
 func (s *Server) handleUsageLogsByRole(w http.ResponseWriter, r *http.Request) {
-	// 复用现有的 handler，根据角色调整数据范围
 	s.handleAdminListUsageLogs(w, r)
 }
 
@@ -223,24 +220,23 @@ func (s *Server) handleUsageLogsByRole(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUserPricesSelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleTenant {
-		writeAPIError(w, http.StatusForbidden, "only tenant can manage user prices")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can manage user prices")
 		return
 	}
 
-	// 获取租户售价列表
 	rows, err := s.queries.ListTenantUserPrices(r.Context(), ac.TenantID)
 	if err != nil {
 		s.logger.Error("list tenant user prices failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
+		writeDBErr(w, err)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, rows)
+	writeOK(w, fromListTenantUserPrices(rows))
 }
 
 // ============================================================================
@@ -251,12 +247,12 @@ func (s *Server) handleUserPricesSelf(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUserUsageLogsSelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleUser {
-		writeAPIError(w, http.StatusForbidden, "only for end users")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only for end users")
 		return
 	}
 
@@ -274,23 +270,23 @@ func (s *Server) handleUserUsageLogsSelf(w http.ResponseWriter, r *http.Request)
 	})
 	if err != nil {
 		s.logger.Error("list user usage logs failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
+		writeDBErr(w, err)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, rows)
+	writeOK(w, fromListUsageLogsByUser(rows))
 }
 
 // handleUserUsageSummarySelf - 用户查看自己的使用汇总
 func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleUser {
-		writeAPIError(w, http.StatusForbidden, "only for end users")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only for end users")
 		return
 	}
 
@@ -300,11 +296,11 @@ func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Reque
 	})
 	if err != nil {
 		s.logger.Error("list user usage summary failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "query failed")
+		writeDBErr(w, err)
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, summary)
+	writeOK(w, summary)
 }
 
 // ============================================================================
@@ -315,12 +311,12 @@ func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleTenant {
-		writeAPIError(w, http.StatusForbidden, "only tenant can create own api keys")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can create own api keys")
 		return
 	}
 
@@ -329,19 +325,17 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// 生成 API Key
 	key, err := apikey.Generate()
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "key generation failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
 		return
 	}
 	hash := apikey.Hash(key)
 	prefix := apikey.PrefixForDisplay(key)
 
-	// 处理 allowed_models
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid allowed_models")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
 
@@ -358,18 +352,14 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		s.logger.Error("create tenant api key failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "create failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "create failed")
 		return
 	}
 
-	// 返回创建结果 + 生成的完整 Key
-	writeAPIJSON(w, http.StatusCreated, map[string]interface{}{
-		"key":        key,
-		"id":         row.ID,
-		"key_prefix": row.KeyPrefix,
-		"name":       row.Name,
-		"status":     row.Status,
-		"created_at": row.CreatedAt,
+	dto := fromCreateTenantAPIKeySelf(row)
+	writeOK(w, map[string]any{
+		"key": key,
+		"key_info": dto,
 	})
 }
 
@@ -377,12 +367,12 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleTenant {
-		writeAPIError(w, http.StatusForbidden, "only tenant can update own api keys")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can update own api keys")
 		return
 	}
 
@@ -398,7 +388,7 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid allowed_models")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
 
@@ -411,23 +401,23 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		s.logger.Error("update tenant api key failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "update failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, row)
+	writeOK(w, fromUpdateTenantAPIKeySelf(row))
 }
 
 // handleTenantsMeAPIKeysStatus - 租户更新自己的 API Key 状态
 func (s *Server) handleTenantsMeAPIKeysStatus(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleTenant {
-		writeAPIError(w, http.StatusForbidden, "only tenant can update own api keys")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can update own api keys")
 		return
 	}
 
@@ -448,11 +438,11 @@ func (s *Server) handleTenantsMeAPIKeysStatus(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		s.logger.Error("update tenant api key status failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "update failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, row)
+	writeOK(w, fromUpdateTenantAPIKeyStatusSelf(row))
 }
 
 // ============================================================================
@@ -463,18 +453,17 @@ func (s *Server) handleTenantsMeAPIKeysStatus(w http.ResponseWriter, r *http.Req
 func (s *Server) handleTenantsMeUserPricesUpsert(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleTenant {
-		writeAPIError(w, http.StatusForbidden, "only tenant can manage user prices")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can manage user prices")
 		return
 	}
 
-	modelID := chi.URLParam(r, "modelID")
-	if modelID == "" {
-		writeAPIError(w, http.StatusBadRequest, "model_id required")
+	modelID, ok2 := parseAPIUUIDParam(w, r, "modelID")
+	if !ok2 {
 		return
 	}
 
@@ -483,25 +472,46 @@ func (s *Server) handleTenantsMeUserPricesUpsert(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// 复用现有的 handler 逻辑
-	s.handleAdminUpsertTenantUserPrice(w, r)
+	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
+		TenantID:         ac.TenantID,
+		ModelID:          modelID,
+		InputPricePer1m:  req.InputPricePer1m,
+		OutputPricePer1m: req.OutputPricePer1m,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	writeOK(w, fromUpsertTenantUserPrice(row))
 }
 
 // handleTenantsMeUserPricesDelete - 租户删除售价
 func (s *Server) handleTenantsMeUserPricesDelete(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleTenant {
-		writeAPIError(w, http.StatusForbidden, "only tenant can manage user prices")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can manage user prices")
 		return
 	}
 
-	// 复用现有的 handler 逻辑
-	s.handleAdminDeleteTenantUserPrice(w, r)
+	modelID, ok2 := parseAPIUUIDParam(w, r, "modelID")
+	if !ok2 {
+		return
+	}
+
+	err := s.queries.DeleteTenantUserPrice(r.Context(), dbgen.DeleteTenantUserPriceParams{
+		TenantID: ac.TenantID,
+		ModelID:  modelID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	writeOK(w, nil)
 }
 
 // ============================================================================
@@ -512,12 +522,12 @@ func (s *Server) handleTenantsMeUserPricesDelete(w http.ResponseWriter, r *http.
 func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleUser {
-		writeAPIError(w, http.StatusForbidden, "only user can create own api keys")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can create own api keys")
 		return
 	}
 
@@ -526,10 +536,9 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// 生成 API Key
 	key, err := apikey.Generate()
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, "key generation failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
 		return
 	}
 	hash := apikey.Hash(key)
@@ -537,7 +546,7 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid allowed_models")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
 
@@ -555,17 +564,14 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 	})
 	if err != nil {
 		s.logger.Error("create user api key failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "create failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "create failed")
 		return
 	}
 
-	writeAPIJSON(w, http.StatusCreated, map[string]interface{}{
-		"key":        key,
-		"id":         row.ID,
-		"key_prefix": row.KeyPrefix,
-		"name":       row.Name,
-		"status":     row.Status,
-		"created_at": row.CreatedAt,
+	dto := fromCreateUserAPIKeySelf(row)
+	writeOK(w, map[string]any{
+		"key":      key,
+		"key_info": dto,
 	})
 }
 
@@ -573,12 +579,12 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleUser {
-		writeAPIError(w, http.StatusForbidden, "only user can update own api keys")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can update own api keys")
 		return
 	}
 
@@ -594,7 +600,7 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid allowed_models")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
 
@@ -608,23 +614,23 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 	})
 	if err != nil {
 		s.logger.Error("update user api key failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "update failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, row)
+	writeOK(w, fromUpdateUserAPIKeySelf(row))
 }
 
 // handleUsersMeAPIKeysStatus - 用户更新自己的 API Key 状态
 func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
 	if !ok {
-		writeAPIError(w, http.StatusUnauthorized, "missing context")
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
 
 	if ac.Role != apiRoleUser {
-		writeAPIError(w, http.StatusForbidden, "only user can update own api keys")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can update own api keys")
 		return
 	}
 
@@ -646,11 +652,11 @@ func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Reque
 	})
 	if err != nil {
 		s.logger.Error("update user api key status failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "update failed")
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
 
-	writeAPIJSON(w, http.StatusOK, row)
+	writeOK(w, fromUpdateUserAPIKeyStatusSelf(row))
 }
 
 // ============================================================================
@@ -679,30 +685,29 @@ type upsertTenantUserPriceRequest struct {
 
 func decodeAPIJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid json")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid json")
 		return false
 	}
 	return true
 }
 
 func parseInt32(s string) (int32, error) {
-	var i int32
-	_, err := json.Number(s).Int64()
+	n, err := json.Number(s).Int64()
 	if err != nil {
 		return 0, err
 	}
-	return i, nil
+	return int32(n), nil
 }
 
 func parseAPIUUIDParam(w http.ResponseWriter, r *http.Request, param string) (pgtype.UUID, bool) {
 	value := chi.URLParam(r, param)
 	if value == "" {
-		writeAPIError(w, http.StatusBadRequest, param+" is required")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, param+" is required")
 		return pgtype.UUID{}, false
 	}
 	var id pgtype.UUID
 	if err := id.Scan(value); err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid "+param)
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid "+param)
 		return pgtype.UUID{}, false
 	}
 	return id, true

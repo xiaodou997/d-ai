@@ -14,18 +14,20 @@ import (
 const confirmAPIKeyQuotaUsage = `-- name: ConfirmAPIKeyQuotaUsage :exec
 UPDATE ai_api_keys
 SET
-  quota_used = quota_used + $2,
-  updated_at = now()
+  quota_used     = quota_used + $2,
+  quota_reserved = GREATEST(0, quota_reserved - $3),
+  updated_at     = now()
 WHERE id = $1
 `
 
 type ConfirmAPIKeyQuotaUsageParams struct {
-	ID        pgtype.UUID `json:"id"`
-	QuotaUsed int64       `json:"quota_used"`
+	ID            pgtype.UUID `json:"id"`
+	QuotaUsed     int64       `json:"quota_used"`
+	QuotaReserved int64       `json:"quota_reserved"`
 }
 
 func (q *Queries) ConfirmAPIKeyQuotaUsage(ctx context.Context, arg ConfirmAPIKeyQuotaUsageParams) error {
-	_, err := q.db.Exec(ctx, confirmAPIKeyQuotaUsage, arg.ID, arg.QuotaUsed)
+	_, err := q.db.Exec(ctx, confirmAPIKeyQuotaUsage, arg.ID, arg.QuotaUsed, arg.QuotaReserved)
 	return err
 }
 
@@ -43,12 +45,18 @@ INSERT INTO ai_usage_logs (
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
+  credential_pool_id,
+  oauth_credential_id,
   provider_code,
   upstream_model,
+  provider_format,
   conversation_id,
   stream,
   prompt_tokens,
   completion_tokens,
+  cache_write_tokens,
+  cache_read_tokens,
+  reasoning_tokens,
   total_tokens,
   billable_unit_type,
   billable_units,
@@ -71,7 +79,8 @@ INSERT INTO ai_usage_logs (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-  $31, $32, $33, $34, $35, $36
+  $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
+  $41, $42
 )
 RETURNING id
 `
@@ -89,12 +98,18 @@ type CreateUsageLogParams struct {
 	ModelRouteID         pgtype.UUID `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID `json:"endpoint_id"`
+	CredentialPoolID     pgtype.UUID `json:"credential_pool_id"`
+	OauthCredentialID    pgtype.UUID `json:"oauth_credential_id"`
 	ProviderCode         pgtype.Text `json:"provider_code"`
 	UpstreamModel        pgtype.Text `json:"upstream_model"`
+	ProviderFormat       pgtype.Text `json:"provider_format"`
 	ConversationID       pgtype.Text `json:"conversation_id"`
 	Stream               bool        `json:"stream"`
 	PromptTokens         int32       `json:"prompt_tokens"`
 	CompletionTokens     int32       `json:"completion_tokens"`
+	CacheWriteTokens     int32       `json:"cache_write_tokens"`
+	CacheReadTokens      int32       `json:"cache_read_tokens"`
+	ReasoningTokens      int32       `json:"reasoning_tokens"`
 	TotalTokens          int32       `json:"total_tokens"`
 	BillableUnitType     string      `json:"billable_unit_type"`
 	BillableUnits        int64       `json:"billable_units"`
@@ -129,12 +144,18 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.ModelRouteID,
 		arg.UpstreamDeploymentID,
 		arg.EndpointID,
+		arg.CredentialPoolID,
+		arg.OauthCredentialID,
 		arg.ProviderCode,
 		arg.UpstreamModel,
+		arg.ProviderFormat,
 		arg.ConversationID,
 		arg.Stream,
 		arg.PromptTokens,
 		arg.CompletionTokens,
+		arg.CacheWriteTokens,
+		arg.CacheReadTokens,
+		arg.ReasoningTokens,
 		arg.TotalTokens,
 		arg.BillableUnitType,
 		arg.BillableUnits,
@@ -163,6 +184,9 @@ const getActiveModelPrice = `-- name: GetActiveModelPrice :one
 SELECT
   input_price_per_1m,
   output_price_per_1m,
+  cache_write_price_per_1m,
+  cache_read_price_per_1m,
+  reasoning_price_per_1m,
   image_size_prices,
   video_price_per_second,
   audio_tts_price_per_1m_chars,
@@ -174,6 +198,9 @@ WHERE model_id = $1
 type GetActiveModelPriceRow struct {
 	InputPricePer1m         int64  `json:"input_price_per_1m"`
 	OutputPricePer1m        int64  `json:"output_price_per_1m"`
+	CacheWritePricePer1m    int64  `json:"cache_write_price_per_1m"`
+	CacheReadPricePer1m     int64  `json:"cache_read_price_per_1m"`
+	ReasoningPricePer1m     int64  `json:"reasoning_price_per_1m"`
 	ImageSizePrices         []byte `json:"image_size_prices"`
 	VideoPricePerSecond     int64  `json:"video_price_per_second"`
 	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
@@ -186,6 +213,9 @@ func (q *Queries) GetActiveModelPrice(ctx context.Context, modelID pgtype.UUID) 
 	err := row.Scan(
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
+		&i.CacheWritePricePer1m,
+		&i.CacheReadPricePer1m,
+		&i.ReasoningPricePer1m,
 		&i.ImageSizePrices,
 		&i.VideoPricePerSecond,
 		&i.AudioTtsPricePer1mChars,
@@ -198,6 +228,9 @@ const getActiveUpstreamDeploymentCostPrice = `-- name: GetActiveUpstreamDeployme
 SELECT
   input_cost_per_1m,
   output_cost_per_1m,
+  cache_write_cost_per_1m,
+  cache_read_cost_per_1m,
+  reasoning_cost_per_1m,
   request_cost,
   image_cost,
   image_size_prices,
@@ -211,12 +244,15 @@ LIMIT 1
 `
 
 type GetActiveUpstreamDeploymentCostPriceRow struct {
-	InputCostPer1m     int64  `json:"input_cost_per_1m"`
-	OutputCostPer1m    int64  `json:"output_cost_per_1m"`
-	RequestCost        int64  `json:"request_cost"`
-	ImageCost          int64  `json:"image_cost"`
-	ImageSizePrices    []byte `json:"image_size_prices"`
-	VideoCostPerSecond int64  `json:"video_cost_per_second"`
+	InputCostPer1m      int64  `json:"input_cost_per_1m"`
+	OutputCostPer1m     int64  `json:"output_cost_per_1m"`
+	CacheWriteCostPer1m int64  `json:"cache_write_cost_per_1m"`
+	CacheReadCostPer1m  int64  `json:"cache_read_cost_per_1m"`
+	ReasoningCostPer1m  int64  `json:"reasoning_cost_per_1m"`
+	RequestCost         int64  `json:"request_cost"`
+	ImageCost           int64  `json:"image_cost"`
+	ImageSizePrices     []byte `json:"image_size_prices"`
+	VideoCostPerSecond  int64  `json:"video_cost_per_second"`
 }
 
 func (q *Queries) GetActiveUpstreamDeploymentCostPrice(ctx context.Context, upstreamDeploymentID pgtype.UUID) (GetActiveUpstreamDeploymentCostPriceRow, error) {
@@ -225,6 +261,9 @@ func (q *Queries) GetActiveUpstreamDeploymentCostPrice(ctx context.Context, upst
 	err := row.Scan(
 		&i.InputCostPer1m,
 		&i.OutputCostPer1m,
+		&i.CacheWriteCostPer1m,
+		&i.CacheReadCostPer1m,
+		&i.ReasoningCostPer1m,
 		&i.RequestCost,
 		&i.ImageCost,
 		&i.ImageSizePrices,
@@ -237,6 +276,9 @@ const getTenantModelPriceOverrideForRuntime = `-- name: GetTenantModelPriceOverr
 SELECT
   input_price_per_1m,
   output_price_per_1m,
+  cache_write_price_per_1m,
+  cache_read_price_per_1m,
+  reasoning_price_per_1m,
   image_size_prices,
   video_price_per_second,
   audio_tts_price_per_1m_chars,
@@ -254,6 +296,9 @@ type GetTenantModelPriceOverrideForRuntimeParams struct {
 type GetTenantModelPriceOverrideForRuntimeRow struct {
 	InputPricePer1m         int64  `json:"input_price_per_1m"`
 	OutputPricePer1m        int64  `json:"output_price_per_1m"`
+	CacheWritePricePer1m    int64  `json:"cache_write_price_per_1m"`
+	CacheReadPricePer1m     int64  `json:"cache_read_price_per_1m"`
+	ReasoningPricePer1m     int64  `json:"reasoning_price_per_1m"`
 	ImageSizePrices         []byte `json:"image_size_prices"`
 	VideoPricePerSecond     int64  `json:"video_price_per_second"`
 	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
@@ -266,6 +311,9 @@ func (q *Queries) GetTenantModelPriceOverrideForRuntime(ctx context.Context, arg
 	err := row.Scan(
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
+		&i.CacheWritePricePer1m,
+		&i.CacheReadPricePer1m,
+		&i.ReasoningPricePer1m,
 		&i.ImageSizePrices,
 		&i.VideoPricePerSecond,
 		&i.AudioTtsPricePer1mChars,
@@ -278,6 +326,9 @@ const getTenantUserPriceForRuntime = `-- name: GetTenantUserPriceForRuntime :one
 SELECT
   input_price_per_1m,
   output_price_per_1m,
+  cache_write_price_per_1m,
+  cache_read_price_per_1m,
+  reasoning_price_per_1m,
   image_size_prices,
   video_price_per_second,
   audio_tts_price_per_1m_chars,
@@ -295,6 +346,9 @@ type GetTenantUserPriceForRuntimeParams struct {
 type GetTenantUserPriceForRuntimeRow struct {
 	InputPricePer1m         int64  `json:"input_price_per_1m"`
 	OutputPricePer1m        int64  `json:"output_price_per_1m"`
+	CacheWritePricePer1m    int64  `json:"cache_write_price_per_1m"`
+	CacheReadPricePer1m     int64  `json:"cache_read_price_per_1m"`
+	ReasoningPricePer1m     int64  `json:"reasoning_price_per_1m"`
 	ImageSizePrices         []byte `json:"image_size_prices"`
 	VideoPricePerSecond     int64  `json:"video_price_per_second"`
 	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
@@ -307,12 +361,146 @@ func (q *Queries) GetTenantUserPriceForRuntime(ctx context.Context, arg GetTenan
 	err := row.Scan(
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
+		&i.CacheWritePricePer1m,
+		&i.CacheReadPricePer1m,
+		&i.ReasoningPricePer1m,
 		&i.ImageSizePrices,
 		&i.VideoPricePerSecond,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 	)
 	return i, err
+}
+
+const releaseAPIKeyQuotaReserve = `-- name: ReleaseAPIKeyQuotaReserve :exec
+UPDATE ai_api_keys
+SET
+  quota_reserved = GREATEST(0, quota_reserved - $2),
+  updated_at     = now()
+WHERE id = $1
+`
+
+type ReleaseAPIKeyQuotaReserveParams struct {
+	ID            pgtype.UUID `json:"id"`
+	QuotaReserved int64       `json:"quota_reserved"`
+}
+
+func (q *Queries) ReleaseAPIKeyQuotaReserve(ctx context.Context, arg ReleaseAPIKeyQuotaReserveParams) error {
+	_, err := q.db.Exec(ctx, releaseAPIKeyQuotaReserve, arg.ID, arg.QuotaReserved)
+	return err
+}
+
+const reserveAPIKeyQuota = `-- name: ReserveAPIKeyQuota :execrows
+UPDATE ai_api_keys
+SET
+  quota_reserved = quota_reserved + $2,
+  updated_at     = now()
+WHERE id = $1
+  AND (quota_limit IS NULL OR quota_limit - quota_used - quota_reserved >= $2)
+`
+
+type ReserveAPIKeyQuotaParams struct {
+	ID            pgtype.UUID `json:"id"`
+	QuotaReserved int64       `json:"quota_reserved"`
+}
+
+func (q *Queries) ReserveAPIKeyQuota(ctx context.Context, arg ReserveAPIKeyQuotaParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveAPIKeyQuota, arg.ID, arg.QuotaReserved)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUsageLogBillingStatus = `-- name: UpdateUsageLogBillingStatus :exec
+UPDATE ai_usage_logs
+SET
+  urm_transaction_id = $2,
+  billing_status     = $3,
+  provider_cost      = $4,
+  platform_cost      = $5,
+  user_cost          = $6,
+  api_key_quota_cost = $7,
+  billable_units     = $8
+WHERE request_id = $1
+`
+
+type UpdateUsageLogBillingStatusParams struct {
+	RequestID        string      `json:"request_id"`
+	UrmTransactionID pgtype.Text `json:"urm_transaction_id"`
+	BillingStatus    string      `json:"billing_status"`
+	ProviderCost     int64       `json:"provider_cost"`
+	PlatformCost     int64       `json:"platform_cost"`
+	UserCost         int64       `json:"user_cost"`
+	ApiKeyQuotaCost  int64       `json:"api_key_quota_cost"`
+	BillableUnits    int64       `json:"billable_units"`
+}
+
+func (q *Queries) UpdateUsageLogBillingStatus(ctx context.Context, arg UpdateUsageLogBillingStatusParams) error {
+	_, err := q.db.Exec(ctx, updateUsageLogBillingStatus,
+		arg.RequestID,
+		arg.UrmTransactionID,
+		arg.BillingStatus,
+		arg.ProviderCost,
+		arg.PlatformCost,
+		arg.UserCost,
+		arg.ApiKeyQuotaCost,
+		arg.BillableUnits,
+	)
+	return err
+}
+
+const updateUsageLogCompletion = `-- name: UpdateUsageLogCompletion :exec
+UPDATE ai_usage_logs
+SET
+  prompt_tokens          = $2,
+  completion_tokens      = $3,
+  cache_write_tokens     = $4,
+  cache_read_tokens      = $5,
+  reasoning_tokens       = $6,
+  total_tokens           = $7,
+  request_status         = $8,
+  http_status            = $9,
+  latency_ms             = $10,
+  first_token_latency_ms = $11,
+  error_code             = $12,
+  error_message          = $13
+WHERE request_id = $1
+`
+
+type UpdateUsageLogCompletionParams struct {
+	RequestID           string      `json:"request_id"`
+	PromptTokens        int32       `json:"prompt_tokens"`
+	CompletionTokens    int32       `json:"completion_tokens"`
+	CacheWriteTokens    int32       `json:"cache_write_tokens"`
+	CacheReadTokens     int32       `json:"cache_read_tokens"`
+	ReasoningTokens     int32       `json:"reasoning_tokens"`
+	TotalTokens         int32       `json:"total_tokens"`
+	RequestStatus       string      `json:"request_status"`
+	HttpStatus          pgtype.Int4 `json:"http_status"`
+	LatencyMs           pgtype.Int4 `json:"latency_ms"`
+	FirstTokenLatencyMs pgtype.Int4 `json:"first_token_latency_ms"`
+	ErrorCode           pgtype.Text `json:"error_code"`
+	ErrorMessage        pgtype.Text `json:"error_message"`
+}
+
+func (q *Queries) UpdateUsageLogCompletion(ctx context.Context, arg UpdateUsageLogCompletionParams) error {
+	_, err := q.db.Exec(ctx, updateUsageLogCompletion,
+		arg.RequestID,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.CacheWriteTokens,
+		arg.CacheReadTokens,
+		arg.ReasoningTokens,
+		arg.TotalTokens,
+		arg.RequestStatus,
+		arg.HttpStatus,
+		arg.LatencyMs,
+		arg.FirstTokenLatencyMs,
+		arg.ErrorCode,
+		arg.ErrorMessage,
+	)
+	return err
 }
 
 const upsertUsageRollupHourly = `-- name: UpsertUsageRollupHourly :exec
@@ -330,6 +518,9 @@ INSERT INTO ai_usage_rollups_hourly (
   failed_count,
   prompt_tokens,
   completion_tokens,
+  cache_write_tokens,
+  cache_read_tokens,
+  reasoning_tokens,
   total_tokens,
   billable_units,
   provider_cost,
@@ -349,7 +540,7 @@ INSERT INTO ai_usage_rollups_hourly (
   $7,
   1,
   CASE WHEN $6 = 'success' THEN 1 ELSE 0 END,
-  CASE WHEN $6 = 'failed' THEN 1 ELSE 0 END,
+  CASE WHEN $6 = 'failed'  THEN 1 ELSE 0 END,
   $8::bigint,
   $9::bigint,
   $10::bigint,
@@ -358,40 +549,40 @@ INSERT INTO ai_usage_rollups_hourly (
   $13::bigint,
   $14::bigint,
   $15::bigint,
+  $16::bigint,
+  $17::bigint,
+  $18::bigint,
   CASE
-    WHEN $6 = 'success' AND $16::integer IS NOT NULL
-      THEN $16::bigint
+    WHEN $6 = 'success' AND $19::integer IS NOT NULL
+      THEN $19::bigint
     ELSE 0
   END,
   CASE
-    WHEN $6 = 'success' AND $16::integer IS NOT NULL
+    WHEN $6 = 'success' AND $19::integer IS NOT NULL
       THEN 1
     ELSE 0
   END
 )
 ON CONFLICT (
-  bucket_start,
-  tenant_id,
-  user_id,
-  api_key_id,
-  model_code,
-  provider_code,
-  request_status,
-  billable_unit_type
+  bucket_start, tenant_id, user_id, api_key_id,
+  model_code, provider_code, request_status, billable_unit_type
 ) DO UPDATE SET
-  request_count = ai_usage_rollups_hourly.request_count + EXCLUDED.request_count,
-  success_count = ai_usage_rollups_hourly.success_count + EXCLUDED.success_count,
-  failed_count = ai_usage_rollups_hourly.failed_count + EXCLUDED.failed_count,
-  prompt_tokens = ai_usage_rollups_hourly.prompt_tokens + EXCLUDED.prompt_tokens,
-  completion_tokens = ai_usage_rollups_hourly.completion_tokens + EXCLUDED.completion_tokens,
-  total_tokens = ai_usage_rollups_hourly.total_tokens + EXCLUDED.total_tokens,
-  billable_units = ai_usage_rollups_hourly.billable_units + EXCLUDED.billable_units,
-  provider_cost = ai_usage_rollups_hourly.provider_cost + EXCLUDED.provider_cost,
-  platform_cost = ai_usage_rollups_hourly.platform_cost + EXCLUDED.platform_cost,
-  user_cost = ai_usage_rollups_hourly.user_cost + EXCLUDED.user_cost,
-  api_key_quota_cost = ai_usage_rollups_hourly.api_key_quota_cost + EXCLUDED.api_key_quota_cost,
-  latency_success_sum_ms = ai_usage_rollups_hourly.latency_success_sum_ms + EXCLUDED.latency_success_sum_ms,
-  latency_success_count = ai_usage_rollups_hourly.latency_success_count + EXCLUDED.latency_success_count,
+  request_count           = ai_usage_rollups_hourly.request_count           + EXCLUDED.request_count,
+  success_count           = ai_usage_rollups_hourly.success_count           + EXCLUDED.success_count,
+  failed_count            = ai_usage_rollups_hourly.failed_count            + EXCLUDED.failed_count,
+  prompt_tokens           = ai_usage_rollups_hourly.prompt_tokens           + EXCLUDED.prompt_tokens,
+  completion_tokens       = ai_usage_rollups_hourly.completion_tokens       + EXCLUDED.completion_tokens,
+  cache_write_tokens      = ai_usage_rollups_hourly.cache_write_tokens      + EXCLUDED.cache_write_tokens,
+  cache_read_tokens       = ai_usage_rollups_hourly.cache_read_tokens       + EXCLUDED.cache_read_tokens,
+  reasoning_tokens        = ai_usage_rollups_hourly.reasoning_tokens        + EXCLUDED.reasoning_tokens,
+  total_tokens            = ai_usage_rollups_hourly.total_tokens            + EXCLUDED.total_tokens,
+  billable_units          = ai_usage_rollups_hourly.billable_units          + EXCLUDED.billable_units,
+  provider_cost           = ai_usage_rollups_hourly.provider_cost           + EXCLUDED.provider_cost,
+  platform_cost           = ai_usage_rollups_hourly.platform_cost           + EXCLUDED.platform_cost,
+  user_cost               = ai_usage_rollups_hourly.user_cost               + EXCLUDED.user_cost,
+  api_key_quota_cost      = ai_usage_rollups_hourly.api_key_quota_cost      + EXCLUDED.api_key_quota_cost,
+  latency_success_sum_ms  = ai_usage_rollups_hourly.latency_success_sum_ms  + EXCLUDED.latency_success_sum_ms,
+  latency_success_count   = ai_usage_rollups_hourly.latency_success_count   + EXCLUDED.latency_success_count,
   updated_at = now()
 `
 
@@ -405,6 +596,9 @@ type UpsertUsageRollupHourlyParams struct {
 	BillableUnitType string      `json:"billable_unit_type"`
 	PromptTokens     int64       `json:"prompt_tokens"`
 	CompletionTokens int64       `json:"completion_tokens"`
+	CacheWriteTokens int64       `json:"cache_write_tokens"`
+	CacheReadTokens  int64       `json:"cache_read_tokens"`
+	ReasoningTokens  int64       `json:"reasoning_tokens"`
 	TotalTokens      int64       `json:"total_tokens"`
 	BillableUnits    int64       `json:"billable_units"`
 	ProviderCost     int64       `json:"provider_cost"`
@@ -425,6 +619,9 @@ func (q *Queries) UpsertUsageRollupHourly(ctx context.Context, arg UpsertUsageRo
 		arg.BillableUnitType,
 		arg.PromptTokens,
 		arg.CompletionTokens,
+		arg.CacheWriteTokens,
+		arg.CacheReadTokens,
+		arg.ReasoningTokens,
 		arg.TotalTokens,
 		arg.BillableUnits,
 		arg.ProviderCost,

@@ -47,7 +47,7 @@ type UserInfoResponse struct {
 	UserType   int    `json:"userType"`
 	TenantID   string `json:"tenantId"`
 	TenantName string `json:"tenantName"`
-	AppKey     string `json:"appKey"`
+	ClientID   string `json:"clientId"`
 }
 
 type TokenPairResponse struct {

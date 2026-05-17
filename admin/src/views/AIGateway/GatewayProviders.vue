@@ -21,7 +21,6 @@ import {
   updateUpstreamDeployment,
   updateUpstreamDeploymentStatus
 } from '@/api/aiGateway'
-
 const loading = shallowRef(false)
 const endpointLoading = shallowRef(false)
 const deploymentLoading = shallowRef(false)
@@ -483,10 +482,10 @@ onMounted(fetchProviders)
 
         <el-table v-loading="endpointLoading" :data="endpoints" border stripe class="w-full">
           <el-table-column prop="name" label="名称" min-width="160" />
-          <el-table-column prop="base_url" label="Base URL" min-width="280" show-overflow-tooltip />
-          <el-table-column prop="weight" label="权重" width="80" align="right" />
-          <el-table-column prop="timeout_ms" label="超时(ms)" width="110" align="right" />
-          <el-table-column label="状态" width="95">
+          <el-table-column prop="base_url" label="Base URL" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="weight" label="权重" width="75" align="right" />
+          <el-table-column prop="timeout_ms" label="超时(ms)" width="100" align="right" />
+          <el-table-column label="状态" width="90">
             <template #default="{ row }">
               <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>

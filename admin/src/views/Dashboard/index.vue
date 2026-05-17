@@ -5,6 +5,7 @@ import {
   formatCredits,
   formatTimestamp,
   getDashboardSummary,
+  getOAuthPoolHealth,
   listDashboardRecentErrors,
   listDashboardTopModels,
   listDashboardTopTenants
@@ -23,6 +24,7 @@ const loading = shallowRef(false)
 const topModels = shallowRef([])
 const topTenants = shallowRef([])
 const recentErrors = shallowRef([])
+const oauthPoolHealth = shallowRef([])
 
 const summary = reactive({
   total_requests: 0,
@@ -54,16 +56,18 @@ const fetchAll = async () => {
   loading.value = true
   try {
     const params = { days: selectedDays.value }
-    const [nextSummary, nextModels, nextTenants, nextErrors] = await Promise.all([
+    const [nextSummary, nextModels, nextTenants, nextErrors, nextPoolHealth] = await Promise.all([
       getDashboardSummary(params),
       listDashboardTopModels({ ...params, limit: 8 }),
       listDashboardTopTenants({ ...params, limit: 8 }),
-      listDashboardRecentErrors({ ...params, limit: 8 })
+      listDashboardRecentErrors({ ...params, limit: 8 }),
+      getOAuthPoolHealth()
     ])
     Object.assign(summary, nextSummary || {})
     topModels.value = nextModels || []
     topTenants.value = nextTenants || []
     recentErrors.value = nextErrors || []
+    oauthPoolHealth.value = nextPoolHealth || []
   } finally {
     loading.value = false
   }
@@ -209,6 +213,59 @@ onMounted(fetchAll)
         <el-table-column prop="request_id" label="请求 ID" min-width="180" show-overflow-tooltip />
         <el-table-column prop="error_code" label="错误码" min-width="150" show-overflow-tooltip />
         <el-table-column prop="error_message" label="错误信息" min-width="260" show-overflow-tooltip />
+      </el-table>
+    </section>
+
+    <section v-if="oauthPoolHealth.length > 0" class="panel">
+      <div class="section-head">
+        <div>
+          <h2>OAuth 凭据池</h2>
+          <p>各账号池 OAuth 凭据状态汇总，快速识别失效或即将过期的凭据。</p>
+        </div>
+      </div>
+      <el-table v-loading="loading" :data="oauthPoolHealth" border stripe class="w-full">
+        <el-table-column prop="pool_name" label="账号池" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="fixed_provider_type" label="类型" width="140">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ row.fixed_provider_type || '自定义' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="oauth_strategy" label="调度策略" width="110" align="center">
+          <template #default="{ row }">
+            <span class="strategy-badge" :class="row.oauth_strategy">{{ row.oauth_strategy }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="总数" prop="total" width="70" align="right" />
+        <el-table-column label="正常" width="80" align="right">
+          <template #default="{ row }">
+            <span class="count-active">{{ row.active }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="失效" width="80" align="right">
+          <template #default="{ row }">
+            <span :class="row.invalid > 0 ? 'count-invalid' : 'count-zero'">{{ row.invalid }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="禁用" width="80" align="right">
+          <template #default="{ row }">
+            <span :class="row.disabled > 0 ? 'count-warn' : 'count-zero'">{{ row.disabled }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="即将过期" width="100" align="right">
+          <template #default="{ row }">
+            <span :class="row.expiring_soon > 0 ? 'count-warn' : 'count-zero'">{{ row.expiring_soon }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="健康度" width="120" align="center">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="row.total > 0 ? Math.round(row.active * 100 / row.total) : 0"
+              :status="row.active === 0 ? 'exception' : row.invalid > 0 ? 'warning' : 'success'"
+              :stroke-width="8"
+              style="width: 90px; display: inline-block"
+            />
+          </template>
+        </el-table-column>
       </el-table>
     </section>
   </div>
@@ -370,5 +427,24 @@ onMounted(fetchAll)
   .metric-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.count-active { color: #16a34a; font-weight: 700; }
+.count-invalid { color: #dc2626; font-weight: 700; }
+.count-warn { color: #d97706; font-weight: 700; }
+.count-zero { color: #94a3b8; }
+
+.strategy-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+}
+.strategy-badge.weighted {
+  background: #ede9fe;
+  color: #6d28d9;
 }
 </style>

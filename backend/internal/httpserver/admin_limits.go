@@ -24,7 +24,7 @@ func (s *Server) handleAdminListRuntimeLimitPolicies(w http.ResponseWriter, r *h
 		s.writeAdminServerError(w, r, "list runtime limit policies failed", err)
 		return
 	}
-	writeAdminJSON(w, http.StatusOK, rows)
+	writeOK(w, fromLimitPolicies(rows))
 }
 
 func (s *Server) handleAdminCreateRuntimeLimitPolicy(w http.ResponseWriter, r *http.Request) {
@@ -47,10 +47,10 @@ func (s *Server) handleAdminCreateRuntimeLimitPolicy(w http.ResponseWriter, r *h
 		CreatedBy:        optionalTextValue(req.CreatedBy),
 	})
 	if err != nil {
-		writeAdminDBError(w, err)
+		writeDBErr(w, err)
 		return
 	}
-	writeAdminJSON(w, http.StatusCreated, row)
+	writeOK(w, fromLimitPolicy(row))
 }
 
 func (s *Server) handleAdminUpdateRuntimeLimitPolicy(w http.ResponseWriter, r *http.Request) {
@@ -77,10 +77,10 @@ func (s *Server) handleAdminUpdateRuntimeLimitPolicy(w http.ResponseWriter, r *h
 		Status:           req.Status,
 	})
 	if err != nil {
-		writeAdminDBError(w, err)
+		writeDBErr(w, err)
 		return
 	}
-	writeAdminJSON(w, http.StatusOK, row)
+	writeOK(w, fromLimitPolicy(row))
 }
 
 func (s *Server) handleAdminUpdateRuntimeLimitPolicyStatus(w http.ResponseWriter, r *http.Request) {
@@ -97,21 +97,21 @@ func (s *Server) handleAdminUpdateRuntimeLimitPolicyStatus(w http.ResponseWriter
 		Status: status,
 	})
 	if err != nil {
-		writeAdminDBError(w, err)
+		writeDBErr(w, err)
 		return
 	}
-	writeAdminJSON(w, http.StatusOK, row)
+	writeOK(w, fromLimitPolicy(row))
 }
 
 func validateRuntimeLimitPolicyRequest(w http.ResponseWriter, req *runtimeLimitPolicyRequest) bool {
 	if req.ScopeType == "" || req.ScopeID == "" {
-		writeAdminError(w, http.StatusBadRequest, "scope_type and scope_id are required")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "scope_type and scope_id are required")
 		return false
 	}
 	switch req.ScopeType {
 	case "tenant", "user", "api_key", "provider", "endpoint":
 	default:
-		writeAdminError(w, http.StatusBadRequest, "invalid scope_type")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid scope_type")
 		return false
 	}
 	if req.CapabilityType == "" {
@@ -120,7 +120,7 @@ func validateRuntimeLimitPolicyRequest(w http.ResponseWriter, req *runtimeLimitP
 	switch req.CapabilityType {
 	case "chat", "image", "video", "embedding", "audio", "rerank":
 	default:
-		writeAdminError(w, http.StatusBadRequest, "invalid capability_type")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid capability_type")
 		return false
 	}
 	if req.Status == "" {
@@ -129,15 +129,15 @@ func validateRuntimeLimitPolicyRequest(w http.ResponseWriter, req *runtimeLimitP
 	switch req.Status {
 	case "active", "inactive", "disabled":
 	default:
-		writeAdminError(w, http.StatusBadRequest, "invalid status")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid status")
 		return false
 	}
 	if req.RPMLimit == nil && req.TPMLimit == nil && req.ConcurrencyLimit == nil {
-		writeAdminError(w, http.StatusBadRequest, "at least one limit is required")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "at least one limit is required")
 		return false
 	}
 	if !positiveOptionalInt32(req.RPMLimit) || !positiveOptionalInt32(req.TPMLimit) || !positiveOptionalInt32(req.ConcurrencyLimit) {
-		writeAdminError(w, http.StatusBadRequest, "limits must be positive")
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "limits must be positive")
 		return false
 	}
 	return true

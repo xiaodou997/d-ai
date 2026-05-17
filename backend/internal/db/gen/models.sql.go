@@ -17,14 +17,15 @@ SELECT
   m.model_code,
   m.display_name,
   m.capability_type,
-  m.default_max_output_tokens
+  m.default_max_output_tokens,
+  m.max_output_tokens
 FROM ai_models m
 JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
-WHERE tg.tenant_id = $1
-  AND m.model_code = $2
+WHERE tg.tenant_id      = $1
+  AND m.model_code      = $2
   AND m.capability_type = $3
-  AND tg.status = 'active'
-  AND m.status = 'active'
+  AND tg.status         = 'active'
+  AND m.status          = 'active'
 `
 
 type GetTenantModelParams struct {
@@ -39,8 +40,10 @@ type GetTenantModelRow struct {
 	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
 }
 
+// Validates a model is accessible to the given tenant.
 func (q *Queries) GetTenantModel(ctx context.Context, arg GetTenantModelParams) (GetTenantModelRow, error) {
 	row := q.db.QueryRow(ctx, getTenantModel, arg.TenantID, arg.ModelCode, arg.CapabilityType)
 	var i GetTenantModelRow
@@ -50,8 +53,87 @@ func (q *Queries) GetTenantModel(ctx context.Context, arg GetTenantModelParams) 
 		&i.DisplayName,
 		&i.CapabilityType,
 		&i.DefaultMaxOutputTokens,
+		&i.MaxOutputTokens,
 	)
 	return i, err
+}
+
+const getUserModel = `-- name: GetUserModel :one
+SELECT
+  m.id,
+  m.model_code,
+  m.display_name,
+  m.capability_type,
+  m.default_max_output_tokens,
+  m.max_output_tokens
+FROM ai_models m
+JOIN ai_user_model_grants ug ON ug.model_id = m.id
+WHERE ug.tenant_id      = $1
+  AND ug.user_id        = $2
+  AND m.model_code      = $3
+  AND m.capability_type = $4
+  AND ug.status         = 'active'
+  AND m.status          = 'active'
+`
+
+type GetUserModelParams struct {
+	TenantID       string `json:"tenant_id"`
+	UserID         string `json:"user_id"`
+	ModelCode      string `json:"model_code"`
+	CapabilityType string `json:"capability_type"`
+}
+
+type GetUserModelRow struct {
+	ID                     pgtype.UUID `json:"id"`
+	ModelCode              string      `json:"model_code"`
+	DisplayName            string      `json:"display_name"`
+	CapabilityType         string      `json:"capability_type"`
+	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
+}
+
+// Validates a model is accessible to a specific user (explicit user grant).
+// When user has no explicit grants, caller falls back to tenant-level check.
+func (q *Queries) GetUserModel(ctx context.Context, arg GetUserModelParams) (GetUserModelRow, error) {
+	row := q.db.QueryRow(ctx, getUserModel,
+		arg.TenantID,
+		arg.UserID,
+		arg.ModelCode,
+		arg.CapabilityType,
+	)
+	var i GetUserModelRow
+	err := row.Scan(
+		&i.ID,
+		&i.ModelCode,
+		&i.DisplayName,
+		&i.CapabilityType,
+		&i.DefaultMaxOutputTokens,
+		&i.MaxOutputTokens,
+	)
+	return i, err
+}
+
+const hasUserModelGrants = `-- name: HasUserModelGrants :one
+SELECT EXISTS(
+  SELECT 1 FROM ai_user_model_grants
+  WHERE tenant_id = $1
+    AND user_id   = $2
+    AND status    = 'active'
+) AS has_grants
+`
+
+type HasUserModelGrantsParams struct {
+	TenantID string `json:"tenant_id"`
+	UserID   string `json:"user_id"`
+}
+
+// Returns true if the user has ANY explicit model grants.
+// Used to decide whether to apply user-level filtering or fall back to tenant grants.
+func (q *Queries) HasUserModelGrants(ctx context.Context, arg HasUserModelGrantsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasUserModelGrants, arg.TenantID, arg.UserID)
+	var has_grants bool
+	err := row.Scan(&has_grants)
+	return has_grants, err
 }
 
 const listModelsForTenant = `-- name: ListModelsForTenant :many
@@ -67,8 +149,8 @@ SELECT
 FROM ai_models m
 JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
 WHERE tg.tenant_id = $1
-  AND tg.status = 'active'
-  AND m.status = 'active'
+  AND tg.status   = 'active'
+  AND m.status    = 'active'
 ORDER BY m.model_code ASC
 `
 
@@ -85,6 +167,7 @@ type ListModelsForTenantRow struct {
 // ============================================================================
 // Runtime Model Queries
 // ============================================================================
+// Lists models the tenant is granted access to.
 func (q *Queries) ListModelsForTenant(ctx context.Context, tenantID string) ([]ListModelsForTenantRow, error) {
 	rows, err := q.db.Query(ctx, listModelsForTenant, tenantID)
 	if err != nil {
@@ -115,35 +198,38 @@ func (q *Queries) ListModelsForTenant(ctx context.Context, tenantID string) ([]L
 
 const listRoutesForModel = `-- name: ListRoutesForModel :many
 SELECT
-  r.id AS route_id,
-  r.priority AS route_priority,
-  r.weight AS route_weight,
+  r.id                   AS route_id,
+  r.priority             AS route_priority,
+  r.weight               AS route_weight,
   r.supports_stream,
-  ud.id AS upstream_deployment_id,
+  ud.id                  AS upstream_deployment_id,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
   ud.health_status,
-  e.id AS endpoint_id,
+  e.id                   AS endpoint_id,
   e.base_url,
   e.api_key_ciphertext,
   e.extra_headers,
   e.timeout_ms,
-  e.weight AS endpoint_weight,
-  p.id AS provider_id,
-  p.code AS provider_code
+  e.weight               AS endpoint_weight,
+  e.auth_type,
+  e.fixed_provider_type,
+  e.oauth_strategy,
+  p.id                   AS provider_id,
+  p.code                 AS provider_code
 FROM ai_model_routes r
 JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
-JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
-JOIN ai_providers p ON p.id = e.provider_id
-WHERE r.model_id = $1
-  AND r.status = 'active'
-  AND ud.status = 'active'
+JOIN ai_provider_endpoints   e  ON e.id  = ud.endpoint_id
+JOIN ai_providers            p  ON p.id  = e.provider_id
+WHERE r.model_id       = $1
+  AND r.status         = 'active'
+  AND ud.status        = 'active'
   AND ud.health_status IN ('healthy', 'unknown')
-  AND e.status = 'active'
-  AND p.status = 'active'
+  AND e.status         = 'active'
+  AND p.status         = 'active'
 ORDER BY r.priority ASC, r.weight DESC, e.weight DESC
 `
 
@@ -165,11 +251,15 @@ type ListRoutesForModelRow struct {
 	ExtraHeaders         []byte      `json:"extra_headers"`
 	TimeoutMs            int32       `json:"timeout_ms"`
 	EndpointWeight       int32       `json:"endpoint_weight"`
+	AuthType             string      `json:"auth_type"`
+	FixedProviderType    pgtype.Text `json:"fixed_provider_type"`
+	OauthStrategy        string      `json:"oauth_strategy"`
 	ProviderID           pgtype.UUID `json:"provider_id"`
 	ProviderCode         string      `json:"provider_code"`
 }
 
-// Runtime route lookup: model -> routes -> upstream_deployments -> endpoints -> providers
+// Full route lookup: model → routes → upstream_deployments → endpoints → providers.
+// Only healthy/unknown deployments on active endpoints are returned.
 func (q *Queries) ListRoutesForModel(ctx context.Context, modelID pgtype.UUID) ([]ListRoutesForModelRow, error) {
 	rows, err := q.db.Query(ctx, listRoutesForModel, modelID)
 	if err != nil {
@@ -197,6 +287,9 @@ func (q *Queries) ListRoutesForModel(ctx context.Context, modelID pgtype.UUID) (
 			&i.ExtraHeaders,
 			&i.TimeoutMs,
 			&i.EndpointWeight,
+			&i.AuthType,
+			&i.FixedProviderType,
+			&i.OauthStrategy,
 			&i.ProviderID,
 			&i.ProviderCode,
 		); err != nil {
@@ -208,4 +301,25 @@ func (q *Queries) ListRoutesForModel(ctx context.Context, modelID pgtype.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateDeploymentHealth = `-- name: UpdateDeploymentHealth :exec
+UPDATE ai_upstream_deployments
+SET
+  health_status        = $2,
+  last_health_check_at = now(),
+  last_health_error    = $3,
+  updated_at           = now()
+WHERE id = $1
+`
+
+type UpdateDeploymentHealthParams struct {
+	ID              pgtype.UUID `json:"id"`
+	HealthStatus    string      `json:"health_status"`
+	LastHealthError pgtype.Text `json:"last_health_error"`
+}
+
+func (q *Queries) UpdateDeploymentHealth(ctx context.Context, arg UpdateDeploymentHealthParams) error {
+	_, err := q.db.Exec(ctx, updateDeploymentHealth, arg.ID, arg.HealthStatus, arg.LastHealthError)
+	return err
 }

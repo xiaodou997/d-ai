@@ -9,9 +9,12 @@ import {
   Management,
   Odometer,
   OfficeBuilding,
+  SetUp,
   SwitchButton,
   Tickets,
-  User
+  TrendCharts,
+  User,
+  UserFilled
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
@@ -31,6 +34,7 @@ const gatewayMenuItems = computed(() => {
   return [
     { index: '/ai-gateway/providers', label: '厂商接入', icon: Connection },
     { index: '/ai-gateway/models', label: '模型映射', icon: Cpu },
+    { index: '/ai-gateway/credential-pools', label: '账号池', icon: UserFilled },
     ...shared,
     { index: '/ai-gateway/limits', label: '限流策略', icon: Lock },
     { index: '/ai-gateway/audit', label: '网关审计', icon: DocumentChecked }
@@ -74,6 +78,14 @@ const handleLogout = () => {
           <el-menu-item index="/dashboard">
             <el-icon><Odometer /></el-icon>
             <span>控制概览</span>
+          </el-menu-item>
+          <el-menu-item index="/analytics">
+            <el-icon><TrendCharts /></el-icon>
+            <span>趋势分析</span>
+          </el-menu-item>
+          <el-menu-item index="/system">
+            <el-icon><SetUp /></el-icon>
+            <span>系统状态</span>
           </el-menu-item>
         </template>
 

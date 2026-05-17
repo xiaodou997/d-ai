@@ -60,7 +60,14 @@ gatewayRequest.interceptors.request.use((config) => {
 })
 
 gatewayRequest.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const data = response.data
+    if (data && typeof data.code === 'number' && data.code !== 0) {
+      ElMessage.error(data.message || 'AI Gateway 请求失败')
+      return Promise.reject(new Error(data.message || 'business error'))
+    }
+    return data
+  },
   async (error) => {
     // 处理 HTTP 错误
     if (error.response) {
@@ -68,11 +75,12 @@ gatewayRequest.interceptors.response.use(
 
       if (status === 401) {
         const authStore = useAuthStore()
+        const bizCode = data?.code
         const refreshToken = localStorage.getItem('admin_refreshToken')
 
-        // 没有 refresh token，直接跳转登录
-        if (!refreshToken) {
-          ElMessage.error('登录已过期，请重新登录')
+        // code 10001: token 无效/已吊销，无法刷新，直接跳转登录
+        if (bizCode === 10001 || !refreshToken) {
+          ElMessage.error(data?.message || '登录已失效，请重新登录')
           authStore.clearState()
           redirectToLogin()
           return Promise.reject(error)
@@ -89,14 +97,13 @@ gatewayRequest.interceptors.response.use(
           })
         }
 
-        // 开始刷新 token
+        // code 10002: token 已过期，尝试刷新
         isRefreshing = true
         try {
           const newToken = await authStore.refreshAccessToken()
           isRefreshing = false
           onRefreshed(newToken.accessToken)
 
-          // 重试之前的请求
           const config = error.config
           config.headers['Authorization'] = `Bearer ${newToken.accessToken}`
           return gatewayRequest(config)
@@ -104,7 +111,6 @@ gatewayRequest.interceptors.response.use(
           isRefreshing = false
           onRefreshFailed(refreshError)
 
-          // 刷新失败，清理状态并跳转
           ElMessage.error('登录已过期，请重新登录')
           authStore.clearState()
           authStore.stopAutoRefresh()
@@ -288,6 +294,22 @@ export function deleteTenantModelPriceOverride(tenantId, modelId) {
 }
 
 // ============================================================================
+// Tenant User Price APIs（平台管理员为租户设定对用户的售价）
+// ============================================================================
+
+export function listTenantUserPrices(tenantId) {
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/user-prices`)
+}
+
+export function upsertTenantUserPrice(tenantId, modelId, data) {
+  return gatewayRequest.put(`/api/v1/tenants/${tenantId}/user-prices/${modelId}`, data)
+}
+
+export function deleteTenantUserPrice(tenantId, modelId) {
+  return gatewayRequest.delete(`/api/v1/tenants/${tenantId}/user-prices/${modelId}`)
+}
+
+// ============================================================================
 // Model Route APIs (新增)
 // ============================================================================
 
@@ -420,6 +442,10 @@ export function listDashboardRecentErrors(params) {
   return gatewayRequest.get('/api/v1/dashboard/recent-errors', { params })
 }
 
+export function listAnalyticsDailyTrend(params) {
+  return gatewayRequest.get('/api/v1/analytics/daily-trend', { params })
+}
+
 // ============================================================================
 // Runtime Limit Policy APIs
 // ============================================================================
@@ -446,4 +472,56 @@ export function updateRuntimeLimitPolicyStatus(policyId, status) {
 
 export function listGatewayAuditLogs(params) {
   return gatewayRequest.get('/api/v1/audit-logs', { params })
+}
+
+// ============================================================================
+// Credential Pool APIs
+// ============================================================================
+
+export function listCredentialPools() {
+  return gatewayRequest.get('/api/v1/credential-pools')
+}
+
+export function createCredentialPool(data) {
+  return gatewayRequest.post('/api/v1/credential-pools', data)
+}
+
+export function patchCredentialPool(poolId, data) {
+  return gatewayRequest.patch(`/api/v1/credential-pools/${poolId}`, data)
+}
+
+export function deleteCredentialPool(poolId) {
+  return gatewayRequest.delete(`/api/v1/credential-pools/${poolId}`)
+}
+
+export function listPoolCredentials(poolId) {
+  return gatewayRequest.get(`/api/v1/credential-pools/${poolId}/credentials`)
+}
+
+export function createPoolCredential(poolId, data) {
+  return gatewayRequest.post(`/api/v1/credential-pools/${poolId}/credentials`, data)
+}
+
+export function patchPoolCredential(poolId, credId, data) {
+  return gatewayRequest.patch(`/api/v1/credential-pools/${poolId}/credentials/${credId}`, data)
+}
+
+export function deletePoolCredential(poolId, credId) {
+  return gatewayRequest.delete(`/api/v1/credential-pools/${poolId}/credentials/${credId}`)
+}
+
+export function refreshPoolCredential(poolId, credId) {
+  return gatewayRequest.post(`/api/v1/credential-pools/${poolId}/credentials/${credId}/refresh`)
+}
+
+export function getPoolAvailableModels(poolId) {
+  return gatewayRequest.get(`/api/v1/credential-pools/${poolId}/available-models`)
+}
+
+export function getOAuthPoolHealth() {
+  return gatewayRequest.get('/api/v1/oauth-pool-health')
+}
+
+export function getSystemStatus() {
+  return gatewayRequest.get('/api/v1/system/status')
 }

@@ -11,5 +11,6 @@ coverage/
 .gomodcache/
 backend/.gocache/
 backend/.gomodcache/
+backend/config.yaml
 backend/config.local.yaml
 web/admin/.env.local

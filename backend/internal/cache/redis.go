@@ -10,14 +10,13 @@ import (
 )
 
 func Open(ctx context.Context, cfg config.RedisConfig) (*redis.Client, error) {
-	if !cfg.Enabled {
+	if cfg.Addr == "" {
 		return nil, nil
 	}
 
 	client := redis.NewClient(&redis.Options{
 		Addr:     cfg.Addr,
 		Password: cfg.Password,
-		DB:       cfg.DB,
 	})
 
 	if err := client.Ping(ctx).Err(); err != nil {

@@ -16,15 +16,17 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Claims JWT claims — mirrors the URM JWT structure
+// Claims JWT claims — mirrors the URM JWT structure (both user and service tokens)
 type Claims struct {
+	PrincipalType   string `json:"principal_type"`
+	TokenUse        string `json:"token_use"`
 	UserID          string `json:"user_id"`
 	Username        string `json:"username"`
 	TenantID        string `json:"tenant_id"`
 	UserType        int    `json:"user_type"`
 	UserTypeDisplay string `json:"user_type_display"`
-	AppKey          string `json:"app_key"`
-	TokenType       string `json:"token_type"`
+	ClientID        string `json:"client_id"`
+	Scope           string `json:"scope"`
 	jwt.RegisteredClaims
 }
 
@@ -41,26 +43,23 @@ type jwksResponse struct {
 
 // JWKSValidator fetches URM JWKS and validates JWT tokens locally
 type JWKSValidator struct {
-	jwksURL         string
-	httpClient      *http.Client
-	refreshInterval time.Duration
-	issuer          string
+	jwksURL    string
+	httpClient *http.Client
+	issuer     string
 
 	mu         sync.RWMutex
 	keys       map[string]*rsa.PublicKey
 	lastUpdate time.Time
 }
 
-func NewJWKSValidator(urmBaseURL string, refreshInterval time.Duration, timeout time.Duration) *JWKSValidator {
-	if refreshInterval <= 0 {
-		refreshInterval = 24 * time.Hour
-	}
+const jwksRefreshInterval = 24 * time.Hour
+
+func NewJWKSValidator(urmBaseURL string, timeout time.Duration) *JWKSValidator {
 	return &JWKSValidator{
-		jwksURL:         strings.TrimRight(urmBaseURL, "/") + "/public/jwks.json",
-		refreshInterval: refreshInterval,
-		httpClient:      &http.Client{Timeout: timeout},
-		issuer:          "urm",
-		keys:            make(map[string]*rsa.PublicKey),
+		jwksURL:    strings.TrimRight(urmBaseURL, "/") + "/public/jwks.json",
+		httpClient: &http.Client{Timeout: timeout},
+		issuer:     "urm",
+		keys:       make(map[string]*rsa.PublicKey),
 	}
 }
 
@@ -116,14 +115,13 @@ func (v *JWKSValidator) refresh(ctx context.Context) error {
 func (v *JWKSValidator) getKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	v.mu.RLock()
 	key, ok := v.keys[kid]
-	stale := time.Since(v.lastUpdate) > v.refreshInterval
+	stale := time.Since(v.lastUpdate) > jwksRefreshInterval
 	v.mu.RUnlock()
 
 	if ok && !stale {
 		return key, nil
 	}
 
-	// Try to refresh (unknown kid or stale)
 	if err := v.refresh(ctx); err != nil {
 		if ok {
 			return key, nil // stale but usable
@@ -142,7 +140,6 @@ func (v *JWKSValidator) getKey(ctx context.Context, kid string) (*rsa.PublicKey,
 
 // ValidateToken parses and validates a JWT token string, returning the Claims.
 func (v *JWKSValidator) ValidateToken(ctx context.Context, tokenStr string) (*Claims, error) {
-	// Parse without verification first to extract kid
 	unverified, _, err := new(jwt.Parser).ParseUnverified(tokenStr, &Claims{})
 	if err != nil {
 		return nil, fmt.Errorf("parse token: %w", err)
@@ -172,7 +169,7 @@ func (v *JWKSValidator) ValidateToken(ctx context.Context, tokenStr string) (*Cl
 	if !ok || !token.Valid {
 		return nil, fmt.Errorf("invalid token claims")
 	}
-	if claims.TokenType != "access" {
+	if claims.TokenUse != "access" {
 		return nil, fmt.Errorf("not an access token")
 	}
 

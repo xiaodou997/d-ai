@@ -11,6 +11,7 @@ import (
 type AiAdminAuditLog struct {
 	ID             pgtype.UUID        `json:"id"`
 	Actor          pgtype.Text        `json:"actor"`
+	ActorTenantID  pgtype.Text        `json:"actor_tenant_id"`
 	Action         string             `json:"action"`
 	ObjectType     pgtype.Text        `json:"object_type"`
 	ObjectID       pgtype.Text        `json:"object_id"`
@@ -37,6 +38,27 @@ type AiApiKey struct {
 	CreatedBy     pgtype.Text        `json:"created_by"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiAsyncTask struct {
+	ID               pgtype.UUID        `json:"id"`
+	TaskType         string             `json:"task_type"`
+	TenantID         string             `json:"tenant_id"`
+	UserID           pgtype.Text        `json:"user_id"`
+	ApiKeyID         pgtype.UUID        `json:"api_key_id"`
+	ModelCode        string             `json:"model_code"`
+	InputPayload     []byte             `json:"input_payload"`
+	Status           string             `json:"status"`
+	ResultPayload    []byte             `json:"result_payload"`
+	ErrorCode        pgtype.Text        `json:"error_code"`
+	ErrorMessage     pgtype.Text        `json:"error_message"`
+	UrmTransactionID pgtype.Text        `json:"urm_transaction_id"`
+	EstimatedCost    int64              `json:"estimated_cost"`
+	ActualCost       int64              `json:"actual_cost"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 }
 
 type AiConversationBinding struct {
@@ -69,6 +91,9 @@ type AiModelPrice struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
+	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
+	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
 	ImageSizePrices         []byte             `json:"image_size_prices"`
 	VideoPricePerSecond     int64              `json:"video_price_per_second"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
@@ -100,17 +125,45 @@ type AiProvider struct {
 }
 
 type AiProviderEndpoint struct {
-	ID               pgtype.UUID        `json:"id"`
-	ProviderID       pgtype.UUID        `json:"provider_id"`
-	Name             string             `json:"name"`
-	BaseUrl          string             `json:"base_url"`
-	ApiKeyCiphertext string             `json:"api_key_ciphertext"`
-	ExtraHeaders     []byte             `json:"extra_headers"`
-	Weight           int32              `json:"weight"`
-	TimeoutMs        int32              `json:"timeout_ms"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                pgtype.UUID        `json:"id"`
+	ProviderID        pgtype.UUID        `json:"provider_id"`
+	Name              string             `json:"name"`
+	BaseUrl           string             `json:"base_url"`
+	ApiKeyCiphertext  string             `json:"api_key_ciphertext"`
+	ExtraHeaders      []byte             `json:"extra_headers"`
+	Weight            int32              `json:"weight"`
+	TimeoutMs         int32              `json:"timeout_ms"`
+	AuthType          string             `json:"auth_type"`
+	FixedProviderType pgtype.Text        `json:"fixed_provider_type"`
+	OauthStrategy     string             `json:"oauth_strategy"`
+	Status            string             `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiProviderOauthCredential struct {
+	ID                     pgtype.UUID        `json:"id"`
+	EndpointID             pgtype.UUID        `json:"endpoint_id"`
+	Name                   string             `json:"name"`
+	ProviderType           string             `json:"provider_type"`
+	Email                  pgtype.Text        `json:"email"`
+	AccessTokenCiphertext  string             `json:"access_token_ciphertext"`
+	RefreshTokenCiphertext pgtype.Text        `json:"refresh_token_ciphertext"`
+	TokenType              string             `json:"token_type"`
+	Scope                  pgtype.Text        `json:"scope"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	AuthMetadata           []byte             `json:"auth_metadata"`
+	Weight                 int32              `json:"weight"`
+	Status                 string             `json:"status"`
+	InvalidReason          pgtype.Text        `json:"invalid_reason"`
+	LastUsedAt             pgtype.Timestamptz `json:"last_used_at"`
+	LastRefreshedAt        pgtype.Timestamptz `json:"last_refreshed_at"`
+	LastFailedAt           pgtype.Timestamptz `json:"last_failed_at"`
+	ConsecutiveFailCount   int32              `json:"consecutive_fail_count"`
+	SuccessCount           int64              `json:"success_count"`
+	FailCount              int64              `json:"fail_count"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiRuntimeLimitPolicy struct {
@@ -143,6 +196,9 @@ type AiTenantModelPriceOverride struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
+	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
+	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
 	ImageSizePrices         []byte             `json:"image_size_prices"`
 	VideoPricePerSecond     int64              `json:"video_price_per_second"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
@@ -158,6 +214,9 @@ type AiTenantUserPrice struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
+	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
+	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
 	ImageSizePrices         []byte             `json:"image_size_prices"`
 	VideoPricePerSecond     int64              `json:"video_price_per_second"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
@@ -192,6 +251,9 @@ type AiUpstreamDeploymentCostPrice struct {
 	Currency             string             `json:"currency"`
 	InputCostPer1m       int64              `json:"input_cost_per_1m"`
 	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
+	CacheWriteCostPer1m  int64              `json:"cache_write_cost_per_1m"`
+	CacheReadCostPer1m   int64              `json:"cache_read_cost_per_1m"`
+	ReasoningCostPer1m   int64              `json:"reasoning_cost_per_1m"`
 	RequestCost          int64              `json:"request_cost"`
 	ImageCost            int64              `json:"image_cost"`
 	ImageSizePrices      []byte             `json:"image_size_prices"`
@@ -217,10 +279,14 @@ type AiUsageLog struct {
 	EndpointID           pgtype.UUID        `json:"endpoint_id"`
 	ProviderCode         pgtype.Text        `json:"provider_code"`
 	UpstreamModel        pgtype.Text        `json:"upstream_model"`
+	ProviderFormat       pgtype.Text        `json:"provider_format"`
 	ConversationID       pgtype.Text        `json:"conversation_id"`
 	Stream               bool               `json:"stream"`
 	PromptTokens         int32              `json:"prompt_tokens"`
 	CompletionTokens     int32              `json:"completion_tokens"`
+	CacheWriteTokens     int32              `json:"cache_write_tokens"`
+	CacheReadTokens      int32              `json:"cache_read_tokens"`
+	ReasoningTokens      int32              `json:"reasoning_tokens"`
 	TotalTokens          int32              `json:"total_tokens"`
 	BillableUnitType     string             `json:"billable_unit_type"`
 	BillableUnits        int64              `json:"billable_units"`
@@ -237,6 +303,7 @@ type AiUsageLog struct {
 	FirstTokenLatencyMs  pgtype.Int4        `json:"first_token_latency_ms"`
 	ErrorCode            pgtype.Text        `json:"error_code"`
 	ErrorMessage         pgtype.Text        `json:"error_message"`
+	OauthCredentialID    pgtype.UUID        `json:"oauth_credential_id"`
 	UsageEstimated       bool               `json:"usage_estimated"`
 	UsageSource          string             `json:"usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
@@ -256,6 +323,9 @@ type AiUsageRollupsHourly struct {
 	FailedCount         int64              `json:"failed_count"`
 	PromptTokens        int64              `json:"prompt_tokens"`
 	CompletionTokens    int64              `json:"completion_tokens"`
+	CacheWriteTokens    int64              `json:"cache_write_tokens"`
+	CacheReadTokens     int64              `json:"cache_read_tokens"`
+	ReasoningTokens     int64              `json:"reasoning_tokens"`
 	TotalTokens         int64              `json:"total_tokens"`
 	BillableUnits       int64              `json:"billable_units"`
 	ProviderCost        int64              `json:"provider_cost"`
@@ -265,4 +335,14 @@ type AiUsageRollupsHourly struct {
 	LatencySuccessSumMs int64              `json:"latency_success_sum_ms"`
 	LatencySuccessCount int64              `json:"latency_success_count"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiUserModelGrant struct {
+	ID        pgtype.UUID        `json:"id"`
+	TenantID  string             `json:"tenant_id"`
+	UserID    string             `json:"user_id"`
+	ModelID   pgtype.UUID        `json:"model_id"`
+	Status    string             `json:"status"`
+	CreatedBy pgtype.Text        `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
