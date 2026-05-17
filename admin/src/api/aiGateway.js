@@ -66,7 +66,7 @@ gatewayRequest.interceptors.response.use(
       ElMessage.error(data.message || 'AI Gateway 请求失败')
       return Promise.reject(new Error(data.message || 'business error'))
     }
-    return data
+    return data.data !== undefined ? data.data : data
   },
   async (error) => {
     // 处理 HTTP 错误
