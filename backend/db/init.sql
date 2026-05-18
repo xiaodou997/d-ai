@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS ai_provider_endpoints (
   extra_headers      JSONB       NOT NULL DEFAULT '{}',
   weight             INTEGER     NOT NULL DEFAULT 100 CHECK (weight >= 0),
   timeout_ms         INTEGER     NOT NULL DEFAULT 30000 CHECK (timeout_ms > 0),
+  default_protocol   TEXT        NOT NULL DEFAULT 'openai_compatible' CHECK (default_protocol IN ('openai_compatible', 'anthropic', 'gemini')),
   status             TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),

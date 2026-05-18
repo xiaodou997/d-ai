@@ -77,58 +77,62 @@ func fromProviders(rows []dbgen.AiProvider) []providerDTO {
 // ---------------------------------------------------------------------------
 
 type providerEndpointDTO struct {
-	ID                pgtype.UUID     `json:"id"`
-	ProviderID        pgtype.UUID     `json:"provider_id"`
-	Name              string          `json:"name"`
-	BaseUrl           string          `json:"base_url"`
-	ExtraHeaders      json.RawMessage `json:"extra_headers"`
-	Weight            int32           `json:"weight"`
-	TimeoutMs         int32           `json:"timeout_ms"`
-	Status            string          `json:"status"`
-	CreatedAt         *int64          `json:"created_at"`
-	UpdatedAt         *int64          `json:"updated_at"`
+	ID              pgtype.UUID     `json:"id"`
+	ProviderID      pgtype.UUID     `json:"provider_id"`
+	Name            string          `json:"name"`
+	BaseUrl         string          `json:"base_url"`
+	ExtraHeaders    json.RawMessage `json:"extra_headers"`
+	Weight          int32           `json:"weight"`
+	TimeoutMs       int32           `json:"timeout_ms"`
+	DefaultProtocol string          `json:"default_protocol"`
+	Status          string          `json:"status"`
+	CreatedAt       *int64          `json:"created_at"`
+	UpdatedAt       *int64          `json:"updated_at"`
 }
 
 func fromCreateProviderEndpoint(r dbgen.CreateProviderEndpointRow) providerEndpointDTO {
 	return providerEndpointDTO{
-		ID:           r.ID,
-		ProviderID:   r.ProviderID,
-		Name:         r.Name,
-		BaseUrl:      r.BaseUrl,
-		ExtraHeaders: rawJSON(r.ExtraHeaders),
-		Weight:       r.Weight,
-		TimeoutMs:    r.TimeoutMs,
-		Status:       r.Status,
-		CreatedAt:    millis(r.CreatedAt),
-		UpdatedAt:    millis(r.UpdatedAt),
+		ID:              r.ID,
+		ProviderID:      r.ProviderID,
+		Name:            r.Name,
+		BaseUrl:         r.BaseUrl,
+		ExtraHeaders:    rawJSON(r.ExtraHeaders),
+		Weight:          r.Weight,
+		TimeoutMs:       r.TimeoutMs,
+		DefaultProtocol: r.DefaultProtocol,
+		Status:          r.Status,
+		CreatedAt:       millis(r.CreatedAt),
+		UpdatedAt:       millis(r.UpdatedAt),
 	}
 }
 
 type listProviderEndpointDTO struct {
-	ID           pgtype.UUID     `json:"id"`
-	ProviderID   pgtype.UUID     `json:"provider_id"`
-	Name         string          `json:"name"`
-	BaseUrl      string          `json:"base_url"`
-	ExtraHeaders json.RawMessage `json:"extra_headers"`
-	Weight       int32           `json:"weight"`
-	TimeoutMs    int32           `json:"timeout_ms"`
-	Status       string          `json:"status"`
-	CreatedAt    *int64          `json:"created_at"`
-	UpdatedAt    *int64          `json:"updated_at"`
+	ID              pgtype.UUID     `json:"id"`
+	ProviderID      pgtype.UUID     `json:"provider_id"`
+	Name            string          `json:"name"`
+	BaseUrl         string          `json:"base_url"`
+	ExtraHeaders    json.RawMessage `json:"extra_headers"`
+	Weight          int32           `json:"weight"`
+	TimeoutMs       int32           `json:"timeout_ms"`
+	DefaultProtocol string          `json:"default_protocol"`
+	Status          string          `json:"status"`
+	CreatedAt       *int64          `json:"created_at"`
+	UpdatedAt       *int64          `json:"updated_at"`
 }
 
 func fromListProviderEndpoint(r dbgen.ListProviderEndpointsRow) listProviderEndpointDTO {
 	return listProviderEndpointDTO{
-		ID:           r.ID,
-		ProviderID:   r.ProviderID,
-		Name:         r.Name,
-		BaseUrl:      r.BaseUrl,
-		ExtraHeaders: rawJSON(r.ExtraHeaders),
-		Weight:       r.Weight,
-		TimeoutMs:    r.TimeoutMs,
-		Status:       r.Status,
-		CreatedAt:    millis(r.CreatedAt),
-		UpdatedAt:    millis(r.UpdatedAt),
+		ID:              r.ID,
+		ProviderID:      r.ProviderID,
+		Name:            r.Name,
+		BaseUrl:         r.BaseUrl,
+		ExtraHeaders:    rawJSON(r.ExtraHeaders),
+		Weight:          r.Weight,
+		TimeoutMs:       r.TimeoutMs,
+		DefaultProtocol: r.DefaultProtocol,
+		Status:          r.Status,
+		CreatedAt:       millis(r.CreatedAt),
+		UpdatedAt:       millis(r.UpdatedAt),
 	}
 }
 
@@ -1128,31 +1132,33 @@ func fromListDashboardRecentErrors(rows []dbgen.ListDashboardRecentErrorsRow) []
 
 func fromUpdateProviderEndpoint(r dbgen.UpdateProviderEndpointRow) providerEndpointDTO {
 	return providerEndpointDTO{
-		ID:           r.ID,
-		ProviderID:   r.ProviderID,
-		Name:         r.Name,
-		BaseUrl:      r.BaseUrl,
-		ExtraHeaders: rawJSON(r.ExtraHeaders),
-		Weight:       r.Weight,
-		TimeoutMs:    r.TimeoutMs,
-		Status:       r.Status,
-		CreatedAt:    millis(r.CreatedAt),
-		UpdatedAt:    millis(r.UpdatedAt),
+		ID:              r.ID,
+		ProviderID:      r.ProviderID,
+		Name:            r.Name,
+		BaseUrl:         r.BaseUrl,
+		ExtraHeaders:    rawJSON(r.ExtraHeaders),
+		Weight:          r.Weight,
+		TimeoutMs:       r.TimeoutMs,
+		DefaultProtocol: r.DefaultProtocol,
+		Status:          r.Status,
+		CreatedAt:       millis(r.CreatedAt),
+		UpdatedAt:       millis(r.UpdatedAt),
 	}
 }
 
 func fromUpdateProviderEndpointStatus(r dbgen.UpdateProviderEndpointStatusRow) providerEndpointDTO {
 	return providerEndpointDTO{
-		ID:           r.ID,
-		ProviderID:   r.ProviderID,
-		Name:         r.Name,
-		BaseUrl:      r.BaseUrl,
-		ExtraHeaders: rawJSON(r.ExtraHeaders),
-		Weight:       r.Weight,
-		TimeoutMs:    r.TimeoutMs,
-		Status:       r.Status,
-		CreatedAt:    millis(r.CreatedAt),
-		UpdatedAt:    millis(r.UpdatedAt),
+		ID:              r.ID,
+		ProviderID:      r.ProviderID,
+		Name:            r.Name,
+		BaseUrl:         r.BaseUrl,
+		ExtraHeaders:    rawJSON(r.ExtraHeaders),
+		Weight:          r.Weight,
+		TimeoutMs:       r.TimeoutMs,
+		DefaultProtocol: r.DefaultProtocol,
+		Status:          r.Status,
+		CreatedAt:       millis(r.CreatedAt),
+		UpdatedAt:       millis(r.UpdatedAt),
 	}
 }
 

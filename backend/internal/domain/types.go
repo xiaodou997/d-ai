@@ -16,6 +16,16 @@ const (
 	CapabilityRerank    CapabilityType = "rerank"
 )
 
+// EndpointProtocol identifies the vendor API style of an endpoint, used for
+// model discovery (GET /v1/models) and default protocol assignment.
+type EndpointProtocol string
+
+const (
+	EndpointProtocolOpenAICompatible EndpointProtocol = "openai_compatible"
+	EndpointProtocolAnthropic        EndpointProtocol = "anthropic"
+	EndpointProtocolGemini           EndpointProtocol = "gemini"
+)
+
 // UpstreamProtocol identifies which wire protocol to use when calling an upstream.
 type UpstreamProtocol string
 

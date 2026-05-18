@@ -150,6 +150,7 @@ type AiProviderEndpoint struct {
 	ExtraHeaders     []byte             `json:"extra_headers"`
 	Weight           int32              `json:"weight"`
 	TimeoutMs        int32              `json:"timeout_ms"`
+	DefaultProtocol  string             `json:"default_protocol"`
 	Status           string             `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`

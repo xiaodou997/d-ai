@@ -468,9 +468,10 @@ INSERT INTO ai_provider_endpoints (
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING
   id,
@@ -480,6 +481,7 @@ RETURNING
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -493,20 +495,22 @@ type CreateProviderEndpointParams struct {
 	ExtraHeaders     []byte      `json:"extra_headers"`
 	Weight           int32       `json:"weight"`
 	TimeoutMs        int32       `json:"timeout_ms"`
+	DefaultProtocol  string      `json:"default_protocol"`
 	Status           string      `json:"status"`
 }
 
 type CreateProviderEndpointRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	ProviderID   pgtype.UUID        `json:"provider_id"`
-	Name         string             `json:"name"`
-	BaseUrl      string             `json:"base_url"`
-	ExtraHeaders []byte             `json:"extra_headers"`
-	Weight       int32              `json:"weight"`
-	TimeoutMs    int32              `json:"timeout_ms"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID              pgtype.UUID        `json:"id"`
+	ProviderID      pgtype.UUID        `json:"provider_id"`
+	Name            string             `json:"name"`
+	BaseUrl         string             `json:"base_url"`
+	ExtraHeaders    []byte             `json:"extra_headers"`
+	Weight          int32              `json:"weight"`
+	TimeoutMs       int32              `json:"timeout_ms"`
+	DefaultProtocol string             `json:"default_protocol"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 // ============================================================================
@@ -521,6 +525,7 @@ func (q *Queries) CreateProviderEndpoint(ctx context.Context, arg CreateProvider
 		arg.ExtraHeaders,
 		arg.Weight,
 		arg.TimeoutMs,
+		arg.DefaultProtocol,
 		arg.Status,
 	)
 	var i CreateProviderEndpointRow
@@ -532,6 +537,7 @@ func (q *Queries) CreateProviderEndpoint(ctx context.Context, arg CreateProvider
 		&i.ExtraHeaders,
 		&i.Weight,
 		&i.TimeoutMs,
+		&i.DefaultProtocol,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1446,6 +1452,7 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -1471,6 +1478,7 @@ func (q *Queries) GetProviderEndpoint(ctx context.Context, arg GetProviderEndpoi
 		&i.ExtraHeaders,
 		&i.Weight,
 		&i.TimeoutMs,
+		&i.DefaultProtocol,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1778,6 +1786,7 @@ SELECT
   e.api_key_ciphertext,
   e.extra_headers,
   e.timeout_ms,
+  e.default_protocol AS endpoint_default_protocol,
   p.code AS provider_code,
   p.name AS provider_name
 FROM ai_upstream_deployments ud
@@ -1787,22 +1796,23 @@ WHERE ud.id = $1
 `
 
 type GetUpstreamDeploymentForHealthCheckRow struct {
-	ID                 pgtype.UUID `json:"id"`
-	EndpointID         pgtype.UUID `json:"endpoint_id"`
-	Name               string      `json:"name"`
-	UpstreamModel      string      `json:"upstream_model"`
-	CapabilityType     string      `json:"capability_type"`
-	UpstreamProtocol   string      `json:"upstream_protocol"`
-	RequestPath        pgtype.Text `json:"request_path"`
-	UpstreamParameters []byte      `json:"upstream_parameters"`
-	HealthStatus       string      `json:"health_status"`
-	EndpointName       string      `json:"endpoint_name"`
-	BaseUrl            string      `json:"base_url"`
-	ApiKeyCiphertext   string      `json:"api_key_ciphertext"`
-	ExtraHeaders       []byte      `json:"extra_headers"`
-	TimeoutMs          int32       `json:"timeout_ms"`
-	ProviderCode       string      `json:"provider_code"`
-	ProviderName       string      `json:"provider_name"`
+	ID                      pgtype.UUID `json:"id"`
+	EndpointID              pgtype.UUID `json:"endpoint_id"`
+	Name                    string      `json:"name"`
+	UpstreamModel           string      `json:"upstream_model"`
+	CapabilityType          string      `json:"capability_type"`
+	UpstreamProtocol        string      `json:"upstream_protocol"`
+	RequestPath             pgtype.Text `json:"request_path"`
+	UpstreamParameters      []byte      `json:"upstream_parameters"`
+	HealthStatus            string      `json:"health_status"`
+	EndpointName            string      `json:"endpoint_name"`
+	BaseUrl                 string      `json:"base_url"`
+	ApiKeyCiphertext        string      `json:"api_key_ciphertext"`
+	ExtraHeaders            []byte      `json:"extra_headers"`
+	TimeoutMs               int32       `json:"timeout_ms"`
+	EndpointDefaultProtocol string      `json:"endpoint_default_protocol"`
+	ProviderCode            string      `json:"provider_code"`
+	ProviderName            string      `json:"provider_name"`
 }
 
 func (q *Queries) GetUpstreamDeploymentForHealthCheck(ctx context.Context, id pgtype.UUID) (GetUpstreamDeploymentForHealthCheckRow, error) {
@@ -1823,6 +1833,7 @@ func (q *Queries) GetUpstreamDeploymentForHealthCheck(ctx context.Context, id pg
 		&i.ApiKeyCiphertext,
 		&i.ExtraHeaders,
 		&i.TimeoutMs,
+		&i.EndpointDefaultProtocol,
 		&i.ProviderCode,
 		&i.ProviderName,
 	)
@@ -2562,6 +2573,7 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -2571,16 +2583,17 @@ ORDER BY name ASC
 `
 
 type ListProviderEndpointsRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	ProviderID   pgtype.UUID        `json:"provider_id"`
-	Name         string             `json:"name"`
-	BaseUrl      string             `json:"base_url"`
-	ExtraHeaders []byte             `json:"extra_headers"`
-	Weight       int32              `json:"weight"`
-	TimeoutMs    int32              `json:"timeout_ms"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID              pgtype.UUID        `json:"id"`
+	ProviderID      pgtype.UUID        `json:"provider_id"`
+	Name            string             `json:"name"`
+	BaseUrl         string             `json:"base_url"`
+	ExtraHeaders    []byte             `json:"extra_headers"`
+	Weight          int32              `json:"weight"`
+	TimeoutMs       int32              `json:"timeout_ms"`
+	DefaultProtocol string             `json:"default_protocol"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.UUID) ([]ListProviderEndpointsRow, error) {
@@ -2600,6 +2613,7 @@ func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.U
 			&i.ExtraHeaders,
 			&i.Weight,
 			&i.TimeoutMs,
+			&i.DefaultProtocol,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -4399,7 +4413,8 @@ SET name = $3,
     extra_headers = $6,
     weight = $7,
     timeout_ms = $8,
-    status = $9,
+    default_protocol = $9,
+    status = $10,
     updated_at = now()
 WHERE provider_id = $1
   AND id = $2
@@ -4411,6 +4426,7 @@ RETURNING
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -4425,20 +4441,22 @@ type UpdateProviderEndpointParams struct {
 	ExtraHeaders     []byte      `json:"extra_headers"`
 	Weight           int32       `json:"weight"`
 	TimeoutMs        int32       `json:"timeout_ms"`
+	DefaultProtocol  string      `json:"default_protocol"`
 	Status           string      `json:"status"`
 }
 
 type UpdateProviderEndpointRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	ProviderID   pgtype.UUID        `json:"provider_id"`
-	Name         string             `json:"name"`
-	BaseUrl      string             `json:"base_url"`
-	ExtraHeaders []byte             `json:"extra_headers"`
-	Weight       int32              `json:"weight"`
-	TimeoutMs    int32              `json:"timeout_ms"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID              pgtype.UUID        `json:"id"`
+	ProviderID      pgtype.UUID        `json:"provider_id"`
+	Name            string             `json:"name"`
+	BaseUrl         string             `json:"base_url"`
+	ExtraHeaders    []byte             `json:"extra_headers"`
+	Weight          int32              `json:"weight"`
+	TimeoutMs       int32              `json:"timeout_ms"`
+	DefaultProtocol string             `json:"default_protocol"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) UpdateProviderEndpoint(ctx context.Context, arg UpdateProviderEndpointParams) (UpdateProviderEndpointRow, error) {
@@ -4451,6 +4469,7 @@ func (q *Queries) UpdateProviderEndpoint(ctx context.Context, arg UpdateProvider
 		arg.ExtraHeaders,
 		arg.Weight,
 		arg.TimeoutMs,
+		arg.DefaultProtocol,
 		arg.Status,
 	)
 	var i UpdateProviderEndpointRow
@@ -4462,6 +4481,7 @@ func (q *Queries) UpdateProviderEndpoint(ctx context.Context, arg UpdateProvider
 		&i.ExtraHeaders,
 		&i.Weight,
 		&i.TimeoutMs,
+		&i.DefaultProtocol,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -4483,6 +4503,7 @@ RETURNING
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -4495,16 +4516,17 @@ type UpdateProviderEndpointStatusParams struct {
 }
 
 type UpdateProviderEndpointStatusRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	ProviderID   pgtype.UUID        `json:"provider_id"`
-	Name         string             `json:"name"`
-	BaseUrl      string             `json:"base_url"`
-	ExtraHeaders []byte             `json:"extra_headers"`
-	Weight       int32              `json:"weight"`
-	TimeoutMs    int32              `json:"timeout_ms"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID              pgtype.UUID        `json:"id"`
+	ProviderID      pgtype.UUID        `json:"provider_id"`
+	Name            string             `json:"name"`
+	BaseUrl         string             `json:"base_url"`
+	ExtraHeaders    []byte             `json:"extra_headers"`
+	Weight          int32              `json:"weight"`
+	TimeoutMs       int32              `json:"timeout_ms"`
+	DefaultProtocol string             `json:"default_protocol"`
+	Status          string             `json:"status"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) UpdateProviderEndpointStatus(ctx context.Context, arg UpdateProviderEndpointStatusParams) (UpdateProviderEndpointStatusRow, error) {
@@ -4518,6 +4540,7 @@ func (q *Queries) UpdateProviderEndpointStatus(ctx context.Context, arg UpdatePr
 		&i.ExtraHeaders,
 		&i.Weight,
 		&i.TimeoutMs,
+		&i.DefaultProtocol,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,

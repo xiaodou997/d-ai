@@ -140,11 +140,20 @@ export const statusOptions = [
 ]
 
 export const protocolOptions = [
-  { label: 'OpenAI Chat Completions', value: 'openai_chat_completions' },
-  { label: 'OpenAI Images Generations', value: 'openai_images_generations' },
+  { label: 'OpenAI Chat Completions', value: 'openai_chat' },
   { label: 'OpenAI Responses', value: 'openai_responses' },
   { label: 'OpenAI Embeddings', value: 'openai_embeddings' },
-  { label: 'Anthropic Messages', value: 'anthropic_messages' }
+  { label: 'OpenAI Images Generations', value: 'openai_images' },
+  { label: 'OpenAI Completions (Legacy)', value: 'openai_completions' },
+  { label: 'Anthropic Messages', value: 'anthropic_messages' },
+  { label: 'Gemini Generate', value: 'gemini_generate' },
+  { label: 'Gemini Embeddings', value: 'gemini_embeddings' }
+]
+
+export const endpointProtocolOptions = [
+  { label: 'OpenAI Compatible', value: 'openai_compatible' },
+  { label: 'Anthropic', value: 'anthropic' },
+  { label: 'Gemini', value: 'gemini' }
 ]
 
 export const capabilityOptions = [
@@ -191,6 +200,14 @@ export function updateProviderEndpoint(providerId, endpointId, data) {
 
 export function updateProviderEndpointStatus(providerId, endpointId, status) {
   return gatewayRequest.patch(`/api/v1/providers/${providerId}/endpoints/${endpointId}/status`, { status })
+}
+
+export function fetchEndpointUpstreamModels(providerId, endpointId) {
+  return gatewayRequest.get(`/api/v1/providers/${providerId}/endpoints/${endpointId}/upstream-models`)
+}
+
+export function importEndpointUpstreamModels(providerId, endpointId, data) {
+  return gatewayRequest.post(`/api/v1/providers/${providerId}/endpoints/${endpointId}/import-upstream-models`, data)
 }
 
 // ============================================================================

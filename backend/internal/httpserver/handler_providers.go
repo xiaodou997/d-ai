@@ -143,6 +143,9 @@ func (s *Server) handleAdminCreateProviderEndpoint(w http.ResponseWriter, r *htt
 		return
 	}
 
+	if req.DefaultProtocol == "" {
+		req.DefaultProtocol = string(domain.EndpointProtocolOpenAICompatible)
+	}
 	row, err := s.queries.CreateProviderEndpoint(r.Context(), dbgen.CreateProviderEndpointParams{
 		ProviderID:       providerID,
 		Name:             req.Name,
@@ -151,6 +154,7 @@ func (s *Server) handleAdminCreateProviderEndpoint(w http.ResponseWriter, r *htt
 		ExtraHeaders:     jsonObjectOrDefault(req.ExtraHeaders),
 		Weight:           int32OrDefault(req.Weight, defaultEndpointWeight),
 		TimeoutMs:        int32OrDefault(req.TimeoutMs, defaultTimeoutMs),
+		DefaultProtocol:  req.DefaultProtocol,
 		Status:           req.Status,
 	})
 	if err != nil {
@@ -193,10 +197,20 @@ func (s *Server) handleAdminUpdateProviderEndpoint(w http.ResponseWriter, r *htt
 			return
 		}
 	}
+	if req.DefaultProtocol == "" {
+		req.DefaultProtocol = current.DefaultProtocol
+	}
 	row, err := s.queries.UpdateProviderEndpoint(r.Context(), dbgen.UpdateProviderEndpointParams{
-		ProviderID: providerID, ID: endpointID, Name: req.Name, BaseUrl: req.BaseURL,
-		ApiKeyCiphertext: ciphertext, ExtraHeaders: jsonObjectOrDefault(req.ExtraHeaders), Weight: int32OrDefault(req.Weight, defaultEndpointWeight),
-		TimeoutMs: int32OrDefault(req.TimeoutMs, defaultTimeoutMs), Status: req.Status,
+		ProviderID:      providerID,
+		ID:              endpointID,
+		Name:            req.Name,
+		BaseUrl:         req.BaseURL,
+		ApiKeyCiphertext: ciphertext,
+		ExtraHeaders:    jsonObjectOrDefault(req.ExtraHeaders),
+		Weight:          int32OrDefault(req.Weight, defaultEndpointWeight),
+		TimeoutMs:       int32OrDefault(req.TimeoutMs, defaultTimeoutMs),
+		DefaultProtocol: req.DefaultProtocol,
+		Status:          req.Status,
 	})
 	if err != nil {
 		writeDBErr(w, err)

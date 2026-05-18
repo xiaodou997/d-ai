@@ -222,6 +222,8 @@ func New(cfg Config) *Server {
 		r.Post("/providers/{providerID}/endpoints", s.handleAdminCreateProviderEndpoint)
 		r.Patch("/providers/{providerID}/endpoints/{endpointID}", s.handleAdminUpdateProviderEndpoint)
 		r.Patch("/providers/{providerID}/endpoints/{endpointID}/status", s.handleAdminUpdateProviderEndpointStatus)
+		r.Get("/providers/{providerID}/endpoints/{endpointID}/upstream-models", s.handleAdminFetchEndpointUpstreamModels)
+		r.Post("/providers/{providerID}/endpoints/{endpointID}/import-upstream-models", s.handleAdminImportEndpointUpstreamModels)
 		r.Get("/upstream-deployments", s.handleAdminListUpstreamDeployments)
 		r.Post("/upstream-deployments", s.handleAdminCreateUpstreamDeployment)
 		r.Get("/upstream-deployments/{deploymentID}", s.handleAdminGetUpstreamDeployment)

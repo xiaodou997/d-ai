@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, shallowRef } from 'vue'
+import { computed, onMounted, reactive, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Edit, Plus, Refresh, Search, Switch } from '@element-plus/icons-vue'
 import {
@@ -8,7 +8,10 @@ import {
   createProvider,
   createProviderEndpoint,
   createUpstreamDeployment,
+  endpointProtocolOptions,
+  fetchEndpointUpstreamModels,
   getUpstreamDeployment,
+  importEndpointUpstreamModels,
   listProviderEndpoints,
   listProviders,
   listUpstreamDeployments,
@@ -27,6 +30,12 @@ const deploymentLoading = shallowRef(false)
 const providerDialogVisible = shallowRef(false)
 const endpointDialogVisible = shallowRef(false)
 const deploymentDialogVisible = shallowRef(false)
+const discoveryDialogVisible = shallowRef(false)
+const discoveryLoading = shallowRef(false)
+const discoveryImporting = shallowRef(false)
+const discoveryEndpointId = shallowRef('')
+const discoveryEndpointProviderId = shallowRef('')
+const discoveredModels = ref([])
 const editingProviderId = shallowRef('')
 const editingEndpointId = shallowRef('')
 const editingDeploymentId = shallowRef('')
@@ -48,6 +57,7 @@ const endpointForm = reactive({
   api_key: '',
   weight: 100,
   timeout_ms: 60000,
+  default_protocol: 'openai_compatible',
   status: 'active'
 })
 
@@ -128,6 +138,7 @@ const resetEndpointForm = () => {
     api_key: '',
     weight: 100,
     timeout_ms: 60000,
+    default_protocol: 'openai_compatible',
     status: 'active'
   })
 }
@@ -164,6 +175,7 @@ const applyEndpointForm = (row) => {
     api_key: '',
     weight: row.weight,
     timeout_ms: row.timeout_ms,
+    default_protocol: row.default_protocol || 'openai_compatible',
     status: row.status
   })
 }
@@ -373,6 +385,63 @@ const handleHealthCheck = async (row) => {
   }
 }
 
+const openDiscoveryDialog = async (endpointRow) => {
+  if (!selectedProviderId.value) return
+  discoveryEndpointId.value = endpointRow.id
+  discoveryEndpointProviderId.value = selectedProviderId.value
+  discoveredModels.value = []
+  discoveryDialogVisible.value = true
+  discoveryLoading.value = true
+  try {
+    const models = await fetchEndpointUpstreamModels(selectedProviderId.value, endpointRow.id)
+    discoveredModels.value = models.map((m) => ({ ...m, selected: true }))
+  } catch {
+    // Error already handled by interceptor
+  } finally {
+    discoveryLoading.value = false
+  }
+}
+
+const discoverySelectAll = (val) => {
+  discoveredModels.value = discoveredModels.value.map((m) => ({ ...m, selected: val }))
+}
+
+const discoveryAllSelected = computed(() =>
+  discoveredModels.value.length > 0 && discoveredModels.value.every((m) => m.selected)
+)
+
+const submitDiscovery = async () => {
+  const toImport = discoveredModels.value.filter((m) => m.selected)
+  if (toImport.length === 0) {
+    ElMessage.warning('请至少选择一个模型')
+    return
+  }
+  discoveryImporting.value = true
+  try {
+    const result = await importEndpointUpstreamModels(
+      discoveryEndpointProviderId.value,
+      discoveryEndpointId.value,
+      {
+        models: toImport.map((m) => ({
+          upstream_model: m.id,
+          name: m.name,
+          capability_type: m.capability_type,
+          upstream_protocol: m.upstream_protocol
+        }))
+      }
+    )
+    const createdCount = result.created?.length ?? 0
+    const skippedCount = result.skipped?.length ?? 0
+    ElMessage.success(`已创建 ${createdCount} 个部署，跳过 ${skippedCount} 个（已存在）`)
+    discoveryDialogVisible.value = false
+    await fetchDeployments()
+  } catch {
+    // Error already handled by interceptor
+  } finally {
+    discoveryImporting.value = false
+  }
+}
+
 onMounted(fetchProviders)
 </script>
 
@@ -490,9 +559,10 @@ onMounted(fetchProviders)
               <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="190" fixed="right">
+          <el-table-column label="操作" width="250" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openEndpointEditDialog(row)">编辑</el-button>
+              <el-button link type="success" @click="openDiscoveryDialog(row)">发现模型</el-button>
               <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleEndpoint(row)">
                 <el-icon><Switch /></el-icon>
                 {{ row.status === 'active' ? '禁用' : '启用' }}
@@ -583,9 +653,9 @@ onMounted(fetchProviders)
           <el-form-item label="接入点名称" required>
             <el-input v-model="endpointForm.name" placeholder="OpenAI Compatible Endpoint" />
           </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="endpointForm.status" class="w-full">
-              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          <el-form-item label="厂商 API 风格" required>
+            <el-select v-model="endpointForm.default_protocol" class="w-full">
+              <el-option v-for="item in endpointProtocolOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
         </div>
@@ -603,10 +673,58 @@ onMounted(fetchProviders)
             <el-input-number v-model="endpointForm.timeout_ms" :min="1000" class="w-full" />
           </el-form-item>
         </div>
+        <el-form-item label="状态">
+          <el-select v-model="endpointForm.status" class="w-full">
+            <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="endpointDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitEndpoint">{{ isEditingEndpoint ? '保存' : '创建' }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="discoveryDialogVisible" title="发现模型" width="800px" append-to-body>
+      <div v-if="discoveryLoading" class="discovery-loading">
+        <el-text type="info">正在从上游拉取模型列表…</el-text>
+      </div>
+      <template v-else-if="discoveredModels.length > 0">
+        <div class="discovery-header">
+          <el-checkbox :model-value="discoveryAllSelected" @change="discoverySelectAll">全选</el-checkbox>
+          <el-text type="info" size="small">共 {{ discoveredModels.length }} 个模型，勾选后批量创建 upstream deployment</el-text>
+        </div>
+        <el-table :data="discoveredModels" max-height="420" class="w-full">
+          <el-table-column width="48">
+            <template #default="{ row }">
+              <el-checkbox v-model="row.selected" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="id" label="模型 ID" min-width="180" show-overflow-tooltip />
+          <el-table-column label="能力类型" width="140">
+            <template #default="{ row }">
+              <el-select v-model="row.capability_type" size="small" class="w-full">
+                <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="协议类型" min-width="180">
+            <template #default="{ row }">
+              <el-select v-model="row.upstream_protocol" size="small" class="w-full">
+                <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <div v-else class="discovery-empty">
+        <el-text type="warning">未能获取到模型列表，请检查接入点配置和 API Key</el-text>
+      </div>
+      <template #footer>
+        <el-button @click="discoveryDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="discoveryImporting" :disabled="discoveryLoading || discoveredModels.length === 0" @click="submitDiscovery">
+          导入选中
+        </el-button>
       </template>
     </el-dialog>
 
@@ -945,6 +1063,21 @@ onMounted(fetchProviders)
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.discovery-loading,
+.discovery-empty {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+}
+
+.discovery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .empty-workspace {

@@ -55,13 +55,14 @@ type updateStatusRequest struct {
 }
 
 type createEndpointRequest struct {
-	Name         string          `json:"name"`
-	BaseURL      string          `json:"base_url"`
-	APIKey       string          `json:"api_key"`
-	ExtraHeaders json.RawMessage `json:"extra_headers"`
-	Weight       *int32          `json:"weight"`
-	TimeoutMs    *int32          `json:"timeout_ms"`
-	Status       string          `json:"status"`
+	Name            string          `json:"name"`
+	BaseURL         string          `json:"base_url"`
+	APIKey          string          `json:"api_key"`
+	ExtraHeaders    json.RawMessage `json:"extra_headers"`
+	Weight          *int32          `json:"weight"`
+	TimeoutMs       *int32          `json:"timeout_ms"`
+	DefaultProtocol string          `json:"default_protocol"`
+	Status          string          `json:"status"`
 }
 
 type createModelRequest struct {

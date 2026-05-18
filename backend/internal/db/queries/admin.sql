@@ -88,9 +88,10 @@ INSERT INTO ai_provider_endpoints (
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING
   id,
@@ -100,6 +101,7 @@ RETURNING
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at;
@@ -113,6 +115,7 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -130,6 +133,7 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at
@@ -151,6 +155,7 @@ RETURNING
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at;
@@ -163,7 +168,8 @@ SET name = $3,
     extra_headers = $6,
     weight = $7,
     timeout_ms = $8,
-    status = $9,
+    default_protocol = $9,
+    status = $10,
     updated_at = now()
 WHERE provider_id = $1
   AND id = $2
@@ -175,6 +181,7 @@ RETURNING
   extra_headers,
   weight,
   timeout_ms,
+  default_protocol,
   status,
   created_at,
   updated_at;
@@ -365,6 +372,7 @@ SELECT
   e.api_key_ciphertext,
   e.extra_headers,
   e.timeout_ms,
+  e.default_protocol AS endpoint_default_protocol,
   p.code AS provider_code,
   p.name AS provider_name
 FROM ai_upstream_deployments ud
