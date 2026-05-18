@@ -73,7 +73,7 @@ func (c *Client) Do(ctx context.Context, req *serving.UpstreamRequest) (*serving
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("http do: %w", err)
+		return nil, fmt.Errorf("http do %s %s: %w", req.Method, url, err)
 	}
 
 	return &serving.UpstreamResponse{

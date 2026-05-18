@@ -200,10 +200,11 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		defer s.Stats.DecrInflight(parentCtx, cand.RouteID)
 	}
 
+	upstreamURL := buildURL(cand, req.IsStream)
 	startTime := time.Now()
 	upResp, callErr := s.Transport.Do(attemptCtx, &UpstreamRequest{
 		Method:   "POST",
-		URL:      buildURL(cand, req.IsStream),
+		URL:      upstreamURL,
 		Headers:  buildHeaders(cand, req),
 		Body:     body,
 		Timeout:  perTimeout,
@@ -225,6 +226,17 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	req.LatencyMs = latencyMs
 	s.recordAttempt(req, cand, outcome, latencyMs, score)
 	s.notifyHealth(parentCtx, req, cand, outcome)
+
+	// Pre-read error body once (consumed by DecisionRetry/GiveUp branches below) and
+	// emit a single structured error log carrying full upstream context. Without
+	// this, transport failures and upstream 4xx/5xx leave NO trace in app logs.
+	var errBody string
+	if outcome.Status != ResultSuccess {
+		if callErr == nil && upResp != nil {
+			errBody = snippetBody(upResp)
+		}
+		logUpstreamFailure(parentCtx, req, cand, upstreamURL, status, latencyMs, callErr, errBody)
+	}
 
 	switch outcome.Decision(req.SelectedCredential != nil) {
 	case DecisionAccept:
@@ -248,7 +260,6 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		}
 
 	case DecisionRetry:
-		errBody := snippetBody(upResp)
 		drainAndClose(upResp)
 		return attemptResult{
 			decision: DecisionRetry,
@@ -257,7 +268,6 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		}
 
 	case DecisionGiveUp:
-		errBody := snippetBody(upResp)
 		drainAndClose(upResp)
 		req.RequestStatus = domain.RequestFailed
 		req.HTTPStatus = status
@@ -455,6 +465,40 @@ func lastAttemptWas(req *Request, status ResultStatus) bool {
 		return false
 	}
 	return req.Attempts[len(req.Attempts)-1].Outcome == status
+}
+
+// logUpstreamFailure emits a single structured Error log line for any
+// non-success upstream attempt — transport errors AND HTTP 4xx/5xx. It is the
+// authoritative observability hook for "why did the upstream call fail": it
+// carries the URL we hit, route/deployment/provider, status, latency, and
+// (when available) the truncated upstream response body. Without this, the
+// only trace of an upstream failure is the access log info line, which has
+// no upstream context.
+func logUpstreamFailure(ctx context.Context, req *Request, cand *domain.RouteCandidate, url string, status, latencyMs int, callErr error, errBody string) {
+	attrs := []any{
+		"request_id", req.RequestID,
+		"upstream_url", url,
+		"upstream_status", status,
+		"latency_ms", latencyMs,
+		"route_id", cand.RouteID,
+		"protocol", string(cand.Protocol),
+		"model_code", req.ModelCode,
+		"upstream_model", cand.UpstreamModel,
+		"provider_code", cand.ProviderCode,
+		"endpoint_id", cand.EndpointID,
+		"deployment_id", cand.DeploymentID,
+		"is_stream", req.IsStream,
+	}
+	if cand.PoolID != "" {
+		attrs = append(attrs, "pool_id", cand.PoolID)
+	}
+	if callErr != nil {
+		attrs = append(attrs, "transport_error", callErr.Error())
+	}
+	if errBody != "" {
+		attrs = append(attrs, "upstream_body", truncateValidUTF8(errBody, 1024))
+	}
+	slog.ErrorContext(ctx, "upstream call failed", attrs...)
 }
 
 // snippetBody returns up to 512 bytes of the upstream response body for error
