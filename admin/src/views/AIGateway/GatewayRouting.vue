@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, shallowRef } from 'vue'
+import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRouteWeights, putRouteWeights } from '@/api/aiGateway'
 
@@ -15,13 +15,133 @@ const weights = reactive({
   health: 0.1
 })
 
+const dimensionOptions = [
+  {
+    key: 'cost',
+    label: '成本优先',
+    code: 'cost',
+    color: '#3b82f6',
+    hint: '越重视成本，系统越倾向选择单价更低或账号池类路线。',
+    detail: '适合预算敏感、批量任务、后台分析等场景。调得太高时，可能会牺牲一部分响应速度。'
+  },
+  {
+    key: 'latency',
+    label: '响应速度',
+    code: 'latency',
+    color: '#10b981',
+    hint: '越重视速度，系统越倾向选择最近响应更快的路线。',
+    detail: '适合聊天、代码补全、实时交互等场景。系统使用最近一段时间的平均耗时来判断，不只看某一次请求。'
+  },
+  {
+    key: 'load',
+    label: '繁忙程度',
+    code: 'load',
+    color: '#f59e0b',
+    hint: '越重视空闲，系统越倾向选择当前排队更少的路线。',
+    detail: '适合高并发场景，可减少所有请求挤到同一路线。调高后流量会更分散，但单次可能不总是走最低成本路线。'
+  },
+  {
+    key: 'health',
+    label: '可用状态',
+    code: 'health',
+    color: '#ef4444',
+    hint: '越重视稳定，系统越会避开刚失败过、正在恢复探测的路线。',
+    detail: '建议至少保留 0.10。完全调低会让系统更少参考健康状态，故障恢复期的路线可能更早拿到流量。'
+  }
+]
+
+const routingSteps = [
+  {
+    title: '先找可用路线',
+    desc: '系统会根据当前模型找出可用的上游路线，已经不可用或本次已失败过的路线会被跳过。'
+  },
+  {
+    title: '再按四项打分',
+    desc: '每条路线都会同时看成本、速度、繁忙程度和可用状态。你在上面设置的比例越高，这一项对最终选择影响越大。'
+  },
+  {
+    title: '按概率选择',
+    desc: '系统不是永远选择分数最高的一条，而是让高分路线更容易被选中，这样可以避免流量全部压到同一条路线。'
+  },
+  {
+    title: '失败后自动换路',
+    desc: '如果一次调用失败，系统会在重试预算内换其他候选路线；连续失败的路线会进入保护期，暂时不再承接正常流量。'
+  }
+]
+
+const tuningPresets = [
+  {
+    key: 'balanced',
+    name: '默认均衡',
+    values: { cost: 0.4, latency: 0.3, load: 0.2, health: 0.1 },
+    desc: '适合大多数模型调用，成本、速度和均衡分流都有考虑。'
+  },
+  {
+    key: 'cost-first',
+    name: '成本优先',
+    values: { cost: 0.55, latency: 0.2, load: 0.15, health: 0.1 },
+    desc: '适合批量生成、离线任务、预算压力较大的业务。'
+  },
+  {
+    key: 'experience-first',
+    name: '体验优先',
+    values: { cost: 0.2, latency: 0.5, load: 0.2, health: 0.1 },
+    desc: '适合用户正在等待结果的在线请求，例如聊天和实时助手。'
+  },
+  {
+    key: 'stability-first',
+    name: '稳定优先',
+    values: { cost: 0.25, latency: 0.25, load: 0.2, health: 0.3 },
+    desc: '适合对失败率更敏感的场景，例如付费用户、关键业务或高峰期。'
+  }
+]
+
+const termExplanations = [
+  {
+    title: '归一化',
+    desc: '把四个数字按原来的比例自动换算成合计 1.00。比如 4、3、2、1 会变成 0.40、0.30、0.20、0.10。'
+  },
+  {
+    title: '概率选择',
+    desc: '分数越高越容易被选中，但不是每次都固定选同一条。这样既能偏向好路线，也能保留分流和容错空间。'
+  },
+  {
+    title: '会话保持',
+    desc: '请求带有 X-Conversation-Id 时，系统会尽量复用上次成功的路线或账号，让同一段对话更连续。'
+  },
+  {
+    title: '保护期',
+    desc: '一条路线连续失败后会暂时停止承接正常流量。等待一段时间后，系统只放少量探测请求确认它是否恢复。'
+  }
+]
+
 // ── Computed ────────────────────────────────────────────────────────────────
-function weightSum() {
-  return +(weights.cost + weights.latency + weights.load + weights.health).toFixed(4)
+const weightSum = computed(() => +(weights.cost + weights.latency + weights.load + weights.health).toFixed(4))
+const weightSumOk = computed(() => Math.abs(weightSum.value - 1.0) < 0.001)
+const sumGapText = computed(() => {
+  const diff = +(weightSum.value - 1).toFixed(3)
+  if (diff > 0) return `超出 ${diff.toFixed(3)}`
+  return `还差 ${Math.abs(diff).toFixed(3)}`
+})
+
+function weightPercent(key) {
+  return ((weights[key] || 0) * 100).toFixed(1)
 }
 
-function weightSumOk() {
-  return Math.abs(weightSum() - 1.0) < 0.001
+function matchesPreset(preset) {
+  return ['cost', 'latency', 'load', 'health'].every((key) => {
+    return Math.abs(weights[key] - preset.values[key]) < 0.001
+  })
+}
+
+const activePreset = computed(() => tuningPresets.find(matchesPreset)?.key || '')
+
+function applyPreset(preset) {
+  weights.cost = preset.values.cost
+  weights.latency = preset.values.latency
+  weights.load = preset.values.load
+  weights.health = preset.values.health
+  ElMessage.success(`已套用“${preset.name}”`)
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -43,8 +163,8 @@ async function fetchWeights() {
 }
 
 async function saveWeights() {
-  if (!weightSumOk()) {
-    ElMessage.warning('四项权重之和必须等于 1.0，当前合计 ' + weightSum())
+  if (!weightSumOk.value) {
+    ElMessage.warning('四项权重之和必须等于 1.0，当前合计 ' + weightSum.value)
     return
   }
   saving.value = true
@@ -64,17 +184,13 @@ async function saveWeights() {
 }
 
 function normalize() {
-  const sum = weightSum()
+  const sum = weightSum.value
   if (sum <= 0) return
   weights.cost    = +(weights.cost    / sum).toFixed(3)
   weights.latency = +(weights.latency / sum).toFixed(3)
   weights.load    = +(weights.load    / sum).toFixed(3)
   weights.health  = +(1 - weights.cost - weights.latency - weights.load).toFixed(3)
-}
-
-function barColor(key) {
-  const map = { cost: '#3b82f6', latency: '#10b981', load: '#f59e0b', health: '#ef4444' }
-  return map[key] || '#94a3b8'
+  ElMessage.success('已按当前比例归一化为合计 1.0')
 }
 
 onMounted(fetchWeights)
@@ -89,100 +205,80 @@ onMounted(fetchWeights)
           <div>
             <h3 class="card-title">多维评分路由权重</h3>
             <p class="card-desc">
-              调整 cost / latency / load / health 四维权重，控制 Softmax 路由选路倾向。
-              权重之和须为 <strong>1.0</strong>（当前合计：
-              <span :class="weightSumOk() ? 'sum-ok' : 'sum-err'">{{ weightSum() }}</span>）。
+              设置系统选上游路线时更看重什么：更省钱、更快、更空闲，还是更稳定。
+              四项合计必须为 <strong>1.0</strong>（当前合计：
+              <span :class="weightSumOk ? 'sum-ok' : 'sum-err'">{{ weightSum }}</span>）。
             </p>
           </div>
           <div class="header-actions">
             <el-button size="small" @click="fetchWeights" :loading="loading">刷新</el-button>
-            <el-button size="small" @click="normalize">归一化</el-button>
+            <el-button size="small" @click="normalize">按比例修正</el-button>
           </div>
         </div>
       </template>
 
       <el-form label-width="120px" label-position="left">
-        <el-form-item label="Cost 权重">
+        <el-form-item
+          v-for="dim in dimensionOptions"
+          :key="dim.key"
+          :label="dim.label"
+        >
           <div class="weight-row">
             <el-slider
-              v-model="weights.cost"
+              v-model="weights[dim.key]"
               :min="0" :max="1" :step="0.01"
               :show-tooltip="true"
               class="weight-slider"
             />
             <el-input-number
-              v-model="weights.cost"
+              v-model="weights[dim.key]"
               :min="0" :max="1" :step="0.01" :precision="2"
               size="small" style="width:90px"
             />
           </div>
-          <div class="weight-hint">路由成本越低分越高（适合控费场景调大）</div>
-        </el-form-item>
-
-        <el-form-item label="Latency 权重">
-          <div class="weight-row">
-            <el-slider
-              v-model="weights.latency"
-              :min="0" :max="1" :step="0.01"
-              :show-tooltip="true"
-              class="weight-slider"
-            />
-            <el-input-number
-              v-model="weights.latency"
-              :min="0" :max="1" :step="0.01" :precision="2"
-              size="small" style="width:90px"
-            />
+          <div class="weight-hint">
+            <span class="dim-code">{{ dim.code }}</span>
+            {{ dim.hint }}
           </div>
-          <div class="weight-hint">EWMA 延迟越低分越高（适合低延迟场景调大）</div>
-        </el-form-item>
-
-        <el-form-item label="Load 权重">
-          <div class="weight-row">
-            <el-slider
-              v-model="weights.load"
-              :min="0" :max="1" :step="0.01"
-              :show-tooltip="true"
-              class="weight-slider"
-            />
-            <el-input-number
-              v-model="weights.load"
-              :min="0" :max="1" :step="0.01" :precision="2"
-              size="small" style="width:90px"
-            />
-          </div>
-          <div class="weight-hint">当前 inflight 越少分越高（均衡流量调大）</div>
-        </el-form-item>
-
-        <el-form-item label="Health 权重">
-          <div class="weight-row">
-            <el-slider
-              v-model="weights.health"
-              :min="0" :max="1" :step="0.01"
-              :show-tooltip="true"
-              class="weight-slider"
-            />
-            <el-input-number
-              v-model="weights.health"
-              :min="0" :max="1" :step="0.01" :precision="2"
-              size="small" style="width:90px"
-            />
-          </div>
-          <div class="weight-hint">熔断 OPEN 路由惩罚系数，建议保留 ≥ 0.1</div>
+          <div class="weight-detail">{{ dim.detail }}</div>
         </el-form-item>
       </el-form>
 
       <!-- 可视化条状图 -->
       <div class="weight-bars">
         <div
-          v-for="(dim, key) in {cost: weights.cost, latency: weights.latency, load: weights.load, health: weights.health}"
-          :key="key"
+          v-for="dim in dimensionOptions"
+          :key="dim.key"
           class="weight-bar-row"
         >
-          <span class="bar-label">{{ key }}</span>
+          <span class="bar-label">{{ dim.label }}</span>
           <div class="bar-track">
-            <div class="bar-fill" :style="{width: (dim * 100).toFixed(1) + '%', background: barColor(key)}" />
+            <div class="bar-fill" :style="{ width: weightPercent(dim.key) + '%', background: dim.color }" />
           </div>
-          <span class="bar-pct">{{ (dim * 100).toFixed(1) }}%</span>
+          <span class="bar-pct">{{ weightPercent(dim.key) }}%</span>
+        </div>
+      </div>
+
+      <div class="preset-section">
+        <div class="preset-section-head">
+          <h4 class="guide-title">推荐预设</h4>
+          <p class="preset-section-desc">先点一个方向，系统会自动填好四个比例，你再按需要微调。</p>
+        </div>
+        <div class="preset-grid preset-grid-buttons">
+          <el-button
+            v-for="preset in tuningPresets"
+            :key="preset.key"
+            class="preset-button"
+            :type="activePreset === preset.key ? 'primary' : 'default'"
+            :plain="activePreset !== preset.key"
+            @click="applyPreset(preset)"
+          >
+            <span class="preset-button-name">{{ preset.name }}</span>
+            <span class="preset-button-values">
+              成本 {{ preset.values.cost.toFixed(2) }} / 速度 {{ preset.values.latency.toFixed(2) }} / 空闲 {{ preset.values.load.toFixed(2) }} / 稳定 {{ preset.values.health.toFixed(2) }}
+            </span>
+            <span class="preset-button-desc">{{ preset.desc }}</span>
+          </el-button>
         </div>
       </div>
 
@@ -191,34 +287,50 @@ onMounted(fetchWeights)
           <el-button
             type="primary"
             :loading="saving"
-            :disabled="!weightSumOk()"
+            :disabled="!weightSumOk"
             @click="saveWeights"
           >保存权重</el-button>
-          <span v-if="!weightSumOk()" class="sum-err-msg">权重之和需为 1.0（差 {{ (1 - weightSum()).toFixed(3) }}）</span>
+          <span v-if="!weightSumOk" class="sum-err-msg">权重之和需为 1.0（{{ sumGapText }}）</span>
         </div>
       </template>
     </el-card>
 
     <!-- 说明卡 -->
     <el-card shadow="never" class="info-card">
-      <template #header><h3 class="card-title">路由选路说明</h3></template>
-      <div class="info-list">
-        <div class="info-item">
-          <span class="info-badge" style="background:#3b82f6">Softmax</span>
-          <span>评分经 Softmax 加权后随机抽样，避免流量完全集中。温度参数 T=1.0（越大越均匀）。</span>
+      <template #header>
+        <div>
+          <h3 class="card-title">这页功能是做什么的</h3>
+          <p class="card-desc">
+            当一个模型配置了多条上游路线时，系统会用这里的比例决定“更偏向哪类路线”。
+            保存后会影响后续新请求，不会修改模型价格、授权关系或已有调用记录。
+          </p>
         </div>
-        <div class="info-item">
-          <span class="info-badge" style="background:#10b981">降级</span>
-          <span>Redis 不可用时自动降级为 priority+weighted 随机（忽略 cost/latency/load 权重）。</span>
+      </template>
+
+      <div class="guide-section">
+        <h4 class="guide-title">系统会怎么选路</h4>
+        <div class="step-grid">
+          <div v-for="(step, index) in routingSteps" :key="step.title" class="step-card">
+            <span class="step-index">{{ index + 1 }}</span>
+            <div>
+              <strong>{{ step.title }}</strong>
+              <p>{{ step.desc }}</p>
+            </div>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="info-badge" style="background:#f59e0b">Sticky</span>
-          <span>携带 X-Conversation-Id header 的请求粘性路由到同一凭据（24 h TTL）。</span>
+      </div>
+
+      <div class="guide-section">
+        <h4 class="guide-title">容易误解的词</h4>
+        <div class="term-list">
+          <div v-for="term in termExplanations" :key="term.title" class="term-item">
+            <span class="term-name">{{ term.title }}</span>
+            <span>{{ term.desc }}</span>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="info-badge" style="background:#ef4444">熔断</span>
-          <span>连续失败触发 OPEN 状态（60s 起步指数退避），半开探测成功后恢复。</span>
-        </div>
+        <p class="guide-note">
+          如果 Redis 暂时不可用，系统拿不到实时速度和繁忙程度，会自动退回到“优先级 + 权重”的基础选路方式，保证请求仍可继续处理。
+        </p>
       </div>
     </el-card>
   </div>
@@ -279,8 +391,22 @@ onMounted(fetchWeights)
 
 .weight-hint {
   font-size: 12px;
-  color: #94a3b8;
+  color: #64748b;
   margin-top: 4px;
+}
+
+.dim-code {
+  display: inline-block;
+  margin-right: 6px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.weight-detail {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .weight-bars {
@@ -300,11 +426,10 @@ onMounted(fetchWeights)
 }
 
 .bar-label {
-  width: 60px;
+  width: 72px;
   font-size: 12px;
   font-weight: 600;
   color: #475569;
-  text-transform: uppercase;
   flex-shrink: 0;
 }
 
@@ -336,13 +461,161 @@ onMounted(fetchWeights)
   gap: 8px;
 }
 
-.info-list {
+.preset-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.preset-section-head {
+  margin-bottom: 12px;
+}
+
+.preset-section-desc {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.guide-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.info-item {
+.guide-section + .guide-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.guide-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.step-grid,
+.preset-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.step-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preset-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.step-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.step-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+}
+
+.step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.step-card strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.step-card p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.preset-grid-buttons .preset-button + .preset-button {
+  margin-left: 0;
+}
+
+.preset-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 116px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.preset-button :deep(> span) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.preset-button-name {
+  display: block;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.preset-button-values {
+  display: block;
+  margin-top: 8px;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.preset-button-desc {
+  display: block;
+  margin-top: 8px;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.86;
+}
+
+.guide-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.term-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.term-item {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -351,15 +624,43 @@ onMounted(fetchWeights)
   line-height: 1.6;
 }
 
-.info-badge {
+.term-name {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
+  background: #e2e8f0;
+  color: #334155;
   font-size: 11px;
   font-weight: 700;
-  color: #fff;
   flex-shrink: 0;
   margin-top: 1px;
 }
-</style>
 
+@media (max-width: 960px) {
+  .preset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .card-header,
+  .card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .step-grid,
+  .preset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .weight-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bar-label {
+    width: 64px;
+  }
+}
+</style>
