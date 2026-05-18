@@ -128,10 +128,11 @@ const infraAlert = shallowRef(null) // { reason: string }
 const fetchInfraStatus = async () => {
   try {
     const sys = await getSystemStatus()
+    const health = sys?.health
     const reasons = []
     if (sys?.db?.status && sys.db.status !== 'ok') reasons.push('数据库异常')
     if (sys?.redis?.status && sys.redis.status !== 'ok' && sys.redis.status !== 'disabled') reasons.push('Redis 异常')
-    if (sys?.circuit_breaker?.open_count > 0) reasons.push(`${sys.circuit_breaker.open_count} 个熔断`)
+    if (health?.open_count > 0) reasons.push(`${health.open_count} 个熔断`)
     infraAlert.value = reasons.length ? { reason: reasons.join(' · ') } : null
   } catch {
     infraAlert.value = null

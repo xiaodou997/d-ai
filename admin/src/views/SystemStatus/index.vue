@@ -1,15 +1,23 @@
 <script setup>
-import { onMounted, shallowRef } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 import { Refresh, CircleCheck, CircleClose, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getSystemStatus } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const sysStatus = shallowRef(null)
+const healthSummary = computed(() => sysStatus.value?.health || {
+  total_tracked: 0,
+  open_count: 0,
+  half_open_count: 0,
+  records: []
+})
 
 const componentTag = s => s === 'ok' ? 'success' : s === 'disabled' ? 'info' : 'danger'
 const componentIcon = s => s === 'ok' ? CircleCheck : s === 'disabled' ? Warning : CircleClose
 const formatUntil = ts => ts ? new Date(ts).toLocaleString('zh-CN') : '—'
+const healthStateTag = state => state === 'open' ? 'danger' : state === 'half_open' ? 'warning' : 'success'
+const healthStateLabel = state => state === 'open' ? '熔断' : state === 'half_open' ? '半开' : '正常'
 
 const fetchSystem = async () => {
   loading.value = true
@@ -63,29 +71,32 @@ onMounted(fetchSystem)
       <p class="section-label" style="margin-top:2rem">
         熔断器状态
         <span class="cb-summary">
-          跟踪中 {{ sysStatus.circuit_breaker.total_tracked }} 个部署
-          <el-tag v-if="sysStatus.circuit_breaker.open_count > 0" type="danger" size="small" class="ml-2">
-            {{ sysStatus.circuit_breaker.open_count }} 个熔断
+          跟踪中 {{ healthSummary.total_tracked }} 个目标
+          <el-tag v-if="healthSummary.open_count > 0" type="danger" size="small" class="ml-2">
+            {{ healthSummary.open_count }} 个熔断
           </el-tag>
           <el-tag v-else type="success" size="small" class="ml-2">全部健康</el-tag>
         </span>
       </p>
 
-      <div v-if="sysStatus.circuit_breaker.total_tracked === 0" class="empty-hint">
-        暂无跟踪中的部署（所有线路处于默认健康状态）
+      <div v-if="healthSummary.total_tracked === 0" class="empty-hint">
+        暂无跟踪中的目标（所有线路处于默认健康状态）
       </div>
-      <el-table v-else :data="sysStatus.circuit_breaker.states" stripe class="cb-table">
-        <el-table-column label="部署 ID" prop="deployment_id" min-width="280">
-          <template #default="{ row }"><span class="mono">{{ row.deployment_id }}</span></template>
+      <el-table v-else :data="healthSummary.records" stripe class="cb-table">
+        <el-table-column label="目标 ID" prop="target_id" min-width="280">
+          <template #default="{ row }"><span class="mono">{{ row.target_id }}</span></template>
+        </el-table-column>
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">{{ row.kind === 1 ? '凭证' : '部署' }}</template>
         </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.open ? 'danger' : 'success'" size="small">{{ row.open ? '熔断' : '正常' }}</el-tag>
+            <el-tag :type="healthStateTag(row.state_str)" size="small">{{ healthStateLabel(row.state_str) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="连续失败次数" prop="consecutive_failures" width="140" align="right" />
-        <el-table-column label="冷却到期时间" min-width="180">
-          <template #default="{ row }">{{ formatUntil(row.unhealthy_until) }}</template>
+        <el-table-column label="下次探测时间" min-width="180">
+          <template #default="{ row }">{{ formatUntil(row.next_probe_at) }}</template>
         </el-table-column>
       </el-table>
 
