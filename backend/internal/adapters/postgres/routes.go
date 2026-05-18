@@ -33,6 +33,7 @@ type routeRow struct {
 	UpstreamProtocol   *string
 	RequestPath        *string
 	UpstreamParameters []byte
+	Pricing            []byte
 	HealthStatus       *string
 	EndpointID         *string
 	BaseURL            *string
@@ -69,6 +70,7 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  ud.upstream_protocol,
 		  ud.request_path,
 		  ud.upstream_parameters,
+		  ud.pricing,
 		  ud.health_status,
 		  e.id::text       AS endpoint_id,
 		  e.base_url,
@@ -109,6 +111,7 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  NULL::text       AS upstream_protocol,
 		  NULL::text       AS request_path,
 		  NULL::jsonb      AS upstream_parameters,
+		  NULL::jsonb      AS pricing,
 		  NULL::text       AS health_status,
 		  NULL::text       AS endpoint_id,
 		  NULL::text       AS base_url,
@@ -144,7 +147,7 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		if err := pgRows.Scan(
 			&r.RouteID, &r.RoutePriority, &r.RouteWeight, &r.SupportsStream,
 			&r.DeploymentID, &r.UpstreamModel, &r.CapabilityType, &r.UpstreamProtocol,
-			&r.RequestPath, &r.UpstreamParameters, &r.HealthStatus,
+			&r.RequestPath, &r.UpstreamParameters, &r.Pricing, &r.HealthStatus,
 			&r.EndpointID, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.TimeoutMs, &r.EndpointWeight, &r.ProviderCode,
 			&r.PoolID, &r.PoolUpstreamModel, &r.FixedProviderType, &r.OAuthStrategy,
@@ -287,6 +290,12 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 	c.ExtraHeaders = unmarshalStringMap(row.ExtraHeaders)
 	if len(row.UpstreamParameters) > 0 {
 		_ = json.Unmarshal(row.UpstreamParameters, &c.UpstreamParameters)
+	}
+	if len(row.Pricing) > 0 {
+		var p domain.Pricing
+		if err := json.Unmarshal(row.Pricing, &p); err == nil {
+			c.Pricing = &p
+		}
 	}
 	return c
 }

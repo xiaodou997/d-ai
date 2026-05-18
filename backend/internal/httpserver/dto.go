@@ -494,13 +494,12 @@ func fromListModelRoutes(rows []dbgen.ListModelRoutesRow) []listModelRouteDTO {
 type upstreamDeploymentDTO struct {
 	ID                 pgtype.UUID     `json:"id"`
 	EndpointID         pgtype.UUID     `json:"endpoint_id"`
-	Name               string          `json:"name"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
 	RequestPath        pgtype.Text     `json:"request_path"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
-	Tags               json.RawMessage `json:"tags"`
+	Pricing            json.RawMessage `json:"pricing"`
 	HealthStatus       string          `json:"health_status"`
 	LastHealthCheckAt  *int64          `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text     `json:"last_health_error"`
@@ -513,13 +512,12 @@ func fromAiUpstreamDeployment(r dbgen.AiUpstreamDeployment) upstreamDeploymentDT
 	return upstreamDeploymentDTO{
 		ID:                 r.ID,
 		EndpointID:         r.EndpointID,
-		Name:               r.Name,
 		UpstreamModel:      r.UpstreamModel,
 		CapabilityType:     r.CapabilityType,
 		UpstreamProtocol:   r.UpstreamProtocol,
 		RequestPath:        r.RequestPath,
 		UpstreamParameters: rawJSON(r.UpstreamParameters),
-		Tags:               rawJSON(r.Tags),
+		Pricing:            rawJSON(r.Pricing),
 		HealthStatus:       r.HealthStatus,
 		LastHealthCheckAt:  millis(r.LastHealthCheckAt),
 		LastHealthError:    r.LastHealthError,
@@ -532,13 +530,12 @@ func fromAiUpstreamDeployment(r dbgen.AiUpstreamDeployment) upstreamDeploymentDT
 type getUpstreamDeploymentDTO struct {
 	ID                 pgtype.UUID     `json:"id"`
 	EndpointID         pgtype.UUID     `json:"endpoint_id"`
-	Name               string          `json:"name"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
 	RequestPath        pgtype.Text     `json:"request_path"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
-	Tags               json.RawMessage `json:"tags"`
+	Pricing            json.RawMessage `json:"pricing"`
 	HealthStatus       string          `json:"health_status"`
 	LastHealthCheckAt  *int64          `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text     `json:"last_health_error"`
@@ -559,13 +556,12 @@ func fromGetUpstreamDeployment(r dbgen.GetUpstreamDeploymentRow) getUpstreamDepl
 	return getUpstreamDeploymentDTO{
 		ID:                 r.ID,
 		EndpointID:         r.EndpointID,
-		Name:               r.Name,
 		UpstreamModel:      r.UpstreamModel,
 		CapabilityType:     r.CapabilityType,
 		UpstreamProtocol:   r.UpstreamProtocol,
 		RequestPath:        r.RequestPath,
 		UpstreamParameters: rawJSON(r.UpstreamParameters),
-		Tags:               rawJSON(r.Tags),
+		Pricing:            rawJSON(r.Pricing),
 		HealthStatus:       r.HealthStatus,
 		LastHealthCheckAt:  millis(r.LastHealthCheckAt),
 		LastHealthError:    r.LastHealthError,
@@ -585,13 +581,12 @@ func fromGetUpstreamDeployment(r dbgen.GetUpstreamDeploymentRow) getUpstreamDepl
 type listUpstreamDeploymentDTO struct {
 	ID                 pgtype.UUID     `json:"id"`
 	EndpointID         pgtype.UUID     `json:"endpoint_id"`
-	Name               string          `json:"name"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
 	RequestPath        pgtype.Text     `json:"request_path"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
-	Tags               json.RawMessage `json:"tags"`
+	Pricing            json.RawMessage `json:"pricing"`
 	HealthStatus       string          `json:"health_status"`
 	LastHealthCheckAt  *int64          `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text     `json:"last_health_error"`
@@ -610,13 +605,12 @@ func fromListUpstreamDeployment(r dbgen.ListUpstreamDeploymentsRow) listUpstream
 	return listUpstreamDeploymentDTO{
 		ID:                 r.ID,
 		EndpointID:         r.EndpointID,
-		Name:               r.Name,
 		UpstreamModel:      r.UpstreamModel,
 		CapabilityType:     r.CapabilityType,
 		UpstreamProtocol:   r.UpstreamProtocol,
 		RequestPath:        r.RequestPath,
 		UpstreamParameters: rawJSON(r.UpstreamParameters),
-		Tags:               rawJSON(r.Tags),
+		Pricing:            rawJSON(r.Pricing),
 		HealthStatus:       r.HealthStatus,
 		LastHealthCheckAt:  millis(r.LastHealthCheckAt),
 		LastHealthError:    r.LastHealthError,
@@ -636,106 +630,6 @@ func fromListUpstreamDeployments(rows []dbgen.ListUpstreamDeploymentsRow) []list
 	out := make([]listUpstreamDeploymentDTO, len(rows))
 	for i, r := range rows {
 		out[i] = fromListUpstreamDeployment(r)
-	}
-	return out
-}
-
-// ---------------------------------------------------------------------------
-// Upstream deployment cost price DTOs
-// ---------------------------------------------------------------------------
-
-type upstreamDeploymentCostPriceDTO struct {
-	ID                   pgtype.UUID     `json:"id"`
-	UpstreamDeploymentID pgtype.UUID     `json:"upstream_deployment_id"`
-	CapabilityType       string          `json:"capability_type"`
-	Currency             string          `json:"currency"`
-	InputCostPer1m       int64           `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64           `json:"output_cost_per_1m"`
-	RequestCost          int64           `json:"request_cost"`
-	ImageCost            int64           `json:"image_cost"`
-	ImageSizePrices      json.RawMessage `json:"image_size_prices"`
-	VideoCostPerSecond   int64           `json:"video_cost_per_second"`
-	EffectiveFrom        *int64          `json:"effective_from"`
-	Status               string          `json:"status"`
-	CreatedAt            *int64          `json:"created_at"`
-}
-
-func fromCreateUpstreamDeploymentCostPrice(r dbgen.CreateUpstreamDeploymentCostPriceRow) upstreamDeploymentCostPriceDTO {
-	return upstreamDeploymentCostPriceDTO{
-		ID:                   r.ID,
-		UpstreamDeploymentID: r.UpstreamDeploymentID,
-		CapabilityType:       r.CapabilityType,
-		Currency:             r.Currency,
-		InputCostPer1m:       r.InputCostPer1m,
-		OutputCostPer1m:      r.OutputCostPer1m,
-		RequestCost:          r.RequestCost,
-		ImageCost:            r.ImageCost,
-		ImageSizePrices:      rawJSON(r.ImageSizePrices),
-		VideoCostPerSecond:   r.VideoCostPerSecond,
-		EffectiveFrom:        millis(r.EffectiveFrom),
-		Status:               r.Status,
-		CreatedAt:            millis(r.CreatedAt),
-	}
-}
-
-func fromUpdateUpstreamDeploymentCostPrice(r dbgen.UpdateUpstreamDeploymentCostPriceRow) upstreamDeploymentCostPriceDTO {
-	return upstreamDeploymentCostPriceDTO{
-		ID:                   r.ID,
-		UpstreamDeploymentID: r.UpstreamDeploymentID,
-		CapabilityType:       r.CapabilityType,
-		Currency:             r.Currency,
-		InputCostPer1m:       r.InputCostPer1m,
-		OutputCostPer1m:      r.OutputCostPer1m,
-		RequestCost:          r.RequestCost,
-		ImageCost:            r.ImageCost,
-		ImageSizePrices:      rawJSON(r.ImageSizePrices),
-		VideoCostPerSecond:   r.VideoCostPerSecond,
-		EffectiveFrom:        millis(r.EffectiveFrom),
-		Status:               r.Status,
-		CreatedAt:            millis(r.CreatedAt),
-	}
-}
-
-func fromUpdateUpstreamDeploymentCostPriceStatus(r dbgen.UpdateUpstreamDeploymentCostPriceStatusRow) upstreamDeploymentCostPriceDTO {
-	return upstreamDeploymentCostPriceDTO{
-		ID:                   r.ID,
-		UpstreamDeploymentID: r.UpstreamDeploymentID,
-		CapabilityType:       r.CapabilityType,
-		Currency:             r.Currency,
-		InputCostPer1m:       r.InputCostPer1m,
-		OutputCostPer1m:      r.OutputCostPer1m,
-		RequestCost:          r.RequestCost,
-		ImageCost:            r.ImageCost,
-		ImageSizePrices:      rawJSON(r.ImageSizePrices),
-		VideoCostPerSecond:   r.VideoCostPerSecond,
-		EffectiveFrom:        millis(r.EffectiveFrom),
-		Status:               r.Status,
-		CreatedAt:            millis(r.CreatedAt),
-	}
-}
-
-func fromListUpstreamDeploymentCostPrice(r dbgen.ListUpstreamDeploymentCostPricesRow) upstreamDeploymentCostPriceDTO {
-	return upstreamDeploymentCostPriceDTO{
-		ID:                   r.ID,
-		UpstreamDeploymentID: r.UpstreamDeploymentID,
-		CapabilityType:       r.CapabilityType,
-		Currency:             r.Currency,
-		InputCostPer1m:       r.InputCostPer1m,
-		OutputCostPer1m:      r.OutputCostPer1m,
-		RequestCost:          r.RequestCost,
-		ImageCost:            r.ImageCost,
-		ImageSizePrices:      rawJSON(r.ImageSizePrices),
-		VideoCostPerSecond:   r.VideoCostPerSecond,
-		EffectiveFrom:        millis(r.EffectiveFrom),
-		Status:               r.Status,
-		CreatedAt:            millis(r.CreatedAt),
-	}
-}
-
-func fromListUpstreamDeploymentCostPrices(rows []dbgen.ListUpstreamDeploymentCostPricesRow) []upstreamDeploymentCostPriceDTO {
-	out := make([]upstreamDeploymentCostPriceDTO, len(rows))
-	for i, r := range rows {
-		out[i] = fromListUpstreamDeploymentCostPrice(r)
 	}
 	return out
 }

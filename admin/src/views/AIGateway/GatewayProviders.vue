@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, reactive, ref, shallowRef } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Plus, Refresh, Search, Switch } from '@element-plus/icons-vue'
 import {
   capabilityOptions,
@@ -8,14 +8,16 @@ import {
   createProvider,
   createProviderEndpoint,
   createUpstreamDeployment,
+  deleteProviderEndpoint,
+  deleteUpstreamDeployment,
   endpointProtocolOptions,
   fetchEndpointUpstreamModels,
-  getUpstreamDeployment,
   importEndpointUpstreamModels,
   listProviderEndpoints,
   listProviders,
   listUpstreamDeployments,
   protocolOptions,
+  statusLabel,
   statusOptions,
   updateProvider,
   updateProviderEndpoint,
@@ -24,6 +26,11 @@ import {
   updateUpstreamDeployment,
   updateUpstreamDeploymentStatus
 } from '@/api/aiGateway'
+import TieredPricingEditor from './components/TieredPricingEditor.vue'
+import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
+import KeyValueEditor from './components/KeyValueEditor.vue'
+import { suggestPricingForModel } from './modelPricingCatalog'
+
 const loading = shallowRef(false)
 const endpointLoading = shallowRef(false)
 const deploymentLoading = shallowRef(false)
@@ -61,17 +68,86 @@ const endpointForm = reactive({
   status: 'active'
 })
 
+const emptyPricing = () => ({
+  tiers: [{ up_to: null, input_per_1m: 0, output_per_1m: 0, cache_write_per_1m: 0, cache_read_per_1m: 0, reasoning_per_1m: 0 }],
+  request_cost: 0,
+  image_prices: [],
+  video_prices: []
+})
+
 const deploymentForm = reactive({
   endpoint_id: '',
-  name: '',
   upstream_model: '',
   capability_type: 'chat',
-  upstream_protocol: 'openai_chat_completions',
+  upstream_protocol: 'openai_chat',
   request_path: '',
-  upstream_parameters: '',
-  tags: '',
+  upstream_parameters: {},
+  pricing: emptyPricing(),
   status: 'active'
 })
+
+const pricingSuggestion = ref(null) // { label, vendor, input_per_1m, output_per_1m, cache_write_per_1m, cache_read_per_1m, reasoning_per_1m }
+
+const isFirstTierAllZero = () => {
+  const t = deploymentForm.pricing.tiers[0]
+  if (!t) return true
+  return !t.input_per_1m && !t.output_per_1m && !t.cache_write_per_1m && !t.cache_read_per_1m && !t.reasoning_per_1m
+}
+
+const applyPricingSuggestion = () => {
+  if (!pricingSuggestion.value) return
+  const s = pricingSuggestion.value
+  const tiers = deploymentForm.pricing.tiers.length ? [...deploymentForm.pricing.tiers] : [{ up_to: null }]
+  tiers[0] = {
+    ...tiers[0],
+    up_to: tiers[0].up_to ?? null,
+    input_per_1m: s.input_per_1m,
+    output_per_1m: s.output_per_1m,
+    cache_write_per_1m: s.cache_write_per_1m,
+    cache_read_per_1m: s.cache_read_per_1m,
+    reasoning_per_1m: s.reasoning_per_1m
+  }
+  deploymentForm.pricing.tiers = tiers
+  pricingSuggestion.value = null
+  ElMessage.success(`已应用 ${s.label} 建议价`)
+}
+
+const onUpstreamModelBlur = () => {
+  if (!deploymentForm.upstream_model) {
+    pricingSuggestion.value = null
+    return
+  }
+  if (!supportsTieredPricing(deploymentForm.capability_type)) {
+    pricingSuggestion.value = null
+    return
+  }
+  const suggestion = suggestPricingForModel(deploymentForm.upstream_model)
+  if (!suggestion) {
+    pricingSuggestion.value = null
+    return
+  }
+  if (isFirstTierAllZero()) {
+    pricingSuggestion.value = suggestion
+    applyPricingSuggestion()
+  } else {
+    // 用户已填了价，仅提示
+    pricingSuggestion.value = suggestion
+  }
+}
+
+const imagePresets = [
+  { label: '1024×1024', resolutions: ['1024x1024'] },
+  { label: '1024×1792', resolutions: ['1024x1792'] },
+  { label: '1792×1024', resolutions: ['1792x1024'] }
+]
+
+const videoPresets = [
+  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
+  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
+  { label: 'Veo', resolutions: ['720p', '1080p', '4k'] }
+]
+
+const supportsTieredPricing = (cap) => cap !== 'image' && cap !== 'video'
 
 const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === selectedProviderId.value)
@@ -100,8 +176,8 @@ const providerSummary = computed(() => ({
 
 const setupSteps = [
   '创建厂商分组，标记上游归属和厂商类型。',
-  '添加连接配置，配置 Base URL、Key、额外 Headers、权重和超时。',
-  '到模型映射页面维护调用配置、协议、请求路径和上游成本价。',
+  '添加 API 账户，填入 Base URL、API Key、权重和超时。',
+  '在模型配置中维护可调用的模型名、协议和上游成本价（含阶梯/分辨率档）。',
   '在授权与 Key 页面分配对外模型调用权限。'
 ]
 
@@ -119,6 +195,65 @@ const capabilityLabel = (value) =>
 const getEndpointName = (endpointId) => {
   const endpoint = endpoints.value.find((item) => item.id === endpointId)
   return endpoint?.name || endpointId || '-'
+}
+
+const parsePricing = (raw) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return emptyPricing()
+  const tiers = Array.isArray(raw.tiers) && raw.tiers.length > 0
+    ? raw.tiers.map(normalizeTier)
+    : emptyPricing().tiers
+  return {
+    tiers,
+    request_cost: Number(raw.request_cost) || 0,
+    image_prices: Array.isArray(raw.image_prices) ? raw.image_prices.map(normalizeResPrice) : [],
+    video_prices: Array.isArray(raw.video_prices) ? raw.video_prices.map(normalizeResPrice) : []
+  }
+}
+
+const normalizeTier = (t) => ({
+  up_to: t.up_to == null ? null : Number(t.up_to),
+  input_per_1m: Number(t.input_per_1m) || 0,
+  output_per_1m: Number(t.output_per_1m) || 0,
+  cache_write_per_1m: Number(t.cache_write_per_1m) || 0,
+  cache_read_per_1m: Number(t.cache_read_per_1m) || 0,
+  reasoning_per_1m: Number(t.reasoning_per_1m) || 0
+})
+
+const normalizeResPrice = (r) => ({
+  resolution: String(r.resolution || ''),
+  price: Number(r.price) || 0
+})
+
+// 价格列展示
+const firstTier = (row) => parsePricing(row.pricing).tiers[0]
+const tierCount = (row) => parsePricing(row.pricing).tiers.length
+const minResolutionPrice = (list) => {
+  if (!list || list.length === 0) return null
+  return list.reduce((acc, cur) => (cur.price < acc ? cur.price : acc), list[0].price)
+}
+
+const fmtMoney = (v) => {
+  if (v == null) return '0'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '0'
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '')
+}
+
+const pricingCellChat = (row) => {
+  const t = firstTier(row)
+  return { input: fmtMoney(t.input_per_1m), output: fmtMoney(t.output_per_1m) }
+}
+
+const pricingCellImage = (row) => {
+  const pricing = parsePricing(row.pricing)
+  const min = minResolutionPrice(pricing.image_prices)
+  return min == null ? null : fmtMoney(min)
+}
+
+const pricingCellVideo = (row) => {
+  const pricing = parsePricing(row.pricing)
+  const min = minResolutionPrice(pricing.video_prices)
+  return min == null ? null : fmtMoney(min)
 }
 
 const resetProviderForm = () => {
@@ -147,13 +282,12 @@ const resetDeploymentForm = () => {
   editingDeploymentId.value = ''
   Object.assign(deploymentForm, {
     endpoint_id: '',
-    name: '',
     upstream_model: '',
     capability_type: 'chat',
-    upstream_protocol: 'openai_chat_completions',
+    upstream_protocol: 'openai_chat',
     request_path: '',
-    upstream_parameters: '',
-    tags: '',
+    upstream_parameters: {},
+    pricing: emptyPricing(),
     status: 'active'
   })
 }
@@ -182,15 +316,17 @@ const applyEndpointForm = (row) => {
 
 const applyDeploymentForm = (row) => {
   editingDeploymentId.value = row.id
+  const params = row.upstream_parameters && typeof row.upstream_parameters === 'object'
+    ? row.upstream_parameters
+    : {}
   Object.assign(deploymentForm, {
     endpoint_id: row.endpoint_id || '',
-    name: row.name || '',
     upstream_model: row.upstream_model || '',
     capability_type: row.capability_type || 'chat',
-    upstream_protocol: row.upstream_protocol || 'openai_chat_completions',
+    upstream_protocol: row.upstream_protocol || 'openai_chat',
     request_path: row.request_path || '',
-    upstream_parameters: typeof row.upstream_parameters === 'object' ? JSON.stringify(row.upstream_parameters, null, 2) : (row.upstream_parameters || ''),
-    tags: typeof row.tags === 'object' ? JSON.stringify(row.tags, null, 2) : (row.tags || ''),
+    upstream_parameters: { ...params },
+    pricing: parsePricing(row.pricing),
     status: row.status || 'active'
   })
 }
@@ -287,21 +423,35 @@ const openDeploymentDialog = () => {
     return
   }
   if (endpoints.value.length === 0) {
-    ElMessage.warning('请先创建接入点')
+    ElMessage.warning('请先创建 API 账户')
     return
   }
   resetDeploymentForm()
+  pricingSuggestion.value = null
   deploymentDialogVisible.value = true
 }
 
-const openDeploymentEditDialog = async (row) => {
+const openDeploymentEditDialog = (row) => {
   if (!selectedProviderId.value) {
     ElMessage.warning('请先选择厂商')
     return
   }
   applyDeploymentForm(row)
+  pricingSuggestion.value = null
   deploymentDialogVisible.value = true
 }
+
+// 切换能力类型时，清理不再适用的价格区块（避免误存）
+watch(
+  () => deploymentForm.capability_type,
+  (cap) => {
+    if (cap !== 'image') deploymentForm.pricing.image_prices = []
+    if (cap !== 'video') deploymentForm.pricing.video_prices = []
+    if (!supportsTieredPricing(cap) && deploymentForm.pricing.tiers.length === 0) {
+      deploymentForm.pricing.tiers = emptyPricing().tiers
+    }
+  }
+)
 
 const submitProvider = async () => {
   if (editingProviderId.value) {
@@ -329,23 +479,29 @@ const submitEndpoint = async () => {
 }
 
 const submitDeployment = async () => {
+  const cap = deploymentForm.capability_type
+  const pricing = {
+    tiers: supportsTieredPricing(cap) ? deploymentForm.pricing.tiers : [],
+    request_cost: Number(deploymentForm.pricing.request_cost) || 0,
+    image_prices: cap === 'image' ? deploymentForm.pricing.image_prices : [],
+    video_prices: cap === 'video' ? deploymentForm.pricing.video_prices : []
+  }
   const payload = {
     endpoint_id: deploymentForm.endpoint_id,
-    name: deploymentForm.name,
     upstream_model: deploymentForm.upstream_model,
-    capability_type: deploymentForm.capability_type,
+    capability_type: cap,
     upstream_protocol: deploymentForm.upstream_protocol,
     request_path: deploymentForm.request_path || null,
-    upstream_parameters: deploymentForm.upstream_parameters ? JSON.parse(deploymentForm.upstream_parameters) : null,
-    tags: deploymentForm.tags ? JSON.parse(deploymentForm.tags) : null,
+    upstream_parameters: deploymentForm.upstream_parameters || {},
+    pricing,
     status: deploymentForm.status
   }
   if (editingDeploymentId.value) {
     await updateUpstreamDeployment(editingDeploymentId.value, payload)
-    ElMessage.success('上游部署已保存')
+    ElMessage.success('模型配置已保存')
   } else {
     await createUpstreamDeployment(payload)
-    ElMessage.success('上游部署已创建')
+    ElMessage.success('模型配置已创建')
   }
   deploymentDialogVisible.value = false
   await fetchDeployments()
@@ -365,10 +521,40 @@ const toggleEndpoint = async (row) => {
   await fetchEndpoints()
 }
 
+const deleteEndpoint = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除接入点「${row.name}」吗？关联的上游部署也将一并删除，此操作不可恢复。`,
+      '删除接入点',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
+    )
+  } catch {
+    return
+  }
+  await deleteProviderEndpoint(selectedProviderId.value, row.id)
+  ElMessage.success('接入点已删除')
+  await fetchSelectedProviderDetail()
+}
+
 const toggleDeployment = async (row) => {
   const nextStatus = row.status === 'active' ? 'disabled' : 'active'
   await updateUpstreamDeploymentStatus(row.id, nextStatus)
-  ElMessage.success('上游部署状态已更新')
+  ElMessage.success('模型配置状态已更新')
+  await fetchDeployments()
+}
+
+const deleteDeployment = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除模型配置「${row.upstream_model}」吗？关联的路由规则也将一并删除，此操作不可恢复。`,
+      '删除模型配置',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' }
+    )
+  } catch {
+    return
+  }
+  await deleteUpstreamDeployment(row.id)
+  ElMessage.success('模型配置已删除')
   await fetchDeployments()
 }
 
@@ -422,12 +608,27 @@ const submitDiscovery = async () => {
       discoveryEndpointProviderId.value,
       discoveryEndpointId.value,
       {
-        models: toImport.map((m) => ({
-          upstream_model: m.id,
-          name: m.name,
-          capability_type: m.capability_type,
-          upstream_protocol: m.upstream_protocol
-        }))
+        models: toImport.map((m) => {
+          const suggestion = suggestPricingForModel(m.id)
+          const item = {
+            upstream_model: m.id,
+            capability_type: m.capability_type,
+            upstream_protocol: m.upstream_protocol
+          }
+          if (suggestion && m.capability_type !== 'image' && m.capability_type !== 'video') {
+            item.pricing = {
+              tiers: [{
+                up_to: null,
+                input_per_1m: suggestion.input_per_1m,
+                output_per_1m: suggestion.output_per_1m,
+                cache_write_per_1m: suggestion.cache_write_per_1m,
+                cache_read_per_1m: suggestion.cache_read_per_1m,
+                reasoning_per_1m: suggestion.reasoning_per_1m
+              }]
+            }
+          }
+          return item
+        })
       }
     )
     const createdCount = result.created?.length ?? 0
@@ -478,7 +679,7 @@ onMounted(fetchProviders)
           <div class="provider-item-main">
             <div class="provider-item-title">
               <strong>{{ provider.name }}</strong>
-              <el-tag :type="statusTagType(provider.status)" size="small">{{ provider.status }}</el-tag>
+              <el-tag :type="statusTagType(provider.status)" size="small">{{ statusLabel(provider.status) }}</el-tag>
             </div>
             <span>{{ provider.code }}</span>
           </div>
@@ -498,7 +699,7 @@ onMounted(fetchProviders)
           <p class="eyebrow">Current Provider</p>
           <div class="hero-title-row">
             <h2>{{ selectedProvider.name }}</h2>
-            <el-tag :type="statusTagType(selectedProvider.status)" effect="dark">{{ selectedProvider.status }}</el-tag>
+            <el-tag :type="statusTagType(selectedProvider.status)" effect="dark">{{ statusLabel(selectedProvider.status) }}</el-tag>
           </div>
           <p>{{ selectedProvider.code }}</p>
         </div>
@@ -512,14 +713,14 @@ onMounted(fetchProviders)
 
         <div class="metric-grid">
           <div class="metric-cell">
-            <span>接入点</span>
+            <span>API 账户</span>
             <strong>{{ providerSummary.endpointCount }}</strong>
-            <small>{{ providerSummary.activeEndpointCount }} active</small>
+            <small>{{ providerSummary.activeEndpointCount }} 启用</small>
           </div>
           <div class="metric-cell">
-            <span>上游部署</span>
+            <span>模型配置</span>
             <strong>{{ providerSummary.deploymentCount }}</strong>
-            <small>{{ providerSummary.activeDeploymentCount }} active</small>
+            <small>{{ providerSummary.activeDeploymentCount }} 启用</small>
           </div>
           <div class="metric-cell">
             <span>计费单位</span>
@@ -537,16 +738,16 @@ onMounted(fetchProviders)
         <ol>
           <li v-for="step in setupSteps" :key="step">{{ step }}</li>
         </ol>
-        <p class="guide-note">文本类接口按 token 计成本，图片类接口按 image_count 计成本；所有成本字段统一使用整数积分。</p>
+        <p class="guide-note">文本类按 token 计成本（支持阶梯定价），图片按分辨率/张，视频按分辨率/秒。所有金额单位均为整数积分。</p>
       </section>
 
       <section class="panel">
         <div class="section-head">
           <div>
-            <h3>接入点管理</h3>
-            <p>配置当前厂商的连接配置：Base URL、密钥、额外 Headers、权重和超时</p>
+            <h3>API 账户管理</h3>
+            <p>配置连接到上游供应商的账户：Base URL、API Key、权重和超时</p>
           </div>
-          <el-button type="primary" :icon="Plus" @click="openEndpointDialog">新增接入点</el-button>
+          <el-button type="primary" :icon="Plus" @click="openEndpointDialog">新增账户</el-button>
         </div>
 
         <el-table v-loading="endpointLoading" :data="endpoints" border stripe class="w-full">
@@ -556,10 +757,10 @@ onMounted(fetchProviders)
           <el-table-column prop="timeout_ms" label="超时(ms)" width="100" align="right" />
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="250" fixed="right">
+          <el-table-column label="操作" width="310" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openEndpointEditDialog(row)">编辑</el-button>
               <el-button link type="success" @click="openDiscoveryDialog(row)">发现模型</el-button>
@@ -567,6 +768,7 @@ onMounted(fetchProviders)
                 <el-icon><Switch /></el-icon>
                 {{ row.status === 'active' ? '禁用' : '启用' }}
               </el-button>
+              <el-button link type="danger" @click="deleteEndpoint(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -575,36 +777,66 @@ onMounted(fetchProviders)
       <section class="panel">
         <div class="section-head">
           <div>
-            <h3>上游部署管理</h3>
-            <p>配置当前厂商的上游模型映射：协议类型、请求路径和上游模型名</p>
+            <h3>模型配置管理</h3>
+            <p>配置账户下可调用的具体模型：上游模型名、协议类型和上游成本价</p>
           </div>
-          <el-button type="primary" :icon="Plus" @click="openDeploymentDialog">新增部署</el-button>
+          <el-button type="primary" :icon="Plus" @click="openDeploymentDialog">新增模型</el-button>
         </div>
 
         <el-table v-loading="deploymentLoading" :data="deployments" border stripe class="w-full">
-          <el-table-column prop="name" label="名称" min-width="140" />
-          <el-table-column label="关联接入点" min-width="140">
+          <el-table-column prop="upstream_model" label="模型" min-width="200" show-overflow-tooltip />
+          <el-table-column label="所属账户" min-width="140">
             <template #default="{ row }">
               {{ getEndpointName(row.endpoint_id) }}
             </template>
           </el-table-column>
-          <el-table-column prop="upstream_model" label="上游模型" min-width="160" show-overflow-tooltip />
-          <el-table-column label="能力类型" width="110">
+          <el-table-column label="能力" width="100">
             <template #default="{ row }">
               <el-tag size="small">{{ capabilityLabel(row.capability_type) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="协议类型" width="180">
+          <el-table-column label="协议" width="180">
             <template #default="{ row }">
               <span class="protocol-text">{{ protocolLabel(row.upstream_protocol) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="95">
+          <el-table-column label="价格" min-width="220">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+              <template v-if="row.capability_type === 'image'">
+                <span v-if="pricingCellImage(row) == null" class="price-empty">—</span>
+                <span v-else class="price-pill price-pill-image">
+                  <span class="price-pill-label">图</span>
+                  <span class="price-pill-value">¥{{ pricingCellImage(row) }}/张 起</span>
+                </span>
+              </template>
+              <template v-else-if="row.capability_type === 'video'">
+                <span v-if="pricingCellVideo(row) == null" class="price-empty">—</span>
+                <span v-else class="price-pill price-pill-video">
+                  <span class="price-pill-label">视</span>
+                  <span class="price-pill-value">¥{{ pricingCellVideo(row) }}/s 起</span>
+                </span>
+              </template>
+              <template v-else>
+                <div class="price-pair">
+                  <span class="price-pill price-pill-input">
+                    <span class="price-pill-label">In</span>
+                    <span class="price-pill-value">¥{{ pricingCellChat(row).input }}</span>
+                  </span>
+                  <span class="price-pill price-pill-output">
+                    <span class="price-pill-label">Out</span>
+                    <span class="price-pill-value">¥{{ pricingCellChat(row).output }}</span>
+                  </span>
+                  <el-tag v-if="tierCount(row) > 1" size="small" effect="plain" class="tier-badge">阶梯</el-tag>
+                </div>
+              </template>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
+          <el-table-column label="状态" width="95">
+            <template #default="{ row }">
+              <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="270" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openDeploymentEditDialog(row)">编辑</el-button>
               <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleDeployment(row)">
@@ -612,6 +844,7 @@ onMounted(fetchProviders)
                 {{ row.status === 'active' ? '禁用' : '启用' }}
               </el-button>
               <el-button link type="info" @click="handleHealthCheck(row)">健康检查</el-button>
+              <el-button link type="danger" @click="deleteDeployment(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -621,7 +854,7 @@ onMounted(fetchProviders)
     <main v-else class="empty-workspace">
       <p class="eyebrow">No Provider</p>
       <h2>先创建一个服务商</h2>
-      <p>服务商是连接配置和后续模型映射的上游归属。创建后即可在右侧完成接入点配置。</p>
+      <p>服务商是 API 账户和模型配置的归属分组。创建后即可在右侧添加 API 账户并配置可调用的模型。</p>
       <el-button type="primary" :icon="Plus" @click="openProviderDialog">新增服务商</el-button>
     </main>
 
@@ -647,11 +880,11 @@ onMounted(fetchProviders)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="endpointDialogVisible" :title="isEditingEndpoint ? '编辑接入点' : '新增接入点'" width="640px" append-to-body>
+    <el-dialog v-model="endpointDialogVisible" :title="isEditingEndpoint ? '编辑 API 账户' : '新增 API 账户'" width="640px" append-to-body>
       <el-form :model="endpointForm" label-position="top">
         <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="接入点名称" required>
-            <el-input v-model="endpointForm.name" placeholder="OpenAI Compatible Endpoint" />
+          <el-form-item label="账户名称" required>
+            <el-input v-model="endpointForm.name" placeholder="OpenAI Compatible" />
           </el-form-item>
           <el-form-item label="厂商 API 风格" required>
             <el-select v-model="endpointForm.default_protocol" class="w-full">
@@ -681,7 +914,7 @@ onMounted(fetchProviders)
       </el-form>
       <template #footer>
         <el-button @click="endpointDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitEndpoint">{{ isEditingEndpoint ? '保存' : '创建' }}</el-button>
+        <el-button type="primary" @click="submitEndpoint">{{ isEditingEndpoint ? '保存账户' : '创建账户' }}</el-button>
       </template>
     </el-dialog>
 
@@ -692,7 +925,7 @@ onMounted(fetchProviders)
       <template v-else-if="discoveredModels.length > 0">
         <div class="discovery-header">
           <el-checkbox :model-value="discoveryAllSelected" @change="discoverySelectAll">全选</el-checkbox>
-          <el-text type="info" size="small">共 {{ discoveredModels.length }} 个模型，勾选后批量创建 upstream deployment</el-text>
+          <el-text type="info" size="small">共 {{ discoveredModels.length }} 个模型，勾选后批量创建模型配置</el-text>
         </div>
         <el-table :data="discoveredModels" max-height="420" class="w-full">
           <el-table-column width="48">
@@ -728,50 +961,100 @@ onMounted(fetchProviders)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="deploymentDialogVisible" :title="isEditingDeployment ? '编辑上游部署' : '新增上游部署'" width="640px" append-to-body>
+    <el-dialog v-model="deploymentDialogVisible" :title="isEditingDeployment ? '编辑模型配置' : '新增模型配置'" width="860px" append-to-body>
       <el-form :model="deploymentForm" label-position="top">
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="关联接入点" required>
-            <el-select v-model="deploymentForm.endpoint_id" placeholder="选择接入点" class="w-full">
-              <el-option v-for="item in endpoints" :key="item.id" :label="item.name" :value="item.id" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="部署名称" required>
-            <el-input v-model="deploymentForm.name" placeholder="GPT-4o Deployment" />
+        <div class="section-card">
+          <p class="section-title">基础信息</p>
+          <div class="grid grid-cols-2 gap-4">
+            <el-form-item label="所属 API 账户" required>
+              <el-select v-model="deploymentForm.endpoint_id" placeholder="选择账户" class="w-full">
+                <el-option v-for="item in endpoints" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="上游模型名" required>
+              <el-input
+                v-model="deploymentForm.upstream_model"
+                placeholder="gpt-4o"
+                @blur="onUpstreamModelBlur"
+              />
+            </el-form-item>
+          </div>
+          <div class="grid grid-cols-3 gap-4">
+            <el-form-item label="能力类型">
+              <el-select v-model="deploymentForm.capability_type" class="w-full">
+                <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="协议类型">
+              <el-select v-model="deploymentForm.upstream_protocol" class="w-full">
+                <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="状态">
+              <el-select v-model="deploymentForm.status" class="w-full">
+                <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <el-form-item label="请求路径（可选）">
+            <el-input v-model="deploymentForm.request_path" placeholder="/v1/chat/completions" />
           </el-form-item>
         </div>
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="上游模型名" required>
-            <el-input v-model="deploymentForm.upstream_model" placeholder="gpt-4o" />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="deploymentForm.status" class="w-full">
-              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
+
+        <div class="section-card">
+          <p class="section-title">上游参数（可选）</p>
+          <p class="section-sub">用于覆盖默认请求参数，例如 temperature、top_p。值会按 JSON 类型推断（数字/布尔/字符串）。</p>
+          <KeyValueEditor v-model="deploymentForm.upstream_parameters" />
         </div>
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="能力类型">
-            <el-select v-model="deploymentForm.capability_type" class="w-full">
-              <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="协议类型">
-            <el-select v-model="deploymentForm.upstream_protocol" class="w-full">
-              <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
+
+        <div class="section-card">
+          <p class="section-title">价格配置</p>
+          <p class="section-sub">单位：人民币（¥/百万 token）；图片/视频按张/秒。所有字段填 0 表示该项不计成本。</p>
+
+          <el-alert
+            v-if="pricingSuggestion"
+            class="suggestion-banner"
+            type="info"
+            show-icon
+            :closable="false"
+          >
+            <template #title>
+              <span>检测到 <strong>{{ pricingSuggestion.label }}</strong>，建议价：输入 ¥{{ pricingSuggestion.input_per_1m }}/M、输出 ¥{{ pricingSuggestion.output_per_1m }}/M</span>
+              <el-button type="primary" size="small" link @click="applyPricingSuggestion">应用建议价</el-button>
+              <el-button size="small" link @click="pricingSuggestion = null">忽略</el-button>
+            </template>
+          </el-alert>
+
+          <template v-if="supportsTieredPricing(deploymentForm.capability_type)">
+            <p class="sub-label">阶梯定价（按输入 token 用量分档）</p>
+            <TieredPricingEditor v-model="deploymentForm.pricing.tiers" />
+          </template>
+
+          <template v-if="deploymentForm.capability_type === 'image'">
+            <p class="sub-label">图片计费（按分辨率）</p>
+            <ResolutionPricingEditor
+              v-model="deploymentForm.pricing.image_prices"
+              mode="image"
+              :presets="imagePresets"
+            />
+          </template>
+
+          <template v-if="deploymentForm.capability_type === 'video'">
+            <p class="sub-label">视频计费（按分辨率 × 秒）</p>
+            <ResolutionPricingEditor
+              v-model="deploymentForm.pricing.video_prices"
+              mode="video"
+              :presets="videoPresets"
+            />
+          </template>
+
+          <div class="request-cost-row">
+            <span class="sub-label">按次计费（每次请求叠加，¥）</span>
+            <el-input-number v-model="deploymentForm.pricing.request_cost" :min="0" :precision="4" :step="0.01" controls-position="right" />
+          </div>
         </div>
-        <el-form-item label="请求路径（可选）">
-          <el-input v-model="deploymentForm.request_path" placeholder="/v1/chat/completions" />
-        </el-form-item>
-        <el-form-item label="上游参数 JSON（可选）">
-          <el-input v-model="deploymentForm.upstream_parameters" type="textarea" :rows="3" placeholder='{"temperature": 0.7}' />
-        </el-form-item>
-        <el-form-item label="标签 JSON（可选）">
-          <el-input v-model="deploymentForm.tags" type="textarea" :rows="2" placeholder='{"env": "prod", "tier": "premium"}' />
-        </el-form-item>
       </el-form>
+
       <template #footer>
         <el-button @click="deploymentDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitDeployment">{{ isEditingDeployment ? '保存' : '创建' }}</el-button>
@@ -1063,6 +1346,138 @@ onMounted(fetchProviders)
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.price-pair {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.price-pill {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+
+.price-pill-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.price-pill-value {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.price-pill-input {
+  border-color: #bfdbfe;
+}
+
+.price-pill-input .price-pill-label {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.price-pill-output {
+  border-color: #fed7aa;
+}
+
+.price-pill-output .price-pill-label {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.price-pill-image {
+  border-color: #c7d2fe;
+}
+
+.price-pill-image .price-pill-label {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.price-pill-video {
+  border-color: #fbcfe8;
+}
+
+.price-pill-video .price-pill-label {
+  background: #fce7f3;
+  color: #be185d;
+}
+
+.price-empty {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.tier-badge {
+  margin-left: 2px;
+}
+
+.section-card {
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fafbfc;
+}
+
+.section-title {
+  margin: 0 0 4px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.section-sub {
+  margin: 0 0 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.sub-label {
+  margin: 12px 0 8px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.request-cost-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.request-cost-row .sub-label {
+  margin: 0;
+}
+
+.suggestion-banner {
+  margin-bottom: 14px;
+}
+
+.suggestion-banner :deep(.el-alert__title) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .discovery-loading,

@@ -233,54 +233,6 @@ func (q *Queries) GetActiveModelPrice(ctx context.Context, modelID pgtype.UUID) 
 	return i, err
 }
 
-const getActiveUpstreamDeploymentCostPrice = `-- name: GetActiveUpstreamDeploymentCostPrice :one
-SELECT
-  input_cost_per_1m,
-  output_cost_per_1m,
-  cache_write_cost_per_1m,
-  cache_read_cost_per_1m,
-  reasoning_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second
-FROM ai_upstream_deployment_cost_prices
-WHERE upstream_deployment_id = $1
-  AND status = 'active'
-  AND effective_from <= now()
-ORDER BY effective_from DESC
-LIMIT 1
-`
-
-type GetActiveUpstreamDeploymentCostPriceRow struct {
-	InputCostPer1m      int64  `json:"input_cost_per_1m"`
-	OutputCostPer1m     int64  `json:"output_cost_per_1m"`
-	CacheWriteCostPer1m int64  `json:"cache_write_cost_per_1m"`
-	CacheReadCostPer1m  int64  `json:"cache_read_cost_per_1m"`
-	ReasoningCostPer1m  int64  `json:"reasoning_cost_per_1m"`
-	RequestCost         int64  `json:"request_cost"`
-	ImageCost           int64  `json:"image_cost"`
-	ImageSizePrices     []byte `json:"image_size_prices"`
-	VideoCostPerSecond  int64  `json:"video_cost_per_second"`
-}
-
-func (q *Queries) GetActiveUpstreamDeploymentCostPrice(ctx context.Context, upstreamDeploymentID pgtype.UUID) (GetActiveUpstreamDeploymentCostPriceRow, error) {
-	row := q.db.QueryRow(ctx, getActiveUpstreamDeploymentCostPrice, upstreamDeploymentID)
-	var i GetActiveUpstreamDeploymentCostPriceRow
-	err := row.Scan(
-		&i.InputCostPer1m,
-		&i.OutputCostPer1m,
-		&i.CacheWriteCostPer1m,
-		&i.CacheReadCostPer1m,
-		&i.ReasoningCostPer1m,
-		&i.RequestCost,
-		&i.ImageCost,
-		&i.ImageSizePrices,
-		&i.VideoCostPerSecond,
-	)
-	return i, err
-}
-
 const getTenantModelPriceOverrideForRuntime = `-- name: GetTenantModelPriceOverrideForRuntime :one
 SELECT
   input_price_per_1m,

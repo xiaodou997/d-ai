@@ -41,6 +41,10 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = userInfo.username || ''
     userType.value = Number(userInfo.userType || 0)
     saveToLocalStorage()
+    if (userType.value !== 1 && userType.value !== 2) {
+      clearState()
+      throw new Error('当前账号无权访问管理后台')
+    }
     return userInfo
   }
 
@@ -90,18 +94,15 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const isAuthenticated = () => !!accessToken.value
-  const isPlatformAdmin = computed(() => userType.value === 1)
-  const isTenantAdmin = computed(() => userType.value === 2)
-  const isEndUser = computed(() => userType.value === 3)
+  const isPlatformAdmin = computed(() => userType.value === 1 || userType.value === 2)
 
   const roleName = computed(() => {
-    if (isPlatformAdmin.value) return '平台管理员'
-    if (isTenantAdmin.value) return '租户管理员'
-    if (isEndUser.value) return '终端用户'
+    if (userType.value === 1) return '超级管理员'
+    if (userType.value === 2) return '平台管理员'
     return '未识别角色'
   })
 
-  const defaultRoute = computed(() => (isPlatformAdmin.value ? '/dashboard' : '/ai-gateway/access'))
+  const defaultRoute = computed(() => '/dashboard')
 
   const isTokenExpiring = () => expiresIn.value < 300
 
@@ -165,8 +166,6 @@ export const useAuthStore = defineStore('auth', () => {
     userType,
     expiresIn,
     isPlatformAdmin,
-    isTenantAdmin,
-    isEndUser,
     roleName,
     defaultRoute,
     logout,

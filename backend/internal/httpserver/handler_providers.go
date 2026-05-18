@@ -245,6 +245,30 @@ func (s *Server) handleAdminUpdateProviderEndpointStatus(w http.ResponseWriter, 
 	writeOK(w, fromUpdateProviderEndpointStatus(row))
 }
 
+func (s *Server) handleAdminDeleteProviderEndpoint(w http.ResponseWriter, r *http.Request) {
+	providerID, ok := parseUUIDParam(w, r, "providerID")
+	if !ok {
+		return
+	}
+	endpointID, ok := parseUUIDParam(w, r, "endpointID")
+	if !ok {
+		return
+	}
+
+	result, err := s.postgres.Exec(r.Context(),
+		"DELETE FROM ai_provider_endpoints WHERE provider_id = $1 AND id = $2",
+		providerID, endpointID)
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	if result.RowsAffected() == 0 {
+		writeErr(w, http.StatusNotFound, BizErrNotFound, "endpoint not found")
+		return
+	}
+	writeOK(w, map[string]string{"status": "deleted"})
+}
+
 func (s *Server) handleAdminCheckUpstreamDeploymentHealth(w http.ResponseWriter, r *http.Request) {
 	deploymentID, ok := parseUUIDParam(w, r, "deploymentID")
 	if !ok {

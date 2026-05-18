@@ -175,6 +175,45 @@ type RouteCandidate struct {
 	// P3: scoring hints loaded from ai_model_routes
 	CostPer1kTokens    float64                // 0 for free/pool routes → scorer treats as very cheap
 	ScoreWeightsOverride map[string]float64   // nil = use global weights
+
+	// Upstream cost price (decoded from ai_upstream_deployments.pricing JSONB).
+	// nil for pool routes or when deployment has no pricing configured.
+	Pricing *Pricing
+}
+
+// ============================================================================
+// Upstream cost pricing
+// ============================================================================
+
+// Pricing carries everything needed to compute the upstream cost of one call.
+// All numeric values are CNY in原值 (no scaling). Token prices are per 1,000,000
+// tokens; image/video prices are absolute per-unit charges. Stored in JSONB so
+// decimals (e.g. ¥0.525/M) survive round-trip without precision loss.
+type Pricing struct {
+	Tiers        []PricingTier              `json:"tiers,omitempty"`
+	RequestCost  float64                    `json:"request_cost,omitempty"`
+	ImagePrices  []ResolutionPrice          `json:"image_prices,omitempty"`
+	VideoPrices  []ResolutionPrice          `json:"video_prices,omitempty"`
+}
+
+// PricingTier describes one band of token-volume-based pricing. The tier is
+// selected by prompt_tokens (input). The last tier must use UpTo == nil to
+// mean "no upper bound".
+type PricingTier struct {
+	UpTo            *int64  `json:"up_to"`
+	InputPer1M      float64 `json:"input_per_1m"`
+	OutputPer1M     float64 `json:"output_per_1m"`
+	CacheWritePer1M float64 `json:"cache_write_per_1m,omitempty"`
+	CacheReadPer1M  float64 `json:"cache_read_per_1m,omitempty"`
+	ReasoningPer1M  float64 `json:"reasoning_per_1m,omitempty"`
+}
+
+// ResolutionPrice expresses a per-resolution image or per-resolution-per-second
+// video price. For images, Price is per generated image. For videos, Price is
+// per second at that resolution.
+type ResolutionPrice struct {
+	Resolution string  `json:"resolution"`
+	Price      float64 `json:"price"`
 }
 
 // IsPoolRoute returns true when this route targets a CredentialPool (OAuth Fixed Provider).

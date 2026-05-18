@@ -84,28 +84,14 @@ type modelPriceRequest struct {
 	AudioSTTPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 }
 
-type createUpstreamDeploymentCostPriceRequest struct {
-	CapabilityType     string          `json:"capability_type"`
-	Currency           string          `json:"currency"`
-	InputCostPer1M     int64           `json:"input_cost_per_1m"`
-	OutputCostPer1M    int64           `json:"output_cost_per_1m"`
-	RequestCost        int64           `json:"request_cost"`
-	ImageCost          int64           `json:"image_cost"`
-	ImageSizePrices    json.RawMessage `json:"image_size_prices"`
-	VideoCostPerSecond int64           `json:"video_cost_per_second"`
-	EffectiveFrom      adminTimestamp  `json:"effective_from"`
-	Status             string          `json:"status"`
-}
-
 type createUpstreamDeploymentRequest struct {
 	EndpointID         string          `json:"endpoint_id"`
-	Name               string          `json:"name"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
 	RequestPath        *string         `json:"request_path"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
-	Tags               json.RawMessage `json:"tags"`
+	Pricing            json.RawMessage `json:"pricing"`
 	Status             string          `json:"status"`
 }
 

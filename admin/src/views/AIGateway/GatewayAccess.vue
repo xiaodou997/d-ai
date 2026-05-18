@@ -339,6 +339,7 @@ onMounted(async () => {
       <p v-if="hasSelectedTenant" class="tenant-info">
         {{ selectedTenant.tenantName }} · {{ selectedTenant.contactPerson || '无联系人' }} · {{ selectedTenant.contactEmail || '无邮箱' }}
       </p>
+      <p v-else class="tenant-hint">请先搜索并选择一个租户，再进行授权操作</p>
     </section>
 
     <!-- 统计卡片 -->
@@ -572,6 +573,13 @@ onMounted(async () => {
   color: #475569;
   font-size: 12px;
   font-weight: 700;
+}
+
+.tenant-hint {
+  margin: 12px 0 0;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .metric-grid {

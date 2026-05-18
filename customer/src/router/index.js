@@ -79,13 +79,20 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 
   if (requiresAuth && !authStore.isAuthenticated()) {
     return '/login'
-  } else if (to.path === '/login' && authStore.isAuthenticated()) {
+  }
+
+  if (authStore.isAuthenticated() && authStore.userType !== 0 && authStore.userType !== 4) {
+    authStore.clearState()
+    return '/login'
+  }
+
+  if (to.path === '/login' && authStore.isAuthenticated()) {
     return '/dashboard'
   }
 })

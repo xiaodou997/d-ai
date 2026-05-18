@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   refreshAccessToken as refreshAccessTokenApi,
   logout as logoutApi,
@@ -16,7 +16,10 @@ export const useAuthStore = defineStore('tenantAuth', () => {
   const username = ref(localStorage.getItem('tenant_username') || '')
   const tenantId = ref(localStorage.getItem('tenant_tenantId') || '')
   const tenantName = ref(localStorage.getItem('tenant_tenantName') || '')
+  const userType = ref(parseInt(localStorage.getItem('tenant_userType') || '0'))
   const expiresIn = ref(parseInt(localStorage.getItem('tenant_expiresIn') || '7200'))
+
+  const roleName = computed(() => '租户管理员')
 
   let refreshTimer = null
 
@@ -40,7 +43,12 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     username.value = userInfo.username || ''
     tenantId.value = userInfo.tenantId || ''
     tenantName.value = userInfo.tenantName || ''
+    userType.value = Number(userInfo.userType || 0)
     saveToLocalStorage()
+    if (userType.value !== 3) {
+      clearState()
+      throw new Error('当前账号无权访问租户管理中心')
+    }
     return userInfo
   }
 
@@ -97,6 +105,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     localStorage.setItem('tenant_username', username.value)
     localStorage.setItem('tenant_tenantId', tenantId.value)
     localStorage.setItem('tenant_tenantName', tenantName.value)
+    localStorage.setItem('tenant_userType', userType.value.toString())
     localStorage.setItem('tenant_expiresIn', expiresIn.value.toString())
   }
 
@@ -107,6 +116,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     username.value = ''
     tenantId.value = ''
     tenantName.value = ''
+    userType.value = 0
     expiresIn.value = 7200
     localStorage.removeItem('tenant_accessToken')
     localStorage.removeItem('tenant_refreshToken')
@@ -114,6 +124,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     localStorage.removeItem('tenant_username')
     localStorage.removeItem('tenant_tenantId')
     localStorage.removeItem('tenant_tenantName')
+    localStorage.removeItem('tenant_userType')
     localStorage.removeItem('tenant_expiresIn')
   }
 
@@ -147,7 +158,9 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     username,
     tenantId,
     tenantName,
+    userType,
     expiresIn,
+    roleName,
     logout,
     refreshAccessToken,
     fetchUserInfo,

@@ -60,6 +60,13 @@ const routes = [
         component: () => import('@/views/Finance/UserRechargeRecords.vue'),
         meta: { title: '用户充值记录', requiresAuth: true }
       },
+      // 接入文档
+      {
+        path: '/docs/api',
+        name: 'ApiDocs',
+        component: () => import('@/views/Docs/ApiDocs.vue'),
+        meta: { title: '接入文档', requiresAuth: true }
+      },
       // AI Gateway
       {
         path: '/ai/models',
@@ -98,13 +105,20 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
 
   if (requiresAuth && !authStore.isAuthenticated()) {
     return '/login'
-  } else if (to.path === '/login' && authStore.isAuthenticated()) {
+  }
+
+  if (authStore.isAuthenticated() && authStore.userType !== 0 && authStore.userType !== 3) {
+    authStore.clearState()
+    return '/login'
+  }
+
+  if (to.path === '/login' && authStore.isAuthenticated()) {
     return '/dashboard'
   }
 })

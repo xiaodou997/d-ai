@@ -27,100 +27,103 @@ const routes = [
         path: '/dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard/index.vue'),
-        meta: { title: '数据大盘', requiresAuth: true, roles: [1] }
+        meta: { title: '数据大盘', requiresAuth: true, roles: [1, 2] }
       },
       {
         path: '/system-status',
         name: 'SystemStatus',
         component: () => import('@/views/SystemStatus/index.vue'),
-        meta: { title: '系统状态', requiresAuth: true, roles: [1] }
+        meta: { title: '系统状态', requiresAuth: true, roles: [1, 2] }
       },
       {
         path: '/tenants',
         name: 'TenantList',
         component: () => import('@/views/Tenant/TenantList.vue'),
-        meta: { title: '租户管理', requiresAuth: true, roles: [1] }
+        meta: { title: '租户管理', requiresAuth: true, roles: [1, 2] }
       },
       {
         path: '/tenants/:id',
         name: 'TenantDetail',
         component: () => import('@/views/Tenant/TenantDetail.vue'),
-        meta: { title: '租户详情', requiresAuth: true, hidden: true, roles: [1] }
+        meta: { title: '租户详情', requiresAuth: true, hidden: true, roles: [1, 2] }
       },
       {
         path: '/users',
         name: 'UserList',
         component: () => import('@/views/User/UserList.vue'),
-        meta: { title: '终端用户', requiresAuth: true, roles: [1] }
+        meta: { title: '终端用户', requiresAuth: true, roles: [1, 2] }
       },
       {
         path: '/finance/recharge',
         name: 'TenantRecharge',
         component: () => import('@/views/Finance/Recharge.vue'),
-        meta: { title: '租户充值', requiresAuth: true, hidden: true, roles: [1] }
+        meta: { title: '租户充值', requiresAuth: true, hidden: true, roles: [1, 2] }
       },
       {
         path: '/finance/recharge-records',
         name: 'TenantRechargeRecords',
         component: () => import('@/views/Finance/RechargeRecords.vue'),
-        meta: { title: '充值记录', requiresAuth: true, roles: [1] }
+        meta: { title: '充值记录', requiresAuth: true, roles: [1, 2] }
+      },
+      {
+        path: '/docs/api',
+        name: 'ApiDocs',
+        component: () => import('@/views/Docs/ApiDocs.vue'),
+        meta: { title: '接入文档', requiresAuth: true, roles: [1, 2] }
       },
       {
         path: '/ai-gateway',
         component: () => import('@/views/AIGateway/index.vue'),
-        redirect: () => {
-          const authStore = useAuthStore()
-          return authStore.isPlatformAdmin ? '/ai-gateway/providers' : '/ai-gateway/access'
-        },
-        meta: { title: 'AI 网关', requiresAuth: true, roles: [1, 2, 3] },
+        redirect: '/ai-gateway/providers',
+        meta: { title: 'AI 网关', requiresAuth: true, roles: [1, 2] },
         children: [
           {
             path: 'providers',
             name: 'GatewayProviders',
             component: () => import('@/views/AIGateway/GatewayProviders.vue'),
-            meta: { title: '厂商接入', requiresAuth: true, roles: [1] }
+            meta: { title: '厂商接入', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'models',
             name: 'GatewayModels',
             component: () => import('@/views/AIGateway/GatewayModels.vue'),
-            meta: { title: '模型映射', requiresAuth: true, roles: [1] }
+            meta: { title: '模型映射', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'access',
             name: 'GatewayAccess',
             component: () => import('@/views/AIGateway/GatewayAccess.vue'),
-            meta: { title: '模型授权', requiresAuth: true, roles: [1] }
+            meta: { title: '模型授权', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'usage',
             name: 'GatewayUsage',
             component: () => import('@/views/AIGateway/GatewayUsage.vue'),
-            meta: { title: '调用日志', requiresAuth: true, roles: [1, 2, 3] }
+            meta: { title: '调用日志', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'limits',
             name: 'GatewayLimits',
             component: () => import('@/views/AIGateway/GatewayLimits.vue'),
-            meta: { title: '限流策略', requiresAuth: true, roles: [1] }
+            meta: { title: '限流策略', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'credential-pools',
             name: 'GatewayCredentialPools',
             component: () => import('@/views/AIGateway/GatewayCredentialPools.vue'),
-            meta: { title: '账号池', requiresAuth: true, roles: [1] }
+            meta: { title: '账号池', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'audit',
             name: 'GatewayAudit',
             component: () => import('@/views/AIGateway/GatewayAudit.vue'),
-            meta: { title: '网关审计', requiresAuth: true, roles: [1] }
+            meta: { title: '网关审计', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'routing',
             name: 'GatewayRouting',
             component: () => import('@/views/AIGateway/GatewayRouting.vue'),
-            meta: { title: '路由策略', requiresAuth: true, roles: [1] }
+            meta: { title: '路由策略', requiresAuth: true, roles: [1, 2] }
           }
         ]
       }
@@ -141,12 +144,12 @@ router.beforeEach((to) => {
     return '/login'
   }
 
-  if (to.path === '/login' && authStore.isAuthenticated()) {
-    return authStore.defaultRoute
+  if (authStore.isAuthenticated() && authStore.userType !== 1 && authStore.userType !== 2) {
+    authStore.clearState()
+    return '/login'
   }
 
-  const superAdminOnly = to.matched.some(record => record.meta.superAdminOnly)
-  if (superAdminOnly && authStore.userType !== 1) {
+  if (to.path === '/login' && authStore.isAuthenticated()) {
     return authStore.defaultRoute
   }
 

@@ -104,10 +104,6 @@ func (s *Server) handleAdminImportEndpointUpstreamModels(w http.ResponseWriter, 
 		if m.UpstreamModel == "" {
 			continue
 		}
-		name := m.Name
-		if name == "" {
-			name = m.UpstreamModel
-		}
 		capType := m.CapabilityType
 		if capType == "" {
 			capType = defaultCapability
@@ -117,12 +113,13 @@ func (s *Server) handleAdminImportEndpointUpstreamModels(w http.ResponseWriter, 
 			protocol = defaultProtocol
 		}
 
+		pricing := jsonObjectOrDefault(m.Pricing)
 		tag, insertErr := s.postgres.Exec(r.Context(), `
 			INSERT INTO ai_upstream_deployments
-			  (endpoint_id, name, upstream_model, capability_type, upstream_protocol, status, health_status)
+			  (endpoint_id, upstream_model, capability_type, upstream_protocol, pricing, status, health_status)
 			VALUES ($1, $2, $3, $4, $5, 'active', 'unknown')
 			ON CONFLICT (endpoint_id, upstream_model, upstream_protocol) DO NOTHING`,
-			endpointID, name, m.UpstreamModel, capType, protocol,
+			endpointID, m.UpstreamModel, capType, protocol, pricing,
 		)
 		if insertErr != nil {
 			writeErr(w, http.StatusInternalServerError, BizErrInternal, fmt.Sprintf("insert %s failed: %s", m.UpstreamModel, insertErr.Error()))
@@ -134,7 +131,6 @@ func (s *Server) handleAdminImportEndpointUpstreamModels(w http.ResponseWriter, 
 		} else {
 			created = append(created, upstreamModelImportDTO{
 				UpstreamModel:    m.UpstreamModel,
-				Name:             name,
 				CapabilityType:   capType,
 				UpstreamProtocol: protocol,
 			})
@@ -164,15 +160,14 @@ type importUpstreamModelsRequest struct {
 }
 
 type importModelItem struct {
-	UpstreamModel    string `json:"upstream_model"`
-	Name             string `json:"name"`
-	CapabilityType   string `json:"capability_type"`
-	UpstreamProtocol string `json:"upstream_protocol"`
+	UpstreamModel    string          `json:"upstream_model"`
+	CapabilityType   string          `json:"capability_type"`
+	UpstreamProtocol string          `json:"upstream_protocol"`
+	Pricing          json.RawMessage `json:"pricing,omitempty"`
 }
 
 type upstreamModelImportDTO struct {
 	UpstreamModel    string `json:"upstream_model"`
-	Name             string `json:"name"`
 	CapabilityType   string `json:"capability_type"`
 	UpstreamProtocol string `json:"upstream_protocol"`
 }

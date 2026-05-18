@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   refreshAccessToken as refreshAccessTokenApi,
   logout as logoutApi,
@@ -16,6 +16,9 @@ export const useAuthStore = defineStore('customerAuth', () => {
   const username = ref(localStorage.getItem('customer_username') || '')
   const userId = ref(localStorage.getItem('customer_userId') || '')
   const tenantId = ref(localStorage.getItem('customer_tenantId') || '')
+  const userType = ref(parseInt(localStorage.getItem('customer_userType') || '0'))
+
+  const roleName = computed(() => '终端用户')
 
   let refreshTimer = null
 
@@ -38,7 +41,12 @@ export const useAuthStore = defineStore('customerAuth', () => {
     userId.value = userInfo.sub || userInfo.userId || ''
     username.value = userInfo.username || ''
     tenantId.value = userInfo.tenantId || ''
+    userType.value = Number(userInfo.userType || 0)
     saveToLocalStorage()
+    if (userType.value !== 4) {
+      clearState()
+      throw new Error('当前账号无权访问用户中心')
+    }
     return userInfo
   }
 
@@ -93,6 +101,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     localStorage.setItem('customer_userId', userId.value)
     localStorage.setItem('customer_username', username.value)
     localStorage.setItem('customer_tenantId', tenantId.value)
+    localStorage.setItem('customer_userType', userType.value.toString())
     localStorage.setItem('customer_expiresIn', expiresIn.value.toString())
   }
 
@@ -102,12 +111,14 @@ export const useAuthStore = defineStore('customerAuth', () => {
     userId.value = ''
     username.value = ''
     tenantId.value = ''
+    userType.value = 0
     expiresIn.value = 7200
     localStorage.removeItem('customer_accessToken')
     localStorage.removeItem('customer_refreshToken')
     localStorage.removeItem('customer_userId')
     localStorage.removeItem('customer_username')
     localStorage.removeItem('customer_tenantId')
+    localStorage.removeItem('customer_userType')
     localStorage.removeItem('customer_expiresIn')
   }
 
@@ -140,7 +151,9 @@ export const useAuthStore = defineStore('customerAuth', () => {
     userId,
     username,
     tenantId,
+    userType,
     expiresIn,
+    roleName,
     logout,
     refreshAccessToken,
     fetchUserInfo,

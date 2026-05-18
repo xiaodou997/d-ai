@@ -52,6 +52,13 @@
           <span>用户充值记录</span>
         </el-menu-item>
 
+        <!-- 开发者 -->
+        <div class="menu-divider">开发者</div>
+        <el-menu-item index="/docs/api">
+          <el-icon><Document /></el-icon>
+          <span>接入文档</span>
+        </el-menu-item>
+
         <!-- AI Gateway -->
         <div class="menu-divider">AI Gateway</div>
         <el-menu-item index="/ai/models">
@@ -114,6 +121,7 @@ import {
   SwitchButton,
   Money,
   Box,
+  Document,
   PriceTag,
   Key,
   TrendCharts

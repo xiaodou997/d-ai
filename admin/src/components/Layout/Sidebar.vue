@@ -4,6 +4,7 @@ import {
   Connection,
   Cpu,
   DataAnalysis,
+  Document,
   DocumentChecked,
   Monitor,
   Key,
@@ -93,6 +94,12 @@ const handleLogout = () => {
         >
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.label }}</span>
+        </el-menu-item>
+
+        <div class="menu-divider">开发者</div>
+        <el-menu-item index="/docs/api">
+          <el-icon><Document /></el-icon>
+          <span>接入文档</span>
         </el-menu-item>
 
         <template v-if="authStore.isPlatformAdmin">

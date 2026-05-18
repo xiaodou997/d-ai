@@ -139,6 +139,20 @@ export const statusOptions = [
   { label: '禁用', value: 'disabled' }
 ]
 
+const STATUS_LABEL_MAP = {
+  active: '启用',
+  inactive: '停用',
+  disabled: '禁用',
+  healthy: '健康',
+  unhealthy: '异常',
+  unknown: '未知'
+}
+
+export function statusLabel(value) {
+  if (!value) return '-'
+  return STATUS_LABEL_MAP[value] || value
+}
+
 export const protocolOptions = [
   { label: 'OpenAI Chat Completions', value: 'openai_chat' },
   { label: 'OpenAI Responses', value: 'openai_responses' },
@@ -202,6 +216,10 @@ export function updateProviderEndpointStatus(providerId, endpointId, status) {
   return gatewayRequest.patch(`/api/v1/providers/${providerId}/endpoints/${endpointId}/status`, { status })
 }
 
+export function deleteProviderEndpoint(providerId, endpointId) {
+  return gatewayRequest.delete(`/api/v1/providers/${providerId}/endpoints/${endpointId}`)
+}
+
 export function fetchEndpointUpstreamModels(providerId, endpointId) {
   return gatewayRequest.get(`/api/v1/providers/${providerId}/endpoints/${endpointId}/upstream-models`)
 }
@@ -238,24 +256,8 @@ export function checkUpstreamDeploymentHealth(deploymentId) {
   return gatewayRequest.post(`/api/v1/upstream-deployments/${deploymentId}/health-check`)
 }
 
-// ============================================================================
-// Upstream Deployment Cost Price APIs
-// ============================================================================
-
-export function listUpstreamDeploymentCostPrices(deploymentId) {
-  return gatewayRequest.get(`/api/v1/upstream-deployments/${deploymentId}/cost-prices`)
-}
-
-export function createUpstreamDeploymentCostPrice(deploymentId, data) {
-  return gatewayRequest.post(`/api/v1/upstream-deployments/${deploymentId}/cost-prices`, data)
-}
-
-export function updateUpstreamDeploymentCostPrice(deploymentId, priceId, data) {
-  return gatewayRequest.patch(`/api/v1/upstream-deployments/${deploymentId}/cost-prices/${priceId}`, data)
-}
-
-export function updateUpstreamDeploymentCostPriceStatus(deploymentId, priceId, status) {
-  return gatewayRequest.patch(`/api/v1/upstream-deployments/${deploymentId}/cost-prices/${priceId}/status`, { status })
+export function deleteUpstreamDeployment(deploymentId) {
+  return gatewayRequest.delete(`/api/v1/upstream-deployments/${deploymentId}`)
 }
 
 // ============================================================================

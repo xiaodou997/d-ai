@@ -180,24 +180,6 @@ FROM ai_tenant_user_prices
 WHERE tenant_id = $1
   AND model_id = $2;
 
--- name: GetActiveUpstreamDeploymentCostPrice :one
-SELECT
-  input_cost_per_1m,
-  output_cost_per_1m,
-  cache_write_cost_per_1m,
-  cache_read_cost_per_1m,
-  reasoning_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second
-FROM ai_upstream_deployment_cost_prices
-WHERE upstream_deployment_id = $1
-  AND status = 'active'
-  AND effective_from <= now()
-ORDER BY effective_from DESC
-LIMIT 1;
-
 -- name: ConfirmAPIKeyQuotaUsage :exec
 UPDATE ai_api_keys
 SET

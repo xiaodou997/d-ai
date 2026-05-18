@@ -193,28 +193,26 @@ RETURNING
 -- name: CreateUpstreamDeployment :one
 INSERT INTO ai_upstream_deployments (
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, 'unknown', $9
+  $1, $2, $3, $4, $5, $6, $7, 'unknown', $8
 )
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -226,13 +224,12 @@ RETURNING
 SELECT
   ud.id,
   ud.endpoint_id,
-  ud.name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
-  ud.tags,
+  ud.pricing,
   ud.health_status,
   ud.last_health_check_at,
   ud.last_health_error,
@@ -249,19 +246,18 @@ FROM ai_upstream_deployments ud
 JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
 JOIN ai_providers p ON p.id = e.provider_id
 WHERE ud.endpoint_id = $1
-ORDER BY ud.name ASC;
+ORDER BY ud.upstream_model ASC;
 
 -- name: GetUpstreamDeployment :one
 SELECT
   ud.id,
   ud.endpoint_id,
-  ud.name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
-  ud.tags,
+  ud.pricing,
   ud.health_status,
   ud.last_health_check_at,
   ud.last_health_error,
@@ -289,13 +285,12 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -305,26 +300,24 @@ RETURNING
 
 -- name: UpdateUpstreamDeployment :one
 UPDATE ai_upstream_deployments
-SET name = $2,
-    upstream_model = $3,
-    capability_type = $4,
-    upstream_protocol = $5,
-    request_path = $6,
-    upstream_parameters = $7,
-    tags = $8,
-    status = $9,
+SET upstream_model = $2,
+    capability_type = $3,
+    upstream_protocol = $4,
+    request_path = $5,
+    upstream_parameters = $6,
+    pricing = $7,
+    status = $8,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -342,13 +335,12 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -360,7 +352,6 @@ RETURNING
 SELECT
   ud.id,
   ud.endpoint_id,
-  ud.name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
@@ -379,109 +370,6 @@ FROM ai_upstream_deployments ud
 JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
 JOIN ai_providers p ON p.id = e.provider_id
 WHERE ud.id = $1;
-
--- ============================================================================
--- Upstream Deployment Cost Price CRUD
--- ============================================================================
-
--- name: CreateUpstreamDeploymentCostPrice :one
-INSERT INTO ai_upstream_deployment_cost_prices (
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-)
-RETURNING
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at;
-
--- name: ListUpstreamDeploymentCostPrices :many
-SELECT
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at
-FROM ai_upstream_deployment_cost_prices
-WHERE upstream_deployment_id = $1
-ORDER BY effective_from DESC;
-
--- name: UpdateUpstreamDeploymentCostPriceStatus :one
-UPDATE ai_upstream_deployment_cost_prices
-SET status = $3
-WHERE upstream_deployment_id = $1
-  AND id = $2
-RETURNING
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at;
-
--- name: UpdateUpstreamDeploymentCostPrice :one
-UPDATE ai_upstream_deployment_cost_prices
-SET capability_type = $3,
-    currency = $4,
-    input_cost_per_1m = $5,
-    output_cost_per_1m = $6,
-    request_cost = $7,
-    image_cost = $8,
-    image_size_prices = $9,
-    video_cost_per_second = $10,
-    effective_from = $11,
-    status = $12
-WHERE upstream_deployment_id = $1
-  AND id = $2
-RETURNING
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at;
 
 -- ============================================================================
 -- Model CRUD
@@ -663,7 +551,7 @@ SELECT
   r.status,
   r.created_at,
   r.updated_at,
-  ud.name AS upstream_deployment_name,
+  ud.upstream_model AS upstream_deployment_name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,

@@ -67,7 +67,7 @@ const capabilityLabel = (capability) => {
 
 const usageParams = computed(() => ({
   tenant_id: authStore.isPlatformAdmin ? filters.tenant_id || undefined : authStore.tenantId || undefined,
-  user_id: authStore.isEndUser ? authStore.userId || undefined : filters.user_id || undefined,
+  user_id: filters.user_id || undefined,
   model_code: filters.model_code || undefined,
   request_status: filters.request_status || undefined
 }))
@@ -130,7 +130,7 @@ onMounted(fetchUsage)
 
     <div class="toolbar">
       <el-input v-if="authStore.isPlatformAdmin" v-model="filters.tenant_id" clearable placeholder="租户" />
-      <el-input v-if="!authStore.isEndUser" v-model="filters.user_id" clearable placeholder="用户" />
+      <el-input v-model="filters.user_id" clearable placeholder="用户" />
       <el-input v-model="filters.model_code" clearable placeholder="模型" />
       <el-select v-model="filters.request_status" clearable placeholder="状态">
         <el-option label="success" value="success" />

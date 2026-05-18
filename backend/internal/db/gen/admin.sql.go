@@ -761,28 +761,26 @@ const createUpstreamDeployment = `-- name: CreateUpstreamDeployment :one
 
 INSERT INTO ai_upstream_deployments (
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, 'unknown', $9
+  $1, $2, $3, $4, $5, $6, $7, 'unknown', $8
 )
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -793,13 +791,12 @@ RETURNING
 
 type CreateUpstreamDeploymentParams struct {
 	EndpointID         pgtype.UUID `json:"endpoint_id"`
-	Name               string      `json:"name"`
 	UpstreamModel      string      `json:"upstream_model"`
 	CapabilityType     string      `json:"capability_type"`
 	UpstreamProtocol   string      `json:"upstream_protocol"`
 	RequestPath        pgtype.Text `json:"request_path"`
 	UpstreamParameters []byte      `json:"upstream_parameters"`
-	Tags               []byte      `json:"tags"`
+	Pricing            []byte      `json:"pricing"`
 	Status             string      `json:"status"`
 }
 
@@ -809,131 +806,30 @@ type CreateUpstreamDeploymentParams struct {
 func (q *Queries) CreateUpstreamDeployment(ctx context.Context, arg CreateUpstreamDeploymentParams) (AiUpstreamDeployment, error) {
 	row := q.db.QueryRow(ctx, createUpstreamDeployment,
 		arg.EndpointID,
-		arg.Name,
 		arg.UpstreamModel,
 		arg.CapabilityType,
 		arg.UpstreamProtocol,
 		arg.RequestPath,
 		arg.UpstreamParameters,
-		arg.Tags,
+		arg.Pricing,
 		arg.Status,
 	)
 	var i AiUpstreamDeployment
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
-		&i.Name,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
 		&i.RequestPath,
 		&i.UpstreamParameters,
-		&i.Tags,
+		&i.Pricing,
 		&i.HealthStatus,
 		&i.LastHealthCheckAt,
 		&i.LastHealthError,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const createUpstreamDeploymentCostPrice = `-- name: CreateUpstreamDeploymentCostPrice :one
-
-INSERT INTO ai_upstream_deployment_cost_prices (
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-)
-RETURNING
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at
-`
-
-type CreateUpstreamDeploymentCostPriceParams struct {
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-}
-
-type CreateUpstreamDeploymentCostPriceRow struct {
-	ID                   pgtype.UUID        `json:"id"`
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-}
-
-// ============================================================================
-// Upstream Deployment Cost Price CRUD
-// ============================================================================
-func (q *Queries) CreateUpstreamDeploymentCostPrice(ctx context.Context, arg CreateUpstreamDeploymentCostPriceParams) (CreateUpstreamDeploymentCostPriceRow, error) {
-	row := q.db.QueryRow(ctx, createUpstreamDeploymentCostPrice,
-		arg.UpstreamDeploymentID,
-		arg.CapabilityType,
-		arg.Currency,
-		arg.InputCostPer1m,
-		arg.OutputCostPer1m,
-		arg.RequestCost,
-		arg.ImageCost,
-		arg.ImageSizePrices,
-		arg.VideoCostPerSecond,
-		arg.EffectiveFrom,
-		arg.Status,
-	)
-	var i CreateUpstreamDeploymentCostPriceRow
-	err := row.Scan(
-		&i.ID,
-		&i.UpstreamDeploymentID,
-		&i.CapabilityType,
-		&i.Currency,
-		&i.InputCostPer1m,
-		&i.OutputCostPer1m,
-		&i.RequestCost,
-		&i.ImageCost,
-		&i.ImageSizePrices,
-		&i.VideoCostPerSecond,
-		&i.EffectiveFrom,
-		&i.Status,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -1686,13 +1582,12 @@ const getUpstreamDeployment = `-- name: GetUpstreamDeployment :one
 SELECT
   ud.id,
   ud.endpoint_id,
-  ud.name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
-  ud.tags,
+  ud.pricing,
   ud.health_status,
   ud.last_health_check_at,
   ud.last_health_error,
@@ -1716,13 +1611,12 @@ WHERE ud.id = $1
 type GetUpstreamDeploymentRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	Name               string             `json:"name"`
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`
 	RequestPath        pgtype.Text        `json:"request_path"`
 	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Tags               []byte             `json:"tags"`
+	Pricing            []byte             `json:"pricing"`
 	HealthStatus       string             `json:"health_status"`
 	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text        `json:"last_health_error"`
@@ -1745,13 +1639,12 @@ func (q *Queries) GetUpstreamDeployment(ctx context.Context, id pgtype.UUID) (Ge
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
-		&i.Name,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
 		&i.RequestPath,
 		&i.UpstreamParameters,
-		&i.Tags,
+		&i.Pricing,
 		&i.HealthStatus,
 		&i.LastHealthCheckAt,
 		&i.LastHealthError,
@@ -1774,7 +1667,6 @@ const getUpstreamDeploymentForHealthCheck = `-- name: GetUpstreamDeploymentForHe
 SELECT
   ud.id,
   ud.endpoint_id,
-  ud.name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
@@ -1798,7 +1690,6 @@ WHERE ud.id = $1
 type GetUpstreamDeploymentForHealthCheckRow struct {
 	ID                      pgtype.UUID `json:"id"`
 	EndpointID              pgtype.UUID `json:"endpoint_id"`
-	Name                    string      `json:"name"`
 	UpstreamModel           string      `json:"upstream_model"`
 	CapabilityType          string      `json:"capability_type"`
 	UpstreamProtocol        string      `json:"upstream_protocol"`
@@ -1821,7 +1712,6 @@ func (q *Queries) GetUpstreamDeploymentForHealthCheck(ctx context.Context, id pg
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
-		&i.Name,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -2481,7 +2371,7 @@ SELECT
   r.status,
   r.created_at,
   r.updated_at,
-  ud.name AS upstream_deployment_name,
+  ud.upstream_model AS upstream_deployment_name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
@@ -2959,87 +2849,16 @@ func (q *Queries) ListTenantUserPrices(ctx context.Context, tenantID string) ([]
 	return items, nil
 }
 
-const listUpstreamDeploymentCostPrices = `-- name: ListUpstreamDeploymentCostPrices :many
-SELECT
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at
-FROM ai_upstream_deployment_cost_prices
-WHERE upstream_deployment_id = $1
-ORDER BY effective_from DESC
-`
-
-type ListUpstreamDeploymentCostPricesRow struct {
-	ID                   pgtype.UUID        `json:"id"`
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) ListUpstreamDeploymentCostPrices(ctx context.Context, upstreamDeploymentID pgtype.UUID) ([]ListUpstreamDeploymentCostPricesRow, error) {
-	rows, err := q.db.Query(ctx, listUpstreamDeploymentCostPrices, upstreamDeploymentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListUpstreamDeploymentCostPricesRow{}
-	for rows.Next() {
-		var i ListUpstreamDeploymentCostPricesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.UpstreamDeploymentID,
-			&i.CapabilityType,
-			&i.Currency,
-			&i.InputCostPer1m,
-			&i.OutputCostPer1m,
-			&i.RequestCost,
-			&i.ImageCost,
-			&i.ImageSizePrices,
-			&i.VideoCostPerSecond,
-			&i.EffectiveFrom,
-			&i.Status,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listUpstreamDeployments = `-- name: ListUpstreamDeployments :many
 SELECT
   ud.id,
   ud.endpoint_id,
-  ud.name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
-  ud.tags,
+  ud.pricing,
   ud.health_status,
   ud.last_health_check_at,
   ud.last_health_error,
@@ -3056,19 +2875,18 @@ FROM ai_upstream_deployments ud
 JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
 JOIN ai_providers p ON p.id = e.provider_id
 WHERE ud.endpoint_id = $1
-ORDER BY ud.name ASC
+ORDER BY ud.upstream_model ASC
 `
 
 type ListUpstreamDeploymentsRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	Name               string             `json:"name"`
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`
 	RequestPath        pgtype.Text        `json:"request_path"`
 	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Tags               []byte             `json:"tags"`
+	Pricing            []byte             `json:"pricing"`
 	HealthStatus       string             `json:"health_status"`
 	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text        `json:"last_health_error"`
@@ -3095,13 +2913,12 @@ func (q *Queries) ListUpstreamDeployments(ctx context.Context, endpointID pgtype
 		if err := rows.Scan(
 			&i.ID,
 			&i.EndpointID,
-			&i.Name,
 			&i.UpstreamModel,
 			&i.CapabilityType,
 			&i.UpstreamProtocol,
 			&i.RequestPath,
 			&i.UpstreamParameters,
-			&i.Tags,
+			&i.Pricing,
 			&i.HealthStatus,
 			&i.LastHealthCheckAt,
 			&i.LastHealthError,
@@ -4935,26 +4752,24 @@ func (q *Queries) UpdateTenantModelGrantStatus(ctx context.Context, arg UpdateTe
 
 const updateUpstreamDeployment = `-- name: UpdateUpstreamDeployment :one
 UPDATE ai_upstream_deployments
-SET name = $2,
-    upstream_model = $3,
-    capability_type = $4,
-    upstream_protocol = $5,
-    request_path = $6,
-    upstream_parameters = $7,
-    tags = $8,
-    status = $9,
+SET upstream_model = $2,
+    capability_type = $3,
+    upstream_protocol = $4,
+    request_path = $5,
+    upstream_parameters = $6,
+    pricing = $7,
+    status = $8,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -4965,204 +4780,42 @@ RETURNING
 
 type UpdateUpstreamDeploymentParams struct {
 	ID                 pgtype.UUID `json:"id"`
-	Name               string      `json:"name"`
 	UpstreamModel      string      `json:"upstream_model"`
 	CapabilityType     string      `json:"capability_type"`
 	UpstreamProtocol   string      `json:"upstream_protocol"`
 	RequestPath        pgtype.Text `json:"request_path"`
 	UpstreamParameters []byte      `json:"upstream_parameters"`
-	Tags               []byte      `json:"tags"`
+	Pricing            []byte      `json:"pricing"`
 	Status             string      `json:"status"`
 }
 
 func (q *Queries) UpdateUpstreamDeployment(ctx context.Context, arg UpdateUpstreamDeploymentParams) (AiUpstreamDeployment, error) {
 	row := q.db.QueryRow(ctx, updateUpstreamDeployment,
 		arg.ID,
-		arg.Name,
 		arg.UpstreamModel,
 		arg.CapabilityType,
 		arg.UpstreamProtocol,
 		arg.RequestPath,
 		arg.UpstreamParameters,
-		arg.Tags,
+		arg.Pricing,
 		arg.Status,
 	)
 	var i AiUpstreamDeployment
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
-		&i.Name,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
 		&i.RequestPath,
 		&i.UpstreamParameters,
-		&i.Tags,
+		&i.Pricing,
 		&i.HealthStatus,
 		&i.LastHealthCheckAt,
 		&i.LastHealthError,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateUpstreamDeploymentCostPrice = `-- name: UpdateUpstreamDeploymentCostPrice :one
-UPDATE ai_upstream_deployment_cost_prices
-SET capability_type = $3,
-    currency = $4,
-    input_cost_per_1m = $5,
-    output_cost_per_1m = $6,
-    request_cost = $7,
-    image_cost = $8,
-    image_size_prices = $9,
-    video_cost_per_second = $10,
-    effective_from = $11,
-    status = $12
-WHERE upstream_deployment_id = $1
-  AND id = $2
-RETURNING
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at
-`
-
-type UpdateUpstreamDeploymentCostPriceParams struct {
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	ID                   pgtype.UUID        `json:"id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-}
-
-type UpdateUpstreamDeploymentCostPriceRow struct {
-	ID                   pgtype.UUID        `json:"id"`
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) UpdateUpstreamDeploymentCostPrice(ctx context.Context, arg UpdateUpstreamDeploymentCostPriceParams) (UpdateUpstreamDeploymentCostPriceRow, error) {
-	row := q.db.QueryRow(ctx, updateUpstreamDeploymentCostPrice,
-		arg.UpstreamDeploymentID,
-		arg.ID,
-		arg.CapabilityType,
-		arg.Currency,
-		arg.InputCostPer1m,
-		arg.OutputCostPer1m,
-		arg.RequestCost,
-		arg.ImageCost,
-		arg.ImageSizePrices,
-		arg.VideoCostPerSecond,
-		arg.EffectiveFrom,
-		arg.Status,
-	)
-	var i UpdateUpstreamDeploymentCostPriceRow
-	err := row.Scan(
-		&i.ID,
-		&i.UpstreamDeploymentID,
-		&i.CapabilityType,
-		&i.Currency,
-		&i.InputCostPer1m,
-		&i.OutputCostPer1m,
-		&i.RequestCost,
-		&i.ImageCost,
-		&i.ImageSizePrices,
-		&i.VideoCostPerSecond,
-		&i.EffectiveFrom,
-		&i.Status,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const updateUpstreamDeploymentCostPriceStatus = `-- name: UpdateUpstreamDeploymentCostPriceStatus :one
-UPDATE ai_upstream_deployment_cost_prices
-SET status = $3
-WHERE upstream_deployment_id = $1
-  AND id = $2
-RETURNING
-  id,
-  upstream_deployment_id,
-  capability_type,
-  currency,
-  input_cost_per_1m,
-  output_cost_per_1m,
-  request_cost,
-  image_cost,
-  image_size_prices,
-  video_cost_per_second,
-  effective_from,
-  status,
-  created_at
-`
-
-type UpdateUpstreamDeploymentCostPriceStatusParams struct {
-	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
-	ID                   pgtype.UUID `json:"id"`
-	Status               string      `json:"status"`
-}
-
-type UpdateUpstreamDeploymentCostPriceStatusRow struct {
-	ID                   pgtype.UUID        `json:"id"`
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) UpdateUpstreamDeploymentCostPriceStatus(ctx context.Context, arg UpdateUpstreamDeploymentCostPriceStatusParams) (UpdateUpstreamDeploymentCostPriceStatusRow, error) {
-	row := q.db.QueryRow(ctx, updateUpstreamDeploymentCostPriceStatus, arg.UpstreamDeploymentID, arg.ID, arg.Status)
-	var i UpdateUpstreamDeploymentCostPriceStatusRow
-	err := row.Scan(
-		&i.ID,
-		&i.UpstreamDeploymentID,
-		&i.CapabilityType,
-		&i.Currency,
-		&i.InputCostPer1m,
-		&i.OutputCostPer1m,
-		&i.RequestCost,
-		&i.ImageCost,
-		&i.ImageSizePrices,
-		&i.VideoCostPerSecond,
-		&i.EffectiveFrom,
-		&i.Status,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -5177,13 +4830,12 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -5204,13 +4856,12 @@ func (q *Queries) UpdateUpstreamDeploymentHealth(ctx context.Context, arg Update
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
-		&i.Name,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
 		&i.RequestPath,
 		&i.UpstreamParameters,
-		&i.Tags,
+		&i.Pricing,
 		&i.HealthStatus,
 		&i.LastHealthCheckAt,
 		&i.LastHealthError,
@@ -5229,13 +4880,12 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
-  name,
   upstream_model,
   capability_type,
   upstream_protocol,
   request_path,
   upstream_parameters,
-  tags,
+  pricing,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -5255,13 +4905,12 @@ func (q *Queries) UpdateUpstreamDeploymentStatus(ctx context.Context, arg Update
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
-		&i.Name,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
 		&i.RequestPath,
 		&i.UpstreamParameters,
-		&i.Tags,
+		&i.Pricing,
 		&i.HealthStatus,
 		&i.LastHealthCheckAt,
 		&i.LastHealthError,

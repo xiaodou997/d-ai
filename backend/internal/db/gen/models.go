@@ -264,38 +264,18 @@ type AiTenantUserPrice struct {
 type AiUpstreamDeployment struct {
 	ID                 pgtype.UUID        `json:"id"`
 	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	Name               string             `json:"name"`
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`
 	RequestPath        pgtype.Text        `json:"request_path"`
 	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Tags               []byte             `json:"tags"`
+	Pricing            []byte             `json:"pricing"`
 	HealthStatus       string             `json:"health_status"`
 	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text        `json:"last_health_error"`
 	Status             string             `json:"status"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiUpstreamDeploymentCostPrice struct {
-	ID                   pgtype.UUID        `json:"id"`
-	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CapabilityType       string             `json:"capability_type"`
-	Currency             string             `json:"currency"`
-	InputCostPer1m       int64              `json:"input_cost_per_1m"`
-	OutputCostPer1m      int64              `json:"output_cost_per_1m"`
-	CacheWriteCostPer1m  int64              `json:"cache_write_cost_per_1m"`
-	CacheReadCostPer1m   int64              `json:"cache_read_cost_per_1m"`
-	ReasoningCostPer1m   int64              `json:"reasoning_cost_per_1m"`
-	RequestCost          int64              `json:"request_cost"`
-	ImageCost            int64              `json:"image_cost"`
-	ImageSizePrices      []byte             `json:"image_size_prices"`
-	VideoCostPerSecond   int64              `json:"video_cost_per_second"`
-	EffectiveFrom        pgtype.Timestamptz `json:"effective_from"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type AiUsageLog struct {

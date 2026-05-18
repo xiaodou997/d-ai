@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_provider_endpoints (
   id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider_id        UUID        NOT NULL REFERENCES ai_providers (id),
+  provider_id        UUID        NOT NULL,
   name               TEXT        NOT NULL,
   base_url           TEXT        NOT NULL,
   api_key_ciphertext TEXT        NOT NULL,
@@ -97,7 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_credential_pools_status ON ai_credential_pools
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_provider_oauth_credentials (
   id                       UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  pool_id                  UUID        NOT NULL REFERENCES ai_credential_pools (id) ON DELETE CASCADE,
+  pool_id                  UUID        NOT NULL,
   name                     TEXT        NOT NULL,
   provider_type            TEXT        NOT NULL
     CHECK (provider_type IN ('codex', 'claude_oauth', 'gemini_cli', 'antigravity')),
@@ -134,14 +134,13 @@ CREATE INDEX IF NOT EXISTS idx_oauth_cred_expires
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_upstream_deployments (
   id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  endpoint_id          UUID        NOT NULL REFERENCES ai_provider_endpoints (id),
-  name                 TEXT        NOT NULL,
+  endpoint_id          UUID        NOT NULL,
   upstream_model       TEXT        NOT NULL,
   capability_type      TEXT        NOT NULL DEFAULT 'chat',
   upstream_protocol    TEXT        NOT NULL DEFAULT 'openai_chat',
   request_path         TEXT,
   upstream_parameters  JSONB       NOT NULL DEFAULT '{}',
-  tags                 JSONB       NOT NULL DEFAULT '{}',
+  pricing              JSONB       NOT NULL DEFAULT '{}',
   health_status        TEXT        NOT NULL DEFAULT 'unknown',
   last_health_check_at TIMESTAMPTZ,
   last_health_error    TEXT,
@@ -193,11 +192,11 @@ CREATE INDEX IF NOT EXISTS idx_ai_models_capability ON ai_models (capability_typ
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_model_routes (
   id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id               UUID        NOT NULL REFERENCES ai_models (id),
+  model_id               UUID        NOT NULL,
   -- Deployment-based route (API Key 型上游)
-  upstream_deployment_id UUID        REFERENCES ai_upstream_deployments (id),
+  upstream_deployment_id UUID,
   -- Pool-based route (OAuth Fixed Provider)
-  credential_pool_id     UUID        REFERENCES ai_credential_pools (id),
+  credential_pool_id     UUID,
   pool_upstream_model    TEXT,       -- 打到上游的模型名（pool 路由时必填）
   priority               INTEGER     NOT NULL DEFAULT 100 CHECK (priority >= 0),
   weight                 INTEGER     NOT NULL DEFAULT 100 CHECK (weight >= 0),
@@ -226,7 +225,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_model_routes_pool       ON ai_model_routes (cr
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_model_prices (
   id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id                     UUID        NOT NULL UNIQUE REFERENCES ai_models (id),
+  model_id                     UUID        NOT NULL UNIQUE,
   input_price_per_1m           BIGINT      NOT NULL DEFAULT 0,
   output_price_per_1m          BIGINT      NOT NULL DEFAULT 0,
   cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
@@ -253,7 +252,7 @@ CREATE TABLE IF NOT EXISTS ai_model_prices (
 CREATE TABLE IF NOT EXISTS ai_tenant_model_price_overrides (
   id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id                    TEXT        NOT NULL,
-  model_id                     UUID        NOT NULL REFERENCES ai_models (id),
+  model_id                     UUID        NOT NULL,
   input_price_per_1m           BIGINT      NOT NULL DEFAULT 0,
   output_price_per_1m          BIGINT      NOT NULL DEFAULT 0,
   cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
@@ -285,7 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_tenant_model_price_overrides_lookup
 CREATE TABLE IF NOT EXISTS ai_tenant_user_prices (
   id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id                    TEXT        NOT NULL,
-  model_id                     UUID        NOT NULL REFERENCES ai_models (id),
+  model_id                     UUID        NOT NULL,
   input_price_per_1m           BIGINT      NOT NULL DEFAULT 0,
   output_price_per_1m          BIGINT      NOT NULL DEFAULT 0,
   cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
@@ -312,45 +311,12 @@ CREATE INDEX IF NOT EXISTS idx_ai_tenant_user_prices_lookup
   ON ai_tenant_user_prices (tenant_id, model_id);
 
 -- ============================================================================
--- AI Upstream Deployment Cost Prices (上游成本价，用于利润核算)
--- cache_read_cost 远低于 input_cost，差价是平台盈利来源
--- ============================================================================
-CREATE TABLE IF NOT EXISTS ai_upstream_deployment_cost_prices (
-  id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  upstream_deployment_id  UUID        NOT NULL REFERENCES ai_upstream_deployments (id),
-  capability_type         TEXT        NOT NULL DEFAULT 'chat',
-  currency                TEXT        NOT NULL DEFAULT 'CNY_CREDITS',
-  input_cost_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  output_cost_per_1m      BIGINT      NOT NULL DEFAULT 0,
-  cache_write_cost_per_1m BIGINT      NOT NULL DEFAULT 0,
-  cache_read_cost_per_1m  BIGINT      NOT NULL DEFAULT 0,
-  reasoning_cost_per_1m   BIGINT      NOT NULL DEFAULT 0,
-  request_cost            BIGINT      NOT NULL DEFAULT 0,
-  image_cost              BIGINT      NOT NULL DEFAULT 0,
-  image_size_prices       JSONB       NOT NULL DEFAULT '{}',
-  video_cost_per_second   BIGINT      NOT NULL DEFAULT 0,
-  effective_from          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status                  TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (capability_type IN ('chat', 'image', 'video', 'embedding', 'audio_tts', 'audio_stt', 'rerank')),
-  CONSTRAINT ai_upstream_deployment_cost_prices_nonnegative CHECK (
-    input_cost_per_1m >= 0 AND output_cost_per_1m >= 0
-    AND cache_write_cost_per_1m >= 0 AND cache_read_cost_per_1m >= 0
-    AND reasoning_cost_per_1m >= 0
-    AND request_cost >= 0 AND image_cost >= 0 AND video_cost_per_second >= 0
-  )
-);
-
-CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployment_cost_prices_lookup
-  ON ai_upstream_deployment_cost_prices (upstream_deployment_id, status, effective_from DESC);
-
--- ============================================================================
 -- AI Tenant Model Grants (租户级模型授权)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_tenant_model_grants (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id  TEXT        NOT NULL,
-  model_id   UUID        NOT NULL REFERENCES ai_models (id),
+  model_id   UUID        NOT NULL,
   status     TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -367,7 +333,7 @@ CREATE TABLE IF NOT EXISTS ai_user_model_grants (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id  TEXT        NOT NULL,
   user_id    TEXT        NOT NULL,
-  model_id   UUID        NOT NULL REFERENCES ai_models (id),
+  model_id   UUID        NOT NULL,
   status     TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -422,8 +388,8 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   first_token_latency_ms INTEGER,
   error_code             TEXT,
   error_message          TEXT,
-  oauth_credential_id    UUID        REFERENCES ai_provider_oauth_credentials (id),
-  credential_pool_id     UUID        REFERENCES ai_credential_pools (id),
+  oauth_credential_id    UUID,
+  credential_pool_id     UUID,
   usage_estimated        BOOLEAN     NOT NULL DEFAULT false,
   usage_source           TEXT        NOT NULL DEFAULT 'upstream',
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -524,8 +490,8 @@ CREATE TABLE IF NOT EXISTS ai_conversation_bindings (
   tenant_id              TEXT        NOT NULL,
   identity_id            TEXT        NOT NULL,
   model_id               UUID        NOT NULL,
-  upstream_deployment_id UUID        NOT NULL REFERENCES ai_upstream_deployments (id),
-  endpoint_id            UUID        NOT NULL REFERENCES ai_provider_endpoints (id),
+  upstream_deployment_id UUID        NOT NULL,
+  endpoint_id            UUID        NOT NULL,
   expires_at             TIMESTAMPTZ NOT NULL,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -628,7 +594,7 @@ ALTER TABLE ai_usage_logs
 -- upstream_body / raw_client_body are AES-GCM encrypted (BYTEA).
 CREATE TABLE IF NOT EXISTS ai_request_payloads (
   id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  usage_log_id      UUID        REFERENCES ai_usage_logs(id) ON DELETE CASCADE,
+  usage_log_id      UUID,
   upstream_body     BYTEA,
   upstream_response BYTEA,
   raw_client_body   BYTEA,
