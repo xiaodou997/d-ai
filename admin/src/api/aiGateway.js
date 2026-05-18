@@ -525,3 +525,17 @@ export function getOAuthPoolHealth() {
 export function getSystemStatus() {
   return gatewayRequest.get('/api/v1/system/status')
 }
+
+// P4: Route scorer weights
+export function getRouteWeights(scope = 'global') {
+  return gatewayRequest.get(`/api/v1/route-weights/${scope}`)
+}
+
+export function putRouteWeights(scope = 'global', weights) {
+  return gatewayRequest.put(`/api/v1/route-weights/${scope}`, weights)
+}
+
+// P4: Replay usage log
+export function replayUsageLog(usageLogId) {
+  return gatewayRequest.post(`/api/v1/usage-logs/${usageLogId}/replay`)
+}

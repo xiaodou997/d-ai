@@ -105,36 +105,30 @@ func fromCreateProviderEndpoint(r dbgen.CreateProviderEndpointRow) providerEndpo
 }
 
 type listProviderEndpointDTO struct {
-	ID                pgtype.UUID     `json:"id"`
-	ProviderID        pgtype.UUID     `json:"provider_id"`
-	Name              string          `json:"name"`
-	BaseUrl           string          `json:"base_url"`
-	ExtraHeaders      json.RawMessage `json:"extra_headers"`
-	Weight            int32           `json:"weight"`
-	TimeoutMs         int32           `json:"timeout_ms"`
-	AuthType          string          `json:"auth_type"`
-	FixedProviderType pgtype.Text     `json:"fixed_provider_type"`
-	OauthStrategy     string          `json:"oauth_strategy"`
-	Status            string          `json:"status"`
-	CreatedAt         *int64          `json:"created_at"`
-	UpdatedAt         *int64          `json:"updated_at"`
+	ID           pgtype.UUID     `json:"id"`
+	ProviderID   pgtype.UUID     `json:"provider_id"`
+	Name         string          `json:"name"`
+	BaseUrl      string          `json:"base_url"`
+	ExtraHeaders json.RawMessage `json:"extra_headers"`
+	Weight       int32           `json:"weight"`
+	TimeoutMs    int32           `json:"timeout_ms"`
+	Status       string          `json:"status"`
+	CreatedAt    *int64          `json:"created_at"`
+	UpdatedAt    *int64          `json:"updated_at"`
 }
 
 func fromListProviderEndpoint(r dbgen.ListProviderEndpointsRow) listProviderEndpointDTO {
 	return listProviderEndpointDTO{
-		ID:                r.ID,
-		ProviderID:        r.ProviderID,
-		Name:              r.Name,
-		BaseUrl:           r.BaseUrl,
-		ExtraHeaders:      rawJSON(r.ExtraHeaders),
-		Weight:            r.Weight,
-		TimeoutMs:         r.TimeoutMs,
-		AuthType:          r.AuthType,
-		FixedProviderType: r.FixedProviderType,
-		OauthStrategy:     r.OauthStrategy,
-		Status:            r.Status,
-		CreatedAt:         millis(r.CreatedAt),
-		UpdatedAt:         millis(r.UpdatedAt),
+		ID:           r.ID,
+		ProviderID:   r.ProviderID,
+		Name:         r.Name,
+		BaseUrl:      r.BaseUrl,
+		ExtraHeaders: rawJSON(r.ExtraHeaders),
+		Weight:       r.Weight,
+		TimeoutMs:    r.TimeoutMs,
+		Status:       r.Status,
+		CreatedAt:    millis(r.CreatedAt),
+		UpdatedAt:    millis(r.UpdatedAt),
 	}
 }
 

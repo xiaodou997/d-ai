@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/rand"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 
 	dbgen "uni-ai-api/backend/internal/db/gen"
 	"uni-ai-api/backend/internal/domain"
@@ -18,10 +17,6 @@ import (
 	"uni-ai-api/backend/internal/serving"
 )
 
-const (
-	conversationBindingTTL = 24 * time.Hour
-	conversationKeyPrefix  = "uni_ai_api:conv:"
-)
 
 // routeRow holds one resolved route from the dual-source UNION query.
 // All pointer fields are NULL for the route type that doesn't apply.
@@ -52,6 +47,10 @@ type routeRow struct {
 	PoolUpstreamModel *string
 	FixedProviderType *string
 	OAuthStrategy     *string
+
+	// P3 scoring hints
+	CostPer1kTokens      float64
+	ScoreWeightsOverride []byte // JSONB or NULL
 }
 
 // listRoutesForModel fetches all active routes for a model, supporting both
@@ -81,7 +80,9 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  NULL::text       AS pool_id,
 		  NULL::text       AS pool_upstream_model,
 		  NULL::text       AS fixed_provider_type,
-		  NULL::text       AS oauth_strategy
+		  NULL::text       AS oauth_strategy,
+		  r.cost_per_1k_tokens,
+		  r.score_weights_override
 		FROM ai_model_routes r
 		JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
 		JOIN ai_provider_endpoints   e  ON e.id  = ud.endpoint_id
@@ -119,7 +120,9 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  cp.id::text      AS pool_id,
 		  r.pool_upstream_model,
 		  cp.fixed_provider_type,
-		  cp.oauth_strategy
+		  cp.oauth_strategy,
+		  r.cost_per_1k_tokens,
+		  r.score_weights_override
 		FROM ai_model_routes r
 		JOIN ai_credential_pools cp ON cp.id = r.credential_pool_id
 		WHERE r.model_id             = $1
@@ -145,18 +148,13 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 			&r.EndpointID, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.TimeoutMs, &r.EndpointWeight, &r.ProviderCode,
 			&r.PoolID, &r.PoolUpstreamModel, &r.FixedProviderType, &r.OAuthStrategy,
+			&r.CostPer1kTokens, &r.ScoreWeightsOverride,
 		); err != nil {
 			return nil, fmt.Errorf("scan route row: %w", err)
 		}
 		out = append(out, r)
 	}
 	return out, pgRows.Err()
-}
-
-// conversationBinding stores sticky routing state in Redis.
-type conversationBinding struct {
-	DeploymentID string `json:"deployment_id"`
-	EndpointID   string `json:"endpoint_id"`
 }
 
 // RouteSelector loads all healthy routes for the requested model and selects
@@ -167,8 +165,7 @@ type RouteSelector struct {
 	pool         *pgxpool.Pool
 	masterKey    string
 	grantChecker *ModelGrantChecker
-	breaker      *routing.CircuitBreaker
-	redis        *redis.Client
+	health       routing.HealthTracker
 	oauthCreds   *OAuthCredentialStore
 }
 
@@ -178,8 +175,13 @@ func NewRouteSelector(q *dbgen.Queries, pool *pgxpool.Pool, masterKey string, gc
 		pool:         pool,
 		masterKey:    masterKey,
 		grantChecker: gc,
-		breaker:      routing.NewCircuitBreaker(routing.DefaultBreakerConfig()),
 	}
+}
+
+// WithHealth injects the shared HealthTracker (must be called before serving).
+func (s *RouteSelector) WithHealth(h routing.HealthTracker) *RouteSelector {
+	s.health = h
+	return s
 }
 
 func (s *RouteSelector) WithOAuthCredentialStore(store *OAuthCredentialStore) *RouteSelector {
@@ -187,79 +189,56 @@ func (s *RouteSelector) WithOAuthCredentialStore(store *OAuthCredentialStore) *R
 	return s
 }
 
-func (s *RouteSelector) WithRedis(rdb *redis.Client) *RouteSelector {
-	s.redis = rdb
-	return s
-}
-
-// SelectRoute resolves model → routes and picks the best candidate.
-func (s *RouteSelector) SelectRoute(ctx context.Context, req *serving.Request) error {
+// SelectCandidates returns the ordered list of routes that may serve this
+// request. The caller (ExecuteStep) is responsible for picking one and
+// retrying on the rest. API keys for deployment routes are decrypted eagerly
+// so retries don't re-do the DB roundtrip.
+//
+// Sticky routing: if X-Conversation-Id maps to a known prior route via the
+// Redis binding, that candidate is moved to the head of the list. If no
+// binding exists, the first deployment-eligible candidate is written as the
+// sticky target for the next call. Pool credential selection itself is
+// deferred to ExecuteStep so that retries can swap credentials cleanly.
+func (s *RouteSelector) SelectCandidates(ctx context.Context, req *serving.Request) ([]*domain.RouteCandidate, error) {
 	model, err := s.grantChecker.resolveModelID(ctx,
 		req.APIKey.TenantID, req.ModelCode, string(req.CapabilityType))
 	if err != nil {
-		return fmt.Errorf("resolve model id: %w", err)
+		return nil, fmt.Errorf("resolve model id: %w", err)
 	}
 
 	rows, err := s.listRoutesForModel(ctx, mustParseUUID(model.ID))
 	if err != nil {
-		return fmt.Errorf("list routes: %w", err)
+		return nil, fmt.Errorf("list routes: %w", err)
 	}
 	if len(rows) == 0 {
-		return fmt.Errorf("no healthy routes for model %q", req.ModelCode)
-	}
-
-	// Filter circuit-broken deployment routes (pool routes skip CB).
-	rows = s.filterOpenCircuits(rows)
-	if len(rows) == 0 {
-		return fmt.Errorf("all routes for model %q are circuit-broken", req.ModelCode)
+		return nil, fmt.Errorf("no routes for model %q", req.ModelCode)
 	}
 
 	if req.IsStream {
 		rows = filterStreamable(rows)
-		if len(rows) == 0 {
-			return fmt.Errorf("no streaming-capable routes for model %q", req.ModelCode)
-		}
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("no healthy routes for model %q", req.ModelCode)
 	}
 
-	// Sticky routing only for deployment-based routes.
-	var row routeRow
-	stickyKey := s.conversationKey(req)
-	if stickyKey != "" {
-		if pinned, ok := s.getStickyRoute(ctx, rows, stickyKey); ok {
-			row = pinned
-		} else {
-			group := lowestPriorityGroup(rows)
-			row = weightedSelectRoute(group)
-			if row.DeploymentID != nil {
-				s.setStickyRoute(ctx, stickyKey, row)
+	candidates := make([]*domain.RouteCandidate, 0, len(rows))
+	for _, row := range rows {
+		c := s.buildCandidate(model.ID, row)
+		if !c.IsPoolRoute() && c.APIKeyCiphertext != "" {
+			key, derr := secret.DecryptProviderKey(s.masterKey, c.APIKeyCiphertext)
+			if derr != nil {
+				slog.WarnContext(ctx, "decrypt api key failed, skipping route",
+					"route_id", c.RouteID, "error", derr)
+				continue
 			}
+			c.APIKeyCiphertext = key
 		}
-	} else {
-		group := lowestPriorityGroup(rows)
-		row = weightedSelectRoute(group)
+		candidates = append(candidates, c)
 	}
-
-	req.Candidate = s.buildCandidate(model.ID, row)
-
-	if req.Candidate.IsPoolRoute() && s.oauthCreds != nil {
-		cred, err := s.oauthCreds.SelectCredentialFromPool(ctx, row.strVal(row.PoolID), row.strVal(row.OAuthStrategy))
-		if err != nil {
-			return fmt.Errorf("select oauth credential: %w", err)
-		}
-		req.SelectedCredential = cred
-		return nil
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no usable candidates for model %q", req.ModelCode)
 	}
-
-	// Deployment-based: decrypt API key.
-	if row.APIKeyCiphertext != nil && *row.APIKeyCiphertext != "" {
-		key, err := secret.DecryptProviderKey(s.masterKey, *row.APIKeyCiphertext)
-		if err != nil {
-			return fmt.Errorf("decrypt api key: %w", err)
-		}
-		req.Candidate.APIKeyCiphertext = key
-	}
-
-	return nil
+	return candidates, nil
 }
 
 func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.RouteCandidate {
@@ -269,10 +248,19 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 		Weight:         int(row.RouteWeight),
 		SupportsStream: row.SupportsStream,
 		ModelID:        modelID,
+		// P3 scoring hints
+		CostPer1kTokens: row.CostPer1kTokens,
+	}
+	if len(row.ScoreWeightsOverride) > 0 {
+		var m map[string]float64
+		if err := json.Unmarshal(row.ScoreWeightsOverride, &m); err == nil {
+			c.ScoreWeightsOverride = m
+		}
 	}
 
 	if row.PoolID != nil {
-		// Pool-based route
+		// Pool-based route — cost is 0 (free/OAuth), scorer will use costCapFree.
+		c.CostPer1kTokens = 0
 		c.PoolID = *row.PoolID
 		c.PoolUpstreamModel = row.strVal(row.PoolUpstreamModel)
 		c.FixedProviderType = domain.FixedProviderType(row.strVal(row.FixedProviderType))
@@ -310,39 +298,15 @@ func (r routeRow) strVal(s *string) string {
 	return *s
 }
 
-func (s *RouteSelector) RecordSuccess(deploymentID string) {
-	s.breaker.RecordSuccess(deploymentID)
-}
-
-func (s *RouteSelector) RecordFailure(ctx context.Context, deploymentID string, errMsg string) {
-	tripped := s.breaker.RecordFailure(deploymentID)
-	if tripped {
-		go func() {
-			_ = s.q.UpdateDeploymentHealth(context.Background(), dbgen.UpdateDeploymentHealthParams{
-				ID:              mustParseUUID(deploymentID),
-				HealthStatus:    string(domain.HealthUnhealthy),
-				LastHealthError: pgtype.Text{String: errMsg, Valid: true},
-			})
-		}()
+// HealthSnapshot returns a read-only view of all tracked health states for
+// the admin /system/status endpoint.
+func (s *RouteSelector) HealthSnapshot() []routing.HealthRecord {
+	if s.health == nil {
+		return nil
 	}
+	return s.health.Snapshot()
 }
 
-func (s *RouteSelector) BreakerSnapshot() []routing.BreakerState {
-	return s.breaker.ListStates()
-}
-
-// filterOpenCircuits removes deployment routes with open circuit breakers.
-// Pool routes always pass through (CB not applicable).
-func (s *RouteSelector) filterOpenCircuits(rows []routeRow) []routeRow {
-	out := rows[:0]
-	for _, r := range rows {
-		if r.DeploymentID != nil && s.breaker.IsOpen(*r.DeploymentID) {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out
-}
 
 func filterStreamable(rows []routeRow) []routeRow {
 	out := rows[:0]
@@ -394,52 +358,3 @@ func weightedSelectRoute(rows []routeRow) routeRow {
 	return rows[len(rows)-1]
 }
 
-// ============================================================================
-// Sticky routing helpers (deployment routes only)
-// ============================================================================
-
-func (s *RouteSelector) conversationKey(req *serving.Request) string {
-	if s.redis == nil || req.ConversationID == "" || req.APIKey == nil {
-		return ""
-	}
-	identity := req.APIKey.TenantID
-	if req.APIKey.UserID != "" {
-		identity = req.APIKey.UserID
-	}
-	return conversationKeyPrefix + req.APIKey.TenantID + ":" + identity + ":" + req.ModelCode + ":" + req.ConversationID
-}
-
-func (s *RouteSelector) getStickyRoute(ctx context.Context, rows []routeRow, key string) (routeRow, bool) {
-	if s.redis == nil {
-		return routeRow{}, false
-	}
-	raw, err := s.redis.Get(ctx, key).Result()
-	if err != nil {
-		return routeRow{}, false
-	}
-	var binding conversationBinding
-	if err := json.Unmarshal([]byte(raw), &binding); err != nil {
-		return routeRow{}, false
-	}
-	for _, r := range rows {
-		if r.DeploymentID != nil && *r.DeploymentID == binding.DeploymentID &&
-			r.EndpointID != nil && *r.EndpointID == binding.EndpointID {
-			return r, true
-		}
-	}
-	return routeRow{}, false
-}
-
-func (s *RouteSelector) setStickyRoute(ctx context.Context, key string, row routeRow) {
-	if s.redis == nil || row.DeploymentID == nil {
-		return
-	}
-	value, err := json.Marshal(conversationBinding{
-		DeploymentID: *row.DeploymentID,
-		EndpointID:   row.strVal(row.EndpointID),
-	})
-	if err != nil {
-		return
-	}
-	_ = s.redis.Set(ctx, key, value, conversationBindingTTL).Err()
-}

@@ -113,9 +113,6 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
-  auth_type,
-  fixed_provider_type,
-  oauth_strategy,
   status,
   created_at,
   updated_at
@@ -643,15 +640,9 @@ INSERT INTO ai_model_routes (
   $1, $2, $3, $4, $5, $6
 )
 RETURNING
-  id,
-  model_id,
-  upstream_deployment_id,
-  priority,
-  weight,
-  supports_stream,
-  status,
-  created_at,
-  updated_at;
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled;
 
 -- name: ListModelRoutes :many
 SELECT
@@ -684,17 +675,11 @@ ORDER BY r.priority ASC, r.weight DESC, p.code ASC, e.name ASC;
 
 -- name: GetModelRoute :one
 SELECT
-  r.id,
-  r.model_id,
-  r.upstream_deployment_id,
-  r.priority,
-  r.weight,
-  r.supports_stream,
-  r.status,
-  r.created_at,
-  r.updated_at
-FROM ai_model_routes r
-WHERE r.id = $1;
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled
+FROM ai_model_routes
+WHERE id = $1;
 
 -- name: UpdateModelRouteStatus :one
 UPDATE ai_model_routes
@@ -703,15 +688,9 @@ SET status = $3,
 WHERE model_id = $1
   AND id = $2
 RETURNING
-  id,
-  model_id,
-  upstream_deployment_id,
-  priority,
-  weight,
-  supports_stream,
-  status,
-  created_at,
-  updated_at;
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled;
 
 -- name: UpdateModelRoute :one
 UPDATE ai_model_routes
@@ -724,15 +703,9 @@ SET upstream_deployment_id = $3,
 WHERE model_id = $1
   AND id = $2
 RETURNING
-  id,
-  model_id,
-  upstream_deployment_id,
-  priority,
-  weight,
-  supports_stream,
-  status,
-  created_at,
-  updated_at;
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled;
 
 -- ============================================================================
 -- Tenant Model Grants CRUD
@@ -1230,9 +1203,9 @@ SELECT
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
-  AND ($4 = '' OR user_id = $4)
-  AND ($5 = '' OR model_code = $5)
-  AND ($6 = '' OR request_status = $6)
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
+  AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 

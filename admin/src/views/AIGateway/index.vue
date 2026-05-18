@@ -15,6 +15,7 @@ const pageDescription = computed(() => {
   if (route.path.endsWith('/limits')) return '维护租户、用户和 Key 级限流策略。'
   if (route.path.endsWith('/credential-pools')) return '管理 Codex / Claude OAuth / Gemini CLI 的 OAuth Token 账号池。'
   if (route.path.endsWith('/audit')) return '追踪 AI Gateway 后台配置变更。'
+  if (route.path.endsWith('/routing')) return '配置多维评分路由权重（cost / latency / load / health），调整 Softmax 选路倾向。'
   return authStore.isPlatformAdmin ? '统一维护 AI Gateway 业务能力。' : '管理你的模型授权、API Key 和调用记录。'
 })
 </script>

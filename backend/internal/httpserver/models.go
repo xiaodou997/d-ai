@@ -3,6 +3,9 @@ package httpserver
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
+
+	"uni-ai-api/backend/internal/domain"
 )
 
 type modelsResponse struct {
@@ -16,17 +19,39 @@ type modelItem struct {
 	OwnedBy string `json:"owned_by"`
 }
 
+// Anthropic /v1/models response shape.
+type anthropicModelsResponse struct {
+	Data    []anthropicModelItem `json:"data"`
+	HasMore bool                 `json:"has_more"`
+	FirstID string               `json:"first_id,omitempty"`
+	LastID  string               `json:"last_id,omitempty"`
+}
+
+type anthropicModelItem struct {
+	Type        string `json:"type"`         // "model"
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	CreatedAt   string `json:"created_at"`
+}
+
 func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 	auth, ok := runtimeAuthFromContext(r.Context())
 	if !ok {
-		writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key.", "invalid_api_key", "invalid_api_key")
+		writeRuntimeErrorByProtocol(w, clientProtoFromRequest(r),
+			http.StatusUnauthorized, "Invalid API key.", "invalid_api_key")
 		return
 	}
 
 	models, err := s.callableModels(r, auth)
 	if err != nil {
 		s.logger.Error("list models failed", "error", err, "request_id", requestIDFromContext(r.Context()))
-		writeOpenAIError(w, http.StatusInternalServerError, "Failed to list models.", "server_error", "server_error")
+		writeRuntimeErrorByProtocol(w, clientProtoFromRequest(r),
+			http.StatusInternalServerError, "Failed to list models.", "server_error")
+		return
+	}
+
+	if clientProtoFromRequest(r) == domain.ProtocolAnthropicMessages {
+		writeJSON(w, http.StatusOK, buildAnthropicModelsResponse(models))
 		return
 	}
 
@@ -38,11 +63,39 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 			OwnedBy: "uni-ai-api",
 		})
 	}
+	writeJSON(w, http.StatusOK, modelsResponse{Object: "list", Data: items})
+}
 
-	writeJSON(w, http.StatusOK, modelsResponse{
-		Object: "list",
-		Data:   items,
-	})
+// clientProtoFromRequest infers the wire protocol the caller expects on
+// endpoints that don't carry a body (GET /v1/models, errors, etc.) by sniffing
+// the User-Agent. Anthropic SDKs and Claude Code identify themselves; the
+// `anthropic-version` header is also a strong signal.
+func clientProtoFromRequest(r *http.Request) domain.UpstreamProtocol {
+	if r.Header.Get("anthropic-version") != "" {
+		return domain.ProtocolAnthropicMessages
+	}
+	ua := strings.ToLower(r.Header.Get("User-Agent"))
+	if strings.Contains(ua, "anthropic") || strings.Contains(ua, "claude") {
+		return domain.ProtocolAnthropicMessages
+	}
+	return domain.ProtocolOpenAIChat
+}
+
+func buildAnthropicModelsResponse(codes []string) anthropicModelsResponse {
+	items := make([]anthropicModelItem, 0, len(codes))
+	for _, c := range codes {
+		items = append(items, anthropicModelItem{
+			Type:        "model",
+			ID:          c,
+			DisplayName: c,
+		})
+	}
+	resp := anthropicModelsResponse{Data: items}
+	if len(items) > 0 {
+		resp.FirstID = items[0].ID
+		resp.LastID = items[len(items)-1].ID
+	}
+	return resp
 }
 
 // callableModels - only check tenant grant, no user grant required

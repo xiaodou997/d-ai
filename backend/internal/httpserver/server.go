@@ -20,11 +20,18 @@ import (
 	dbgen "uni-ai-api/backend/internal/db/gen"
 	"uni-ai-api/backend/internal/domain"
 	"uni-ai-api/backend/internal/observability/metrics"
+	"uni-ai-api/backend/internal/routing"
 	"uni-ai-api/backend/internal/serving"
 	"uni-ai-api/backend/internal/tokenrefresh"
 	"uni-ai-api/backend/internal/transport"
 	"uni-ai-api/backend/internal/urm"
 )
+
+// stickyStoreAdapter adapts redisadapter.RedisSticky to serving.stickyWriter
+// without creating an import cycle. RedisSticky already implements routing.StickyStore
+// which is the interface used by RouteCandidatesStep. ExecuteStep uses stickyWriter
+// (a subset of routing.StickyStore); both are satisfied by *redisadapter.RedisSticky.
+
 
 
 type Config struct {
@@ -66,9 +73,11 @@ type Server struct {
 	jwksValidator jwksValidator
 	banSubscriber banChecker
 	httpClient    *http.Client
-	oauthCreds      *pgadapter.OAuthCredentialStore
-	tokenRefresher  *tokenrefresh.Refresher
-	routeSelector   *pgadapter.RouteSelector
+	oauthCreds        *pgadapter.OAuthCredentialStore
+	tokenRefresher    *tokenrefresh.Refresher
+	routeSelector     *pgadapter.RouteSelector
+	routeWeightsStore *pgadapter.RouteWeightsStore
+	payloadStore      *pgadapter.PayloadStore // optional; nil when masterKey is empty
 
 	// Serving pipeline — shared across requests (steps are stateless)
 	pipeline *serving.Pipeline
@@ -84,9 +93,17 @@ func New(cfg Config) *Server {
 	oauthCreds := pgadapter.NewOAuthCredentialStore(cfg.Postgres, cfg.Security.ProviderKeyMaster)
 	routeSelector := pgadapter.NewRouteSelector(q, cfg.Postgres, cfg.Security.ProviderKeyMaster, grantChecker).
 		WithOAuthCredentialStore(oauthCreds)
+
+	// Build the shared HealthTracker. With Redis: multi-node sync via Pub/Sub.
+	// Without Redis: single-node in-memory only.
+	innerTracker := routing.DefaultInMemoryTracker()
+	var healthTracker routing.HealthTracker = innerTracker
 	if cfg.Redis != nil {
-		routeSelector.WithRedis(cfg.Redis)
+		rht := routing.NewRedisHealthTracker(innerTracker, cfg.Redis)
+		go rht.Start(context.Background())
+		healthTracker = rht
 	}
+	routeSelector.WithHealth(healthTracker)
 	priceResolver := pgadapter.NewPriceResolver(q)
 	gw := metrics.NewGateway()
 
@@ -106,19 +123,51 @@ func New(cfg Config) *Server {
 		)
 	}
 
+	// P3: multi-dim scorer. RouteStats backed by Redis when available; otherwise
+	// the scorer degrades to priority+weighted random.
+	routeWeightsStore := pgadapter.NewRouteWeightsStore(cfg.Postgres)
+	var routeStats routing.RouteStatsStore = routing.NoopRouteStats{}
+	if cfg.Redis != nil {
+		routeStats = redisadapter.NewRedisRouteStats(cfg.Redis)
+	}
+	scorer := &serving.MultiDimScorer{
+		Health:  healthTracker,
+		Stats:   routeStats,
+		Weights: routeWeightsStore,
+	}
+
+	// P4: Sticky routing backed by Redis (disabled gracefully when Redis is nil).
+	var stickyStore routing.StickyStore
+	if cfg.Redis != nil {
+		stickyStore = redisadapter.NewRedisSticky(cfg.Redis)
+	}
+
+	// P4: Payload store for failed-request body persistence.
+	var payloadStore *pgadapter.PayloadStore
+	if cfg.Security.ProviderKeyMaster != "" {
+		payloadStore = pgadapter.NewPayloadStore(cfg.Postgres, cfg.Security.ProviderKeyMaster)
+	}
+
+	usageLogger := pgadapter.NewUsageLogger(q)
+	if payloadStore != nil {
+		usageLogger.SetPayloadStore(payloadStore)
+	}
+
 	s := &Server{
-		postgres:      cfg.Postgres,
-		redis:         cfg.Redis,
-		logger:        cfg.Logger,
-		queries:       q,
-		security:      cfg.Security,
-		urmClient:     cfg.URM,
-		urmClientID:   cfg.URMClientID,
-		jwksValidator: cfg.JWKSValidator,
-		banSubscriber: cfg.BanSubscriber,
-		oauthCreds:     oauthCreds,
-		tokenRefresher: tokenrefresh.New(oauthCreds, cfg.Logger),
-		routeSelector:  routeSelector,
+		postgres:          cfg.Postgres,
+		redis:             cfg.Redis,
+		logger:            cfg.Logger,
+		queries:           q,
+		security:          cfg.Security,
+		urmClient:         cfg.URM,
+		urmClientID:       cfg.URMClientID,
+		jwksValidator:     cfg.JWKSValidator,
+		banSubscriber:     cfg.BanSubscriber,
+		oauthCreds:        oauthCreds,
+		tokenRefresher:    tokenrefresh.New(oauthCreds, cfg.Logger),
+		routeSelector:     routeSelector,
+		routeWeightsStore: routeWeightsStore,
+		payloadStore:      payloadStore,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -126,17 +175,21 @@ func New(cfg Config) *Server {
 			&serving.AuthNStep{Resolver: pgadapter.NewAPIKeyResolver(q)},
 			&serving.AuthZStep{Checker: grantChecker},
 			&serving.QuotaCheckStep{},
-			&serving.RouteSelectStep{Selector: routeSelector},
+			&serving.RouteCandidatesStep{Selector: routeSelector, Sticky: stickyStore},
 			&serving.RateLimitStep{Limiter: rateLimiter},
 			&serving.QuotaReserveStep{Reserver: pgadapter.NewQuotaReserver(q)},
 			&serving.URMFreezeStep{Biller: urmBiller},
 			&serving.ExecuteStep{
 				Transport: transport.NewClient(120 * time.Second),
-				Breaker:   routeSelector,
+				Health:    healthTracker,
 				OAuthPool: oauthCreds,
+				Budget:    serving.DefaultRetryBudget(),
+				Scorer:    scorer,
+				Stats:     routeStats,
+				Sticky:    stickyStore,
 			},
 			&serving.URMConfirmStep{Biller: urmBiller},
-			&serving.UsageLogStep{Logger: pgadapter.NewUsageLogger(q), Metrics: gw},
+			&serving.UsageLogStep{Logger: usageLogger, Metrics: gw},
 		),
 	}
 
@@ -202,6 +255,13 @@ func New(cfg Config) *Server {
 
 		// System status: DB/Redis health + circuit breaker snapshot
 		r.Get("/system/status", s.handleAdminSystemStatus)
+
+		// P3: route scorer weight config
+		r.Get("/route-weights/{scope}", s.handleAdminGetRouteWeights)
+		r.Put("/route-weights/{scope}", s.handleAdminPutRouteWeights)
+
+		// P4: request payload replay
+		r.Post("/usage-logs/{id}/replay", s.handleReplay)
 
 		// Credential pool management
 		r.Get("/credential-pools", s.handleAdminListCredentialPools)
@@ -289,6 +349,7 @@ func New(cfg Config) *Server {
 		r.Post("/embeddings", s.handleRuntime(domain.CapabilityEmbedding))
 		r.Post("/images/generations", s.handleRuntime(domain.CapabilityImage))
 		r.Post("/messages", s.handleRuntime(domain.CapabilityChat)) // Native Anthropic client path
+		r.Post("/messages/count_tokens", s.handleCountTokens)       // Anthropic count_tokens API
 	})
 
 	s.httpServer = &http.Server{
@@ -303,6 +364,9 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Start(addr string) error {
+	if s.payloadStore != nil {
+		s.payloadStore.StartCleanupJob(context.Background())
+	}
 	s.httpServer.Addr = addr
 	err := s.httpServer.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {

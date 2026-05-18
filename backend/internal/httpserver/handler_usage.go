@@ -29,9 +29,9 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		TenantID:      filters.tenantID,
 		Limit:         limit,
 		Offset:        0,
-		UserID:        filters.userID,
-		ModelCode:     filters.modelCode,
-		RequestStatus: filters.requestStatus,
+		UserID:        optionalTextValue(filters.userID),
+		ModelCode:     optionalTextValue(filters.modelCode),
+		RequestStatus: optionalTextValue(filters.requestStatus),
 	})
 	if err != nil {
 		s.writeAdminServerError(w, r, "list usage logs failed", err)

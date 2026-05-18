@@ -161,6 +161,10 @@ type RouteCandidate struct {
 	PoolUpstreamModel  string            // model name to send to the upstream
 	FixedProviderType  FixedProviderType // "codex" | "claude_oauth" | "gemini_cli" | "antigravity"
 	OAuthStrategy      string            // "round_robin" | "weighted"
+
+	// P3: scoring hints loaded from ai_model_routes
+	CostPer1kTokens    float64                // 0 for free/pool routes → scorer treats as very cheap
+	ScoreWeightsOverride map[string]float64   // nil = use global weights
 }
 
 // IsPoolRoute returns true when this route targets a CredentialPool (OAuth Fixed Provider).

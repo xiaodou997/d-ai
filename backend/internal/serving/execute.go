@@ -19,7 +19,15 @@ import (
 	"uni-ai-api/backend/internal/formats/claude"
 	"uni-ai-api/backend/internal/formats/gemini"
 	"uni-ai-api/backend/internal/formats/openai/responses"
+	"uni-ai-api/backend/internal/routing"
 )
+
+// stickyWriter writes a sticky binding after a successful upstream call.
+// The interface is satisfied by redis.RedisSticky; nil = feature disabled.
+type stickyWriter interface {
+	SetBinding(ctx context.Context, tenantID, identity, model, convID string, b *routing.StickyBinding) error
+	DeleteBinding(ctx context.Context, tenantID, identity, model, convID string) error
+}
 
 // OAuthCredentialPool handles credential lifecycle for OAuth upstreams.
 type OAuthCredentialPool interface {
@@ -29,23 +37,24 @@ type OAuthCredentialPool interface {
 	RecordFailure(ctx context.Context, credID, reason string)
 }
 
-// ExecuteStep forwards the request to the upstream and writes the response to
-// the HTTP client. It populates req.TokenUsage, req.HTTPStatus, etc.
+// ExecuteStep is the upstream call + retry loop. It pulls candidates from
+// req.Candidates, attempts them in order subject to RetryBudget, classifies
+// each outcome, and either retries with a different route, swaps the OAuth
+// credential, gives up (4xx), or relays the successful response to the client
+// via the protocol-appropriate Relay.
 type ExecuteStep struct {
-	Transport   Transporter
-	Breaker     CircuitBreakerNotifier // optional; nil = no circuit breaking
-	OAuthPool   OAuthCredentialPool   // optional; enables 401 retry for OAuth upstreams
+	Transport Transporter
+	Health    routing.HealthTracker   // optional; nil = no circuit breaking
+	OAuthPool OAuthCredentialPool     // optional; enables 401 credential swap
+	Budget    RetryBudget             // zero value falls back to DefaultRetryBudget
+	Scorer    RouteScorer             // optional; nil = first unused candidate (P1 behaviour)
+	Stats     routing.RouteStatsStore // optional; used for inflight tracking alongside scorer
+	Sticky    stickyWriter            // optional; writes/deletes sticky binding on success/failure
 }
 
 // Transporter makes the actual HTTP call to an upstream provider.
 type Transporter interface {
 	Do(ctx context.Context, req *UpstreamRequest) (*UpstreamResponse, error)
-}
-
-// CircuitBreakerNotifier receives upstream call outcomes per deployment.
-type CircuitBreakerNotifier interface {
-	RecordSuccess(deploymentID string)
-	RecordFailure(ctx context.Context, deploymentID string, errMsg string)
 }
 
 // UpstreamRequest contains everything needed to call an upstream endpoint.
@@ -68,126 +77,406 @@ type UpstreamResponse struct {
 func (s *ExecuteStep) Name() string { return "execute" }
 
 func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
-	candidate := req.Candidate
-	if candidate == nil {
-		return fmt.Errorf("no route candidate")
+	if len(req.Candidates) == 0 {
+		return apiError(http.StatusServiceUnavailable, "no_available_route", "no route candidates")
+	}
+	if req.Envelope == nil || req.Envelope.W == nil {
+		return apiError(http.StatusInternalServerError, "missing_envelope", "request envelope not set")
 	}
 
-	body, err := buildUpstreamBody(req)
+	budget := s.Budget
+	if budget.MaxAttempts == 0 {
+		budget = DefaultRetryBudget()
+	}
+	deadline := time.Now().Add(budget.TotalTimeout)
+
+	body, err := s.prepareBody(req)
 	if err != nil {
 		return err
 	}
 	req.UpstreamBodySize = len(body)
 
-	resp, startTime, err := s.doUpstream(ctx, req, body)
-	if err != nil {
-		return err
-	}
-
-	// OAuth 401: mark credential invalid and retry once with a new one.
-	if resp.StatusCode == http.StatusUnauthorized && req.SelectedCredential != nil && s.OAuthPool != nil {
-		body401, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		_ = resp.Body.Close()
-
-		// Persist the first attempt's metrics so observability (and the
-		// breaker) see the 401 even when the retry succeeds and overwrites
-		// req.UpstreamStatus/LatencyMs further down.
-		req.UpstreamStatus = http.StatusUnauthorized
-		req.LatencyMs = int(time.Since(startTime).Milliseconds())
-		if s.Breaker != nil {
-			s.Breaker.RecordFailure(ctx, candidate.DeploymentID, "http 401")
+	var lastErr error
+	for attempt := 1; attempt <= budget.MaxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return apiError(http.StatusGatewayTimeout, "client_disconnected", err.Error())
 		}
 
-		oldCredID := req.SelectedCredential.ID
-		slog.WarnContext(ctx, "upstream 401, retrying with new credential",
-			"old_cred_id", oldCredID,
-			"upstream_body", string(body401),
-		)
-		_ = s.OAuthPool.MarkInvalid(ctx, oldCredID, "upstream 401 unauthorized")
-		s.OAuthPool.RecordFailure(ctx, oldCredID, "401 unauthorized")
+		cand, score := s.pickCandidate(ctx, req)
+		if cand == nil {
+			break // exhausted all candidates
+		}
+		req.Candidate = cand
 
-		newCred, selectErr := s.OAuthPool.SelectCredentialFromPool(ctx, candidate.PoolID, candidate.OAuthStrategy)
-		if selectErr != nil {
-			return &APIError{
-				Status:  http.StatusServiceUnavailable,
-				Code:    "no_credential",
-				Message: "no available credential after 401 retry: " + selectErr.Error(),
+		// Pool routes: select a fresh credential per attempt so 401-swap and
+		// new-route paths both get a clean credential.
+		if cand.IsPoolRoute() && s.OAuthPool != nil && req.SelectedCredential == nil {
+			cred, selErr := s.OAuthPool.SelectCredentialFromPool(ctx, cand.PoolID, cand.OAuthStrategy)
+			if selErr != nil {
+				slog.WarnContext(ctx, "pool credential selection failed",
+					"pool_id", cand.PoolID, "error", selErr)
+				req.UsedCandidates[cand.RouteID] = true
+				lastErr = apiError(http.StatusServiceUnavailable, "no_credential", selErr.Error())
+				continue
+			}
+			req.SelectedCredential = cred
+		}
+
+		// 429 backoff: applies on retry only and only when the previous
+		// attempt was rate-limited.
+		if attempt > 1 && lastAttemptWas(req, ResultRateLimited) {
+			if delay := budget.BackoffFor(attempt); delay > 0 {
+				select {
+				case <-time.After(delay):
+				case <-ctx.Done():
+					return apiError(http.StatusGatewayTimeout, "client_disconnected", ctx.Err().Error())
+				}
 			}
 		}
-		req.SelectedCredential = newCred
-		resp, startTime, err = s.doUpstream(ctx, req, body)
-		if err != nil {
-			return err
+
+		// Rebuild body if the protocol/upstream model differs from the previous
+		// attempt (e.g. retry from openai_chat → anthropic_messages).
+		if attempt > 1 && candidateNeedsBodyRebuild(req, cand) {
+			newBody, berr := s.prepareBody(req)
+			if berr != nil {
+				return berr
+			}
+			body = newBody
+			req.UpstreamBodySize = len(body)
+		}
+
+		perTimeout := budget.PerAttemptTimeout(deadline, cand.TimeoutMs)
+		if perTimeout <= 0 {
+			lastErr = apiError(http.StatusGatewayTimeout, "retry_budget_exhausted", "no time remaining for upstream call")
+			break
+		}
+
+		result := s.runAttempt(ctx, req, cand, body, perTimeout, score)
+		if result.finished {
+			return result.finalErr
+		}
+		// Non-terminal outcomes — record and loop.
+		lastErr = result.finalErr
+		switch result.decision {
+		case DecisionRetryNewCred:
+			// Same route, fresh credential next iteration.
+			req.SelectedCredential = nil
+		case DecisionRetry:
+			req.UsedCandidates[cand.RouteID] = true
+			req.SelectedCredential = nil
 		}
 	}
-	defer resp.Body.Close()
 
-	req.UpstreamStatus = resp.StatusCode
-	req.LatencyMs = int(time.Since(startTime).Milliseconds())
-
-	deploymentID := candidate.DeploymentID
-
-	// Non-2xx from upstream
-	if resp.StatusCode >= 400 {
-		req.RequestStatus = domain.RequestFailed
-		req.HTTPStatus = resp.StatusCode
-		req.ErrorCode = "upstream_http_error"
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		req.ErrorMessage = truncateValidUTF8(string(bodyBytes), 1024)
-		if s.Breaker != nil {
-			s.Breaker.RecordFailure(ctx, deploymentID, fmt.Sprintf("http %d", resp.StatusCode))
-		}
-		if req.SelectedCredential != nil && s.OAuthPool != nil {
-			s.OAuthPool.RecordFailure(ctx, req.SelectedCredential.ID, fmt.Sprintf("http %d", resp.StatusCode))
-		}
-		return &APIError{
-			Status:  upstreamStatusToGateway(resp.StatusCode),
-			Code:    "upstream_error",
-			Message: "upstream returned error",
-		}
+	// Budget exhausted or candidates depleted.
+	req.RequestStatus = domain.RequestFailed
+	if req.ErrorCode == "" {
+		req.ErrorCode = "retry_budget_exhausted"
 	}
-
-	if s.Breaker != nil {
-		s.Breaker.RecordSuccess(deploymentID)
+	if lastErr != nil {
+		return lastErr
 	}
-	if req.SelectedCredential != nil && s.OAuthPool != nil {
-		s.OAuthPool.RecordSuccess(ctx, req.SelectedCredential.ID)
-	}
-
-	// Route to streaming or non-streaming execution
-	if req.IsStream {
-		return s.executeStream(ctx, req, resp, req.W, startTime)
-	}
-	return s.executeSync(ctx, req, resp, req.W)
+	return apiError(http.StatusBadGateway, "retry_budget_exhausted",
+		fmt.Sprintf("all %d upstream attempts failed", len(req.Attempts)))
 }
 
-// doUpstream builds headers, fires the upstream request, and returns the response.
-func (s *ExecuteStep) doUpstream(ctx context.Context, req *Request, body []byte) (*UpstreamResponse, time.Time, error) {
-	candidate := req.Candidate
-	upReq := &UpstreamRequest{
-		Method:   "POST",
-		URL:      buildURL(candidate, req.IsStream),
-		Headers:  buildHeaders(candidate, req),
-		Body:     body,
-		Timeout:  time.Duration(candidate.TimeoutMs) * time.Millisecond,
-		Protocol: candidate.Protocol,
+// attemptResult is what one runAttempt invocation tells the loop to do next.
+type attemptResult struct {
+	finished bool     // true = exit Execute, return finalErr (nil = success)
+	decision Decision // valid when finished=false
+	finalErr error    // success error (nil) when finished, otherwise lastErr to remember
+}
+
+// runAttempt executes one upstream call and handles the response. It owns the
+// per-attempt timeout context (defer cancel) so the Execute loop never leaks
+// a context. For the accept case the relay finishes BEFORE this function
+// returns, so cancel firing afterward is safe.
+func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *domain.RouteCandidate, body []byte, perTimeout time.Duration, score float64) attemptResult {
+	attemptCtx, cancel := context.WithTimeout(parentCtx, perTimeout)
+	defer cancel()
+
+	// P3: track inflight count; always decrement even on error.
+	if s.Stats != nil {
+		s.Stats.IncrInflight(parentCtx, cand.RouteID)
+		defer s.Stats.DecrInflight(parentCtx, cand.RouteID)
 	}
 
 	startTime := time.Now()
-	resp, err := s.Transport.Do(ctx, upReq)
-	if err != nil {
-		req.RequestStatus = domain.RequestFailed
-		req.ErrorCode = "upstream_error"
-		req.ErrorMessage = err.Error()
-		if s.Breaker != nil {
-			s.Breaker.RecordFailure(ctx, candidate.DeploymentID, err.Error())
-		}
-		return nil, startTime, apiError(http.StatusBadGateway, "upstream_error", "upstream request failed")
+	upResp, callErr := s.Transport.Do(attemptCtx, &UpstreamRequest{
+		Method:   "POST",
+		URL:      buildURL(cand, req.IsStream),
+		Headers:  buildHeaders(cand, req),
+		Body:     body,
+		Timeout:  perTimeout,
+		Protocol: cand.Protocol,
+	})
+	latencyMs := int(time.Since(startTime).Milliseconds())
+
+	// P3: record latency for EWMA update (only on completed calls, not context cancellations).
+	if s.Stats != nil && callErr == nil {
+		s.Stats.RecordLatency(parentCtx, cand.RouteID, latencyMs)
 	}
-	return resp, startTime, nil
+
+	status := 0
+	if upResp != nil {
+		status = upResp.StatusCode
+	}
+	outcome := ClassifyOutcome(status, callErr)
+	req.UpstreamStatus = status
+	req.LatencyMs = latencyMs
+	s.recordAttempt(req, cand, outcome, latencyMs, score)
+	s.notifyHealth(parentCtx, req, cand, outcome)
+
+	switch outcome.Decision(req.SelectedCredential != nil) {
+	case DecisionAccept:
+		err := s.relay(attemptCtx, req, upResp, startTime)
+		if err == nil {
+			s.writeSticky(parentCtx, req, cand)
+		}
+		return attemptResult{finished: true, finalErr: err}
+
+	case DecisionRetryNewCred:
+		drainAndClose(upResp)
+		if s.OAuthPool != nil && req.SelectedCredential != nil {
+			oldCredID := req.SelectedCredential.ID
+			slog.WarnContext(parentCtx, "upstream 401, swapping credential",
+				"old_cred_id", oldCredID)
+			_ = s.OAuthPool.MarkInvalid(parentCtx, oldCredID, "upstream 401 unauthorized")
+		}
+		return attemptResult{
+			decision: DecisionRetryNewCred,
+			finalErr: apiError(http.StatusBadGateway, "upstream_error", "credential rejected"),
+		}
+
+	case DecisionRetry:
+		errBody := snippetBody(upResp)
+		drainAndClose(upResp)
+		return attemptResult{
+			decision: DecisionRetry,
+			finalErr: apiError(upstreamStatusToGateway(status), "upstream_error",
+				fmt.Sprintf("upstream returned %d: %s", status, errBody)),
+		}
+
+	case DecisionGiveUp:
+		errBody := snippetBody(upResp)
+		drainAndClose(upResp)
+		req.RequestStatus = domain.RequestFailed
+		req.HTTPStatus = status
+		req.ErrorCode = "upstream_http_error"
+		req.ErrorMessage = truncateValidUTF8(errBody, 1024)
+		return attemptResult{
+			finished: true,
+			finalErr: apiError(upstreamStatusToGateway(status), "upstream_error",
+				fmt.Sprintf("upstream returned %d", status)),
+		}
+
+	default:
+		drainAndClose(upResp)
+		return attemptResult{decision: DecisionRetry}
+	}
+}
+
+func (s *ExecuteStep) prepareBody(req *Request) ([]byte, error) {
+	body, err := buildUpstreamBody(req)
+	if err != nil {
+		return nil, err
+	}
+	req.UpstreamBody = body
+	return body, nil
+}
+
+// pickCandidate returns the next candidate using the multi-dim scorer when
+// available, or falls back to linear priority order (P1 behaviour).
+// Health gate (IsBlocked) is applied here — only on the candidate about to be
+// used — to avoid consuming HALF_OPEN probe slots for unchosen candidates.
+func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.RouteCandidate, float64) {
+	for {
+		var cand *domain.RouteCandidate
+		var score float64
+		if sp, ok := s.Scorer.(ScoringPicker); ok {
+			cand, score = sp.PickWithScore(ctx, req.Candidates, req.UsedCandidates)
+		} else if s.Scorer != nil {
+			cand = s.Scorer.Pick(ctx, req.Candidates, req.UsedCandidates)
+		} else {
+			for _, c := range req.Candidates {
+				if !req.UsedCandidates[c.RouteID] {
+					cand = c
+					break
+				}
+			}
+		}
+		if cand == nil {
+			return nil, 0
+		}
+		// IsBlocked is called only now — for deployment routes that are OPEN the
+		// first expired probe window atomically transitions to HALF_OPEN and returns
+		// false (allowing exactly one probe). Calling it earlier (in SelectCandidates)
+		// would waste probe slots on candidates the scorer doesn't ultimately choose.
+		if s.Health != nil && !cand.IsPoolRoute() {
+			if s.Health.IsBlocked(cand.DeploymentID) {
+				req.UsedCandidates[cand.RouteID] = true
+				continue
+			}
+		}
+		return cand, score
+	}
+}
+
+// relay dispatches to sync or streaming relay based on req.IsStream.
+func (s *ExecuteStep) relay(ctx context.Context, req *Request, upResp *UpstreamResponse, startTime time.Time) error {
+	if req.IsStream {
+		return s.executeStream(ctx, req, upResp, req.Envelope.W, startTime)
+	}
+	return s.executeSync(ctx, req, upResp, req.Envelope.W)
+}
+
+// recordAttempt appends a structured trace record for this attempt.
+func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, outcome Outcome, latencyMs int, score float64) {
+	targetID := cand.DeploymentID
+	if cand.IsPoolRoute() {
+		if req.SelectedCredential != nil {
+			targetID = req.SelectedCredential.ID
+		} else {
+			targetID = cand.PoolID
+		}
+	}
+	errMsg := ""
+	if outcome.Err != nil {
+		errMsg = outcome.Err.Error()
+	}
+	req.Attempts = append(req.Attempts, AttemptRecord{
+		RouteID:    cand.RouteID,
+		TargetID:   targetID,
+		HTTPStatus: outcome.HTTPStatus,
+		Outcome:    outcome.Status,
+		LatencyMs:  latencyMs,
+		ErrorMsg:   errMsg,
+		Score:      score,
+	})
+}
+
+// notifyHealth records the outcome with the HealthTracker and the OAuth pool.
+// 429 is intentionally excluded from health failure accounting (see
+// CountsAsHealthFailure). Both deployment and credential targets share the
+// same HealthTracker interface; TargetKind distinguishes them in Snapshot.
+func (s *ExecuteStep) notifyHealth(ctx context.Context, req *Request, cand *domain.RouteCandidate, outcome Outcome) {
+	if s.Health != nil {
+		targetID, kind := healthTarget(cand, req)
+		switch outcome.Status {
+		case ResultSuccess:
+			s.Health.RecordSuccess(targetID, kind)
+		default:
+			if outcome.CountsAsHealthFailure() {
+				s.Health.RecordFailure(targetID, kind)
+			}
+		}
+	}
+
+	// OAuthPool persists credential failures to DB independently of the
+	// in-memory HealthTracker so that invalid credentials survive restarts.
+	if cand.IsPoolRoute() && s.OAuthPool != nil && req.SelectedCredential != nil {
+		credID := req.SelectedCredential.ID
+		switch outcome.Status {
+		case ResultSuccess:
+			s.OAuthPool.RecordSuccess(ctx, credID)
+		case ResultUnauthorized:
+			s.OAuthPool.RecordFailure(ctx, credID, "401 unauthorized")
+		default:
+			if outcome.CountsAsHealthFailure() {
+				msg := fmt.Sprintf("http %d", outcome.HTTPStatus)
+				if outcome.Err != nil {
+					msg = outcome.Err.Error()
+				}
+				s.OAuthPool.RecordFailure(ctx, credID, msg)
+			}
+		}
+	}
+}
+
+// healthTarget resolves the HealthTracker target ID and kind for a candidate.
+func healthTarget(cand *domain.RouteCandidate, req *Request) (string, routing.TargetKind) {
+	if cand.IsPoolRoute() {
+		if req.SelectedCredential != nil {
+			return req.SelectedCredential.ID, routing.TargetCredential
+		}
+		return cand.PoolID, routing.TargetCredential
+	}
+	return cand.DeploymentID, routing.TargetDeployment
 }
 
 func (s *ExecuteStep) Rollback(_ context.Context, _ *Request) {}
+
+// writeSticky persists the sticky binding for this conversation after a
+// successful upstream call. No-op when Sticky is nil or req.ConversationID is
+// empty (opt-in by caller).
+func (s *ExecuteStep) writeSticky(ctx context.Context, req *Request, cand *domain.RouteCandidate) {
+	if s.Sticky == nil || req.ConversationID == "" || req.APIKey == nil {
+		return
+	}
+	var b routing.StickyBinding
+	b.RouteID = cand.RouteID
+	if cand.IsPoolRoute() {
+		b.TargetKind = "credential"
+		if req.SelectedCredential != nil {
+			b.CredentialID = req.SelectedCredential.ID
+		}
+	} else {
+		b.TargetKind = "deployment"
+		b.DeploymentID = cand.DeploymentID
+		b.EndpointID = cand.EndpointID
+	}
+	identity := req.APIKey.KeyID
+	if err := s.Sticky.SetBinding(ctx, req.APIKey.TenantID, identity, req.ModelCode, req.ConversationID, &b); err != nil {
+		slog.WarnContext(ctx, "sticky write failed",
+			"conv_id", req.ConversationID,
+			"route_id", cand.RouteID,
+			"error", err,
+		)
+	}
+}
+
+// candidateNeedsBodyRebuild reports whether switching from the previous attempt
+// to cand requires regenerating the upstream body. The body bytes embed both
+// the protocol shape (openai_chat vs anthropic_messages) and the upstream model
+// name, so any change to either invalidates the cached body.
+func candidateNeedsBodyRebuild(req *Request, cand *domain.RouteCandidate) bool {
+	if len(req.Attempts) == 0 {
+		return false
+	}
+	prev := req.Attempts[len(req.Attempts)-1]
+	// We don't store protocol/model on AttemptRecord (yet), so be conservative:
+	// any new RouteID means a potential change.
+	return prev.RouteID != cand.RouteID
+}
+
+// lastAttemptWas reports whether the most recent recorded attempt has the
+// given status.
+func lastAttemptWas(req *Request, status ResultStatus) bool {
+	if len(req.Attempts) == 0 {
+		return false
+	}
+	return req.Attempts[len(req.Attempts)-1].Outcome == status
+}
+
+// snippetBody returns up to 512 bytes of the upstream response body for error
+// reporting. Safe to call with a nil UpstreamResponse.
+func snippetBody(resp *UpstreamResponse) string {
+	if resp == nil || resp.Body == nil {
+		return ""
+	}
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	return string(b)
+}
+
+// drainAndClose discards any remaining body and closes the response. Safe for
+// nil. Must be called before retrying so the underlying connection can be
+// reused.
+func drainAndClose(resp *UpstreamResponse) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 16*1024))
+	_ = resp.Body.Close()
+}
 
 // ============================================================================
 // Non-streaming execution
@@ -198,40 +487,37 @@ func (s *ExecuteStep) executeSync(ctx context.Context, req *Request, resp *Upstr
 	if err != nil {
 		return fmt.Errorf("read upstream body: %w", err)
 	}
+	req.UpstreamResponseBody = bodyBytes
 
 	bodyBytes = unwrapCodeAssistResponse(req.Candidate, bodyBytes)
 
-	canonical, err := formats.ToCanonicalChatResponse(bodyBytes, req.Candidate.Protocol, req.RequestID, req.Candidate.UpstreamModel)
+	canonResp, err := formats.ToCanonicalChatResponse(bodyBytes, req.Candidate.Protocol, req.RequestID, req.Candidate.UpstreamModel)
 	if err != nil {
 		return fmt.Errorf("parse upstream response: %w", err)
 	}
 
 	// Extract usage for billing
-	if canonical.Usage != nil {
+	if canonResp.Usage != nil {
 		req.TokenUsage = domain.TokenUsage{
-			PromptTokens:     canonical.Usage.PromptTokens,
-			CompletionTokens: canonical.Usage.CompletionTokens,
-			CacheWriteTokens: canonical.Usage.CacheWriteTokens,
-			CacheReadTokens:  canonical.Usage.CacheReadTokens,
-			ReasoningTokens:  canonical.Usage.ReasoningTokens,
+			PromptTokens:     canonResp.Usage.PromptTokens,
+			CompletionTokens: canonResp.Usage.CompletionTokens,
+			CacheWriteTokens: canonResp.Usage.CacheWriteTokens,
+			CacheReadTokens:  canonResp.Usage.CacheReadTokens,
+			ReasoningTokens:  canonResp.Usage.ReasoningTokens,
 		}
 	}
 	fillEstimatedUsage(req, len(bodyBytes))
 
-	// Ensure the model field in the response shows the public model code
-	canonical.Model = req.ModelCode
+	// Public-facing model code, not upstream's internal name.
+	canonResp.Model = req.ModelCode
 
-	outBytes, err := formats.CanonicalResponseToOpenAI(canonical)
-	if err != nil {
-		return fmt.Errorf("serialise response: %w", err)
+	relay := RelayFor(req.ClientProtocol)
+	if err := relay.WriteSync(w, canonResp); err != nil {
+		return fmt.Errorf("relay sync response: %w", err)
 	}
 
 	req.RequestStatus = domain.RequestSuccess
 	req.HTTPStatus = resp.StatusCode
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(outBytes)
 	return nil
 }
 
@@ -245,10 +531,13 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 		return fmt.Errorf("response writer does not support streaming")
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
+	relay := RelayFor(req.ClientProtocol)
+	sink := relay.NewStream(w, flusher.Flush, req.RequestID, req.ModelCode)
+	if err := sink.Start(0); err != nil {
+		return fmt.Errorf("stream start: %w", err)
+	}
+	// Mark headers as committed so runtime_pipeline.go skips the error WriteHeader path.
+	req.HTTPStatus = http.StatusOK
 
 	protocol := req.Candidate.Protocol
 	responseID := req.RequestID
@@ -277,8 +566,6 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
-			_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
-			flusher.Flush()
 			break
 		}
 
@@ -314,27 +601,27 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 			}
 		}
 
-		// Always report the public model code to the client
+		// Always report the public model code to the client.
 		chunk.Model = req.ModelCode
 
-		outBytes, err := formats.CanonicalChunkToOpenAI(chunk)
-		if err != nil {
-			continue
+		if err := sink.Push(chunk); err != nil {
+			// Client likely disconnected — stop the stream.
+			req.RequestStatus = domain.RequestFailed
+			req.ErrorCode = "stream_write_error"
+			req.ErrorMessage = err.Error()
+			return nil
 		}
-
-		_, _ = fmt.Fprintf(w, "data: %s\n\n", outBytes)
-		flusher.Flush()
 	}
 
 	if err := scanner.Err(); err != nil && err != io.EOF {
 		req.RequestStatus = domain.RequestFailed
 		req.ErrorCode = "stream_read_error"
 		req.ErrorMessage = err.Error()
-		_, _ = fmt.Fprintf(w, "data: {\"error\":{\"message\":\"stream read error\",\"type\":\"stream_error\",\"code\":\"stream_read_error\"}}\n\ndata: [DONE]\n\n")
-		flusher.Flush()
+		_ = sink.Error("stream_read_error", err.Error())
 		return nil
 	}
 
+	_ = sink.Finish()
 	fillEstimatedUsage(req, accumulatedOutputBytes)
 
 	req.RequestStatus = domain.RequestSuccess
@@ -459,8 +746,8 @@ func buildHeaders(c *domain.RouteCandidate, req *Request) map[string]string {
 		// Claude Code OAuth — anthropic-beta / version / x-app etc.
 		if c.FixedProviderType == domain.FixedProviderClaudeOAuth {
 			incomingBeta := ""
-			if req.R != nil {
-				incomingBeta = req.R.Header.Get("anthropic-beta")
+			if req.Envelope != nil && req.Envelope.R != nil {
+				incomingBeta = req.Envelope.R.Header.Get("anthropic-beta")
 			}
 			claude.ApplyOAuthHeaders(headers, incomingBeta)
 		}

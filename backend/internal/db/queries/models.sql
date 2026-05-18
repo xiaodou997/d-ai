@@ -86,9 +86,6 @@ SELECT
   e.extra_headers,
   e.timeout_ms,
   e.weight               AS endpoint_weight,
-  e.auth_type,
-  e.fixed_provider_type,
-  e.oauth_strategy,
   p.id                   AS provider_id,
   p.code                 AS provider_code
 FROM ai_model_routes r

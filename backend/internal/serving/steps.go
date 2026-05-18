@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+
+	"uni-ai-api/backend/internal/domain"
+	"uni-ai-api/backend/internal/routing"
 )
 
 // ============================================================================
@@ -24,7 +27,10 @@ type AuthNStep struct {
 func (s *AuthNStep) Name() string { return "authn" }
 
 func (s *AuthNStep) Execute(ctx context.Context, req *Request) error {
-	token := bearerToken(req.R.Header.Get("Authorization"))
+	if req.Envelope == nil || req.Envelope.R == nil {
+		return apiError(http.StatusInternalServerError, "missing_envelope", "request envelope not set")
+	}
+	token := bearerToken(req.Envelope.R.Header.Get("Authorization"))
 	if token == "" {
 		return apiError(http.StatusUnauthorized, "missing_api_key", "API key required")
 	}
@@ -84,29 +90,83 @@ func (s *QuotaCheckStep) Execute(_ context.Context, req *Request) error {
 func (s *QuotaCheckStep) Rollback(_ context.Context, _ *Request) {}
 
 // ============================================================================
-// RouteSelectStep — selects the best upstream candidate for the model
+// RouteCandidatesStep — fetches all healthy candidate routes for the model
 // ============================================================================
 
-// RouteSelector picks the best RouteCandidate for a request.
-type RouteSelector interface {
-	SelectRoute(ctx context.Context, req *Request) error
+// RouteCandidateSelector returns the sorted candidate list for a model. The
+// caller (ExecuteStep) is responsible for picking one to actually call and
+// retrying against the remainder on failure. Sticky-pinned candidates should
+// be returned at the head of the list.
+type RouteCandidateSelector interface {
+	SelectCandidates(ctx context.Context, req *Request) ([]*domain.RouteCandidate, error)
 }
 
-type RouteSelectStep struct {
-	Selector RouteSelector
+// RouteCandidatesStep populates req.Candidates with every route eligible to
+// serve the current request. When Sticky is set and req.ConversationID is
+// non-empty, it reads the sticky binding from Redis and promotes the matching
+// candidate to the front of the list (setting req.StickyHit = true).
+type RouteCandidatesStep struct {
+	Selector RouteCandidateSelector
+	Sticky   routing.StickyStore // optional; nil = sticky disabled
 }
 
-func (s *RouteSelectStep) Name() string { return "route_select" }
+func (s *RouteCandidatesStep) Name() string { return "route_candidates" }
 
-func (s *RouteSelectStep) Execute(ctx context.Context, req *Request) error {
-	if err := s.Selector.SelectRoute(ctx, req); err != nil {
+func (s *RouteCandidatesStep) Execute(ctx context.Context, req *Request) error {
+	candidates, err := s.Selector.SelectCandidates(ctx, req)
+	if err != nil {
+		return apiError(http.StatusServiceUnavailable, "no_available_route", err.Error())
+	}
+	if len(candidates) == 0 {
 		return apiError(http.StatusServiceUnavailable, "no_available_route",
 			"no healthy upstream route available for this model")
 	}
+
+	// Sticky routing: promote the bound candidate to position 0 when found.
+	if s.Sticky != nil && req.ConversationID != "" && req.APIKey != nil {
+		identity := req.APIKey.KeyID
+		binding, berr := s.Sticky.GetBinding(ctx, req.APIKey.TenantID, identity, req.ModelCode, req.ConversationID)
+		if berr != nil {
+			slog.WarnContext(ctx, "sticky read failed", "error", berr)
+		} else if binding != nil {
+			if idx := findStickyCandidate(candidates, binding); idx > 0 {
+				candidates[0], candidates[idx] = candidates[idx], candidates[0]
+				req.StickyHit = true
+			} else if idx == 0 {
+				req.StickyHit = true
+			}
+		}
+	}
+
+	req.Candidates = candidates
+	req.UsedCandidates = make(map[string]bool, len(candidates))
+	req.Candidate = candidates[0]
 	return nil
 }
 
-func (s *RouteSelectStep) Rollback(_ context.Context, _ *Request) {}
+func (s *RouteCandidatesStep) Rollback(_ context.Context, _ *Request) {}
+
+// findStickyCandidate returns the index of the candidate matching the binding,
+// or -1 when not found.
+func findStickyCandidate(candidates []*domain.RouteCandidate, b *routing.StickyBinding) int {
+	for i, c := range candidates {
+		if c.RouteID != b.RouteID {
+			continue
+		}
+		switch b.TargetKind {
+		case "deployment":
+			if c.DeploymentID == b.DeploymentID {
+				return i
+			}
+		case "credential":
+			// Pool routes match by RouteID; credential selection happens in Execute.
+			if c.IsPoolRoute() {
+				return i
+			}
+		}
+	}
+	return -1
+}
 
 // ============================================================================
 // RateLimitStep — enforces RPM / TPM limits per tenant and user

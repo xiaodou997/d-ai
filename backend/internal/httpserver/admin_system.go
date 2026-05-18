@@ -8,16 +8,17 @@ import (
 )
 
 type systemStatusResponse struct {
-	Timestamp      time.Time              `json:"timestamp"`
-	DB             componentStatus        `json:"db"`
-	Redis          componentStatus        `json:"redis"`
-	CircuitBreaker circuitBreakerSummary  `json:"circuit_breaker"`
+	Timestamp time.Time       `json:"timestamp"`
+	DB        componentStatus `json:"db"`
+	Redis     componentStatus `json:"redis"`
+	Health    healthSummary   `json:"health"`
 }
 
-type circuitBreakerSummary struct {
+type healthSummary struct {
 	TotalTracked int                    `json:"total_tracked"`
 	OpenCount    int                    `json:"open_count"`
-	States       []routing.BreakerState `json:"states"`
+	HalfOpenCount int                   `json:"half_open_count"`
+	Records      []routing.HealthRecord `json:"records"`
 }
 
 func (s *Server) handleAdminSystemStatus(w http.ResponseWriter, r *http.Request) {
@@ -40,18 +41,22 @@ func (s *Server) handleAdminSystemStatus(w http.ResponseWriter, r *http.Request)
 		resp.Redis = componentStatus{Status: "ok"}
 	}
 
-	// Circuit breaker snapshot
-	states := s.routeSelector.BreakerSnapshot()
-	openCount := 0
-	for _, st := range states {
-		if st.Open {
+	// Health tracker snapshot
+	records := s.routeSelector.HealthSnapshot()
+	openCount, halfOpenCount := 0, 0
+	for _, rec := range records {
+		switch rec.State {
+		case routing.StateOpen:
 			openCount++
+		case routing.StateHalfOpen:
+			halfOpenCount++
 		}
 	}
-	resp.CircuitBreaker = circuitBreakerSummary{
-		TotalTracked: len(states),
-		OpenCount:    openCount,
-		States:       states,
+	resp.Health = healthSummary{
+		TotalTracked:  len(records),
+		OpenCount:     openCount,
+		HalfOpenCount: halfOpenCount,
+		Records:       records,
 	}
 
 	writeOK(w, resp)

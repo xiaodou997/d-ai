@@ -5,6 +5,7 @@ import {
   Cpu,
   DataAnalysis,
   DocumentChecked,
+  Monitor,
   Key,
   Lock,
   Management,
@@ -35,6 +36,7 @@ const gatewayMenuItems = computed(() => {
     { index: '/ai-gateway/credential-pools', label: '账号池', icon: UserFilled },
     ...shared,
     { index: '/ai-gateway/limits', label: '限流策略', icon: Lock },
+    { index: '/ai-gateway/routing', label: '路由策略', icon: DataAnalysis },
     { index: '/ai-gateway/audit', label: '网关审计', icon: DocumentChecked }
   ]
 })
@@ -76,6 +78,10 @@ const handleLogout = () => {
           <el-menu-item index="/dashboard">
             <el-icon><DataAnalysis /></el-icon>
             <span>数据大盘</span>
+          </el-menu-item>
+          <el-menu-item index="/system-status">
+            <el-icon><Monitor /></el-icon>
+            <span>系统状态</span>
           </el-menu-item>
         </template>
 

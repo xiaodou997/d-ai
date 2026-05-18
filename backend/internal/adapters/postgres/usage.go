@@ -21,12 +21,18 @@ import (
 //	2. ai_tenant_model_price_overrides (tenant override)
 //	3. ai_model_prices (base price)
 type UsageLogger struct {
-	q      *dbgen.Queries
-	prices *PriceResolver
+	q        *dbgen.Queries
+	prices   *PriceResolver
+	payloads *PayloadStore // optional; nil = payload persistence disabled
 }
 
 func NewUsageLogger(q *dbgen.Queries) *UsageLogger {
 	return &UsageLogger{q: q, prices: NewPriceResolver(q)}
+}
+
+// SetPayloadStore enables payload persistence for failed/sampled requests.
+func (l *UsageLogger) SetPayloadStore(ps *PayloadStore) {
+	l.payloads = ps
 }
 
 // Log records a usage entry regardless of request success/failure.
@@ -64,8 +70,24 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 		})
 	}()
 
-	if err := l.createUsageLog(ctx, req, billing); err != nil {
+	logID, err := l.createUsageLog(ctx, req, billing)
+	if err != nil {
 		return fmt.Errorf("create usage log: %w", err)
+	}
+
+	// Async payload persistence (failed + sampled). clientBody is not available
+	// here; pass a best-effort copy from Envelope (may be nil for non-chat).
+	if l.payloads != nil {
+		var clientBody []byte
+		if req.Envelope != nil {
+			clientBody = req.Envelope.ClientBody
+		}
+		go func() {
+			defer recoverGoroutine("payload save", req.RequestID)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			l.payloads.Save(bgCtx, logID, req, clientBody)
+		}()
 	}
 
 	// Async rollup — best effort
@@ -98,7 +120,7 @@ func recoverGoroutine(label, requestID string) {
 // DB writes
 // ============================================================================
 
-func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, billing domain.BillingResult) error {
+func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, billing domain.BillingResult) (pgtype.UUID, error) {
 	c := req.Candidate
 	key := req.APIKey
 	usage := req.TokenUsage
@@ -161,12 +183,14 @@ func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, 
 		FirstTokenLatencyMs:  nullableInt4(req.FirstTokenMs),
 		ErrorCode:            nullableText(req.ErrorCode),
 		ErrorMessage:         nullableText(req.ErrorMessage),
-		UsageEstimated:       req.TokenCountSource == "estimated",
-		UsageSource:          tokenCountSource(req.TokenCountSource),
+		UsageEstimated:  req.TokenCountSource == "estimated",
+		UsageSource:     tokenCountSource(req.TokenCountSource),
+		AttemptsCount:   int32(len(req.Attempts)),
+		FinalRouteID:    mustParseUUID(c.RouteID),
+		ClientProtocol:  string(req.ClientProtocol),
 	}
 
-	_, err := l.q.CreateUsageLog(ctx, params)
-	return err
+	return l.q.CreateUsageLog(ctx, params)
 }
 
 func (l *UsageLogger) upsertRollup(ctx context.Context, req *serving.Request, billing domain.BillingResult) error {

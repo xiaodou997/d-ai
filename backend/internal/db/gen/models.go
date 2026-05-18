@@ -73,6 +73,18 @@ type AiConversationBinding struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiCredentialPool struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	FixedProviderType string             `json:"fixed_provider_type"`
+	OauthStrategy     string             `json:"oauth_strategy"`
+	Notes             pgtype.Text        `json:"notes"`
+	Status            string             `json:"status"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	StickyGranularity string             `json:"sticky_granularity"`
+}
+
 type AiModel struct {
 	ID                     pgtype.UUID        `json:"id"`
 	ModelCode              string             `json:"model_code"`
@@ -106,12 +118,17 @@ type AiModelRoute struct {
 	ID                   pgtype.UUID        `json:"id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
 	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
+	CredentialPoolID     pgtype.UUID        `json:"credential_pool_id"`
+	PoolUpstreamModel    pgtype.Text        `json:"pool_upstream_model"`
 	Priority             int32              `json:"priority"`
 	Weight               int32              `json:"weight"`
 	SupportsStream       bool               `json:"supports_stream"`
 	Status               string             `json:"status"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	CostPer1kTokens      pgtype.Numeric     `json:"cost_per_1k_tokens"`
+	ScoreWeightsOverride []byte             `json:"score_weights_override"`
+	StickyEnabled        bool               `json:"sticky_enabled"`
 }
 
 type AiProvider struct {
@@ -125,25 +142,22 @@ type AiProvider struct {
 }
 
 type AiProviderEndpoint struct {
-	ID                pgtype.UUID        `json:"id"`
-	ProviderID        pgtype.UUID        `json:"provider_id"`
-	Name              string             `json:"name"`
-	BaseUrl           string             `json:"base_url"`
-	ApiKeyCiphertext  string             `json:"api_key_ciphertext"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	Weight            int32              `json:"weight"`
-	TimeoutMs         int32              `json:"timeout_ms"`
-	AuthType          string             `json:"auth_type"`
-	FixedProviderType pgtype.Text        `json:"fixed_provider_type"`
-	OauthStrategy     string             `json:"oauth_strategy"`
-	Status            string             `json:"status"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ID               pgtype.UUID        `json:"id"`
+	ProviderID       pgtype.UUID        `json:"provider_id"`
+	Name             string             `json:"name"`
+	BaseUrl          string             `json:"base_url"`
+	ApiKeyCiphertext string             `json:"api_key_ciphertext"`
+	ExtraHeaders     []byte             `json:"extra_headers"`
+	Weight           int32              `json:"weight"`
+	TimeoutMs        int32              `json:"timeout_ms"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiProviderOauthCredential struct {
 	ID                     pgtype.UUID        `json:"id"`
-	EndpointID             pgtype.UUID        `json:"endpoint_id"`
+	PoolID                 pgtype.UUID        `json:"pool_id"`
 	Name                   string             `json:"name"`
 	ProviderType           string             `json:"provider_type"`
 	Email                  pgtype.Text        `json:"email"`
@@ -164,6 +178,26 @@ type AiProviderOauthCredential struct {
 	FailCount              int64              `json:"fail_count"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiRequestPayload struct {
+	ID               pgtype.UUID        `json:"id"`
+	UsageLogID       pgtype.UUID        `json:"usage_log_id"`
+	UpstreamBody     []byte             `json:"upstream_body"`
+	UpstreamResponse []byte             `json:"upstream_response"`
+	RawClientBody    []byte             `json:"raw_client_body"`
+	RouteAttempts    []byte             `json:"route_attempts"`
+	Sampled          bool               `json:"sampled"`
+	ClientProtocol   string             `json:"client_protocol"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+}
+
+type AiRouteScoreWeight struct {
+	ID        pgtype.UUID        `json:"id"`
+	Scope     string             `json:"scope"`
+	Weights   []byte             `json:"weights"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiRuntimeLimitPolicy struct {
@@ -304,9 +338,13 @@ type AiUsageLog struct {
 	ErrorCode            pgtype.Text        `json:"error_code"`
 	ErrorMessage         pgtype.Text        `json:"error_message"`
 	OauthCredentialID    pgtype.UUID        `json:"oauth_credential_id"`
+	CredentialPoolID     pgtype.UUID        `json:"credential_pool_id"`
 	UsageEstimated       bool               `json:"usage_estimated"`
 	UsageSource          string             `json:"usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	AttemptsCount        int32              `json:"attempts_count"`
+	FinalRouteID         pgtype.UUID        `json:"final_route_id"`
+	ClientProtocol       string             `json:"client_protocol"`
 }
 
 type AiUsageRollupsHourly struct {

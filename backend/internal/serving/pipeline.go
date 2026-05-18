@@ -10,7 +10,6 @@ package serving
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -27,11 +26,17 @@ import (
 
 // Request carries all state through the pipeline. Steps read from and write to
 // this struct; they must not share mutable state via closures.
+//
+// Wire-level concerns (ResponseWriter / *http.Request) live in Envelope rather
+// than directly on Request, so that the pipeline can be exercised in tests and
+// the Execute step can retry across multiple upstream attempts without
+// re-allocating the request object.
 type Request struct {
-	// W is the client-facing response writer. ExecuteStep writes to it directly.
-	W http.ResponseWriter
-	// R is the inbound HTTP request (read-only after parsing).
-	R *http.Request
+	// Envelope owns the HTTP transport for this request. Steps that need to
+	// read the inbound request (AuthN) or write a response (Execute via Relay)
+	// reach into the envelope. It is populated by the HTTP handler before the
+	// pipeline runs.
+	Envelope *RequestEnvelope
 
 	// Parsed from HTTP body before pipeline starts
 	ModelCode      string
@@ -40,20 +45,38 @@ type Request struct {
 	IsStream       bool
 
 	// Canonical form of the decoded AI request
-	ChatReq      *canonical.ChatRequest
-	EmbedReq     *canonical.EmbeddingRequest
-	ImageReq     *canonical.ImageRequest
+	ChatReq  *canonical.ChatRequest
+	EmbedReq *canonical.EmbeddingRequest
+	ImageReq *canonical.ImageRequest
 
 	// Resolved by AuthN step
 	APIKey *domain.APIKeyAuth
 
-	// Extracted from request body; used by RouteSelect for sticky routing.
+	// Extracted from request body; used by RouteCandidates for sticky routing.
 	ConversationID string
 
-	// Resolved by RouteSelect step
-	Candidate          *domain.RouteCandidate
-	// Resolved by RouteSelect step when endpoint.auth_type = 'oauth'
+	// Populated by RouteCandidatesStep: the ordered list of routes the Execute
+	// step may try. Sticky-pinned candidates are placed first.
+	Candidates     []*domain.RouteCandidate
+	UsedCandidates map[string]bool // route_id → already attempted
+
+	// The currently-selected (or last-attempted) candidate. ExecuteStep sets
+	// this on every attempt and downstream steps (URMConfirm, UsageLog,
+	// observability) read it as "the route that actually served this request".
+	Candidate *domain.RouteCandidate
+
+	// SelectedCredential is the OAuth credential chosen for the current
+	// attempt when Candidate is a pool route. Reset between retries that swap
+	// credentials (401) or routes.
 	SelectedCredential *domain.OAuthCredential
+
+	// Attempts records every upstream call made during Execute. Used by
+	// X-Route-Trace observability and to drive 429 backoff decisions.
+	Attempts []AttemptRecord
+
+	// StickyHit is set to true when the first candidate was loaded from the
+	// sticky Redis binding rather than freshly scored.
+	StickyHit bool
 
 	// Resolved by URMFreeze step
 	URMTransactionID string
@@ -69,9 +92,11 @@ type Request struct {
 	BillingResolved bool
 
 	// Filled by Execute step
-	TokenUsage       domain.TokenUsage
-	TokenCountSource string // "upstream" | "estimated" — set by Execute, read by UsageLogger
-	UpstreamBodySize int    // byte length of the serialised upstream request body; used for token estimation
+	TokenUsage          domain.TokenUsage
+	TokenCountSource    string // "upstream" | "estimated" — set by Execute, read by UsageLogger
+	UpstreamBodySize    int    // byte length of the serialised upstream request body; used for token estimation
+	UpstreamBody        []byte // serialised upstream request body (for payload persistence / replay)
+	UpstreamResponseBody []byte // raw sync response body (nil for streams; used for replay)
 	BillingResult    domain.BillingResult
 	RequestStatus    domain.RequestStatus
 	HTTPStatus       int

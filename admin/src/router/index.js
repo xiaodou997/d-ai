@@ -30,6 +30,12 @@ const routes = [
         meta: { title: '数据大盘', requiresAuth: true, roles: [1] }
       },
       {
+        path: '/system-status',
+        name: 'SystemStatus',
+        component: () => import('@/views/SystemStatus/index.vue'),
+        meta: { title: '系统状态', requiresAuth: true, roles: [1] }
+      },
+      {
         path: '/tenants',
         name: 'TenantList',
         component: () => import('@/views/Tenant/TenantList.vue'),
@@ -109,6 +115,12 @@ const routes = [
             name: 'GatewayAudit',
             component: () => import('@/views/AIGateway/GatewayAudit.vue'),
             meta: { title: '网关审计', requiresAuth: true, roles: [1] }
+          },
+          {
+            path: 'routing',
+            name: 'GatewayRouting',
+            component: () => import('@/views/AIGateway/GatewayRouting.vue'),
+            meta: { title: '路由策略', requiresAuth: true, roles: [1] }
           }
         ]
       }

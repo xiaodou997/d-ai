@@ -362,15 +362,9 @@ INSERT INTO ai_model_routes (
   $1, $2, $3, $4, $5, $6
 )
 RETURNING
-  id,
-  model_id,
-  upstream_deployment_id,
-  priority,
-  weight,
-  supports_stream,
-  status,
-  created_at,
-  updated_at
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled
 `
 
 type CreateModelRouteParams struct {
@@ -399,12 +393,17 @@ func (q *Queries) CreateModelRoute(ctx context.Context, arg CreateModelRoutePara
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
+		&i.CredentialPoolID,
+		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CostPer1kTokens,
+		&i.ScoreWeightsOverride,
+		&i.StickyEnabled,
 	)
 	return i, err
 }
@@ -1380,17 +1379,11 @@ func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (GetMo
 
 const getModelRoute = `-- name: GetModelRoute :one
 SELECT
-  r.id,
-  r.model_id,
-  r.upstream_deployment_id,
-  r.priority,
-  r.weight,
-  r.supports_stream,
-  r.status,
-  r.created_at,
-  r.updated_at
-FROM ai_model_routes r
-WHERE r.id = $1
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled
+FROM ai_model_routes
+WHERE id = $1
 `
 
 func (q *Queries) GetModelRoute(ctx context.Context, id pgtype.UUID) (AiModelRoute, error) {
@@ -1400,12 +1393,17 @@ func (q *Queries) GetModelRoute(ctx context.Context, id pgtype.UUID) (AiModelRou
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
+		&i.CredentialPoolID,
+		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CostPer1kTokens,
+		&i.ScoreWeightsOverride,
+		&i.StickyEnabled,
 	)
 	return i, err
 }
@@ -1461,23 +1459,9 @@ type GetProviderEndpointParams struct {
 	ID         pgtype.UUID `json:"id"`
 }
 
-type GetProviderEndpointRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	ProviderID       pgtype.UUID        `json:"provider_id"`
-	Name             string             `json:"name"`
-	BaseUrl          string             `json:"base_url"`
-	ApiKeyCiphertext string             `json:"api_key_ciphertext"`
-	ExtraHeaders     []byte             `json:"extra_headers"`
-	Weight           int32              `json:"weight"`
-	TimeoutMs        int32              `json:"timeout_ms"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetProviderEndpoint(ctx context.Context, arg GetProviderEndpointParams) (GetProviderEndpointRow, error) {
+func (q *Queries) GetProviderEndpoint(ctx context.Context, arg GetProviderEndpointParams) (AiProviderEndpoint, error) {
 	row := q.db.QueryRow(ctx, getProviderEndpoint, arg.ProviderID, arg.ID)
-	var i GetProviderEndpointRow
+	var i AiProviderEndpoint
 	err := row.Scan(
 		&i.ID,
 		&i.ProviderID,
@@ -2578,9 +2562,6 @@ SELECT
   extra_headers,
   weight,
   timeout_ms,
-  auth_type,
-  fixed_provider_type,
-  oauth_strategy,
   status,
   created_at,
   updated_at
@@ -2590,19 +2571,16 @@ ORDER BY name ASC
 `
 
 type ListProviderEndpointsRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	ProviderID        pgtype.UUID        `json:"provider_id"`
-	Name              string             `json:"name"`
-	BaseUrl           string             `json:"base_url"`
-	ExtraHeaders      []byte             `json:"extra_headers"`
-	Weight            int32              `json:"weight"`
-	TimeoutMs         int32              `json:"timeout_ms"`
-	AuthType          string             `json:"auth_type"`
-	FixedProviderType pgtype.Text        `json:"fixed_provider_type"`
-	OauthStrategy     string             `json:"oauth_strategy"`
-	Status            string             `json:"status"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ID           pgtype.UUID        `json:"id"`
+	ProviderID   pgtype.UUID        `json:"provider_id"`
+	Name         string             `json:"name"`
+	BaseUrl      string             `json:"base_url"`
+	ExtraHeaders []byte             `json:"extra_headers"`
+	Weight       int32              `json:"weight"`
+	TimeoutMs    int32              `json:"timeout_ms"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.UUID) ([]ListProviderEndpointsRow, error) {
@@ -2622,9 +2600,6 @@ func (q *Queries) ListProviderEndpoints(ctx context.Context, providerID pgtype.U
 			&i.ExtraHeaders,
 			&i.Weight,
 			&i.TimeoutMs,
-			&i.AuthType,
-			&i.FixedProviderType,
-			&i.OauthStrategy,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -3179,20 +3154,20 @@ SELECT
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
-  AND ($4 = '' OR user_id = $4)
-  AND ($5 = '' OR model_code = $5)
-  AND ($6 = '' OR request_status = $6)
+  AND ($4::text IS NULL OR user_id = $4::text)
+  AND ($5::text IS NULL OR model_code = $5::text)
+  AND ($6::text IS NULL OR request_status = $6::text)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListUsageLogsParams struct {
-	TenantID      string `json:"tenant_id"`
-	Limit         int32  `json:"limit"`
-	Offset        int32  `json:"offset"`
-	UserID        string `json:"user_id"`
-	ModelCode     string `json:"model_code"`
-	RequestStatus string `json:"request_status"`
+	TenantID      string      `json:"tenant_id"`
+	Limit         int32       `json:"limit"`
+	Offset        int32       `json:"offset"`
+	UserID        pgtype.Text `json:"user_id"`
+	ModelCode     pgtype.Text `json:"model_code"`
+	RequestStatus pgtype.Text `json:"request_status"`
 }
 
 type ListUsageLogsRow struct {
@@ -3240,7 +3215,14 @@ type ListUsageLogsRow struct {
 // Usage Logs Queries
 // ============================================================================
 func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([]ListUsageLogsRow, error) {
-	rows, err := q.db.Query(ctx, listUsageLogs, arg.TenantID, arg.Limit, arg.Offset, arg.UserID, arg.ModelCode, arg.RequestStatus)
+	rows, err := q.db.Query(ctx, listUsageLogs,
+		arg.TenantID,
+		arg.Limit,
+		arg.Offset,
+		arg.UserID,
+		arg.ModelCode,
+		arg.RequestStatus,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -4236,15 +4218,9 @@ SET upstream_deployment_id = $3,
 WHERE model_id = $1
   AND id = $2
 RETURNING
-  id,
-  model_id,
-  upstream_deployment_id,
-  priority,
-  weight,
-  supports_stream,
-  status,
-  created_at,
-  updated_at
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled
 `
 
 type UpdateModelRouteParams struct {
@@ -4272,12 +4248,17 @@ func (q *Queries) UpdateModelRoute(ctx context.Context, arg UpdateModelRoutePara
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
+		&i.CredentialPoolID,
+		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CostPer1kTokens,
+		&i.ScoreWeightsOverride,
+		&i.StickyEnabled,
 	)
 	return i, err
 }
@@ -4289,15 +4270,9 @@ SET status = $3,
 WHERE model_id = $1
   AND id = $2
 RETURNING
-  id,
-  model_id,
-  upstream_deployment_id,
-  priority,
-  weight,
-  supports_stream,
-  status,
-  created_at,
-  updated_at
+  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  priority, weight, supports_stream, status, created_at, updated_at,
+  cost_per_1k_tokens, score_weights_override, sticky_enabled
 `
 
 type UpdateModelRouteStatusParams struct {
@@ -4313,12 +4288,17 @@ func (q *Queries) UpdateModelRouteStatus(ctx context.Context, arg UpdateModelRou
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
+		&i.CredentialPoolID,
+		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CostPer1kTokens,
+		&i.ScoreWeightsOverride,
+		&i.StickyEnabled,
 	)
 	return i, err
 }

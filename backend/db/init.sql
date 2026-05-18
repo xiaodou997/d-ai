@@ -582,3 +582,62 @@ CREATE TABLE IF NOT EXISTS ai_admin_audit_logs (
 CREATE INDEX IF NOT EXISTS idx_ai_admin_audit_logs_time   ON ai_admin_audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_admin_audit_logs_object ON ai_admin_audit_logs (object_type, object_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_admin_audit_logs_actor  ON ai_admin_audit_logs (actor, created_at DESC);
+
+-- ============================================================================
+-- P3: 多维评分路由 (route scorer weights + per-route cost hint)
+-- ============================================================================
+
+-- Route-level scoring cost hint (optional; 0 = Pool/free, >0 = paid upstream)
+ALTER TABLE ai_model_routes
+  ADD COLUMN IF NOT EXISTS cost_per_1k_tokens    NUMERIC(10,6) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS score_weights_override JSONB;
+
+-- Global (and future per-tenant/per-model) scorer weight config
+CREATE TABLE IF NOT EXISTS ai_route_score_weights (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope      TEXT        NOT NULL,   -- 'global' | 'tenant:<id>' | 'model:<id>'
+  weights    JSONB       NOT NULL,   -- {"cost":0.4,"latency":0.3,"load":0.2,"health":0.1}
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (scope)
+);
+
+INSERT INTO ai_route_score_weights (scope, weights)
+  VALUES ('global', '{"cost":0.4,"latency":0.3,"load":0.2,"health":0.1}'::jsonb)
+  ON CONFLICT (scope) DO NOTHING;
+
+-- ============================================================================
+-- P4: Sticky 路由 + 可观测 + Payload 落盘
+-- ============================================================================
+
+-- Sticky routing: allow per-route opt-out and per-pool granularity override.
+ALTER TABLE ai_model_routes
+  ADD COLUMN IF NOT EXISTS sticky_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE ai_credential_pools
+  ADD COLUMN IF NOT EXISTS sticky_granularity TEXT NOT NULL DEFAULT 'credential'
+    CHECK (sticky_granularity IN ('credential', 'pool'));
+
+-- Usage log: multi-attempt metadata.
+ALTER TABLE ai_usage_logs
+  ADD COLUMN IF NOT EXISTS attempts_count  INT  NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS final_route_id  UUID,
+  ADD COLUMN IF NOT EXISTS client_protocol TEXT NOT NULL DEFAULT 'openai_chat';
+
+-- Request payload table: failed requests (required) + sampled successes.
+-- upstream_body / raw_client_body are AES-GCM encrypted (BYTEA).
+CREATE TABLE IF NOT EXISTS ai_request_payloads (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  usage_log_id      UUID        REFERENCES ai_usage_logs(id) ON DELETE CASCADE,
+  upstream_body     BYTEA,
+  upstream_response BYTEA,
+  raw_client_body   BYTEA,
+  route_attempts    JSONB       NOT NULL DEFAULT '[]',
+  sampled           BOOLEAN     NOT NULL DEFAULT false,
+  client_protocol   TEXT        NOT NULL DEFAULT 'openai_chat',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at        TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_expires    ON ai_request_payloads (expires_at);
+CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_usage_log  ON ai_request_payloads (usage_log_id);
+CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_created    ON ai_request_payloads (created_at DESC);
