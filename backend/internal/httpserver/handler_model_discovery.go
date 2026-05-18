@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,13 +42,23 @@ func (s *Server) handleAdminFetchEndpointUpstreamModels(w http.ResponseWriter, r
 
 	apiKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, endpoint.ApiKeyCiphertext)
 	if err != nil {
+		s.logger.Error("model discovery: decrypt api key failed",
+			"error", err,
+			"endpoint_id", endpointID,
+			"request_id", requestIDFromContext(r.Context()))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "failed to decrypt api key")
 		return
 	}
 
 	models, fetchErr := s.fetchUpstreamModelList(r.Context(), endpoint.BaseUrl, apiKey, endpoint.DefaultProtocol, endpoint.ExtraHeaders, int(endpoint.TimeoutMs))
 	if fetchErr != nil {
-		writeErr(w, http.StatusBadGateway, BizErrBadRequest, fmt.Sprintf("fetch upstream models failed: %s", fetchErr.Error()))
+		s.logger.Error("model discovery: fetch upstream models failed",
+			"error", fetchErr,
+			"endpoint_id", endpointID,
+			"base_url", endpoint.BaseUrl,
+			"default_protocol", endpoint.DefaultProtocol,
+			"request_id", requestIDFromContext(r.Context()))
+		writeErr(w, http.StatusBadGateway, BizErrUpstreamUnavailable, sanitizeUpstreamFetchError(fetchErr))
 		return
 	}
 
@@ -202,7 +213,11 @@ func (s *Server) fetchUpstreamModelList(ctx context.Context, baseURL, apiKey, de
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return nil, &upstreamFetchError{
+			Status: resp.StatusCode,
+			URL:    listURL,
+			Body:   truncate(string(body), 500),
+		}
 	}
 
 	return parseModelListResponse(body, defaultProtocol)
@@ -335,6 +350,41 @@ func containsAny(s string, prefixes ...string) bool {
 		}
 	}
 	return false
+}
+
+// upstreamFetchError carries the raw upstream failure detail for logging while
+// allowing the handler to render a sanitized message to the client.
+type upstreamFetchError struct {
+	Status int
+	URL    string
+	Body   string
+}
+
+func (e *upstreamFetchError) Error() string {
+	return fmt.Sprintf("upstream %s returned %d: %s", e.URL, e.Status, e.Body)
+}
+
+// sanitizeUpstreamFetchError returns a short, user-safe message that hides raw
+// upstream response bodies (which may include vendor-specific HTML, tunnel
+// errors, internal hostnames, etc.). The full detail still goes to the log.
+func sanitizeUpstreamFetchError(err error) string {
+	var ufe *upstreamFetchError
+	if errors.As(err, &ufe) {
+		switch {
+		case ufe.Status == http.StatusUnauthorized || ufe.Status == http.StatusForbidden:
+			return "upstream rejected api key (check provider api_key)"
+		case ufe.Status == http.StatusNotFound:
+			return "upstream /models endpoint not found (check base_url and default_protocol)"
+		case ufe.Status >= 500:
+			return fmt.Sprintf("upstream unavailable (HTTP %d)", ufe.Status)
+		default:
+			return fmt.Sprintf("upstream returned HTTP %d", ufe.Status)
+		}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "upstream request timed out"
+	}
+	return "failed to reach upstream"
 }
 
 func truncate(s string, n int) string {

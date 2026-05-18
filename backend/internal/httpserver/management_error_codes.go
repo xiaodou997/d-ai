@@ -21,6 +21,7 @@ const (
 	BizErrMissingField  = 30003
 
 	// 5xxxx Server
-	BizErrInternal  = 50001
-	BizErrDatabase  = 50002
+	BizErrInternal           = 50001
+	BizErrDatabase           = 50002
+	BizErrUpstreamUnavailable = 50003
 )
