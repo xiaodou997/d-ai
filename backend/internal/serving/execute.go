@@ -264,7 +264,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		return attemptResult{
 			decision: DecisionRetry,
 			finalErr: apiError(upstreamStatusToGateway(status), "upstream_error",
-				fmt.Sprintf("upstream returned %d: %s", status, errBody)),
+				fmt.Sprintf("upstream returned %d: %s", status, truncateValidUTF8(errBody, 512))),
 		}
 
 	case DecisionGiveUp:
@@ -501,13 +501,15 @@ func logUpstreamFailure(ctx context.Context, req *Request, cand *domain.RouteCan
 	slog.ErrorContext(ctx, "upstream call failed", attrs...)
 }
 
-// snippetBody returns up to 512 bytes of the upstream response body for error
-// reporting. Safe to call with a nil UpstreamResponse.
+// snippetBody returns up to 4 KiB of the upstream response body for diagnostics.
+// The cap is generous so logs / DB error_message capture meaningful vendor
+// payloads; callers that surface this to clients should re-truncate before
+// echoing it back.
 func snippetBody(resp *UpstreamResponse) string {
 	if resp == nil || resp.Body == nil {
 		return ""
 	}
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	return string(b)
 }
 

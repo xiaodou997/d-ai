@@ -216,7 +216,7 @@ func (s *Server) fetchUpstreamModelList(ctx context.Context, baseURL, apiKey, de
 		return nil, &upstreamFetchError{
 			Status: resp.StatusCode,
 			URL:    listURL,
-			Body:   truncate(string(body), 500),
+			Body:   truncate(string(body), 4096),
 		}
 	}
 
