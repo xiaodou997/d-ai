@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, shallowRef, computed } from 'vue'
-import { Refresh, Plus, Edit, CopyDocument } from '@element-plus/icons-vue'
+import { Refresh, Plus, Edit, Delete as DeleteIcon, CopyDocument } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listUserAPIKeys,
@@ -8,6 +8,7 @@ import {
   updateUserAPIKey,
   updateUserAPIKeyStatus,
   rotateUserAPIKey,
+  deleteUserAPIKey,
   listUserModelGrants,
   statusOptions,
   formatCredits
@@ -139,6 +140,20 @@ const rotateKey = async (row) => {
   } catch {}
 }
 
+const deleteKey = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确定删除 API Key「${row.name}」？删除后无法恢复，且立即失效。`, '删除 API Key', {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+    await deleteUserAPIKey(row.id)
+    ElMessage.success('已删除')
+    await fetchAPIKeys()
+  } catch {}
+}
+
 const copyKey = async (text) => {
   try {
     await navigator.clipboard.writeText(text ?? generatedKey.value)
@@ -220,7 +235,7 @@ onMounted(() => {
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column label="操作" width="240" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
               <el-button link type="info" @click="rotateKey(row)">轮换</el-button>
@@ -231,6 +246,7 @@ onMounted(() => {
               >
                 {{ row.status === 'active' ? '停用' : '启用' }}
               </el-button>
+              <el-button link type="danger" :icon="DeleteIcon" @click="deleteKey(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>

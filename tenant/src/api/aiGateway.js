@@ -113,6 +113,13 @@ export const rotateTenantAPIKey = (apiKeyId) => {
   return request.post(`/api/v1/tenants/me/api-keys/${apiKeyId}/rotate`)
 }
 
+/**
+ * 删除租户 API Key
+ */
+export const deleteTenantAPIKey = (apiKeyId) => {
+  return request.delete(`/api/v1/tenants/me/api-keys/${apiKeyId}`)
+}
+
 // ==================== 用户消耗统计 ====================
 
 /**

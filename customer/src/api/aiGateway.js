@@ -55,6 +55,13 @@ export const rotateUserAPIKey = (apiKeyId) => {
   return request.post(`/api/v1/users/me/api-keys/${apiKeyId}/rotate`)
 }
 
+/**
+ * 删除用户 API Key
+ */
+export const deleteUserAPIKey = (apiKeyId) => {
+  return request.delete(`/api/v1/users/me/api-keys/${apiKeyId}`)
+}
+
 // ==================== 用户消耗统计 ====================
 
 /**
