@@ -90,6 +90,10 @@ func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serv
 		userAmount = 0
 	}
 
+	if tenantAmount == 0 && userAmount == 0 {
+		return nil
+	}
+
 	resp, err := b.client.Freeze(ctx, urm.FreezeRequest{
 		IdempotencyKey: req.RequestID,
 		TenantID:       req.APIKey.TenantID,

@@ -17,7 +17,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"uni-ai-api/backend/internal/domain"
-	"uni-ai-api/backend/internal/formats/canonical"
 )
 
 // ============================================================================
@@ -38,17 +37,13 @@ type Request struct {
 	// pipeline runs.
 	Envelope *RequestEnvelope
 
-	// Parsed from HTTP body before pipeline starts
+	// Parsed from HTTP body before pipeline starts. The full client body lives
+	// on Envelope.ClientBody and is the source of truth for the upstream call
+	// (strict 1:1 passthrough — no canonical intermediate form).
 	ModelCode      string
 	CapabilityType domain.CapabilityType
 	ClientProtocol domain.UpstreamProtocol
 	IsStream       bool
-
-	// Canonical form of the decoded AI request
-	ChatReq  *canonical.ChatRequest
-	EmbedReq *canonical.EmbeddingRequest
-	ImageReq *canonical.ImageRequest
-	VideoReq *canonical.VideoRequest
 
 	// Resolved by AuthN step
 	APIKey *domain.APIKeyAuth

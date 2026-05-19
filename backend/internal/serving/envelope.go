@@ -12,8 +12,8 @@ import (
 // pipeline Request a pure data carrier and allows retries / fan-out
 // experiments to operate on Request without touching the wire.
 //
-// The Relay layer reads ClientProtocol to pick the right wire format and
-// IsStream to choose sync vs streaming write paths.
+// Execute step reads ClientProtocol to choose error-envelope shape and
+// reads IsStream to dispatch sync vs streaming write paths.
 type RequestEnvelope struct {
 	W              http.ResponseWriter
 	R              *http.Request

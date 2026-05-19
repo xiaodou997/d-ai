@@ -2,6 +2,7 @@ package serving
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,7 +20,6 @@ import (
 	"uni-ai-api/backend/internal/formats"
 	"uni-ai-api/backend/internal/formats/claude"
 	"uni-ai-api/backend/internal/formats/gemini"
-	"uni-ai-api/backend/internal/formats/openai/responses"
 	"uni-ai-api/backend/internal/routing"
 )
 
@@ -201,6 +202,18 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}
 
 	upstreamURL := buildURL(cand, req.IsStream)
+	slog.InfoContext(parentCtx, "upstream call started",
+		"request_id", req.RequestID,
+		"upstream_url", upstreamURL,
+		"model_code", req.ModelCode,
+		"upstream_model", cand.UpstreamModel,
+		"provider_code", cand.ProviderCode,
+		"is_stream", req.IsStream,
+	)
+	slog.DebugContext(parentCtx, "upstream request body",
+		"request_id", req.RequestID,
+		"body", string(body),
+	)
 	startTime := time.Now()
 	upResp, callErr := s.Transport.Do(attemptCtx, &UpstreamRequest{
 		Method:   "POST",
@@ -270,7 +283,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	case DecisionGiveUp:
 		drainAndClose(upResp)
 		req.RequestStatus = domain.RequestFailed
-		req.HTTPStatus = status
+		req.HTTPStatus = upstreamStatusToGateway(status)
 		req.ErrorCode = "upstream_http_error"
 		req.ErrorMessage = truncateValidUTF8(errBody, 1024)
 		return attemptResult{
@@ -525,11 +538,18 @@ func drainAndClose(resp *UpstreamResponse) {
 }
 
 // ============================================================================
-// Non-streaming execution
+// Non-streaming execution — strict 1:1 passthrough.
+//
+// The route candidate is guaranteed (by routes.go SQL filter) to share the
+// client's protocol, so the upstream response body is already in the wire
+// format the client expects. We extract usage as a side effect for billing
+// and forward the bytes verbatim. The only mutation is unwrapping the
+// CodeAssist {"response": {...}} envelope for gemini_cli / antigravity so
+// the client receives a vanilla Gemini response.
 // ============================================================================
 
-func (s *ExecuteStep) executeSync(ctx context.Context, req *Request, resp *UpstreamResponse, w http.ResponseWriter) error {
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024)) // 32MB max
+func (s *ExecuteStep) executeSync(_ context.Context, req *Request, resp *UpstreamResponse, w http.ResponseWriter) error {
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024)) // 32MB cap
 	if err != nil {
 		return fmt.Errorf("read upstream body: %w", err)
 	}
@@ -537,30 +557,28 @@ func (s *ExecuteStep) executeSync(ctx context.Context, req *Request, resp *Upstr
 
 	bodyBytes = unwrapCodeAssistResponse(req.Candidate, bodyBytes)
 
-	canonResp, err := formats.ToCanonicalChatResponse(bodyBytes, req.Candidate.Protocol, req.RequestID, req.Candidate.UpstreamModel)
-	if err != nil {
-		return fmt.Errorf("parse upstream response: %w", err)
-	}
-
-	// Extract usage for billing
-	if canonResp.Usage != nil {
-		req.TokenUsage = domain.TokenUsage{
-			PromptTokens:     canonResp.Usage.PromptTokens,
-			CompletionTokens: canonResp.Usage.CompletionTokens,
-			CacheWriteTokens: canonResp.Usage.CacheWriteTokens,
-			CacheReadTokens:  canonResp.Usage.CacheReadTokens,
-			ReasoningTokens:  canonResp.Usage.ReasoningTokens,
-		}
+	// Side-channel: usage for billing. ExtractSyncUsage returns a zero value
+	// when upstream did not report tokens; fillEstimatedUsage then falls back
+	// to byte-length estimation.
+	if u := formats.ExtractSyncUsage(bodyBytes, req.Candidate.Protocol); u.PromptTokens != 0 || u.CompletionTokens != 0 {
+		// Preserve any pre-populated image/video billing fields.
+		u.ImageCount = req.TokenUsage.ImageCount
+		u.ImageResolution = req.TokenUsage.ImageResolution
+		u.VideoSeconds = req.TokenUsage.VideoSeconds
+		u.VideoResolution = req.TokenUsage.VideoResolution
+		req.TokenUsage = u
 	}
 	fillEstimatedUsage(req, len(bodyBytes))
 
-	// Public-facing model code, not upstream's internal name.
-	canonResp.Model = req.ModelCode
-
-	relay := RelayFor(req.ClientProtocol)
-	if err := relay.WriteSync(w, canonResp); err != nil {
-		return fmt.Errorf("relay sync response: %w", err)
+	// Forward upstream Content-Type when present (Anthropic returns
+	// `application/json`; OpenAI/Gemini do likewise). Defaults are safe.
+	if ct := resp.Headers.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
 	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(bodyBytes)
 
 	req.RequestStatus = domain.RequestSuccess
 	req.HTTPStatus = resp.StatusCode
@@ -568,7 +586,14 @@ func (s *ExecuteStep) executeSync(ctx context.Context, req *Request, resp *Upstr
 }
 
 // ============================================================================
-// Streaming execution
+// Streaming execution — strict 1:1 line-level passthrough.
+//
+// Each SSE line from the upstream is forwarded to the client verbatim, with
+// two exceptions:
+//   - data: lines for gemini_cli / antigravity have the CodeAssist
+//     {"response": {...}} envelope stripped before forwarding.
+//   - Usage frames are inspected (not modified) to update the running token
+//     counters used for billing and first-token latency tracking.
 // ============================================================================
 
 func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *UpstreamResponse, w http.ResponseWriter, startTime time.Time) error {
@@ -577,85 +602,126 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 		return fmt.Errorf("response writer does not support streaming")
 	}
 
-	relay := RelayFor(req.ClientProtocol)
-	sink := relay.NewStream(w, flusher.Flush, req.RequestID, req.ModelCode)
-	if err := sink.Start(0); err != nil {
-		return fmt.Errorf("stream start: %w", err)
-	}
-	// Mark headers as committed so runtime_pipeline.go skips the error WriteHeader path.
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
 	req.HTTPStatus = http.StatusOK
 
+	slog.InfoContext(ctx, "stream started",
+		"request_id", req.RequestID,
+		"model_code", req.ModelCode,
+		"upstream_model", req.Candidate.UpstreamModel,
+		"provider_code", req.Candidate.ProviderCode,
+		"endpoint_id", req.Candidate.EndpointID,
+		"route_id", req.Candidate.RouteID,
+	)
+
 	protocol := req.Candidate.Protocol
-	responseID := req.RequestID
-	upstreamModel := req.Candidate.UpstreamModel
 	firstToken := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
-	var eventType string // used for Anthropic SSE event: field
+	var eventType string // tracks the most recent SSE `event:` line for Anthropic
 	var accumulatedOutputBytes int
+	dataPrefix := []byte("data: ")
+	eventPrefix := []byte("event: ")
+	donePayload := []byte("[DONE]")
+
+	writeLine := func(line []byte) error {
+		if _, err := w.Write(line); err != nil {
+			return err
+		}
+		if _, err := w.Write([]byte{'\n'}); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := scanner.Bytes()
+		// Take a local copy because scanner.Bytes() is invalidated on the next
+		// scan and we use the slice past the write call.
+		lineCopy := append([]byte(nil), line...)
+		slog.DebugContext(ctx, "upstream sse line", "request_id", req.RequestID, "line", string(lineCopy))
 
-		// Anthropic SSE has "event: <type>" lines
-		if strings.HasPrefix(line, "event: ") {
-			eventType = strings.TrimPrefix(line, "event: ")
+		switch {
+		case len(lineCopy) == 0:
+			// Blank line is the SSE event terminator — forward verbatim.
+			if err := writeLine(lineCopy); err != nil {
+				return streamClientWriteError(req, err)
+			}
+			flusher.Flush()
 			continue
-		}
 
-		if !strings.HasPrefix(line, "data: ") {
+		case bytes.HasPrefix(lineCopy, eventPrefix):
+			eventType = string(bytes.TrimPrefix(lineCopy, eventPrefix))
+			if err := writeLine(lineCopy); err != nil {
+				return streamClientWriteError(req, err)
+			}
+			continue
+
+		case bytes.HasPrefix(lineCopy, dataPrefix):
+			data := lineCopy[len(dataPrefix):]
+
+			if bytes.Equal(data, donePayload) {
+				if err := writeLine(lineCopy); err != nil {
+					return streamClientWriteError(req, err)
+				}
+				flusher.Flush()
+				eventType = ""
+				continue
+			}
+
+			// Strip the CodeAssist response envelope so the client sees a
+			// vanilla Gemini chunk. unwrapCodeAssistResponse is a no-op for
+			// non-CodeAssist providers.
+			dataUnwrapped := unwrapCodeAssistResponse(req.Candidate, data)
+			payloadForClient := dataUnwrapped
+			if bytes.Equal(dataUnwrapped, data) {
+				// Fast path: nothing changed — forward original framing.
+				if err := writeLine(lineCopy); err != nil {
+					return streamClientWriteError(req, err)
+				}
+			} else {
+				out := make([]byte, 0, len(dataPrefix)+len(dataUnwrapped))
+				out = append(out, dataPrefix...)
+				out = append(out, dataUnwrapped...)
+				if err := writeLine(out); err != nil {
+					return streamClientWriteError(req, err)
+				}
+			}
+			flusher.Flush()
+
+			// First-token latency: any non-empty data payload counts.
+			if !firstToken {
+				req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+				firstToken = true
+			}
+
+			// Side-extract usage. ExtractStreamUsage merges into the running
+			// counters; output_tokens are cumulative per provider semantics.
+			if u, ok := formats.ExtractStreamUsage(req.TokenUsage, payloadForClient, eventType, protocol); ok {
+				u.ImageCount = req.TokenUsage.ImageCount
+				u.ImageResolution = req.TokenUsage.ImageResolution
+				u.VideoSeconds = req.TokenUsage.VideoSeconds
+				u.VideoResolution = req.TokenUsage.VideoResolution
+				req.TokenUsage = u
+				accumulatedOutputBytes = 0
+			} else {
+				accumulatedOutputBytes += len(payloadForClient)
+			}
 			eventType = ""
-			continue
-		}
 
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			break
-		}
-
-		dataBytes := unwrapCodeAssistResponse(req.Candidate, []byte(data))
-		chunk, err := formats.ToCanonicalStreamChunk(
-			dataBytes, eventType, protocol, responseID, upstreamModel, 0,
-		)
-		eventType = ""
-
-		if err != nil || chunk == nil {
-			continue
-		}
-
-		// Track first-token latency
-		if !firstToken && len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-			req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
-			firstToken = true
-		}
-
-		// Accumulate usage from final chunk
-		if chunk.Usage != nil {
-			req.TokenUsage = domain.TokenUsage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				CacheWriteTokens: chunk.Usage.CacheWriteTokens,
-				CacheReadTokens:  chunk.Usage.CacheReadTokens,
-				ReasoningTokens:  chunk.Usage.ReasoningTokens,
+		default:
+			// Comment / unknown SSE line — forward verbatim, clear pending event.
+			if err := writeLine(lineCopy); err != nil {
+				return streamClientWriteError(req, err)
 			}
-			accumulatedOutputBytes = 0 // upstream provided real counts, reset estimator
-		} else if chunk.Choices != nil {
-			for _, c := range chunk.Choices {
-				accumulatedOutputBytes += len(c.Delta.Content)
-			}
-		}
-
-		// Always report the public model code to the client.
-		chunk.Model = req.ModelCode
-
-		if err := sink.Push(chunk); err != nil {
-			// Client likely disconnected — stop the stream.
-			req.RequestStatus = domain.RequestFailed
-			req.ErrorCode = "stream_write_error"
-			req.ErrorMessage = err.Error()
-			return nil
+			eventType = ""
 		}
 	}
 
@@ -663,15 +729,33 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 		req.RequestStatus = domain.RequestFailed
 		req.ErrorCode = "stream_read_error"
 		req.ErrorMessage = err.Error()
-		_ = sink.Error("stream_read_error", err.Error())
 		return nil
 	}
 
-	_ = sink.Finish()
 	fillEstimatedUsage(req, accumulatedOutputBytes)
-
 	req.RequestStatus = domain.RequestSuccess
 	req.HTTPStatus = http.StatusOK
+
+	slog.InfoContext(ctx, "stream finished",
+		"request_id", req.RequestID,
+		"model_code", req.ModelCode,
+		"upstream_model", req.Candidate.UpstreamModel,
+		"provider_code", req.Candidate.ProviderCode,
+		"first_token_ms", req.FirstTokenMs,
+		"total_ms", int(time.Since(startTime).Milliseconds()),
+		"prompt_tokens", req.TokenUsage.PromptTokens,
+		"completion_tokens", req.TokenUsage.CompletionTokens,
+	)
+	return nil
+}
+
+// streamClientWriteError marks the request as failed when the client socket
+// breaks mid-stream and returns nil so the pipeline does not treat this as a
+// pipeline-level error (response is already committed).
+func streamClientWriteError(req *Request, err error) error {
+	req.RequestStatus = domain.RequestFailed
+	req.ErrorCode = "stream_write_error"
+	req.ErrorMessage = err.Error()
 	return nil
 }
 
@@ -679,35 +763,47 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 // Helpers
 // ============================================================================
 
+// buildUpstreamBody produces the bytes we send to the upstream. The starting
+// point is the unmodified client request body (req.Envelope.ClientBody) — we
+// only mutate the `model` field (so upstream sees the deployment's
+// upstream_model rather than the client's logical model name) and apply
+// vendor-specific body transforms required by OAuth fixed providers:
+//
+//   - Codex: strip max_output_tokens / temperature / top_p, force store=false,
+//     default instructions. ApplyCodexRequestModifications operates on raw
+//     bytes so client-supplied fields (previous_response_id, reasoning, etc.)
+//     are preserved.
+//   - Claude OAuth: drop unsigned thinking blocks (SanitizeOAuthRequestBody).
+//   - Gemini CLI / Antigravity: wrap the body in CodeAssist envelope.
+//
+// Strict 1:1 protocol matching means the body's wire format already matches
+// the upstream; no canonical round-trip and no cross-protocol translation
+// happens here.
 func buildUpstreamBody(req *Request) ([]byte, error) {
-	switch {
-	case req.ChatReq != nil && req.Candidate.Protocol == domain.ProtocolOpenAIResponses:
-		respReq := responses.FromCanonical(req.ChatReq, req.Candidate.UpstreamModel)
-		if req.Candidate.FixedProviderType == domain.FixedProviderCodex {
-			responses.ApplyCodexModifications(respReq)
-		}
-		return json.Marshal(respReq)
+	if req.Envelope == nil || len(req.Envelope.ClientBody) == 0 {
+		return nil, fmt.Errorf("missing client request body")
+	}
+	body := req.Envelope.ClientBody
 
-	case req.ChatReq != nil:
-		body, err := formats.ToUpstreamChatRequest(req.ChatReq, req.Candidate.Protocol, req.Candidate.UpstreamModel)
+	// Model substitution. RewriteModel returns the original slice unchanged
+	// when the client already named upstream_model, so zero-cost in the
+	// common path.
+	body, err := formats.RewriteModel(body, req.Candidate.UpstreamModel)
+	if err != nil {
+		return nil, err
+	}
+
+	// Codex needs strict body shape before OAuth transforms (which it does
+	// not have — Codex is a fixed provider in the OpenAI Responses family,
+	// not a Claude/Gemini OAuth pool).
+	if req.Candidate.FixedProviderType == domain.FixedProviderCodex {
+		body, err = formats.ApplyCodexRequestModifications(body)
 		if err != nil {
 			return nil, err
 		}
-		return applyOAuthBodyTransform(req, body)
-
-	case req.EmbedReq != nil:
-		embedCopy := *req.EmbedReq
-		embedCopy.Model = req.Candidate.UpstreamModel
-		return json.Marshal(embedCopy)
-
-	case req.ImageReq != nil:
-		imgCopy := *req.ImageReq
-		imgCopy.Model = req.Candidate.UpstreamModel
-		return json.Marshal(imgCopy)
-
-	default:
-		return nil, fmt.Errorf("no request payload")
 	}
+
+	return applyOAuthBodyTransform(req, body)
 }
 
 func buildURL(c *domain.RouteCandidate, isStream bool) string {
@@ -722,13 +818,21 @@ func buildURL(c *domain.RouteCandidate, isStream bool) string {
 		return gemini.BuildCLIURL(c.BaseURL, action)
 	}
 
-	base := strings.TrimRight(c.BaseURL, "/")
+	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	path := c.RequestPath
 	if path == "" {
 		path = defaultPath(c.Protocol)
 	}
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
+	}
+	// 防止 base_url 末尾路径与 path 前缀重复（如 base_url 存了 /v1，defaultPath 也以 /v1/ 开头）
+	if u, err := url.Parse(base); err == nil {
+		if basePath := strings.TrimRight(u.Path, "/"); basePath != "" {
+			if trimmed, ok := strings.CutPrefix(path, basePath+"/"); ok {
+				path = "/" + trimmed
+			}
+		}
 	}
 	url := base + path
 	// {model} placeholder for public Gemini API (gateway-internal candidates
@@ -882,6 +986,8 @@ func codexSessionID(keyID, endpointID string) string {
 
 func upstreamStatusToGateway(code int) int {
 	switch {
+	case code == 0:
+		return http.StatusBadGateway // transport error (timeout, connection refused, etc.)
 	case code == 429:
 		return http.StatusTooManyRequests
 	case code >= 500:

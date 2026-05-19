@@ -8,128 +8,167 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"uni-ai-api/backend/internal/domain"
 	"uni-ai-api/backend/internal/formats"
-	"uni-ai-api/backend/internal/formats/canonical"
 	"uni-ai-api/backend/internal/formats/claude"
 	"uni-ai-api/backend/internal/observability"
 	"uni-ai-api/backend/internal/serving"
 )
 
-// handleRuntime is the unified entrypoint for all AI inference endpoints:
-//
-//	POST /v1/chat/completions
-//	POST /v1/responses
-//	POST /v1/embeddings
-//	POST /v1/images/generations
-//	POST /v1/messages  (native Anthropic)
-//
-// It builds a serving.Request, runs the pipeline, and maps errors to OpenAI-style
-// JSON error responses.
+// runtimeOverride carries values resolved from the URL path that must override
+// what would otherwise be parsed from the request body. Used by the Gemini
+// native endpoint where model and stream-ness live in the URL, not the body.
+type runtimeOverride struct {
+	model  string // upstream model code (when provided by URL)
+	stream bool   // true if this URL is a streaming variant
+	apply  bool   // false → ignore overrides and parse from body
+}
+
+// handleRuntime is the unified entrypoint for OpenAI / Anthropic native client
+// endpoints. The capability is fixed per route; model + stream-ness come from
+// the request body.
 func (s *Server) handleRuntime(capType domain.CapabilityType) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		clientProto := formats.DetectClientProtocol(r)
-
-		body, err := io.ReadAll(io.LimitReader(r.Body, 32*1024*1024))
-		if err != nil {
-			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Failed to read request body.", "body_read_error")
-			return
-		}
-		envelope := &serving.RequestEnvelope{
-			W:              w,
-			R:              r,
-			ClientProtocol: clientProto,
-			ClientBody:     body,
-		}
-		req := &serving.Request{
-			Envelope:       envelope,
-			CapabilityType: capType,
-			ClientProtocol: clientProto,
-			StartedAt:      time.Now(),
-			RequestID:      newRequestID(r),
-			TraceID:        r.Header.Get("X-Trace-Id"),
-		}
-
-		switch capType {
-		case domain.CapabilityChat:
-			chatReq, err := formats.ParseClientChatRequest(body, clientProto)
-			if err != nil {
-				writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Invalid request body: "+err.Error(), "invalid_body")
-				return
-			}
-			req.ModelCode = chatReq.Model
-			req.IsStream = chatReq.Stream
-			req.ChatReq = chatReq
-			req.ConversationID = extractConversationID(body, r)
-			envelope.IsStream = chatReq.Stream
-
-		case domain.CapabilityEmbedding:
-			var embedReq canonical.EmbeddingRequest
-			if err := json.Unmarshal(body, &embedReq); err != nil {
-				writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Invalid request body.", "invalid_body")
-				return
-			}
-			req.ModelCode = embedReq.Model
-			req.EmbedReq = &embedReq
-
-		case domain.CapabilityImage:
-			var imgReq canonical.ImageRequest
-			if err := json.Unmarshal(body, &imgReq); err != nil {
-				writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Invalid request body.", "invalid_body")
-				return
-			}
-			req.ModelCode = imgReq.Model
-			req.ImageReq = &imgReq
-			// Populate usage fields upfront — image count and resolution are known
-			// from the request; they do not appear in the upstream response.
-			n := 1
-			if imgReq.N != nil && *imgReq.N > 0 {
-				n = *imgReq.N
-			}
-			req.TokenUsage.ImageCount = n
-			req.TokenUsage.ImageResolution = imgReq.Size
-
-		case domain.CapabilityVideo:
-			var vidReq canonical.VideoRequest
-			if err := json.Unmarshal(body, &vidReq); err != nil {
-				writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Invalid request body.", "invalid_body")
-				return
-			}
-			req.ModelCode = vidReq.Model
-			req.VideoReq = &vidReq
-			req.TokenUsage.VideoSeconds = vidReq.Duration
-			req.TokenUsage.VideoResolution = vidReq.Resolution
-
-		default:
-			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Unsupported capability.", "unsupported_capability")
-			return
-		}
-
-		if req.ModelCode == "" {
-			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Missing required parameter: model.", "missing_required_parameter")
-			return
-		}
-
-		if err := s.pipeline.Run(r.Context(), req); err != nil {
-			// If Execute step already wrote headers/body (HTTPStatus != 0), the
-			// response is committed (especially for SSE streams). Writing another
-			// JSON error here would produce a "superfluous WriteHeader" warning
-			// and corrupt the stream. Just log and return.
-			if req.HTTPStatus != 0 {
-				s.logger.WarnContext(r.Context(), "pipeline error after response committed",
-					"error", err,
-					"request_id", req.RequestID,
-					"http_status", req.HTTPStatus,
-				)
-				return
-			}
-			writeRuntimeError(w, clientProto, err)
-			return
-		}
-		writeRouteHeaders(w, req)
+		s.serveRuntime(w, r, capType, runtimeOverride{})
 	}
+}
+
+// handleGeminiRuntime handles Google's native paths
+// `POST /v1beta/models/{model}:generateContent|streamGenerateContent|embedContent`.
+// Chi captures the entire last segment ("gemini-pro:generateContent"); we
+// split on the colon to recover model and action.
+func (s *Server) handleGeminiRuntime(w http.ResponseWriter, r *http.Request) {
+	modelAction := chi.URLParam(r, "modelAction")
+	colon := strings.IndexByte(modelAction, ':')
+	if colon <= 0 || colon == len(modelAction)-1 {
+		writeRuntimeErrorByProtocol(w, domain.ProtocolGeminiGenerate, http.StatusBadRequest,
+			"Invalid Gemini path: expected /v1beta/models/MODEL:ACTION.", "invalid_request")
+		return
+	}
+	model, action := modelAction[:colon], modelAction[colon+1:]
+
+	var (
+		capType domain.CapabilityType
+		stream  bool
+	)
+	switch action {
+	case "generateContent":
+		capType = domain.CapabilityChat
+	case "streamGenerateContent":
+		capType = domain.CapabilityChat
+		stream = true
+	case "embedContent":
+		capType = domain.CapabilityEmbedding
+	default:
+		writeRuntimeErrorByProtocol(w, domain.ProtocolGeminiGenerate, http.StatusBadRequest,
+			fmt.Sprintf("Unsupported Gemini action %q.", action), "invalid_request")
+		return
+	}
+
+	s.serveRuntime(w, r, capType, runtimeOverride{
+		model:  model,
+		stream: stream,
+		apply:  true,
+	})
+}
+
+func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType domain.CapabilityType, override runtimeOverride) {
+	clientProto := formats.DetectClientProtocol(r)
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 32*1024*1024))
+	if err != nil {
+		writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Failed to read request body.", "body_read_error")
+		return
+	}
+
+	envelope := &serving.RequestEnvelope{
+		W:              w,
+		R:              r,
+		ClientProtocol: clientProto,
+		ClientBody:     body,
+	}
+	req := &serving.Request{
+		Envelope:       envelope,
+		CapabilityType: capType,
+		ClientProtocol: clientProto,
+		StartedAt:      time.Now(),
+		RequestID:      newRequestID(r),
+		TraceID:        r.Header.Get("X-Trace-Id"),
+	}
+
+	// Resolve model + stream. URL overrides (Gemini) take precedence over body
+	// fields because the body of a Gemini request typically has no `model`.
+	var model string
+	var stream bool
+	if override.apply {
+		model = override.model
+		stream = override.stream
+	} else {
+		meta, err := formats.ParseRequestMeta(body)
+		if err != nil {
+			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
+				"Invalid request body: "+err.Error(), "invalid_body")
+			return
+		}
+		model = meta.Model
+		stream = meta.Stream
+	}
+
+	req.ModelCode = model
+	req.IsStream = stream
+	envelope.IsStream = stream
+
+	// Per-capability billing-only metadata (does not influence routing or
+	// request body — strictly used for usage logging / freeze estimate).
+	switch capType {
+	case domain.CapabilityChat:
+		req.ConversationID = extractConversationID(body, r)
+	case domain.CapabilityImage:
+		var meta struct {
+			N    *int   `json:"n"`
+			Size string `json:"size"`
+		}
+		_ = json.Unmarshal(body, &meta)
+		n := 1
+		if meta.N != nil && *meta.N > 0 {
+			n = *meta.N
+		}
+		req.TokenUsage.ImageCount = n
+		req.TokenUsage.ImageResolution = meta.Size
+	case domain.CapabilityVideo:
+		var meta struct {
+			Resolution string  `json:"resolution"`
+			Duration   float64 `json:"duration"`
+		}
+		_ = json.Unmarshal(body, &meta)
+		req.TokenUsage.VideoSeconds = meta.Duration
+		req.TokenUsage.VideoResolution = meta.Resolution
+	}
+
+	if req.ModelCode == "" {
+		writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
+			"Missing required parameter: model.", "missing_required_parameter")
+		return
+	}
+
+	if err := s.pipeline.Run(r.Context(), req); err != nil {
+		if req.HTTPStatus != 0 {
+			s.logger.WarnContext(r.Context(), "pipeline error after response committed",
+				"error", err,
+				"request_id", req.RequestID,
+				"http_status", req.HTTPStatus,
+			)
+			return
+		}
+		writeRuntimeError(w, clientProto, err)
+		return
+	}
+	writeRouteHeaders(w, req)
 }
 
 // writeRuntimeError converts a pipeline error to a protocol-appropriate JSON
@@ -158,7 +197,6 @@ func writeRuntimeErrorByProtocol(w http.ResponseWriter, clientProto domain.Upstr
 	if clientProto == domain.ProtocolAnthropicMessages {
 		body, err := claude.MarshalError(code, message)
 		if err != nil {
-			// Fall back to OpenAI shape so the client at least gets JSON.
 			writeOpenAIError(w, status, message, "api_error", code)
 			return
 		}

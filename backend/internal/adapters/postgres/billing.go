@@ -129,6 +129,12 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 	total := promptCost + completionCost + cacheWriteCost + cacheReadCost + reasoningCost
 	totalTokens := int64(usage.TotalTokens())
 
+	// Integer division truncates sub-1 results to 0 for small token counts.
+	// Apply a floor of 1 when there is real token usage and the model has non-zero pricing.
+	if total == 0 && totalTokens > 0 && (pricing.InputPer1M > 0 || pricing.OutputPer1M > 0) {
+		total = 1
+	}
+
 	return domain.BillingResult{
 		PlatformCost:     total,
 		UserCost:         total,

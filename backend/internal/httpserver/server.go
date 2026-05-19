@@ -367,6 +367,15 @@ func New(cfg Config) *Server {
 		r.Post("/messages", s.handleRuntime(domain.CapabilityChat)) // Native Anthropic client path
 		r.Post("/messages/count_tokens", s.handleCountTokens)       // Anthropic count_tokens API
 	})
+	// Native Gemini client endpoints. Chi captures the last URL segment
+	// (e.g. "gemini-pro:generateContent") whole; the handler splits on ":" to
+	// derive the model name and action. Required so strict 1:1 routing can
+	// match gemini_generate / gemini_embeddings deployments without a Chat-API
+	// cross-protocol bridge.
+	router.Route("/v1beta", func(r chi.Router) {
+		r.Use(s.runtimeAuth)
+		r.Post("/models/{modelAction}", s.handleGeminiRuntime)
+	})
 
 	s.httpServer = &http.Server{
 		Handler:           router,

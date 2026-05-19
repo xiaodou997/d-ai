@@ -6,18 +6,13 @@ import (
 	"net/http"
 
 	"uni-ai-api/backend/internal/domain"
-	"uni-ai-api/backend/internal/formats/claude"
 )
 
 // handleCountTokens implements Anthropic's POST /v1/messages/count_tokens.
 //
-// The request body shape matches Messages (model + messages + system + tools),
-// but no upstream call is made: we return a character-based local estimate.
-// This is intentional — Claude Code uses count_tokens to plan context window
-// utilisation, not for billing, so an estimate is adequate. A future enhancement
-// can route the call to the real Anthropic upstream when one is available.
-//
-// Response shape (Anthropic-compatible):
+// We return a character-based local estimate instead of calling upstream:
+// Claude Code uses count_tokens to plan context-window utilisation, not for
+// billing, so an estimate is adequate. The response shape mirrors Anthropic's:
 //
 //	{"input_tokens": 1234}
 func (s *Server) handleCountTokens(w http.ResponseWriter, r *http.Request) {
@@ -28,37 +23,34 @@ func (s *Server) handleCountTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req claude.MessagesRequest
+	// Use json.RawMessage to count bytes verbatim without re-modelling
+	// the entire Anthropic request schema. This is robust to schema drift
+	// (new fields just contribute their bytes to the estimate, which is the
+	// desired behaviour for a byte-based heuristic).
+	var req struct {
+		System   json.RawMessage   `json:"system"`
+		Messages []json.RawMessage `json:"messages"`
+		Tools    []json.RawMessage `json:"tools"`
+	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeRuntimeErrorByProtocol(w, domain.ProtocolAnthropicMessages,
 			http.StatusBadRequest, "Invalid request body: "+err.Error(), "invalid_body")
 		return
 	}
 
-	estimate := estimateInputTokens(&req)
+	totalBytes := len(req.System)
+	for _, m := range req.Messages {
+		totalBytes += len(m)
+	}
+	for _, t := range req.Tools {
+		totalBytes += len(t)
+	}
+
+	estimate := 0
+	if totalBytes > 0 {
+		// bytes / 3, rounded up — matches fillEstimatedUsage in serving/execute.go.
+		estimate = (totalBytes + 2) / 3
+	}
 
 	writeJSON(w, http.StatusOK, map[string]int{"input_tokens": estimate})
-}
-
-// estimateInputTokens returns a conservative byte-based token count using the
-// project-wide bytes/3 heuristic. Sums system prompt + all message text +
-// tool schemas.
-func estimateInputTokens(req *claude.MessagesRequest) int {
-	bytes := len(req.System)
-
-	for _, m := range req.Messages {
-		// Content can be a plain string or an array of blocks. Treat the raw
-		// JSON length as a safe upper bound for text-heavy payloads.
-		bytes += len(m.Content)
-	}
-
-	for _, t := range req.Tools {
-		bytes += len(t.Name) + len(t.Description) + len(t.InputSchema)
-	}
-
-	if bytes == 0 {
-		return 0
-	}
-	// bytes / 3, rounded up — matches fillEstimatedUsage in serving/execute.go.
-	return (bytes + 2) / 3
 }

@@ -219,14 +219,14 @@ func (s *Server) fetchUpstreamModelList(ctx context.Context, baseURL, apiKey, de
 }
 
 func modelListURLAndAuth(baseURL, apiKey, defaultProtocol string) (listURL, authHeader, authValue string) {
-	base := strings.TrimRight(baseURL, "/")
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	switch defaultProtocol {
 	case string(domain.EndpointProtocolAnthropic):
 		return base + "/v1/models", "x-api-key", apiKey
 	case string(domain.EndpointProtocolGemini):
 		return base + "/v1beta/models", "x-goog-api-key", apiKey
 	default:
-		return base + "/models", "Authorization", "Bearer " + apiKey
+		return base + "/v1/models", "Authorization", "Bearer " + apiKey
 	}
 }
 
