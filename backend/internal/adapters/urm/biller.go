@@ -91,17 +91,17 @@ func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serv
 	}
 
 	resp, err := b.client.Freeze(ctx, urm.FreezeRequest{
-		RequestID:    req.RequestID,
-		TenantID:     req.APIKey.TenantID,
-		CustomerID:   req.APIKey.UserID,
-		Description:  "ai-gateway: " + req.ModelCode,
-		TenantAmount: tenantAmount,
-		UserAmount:   userAmount,
+		IdempotencyKey: req.RequestID,
+		TenantID:       req.APIKey.TenantID,
+		UserID:         req.APIKey.UserID,
+		Description:    "ai-gateway: " + req.ModelCode,
+		TenantAmount:   tenantAmount,
+		UserAmount:     userAmount,
 	})
 	if err != nil {
 		return err
 	}
-	req.URMTransactionID = resp.TransactionID
+	req.URMTransactionID = resp.EventID
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (b *Biller) Confirm(ctx context.Context, req *serving.Request, _ serving.Bi
 	}
 
 	_, err = b.client.Confirm(ctx, urm.ConfirmRequest{
-		TransactionID:      req.URMTransactionID,
+		EventID:            req.URMTransactionID,
 		ActualTenantAmount: actualTenant,
 		ActualUserAmount:   actualUser,
 	})

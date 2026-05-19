@@ -7,30 +7,30 @@ type Response[T any] struct {
 }
 
 type FreezeRequest struct {
-	RequestID    string `json:"requestId"`
-	TenantID     string `json:"tenantId"`
-	CustomerID   string `json:"customerId,omitempty"`
-	Description  string `json:"description,omitempty"`
-	TenantAmount int64  `json:"tenantAmount"`
-	UserAmount   int64  `json:"userAmount"`
+	IdempotencyKey string `json:"idempotencyKey"`
+	TenantID       string `json:"tenantId"`
+	UserID         string `json:"userId,omitempty"`
+	Description    string `json:"description,omitempty"`
+	TenantAmount   int64  `json:"tenantAmount"`
+	UserAmount     int64  `json:"userAmount"`
 }
 
 type FreezeResponse struct {
-	TransactionID string `json:"transactionId"`
-	FrozenTenant  int64  `json:"frozenTenant"`
-	FrozenUser    int64  `json:"frozenUser"`
-	Status        string `json:"status"`
+	EventID      string `json:"eventId"`
+	FrozenTenant int64  `json:"frozenTenant"`
+	FrozenUser   int64  `json:"frozenUser"`
+	Status       string `json:"status"`
 }
 
 type ConfirmRequest struct {
-	TransactionID      string `json:"transactionId"`
+	EventID            string `json:"eventId"`
 	ActualTenantAmount int64  `json:"actualTenantAmount"`
 	ActualUserAmount   int64  `json:"actualUserAmount"`
 }
 
 type ConfirmResponse struct {
-	TransactionID string `json:"transactionId"`
-	Status        string `json:"status"`
+	EventID string `json:"eventId"`
+	Status  string `json:"status"`
 }
 
 type BalanceResponse struct {
