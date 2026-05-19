@@ -11,35 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
-SELECT
-  id,
+const createAPIKey = `-- name: CreateAPIKey :one
+INSERT INTO ai_api_keys (
   owner_type,
   tenant_id,
   user_id,
-  key_prefix,
+  key_hash,
+  last_four,
   name,
   quota_limit,
-  quota_used,
-  quota_reserved,
   allowed_models,
   status,
   expires_at,
-  created_by,
-  created_at,
-  updated_at
-FROM ai_api_keys
-WHERE key_hash = $1
-  AND status = 'active'
-  AND (expires_at IS NULL OR expires_at > now())
+  created_by
+) VALUES (
+  $1, $2, $8, $3, $4, $5, $9, $6, $7, $10, $11
+)
+RETURNING
+  id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
 `
 
-type GetAPIKeyByHashRow struct {
+type CreateAPIKeyParams struct {
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	KeyHash       string             `json:"key_hash"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	UserID        pgtype.Text        `json:"user_id"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+}
+
+type CreateAPIKeyRow struct {
 	ID            pgtype.UUID        `json:"id"`
 	OwnerType     string             `json:"owner_type"`
 	TenantID      string             `json:"tenant_id"`
 	UserID        pgtype.Text        `json:"user_id"`
-	KeyPrefix     string             `json:"key_prefix"`
+	LastFour      pgtype.Text        `json:"last_four"`
 	Name          string             `json:"name"`
 	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
 	QuotaUsed     int64              `json:"quota_used"`
@@ -47,6 +60,71 @@ type GetAPIKeyByHashRow struct {
 	AllowedModels []byte             `json:"allowed_models"`
 	Status        string             `json:"status"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (CreateAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, createAPIKey,
+		arg.OwnerType,
+		arg.TenantID,
+		arg.KeyHash,
+		arg.LastFour,
+		arg.Name,
+		arg.AllowedModels,
+		arg.Status,
+		arg.UserID,
+		arg.QuotaLimit,
+		arg.ExpiresAt,
+		arg.CreatedBy,
+	)
+	var i CreateAPIKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.LastFour,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
+SELECT
+  id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
+FROM ai_api_keys
+WHERE key_hash = $1
+`
+
+type GetAPIKeyByHashRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
 	CreatedBy     pgtype.Text        `json:"created_by"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
@@ -60,7 +138,7 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (GetAPIKe
 		&i.OwnerType,
 		&i.TenantID,
 		&i.UserID,
-		&i.KeyPrefix,
+		&i.LastFour,
 		&i.Name,
 		&i.QuotaLimit,
 		&i.QuotaUsed,
@@ -68,6 +146,363 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (GetAPIKe
 		&i.AllowedModels,
 		&i.Status,
 		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAPIKeyByID = `-- name: GetAPIKeyByID :one
+SELECT
+  id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
+FROM ai_api_keys
+WHERE id = $1
+  AND tenant_id = $2
+`
+
+type GetAPIKeyByIDParams struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID string      `json:"tenant_id"`
+}
+
+type GetAPIKeyByIDRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (GetAPIKeyByIDRow, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyByID, arg.ID, arg.TenantID)
+	var i GetAPIKeyByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.LastFour,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listAPIKeys = `-- name: ListAPIKeys :many
+SELECT
+  id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
+FROM ai_api_keys
+WHERE tenant_id = $1
+  AND ($2::text IS NULL OR owner_type = $2::text)
+  AND ($3::text IS NULL OR user_id = $3::text)
+ORDER BY created_at DESC
+`
+
+type ListAPIKeysParams struct {
+	TenantID  string      `json:"tenant_id"`
+	OwnerType pgtype.Text `json:"owner_type"`
+	UserID    pgtype.Text `json:"user_id"`
+}
+
+type ListAPIKeysRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAPIKeys(ctx context.Context, arg ListAPIKeysParams) ([]ListAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listAPIKeys, arg.TenantID, arg.OwnerType, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAPIKeysRow{}
+	for rows.Next() {
+		var i ListAPIKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerType,
+			&i.TenantID,
+			&i.UserID,
+			&i.LastFour,
+			&i.Name,
+			&i.QuotaLimit,
+			&i.QuotaUsed,
+			&i.QuotaReserved,
+			&i.AllowedModels,
+			&i.Status,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rotateAPIKey = `-- name: RotateAPIKey :one
+UPDATE ai_api_keys
+SET key_hash   = $3,
+    last_four  = $4,
+    updated_at = now()
+WHERE id = $1
+  AND tenant_id = $2
+RETURNING
+  key_hash, id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
+`
+
+type RotateAPIKeyParams struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID string      `json:"tenant_id"`
+	KeyHash  string      `json:"key_hash"`
+	LastFour pgtype.Text `json:"last_four"`
+}
+
+type RotateAPIKeyRow struct {
+	KeyHash       string             `json:"key_hash"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) (RotateAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, rotateAPIKey,
+		arg.ID,
+		arg.TenantID,
+		arg.KeyHash,
+		arg.LastFour,
+	)
+	var i RotateAPIKeyRow
+	err := row.Scan(
+		&i.KeyHash,
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.LastFour,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const touchLastUsedAt = `-- name: TouchLastUsedAt :exec
+UPDATE ai_api_keys
+SET last_used_at = now()
+WHERE id = $1
+  AND (last_used_at IS NULL OR last_used_at < now() - interval '5 minutes')
+`
+
+func (q *Queries) TouchLastUsedAt(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, touchLastUsedAt, id)
+	return err
+}
+
+const updateAPIKey = `-- name: UpdateAPIKey :one
+UPDATE ai_api_keys
+SET name           = $3,
+    quota_limit    = $6,
+    allowed_models = $4,
+    status         = $5,
+    expires_at     = $7,
+    updated_at     = now()
+WHERE id = $1
+  AND tenant_id = $2
+RETURNING
+  key_hash, id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
+`
+
+type UpdateAPIKeyParams struct {
+	ID            pgtype.UUID        `json:"id"`
+	TenantID      string             `json:"tenant_id"`
+	Name          string             `json:"name"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+type UpdateAPIKeyRow struct {
+	KeyHash       string             `json:"key_hash"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAPIKey(ctx context.Context, arg UpdateAPIKeyParams) (UpdateAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, updateAPIKey,
+		arg.ID,
+		arg.TenantID,
+		arg.Name,
+		arg.AllowedModels,
+		arg.Status,
+		arg.QuotaLimit,
+		arg.ExpiresAt,
+	)
+	var i UpdateAPIKeyRow
+	err := row.Scan(
+		&i.KeyHash,
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.LastFour,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateAPIKeyStatus = `-- name: UpdateAPIKeyStatus :one
+UPDATE ai_api_keys
+SET status     = $3,
+    updated_at = now()
+WHERE id = $1
+  AND tenant_id = $2
+RETURNING
+  key_hash, id, owner_type, tenant_id, user_id, last_four, name,
+  quota_limit, quota_used, quota_reserved, allowed_models,
+  status, expires_at, last_used_at, created_by, created_at, updated_at
+`
+
+type UpdateAPIKeyStatusParams struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID string      `json:"tenant_id"`
+	Status   string      `json:"status"`
+}
+
+type UpdateAPIKeyStatusRow struct {
+	KeyHash       string             `json:"key_hash"`
+	ID            pgtype.UUID        `json:"id"`
+	OwnerType     string             `json:"owner_type"`
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	LastFour      pgtype.Text        `json:"last_four"`
+	Name          string             `json:"name"`
+	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
+	QuotaUsed     int64              `json:"quota_used"`
+	QuotaReserved int64              `json:"quota_reserved"`
+	AllowedModels []byte             `json:"allowed_models"`
+	Status        string             `json:"status"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAPIKeyStatus(ctx context.Context, arg UpdateAPIKeyStatusParams) (UpdateAPIKeyStatusRow, error) {
+	row := q.db.QueryRow(ctx, updateAPIKeyStatus, arg.ID, arg.TenantID, arg.Status)
+	var i UpdateAPIKeyStatusRow
+	err := row.Scan(
+		&i.KeyHash,
+		&i.ID,
+		&i.OwnerType,
+		&i.TenantID,
+		&i.UserID,
+		&i.LastFour,
+		&i.Name,
+		&i.QuotaLimit,
+		&i.QuotaUsed,
+		&i.QuotaReserved,
+		&i.AllowedModels,
+		&i.Status,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,

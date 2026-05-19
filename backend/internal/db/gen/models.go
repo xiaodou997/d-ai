@@ -27,7 +27,7 @@ type AiApiKey struct {
 	TenantID      string             `json:"tenant_id"`
 	UserID        pgtype.Text        `json:"user_id"`
 	KeyHash       string             `json:"key_hash"`
-	KeyPrefix     string             `json:"key_prefix"`
+	LastFour      pgtype.Text        `json:"last_four"`
 	Name          string             `json:"name"`
 	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
 	QuotaUsed     int64              `json:"quota_used"`
@@ -35,6 +35,7 @@ type AiApiKey struct {
 	AllowedModels []byte             `json:"allowed_models"`
 	Status        string             `json:"status"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
 	CreatedBy     pgtype.Text        `json:"created_by"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
@@ -260,8 +261,8 @@ type AiTenantUserPrice struct {
 
 type AiUpstreamDeployment struct {
 	ID                 pgtype.UUID        `json:"id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`          // nullable; set for API Key型
-	CredentialPoolID   pgtype.UUID        `json:"credential_pool_id"`   // nullable; set for OAuth池型
+	EndpointID         pgtype.UUID        `json:"endpoint_id"`
+	CredentialPoolID   pgtype.UUID        `json:"credential_pool_id"`
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`
@@ -324,6 +325,7 @@ type AiUsageLog struct {
 	AttemptsCount        int32              `json:"attempts_count"`
 	FinalRouteID         pgtype.UUID        `json:"final_route_id"`
 	ClientProtocol       string             `json:"client_protocol"`
+	Resolution           pgtype.Text        `json:"resolution"`
 }
 
 type AiUsageRollupsHourly struct {

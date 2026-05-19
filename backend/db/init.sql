@@ -13,15 +13,16 @@ CREATE TABLE IF NOT EXISTS ai_api_keys (
   owner_type     TEXT        NOT NULL CHECK (owner_type IN ('user', 'tenant')),
   tenant_id      TEXT        NOT NULL,
   user_id        TEXT,
-  key_hash       TEXT        NOT NULL UNIQUE,
-  key_prefix     TEXT        NOT NULL,
+  key_hash       TEXT        NOT NULL,
+  last_four      CHAR(4),
   name           TEXT        NOT NULL,
   quota_limit    BIGINT,
   quota_used     BIGINT      NOT NULL DEFAULT 0,
   quota_reserved BIGINT      NOT NULL DEFAULT 0,
   allowed_models JSONB       NOT NULL DEFAULT '[]',
-  status         TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'expired')),
+  status         TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   expires_at     TIMESTAMPTZ,
+  last_used_at   TIMESTAMPTZ,
   created_by     TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -32,9 +33,10 @@ CREATE TABLE IF NOT EXISTS ai_api_keys (
   )
 );
 
-CREATE INDEX IF NOT EXISTS idx_ai_api_keys_tenant ON ai_api_keys (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_ai_api_keys_user   ON ai_api_keys (user_id);
-CREATE INDEX IF NOT EXISTS idx_ai_api_keys_status ON ai_api_keys (status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_api_keys_key_hash     ON ai_api_keys (key_hash);
+CREATE INDEX IF NOT EXISTS idx_ai_api_keys_tenant              ON ai_api_keys (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ai_api_keys_user                ON ai_api_keys (user_id);
+CREATE INDEX IF NOT EXISTS idx_ai_api_keys_tenant_status       ON ai_api_keys (tenant_id, status);
 
 -- ============================================================================
 -- AI Providers (厂商)
