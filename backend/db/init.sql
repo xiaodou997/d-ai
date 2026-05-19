@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS ai_credential_pools (
     CHECK (fixed_provider_type IN ('codex', 'claude_oauth', 'gemini_cli', 'antigravity')),
   oauth_strategy      TEXT        NOT NULL DEFAULT 'round_robin'
     CHECK (oauth_strategy IN ('round_robin', 'weighted')),
+  sticky_granularity  TEXT        NOT NULL DEFAULT 'credential'
+    CHECK (sticky_granularity IN ('credential', 'pool')),
   notes               TEXT,
   status              TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -206,6 +208,9 @@ CREATE TABLE IF NOT EXISTS ai_model_routes (
   priority               INTEGER     NOT NULL DEFAULT 100 CHECK (priority >= 0),
   weight                 INTEGER     NOT NULL DEFAULT 100 CHECK (weight >= 0),
   supports_stream        BOOLEAN     NOT NULL DEFAULT true,
+  cost_per_1k_tokens     NUMERIC(10,6) NOT NULL DEFAULT 0,
+  score_weights_override JSONB,
+  sticky_enabled         BOOLEAN     NOT NULL DEFAULT true,
   status                 TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -385,6 +390,10 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   error_message          TEXT,
   oauth_credential_id    UUID,
   credential_pool_id     UUID,
+  attempts_count         INT         NOT NULL DEFAULT 1,
+  final_route_id         UUID,
+  client_protocol        TEXT        NOT NULL DEFAULT 'openai_chat',
+  resolution             TEXT,
   usage_estimated        BOOLEAN     NOT NULL DEFAULT false,
   usage_source           TEXT        NOT NULL DEFAULT 'upstream',
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -546,15 +555,8 @@ CREATE INDEX IF NOT EXISTS idx_ai_admin_audit_logs_object ON ai_admin_audit_logs
 CREATE INDEX IF NOT EXISTS idx_ai_admin_audit_logs_actor  ON ai_admin_audit_logs (actor, created_at DESC);
 
 -- ============================================================================
--- P3: 多维评分路由 (route scorer weights + per-route cost hint)
+-- AI Route Score Weights (多维评分路由权重配置)
 -- ============================================================================
-
--- Route-level scoring cost hint (optional; 0 = Pool/free, >0 = paid upstream)
-ALTER TABLE ai_model_routes
-  ADD COLUMN IF NOT EXISTS cost_per_1k_tokens    NUMERIC(10,6) NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS score_weights_override JSONB;
-
--- Global (and future per-tenant/per-model) scorer weight config
 CREATE TABLE IF NOT EXISTS ai_route_score_weights (
   id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   scope      TEXT        NOT NULL,   -- 'global' | 'tenant:<id>' | 'model:<id>'
@@ -568,26 +570,9 @@ INSERT INTO ai_route_score_weights (scope, weights)
   ON CONFLICT (scope) DO NOTHING;
 
 -- ============================================================================
--- P4: Sticky 路由 + 可观测 + Payload 落盘
--- ============================================================================
-
--- Sticky routing: allow per-route opt-out and per-pool granularity override.
-ALTER TABLE ai_model_routes
-  ADD COLUMN IF NOT EXISTS sticky_enabled BOOLEAN NOT NULL DEFAULT TRUE;
-
-ALTER TABLE ai_credential_pools
-  ADD COLUMN IF NOT EXISTS sticky_granularity TEXT NOT NULL DEFAULT 'credential'
-    CHECK (sticky_granularity IN ('credential', 'pool'));
-
--- Usage log: multi-attempt metadata.
-ALTER TABLE ai_usage_logs
-  ADD COLUMN IF NOT EXISTS attempts_count  INT  NOT NULL DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS final_route_id  UUID,
-  ADD COLUMN IF NOT EXISTS client_protocol TEXT NOT NULL DEFAULT 'openai_chat',
-  ADD COLUMN IF NOT EXISTS resolution      TEXT;
-
--- Request payload table: failed requests (required) + sampled successes.
+-- AI Request Payloads (请求落盘：失败请求必存 + 成功请求采样)
 -- upstream_body / raw_client_body are AES-GCM encrypted (BYTEA).
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_request_payloads (
   id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   usage_log_id      UUID,

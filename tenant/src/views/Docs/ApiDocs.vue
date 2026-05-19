@@ -248,10 +248,8 @@ function scrollTo(id) {
   </div>
 </template>
 
-<style scoped lang="scss">
-.docs-root {
-  min-height: 100%;
-}
+<style scoped>
+.docs-root { min-height: 100%; }
 
 .docs-layout {
   display: flex;
@@ -295,18 +293,9 @@ function scrollTo(id) {
   color: #64748b;
   transition: all 0.15s ease;
   margin-bottom: 2px;
-
-  &:hover {
-    background: #f8fafc;
-    color: #334155;
-  }
-
-  &--active {
-    background: #eff6ff;
-    color: #3b82f6;
-    font-weight: 700;
-  }
 }
+.toc-item:hover { background: #f8fafc; color: #334155; }
+.toc-item--active { background: #eff6ff; color: #3b82f6; font-weight: 700; }
 
 /* ── 右侧内容 ─────────────────────────────────── */
 .docs-content {
@@ -332,34 +321,29 @@ function scrollTo(id) {
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
-
-  h2 {
-    margin: 0;
-    font-size: 17px;
-    font-weight: 800;
-    color: #0f172a;
-  }
+}
+.section-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
 }
 
-.section-icon {
-  color: #0ea5e9;
-  font-size: 20px;
-}
+.section-icon { color: #0ea5e9; font-size: 20px; }
 
 .section-desc {
   margin: 0 0 20px;
   font-size: 14px;
   color: #64748b;
   line-height: 1.7;
-
-  code {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12.5px;
-    background: #f1f5f9;
-    color: #475569;
-    padding: 1px 5px;
-    border-radius: 4px;
-  }
+}
+.section-desc code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12.5px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 
 /* ── 接入地址栏 ────────────────────────────────── */
@@ -373,7 +357,6 @@ function scrollTo(id) {
   padding: 12px 16px;
   margin-bottom: 16px;
 }
-
 .url-label {
   flex-shrink: 0;
   font-size: 11px;
@@ -385,7 +368,6 @@ function scrollTo(id) {
   padding: 3px 8px;
   border-radius: 6px;
 }
-
 .url-value {
   flex: 1;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
@@ -405,27 +387,16 @@ function scrollTo(id) {
   font-size: 13px;
   line-height: 1.6;
   margin-top: 16px;
-
-  code {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
-    font-size: 12px;
-    background: rgba(0, 0, 0, 0.06);
-    padding: 1px 4px;
-    border-radius: 3px;
-  }
-
-  &--green {
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    color: #166534;
-  }
-
-  &--amber {
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    color: #92400e;
-  }
 }
+.tip-box code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.tip-box--green { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.tip-box--amber { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 
 .tip-dot {
   flex-shrink: 0;
@@ -433,10 +404,9 @@ function scrollTo(id) {
   height: 7px;
   border-radius: 50%;
   margin-top: 5px;
-
-  &--green { background: #22c55e; }
-  &--amber { background: #f59e0b; }
 }
+.tip-dot--green { background: #22c55e; }
+.tip-dot--amber { background: #f59e0b; }
 
 /* ── 信息表格 ──────────────────────────────────── */
 .info-table {
@@ -444,47 +414,38 @@ function scrollTo(id) {
   border-collapse: collapse;
   font-size: 13.5px;
   margin-top: 16px;
-
-  th {
-    text-align: left;
-    padding: 10px 14px;
-    background: #f8fafc;
-    color: #64748b;
-    font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid #f1f5f9;
-
-    &:first-child { border-radius: 10px 0 0 10px; }
-    &:last-child  { border-radius: 0 10px 10px 0; }
-  }
-
-  td {
-    padding: 11px 14px;
-    color: #334155;
-    border-bottom: 1px solid #f8fafc;
-    vertical-align: top;
-
-    code {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 12px;
-      background: #f1f5f9;
-      color: #475569;
-      padding: 1px 5px;
-      border-radius: 4px;
-    }
-  }
-
-  tr:last-child td { border-bottom: none; }
 }
+.info-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #f1f5f9;
+}
+.info-table th:first-child { border-radius: 10px 0 0 10px; }
+.info-table th:last-child  { border-radius: 0 10px 10px 0; }
+.info-table td {
+  padding: 11px 14px;
+  color: #334155;
+  border-bottom: 1px solid #f8fafc;
+  vertical-align: top;
+}
+.info-table td code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.info-table tr:last-child td { border-bottom: none; }
 
 /* ── 接口列表 ──────────────────────────────────── */
-.endpoint-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.endpoint-list { display: flex; flex-direction: column; gap: 8px; }
 
 .endpoint-row {
   display: flex;
@@ -495,12 +456,8 @@ function scrollTo(id) {
   border: 1px solid #f1f5f9;
   border-radius: 12px;
   transition: border-color 0.15s;
-
-  &:hover {
-    border-color: #e2e8f0;
-    background: #fff;
-  }
 }
+.endpoint-row:hover { border-color: #e2e8f0; background: #fff; }
 
 .method-badge {
   flex-shrink: 0;
@@ -511,10 +468,9 @@ function scrollTo(id) {
   border-radius: 6px;
   min-width: 44px;
   text-align: center;
-
-  &--get  { background: #dcfce7; color: #15803d; }
-  &--post { background: #dbeafe; color: #1d4ed8; }
 }
+.method-badge--get  { background: #dcfce7; color: #15803d; }
+.method-badge--post { background: #dbeafe; color: #1d4ed8; }
 
 .ep-path {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
@@ -523,20 +479,10 @@ function scrollTo(id) {
   font-weight: 600;
   flex-shrink: 0;
 }
-
-.ep-desc {
-  font-size: 13px;
-  color: #64748b;
-  flex: 1;
-  min-width: 0;
-}
+.ep-desc { font-size: 13px; color: #64748b; flex: 1; min-width: 0; }
 
 /* ── 代码块 ────────────────────────────────────── */
-.code-block {
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  overflow: hidden;
-}
+.code-block { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
 
 .code-block__bar {
   display: flex;
@@ -550,10 +496,7 @@ function scrollTo(id) {
   color: #64748b;
 }
 
-.tab-group {
-  display: flex;
-  gap: 4px;
-}
+.tab-group { display: flex; gap: 4px; }
 
 .tab-btn {
   background: none;
@@ -565,15 +508,9 @@ function scrollTo(id) {
   font-weight: 600;
   color: #94a3b8;
   transition: all 0.15s;
-
-  &:hover { background: #e2e8f0; color: #475569; }
-
-  &--active {
-    background: #fff;
-    color: #0ea5e9;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  }
 }
+.tab-btn:hover { background: #e2e8f0; color: #475569; }
+.tab-btn--active { background: #fff; color: #0ea5e9; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); }
 
 pre {
   margin: 0;
@@ -585,9 +522,8 @@ pre {
   line-height: 1.75;
   overflow-x: auto;
   white-space: pre;
-
-  .kw  { color: #7dd3fc; }
-  .pu  { color: #94a3b8; }
-  .str { color: #86efac; }
 }
+pre :deep(.kw)  { color: #7dd3fc; }
+pre :deep(.pu)  { color: #94a3b8; }
+pre :deep(.str) { color: #86efac; }
 </style>

@@ -8,7 +8,8 @@
         <el-icon color="#fff" :size="20"><OfficeBuilding /></el-icon>
       </div>
       <span class="text-xl font-bold tracking-tight text-slate-800">
-        URM<span class="text-primary-500">租户中心</span>
+        <span class="brand-text"> Uni<span>AI API</span> </span
+        ><span class="text-primary-500">租户中心</span>
       </span>
     </div>
 

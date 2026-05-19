@@ -24,7 +24,6 @@
 
     <!-- 统计卡片（第一行：基础统计） -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- 终端用户数 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4 hover:-translate-y-1 transition-transform duration-300">
         <div class="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-primary-500" :size="24"><User /></el-icon>
@@ -39,7 +38,6 @@
         </div>
       </div>
 
-      <!-- 活跃用户数 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4 hover:-translate-y-1 transition-transform duration-300">
         <div class="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-emerald-500" :size="24"><Avatar /></el-icon>
@@ -54,7 +52,6 @@
         </div>
       </div>
 
-      <!-- 邀请码数量 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4 hover:-translate-y-1 transition-transform duration-300">
         <div class="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-indigo-500" :size="24"><Ticket /></el-icon>
@@ -72,7 +69,6 @@
 
     <!-- 统计卡片（第二行：积分相关） -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <!-- 租户积分余额 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4 hover:-translate-y-1 transition-transform duration-300">
         <div class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-amber-500" :size="24"><Coin /></el-icon>
@@ -87,7 +83,6 @@
         </div>
       </div>
 
-      <!-- 用户总积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4 hover:-translate-y-1 transition-transform duration-300">
         <div class="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-sky-500" :size="24"><Wallet /></el-icon>
@@ -102,7 +97,6 @@
         </div>
       </div>
 
-      <!-- 总扣费积分 -->
       <div class="bg-white rounded-2xl p-6 border border-slate-50 shadow-soft flex items-start gap-4 hover:-translate-y-1 transition-transform duration-300">
         <div class="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center flex-shrink-0">
           <el-icon class="text-rose-500" :size="24"><TrendCharts /></el-icon>
@@ -120,136 +114,198 @@
 
     <!-- AI Gateway 统计区 -->
     <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 p-6">
-      <div class="flex items-center gap-3 mb-4">
-        <el-icon class="text-blue-600" :size="20"><Box /></el-icon>
-        <h2 class="text-base font-bold text-blue-800">AI Gateway 统计</h2>
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center gap-3">
+          <el-icon class="text-blue-600" :size="20"><Box /></el-icon>
+          <h2 class="text-base font-bold text-blue-800">AI Gateway 统计</h2>
+          <span class="text-xs text-blue-400 font-medium">近 30 天</span>
+        </div>
+        <el-button text type="primary" size="small" @click="$router.push('/ai/models')">
+          查看 AI Gateway <el-icon class="ml-1"><ArrowRight /></el-icon>
+        </el-button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- 授权模型数 -->
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <!-- 授权模型 -->
         <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
           <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
             <el-icon class="text-blue-500" :size="20"><Box /></el-icon>
           </div>
-          <div>
+          <div class="min-w-0">
             <p class="text-xs font-bold text-slate-400 mb-1">授权模型</p>
             <p class="text-2xl font-black text-blue-700">
               <span v-if="aiLoading" class="text-slate-200">—</span>
               <span v-else>{{ aiStats.modelCount ?? 0 }}</span>
             </p>
-            <p class="text-xs text-slate-400 mt-1">平台已授权的模型</p>
+            <p class="text-xs text-slate-400 mt-1">平台已授权</p>
           </div>
         </div>
 
-        <!-- API Key 数 -->
+        <!-- API Key -->
         <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
           <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
             <el-icon class="text-green-500" :size="20"><Key /></el-icon>
           </div>
-          <div>
-            <p class="text-xs font-bold text-slate-400 mb-1">租户 API Key</p>
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-400 mb-1">API Key</p>
             <p class="text-2xl font-black text-green-700">
               <span v-if="aiLoading" class="text-slate-200">—</span>
               <span v-else>{{ aiStats.apiKeyCount ?? 0 }}</span>
             </p>
-            <p class="text-xs text-slate-400 mt-1">已创建的 API Key</p>
+            <p class="text-xs text-slate-400 mt-1">已创建</p>
           </div>
         </div>
 
-        <!-- 本月消耗 -->
+        <!-- AI 消耗积分 -->
         <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
           <div class="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
             <el-icon class="text-purple-500" :size="20"><DataLine /></el-icon>
           </div>
-          <div>
-            <p class="text-xs font-bold text-slate-400 mb-1">本月 AI 消耗</p>
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-400 mb-1">AI 消耗</p>
             <p class="text-2xl font-black text-purple-700">
               <span v-if="aiLoading" class="text-slate-200">—</span>
-              <span v-else>{{ aiStats.monthCost ?? 0 }}</span>
+              <span v-else>{{ formatCredits(aiStats.totalCost) }}</span>
             </p>
             <p class="text-xs text-slate-400 mt-1">积分 · 租户支付</p>
           </div>
         </div>
-      </div>
 
-      <div class="mt-4 flex justify-end">
-        <el-button text type="primary" size="small" @click="$router.push('/ai/models')">
-          查看 AI Gateway <el-icon class="ml-1"><ArrowRight /></el-icon>
-        </el-button>
+        <!-- 请求总数 -->
+        <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+            <el-icon class="text-sky-500" :size="20"><Histogram /></el-icon>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-400 mb-1">请求总数</p>
+            <p class="text-2xl font-black text-sky-700">
+              <span v-if="aiLoading" class="text-slate-200">—</span>
+              <span v-else>{{ formatCredits(aiStats.totalRequests) }}</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">近 30 天调用</p>
+          </div>
+        </div>
+
+        <!-- 成功率 -->
+        <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <el-icon class="text-emerald-500" :size="20"><CircleCheck /></el-icon>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-400 mb-1">成功率</p>
+            <p class="text-2xl font-black text-emerald-700">
+              <span v-if="aiLoading" class="text-slate-200">—</span>
+              <span v-else>{{ successRate }}</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">{{ formatCredits(aiStats.successRequests) }} 次成功</p>
+          </div>
+        </div>
+
+        <!-- 平均延迟 -->
+        <div class="bg-white rounded-xl p-4 border border-blue-50 flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+            <el-icon class="text-orange-500" :size="20"><Timer /></el-icon>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-bold text-slate-400 mb-1">平均延迟</p>
+            <p class="text-2xl font-black text-orange-700">
+              <span v-if="aiLoading" class="text-slate-200">—</span>
+              <span v-else>{{ formatCredits(aiStats.avgLatency) }}</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">ms · 端到端</p>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- APP 消耗分布 + 近期用户充值记录 -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <!-- APP 消耗分布饼状图 -->
+    <!-- Top 模型 + 最近错误 -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <!-- Top 模型 -->
       <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
         <div class="flex items-center justify-between p-6 border-b border-slate-50">
           <div>
-            <h2 class="text-base font-bold text-slate-800">APP 消耗分布</h2>
-            <p class="text-xs text-slate-400 mt-0.5">最近 30 天按应用系统的消耗占比</p>
+            <h2 class="text-base font-bold text-slate-800">Top 模型使用</h2>
+            <p class="text-xs text-slate-400 mt-0.5">近 30 天按积分消耗排序</p>
           </div>
         </div>
-
-        <div v-if="appLoading" class="flex items-center justify-center py-16">
+        <div v-if="gatewayLoading" class="flex items-center justify-center py-12">
           <el-icon class="text-slate-300 animate-spin" :size="32"><Loading /></el-icon>
         </div>
-
-        <div v-else-if="appConsumption.length === 0" class="flex flex-col items-center justify-center py-16 text-slate-400">
-          <el-icon :size="48"><PieChart /></el-icon>
-          <p class="mt-4 text-sm">暂无消耗数据</p>
-        </div>
-
-        <div v-else class="p-4">
-          <div ref="pieChartRef" style="height: 280px;"></div>
-        </div>
-      </div>
-
-      <!-- 近期用户充值记录 -->
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
-        <div class="flex items-center justify-between p-6 border-b border-slate-50">
-          <div>
-            <h2 class="text-base font-bold text-slate-800">近期用户充值记录</h2>
-            <p class="text-xs text-slate-400 mt-0.5">给终端用户充值积分的历史（最近 5 条）</p>
-          </div>
-          <el-button
-            text
-            type="primary"
-            class="!text-xs font-bold"
-            @click="$router.push('/finance/user-recharge-records')"
-          >
-            查看全部 <el-icon class="ml-1"><ArrowRight /></el-icon>
-          </el-button>
-        </div>
-
-        <div v-if="rechargeLoading" class="flex items-center justify-center py-12">
-          <el-icon class="text-slate-300 animate-spin" :size="32"><Loading /></el-icon>
-        </div>
-
-        <el-table
-          v-else
-          :data="recentRecharges"
-          empty-text="暂无充值记录"
-          class="w-full"
-        >
-          <el-table-column prop="rechargeNo" label="充值单号" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="username" label="用户名" width="100">
-            <template #default="{ row }">
-              <span v-if="row.username">{{ row.username }}</span>
-              <span v-else class="text-slate-300">—</span>
-            </template>
+        <el-table v-else :data="topModels" empty-text="暂无数据" class="w-full">
+          <el-table-column prop="model_code" label="模型" min-width="140" show-overflow-tooltip />
+          <el-table-column label="请求数" width="90" align="right">
+            <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
           </el-table-column>
-          <el-table-column label="到账积分" width="100">
-            <template #default="{ row }">
-              <span class="font-bold text-emerald-600">+{{ row.creditAmount?.toLocaleString() ?? 0 }}</span>
-            </template>
+          <el-table-column label="Token" width="100" align="right">
+            <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
           </el-table-column>
-          <el-table-column prop="createdTime" label="充值时间" width="150">
+          <el-table-column label="积分消耗" width="100" align="right">
             <template #default="{ row }">
-              {{ formatTime(row.createdTime) }}
+              <span class="font-bold text-purple-600">{{ formatCredits(row.total_cost) }}</span>
             </template>
           </el-table-column>
         </el-table>
       </div>
+
+      <!-- 最近错误 -->
+      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
+        <div class="flex items-center justify-between p-6 border-b border-slate-50">
+          <div>
+            <h2 class="text-base font-bold text-slate-800">最近请求错误</h2>
+            <p class="text-xs text-slate-400 mt-0.5">近 7 天请求失败记录</p>
+          </div>
+        </div>
+        <div v-if="gatewayLoading" class="flex items-center justify-center py-12">
+          <el-icon class="text-slate-300 animate-spin" :size="32"><Loading /></el-icon>
+        </div>
+        <el-table v-else :data="recentErrors" empty-text="暂无错误记录" class="w-full">
+          <el-table-column label="时间" width="150">
+            <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column prop="model_code" label="模型" min-width="120" show-overflow-tooltip />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="errorTagType(row.request_status)" size="small">{{ row.request_status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="error_message" label="错误信息" min-width="160" show-overflow-tooltip />
+        </el-table>
+      </div>
+    </div>
+
+    <!-- 近期用户充值记录 -->
+    <div class="bg-white rounded-2xl border border-slate-50 shadow-soft overflow-hidden">
+      <div class="flex items-center justify-between p-6 border-b border-slate-50">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">近期用户充值记录</h2>
+          <p class="text-xs text-slate-400 mt-0.5">给终端用户充值积分的历史（最近 5 条）</p>
+        </div>
+        <el-button text type="primary" class="!text-xs font-bold" @click="$router.push('/finance/user-recharge-records')">
+          查看全部 <el-icon class="ml-1"><ArrowRight /></el-icon>
+        </el-button>
+      </div>
+
+      <div v-if="rechargeLoading" class="flex items-center justify-center py-12">
+        <el-icon class="text-slate-300 animate-spin" :size="32"><Loading /></el-icon>
+      </div>
+
+      <el-table v-else :data="recentRecharges" empty-text="暂无充值记录" class="w-full">
+        <el-table-column prop="orderId" label="充值单号" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="username" label="用户名" width="100">
+          <template #default="{ row }">
+            <span v-if="row.username">{{ row.username }}</span>
+            <span v-else class="text-slate-300">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="到账积分" width="100">
+          <template #default="{ row }">
+            <span class="font-bold text-emerald-600">+{{ row.creditAmount?.toLocaleString() ?? 0 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdTime" label="充值时间" width="150">
+          <template #default="{ row }">{{ formatTime(row.createdTime) }}</template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <!-- 近期交易流水 -->
@@ -259,12 +315,7 @@
           <h2 class="text-base font-bold text-slate-800">近期交易流水</h2>
           <p class="text-xs text-slate-400 mt-0.5">最近 10 条扣费流水记录</p>
         </div>
-        <el-button
-          text
-          type="primary"
-          class="!text-xs font-bold"
-          @click="$router.push('/finance/transactions')"
-        >
+        <el-button text type="primary" class="!text-xs font-bold" @click="$router.push('/finance/transactions')">
           查看全部 <el-icon class="ml-1"><ArrowRight /></el-icon>
         </el-button>
       </div>
@@ -273,13 +324,8 @@
         <el-icon class="text-slate-300 animate-spin" :size="32"><Loading /></el-icon>
       </div>
 
-      <el-table
-        v-else
-        :data="recentTransactions"
-        empty-text="暂无数据"
-        class="w-full"
-      >
-        <el-table-column prop="transactionId" label="流水号" min-width="140" show-overflow-tooltip />
+      <el-table v-else :data="recentTransactions" empty-text="暂无数据" class="w-full">
+        <el-table-column prop="eventId" label="流水号" min-width="140" show-overflow-tooltip />
         <el-table-column prop="username" label="用户名" width="100">
           <template #default="{ row }">
             <span v-if="row.username">{{ row.username }}</span>
@@ -308,9 +354,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="createdTime" label="时间" width="150">
-          <template #default="{ row }">
-            {{ formatTime(row.createdTime) }}
-          </template>
+          <template #default="{ row }">{{ formatTime(row.createdTime) }}</template>
         </el-table-column>
       </el-table>
     </div>
@@ -318,12 +362,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
-import { Refresh, User, Avatar, Ticket, Coin, Wallet, TrendCharts, ArrowRight, Loading, PieChart, Box, Key, DataLine } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { Refresh, User, Avatar, Ticket, Coin, Wallet, TrendCharts, ArrowRight, Loading, Box, Key, DataLine, Histogram, CircleCheck, Timer } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { getAnalyticsOverview, getAppConsumption, getAccountBalance, getTransactions, getUserRechargeRecords } from '@/api/tenant'
-import { listTenantModelGrants, listTenantAPIKeys, getDashboardSummary } from '@/api/aiGateway'
-import * as echarts from 'echarts'
+import { getAnalyticsOverview, getAccountBalance, getTransactions, getUserRechargeRecords } from '@/api/tenant'
+import { listTenantModelGrants, listTenantAPIKeys, getDashboardSummary, getDashboardTopModels, listDashboardRecentErrors, formatCredits } from '@/api/aiGateway'
 import dayjs from 'dayjs'
 
 const authStore = useAuthStore()
@@ -332,8 +375,8 @@ const overviewLoading = ref(false)
 const balanceLoading = ref(false)
 const txLoading = ref(false)
 const rechargeLoading = ref(false)
-const appLoading = ref(false)
 const aiLoading = ref(false)
+const gatewayLoading = ref(false)
 
 const overview = reactive({
   endUserCount: 0,
@@ -351,16 +394,23 @@ const balance = reactive({
 
 const recentTransactions = ref([])
 const recentRecharges = ref([])
-const appConsumption = ref([])
+const topModels = ref([])
+const recentErrors = ref([])
 
 const aiStats = reactive({
   modelCount: 0,
   apiKeyCount: 0,
-  monthCost: 0
+  totalCost: 0,
+  totalRequests: 0,
+  successRequests: 0,
+  avgLatency: 0
 })
 
-const pieChartRef = ref(null)
-let pieChartInstance = null
+const successRate = computed(() => {
+  const total = Number(aiStats.totalRequests) || 0
+  if (!total) return '0%'
+  return `${((Number(aiStats.successRequests) || 0) * 100 / total).toFixed(1)}%`
+})
 
 const formatTime = (ts) => {
   if (!ts) return '—'
@@ -369,6 +419,7 @@ const formatTime = (ts) => {
 
 const statusText = (s) => ({ 0: '进行中', 1: '成功', 2: '取消', 3: '退款', 4: '已释放' }[s] ?? '—')
 const statusDotClass = (s) => s === 1 ? 'bg-emerald-500' : s === 0 ? 'bg-amber-400' : 'bg-rose-500'
+const errorTagType = (s) => ({ success: 'success', failed: 'danger', rejected: 'warning', partial: 'warning' }[s] || 'info')
 
 const fetchOverview = async () => {
   overviewLoading.value = true
@@ -424,31 +475,20 @@ const fetchRecharges = async () => {
   }
 }
 
-const fetchAppConsumption = async () => {
-  appLoading.value = true
-  try {
-    const data = await getAppConsumption(30)
-    appConsumption.value = Array.isArray(data) ? data : []
-    renderPieChart()
-  } catch (e) {
-    console.error('获取APP消耗数据失败:', e)
-    appConsumption.value = []
-  } finally {
-    appLoading.value = false
-  }
-}
-
 const fetchAIStats = async () => {
   aiLoading.value = true
   try {
     const [modelsRes, keysRes, summaryRes] = await Promise.all([
       listTenantModelGrants().catch(() => []),
       listTenantAPIKeys().catch(() => []),
-      getDashboardSummary().catch(() => ({}))
+      getDashboardSummary({ days: 30 }).catch(() => ({}))
     ])
-    aiStats.modelCount = modelsRes.length
-    aiStats.apiKeyCount = keysRes.length
-    aiStats.monthCost = summaryRes.total_user_cost || 0
+    aiStats.modelCount = Array.isArray(modelsRes) ? modelsRes.length : 0
+    aiStats.apiKeyCount = Array.isArray(keysRes) ? keysRes.length : 0
+    aiStats.totalCost = summaryRes.total_user_cost || 0
+    aiStats.totalRequests = summaryRes.total_requests || 0
+    aiStats.successRequests = summaryRes.successful_requests || 0
+    aiStats.avgLatency = summaryRes.avg_latency_ms || 0
   } catch (e) {
     console.error('获取AI统计失败:', e)
   } finally {
@@ -456,97 +496,40 @@ const fetchAIStats = async () => {
   }
 }
 
-const renderPieChart = () => {
-  if (!pieChartRef.value || appConsumption.value.length === 0) return
-
-  if (pieChartInstance) {
-    pieChartInstance.dispose()
+const fetchGatewayDetails = async () => {
+  gatewayLoading.value = true
+  try {
+    const [modelsRes, errorsRes] = await Promise.all([
+      getDashboardTopModels({ days: 30, limit: 8 }).catch(() => []),
+      listDashboardRecentErrors({ days: 7, limit: 5 }).catch(() => [])
+    ])
+    topModels.value = Array.isArray(modelsRes) ? modelsRes : []
+    recentErrors.value = Array.isArray(errorsRes) ? errorsRes : []
+  } catch (e) {
+    console.error('获取AI详情失败:', e)
+  } finally {
+    gatewayLoading.value = false
   }
-
-  pieChartInstance = echarts.init(pieChartRef.value)
-
-  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
-
-  const option = {
-    tooltip: {
-      trigger: 'item',
-      formatter: '{b}: {c} 积分 ({d}%)'
-    },
-    legend: {
-      orient: 'vertical',
-      right: 10,
-      top: 'center',
-      textStyle: {
-        fontSize: 12,
-        color: '#64748b'
-      }
-    },
-    series: [
-      {
-        type: 'pie',
-        radius: ['40%', '70%'],
-        center: ['35%', '50%'],
-        avoidLabelOverlap: false,
-        itemStyle: {
-          borderRadius: 6,
-          borderColor: '#fff',
-          borderWidth: 2
-        },
-        label: {
-          show: false
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 14,
-            fontWeight: 'bold'
-          }
-        },
-        labelLine: {
-          show: false
-        },
-        data: appConsumption.value.map((item, index) => ({
-          name: item.appName || '其他/未知',
-          value: item.credits,
-          itemStyle: { color: colors[index % colors.length] }
-        }))
-      }
-    ]
-  }
-
-  pieChartInstance.setOption(option)
 }
 
 const fetchData = async () => {
   loading.value = true
   try {
-    await Promise.all([fetchOverview(), fetchBalance(), fetchTransactions(), fetchRecharges(), fetchAppConsumption(), fetchAIStats()])
+    await Promise.all([
+      fetchOverview(),
+      fetchBalance(),
+      fetchTransactions(),
+      fetchRecharges(),
+      fetchAIStats(),
+      fetchGatewayDetails()
+    ])
   } finally {
     loading.value = false
   }
 }
 
-// 监听窗口大小变化，调整图表
-const handleResize = () => {
-  if (pieChartInstance) {
-    pieChartInstance.resize()
-  }
-}
-
-watch(appConsumption, () => {
-  renderPieChart()
-})
-
 onMounted(() => {
   fetchData()
-  window.addEventListener('resize', handleResize)
-})
-
-onUnmounted(() => {
-  if (pieChartInstance) {
-    pieChartInstance.dispose()
-  }
-  window.removeEventListener('resize', handleResize)
 })
 </script>
 
