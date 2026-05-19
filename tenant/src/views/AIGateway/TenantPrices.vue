@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, reactive, shallowRef, computed } from 'vue'
-import { Refresh, Plus, Delete } from '@element-plus/icons-vue'
+import { Refresh, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listTenantModelGrants,
@@ -12,27 +12,49 @@ import {
   capabilityOptions,
   formatCredits
 } from '@/api/aiGateway'
+import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
 
 const loading = shallowRef(false)
-const models = shallowRef([]) // 已授权模型
-const userPrices = shallowRef([]) // 租户售价
+const models = shallowRef([])
+const userPrices = shallowRef([])
 const selectedModel = shallowRef(null)
 const priceLoading = shallowRef(false)
 const saving = shallowRef(false)
 
-const publicPrice = shallowRef(null) // 平台公价（参考）
-const tenantPrice = shallowRef(null) // 当前租户售价
+const publicPrice = shallowRef(null)
+const tenantPrice = shallowRef(null)
+
+const imagePresets = [
+  { label: '1024×1024', resolutions: ['1024x1024'] },
+  { label: '1024×1792', resolutions: ['1024x1792'] },
+  { label: '1792×1024', resolutions: ['1792x1024'] },
+  { label: '512×512',   resolutions: ['512x512'] }
+]
+
+const videoPresets = [
+  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
+  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
+  { label: 'Veo',  resolutions: ['720p', '1080p', '4k'] }
+]
 
 const priceForm = reactive({
   input_price_per_1m: 0,
   output_price_per_1m: 0,
-  image_size_prices: [],
-  video_price_per_second: 0,
+  image_prices: [],
+  video_prices: [],
   audio_tts_price_per_1m_chars: 0,
   audio_stt_price_per_minute: 0
 })
 
 const hasPriceSet = computed(() => Boolean(tenantPrice.value))
+
+const cap = computed(() => selectedModel.value?.capability_type || '')
+const isChatLike = computed(() => ['chat', 'embedding', 'rerank'].includes(cap.value))
+const isChat = computed(() => cap.value === 'chat')
+const isImage = computed(() => cap.value === 'image')
+const isVideo = computed(() => cap.value === 'video')
+const isAudioTTS = computed(() => cap.value === 'audio_tts')
+const isAudioSTT = computed(() => cap.value === 'audio_stt')
 
 const fetchModels = async () => {
   loading.value = true
@@ -56,7 +78,6 @@ const selectModel = async (model) => {
   resetPriceForm()
 
   try {
-    // 并行获取平台公价和租户售价
     const [pubRes, tenantRes] = await Promise.all([
       getModelPrice(model.model_id).catch(() => null),
       getTenantUserPrice(model.model_id).catch(() => null)
@@ -64,22 +85,14 @@ const selectModel = async (model) => {
     publicPrice.value = pubRes
     tenantPrice.value = tenantRes
 
-    if (tenantRes) {
-      // 已有租户售价，填充表单
-      priceForm.input_price_per_1m = tenantRes.input_price_per_1m || 0
-      priceForm.output_price_per_1m = tenantRes.output_price_per_1m || 0
-      priceForm.video_price_per_second = tenantRes.video_price_per_second || 0
-      priceForm.audio_tts_price_per_1m_chars = tenantRes.audio_tts_price_per_1m_chars || 0
-      priceForm.audio_stt_price_per_minute = tenantRes.audio_stt_price_per_minute || 0
-      priceForm.image_size_prices = parseSizePrices(tenantRes.image_size_prices)
-    } else if (pubRes) {
-      // 无租户售价，使用平台公价作为默认值
-      priceForm.input_price_per_1m = pubRes.input_price_per_1m || 0
-      priceForm.output_price_per_1m = pubRes.output_price_per_1m || 0
-      priceForm.video_price_per_second = pubRes.video_price_per_second || 0
-      priceForm.audio_tts_price_per_1m_chars = pubRes.audio_tts_price_per_1m_chars || 0
-      priceForm.audio_stt_price_per_minute = pubRes.audio_stt_price_per_minute || 0
-      priceForm.image_size_prices = parseSizePrices(pubRes.image_size_prices)
+    const src = tenantRes || pubRes
+    if (src) {
+      priceForm.input_price_per_1m = src.input_price_per_1m || 0
+      priceForm.output_price_per_1m = src.output_price_per_1m || 0
+      priceForm.image_prices = Array.isArray(src.image_prices) ? src.image_prices : []
+      priceForm.video_prices = Array.isArray(src.video_prices) ? src.video_prices : []
+      priceForm.audio_tts_price_per_1m_chars = src.audio_tts_price_per_1m_chars || 0
+      priceForm.audio_stt_price_per_minute = src.audio_stt_price_per_minute || 0
     }
   } finally {
     priceLoading.value = false
@@ -90,39 +103,11 @@ const resetPriceForm = () => {
   Object.assign(priceForm, {
     input_price_per_1m: 0,
     output_price_per_1m: 0,
-    image_size_prices: [],
-    video_price_per_second: 0,
+    image_prices: [],
+    video_prices: [],
     audio_tts_price_per_1m_chars: 0,
     audio_stt_price_per_minute: 0
   })
-}
-
-const parseSizePrices = (raw) => {
-  if (!raw) return []
-  try {
-    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Object.entries(obj).map(([size, price]) => ({ size, price: Number(price) }))
-  } catch {
-    return []
-  }
-}
-
-const serializeSizePrices = () => {
-  const obj = {}
-  for (const { size, price } of priceForm.image_size_prices) {
-    if (size && size.trim()) {
-      obj[size.trim()] = Number(price) || 0
-    }
-  }
-  return obj
-}
-
-const addSizePrice = () => {
-  priceForm.image_size_prices.push({ size: '', price: 0 })
-}
-
-const removeSizePrice = (idx) => {
-  priceForm.image_size_prices.splice(idx, 1)
 }
 
 const savePrice = async () => {
@@ -132,16 +117,14 @@ const savePrice = async () => {
     await upsertTenantUserPrice(selectedModel.value.model_id, {
       input_price_per_1m: priceForm.input_price_per_1m,
       output_price_per_1m: priceForm.output_price_per_1m,
-      image_size_prices: serializeSizePrices(),
-      video_price_per_second: priceForm.video_price_per_second,
+      image_prices: priceForm.image_prices,
+      video_prices: priceForm.video_prices,
       audio_tts_price_per_1m_chars: priceForm.audio_tts_price_per_1m_chars,
       audio_stt_price_per_minute: priceForm.audio_stt_price_per_minute
     })
     ElMessage.success('售价已保存')
     await fetchModels()
-    // 重新加载当前模型的售价
-    const tenantRes = await getTenantUserPrice(selectedModel.value.model_id).catch(() => null)
-    tenantPrice.value = tenantRes
+    tenantPrice.value = await getTenantUserPrice(selectedModel.value.model_id).catch(() => null)
   } finally {
     saving.value = false
   }
@@ -171,16 +154,14 @@ const statusTagType = (status) => {
   return map[status] || 'info'
 }
 
-const getUserPriceForModel = (modelId) => {
-  return userPrices.value.find((p) => p.model_id === modelId)
-}
+const getUserPriceForModel = (modelId) =>
+  userPrices.value.find((p) => p.model_id === modelId)
 
 onMounted(fetchModels)
 </script>
 
 <template>
   <div class="page-container">
-    <!-- Header -->
     <header class="page-header">
       <div class="page-title">
         <p class="eyebrow">Tenant Pricing</p>
@@ -190,13 +171,11 @@ onMounted(fetchModels)
       <el-button :icon="Refresh" @click="fetchModels" :loading="loading">刷新</el-button>
     </header>
 
-    <!-- Content -->
     <main class="page-main flex gap-6 min-h-0">
-      <!-- Left: Model List -->
+      <!-- 左：模型列表 -->
       <section class="model-list-panel flex-1 min-w-0">
         <el-table :data="models" v-loading="loading" stripe highlight-current-row @current-change="selectModel">
-          <el-table-column prop="model_code" label="模型编码" min-width="140" />
-          <el-table-column prop="display_name" label="显示名称" min-width="160" />
+          <el-table-column prop="model_code" label="模型编码" min-width="200" />
           <el-table-column label="能力类型" min-width="100">
             <template #default="{ row }">
               <el-tag size="small">{{ capabilityLabel(row.capability_type) }}</el-tag>
@@ -204,23 +183,20 @@ onMounted(fetchModels)
           </el-table-column>
           <el-table-column label="售价状态" min-width="100">
             <template #default="{ row }">
-              <template v-if="getUserPriceForModel(row.model_id)">
-                <el-tag type="success" size="small">已设置</el-tag>
-              </template>
-              <template v-else>
-                <el-tag type="info" size="small">未设置</el-tag>
-              </template>
+              <el-tag :type="getUserPriceForModel(row.model_id) ? 'success' : 'info'" size="small">
+                {{ getUserPriceForModel(row.model_id) ? '已设置' : '未设置' }}
+              </el-tag>
             </template>
           </el-table-column>
         </el-table>
       </section>
 
-      <!-- Right: Price Editor -->
-      <section class="price-editor-panel w-96" v-if="selectedModel">
+      <!-- 右：价格编辑器 -->
+      <section class="price-editor-panel w-[420px]" v-if="selectedModel">
         <el-card shadow="never" class="editor-card" v-loading="priceLoading">
           <template #header>
             <div class="card-header">
-              <span class="font-bold">{{ selectedModel.display_name }}</span>
+              <span class="font-bold">{{ selectedModel.model_code }}</span>
               <el-tag size="small" :type="statusTagType(selectedModel.status)">
                 {{ selectedModel.status }}
               </el-tag>
@@ -228,79 +204,100 @@ onMounted(fetchModels)
           </template>
 
           <p class="text-xs text-slate-500 mb-4">
-            模型编码: {{ selectedModel.model_code }} · {{ capabilityLabel(selectedModel.capability_type) }}
+            {{ selectedModel.model_code }} · {{ capabilityLabel(selectedModel.capability_type) }}
           </p>
 
-          <!-- Platform Price Reference -->
+          <!-- 平台公价参考 -->
           <el-divider content-position="left">平台公价（参考）</el-divider>
           <div v-if="publicPrice" class="reference-section">
-            <div class="ref-row">
-              <span>输入</span>
-              <span>{{ formatCredits(publicPrice.input_price_per_1m) }} 积分/M</span>
+            <template v-if="isChatLike">
+              <div class="ref-row">
+                <span>输入</span>
+                <span>{{ formatCredits(publicPrice.input_price_per_1m) }} 积分/M tokens</span>
+              </div>
+              <div v-if="isChat" class="ref-row">
+                <span>输出</span>
+                <span>{{ formatCredits(publicPrice.output_price_per_1m) }} 积分/M tokens</span>
+              </div>
+            </template>
+            <template v-if="isImage">
+              <div v-for="(entry, idx) in (publicPrice.image_prices || [])" :key="idx" class="ref-row">
+                <span>{{ entry.resolution }}</span>
+                <span>{{ formatCredits(entry.price) }} 积分/张</span>
+              </div>
+              <p v-if="!(publicPrice.image_prices?.length)" class="text-slate-400 text-xs">暂无尺寸定价</p>
+            </template>
+            <template v-if="isVideo">
+              <div v-for="(entry, idx) in (publicPrice.video_prices || [])" :key="idx" class="ref-row">
+                <span>{{ entry.resolution }}</span>
+                <span>{{ formatCredits(entry.price) }} 积分/秒</span>
+              </div>
+              <p v-if="!(publicPrice.video_prices?.length)" class="text-slate-400 text-xs">暂无分辨率定价</p>
+            </template>
+            <div v-if="isAudioTTS" class="ref-row">
+              <span>语音合成</span>
+              <span>{{ formatCredits(publicPrice.audio_tts_price_per_1m_chars) }} 积分/M 字符</span>
             </div>
-            <div class="ref-row">
-              <span>输出</span>
-              <span>{{ formatCredits(publicPrice.output_price_per_1m) }} 积分/M</span>
+            <div v-if="isAudioSTT" class="ref-row">
+              <span>语音识别</span>
+              <span>{{ formatCredits(publicPrice.audio_stt_price_per_minute) }} 积分/分钟</span>
             </div>
           </div>
-          <p v-else class="text-slate-400 text-xs">暂无平台定价</p>
+          <p v-else class="text-slate-400 text-xs mb-4">暂无平台定价</p>
 
-          <!-- Tenant Price Form -->
+          <!-- 租户售价表单 -->
           <el-divider content-position="left">
             <span>租户售价</span>
             <el-tag v-if="hasPriceSet" type="success" size="small" class="ml-2">已设置</el-tag>
           </el-divider>
 
           <el-form label-position="top" size="small">
-            <div class="grid grid-cols-2 gap-4">
-              <el-form-item label="输入价格（积分/百万token）">
-                <el-input-number v-model="priceForm.input_price_per_1m" :min="0" :precision="0" class="w-full" />
-              </el-form-item>
-              <el-form-item label="输出价格（积分/百万token）">
-                <el-input-number v-model="priceForm.output_price_per_1m" :min="0" :precision="0" class="w-full" />
-              </el-form-item>
-            </div>
-
-            <el-form-item label="图片尺寸价格">
-              <div class="size-price-list">
-                <div v-for="(item, idx) in priceForm.image_size_prices" :key="idx" class="size-price-row">
-                  <el-input v-model="item.size" placeholder="尺寸如 1024x1024" class="flex-1" />
-                  <el-input-number v-model="item.price" :min="0" :precision="0" class="w-24" />
-                  <el-button :icon="Delete" link type="danger" @click="removeSizePrice(idx)" />
-                </div>
-                <el-button :icon="Plus" link type="primary" @click="addSizePrice">添加尺寸</el-button>
+            <!-- chat / embedding / rerank -->
+            <template v-if="isChatLike">
+              <div class="grid grid-cols-2 gap-4">
+                <el-form-item label="输入（积分/百万 token）">
+                  <el-input-number v-model="priceForm.input_price_per_1m" :min="0" :precision="0" class="w-full" />
+                </el-form-item>
+                <el-form-item v-if="isChat" label="输出（积分/百万 token）">
+                  <el-input-number v-model="priceForm.output_price_per_1m" :min="0" :precision="0" class="w-full" />
+                </el-form-item>
               </div>
+            </template>
+
+            <!-- image -->
+            <el-form-item v-if="isImage" label="尺寸定价（积分/张）">
+              <ResolutionPricingEditor v-model="priceForm.image_prices" mode="image" :presets="imagePresets" />
             </el-form-item>
 
-            <div class="grid grid-cols-2 gap-4">
-              <el-form-item label="视频价格（积分/秒）">
-                <el-input-number v-model="priceForm.video_price_per_second" :min="0" :precision="0" class="w-full" />
-              </el-form-item>
-              <el-form-item label="语音合成（积分/百万字符）">
-                <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars" :min="0" :precision="0" class="w-full" />
-              </el-form-item>
-            </div>
-            <el-form-item label="语音识别（积分/分钟）">
+            <!-- video -->
+            <el-form-item v-if="isVideo" label="分辨率定价（积分/秒）">
+              <ResolutionPricingEditor v-model="priceForm.video_prices" mode="video" :presets="videoPresets" />
+            </el-form-item>
+
+            <!-- audio TTS -->
+            <el-form-item v-if="isAudioTTS" label="语音合成（积分/百万字符）">
+              <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars" :min="0" :precision="0" class="w-full" />
+            </el-form-item>
+
+            <!-- audio STT -->
+            <el-form-item v-if="isAudioSTT" label="语音识别（积分/分钟）">
               <el-input-number v-model="priceForm.audio_stt_price_per_minute" :min="0" :precision="0" class="w-full" />
             </el-form-item>
           </el-form>
 
-          <!-- Actions -->
           <div class="action-bar">
             <el-button type="primary" @click="savePrice" :loading="saving">保存售价</el-button>
-            <el-button v-if="hasPriceSet" type="danger" plain @click="deletePrice">删除售价</el-button>
+            <el-button v-if="hasPriceSet" type="danger" plain @click="deletePrice" :icon="Delete">删除售价</el-button>
           </div>
 
           <el-divider />
-
           <p class="text-xs text-slate-400">
             租户售价用于扣减用户积分。如未设置，将使用平台公价扣减用户积分。
           </p>
         </el-card>
       </section>
 
-      <!-- Empty State -->
-      <section class="price-editor-panel w-96 flex items-center justify-center" v-else>
+      <section class="price-editor-panel w-[420px] flex items-center justify-center" v-else>
         <p class="text-slate-400 text-sm">选择左侧模型设置售价</p>
       </section>
     </main>
@@ -312,99 +309,90 @@ onMounted(fetchModels)
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f5f7fa;
+  gap: 24px;
+  padding: 24px;
 }
 
 .page-header {
-  padding: 16px 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
 }
 
-.page-title {
-  display: flex;
-  flex-direction: column;
-}
-
+.page-title { display: flex; flex-direction: column; }
 .eyebrow {
   margin: 0 0 4px;
   color: #64748b;
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.page-title h1 {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
   font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
-
-.page-title p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
-}
+.page-title h1 { margin: 0; color: #0f172a; font-size: 22px; font-weight: 900; }
+.page-title p  { margin: 4px 0 0; color: #64748b; font-size: 13px; }
 
 .page-main {
-  padding: 24px;
   flex: 1;
   min-height: 0;
+  display: flex;
+  gap: 24px;
 }
 
 .model-list-panel {
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
 }
 
 .price-editor-panel {
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  padding: 20px;
+  overflow-y: auto;
 }
 
-.editor-card {
-  height: 100%;
-}
+.editor-card { border: none !important; box-shadow: none !important; }
+:deep(.editor-card .el-card__header) { padding: 0 0 14px; border-bottom: 1px solid #f1f5f9; }
+:deep(.editor-card .el-card__body)   { padding: 0; }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+.card-header { display: flex; justify-content: space-between; align-items: center; }
 
 .reference-section {
-  padding: 8px 0;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 4px;
 }
-
 .ref-row {
   display: flex;
   justify-content: space-between;
-  padding: 4px 0;
+  padding: 5px 0;
   font-size: 13px;
-  color: #909399;
 }
-
-.size-price-list {
-  width: 100%;
-}
-
-.size-price-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  align-items: center;
-}
+.ref-row span:first-child { color: #64748b; }
+.ref-row span:last-child  { color: #0f172a; font-weight: 600; }
 
 .action-bar {
   margin-top: 16px;
   display: flex;
   gap: 12px;
+}
+
+:deep(.el-table__header th) {
+  background: #f8fafc !important;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 </style>
