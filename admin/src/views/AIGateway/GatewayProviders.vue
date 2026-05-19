@@ -466,7 +466,7 @@ const submitProvider = async () => {
 }
 
 const submitEndpoint = async () => {
-  const payload = { ...endpointForm }
+  const payload = { ...endpointForm, base_url: endpointForm.base_url.trim() }
   if (editingEndpointId.value) {
     await updateProviderEndpoint(selectedProviderId.value, editingEndpointId.value, payload)
     ElMessage.success('接入点已保存')
@@ -893,7 +893,7 @@ onMounted(fetchProviders)
           </el-form-item>
         </div>
         <el-form-item label="Base URL" required>
-          <el-input v-model="endpointForm.base_url" placeholder="https://example.com/v1" />
+          <el-input v-model="endpointForm.base_url" placeholder="https://example.com" />
         </el-form-item>
         <el-form-item :label="isEditingEndpoint ? '上游 API Key（留空不修改）' : '上游 API Key'" :required="!isEditingEndpoint">
           <el-input v-model="endpointForm.api_key" type="password" show-password placeholder="后端加密保存" />
@@ -989,6 +989,9 @@ onMounted(fetchProviders)
               <el-select v-model="deploymentForm.upstream_protocol" class="w-full">
                 <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
               </el-select>
+              <div class="protocol-hint">
+                严格 1:1：客户端访问的协议必须与此处完全一致才会命中。例如 /v1/chat/completions 只会路由到 openai_chat 的 deployment，/v1/responses 只会路由到 openai_responses。同一上游模型支持多协议时，请分别建立两条 deployment。
+              </div>
             </el-form-item>
             <el-form-item label="状态">
               <el-select v-model="deploymentForm.status" class="w-full">
@@ -1346,6 +1349,13 @@ onMounted(fetchProviders)
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.protocol-hint {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .price-pair {
