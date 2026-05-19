@@ -7,18 +7,20 @@ Go service for Uni AI API Gateway.
 - `GET /health`
 - `GET /ready`
 - `GET /v1/models`
-- `POST /v1/chat/completions`
-- `POST /v1/responses`
-- `POST /v1/embeddings`
-- `POST /v1/images/generations`
+- `POST /v1/chat/completions` (openai_chat)
+- `POST /v1/responses` (openai_responses)
+- `POST /v1/messages` (anthropic_messages)
+- `POST /v1/embeddings` (openai_embeddings)
+- `POST /v1/images/generations` (openai_images)
+- `POST /v1beta/models/{model}:{action}` (gemini_generate / gemini_embeddings)
+- `POST /v1/messages/count_tokens` (Anthropic token estimation)
 
 Implemented backend responsibilities:
 
 - Runtime API key authentication with `sk-ai-` bearer tokens
 - Tenant/user model grant and key allowed-model checks
-- OpenAI-compatible provider routing through model deployments
-- Chat and responses non-streaming and SSE streaming relay
-- Embeddings and image generation relay
+- **Strict 1:1 protocol passthrough routing** — client protocol must match deployment `upstream_protocol`; no cross-protocol translation
+- Chat, responses, Anthropic messages, Gemini generate, embeddings, and image generation — non-streaming and SSE streaming relay
 - PostgreSQL configuration and usage ledgers
 - Redis stickiness, rate limiting, endpoint cooldowns, and quota reservations
 - URM HMAC `Freeze -> Confirm -> Cancel` settlement integration

@@ -7,12 +7,15 @@ Uni AI API Gateway provides OpenAI-compatible runtime APIs for internal AI servi
 - `GET /health`
 - `GET /ready`
 - `GET /v1/models`
-- `POST /v1/chat/completions`
-- `POST /v1/responses`
-- `POST /v1/embeddings`
-- `POST /v1/images/generations`
+- `POST /v1/chat/completions` (openai_chat)
+- `POST /v1/responses` (openai_responses)
+- `POST /v1/messages` (anthropic_messages)
+- `POST /v1/embeddings` (openai_embeddings)
+- `POST /v1/images/generations` (openai_images)
+- `POST /v1beta/models/{model}:{action}` (gemini_generate / gemini_embeddings)
+- `POST /v1/messages/count_tokens` (Anthropic token estimation)
 
-The backend supports OpenAI-compatible chat, responses, embeddings, and image generation upstream protocols. Chat and responses support both non-streaming and SSE streaming relay.
+The gateway uses **strict 1:1 protocol passthrough**: the client protocol (derived from the request path) must exactly match the deployment's `upstream_protocol`. No cross-protocol format translation is performed — request and response bytes are forwarded verbatim. To serve the same model over multiple protocols, create separate deployments (one per `upstream_protocol`) under the same endpoint.
 
 ## Local E2E
 

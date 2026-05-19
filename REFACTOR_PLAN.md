@@ -2,12 +2,14 @@
 
 > **激进重构原则**：不兼容历史数据，不留历史包袱，长期最优优先于短期修补。
 > **总改动量预估**：后端 ~3500 行 / 前端 ~250 行 / 5 个 Phase 独立可提交。
+>
+> **⚠️ P0 策略已更新（2025-05）**：原计划 P0 采用 canonical 中间格式做 N×M 跨协议转换，实际实施时改为**严格 1:1 协议透传**——client_protocol 必须与 upstream_protocol 完全一致才允许路由，删除所有跨协议转换代码。详见 3.1 和第七章。
 
 ---
 
 ## 一、重构目标
 
-1. **协议矩阵 N×M 完全打通**：客户端协议（OpenAI Chat / OpenAI Responses / Anthropic Messages）与上游协议（openai_chat / openai_responses / anthropic_messages / gemini_generate）任意组合，响应按客户端协议回写。
+1. **严格 1:1 协议透传**：客户端协议（由请求路径推导）必须与 deployment 的 `upstream_protocol` 完全一致才允许路由；不做任何跨协议转换，请求和响应字节原样透传。同模型多协议通过同一 endpoint 下挂多行 deployment（不同 `upstream_protocol`）实现。
 2. **请求级 fallback 重试**：非流式 + 流式 pre-flush 阶段都支持跨 route 自动重试，最多 3 次 / 总预算 90s。
 3. **多维评分路由**：cost / latency / load / health 加权打分，替代单一 priority+weighted random。
 4. **统一健康模型**：错误分级 + 半开探测 + Deployment / Pool credential 共用接口。
@@ -32,54 +34,56 @@
 | D10 | 重试预算 | 最多 3 次，总预算 90s，单次 = min(route.timeout, deadline-now) |
 | D11 | 单次超时 | 不加 route 级 override，全局预算 + endpoint timeout 即可 |
 | D12 | 多 attempt 日志 | 主行只记最终结果 + `attempts_count`；attempt 明细落 payload 表 JSONB |
-| D13 | 协议矩阵 | 客户端 ↔ 上游完全解耦，模型 code 不绑协议 |
-| D14 | 特性降级 | 上游不支持的特性静默丢弃 + 在 X-Route-Trace 记录 |
+| D13 | 协议路由 | **严格 1:1**：client_protocol == upstream_protocol 才允许路由；不匹配返回 400 no_matching_deployment |
+| D14 | 跨协议转换 | **已全部删除**：不再有 canonical 中间格式转换，网关只做字节透传 |
 | D15 | count_tokens | 上游支持时透传，否则本地 tiktoken-go 估算 |
 
 ---
 
 ## 三、新架构总览
 
-### 3.1 协议矩阵
+### 3.1 协议路由：严格 1:1 透传
+
+> **⚠️ 已于 P0 阶段实施完毕**。原 N×M 跨协议转换方案已废弃。
+
+**核心原则**：`client_protocol == upstream_protocol` 才允许路由。网关不做任何格式转换，请求体和响应体原样透传。
 
 ```
-┌─────────────────── 客户端协议（in）────────────────────┐
-│  /v1/chat/completions  (OpenAI Chat)                  │
-│  /v1/responses         (OpenAI Responses)             │
-│  /v1/messages          (Anthropic Messages)           │
-│  /v1/embeddings        (OpenAI Embeddings)            │
-│  /v1/images/generations(OpenAI Images)                │
-│  /v1/models            (OpenAI / Anthropic 按 UA 分发) │
-│  /v1/messages/count_tokens (Anthropic)                │
-└────────────────────────┬───────────────────────────────┘
-                         ↓ formats.ParseClientRequest
-            ┌──────────────────────────────┐
-            │   canonical.{Chat,Embed,...} │   ← 内部规范层
-            └──────────────────────────────┘
-                         ↓ formats.ToUpstreamRequest
-┌─────────────────── 上游协议（out）─────────────────────┐
-│  openai_chat / openai_responses / openai_embeddings   │
-│  anthropic_messages                                    │
-│  gemini_generate / gemini_embeddings                  │
-└────────────────────────┬───────────────────────────────┘
-                         ↓ 上游响应
-            ┌──────────────────────────────┐
-            │   formats.ToCanonical*       │   ← 反向规范化
-            └──────────────────────────────┘
-                         ↓ RelayToClient（按 req.ClientProtocol 选择）
-            ┌──────────────────────────────┐
-            │  CanonicalTo{OpenAIChat,     │
-            │   OpenAIResponses,Anthropic} │
-            └──────────────────────────────┘
+┌─────────────────── 客户端协议（由路径推导）────────────────┐
+│  /v1/chat/completions      → openai_chat                  │
+│  /v1/responses             → openai_responses             │
+│  /v1/messages              → anthropic_messages           │
+│  /v1/embeddings            → openai_embeddings            │
+│  /v1/images/generations    → openai_images                │
+│  /v1beta/models/{m}:action → gemini_generate/gemini_embeddings │
+│  /v1/messages/count_tokens → (独立 handler，不走路由)       │
+└────────────────────────┬────────────────────────────────────┘
+                         ↓ formats.DetectClientProtocol
+                         ↓ SQL WHERE ud.upstream_protocol = $clientProtocol
+┌─────────────────── 上游协议（只匹配与客户端一致的）──────────┐
+│  openai_chat / openai_responses / openai_embeddings        │
+│  anthropic_messages                                         │
+│  gemini_generate / gemini_embeddings                       │
+└────────────────────────┬────────────────────────────────────┘
+                         ↓ 请求/响应字节原样透传
+                         ↓ 仅做：model 名替换 / OAuth body 改写 / SSE usage 提取
+┌─────────────────── 客户端响应（与请求同协议）───────────────┐
+│  错误体按客户端协议格式输出（Anthropic ↔ OpenAI 各自格式）     │
+└────────────────────────────────────────────────────────────┘
 ```
 
-**协议适配矩阵（输出端必须实现的转换器）**：
+**同模型多协议**：一个 endpoint 下挂多行 deployment（不同 `upstream_protocol`），路由 SQL 的 `client_protocol` 过滤确保各自命中正确的 deployment。
 
-| Canonical → | OpenAI Chat | OpenAI Responses | Anthropic Messages |
-|---|---|---|---|
-| 非流式 | `CanonicalToOpenAIChat` ✅已有 | 🔴 **新建** | 🔴 **新建** |
-| 流式 SSE | `CanonicalToOpenAIChatChunk` ✅已有 | 🔴 **新建** | 🔴 **新建** |
-| 错误体 | `OpenAIErrorBody` | `OpenAIErrorBody` 共用 | 🔴 **新建** AnthropicErrorBody |
+**OAuth pool 协议映射**：`ai_credential_pools.fixed_provider_type` 在运行时映射到对应的 `upstream_protocol`，由 `oauthFixedTypesForProtocol()` Go 端常量实现，COALESCE 写入 SQL：
+
+| client_protocol | OAuth fixed_provider_type 池 |
+|---|---|
+| openai_responses | codex |
+| anthropic_messages | claude_oauth |
+| gemini_generate | gemini_cli, antigravity |
+| 其它 | 空数组（SQL `ANY({})` 自动排除） |
+
+**无匹配部署时**：返回 HTTP 400 + `no_matching_deployment` 错误码，消息体包含 client_protocol 和 model 信息。
 
 ### 3.2 Pipeline 新形态
 
@@ -359,21 +363,31 @@ CREATE INDEX ON ai_request_payloads(usage_log_id);
 
 ## 六、Phase 拆分（独立可提交可回滚）
 
-### **P0：协议回写修复 + Anthropic 端到端**（修 bug + 补齐协议矩阵）
-> **优先级最高**：当前 `/v1/messages` 和 `/v1/responses` 实际是 broken 的，Claude Code 接不通。
+### **P0：严格 1:1 协议透传** ✅ **已完成**
+> **策略变更**：原计划 N×M 跨协议转换，实施时改为严格 1:1 透传，更彻底地消灭了一类成功率玄学问题。
 
-- 新建 `formats/claude/response.go` + `stream.go` + `error.go`
-- 新建 `formats/openai/responses/output.go` + `stream_out.go`
-- 新建 `formats/tokens/counter.go`（透传 + tiktoken-go fallback）
-- 新建 `serving/relay.go` ClientRelay 接口 + 三种协议实现
-- 重构 `httpserver/runtime_pipeline.go` 持有 RequestEnvelope，剥离 W/R from Request
-- 修 `convert.go` 输出端按 ClientProtocol 分发
-- 补 `POST /v1/messages/count_tokens` handler
-- 修 `GET /v1/models` 按 UA 分发（user-agent 含 `claude-cli` / `anthropic` 走 Anthropic 格式）
-- 增加端到端测试矩阵：3 客户端协议 × 4 上游协议 = 12 个 case + streaming 各 12 个
+**已完成的工作**：
 
-**改动量**：~900 行
-**验收**：Claude Code、OpenAI SDK、Anthropic SDK 同时连同一个 model code 都跑通，流式&非流式都对。
+- 删除整个 `formats/canonical/` 包（~240 行）
+- 删除 `formats/claude/` 的 `messages.go`、`random.go`、`response_out.go`、`stream_out.go`（~890 行）
+- 删除 `formats/gemini/generate.go`（~400 行）
+- 删除整个 `formats/openai/` 目录含 `chat.go` + `responses/` 子目录 6 个文件（~1160 行）
+- 删除 `serving/relay.go` ClientRelay 层（~200 行）
+- 精简 `formats/convert.go` 从 308 行到 ~45 行（仅保留 `DetectClientProtocol` + `ParseRequestMeta`）
+- 新增 `formats/rewrite.go`（model 名替换 + Codex body 改写）
+- 新增 `formats/usage.go`（各协议 usage 提取，替代 canonical 中间层）
+- `adapters/postgres/routes.go` SQL WHERE 增加 `upstream_protocol = $clientProtocol` 过滤 + `oauthFixedTypesForProtocol()` 映射
+- `serving/steps.go` `RouteCandidatesStep` 保留 `*APIError` 透传，无匹配返回 400 `no_matching_deployment`
+- `serving/execute.go` 改为直接透传 `Envelope.ClientBody`，流式响应直接 io.Copy
+- `serving/pipeline.go` 删除 `ChatReq`/`EmbedReq` 等 canonical 中间字段
+- `httpserver/server.go` 新增 `/v1beta/models/{modelAction}` Gemini 原生端点
+- `httpserver/runtime_pipeline.go` 重构 pipeline 入口，Gemini 走独立 handler
+- 前端 `GatewayProviders.vue` 增加协议匹配提示 + base_url trim
+- 计费保底（billing floor=1）+ URM Freeze 跳过零金额
+- base_url TrimSpace + buildURL 路径去重 + OpenAI 模型列表 URL 修正
+
+**实际改动量**：-3579 / +560 行
+**验收**：各协议客户端直连同协议上游跑通，无匹配部署返回 400，同模型多协议互不串扰。
 
 ---
 
@@ -440,54 +454,57 @@ CREATE INDEX ON ai_request_payloads(usage_log_id);
 
 ---
 
-## 七、N×M 协议矩阵 - 特性降级表
+## 七、协议路由策略（已实施：严格 1:1）
 
-> 客户端协议特性在上游不支持时的处理策略。原则：能转的转，不能转的静默丢弃 + X-Route-Trace 记录 dropped_features。
+> **⚠️ 已于 P0 阶段实施完毕**。原 N×M 特性降级表已废弃。
 
-| 客户端特性 | OpenAI Chat 上游 | OpenAI Responses 上游 | Anthropic 上游 | Gemini 上游 |
-|---|---|---|---|---|
-| Anthropic `thinking` block | 静默丢弃 | 转 `reasoning` 段 | 透传 | 静默丢弃 |
-| Anthropic `cache_control` | 丢弃（OpenAI 自动 cache） | 丢弃 | 透传 | 丢弃 |
-| Anthropic `tool_use` | 转 `tool_calls` | 转 Responses tool 事件 | 透传 | 转 Gemini function_call |
-| Anthropic `system` 数组 | flatten 进 messages[0].system | 转 instructions | 透传 | 转 systemInstruction |
-| OpenAI `function`/`tool_calls` | 透传 | 透传 | 转 tool_use block | 转 function_call |
-| OpenAI Responses `instructions` | 转 system message | 透传 | 转 system 字段 | 转 systemInstruction |
-| OpenAI Responses `previous_response_id` | ❌ 拒绝（400） | 透传 | ❌ 拒绝 | ❌ 拒绝 |
-| 图片输入 (multimodal) | 转 image_url | 转 input_image | 转 image source.base64 | 转 inlineData |
+**设计原则**：`client_protocol == upstream_protocol` 严格字符串相等，不做任何跨协议转换。
 
-**实施细则**：
-- 所有协议特性在 canonical 层定义为 optional field，downstream 转换器自行决定丢弃/映射
-- 拒绝类（如 previous_response_id 不支持持久化时）返回 400 `unsupported_feature_for_route`
-- 丢弃的特性写入 `req.Attempts[].dropped_features` 数组，可见于 X-Route-Trace
+**协议与端点对应表**：
+
+| 客户端端点 | 推导的 client_protocol | 只匹配的 upstream_protocol |
+|---|---|---|
+| `/v1/chat/completions` | openai_chat | openai_chat |
+| `/v1/responses` | openai_responses | openai_responses |
+| `/v1/messages` | anthropic_messages | anthropic_messages |
+| `/v1/embeddings` | openai_embeddings | openai_embeddings |
+| `/v1/images/generations` | openai_images | openai_images |
+| `/v1beta/models/{m}:generateContent` | gemini_generate | gemini_generate |
+| `/v1beta/models/{m}:embedContent` | gemini_embeddings | gemini_embeddings |
+
+**同模型多协议部署**：schema 已支持——`ai_upstream_deployments` 的 UNIQUE 约束包含 `(endpoint_id, upstream_model, upstream_protocol)`，同一 endpoint + upstream_model 可挂多行 deployment（不同 protocol），路由 SQL 的 `client_protocol` 过滤确保各自命中。
+
+**不匹配时的行为**：返回 HTTP 400 + `no_matching_deployment` 错误码 + 提示信息（含 client_protocol 和 model），引导用户配置对应协议的 deployment。
+
+**OAuth pool 隐式协议映射**：`ai_credential_pools.fixed_provider_type` 在运行时映射到 `upstream_protocol`（由 Go 端 `oauthFixedTypesForProtocol()` 常量实现，无需 schema 新增列）。映射关系见 3.1 节。
+
+**保留的协议级轻量改写**（非转换，仅限同协议内）：
+- `RewriteModelInBody`：替换请求体中的 `model` 字段为上游模型名
+- `ApplyCodexRequestModifications`：Codex 特定 body 改写（strip 不支持字段、force store=false）
+- OAuth body transform：Claude `thinking` 块过滤、Gemini CLI/Antigravity envelope 包装
+- `ExtractUsage` / `ExtractStreamUsage`：从各协议原始响应/流式 chunk 提取 token usage（用于计费）
 
 ---
 
-## 八、流式事件对齐策略
+## 八、流式透传策略（已实施）
 
-**SSE 事件模型差异**：
+> **⚠️ 已于 P0 阶段实施完毕**。原 canonical 流式模型已废弃，改为直接透传。
+
+**核心原则**：流式响应直接从上游 io.Copy 到客户端，不做任何格式转换或事件重编码。
+
+**SSE 事件模型**（各协议透传，互不干扰）：
 
 | 协议 | 事件模型 |
 |---|---|
 | OpenAI Chat | 匿名 SSE，data 全部是 `chat.completion.chunk`，最后 `data: [DONE]` |
 | OpenAI Responses | 命名事件 `response.created` / `response.output_text.delta` / `response.completed` 等 ~20 种 |
 | Anthropic Messages | 命名事件 `message_start` / `content_block_start` / `content_block_delta` / `content_block_stop` / `message_delta` / `message_stop` |
+| Gemini | `text/event-stream` 格式，含 `candidates` / `usageMetadata` 字段 |
 
-**canonical 流式模型**：
-```go
-type StreamEvent struct {
-    Kind      EventKind  // start | text_delta | tool_use_start | tool_use_delta | reasoning_delta | usage | finish | error
-    Index     int        // content block index
-    Text      string
-    ToolCall  *ToolCallDelta
-    Usage     *Usage
-    FinishReason string
-}
-```
-
-每个 client 协议的回写器消费 `StreamEvent` 序列，按各自协议生成正确的命名事件序列：
-- Anthropic 回写器维护 content block 生命周期（start/delta/stop）
-- OpenAI Responses 回写器维护 output_item 生命周期
-- OpenAI Chat 回写器扁平输出 delta
+**透传路径中的轻量处理**（不改变事件格式）：
+- SSE chunk 计数 + token usage 提取（`formats.ExtractStreamUsage`）——按各协议格式解析，不转换
+- 首个 chunk 到达时记录 `FirstTokenMs`
+- 流式错误检测（读取 SSE data 行判断是否为 error event）
 
 ---
 
