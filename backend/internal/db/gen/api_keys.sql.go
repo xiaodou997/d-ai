@@ -102,6 +102,25 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Cre
 	return i, err
 }
 
+const deleteAPIKey = `-- name: DeleteAPIKey :one
+DELETE FROM ai_api_keys
+WHERE id = $1
+  AND tenant_id = $2
+RETURNING key_hash
+`
+
+type DeleteAPIKeyParams struct {
+	ID       pgtype.UUID `json:"id"`
+	TenantID string      `json:"tenant_id"`
+}
+
+func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) (string, error) {
+	row := q.db.QueryRow(ctx, deleteAPIKey, arg.ID, arg.TenantID)
+	var key_hash string
+	err := row.Scan(&key_hash)
+	return key_hash, err
+}
+
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
 SELECT
   id, owner_type, tenant_id, user_id, last_four, name,

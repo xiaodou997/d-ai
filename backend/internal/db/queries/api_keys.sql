@@ -85,6 +85,12 @@ RETURNING
   quota_limit, quota_used, quota_reserved, allowed_models,
   status, expires_at, last_used_at, created_by, created_at, updated_at;
 
+-- name: DeleteAPIKey :one
+DELETE FROM ai_api_keys
+WHERE id = $1
+  AND tenant_id = $2
+RETURNING key_hash;
+
 -- name: TouchLastUsedAt :exec
 UPDATE ai_api_keys
 SET last_used_at = now()
