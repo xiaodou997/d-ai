@@ -118,7 +118,6 @@ func (c *ModelGrantChecker) resolveModelID(ctx context.Context, tenantID, modelC
 	return domain.Model{
 		ID:                     uuidToString(row.ID),
 		ModelCode:              row.ModelCode,
-		DisplayName:            row.DisplayName,
 		CapabilityType:         domain.CapabilityType(row.CapabilityType),
 		DefaultMaxOutputTokens: int(row.DefaultMaxOutputTokens),
 	}, nil

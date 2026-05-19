@@ -11,8 +11,8 @@ import (
 // ============================================================================
 
 func (s *Server) handleAdminListUpstreamDeployments(w http.ResponseWriter, r *http.Request) {
-	// endpoint_id is optional - if not provided, list all deployments
 	endpointIDParam := r.URL.Query().Get("endpoint_id")
+	poolIDParam := r.URL.Query().Get("credential_pool_id")
 
 	var rows []dbgen.ListUpstreamDeploymentsRow
 	var err error
@@ -24,11 +24,17 @@ func (s *Server) handleAdminListUpstreamDeployments(w http.ResponseWriter, r *ht
 			return
 		}
 		rows, err = s.queries.ListUpstreamDeployments(r.Context(), endpointID)
-	} else {
-		query := `
+	} else if poolIDParam != "" {
+		poolID, parseErr := parseUUID(poolIDParam)
+		if parseErr != nil {
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid credential_pool_id")
+			return
+		}
+		const poolQuery = `
 			SELECT
 			  ud.id,
 			  ud.endpoint_id,
+			  ud.credential_pool_id,
 			  ud.upstream_model,
 			  ud.capability_type,
 			  ud.upstream_protocol,
@@ -41,15 +47,76 @@ func (s *Server) handleAdminListUpstreamDeployments(w http.ResponseWriter, r *ht
 			  ud.status,
 			  ud.created_at,
 			  ud.updated_at,
-			  e.name AS endpoint_name,
-			  e.base_url,
-			  e.weight AS endpoint_weight,
-			  p.id AS provider_id,
-			  p.code AS provider_code,
-			  p.name AS provider_name
+			  'pool'                          AS credential_source,
+			  ''                              AS endpoint_name,
+			  ''                              AS base_url,
+			  0                               AS endpoint_weight,
+			  '00000000-0000-0000-0000-000000000000'::uuid AS provider_id,
+			  ''                              AS provider_code,
+			  ''                              AS provider_name,
+			  COALESCE(cp.name, '')           AS pool_name,
+			  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 			FROM ai_upstream_deployments ud
-			JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
-			JOIN ai_providers p ON p.id = e.provider_id
+			LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
+			WHERE ud.credential_pool_id = $1
+			ORDER BY ud.upstream_model ASC`
+		dbRows, queryErr := s.postgres.Query(r.Context(), poolQuery, poolID)
+		if queryErr != nil {
+			err = queryErr
+		} else {
+			defer dbRows.Close()
+			for dbRows.Next() {
+				var row dbgen.ListUpstreamDeploymentsRow
+				if scanErr := dbRows.Scan(
+					&row.ID, &row.EndpointID, &row.CredentialPoolID,
+					&row.UpstreamModel, &row.CapabilityType, &row.UpstreamProtocol,
+					&row.RequestPath, &row.UpstreamParameters, &row.Pricing,
+					&row.HealthStatus, &row.LastHealthCheckAt, &row.LastHealthError,
+					&row.Status, &row.CreatedAt, &row.UpdatedAt,
+					&row.CredentialSource, &row.EndpointName, &row.BaseUrl,
+					&row.EndpointWeight, &row.ProviderID, &row.ProviderCode,
+					&row.ProviderName, &row.PoolName, &row.FixedProviderType,
+				); scanErr != nil {
+					err = scanErr
+					break
+				}
+				rows = append(rows, row)
+			}
+			if closeErr := dbRows.Err(); closeErr != nil {
+				err = closeErr
+			}
+		}
+	} else {
+		const query = `
+			SELECT
+			  ud.id,
+			  ud.endpoint_id,
+			  ud.credential_pool_id,
+			  ud.upstream_model,
+			  ud.capability_type,
+			  ud.upstream_protocol,
+			  ud.request_path,
+			  ud.upstream_parameters,
+			  ud.pricing,
+			  ud.health_status,
+			  ud.last_health_check_at,
+			  ud.last_health_error,
+			  ud.status,
+			  ud.created_at,
+			  ud.updated_at,
+			  CASE WHEN ud.endpoint_id IS NOT NULL THEN 'endpoint' ELSE 'pool' END AS credential_source,
+			  COALESCE(e.name, '')          AS endpoint_name,
+			  COALESCE(e.base_url, '')      AS base_url,
+			  COALESCE(e.weight, 0)         AS endpoint_weight,
+			  COALESCE(p.id, '00000000-0000-0000-0000-000000000000'::uuid) AS provider_id,
+			  COALESCE(p.code, '')          AS provider_code,
+			  COALESCE(p.name, '')          AS provider_name,
+			  COALESCE(cp.name, '')         AS pool_name,
+			  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
+			FROM ai_upstream_deployments ud
+			LEFT JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+			LEFT JOIN ai_providers p ON p.id = e.provider_id
+			LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
 			ORDER BY ud.upstream_model ASC`
 		dbRows, queryErr := s.postgres.Query(r.Context(), query)
 		if queryErr != nil {
@@ -61,6 +128,7 @@ func (s *Server) handleAdminListUpstreamDeployments(w http.ResponseWriter, r *ht
 				if scanErr := dbRows.Scan(
 					&row.ID,
 					&row.EndpointID,
+					&row.CredentialPoolID,
 					&row.UpstreamModel,
 					&row.CapabilityType,
 					&row.UpstreamProtocol,
@@ -73,12 +141,15 @@ func (s *Server) handleAdminListUpstreamDeployments(w http.ResponseWriter, r *ht
 					&row.Status,
 					&row.CreatedAt,
 					&row.UpdatedAt,
+					&row.CredentialSource,
 					&row.EndpointName,
 					&row.BaseUrl,
 					&row.EndpointWeight,
 					&row.ProviderID,
 					&row.ProviderCode,
 					&row.ProviderName,
+					&row.PoolName,
+					&row.FixedProviderType,
 				); scanErr != nil {
 					err = scanErr
 					break
@@ -103,15 +174,18 @@ func (s *Server) handleAdminCreateUpstreamDeployment(w http.ResponseWriter, r *h
 	if !decodeAdminJSON(w, r, &req) {
 		return
 	}
-	if req.EndpointID == "" || req.UpstreamModel == "" {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "endpoint_id and upstream_model are required")
+	if req.UpstreamModel == "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "upstream_model is required")
 		return
 	}
-	endpointID, err := parseUUID(req.EndpointID)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid endpoint_id")
+
+	isEndpoint := req.EndpointID != ""
+	isPool := req.CredentialPoolID != ""
+	if isEndpoint == isPool {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "exactly one of endpoint_id or credential_pool_id must be set")
 		return
 	}
+
 	if req.CapabilityType == "" {
 		req.CapabilityType = defaultCapability
 	}
@@ -122,6 +196,31 @@ func (s *Server) handleAdminCreateUpstreamDeployment(w http.ResponseWriter, r *h
 		req.Status = defaultStatus
 	}
 
+	if isPool {
+		poolID, err := parseUUID(req.CredentialPoolID)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid credential_pool_id")
+			return
+		}
+		row, err := s.queries.CreatePoolDeployment(r.Context(), dbgen.CreatePoolDeploymentParams{
+			CredentialPoolID: poolID,
+			UpstreamModel:    req.UpstreamModel,
+			CapabilityType:   req.CapabilityType,
+			UpstreamProtocol: req.UpstreamProtocol,
+		})
+		if err != nil {
+			writeDBErr(w, err)
+			return
+		}
+		writeOK(w, fromAiUpstreamDeployment(row))
+		return
+	}
+
+	endpointID, err := parseUUID(req.EndpointID)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid endpoint_id")
+		return
+	}
 	row, err := s.queries.CreateUpstreamDeployment(r.Context(), dbgen.CreateUpstreamDeploymentParams{
 		EndpointID:         endpointID,
 		UpstreamModel:      req.UpstreamModel,

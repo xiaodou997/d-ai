@@ -130,7 +130,6 @@ func (c JWTClaims) IsPlatformAdmin() bool { return c.UserType == 1 || c.UserType
 type Model struct {
 	ID                     string
 	ModelCode              string
-	DisplayName            string
 	CapabilityType         CapabilityType
 	ContextWindow          *int
 	DefaultMaxOutputTokens int
@@ -312,13 +311,24 @@ func (c *OAuthCredential) AccountID() string {
 // Billing
 // ============================================================================
 
-// TokenUsage records actual token counts from a completed upstream response.
+// TokenUsage records actual usage from a completed upstream response.
+// For chat/embedding, only the token fields are populated.
+// For image, ImageCount + ImageResolution carry the billing inputs.
+// For video, VideoSeconds + VideoResolution carry the billing inputs.
 type TokenUsage struct {
 	PromptTokens     int
 	CompletionTokens int
 	CacheWriteTokens int // tokens written to provider cache (billed at input price)
 	CacheReadTokens  int // tokens read from provider cache (billed at input price, margin opportunity)
 	ReasoningTokens  int // extended thinking / reasoning tokens
+
+	// Image generation billing fields (populated from request, not upstream response).
+	ImageCount      int    // number of images generated
+	ImageResolution string // e.g. "1024x1024"
+
+	// Video generation billing fields (populated from request, not upstream response).
+	VideoSeconds    float64 // duration of video generated
+	VideoResolution string  // e.g. "1920x1080"
 }
 
 func (u TokenUsage) TotalTokens() int {
@@ -326,16 +336,23 @@ func (u TokenUsage) TotalTokens() int {
 		u.CacheWriteTokens + u.CacheReadTokens + u.ReasoningTokens
 }
 
+// ResolutionCreditPrice is a per-resolution price denominated in integer credits.
+// Used for image (per image) and video (per second) sales pricing.
+type ResolutionCreditPrice struct {
+	Resolution string `json:"resolution"`
+	Price      int64  `json:"price"`
+}
+
 // ModelPricing holds per-1M-token prices in integer credits.
 // Zero values mean "use the corresponding base price" — see Effective* methods.
 type ModelPricing struct {
-	InputPer1M       int64
-	OutputPer1M      int64
-	CacheWritePer1M  int64 // 0 = bill at InputPer1M
-	CacheReadPer1M   int64 // 0 = bill at InputPer1M (profit: provider charges less)
-	ReasoningPer1M   int64 // 0 = bill at OutputPer1M
-	ImageSizePrices  map[string]int64
-	VideoPricePerSec int64
+	InputPer1M      int64
+	OutputPer1M     int64
+	CacheWritePer1M int64 // 0 = bill at InputPer1M
+	CacheReadPer1M  int64 // 0 = bill at InputPer1M (profit: provider charges less)
+	ReasoningPer1M  int64 // 0 = bill at OutputPer1M
+	ImagePrices     []ResolutionCreditPrice
+	VideoPrices     []ResolutionCreditPrice
 }
 
 func (p ModelPricing) EffectiveCacheWritePrice() int64 {

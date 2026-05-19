@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, reactive, shallowRef, watch } from 'vue'
+import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, Plus, Refresh } from '@element-plus/icons-vue'
+import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import {
   capabilityOptions,
   createModel,
@@ -10,11 +10,9 @@ import {
   formatCredits,
   formatTimestamp,
   getModelPrice,
-  listCredentialPools,
   listModelRoutes,
   listModels,
   listUpstreamDeployments,
-  nowTimestamp,
   statusOptions,
   updateModel,
   updateModelRoute,
@@ -22,11 +20,14 @@ import {
   updateModelStatus,
   upsertModelPrice
 } from '@/api/aiGateway'
+import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
+import { suggestModelConfig } from './modelPricingCatalog'
 
 // ── Loading states ──────────────────────────────────────────────────────────
 const loading = shallowRef(false)
 const priceLoading = shallowRef(false)
 const routeLoading = shallowRef(false)
+const submittingRoutes = shallowRef(false)
 
 // ── Dialog visibility ───────────────────────────────────────────────────────
 const modelDialogVisible = shallowRef(false)
@@ -36,22 +37,36 @@ const routeDialogVisible = shallowRef(false)
 // ── Editing state ───────────────────────────────────────────────────────────
 const editingModelId = shallowRef('')
 const editingRouteId = shallowRef('')
+const modelDialogStep = shallowRef(0) // 0 基础信息 | 1 价格
 
 // ── Data ────────────────────────────────────────────────────────────────────
 const models = shallowRef([])
 const modelPrice = shallowRef(null)
 const modelRoutes = shallowRef([])
-const upstreamDeployments = shallowRef([])
+const allUpstreamDeployments = shallowRef([])
 
 // ── Selection & filter ──────────────────────────────────────────────────────
 const selectedModelId = shallowRef('')
 const searchQuery = shallowRef('')
 const capabilityFilter = shallowRef('all')
 
+// ── Image / video price presets ─────────────────────────────────────────────
+const imagePresets = [
+  { label: '1024×1024', resolutions: ['1024x1024'] },
+  { label: '1024×1792', resolutions: ['1024x1792'] },
+  { label: '1792×1024', resolutions: ['1792x1024'] },
+  { label: '512×512',   resolutions: ['512x512'] }
+]
+
+const videoPresets = [
+  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
+  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
+  { label: 'Veo',  resolutions: ['720p', '1080p', '4k'] }
+]
+
 // ── Forms ───────────────────────────────────────────────────────────────────
 const modelForm = reactive({
   model_code: '',
-  display_name: '',
   capability_type: 'chat',
   context_window: null,
   default_max_output_tokens: 4096,
@@ -62,26 +77,30 @@ const modelForm = reactive({
 const priceForm = reactive({
   input_price_per_1m: 0,
   output_price_per_1m: 0,
-  image_size_prices: [],     // [{size:'1024x1024', price:100}]
-  video_price_per_second: 0,
+  image_prices: [],   // [{resolution, price}]
+  video_prices: [],   // [{resolution, price}] (price = credits per second)
   audio_tts_price_per_1m_chars: 0,
   audio_stt_price_per_minute: 0
 })
 
-const routeMode = shallowRef('deployment') // 'deployment' | 'pool'
-const credentialPools = shallowRef([])
+const suggestionHint = shallowRef(null)
 
-const routeForm = reactive({
-  upstream_deployment_id: '',
-  credential_pool_id: '',
-  pool_upstream_model: '',
+// ── Route picker ────────────────────────────────────────────────────────────
+const pickerSourceFilter = shallowRef('')    // '' | 'endpoint' | 'pool'
+const pickerProviderFilter = shallowRef('')
+const pickerEndpointFilter = shallowRef('')
+const pickerCapabilityFilter = shallowRef('')
+const pickerSearch = shallowRef('')
+const pickerSelectedIds = shallowRef([])     // Set-like array of deployment ids
+const pickerOverrides = reactive({})         // { [deploymentId]: { priority, weight, supports_stream } }
+const pickerDefaults = reactive({
   priority: 100,
   weight: 100,
   supports_stream: true,
   status: 'active'
 })
 
-// ── Computed ─────────────────────────────────────────────────────────────────
+// ── Computed ────────────────────────────────────────────────────────────────
 const isEditingModel = computed(() => Boolean(editingModelId.value))
 const isEditingRoute = computed(() => Boolean(editingRouteId.value))
 
@@ -94,37 +113,36 @@ const selectedCapabilityType = computed(() => selectedModel.value?.capability_ty
 const filteredModels = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return models.value.filter((m) => {
-    const matchesCap = capabilityFilter.value === 'all' || m.capability_type === capabilityFilter.value
-    if (!matchesCap) return false
+    if (capabilityFilter.value !== 'all' && m.capability_type !== capabilityFilter.value) return false
     if (!q) return true
-    return m.display_name.toLowerCase().includes(q) || m.model_code.toLowerCase().includes(q)
+    return m.model_code.toLowerCase().includes(q)
   })
 })
-
-const upstreamDeploymentOptions = computed(() =>
-  upstreamDeployments.value.map((d) => ({
-    label: `${d.name} · ${d.upstream_model}`,
-    value: d.id
-  }))
-)
 
 const capabilityFilterOptions = computed(() => [
   { label: '全部', value: 'all' },
   ...capabilityOptions
 ])
 
-const showTokenPrice = computed(() =>
-  ['chat', 'embedding', 'rerank'].includes(selectedCapabilityType.value)
-)
+const isChatLike = (cap) => ['chat', 'embedding', 'rerank'].includes(cap)
+const isImage = (cap) => cap === 'image'
+const isVideo = (cap) => cap === 'video'
+const isAudioTTS = (cap) => cap === 'audio_tts'
+const isAudioSTT = (cap) => cap === 'audio_stt'
+
+const showTokenPrice = computed(() => isChatLike(selectedCapabilityType.value))
 const showOutputPrice = computed(() => selectedCapabilityType.value === 'chat')
-const showImagePrice = computed(() => selectedCapabilityType.value === 'image')
-const showVideoPrice = computed(() => selectedCapabilityType.value === 'video')
-const showAudioTTSPrice = computed(() => selectedCapabilityType.value === 'audio_tts')
-const showAudioSTTPrice = computed(() => selectedCapabilityType.value === 'audio_stt')
+const showImagePrice = computed(() => isImage(selectedCapabilityType.value))
+const showVideoPrice = computed(() => isVideo(selectedCapabilityType.value))
+const showAudioTTSPrice = computed(() => isAudioTTS(selectedCapabilityType.value))
+const showAudioSTTPrice = computed(() => isAudioSTT(selectedCapabilityType.value))
+
+const formCap = computed(() => modelForm.capability_type)
+const showChatFieldsInForm = computed(() => formCap.value === 'chat')
 
 const activeRouteCount = computed(() => modelRoutes.value.filter((r) => r.status === 'active').length)
 
-// ── Utility ──────────────────────────────────────────────────────────────────
+// ── Utilities ───────────────────────────────────────────────────────────────
 const statusTagType = (status) => ({ active: 'success', inactive: 'warning', disabled: 'danger' }[status] || 'info')
 
 const capabilityLabel = (value) => capabilityOptions.find((o) => o.value === value)?.label || value || '-'
@@ -134,97 +152,88 @@ const capabilityDotClass = (value) => {
   return map[value] || 'dot-default'
 }
 
-// ── Reset forms ───────────────────────────────────────────────────────────────
+// ── Reset forms ─────────────────────────────────────────────────────────────
 const resetModelForm = () => {
   editingModelId.value = ''
+  modelDialogStep.value = 0
+  suggestionHint.value = null
   Object.assign(modelForm, {
-    model_code: '', display_name: '', capability_type: 'chat',
-    context_window: null, default_max_output_tokens: 4096, max_output_tokens: null, status: 'active'
+    model_code: '',
+    capability_type: 'chat',
+    context_window: null,
+    default_max_output_tokens: 4096,
+    max_output_tokens: null,
+    status: 'active'
+  })
+  resetPriceFormDefaults()
+}
+
+const resetPriceFormDefaults = () => {
+  Object.assign(priceForm, {
+    input_price_per_1m: 0,
+    output_price_per_1m: 0,
+    image_prices: [],
+    video_prices: [],
+    audio_tts_price_per_1m_chars: 0,
+    audio_stt_price_per_minute: 0
   })
 }
 
-const resetPriceForm = () => {
+const seedPriceFormFromModel = () => {
   const p = modelPrice.value
   Object.assign(priceForm, {
     input_price_per_1m: p?.input_price_per_1m ?? 0,
     output_price_per_1m: p?.output_price_per_1m ?? 0,
-    image_size_prices: parseSizePrices(p?.image_size_prices),
-    video_price_per_second: p?.video_price_per_second ?? 0,
+    image_prices: Array.isArray(p?.image_prices) ? p.image_prices : [],
+    video_prices: Array.isArray(p?.video_prices) ? p.video_prices : [],
     audio_tts_price_per_1m_chars: p?.audio_tts_price_per_1m_chars ?? 0,
     audio_stt_price_per_minute: p?.audio_stt_price_per_minute ?? 0
   })
 }
 
-const fetchCredentialPools = async () => {
-  try {
-    credentialPools.value = (await listCredentialPools()) || []
-  } catch { /* ignore */ }
-}
-
-const resetRouteForm = () => {
-  editingRouteId.value = ''
-  routeMode.value = 'deployment'
-  Object.assign(routeForm, {
-    upstream_deployment_id: '', credential_pool_id: '', pool_upstream_model: '',
-    priority: 100, weight: 100, supports_stream: true, status: 'active'
-  })
-}
-
 const applyModelForm = (row) => {
   editingModelId.value = row.id
+  modelDialogStep.value = 0
+  suggestionHint.value = null
   Object.assign(modelForm, {
-    model_code: row.model_code, display_name: row.display_name,
-    capability_type: row.capability_type, context_window: row.context_window ?? null,
+    model_code: row.model_code,
+    capability_type: row.capability_type,
+    context_window: row.context_window ?? null,
     default_max_output_tokens: row.default_max_output_tokens,
-    max_output_tokens: row.max_output_tokens ?? null, status: row.status
+    max_output_tokens: row.max_output_tokens ?? null,
+    status: row.status
   })
 }
 
-const applyRouteForm = (row) => {
-  editingRouteId.value = row.id
-  if (row.credential_pool_id) {
-    routeMode.value = 'pool'
-    Object.assign(routeForm, {
-      upstream_deployment_id: '',
-      credential_pool_id: row.credential_pool_id,
-      pool_upstream_model: row.pool_upstream_model || '',
-      priority: row.priority, weight: row.weight,
-      supports_stream: row.supports_stream, status: row.status
-    })
-  } else {
-    routeMode.value = 'deployment'
-    Object.assign(routeForm, {
-      upstream_deployment_id: row.upstream_deployment_id || '',
-      credential_pool_id: '', pool_upstream_model: '',
-      priority: row.priority, weight: row.weight,
-      supports_stream: row.supports_stream, status: row.status
-    })
+// 编辑时切换 capability，priceForm 不主动重置，避免误清。新增时切 capability 不影响 step1。
+const onModelCapabilityChange = () => {
+  // 切到非 chat 时清掉 context_window / max_output_tokens 字段值（保留 default_max_output_tokens 让后端有默认）
+  if (modelForm.capability_type !== 'chat') {
+    modelForm.context_window = null
+    modelForm.max_output_tokens = null
   }
+  suggestionHint.value = null
 }
 
-// ── Image size price helpers ──────────────────────────────────────────────────
-const parseSizePrices = (raw) => {
-  if (!raw) return []
-  try {
-    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Object.entries(obj).map(([size, price]) => ({ size, price: Number(price) }))
-  } catch {
-    return []
+const onModelCodeBlur = () => {
+  const code = (modelForm.model_code || '').trim()
+  if (!code) return
+  if (modelForm.capability_type !== 'chat') return
+  const cfg = suggestModelConfig(code)
+  if (!cfg) {
+    suggestionHint.value = null
+    return
   }
+  // 仅在字段为空/默认值时填入，避免覆盖用户输入
+  if (modelForm.context_window == null) modelForm.context_window = cfg.context_window
+  if (modelForm.default_max_output_tokens == null || modelForm.default_max_output_tokens === 4096) {
+    modelForm.default_max_output_tokens = cfg.default_max_output_tokens
+  }
+  if (modelForm.max_output_tokens == null) modelForm.max_output_tokens = cfg.max_output_tokens
+  suggestionHint.value = cfg
 }
 
-const serializeSizePrices = (arr) => {
-  const obj = {}
-  for (const { size, price } of arr) {
-    if (size && size.trim()) obj[size.trim()] = Number(price) || 0
-  }
-  return obj
-}
-
-const addSizePrice = () => priceForm.image_size_prices.push({ size: '', price: 0 })
-const removeSizePrice = (idx) => priceForm.image_size_prices.splice(idx, 1)
-
-// ── Fetch ─────────────────────────────────────────────────────────────────────
+// ── Fetch ───────────────────────────────────────────────────────────────────
 const fetchModels = async () => {
   loading.value = true
   try {
@@ -232,6 +241,9 @@ const fetchModels = async () => {
     if (!selectedModelId.value && models.value.length > 0) {
       selectedModelId.value = models.value[0].id
       await fetchSelectedModelDetail()
+    } else if (selectedModelId.value && !models.value.some((m) => m.id === selectedModelId.value)) {
+      selectedModelId.value = models.value[0]?.id || ''
+      if (selectedModelId.value) await fetchSelectedModelDetail()
     }
   } finally {
     loading.value = false
@@ -239,7 +251,7 @@ const fetchModels = async () => {
 }
 
 const fetchSelectedModelDetail = async () => {
-  await Promise.all([fetchModelPrice(), fetchModelRoutes(), fetchUpstreamDeployments()])
+  await Promise.all([fetchModelPrice(), fetchModelRoutes()])
 }
 
 const fetchModelPrice = async () => {
@@ -264,101 +276,261 @@ const fetchModelRoutes = async () => {
   }
 }
 
-const fetchUpstreamDeployments = async () => {
-  try { upstreamDeployments.value = await listUpstreamDeployments() }
-  catch { upstreamDeployments.value = [] }
+const fetchAllUpstreamDeployments = async () => {
+  try { allUpstreamDeployments.value = await listUpstreamDeployments() }
+  catch { allUpstreamDeployments.value = [] }
 }
 
-// ── Selection ─────────────────────────────────────────────────────────────────
+// ── Selection ───────────────────────────────────────────────────────────────
 const selectModel = async (model) => {
   selectedModelId.value = model.id
   await fetchSelectedModelDetail()
 }
 
-// ── Dialog handlers ───────────────────────────────────────────────────────────
+// ── Model dialog handlers ───────────────────────────────────────────────────
 const openModelDialog = () => { resetModelForm(); modelDialogVisible.value = true }
 const openModelEditDialog = (row) => { applyModelForm(row); modelDialogVisible.value = true }
 
+const modelStepNext = () => {
+  if (!modelForm.model_code.trim()) {
+    ElMessage.error('请填写模型名称')
+    return
+  }
+  modelDialogStep.value = 1
+}
+
+const submitModel = async () => {
+  const payload = {
+    model_code: modelForm.model_code.trim(),
+    capability_type: modelForm.capability_type,
+    context_window: modelForm.capability_type === 'chat' ? (modelForm.context_window || undefined) : undefined,
+    default_max_output_tokens: modelForm.default_max_output_tokens,
+    max_output_tokens: modelForm.capability_type === 'chat' ? (modelForm.max_output_tokens || undefined) : undefined,
+    status: modelForm.status
+  }
+
+  let modelId = editingModelId.value
+  if (modelId) {
+    await updateModel(modelId, payload)
+    ElMessage.success('模型已保存')
+  } else {
+    const created = await createModel(payload)
+    modelId = created?.id
+    if (!modelId) {
+      ElMessage.error('创建模型失败：未返回 id')
+      return
+    }
+    // 新建模型时一并写入价格
+    await upsertModelPrice(modelId, buildPricePayload(modelForm.capability_type))
+    ElMessage.success('模型与价格已创建')
+  }
+
+  modelDialogVisible.value = false
+  selectedModelId.value = modelId
+  await fetchModels()
+  await fetchSelectedModelDetail()
+}
+
+const buildPricePayload = (cap) => ({
+  input_price_per_1m: isChatLike(cap) ? (priceForm.input_price_per_1m || 0) : 0,
+  output_price_per_1m: cap === 'chat' ? (priceForm.output_price_per_1m || 0) : 0,
+  image_prices: isImage(cap) ? priceForm.image_prices : [],
+  video_prices: isVideo(cap) ? priceForm.video_prices : [],
+  audio_tts_price_per_1m_chars: isAudioTTS(cap) ? (priceForm.audio_tts_price_per_1m_chars || 0) : 0,
+  audio_stt_price_per_minute: isAudioSTT(cap) ? (priceForm.audio_stt_price_per_minute || 0) : 0
+})
+
+// ── Price dialog (单独编辑现有模型价格) ─────────────────────────────────────
 const openPriceDialog = () => {
   if (!selectedModelId.value) { ElMessage.warning('请先选择模型'); return }
-  resetPriceForm()
+  seedPriceFormFromModel()
   priceDialogVisible.value = true
 }
 
-const openRouteDialog = async () => {
-  if (!selectedModelId.value) { ElMessage.warning('请先选择模型'); return }
-  await fetchUpstreamDeployments()
-  resetRouteForm()
-  routeDialogVisible.value = true
-}
-
-const openRouteEditDialog = async (row) => {
-  await fetchUpstreamDeployments()
-  applyRouteForm(row)
-  routeDialogVisible.value = true
-}
-
-// ── Submit ─────────────────────────────────────────────────────────────────────
-const submitModel = async () => {
-  const payload = {
-    ...modelForm,
-    context_window: modelForm.context_window || undefined,
-    max_output_tokens: modelForm.max_output_tokens || undefined
-  }
-  if (editingModelId.value) {
-    await updateModel(editingModelId.value, payload)
-    ElMessage.success('模型已保存')
-  } else {
-    await createModel(payload)
-    ElMessage.success('模型已创建')
-  }
-  modelDialogVisible.value = false
-  await fetchModels()
-}
-
 const submitModelPrice = async () => {
-  const payload = {
-    input_price_per_1m: priceForm.input_price_per_1m,
-    output_price_per_1m: priceForm.output_price_per_1m,
-    image_size_prices: serializeSizePrices(priceForm.image_size_prices),
-    video_price_per_second: priceForm.video_price_per_second,
-    audio_tts_price_per_1m_chars: priceForm.audio_tts_price_per_1m_chars,
-    audio_stt_price_per_minute: priceForm.audio_stt_price_per_minute
-  }
-  await upsertModelPrice(selectedModelId.value, payload)
+  await upsertModelPrice(selectedModelId.value, buildPricePayload(selectedCapabilityType.value))
   ElMessage.success('销售价已保存')
   priceDialogVisible.value = false
   await fetchModelPrice()
 }
 
-const submitModelRoute = async () => {
-  const payload = {
-    priority: routeForm.priority,
-    weight: routeForm.weight,
-    supports_stream: routeForm.supports_stream,
-    status: routeForm.status
-  }
-  if (routeMode.value === 'pool') {
-    if (!routeForm.credential_pool_id) { ElMessage.error('请选择账号池'); return }
-    if (!routeForm.pool_upstream_model.trim()) { ElMessage.error('pool_upstream_model 不能为空'); return }
-    payload.credential_pool_id = routeForm.credential_pool_id
-    payload.pool_upstream_model = routeForm.pool_upstream_model
-  } else {
-    if (!routeForm.upstream_deployment_id) { ElMessage.error('请选择上游部署'); return }
-    payload.upstream_deployment_id = routeForm.upstream_deployment_id
-  }
-  if (editingRouteId.value) {
-    await updateModelRoute(selectedModelId.value, editingRouteId.value, payload)
-    ElMessage.success('路由已保存')
-  } else {
-    await createModelRoute(selectedModelId.value, payload)
-    ElMessage.success('路由已创建')
-  }
-  routeDialogVisible.value = false
-  await fetchModelRoutes()
+// ── Route dialog ────────────────────────────────────────────────────────────
+const resetRoutePicker = () => {
+  pickerSourceFilter.value = ''
+  pickerProviderFilter.value = ''
+  pickerEndpointFilter.value = ''
+  pickerCapabilityFilter.value = selectedCapabilityType.value || ''
+  pickerSearch.value = ''
+  pickerSelectedIds.value = []
+  for (const key of Object.keys(pickerOverrides)) delete pickerOverrides[key]
+  Object.assign(pickerDefaults, { priority: 100, weight: 100, supports_stream: true, status: 'active' })
 }
 
-// ── Toggle & delete ───────────────────────────────────────────────────────────
+const openRouteDialog = async () => {
+  if (!selectedModelId.value) { ElMessage.warning('请先选择模型'); return }
+  editingRouteId.value = ''
+  await fetchAllUpstreamDeployments()
+  resetRoutePicker()
+  routeDialogVisible.value = true
+}
+
+const openRouteEditDialog = async (row) => {
+  editingRouteId.value = row.id
+  await fetchAllUpstreamDeployments()
+  resetRoutePicker()
+  pickerSelectedIds.value = [row.upstream_deployment_id]
+  Object.assign(pickerDefaults, {
+    priority: row.priority,
+    weight: row.weight,
+    supports_stream: row.supports_stream,
+    status: row.status
+  })
+  routeDialogVisible.value = true
+}
+
+// Filter options derived from deployments
+const providerOptions = computed(() => {
+  const m = new Map()
+  for (const d of allUpstreamDeployments.value) m.set(d.provider_id, d.provider_name || d.provider_code)
+  return [...m.entries()].map(([id, name]) => ({ id, name }))
+})
+
+const endpointOptions = computed(() => {
+  const m = new Map()
+  for (const d of allUpstreamDeployments.value) {
+    if (pickerProviderFilter.value && d.provider_id !== pickerProviderFilter.value) continue
+    m.set(d.endpoint_id, d.endpoint_name)
+  }
+  return [...m.entries()].map(([id, name]) => ({ id, name }))
+})
+
+// Routes already attached to current model — to disable duplicates
+const existingRouteDeploymentIds = computed(() => {
+  const ids = new Set()
+  for (const r of modelRoutes.value) {
+    if (r.upstream_deployment_id) ids.add(r.upstream_deployment_id)
+  }
+  // 编辑模式下放行当前编辑的部署
+  if (editingRouteId.value) {
+    const current = modelRoutes.value.find((r) => r.id === editingRouteId.value)
+    if (current?.upstream_deployment_id) ids.delete(current.upstream_deployment_id)
+  }
+  return ids
+})
+
+const filteredDeployments = computed(() => {
+  const q = pickerSearch.value.trim().toLowerCase()
+  return allUpstreamDeployments.value.filter((d) => {
+    if (d.status !== 'active') return false
+    if (pickerSourceFilter.value && d.credential_source !== pickerSourceFilter.value) return false
+    if (pickerProviderFilter.value && d.provider_id !== pickerProviderFilter.value) return false
+    if (pickerEndpointFilter.value && d.endpoint_id !== pickerEndpointFilter.value) return false
+    if (pickerCapabilityFilter.value && d.capability_type !== pickerCapabilityFilter.value) return false
+    if (!q) return true
+    return (
+      d.upstream_model.toLowerCase().includes(q) ||
+      (d.endpoint_name || '').toLowerCase().includes(q) ||
+      (d.pool_name || '').toLowerCase().includes(q) ||
+      (d.provider_name || '').toLowerCase().includes(q)
+    )
+  })
+})
+
+const allFilteredSelected = computed(() => {
+  const list = filteredDeployments.value.filter((d) => !existingRouteDeploymentIds.value.has(d.id))
+  if (list.length === 0) return false
+  return list.every((d) => pickerSelectedIds.value.includes(d.id))
+})
+
+const togglePickerRow = (id) => {
+  const set = new Set(pickerSelectedIds.value)
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
+  pickerSelectedIds.value = [...set]
+}
+
+const togglePickerAll = (val) => {
+  if (val) {
+    const ids = filteredDeployments.value
+      .filter((d) => !existingRouteDeploymentIds.value.has(d.id))
+      .map((d) => d.id)
+    pickerSelectedIds.value = [...new Set([...pickerSelectedIds.value, ...ids])]
+  } else {
+    const exclude = new Set(filteredDeployments.value.map((d) => d.id))
+    pickerSelectedIds.value = pickerSelectedIds.value.filter((id) => !exclude.has(id))
+  }
+}
+
+const isOverridden = (id) => Boolean(pickerOverrides[id])
+
+const toggleOverride = (id) => {
+  if (pickerOverrides[id]) {
+    delete pickerOverrides[id]
+  } else {
+    pickerOverrides[id] = {
+      priority: pickerDefaults.priority,
+      weight: pickerDefaults.weight,
+      supports_stream: pickerDefaults.supports_stream
+    }
+  }
+}
+
+const buildRoutePayload = (deploymentId) => {
+  const o = pickerOverrides[deploymentId]
+  return {
+    upstream_deployment_id: deploymentId,
+    priority: o?.priority ?? pickerDefaults.priority,
+    weight: o?.weight ?? pickerDefaults.weight,
+    supports_stream: o?.supports_stream ?? pickerDefaults.supports_stream,
+    status: pickerDefaults.status
+  }
+}
+
+const submitRoutes = async () => {
+  if (editingRouteId.value) {
+    if (pickerSelectedIds.value.length !== 1) {
+      ElMessage.error('编辑路由时只能选择一个上游部署')
+      return
+    }
+    submittingRoutes.value = true
+    try {
+      const payload = buildRoutePayload(pickerSelectedIds.value[0])
+      await updateModelRoute(selectedModelId.value, editingRouteId.value, payload)
+      ElMessage.success('路由已保存')
+      routeDialogVisible.value = false
+      await fetchModelRoutes()
+    } finally {
+      submittingRoutes.value = false
+    }
+    return
+  }
+
+  if (pickerSelectedIds.value.length === 0) {
+    ElMessage.warning('请至少选择一个上游部署')
+    return
+  }
+  submittingRoutes.value = true
+  let ok = 0
+  let fail = 0
+  try {
+    for (const id of pickerSelectedIds.value) {
+      try {
+        await createModelRoute(selectedModelId.value, buildRoutePayload(id))
+        ok++
+      } catch {
+        fail++
+      }
+    }
+    if (fail === 0) ElMessage.success(`已创建 ${ok} 条路由`)
+    else ElMessage.warning(`成功 ${ok} 条，失败 ${fail} 条`)
+    routeDialogVisible.value = false
+    await fetchModelRoutes()
+  } finally {
+    submittingRoutes.value = false
+  }
+}
+
+// ── Toggle & delete ────────────────────────────────────────────────────────
 const toggleModel = async (row) => {
   await updateModelStatus(row.id, row.status === 'active' ? 'disabled' : 'active')
   ElMessage.success('模型状态已更新')
@@ -382,8 +554,8 @@ const deleteRoute = async (row) => {
   } catch { /* cancelled */ }
 }
 
-// ── Lifecycle ─────────────────────────────────────────────────────────────────
-onMounted(() => { fetchModels(); fetchCredentialPools() })
+// ── Lifecycle ───────────────────────────────────────────────────────────────
+onMounted(() => { fetchModels() })
 </script>
 
 <template>
@@ -398,9 +570,8 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
         <el-button type="primary" :icon="Plus" @click="openModelDialog">新增</el-button>
       </div>
 
-      <!-- Search + filter -->
       <div class="rail-filter">
-        <el-input v-model="searchQuery" placeholder="搜索模型名称或编码" clearable size="small" />
+        <el-input v-model="searchQuery" placeholder="搜索模型名称" clearable size="small" />
         <div class="cap-tabs">
           <span
             v-for="opt in capabilityFilterOptions"
@@ -423,8 +594,8 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
         >
           <span :class="['dot', capabilityDotClass(model.capability_type)]" :title="capabilityLabel(model.capability_type)" />
           <div class="model-item-text">
-            <strong>{{ model.display_name }}</strong>
-            <small>{{ model.model_code }}</small>
+            <strong>{{ model.model_code }}</strong>
+            <small>{{ capabilityLabel(model.capability_type) }}</small>
           </div>
           <div class="model-item-actions" @click.stop>
             <el-button link type="primary" size="small" :icon="Edit" @click="openModelEditDialog(model)" />
@@ -446,10 +617,10 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
         <div class="hero-main">
           <p class="eyebrow">Current Model</p>
           <div class="hero-title-row">
-            <h2>{{ selectedModel.display_name }}</h2>
+            <h2>{{ selectedModel.model_code }}</h2>
             <el-tag :type="statusTagType(selectedModel.status)" effect="dark">{{ selectedModel.status }}</el-tag>
           </div>
-          <p>{{ selectedModel.model_code }} · {{ capabilityLabel(selectedModel.capability_type) }}</p>
+          <p>{{ capabilityLabel(selectedModel.capability_type) }}</p>
         </div>
         <div class="hero-actions">
           <el-button :icon="Refresh" @click="fetchSelectedModelDetail" />
@@ -471,12 +642,12 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
             <span>能力类型</span>
             <strong>{{ capabilityLabel(selectedModel.capability_type) }}</strong>
           </div>
-          <div class="metric-cell">
+          <div v-if="selectedModel.capability_type === 'chat'" class="metric-cell">
             <span>上下文窗口</span>
             <strong>{{ selectedModel.context_window ? selectedModel.context_window.toLocaleString() : '-' }}</strong>
             <small>tokens</small>
           </div>
-          <div class="metric-cell">
+          <div v-if="selectedModel.capability_type === 'chat'" class="metric-cell">
             <span>默认输出</span>
             <strong>{{ selectedModel.default_max_output_tokens?.toLocaleString() }}</strong>
             <small>tokens</small>
@@ -489,16 +660,19 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
         <div class="section-head">
           <div>
             <h3>模型路由</h3>
-            <p>{{ selectedModel.model_code }} · 配置上游部署映射和优先级权重</p>
+            <p>配置上游部署映射和优先级权重</p>
           </div>
           <el-button type="primary" :icon="Plus" @click="openRouteDialog">新增路由</el-button>
         </div>
         <el-table v-loading="routeLoading" :data="modelRoutes" border stripe class="w-full">
-          <el-table-column label="上游部署" min-width="140">
+          <el-table-column label="上游" min-width="240">
             <template #default="{ row }">
               <div class="route-deployment">
-                <strong>{{ row.upstream_deployment_name || '-' }}</strong>
-                <small v-if="row.upstream_model">{{ row.upstream_model }}</small>
+                <div class="route-endpoint-row">
+                  <el-tag v-if="row.credential_source === 'pool'" size="small" type="warning" effect="plain" class="oauth-badge">OAuth</el-tag>
+                  <span class="route-endpoint">{{ row.pool_name || row.endpoint_name || '-' }}</span>
+                </div>
+                <span class="route-model">{{ row.upstream_model || '-' }}</span>
               </div>
             </template>
           </el-table-column>
@@ -520,7 +694,7 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
               <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="210" fixed="right">
+          <el-table-column label="操作" width="230" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openRouteEditDialog(row)">编辑</el-button>
               <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleModelRoute(row)">
@@ -537,7 +711,7 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
         <div class="section-head">
           <div>
             <h3>销售价配置</h3>
-            <p>{{ selectedModel.model_code }} · 所有价格为积分单位</p>
+            <p>所有价格为积分单位</p>
           </div>
           <el-button type="primary" :icon="Edit" @click="openPriceDialog">
             {{ modelPrice ? '修改价格' : '设置价格' }}
@@ -546,7 +720,6 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
 
         <div v-loading="priceLoading">
           <div v-if="modelPrice" class="price-display">
-            <!-- Token prices (chat / embedding / rerank) -->
             <template v-if="showTokenPrice">
               <div class="price-item">
                 <span>输入 / 1M tokens</span>
@@ -557,27 +730,28 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
                 <strong>{{ formatCredits(modelPrice.output_price_per_1m) }} 积分</strong>
               </div>
             </template>
-            <!-- Image prices -->
             <template v-if="showImagePrice">
-              <div v-for="(entry, idx) in parseSizePrices(modelPrice.image_size_prices)" :key="idx" class="price-item">
-                <span>{{ entry.size }}</span>
+              <div v-for="(entry, idx) in (modelPrice.image_prices || [])" :key="idx" class="price-item">
+                <span>{{ entry.resolution }}</span>
                 <strong>{{ formatCredits(entry.price) }} 积分 / 张</strong>
               </div>
-              <div v-if="parseSizePrices(modelPrice.image_size_prices).length === 0" class="price-empty-hint">
+              <div v-if="!(modelPrice.image_prices?.length)" class="price-empty-hint">
                 尚未配置尺寸定价
               </div>
             </template>
-            <!-- Video price -->
-            <div v-if="showVideoPrice" class="price-item">
-              <span>视频 / 秒</span>
-              <strong>{{ formatCredits(modelPrice.video_price_per_second) }} 积分</strong>
-            </div>
-            <!-- Audio TTS price -->
+            <template v-if="showVideoPrice">
+              <div v-for="(entry, idx) in (modelPrice.video_prices || [])" :key="idx" class="price-item">
+                <span>{{ entry.resolution }}</span>
+                <strong>{{ formatCredits(entry.price) }} 积分 / 秒</strong>
+              </div>
+              <div v-if="!(modelPrice.video_prices?.length)" class="price-empty-hint">
+                尚未配置分辨率定价
+              </div>
+            </template>
             <div v-if="showAudioTTSPrice" class="price-item">
               <span>TTS / 1M 字符</span>
               <strong>{{ formatCredits(modelPrice.audio_tts_price_per_1m_chars) }} 积分</strong>
             </div>
-            <!-- Audio STT price -->
             <div v-if="showAudioSTTPrice" class="price-item">
               <span>STT / 分钟</span>
               <strong>{{ formatCredits(modelPrice.audio_stt_price_per_minute) }} 积分</strong>
@@ -599,20 +773,44 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
       <el-button type="primary" :icon="Plus" @click="openModelDialog">新增模型</el-button>
     </main>
 
-    <!-- ── 模型对话框 ── -->
-    <el-dialog v-model="modelDialogVisible" :title="isEditingModel ? '编辑对外模型' : '新增对外模型'" width="620px" append-to-body>
-      <el-form :model="modelForm" label-position="top">
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="模型编码" required>
-            <el-input v-model="modelForm.model_code" placeholder="gpt-5.4" />
-          </el-form-item>
-          <el-form-item label="显示名称" required>
-            <el-input v-model="modelForm.display_name" placeholder="GPT 5.4" />
-          </el-form-item>
-        </div>
+    <!-- ── 模型对话框（分步） ── -->
+    <el-dialog
+      v-model="modelDialogVisible"
+      :title="isEditingModel ? '编辑对外模型' : '新增对外模型'"
+      width="680px"
+      append-to-body
+      :close-on-click-modal="false"
+    >
+      <el-steps v-if="!isEditingModel" :active="modelDialogStep" simple class="model-stepper">
+        <el-step title="基础信息" />
+        <el-step title="销售价格" />
+      </el-steps>
+
+      <!-- Step 1: 基础信息 -->
+      <el-form v-if="modelDialogStep === 0 || isEditingModel" :model="modelForm" label-position="top">
+        <el-form-item label="模型名称（调用 model 字段）" required>
+          <el-input
+            v-model="modelForm.model_code"
+            placeholder="例如 gpt-4o、claude-sonnet-4-5"
+            @blur="onModelCodeBlur"
+          />
+        </el-form-item>
+
+        <el-alert
+          v-if="suggestionHint && !isEditingModel"
+          class="suggestion-banner"
+          type="success"
+          show-icon
+          :closable="false"
+        >
+          <template #title>
+            <span>已识别为 <strong>{{ suggestionHint.label }}</strong>，自动填充上下文窗口/输出 token 配置（你可以修改）</span>
+          </template>
+        </el-alert>
+
         <div class="grid grid-cols-2 gap-4">
           <el-form-item label="能力类型">
-            <el-select v-model="modelForm.capability_type" class="w-full">
+            <el-select v-model="modelForm.capability_type" class="w-full" @change="onModelCapabilityChange">
               <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
@@ -622,7 +820,7 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
             </el-select>
           </el-form-item>
         </div>
-        <div class="grid grid-cols-3 gap-4">
+        <div v-if="showChatFieldsInForm" class="grid grid-cols-3 gap-4">
           <el-form-item label="上下文窗口">
             <el-input-number v-model="modelForm.context_window" :min="0" :precision="0" class="w-full" />
           </el-form-item>
@@ -634,62 +832,93 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
           </el-form-item>
         </div>
       </el-form>
-      <template #footer>
-        <el-button @click="modelDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitModel">{{ isEditingModel ? '保存' : '创建' }}</el-button>
-      </template>
-    </el-dialog>
 
-    <!-- ── 销售价对话框 ── -->
-    <el-dialog v-model="priceDialogVisible" title="设置销售价" width="580px" append-to-body>
-      <el-form :model="priceForm" label-position="top">
+      <!-- Step 2: 销售价格 -->
+      <el-form v-if="!isEditingModel && modelDialogStep === 1" :model="priceForm" label-position="top">
+        <p class="form-section-hint">当前能力：<strong>{{ capabilityLabel(modelForm.capability_type) }}</strong>，下方仅显示该能力相关的价格字段（积分）。</p>
 
-        <!-- Token prices -->
-        <template v-if="showTokenPrice">
+        <template v-if="isChatLike(modelForm.capability_type)">
           <div class="grid grid-cols-2 gap-4">
-            <el-form-item label="输入价格 / 1M tokens（积分）">
+            <el-form-item label="输入 / 1M tokens（积分）">
               <el-input-number v-model="priceForm.input_price_per_1m" :min="0" :precision="0" class="w-full" />
             </el-form-item>
-            <el-form-item v-if="showOutputPrice" label="输出价格 / 1M tokens（积分）">
+            <el-form-item v-if="modelForm.capability_type === 'chat'" label="输出 / 1M tokens（积分）">
               <el-input-number v-model="priceForm.output_price_per_1m" :min="0" :precision="0" class="w-full" />
             </el-form-item>
           </div>
         </template>
 
-        <!-- Image size prices -->
-        <template v-if="showImagePrice">
-          <el-form-item label="尺寸定价（积分/张）">
-            <div class="size-price-editor">
-              <div
-                v-for="(entry, idx) in priceForm.image_size_prices"
-                :key="idx"
-                class="size-price-row"
-              >
-                <el-input v-model="entry.size" placeholder="1024x1024" class="size-input" />
-                <el-input-number v-model="entry.price" :min="0" :precision="0" class="price-input" />
-                <el-button link type="danger" :icon="Delete" @click="removeSizePrice(idx)" />
-              </div>
-              <el-button :icon="Plus" @click="addSizePrice">添加尺寸</el-button>
-            </div>
-            <small class="form-hint">不在列表中的尺寸将直接拒绝请求</small>
+        <template v-if="isImage(modelForm.capability_type)">
+          <el-form-item label="尺寸定价（积分 / 张）">
+            <ResolutionPricingEditor v-model="priceForm.image_prices" mode="image" :presets="imagePresets" />
+            <small class="form-hint">不在列表中的尺寸将拒绝请求</small>
           </el-form-item>
         </template>
 
-        <!-- Video price -->
-        <el-form-item v-if="showVideoPrice" label="视频价格 / 秒（积分）">
-          <el-input-number v-model="priceForm.video_price_per_second" :min="0" :precision="0" class="w-full" />
-        </el-form-item>
+        <template v-if="isVideo(modelForm.capability_type)">
+          <el-form-item label="分辨率定价（积分 / 秒）">
+            <ResolutionPricingEditor v-model="priceForm.video_prices" mode="video" :presets="videoPresets" />
+            <small class="form-hint">不在列表中的分辨率将拒绝请求</small>
+          </el-form-item>
+        </template>
 
-        <!-- Audio TTS price -->
-        <el-form-item v-if="showAudioTTSPrice" label="TTS 价格 / 1M 字符（积分）">
+        <el-form-item v-if="isAudioTTS(modelForm.capability_type)" label="TTS / 1M 字符（积分）">
           <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars" :min="0" :precision="0" class="w-full" />
         </el-form-item>
 
-        <!-- Audio STT price -->
-        <el-form-item v-if="showAudioSTTPrice" label="STT 价格 / 分钟（积分）">
+        <el-form-item v-if="isAudioSTT(modelForm.capability_type)" label="STT / 分钟（积分）">
           <el-input-number v-model="priceForm.audio_stt_price_per_minute" :min="0" :precision="0" class="w-full" />
         </el-form-item>
+      </el-form>
 
+      <template #footer>
+        <el-button @click="modelDialogVisible = false">取消</el-button>
+        <template v-if="isEditingModel">
+          <el-button type="primary" @click="submitModel">保存</el-button>
+        </template>
+        <template v-else>
+          <el-button v-if="modelDialogStep === 1" @click="modelDialogStep = 0">上一步</el-button>
+          <el-button v-if="modelDialogStep === 0" type="primary" @click="modelStepNext">下一步</el-button>
+          <el-button v-else type="primary" @click="submitModel">创建</el-button>
+        </template>
+      </template>
+    </el-dialog>
+
+    <!-- ── 销售价对话框（编辑现有模型） ── -->
+    <el-dialog v-model="priceDialogVisible" title="修改销售价" width="600px" append-to-body>
+      <el-form :model="priceForm" label-position="top">
+        <template v-if="showTokenPrice">
+          <div class="grid grid-cols-2 gap-4">
+            <el-form-item label="输入 / 1M tokens（积分）">
+              <el-input-number v-model="priceForm.input_price_per_1m" :min="0" :precision="0" class="w-full" />
+            </el-form-item>
+            <el-form-item v-if="showOutputPrice" label="输出 / 1M tokens（积分）">
+              <el-input-number v-model="priceForm.output_price_per_1m" :min="0" :precision="0" class="w-full" />
+            </el-form-item>
+          </div>
+        </template>
+
+        <template v-if="showImagePrice">
+          <el-form-item label="尺寸定价（积分 / 张）">
+            <ResolutionPricingEditor v-model="priceForm.image_prices" mode="image" :presets="imagePresets" />
+            <small class="form-hint">不在列表中的尺寸将拒绝请求</small>
+          </el-form-item>
+        </template>
+
+        <template v-if="showVideoPrice">
+          <el-form-item label="分辨率定价（积分 / 秒）">
+            <ResolutionPricingEditor v-model="priceForm.video_prices" mode="video" :presets="videoPresets" />
+            <small class="form-hint">不在列表中的分辨率将拒绝请求</small>
+          </el-form-item>
+        </template>
+
+        <el-form-item v-if="showAudioTTSPrice" label="TTS / 1M 字符（积分）">
+          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars" :min="0" :precision="0" class="w-full" />
+        </el-form-item>
+
+        <el-form-item v-if="showAudioSTTPrice" label="STT / 分钟（积分）">
+          <el-input-number v-model="priceForm.audio_stt_price_per_minute" :min="0" :precision="0" class="w-full" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="priceDialogVisible = false">取消</el-button>
@@ -698,64 +927,122 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
     </el-dialog>
 
     <!-- ── 路由对话框 ── -->
-    <el-dialog v-model="routeDialogVisible" :title="isEditingRoute ? '编辑模型路由' : '新增模型路由'" width="580px" append-to-body>
-      <el-form :model="routeForm" label-position="top">
-        <!-- Route target mode -->
-        <el-form-item label="路由目标">
-          <el-radio-group v-model="routeMode">
-            <el-radio-button value="deployment">上游部署（API Key）</el-radio-button>
-            <el-radio-button value="pool">账号池（OAuth）</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
+    <el-dialog
+      v-model="routeDialogVisible"
+      :title="isEditingRoute ? '编辑模型路由' : '新增模型路由'"
+      width="960px"
+      append-to-body
+      :close-on-click-modal="false"
+    >
+      <div class="picker-filters">
+        <el-select v-model="pickerSourceFilter" placeholder="来源类型" clearable class="picker-filter">
+          <el-option label="API Key" value="endpoint" />
+          <el-option label="OAuth 池" value="pool" />
+        </el-select>
+        <el-select v-model="pickerProviderFilter" placeholder="厂商" clearable class="picker-filter">
+          <el-option v-for="p in providerOptions" :key="p.id" :label="p.name" :value="p.id" />
+        </el-select>
+        <el-select v-model="pickerEndpointFilter" placeholder="账户" clearable class="picker-filter">
+          <el-option v-for="e in endpointOptions" :key="e.id" :label="e.name" :value="e.id" />
+        </el-select>
+        <el-select v-model="pickerCapabilityFilter" placeholder="能力类型" clearable class="picker-filter">
+          <el-option v-for="c in capabilityOptions" :key="c.value" :label="c.label" :value="c.value" />
+        </el-select>
+        <el-input v-model="pickerSearch" :prefix-icon="Search" placeholder="搜索 model / 账户 / 池" clearable class="picker-search" />
+      </div>
 
-        <!-- Deployment mode -->
-        <el-form-item v-if="routeMode === 'deployment'" label="上游部署" required>
-          <el-select v-model="routeForm.upstream_deployment_id" class="w-full" filterable placeholder="选择上游部署">
-            <el-option v-for="item in upstreamDeploymentOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
-        </el-form-item>
-
-        <!-- Pool mode -->
+      <div class="picker-table-wrap">
+        <div class="picker-row picker-row-head">
+          <span class="cell-check">
+            <el-checkbox :model-value="allFilteredSelected" @change="togglePickerAll" />
+          </span>
+          <span class="cell-endpoint">来源 · 上游模型</span>
+          <span class="cell-cap">能力</span>
+          <span class="cell-protocol">协议</span>
+          <span class="cell-actions">行内覆盖</span>
+        </div>
+        <div v-if="filteredDeployments.length === 0" class="picker-empty">无匹配的上游部署</div>
         <template v-else>
-          <el-form-item label="账号池" required>
-            <el-select v-model="routeForm.credential_pool_id" class="w-full" filterable placeholder="选择账号池">
-              <el-option
-                v-for="pool in credentialPools"
-                :key="pool.id"
-                :label="`[${pool.fixed_provider_type}] ${pool.name}`"
-                :value="pool.id"
+          <div
+            v-for="d in filteredDeployments"
+            :key="d.id"
+            class="picker-row"
+            :class="{ 'is-disabled': existingRouteDeploymentIds.has(d.id), 'is-selected': pickerSelectedIds.includes(d.id) }"
+          >
+            <span class="cell-check">
+              <el-checkbox
+                :model-value="pickerSelectedIds.includes(d.id)"
+                :disabled="existingRouteDeploymentIds.has(d.id)"
+                @change="togglePickerRow(d.id)"
               />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="上游模型名（pool_upstream_model）" required>
-            <el-input v-model="routeForm.pool_upstream_model" placeholder="例如 gpt-4o、claude-opus-4-5" />
-          </el-form-item>
+            </span>
+            <span class="cell-endpoint">
+              <el-tag v-if="d.credential_source === 'pool'" size="small" type="warning" effect="plain" class="oauth-badge">OAuth</el-tag>
+              <span class="endpoint-name">{{ d.pool_name || d.endpoint_name || '-' }}</span>
+              <span class="endpoint-sep">·</span>
+              <span class="upstream-model">{{ d.upstream_model }}</span>
+              <small v-if="existingRouteDeploymentIds.has(d.id)" class="already-tag">已配置</small>
+            </span>
+            <span class="cell-cap">
+              <el-tag size="small">{{ capabilityLabel(d.capability_type) }}</el-tag>
+            </span>
+            <span class="cell-protocol">{{ d.upstream_protocol }}</span>
+            <span class="cell-actions">
+              <el-button
+                link
+                size="small"
+                :type="isOverridden(d.id) ? 'warning' : 'primary'"
+                :disabled="!pickerSelectedIds.includes(d.id)"
+                @click="toggleOverride(d.id)"
+              >{{ isOverridden(d.id) ? '收起' : '自定义' }}</el-button>
+            </span>
+            <div v-if="isOverridden(d.id) && pickerSelectedIds.includes(d.id)" class="row-override">
+              <span class="ov-field">
+                优先级
+                <el-input-number v-model="pickerOverrides[d.id].priority" :min="0" :precision="0" size="small" controls-position="right" />
+              </span>
+              <span class="ov-field">
+                权重
+                <el-input-number v-model="pickerOverrides[d.id].weight" :min="0" :precision="0" size="small" controls-position="right" />
+              </span>
+              <span class="ov-field">
+                流式
+                <el-switch v-model="pickerOverrides[d.id].supports_stream" />
+              </span>
+            </div>
+          </div>
         </template>
+      </div>
 
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="优先级">
-            <el-input-number v-model="routeForm.priority" :min="0" :precision="0" class="w-full" />
-            <small class="form-hint">数字越小优先级越高</small>
-          </el-form-item>
-          <el-form-item label="权重">
-            <el-input-number v-model="routeForm.weight" :min="0" :precision="0" class="w-full" />
-            <small class="form-hint">用于加权随机选择</small>
-          </el-form-item>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-          <el-form-item label="支持流式">
-            <el-switch v-model="routeForm.supports_stream" />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="routeForm.status" class="w-full">
-              <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
-        </div>
-      </el-form>
+      <div class="picker-summary">
+        <span class="summary-count">已选 <strong>{{ pickerSelectedIds.length }}</strong> 条</span>
+        <span class="summary-sep">·</span>
+        <span>默认</span>
+        <span class="ov-field">
+          优先级
+          <el-input-number v-model="pickerDefaults.priority" :min="0" :precision="0" size="small" controls-position="right" />
+        </span>
+        <span class="ov-field">
+          权重
+          <el-input-number v-model="pickerDefaults.weight" :min="0" :precision="0" size="small" controls-position="right" />
+        </span>
+        <span class="ov-field">
+          流式
+          <el-switch v-model="pickerDefaults.supports_stream" />
+        </span>
+        <span class="ov-field">
+          状态
+          <el-select v-model="pickerDefaults.status" size="small" style="width: 100px">
+            <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
+          </el-select>
+        </span>
+      </div>
+
       <template #footer>
         <el-button @click="routeDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitModelRoute">{{ isEditingRoute ? '保存' : '创建' }}</el-button>
+        <el-button type="primary" :loading="submittingRoutes" @click="submitRoutes">
+          {{ isEditingRoute ? '保存' : `创建 ${pickerSelectedIds.length} 条路由` }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -769,7 +1056,6 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
   align-items: start;
 }
 
-/* ── Rail ── */
 .model-rail {
   position: sticky;
   top: 16px;
@@ -855,7 +1141,6 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
 .model-item:hover { background: #f1f5f9; }
 .model-item.active { background: #eff6ff; }
 
-/* Status dot */
 .dot {
   flex-shrink: 0;
   width: 8px;
@@ -885,15 +1170,13 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .model-item-text small {
   font-size: 11px;
   color: #94a3b8;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .model-item-actions {
@@ -915,7 +1198,6 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
   margin-top: 8px;
 }
 
-/* ── Workspace ── */
 .model-workspace {
   display: flex;
   flex-direction: column;
@@ -950,6 +1232,7 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
   color: #111827;
   font-size: 22px;
   font-weight: 900;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .workspace-hero > .hero-main > p:not(.eyebrow) {
@@ -1000,8 +1283,10 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
 .section-head p { margin: 4px 0 0; color: #64748b; font-size: 12px; font-weight: 700; }
 
 .route-deployment { display: flex; flex-direction: column; gap: 2px; }
-.route-deployment strong { color: #334155; font-weight: 700; }
-.route-deployment small { color: #94a3b8; font-size: 11px; }
+.route-endpoint-row { display: flex; align-items: center; gap: 6px; }
+.route-endpoint { color: #2563eb; font-weight: 700; font-size: 13px; }
+.route-model { color: #334155; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.oauth-badge { flex-shrink: 0; }
 
 .priority-badge {
   display: inline-flex;
@@ -1016,12 +1301,8 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
   font-weight: 700;
 }
 
-/* ── Price display ── */
-.price-display {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
+/* Price display */
+.price-display { display: flex; flex-direction: column; gap: 0; }
 
 .price-item {
   display: flex;
@@ -1035,19 +1316,8 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
 .price-item span { color: #64748b; font-weight: 700; }
 .price-item strong { color: #0f172a; font-weight: 900; }
 
-.price-updated {
-  margin-top: 10px;
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.price-empty-hint {
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 10px 0;
-}
+.price-updated { margin-top: 10px; color: #94a3b8; font-size: 11px; font-weight: 600; }
+.price-empty-hint { color: #94a3b8; font-size: 12px; font-weight: 700; padding: 10px 0; }
 
 .price-unset {
   padding: 16px;
@@ -1056,31 +1326,9 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
   background: #fff7f7;
 }
 
-.price-unset p {
-  margin: 0;
-  color: #dc2626;
-  font-size: 13px;
-  font-weight: 700;
-}
+.price-unset p { margin: 0; color: #dc2626; font-size: 13px; font-weight: 700; }
 
-/* ── Image size price editor ── */
-.size-price-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-.size-price-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.size-input { width: 140px; }
-.price-input { flex: 1; }
-
-/* ── Empty workspace ── */
+/* Empty workspace */
 .empty-workspace {
   display: flex;
   flex-direction: column;
@@ -1104,6 +1352,113 @@ onMounted(() => { fetchModels(); fetchCredentialPools() })
 }
 
 .form-hint { display: block; margin-top: 4px; color: #94a3b8; font-size: 11px; }
+
+.model-stepper { margin-bottom: 18px; }
+
+.form-section-hint { margin: 0 0 14px; color: #475569; font-size: 13px; }
+.form-section-hint strong { color: #2563eb; }
+
+.suggestion-banner { margin-bottom: 14px; }
+
+/* Route picker */
+.picker-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.picker-filter { width: 160px; }
+.picker-search { flex: 1; min-width: 200px; }
+
+.picker-table-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.picker-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 90px 140px 80px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+  transition: background 0.13s;
+}
+
+.picker-row:hover:not(.is-disabled) { background: #f8fafc; }
+.picker-row.is-selected { background: #eff6ff; }
+.picker-row.is-disabled { background: #fafafa; color: #cbd5e1; }
+.picker-row.is-disabled .endpoint-name,
+.picker-row.is-disabled .upstream-model { color: #cbd5e1; }
+
+.picker-row-head {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+.cell-endpoint { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.endpoint-name { color: #2563eb; font-weight: 700; }
+.endpoint-sep { color: #cbd5e1; }
+.upstream-model { color: #0f172a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.already-tag { color: #94a3b8; font-size: 10px; font-weight: 700; margin-left: 4px; }
+
+.cell-protocol { color: #475569; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.cell-actions { text-align: right; }
+
+.picker-empty {
+  padding: 40px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.row-override {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 14px;
+  padding: 8px 12px;
+  background: #fef3c7;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+
+.ov-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.picker-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 700;
+}
+
+.summary-count strong { color: #2563eb; font-size: 14px; }
+.summary-sep { color: #cbd5e1; }
 
 @media (max-width: 1280px) {
   .model-workbench { grid-template-columns: 1fr; }

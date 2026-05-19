@@ -58,7 +58,7 @@ const hasSelectedTenant = computed(() => Boolean(selectedTenant.tenantId))
 
 const modelOptions = computed(() =>
   models.value.map((item) => ({
-    label: `${item.model_code} · ${item.display_name}`,
+    label: item.model_code,
     value: item.id,
     code: item.model_code,
     capability: item.capability_type
@@ -395,8 +395,8 @@ onMounted(async () => {
         <el-table-column label="模型" min-width="200">
           <template #default="{ row }">
             <div class="model-cell">
-              <strong>{{ row.display_name }}</strong>
-              <small>{{ row.model_code }}</small>
+              <strong>{{ row.model_code }}</strong>
+              <small>{{ capabilityLabel(row.capability_type) }}</small>
             </div>
           </template>
         </el-table-column>
@@ -431,7 +431,7 @@ onMounted(async () => {
     <!-- 租户价格覆盖对话框 -->
     <el-dialog
       v-model="priceOverrideDialogVisible"
-      :title="`租户定价 · ${overrideTargetGrant?.display_name || ''}`"
+      :title="`租户定价 · ${overrideTargetGrant?.model_code || ''}`"
       width="520px"
       append-to-body
     >

@@ -15,7 +15,6 @@ const getTenantModel = `-- name: GetTenantModel :one
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.default_max_output_tokens,
   m.max_output_tokens
@@ -37,7 +36,6 @@ type GetTenantModelParams struct {
 type GetTenantModelRow struct {
 	ID                     pgtype.UUID `json:"id"`
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
 	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
@@ -50,7 +48,6 @@ func (q *Queries) GetTenantModel(ctx context.Context, arg GetTenantModelParams) 
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
-		&i.DisplayName,
 		&i.CapabilityType,
 		&i.DefaultMaxOutputTokens,
 		&i.MaxOutputTokens,
@@ -62,7 +59,6 @@ const getUserModel = `-- name: GetUserModel :one
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.default_max_output_tokens,
   m.max_output_tokens
@@ -86,7 +82,6 @@ type GetUserModelParams struct {
 type GetUserModelRow struct {
 	ID                     pgtype.UUID `json:"id"`
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
 	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
@@ -105,7 +100,6 @@ func (q *Queries) GetUserModel(ctx context.Context, arg GetUserModelParams) (Get
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
-		&i.DisplayName,
 		&i.CapabilityType,
 		&i.DefaultMaxOutputTokens,
 		&i.MaxOutputTokens,
@@ -141,7 +135,6 @@ const listModelsForTenant = `-- name: ListModelsForTenant :many
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.context_window,
   m.default_max_output_tokens,
@@ -157,7 +150,6 @@ ORDER BY m.model_code ASC
 type ListModelsForTenantRow struct {
 	ID                     pgtype.UUID `json:"id"`
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	ContextWindow          pgtype.Int4 `json:"context_window"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
@@ -180,7 +172,6 @@ func (q *Queries) ListModelsForTenant(ctx context.Context, tenantID string) ([]L
 		if err := rows.Scan(
 			&i.ID,
 			&i.ModelCode,
-			&i.DisplayName,
 			&i.CapabilityType,
 			&i.ContextWindow,
 			&i.DefaultMaxOutputTokens,

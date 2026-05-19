@@ -7,7 +7,6 @@
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.context_window,
   m.default_max_output_tokens,
@@ -24,7 +23,6 @@ ORDER BY m.model_code ASC;
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.default_max_output_tokens,
   m.max_output_tokens
@@ -42,7 +40,6 @@ WHERE tg.tenant_id      = $1
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.default_max_output_tokens,
   m.max_output_tokens

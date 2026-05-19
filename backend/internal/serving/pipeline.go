@@ -48,6 +48,7 @@ type Request struct {
 	ChatReq  *canonical.ChatRequest
 	EmbedReq *canonical.EmbeddingRequest
 	ImageReq *canonical.ImageRequest
+	VideoReq *canonical.VideoRequest
 
 	// Resolved by AuthN step
 	APIKey *domain.APIKeyAuth

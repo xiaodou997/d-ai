@@ -82,6 +82,25 @@ func (s *Server) handleRuntime(capType domain.CapabilityType) http.HandlerFunc {
 			}
 			req.ModelCode = imgReq.Model
 			req.ImageReq = &imgReq
+			// Populate usage fields upfront — image count and resolution are known
+			// from the request; they do not appear in the upstream response.
+			n := 1
+			if imgReq.N != nil && *imgReq.N > 0 {
+				n = *imgReq.N
+			}
+			req.TokenUsage.ImageCount = n
+			req.TokenUsage.ImageResolution = imgReq.Size
+
+		case domain.CapabilityVideo:
+			var vidReq canonical.VideoRequest
+			if err := json.Unmarshal(body, &vidReq); err != nil {
+				writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Invalid request body.", "invalid_body")
+				return
+			}
+			req.ModelCode = vidReq.Model
+			req.VideoReq = &vidReq
+			req.TokenUsage.VideoSeconds = vidReq.Duration
+			req.TokenUsage.VideoResolution = vidReq.Resolution
 
 		default:
 			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Unsupported capability.", "unsupported_capability")

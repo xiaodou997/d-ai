@@ -217,3 +217,24 @@ type ImageObject struct {
 	B64JSON string `json:"b64_json,omitempty"`
 	Revised string `json:"revised_prompt,omitempty"`
 }
+
+// ============================================================================
+// Video generation request / response
+// ============================================================================
+
+type VideoRequest struct {
+	Model      string  `json:"model"`
+	Prompt     string  `json:"prompt"`
+	Resolution string  `json:"resolution,omitempty"` // e.g. "1920x1080"
+	Duration   float64 `json:"duration,omitempty"`   // seconds
+	N          *int    `json:"n,omitempty"`
+}
+
+type VideoResponse struct {
+	Created int64         `json:"created"`
+	Data    []VideoObject `json:"data"`
+}
+
+type VideoObject struct {
+	URL string `json:"url,omitempty"`
+}

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
@@ -35,8 +36,9 @@ func (r *PriceResolver) ResolvePricing(ctx context.Context, req *serving.Request
 			ModelID:  modelID,
 		})
 		if err == nil {
-			return priceRowToModelPricing(row.InputPricePer1m, row.OutputPricePer1m,
-				row.CacheWritePricePer1m, row.CacheReadPricePer1m, row.ReasoningPricePer1m), nil
+			return buildModelPricing(row.InputPricePer1m, row.OutputPricePer1m,
+				row.CacheWritePricePer1m, row.CacheReadPricePer1m, row.ReasoningPricePer1m,
+				row.ImagePrices, row.VideoPrices), nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return domain.ModelPricing{}, err
@@ -48,8 +50,9 @@ func (r *PriceResolver) ResolvePricing(ctx context.Context, req *serving.Request
 		ModelID:  modelID,
 	})
 	if err == nil {
-		return priceRowToModelPricing(tenantRow.InputPricePer1m, tenantRow.OutputPricePer1m,
-			tenantRow.CacheWritePricePer1m, tenantRow.CacheReadPricePer1m, tenantRow.ReasoningPricePer1m), nil
+		return buildModelPricing(tenantRow.InputPricePer1m, tenantRow.OutputPricePer1m,
+			tenantRow.CacheWritePricePer1m, tenantRow.CacheReadPricePer1m, tenantRow.ReasoningPricePer1m,
+			tenantRow.ImagePrices, tenantRow.VideoPrices), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return domain.ModelPricing{}, err
@@ -59,26 +62,64 @@ func (r *PriceResolver) ResolvePricing(ctx context.Context, req *serving.Request
 	if err != nil {
 		return domain.ModelPricing{}, err
 	}
-	return priceRowToModelPricing(baseRow.InputPricePer1m, baseRow.OutputPricePer1m,
-		baseRow.CacheWritePricePer1m, baseRow.CacheReadPricePer1m, baseRow.ReasoningPricePer1m), nil
+	return buildModelPricing(baseRow.InputPricePer1m, baseRow.OutputPricePer1m,
+		baseRow.CacheWritePricePer1m, baseRow.CacheReadPricePer1m, baseRow.ReasoningPricePer1m,
+		baseRow.ImagePrices, baseRow.VideoPrices), nil
 }
 
-func priceRowToModelPricing(input, output, cacheWrite, cacheRead, reasoning int64) domain.ModelPricing {
+func buildModelPricing(input, output, cacheWrite, cacheRead, reasoning int64, imagePricesJSON, videoPricesJSON []byte) domain.ModelPricing {
 	return domain.ModelPricing{
 		InputPer1M:      input,
 		OutputPer1M:     output,
 		CacheWritePer1M: cacheWrite,
 		CacheReadPer1M:  cacheRead,
 		ReasoningPer1M:  reasoning,
+		ImagePrices:     decodeResolutionCreditPrices(imagePricesJSON),
+		VideoPrices:     decodeResolutionCreditPrices(videoPricesJSON),
 	}
 }
 
-// CalculateBilling computes all cost tiers from token usage and pricing.
-// Cache tokens are billed at input price, which creates margin when the
-// provider charges less for cache reads.
-func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) domain.BillingResult {
-	const perM = int64(1_000_000)
+func decodeResolutionCreditPrices(raw []byte) []domain.ResolutionCreditPrice {
+	if len(raw) == 0 {
+		return nil
+	}
+	var prices []domain.ResolutionCreditPrice
+	if err := json.Unmarshal(raw, &prices); err != nil {
+		return nil
+	}
+	return prices
+}
 
+// CalculateBilling computes all cost tiers from usage and pricing.
+// For token-based models, cache tokens are billed at input price to create margin.
+// For image models, cost = price-per-image × count (resolved by resolution).
+// For video models, cost = price-per-second × duration (resolved by resolution).
+func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) domain.BillingResult {
+	if usage.ImageCount > 0 {
+		cost := lookupCreditPrice(pricing.ImagePrices, usage.ImageResolution) * int64(usage.ImageCount)
+		return domain.BillingResult{
+			PlatformCost:     cost,
+			UserCost:         cost,
+			APIKeyQuotaCost:  cost,
+			BillableUnits:    int64(usage.ImageCount),
+			BillableUnitType: "image",
+		}
+	}
+
+	if usage.VideoSeconds > 0 {
+		pricePerSec := lookupCreditPrice(pricing.VideoPrices, usage.VideoResolution)
+		cost := int64(usage.VideoSeconds * float64(pricePerSec))
+		seconds := int64(usage.VideoSeconds)
+		return domain.BillingResult{
+			PlatformCost:     cost,
+			UserCost:         cost,
+			APIKeyQuotaCost:  cost,
+			BillableUnits:    seconds,
+			BillableUnitType: "second",
+		}
+	}
+
+	const perM = int64(1_000_000)
 	promptCost := int64(usage.PromptTokens) * pricing.InputPer1M / perM
 	completionCost := int64(usage.CompletionTokens) * pricing.OutputPer1M / perM
 	cacheWriteCost := int64(usage.CacheWriteTokens) * pricing.EffectiveCacheWritePrice() / perM
@@ -95,4 +136,26 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 		BillableUnits:    totalTokens,
 		BillableUnitType: "token",
 	}
+}
+
+// lookupCreditPrice returns the credit price matching resolution, or the lowest
+// price in the list when no exact match is found.
+func lookupCreditPrice(prices []domain.ResolutionCreditPrice, resolution string) int64 {
+	if len(prices) == 0 {
+		return 0
+	}
+	if resolution != "" {
+		for _, p := range prices {
+			if p.Resolution == resolution {
+				return p.Price
+			}
+		}
+	}
+	min := prices[0].Price
+	for _, p := range prices[1:] {
+		if p.Price < min {
+			min = p.Price
+		}
+	}
+	return min
 }

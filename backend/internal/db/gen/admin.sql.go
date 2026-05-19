@@ -288,19 +288,17 @@ const createModel = `-- name: CreateModel :one
 
 INSERT INTO ai_models (
   model_code,
-  display_name,
   capability_type,
   context_window,
   default_max_output_tokens,
   max_output_tokens,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
+  $1, $2, $3, $4, $5, $6
 )
 RETURNING
   id,
   model_code,
-  display_name,
   capability_type,
   context_window,
   default_max_output_tokens,
@@ -312,7 +310,6 @@ RETURNING
 
 type CreateModelParams struct {
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	ContextWindow          pgtype.Int4 `json:"context_window"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
@@ -326,7 +323,6 @@ type CreateModelParams struct {
 func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (AiModel, error) {
 	row := q.db.QueryRow(ctx, createModel,
 		arg.ModelCode,
-		arg.DisplayName,
 		arg.CapabilityType,
 		arg.ContextWindow,
 		arg.DefaultMaxOutputTokens,
@@ -337,7 +333,6 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (AiMod
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
-		&i.DisplayName,
 		&i.CapabilityType,
 		&i.ContextWindow,
 		&i.DefaultMaxOutputTokens,
@@ -362,7 +357,7 @@ INSERT INTO ai_model_routes (
   $1, $2, $3, $4, $5, $6
 )
 RETURNING
-  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  id, model_id, upstream_deployment_id,
   priority, weight, supports_stream, status, created_at, updated_at,
   cost_per_1k_tokens, score_weights_override, sticky_enabled
 `
@@ -393,8 +388,6 @@ func (q *Queries) CreateModelRoute(ctx context.Context, arg CreateModelRoutePara
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
-		&i.CredentialPoolID,
-		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
@@ -775,6 +768,7 @@ INSERT INTO ai_upstream_deployments (
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -818,6 +812,71 @@ func (q *Queries) CreateUpstreamDeployment(ctx context.Context, arg CreateUpstre
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
+		&i.UpstreamModel,
+		&i.CapabilityType,
+		&i.UpstreamProtocol,
+		&i.RequestPath,
+		&i.UpstreamParameters,
+		&i.Pricing,
+		&i.HealthStatus,
+		&i.LastHealthCheckAt,
+		&i.LastHealthError,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createPoolDeployment = `-- name: CreatePoolDeployment :one
+
+INSERT INTO ai_upstream_deployments (
+  credential_pool_id,
+  upstream_model,
+  capability_type,
+  upstream_protocol,
+  status
+) VALUES (
+  $1, $2, $3, $4, 'active'
+)
+RETURNING
+  id,
+  endpoint_id,
+  credential_pool_id,
+  upstream_model,
+  capability_type,
+  upstream_protocol,
+  request_path,
+  upstream_parameters,
+  pricing,
+  health_status,
+  last_health_check_at,
+  last_health_error,
+  status,
+  created_at,
+  updated_at
+`
+
+type CreatePoolDeploymentParams struct {
+	CredentialPoolID pgtype.UUID `json:"credential_pool_id"`
+	UpstreamModel    string      `json:"upstream_model"`
+	CapabilityType   string      `json:"capability_type"`
+	UpstreamProtocol string      `json:"upstream_protocol"`
+}
+
+func (q *Queries) CreatePoolDeployment(ctx context.Context, arg CreatePoolDeploymentParams) (AiUpstreamDeployment, error) {
+	row := q.db.QueryRow(ctx, createPoolDeployment,
+		arg.CredentialPoolID,
+		arg.UpstreamModel,
+		arg.CapabilityType,
+		arg.UpstreamProtocol,
+	)
+	var i AiUpstreamDeployment
+	err := row.Scan(
+		&i.ID,
+		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -1198,7 +1257,6 @@ const getModel = `-- name: GetModel :one
 SELECT
   id,
   model_code,
-  display_name,
   capability_type,
   context_window,
   default_max_output_tokens,
@@ -1216,7 +1274,6 @@ func (q *Queries) GetModel(ctx context.Context, id pgtype.UUID) (AiModel, error)
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
-		&i.DisplayName,
 		&i.CapabilityType,
 		&i.ContextWindow,
 		&i.DefaultMaxOutputTokens,
@@ -1235,8 +1292,8 @@ SELECT
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_at,
@@ -1250,8 +1307,8 @@ type GetModelPriceRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
@@ -1269,8 +1326,8 @@ func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (GetMo
 		&i.ModelID,
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 		&i.CreatedAt,
@@ -1281,7 +1338,7 @@ func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (GetMo
 
 const getModelRoute = `-- name: GetModelRoute :one
 SELECT
-  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  id, model_id, upstream_deployment_id,
   priority, weight, supports_stream, status, created_at, updated_at,
   cost_per_1k_tokens, score_weights_override, sticky_enabled
 FROM ai_model_routes
@@ -1295,8 +1352,6 @@ func (q *Queries) GetModelRoute(ctx context.Context, id pgtype.UUID) (AiModelRou
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
-		&i.CredentialPoolID,
-		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
@@ -1460,8 +1515,8 @@ SELECT
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_by,
@@ -1483,8 +1538,8 @@ type GetTenantModelPriceOverrideRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
@@ -1504,8 +1559,8 @@ func (q *Queries) GetTenantModelPriceOverride(ctx context.Context, arg GetTenant
 		&i.ModelID,
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 		&i.CreatedBy,
@@ -1523,8 +1578,8 @@ SELECT
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_by,
@@ -1546,8 +1601,8 @@ type GetTenantUserPriceRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
@@ -1567,8 +1622,8 @@ func (q *Queries) GetTenantUserPrice(ctx context.Context, arg GetTenantUserPrice
 		&i.ModelID,
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 		&i.CreatedBy,
@@ -1582,6 +1637,7 @@ const getUpstreamDeployment = `-- name: GetUpstreamDeployment :one
 SELECT
   ud.id,
   ud.endpoint_id,
+  ud.credential_pool_id,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
@@ -1594,23 +1650,28 @@ SELECT
   ud.status,
   ud.created_at,
   ud.updated_at,
-  e.name AS endpoint_name,
-  e.base_url,
-  e.api_key_ciphertext,
-  e.extra_headers,
-  e.timeout_ms,
-  p.id AS provider_id,
-  p.code AS provider_code,
-  p.name AS provider_name
+  CASE WHEN ud.endpoint_id IS NOT NULL THEN 'endpoint' ELSE 'pool' END AS credential_source,
+  COALESCE(e.name, '')          AS endpoint_name,
+  COALESCE(e.base_url, '')      AS base_url,
+  COALESCE(e.api_key_ciphertext, '') AS api_key_ciphertext,
+  COALESCE(e.extra_headers, '{}'::jsonb) AS extra_headers,
+  COALESCE(e.timeout_ms, 30000) AS timeout_ms,
+  COALESCE(p.id, '00000000-0000-0000-0000-000000000000'::uuid) AS provider_id,
+  COALESCE(p.code, '')          AS provider_code,
+  COALESCE(p.name, '')          AS provider_name,
+  COALESCE(cp.name, '')         AS pool_name,
+  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 FROM ai_upstream_deployments ud
-JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
-JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+LEFT JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
 WHERE ud.id = $1
 `
 
 type GetUpstreamDeploymentRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	EndpointID         pgtype.UUID        `json:"endpoint_id"`
+	CredentialPoolID   pgtype.UUID        `json:"credential_pool_id"`
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`
@@ -1623,6 +1684,7 @@ type GetUpstreamDeploymentRow struct {
 	Status             string             `json:"status"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CredentialSource   string             `json:"credential_source"`
 	EndpointName       string             `json:"endpoint_name"`
 	BaseUrl            string             `json:"base_url"`
 	ApiKeyCiphertext   string             `json:"api_key_ciphertext"`
@@ -1631,6 +1693,8 @@ type GetUpstreamDeploymentRow struct {
 	ProviderID         pgtype.UUID        `json:"provider_id"`
 	ProviderCode       string             `json:"provider_code"`
 	ProviderName       string             `json:"provider_name"`
+	PoolName           string             `json:"pool_name"`
+	FixedProviderType  string             `json:"fixed_provider_type"`
 }
 
 func (q *Queries) GetUpstreamDeployment(ctx context.Context, id pgtype.UUID) (GetUpstreamDeploymentRow, error) {
@@ -1639,6 +1703,7 @@ func (q *Queries) GetUpstreamDeployment(ctx context.Context, id pgtype.UUID) (Ge
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -1651,6 +1716,7 @@ func (q *Queries) GetUpstreamDeployment(ctx context.Context, id pgtype.UUID) (Ge
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.CredentialSource,
 		&i.EndpointName,
 		&i.BaseUrl,
 		&i.ApiKeyCiphertext,
@@ -1659,6 +1725,8 @@ func (q *Queries) GetUpstreamDeployment(ctx context.Context, id pgtype.UUID) (Ge
 		&i.ProviderID,
 		&i.ProviderCode,
 		&i.ProviderName,
+		&i.PoolName,
+		&i.FixedProviderType,
 	)
 	return i, err
 }
@@ -1938,7 +2006,6 @@ const listAdminModels = `-- name: ListAdminModels :many
 SELECT
   id,
   model_code,
-  display_name,
   capability_type,
   context_window,
   default_max_output_tokens,
@@ -1962,7 +2029,6 @@ func (q *Queries) ListAdminModels(ctx context.Context) ([]AiModel, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.ModelCode,
-			&i.DisplayName,
 			&i.CapabilityType,
 			&i.ContextWindow,
 			&i.DefaultMaxOutputTokens,
@@ -2371,23 +2437,28 @@ SELECT
   r.status,
   r.created_at,
   r.updated_at,
-  ud.upstream_model AS upstream_deployment_name,
+  ud.upstream_model                                               AS upstream_deployment_name,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
   ud.health_status,
-  e.id AS endpoint_id,
-  e.name AS endpoint_name,
-  e.base_url,
-  p.id AS provider_id,
-  p.code AS provider_code,
-  p.name AS provider_name
+  CASE WHEN ud.endpoint_id IS NOT NULL THEN 'endpoint' ELSE 'pool' END AS credential_source,
+  COALESCE(e.id, '00000000-0000-0000-0000-000000000000'::uuid)   AS endpoint_id,
+  COALESCE(e.name, '')                                           AS endpoint_name,
+  COALESCE(e.base_url, '')                                       AS base_url,
+  COALESCE(p.id, '00000000-0000-0000-0000-000000000000'::uuid)   AS provider_id,
+  COALESCE(p.code, '')                                           AS provider_code,
+  COALESCE(p.name, '')                                           AS provider_name,
+  COALESCE(cp.id, '00000000-0000-0000-0000-000000000000'::uuid)  AS pool_id,
+  COALESCE(cp.name, '')                                          AS pool_name,
+  COALESCE(cp.fixed_provider_type, '')                           AS fixed_provider_type
 FROM ai_model_routes r
 JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
-JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
-JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+LEFT JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
 WHERE r.model_id = $1
-ORDER BY r.priority ASC, r.weight DESC, p.code ASC, e.name ASC
+ORDER BY r.priority ASC, r.weight DESC
 `
 
 type ListModelRoutesRow struct {
@@ -2405,12 +2476,16 @@ type ListModelRoutesRow struct {
 	CapabilityType         string             `json:"capability_type"`
 	UpstreamProtocol       string             `json:"upstream_protocol"`
 	HealthStatus           string             `json:"health_status"`
+	CredentialSource       string             `json:"credential_source"`
 	EndpointID             pgtype.UUID        `json:"endpoint_id"`
 	EndpointName           string             `json:"endpoint_name"`
 	BaseUrl                string             `json:"base_url"`
 	ProviderID             pgtype.UUID        `json:"provider_id"`
 	ProviderCode           string             `json:"provider_code"`
 	ProviderName           string             `json:"provider_name"`
+	PoolID                 pgtype.UUID        `json:"pool_id"`
+	PoolName               string             `json:"pool_name"`
+	FixedProviderType      string             `json:"fixed_provider_type"`
 }
 
 func (q *Queries) ListModelRoutes(ctx context.Context, modelID pgtype.UUID) ([]ListModelRoutesRow, error) {
@@ -2437,12 +2512,16 @@ func (q *Queries) ListModelRoutes(ctx context.Context, modelID pgtype.UUID) ([]L
 			&i.CapabilityType,
 			&i.UpstreamProtocol,
 			&i.HealthStatus,
+			&i.CredentialSource,
 			&i.EndpointID,
 			&i.EndpointName,
 			&i.BaseUrl,
 			&i.ProviderID,
 			&i.ProviderCode,
 			&i.ProviderName,
+			&i.PoolID,
+			&i.PoolName,
+			&i.FixedProviderType,
 		); err != nil {
 			return nil, err
 		}
@@ -2645,7 +2724,6 @@ SELECT
   tg.created_by,
   tg.created_at,
   m.model_code,
-  m.display_name,
   m.capability_type
 FROM ai_tenant_model_grants tg
 JOIN ai_models m ON m.id = tg.model_id
@@ -2661,7 +2739,6 @@ type ListTenantModelGrantsRow struct {
 	CreatedBy      pgtype.Text        `json:"created_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	ModelCode      string             `json:"model_code"`
-	DisplayName    string             `json:"display_name"`
 	CapabilityType string             `json:"capability_type"`
 }
 
@@ -2682,7 +2759,6 @@ func (q *Queries) ListTenantModelGrants(ctx context.Context, tenantID string) ([
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.ModelCode,
-			&i.DisplayName,
 			&i.CapabilityType,
 		); err != nil {
 			return nil, err
@@ -2702,15 +2778,14 @@ SELECT
   o.model_id,
   o.input_price_per_1m,
   o.output_price_per_1m,
-  o.image_size_prices,
-  o.video_price_per_second,
+  o.image_prices,
+  o.video_prices,
   o.audio_tts_price_per_1m_chars,
   o.audio_stt_price_per_minute,
   o.created_by,
   o.created_at,
   o.updated_at,
   m.model_code,
-  m.display_name,
   m.capability_type
 FROM ai_tenant_model_price_overrides o
 JOIN ai_models m ON m.id = o.model_id
@@ -2724,15 +2799,14 @@ type ListTenantModelPriceOverridesRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	ModelCode               string             `json:"model_code"`
-	DisplayName             string             `json:"display_name"`
 	CapabilityType          string             `json:"capability_type"`
 }
 
@@ -2751,15 +2825,14 @@ func (q *Queries) ListTenantModelPriceOverrides(ctx context.Context, tenantID st
 			&i.ModelID,
 			&i.InputPricePer1m,
 			&i.OutputPricePer1m,
-			&i.ImageSizePrices,
-			&i.VideoPricePerSecond,
+			&i.ImagePrices,
+			&i.VideoPrices,
 			&i.AudioTtsPricePer1mChars,
 			&i.AudioSttPricePerMinute,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ModelCode,
-			&i.DisplayName,
 			&i.CapabilityType,
 		); err != nil {
 			return nil, err
@@ -2779,15 +2852,14 @@ SELECT
   p.model_id,
   p.input_price_per_1m,
   p.output_price_per_1m,
-  p.image_size_prices,
-  p.video_price_per_second,
+  p.image_prices,
+  p.video_prices,
   p.audio_tts_price_per_1m_chars,
   p.audio_stt_price_per_minute,
   p.created_by,
   p.created_at,
   p.updated_at,
   m.model_code,
-  m.display_name,
   m.capability_type
 FROM ai_tenant_user_prices p
 JOIN ai_models m ON m.id = p.model_id
@@ -2801,15 +2873,14 @@ type ListTenantUserPricesRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	ModelCode               string             `json:"model_code"`
-	DisplayName             string             `json:"display_name"`
 	CapabilityType          string             `json:"capability_type"`
 }
 
@@ -2828,15 +2899,14 @@ func (q *Queries) ListTenantUserPrices(ctx context.Context, tenantID string) ([]
 			&i.ModelID,
 			&i.InputPricePer1m,
 			&i.OutputPricePer1m,
-			&i.ImageSizePrices,
-			&i.VideoPricePerSecond,
+			&i.ImagePrices,
+			&i.VideoPrices,
 			&i.AudioTtsPricePer1mChars,
 			&i.AudioSttPricePerMinute,
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ModelCode,
-			&i.DisplayName,
 			&i.CapabilityType,
 		); err != nil {
 			return nil, err
@@ -2853,6 +2923,7 @@ const listUpstreamDeployments = `-- name: ListUpstreamDeployments :many
 SELECT
   ud.id,
   ud.endpoint_id,
+  ud.credential_pool_id,
   ud.upstream_model,
   ud.capability_type,
   ud.upstream_protocol,
@@ -2865,15 +2936,19 @@ SELECT
   ud.status,
   ud.created_at,
   ud.updated_at,
-  e.name AS endpoint_name,
-  e.base_url,
-  e.weight AS endpoint_weight,
-  p.id AS provider_id,
-  p.code AS provider_code,
-  p.name AS provider_name
+  CASE WHEN ud.endpoint_id IS NOT NULL THEN 'endpoint' ELSE 'pool' END AS credential_source,
+  COALESCE(e.name, '')          AS endpoint_name,
+  COALESCE(e.base_url, '')      AS base_url,
+  COALESCE(e.weight, 0)         AS endpoint_weight,
+  COALESCE(p.id, '00000000-0000-0000-0000-000000000000'::uuid) AS provider_id,
+  COALESCE(p.code, '')          AS provider_code,
+  COALESCE(p.name, '')          AS provider_name,
+  COALESCE(cp.name, '')         AS pool_name,
+  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
 FROM ai_upstream_deployments ud
-JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
-JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+LEFT JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
 WHERE ud.endpoint_id = $1
 ORDER BY ud.upstream_model ASC
 `
@@ -2881,6 +2956,7 @@ ORDER BY ud.upstream_model ASC
 type ListUpstreamDeploymentsRow struct {
 	ID                 pgtype.UUID        `json:"id"`
 	EndpointID         pgtype.UUID        `json:"endpoint_id"`
+	CredentialPoolID   pgtype.UUID        `json:"credential_pool_id"`
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`
@@ -2893,12 +2969,15 @@ type ListUpstreamDeploymentsRow struct {
 	Status             string             `json:"status"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	CredentialSource   string             `json:"credential_source"`
 	EndpointName       string             `json:"endpoint_name"`
 	BaseUrl            string             `json:"base_url"`
 	EndpointWeight     int32              `json:"endpoint_weight"`
 	ProviderID         pgtype.UUID        `json:"provider_id"`
 	ProviderCode       string             `json:"provider_code"`
 	ProviderName       string             `json:"provider_name"`
+	PoolName           string             `json:"pool_name"`
+	FixedProviderType  string             `json:"fixed_provider_type"`
 }
 
 func (q *Queries) ListUpstreamDeployments(ctx context.Context, endpointID pgtype.UUID) ([]ListUpstreamDeploymentsRow, error) {
@@ -2913,6 +2992,7 @@ func (q *Queries) ListUpstreamDeployments(ctx context.Context, endpointID pgtype
 		if err := rows.Scan(
 			&i.ID,
 			&i.EndpointID,
+			&i.CredentialPoolID,
 			&i.UpstreamModel,
 			&i.CapabilityType,
 			&i.UpstreamProtocol,
@@ -2925,12 +3005,15 @@ func (q *Queries) ListUpstreamDeployments(ctx context.Context, endpointID pgtype
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CredentialSource,
 			&i.EndpointName,
 			&i.BaseUrl,
 			&i.EndpointWeight,
 			&i.ProviderID,
 			&i.ProviderCode,
 			&i.ProviderName,
+			&i.PoolName,
+			&i.FixedProviderType,
 		); err != nil {
 			return nil, err
 		}
@@ -3801,7 +3884,6 @@ const listUserAvailableModels = `-- name: ListUserAvailableModels :many
 SELECT
   m.id,
   m.model_code,
-  m.display_name,
   m.capability_type,
   m.context_window,
   m.default_max_output_tokens,
@@ -3814,13 +3896,12 @@ JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
 WHERE tg.tenant_id = $1
   AND tg.status = 'active'
   AND m.status = 'active'
-ORDER BY m.display_name ASC
+ORDER BY m.model_code ASC
 `
 
 type ListUserAvailableModelsRow struct {
 	ID                     pgtype.UUID        `json:"id"`
 	ModelCode              string             `json:"model_code"`
-	DisplayName            string             `json:"display_name"`
 	CapabilityType         string             `json:"capability_type"`
 	ContextWindow          pgtype.Int4        `json:"context_window"`
 	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
@@ -3843,7 +3924,6 @@ func (q *Queries) ListUserAvailableModels(ctx context.Context, tenantID string) 
 		if err := rows.Scan(
 			&i.ID,
 			&i.ModelCode,
-			&i.DisplayName,
 			&i.CapabilityType,
 			&i.ContextWindow,
 			&i.DefaultMaxOutputTokens,
@@ -3979,18 +4059,16 @@ func (q *Queries) UpdateLimitPolicyStatus(ctx context.Context, arg UpdateLimitPo
 const updateModel = `-- name: UpdateModel :one
 UPDATE ai_models
 SET model_code = $2,
-    display_name = $3,
-    capability_type = $4,
-    context_window = $5,
-    default_max_output_tokens = $6,
-    max_output_tokens = $7,
-    status = $8,
+    capability_type = $3,
+    context_window = $4,
+    default_max_output_tokens = $5,
+    max_output_tokens = $6,
+    status = $7,
     updated_at = now()
 WHERE id = $1
 RETURNING
   id,
   model_code,
-  display_name,
   capability_type,
   context_window,
   default_max_output_tokens,
@@ -4003,7 +4081,6 @@ RETURNING
 type UpdateModelParams struct {
 	ID                     pgtype.UUID `json:"id"`
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	ContextWindow          pgtype.Int4 `json:"context_window"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
@@ -4015,7 +4092,6 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (AiMod
 	row := q.db.QueryRow(ctx, updateModel,
 		arg.ID,
 		arg.ModelCode,
-		arg.DisplayName,
 		arg.CapabilityType,
 		arg.ContextWindow,
 		arg.DefaultMaxOutputTokens,
@@ -4026,7 +4102,6 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (AiMod
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
-		&i.DisplayName,
 		&i.CapabilityType,
 		&i.ContextWindow,
 		&i.DefaultMaxOutputTokens,
@@ -4049,7 +4124,7 @@ SET upstream_deployment_id = $3,
 WHERE model_id = $1
   AND id = $2
 RETURNING
-  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  id, model_id, upstream_deployment_id,
   priority, weight, supports_stream, status, created_at, updated_at,
   cost_per_1k_tokens, score_weights_override, sticky_enabled
 `
@@ -4079,8 +4154,6 @@ func (q *Queries) UpdateModelRoute(ctx context.Context, arg UpdateModelRoutePara
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
-		&i.CredentialPoolID,
-		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
@@ -4101,7 +4174,7 @@ SET status = $3,
 WHERE model_id = $1
   AND id = $2
 RETURNING
-  id, model_id, upstream_deployment_id, credential_pool_id, pool_upstream_model,
+  id, model_id, upstream_deployment_id,
   priority, weight, supports_stream, status, created_at, updated_at,
   cost_per_1k_tokens, score_weights_override, sticky_enabled
 `
@@ -4119,8 +4192,6 @@ func (q *Queries) UpdateModelRouteStatus(ctx context.Context, arg UpdateModelRou
 		&i.ID,
 		&i.ModelID,
 		&i.UpstreamDeploymentID,
-		&i.CredentialPoolID,
-		&i.PoolUpstreamModel,
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
@@ -4142,7 +4213,6 @@ WHERE id = $1
 RETURNING
   id,
   model_code,
-  display_name,
   capability_type,
   context_window,
   default_max_output_tokens,
@@ -4163,7 +4233,6 @@ func (q *Queries) UpdateModelStatus(ctx context.Context, arg UpdateModelStatusPa
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
-		&i.DisplayName,
 		&i.CapabilityType,
 		&i.ContextWindow,
 		&i.DefaultMaxOutputTokens,
@@ -4764,6 +4833,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -4804,6 +4874,7 @@ func (q *Queries) UpdateUpstreamDeployment(ctx context.Context, arg UpdateUpstre
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -4830,6 +4901,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -4856,6 +4928,7 @@ func (q *Queries) UpdateUpstreamDeploymentHealth(ctx context.Context, arg Update
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -4880,6 +4953,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -4905,6 +4979,7 @@ func (q *Queries) UpdateUpstreamDeploymentStatus(ctx context.Context, arg Update
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -5262,8 +5337,8 @@ INSERT INTO ai_model_prices (
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 ) VALUES (
@@ -5272,8 +5347,8 @@ INSERT INTO ai_model_prices (
 ON CONFLICT (model_id) DO UPDATE SET
   input_price_per_1m           = EXCLUDED.input_price_per_1m,
   output_price_per_1m          = EXCLUDED.output_price_per_1m,
-  image_size_prices            = EXCLUDED.image_size_prices,
-  video_price_per_second       = EXCLUDED.video_price_per_second,
+  image_prices                 = EXCLUDED.image_prices,
+  video_prices                 = EXCLUDED.video_prices,
   audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
   updated_at                   = now()
@@ -5282,8 +5357,8 @@ RETURNING
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_at,
@@ -5294,8 +5369,8 @@ type UpsertModelPriceParams struct {
 	ModelID                 pgtype.UUID `json:"model_id"`
 	InputPricePer1m         int64       `json:"input_price_per_1m"`
 	OutputPricePer1m        int64       `json:"output_price_per_1m"`
-	ImageSizePrices         []byte      `json:"image_size_prices"`
-	VideoPricePerSecond     int64       `json:"video_price_per_second"`
+	ImagePrices             []byte      `json:"image_prices"`
+	VideoPrices             []byte      `json:"video_prices"`
 	AudioTtsPricePer1mChars int64       `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64       `json:"audio_stt_price_per_minute"`
 }
@@ -5305,8 +5380,8 @@ type UpsertModelPriceRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
@@ -5318,8 +5393,8 @@ func (q *Queries) UpsertModelPrice(ctx context.Context, arg UpsertModelPricePara
 		arg.ModelID,
 		arg.InputPricePer1m,
 		arg.OutputPricePer1m,
-		arg.ImageSizePrices,
-		arg.VideoPricePerSecond,
+		arg.ImagePrices,
+		arg.VideoPrices,
 		arg.AudioTtsPricePer1mChars,
 		arg.AudioSttPricePerMinute,
 	)
@@ -5329,8 +5404,8 @@ func (q *Queries) UpsertModelPrice(ctx context.Context, arg UpsertModelPricePara
 		&i.ModelID,
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 		&i.CreatedAt,
@@ -5345,8 +5420,8 @@ INSERT INTO ai_tenant_model_price_overrides (
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_by
@@ -5356,8 +5431,8 @@ INSERT INTO ai_tenant_model_price_overrides (
 ON CONFLICT (tenant_id, model_id) DO UPDATE SET
   input_price_per_1m           = EXCLUDED.input_price_per_1m,
   output_price_per_1m          = EXCLUDED.output_price_per_1m,
-  image_size_prices            = EXCLUDED.image_size_prices,
-  video_price_per_second       = EXCLUDED.video_price_per_second,
+  image_prices                 = EXCLUDED.image_prices,
+  video_prices                 = EXCLUDED.video_prices,
   audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
   updated_at                   = now()
@@ -5367,8 +5442,8 @@ RETURNING
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_by,
@@ -5381,8 +5456,8 @@ type UpsertTenantModelPriceOverrideParams struct {
 	ModelID                 pgtype.UUID `json:"model_id"`
 	InputPricePer1m         int64       `json:"input_price_per_1m"`
 	OutputPricePer1m        int64       `json:"output_price_per_1m"`
-	ImageSizePrices         []byte      `json:"image_size_prices"`
-	VideoPricePerSecond     int64       `json:"video_price_per_second"`
+	ImagePrices             []byte      `json:"image_prices"`
+	VideoPrices             []byte      `json:"video_prices"`
 	AudioTtsPricePer1mChars int64       `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64       `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text `json:"created_by"`
@@ -5394,8 +5469,8 @@ type UpsertTenantModelPriceOverrideRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
@@ -5409,8 +5484,8 @@ func (q *Queries) UpsertTenantModelPriceOverride(ctx context.Context, arg Upsert
 		arg.ModelID,
 		arg.InputPricePer1m,
 		arg.OutputPricePer1m,
-		arg.ImageSizePrices,
-		arg.VideoPricePerSecond,
+		arg.ImagePrices,
+		arg.VideoPrices,
 		arg.AudioTtsPricePer1mChars,
 		arg.AudioSttPricePerMinute,
 		arg.CreatedBy,
@@ -5422,8 +5497,8 @@ func (q *Queries) UpsertTenantModelPriceOverride(ctx context.Context, arg Upsert
 		&i.ModelID,
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 		&i.CreatedBy,
@@ -5439,8 +5514,8 @@ INSERT INTO ai_tenant_user_prices (
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_by
@@ -5450,8 +5525,8 @@ INSERT INTO ai_tenant_user_prices (
 ON CONFLICT (tenant_id, model_id) DO UPDATE SET
   input_price_per_1m           = EXCLUDED.input_price_per_1m,
   output_price_per_1m          = EXCLUDED.output_price_per_1m,
-  image_size_prices            = EXCLUDED.image_size_prices,
-  video_price_per_second       = EXCLUDED.video_price_per_second,
+  image_prices                 = EXCLUDED.image_prices,
+  video_prices                 = EXCLUDED.video_prices,
   audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
   updated_at                   = now()
@@ -5461,8 +5536,8 @@ RETURNING
   model_id,
   input_price_per_1m,
   output_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute,
   created_by,
@@ -5475,8 +5550,8 @@ type UpsertTenantUserPriceParams struct {
 	ModelID                 pgtype.UUID `json:"model_id"`
 	InputPricePer1m         int64       `json:"input_price_per_1m"`
 	OutputPricePer1m        int64       `json:"output_price_per_1m"`
-	ImageSizePrices         []byte      `json:"image_size_prices"`
-	VideoPricePerSecond     int64       `json:"video_price_per_second"`
+	ImagePrices             []byte      `json:"image_prices"`
+	VideoPrices             []byte      `json:"video_prices"`
 	AudioTtsPricePer1mChars int64       `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64       `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text `json:"created_by"`
@@ -5488,8 +5563,8 @@ type UpsertTenantUserPriceRow struct {
 	ModelID                 pgtype.UUID        `json:"model_id"`
 	InputPricePer1m         int64              `json:"input_price_per_1m"`
 	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
@@ -5503,8 +5578,8 @@ func (q *Queries) UpsertTenantUserPrice(ctx context.Context, arg UpsertTenantUse
 		arg.ModelID,
 		arg.InputPricePer1m,
 		arg.OutputPricePer1m,
-		arg.ImageSizePrices,
-		arg.VideoPricePerSecond,
+		arg.ImagePrices,
+		arg.VideoPrices,
 		arg.AudioTtsPricePer1mChars,
 		arg.AudioSttPricePerMinute,
 		arg.CreatedBy,
@@ -5516,8 +5591,8 @@ func (q *Queries) UpsertTenantUserPrice(ctx context.Context, arg UpsertTenantUse
 		&i.ModelID,
 		&i.InputPricePer1m,
 		&i.OutputPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 		&i.CreatedBy,

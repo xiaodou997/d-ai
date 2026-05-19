@@ -88,7 +88,6 @@ type AiCredentialPool struct {
 type AiModel struct {
 	ID                     pgtype.UUID        `json:"id"`
 	ModelCode              string             `json:"model_code"`
-	DisplayName            string             `json:"display_name"`
 	CapabilityType         string             `json:"capability_type"`
 	ContextWindow          pgtype.Int4        `json:"context_window"`
 	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
@@ -106,8 +105,8 @@ type AiModelPrice struct {
 	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
 	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
 	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
@@ -118,8 +117,6 @@ type AiModelRoute struct {
 	ID                   pgtype.UUID        `json:"id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
 	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
-	CredentialPoolID     pgtype.UUID        `json:"credential_pool_id"`
-	PoolUpstreamModel    pgtype.Text        `json:"pool_upstream_model"`
 	Priority             int32              `json:"priority"`
 	Weight               int32              `json:"weight"`
 	SupportsStream       bool               `json:"supports_stream"`
@@ -234,8 +231,8 @@ type AiTenantModelPriceOverride struct {
 	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
 	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
 	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
@@ -252,8 +249,8 @@ type AiTenantUserPrice struct {
 	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
 	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
 	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
-	ImageSizePrices         []byte             `json:"image_size_prices"`
-	VideoPricePerSecond     int64              `json:"video_price_per_second"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
 	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text        `json:"created_by"`
@@ -263,7 +260,8 @@ type AiTenantUserPrice struct {
 
 type AiUpstreamDeployment struct {
 	ID                 pgtype.UUID        `json:"id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`
+	EndpointID         pgtype.UUID        `json:"endpoint_id"`          // nullable; set for API Key型
+	CredentialPoolID   pgtype.UUID        `json:"credential_pool_id"`   // nullable; set for OAuth池型
 	UpstreamModel      string             `json:"upstream_model"`
 	CapabilityType     string             `json:"capability_type"`
 	UpstreamProtocol   string             `json:"upstream_protocol"`

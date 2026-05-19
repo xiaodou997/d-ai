@@ -131,10 +131,12 @@ CREATE INDEX IF NOT EXISTS idx_oauth_cred_expires
 -- ============================================================================
 -- AI Upstream Deployments (上游模型部署)
 -- upstream_protocol 决定格式转换路径和 transport 行为
+-- credential_source: endpoint_id (API Key型) XOR credential_pool_id (OAuth池型) 恰好一个
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_upstream_deployments (
   id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  endpoint_id          UUID        NOT NULL,
+  endpoint_id          UUID,                   -- API Key型上游；与 credential_pool_id 互斥
+  credential_pool_id   UUID        REFERENCES ai_credential_pools(id),
   upstream_model       TEXT        NOT NULL,
   capability_type      TEXT        NOT NULL DEFAULT 'chat',
   upstream_protocol    TEXT        NOT NULL DEFAULT 'openai_chat',
@@ -147,6 +149,10 @@ CREATE TABLE IF NOT EXISTS ai_upstream_deployments (
   status               TEXT        NOT NULL DEFAULT 'active',
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT chk_deployment_credential_source CHECK (
+    (endpoint_id IS NOT NULL AND credential_pool_id IS NULL) OR
+    (endpoint_id IS NULL AND credential_pool_id IS NOT NULL)
+  ),
   CHECK (capability_type IN ('chat', 'image', 'video', 'embedding', 'audio_tts', 'audio_stt', 'rerank')),
   CHECK (upstream_protocol IN (
     'openai_chat',        -- OpenAI Chat Completions 及所有 OpenAI 兼容上游（国内模型）
@@ -160,10 +166,11 @@ CREATE TABLE IF NOT EXISTS ai_upstream_deployments (
   )),
   CHECK (health_status IN ('healthy', 'unhealthy', 'unknown')),
   CHECK (status IN ('active', 'disabled')),
-  UNIQUE (endpoint_id, upstream_model, upstream_protocol)
+  UNIQUE NULLS NOT DISTINCT (endpoint_id, credential_pool_id, upstream_model, upstream_protocol)
 );
 
-CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployments_endpoint   ON ai_upstream_deployments (endpoint_id);
+CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployments_endpoint   ON ai_upstream_deployments (endpoint_id) WHERE endpoint_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployments_pool       ON ai_upstream_deployments (credential_pool_id) WHERE credential_pool_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployments_capability ON ai_upstream_deployments (capability_type, status);
 CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployments_health     ON ai_upstream_deployments (health_status, status);
 
@@ -173,7 +180,6 @@ CREATE INDEX IF NOT EXISTS idx_ai_upstream_deployments_health     ON ai_upstream
 CREATE TABLE IF NOT EXISTS ai_models (
   id                        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   model_code                TEXT        NOT NULL UNIQUE,
-  display_name              TEXT        NOT NULL,
   capability_type           TEXT        NOT NULL DEFAULT 'chat',
   context_window            INTEGER,
   default_max_output_tokens INTEGER     NOT NULL DEFAULT 2048,
@@ -189,34 +195,23 @@ CREATE INDEX IF NOT EXISTS idx_ai_models_capability ON ai_models (capability_typ
 
 -- ============================================================================
 -- AI Model Routes (模型 → 上游部署 路由映射)
+-- 统一只认 upstream_deployment_id，Pool 路由也通过 ai_upstream_deployments 中的池部署记录绑定
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_model_routes (
   id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   model_id               UUID        NOT NULL,
-  -- Deployment-based route (API Key 型上游)
-  upstream_deployment_id UUID,
-  -- Pool-based route (OAuth Fixed Provider)
-  credential_pool_id     UUID,
-  pool_upstream_model    TEXT,       -- 打到上游的模型名（pool 路由时必填）
+  upstream_deployment_id UUID        NOT NULL,
   priority               INTEGER     NOT NULL DEFAULT 100 CHECK (priority >= 0),
   weight                 INTEGER     NOT NULL DEFAULT 100 CHECK (weight >= 0),
   supports_stream        BOOLEAN     NOT NULL DEFAULT true,
   status                 TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- 两种路由 target 互斥
-  CONSTRAINT route_target_xor CHECK (
-    (upstream_deployment_id IS NOT NULL AND credential_pool_id IS NULL)
-    OR
-    (credential_pool_id IS NOT NULL AND pool_upstream_model IS NOT NULL AND upstream_deployment_id IS NULL)
-  ),
-  UNIQUE NULLS NOT DISTINCT (model_id, upstream_deployment_id),
-  UNIQUE NULLS NOT DISTINCT (model_id, credential_pool_id, pool_upstream_model)
+  UNIQUE (model_id, upstream_deployment_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_model_routes_model      ON ai_model_routes (model_id, status);
-CREATE INDEX IF NOT EXISTS idx_ai_model_routes_deployment ON ai_model_routes (upstream_deployment_id) WHERE upstream_deployment_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_ai_model_routes_pool       ON ai_model_routes (credential_pool_id) WHERE credential_pool_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ai_model_routes_deployment ON ai_model_routes (upstream_deployment_id);
 
 -- ============================================================================
 -- AI Model Prices (平台对外售价)
@@ -231,8 +226,8 @@ CREATE TABLE IF NOT EXISTS ai_model_prices (
   cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
   cache_read_price_per_1m      BIGINT      NOT NULL DEFAULT 0,
   reasoning_price_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  image_size_prices            JSONB       NOT NULL DEFAULT '{}',
-  video_price_per_second       BIGINT      NOT NULL DEFAULT 0,
+  image_prices                 JSONB       NOT NULL DEFAULT '[]',
+  video_prices                 JSONB       NOT NULL DEFAULT '[]',
   audio_tts_price_per_1m_chars BIGINT      NOT NULL DEFAULT 0,
   audio_stt_price_per_minute   BIGINT      NOT NULL DEFAULT 0,
   created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -241,7 +236,6 @@ CREATE TABLE IF NOT EXISTS ai_model_prices (
     input_price_per_1m >= 0 AND output_price_per_1m >= 0
     AND cache_write_price_per_1m >= 0 AND cache_read_price_per_1m >= 0
     AND reasoning_price_per_1m >= 0
-    AND video_price_per_second >= 0
     AND audio_tts_price_per_1m_chars >= 0 AND audio_stt_price_per_minute >= 0
   )
 );
@@ -258,8 +252,8 @@ CREATE TABLE IF NOT EXISTS ai_tenant_model_price_overrides (
   cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
   cache_read_price_per_1m      BIGINT      NOT NULL DEFAULT 0,
   reasoning_price_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  image_size_prices            JSONB       NOT NULL DEFAULT '{}',
-  video_price_per_second       BIGINT      NOT NULL DEFAULT 0,
+  image_prices                 JSONB       NOT NULL DEFAULT '[]',
+  video_prices                 JSONB       NOT NULL DEFAULT '[]',
   audio_tts_price_per_1m_chars BIGINT      NOT NULL DEFAULT 0,
   audio_stt_price_per_minute   BIGINT      NOT NULL DEFAULT 0,
   created_by                   TEXT,
@@ -270,7 +264,6 @@ CREATE TABLE IF NOT EXISTS ai_tenant_model_price_overrides (
     input_price_per_1m >= 0 AND output_price_per_1m >= 0
     AND cache_write_price_per_1m >= 0 AND cache_read_price_per_1m >= 0
     AND reasoning_price_per_1m >= 0
-    AND video_price_per_second >= 0
     AND audio_tts_price_per_1m_chars >= 0 AND audio_stt_price_per_minute >= 0
   )
 );
@@ -290,8 +283,8 @@ CREATE TABLE IF NOT EXISTS ai_tenant_user_prices (
   cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
   cache_read_price_per_1m      BIGINT      NOT NULL DEFAULT 0,
   reasoning_price_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  image_size_prices            JSONB       NOT NULL DEFAULT '{}',
-  video_price_per_second       BIGINT      NOT NULL DEFAULT 0,
+  image_prices                 JSONB       NOT NULL DEFAULT '[]',
+  video_prices                 JSONB       NOT NULL DEFAULT '[]',
   audio_tts_price_per_1m_chars BIGINT      NOT NULL DEFAULT 0,
   audio_stt_price_per_minute   BIGINT      NOT NULL DEFAULT 0,
   created_by                   TEXT,
@@ -302,7 +295,7 @@ CREATE TABLE IF NOT EXISTS ai_tenant_user_prices (
     input_price_per_1m >= 0 AND output_price_per_1m >= 0
     AND cache_write_price_per_1m >= 0 AND cache_read_price_per_1m >= 0
     AND reasoning_price_per_1m >= 0
-    AND video_price_per_second >= 0 AND audio_tts_price_per_1m_chars >= 0
+    AND audio_tts_price_per_1m_chars >= 0
     AND audio_stt_price_per_minute >= 0
   )
 );
@@ -588,7 +581,8 @@ ALTER TABLE ai_credential_pools
 ALTER TABLE ai_usage_logs
   ADD COLUMN IF NOT EXISTS attempts_count  INT  NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS final_route_id  UUID,
-  ADD COLUMN IF NOT EXISTS client_protocol TEXT NOT NULL DEFAULT 'openai_chat';
+  ADD COLUMN IF NOT EXISTS client_protocol TEXT NOT NULL DEFAULT 'openai_chat',
+  ADD COLUMN IF NOT EXISTS resolution      TEXT;
 
 -- Request payload table: failed requests (required) + sampled successes.
 -- upstream_body / raw_client_body are AES-GCM encrypted (BYTEA).

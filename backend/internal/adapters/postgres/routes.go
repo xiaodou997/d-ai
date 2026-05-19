@@ -18,15 +18,14 @@ import (
 )
 
 
-// routeRow holds one resolved route from the dual-source UNION query.
-// All pointer fields are NULL for the route type that doesn't apply.
+// routeRow holds one resolved route. All endpoint/pool fields may be nil
+// depending on whether the deployment is API Key-based or OAuth pool-based.
 type routeRow struct {
 	RouteID        string
 	RoutePriority  int32
 	RouteWeight    int32
 	SupportsStream bool
 
-	// Deployment-based fields (nil for pool routes)
 	DeploymentID       *string
 	UpstreamModel      *string
 	CapabilityType     *string
@@ -35,36 +34,37 @@ type routeRow struct {
 	UpstreamParameters []byte
 	Pricing            []byte
 	HealthStatus       *string
-	EndpointID         *string
-	BaseURL            *string
-	APIKeyCiphertext   *string
-	ExtraHeaders       []byte
-	TimeoutMs          int32
-	EndpointWeight     int32
-	ProviderCode       *string
 
-	// Pool-based fields (nil for deployment routes)
+	// Endpoint fields — nil for pool deployments
+	EndpointID       *string
+	BaseURL          *string
+	APIKeyCiphertext *string
+	ExtraHeaders     []byte
+	TimeoutMs        int32
+	EndpointWeight   int32
+	ProviderCode     *string
+
+	// Pool fields — nil for endpoint deployments
 	PoolID            *string
-	PoolUpstreamModel *string
 	FixedProviderType *string
 	OAuthStrategy     *string
 
 	// P3 scoring hints
 	CostPer1kTokens      float64
-	ScoreWeightsOverride []byte // JSONB or NULL
+	ScoreWeightsOverride []byte
 }
 
-// listRoutesForModel fetches all active routes for a model, supporting both
-// deployment-based (API Key) and pool-based (OAuth Fixed Provider) routes.
+// listRoutesForModel fetches all active routes for a model. All routes now
+// reference ai_upstream_deployments; endpoint vs pool is determined by which
+// column (endpoint_id / credential_pool_id) is non-null on the deployment row.
 func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.UUID) ([]routeRow, error) {
 	const q = `
-		-- Deployment-based routes (API Key type)
 		SELECT
-		  r.id::text       AS route_id,
-		  r.priority       AS route_priority,
-		  r.weight         AS route_weight,
+		  r.id::text                  AS route_id,
+		  r.priority                  AS route_priority,
+		  r.weight                    AS route_weight,
 		  r.supports_stream,
-		  ud.id::text      AS deployment_id,
+		  ud.id::text                 AS deployment_id,
 		  ud.upstream_model,
 		  ud.capability_type,
 		  ud.upstream_protocol,
@@ -72,67 +72,29 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  ud.upstream_parameters,
 		  ud.pricing,
 		  ud.health_status,
-		  e.id::text       AS endpoint_id,
+		  e.id::text                  AS endpoint_id,
 		  e.base_url,
 		  e.api_key_ciphertext,
 		  e.extra_headers,
-		  e.timeout_ms,
-		  e.weight         AS endpoint_weight,
-		  p.code           AS provider_code,
-		  NULL::text       AS pool_id,
-		  NULL::text       AS pool_upstream_model,
-		  NULL::text       AS fixed_provider_type,
-		  NULL::text       AS oauth_strategy,
-		  r.cost_per_1k_tokens,
-		  r.score_weights_override
-		FROM ai_model_routes r
-		JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
-		JOIN ai_provider_endpoints   e  ON e.id  = ud.endpoint_id
-		JOIN ai_providers            p  ON p.id  = e.provider_id
-		WHERE r.model_id               = $1
-		  AND r.status                 = 'active'
-		  AND r.upstream_deployment_id IS NOT NULL
-		  AND ud.status                = 'active'
-		  AND ud.health_status         IN ('healthy', 'unknown')
-		  AND e.status                 = 'active'
-		  AND p.status                 = 'active'
-
-		UNION ALL
-
-		-- Pool-based routes (OAuth Fixed Provider)
-		SELECT
-		  r.id::text       AS route_id,
-		  r.priority       AS route_priority,
-		  r.weight         AS route_weight,
-		  r.supports_stream,
-		  NULL::text       AS deployment_id,
-		  r.pool_upstream_model AS upstream_model,
-		  NULL::text       AS capability_type,
-		  NULL::text       AS upstream_protocol,
-		  NULL::text       AS request_path,
-		  NULL::jsonb      AS upstream_parameters,
-		  NULL::jsonb      AS pricing,
-		  NULL::text       AS health_status,
-		  NULL::text       AS endpoint_id,
-		  NULL::text       AS base_url,
-		  NULL::text       AS api_key_ciphertext,
-		  NULL::jsonb      AS extra_headers,
-		  30000::int       AS timeout_ms,
-		  100::int         AS endpoint_weight,
-		  cp.fixed_provider_type AS provider_code,
-		  cp.id::text      AS pool_id,
-		  r.pool_upstream_model,
+		  COALESCE(e.timeout_ms, 30000) AS timeout_ms,
+		  COALESCE(e.weight, 100)       AS endpoint_weight,
+		  p.code                       AS provider_code,
+		  cp.id::text                  AS pool_id,
 		  cp.fixed_provider_type,
 		  cp.oauth_strategy,
 		  r.cost_per_1k_tokens,
 		  r.score_weights_override
 		FROM ai_model_routes r
-		JOIN ai_credential_pools cp ON cp.id = r.credential_pool_id
-		WHERE r.model_id             = $1
-		  AND r.status               = 'active'
-		  AND r.credential_pool_id   IS NOT NULL
-		  AND cp.status              = 'active'
-
+		JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
+		LEFT JOIN ai_provider_endpoints e  ON e.id  = ud.endpoint_id
+		LEFT JOIN ai_providers          p  ON p.id  = e.provider_id
+		LEFT JOIN ai_credential_pools   cp ON cp.id = ud.credential_pool_id
+		WHERE r.model_id         = $1
+		  AND r.status           = 'active'
+		  AND ud.status          = 'active'
+		  AND ud.health_status   IN ('healthy', 'unknown')
+		  AND (e.status = 'active' OR e.status IS NULL)
+		  AND (p.status = 'active' OR p.status IS NULL)
 		ORDER BY route_priority ASC, route_weight DESC, endpoint_weight DESC`
 
 	pgRows, err := s.pool.Query(ctx, q, modelID)
@@ -150,7 +112,7 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 			&r.RequestPath, &r.UpstreamParameters, &r.Pricing, &r.HealthStatus,
 			&r.EndpointID, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.TimeoutMs, &r.EndpointWeight, &r.ProviderCode,
-			&r.PoolID, &r.PoolUpstreamModel, &r.FixedProviderType, &r.OAuthStrategy,
+			&r.PoolID, &r.FixedProviderType, &r.OAuthStrategy,
 			&r.CostPer1kTokens, &r.ScoreWeightsOverride,
 		); err != nil {
 			return nil, fmt.Errorf("scan route row: %w", err)
@@ -265,11 +227,11 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 		// Pool-based route — cost is 0 (free/OAuth), scorer will use costCapFree.
 		c.CostPer1kTokens = 0
 		c.PoolID = *row.PoolID
-		c.PoolUpstreamModel = row.strVal(row.PoolUpstreamModel)
 		c.FixedProviderType = domain.FixedProviderType(row.strVal(row.FixedProviderType))
 		c.OAuthStrategy = row.strVal(row.OAuthStrategy)
 		c.ProviderCode = row.strVal(row.FixedProviderType)
-		c.UpstreamModel = c.PoolUpstreamModel
+		c.UpstreamModel = row.strVal(row.UpstreamModel)
+		c.PoolUpstreamModel = c.UpstreamModel
 		c.BaseURL = domain.FixedProviderBaseURL(c.FixedProviderType)
 		c.Protocol = domain.FixedProviderProtocol(c.FixedProviderType)
 		c.TimeoutMs = 60000

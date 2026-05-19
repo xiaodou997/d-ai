@@ -151,7 +151,6 @@ func fromListProviderEndpoints(rows []dbgen.ListProviderEndpointsRow) []listProv
 type modelDTO struct {
 	ID                     pgtype.UUID `json:"id"`
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	ContextWindow          pgtype.Int4 `json:"context_window"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
@@ -165,7 +164,6 @@ func fromModel(r dbgen.AiModel) modelDTO {
 	return modelDTO{
 		ID:                     r.ID,
 		ModelCode:              r.ModelCode,
-		DisplayName:            r.DisplayName,
 		CapabilityType:         r.CapabilityType,
 		ContextWindow:          r.ContextWindow,
 		DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,
@@ -193,8 +191,8 @@ type modelPriceDTO struct {
 	ModelID                 pgtype.UUID     `json:"model_id"`
 	InputPricePer1m         int64           `json:"input_price_per_1m"`
 	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImageSizePrices         json.RawMessage `json:"image_size_prices"`
-	VideoPricePerSecond     int64           `json:"video_price_per_second"`
+	ImagePrices             json.RawMessage `json:"image_prices"`
+	VideoPrices             json.RawMessage `json:"video_prices"`
 	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 	CreatedAt               *int64          `json:"created_at"`
@@ -207,8 +205,8 @@ func fromGetModelPrice(r dbgen.GetModelPriceRow) modelPriceDTO {
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedAt:               millis(r.CreatedAt),
@@ -222,8 +220,8 @@ func fromUpsertModelPrice(r dbgen.UpsertModelPriceRow) modelPriceDTO {
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedAt:               millis(r.CreatedAt),
@@ -241,8 +239,8 @@ type tenantModelPriceDTO struct {
 	ModelID                 pgtype.UUID     `json:"model_id"`
 	InputPricePer1m         int64           `json:"input_price_per_1m"`
 	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImageSizePrices         json.RawMessage `json:"image_size_prices"`
-	VideoPricePerSecond     int64           `json:"video_price_per_second"`
+	ImagePrices             json.RawMessage `json:"image_prices"`
+	VideoPrices             json.RawMessage `json:"video_prices"`
 	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text     `json:"created_by"`
@@ -250,7 +248,6 @@ type tenantModelPriceDTO struct {
 	UpdatedAt               *int64          `json:"updated_at"`
 	// Extra fields from list query
 	ModelCode      string `json:"model_code,omitempty"`
-	DisplayName    string `json:"display_name,omitempty"`
 	CapabilityType string `json:"capability_type,omitempty"`
 }
 
@@ -261,8 +258,8 @@ func fromGetTenantModelPriceOverride(r dbgen.GetTenantModelPriceOverrideRow) ten
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedBy:               r.CreatedBy,
@@ -278,8 +275,8 @@ func fromUpsertTenantModelPriceOverride(r dbgen.UpsertTenantModelPriceOverrideRo
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedBy:               r.CreatedBy,
@@ -295,15 +292,14 @@ func fromListTenantModelPriceOverride(r dbgen.ListTenantModelPriceOverridesRow) 
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedBy:               r.CreatedBy,
 		CreatedAt:               millis(r.CreatedAt),
 		UpdatedAt:               millis(r.UpdatedAt),
 		ModelCode:               r.ModelCode,
-		DisplayName:             r.DisplayName,
 		CapabilityType:          r.CapabilityType,
 	}
 }
@@ -326,8 +322,8 @@ type tenantUserPriceDTO struct {
 	ModelID                 pgtype.UUID     `json:"model_id"`
 	InputPricePer1m         int64           `json:"input_price_per_1m"`
 	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImageSizePrices         json.RawMessage `json:"image_size_prices"`
-	VideoPricePerSecond     int64           `json:"video_price_per_second"`
+	ImagePrices             json.RawMessage `json:"image_prices"`
+	VideoPrices             json.RawMessage `json:"video_prices"`
 	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 	CreatedBy               pgtype.Text     `json:"created_by"`
@@ -335,7 +331,6 @@ type tenantUserPriceDTO struct {
 	UpdatedAt               *int64          `json:"updated_at"`
 	// Extra fields from list query
 	ModelCode      string `json:"model_code,omitempty"`
-	DisplayName    string `json:"display_name,omitempty"`
 	CapabilityType string `json:"capability_type,omitempty"`
 }
 
@@ -346,8 +341,8 @@ func fromGetTenantUserPrice(r dbgen.GetTenantUserPriceRow) tenantUserPriceDTO {
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedBy:               r.CreatedBy,
@@ -363,8 +358,8 @@ func fromUpsertTenantUserPrice(r dbgen.UpsertTenantUserPriceRow) tenantUserPrice
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedBy:               r.CreatedBy,
@@ -380,15 +375,14 @@ func fromListTenantUserPrice(r dbgen.ListTenantUserPricesRow) tenantUserPriceDTO
 		ModelID:                 r.ModelID,
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
-		ImageSizePrices:         rawJSON(r.ImageSizePrices),
-		VideoPricePerSecond:     r.VideoPricePerSecond,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
 		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
 		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 		CreatedBy:               r.CreatedBy,
 		CreatedAt:               millis(r.CreatedAt),
 		UpdatedAt:               millis(r.UpdatedAt),
 		ModelCode:               r.ModelCode,
-		DisplayName:             r.DisplayName,
 		CapabilityType:          r.CapabilityType,
 	}
 }
@@ -406,15 +400,15 @@ func fromListTenantUserPrices(rows []dbgen.ListTenantUserPricesRow) []tenantUser
 // ---------------------------------------------------------------------------
 
 type modelRouteDTO struct {
-	ID                     pgtype.UUID `json:"id"`
-	ModelID                pgtype.UUID `json:"model_id"`
-	UpstreamDeploymentID   pgtype.UUID `json:"upstream_deployment_id"`
-	Priority               int32       `json:"priority"`
-	Weight                 int32       `json:"weight"`
-	SupportsStream         bool        `json:"supports_stream"`
-	Status                 string      `json:"status"`
-	CreatedAt              *int64      `json:"created_at"`
-	UpdatedAt              *int64      `json:"updated_at"`
+	ID                   pgtype.UUID `json:"id"`
+	ModelID              pgtype.UUID `json:"model_id"`
+	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
+	Priority             int32       `json:"priority"`
+	Weight               int32       `json:"weight"`
+	SupportsStream       bool        `json:"supports_stream"`
+	Status               string      `json:"status"`
+	CreatedAt            *int64      `json:"created_at"`
+	UpdatedAt            *int64      `json:"updated_at"`
 }
 
 func fromModelRoute(r dbgen.AiModelRoute) modelRouteDTO {
@@ -446,12 +440,16 @@ type listModelRouteDTO struct {
 	CapabilityType         string      `json:"capability_type"`
 	UpstreamProtocol       string      `json:"upstream_protocol"`
 	HealthStatus           string      `json:"health_status"`
+	CredentialSource       string      `json:"credential_source"`
 	EndpointID             pgtype.UUID `json:"endpoint_id"`
 	EndpointName           string      `json:"endpoint_name"`
 	BaseUrl                string      `json:"base_url"`
 	ProviderID             pgtype.UUID `json:"provider_id"`
 	ProviderCode           string      `json:"provider_code"`
 	ProviderName           string      `json:"provider_name"`
+	PoolID                 pgtype.UUID `json:"pool_id"`
+	PoolName               string      `json:"pool_name"`
+	FixedProviderType      string      `json:"fixed_provider_type"`
 }
 
 func fromListModelRoute(r dbgen.ListModelRoutesRow) listModelRouteDTO {
@@ -470,12 +468,16 @@ func fromListModelRoute(r dbgen.ListModelRoutesRow) listModelRouteDTO {
 		CapabilityType:         r.CapabilityType,
 		UpstreamProtocol:       r.UpstreamProtocol,
 		HealthStatus:           r.HealthStatus,
+		CredentialSource:       r.CredentialSource,
 		EndpointID:             r.EndpointID,
 		EndpointName:           r.EndpointName,
 		BaseUrl:                r.BaseUrl,
 		ProviderID:             r.ProviderID,
 		ProviderCode:           r.ProviderCode,
 		ProviderName:           r.ProviderName,
+		PoolID:                 r.PoolID,
+		PoolName:               r.PoolName,
+		FixedProviderType:      r.FixedProviderType,
 	}
 }
 
@@ -494,6 +496,7 @@ func fromListModelRoutes(rows []dbgen.ListModelRoutesRow) []listModelRouteDTO {
 type upstreamDeploymentDTO struct {
 	ID                 pgtype.UUID     `json:"id"`
 	EndpointID         pgtype.UUID     `json:"endpoint_id"`
+	CredentialPoolID   pgtype.UUID     `json:"credential_pool_id"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
@@ -512,6 +515,7 @@ func fromAiUpstreamDeployment(r dbgen.AiUpstreamDeployment) upstreamDeploymentDT
 	return upstreamDeploymentDTO{
 		ID:                 r.ID,
 		EndpointID:         r.EndpointID,
+		CredentialPoolID:   r.CredentialPoolID,
 		UpstreamModel:      r.UpstreamModel,
 		CapabilityType:     r.CapabilityType,
 		UpstreamProtocol:   r.UpstreamProtocol,
@@ -530,6 +534,7 @@ func fromAiUpstreamDeployment(r dbgen.AiUpstreamDeployment) upstreamDeploymentDT
 type getUpstreamDeploymentDTO struct {
 	ID                 pgtype.UUID     `json:"id"`
 	EndpointID         pgtype.UUID     `json:"endpoint_id"`
+	CredentialPoolID   pgtype.UUID     `json:"credential_pool_id"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
@@ -542,6 +547,7 @@ type getUpstreamDeploymentDTO struct {
 	Status             string          `json:"status"`
 	CreatedAt          *int64          `json:"created_at"`
 	UpdatedAt          *int64          `json:"updated_at"`
+	CredentialSource   string          `json:"credential_source"`
 	EndpointName       string          `json:"endpoint_name"`
 	BaseUrl            string          `json:"base_url"`
 	ExtraHeaders       json.RawMessage `json:"extra_headers"`
@@ -549,6 +555,8 @@ type getUpstreamDeploymentDTO struct {
 	ProviderID         pgtype.UUID     `json:"provider_id"`
 	ProviderCode       string          `json:"provider_code"`
 	ProviderName       string          `json:"provider_name"`
+	PoolName           string          `json:"pool_name"`
+	FixedProviderType  string          `json:"fixed_provider_type"`
 	// ApiKeyCiphertext is intentionally omitted from the DTO (sensitive)
 }
 
@@ -556,6 +564,7 @@ func fromGetUpstreamDeployment(r dbgen.GetUpstreamDeploymentRow) getUpstreamDepl
 	return getUpstreamDeploymentDTO{
 		ID:                 r.ID,
 		EndpointID:         r.EndpointID,
+		CredentialPoolID:   r.CredentialPoolID,
 		UpstreamModel:      r.UpstreamModel,
 		CapabilityType:     r.CapabilityType,
 		UpstreamProtocol:   r.UpstreamProtocol,
@@ -568,6 +577,7 @@ func fromGetUpstreamDeployment(r dbgen.GetUpstreamDeploymentRow) getUpstreamDepl
 		Status:             r.Status,
 		CreatedAt:          millis(r.CreatedAt),
 		UpdatedAt:          millis(r.UpdatedAt),
+		CredentialSource:   r.CredentialSource,
 		EndpointName:       r.EndpointName,
 		BaseUrl:            r.BaseUrl,
 		ExtraHeaders:       rawJSON(r.ExtraHeaders),
@@ -575,12 +585,15 @@ func fromGetUpstreamDeployment(r dbgen.GetUpstreamDeploymentRow) getUpstreamDepl
 		ProviderID:         r.ProviderID,
 		ProviderCode:       r.ProviderCode,
 		ProviderName:       r.ProviderName,
+		PoolName:           r.PoolName,
+		FixedProviderType:  r.FixedProviderType,
 	}
 }
 
 type listUpstreamDeploymentDTO struct {
 	ID                 pgtype.UUID     `json:"id"`
 	EndpointID         pgtype.UUID     `json:"endpoint_id"`
+	CredentialPoolID   pgtype.UUID     `json:"credential_pool_id"`
 	UpstreamModel      string          `json:"upstream_model"`
 	CapabilityType     string          `json:"capability_type"`
 	UpstreamProtocol   string          `json:"upstream_protocol"`
@@ -593,18 +606,22 @@ type listUpstreamDeploymentDTO struct {
 	Status             string          `json:"status"`
 	CreatedAt          *int64          `json:"created_at"`
 	UpdatedAt          *int64          `json:"updated_at"`
+	CredentialSource   string          `json:"credential_source"`
 	EndpointName       string          `json:"endpoint_name"`
 	BaseUrl            string          `json:"base_url"`
 	EndpointWeight     int32           `json:"endpoint_weight"`
 	ProviderID         pgtype.UUID     `json:"provider_id"`
 	ProviderCode       string          `json:"provider_code"`
 	ProviderName       string          `json:"provider_name"`
+	PoolName           string          `json:"pool_name"`
+	FixedProviderType  string          `json:"fixed_provider_type"`
 }
 
 func fromListUpstreamDeployment(r dbgen.ListUpstreamDeploymentsRow) listUpstreamDeploymentDTO {
 	return listUpstreamDeploymentDTO{
 		ID:                 r.ID,
 		EndpointID:         r.EndpointID,
+		CredentialPoolID:   r.CredentialPoolID,
 		UpstreamModel:      r.UpstreamModel,
 		CapabilityType:     r.CapabilityType,
 		UpstreamProtocol:   r.UpstreamProtocol,
@@ -617,12 +634,15 @@ func fromListUpstreamDeployment(r dbgen.ListUpstreamDeploymentsRow) listUpstream
 		Status:             r.Status,
 		CreatedAt:          millis(r.CreatedAt),
 		UpdatedAt:          millis(r.UpdatedAt),
+		CredentialSource:   r.CredentialSource,
 		EndpointName:       r.EndpointName,
 		BaseUrl:            r.BaseUrl,
 		EndpointWeight:     r.EndpointWeight,
 		ProviderID:         r.ProviderID,
 		ProviderCode:       r.ProviderCode,
 		ProviderName:       r.ProviderName,
+		PoolName:           r.PoolName,
+		FixedProviderType:  r.FixedProviderType,
 	}
 }
 
@@ -666,7 +686,6 @@ type listTenantModelGrantDTO struct {
 	CreatedBy      pgtype.Text `json:"created_by"`
 	CreatedAt      *int64      `json:"created_at"`
 	ModelCode      string      `json:"model_code"`
-	DisplayName    string      `json:"display_name"`
 	CapabilityType string      `json:"capability_type"`
 }
 
@@ -679,7 +698,6 @@ func fromListTenantModelGrant(r dbgen.ListTenantModelGrantsRow) listTenantModelG
 		CreatedBy:      r.CreatedBy,
 		CreatedAt:      millis(r.CreatedAt),
 		ModelCode:      r.ModelCode,
-		DisplayName:    r.DisplayName,
 		CapabilityType: r.CapabilityType,
 	}
 }
@@ -1355,7 +1373,6 @@ func fromListUsageLogsByUser(rows []dbgen.ListUsageLogsByTenantUserRow) []usageL
 type userAvailableModelDTO struct {
 	ID                     pgtype.UUID `json:"id"`
 	ModelCode              string      `json:"model_code"`
-	DisplayName            string      `json:"display_name"`
 	CapabilityType         string      `json:"capability_type"`
 	ContextWindow          pgtype.Int4 `json:"context_window"`
 	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
@@ -1369,7 +1386,6 @@ func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailabl
 	return userAvailableModelDTO{
 		ID:                     r.ID,
 		ModelCode:              r.ModelCode,
-		DisplayName:            r.DisplayName,
 		CapabilityType:         r.CapabilityType,
 		ContextWindow:          r.ContextWindow,
 		DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,

@@ -44,13 +44,14 @@ INSERT INTO ai_usage_logs (
   usage_source,
   attempts_count,
   final_route_id,
-  client_protocol
+  client_protocol,
+  resolution
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44, $45
+  $41, $42, $43, $44, $45, $46
 )
 RETURNING id;
 
@@ -143,8 +144,8 @@ SELECT
   cache_write_price_per_1m,
   cache_read_price_per_1m,
   reasoning_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 FROM ai_model_prices
@@ -157,8 +158,8 @@ SELECT
   cache_write_price_per_1m,
   cache_read_price_per_1m,
   reasoning_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 FROM ai_tenant_model_price_overrides
@@ -172,8 +173,8 @@ SELECT
   cache_write_price_per_1m,
   cache_read_price_per_1m,
   reasoning_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 FROM ai_tenant_user_prices

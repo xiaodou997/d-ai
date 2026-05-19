@@ -77,13 +77,14 @@ INSERT INTO ai_usage_logs (
   usage_source,
   attempts_count,
   final_route_id,
-  client_protocol
+  client_protocol,
+  resolution
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44, $45
+  $41, $42, $43, $44, $45, $46
 )
 RETURNING id
 `
@@ -134,6 +135,7 @@ type CreateUsageLogParams struct {
 	AttemptsCount        int32       `json:"attempts_count"`
 	FinalRouteID         pgtype.UUID `json:"final_route_id"`
 	ClientProtocol       string      `json:"client_protocol"`
+	Resolution           pgtype.Text `json:"resolution"`
 }
 
 func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) (pgtype.UUID, error) {
@@ -183,6 +185,7 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.AttemptsCount,
 		arg.FinalRouteID,
 		arg.ClientProtocol,
+		arg.Resolution,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -196,8 +199,8 @@ SELECT
   cache_write_price_per_1m,
   cache_read_price_per_1m,
   reasoning_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 FROM ai_model_prices
@@ -210,8 +213,8 @@ type GetActiveModelPriceRow struct {
 	CacheWritePricePer1m    int64  `json:"cache_write_price_per_1m"`
 	CacheReadPricePer1m     int64  `json:"cache_read_price_per_1m"`
 	ReasoningPricePer1m     int64  `json:"reasoning_price_per_1m"`
-	ImageSizePrices         []byte `json:"image_size_prices"`
-	VideoPricePerSecond     int64  `json:"video_price_per_second"`
+	ImagePrices             []byte `json:"image_prices"`
+	VideoPrices             []byte `json:"video_prices"`
 	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64  `json:"audio_stt_price_per_minute"`
 }
@@ -225,8 +228,8 @@ func (q *Queries) GetActiveModelPrice(ctx context.Context, modelID pgtype.UUID) 
 		&i.CacheWritePricePer1m,
 		&i.CacheReadPricePer1m,
 		&i.ReasoningPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 	)
@@ -240,8 +243,8 @@ SELECT
   cache_write_price_per_1m,
   cache_read_price_per_1m,
   reasoning_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 FROM ai_tenant_model_price_overrides
@@ -260,8 +263,8 @@ type GetTenantModelPriceOverrideForRuntimeRow struct {
 	CacheWritePricePer1m    int64  `json:"cache_write_price_per_1m"`
 	CacheReadPricePer1m     int64  `json:"cache_read_price_per_1m"`
 	ReasoningPricePer1m     int64  `json:"reasoning_price_per_1m"`
-	ImageSizePrices         []byte `json:"image_size_prices"`
-	VideoPricePerSecond     int64  `json:"video_price_per_second"`
+	ImagePrices             []byte `json:"image_prices"`
+	VideoPrices             []byte `json:"video_prices"`
 	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64  `json:"audio_stt_price_per_minute"`
 }
@@ -275,8 +278,8 @@ func (q *Queries) GetTenantModelPriceOverrideForRuntime(ctx context.Context, arg
 		&i.CacheWritePricePer1m,
 		&i.CacheReadPricePer1m,
 		&i.ReasoningPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 	)
@@ -290,8 +293,8 @@ SELECT
   cache_write_price_per_1m,
   cache_read_price_per_1m,
   reasoning_price_per_1m,
-  image_size_prices,
-  video_price_per_second,
+  image_prices,
+  video_prices,
   audio_tts_price_per_1m_chars,
   audio_stt_price_per_minute
 FROM ai_tenant_user_prices
@@ -310,8 +313,8 @@ type GetTenantUserPriceForRuntimeRow struct {
 	CacheWritePricePer1m    int64  `json:"cache_write_price_per_1m"`
 	CacheReadPricePer1m     int64  `json:"cache_read_price_per_1m"`
 	ReasoningPricePer1m     int64  `json:"reasoning_price_per_1m"`
-	ImageSizePrices         []byte `json:"image_size_prices"`
-	VideoPricePerSecond     int64  `json:"video_price_per_second"`
+	ImagePrices             []byte `json:"image_prices"`
+	VideoPrices             []byte `json:"video_prices"`
 	AudioTtsPricePer1mChars int64  `json:"audio_tts_price_per_1m_chars"`
 	AudioSttPricePerMinute  int64  `json:"audio_stt_price_per_minute"`
 }
@@ -325,8 +328,8 @@ func (q *Queries) GetTenantUserPriceForRuntime(ctx context.Context, arg GetTenan
 		&i.CacheWritePricePer1m,
 		&i.CacheReadPricePer1m,
 		&i.ReasoningPricePer1m,
-		&i.ImageSizePrices,
-		&i.VideoPricePerSecond,
+		&i.ImagePrices,
+		&i.VideoPrices,
 		&i.AudioTtsPricePer1mChars,
 		&i.AudioSttPricePerMinute,
 	)

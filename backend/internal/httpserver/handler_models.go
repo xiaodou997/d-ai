@@ -25,8 +25,8 @@ func (s *Server) handleAdminCreateModel(w http.ResponseWriter, r *http.Request) 
 	if !decodeAdminJSON(w, r, &req) {
 		return
 	}
-	if req.ModelCode == "" || req.DisplayName == "" {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "model_code and display_name are required")
+	if req.ModelCode == "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "model_code is required")
 		return
 	}
 	if req.CapabilityType == "" {
@@ -38,7 +38,6 @@ func (s *Server) handleAdminCreateModel(w http.ResponseWriter, r *http.Request) 
 
 	row, err := s.queries.CreateModel(r.Context(), dbgen.CreateModelParams{
 		ModelCode:              req.ModelCode,
-		DisplayName:            req.DisplayName,
 		CapabilityType:         req.CapabilityType,
 		ContextWindow:          optionalInt4(req.ContextWindow),
 		DefaultMaxOutputTokens: int32OrDefault(req.DefaultMaxOutputTokens, 2048),
@@ -61,8 +60,8 @@ func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) 
 	if !decodeAdminJSON(w, r, &req) {
 		return
 	}
-	if req.ModelCode == "" || req.DisplayName == "" {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "model_code and display_name are required")
+	if req.ModelCode == "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "model_code is required")
 		return
 	}
 	if req.CapabilityType == "" {
@@ -72,7 +71,7 @@ func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) 
 		req.Status = defaultStatus
 	}
 	row, err := s.queries.UpdateModel(r.Context(), dbgen.UpdateModelParams{
-		ID: modelID, ModelCode: req.ModelCode, DisplayName: req.DisplayName, CapabilityType: req.CapabilityType,
+		ID: modelID, ModelCode: req.ModelCode, CapabilityType: req.CapabilityType,
 		ContextWindow: optionalInt4(req.ContextWindow), DefaultMaxOutputTokens: int32OrDefault(req.DefaultMaxOutputTokens, 2048),
 		MaxOutputTokens: optionalInt4(req.MaxOutputTokens), Status: req.Status,
 	})
@@ -134,13 +133,14 @@ func (s *Server) handleAdminUpsertModelPrice(w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
 		return
 	}
-	imageSizePrices := jsonObjectOrDefault(req.ImageSizePrices)
+	imagePrices := jsonArrayOrDefault(req.ImagePrices)
+	videoPrices := jsonArrayOrDefault(req.VideoPrices)
 	row, err := s.queries.UpsertModelPrice(r.Context(), dbgen.UpsertModelPriceParams{
 		ModelID:                 modelID,
 		InputPricePer1m:         req.InputPricePer1M,
 		OutputPricePer1m:        req.OutputPricePer1M,
-		ImageSizePrices:         imageSizePrices,
-		VideoPricePerSecond:     req.VideoPricePerSecond,
+		ImagePrices:             imagePrices,
+		VideoPrices:             videoPrices,
 		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
 		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
 	})
@@ -212,15 +212,16 @@ func (s *Server) handleAdminUpsertTenantModelPriceOverride(w http.ResponseWriter
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
 		return
 	}
-	imageSizePrices := jsonObjectOrDefault(req.ImageSizePrices)
+	imagePrices := jsonArrayOrDefault(req.ImagePrices)
+	videoPrices := jsonArrayOrDefault(req.VideoPrices)
 	adminCtx, _ := adminFromContext(r.Context())
 	row, err := s.queries.UpsertTenantModelPriceOverride(r.Context(), dbgen.UpsertTenantModelPriceOverrideParams{
 		TenantID:                tenantID,
 		ModelID:                 modelID,
 		InputPricePer1m:         req.InputPricePer1M,
 		OutputPricePer1m:        req.OutputPricePer1M,
-		ImageSizePrices:         imageSizePrices,
-		VideoPricePerSecond:     req.VideoPricePerSecond,
+		ImagePrices:             imagePrices,
+		VideoPrices:             videoPrices,
 		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
 		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
 		CreatedBy:               optionalTextString(adminCtx.Actor),
@@ -314,15 +315,16 @@ func (s *Server) handleAdminUpsertTenantUserPrice(w http.ResponseWriter, r *http
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
 		return
 	}
-	imageSizePrices := jsonObjectOrDefault(req.ImageSizePrices)
+	imagePrices := jsonArrayOrDefault(req.ImagePrices)
+	videoPrices := jsonArrayOrDefault(req.VideoPrices)
 	adminCtx, _ := adminFromContext(r.Context())
 	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
 		TenantID:                tenantID,
 		ModelID:                 modelID,
 		InputPricePer1m:         req.InputPricePer1M,
 		OutputPricePer1m:        req.OutputPricePer1M,
-		ImageSizePrices:         imageSizePrices,
-		VideoPricePerSecond:     req.VideoPricePerSecond,
+		ImagePrices:             imagePrices,
+		VideoPrices:             videoPrices,
 		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
 		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
 		CreatedBy:               optionalTextString(adminCtx.Actor),
@@ -386,25 +388,8 @@ func (s *Server) handleAdminCreateModelRoute(w http.ResponseWriter, r *http.Requ
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
-
-	isPool := req.CredentialPoolID != ""
-	isDeployment := req.UpstreamDeploymentID != ""
-	if isPool == isDeployment {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "exactly one of upstream_deployment_id or credential_pool_id must be set")
-		return
-	}
-
-	if isPool {
-		if req.PoolUpstreamModel == "" {
-			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "pool_upstream_model is required for pool routes")
-			return
-		}
-		row, err := createPoolModelRoute(r.Context(), s.postgres, modelID.Bytes[:], req)
-		if err != nil {
-			writeDBErr(w, err)
-			return
-		}
-		writeOK(w, row)
+	if req.UpstreamDeploymentID == "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "upstream_deployment_id is required")
 		return
 	}
 
@@ -458,25 +443,8 @@ func (s *Server) handleAdminUpdateModelRoute(w http.ResponseWriter, r *http.Requ
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
-
-	isPool := req.CredentialPoolID != ""
-	isDeployment := req.UpstreamDeploymentID != ""
-	if isPool == isDeployment {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "exactly one of upstream_deployment_id or credential_pool_id must be set")
-		return
-	}
-
-	if isPool {
-		if req.PoolUpstreamModel == "" {
-			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "pool_upstream_model is required for pool routes")
-			return
-		}
-		row, err := updatePoolModelRoute(r.Context(), s.postgres, modelID.Bytes[:], routeID.Bytes[:], req)
-		if err != nil {
-			writeDBErr(w, err)
-			return
-		}
-		writeOK(w, row)
+	if req.UpstreamDeploymentID == "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "upstream_deployment_id is required")
 		return
 	}
 
@@ -556,7 +524,6 @@ func validateModelPriceCredits(req modelPriceRequest) string {
 	fields := map[string]int64{
 		"input_price_per_1m":           req.InputPricePer1M,
 		"output_price_per_1m":          req.OutputPricePer1M,
-		"video_price_per_second":       req.VideoPricePerSecond,
 		"audio_tts_price_per_1m_chars": req.AudioTTSPricePer1MChars,
 		"audio_stt_price_per_minute":   req.AudioSTTPricePerMinute,
 	}

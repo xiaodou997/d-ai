@@ -676,11 +676,8 @@ type updateAPIKeyRequest struct {
 }
 
 type upsertTenantUserPriceRequest struct {
-	InputPricePer1m  int64  `json:"input_price_per_1m"`
-	OutputPricePer1m int64  `json:"output_price_per_1m"`
-	RequestCost      int64  `json:"request_cost"`
-	ImageCost        int64  `json:"image_cost"`
-	ImageSizePrices  string `json:"image_size_prices"`
+	InputPricePer1m  int64 `json:"input_price_per_1m"`
+	OutputPricePer1m int64 `json:"output_price_per_1m"`
 }
 
 func decodeAPIJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {

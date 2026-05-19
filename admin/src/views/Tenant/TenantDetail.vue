@@ -175,8 +175,7 @@
               </el-button>
             </div>
             <el-table :data="userPrices" v-loading="userPricesLoading" border stripe class="modern-table">
-              <el-table-column prop="display_name" label="模型" min-width="180" />
-              <el-table-column prop="model_code" label="Model Code" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="model_code" label="模型" min-width="220" show-overflow-tooltip />
               <el-table-column prop="capability_type" label="类型" width="110" />
               <el-table-column label="输入价格" width="130" align="right">
                 <template #default="{ row }">{{ row.input_price_per_1m ?? '—' }}</template>
@@ -222,7 +221,7 @@
             <el-option
               v-for="g in tenantGrants"
               :key="g.model_id"
-              :label="`${g.display_name} (${g.model_code})`"
+              :label="g.model_code"
               :value="g.model_id"
             />
           </el-select>

@@ -188,6 +188,7 @@ func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, 
 		AttemptsCount:   int32(len(req.Attempts)),
 		FinalRouteID:    mustParseUUID(c.RouteID),
 		ClientProtocol:  string(req.ClientProtocol),
+		Resolution:      nullableText(resolution(req)),
 	}
 
 	return l.q.CreateUsageLog(ctx, params)
@@ -227,6 +228,15 @@ func tokenCountSource(s string) string {
 		return "upstream"
 	}
 	return s
+}
+
+// resolution returns the request resolution for image/video billing audit,
+// or empty string for token-based requests.
+func resolution(req *serving.Request) string {
+	if req.TokenUsage.ImageResolution != "" {
+		return req.TokenUsage.ImageResolution
+	}
+	return req.TokenUsage.VideoResolution
 }
 
 // billingStatus returns the appropriate billing_status value for the usage log.
