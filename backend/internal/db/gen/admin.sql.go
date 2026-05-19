@@ -377,10 +377,7 @@ INSERT INTO ai_model_routes (
 ) VALUES (
   $1, $2, $3, $4, $5, $6
 )
-RETURNING
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled
+RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
 `
 
 type CreateModelRouteParams struct {
@@ -412,12 +409,12 @@ func (q *Queries) CreateModelRoute(ctx context.Context, arg CreateModelRoutePara
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -927,10 +924,7 @@ func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (GetMo
 }
 
 const getModelRoute = `-- name: GetModelRoute :one
-SELECT
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled
+SELECT id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
 FROM ai_model_routes
 WHERE id = $1
 `
@@ -945,12 +939,12 @@ func (q *Queries) GetModelRoute(ctx context.Context, id pgtype.UUID) (AiModelRou
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -3341,10 +3335,7 @@ SET upstream_deployment_id = $3,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
-RETURNING
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled
+RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
 `
 
 type UpdateModelRouteParams struct {
@@ -3375,12 +3366,12 @@ func (q *Queries) UpdateModelRoute(ctx context.Context, arg UpdateModelRoutePara
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -3391,10 +3382,7 @@ SET status = $3,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
-RETURNING
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled
+RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
 `
 
 type UpdateModelRouteStatusParams struct {
@@ -3413,12 +3401,12 @@ func (q *Queries) UpdateModelRouteStatus(ctx context.Context, arg UpdateModelRou
 		&i.Priority,
 		&i.Weight,
 		&i.SupportsStream,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

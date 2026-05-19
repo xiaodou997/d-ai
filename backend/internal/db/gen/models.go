@@ -79,11 +79,11 @@ type AiCredentialPool struct {
 	Name              string             `json:"name"`
 	FixedProviderType string             `json:"fixed_provider_type"`
 	OauthStrategy     string             `json:"oauth_strategy"`
+	StickyGranularity string             `json:"sticky_granularity"`
 	Notes             pgtype.Text        `json:"notes"`
 	Status            string             `json:"status"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	StickyGranularity string             `json:"sticky_granularity"`
 }
 
 type AiModel struct {
@@ -121,12 +121,12 @@ type AiModelRoute struct {
 	Priority             int32              `json:"priority"`
 	Weight               int32              `json:"weight"`
 	SupportsStream       bool               `json:"supports_stream"`
-	Status               string             `json:"status"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	CostPer1kTokens      pgtype.Numeric     `json:"cost_per_1k_tokens"`
 	ScoreWeightsOverride []byte             `json:"score_weights_override"`
 	StickyEnabled        bool               `json:"sticky_enabled"`
+	Status               string             `json:"status"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiProvider struct {
@@ -319,13 +319,13 @@ type AiUsageLog struct {
 	ErrorMessage         pgtype.Text        `json:"error_message"`
 	OauthCredentialID    pgtype.UUID        `json:"oauth_credential_id"`
 	CredentialPoolID     pgtype.UUID        `json:"credential_pool_id"`
-	UsageEstimated       bool               `json:"usage_estimated"`
-	UsageSource          string             `json:"usage_source"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	AttemptsCount        int32              `json:"attempts_count"`
 	FinalRouteID         pgtype.UUID        `json:"final_route_id"`
 	ClientProtocol       string             `json:"client_protocol"`
 	Resolution           pgtype.Text        `json:"resolution"`
+	UsageEstimated       bool               `json:"usage_estimated"`
+	UsageSource          string             `json:"usage_source"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type AiUsageRollupsHourly struct {

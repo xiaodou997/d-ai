@@ -569,10 +569,7 @@ INSERT INTO ai_model_routes (
 ) VALUES (
   $1, $2, $3, $4, $5, $6
 )
-RETURNING
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled;
+RETURNING *;
 
 -- name: ListModelRoutes :many
 SELECT
@@ -609,10 +606,7 @@ WHERE r.model_id = $1
 ORDER BY r.priority ASC, r.weight DESC;
 
 -- name: GetModelRoute :one
-SELECT
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled
+SELECT *
 FROM ai_model_routes
 WHERE id = $1;
 
@@ -622,10 +616,7 @@ SET status = $3,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
-RETURNING
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled;
+RETURNING *;
 
 -- name: UpdateModelRoute :one
 UPDATE ai_model_routes
@@ -637,10 +628,7 @@ SET upstream_deployment_id = $3,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
-RETURNING
-  id, model_id, upstream_deployment_id,
-  priority, weight, supports_stream, status, created_at, updated_at,
-  cost_per_1k_tokens, score_weights_override, sticky_enabled;
+RETURNING *;
 
 -- ============================================================================
 -- Tenant Model Grants CRUD

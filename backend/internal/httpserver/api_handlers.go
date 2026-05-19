@@ -638,6 +638,32 @@ func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Reque
 	writeOK(w, apiKeyDTOFromUpdateStatus(row))
 }
 
+// handleTenantsMeAPIKeysDelete - 租户删除自己的 API Key
+func (s *Server) handleTenantsMeAPIKeysDelete(w http.ResponseWriter, r *http.Request) {
+	ac, ok := apiContextFromContext(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
+		return
+	}
+	if ac.Role != apiRoleTenant {
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can delete own api keys")
+		return
+	}
+	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	keyHash, err := s.queries.DeleteAPIKey(r.Context(), dbgen.DeleteAPIKeyParams{
+		ID: apiKeyID, TenantID: ac.TenantID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	s.invalidateAPIKeyCache(r.Context(), keyHash)
+	writeOK(w, nil)
+}
+
 // handleUsersMeAPIKeysRotate - 用户 Rotate 自己的 API Key
 func (s *Server) handleUsersMeAPIKeysRotate(w http.ResponseWriter, r *http.Request) {
 	ac, ok := apiContextFromContext(r.Context())
@@ -676,6 +702,32 @@ func (s *Server) handleUsersMeAPIKeysRotate(w http.ResponseWriter, r *http.Reque
 	}
 	s.invalidateAPIKeyCache(r.Context(), existing.KeyHash)
 	writeOK(w, rotateAPIKeyResponse{PlaintextKey: newKey, Key: apiKeyDTOFromRotate(row)})
+}
+
+// handleUsersMeAPIKeysDelete - 用户删除自己的 API Key
+func (s *Server) handleUsersMeAPIKeysDelete(w http.ResponseWriter, r *http.Request) {
+	ac, ok := apiContextFromContext(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
+		return
+	}
+	if ac.Role != apiRoleUser {
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can delete own api keys")
+		return
+	}
+	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	keyHash, err := s.queries.DeleteAPIKey(r.Context(), dbgen.DeleteAPIKeyParams{
+		ID: apiKeyID, TenantID: ac.TenantID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	s.invalidateAPIKeyCache(r.Context(), keyHash)
+	writeOK(w, nil)
 }
 
 // ============================================================================

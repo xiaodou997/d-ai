@@ -153,6 +153,27 @@ func (s *Server) handleAdminUpdateTenantAPIKeyStatus(w http.ResponseWriter, r *h
 	writeOK(w, apiKeyDTOFromUpdateStatus(row))
 }
 
+func (s *Server) handleAdminDeleteTenantAPIKey(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "tenantID")
+	if tenantID == "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "tenantID is required")
+		return
+	}
+	apiKeyID, ok := parseUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	keyHash, err := s.queries.DeleteAPIKey(r.Context(), dbgen.DeleteAPIKeyParams{
+		ID: apiKeyID, TenantID: tenantID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	s.invalidateAPIKeyCache(r.Context(), keyHash)
+	writeOK(w, nil)
+}
+
 func (s *Server) handleAdminRotateTenantAPIKey(w http.ResponseWriter, r *http.Request) {
 	tenantID := chi.URLParam(r, "tenantID")
 	if tenantID == "" {
@@ -325,6 +346,26 @@ func (s *Server) handleAdminUpdateUserAPIKeyStatus(w http.ResponseWriter, r *htt
 	}
 	s.invalidateAPIKeyCache(r.Context(), row.KeyHash)
 	writeOK(w, apiKeyDTOFromUpdateStatus(row))
+}
+
+func (s *Server) handleAdminDeleteUserAPIKey(w http.ResponseWriter, r *http.Request) {
+	tenantID, _, ok := tenantUserParams(w, r)
+	if !ok {
+		return
+	}
+	apiKeyID, ok := parseUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	keyHash, err := s.queries.DeleteAPIKey(r.Context(), dbgen.DeleteAPIKeyParams{
+		ID: apiKeyID, TenantID: tenantID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	s.invalidateAPIKeyCache(r.Context(), keyHash)
+	writeOK(w, nil)
 }
 
 func (s *Server) handleAdminRotateUserAPIKey(w http.ResponseWriter, r *http.Request) {

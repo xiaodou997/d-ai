@@ -302,11 +302,13 @@ func New(cfg Config) *Server {
 		r.Patch("/tenants/{tenantID}/api-keys/{apiKeyID}", s.handleAdminUpdateTenantAPIKey)
 		r.Patch("/tenants/{tenantID}/api-keys/{apiKeyID}/status", s.handleAdminUpdateTenantAPIKeyStatus)
 		r.Post("/tenants/{tenantID}/api-keys/{apiKeyID}/rotate", s.handleAdminRotateTenantAPIKey)
+		r.Delete("/tenants/{tenantID}/api-keys/{apiKeyID}", s.handleAdminDeleteTenantAPIKey)
 		r.Get("/tenants/{tenantID}/users/{userID}/api-keys", s.handleAdminListUserAPIKeys)
 		r.Post("/tenants/{tenantID}/users/{userID}/api-keys", s.handleAdminCreateUserAPIKey)
 		r.Patch("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}", s.handleAdminUpdateUserAPIKey)
 		r.Patch("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}/status", s.handleAdminUpdateUserAPIKeyStatus)
 		r.Post("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}/rotate", s.handleAdminRotateUserAPIKey)
+		r.Delete("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}", s.handleAdminDeleteUserAPIKey)
 
 		// =============================================================
 		// 租户自管理（/tenants/me/* 路由）
@@ -315,6 +317,7 @@ func New(cfg Config) *Server {
 		r.Patch("/tenants/me/api-keys/{apiKeyID}", s.handleTenantsMeAPIKeysUpdate)
 		r.Patch("/tenants/me/api-keys/{apiKeyID}/status", s.handleTenantsMeAPIKeysStatus)
 		r.Post("/tenants/me/api-keys/{apiKeyID}/rotate", s.handleTenantsMeAPIKeysRotate)
+		r.Delete("/tenants/me/api-keys/{apiKeyID}", s.handleTenantsMeAPIKeysDelete)
 		r.Put("/tenants/me/user-prices/{modelID}", s.handleTenantsMeUserPricesUpsert)
 		r.Delete("/tenants/me/user-prices/{modelID}", s.handleTenantsMeUserPricesDelete)
 
@@ -325,6 +328,7 @@ func New(cfg Config) *Server {
 		r.Patch("/users/me/api-keys/{apiKeyID}", s.handleUsersMeAPIKeysUpdate)
 		r.Patch("/users/me/api-keys/{apiKeyID}/status", s.handleUsersMeAPIKeysStatus)
 		r.Post("/users/me/api-keys/{apiKeyID}/rotate", s.handleUsersMeAPIKeysRotate)
+		r.Delete("/users/me/api-keys/{apiKeyID}", s.handleUsersMeAPIKeysDelete)
 
 		// =============================================================
 		// 三角色共享（根据 token 自动过滤数据范围）
