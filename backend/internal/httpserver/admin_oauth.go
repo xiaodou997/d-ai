@@ -273,7 +273,7 @@ func (s *Server) handleAdminCreatePoolCredential(w http.ResponseWriter, r *http.
 	}
 
 	var req importPoolCredentialRequest
-	if !decodeAdminJSON(w, r, &req) {
+	if !decodeAdminJSONLenient(w, r, &req) {
 		return
 	}
 	if req.AccessToken == "" {

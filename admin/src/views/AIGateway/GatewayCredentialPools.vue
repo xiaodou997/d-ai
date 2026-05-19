@@ -3,15 +3,22 @@ import { computed, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Refresh, Setting } from '@element-plus/icons-vue'
 import {
+  capabilityOptions,
   createCredentialPool,
   createPoolCredential,
+  createUpstreamDeployment,
   deleteCredentialPool,
   deletePoolCredential,
+  deleteUpstreamDeployment,
   listCredentialPools,
   listPoolCredentials,
+  listUpstreamDeployments,
   patchCredentialPool,
   patchPoolCredential,
-  refreshPoolCredential
+  protocolOptions,
+  refreshPoolCredential,
+  statusOptions,
+  updateUpstreamDeploymentStatus
 } from '@/api/aiGateway'
 
 // ============================================================================
@@ -46,11 +53,24 @@ const poolDialogLoading = shallowRef(false)
 const editingPoolId     = shallowRef('')
 const poolForm = reactive({ name: '', oauth_strategy: 'round_robin', notes: '', status: 'active' })
 
+// Pool deployment section
+const deployments    = shallowRef([])
+const deployLoading  = shallowRef(false)
+const deployDialogVisible  = shallowRef(false)
+const deployDialogLoading  = shallowRef(false)
+const deployForm = reactive({
+  upstream_model: '',
+  capability_type: 'chat',
+  upstream_protocol: 'openai_chat',
+  status: 'active'
+})
+
 // Credential import dialog
 const credDialogVisible = shallowRef(false)
 const credDialogLoading = shallowRef(false)
-const importMode        = ref('json')   // 'json' | 'manual'
-const importJsonText    = ref('')
+const importMode        = ref('file')   // 'file' | 'manual'
+const fileInputRef      = ref(null)
+const parsedFiles       = ref([])       // [{ name, data, error, importStatus, importError }]
 const credForm = reactive({
   name: '', email: '', access_token: '', refresh_token: '',
   expires_at: null, weight: 100
@@ -100,7 +120,17 @@ const fetchCredentials = async () => {
   }
 }
 
-watch(selectedPool, fetchCredentials)
+const fetchPoolDeployments = async () => {
+  if (!selectedPool.value) { deployments.value = []; return }
+  deployLoading.value = true
+  try {
+    deployments.value = (await listUpstreamDeployments({ credential_pool_id: selectedPool.value.id })) || []
+  } finally {
+    deployLoading.value = false
+  }
+}
+
+watch(selectedPool, () => { fetchCredentials(); fetchPoolDeployments() })
 
 watch(activeTab, () => { selectedPool.value = null })
 
@@ -157,43 +187,143 @@ const handleDeletePool = async (pool) => {
 }
 
 // ============================================================================
+// Pool Deployment CRUD
+// ============================================================================
+
+const openDeploymentDialog = () => {
+  Object.assign(deployForm, { upstream_model: '', capability_type: 'chat', upstream_protocol: 'openai_chat', status: 'active' })
+  deployDialogVisible.value = true
+}
+
+const submitPoolDeployment = async () => {
+  if (!deployForm.upstream_model.trim()) { ElMessage.error('上游模型名不能为空'); return }
+  deployDialogLoading.value = true
+  try {
+    await createUpstreamDeployment({
+      credential_pool_id: selectedPool.value.id,
+      upstream_model: deployForm.upstream_model.trim(),
+      capability_type: deployForm.capability_type,
+      upstream_protocol: deployForm.upstream_protocol,
+      status: deployForm.status
+    })
+    ElMessage.success('部署配置已创建')
+    deployDialogVisible.value = false
+    await fetchPoolDeployments()
+  } finally {
+    deployDialogLoading.value = false
+  }
+}
+
+const togglePoolDeployment = async (row) => {
+  const next = row.status === 'active' ? 'disabled' : 'active'
+  await updateUpstreamDeploymentStatus(row.id, next)
+  ElMessage.success('状态已更新')
+  await fetchPoolDeployments()
+}
+
+const handleDeletePoolDeployment = async (row) => {
+  await ElMessageBox.confirm(`确认删除部署「${row.upstream_model}」？关联的模型路由也将一并删除。`, '删除部署', {
+    type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消'
+  })
+  await deleteUpstreamDeployment(row.id)
+  ElMessage.success('部署已删除')
+  await fetchPoolDeployments()
+}
+
+// ============================================================================
 // Credential CRUD
 // ============================================================================
 
 const openCredDialog = () => {
-  importMode.value = 'json'
-  importJsonText.value = ''
+  importMode.value = 'file'
+  parsedFiles.value = []
   Object.assign(credForm, { name: '', email: '', access_token: '', refresh_token: '', expires_at: null, weight: 100 })
   credDialogVisible.value = true
 }
 
-const parseJsonImport = () => {
-  try {
-    return JSON.parse(importJsonText.value.trim())
-  } catch {
-    ElMessage.error('JSON 格式错误，请检查后重试')
-    return null
+const onFilesSelected = (event) => {
+  const files = Array.from(event.target.files || [])
+  if (!files.length) return
+  parsedFiles.value = []
+  files.forEach(file => {
+    const entry = { name: file.name, data: null, error: null, importStatus: null, importError: '' }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        entry.data = JSON.parse(e.target.result)
+      } catch {
+        entry.error = 'JSON 格式错误'
+      }
+      parsedFiles.value = [...parsedFiles.value]
+    }
+    reader.onerror = () => {
+      entry.error = '文件读取失败'
+      parsedFiles.value = [...parsedFiles.value]
+    }
+    parsedFiles.value.push(entry)
+    reader.readAsText(file)
+  })
+  event.target.value = ''
+}
+
+// Extract only the fields the backend accepts, discarding unknown provider-specific keys
+// (e.g. organizations, exported_at) that would cause DisallowUnknownFields to reject the request.
+const extractCredentialPayload = (raw) => {
+  const KNOWN = ['name', 'provider_type', 'email', 'access_token', 'refresh_token',
+    'token_type', 'scope', 'expires_at', 'weight', 'auth_metadata',
+    'account_id', 'plan_type', 'user_id', 'account_user_id']
+  const payload = {}
+  for (const key of KNOWN) {
+    if (raw[key] !== undefined) payload[key] = raw[key]
   }
+  if (!payload.access_token) return { error: 'access_token 字段缺失' }
+  return { payload }
 }
 
 const submitCredential = async () => {
   if (!selectedPool.value) return
-  credDialogLoading.value = true
-  try {
-    let payload
-    if (importMode.value === 'json') {
-      payload = parseJsonImport()
-      if (!payload) return
-    } else {
-      if (!credForm.access_token.trim()) { ElMessage.error('access_token 不能为空'); return }
-      payload = { ...credForm }
+  if (importMode.value === 'file') {
+    const toImport = parsedFiles.value.filter(f => f.data && !f.error)
+    if (!toImport.length) { ElMessage.error('没有可导入的有效凭据'); return }
+    credDialogLoading.value = true
+    let successCount = 0
+    for (const entry of toImport) {
+      entry.importStatus = 'pending'
+      const { payload, error } = extractCredentialPayload(entry.data)
+      if (error) {
+        entry.importStatus = 'failed'
+        entry.importError = error
+        parsedFiles.value = [...parsedFiles.value]
+        continue
+      }
+      try {
+        await createPoolCredential(selectedPool.value.id, payload)
+        entry.importStatus = 'success'
+        successCount++
+      } catch (err) {
+        entry.importStatus = 'failed'
+        entry.importError = err?.message || '导入失败'
+      }
+      parsedFiles.value = [...parsedFiles.value]
     }
-    await createPoolCredential(selectedPool.value.id, payload)
-    ElMessage.success('凭据已导入')
-    credDialogVisible.value = false
-    await fetchCredentials()
-  } finally {
     credDialogLoading.value = false
+    if (successCount > 0) {
+      ElMessage.success(`成功导入 ${successCount} 条凭据`)
+      await fetchCredentials()
+    }
+    const failCount = toImport.length - successCount
+    if (failCount === 0) credDialogVisible.value = false
+  } else {
+    if (!credForm.access_token.trim()) { ElMessage.error('access_token 不能为空'); return }
+    credDialogLoading.value = true
+    try {
+      await createPoolCredential(selectedPool.value.id, { ...credForm })
+      ElMessage.success('凭据已导入')
+      credDialogVisible.value = false
+      await fetchCredentials()
+    } finally {
+      credDialogLoading.value = false
+    }
   }
 }
 
@@ -406,6 +536,44 @@ const expiryTagType = (ms) => {
           </el-table-column>
         </el-table>
       </section>
+      <!-- Pool deployments table -->
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h3>上游模型部署</h3>
+            <p>为该账号池配置可调用的上游模型（路由器将从此列表选路）</p>
+          </div>
+          <div class="head-actions">
+            <el-button :icon="Refresh" circle @click="fetchPoolDeployments" />
+            <el-button type="primary" :icon="Plus" @click="openDeploymentDialog">新增部署</el-button>
+          </div>
+        </div>
+        <el-table v-loading="deployLoading" :data="deployments" border stripe>
+          <el-table-column prop="upstream_model" label="上游模型" min-width="180" show-overflow-tooltip />
+          <el-table-column label="能力类型" width="110">
+            <template #default="{ row }">
+              <el-tag size="small">{{ row.capability_type }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="upstream_protocol" label="协议" min-width="140" show-overflow-tooltip />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'active' ? 'success' : 'warning'" size="small">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                link
+                :type="row.status === 'active' ? 'warning' : 'success'"
+                size="small"
+                @click="togglePoolDeployment(row)"
+              >{{ row.status === 'active' ? '禁用' : '启用' }}</el-button>
+              <el-button link type="danger" size="small" @click="handleDeletePoolDeployment(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
     </main>
 
     <main v-else class="empty-workspace">
@@ -455,19 +623,90 @@ const expiryTagType = (ms) => {
   </el-dialog>
 
   <!-- ================================================================
+       Pool deployment create dialog
+       ================================================================ -->
+  <el-dialog v-model="deployDialogVisible" title="新增上游模型部署" width="480px">
+    <el-form :model="deployForm" label-width="100px">
+      <el-form-item label="上游模型名" required>
+        <el-input v-model="deployForm.upstream_model" placeholder="例如 gpt-4o、claude-opus-4-5" />
+      </el-form-item>
+      <el-form-item label="能力类型">
+        <el-select v-model="deployForm.capability_type" class="w-full">
+          <el-option v-for="c in capabilityOptions" :key="c.value" :label="c.label" :value="c.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="上游协议">
+        <el-select v-model="deployForm.upstream_protocol" class="w-full">
+          <el-option v-for="p in protocolOptions" :key="p.value" :label="p.label" :value="p.value" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="状态">
+        <el-select v-model="deployForm.status" class="w-full">
+          <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
+        </el-select>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="deployDialogVisible = false">取消</el-button>
+      <el-button type="primary" :loading="deployDialogLoading" @click="submitPoolDeployment">创建</el-button>
+    </template>
+  </el-dialog>
+
+  <!-- ================================================================
        Credential import dialog
        ================================================================ -->
-  <el-dialog v-model="credDialogVisible" title="导入 OAuth 凭据" width="580px">
+  <el-dialog v-model="credDialogVisible" title="导入 OAuth 凭据" width="640px">
     <el-tabs v-model="importMode">
-      <el-tab-pane label="粘贴导出 JSON" name="json">
-        <p class="import-hint">将 Provider 工具导出的 JSON 完整粘贴到下方，系统会自动解析所有字段</p>
-        <el-input
-          v-model="importJsonText"
-          type="textarea"
-          :rows="10"
-          placeholder='{"provider_type":"codex","access_token":"eyJ...","refresh_token":"rt_...","email":"...",...}'
-          class="json-input"
-        />
+      <el-tab-pane label="选择 JSON 文件" name="file">
+        <div class="file-import-area">
+          <p class="import-hint">选择 Provider 工具导出的 JSON 文件，支持多选，系统将自动解析并批量导入</p>
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".json,application/json"
+            multiple
+            style="display:none"
+            @change="onFilesSelected"
+          />
+          <el-button :icon="Plus" @click="fileInputRef.click()">选择 JSON 文件</el-button>
+
+          <div v-if="parsedFiles.length" class="parsed-file-list">
+            <div
+              v-for="(f, i) in parsedFiles"
+              :key="i"
+              class="parsed-file-item"
+              :class="{
+                'parse-ok': !f.error,
+                'parse-err': !!f.error,
+                'import-success': f.importStatus === 'success',
+                'import-failed': f.importStatus === 'failed'
+              }"
+            >
+              <div class="pf-name">{{ f.name }}</div>
+              <div class="pf-meta">
+                <template v-if="f.error">
+                  <el-tag type="danger" size="small">解析失败</el-tag>
+                  <span class="pf-err-msg">{{ f.error }}</span>
+                </template>
+                <template v-else-if="f.importStatus === 'success'">
+                  <el-tag type="success" size="small">导入成功</el-tag>
+                </template>
+                <template v-else-if="f.importStatus === 'failed'">
+                  <el-tag type="danger" size="small">导入失败</el-tag>
+                  <span class="pf-err-msg">{{ f.importError }}</span>
+                </template>
+                <template v-else>
+                  <el-tag type="success" size="small" effect="plain">解析成功</el-tag>
+                  <span class="pf-detail">{{ f.data?.email || f.data?.name || '无邮箱' }}</span>
+                </template>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="file-drop-hint">
+            <p>尚未选择文件</p>
+          </div>
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="手动填写" name="manual">
@@ -501,7 +740,11 @@ const expiryTagType = (ms) => {
 
     <template #footer>
       <el-button @click="credDialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="credDialogLoading" @click="submitCredential">导入</el-button>
+      <el-button type="primary" :loading="credDialogLoading" @click="submitCredential">
+        {{ importMode === 'file'
+          ? `导入 ${parsedFiles.filter(f => !f.error).length} 条凭据`
+          : '导入' }}
+      </el-button>
     </template>
   </el-dialog>
 </template>
@@ -838,12 +1081,82 @@ const expiryTagType = (ms) => {
 .import-hint {
   font-size: 13px;
   color: #64748b;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.json-input :deep(textarea) {
-  font-family: 'SF Mono', 'Fira Code', monospace;
+.file-import-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.file-drop-hint {
+  text-align: center;
+  padding: 32px 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.parsed-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.parsed-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #f1f5f9;
+  background: #fafafa;
+}
+
+.parsed-file-item.parse-err {
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.parsed-file-item.import-success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.parsed-file-item.import-failed {
+  border-color: #fecaca;
+  background: #fff5f5;
+}
+
+.pf-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pf-detail {
   font-size: 12px;
+  color: #64748b;
+}
+
+.pf-err-msg {
+  font-size: 12px;
+  color: #ef4444;
 }
 
 /* ============================================================================

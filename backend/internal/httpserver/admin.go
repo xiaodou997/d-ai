@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -78,8 +79,8 @@ type createModelRequest struct {
 type modelPriceRequest struct {
 	InputPricePer1M         int64           `json:"input_price_per_1m"`
 	OutputPricePer1M        int64           `json:"output_price_per_1m"`
-	ImageSizePrices         json.RawMessage `json:"image_size_prices"`
-	VideoPricePerSecond     int64           `json:"video_price_per_second"`
+	ImagePrices              json.RawMessage `json:"image_prices"`
+	VideoPrices              json.RawMessage `json:"video_prices"`
 	AudioTTSPricePer1MChars int64           `json:"audio_tts_price_per_1m_chars"`
 	AudioSTTPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 }
@@ -92,7 +93,8 @@ type createUpstreamDeploymentRequest struct {
 	RequestPath        *string         `json:"request_path"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
 	Pricing            json.RawMessage `json:"pricing"`
-	Status             string          `json:"status"`
+	CredentialPoolID    string          `json:"credential_pool_id"`
+	Status              string          `json:"status"`
 }
 
 type createModelRouteRequest struct {
@@ -331,10 +333,37 @@ func decodeAdminJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
-		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid request body")
+		slog.WarnContext(r.Context(), "decode admin request body failed",
+			"error", err,
+			"path", r.URL.Path,
+			"request_id", requestIDFromContext(r.Context()),
+		)
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid request body: "+err.Error())
 		return false
 	}
 	return true
+}
+
+// decodeAdminJSONLenient decodes JSON without rejecting unknown fields.
+// Used for import endpoints where the payload may contain extra provider-specific fields.
+func decodeAdminJSONLenient(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		slog.WarnContext(r.Context(), "decode admin request body failed",
+			"error", err,
+			"path", r.URL.Path,
+			"request_id", requestIDFromContext(r.Context()),
+		)
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid request body: "+err.Error())
+		return false
+	}
+	return true
+}
+
+func jsonArrayOrDefault(v json.RawMessage) []byte {
+	if len(v) == 0 {
+		return []byte("[]")
+	}
+	return []byte(v)
 }
 
 func decodeStatusUpdate(w http.ResponseWriter, r *http.Request) (string, bool) {

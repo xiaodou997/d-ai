@@ -600,17 +600,21 @@ func (s *OAuthCredentialStore) scanRows(ctx context.Context, query string, args 
 		var r OAuthCredentialRow
 		var pgExpiresAt pgtype.Timestamptz
 		var pgLastUsed, pgLastRefreshed, pgLastFailed pgtype.Timestamptz
+		var pgInvalidReason pgtype.Text
 		err := pgRows.Scan(
 			&r.ID, &r.PoolID, &r.Name, &r.ProviderType, &r.Email,
 			&r.AccessTokenCiphertext, &r.RefreshTokenCiphertext,
 			&r.TokenType, &r.Scope, &pgExpiresAt, &r.AuthMetadataRaw,
-			&r.Weight, &r.Status, &r.InvalidReason,
+			&r.Weight, &r.Status, &pgInvalidReason,
 			&pgLastUsed, &pgLastRefreshed, &pgLastFailed,
 			&r.ConsecutiveFailCount, &r.SuccessCount, &r.FailCount,
 			&r.CreatedAt, &r.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan oauth credential row: %w", err)
+		}
+		if pgInvalidReason.Valid {
+			r.InvalidReason = pgInvalidReason.String
 		}
 		if pgExpiresAt.Valid {
 			r.ExpiresAt = &pgExpiresAt.Time
