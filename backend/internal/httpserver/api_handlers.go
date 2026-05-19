@@ -473,11 +473,23 @@ func (s *Server) handleTenantsMeUserPricesUpsert(w http.ResponseWriter, r *http.
 		return
 	}
 
+	imagePrices := req.ImagePrices
+	if len(imagePrices) == 0 {
+		imagePrices = json.RawMessage("[]")
+	}
+	videoPrices := req.VideoPrices
+	if len(videoPrices) == 0 {
+		videoPrices = json.RawMessage("[]")
+	}
 	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
-		TenantID:         ac.TenantID,
-		ModelID:          modelID,
-		InputPricePer1m:  req.InputPricePer1m,
-		OutputPricePer1m: req.OutputPricePer1m,
+		TenantID:                ac.TenantID,
+		ModelID:                 modelID,
+		InputPricePer1m:         req.InputPricePer1m,
+		OutputPricePer1m:        req.OutputPricePer1m,
+		ImagePrices:             imagePrices,
+		VideoPrices:             videoPrices,
+		AudioTtsPricePer1mChars: req.AudioTtsPricePer1mChars,
+		AudioSttPricePerMinute:  req.AudioSttPricePerMinute,
 	})
 	if err != nil {
 		writeDBErr(w, err)
@@ -747,8 +759,12 @@ type updateAPIKeyRequest struct {
 }
 
 type upsertTenantUserPriceRequest struct {
-	InputPricePer1m  int64 `json:"input_price_per_1m"`
-	OutputPricePer1m int64 `json:"output_price_per_1m"`
+	InputPricePer1m         int64           `json:"input_price_per_1m"`
+	OutputPricePer1m        int64           `json:"output_price_per_1m"`
+	ImagePrices             json.RawMessage `json:"image_prices"`
+	VideoPrices             json.RawMessage `json:"video_prices"`
+	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 }
 
 func decodeAPIJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {

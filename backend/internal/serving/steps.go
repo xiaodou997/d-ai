@@ -264,6 +264,12 @@ func (s *URMFreezeStep) Execute(ctx context.Context, req *Request) error {
 		return nil
 	}
 	if err := s.Biller.Freeze(ctx, req, s.EstimateCosts); err != nil {
+		slog.Warn("urm freeze failed",
+			"error", err,
+			"request_id", req.RequestID,
+			"tenant_id", req.APIKey.TenantID,
+			"model_code", req.ModelCode,
+		)
 		return apiError(http.StatusPaymentRequired, "insufficient_balance",
 			"insufficient balance to process this request")
 	}
