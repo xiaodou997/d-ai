@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net/http"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,6 +17,24 @@ import (
 	"uni-ai-api/backend/internal/secret"
 	"uni-ai-api/backend/internal/serving"
 )
+
+// oauthFixedTypesForProtocol maps a client_protocol to the set of
+// ai_credential_pools.fixed_provider_type values that natively serve it.
+// Strict 1:1: only protocols handled by OAuth pools have entries here.
+// Returns nil for protocols that are not served by any OAuth pool — callers
+// should still allow API-key deployments matching the protocol directly.
+func oauthFixedTypesForProtocol(p domain.UpstreamProtocol) []string {
+	switch p {
+	case domain.ProtocolOpenAIResponses:
+		return []string{string(domain.FixedProviderCodex)}
+	case domain.ProtocolAnthropicMessages:
+		return []string{string(domain.FixedProviderClaudeOAuth)}
+	case domain.ProtocolGeminiGenerate:
+		return []string{string(domain.FixedProviderGeminiCLI), string(domain.FixedProviderAntigravity)}
+	default:
+		return nil
+	}
+}
 
 
 // routeRow holds one resolved route. All endpoint/pool fields may be nil
@@ -54,10 +73,17 @@ type routeRow struct {
 	ScoreWeightsOverride []byte
 }
 
-// listRoutesForModel fetches all active routes for a model. All routes now
-// reference ai_upstream_deployments; endpoint vs pool is determined by which
-// column (endpoint_id / credential_pool_id) is non-null on the deployment row.
-func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.UUID) ([]routeRow, error) {
+// listRoutesForModel fetches all active routes for a model that are compatible
+// with the given client_protocol. Strict 1:1 protocol matching:
+//   - API-key deployments (endpoint_id IS NOT NULL): ud.upstream_protocol must
+//     equal clientProtocol.
+//   - OAuth pool deployments (credential_pool_id IS NOT NULL): the pool's
+//     fixed_provider_type must be in the set that natively serves clientProtocol
+//     (e.g. codex serves openai_responses; claude_oauth serves anthropic_messages).
+//
+// Cross-protocol routing is intentionally not supported — the caller should
+// fail fast with HTTP 400 when this returns an empty result.
+func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.UUID, clientProtocol domain.UpstreamProtocol) ([]routeRow, error) {
 	const q = `
 		SELECT
 		  r.id::text                  AS route_id,
@@ -95,9 +121,18 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  AND ud.health_status   IN ('healthy', 'unknown')
 		  AND (e.status = 'active' OR e.status IS NULL)
 		  AND (p.status = 'active' OR p.status IS NULL)
+		  AND (
+		    (ud.endpoint_id IS NOT NULL AND ud.upstream_protocol = $2)
+		    OR
+		    (ud.credential_pool_id IS NOT NULL AND cp.fixed_provider_type = ANY($3::text[]))
+		  )
 		ORDER BY route_priority ASC, route_weight DESC, endpoint_weight DESC`
 
-	pgRows, err := s.pool.Query(ctx, q, modelID)
+	oauthTypes := oauthFixedTypesForProtocol(clientProtocol)
+	if oauthTypes == nil {
+		oauthTypes = []string{} // pgx encodes empty slice as empty array; ANY({}) → false
+	}
+	pgRows, err := s.pool.Query(ctx, q, modelID, string(clientProtocol), oauthTypes)
 	if err != nil {
 		return nil, fmt.Errorf("list routes for model: %w", err)
 	}
@@ -171,19 +206,28 @@ func (s *RouteSelector) SelectCandidates(ctx context.Context, req *serving.Reque
 		return nil, fmt.Errorf("resolve model id: %w", err)
 	}
 
-	rows, err := s.listRoutesForModel(ctx, mustParseUUID(model.ID))
+	rows, err := s.listRoutesForModel(ctx, mustParseUUID(model.ID), req.ClientProtocol)
 	if err != nil {
 		return nil, fmt.Errorf("list routes: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("no routes for model %q", req.ModelCode)
+		return nil, &serving.APIError{
+			Status: http.StatusBadRequest,
+			Code:   "no_matching_deployment",
+			Message: fmt.Sprintf("no upstream deployment configured for model %q with client protocol %q; configure a deployment whose upstream_protocol matches, or use a different client endpoint",
+				req.ModelCode, string(req.ClientProtocol)),
+		}
 	}
 
 	if req.IsStream {
 		rows = filterStreamable(rows)
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("no healthy routes for model %q", req.ModelCode)
+		return nil, &serving.APIError{
+			Status:  http.StatusBadRequest,
+			Code:    "no_matching_deployment",
+			Message: fmt.Sprintf("no streaming-capable deployment for model %q with client protocol %q", req.ModelCode, string(req.ClientProtocol)),
+		}
 	}
 
 	candidates := make([]*domain.RouteCandidate, 0, len(rows))
@@ -247,6 +291,7 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 	c.HealthStatus = domain.HealthStatus(row.strVal(row.HealthStatus))
 	c.EndpointID = row.strVal(row.EndpointID)
 	c.BaseURL = row.strVal(row.BaseURL)
+	c.APIKeyCiphertext = row.strVal(row.APIKeyCiphertext)
 	c.TimeoutMs = int(row.TimeoutMs)
 	c.ProviderCode = row.strVal(row.ProviderCode)
 	c.ExtraHeaders = unmarshalStringMap(row.ExtraHeaders)

@@ -2,6 +2,7 @@ package serving
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -115,6 +116,12 @@ func (s *RouteCandidatesStep) Name() string { return "route_candidates" }
 func (s *RouteCandidatesStep) Execute(ctx context.Context, req *Request) error {
 	candidates, err := s.Selector.SelectCandidates(ctx, req)
 	if err != nil {
+		// Preserve structured APIError (e.g. 400 no_matching_deployment)
+		// instead of collapsing every selection failure into 503.
+		var apiErr *APIError
+		if errors.As(err, &apiErr) {
+			return apiErr
+		}
 		return apiError(http.StatusServiceUnavailable, "no_available_route", err.Error())
 	}
 	if len(candidates) == 0 {

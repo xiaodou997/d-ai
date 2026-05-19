@@ -3,8 +3,21 @@ package serving
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
+
+	"uni-ai-api/backend/internal/domain"
 )
+
+// fakeSelector returns canned candidates/error for testing RouteCandidatesStep.
+type fakeSelector struct {
+	candidates []*domain.RouteCandidate
+	err        error
+}
+
+func (f *fakeSelector) SelectCandidates(_ context.Context, _ *Request) ([]*domain.RouteCandidate, error) {
+	return f.candidates, f.err
+}
 
 // fakeStep is a configurable Step used to exercise Pipeline.Run.
 type fakeStep struct {
@@ -73,5 +86,46 @@ func TestPipelineErrorUnwrap(t *testing.T) {
 	pe := &PipelineError{Step: "x", Cause: inner}
 	if !errors.Is(pe, inner) {
 		t.Fatalf("PipelineError should unwrap to its cause")
+	}
+}
+
+// RouteCandidatesStep must preserve a structured *APIError (e.g. the 400
+// no_matching_deployment returned by the postgres RouteSelector under strict
+// protocol matching) instead of collapsing every selection failure into a 503.
+func TestRouteCandidatesStepPreservesAPIError(t *testing.T) {
+	want := &APIError{
+		Status:  http.StatusBadRequest,
+		Code:    "no_matching_deployment",
+		Message: `no upstream deployment configured for model "gpt-x" with client protocol "anthropic_messages"`,
+	}
+	step := &RouteCandidatesStep{Selector: &fakeSelector{err: want}}
+	err := step.Execute(context.Background(), &Request{})
+	var got *APIError
+	if !errors.As(err, &got) {
+		t.Fatalf("expected *APIError, got %T (%v)", err, err)
+	}
+	if got.Status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", got.Status)
+	}
+	if got.Code != "no_matching_deployment" {
+		t.Fatalf("code = %q, want no_matching_deployment", got.Code)
+	}
+}
+
+// Generic selection errors (e.g. DB outage) should still surface as 503
+// no_available_route — the new APIError pass-through must not break the
+// fall-through path.
+func TestRouteCandidatesStepWrapsGenericError(t *testing.T) {
+	step := &RouteCandidatesStep{Selector: &fakeSelector{err: errors.New("db unreachable")}}
+	err := step.Execute(context.Background(), &Request{})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError wrapper, got %T (%v)", err, err)
+	}
+	if apiErr.Status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", apiErr.Status)
+	}
+	if apiErr.Code != "no_available_route" {
+		t.Fatalf("code = %q, want no_available_route", apiErr.Code)
 	}
 }
