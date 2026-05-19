@@ -1135,13 +1135,20 @@ WHERE tenant_id = $1
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
+  AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
+  AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at <= sqlc.narg('date_to')::timestamptz)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountUsageLogs :one
 SELECT COUNT(*) AS count
 FROM ai_usage_logs
-WHERE tenant_id = $1;
+WHERE tenant_id = $1
+  AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
+  AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
+  AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
+  AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
+  AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at <= sqlc.narg('date_to')::timestamptz);
 
 -- name: ListUsageLogsByAPIKey :many
 SELECT

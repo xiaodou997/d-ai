@@ -211,6 +211,8 @@ type usageFilters struct {
 	userID        string
 	modelCode     string
 	requestStatus string
+	dateFrom      pgtype.Timestamptz
+	dateTo        pgtype.Timestamptz
 }
 
 type dashboardParams struct {
@@ -283,12 +285,35 @@ func parseAdminLimit(w http.ResponseWriter, r *http.Request, defaultLimit int32,
 	return limit, true
 }
 
+func parseOptionalTimestamptz(w http.ResponseWriter, r *http.Request, param string) (pgtype.Timestamptz, bool) {
+	raw := r.URL.Query().Get(param)
+	if raw == "" {
+		return pgtype.Timestamptz{}, true
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid "+param+": expected RFC3339")
+		return pgtype.Timestamptz{}, false
+	}
+	return pgtype.Timestamptz{Time: t.UTC(), Valid: true}, true
+}
+
 func scopedUsageFilters(w http.ResponseWriter, r *http.Request) (usageFilters, bool) {
+	dateFrom, ok := parseOptionalTimestamptz(w, r, "date_from")
+	if !ok {
+		return usageFilters{}, false
+	}
+	dateTo, ok := parseOptionalTimestamptz(w, r, "date_to")
+	if !ok {
+		return usageFilters{}, false
+	}
 	filters := usageFilters{
 		tenantID:      r.URL.Query().Get("tenant_id"),
 		userID:        r.URL.Query().Get("user_id"),
 		modelCode:     r.URL.Query().Get("model_code"),
 		requestStatus: r.URL.Query().Get("request_status"),
+		dateFrom:      dateFrom,
+		dateTo:        dateTo,
 	}
 	admin, ok := adminFromContext(r.Context())
 	if !ok {

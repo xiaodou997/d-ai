@@ -7,37 +7,120 @@ import (
 	dbgen "uni-ai-api/backend/internal/db/gen"
 )
 
+type usageStatsDTO struct {
+	TotalRequests int64   `json:"total_requests"`
+	SuccessCount  int64   `json:"success_count"`
+	FailedCount   int64   `json:"failed_count"`
+	TotalTokens   int64   `json:"total_tokens"`
+	TotalCost     int64   `json:"total_cost"`
+	AvgLatencyMs  float64 `json:"avg_latency_ms"`
+}
+
+type listUsageLogsResponse struct {
+	Total   int64          `json:"total"`
+	Stats   usageStatsDTO  `json:"stats"`
+	Records []usageLogDTO  `json:"records"`
+}
+
 func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request) {
-	limit := int32(100)
+	limit := int32(20)
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || parsed <= 0 {
 			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid limit")
 			return
 		}
-		if parsed > 500 {
-			parsed = 500
+		if parsed > 100 {
+			parsed = 100
 		}
 		limit = int32(parsed)
+	}
+
+	offset := int32(0)
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || parsed < 0 {
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid offset")
+			return
+		}
+		offset = int32(parsed)
 	}
 
 	filters, ok := scopedUsageFilters(w, r)
 	if !ok {
 		return
 	}
-	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
+
+	countParams := dbgen.CountUsageLogsParams{
 		TenantID:      filters.tenantID,
-		Limit:         limit,
-		Offset:        0,
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		DateFrom:      filters.dateFrom,
+		DateTo:        filters.dateTo,
+	}
+	total, err := s.queries.CountUsageLogs(r.Context(), countParams)
+	if err != nil {
+		s.writeAdminServerError(w, r, "count usage logs failed", err)
+		return
+	}
+
+	const statsSQL = `
+		SELECT
+			COUNT(*) AS total_requests,
+			COUNT(*) FILTER (WHERE request_status = 'success') AS success_count,
+			COUNT(*) FILTER (WHERE request_status != 'success') AS failed_count,
+			COALESCE(SUM(total_tokens), 0)::bigint AS total_tokens,
+			COALESCE(SUM(user_cost), 0)::bigint AS total_cost,
+			COALESCE(AVG(latency_ms) FILTER (WHERE request_status = 'success' AND latency_ms IS NOT NULL), 0)::float8 AS avg_latency_ms
+		FROM ai_usage_logs
+		WHERE tenant_id = $1
+		  AND ($2::text IS NULL OR user_id = $2::text)
+		  AND ($3::text IS NULL OR model_code = $3::text)
+		  AND ($4::text IS NULL OR request_status = $4::text)
+		  AND ($5::timestamptz IS NULL OR created_at >= $5::timestamptz)
+		  AND ($6::timestamptz IS NULL OR created_at <= $6::timestamptz)
+	`
+	var stats usageStatsDTO
+	statsRow := s.postgres.QueryRow(r.Context(), statsSQL,
+		filters.tenantID,
+		optionalTextValue(filters.userID),
+		optionalTextValue(filters.modelCode),
+		optionalTextValue(filters.requestStatus),
+		filters.dateFrom,
+		filters.dateTo,
+	)
+	if err := statsRow.Scan(
+		&stats.TotalRequests,
+		&stats.SuccessCount,
+		&stats.FailedCount,
+		&stats.TotalTokens,
+		&stats.TotalCost,
+		&stats.AvgLatencyMs,
+	); err != nil {
+		s.writeAdminServerError(w, r, "query usage stats failed", err)
+		return
+	}
+
+	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
+		TenantID:      filters.tenantID,
+		Limit:         limit,
+		Offset:        offset,
+		UserID:        optionalTextValue(filters.userID),
+		ModelCode:     optionalTextValue(filters.modelCode),
+		RequestStatus: optionalTextValue(filters.requestStatus),
+		DateFrom:      filters.dateFrom,
+		DateTo:        filters.dateTo,
 	})
 	if err != nil {
 		s.writeAdminServerError(w, r, "list usage logs failed", err)
 		return
 	}
-	writeOK(w, fromListUsageLogs(rows))
+	writeOK(w, listUsageLogsResponse{
+		Total:   total,
+		Stats:   stats,
+		Records: fromListUsageLogs(rows),
+	})
 }
 
 func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Request) {

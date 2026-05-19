@@ -110,9 +110,11 @@ export const updateTenantAPIKeyStatus = (apiKeyId, status) => {
 
 /**
  * 获取使用日志（自动过滤为当前租户）
+ * params: { limit, offset, user_id, model_code, request_status, date_from, date_to }
+ * 返回: { total, stats, records }
  */
 export const listUsageLogs = (params = {}) => {
-  return request.get('/api/v1/usage-logs', { params: { limit: 100, ...params } })
+  return request.get('/api/v1/usage-logs', { params: { limit: 20, offset: 0, ...params } })
 }
 
 /**
@@ -136,4 +138,8 @@ export const getDashboardSummary = (params = {}) => {
  */
 export const getDashboardTopModels = (params = {}) => {
   return request.get('/api/v1/dashboard/top-models', { params })
+}
+
+export const listDashboardRecentErrors = (params = {}) => {
+  return request.get('/api/v1/dashboard/recent-errors', { params })
 }

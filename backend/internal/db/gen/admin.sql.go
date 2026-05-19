@@ -15,10 +15,31 @@ const countUsageLogs = `-- name: CountUsageLogs :one
 SELECT COUNT(*) AS count
 FROM ai_usage_logs
 WHERE tenant_id = $1
+  AND ($2::text IS NULL OR user_id = $2::text)
+  AND ($3::text IS NULL OR model_code = $3::text)
+  AND ($4::text IS NULL OR request_status = $4::text)
+  AND ($5::timestamptz IS NULL OR created_at >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR created_at <= $6::timestamptz)
 `
 
-func (q *Queries) CountUsageLogs(ctx context.Context, tenantID string) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsageLogs, tenantID)
+type CountUsageLogsParams struct {
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	ModelCode     pgtype.Text        `json:"model_code"`
+	RequestStatus pgtype.Text        `json:"request_status"`
+	DateFrom      pgtype.Timestamptz `json:"date_from"`
+	DateTo        pgtype.Timestamptz `json:"date_to"`
+}
+
+func (q *Queries) CountUsageLogs(ctx context.Context, arg CountUsageLogsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsageLogs,
+		arg.TenantID,
+		arg.UserID,
+		arg.ModelCode,
+		arg.RequestStatus,
+		arg.DateFrom,
+		arg.DateTo,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -3071,17 +3092,21 @@ WHERE tenant_id = $1
   AND ($4::text IS NULL OR user_id = $4::text)
   AND ($5::text IS NULL OR model_code = $5::text)
   AND ($6::text IS NULL OR request_status = $6::text)
+  AND ($7::timestamptz IS NULL OR created_at >= $7::timestamptz)
+  AND ($8::timestamptz IS NULL OR created_at <= $8::timestamptz)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListUsageLogsParams struct {
-	TenantID      string      `json:"tenant_id"`
-	Limit         int32       `json:"limit"`
-	Offset        int32       `json:"offset"`
-	UserID        pgtype.Text `json:"user_id"`
-	ModelCode     pgtype.Text `json:"model_code"`
-	RequestStatus pgtype.Text `json:"request_status"`
+	TenantID      string             `json:"tenant_id"`
+	Limit         int32              `json:"limit"`
+	Offset        int32              `json:"offset"`
+	UserID        pgtype.Text        `json:"user_id"`
+	ModelCode     pgtype.Text        `json:"model_code"`
+	RequestStatus pgtype.Text        `json:"request_status"`
+	DateFrom      pgtype.Timestamptz `json:"date_from"`
+	DateTo        pgtype.Timestamptz `json:"date_to"`
 }
 
 type ListUsageLogsRow struct {
@@ -3136,6 +3161,8 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 		arg.UserID,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.DateFrom,
+		arg.DateTo,
 	)
 	if err != nil {
 		return nil, err
