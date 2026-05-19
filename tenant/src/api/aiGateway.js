@@ -106,6 +106,13 @@ export const updateTenantAPIKeyStatus = (apiKeyId, status) => {
   return request.patch(`/api/v1/tenants/me/api-keys/${apiKeyId}/status`, { status })
 }
 
+/**
+ * 轮换租户 API Key（生成新 Key，旧 Key 立即失效）
+ */
+export const rotateTenantAPIKey = (apiKeyId) => {
+  return request.post(`/api/v1/tenants/me/api-keys/${apiKeyId}/rotate`)
+}
+
 // ==================== 用户消耗统计 ====================
 
 /**

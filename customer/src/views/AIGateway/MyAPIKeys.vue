@@ -7,6 +7,7 @@ import {
   createUserAPIKey,
   updateUserAPIKey,
   updateUserAPIKeyStatus,
+  rotateUserAPIKey,
   listUserModelGrants,
   statusOptions,
   formatCredits
@@ -31,8 +32,8 @@ const keyForm = reactive({
 const isEditing = computed(() => Boolean(editingKeyId.value))
 const modelOptions = computed(() =>
   models.value.map((item) => ({
-    label: `${item.model_code} · ${item.display_name}`,
-    value: item.model_id
+    label: `${item.model_code} · ${item.capability_type}`,
+    value: item.model_code
   }))
 )
 
@@ -103,7 +104,7 @@ const submitForm = async () => {
         status: keyForm.status
       })
       if (res?.key) {
-        generatedKey.value = res.key
+        generatedKey.value = res.plaintext_key
         showKeyDialog.value = true
         dialogVisible.value = false
       }
@@ -116,17 +117,31 @@ const submitForm = async () => {
 }
 
 const toggleStatus = async (row) => {
-  const newStatus = row.status === 'active' ? 'inactive' : 'active'
+  const newStatus = row.status === 'active' ? 'disabled' : 'active'
   try {
     await updateUserAPIKeyStatus(row.id, newStatus)
-    ElMessage.success(`已${newStatus === 'active' ? '启用' : '停用'}`)
+    ElMessage.success(newStatus === 'active' ? '已启用' : '已停用')
     await fetchAPIKeys()
   } catch {}
 }
 
-const copyKey = async () => {
+const rotateKey = async (row) => {
   try {
-    await navigator.clipboard.writeText(generatedKey.value)
+    await ElMessageBox.confirm('轮换后旧 Key 立即失效，新 Key 仅显示一次，确定继续？', '轮换 API Key', {
+      confirmButtonText: '确定轮换',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    const res = await rotateUserAPIKey(row.id)
+    generatedKey.value = res.plaintext_key
+    showKeyDialog.value = true
+    await fetchAPIKeys()
+  } catch {}
+}
+
+const copyKey = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text ?? generatedKey.value)
     ElMessage.success('已复制到剪贴板')
   } catch {
     ElMessage.warning('复制失败，请手动复制')
@@ -175,9 +190,9 @@ onMounted(() => {
       <section class="list-panel">
         <el-table :data="apiKeys" v-loading="loading" stripe>
           <el-table-column prop="name" label="名称" min-width="140" />
-          <el-table-column prop="key_prefix" label="Key 前缀" min-width="120">
+          <el-table-column label="API Key" min-width="200">
             <template #default="{ row }">
-              <code class="key-prefix">{{ row.key_prefix }}...</code>
+              <code class="key-prefix">····{{ row.last_four || '????' }}</code>
             </template>
           </el-table-column>
           <el-table-column label="配额限制" min-width="120">
@@ -205,9 +220,10 @@ onMounted(() => {
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
+          <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
+              <el-button link type="info" @click="rotateKey(row)">轮换</el-button>
               <el-button
                 link
                 :type="row.status === 'active' ? 'warning' : 'success'"
@@ -262,18 +278,12 @@ onMounted(() => {
 
     <!-- Show Generated Key Dialog -->
     <el-dialog v-model="showKeyDialog" title="API Key 已生成" width="480px" append-to-body>
-      <el-alert type="warning" :closable="false" show-icon class="mb-4">
-        <template #title>
-          <strong>请立即复制保存！</strong>
-        </template>
-        Key 仅显示一次，关闭后将无法再次查看完整 Key。
-      </el-alert>
       <div class="key-display">
         <code class="full-key">{{ generatedKey }}</code>
-        <el-button :icon="CopyDocument" type="primary" @click="copyKey">复制 Key</el-button>
+        <el-button :icon="CopyDocument" type="primary" @click="copyKey()">复制 Key</el-button>
       </div>
       <template #footer>
-        <el-button type="primary" @click="showKeyDialog = false">我已保存，关闭</el-button>
+        <el-button type="primary" @click="showKeyDialog = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -340,6 +350,12 @@ onMounted(() => {
   padding: 16px;
 }
 
+.key-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .key-prefix {
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 13px;
@@ -347,6 +363,7 @@ onMounted(() => {
   background: #f5f7fa;
   padding: 2px 6px;
   border-radius: 4px;
+  word-break: break-all;
 }
 
 .key-display {

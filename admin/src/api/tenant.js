@@ -24,6 +24,13 @@ export function queryTenants(params) {
   })
 }
 
+export function getTenant(id) {
+  return request({
+    url: `/urm/v1/tenants/${id}`,
+    method: 'get'
+  })
+}
+
 export function createTenant(data) {
   return request({
     url: '/urm/v1/tenants',

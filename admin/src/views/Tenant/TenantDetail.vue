@@ -128,16 +128,16 @@
         <el-tab-pane label="API Keys" name="apiKeys">
           <div class="p-4">
             <div class="flex justify-between items-center mb-4">
-              <p class="text-slate-500 text-sm">该租户的 API Keys（不含明文，仅展示前缀）</p>
+              <p class="text-slate-500 text-sm">该租户的 API Keys（仅展示末四位）</p>
               <el-button type="primary" class="!rounded-2xl font-bold" @click="openCreateAPIKey">
                 <el-icon class="mr-1"><Plus /></el-icon>创建 API Key
               </el-button>
             </div>
             <el-table :data="apiKeys" v-loading="apiKeysLoading" border stripe class="modern-table">
               <el-table-column prop="name" label="名称" min-width="160" />
-              <el-table-column prop="key_prefix" label="Key 前缀" width="140">
+              <el-table-column label="API Key" width="140">
                 <template #default="{ row }">
-                  <span class="font-mono text-slate-600">{{ row.key_prefix }}...</span>
+                  <span class="font-mono text-slate-600">····{{ row.last_four || '????' }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="配额" width="200" align="right">
@@ -152,8 +152,7 @@
                 <template #default="{ row }">
                   <el-select :model-value="row.status" size="small" @change="changeAPIKeyStatus(row, $event)">
                     <el-option label="启用" value="active" />
-                    <el-option label="停用" value="inactive" />
-                    <el-option label="禁用" value="disabled" />
+                    <el-option label="停用" value="disabled" />
                   </el-select>
                 </template>
               </el-table-column>
@@ -298,7 +297,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { OfficeBuilding, Plus } from '@element-plus/icons-vue'
 import {
-  queryUsers, queryTransactions, queryTenants,
+  queryUsers, queryTransactions, getTenant,
   listTenantUsers, createTenantUser, updateTenantUserStatus, resetTenantUserPassword,
   listTenantApps
 } from '@/api/tenant'
@@ -361,10 +360,7 @@ const handleRecharge = () => {
 }
 
 const fetchTenantInfo = async () => {
-  const data = await queryTenants({ tenantId })
-  if (data.records && data.records.length > 0) {
-    tenantInfo.value = data.records[0]
-  }
+  tenantInfo.value = await getTenant(tenantId)
 }
 
 const fetchUsers = async () => {
@@ -426,8 +422,8 @@ const submitCreateAPIKey = async () => {
       quota_limit: apiKeyForm.quota_limit || undefined,
       status: apiKeyForm.status
     })
-    if (res?.api_key) {
-      generatedAPIKey.value = res.api_key
+    if (res?.plaintext_key) {
+      generatedAPIKey.value = res.plaintext_key
       showAPIKeyDialog.value = true
     }
     createAPIKeyVisible.value = false

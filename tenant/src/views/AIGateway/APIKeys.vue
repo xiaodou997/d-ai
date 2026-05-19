@@ -7,6 +7,7 @@ import {
   createTenantAPIKey,
   updateTenantAPIKey,
   updateTenantAPIKeyStatus,
+  rotateTenantAPIKey,
   listTenantModelGrants,
   statusOptions,
   formatCredits
@@ -31,8 +32,8 @@ const keyForm = reactive({
 const isEditing = computed(() => Boolean(editingKeyId.value))
 const modelOptions = computed(() =>
   models.value.map((item) => ({
-    label: `${item.model_code} · ${item.display_name}`,
-    value: item.model_id
+    label: `${item.model_code} · ${item.capability_type}`,
+    value: item.model_code
   }))
 )
 
@@ -103,7 +104,7 @@ const submitForm = async () => {
         status: keyForm.status
       })
       if (res?.key) {
-        generatedKey.value = res.key
+        generatedKey.value = res.plaintext_key
         showKeyDialog.value = true
         dialogVisible.value = false
       }
@@ -116,29 +117,31 @@ const submitForm = async () => {
 }
 
 const toggleStatus = async (row) => {
-  const newStatus = row.status === 'active' ? 'inactive' : 'active'
+  const newStatus = row.status === 'active' ? 'disabled' : 'active'
   try {
     await updateTenantAPIKeyStatus(row.id, newStatus)
-    ElMessage.success(`已${newStatus === 'active' ? '启用' : '停用'}`)
+    ElMessage.success(newStatus === 'active' ? '已启用' : '已停用')
     await fetchAPIKeys()
   } catch {}
 }
 
-const deleteKey = async (row) => {
+const rotateKey = async (row) => {
   try {
-    await ElMessageBox.confirm('确定删除此 API Key？删除后无法恢复', '提示', {
-      confirmButtonText: '确定删除',
+    await ElMessageBox.confirm('轮换后旧 Key 立即失效，新 Key 仅显示一次，确定继续？', '轮换 API Key', {
+      confirmButtonText: '确定轮换',
       cancelButtonText: '取消',
       type: 'warning'
     })
-    // TODO: 后端暂无删除 API Key 的接口，暂时只支持停用
-    ElMessage.warning('暂不支持删除，请使用停用功能')
+    const res = await rotateTenantAPIKey(row.id)
+    generatedKey.value = res.plaintext_key
+    showKeyDialog.value = true
+    await fetchAPIKeys()
   } catch {}
 }
 
-const copyKey = async () => {
+const copyKey = async (text) => {
   try {
-    await navigator.clipboard.writeText(generatedKey.value)
+    await navigator.clipboard.writeText(text ?? generatedKey.value)
     ElMessage.success('已复制到剪贴板')
   } catch {
     ElMessage.warning('复制失败，请手动复制')
@@ -183,7 +186,7 @@ onMounted(() => {
       <div class="page-title">
         <p class="eyebrow">Tenant API Keys</p>
         <h1>租户 API Key</h1>
-        <p>用于租户自用或匿名用户场景，Key 创建后仅显示一次请立即保存</p>
+        <p>用于租户自用或匿名用户场景</p>
       </div>
       <div class="header-actions">
         <el-button :icon="Refresh" @click="fetchAPIKeys" :loading="loading">刷新</el-button>
@@ -196,9 +199,9 @@ onMounted(() => {
       <section class="list-panel">
         <el-table :data="apiKeys" v-loading="loading" stripe>
           <el-table-column prop="name" label="名称" min-width="140" />
-          <el-table-column prop="key_prefix" label="Key 前缀" min-width="120">
+          <el-table-column label="API Key" min-width="200">
             <template #default="{ row }">
-              <code class="key-prefix">{{ row.key_prefix }}...</code>
+              <code class="key-prefix">····{{ row.last_four || '????' }}</code>
             </template>
           </el-table-column>
           <el-table-column label="配额限制" min-width="120">
@@ -226,9 +229,10 @@ onMounted(() => {
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140" fixed="right">
+          <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
+              <el-button link type="info" @click="rotateKey(row)">轮换</el-button>
               <el-button
                 link
                 :type="row.status === 'active' ? 'warning' : 'success'"
@@ -283,18 +287,12 @@ onMounted(() => {
 
     <!-- Show Generated Key Dialog -->
     <el-dialog v-model="showKeyDialog" title="API Key 已生成" width="480px" append-to-body>
-      <el-alert type="warning" :closable="false" show-icon class="mb-4">
-        <template #title>
-          <strong>请立即复制保存！</strong>
-        </template>
-        Key 仅显示一次，关闭后将无法再次查看完整 Key。
-      </el-alert>
       <div class="key-display">
         <code class="full-key">{{ generatedKey }}</code>
-        <el-button :icon="CopyDocument" type="primary" @click="copyKey">复制 Key</el-button>
+        <el-button :icon="CopyDocument" type="primary" @click="copyKey()">复制 Key</el-button>
       </div>
       <template #footer>
-        <el-button type="primary" @click="showKeyDialog = false">我已保存，关闭</el-button>
+        <el-button type="primary" @click="showKeyDialog = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -302,87 +300,81 @@ onMounted(() => {
 
 <style scoped>
 .page-container {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f5f7fa;
+  gap: 24px;
+  padding: 24px;
 }
 
 .page-header {
-  padding: 16px 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
+  background: #fff;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
 }
 
-.page-title {
-  display: flex;
-  flex-direction: column;
-}
-
+.page-title { display: flex; flex-direction: column; }
 .eyebrow {
   margin: 0 0 4px;
   color: #64748b;
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.page-title h1 {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
   font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
+.page-title h1 { margin: 0; color: #0f172a; font-size: 22px; font-weight: 900; }
+.page-title p  { margin: 4px 0 0; color: #64748b; font-size: 13px; }
 
-.page-title p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
-}
+.header-actions { display: flex; gap: 12px; }
 
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.page-main {
-  padding: 24px;
-  flex: 1;
-  min-height: 0;
-}
+.page-main { /* no padding, container handles it */ }
 
 .list-panel {
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.key-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .key-prefix {
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 13px;
-  color: #606266;
-  background: #f5f7fa;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+  font-size: 12.5px;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 6px;
+  word-break: break-all;
 }
 
-.key-display {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+.key-display { display: flex; flex-direction: column; gap: 16px; }
 
 .full-key {
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 14px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', monospace;
+  font-size: 13px;
   word-break: break-all;
-  background: #f5f7fa;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 16px;
+  border-radius: 12px;
+  line-height: 1.6;
+}
+
+:deep(.el-table__header th) {
+  background: #f8fafc !important;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 </style>

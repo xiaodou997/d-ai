@@ -392,6 +392,10 @@ export function updateTenantAPIKeyStatus(tenantId, apiKeyId, status) {
   return gatewayRequest.patch(`/api/v1/tenants/${tenantId}/api-keys/${apiKeyId}/status`, { status })
 }
 
+export function rotateTenantAPIKey(tenantId, apiKeyId) {
+  return gatewayRequest.post(`/api/v1/tenants/${tenantId}/api-keys/${apiKeyId}/rotate`)
+}
+
 // ============================================================================
 // User API Key APIs (删除了 User Model Grant)
 // ============================================================================

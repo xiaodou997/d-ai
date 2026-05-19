@@ -48,6 +48,13 @@ export const updateUserAPIKeyStatus = (apiKeyId, status) => {
   return request.patch(`/api/v1/users/me/api-keys/${apiKeyId}/status`, { status })
 }
 
+/**
+ * 轮换用户 API Key（生成新 Key，旧 Key 立即失效）
+ */
+export const rotateUserAPIKey = (apiKeyId) => {
+  return request.post(`/api/v1/users/me/api-keys/${apiKeyId}/rotate`)
+}
+
 // ==================== 用户消耗统计 ====================
 
 /**
