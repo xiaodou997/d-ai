@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -26,10 +27,20 @@ func (s *Server) runtimeAuth(next http.Handler) http.Handler {
 			writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key.", "invalid_api_key", "invalid_api_key")
 			return
 		}
+		keyHash := apikey.Hash(key)
 
-		row, err := s.queries.GetAPIKeyByHash(r.Context(), apikey.Hash(key))
+		row, err := s.resolveAPIKey(r.Context(), keyHash)
 		if err != nil {
 			writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key.", "invalid_api_key", "invalid_api_key")
+			return
+		}
+
+		if row.Status != "active" {
+			writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key.", "invalid_api_key", "invalid_api_key")
+			return
+		}
+		if row.ExpiresAt.Valid && !time.Now().Before(row.ExpiresAt.Time) {
+			writeOpenAIError(w, http.StatusUnauthorized, "API key expired.", "invalid_api_key", "invalid_api_key")
 			return
 		}
 
@@ -39,8 +50,31 @@ func (s *Server) runtimeAuth(next http.Handler) http.Handler {
 		}
 		ctx := context.WithValue(r.Context(), runtimeAuthContextKey{}, RuntimeAuth{APIKey: row})
 		setRequestAPIKey(ctx, shortHash(row.ID.String()), row.TenantID, userID)
+
+		keyID := row.ID
+		go func() {
+			_ = s.queries.TouchLastUsedAt(context.Background(), keyID)
+		}()
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// resolveAPIKey checks cache first, falls back to DB, and writes back on miss.
+func (s *Server) resolveAPIKey(ctx context.Context, keyHash string) (dbgen.GetAPIKeyByHashRow, error) {
+	if s.apiKeyCache != nil {
+		if row, ok := s.apiKeyCache.Get(ctx, keyHash); ok {
+			return row, nil
+		}
+	}
+	row, err := s.queries.GetAPIKeyByHash(ctx, keyHash)
+	if err != nil {
+		return dbgen.GetAPIKeyByHashRow{}, err
+	}
+	if s.apiKeyCache != nil {
+		_ = s.apiKeyCache.Set(ctx, keyHash, row)
+	}
+	return row, nil
 }
 
 func runtimeAuthFromContext(ctx context.Context) (RuntimeAuth, bool) {

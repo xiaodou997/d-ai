@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -25,8 +26,8 @@ func NewAPIKeyResolver(q *dbgen.Queries) *APIKeyResolver {
 	return &APIKeyResolver{q: q}
 }
 
-// ResolveAPIKey looks up an active API key by the raw bearer token, computing
-// the SHA-256 key_hash used as the DB lookup key. It populates req.APIKey.
+// ResolveAPIKey looks up an API key by the raw bearer token and validates it.
+// It populates req.APIKey.
 func (r *APIKeyResolver) ResolveAPIKey(ctx context.Context, token string, req *serving.Request) error {
 	keyHash := hashAPIKey(token)
 
@@ -36,6 +37,13 @@ func (r *APIKeyResolver) ResolveAPIKey(ctx context.Context, token string, req *s
 			return fmt.Errorf("api key not found")
 		}
 		return fmt.Errorf("lookup api key: %w", err)
+	}
+
+	if row.Status != "active" {
+		return fmt.Errorf("api key not active")
+	}
+	if row.ExpiresAt.Valid && !row.ExpiresAt.Time.After(nowFunc()) {
+		return fmt.Errorf("api key expired")
 	}
 
 	var allowedModels []string
@@ -68,3 +76,6 @@ func (r *APIKeyResolver) ResolveAPIKey(ctx context.Context, token string, req *s
 	}
 	return nil
 }
+
+// nowFunc is a variable to allow test overrides.
+var nowFunc = func() time.Time { return time.Now() }

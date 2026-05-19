@@ -23,36 +23,26 @@ func (s *Server) handleTenantAPIKeysSelf(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	var tenantID string
 	if ac.Role == apiRolePlatform {
-		tenantID := r.URL.Query().Get("tenant_id")
-		if tenantID != "" {
-			rows, err := s.queries.ListTenantAPIKeys(r.Context(), tenantID)
-			if err != nil {
-				s.logger.Error("list tenant api keys failed", "error", err)
-				writeDBErr(w, err)
-				return
-			}
-			writeOK(w, fromListTenantAPIKeys(rows))
-		} else {
-			rows, err := s.queries.ListAllTenantAPIKeys(r.Context())
-			if err != nil {
-				s.logger.Error("list all tenant api keys failed", "error", err)
-				writeDBErr(w, err)
-				return
-			}
-			writeOK(w, fromListAllTenantAPIKeys(rows))
-		}
+		tenantID = r.URL.Query().Get("tenant_id")
 	} else if ac.Role == apiRoleTenant {
-		rows, err := s.queries.ListTenantAPIKeys(r.Context(), ac.TenantID)
-		if err != nil {
-			s.logger.Error("list tenant api keys failed", "error", err)
-			writeDBErr(w, err)
-			return
-		}
-		writeOK(w, fromListTenantAPIKeys(rows))
+		tenantID = ac.TenantID
 	} else {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "forbidden")
+		return
 	}
+
+	rows, err := s.queries.ListAPIKeys(r.Context(), dbgen.ListAPIKeysParams{
+		TenantID:  tenantID,
+		OwnerType: pgtype.Text{String: "tenant", Valid: true},
+	})
+	if err != nil {
+		s.logger.Error("list tenant api keys failed", "error", err)
+		writeDBErr(w, err)
+		return
+	}
+	writeOK(w, apiKeyDTOsFromList(rows))
 }
 
 // handleTenantModelGrantsSelf - 租户查看自己的模型授权
@@ -99,50 +89,41 @@ func (s *Server) handleUserAPIKeysSelf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if ac.Role == apiRoleUser {
-		rows, err := s.queries.ListUserAPIKeys(r.Context(), dbgen.ListUserAPIKeysParams{
-			TenantID: ac.TenantID,
-			UserID:   pgtype.Text{String: ac.UserID, Valid: true},
-		})
-		if err != nil {
-			writeDBErr(w, err)
-			return
-		}
-		writeOK(w, fromListUserAPIKeys(rows))
-	} else if ac.Role == apiRoleTenant {
+	var params dbgen.ListAPIKeysParams
+	params.OwnerType = pgtype.Text{String: "user", Valid: true}
+
+	switch ac.Role {
+	case apiRoleUser:
+		params.TenantID = ac.TenantID
+		params.UserID = pgtype.Text{String: ac.UserID, Valid: true}
+	case apiRoleTenant:
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
 			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "user_id required for tenant")
 			return
 		}
-		rows, err := s.queries.ListUserAPIKeys(r.Context(), dbgen.ListUserAPIKeysParams{
-			TenantID: ac.TenantID,
-			UserID:   pgtype.Text{String: userID, Valid: true},
-		})
-		if err != nil {
-			writeDBErr(w, err)
-			return
-		}
-		writeOK(w, fromListUserAPIKeys(rows))
-	} else if ac.Role == apiRolePlatform {
+		params.TenantID = ac.TenantID
+		params.UserID = pgtype.Text{String: userID, Valid: true}
+	case apiRolePlatform:
 		tenantID := r.URL.Query().Get("tenant_id")
 		userID := r.URL.Query().Get("user_id")
 		if tenantID == "" || userID == "" {
 			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "tenant_id and user_id required for platform")
 			return
 		}
-		rows, err := s.queries.ListUserAPIKeys(r.Context(), dbgen.ListUserAPIKeysParams{
-			TenantID: tenantID,
-			UserID:   pgtype.Text{String: userID, Valid: true},
-		})
-		if err != nil {
-			writeDBErr(w, err)
-			return
-		}
-		writeOK(w, fromListUserAPIKeys(rows))
-	} else {
+		params.TenantID = tenantID
+		params.UserID = pgtype.Text{String: userID, Valid: true}
+	default:
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "forbidden")
+		return
 	}
+
+	rows, err := s.queries.ListAPIKeys(r.Context(), params)
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	writeOK(w, apiKeyDTOsFromList(rows))
 }
 
 // handleUserModelGrantsSelf - 用户查看自己可用的模型授权
@@ -314,40 +295,33 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
 	if ac.Role != apiRoleTenant {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can create own api keys")
 		return
 	}
-
 	var req createAPIKeyRequest
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
 	key, err := apikey.Generate()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
 		return
 	}
-	hash := apikey.Hash(key)
-	prefix := apikey.PrefixForDisplay(key)
-
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
-
-	row, err := s.queries.CreateTenantAPIKeySelf(r.Context(), dbgen.CreateTenantAPIKeySelfParams{
+	row, err := s.queries.CreateAPIKey(r.Context(), dbgen.CreateAPIKeyParams{
+		OwnerType:     "tenant",
 		TenantID:      ac.TenantID,
-		KeyHash:       hash,
-		KeyPrefix:     prefix,
+		KeyHash:       apikey.Hash(key),
+		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
 		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
-		ExpiresAt:     pgtype.Timestamptz{},
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
 	})
 	if err != nil {
@@ -355,12 +329,7 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "create failed")
 		return
 	}
-
-	dto := fromCreateTenantAPIKeySelf(row)
-	writeOK(w, map[string]any{
-		"key": key,
-		"key_info": dto,
-	})
+	writeOK(w, createAPIKeyResponse{PlaintextKey: key, Key: apiKeyDTOFromCreate(row)})
 }
 
 // handleTenantsMeAPIKeysUpdate - 租户更新自己的 API Key
@@ -370,42 +339,38 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
 	if ac.Role != apiRoleTenant {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can update own api keys")
 		return
 	}
-
 	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
 	if !ok {
 		return
 	}
-
 	var req updateAPIKeyRequest
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
-
-	row, err := s.queries.UpdateTenantAPIKeySelf(r.Context(), dbgen.UpdateTenantAPIKeySelfParams{
+	row, err := s.queries.UpdateAPIKey(r.Context(), dbgen.UpdateAPIKeyParams{
 		TenantID:      ac.TenantID,
 		ID:            apiKeyID,
 		Name:          req.Name,
 		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
+		Status:        defaultStatus,
 	})
 	if err != nil {
 		s.logger.Error("update tenant api key failed", "error", err)
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
-
-	writeOK(w, fromUpdateTenantAPIKeySelf(row))
+	s.invalidateAPIKeyCache(r.Context(), row.KeyHash)
+	writeOK(w, apiKeyDTOFromUpdate(row))
 }
 
 // handleTenantsMeAPIKeysStatus - 租户更新自己的 API Key 状态
@@ -415,23 +380,19 @@ func (s *Server) handleTenantsMeAPIKeysStatus(w http.ResponseWriter, r *http.Req
 		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
 	if ac.Role != apiRoleTenant {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can update own api keys")
 		return
 	}
-
 	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
 	if !ok {
 		return
 	}
-
 	var req updateStatusRequest
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
-	row, err := s.queries.UpdateTenantAPIKeyStatusSelf(r.Context(), dbgen.UpdateTenantAPIKeyStatusSelfParams{
+	row, err := s.queries.UpdateAPIKeyStatus(r.Context(), dbgen.UpdateAPIKeyStatusParams{
 		TenantID: ac.TenantID,
 		ID:       apiKeyID,
 		Status:   req.Status,
@@ -441,8 +402,48 @@ func (s *Server) handleTenantsMeAPIKeysStatus(w http.ResponseWriter, r *http.Req
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
+	s.invalidateAPIKeyCache(r.Context(), row.KeyHash)
+	writeOK(w, apiKeyDTOFromUpdateStatus(row))
+}
 
-	writeOK(w, fromUpdateTenantAPIKeyStatusSelf(row))
+// handleTenantsMeAPIKeysRotate - 租户 Rotate 自己的 API Key
+func (s *Server) handleTenantsMeAPIKeysRotate(w http.ResponseWriter, r *http.Request) {
+	ac, ok := apiContextFromContext(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
+		return
+	}
+	if ac.Role != apiRoleTenant {
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only tenant can rotate own api keys")
+		return
+	}
+	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	existing, err := s.queries.GetAPIKeyByID(r.Context(), dbgen.GetAPIKeyByIDParams{
+		ID: apiKeyID, TenantID: ac.TenantID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	newKey, err := apikey.Generate()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
+		return
+	}
+	row, err := s.queries.RotateAPIKey(r.Context(), dbgen.RotateAPIKeyParams{
+		ID: apiKeyID, TenantID: ac.TenantID,
+		KeyHash:  apikey.Hash(newKey),
+		LastFour: pgtype.Text{String: apikey.LastFour(newKey), Valid: true},
+	})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "rotate failed")
+		return
+	}
+	s.invalidateAPIKeyCache(r.Context(), existing.KeyHash)
+	writeOK(w, rotateAPIKeyResponse{PlaintextKey: newKey, Key: apiKeyDTOFromRotate(row)})
 }
 
 // ============================================================================
@@ -525,41 +526,34 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
 	if ac.Role != apiRoleUser {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can create own api keys")
 		return
 	}
-
 	var req createAPIKeyRequest
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
 	key, err := apikey.Generate()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
 		return
 	}
-	hash := apikey.Hash(key)
-	prefix := apikey.PrefixForDisplay(key)
-
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
-
-	row, err := s.queries.CreateUserAPIKeySelf(r.Context(), dbgen.CreateUserAPIKeySelfParams{
+	row, err := s.queries.CreateAPIKey(r.Context(), dbgen.CreateAPIKeyParams{
+		OwnerType:     "user",
 		TenantID:      ac.TenantID,
 		UserID:        pgtype.Text{String: ac.UserID, Valid: true},
-		KeyHash:       hash,
-		KeyPrefix:     prefix,
+		KeyHash:       apikey.Hash(key),
+		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
 		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
-		ExpiresAt:     pgtype.Timestamptz{},
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
 	})
 	if err != nil {
@@ -567,12 +561,7 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "create failed")
 		return
 	}
-
-	dto := fromCreateUserAPIKeySelf(row)
-	writeOK(w, map[string]any{
-		"key":      key,
-		"key_info": dto,
-	})
+	writeOK(w, createAPIKeyResponse{PlaintextKey: key, Key: apiKeyDTOFromCreate(row)})
 }
 
 // handleUsersMeAPIKeysUpdate - 用户更新自己的 API Key
@@ -582,43 +571,38 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
 	if ac.Role != apiRoleUser {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can update own api keys")
 		return
 	}
-
 	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
 	if !ok {
 		return
 	}
-
 	var req updateAPIKeyRequest
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
 		return
 	}
-
-	row, err := s.queries.UpdateUserAPIKeySelf(r.Context(), dbgen.UpdateUserAPIKeySelfParams{
+	row, err := s.queries.UpdateAPIKey(r.Context(), dbgen.UpdateAPIKeyParams{
 		TenantID:      ac.TenantID,
-		UserID:        pgtype.Text{String: ac.UserID, Valid: true},
 		ID:            apiKeyID,
 		Name:          req.Name,
 		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
 		AllowedModels: allowedModels,
+		Status:        defaultStatus,
 	})
 	if err != nil {
 		s.logger.Error("update user api key failed", "error", err)
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
-
-	writeOK(w, fromUpdateUserAPIKeySelf(row))
+	s.invalidateAPIKeyCache(r.Context(), row.KeyHash)
+	writeOK(w, apiKeyDTOFromUpdate(row))
 }
 
 // handleUsersMeAPIKeysStatus - 用户更新自己的 API Key 状态
@@ -628,25 +612,20 @@ func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Reque
 		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
 		return
 	}
-
 	if ac.Role != apiRoleUser {
 		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can update own api keys")
 		return
 	}
-
 	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
 	if !ok {
 		return
 	}
-
 	var req updateStatusRequest
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
-	row, err := s.queries.UpdateUserAPIKeyStatusSelf(r.Context(), dbgen.UpdateUserAPIKeyStatusSelfParams{
+	row, err := s.queries.UpdateAPIKeyStatus(r.Context(), dbgen.UpdateAPIKeyStatusParams{
 		TenantID: ac.TenantID,
-		UserID:   pgtype.Text{String: ac.UserID, Valid: true},
 		ID:       apiKeyID,
 		Status:   req.Status,
 	})
@@ -655,8 +634,48 @@ func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Reque
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
+	s.invalidateAPIKeyCache(r.Context(), row.KeyHash)
+	writeOK(w, apiKeyDTOFromUpdateStatus(row))
+}
 
-	writeOK(w, fromUpdateUserAPIKeyStatusSelf(row))
+// handleUsersMeAPIKeysRotate - 用户 Rotate 自己的 API Key
+func (s *Server) handleUsersMeAPIKeysRotate(w http.ResponseWriter, r *http.Request) {
+	ac, ok := apiContextFromContext(r.Context())
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, BizErrMissingCtx, "missing context")
+		return
+	}
+	if ac.Role != apiRoleUser {
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "only user can rotate own api keys")
+		return
+	}
+	apiKeyID, ok := parseAPIUUIDParam(w, r, "apiKeyID")
+	if !ok {
+		return
+	}
+	existing, err := s.queries.GetAPIKeyByID(r.Context(), dbgen.GetAPIKeyByIDParams{
+		ID: apiKeyID, TenantID: ac.TenantID,
+	})
+	if err != nil {
+		writeDBErr(w, err)
+		return
+	}
+	newKey, err := apikey.Generate()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
+		return
+	}
+	row, err := s.queries.RotateAPIKey(r.Context(), dbgen.RotateAPIKeyParams{
+		ID: apiKeyID, TenantID: ac.TenantID,
+		KeyHash:  apikey.Hash(newKey),
+		LastFour: pgtype.Text{String: apikey.LastFour(newKey), Valid: true},
+	})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, BizErrInternal, "rotate failed")
+		return
+	}
+	s.invalidateAPIKeyCache(r.Context(), existing.KeyHash)
+	writeOK(w, rotateAPIKeyResponse{PlaintextKey: newKey, Key: apiKeyDTOFromRotate(row)})
 }
 
 // ============================================================================

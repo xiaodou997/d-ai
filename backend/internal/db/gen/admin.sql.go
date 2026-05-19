@@ -3735,6 +3735,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -3760,24 +3761,7 @@ type UpdateUpstreamDeploymentParams struct {
 	Status             string      `json:"status"`
 }
 
-type UpdateUpstreamDeploymentRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	UpstreamModel      string             `json:"upstream_model"`
-	CapabilityType     string             `json:"capability_type"`
-	UpstreamProtocol   string             `json:"upstream_protocol"`
-	RequestPath        pgtype.Text        `json:"request_path"`
-	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Pricing            []byte             `json:"pricing"`
-	HealthStatus       string             `json:"health_status"`
-	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
-	LastHealthError    pgtype.Text        `json:"last_health_error"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) UpdateUpstreamDeployment(ctx context.Context, arg UpdateUpstreamDeploymentParams) (UpdateUpstreamDeploymentRow, error) {
+func (q *Queries) UpdateUpstreamDeployment(ctx context.Context, arg UpdateUpstreamDeploymentParams) (AiUpstreamDeployment, error) {
 	row := q.db.QueryRow(ctx, updateUpstreamDeployment,
 		arg.ID,
 		arg.UpstreamModel,
@@ -3788,10 +3772,11 @@ func (q *Queries) UpdateUpstreamDeployment(ctx context.Context, arg UpdateUpstre
 		arg.Pricing,
 		arg.Status,
 	)
-	var i UpdateUpstreamDeploymentRow
+	var i AiUpstreamDeployment
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -3818,6 +3803,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -3838,29 +3824,13 @@ type UpdateUpstreamDeploymentHealthParams struct {
 	LastHealthError pgtype.Text `json:"last_health_error"`
 }
 
-type UpdateUpstreamDeploymentHealthRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	UpstreamModel      string             `json:"upstream_model"`
-	CapabilityType     string             `json:"capability_type"`
-	UpstreamProtocol   string             `json:"upstream_protocol"`
-	RequestPath        pgtype.Text        `json:"request_path"`
-	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Pricing            []byte             `json:"pricing"`
-	HealthStatus       string             `json:"health_status"`
-	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
-	LastHealthError    pgtype.Text        `json:"last_health_error"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) UpdateUpstreamDeploymentHealth(ctx context.Context, arg UpdateUpstreamDeploymentHealthParams) (UpdateUpstreamDeploymentHealthRow, error) {
+func (q *Queries) UpdateUpstreamDeploymentHealth(ctx context.Context, arg UpdateUpstreamDeploymentHealthParams) (AiUpstreamDeployment, error) {
 	row := q.db.QueryRow(ctx, updateUpstreamDeploymentHealth, arg.ID, arg.HealthStatus, arg.LastHealthError)
-	var i UpdateUpstreamDeploymentHealthRow
+	var i AiUpstreamDeployment
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,
@@ -3885,6 +3855,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -3904,29 +3875,13 @@ type UpdateUpstreamDeploymentStatusParams struct {
 	Status string      `json:"status"`
 }
 
-type UpdateUpstreamDeploymentStatusRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	EndpointID         pgtype.UUID        `json:"endpoint_id"`
-	UpstreamModel      string             `json:"upstream_model"`
-	CapabilityType     string             `json:"capability_type"`
-	UpstreamProtocol   string             `json:"upstream_protocol"`
-	RequestPath        pgtype.Text        `json:"request_path"`
-	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Pricing            []byte             `json:"pricing"`
-	HealthStatus       string             `json:"health_status"`
-	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
-	LastHealthError    pgtype.Text        `json:"last_health_error"`
-	Status             string             `json:"status"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) UpdateUpstreamDeploymentStatus(ctx context.Context, arg UpdateUpstreamDeploymentStatusParams) (UpdateUpstreamDeploymentStatusRow, error) {
+func (q *Queries) UpdateUpstreamDeploymentStatus(ctx context.Context, arg UpdateUpstreamDeploymentStatusParams) (AiUpstreamDeployment, error) {
 	row := q.db.QueryRow(ctx, updateUpstreamDeploymentStatus, arg.ID, arg.Status)
-	var i UpdateUpstreamDeploymentStatusRow
+	var i AiUpstreamDeployment
 	err := row.Scan(
 		&i.ID,
 		&i.EndpointID,
+		&i.CredentialPoolID,
 		&i.UpstreamModel,
 		&i.CapabilityType,
 		&i.UpstreamProtocol,

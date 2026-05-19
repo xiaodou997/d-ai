@@ -156,7 +156,7 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (GetAPIKe
 
 const getAPIKeyByID = `-- name: GetAPIKeyByID :one
 SELECT
-  id, owner_type, tenant_id, user_id, last_four, name,
+  id, owner_type, tenant_id, user_id, key_hash, last_four, name,
   quota_limit, quota_used, quota_reserved, allowed_models,
   status, expires_at, last_used_at, created_by, created_at, updated_at
 FROM ai_api_keys
@@ -169,33 +169,15 @@ type GetAPIKeyByIDParams struct {
 	TenantID string      `json:"tenant_id"`
 }
 
-type GetAPIKeyByIDRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	OwnerType     string             `json:"owner_type"`
-	TenantID      string             `json:"tenant_id"`
-	UserID        pgtype.Text        `json:"user_id"`
-	LastFour      pgtype.Text        `json:"last_four"`
-	Name          string             `json:"name"`
-	QuotaLimit    pgtype.Int8        `json:"quota_limit"`
-	QuotaUsed     int64              `json:"quota_used"`
-	QuotaReserved int64              `json:"quota_reserved"`
-	AllowedModels []byte             `json:"allowed_models"`
-	Status        string             `json:"status"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt    pgtype.Timestamptz `json:"last_used_at"`
-	CreatedBy     pgtype.Text        `json:"created_by"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (GetAPIKeyByIDRow, error) {
+func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (AiApiKey, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByID, arg.ID, arg.TenantID)
-	var i GetAPIKeyByIDRow
+	var i AiApiKey
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerType,
 		&i.TenantID,
 		&i.UserID,
+		&i.KeyHash,
 		&i.LastFour,
 		&i.Name,
 		&i.QuotaLimit,

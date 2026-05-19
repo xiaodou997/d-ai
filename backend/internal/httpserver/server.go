@@ -16,6 +16,7 @@ import (
 	pgadapter "uni-ai-api/backend/internal/adapters/postgres"
 	redisadapter "uni-ai-api/backend/internal/adapters/redis"
 	urmadapter "uni-ai-api/backend/internal/adapters/urm"
+	"uni-ai-api/backend/internal/apikey"
 	"uni-ai-api/backend/internal/config"
 	dbgen "uni-ai-api/backend/internal/db/gen"
 	"uni-ai-api/backend/internal/domain"
@@ -80,7 +81,8 @@ type Server struct {
 	payloadStore      *pgadapter.PayloadStore // optional; nil when masterKey is empty
 
 	// Serving pipeline — shared across requests (steps are stateless)
-	pipeline *serving.Pipeline
+	pipeline    *serving.Pipeline
+	apiKeyCache *apikey.Cache
 }
 
 func New(cfg Config) *Server {
@@ -153,6 +155,11 @@ func New(cfg Config) *Server {
 		usageLogger.SetPayloadStore(payloadStore)
 	}
 
+	var apiKeyCache *apikey.Cache
+	if cfg.Redis != nil {
+		apiKeyCache = apikey.NewCache(cfg.Redis)
+	}
+
 	s := &Server{
 		postgres:          cfg.Postgres,
 		redis:             cfg.Redis,
@@ -191,6 +198,7 @@ func New(cfg Config) *Server {
 			&serving.URMConfirmStep{Biller: urmBiller},
 			&serving.UsageLogStep{Logger: usageLogger, Metrics: gw},
 		),
+		apiKeyCache: apiKeyCache,
 	}
 
 	router := chi.NewRouter()
@@ -293,10 +301,12 @@ func New(cfg Config) *Server {
 		r.Post("/tenants/{tenantID}/api-keys", s.handleAdminCreateTenantAPIKey)
 		r.Patch("/tenants/{tenantID}/api-keys/{apiKeyID}", s.handleAdminUpdateTenantAPIKey)
 		r.Patch("/tenants/{tenantID}/api-keys/{apiKeyID}/status", s.handleAdminUpdateTenantAPIKeyStatus)
+		r.Post("/tenants/{tenantID}/api-keys/{apiKeyID}/rotate", s.handleAdminRotateTenantAPIKey)
 		r.Get("/tenants/{tenantID}/users/{userID}/api-keys", s.handleAdminListUserAPIKeys)
 		r.Post("/tenants/{tenantID}/users/{userID}/api-keys", s.handleAdminCreateUserAPIKey)
 		r.Patch("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}", s.handleAdminUpdateUserAPIKey)
 		r.Patch("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}/status", s.handleAdminUpdateUserAPIKeyStatus)
+		r.Post("/tenants/{tenantID}/users/{userID}/api-keys/{apiKeyID}/rotate", s.handleAdminRotateUserAPIKey)
 
 		// =============================================================
 		// 租户自管理（/tenants/me/* 路由）
@@ -304,6 +314,7 @@ func New(cfg Config) *Server {
 		r.Post("/tenants/me/api-keys", s.handleTenantsMeAPIKeysCreate)
 		r.Patch("/tenants/me/api-keys/{apiKeyID}", s.handleTenantsMeAPIKeysUpdate)
 		r.Patch("/tenants/me/api-keys/{apiKeyID}/status", s.handleTenantsMeAPIKeysStatus)
+		r.Post("/tenants/me/api-keys/{apiKeyID}/rotate", s.handleTenantsMeAPIKeysRotate)
 		r.Put("/tenants/me/user-prices/{modelID}", s.handleTenantsMeUserPricesUpsert)
 		r.Delete("/tenants/me/user-prices/{modelID}", s.handleTenantsMeUserPricesDelete)
 
@@ -313,6 +324,7 @@ func New(cfg Config) *Server {
 		r.Post("/users/me/api-keys", s.handleUsersMeAPIKeysCreate)
 		r.Patch("/users/me/api-keys/{apiKeyID}", s.handleUsersMeAPIKeysUpdate)
 		r.Patch("/users/me/api-keys/{apiKeyID}/status", s.handleUsersMeAPIKeysStatus)
+		r.Post("/users/me/api-keys/{apiKeyID}/rotate", s.handleUsersMeAPIKeysRotate)
 
 		// =============================================================
 		// 三角色共享（根据 token 自动过滤数据范围）

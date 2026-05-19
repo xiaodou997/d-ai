@@ -32,7 +32,7 @@ ORDER BY created_at DESC;
 
 -- name: GetAPIKeyByID :one
 SELECT
-  id, owner_type, tenant_id, user_id, last_four, name,
+  id, owner_type, tenant_id, user_id, key_hash, last_four, name,
   quota_limit, quota_used, quota_reserved, allowed_models,
   status, expires_at, last_used_at, created_by, created_at, updated_at
 FROM ai_api_keys

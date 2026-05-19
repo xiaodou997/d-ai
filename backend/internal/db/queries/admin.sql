@@ -323,6 +323,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -350,6 +351,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,
@@ -373,6 +375,7 @@ WHERE id = $1
 RETURNING
   id,
   endpoint_id,
+  credential_pool_id,
   upstream_model,
   capability_type,
   upstream_protocol,

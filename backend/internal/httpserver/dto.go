@@ -711,34 +711,44 @@ func fromListTenantModelGrants(rows []dbgen.ListTenantModelGrantsRow) []listTena
 }
 
 // ---------------------------------------------------------------------------
-// API key DTOs (shared shape for tenant and user keys)
+// API key DTOs (unified shape — no plaintext key, last_four for display)
 // ---------------------------------------------------------------------------
 
 type apiKeyDTO struct {
-	ID            pgtype.UUID `json:"id"`
-	OwnerType     string      `json:"owner_type"`
-	TenantID      string      `json:"tenant_id"`
-	UserID        pgtype.Text `json:"user_id"`
-	KeyPrefix     string      `json:"key_prefix"`
-	Name          string      `json:"name"`
-	QuotaLimit    pgtype.Int8 `json:"quota_limit"`
-	QuotaUsed     int64       `json:"quota_used"`
-	QuotaReserved int64       `json:"quota_reserved"`
+	ID            pgtype.UUID     `json:"id"`
+	OwnerType     string          `json:"owner_type"`
+	TenantID      string          `json:"tenant_id"`
+	UserID        pgtype.Text     `json:"user_id"`
+	LastFour      pgtype.Text     `json:"last_four"`
+	Name          string          `json:"name"`
+	QuotaLimit    pgtype.Int8     `json:"quota_limit"`
+	QuotaUsed     int64           `json:"quota_used"`
+	QuotaReserved int64           `json:"quota_reserved"`
 	AllowedModels json.RawMessage `json:"allowed_models"`
-	Status        string      `json:"status"`
-	ExpiresAt     *int64      `json:"expires_at"`
-	CreatedBy     pgtype.Text `json:"created_by"`
-	CreatedAt     *int64      `json:"created_at"`
-	UpdatedAt     *int64      `json:"updated_at"`
+	Status        string          `json:"status"`
+	ExpiresAt     *int64          `json:"expires_at"`
+	CreatedBy     pgtype.Text     `json:"created_by"`
+	CreatedAt     *int64          `json:"created_at"`
+	UpdatedAt     *int64          `json:"updated_at"`
 }
 
-func fromCreateTenantAPIKey(r dbgen.CreateTenantAPIKeyRow) apiKeyDTO {
+type createAPIKeyResponse struct {
+	PlaintextKey string     `json:"plaintext_key"`
+	Key          apiKeyDTO  `json:"key"`
+}
+
+type rotateAPIKeyResponse struct {
+	PlaintextKey string     `json:"plaintext_key"`
+	Key          apiKeyDTO  `json:"key"`
+}
+
+func apiKeyDTOFromCreate(r dbgen.CreateAPIKeyRow) apiKeyDTO {
 	return apiKeyDTO{
 		ID:            r.ID,
 		OwnerType:     r.OwnerType,
 		TenantID:      r.TenantID,
 		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
+		LastFour:      r.LastFour,
 		Name:          r.Name,
 		QuotaLimit:    r.QuotaLimit,
 		QuotaUsed:     r.QuotaUsed,
@@ -752,13 +762,13 @@ func fromCreateTenantAPIKey(r dbgen.CreateTenantAPIKeyRow) apiKeyDTO {
 	}
 }
 
-func fromListTenantAPIKey(r dbgen.ListTenantAPIKeysRow) apiKeyDTO {
+func apiKeyDTOFromList(r dbgen.ListAPIKeysRow) apiKeyDTO {
 	return apiKeyDTO{
 		ID:            r.ID,
 		OwnerType:     r.OwnerType,
 		TenantID:      r.TenantID,
 		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
+		LastFour:      r.LastFour,
 		Name:          r.Name,
 		QuotaLimit:    r.QuotaLimit,
 		QuotaUsed:     r.QuotaUsed,
@@ -772,21 +782,21 @@ func fromListTenantAPIKey(r dbgen.ListTenantAPIKeysRow) apiKeyDTO {
 	}
 }
 
-func fromListTenantAPIKeys(rows []dbgen.ListTenantAPIKeysRow) []apiKeyDTO {
+func apiKeyDTOsFromList(rows []dbgen.ListAPIKeysRow) []apiKeyDTO {
 	out := make([]apiKeyDTO, len(rows))
 	for i, r := range rows {
-		out[i] = fromListTenantAPIKey(r)
+		out[i] = apiKeyDTOFromList(r)
 	}
 	return out
 }
 
-func fromUpdateTenantAPIKey(r dbgen.UpdateTenantAPIKeyRow) apiKeyDTO {
+func apiKeyDTOFromGetByID(r dbgen.AiApiKey) apiKeyDTO {
 	return apiKeyDTO{
 		ID:            r.ID,
 		OwnerType:     r.OwnerType,
 		TenantID:      r.TenantID,
 		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
+		LastFour:      r.LastFour,
 		Name:          r.Name,
 		QuotaLimit:    r.QuotaLimit,
 		QuotaUsed:     r.QuotaUsed,
@@ -800,13 +810,13 @@ func fromUpdateTenantAPIKey(r dbgen.UpdateTenantAPIKeyRow) apiKeyDTO {
 	}
 }
 
-func fromUpdateTenantAPIKeyStatus(r dbgen.UpdateTenantAPIKeyStatusRow) apiKeyDTO {
+func apiKeyDTOFromUpdate(r dbgen.UpdateAPIKeyRow) apiKeyDTO {
 	return apiKeyDTO{
 		ID:            r.ID,
 		OwnerType:     r.OwnerType,
 		TenantID:      r.TenantID,
 		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
+		LastFour:      r.LastFour,
 		Name:          r.Name,
 		QuotaLimit:    r.QuotaLimit,
 		QuotaUsed:     r.QuotaUsed,
@@ -820,13 +830,13 @@ func fromUpdateTenantAPIKeyStatus(r dbgen.UpdateTenantAPIKeyStatusRow) apiKeyDTO
 	}
 }
 
-func fromCreateUserAPIKey(r dbgen.CreateUserAPIKeyRow) apiKeyDTO {
+func apiKeyDTOFromUpdateStatus(r dbgen.UpdateAPIKeyStatusRow) apiKeyDTO {
 	return apiKeyDTO{
 		ID:            r.ID,
 		OwnerType:     r.OwnerType,
 		TenantID:      r.TenantID,
 		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
+		LastFour:      r.LastFour,
 		Name:          r.Name,
 		QuotaLimit:    r.QuotaLimit,
 		QuotaUsed:     r.QuotaUsed,
@@ -840,61 +850,13 @@ func fromCreateUserAPIKey(r dbgen.CreateUserAPIKeyRow) apiKeyDTO {
 	}
 }
 
-func fromListUserAPIKey(r dbgen.ListUserAPIKeysRow) apiKeyDTO {
+func apiKeyDTOFromRotate(r dbgen.RotateAPIKeyRow) apiKeyDTO {
 	return apiKeyDTO{
 		ID:            r.ID,
 		OwnerType:     r.OwnerType,
 		TenantID:      r.TenantID,
 		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromListUserAPIKeys(rows []dbgen.ListUserAPIKeysRow) []apiKeyDTO {
-	out := make([]apiKeyDTO, len(rows))
-	for i, r := range rows {
-		out[i] = fromListUserAPIKey(r)
-	}
-	return out
-}
-
-func fromUpdateUserAPIKey(r dbgen.UpdateUserAPIKeyRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromUpdateUserAPIKeyStatus(r dbgen.UpdateUserAPIKeyStatusRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
+		LastFour:      r.LastFour,
 		Name:          r.Name,
 		QuotaLimit:    r.QuotaLimit,
 		QuotaUsed:     r.QuotaUsed,
@@ -1156,157 +1118,6 @@ func fromAuditLogs(rows []dbgen.ListAuditLogsRow) []auditLogDTO {
 	return out
 }
 
-// ---------------------------------------------------------------------------
-// "Self" API key DTO converters (all map to the shared apiKeyDTO shape)
-// ---------------------------------------------------------------------------
-
-func fromCreateTenantAPIKeySelf(r dbgen.CreateTenantAPIKeySelfRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromUpdateTenantAPIKeySelf(r dbgen.UpdateTenantAPIKeySelfRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromUpdateTenantAPIKeyStatusSelf(r dbgen.UpdateTenantAPIKeyStatusSelfRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromCreateUserAPIKeySelf(r dbgen.CreateUserAPIKeySelfRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromUpdateUserAPIKeySelf(r dbgen.UpdateUserAPIKeySelfRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromUpdateUserAPIKeyStatusSelf(r dbgen.UpdateUserAPIKeyStatusSelfRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromListAllTenantAPIKey(r dbgen.ListAllTenantAPIKeysRow) apiKeyDTO {
-	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		KeyPrefix:     r.KeyPrefix,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
-	}
-}
-
-func fromListAllTenantAPIKeys(rows []dbgen.ListAllTenantAPIKeysRow) []apiKeyDTO {
-	out := make([]apiKeyDTO, len(rows))
-	for i, r := range rows {
-		out[i] = fromListAllTenantAPIKey(r)
-	}
-	return out
-}
 
 // ---------------------------------------------------------------------------
 // User usage logs by tenant/user DTOs

@@ -24,11 +24,11 @@ func Hash(key string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func PrefixForDisplay(key string) string {
-	if len(key) <= 14 {
+func LastFour(key string) string {
+	if len(key) < 4 {
 		return key
 	}
-	return key[:14]
+	return key[len(key)-4:]
 }
 
 func ExtractBearer(authHeader string) (string, error) {
