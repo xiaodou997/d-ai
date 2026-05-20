@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,7 +60,6 @@ type routeRow struct {
 	BaseURL          *string
 	APIKeyCiphertext *string
 	ExtraHeaders     []byte
-	TimeoutMs        int32
 	EndpointWeight   int32
 	ProviderCode     *string
 
@@ -71,6 +71,10 @@ type routeRow struct {
 	// P3 scoring hints
 	CostPer1kTokens      float64
 	ScoreWeightsOverride []byte
+
+	// 三段式超时覆盖值（nullable，NULL=继承下一级）。R*=route 级，M*=model 级。
+	RConnectMs, RFirstByteMs, RIdleMs, RMaxDurMs *int32
+	MConnectMs, MFirstByteMs, MIdleMs, MMaxDurMs *int32
 }
 
 // listRoutesForModel fetches all active routes for a model that are compatible
@@ -102,15 +106,17 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  e.base_url,
 		  e.api_key_ciphertext,
 		  e.extra_headers,
-		  COALESCE(e.timeout_ms, 30000) AS timeout_ms,
 		  COALESCE(e.weight, 100)       AS endpoint_weight,
 		  p.code                       AS provider_code,
 		  cp.id::text                  AS pool_id,
 		  cp.fixed_provider_type,
 		  cp.oauth_strategy,
 		  r.cost_per_1k_tokens,
-		  r.score_weights_override
+		  r.score_weights_override,
+		  r.connect_timeout_ms, r.first_byte_timeout_ms, r.idle_timeout_ms, r.max_duration_ms,
+		  m.connect_timeout_ms, m.first_byte_timeout_ms, m.idle_timeout_ms, m.max_duration_ms
 		FROM ai_model_routes r
+		JOIN ai_models m ON m.id = r.model_id
 		JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
 		LEFT JOIN ai_provider_endpoints e  ON e.id  = ud.endpoint_id
 		LEFT JOIN ai_providers          p  ON p.id  = e.provider_id
@@ -146,9 +152,11 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 			&r.DeploymentID, &r.UpstreamModel, &r.CapabilityType, &r.UpstreamProtocol,
 			&r.RequestPath, &r.UpstreamParameters, &r.Pricing, &r.HealthStatus,
 			&r.EndpointID, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
-			&r.TimeoutMs, &r.EndpointWeight, &r.ProviderCode,
+			&r.EndpointWeight, &r.ProviderCode,
 			&r.PoolID, &r.FixedProviderType, &r.OAuthStrategy,
 			&r.CostPer1kTokens, &r.ScoreWeightsOverride,
+			&r.RConnectMs, &r.RFirstByteMs, &r.RIdleMs, &r.RMaxDurMs,
+			&r.MConnectMs, &r.MFirstByteMs, &r.MIdleMs, &r.MMaxDurMs,
 		); err != nil {
 			return nil, fmt.Errorf("scan route row: %w", err)
 		}
@@ -161,12 +169,13 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 // one according to priority → weighted random selection.
 // It satisfies serving.RouteSelector.
 type RouteSelector struct {
-	q            *dbgen.Queries
-	pool         *pgxpool.Pool
-	masterKey    string
-	grantChecker *ModelGrantChecker
-	health       routing.HealthTracker
-	oauthCreds   *OAuthCredentialStore
+	q               *dbgen.Queries
+	pool            *pgxpool.Pool
+	masterKey       string
+	grantChecker    *ModelGrantChecker
+	health          routing.HealthTracker
+	oauthCreds      *OAuthCredentialStore
+	defaultTimeouts domain.RouteTimeouts // 全局兜底超时（route/model 未配置时使用）
 }
 
 func NewRouteSelector(q *dbgen.Queries, pool *pgxpool.Pool, masterKey string, gc *ModelGrantChecker) *RouteSelector {
@@ -175,6 +184,39 @@ func NewRouteSelector(q *dbgen.Queries, pool *pgxpool.Pool, masterKey string, gc
 		pool:         pool,
 		masterKey:    masterKey,
 		grantChecker: gc,
+		// 均衡档兜底值；正常由 WithDefaultTimeouts 从 config 注入覆盖。
+		defaultTimeouts: domain.RouteTimeouts{
+			Connect:     10 * time.Second,
+			FirstByte:   60 * time.Second,
+			Idle:        60 * time.Second,
+			MaxDuration: 15 * time.Minute,
+		},
+	}
+}
+
+// WithDefaultTimeouts injects the global default 三段式 timeouts (from config).
+// These are the lowest priority in the route > model > global chain.
+func (s *RouteSelector) WithDefaultTimeouts(t domain.RouteTimeouts) *RouteSelector {
+	s.defaultTimeouts = t
+	return s
+}
+
+// resolveTimeouts flattens the route > model > global timeout chain for one row.
+func (s *RouteSelector) resolveTimeouts(row routeRow) domain.RouteTimeouts {
+	pick := func(route, model *int32, global time.Duration) time.Duration {
+		if route != nil {
+			return time.Duration(*route) * time.Millisecond
+		}
+		if model != nil {
+			return time.Duration(*model) * time.Millisecond
+		}
+		return global
+	}
+	return domain.RouteTimeouts{
+		Connect:     pick(row.RConnectMs, row.MConnectMs, s.defaultTimeouts.Connect),
+		FirstByte:   pick(row.RFirstByteMs, row.MFirstByteMs, s.defaultTimeouts.FirstByte),
+		Idle:        pick(row.RIdleMs, row.MIdleMs, s.defaultTimeouts.Idle),
+		MaxDuration: pick(row.RMaxDurMs, row.MMaxDurMs, s.defaultTimeouts.MaxDuration),
 	}
 }
 
@@ -266,6 +308,7 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 			c.ScoreWeightsOverride = m
 		}
 	}
+	c.Timeouts = s.resolveTimeouts(row)
 
 	if row.PoolID != nil {
 		// Pool-based route — cost is 0 (free/OAuth), scorer will use costCapFree.
@@ -278,7 +321,6 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 		c.PoolUpstreamModel = c.UpstreamModel
 		c.BaseURL = domain.FixedProviderBaseURL(c.FixedProviderType)
 		c.Protocol = domain.FixedProviderProtocol(c.FixedProviderType)
-		c.TimeoutMs = 60000
 		return c
 	}
 
@@ -292,7 +334,6 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 	c.EndpointID = row.strVal(row.EndpointID)
 	c.BaseURL = row.strVal(row.BaseURL)
 	c.APIKeyCiphertext = row.strVal(row.APIKeyCiphertext)
-	c.TimeoutMs = int(row.TimeoutMs)
 	c.ProviderCode = row.strVal(row.ProviderCode)
 	c.ExtraHeaders = unmarshalStringMap(row.ExtraHeaders)
 	if len(row.UpstreamParameters) > 0 {

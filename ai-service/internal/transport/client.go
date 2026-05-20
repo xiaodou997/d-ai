@@ -25,8 +25,10 @@ type Client struct {
 // headerTimeout bounds the upstream response-header wait (defaults to 120s).
 // We deliberately do NOT set http.Client.Timeout because that is an absolute
 // deadline covering the entire response body read — fatal for SSE streams,
-// which can legitimately last minutes. Per-request deadlines flow in via
-// UpstreamRequest.Timeout and are applied as ctx.WithTimeout in Do().
+// which can legitimately last minutes. The per-attempt deadline is carried by
+// the caller-supplied context (ExecuteStep.runAttempt wraps it with
+// PerAttemptTimeout); Do does not add — and must not prematurely cancel — its
+// own context.
 func NewClient(headerTimeout time.Duration) *Client {
 	if headerTimeout <= 0 {
 		headerTimeout = 120 * time.Second
@@ -46,6 +48,14 @@ func NewClient(headerTimeout time.Duration) *Client {
 
 // Do executes an upstream HTTP request and returns the response.
 // The caller is responsible for closing resp.Body.
+//
+// The request runs under the caller-supplied ctx, which already carries the
+// per-attempt deadline. Do must NOT wrap it in its own context.WithTimeout:
+// the resulting cancel func would have to fire either via defer (the instant
+// Do returns — before the streaming body is read) or never (a leak). Either
+// way, cancelling the request context makes every resp.Body.Read fail with
+// context.Canceled, truncating SSE streams to whatever the transport had
+// already buffered (~4 KiB, typically the first 1-2 events).
 func (c *Client) Do(ctx context.Context, req *serving.UpstreamRequest) (*serving.UpstreamResponse, error) {
 	url := resolveURL(req)
 
@@ -61,14 +71,6 @@ func (c *Client) Do(ctx context.Context, req *serving.UpstreamRequest) (*serving
 			continue
 		}
 		httpReq.Header.Set(k, v)
-	}
-
-	// Per-request timeout via context deadline
-	if req.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
-		defer cancel()
-		httpReq = httpReq.WithContext(ctx)
 	}
 
 	resp, err := c.http.Do(httpReq)

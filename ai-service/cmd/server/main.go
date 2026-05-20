@@ -103,6 +103,7 @@ func main() {
 	server := httpserver.New(httpserver.Config{
 		Server:        cfg.Server,
 		Security:      cfg.Security,
+		Serving:       cfg.Serving,
 		URM:           urmBillingClient,
 		URMClientID:   cfg.URM.ClientID,
 		JWKSValidator: jwksValidator,

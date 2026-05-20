@@ -40,3 +40,12 @@ urm:
 
 security:
   provider_key_master: 'change-me-local-provider-key-master'
+
+# 请求服务三段式超时全局默认值。route/model 未配置时兜底；可被
+# ai_model_routes / ai_models 表的同名列逐级覆盖（route > model > 全局）。
+serving:
+  timeouts:
+    connect: 10s       # 发出请求 → 收到响应头
+    first_byte: 60s    # 响应头 → 首个 body 字节
+    idle: 60s          # 流式相邻 chunk 间隔
+    max_duration: 15m  # 单次响应总时长上限

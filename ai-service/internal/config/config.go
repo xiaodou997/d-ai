@@ -15,6 +15,22 @@ type Config struct {
 	URM      URMConfig      `mapstructure:"urm"`
 	Security SecurityConfig `mapstructure:"security"`
 	Log      LogConfig      `mapstructure:"log"`
+	Serving  ServingConfig  `mapstructure:"serving"`
+}
+
+// ServingConfig holds request-execution-layer tuning.
+type ServingConfig struct {
+	Timeouts ServingTimeouts `mapstructure:"timeouts"`
+}
+
+// ServingTimeouts are the global default 三段式 timeouts. They sit at the
+// lowest priority of the route > model > global resolution chain — an
+// ai_model_routes or ai_models row may override any individual value.
+type ServingTimeouts struct {
+	Connect     time.Duration `mapstructure:"connect"`      // 发出请求 → 收到响应头
+	FirstByte   time.Duration `mapstructure:"first_byte"`   // 响应头 → 首个 body 字节
+	Idle        time.Duration `mapstructure:"idle"`         // 流式相邻 chunk 间隔
+	MaxDuration time.Duration `mapstructure:"max_duration"` // 单次响应总时长上限
 }
 
 type AppConfig struct {
@@ -69,6 +85,10 @@ func Load() (*Config, error) {
 	v.SetDefault("urm.timeout", "10s")
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.file", "")
+	v.SetDefault("serving.timeouts.connect", "10s")
+	v.SetDefault("serving.timeouts.first_byte", "60s")
+	v.SetDefault("serving.timeouts.idle", "60s")
+	v.SetDefault("serving.timeouts.max_duration", "15m")
 
 	// Config file
 	v.SetConfigName("config")

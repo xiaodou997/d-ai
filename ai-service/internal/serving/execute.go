@@ -7,9 +7,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"go.uber.org/zap"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -59,12 +60,13 @@ type Transporter interface {
 }
 
 // UpstreamRequest contains everything needed to call an upstream endpoint.
+// It carries no timeout: the per-attempt deadline lives on the context passed
+// to Transporter.Do (see runAttempt's attemptCtx).
 type UpstreamRequest struct {
 	Method   string
 	URL      string
 	Headers  map[string]string
 	Body     []byte
-	Timeout  time.Duration
 	Protocol domain.UpstreamProtocol
 }
 
@@ -89,7 +91,7 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 	if budget.MaxAttempts == 0 {
 		budget = DefaultRetryBudget()
 	}
-	deadline := time.Now().Add(budget.TotalTimeout)
+	retryDeadline := time.Now().Add(budget.RetryWindow)
 
 	body, err := s.prepareBody(req)
 	if err != nil {
@@ -101,6 +103,11 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 	for attempt := 1; attempt <= budget.MaxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return apiError(http.StatusGatewayTimeout, "client_disconnected", err.Error())
+		}
+		if attempt > 1 && time.Now().After(retryDeadline) {
+			lastErr = apiError(http.StatusGatewayTimeout, "retry_window_exhausted",
+				"retry window exhausted before any route produced a response")
+			break
 		}
 
 		cand, score := s.pickCandidate(ctx, req)
@@ -146,13 +153,7 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 			req.UpstreamBodySize = len(body)
 		}
 
-		perTimeout := budget.PerAttemptTimeout(deadline, cand.TimeoutMs)
-		if perTimeout <= 0 {
-			lastErr = apiError(http.StatusGatewayTimeout, "retry_budget_exhausted", "no time remaining for upstream call")
-			break
-		}
-
-		result := s.runAttempt(ctx, req, cand, body, perTimeout, score)
+		result := s.runAttempt(ctx, req, cand, body, score)
 		if result.finished {
 			return result.finalErr
 		}
@@ -187,13 +188,38 @@ type attemptResult struct {
 	finalErr error    // success error (nil) when finished, otherwise lastErr to remember
 }
 
-// runAttempt executes one upstream call and handles the response. It owns the
-// per-attempt timeout context (defer cancel) so the Execute loop never leaks
-// a context. For the accept case the relay finishes BEFORE this function
-// returns, so cancel firing afterward is safe.
-func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *domain.RouteCandidate, body []byte, perTimeout time.Duration, score float64) attemptResult {
-	attemptCtx, cancel := context.WithTimeout(parentCtx, perTimeout)
-	defer cancel()
+// precommitError marks an upstream attempt that failed AFTER 2xx response
+// headers but BEFORE any byte was committed to the client (empty stream,
+// 200-with-error-body, first SSE frame was an error, or a first-byte timeout).
+// Because nothing was written downstream, the execute loop can still fail over
+// to another route.
+type precommitError struct {
+	cause      error
+	httpStatus int // upstream HTTP status (usually 200)
+	message    string
+}
+
+func (e *precommitError) Error() string { return e.message }
+func (e *precommitError) Unwrap() error { return e.cause }
+
+// postcommitError marks a streaming attempt that broke AFTER 200 OK was
+// committed to the client (idle timeout, max-duration, mid-stream upstream
+// drop). No failover is possible; the client has already been sent a
+// protocol-level error frame. It is reported to the breaker as a failure.
+type postcommitError struct {
+	code    string
+	message string
+}
+
+func (e *postcommitError) Error() string { return e.message }
+
+// runAttempt executes one upstream call and handles the response. It owns a
+// deadlineController (defer stop) whose context is bound to the HTTP request,
+// so the connect / first-byte / idle / max-duration timeouts each cancel the
+// in-flight call cleanly. The relay finishes BEFORE this function returns.
+func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *domain.RouteCandidate, body []byte, score float64) attemptResult {
+	dc := newDeadlineController(parentCtx, cand.Timeouts)
+	defer dc.stop()
 
 	// P3: track inflight count; always decrement even on error.
 	if s.Stats != nil {
@@ -215,17 +241,24 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		zap.String("body", string(body)),
 	)
 	startTime := time.Now()
-	upResp, callErr := s.Transport.Do(attemptCtx, &UpstreamRequest{
+	upResp, callErr := s.Transport.Do(dc.ctx, &UpstreamRequest{
 		Method:   "POST",
 		URL:      upstreamURL,
 		Headers:  buildHeaders(cand, req),
 		Body:     body,
-		Timeout:  perTimeout,
 		Protocol: cand.Protocol,
 	})
+	defer drainAndClose(upResp)
 	latencyMs := int(time.Since(startTime).Milliseconds())
+	if callErr == nil {
+		dc.headersReceived() // connect phase done → first-byte phase
+	} else if cause := dc.cause(); cause != nil {
+		// A phase timeout cancelled the request — surface the precise cause so
+		// the classifier logs "timeout" rather than a generic transport error.
+		callErr = cause
+	}
 
-	// P3: record latency for EWMA update (only on completed calls, not context cancellations).
+	// P3: record latency for EWMA update (only on completed calls).
 	if s.Stats != nil && callErr == nil {
 		s.Stats.RecordLatency(parentCtx, cand.RouteID, latencyMs)
 	}
@@ -238,26 +271,58 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	req.UpstreamStatus = status
 	req.LatencyMs = latencyMs
 	s.recordAttempt(req, cand, outcome, latencyMs, score)
-	s.notifyHealth(parentCtx, req, cand, outcome)
 
-	// Pre-read error body once (consumed by DecisionRetry/GiveUp branches below) and
-	// emit a single structured error log carrying full upstream context. Without
-	// this, transport failures and upstream 4xx/5xx leave NO trace in app logs.
+	// Pre-read error body once (consumed by DecisionRetry/GiveUp branches below)
+	// and emit a single structured error log. Health for non-success outcomes
+	// is notified here; the 2xx/Accept outcome is notified AFTER relay, once we
+	// know whether the response actually committed.
 	var errBody string
 	if outcome.Status != ResultSuccess {
 		if callErr == nil && upResp != nil {
 			errBody = snippetBody(upResp)
 		}
 		logUpstreamFailure(parentCtx, req, cand, upstreamURL, status, latencyMs, callErr, errBody)
+		s.notifyHealth(parentCtx, req, cand, outcome)
 	}
 
 	switch outcome.Decision(req.SelectedCredential != nil) {
 	case DecisionAccept:
-		err := s.relay(attemptCtx, req, upResp, startTime)
-		if err == nil {
+		err := s.relay(dc, req, upResp, startTime)
+		var pre *precommitError
+		switch {
+		case err == nil:
+			// Downstream write failures are terminal for this request but are
+			// not upstream successes; do not reward the route or persist sticky.
+			if req.RequestStatus == domain.RequestFailed && req.ErrorCode == "stream_write_error" {
+				return attemptResult{finished: true, finalErr: nil}
+			}
+			// Upstream succeeded AND the response committed cleanly.
+			s.notifyHealth(parentCtx, req, cand, outcome)
 			s.writeSticky(parentCtx, req, cand)
+			return attemptResult{finished: true, finalErr: nil}
+
+		case errors.As(err, &pre):
+			// 2xx headers but no usable response. Nothing was written
+			// downstream, so fail over — and count it against the breaker so a
+			// deployment serving garbage gets isolated.
+			drainAndClose(upResp)
+			markAttemptFailed(req, pre.message)
+			s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: pre.httpStatus})
+			logUpstreamFailure(parentCtx, req, cand, upstreamURL, pre.httpStatus, latencyMs, pre.cause, pre.message)
+			req.UsedCandidates[cand.RouteID] = true
+			return attemptResult{
+				decision: DecisionRetry,
+				finalErr: apiError(http.StatusBadGateway, "upstream_error", pre.message),
+			}
+
+		default:
+			// postcommitError — the stream broke after 200 OK was committed.
+			// The client already received a protocol error frame; this is
+			// terminal but still a breaker failure for the deployment.
+			markAttemptFailed(req, err.Error())
+			s.notifyHealth(parentCtx, req, cand, Outcome{Status: ResultServerError, HTTPStatus: http.StatusOK})
+			return attemptResult{finished: true, finalErr: nil}
 		}
-		return attemptResult{finished: true, finalErr: err}
 
 	case DecisionRetryNewCred:
 		drainAndClose(upResp)
@@ -295,6 +360,22 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	default:
 		drainAndClose(upResp)
 		return attemptResult{decision: DecisionRetry}
+	}
+}
+
+// isPrecommitError reports whether err is a *precommitError.
+func isPrecommitError(err error) bool {
+	var pre *precommitError
+	return errors.As(err, &pre)
+}
+
+// markAttemptFailed flips the most recent AttemptRecord to a failure outcome so
+// X-Route-Trace and logs reflect what actually happened (the record is written
+// optimistically right after 2xx headers, before the relay result is known).
+func markAttemptFailed(req *Request, msg string) {
+	if n := len(req.Attempts); n > 0 {
+		req.Attempts[n-1].Outcome = ResultServerError
+		req.Attempts[n-1].ErrorMsg = msg
 	}
 }
 
@@ -345,11 +426,11 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 }
 
 // relay dispatches to sync or streaming relay based on req.IsStream.
-func (s *ExecuteStep) relay(ctx context.Context, req *Request, upResp *UpstreamResponse, startTime time.Time) error {
+func (s *ExecuteStep) relay(dc *deadlineController, req *Request, upResp *UpstreamResponse, startTime time.Time) error {
 	if req.IsStream {
-		return s.executeStream(ctx, req, upResp, req.Envelope.W, startTime)
+		return s.executeStream(dc, req, upResp, req.Envelope.W, startTime)
 	}
-	return s.executeSync(ctx, req, upResp, req.Envelope.W)
+	return s.executeSync(dc, req, upResp, req.Envelope.W)
 }
 
 // recordAttempt appends a structured trace record for this attempt.
@@ -548,14 +629,33 @@ func drainAndClose(resp *UpstreamResponse) {
 // the client receives a vanilla Gemini response.
 // ============================================================================
 
-func (s *ExecuteStep) executeSync(_ context.Context, req *Request, resp *UpstreamResponse, w http.ResponseWriter) error {
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024)) // 32MB cap
+func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *UpstreamResponse, w http.ResponseWriter) error {
+	bodyReader := &syncBodyReader{r: resp.Body, onFirstByte: dc.syncBodyPhase}
+	bodyBytes, err := io.ReadAll(io.LimitReader(bodyReader, 32*1024*1024)) // 32MB cap
 	if err != nil {
-		return fmt.Errorf("read upstream body: %w", err)
+		if cause := dc.cause(); cause != nil {
+			err = cause
+		}
+		// Body read failed before anything was written downstream — retryable.
+		return &precommitError{
+			cause:      err,
+			httpStatus: resp.StatusCode,
+			message:    "read upstream body: " + err.Error(),
+		}
 	}
 	req.UpstreamResponseBody = bodyBytes
 
 	bodyBytes = unwrapCodeAssistResponse(req.Candidate, bodyBytes)
+
+	// A 200 whose body is actually an error object is a failed attempt — fail
+	// over to another route instead of relaying a broken success.
+	if resp.StatusCode == http.StatusOK && payloadIsError(bodyBytes) {
+		return &precommitError{
+			cause:      errUpstreamErrorBody,
+			httpStatus: http.StatusOK,
+			message:    "upstream returned 200 with an error body: " + truncateValidUTF8(string(bytes.TrimSpace(bodyBytes)), 256),
+		}
+	}
 
 	// Side-channel: usage for billing. ExtractSyncUsage returns a zero value
 	// when upstream did not report tokens; fillEstimatedUsage then falls back
@@ -585,173 +685,343 @@ func (s *ExecuteStep) executeSync(_ context.Context, req *Request, resp *Upstrea
 	return nil
 }
 
+// syncBodyReader keeps the first-byte timer active until a non-streaming
+// response actually yields body bytes, then switches the attempt to the
+// max-duration body-read bound.
+type syncBodyReader struct {
+	r           io.Reader
+	onFirstByte func()
+	seen        bool
+}
+
+func (r *syncBodyReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 && !r.seen {
+		r.seen = true
+		r.onFirstByte()
+	}
+	return n, err
+}
+
 // ============================================================================
-// Streaming execution — strict 1:1 line-level passthrough.
+// Streaming execution — delayed-commit, line-level 1:1 passthrough.
 //
-// Each SSE line from the upstream is forwarded to the client verbatim, with
-// two exceptions:
-//   - data: lines for gemini_cli / antigravity have the CodeAssist
-//     {"response": {...}} envelope stripped before forwarding.
-//   - Usage frames are inspected (not modified) to update the running token
-//     counters used for billing and first-token latency tracking.
+// Phase 3 (确认): buffer leading event:/comment lines and read until the first
+// usable `data:` frame. If the upstream produced nothing usable — empty
+// stream, 200-with-error-body, or an error as the first frame — the relay
+// returns a *precommitError and the execute loop fails over to another route
+// WITHOUT having written anything to the client.
+//
+// Phase 4 (传输): once the first frame is confirmed the gateway commits 200 OK
+// and forwards every subsequent SSE line verbatim (data: lines for
+// gemini_cli / antigravity have the CodeAssist envelope stripped; usage frames
+// are inspected for billing). A mid-stream failure after this point can no
+// longer fail over, so the client is sent a protocol-level error frame.
 // ============================================================================
 
-func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *UpstreamResponse, w http.ResponseWriter, startTime time.Time) error {
+// maxSSELineBytes is a defensive OOM ceiling, NOT a functional cap: a single
+// SSE data frame may legitimately inline a multi-megabyte base64 image (4K
+// images in particular). It only guards against a pathological upstream that
+// never emits a newline.
+const maxSSELineBytes = 256 * 1024 * 1024
+
+// maxPreambleBytes caps the leading non-data lines buffered before the first
+// data frame — a well-behaved upstream sends only a few small event: lines.
+const maxPreambleBytes = 1 << 20
+
+var (
+	errStreamNoFlusher   = errors.New("response writer does not support streaming")
+	errUpstreamErrorBody = errors.New("upstream returned an error body")
+	errUpstreamEmpty     = errors.New("upstream returned an empty stream")
+	errSSELineTooLong    = errors.New("sse frame exceeds the 256MiB safety ceiling")
+)
+
+func (s *ExecuteStep) executeStream(dc *deadlineController, req *Request, resp *UpstreamResponse, w http.ResponseWriter, startTime time.Time) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return fmt.Errorf("response writer does not support streaming")
+		return &precommitError{cause: errStreamNoFlusher, message: errStreamNoFlusher.Error()}
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
-	req.HTTPStatus = http.StatusOK
+	protocol := req.Candidate.Protocol
+	reader := bufio.NewReaderSize(resp.Body, 64*1024)
+	dataPrefix := []byte("data: ")
+	eventPrefix := []byte("event: ")
+	donePayload := []byte("[DONE]")
 
+	// ---- Phase 3 确认：缓冲前导行，读到首个有效 data 帧才提交 ----
+	var (
+		preamble  []byte
+		eventType string
+		firstData []byte
+		awaitErr  error
+	)
+awaitLoop:
+	for {
+		line, readErr := readSSELine(reader, maxSSELineBytes)
+		trimmed := trimEOL(line)
+		switch {
+		case bytes.HasPrefix(trimmed, dataPrefix):
+			firstData = line
+			awaitErr = readErr
+			break awaitLoop
+		case bytes.HasPrefix(trimmed, eventPrefix):
+			eventType = string(bytes.TrimPrefix(trimmed, eventPrefix))
+			preamble = append(preamble, line...)
+		default:
+			// blank line / comment / non-SSE bytes — buffer it
+			preamble = append(preamble, line...)
+		}
+		if len(preamble) > maxPreambleBytes {
+			return &precommitError{
+				cause:      errUpstreamErrorBody,
+				httpStatus: resp.StatusCode,
+				message:    "upstream sent an oversized preamble without a data frame",
+			}
+		}
+		if readErr != nil {
+			awaitErr = readErr
+			break awaitLoop
+		}
+	}
+
+	// No data frame at all — the upstream produced nothing usable. Fail over.
+	if firstData == nil {
+		if cause := dc.cause(); cause != nil {
+			awaitErr = cause
+		}
+		return precommitFromNoFrame(resp.StatusCode, preamble, awaitErr)
+	}
+
+	// The first data frame itself is an error event. Fail over.
+	firstPayload := trimEOL(firstData)[len(dataPrefix):]
+	if !bytes.Equal(firstPayload, donePayload) && (eventType == "error" || payloadIsError(firstPayload)) {
+		return &precommitError{
+			cause:      errUpstreamErrorBody,
+			httpStatus: resp.StatusCode,
+			message:    "upstream streamed an error before any content: " + truncateValidUTF8(string(firstPayload), 256),
+		}
+	}
+
+	// ---- commit：从这里起响应不可逆 ----
+	hdr := w.Header()
+	hdr.Set("Content-Type", "text/event-stream")
+	hdr.Set("Cache-Control", "no-cache")
+	hdr.Set("Connection", "keep-alive")
+	hdr.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	req.HTTPStatus = http.StatusOK
+	dc.firstByte()
+	req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+	if n := len(req.Attempts); n > 0 {
+		req.Attempts[n-1].FirstByteMs = req.FirstTokenMs
+	}
 	zap.L().Info("stream started",
 		zap.String("request_id", req.RequestID),
 		zap.String("model_code", req.ModelCode),
 		zap.String("upstream_model", req.Candidate.UpstreamModel),
 		zap.String("provider_code", req.Candidate.ProviderCode),
-		zap.String("endpoint_id", req.Candidate.EndpointID),
 		zap.String("route_id", req.Candidate.RouteID),
+		zap.Int("first_byte_ms", req.FirstTokenMs),
 	)
 
-	protocol := req.Candidate.Protocol
-	firstToken := false
-
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
-
-	var eventType string // tracks the most recent SSE `event:` line for Anthropic
-	var accumulatedOutputBytes int
-	dataPrefix := []byte("data: ")
-	eventPrefix := []byte("event: ")
-	donePayload := []byte("[DONE]")
-
-	writeLine := func(line []byte) error {
-		if _, err := w.Write(line); err != nil {
+	accumulatedOutputBytes := 0
+	// forward writes one already-framed SSE line to the client, stripping the
+	// CodeAssist envelope on data lines and side-extracting usage for billing.
+	forward := func(line []byte, evt string) error {
+		trimmed := trimEOL(line)
+		if !bytes.HasPrefix(trimmed, dataPrefix) {
+			_, err := w.Write(line) // blank line / comment — verbatim
 			return err
 		}
-		if _, err := w.Write([]byte{'\n'}); err != nil {
+		data := trimmed[len(dataPrefix):]
+		if bytes.Equal(data, donePayload) {
+			_, err := w.Write(line)
 			return err
+		}
+		unwrapped := unwrapCodeAssistResponse(req.Candidate, data)
+		if bytes.Equal(unwrapped, data) {
+			if _, err := w.Write(line); err != nil {
+				return err
+			}
+		} else {
+			out := append(append([]byte(nil), dataPrefix...), unwrapped...)
+			out = append(out, '\n')
+			if _, err := w.Write(out); err != nil {
+				return err
+			}
+		}
+		if u, ok := formats.ExtractStreamUsage(req.TokenUsage, unwrapped, evt, protocol); ok {
+			u.ImageCount = req.TokenUsage.ImageCount
+			u.ImageResolution = req.TokenUsage.ImageResolution
+			u.VideoSeconds = req.TokenUsage.VideoSeconds
+			u.VideoResolution = req.TokenUsage.VideoResolution
+			req.TokenUsage = u
+			accumulatedOutputBytes = 0
+		} else {
+			accumulatedOutputBytes += len(unwrapped)
 		}
 		return nil
 	}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		// Take a local copy because scanner.Bytes() is invalidated on the next
-		// scan and we use the slice past the write call.
-		lineCopy := append([]byte(nil), line...)
-		zap.L().Debug("upstream sse line", zap.String("request_id", req.RequestID), zap.String("line", string(lineCopy)))
+	// Forward the buffered preamble + the confirmed first data frame.
+	if len(preamble) > 0 {
+		if _, err := w.Write(preamble); err != nil {
+			return streamClientWriteError(req, err)
+		}
+	}
+	if err := forward(firstData, eventType); err != nil {
+		return streamClientWriteError(req, err)
+	}
+	flusher.Flush()
+	eventType = ""
 
-		switch {
-		case len(lineCopy) == 0:
-			// Blank line is the SSE event terminator — forward verbatim.
-			if err := writeLine(lineCopy); err != nil {
-				return streamClientWriteError(req, err)
-			}
-			flusher.Flush()
-			continue
+	if awaitErr != nil {
+		return finishStream(req, startTime, accumulatedOutputBytes, awaitErr, dc, w, flusher)
+	}
 
-		case bytes.HasPrefix(lineCopy, eventPrefix):
-			eventType = string(bytes.TrimPrefix(lineCopy, eventPrefix))
-			if err := writeLine(lineCopy); err != nil {
-				return streamClientWriteError(req, err)
-			}
-			continue
-
-		case bytes.HasPrefix(lineCopy, dataPrefix):
-			data := lineCopy[len(dataPrefix):]
-
-			if bytes.Equal(data, donePayload) {
-				if err := writeLine(lineCopy); err != nil {
+	// ---- Phase 4 传输 ----
+	for {
+		line, readErr := readSSELine(reader, maxSSELineBytes)
+		if len(line) > 0 {
+			dc.chunkReceived()
+			trimmed := trimEOL(line)
+			if bytes.HasPrefix(trimmed, eventPrefix) {
+				eventType = string(bytes.TrimPrefix(trimmed, eventPrefix))
+				if _, err := w.Write(line); err != nil {
+					return streamClientWriteError(req, err)
+				}
+			} else {
+				if err := forward(line, eventType); err != nil {
 					return streamClientWriteError(req, err)
 				}
 				flusher.Flush()
 				eventType = ""
-				continue
 			}
-
-			// Strip the CodeAssist response envelope so the client sees a
-			// vanilla Gemini chunk. unwrapCodeAssistResponse is a no-op for
-			// non-CodeAssist providers.
-			dataUnwrapped := unwrapCodeAssistResponse(req.Candidate, data)
-			payloadForClient := dataUnwrapped
-			if bytes.Equal(dataUnwrapped, data) {
-				// Fast path: nothing changed — forward original framing.
-				if err := writeLine(lineCopy); err != nil {
-					return streamClientWriteError(req, err)
-				}
-			} else {
-				out := make([]byte, 0, len(dataPrefix)+len(dataUnwrapped))
-				out = append(out, dataPrefix...)
-				out = append(out, dataUnwrapped...)
-				if err := writeLine(out); err != nil {
-					return streamClientWriteError(req, err)
-				}
-			}
-			flusher.Flush()
-
-			// First-token latency: any non-empty data payload counts.
-			if !firstToken {
-				req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
-				firstToken = true
-			}
-
-			// Side-extract usage. ExtractStreamUsage merges into the running
-			// counters; output_tokens are cumulative per provider semantics.
-			if u, ok := formats.ExtractStreamUsage(req.TokenUsage, payloadForClient, eventType, protocol); ok {
-				u.ImageCount = req.TokenUsage.ImageCount
-				u.ImageResolution = req.TokenUsage.ImageResolution
-				u.VideoSeconds = req.TokenUsage.VideoSeconds
-				u.VideoResolution = req.TokenUsage.VideoResolution
-				req.TokenUsage = u
-				accumulatedOutputBytes = 0
-			} else {
-				accumulatedOutputBytes += len(payloadForClient)
-			}
-			eventType = ""
-
-		default:
-			// Comment / unknown SSE line — forward verbatim, clear pending event.
-			if err := writeLine(lineCopy); err != nil {
-				return streamClientWriteError(req, err)
-			}
-			eventType = ""
+		}
+		if readErr != nil {
+			return finishStream(req, startTime, accumulatedOutputBytes, readErr, dc, w, flusher)
 		}
 	}
+}
 
-	if err := scanner.Err(); err != nil && err != io.EOF {
-		req.RequestStatus = domain.RequestFailed
-		req.ErrorCode = "stream_read_error"
-		req.ErrorMessage = err.Error()
+// finishStream handles the end of a committed stream. io.EOF is a clean
+// finish; anything else is a post-commit failure that earns a protocol-shaped
+// error frame so the client is not left with a silent truncation.
+func finishStream(req *Request, startTime time.Time, accumulatedOutputBytes int, readErr error, dc *deadlineController, w http.ResponseWriter, flusher http.Flusher) error {
+	fillEstimatedUsage(req, accumulatedOutputBytes)
+
+	if readErr == io.EOF {
+		req.RequestStatus = domain.RequestSuccess
+		req.HTTPStatus = http.StatusOK
+		zap.L().Info("stream finished",
+			zap.String("request_id", req.RequestID),
+			zap.String("model_code", req.ModelCode),
+			zap.Int("first_token_ms", req.FirstTokenMs),
+			zap.Int("total_ms", int(time.Since(startTime).Milliseconds())),
+			zap.Int("prompt_tokens", req.TokenUsage.PromptTokens),
+			zap.Int("completion_tokens", req.TokenUsage.CompletionTokens),
+		)
 		return nil
 	}
 
-	fillEstimatedUsage(req, accumulatedOutputBytes)
-	req.RequestStatus = domain.RequestSuccess
+	// Post-commit failure — 200 OK is already sent and the body is partial.
+	code, msg := streamFailureReason(dc, readErr)
+	req.RequestStatus = domain.RequestFailed
 	req.HTTPStatus = http.StatusOK
-
-	zap.L().Info("stream finished",
+	req.ErrorCode = code
+	req.ErrorMessage = msg
+	if _, werr := w.Write(formats.StreamErrorFrame(req.ClientProtocol, code, msg)); werr == nil {
+		flusher.Flush()
+	}
+	zap.L().Warn("stream aborted after commit",
 		zap.String("request_id", req.RequestID),
-		zap.String("model_code", req.ModelCode),
-		zap.String("upstream_model", req.Candidate.UpstreamModel),
-		zap.String("provider_code", req.Candidate.ProviderCode),
-		zap.Int("first_token_ms", req.FirstTokenMs),
+		zap.String("error_code", code),
+		zap.String("error", msg),
 		zap.Int("total_ms", int(time.Since(startTime).Milliseconds())),
-		zap.Int("prompt_tokens", req.TokenUsage.PromptTokens),
-		zap.Int("completion_tokens", req.TokenUsage.CompletionTokens),
 	)
-	return nil
+	return &postcommitError{code: code, message: msg}
+}
+
+// streamFailureReason maps a post-commit read failure to an error code/message.
+func streamFailureReason(dc *deadlineController, readErr error) (string, string) {
+	switch dc.cause() {
+	case ErrIdleTimeout:
+		return "stream_idle_timeout", "upstream stream stalled and was terminated by the gateway"
+	case ErrMaxDuration:
+		return "stream_max_duration", "upstream stream exceeded the maximum allowed duration"
+	}
+	if errors.Is(readErr, errSSELineTooLong) {
+		return "stream_frame_too_large", "an upstream stream frame exceeded the gateway size limit"
+	}
+	return "stream_read_error", "the gateway lost the connection to the upstream mid-stream: " + readErr.Error()
+}
+
+// precommitFromNoFrame builds a precommitError for an upstream stream that
+// ended before producing a single data frame.
+func precommitFromNoFrame(status int, preamble []byte, readErr error) *precommitError {
+	if payloadIsError(preamble) {
+		return &precommitError{
+			cause:      errUpstreamErrorBody,
+			httpStatus: status,
+			message:    "upstream returned a non-SSE error body: " + truncateValidUTF8(string(bytes.TrimSpace(preamble)), 256),
+		}
+	}
+	cause := errUpstreamEmpty
+	if readErr != nil && readErr != io.EOF {
+		cause = readErr
+	}
+	return &precommitError{
+		cause:      cause,
+		httpStatus: status,
+		message:    "upstream produced no stream content: " + cause.Error(),
+	}
+}
+
+// readSSELine reads one line including its trailing '\n'. Unlike bufio.Scanner
+// it has no fixed line-length limit (an SSE data frame may inline a
+// multi-megabyte image); maxBytes is only the defensive OOM ceiling.
+func readSSELine(r *bufio.Reader, maxBytes int) ([]byte, error) {
+	var line []byte
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if len(line)+len(chunk) > maxBytes {
+			return line, errSSELineTooLong
+		}
+		line = append(line, chunk...)
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		return line, err
+	}
+}
+
+// trimEOL strips a trailing \n or \r\n.
+func trimEOL(line []byte) []byte {
+	return bytes.TrimSuffix(bytes.TrimSuffix(line, []byte("\n")), []byte("\r"))
+}
+
+// payloadIsError reports whether a JSON payload is an error object. It
+// recognises the OpenAI/Gemini `{"error":{...}}` shape and the Anthropic
+// `{"type":"error",...}` shape.
+func payloadIsError(data []byte) bool {
+	t := bytes.TrimSpace(data)
+	if len(t) == 0 || t[0] != '{' {
+		return false
+	}
+	var probe struct {
+		Error json.RawMessage `json:"error"`
+		Type  string          `json:"type"`
+	}
+	if json.Unmarshal(t, &probe) != nil {
+		return false
+	}
+	return len(probe.Error) > 0 || probe.Type == "error"
 }
 
 // streamClientWriteError marks the request as failed when the client socket
 // breaks mid-stream and returns nil so the pipeline does not treat this as a
-// pipeline-level error (response is already committed).
+// pipeline-level error (the response is already committed, and the upstream
+// itself was healthy).
 func streamClientWriteError(req *Request, err error) error {
 	req.RequestStatus = domain.RequestFailed
 	req.ErrorCode = "stream_write_error"
@@ -1034,4 +1304,3 @@ func truncateValidUTF8(s string, maxBytes int) string {
 	}
 	return s[:maxBytes]
 }
-

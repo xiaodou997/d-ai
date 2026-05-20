@@ -162,7 +162,7 @@ type RouteCandidate struct {
 	BaseURL            string
 	APIKeyCiphertext   string // decrypted; empty for pool routes
 	ExtraHeaders       map[string]string
-	TimeoutMs          int
+	Timeouts           RouteTimeouts // 三段式超时，已按 route>model>global 解析完毕
 	ProviderCode       string
 
 	// Pool-based route fields (OAuth Fixed Provider)
@@ -217,6 +217,17 @@ type ResolutionPrice struct {
 
 // IsPoolRoute returns true when this route targets a CredentialPool (OAuth Fixed Provider).
 func (r *RouteCandidate) IsPoolRoute() bool { return r.PoolID != "" }
+
+// RouteTimeouts is the resolved 三段式 timeout budget for one route, already
+// flattened through the route > model > global config chain. All four values
+// are concrete (no zero/nil "inherit" sentinels) by the time a RouteCandidate
+// carries them.
+type RouteTimeouts struct {
+	Connect     time.Duration // 发出请求 → 收到响应头
+	FirstByte   time.Duration // 响应头 → 首个 body 字节
+	Idle        time.Duration // 流式相邻 chunk 间隔
+	MaxDuration time.Duration // 单次响应总时长上限
+}
 
 // ============================================================================
 // OAuth credentials

@@ -10,11 +10,12 @@ import (
 
 // TraceAttempt is one upstream call in the X-Route-Trace payload.
 type TraceAttempt struct {
-	RouteID   string  `json:"route_id"`
-	Score     float64 `json:"score,omitempty"`
-	Outcome   string  `json:"outcome"`
-	HTTP      int     `json:"http,omitempty"`
-	LatencyMs int     `json:"latency_ms"`
+	RouteID     string  `json:"route_id"`
+	Score       float64 `json:"score,omitempty"`
+	Outcome     string  `json:"outcome"`
+	HTTP        int     `json:"http,omitempty"`
+	LatencyMs   int     `json:"latency_ms"`
+	FirstByteMs int     `json:"first_byte_ms,omitempty"`
 }
 
 // TracePayload is the full X-Route-Trace JSON body (base64-encoded in the header).
@@ -35,11 +36,12 @@ func BuildTrace(req *serving.Request) *TracePayload {
 	attempts := make([]TraceAttempt, 0, len(req.Attempts))
 	for _, a := range req.Attempts {
 		attempts = append(attempts, TraceAttempt{
-			RouteID:   a.RouteID,
-			Score:     a.Score,
-			Outcome:   a.Outcome.String(),
-			HTTP:      a.HTTPStatus,
-			LatencyMs: a.LatencyMs,
+			RouteID:     a.RouteID,
+			Score:       a.Score,
+			Outcome:     a.Outcome.String(),
+			HTTP:        a.HTTPStatus,
+			LatencyMs:   a.LatencyMs,
+			FirstByteMs: a.FirstByteMs,
 		})
 	}
 	return &TracePayload{

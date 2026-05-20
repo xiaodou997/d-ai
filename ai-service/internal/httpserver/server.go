@@ -36,6 +36,7 @@ import (
 type Config struct {
 	Server        config.ServerConfig
 	Security      config.SecurityConfig
+	Serving       config.ServingConfig
 	URM           urmClient
 	URMClientID   string
 	JWKSValidator jwksValidator
@@ -92,7 +93,13 @@ func New(cfg Config) *Server {
 	grantChecker := pgadapter.NewModelGrantChecker(q)
 	oauthCreds := pgadapter.NewOAuthCredentialStore(cfg.Postgres, cfg.Security.ProviderKeyMaster)
 	routeSelector := pgadapter.NewRouteSelector(q, cfg.Postgres, cfg.Security.ProviderKeyMaster, grantChecker).
-		WithOAuthCredentialStore(oauthCreds)
+		WithOAuthCredentialStore(oauthCreds).
+		WithDefaultTimeouts(domain.RouteTimeouts{
+			Connect:     cfg.Serving.Timeouts.Connect,
+			FirstByte:   cfg.Serving.Timeouts.FirstByte,
+			Idle:        cfg.Serving.Timeouts.Idle,
+			MaxDuration: cfg.Serving.Timeouts.MaxDuration,
+		})
 
 	// Build the shared HealthTracker. With Redis: multi-node sync via Pub/Sub.
 	// Without Redis: single-node in-memory only.

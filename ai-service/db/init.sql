@@ -188,6 +188,11 @@ CREATE TABLE IF NOT EXISTS ai_models (
   context_window            INTEGER,
   default_max_output_tokens INTEGER     NOT NULL DEFAULT 2048,
   max_output_tokens         INTEGER,
+  -- 请求服务三段式超时（model 级覆盖；NULL=继承全局 config）。解析优先级 route > model > 全局。
+  connect_timeout_ms        INTEGER     CHECK (connect_timeout_ms    IS NULL OR connect_timeout_ms    > 0),
+  first_byte_timeout_ms     INTEGER     CHECK (first_byte_timeout_ms IS NULL OR first_byte_timeout_ms > 0),
+  idle_timeout_ms           INTEGER     CHECK (idle_timeout_ms       IS NULL OR idle_timeout_ms       > 0),
+  max_duration_ms           INTEGER     CHECK (max_duration_ms       IS NULL OR max_duration_ms       > 0),
   status                    TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -211,6 +216,11 @@ CREATE TABLE IF NOT EXISTS ai_model_routes (
   cost_per_1k_tokens     NUMERIC(10,6) NOT NULL DEFAULT 0,
   score_weights_override JSONB,
   sticky_enabled         BOOLEAN     NOT NULL DEFAULT true,
+  -- 请求服务三段式超时（route 级覆盖；NULL=继承 model，再继承全局 config）。
+  connect_timeout_ms     INTEGER     CHECK (connect_timeout_ms    IS NULL OR connect_timeout_ms    > 0),
+  first_byte_timeout_ms  INTEGER     CHECK (first_byte_timeout_ms IS NULL OR first_byte_timeout_ms > 0),
+  idle_timeout_ms        INTEGER     CHECK (idle_timeout_ms       IS NULL OR idle_timeout_ms       > 0),
+  max_duration_ms        INTEGER     CHECK (max_duration_ms       IS NULL OR max_duration_ms       > 0),
   status                 TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
