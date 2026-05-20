@@ -82,7 +82,7 @@
         </el-table-column>
         <el-table-column label="用户扣费" width="100" align="right">
           <template #default="{ row }">
-            <span v-if="row.userCredits || row.credits" class="font-black text-amber-500">{{ row.userCredits || row.credits }}</span>
+            <span v-if="row.userCredits" class="font-black text-amber-500">{{ row.userCredits }}</span>
             <span v-else class="text-slate-400">-</span>
           </template>
         </el-table-column>
@@ -129,7 +129,7 @@ const displayList = computed(() => {
   if (activeTab.value === 'tenant') {
     list = list.filter(r => r.tenantCredits)
   } else if (activeTab.value === 'user') {
-    list = list.filter(r => r.userCredits || r.credits)
+    list = list.filter(r => r.userCredits)
   }
 
   if (queryForm.description) {
@@ -168,7 +168,7 @@ const loadTransactions = async () => {
 
     stats.totalCount = pagination.total
     stats.totalTenantCost = records.reduce((s, r) => s + (r.tenantCredits || 0), 0)
-    stats.totalUserCost = records.reduce((s, r) => s + (r.userCredits || r.credits || 0), 0)
+    stats.totalUserCost = records.reduce((s, r) => s + (r.userCredits || 0), 0)
     const successCount = records.filter(r => r.status === 'succeeded').length
     stats.successRate = records.length > 0 ? Math.round((successCount / records.length) * 100) : 0
   } catch (error) {

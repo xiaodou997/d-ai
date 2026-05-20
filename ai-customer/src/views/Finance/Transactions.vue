@@ -15,14 +15,14 @@
         <el-table-column label="扣减积分" width="140">
           <template #default="{ row }">
             <span class="font-bold text-base text-rose-500">
-              -{{ (row.tenantCredits || 0).toLocaleString() }}
+              -{{ (row.userCredits || 0).toLocaleString() }}
             </span>
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small" round>{{ row.status === 1 ? '成功' : '失败' }}</el-tag>
+            <el-tag :type="statusTagType(row.status)" size="small" round>{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="createdTime" label="时间" width="180">
@@ -62,6 +62,16 @@ const list = ref([])
 const formatTime = (ts) => {
   if (!ts) return '—'
   return dayjs(ts).format('YYYY-MM-DD HH:mm:ss')
+}
+
+const statusTagType = (status) => {
+  const map = { succeeded: 'success', pending: 'warning', cancelled: 'info', refunded: 'info', released: 'danger' }
+  return map[status] || 'info'
+}
+
+const statusText = (status) => {
+  const map = { succeeded: '成功', pending: '进行中', cancelled: '取消', refunded: '已退款', released: '已释放' }
+  return map[status] || '未知'
 }
 
 const fetchList = async () => {
