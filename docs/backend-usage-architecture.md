@@ -42,8 +42,8 @@ Use hourly rollups when the caller needs:
 
 ## Schema Management
 
-- `backend/migrations/*.sql` is the only schema source of truth.
-- `backend/cmd/migrate` records applied versions in `schema_migrations`.
+- `ai-service/migrations/*.sql` is the only schema source of truth.
+- `ai-service/cmd/migrate` records applied versions in `schema_migrations`.
 - `migrate up` applies only unapplied migrations.
 - `migrate down` rolls back only the latest applied migration.
 - `db/local_seed.sql` is sample development data, not schema.

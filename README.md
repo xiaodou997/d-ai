@@ -1,90 +1,131 @@
-# uni-ai-api
+# Uni AI API — 统一 AI 网关代理服务
 
-Uni AI API Gateway provides OpenAI-compatible runtime APIs for internal AI services, with provider routing, local API keys, usage logging, and URM settlement.
+> Uni AI API 是一个 OpenAI 兼容的 AI 网关代理，提供多供应商路由、API Key 管理、用量计费、URM 结算等核心能力。
 
-## Current Runtime Surface
+## 项目结构
 
-- `GET /health`
-- `GET /ready`
-- `GET /v1/models`
-- `POST /v1/chat/completions` (openai_chat)
-- `POST /v1/responses` (openai_responses)
-- `POST /v1/messages` (anthropic_messages)
-- `POST /v1/embeddings` (openai_embeddings)
-- `POST /v1/images/generations` (openai_images)
-- `POST /v1beta/models/{model}:{action}` (gemini_generate / gemini_embeddings)
-- `POST /v1/messages/count_tokens` (Anthropic token estimation)
+```
+uni-ai-api/
+├── ai-service/      # 后端网关服务（Go + Gin + PostgreSQL）
+├── ai-admin/        # 管理员前端（Vue 3 + Element Plus）
+├── ai-tenant/       # 租户前端（Vue 3 + Element Plus）
+├── ai-customer/     # 用户前端（Vue 3 + Element Plus）
+├── docs/            # 项目文档
+└── deployments/     # 部署配置
+```
 
-The gateway uses **strict 1:1 protocol passthrough**: the client protocol (derived from the request path) must exactly match the deployment's `upstream_protocol`. No cross-protocol format translation is performed — request and response bytes are forwarded verbatim. To serve the same model over multiple protocols, create separate deployments (one per `upstream_protocol`) under the same endpoint.
+## 快速开始
 
-## Local E2E
+### 环境要求
 
-Use the fake upstream first; real provider keys are not needed for the default local smoke path.
+| 依赖 | 版本 |
+|------|------|
+| Go | 1.25+ |
+| Node.js / Bun | Bun 1.0+ |
+| PostgreSQL | 15+ |
+| Redis | 7+（可选） |
+| URM | 需提前部署 |
+
+### 1. 启动后端
 
 ```bash
-cp backend/config.local.example.yaml backend/config.local.yaml
+cd ai-service
+
+# 复制配置模板并修改
+cp config.example.yaml config.yaml
+# 编辑 config.yaml，填入数据库、URM 地址等
+
+# 启动
+go run ./cmd/server
+# 或
+make dev
 ```
 
-Initialize schema and local data first:
+后端默认监听 `:13010`。
+
+### 2. 启动前端
 
 ```bash
-cd backend
-UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/migrate up
-UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/seed
+# 管理员后台
+cd ai-admin && bun install && bun run dev     # http://localhost:13011
+
+# 租户门户
+cd ai-tenant && bun install && bun run dev    # http://localhost:13012
+
+# 用户端
+cd ai-customer && bun install && bun run dev  # http://localhost:13013
 ```
 
-Then start:
+## 技术架构
+
+### 后端（ai-service）
+
+- **语言**：Go 1.25，module 名 `xiaodou/uni-ai-api`
+- **框架**：Gin
+- **数据库**：PostgreSQL（pgx/v5，连接池 pgxpool）
+- **代码生成**：SQLC（`sqlc.yaml`）
+- **缓存**：Redis（路由缓存、速率限制、配额预留）
+- **认证**：依赖 URM 的 JWT（RS256）+ JWKS 公钥自动轮换
+- **计费**：URM HMAC Freeze→Confirm→Cancel 结算集成
+- **日志**：Uber Zap
+
+### 前端（ai-admin / ai-tenant / ai-customer）
+
+- Vue 3 + Composition API + `<script setup>`
+- Pinia（状态管理）
+- Vue Router
+- Element Plus（UI）
+- Tailwind CSS
+- Bun（包管理和构建）
+
+## 认证模型
+
+Uni AI API 不自建用户体系，完全依赖 URM 认证：
+
+- **SSO 登录**：前端通过 URM 的 OAuth2 授权码流程登录
+- **JWKS 验签**：后端从 URM 拉取公钥，自动轮换
+- **角色区分**：Admin / Tenant / Customer，通过 JWT 中的 `userType` 区分
+- **API Key 认证**：运行时 API 使用 `sk-ai-` 前缀的 Bearer Token
+
+## 运行时 API
+
+| 端点 | 协议 | 说明 |
+|------|------|------|
+| `POST /v1/chat/completions` | openai_chat | OpenAI Chat Completions |
+| `POST /v1/responses` | openai_responses | OpenAI Responses API |
+| `POST /v1/messages` | anthropic_messages | Anthropic Messages |
+| `POST /v1/embeddings` | openai_embeddings | OpenAI Embeddings |
+| `POST /v1/images/generations` | openai_images | OpenAI Image Generation |
+| `POST /v1beta/models/{model}:{action}` | gemini | Gemini Generate/Embeddings |
+| `GET /v1/models` | - | 模型列表 |
+| `GET /health` | - | 健康检查 |
+
+## 产品策略
+
+- 公共模型码为规范标识，供应商模型名通过 Deployment 映射
+- 严格 1:1 协议透传：客户端协议必须与 Deployment 的 `upstream_protocol` 完全一致
+- 供应商成本价用于审计和毛利报告
+- 运行时计费使用平台和租户模型价格，以整数积分计算
+- Token 接口按 Token 单位计费；图像接口按生成图片数量计费
+- API Key 配额为本地管理；URM 为账户余额和积分结算的唯一来源
+- 租户持有的 API Key 通过 URM 向租户收费；用户持有的 API Key 同时向租户和用户收费
+
+## 文档
+
+- [Admin API](./docs/ADMIN_API.md)
+- [本地冒烟测试](./docs/LOCAL_SMOKE.md)
+- [业务边界](./docs/BUSINESS_BOUNDARY.md)
+- [后端用量架构](./docs/backend-usage-architecture.md)
+- [前端认证](./docs/frontend-auth.md)
+
+## 生产构建
 
 ```bash
-cd backend
-go run ./cmd/fake-upstream
+cd ai-service
+make build
+# 输出到 release/ 目录
 ```
 
-In another shell:
+## License
 
-```bash
-cd backend
-UNI_AI_API_CONFIG=config.local.yaml go run ./cmd/server
-```
-
-Runtime key:
-
-```text
-sk-ai-local-dev
-```
-
-Full smoke commands are in `docs/LOCAL_SMOKE.md`.
-
-## Project Layout
-
-```text
-backend/        Go service, API gateway, provider routing, billing integration
-db/             Local seed SQL for development data
-web/admin/      Platform admin console
-web/tenant/     Tenant console
-web/customer/   End-user console
-docs/           Product, API, and smoke verification docs
-deployments/    Deployment manifests and environment examples
-```
-
-Useful docs:
-
-- `docs/LOCAL_SMOKE.md`
-- `docs/ADMIN_API.md`
-- `docs/BUSINESS_BOUNDARY.md`
-- `docs/frontend-auth.md`
-- `docs/backend-usage-architecture.md`
-- `backend/seeds/README.md`
-
-## Product Decisions
-
-- Public model codes are canonical; provider model names are mapped per deployment.
-- Provider model cost prices are recorded for audit and margin reports.
-- Runtime billing uses platform and tenant model prices, always in integer credits.
-- Token interfaces bill by token units; image interfaces bill by generated image count.
-- API key quotas are local to `uni-ai-api`; URM remains the source of account balances and credit settlement.
-- URM remains the source of truth for account, recharge, grant, transaction, platform-admin, JWT-key, and system-application data.
-- The admin console keeps AI Gateway business convenience entries for tenant/user management, tenant recharge from tenant operations, and tenant recharge records.
-- Tenant-owned API keys charge the tenant through URM.
-- User-owned API keys charge both tenant and user through URM.
-- Runtime API keys use the `sk-ai-` prefix.
+Private — All rights reserved.

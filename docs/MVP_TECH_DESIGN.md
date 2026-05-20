@@ -1,6 +1,6 @@
 # Uni AI API Gateway Technical Design
 
-This document describes the current operating baseline. Local databases must be rebuilt from `backend/migrations/*.sql`; historical migration compatibility is not maintained in this iteration.
+This document describes the current operating baseline. Local databases must be rebuilt from `ai-service/migrations/*.sql`; historical migration compatibility is not maintained in this iteration.
 
 ## 1. Goal
 
@@ -452,9 +452,9 @@ Use HTTP `402`.
 
 The initial frontend is copied from the URM foundation:
 
-- `web/admin`: platform operations
-- `web/tenant`: tenant operations
-- `web/customer`: end-user operations
+- `ai-admin`: platform operations
+- `ai-tenant`: tenant operations
+- `ai-customer`: end-user operations
 
 AI Gateway modules should live under:
 

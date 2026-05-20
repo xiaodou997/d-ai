@@ -1,16 +1,56 @@
-node_modules/
-dist/
-.DS_Store
-.env
-.env.local
-*.log
-data/
-tmp/
-coverage/
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
 .gocache/
 .gomodcache/
-backend/.gocache/
-backend/.gomodcache/
-backend/config.yaml
-backend/config.local.yaml
-web/admin/.env.local
+
+# Node
+node_modules/
+dist/
+.vite/
+*.local
+
+# Build / Release
+ai-service/release/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# AI IDE configs
+.claude/
+.catpaw/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Config (local)
+ai-service/config.yaml
+ai-service/config.local.yaml
+
+# Data
+data/
+tmp/
+database/
+*.db
+*.db-journal
+coverage/

@@ -5,7 +5,7 @@ This smoke path uses PostgreSQL, Redis, URM on `http://127.0.0.1:6900`, the fake
 ## Setup
 
 ```bash
-cp backend/config.local.example.yaml backend/config.local.yaml
+cp ai-service/config.local.example.yaml ai-service/config.local.yaml
 ```
 
 Initialize schema and local data:
@@ -134,6 +134,6 @@ Expected billable units:
 
 All cost columns are integer credits. For image calls, the local seed charges one credit per generated image, so `api_key_quota_cost`, `platform_cost`, and `user_cost` should match the requested image count for user-owned keys.
 
-With URM running on `:6900`, successful billed requests should move through `confirmed`. If URM is unavailable, use the zero-price bypass in `backend/seeds/README.md`.
+With URM running on `:6900`, successful billed requests should move through `confirmed`. If URM is unavailable, use the zero-price bypass in `ai-service/seeds/README.md`.
 
 To verify URM `Cancel`, stop the fake upstream and send one chat request. The backend should return an upstream error and record a usage row with `billing_status = canceled`.

@@ -11,7 +11,7 @@ X-Admin-Token: local-admin-token
 Set it in config as `security.adminToken` or env `UNI_AI_API_ADMIN_TOKEN`.
 If both `security.adminToken` and URM are empty, admin routes are open for local development.
 
-The current database source of truth is `backend/migrations/*.sql`. This iteration intentionally changes the initial schema; rebuild local databases from scratch before using the seed.
+The current database source of truth is `ai-service/migrations/*.sql`. This iteration intentionally changes the initial schema; rebuild local databases from scratch before using the seed.
 
 ## Dashboard
 
