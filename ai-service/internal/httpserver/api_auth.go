@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type apiRole string
@@ -40,8 +42,8 @@ func (s *Server) apiAuth(next http.Handler) http.Handler {
 		claims, err := s.jwksValidator.ValidateToken(r.Context(), token)
 		if err != nil {
 			s.logger.Warn("api auth token validation failed",
-				"error", err,
-				"request_id", requestIDFromContext(r.Context()),
+				zap.Error(err),
+				zap.String("request_id", requestIDFromContext(r.Context())),
 			)
 			writeErr(w, http.StatusUnauthorized, BizErrTokenInvalid, "invalid token")
 			return

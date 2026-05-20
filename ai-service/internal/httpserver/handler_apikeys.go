@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"go.uber.org/zap"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -411,6 +412,6 @@ func (s *Server) invalidateAPIKeyCache(ctx context.Context, keyHash string) {
 		return
 	}
 	if err := s.apiKeyCache.Del(ctx, keyHash); err != nil {
-		s.logger.Error("api key cache invalidation failed", "error", err, "key_hash_prefix", keyHash[:8])
+		s.logger.Error("api key cache invalidation failed", zap.Error(err), zap.String("key_hash_prefix", keyHash[:8]))
 	}
 }

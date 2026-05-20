@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 
 	"xiaodou/uni-ai-api/internal/domain"
@@ -134,7 +134,7 @@ func (s *RouteCandidatesStep) Execute(ctx context.Context, req *Request) error {
 		identity := req.APIKey.KeyID
 		binding, berr := s.Sticky.GetBinding(ctx, req.APIKey.TenantID, identity, req.ModelCode, req.ConversationID)
 		if berr != nil {
-			slog.WarnContext(ctx, "sticky read failed", "error", berr)
+			zap.L().Warn("sticky read failed", zap.Error(berr))
 		} else if binding != nil {
 			if idx := findStickyCandidate(candidates, binding); idx > 0 {
 				candidates[0], candidates[idx] = candidates[idx], candidates[0]
@@ -271,11 +271,11 @@ func (s *URMFreezeStep) Execute(ctx context.Context, req *Request) error {
 		return nil
 	}
 	if err := s.Biller.Freeze(ctx, req, s.EstimateCosts); err != nil {
-		slog.Warn("urm freeze failed",
-			"error", err,
-			"request_id", req.RequestID,
-			"tenant_id", req.APIKey.TenantID,
-			"model_code", req.ModelCode,
+		zap.L().Warn("urm freeze failed",
+			zap.Error(err),
+			zap.String("request_id", req.RequestID),
+			zap.String("tenant_id", req.APIKey.TenantID),
+			zap.String("model_code", req.ModelCode),
 		)
 		return apiError(http.StatusPaymentRequired, "insufficient_balance",
 			"insufficient balance to process this request")
@@ -308,7 +308,7 @@ func (s *URMConfirmStep) Execute(ctx context.Context, req *Request) error {
 		UserCost:     req.BillingResult.UserCost,
 	}
 	if err := s.Biller.Confirm(ctx, req, actual); err != nil {
-		slog.Warn("urm confirm failed (best-effort)", "error", err, "transaction_id", req.URMTransactionID)
+		zap.L().Warn("urm confirm failed (best-effort)", zap.Error(err), zap.String("transaction_id", req.URMTransactionID))
 	}
 	return nil
 }
@@ -339,9 +339,9 @@ func (s *UsageLogStep) Name() string { return "usage_log" }
 func (s *UsageLogStep) Execute(ctx context.Context, req *Request) error {
 	if s.Logger != nil {
 		if err := s.Logger.Log(ctx, req); err != nil {
-			slog.WarnContext(ctx, "usage log failed (best-effort)",
-				"error", err,
-				"request_id", req.RequestID,
+			zap.L().Warn("usage log failed (best-effort)",
+				zap.Error(err),
+				zap.String("request_id", req.RequestID),
 			)
 		}
 	}

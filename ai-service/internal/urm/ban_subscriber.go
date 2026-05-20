@@ -3,7 +3,7 @@ package urm
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -19,15 +19,15 @@ const (
 // BanSubscriber 订阅 URM Pub/Sub 频道，维护本地封禁用户缓存
 type BanSubscriber struct {
 	rdb    *redis.Client
-	logger *slog.Logger
+	logger *zap.Logger
 
 	mu     sync.RWMutex
 	banned map[string]time.Time // userID → 过期时间
 }
 
-func NewBanSubscriber(rdb *redis.Client, logger *slog.Logger) *BanSubscriber {
+func NewBanSubscriber(rdb *redis.Client, logger *zap.Logger) *BanSubscriber {
 	if logger == nil {
-		logger = slog.Default()
+		logger = zap.L()
 	}
 	return &BanSubscriber{
 		rdb:    rdb,
@@ -46,7 +46,7 @@ func (s *BanSubscriber) run(ctx context.Context) {
 	defer pubsub.Close()
 
 	s.logger.Info("ban subscriber started",
-		"channels", []string{channelUserBanned, channelUserUpdated})
+		zap.Strings("channels", []string{channelUserBanned, channelUserUpdated}))
 
 	ch := pubsub.Channel()
 	for {
@@ -77,7 +77,7 @@ func (s *BanSubscriber) handleMessage(msg *redis.Message) {
 		s.mu.Lock()
 		s.banned[payload.UserID] = time.Now().Add(banCacheTTL)
 		s.mu.Unlock()
-		s.logger.Info("user banned, added to local cache", "userId", payload.UserID)
+		s.logger.Info("user banned, added to local cache", zap.String("user_id", payload.UserID))
 	case channelUserUpdated:
 		s.mu.Lock()
 		delete(s.banned, payload.UserID)

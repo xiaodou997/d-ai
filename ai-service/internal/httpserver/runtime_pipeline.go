@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 
 	"xiaodou/uni-ai-api/internal/domain"
 	"xiaodou/uni-ai-api/internal/formats"
@@ -158,10 +159,10 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 
 	if err := s.pipeline.Run(r.Context(), req); err != nil {
 		if req.HTTPStatus != 0 {
-			s.logger.WarnContext(r.Context(), "pipeline error after response committed",
-				"error", err,
-				"request_id", req.RequestID,
-				"http_status", req.HTTPStatus,
+			s.logger.Warn( "pipeline error after response committed",
+				zap.Error(err),
+				zap.String("request_id", req.RequestID),
+				zap.Int("http_status", req.HTTPStatus),
 			)
 			return
 		}

@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,8 +114,8 @@ func (s *ExecuteStep) Execute(ctx context.Context, req *Request) error {
 		if cand.IsPoolRoute() && s.OAuthPool != nil && req.SelectedCredential == nil {
 			cred, selErr := s.OAuthPool.SelectCredentialFromPool(ctx, cand.PoolID, cand.OAuthStrategy)
 			if selErr != nil {
-				slog.WarnContext(ctx, "pool credential selection failed",
-					"pool_id", cand.PoolID, "error", selErr)
+				zap.L().Warn("pool credential selection failed",
+					zap.String("pool_id", cand.PoolID), zap.Error(selErr))
 				req.UsedCandidates[cand.RouteID] = true
 				lastErr = apiError(http.StatusServiceUnavailable, "no_credential", selErr.Error())
 				continue
@@ -202,17 +202,17 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 	}
 
 	upstreamURL := buildURL(cand, req.IsStream)
-	slog.InfoContext(parentCtx, "upstream call started",
-		"request_id", req.RequestID,
-		"upstream_url", upstreamURL,
-		"model_code", req.ModelCode,
-		"upstream_model", cand.UpstreamModel,
-		"provider_code", cand.ProviderCode,
-		"is_stream", req.IsStream,
+	zap.L().Info("upstream call started",
+		zap.String("request_id", req.RequestID),
+		zap.String("upstream_url", upstreamURL),
+		zap.String("model_code", req.ModelCode),
+		zap.String("upstream_model", cand.UpstreamModel),
+		zap.String("provider_code", cand.ProviderCode),
+		zap.Bool("is_stream", req.IsStream),
 	)
-	slog.DebugContext(parentCtx, "upstream request body",
-		"request_id", req.RequestID,
-		"body", string(body),
+	zap.L().Debug("upstream request body",
+		zap.String("request_id", req.RequestID),
+		zap.String("body", string(body)),
 	)
 	startTime := time.Now()
 	upResp, callErr := s.Transport.Do(attemptCtx, &UpstreamRequest{
@@ -263,8 +263,8 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		drainAndClose(upResp)
 		if s.OAuthPool != nil && req.SelectedCredential != nil {
 			oldCredID := req.SelectedCredential.ID
-			slog.WarnContext(parentCtx, "upstream 401, swapping credential",
-				"old_cred_id", oldCredID)
+			zap.L().Warn("upstream 401, swapping credential",
+				zap.String("old_cred_id", oldCredID))
 			_ = s.OAuthPool.MarkInvalid(parentCtx, oldCredID, "upstream 401 unauthorized")
 		}
 		return attemptResult{
@@ -449,10 +449,10 @@ func (s *ExecuteStep) writeSticky(ctx context.Context, req *Request, cand *domai
 	}
 	identity := req.APIKey.KeyID
 	if err := s.Sticky.SetBinding(ctx, req.APIKey.TenantID, identity, req.ModelCode, req.ConversationID, &b); err != nil {
-		slog.WarnContext(ctx, "sticky write failed",
-			"conv_id", req.ConversationID,
-			"route_id", cand.RouteID,
-			"error", err,
+		zap.L().Warn("sticky write failed",
+			zap.String("conv_id", req.ConversationID),
+			zap.String("route_id", cand.RouteID),
+			zap.Error(err),
 		)
 	}
 }
@@ -488,30 +488,30 @@ func lastAttemptWas(req *Request, status ResultStatus) bool {
 // only trace of an upstream failure is the access log info line, which has
 // no upstream context.
 func logUpstreamFailure(ctx context.Context, req *Request, cand *domain.RouteCandidate, url string, status, latencyMs int, callErr error, errBody string) {
-	attrs := []any{
-		"request_id", req.RequestID,
-		"upstream_url", url,
-		"upstream_status", status,
-		"latency_ms", latencyMs,
-		"route_id", cand.RouteID,
-		"protocol", string(cand.Protocol),
-		"model_code", req.ModelCode,
-		"upstream_model", cand.UpstreamModel,
-		"provider_code", cand.ProviderCode,
-		"endpoint_id", cand.EndpointID,
-		"deployment_id", cand.DeploymentID,
-		"is_stream", req.IsStream,
+	attrs := []zap.Field{
+		zap.String("request_id", req.RequestID),
+		zap.String("upstream_url", url),
+		zap.Int("upstream_status", status),
+		zap.Int("latency_ms", latencyMs),
+		zap.String("route_id", cand.RouteID),
+		zap.String("protocol", string(cand.Protocol)),
+		zap.String("model_code", req.ModelCode),
+		zap.String("upstream_model", cand.UpstreamModel),
+		zap.String("provider_code", cand.ProviderCode),
+		zap.String("endpoint_id", cand.EndpointID),
+		zap.String("deployment_id", cand.DeploymentID),
+		zap.Bool("is_stream", req.IsStream),
 	}
 	if cand.PoolID != "" {
-		attrs = append(attrs, "pool_id", cand.PoolID)
+		attrs = append(attrs, zap.String("pool_id", cand.PoolID))
 	}
 	if callErr != nil {
-		attrs = append(attrs, "transport_error", callErr.Error())
+		attrs = append(attrs, zap.String("transport_error", callErr.Error()))
 	}
 	if errBody != "" {
-		attrs = append(attrs, "upstream_body", truncateValidUTF8(errBody, 1024))
+		attrs = append(attrs, zap.String("upstream_body", truncateValidUTF8(errBody, 1024)))
 	}
-	slog.ErrorContext(ctx, "upstream call failed", attrs...)
+	zap.L().Error("upstream call failed", attrs...)
 }
 
 // snippetBody returns up to 4 KiB of the upstream response body for diagnostics.
@@ -610,13 +610,13 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 	flusher.Flush()
 	req.HTTPStatus = http.StatusOK
 
-	slog.InfoContext(ctx, "stream started",
-		"request_id", req.RequestID,
-		"model_code", req.ModelCode,
-		"upstream_model", req.Candidate.UpstreamModel,
-		"provider_code", req.Candidate.ProviderCode,
-		"endpoint_id", req.Candidate.EndpointID,
-		"route_id", req.Candidate.RouteID,
+	zap.L().Info("stream started",
+		zap.String("request_id", req.RequestID),
+		zap.String("model_code", req.ModelCode),
+		zap.String("upstream_model", req.Candidate.UpstreamModel),
+		zap.String("provider_code", req.Candidate.ProviderCode),
+		zap.String("endpoint_id", req.Candidate.EndpointID),
+		zap.String("route_id", req.Candidate.RouteID),
 	)
 
 	protocol := req.Candidate.Protocol
@@ -646,7 +646,7 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 		// Take a local copy because scanner.Bytes() is invalidated on the next
 		// scan and we use the slice past the write call.
 		lineCopy := append([]byte(nil), line...)
-		slog.DebugContext(ctx, "upstream sse line", "request_id", req.RequestID, "line", string(lineCopy))
+		zap.L().Debug("upstream sse line", zap.String("request_id", req.RequestID), zap.String("line", string(lineCopy)))
 
 		switch {
 		case len(lineCopy) == 0:
@@ -736,15 +736,15 @@ func (s *ExecuteStep) executeStream(ctx context.Context, req *Request, resp *Ups
 	req.RequestStatus = domain.RequestSuccess
 	req.HTTPStatus = http.StatusOK
 
-	slog.InfoContext(ctx, "stream finished",
-		"request_id", req.RequestID,
-		"model_code", req.ModelCode,
-		"upstream_model", req.Candidate.UpstreamModel,
-		"provider_code", req.Candidate.ProviderCode,
-		"first_token_ms", req.FirstTokenMs,
-		"total_ms", int(time.Since(startTime).Milliseconds()),
-		"prompt_tokens", req.TokenUsage.PromptTokens,
-		"completion_tokens", req.TokenUsage.CompletionTokens,
+	zap.L().Info("stream finished",
+		zap.String("request_id", req.RequestID),
+		zap.String("model_code", req.ModelCode),
+		zap.String("upstream_model", req.Candidate.UpstreamModel),
+		zap.String("provider_code", req.Candidate.ProviderCode),
+		zap.Int("first_token_ms", req.FirstTokenMs),
+		zap.Int("total_ms", int(time.Since(startTime).Milliseconds())),
+		zap.Int("prompt_tokens", req.TokenUsage.PromptTokens),
+		zap.Int("completion_tokens", req.TokenUsage.CompletionTokens),
 	)
 	return nil
 }

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"go.uber.org/zap"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -151,7 +152,7 @@ func (s *Server) handleAdminCreateCredentialPool(w http.ResponseWriter, r *http.
 	}
 	p, err := s.oauthCreds.GetPool(r.Context(), id)
 	if err != nil {
-		s.logger.Warn("pool created but read-back failed", "error", err, "pool_id", id)
+		s.logger.Warn("pool created but read-back failed", zap.Error(err), zap.String("pool_id", id))
 		writeOK(w, map[string]string{"id": id})
 		return
 	}
@@ -347,7 +348,7 @@ func (s *Server) handleAdminCreatePoolCredential(w http.ResponseWriter, r *http.
 	}
 	row, err := s.oauthCreds.GetByID(r.Context(), id)
 	if err != nil {
-		s.logger.Warn("credential created but read-back failed", "error", err, "credential_id", id)
+		s.logger.Warn("credential created but read-back failed", zap.Error(err), zap.String("credential_id", id))
 		writeOK(w, map[string]string{"id": id})
 		return
 	}
@@ -431,7 +432,7 @@ func (s *Server) handleAdminRefreshPoolCredential(w http.ResponseWriter, r *http
 	}
 	row, err := s.oauthCreds.GetByID(r.Context(), credID)
 	if err != nil {
-		s.logger.Warn("token refreshed but read-back failed", "error", err, "credential_id", credID)
+		s.logger.Warn("token refreshed but read-back failed", zap.Error(err), zap.String("credential_id", credID))
 		writeOK(w, map[string]string{"status": "ok"})
 		return
 	}

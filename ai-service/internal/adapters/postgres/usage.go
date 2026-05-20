@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -108,10 +108,10 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 // with a 10s timeout so they can't outlive shutdown indefinitely.
 func recoverGoroutine(label, requestID string) {
 	if rec := recover(); rec != nil {
-		slog.Error("usage logger goroutine panic",
-			"label", label,
-			"panic", fmt.Sprint(rec),
-			"request_id", requestID,
+		zap.L().Error("usage logger goroutine panic",
+			zap.String("label", label),
+			zap.String("panic", fmt.Sprint(rec)),
+			zap.String("request_id", requestID),
 		)
 	}
 }

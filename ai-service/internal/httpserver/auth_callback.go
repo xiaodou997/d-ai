@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"go.uber.org/zap"
 	"net/http"
 )
 
@@ -17,7 +18,7 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := s.urmClient.ExchangeCode(r.Context(), code, redirectURI)
 	if err != nil {
-		s.logger.Warn("auth callback code exchange failed", "error", err)
+		s.logger.Warn("auth callback code exchange failed", zap.Error(err))
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid or expired code")
 		return
 	}

@@ -1,231 +1,139 @@
 package config
 
 import (
-	"errors"
-	"os"
-	"strconv"
-	"strings"
+	"fmt"
 	"time"
 
-	"go.yaml.in/yaml/v2"
+	"github.com/spf13/viper"
 )
 
 type Config struct {
-	Server   ServerConfig
-	Postgres PostgresConfig
-	Redis    RedisConfig
-	URM      URMConfig
-	Security SecurityConfig
+	App      AppConfig      `mapstructure:"app"`
+	Server   ServerConfig   `mapstructure:"server"`
+	Postgres PostgresConfig `mapstructure:"postgres"`
+	Redis    RedisConfig    `mapstructure:"redis"`
+	URM      URMConfig      `mapstructure:"urm"`
+	Security SecurityConfig `mapstructure:"security"`
+	Log      LogConfig      `mapstructure:"log"`
+}
+
+type AppConfig struct {
+	Env string `mapstructure:"env"` // development | production
 }
 
 type ServerConfig struct {
-	Addr string // e.g. ":13010"
+	Addr string `mapstructure:"addr"` // e.g. ":13010"
 }
 
 type PostgresConfig struct {
-	DSN             string
-	MaxConns        int32
-	MinConns        int32
-	MaxConnLifetime time.Duration
+	DSN             string        `mapstructure:"dsn"`
+	MaxConns        int32         `mapstructure:"max_conns"`
+	MinConns        int32         `mapstructure:"min_conns"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
 }
 
 type RedisConfig struct {
-	Addr     string
-	Password string
+	Addr     string `mapstructure:"addr"`
+	Password string `mapstructure:"password"`
 }
 
 type URMConfig struct {
-	BaseURL     string
-	ClientID    string
-	DisplayName string
-	Description string
-	Timeout     time.Duration
+	BaseURL     string        `mapstructure:"base_url"`
+	ClientID    string        `mapstructure:"client_id"`
+	DisplayName string        `mapstructure:"display_name"`
+	Description string        `mapstructure:"description"`
+	Timeout     time.Duration `mapstructure:"timeout"`
 }
 
 type SecurityConfig struct {
-	ProviderKeyMaster string
+	ProviderKeyMaster string `mapstructure:"provider_key_master"`
+}
+
+type LogConfig struct {
+	Level      string `mapstructure:"level"`       // debug | info | warn | error
+	File       string `mapstructure:"file"`        // 日志文件路径，空表示只输出到控制台
+	MaxSize    int    `mapstructure:"max_size"`    // lumberjack max size in MB (default 100)
+	MaxBackups int    `mapstructure:"max_backups"` // lumberjack max backup count (default 30)
+	MaxAge     int    `mapstructure:"max_age"`     // lumberjack max age in days (default 30)
 }
 
 func Load() (*Config, error) {
-	cfg := &Config{
-		Server: ServerConfig{
-			Addr: ":13010",
-		},
-		Postgres: PostgresConfig{
-			MaxConns:        20,
-			MinConns:        2,
-			MaxConnLifetime: time.Hour,
-		},
-		URM: URMConfig{
-			Timeout: 10 * time.Second,
-		},
+	v := viper.New()
+
+	// Defaults
+	v.SetDefault("app.env", "development")
+	v.SetDefault("server.addr", ":13010")
+	v.SetDefault("postgres.max_conns", 20)
+	v.SetDefault("postgres.min_conns", 2)
+	v.SetDefault("postgres.max_conn_lifetime", "1h")
+	v.SetDefault("urm.timeout", "10s")
+	v.SetDefault("log.level", "info")
+	v.SetDefault("log.file", "")
+
+	// Config file
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("read config: %w", err)
+		}
 	}
 
-	if err := applyYAML(cfg, "config.yaml"); err != nil {
+	// Environment variables
+	v.SetEnvPrefix("AI")
+	v.AutomaticEnv()
+	bindEnvs(v)
+
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal config: %w", err)
+	}
+
+	if err := validate(&cfg); err != nil {
 		return nil, err
 	}
-	applyEnv(cfg)
-
-	if err := validate(cfg); err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return &cfg, nil
 }
 
-type yamlFile struct {
-	Server struct {
-		Port int    `yaml:"port"`
-		Addr string `yaml:"addr"`
-	} `yaml:"server"`
-	Database struct {
-		DSN             string `yaml:"dsn"`
-		MaxConns        int32  `yaml:"max_conns"`
-		MinConns        int32  `yaml:"min_conns"`
-		MaxConnLifetime string `yaml:"max_conn_lifetime"`
-	} `yaml:"database"`
-	Redis struct {
-		Addr     string `yaml:"addr"`
-		Password string `yaml:"password"`
-	} `yaml:"redis"`
-	URM struct {
-		BaseURL     string `yaml:"base_url"`
-		ClientID    string `yaml:"client_id"`
-		DisplayName string `yaml:"display_name"`
-		Description string `yaml:"description"`
-		Timeout     string `yaml:"timeout"`
-	} `yaml:"urm"`
-	Security struct {
-		ProviderKeyMaster string `yaml:"provider_key_master"`
-	} `yaml:"security"`
-}
-
-func applyYAML(cfg *Config, path string) error {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil
+func bindEnvs(v *viper.Viper) {
+	envBindings := map[string]string{
+		"AI_APP_ENV":                "app.env",
+		"AI_SERVER_ADDR":            "server.addr",
+		"AI_DATABASE_URL":           "postgres.dsn",
+		"AI_DB_MAX_CONNS":           "postgres.max_conns",
+		"AI_DB_MIN_CONNS":           "postgres.min_conns",
+		"AI_DB_MAX_CONN_LIFETIME":   "postgres.max_conn_lifetime",
+		"AI_REDIS_ADDR":             "redis.addr",
+		"AI_REDIS_PASSWORD":         "redis.password",
+		"AI_URM_BASE_URL":           "urm.base_url",
+		"AI_URM_CLIENT_ID":          "urm.client_id",
+		"AI_URM_DISPLAY_NAME":       "urm.display_name",
+		"AI_URM_DESCRIPTION":        "urm.description",
+		"AI_URM_TIMEOUT":            "urm.timeout",
+		"AI_PROVIDER_KEY_MASTER":    "security.provider_key_master",
+		"AI_LOG_LEVEL":              "log.level",
+		"AI_LOG_FILE":               "log.file",
 	}
-	if err != nil {
-		return err
+	for env, key := range envBindings {
+		_ = v.BindEnv(key, env)
 	}
-
-	var f yamlFile
-	if err := yaml.Unmarshal(data, &f); err != nil {
-		return err
-	}
-
-	if f.Server.Addr != "" {
-		cfg.Server.Addr = f.Server.Addr
-	} else if f.Server.Port != 0 {
-		cfg.Server.Addr = ":" + strconv.Itoa(f.Server.Port)
-	}
-	if f.Database.DSN != "" {
-		cfg.Postgres.DSN = f.Database.DSN
-	}
-	if f.Database.MaxConns != 0 {
-		cfg.Postgres.MaxConns = f.Database.MaxConns
-	}
-	if f.Database.MinConns != 0 {
-		cfg.Postgres.MinConns = f.Database.MinConns
-	}
-	if f.Database.MaxConnLifetime != "" {
-		if d, err := time.ParseDuration(f.Database.MaxConnLifetime); err == nil {
-			cfg.Postgres.MaxConnLifetime = d
-		}
-	}
-	if f.Redis.Addr != "" {
-		cfg.Redis.Addr = f.Redis.Addr
-	}
-	if f.Redis.Password != "" {
-		cfg.Redis.Password = f.Redis.Password
-	}
-	if f.URM.BaseURL != "" {
-		cfg.URM.BaseURL = f.URM.BaseURL
-	}
-	if f.URM.ClientID != "" {
-		cfg.URM.ClientID = f.URM.ClientID
-	}
-	if f.URM.DisplayName != "" {
-		cfg.URM.DisplayName = f.URM.DisplayName
-	}
-	if f.URM.Description != "" {
-		cfg.URM.Description = f.URM.Description
-	}
-	if f.URM.Timeout != "" {
-		if d, err := time.ParseDuration(f.URM.Timeout); err == nil {
-			cfg.URM.Timeout = d
-		}
-	}
-	if f.Security.ProviderKeyMaster != "" {
-		cfg.Security.ProviderKeyMaster = f.Security.ProviderKeyMaster
-	}
-	return nil
-}
-
-func applyEnv(cfg *Config) {
-	setStr(&cfg.Server.Addr, "PORT", func(v string) string {
-		if !strings.HasPrefix(v, ":") {
-			return ":" + v
-		}
-		return v
-	})
-	setStr(&cfg.Server.Addr, "SERVER_ADDR")
-
-	setStr(&cfg.Postgres.DSN, "DATABASE_URL")
-	setI32(&cfg.Postgres.MaxConns, "DB_MAX_CONNS")
-	setI32(&cfg.Postgres.MinConns, "DB_MIN_CONNS")
-	setDur(&cfg.Postgres.MaxConnLifetime, "DB_MAX_CONN_LIFETIME")
-
-	setStr(&cfg.Redis.Addr, "REDIS_ADDR")
-	setStr(&cfg.Redis.Password, "REDIS_PASSWORD")
-
-	setStr(&cfg.URM.BaseURL, "URM_BASE_URL")
-	setStr(&cfg.URM.ClientID, "URM_CLIENT_ID")
-	setStr(&cfg.URM.DisplayName, "URM_DISPLAY_NAME")
-	setStr(&cfg.URM.Description, "URM_DESCRIPTION")
-	setDur(&cfg.URM.Timeout, "URM_TIMEOUT")
-
-	setStr(&cfg.Security.ProviderKeyMaster, "PROVIDER_KEY_MASTER")
 }
 
 func validate(cfg *Config) error {
 	if cfg.Postgres.DSN == "" {
-		return errors.New("DATABASE_URL is required")
+		return fmt.Errorf("postgres.dsn is required")
 	}
 	if cfg.URM.BaseURL == "" {
-		return errors.New("URM_BASE_URL is required")
+		return fmt.Errorf("urm.base_url is required")
 	}
 	if cfg.URM.ClientID == "" {
-		return errors.New("URM_CLIENT_ID is required")
+		return fmt.Errorf("urm.client_id is required")
 	}
 	if cfg.Security.ProviderKeyMaster == "" {
-		return errors.New("PROVIDER_KEY_MASTER is required")
+		return fmt.Errorf("security.provider_key_master is required")
 	}
 	return nil
-}
-
-func setStr(target *string, key string, transform ...func(string) string) {
-	v := os.Getenv(key)
-	if v == "" {
-		return
-	}
-	if len(transform) > 0 {
-		v = transform[0](v)
-	}
-	*target = v
-}
-
-func setI32(target *int32, key string) {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
-			*target = int32(n)
-		}
-	}
-}
-
-func setDur(target *time.Duration, key string) {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			*target = d
-		}
-	}
 }

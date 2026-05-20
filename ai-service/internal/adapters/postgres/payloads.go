@@ -8,7 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	mrand "math/rand"
 	"time"
 
@@ -75,25 +75,25 @@ func (s *PayloadStore) Save(ctx context.Context, usageLogID pgtype.UUID, req *se
 	attempts := buildAttempts(req)
 	attJSON, err := json.Marshal(attempts)
 	if err != nil {
-		slog.WarnContext(ctx, "payload: marshal attempts failed", "error", err)
+		zap.L().Warn("payload: marshal attempts failed", zap.Error(err))
 		return
 	}
 
 	encBody, err := s.encrypt(clientBody)
 	if err != nil {
-		slog.WarnContext(ctx, "payload: encrypt client body failed", "error", err)
+		zap.L().Warn("payload: encrypt client body failed", zap.Error(err))
 		return
 	}
 
 	encUpstream, err := s.encrypt(req.UpstreamBody)
 	if err != nil {
-		slog.WarnContext(ctx, "payload: encrypt upstream body failed", "error", err)
+		zap.L().Warn("payload: encrypt upstream body failed", zap.Error(err))
 		return
 	}
 
 	encResponse, err := s.encrypt(req.UpstreamResponseBody)
 	if err != nil {
-		slog.WarnContext(ctx, "payload: encrypt upstream response failed", "error", err)
+		zap.L().Warn("payload: encrypt upstream response failed", zap.Error(err))
 		return
 	}
 
@@ -114,7 +114,7 @@ func (s *PayloadStore) Save(ctx context.Context, usageLogID pgtype.UUID, req *se
 		expires,
 	)
 	if err != nil {
-		slog.WarnContext(ctx, "payload: insert failed", "error", err, "usage_log_id", usageLogID)
+		zap.L().Warn("payload: insert failed", zap.Error(err), zap.String("usage_log_id", usageLogID.String()))
 	}
 }
 
@@ -161,7 +161,7 @@ func (s *PayloadStore) GetByUsageLogID(ctx context.Context, usageLogID string) (
 		if dec, err := s.decrypt(encUpstream); err == nil {
 			rec.UpstreamBody = dec
 		} else {
-			slog.WarnContext(ctx, "payload: decrypt upstream body failed", "error", err)
+			zap.L().Warn("payload: decrypt upstream body failed", zap.Error(err))
 		}
 	}
 	if len(encResponse) > 0 {
@@ -171,7 +171,7 @@ func (s *PayloadStore) GetByUsageLogID(ctx context.Context, usageLogID string) (
 	if len(rawBody) > 0 {
 		decrypted, err := s.decrypt(rawBody)
 		if err != nil {
-			slog.WarnContext(ctx, "payload: decrypt failed", "error", err)
+			zap.L().Warn("payload: decrypt failed", zap.Error(err))
 		} else {
 			rec.RawClientBody = decrypted
 		}
@@ -204,11 +204,11 @@ func (s *PayloadStore) cleanup(ctx context.Context) {
 	const q = `DELETE FROM ai_request_payloads WHERE expires_at < now()`
 	res, err := s.pool.Exec(ctx, q)
 	if err != nil {
-		slog.WarnContext(ctx, "payload cleanup failed", "error", err)
+		zap.L().Warn("payload cleanup failed", zap.Error(err))
 		return
 	}
 	if res.RowsAffected() > 0 {
-		slog.InfoContext(ctx, "payload cleanup", "deleted", res.RowsAffected())
+		zap.L().Info("payload cleanup", zap.Int64("deleted", res.RowsAffected()))
 	}
 }
 

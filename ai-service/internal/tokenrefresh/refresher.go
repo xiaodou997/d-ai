@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"net/url"
 	"os"
@@ -94,7 +94,7 @@ type tokenResponse struct {
 type Refresher struct {
 	store           *pgadapter.OAuthCredentialStore
 	client          *http.Client
-	logger          *slog.Logger
+	logger          *zap.Logger
 	interval        time.Duration
 	window          time.Duration // refresh credentials expiring within this window
 	providerConfigs map[domain.FixedProviderType]providerConfig
@@ -102,7 +102,7 @@ type Refresher struct {
 
 // New creates a Refresher that checks every interval and refreshes credentials
 // expiring within window.
-func New(store *pgadapter.OAuthCredentialStore, logger *slog.Logger) *Refresher {
+func New(store *pgadapter.OAuthCredentialStore, logger *zap.Logger) *Refresher {
 	return &Refresher{
 		store:           store,
 		client:          &http.Client{Timeout: 30 * time.Second},
@@ -134,14 +134,14 @@ func (r *Refresher) Start(ctx context.Context) {
 func (r *Refresher) runOnce(ctx context.Context) {
 	rows, err := r.store.ListExpiring(ctx, r.window)
 	if err != nil {
-		r.logger.Error("tokenrefresh: list expiring credentials failed", "error", err)
+		r.logger.Error("tokenrefresh: list expiring credentials failed", zap.Error(err))
 		return
 	}
 	if len(rows) == 0 {
 		return
 	}
 
-	r.logger.Info("tokenrefresh: refreshing credentials", "count", len(rows))
+	r.logger.Info("tokenrefresh: refreshing credentials", zap.Int("count", len(rows)))
 	for _, row := range rows {
 		if ctx.Err() != nil {
 			return
@@ -154,19 +154,19 @@ func (r *Refresher) refreshOne(ctx context.Context, row pgadapter.OAuthCredentia
 	cfg, ok := r.providerConfigs[domain.FixedProviderType(row.ProviderType)]
 	if !ok {
 		r.logger.Warn("tokenrefresh: unknown provider type, skipping",
-			"cred_id", row.ID, "provider_type", row.ProviderType)
+			zap.String("cred_id", row.ID), zap.String("provider_type", row.ProviderType))
 		return
 	}
 
 	cred, err := r.store.GetDecryptedByID(ctx, row.ID)
 	if err != nil {
-		r.logger.Error("tokenrefresh: get credential failed", "cred_id", row.ID, "error", err)
+		r.logger.Error("tokenrefresh: get credential failed", zap.String("cred_id", row.ID), zap.Error(err))
 		return
 	}
 
 	refreshToken := cred.RefreshToken
 	if refreshToken == "" {
-		r.logger.Warn("tokenrefresh: no refresh token, skipping", "cred_id", row.ID)
+		r.logger.Warn("tokenrefresh: no refresh token, skipping", zap.String("cred_id", row.ID))
 		return
 	}
 
@@ -175,9 +175,9 @@ func (r *Refresher) refreshOne(ctx context.Context, row pgadapter.OAuthCredentia
 	cancel()
 	if err != nil {
 		r.logger.Error("tokenrefresh: token refresh failed",
-			"cred_id", row.ID, "provider", row.ProviderType, "error", err)
+			zap.String("cred_id", row.ID), zap.String("provider", row.ProviderType), zap.Error(err))
 		if markErr := r.store.MarkInvalid(ctx, row.ID, fmt.Sprintf("refresh failed: %v", err)); markErr != nil {
-			r.logger.Error("tokenrefresh: mark invalid failed", "cred_id", row.ID, "error", markErr)
+			r.logger.Error("tokenrefresh: mark invalid failed", zap.String("cred_id", row.ID), zap.Error(markErr))
 		}
 		return
 	}
@@ -195,13 +195,13 @@ func (r *Refresher) refreshOne(ctx context.Context, row pgadapter.OAuthCredentia
 	}
 
 	if err := r.store.UpdateTokens(ctx, row.ID, tok.AccessToken, newRefresh, expiresAt); err != nil {
-		r.logger.Error("tokenrefresh: update tokens failed", "cred_id", row.ID, "error", err)
+		r.logger.Error("tokenrefresh: update tokens failed", zap.String("cred_id", row.ID), zap.Error(err))
 		return
 	}
 
 	r.logger.Info("tokenrefresh: refreshed successfully",
-		"cred_id", row.ID, "provider", row.ProviderType,
-		"expires_in_s", tok.ExpiresIn)
+		zap.String("cred_id", row.ID), zap.String("provider", row.ProviderType),
+		zap.Int("expires_in_s", tok.ExpiresIn))
 }
 
 // callTokenEndpoint sends a refresh_token grant request to the provider's token URL.

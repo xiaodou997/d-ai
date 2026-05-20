@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"go.uber.org/zap"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -52,7 +53,7 @@ func (s *Server) writeAdminAuditLog(r *http.Request, status int) {
 		Result:         result,
 		HttpStatus:     optionalInt4Value(int32(status)),
 	}); err != nil {
-		s.logger.Error("record admin audit log failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		s.logger.Error("record admin audit log failed", zap.Error(err), zap.String("request_id", requestIDFromContext(r.Context())))
 	}
 }
 

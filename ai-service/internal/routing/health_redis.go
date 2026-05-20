@@ -3,7 +3,7 @@ package routing
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"go.uber.org/zap"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -91,7 +91,7 @@ func (r *RedisHealthTracker) Start(ctx context.Context) {
 			}
 			var e healthEvent
 			if err := json.Unmarshal([]byte(msg.Payload), &e); err != nil {
-				slog.Warn("health_redis: malformed event", "payload", msg.Payload)
+				zap.L().Warn("health_redis: malformed event", zap.String("payload", msg.Payload))
 				continue
 			}
 			r.inner.syncFromEvent(e)
@@ -107,6 +107,6 @@ func (r *RedisHealthTracker) publish(e healthEvent) {
 		return
 	}
 	if pubErr := r.rdb.Publish(context.Background(), healthPubSubChannel, payload).Err(); pubErr != nil {
-		slog.Debug("health_redis: publish failed", "error", pubErr)
+		zap.L().Debug("health_redis: publish failed", zap.Error(pubErr))
 	}
 }

@@ -2,16 +2,14 @@ package httpserver
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	pgadapter "xiaodou/uni-ai-api/internal/adapters/postgres"
 	redisadapter "xiaodou/uni-ai-api/internal/adapters/redis"
@@ -44,7 +42,7 @@ type Config struct {
 	BanSubscriber banChecker
 	Postgres      *pgxpool.Pool
 	Redis         *redis.Client
-	Logger        *slog.Logger
+	Logger        *zap.Logger
 }
 
 type banChecker interface {
@@ -66,7 +64,7 @@ type Server struct {
 	httpServer    *http.Server
 	postgres      *pgxpool.Pool
 	redis         *redis.Client
-	logger        *slog.Logger
+	logger        *zap.Logger
 	queries       *dbgen.Queries
 	security      config.SecurityConfig
 	urmClient     urmClient
@@ -87,7 +85,7 @@ type Server struct {
 
 func New(cfg Config) *Server {
 	if cfg.Logger == nil {
-		cfg.Logger = slog.Default()
+		panic("logger is required")
 	}
 
 	q := dbgen.New(cfg.Postgres)
@@ -420,12 +418,12 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 				if ww.Status() == 0 {
 					writeErr(ww, http.StatusInternalServerError, BizErrInternal, "internal server error")
 				}
-				s.logger.Error("http request panic",
-					"error", fmt.Sprint(recovered),
-					"stack", string(debug.Stack()),
-					"request_id", requestID,
-					"method", r.Method,
-					"path", r.URL.Path,
+				s.logger.Error("HTTP request panic",
+					zap.Any("error", recovered),
+					zap.Stack("stack"),
+					zap.String("request_id", requestID),
+					zap.String("method", r.Method),
+					zap.String("path", r.URL.Path),
 				)
 			}
 
@@ -433,31 +431,37 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 			status := responseStatus(ww)
 			routePath := routePattern(r)
 
-			attrs := []any{
-				"method", r.Method,
-				"path", routePath,
-				"raw_path", r.URL.Path,
-				"status", status,
-				"bytes", ww.BytesWritten(),
-				"duration_ms", elapsed.Milliseconds(),
-				"request_id", requestID,
-				"remote_ip", r.RemoteAddr,
-				"user_agent", r.UserAgent(),
+			fields := []zap.Field{
+				zap.String("request_id", requestID),
+				zap.String("method", r.Method),
+				zap.String("path", routePath),
+				zap.Int("status", status),
+				zap.Duration("latency", elapsed),
+				zap.String("client_ip", r.RemoteAddr),
+				zap.Int("bytes", ww.BytesWritten()),
+				zap.String("user_agent", r.UserAgent()),
 			}
 			if logCtx.TenantID != "" {
-				attrs = append(attrs, "tenant_id", logCtx.TenantID)
+				fields = append(fields, zap.String("tenant_id", logCtx.TenantID))
 			}
 			if logCtx.UserID != "" {
-				attrs = append(attrs, "user_id", logCtx.UserID)
+				fields = append(fields, zap.String("user_id", logCtx.UserID))
 			}
 			if logCtx.Role != "" {
-				attrs = append(attrs, "role", logCtx.Role)
+				fields = append(fields, zap.String("role", logCtx.Role))
 			}
 			if logCtx.APIKeyIDHash != "" {
-				attrs = append(attrs, "api_key_id_hash", logCtx.APIKeyIDHash)
+				fields = append(fields, zap.String("api_key_id_hash", logCtx.APIKeyIDHash))
 			}
 
-			s.logger.Info("http request", attrs...)
+			switch {
+			case status >= 500:
+				s.logger.Error("HTTP Request", fields...)
+			case status >= 400:
+				s.logger.Warn("HTTP Request", fields...)
+			default:
+				s.logger.Info("HTTP Request", fields...)
+			}
 		}()
 
 		next.ServeHTTP(ww, r)

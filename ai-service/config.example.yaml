@@ -24,19 +24,19 @@
 server:
   port: 13010
 
-database:
-  dsn: "postgres://postgres:postgres@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public"
+postgres:
+  dsn: 'postgres://postgres:postgres@127.0.0.1:5432/uni_ai_api?sslmode=disable&search_path=public'
   max_conns: 10
   min_conns: 1
 
 redis:
-  addr: "127.0.0.1:6379"   # 留空则禁用
+  addr: '127.0.0.1:6379' # 留空则禁用
 
 urm:
-  base_url: "http://127.0.0.1:6900"
-  client_id: "uni-ai-api-local"
-  display_name: "Uni AI API Gateway"
-  description: "AI API gateway service for SSO authentication"
+  base_url: 'http://127.0.0.1:6900'
+  client_id: 'uni-ai-api-local'
+  display_name: 'Uni AI API Gateway'
+  description: 'AI API gateway service for SSO authentication'
 
 security:
-  provider_key_master: "change-me-local-provider-key-master"
+  provider_key_master: 'change-me-local-provider-key-master'

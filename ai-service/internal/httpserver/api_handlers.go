@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"go.uber.org/zap"
 	"encoding/json"
 	"net/http"
 
@@ -38,7 +39,7 @@ func (s *Server) handleTenantAPIKeysSelf(w http.ResponseWriter, r *http.Request)
 		OwnerType: pgtype.Text{String: "tenant", Valid: true},
 	})
 	if err != nil {
-		s.logger.Error("list tenant api keys failed", "error", err)
+		s.logger.Error("list tenant api keys failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -69,7 +70,7 @@ func (s *Server) handleTenantModelGrantsSelf(w http.ResponseWriter, r *http.Requ
 
 	rows, err := s.queries.ListTenantModelGrants(r.Context(), tenantID)
 	if err != nil {
-		s.logger.Error("list tenant model grants failed", "error", err)
+		s.logger.Error("list tenant model grants failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -141,7 +142,7 @@ func (s *Server) handleUserModelGrantsSelf(w http.ResponseWriter, r *http.Reques
 
 	rows, err := s.queries.ListUserAvailableModels(r.Context(), ac.TenantID)
 	if err != nil {
-		s.logger.Error("list user available models failed", "error", err)
+		s.logger.Error("list user available models failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -176,7 +177,7 @@ func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Req
 
 	summary, err := s.queries.GetDashboardSummary(r.Context(), params)
 	if err != nil {
-		s.logger.Error("dashboard summary failed", "error", err)
+		s.logger.Error("dashboard summary failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -212,7 +213,7 @@ func (s *Server) handleUserPricesSelf(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.queries.ListTenantUserPrices(r.Context(), ac.TenantID)
 	if err != nil {
-		s.logger.Error("list tenant user prices failed", "error", err)
+		s.logger.Error("list tenant user prices failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -250,7 +251,7 @@ func (s *Server) handleUserUsageLogsSelf(w http.ResponseWriter, r *http.Request)
 		Limit:    limit,
 	})
 	if err != nil {
-		s.logger.Error("list user usage logs failed", "error", err)
+		s.logger.Error("list user usage logs failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -276,7 +277,7 @@ func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Reque
 		UserID:   ac.UserID,
 	})
 	if err != nil {
-		s.logger.Error("list user usage summary failed", "error", err)
+		s.logger.Error("list user usage summary failed", zap.Error(err))
 		writeDBErr(w, err)
 		return
 	}
@@ -325,7 +326,7 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
 	})
 	if err != nil {
-		s.logger.Error("create tenant api key failed", "error", err)
+		s.logger.Error("create tenant api key failed", zap.Error(err))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "create failed")
 		return
 	}
@@ -365,7 +366,7 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 		Status:        defaultStatus,
 	})
 	if err != nil {
-		s.logger.Error("update tenant api key failed", "error", err)
+		s.logger.Error("update tenant api key failed", zap.Error(err))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
@@ -398,7 +399,7 @@ func (s *Server) handleTenantsMeAPIKeysStatus(w http.ResponseWriter, r *http.Req
 		Status:   req.Status,
 	})
 	if err != nil {
-		s.logger.Error("update tenant api key status failed", "error", err)
+		s.logger.Error("update tenant api key status failed", zap.Error(err))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
@@ -569,7 +570,7 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
 	})
 	if err != nil {
-		s.logger.Error("create user api key failed", "error", err)
+		s.logger.Error("create user api key failed", zap.Error(err))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "create failed")
 		return
 	}
@@ -609,7 +610,7 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 		Status:        defaultStatus,
 	})
 	if err != nil {
-		s.logger.Error("update user api key failed", "error", err)
+		s.logger.Error("update user api key failed", zap.Error(err))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}
@@ -642,7 +643,7 @@ func (s *Server) handleUsersMeAPIKeysStatus(w http.ResponseWriter, r *http.Reque
 		Status:   req.Status,
 	})
 	if err != nil {
-		s.logger.Error("update user api key status failed", "error", err)
+		s.logger.Error("update user api key status failed", zap.Error(err))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "update failed")
 		return
 	}

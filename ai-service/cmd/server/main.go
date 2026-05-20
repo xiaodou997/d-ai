@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"go.uber.org/zap"
 
 	pgadapter "xiaodou/uni-ai-api/internal/adapters/postgres"
 	"xiaodou/uni-ai-api/internal/cache"
 	"xiaodou/uni-ai-api/internal/config"
 	"xiaodou/uni-ai-api/internal/db"
 	"xiaodou/uni-ai-api/internal/httpserver"
-	obslogger "xiaodou/uni-ai-api/internal/observability/logger"
+	"xiaodou/uni-ai-api/internal/logger"
 	"xiaodou/uni-ai-api/internal/observability/tracing"
 	"xiaodou/uni-ai-api/internal/tokenrefresh"
 	"xiaodou/uni-ai-api/internal/urm"
@@ -22,16 +23,23 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("load config failed", "error", err)
-		os.Exit(1)
+		panic(err)
 	}
 
-	logger := obslogger.New()
-	slog.SetDefault(logger)
-	logger.Info("configuration loaded",
-		"http_addr", cfg.Server.Addr,
-		"urm_base_url", cfg.URM.BaseURL,
-		"urm_client_id", cfg.URM.ClientID,
+	logCfg := logger.LogConfig{
+		Level: cfg.Log.Level,
+		File:  cfg.Log.File,
+	}
+	appLogger := logger.InitLogger(cfg.App.Env, logCfg)
+	defer appLogger.Sync()
+
+	// Set global zap logger so zap.L() / zap.S() work everywhere
+	logger.SetGlobal(appLogger)
+
+	appLogger.Info("configuration loaded",
+		zap.String("http_addr", cfg.Server.Addr),
+		zap.String("urm_base_url", cfg.URM.BaseURL),
+		zap.String("urm_client_id", cfg.URM.ClientID),
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -44,53 +52,53 @@ func main() {
 
 	pg, err := db.Open(ctx, cfg.Postgres)
 	if err != nil {
-		logger.Error("connect postgres failed", "error", err)
+		appLogger.Error("connect postgres failed", zap.Error(err))
 		os.Exit(1)
 	}
 	defer pg.Close()
-	logger.Info("postgres connected",
-		"max_conns", cfg.Postgres.MaxConns,
-		"min_conns", cfg.Postgres.MinConns,
+	appLogger.Info("postgres connected",
+		zap.Int32("max_conns", cfg.Postgres.MaxConns),
+		zap.Int32("min_conns", cfg.Postgres.MinConns),
 	)
 
 	redisClient, err := cache.Open(ctx, cfg.Redis)
 	if err != nil {
-		logger.Error("connect redis failed", "error", err)
+		appLogger.Error("connect redis failed", zap.Error(err))
 		os.Exit(1)
 	}
 	if redisClient != nil {
 		defer redisClient.Close()
-		logger.Info("redis connected", "addr", cfg.Redis.Addr)
+		appLogger.Info("redis connected", zap.String("addr", cfg.Redis.Addr))
 	} else {
-		logger.Info("redis disabled")
+		appLogger.Info("redis disabled")
 	}
 
 	urmBillingClient, err := urm.NewClient(cfg.URM)
 	if err != nil {
-		logger.Error("failed to create URM client", "error", err)
+		appLogger.Error("failed to create URM client", zap.Error(err))
 		os.Exit(1)
 	}
-	logger.Info("URM client registered successfully", "client_id", cfg.URM.ClientID)
+	appLogger.Info("URM client registered successfully", zap.String("client_id", cfg.URM.ClientID))
 
 	jwksValidator := urm.NewJWKSValidator(cfg.URM.BaseURL, cfg.URM.Timeout)
 	if err := jwksValidator.Start(ctx); err != nil {
-		logger.Warn("jwks initial fetch failed, will retry on first request", "error", err)
+		appLogger.Warn("jwks initial fetch failed, will retry on first request", zap.Error(err))
 	} else {
-		logger.Info("jwks loaded", "urm_base_url", cfg.URM.BaseURL)
+		appLogger.Info("jwks loaded", zap.String("urm_base_url", cfg.URM.BaseURL))
 	}
 
 	var banSubscriber *urm.BanSubscriber
 	if redisClient != nil {
-		banSubscriber = urm.NewBanSubscriber(redisClient, logger)
+		banSubscriber = urm.NewBanSubscriber(redisClient, appLogger)
 		banSubscriber.Start(ctx)
-		logger.Info("ban subscriber started")
+		appLogger.Info("ban subscriber started")
 	}
 
 	// Start OAuth token refresher as a background goroutine.
 	oauthCreds := pgadapter.NewOAuthCredentialStore(pg, cfg.Security.ProviderKeyMaster)
-	refresher := tokenrefresh.New(oauthCreds, logger)
+	refresher := tokenrefresh.New(oauthCreds, appLogger)
 	go refresher.Start(ctx)
-	logger.Info("oauth token refresher started")
+	appLogger.Info("oauth token refresher started")
 
 	server := httpserver.New(httpserver.Config{
 		Server:        cfg.Server,
@@ -101,12 +109,12 @@ func main() {
 		BanSubscriber: banSubscriber,
 		Postgres:      pg,
 		Redis:         redisClient,
-		Logger:        logger,
+		Logger:        appLogger,
 	})
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("server starting", "addr", cfg.Server.Addr)
+		appLogger.Info("server starting", zap.String("addr", cfg.Server.Addr))
 		errCh <- server.Start(cfg.Server.Addr)
 	}()
 
@@ -115,13 +123,13 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			logger.Error("server shutdown failed", "error", err)
+			appLogger.Error("server shutdown failed", zap.Error(err))
 			os.Exit(1)
 		}
-		logger.Info("server stopped")
+		appLogger.Info("server stopped")
 	case err := <-errCh:
 		if err != nil {
-			logger.Error("server failed", "error", err)
+			appLogger.Error("server failed", zap.Error(err))
 			os.Exit(1)
 		}
 	}

@@ -3,7 +3,7 @@ package urm
 
 import (
 	"context"
-	"log/slog"
+	"go.uber.org/zap"
 
 	"xiaodou/uni-ai-api/internal/domain"
 	"xiaodou/uni-ai-api/internal/serving"
@@ -39,7 +39,7 @@ type Biller struct {
 	pricing              PricingResolver
 	calculate            BillingCalculator
 	defaultTokenEstimate int // tokens to assume when freezing before actual usage is known
-	logger               *slog.Logger
+	logger               *zap.Logger
 }
 
 func NewBiller(
@@ -47,13 +47,13 @@ func NewBiller(
 	pricing PricingResolver,
 	calculate BillingCalculator,
 	defaultTokenEstimate int,
-	logger *slog.Logger,
+	logger *zap.Logger,
 ) *Biller {
 	if defaultTokenEstimate <= 0 {
 		defaultTokenEstimate = 4096
 	}
 	if logger == nil {
-		logger = slog.Default()
+		logger = zap.L()
 	}
 	return &Biller{
 		client:               client,
@@ -136,9 +136,9 @@ func (b *Biller) Confirm(ctx context.Context, req *serving.Request, _ serving.Bi
 	})
 	if err != nil {
 		b.logger.Error("urm confirm failed",
-			"error", err,
-			"transaction_id", req.URMTransactionID,
-			"request_id", req.RequestID,
+			zap.Error(err),
+			zap.String("transaction_id", req.URMTransactionID),
+			zap.String("request_id", req.RequestID),
 		)
 	}
 	return err
@@ -151,9 +151,9 @@ func (b *Biller) Cancel(ctx context.Context, req *serving.Request) {
 	}
 	if err := b.client.Cancel(ctx, req.URMTransactionID); err != nil {
 		b.logger.Warn("urm cancel failed",
-			"error", err,
-			"transaction_id", req.URMTransactionID,
-			"request_id", req.RequestID,
+			zap.Error(err),
+			zap.String("transaction_id", req.URMTransactionID),
+			zap.String("request_id", req.RequestID),
 		)
 	}
 }

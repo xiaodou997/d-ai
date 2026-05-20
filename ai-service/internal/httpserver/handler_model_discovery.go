@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"go.uber.org/zap"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,9 +44,9 @@ func (s *Server) handleAdminFetchEndpointUpstreamModels(w http.ResponseWriter, r
 	apiKey, err := secret.DecryptProviderKey(s.security.ProviderKeyMaster, endpoint.ApiKeyCiphertext)
 	if err != nil {
 		s.logger.Error("model discovery: decrypt api key failed",
-			"error", err,
-			"endpoint_id", endpointID,
-			"request_id", requestIDFromContext(r.Context()))
+			zap.Error(err),
+			zap.String("endpoint_id", endpointID.String()),
+			zap.String("request_id", requestIDFromContext(r.Context())))
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "failed to decrypt api key")
 		return
 	}
@@ -53,11 +54,11 @@ func (s *Server) handleAdminFetchEndpointUpstreamModels(w http.ResponseWriter, r
 	models, fetchErr := s.fetchUpstreamModelList(r.Context(), endpoint.BaseUrl, apiKey, endpoint.DefaultProtocol, endpoint.ExtraHeaders, int(endpoint.TimeoutMs))
 	if fetchErr != nil {
 		s.logger.Error("model discovery: fetch upstream models failed",
-			"error", fetchErr,
-			"endpoint_id", endpointID,
-			"base_url", endpoint.BaseUrl,
-			"default_protocol", endpoint.DefaultProtocol,
-			"request_id", requestIDFromContext(r.Context()))
+			zap.Error(fetchErr),
+			zap.String("endpoint_id", endpointID.String()),
+			zap.String("base_url", endpoint.BaseUrl),
+			zap.String("default_protocol", endpoint.DefaultProtocol),
+			zap.String("request_id", requestIDFromContext(r.Context())))
 		writeErr(w, http.StatusBadGateway, BizErrUpstreamUnavailable, sanitizeUpstreamFetchError(fetchErr))
 		return
 	}

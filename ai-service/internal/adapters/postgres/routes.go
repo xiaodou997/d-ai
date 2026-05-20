@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
+	"go.uber.org/zap"
 	"math/rand"
 	"net/http"
 
@@ -236,8 +236,8 @@ func (s *RouteSelector) SelectCandidates(ctx context.Context, req *serving.Reque
 		if !c.IsPoolRoute() && c.APIKeyCiphertext != "" {
 			key, derr := secret.DecryptProviderKey(s.masterKey, c.APIKeyCiphertext)
 			if derr != nil {
-				slog.WarnContext(ctx, "decrypt api key failed, skipping route",
-					"route_id", c.RouteID, "error", derr)
+				zap.L().Warn("decrypt api key failed, skipping route",
+					zap.String("route_id", c.RouteID), zap.Error(derr))
 				continue
 			}
 			c.APIKeyCiphertext = key

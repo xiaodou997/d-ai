@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"go.uber.org/zap"
 	"xiaodou/uni-ai-api/internal/domain"
 )
 
@@ -44,7 +45,7 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 
 	models, err := s.callableModels(r, auth)
 	if err != nil {
-		s.logger.Error("list models failed", "error", err, "request_id", requestIDFromContext(r.Context()))
+		s.logger.Error("list models failed", zap.Error(err), zap.String("request_id", requestIDFromContext(r.Context())))
 		writeRuntimeErrorByProtocol(w, clientProtoFromRequest(r),
 			http.StatusInternalServerError, "Failed to list models.", "server_error")
 		return
@@ -60,7 +61,6 @@ func (s *Server) handleListModels(w http.ResponseWriter, r *http.Request) {
 		items = append(items, modelItem{
 			ID:      m,
 			Object:  "model",
-			OwnedBy: "uni-ai-api",
 		})
 	}
 	writeJSON(w, http.StatusOK, modelsResponse{Object: "list", Data: items})
@@ -86,7 +86,6 @@ func buildAnthropicModelsResponse(codes []string) anthropicModelsResponse {
 	for _, c := range codes {
 		items = append(items, anthropicModelItem{
 			Type:        "model",
-			ID:          c,
 			DisplayName: c,
 		})
 	}

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 	"strings"
@@ -147,8 +147,8 @@ func (s *Server) validURMAdminToken(r *http.Request) (adminContext, bool) {
 	claims, err := s.jwksValidator.ValidateToken(r.Context(), token)
 	if err != nil {
 		s.logger.Warn("validate urm admin token failed",
-			"error", err,
-			"request_id", requestIDFromContext(r.Context()),
+			zap.Error(err),
+			zap.String("request_id", requestIDFromContext(r.Context())),
 		)
 		return adminContext{}, false
 	}
@@ -358,10 +358,10 @@ func decodeAdminJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
-		slog.WarnContext(r.Context(), "decode admin request body failed",
-			"error", err,
-			"path", r.URL.Path,
-			"request_id", requestIDFromContext(r.Context()),
+		zap.L().Warn("decode admin request body failed",
+			zap.Error(err),
+			zap.String("path", r.URL.Path),
+			zap.String("request_id", requestIDFromContext(r.Context())),
 		)
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid request body: "+err.Error())
 		return false
@@ -373,10 +373,10 @@ func decodeAdminJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 // Used for import endpoints where the payload may contain extra provider-specific fields.
 func decodeAdminJSONLenient(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		slog.WarnContext(r.Context(), "decode admin request body failed",
-			"error", err,
-			"path", r.URL.Path,
-			"request_id", requestIDFromContext(r.Context()),
+		zap.L().Warn("decode admin request body failed",
+			zap.Error(err),
+			zap.String("path", r.URL.Path),
+			zap.String("request_id", requestIDFromContext(r.Context())),
 		)
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid request body: "+err.Error())
 		return false
@@ -580,7 +580,7 @@ func boolOrDefault(value *bool, defaultValue bool) bool {
 }
 
 func (s *Server) writeAdminServerError(w http.ResponseWriter, r *http.Request, message string, err error) {
-	s.logger.Error(message, "error", err, "request_id", requestIDFromContext(r.Context()))
+	s.logger.Error(message, zap.Error(err), zap.String("request_id", requestIDFromContext(r.Context())))
 	writeErr(w, http.StatusInternalServerError, BizErrInternal, "server error")
 }
 
