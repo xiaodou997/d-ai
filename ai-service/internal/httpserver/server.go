@@ -16,6 +16,7 @@ import (
 	urmadapter "xiaodou/uni-ai-api/internal/adapters/urm"
 	"xiaodou/uni-ai-api/internal/apikey"
 	"xiaodou/uni-ai-api/internal/audit"
+	"xiaodou/uni-ai-api/internal/blobstore"
 	"xiaodou/uni-ai-api/internal/config"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 	"xiaodou/uni-ai-api/internal/domain"
@@ -26,6 +27,12 @@ import (
 	"xiaodou/uni-ai-api/internal/transport"
 	"xiaodou/uni-ai-api/internal/urm"
 )
+
+// auditPartitioner is a minimal interface for partition maintenance.
+type auditPartitioner interface {
+	EnsurePartitions(ctx context.Context) error
+	Run(ctx context.Context)
+}
 
 // stickyStoreAdapter adapts redisadapter.RedisSticky to serving.stickyWriter
 // without creating an import cycle. RedisSticky already implements routing.StickyStore
@@ -76,10 +83,12 @@ type Server struct {
 	tokenRefresher    *tokenrefresh.Refresher
 	routeSelector     *pgadapter.RouteSelector
 	routeWeightsStore *pgadapter.RouteWeightsStore
-	auditWorker *audit.Worker // optional; nil = audit log disabled
+	auditWorker  *audit.Worker // optional; nil = audit log disabled
+	partitioner  auditPartitioner
+	shutdownAudit context.CancelFunc
 
 	// Serving pipeline — shared across requests (steps are stateless)
-	pipeline    *serving.Pipeline
+	pipeline *serving.Pipeline
 	apiKeyCache *apikey.Cache
 }
 
@@ -150,7 +159,9 @@ func New(cfg Config) *Server {
 
 	// Audit log: async structured request/response persistence.
 	auditStore := pgadapter.NewAuditStore(cfg.Postgres)
-	auditWorker := audit.NewWorker(auditStore)
+	blobStore := blobstore.NewPGStore(cfg.Postgres)
+	partitioner := blobstore.NewPartitioner(cfg.Postgres)
+	auditWorker := audit.NewWorker(auditStore, blobStore)
 
 	usageLogger := pgadapter.NewUsageLogger(q)
 
@@ -173,7 +184,8 @@ func New(cfg Config) *Server {
 		tokenRefresher:    tokenrefresh.New(oauthCreds, cfg.Logger),
 		routeSelector:     routeSelector,
 		routeWeightsStore: routeWeightsStore,
-		auditWorker:       auditWorker,
+		auditWorker:  auditWorker,
+		partitioner:  partitioner,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -196,7 +208,8 @@ func New(cfg Config) *Server {
 			},
 			&serving.URMConfirmStep{Biller: urmBiller},
 			&serving.UsageLogStep{Logger: usageLogger, Metrics: gw},
-			&serving.AuditLogStep{Worker: auditWorker},
+		).WithFinalizers(
+			&serving.AuditFinalizer{Worker: auditWorker},
 		),
 		apiKeyCache: apiKeyCache,
 	}
@@ -390,9 +403,19 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Start(addr string) error {
+	auditCtx, auditCancel := context.WithCancel(context.Background())
+	s.shutdownAudit = auditCancel
+
 	if s.auditWorker != nil {
-		s.auditWorker.Start(context.Background())
+		s.auditWorker.Start(auditCtx)
 	}
+	if s.partitioner != nil {
+		if err := s.partitioner.EnsurePartitions(auditCtx); err != nil {
+			s.logger.Warn("audit: partition pre-check failed", zap.Error(err))
+		}
+		go s.partitioner.Run(auditCtx)
+	}
+
 	s.httpServer.Addr = addr
 	err := s.httpServer.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
@@ -402,7 +425,12 @@ func (s *Server) Start(addr string) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
-	return s.httpServer.Shutdown(ctx)
+	err := s.httpServer.Shutdown(ctx)
+	// Cancel audit context: Worker.run drains remaining entries then exits.
+	if s.shutdownAudit != nil {
+		s.shutdownAudit()
+	}
+	return err
 }
 
 func (s *Server) requestLogger(next http.Handler) http.Handler {

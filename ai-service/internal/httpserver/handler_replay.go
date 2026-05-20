@@ -38,9 +38,13 @@ func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
 		"request_messages": json.RawMessage(record.RequestMessages),
 		"request_params":   json.RawMessage(record.RequestParams),
 		"response_message": json.RawMessage(record.ResponseMessage),
+		"media_refs":       json.RawMessage(record.MediaRefs),
 		"request_status":   record.RequestStatus,
 		"http_status":      record.HTTPStatus,
 		"error_code":       record.ErrorCode,
 		"latency_ms":       record.LatencyMs,
+		"prompt_tokens":    record.PromptTokens,
+		"completion_tokens": record.CompletionTokens,
+		"tenant_id":        record.TenantID,
 	})
 }

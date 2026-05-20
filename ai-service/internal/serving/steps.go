@@ -358,7 +358,7 @@ func (s *UsageLogStep) Execute(ctx context.Context, req *Request) error {
 func (s *UsageLogStep) Rollback(_ context.Context, _ *Request) {}
 
 // ============================================================================
-// AuditLogStep — asynchronously persists the full request/response payload
+// AuditFinalizer — asynchronously persists the full request/response payload
 // ============================================================================
 
 // AuditSubmitter enqueues a payload for async persistence.
@@ -366,18 +366,19 @@ type AuditSubmitter interface {
 	Submit(p *audit.Payload) bool
 }
 
-// AuditLogStep builds an audit.Payload from the completed request and submits
-// it to the Worker. It always returns nil — audit failures must never block
-// the response path.
-type AuditLogStep struct {
+// AuditFinalizer implements Finalizer: builds an audit.Payload from the
+// completed request (success or failure) and submits it to the Worker.
+// It runs unconditionally after the pipeline completes, including for
+// requests that fail before reaching the Execute step (auth/quota/routing).
+type AuditFinalizer struct {
 	Worker AuditSubmitter
 }
 
-func (s *AuditLogStep) Name() string { return "audit_log" }
+func (f *AuditFinalizer) Name() string { return "audit_log" }
 
-func (s *AuditLogStep) Execute(_ context.Context, req *Request) error {
-	if s.Worker == nil {
-		return nil
+func (f *AuditFinalizer) Finalize(_ context.Context, req *Request) {
+	if f.Worker == nil {
+		return
 	}
 
 	var messages, params json.RawMessage
@@ -395,6 +396,13 @@ func (s *AuditLogStep) Execute(_ context.Context, req *Request) error {
 		}
 	}
 
+	// For the images protocol the response body contains b64_json arrays;
+	// pass the raw upstream body so the Worker can extract blobs from it.
+	responseMessage := req.AuditResponseMessage
+	if req.ClientProtocol == domain.ProtocolOpenAIImages {
+		responseMessage = req.UpstreamResponseBody
+	}
+
 	p := &audit.Payload{
 		RequestID:       req.RequestID,
 		ClientProtocol:  string(req.ClientProtocol),
@@ -405,21 +413,15 @@ func (s *AuditLogStep) Execute(_ context.Context, req *Request) error {
 		RequestModel:    req.ModelCode,
 		RequestMessages: messages,
 		RequestParams:   params,
-		ResponseMessage: req.AuditResponseMessage,
+		ResponseMessage: responseMessage,
 		RequestStatus:   string(req.RequestStatus),
 		HTTPStatus:      req.HTTPStatus,
 		ErrorCode:       req.ErrorCode,
 	}
 
-	if !s.Worker.Submit(p) {
-		zap.L().Warn("audit_log: payload dropped",
-			zap.String("request_id", req.RequestID),
-		)
-	}
-	return nil
+	f.Worker.Submit(p)
 }
 
-func (s *AuditLogStep) Rollback(_ context.Context, _ *Request) {}
 
 // ============================================================================
 // Helpers
