@@ -580,41 +580,73 @@ INSERT INTO ai_route_score_weights (scope, weights)
   ON CONFLICT (scope) DO NOTHING;
 
 -- ============================================================================
--- AI Request Payloads (结构化审计日志：每条请求完整记录，异步写入)
--- request_messages / request_params 按协议拆分；response_message 为重建的 assistant 消息。
--- media_refs 预留 object storage 迁移；无过期字段，由定时任务分表归档。
+-- AI Request Payloads v2 (按月分区审计日志，按需 JOIN ai_usage_logs 获取冗余字段)
+-- 只存 usage_log 没有的 wire 层信息 + 正文 JSONB + 早期失败自带的结果字段。
+-- 归档 = DETACH PARTITION；blob GC / detach 由手动 SQL 执行。
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS ai_request_payloads (
-  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id        TEXT        NOT NULL,
-  tenant_id         TEXT        NOT NULL,
-  api_key_id        UUID,
-  capability_type   TEXT        NOT NULL,
-  client_protocol   TEXT        NOT NULL,
-  client_ip         TEXT,
-  user_agent        TEXT,
-  request_path      TEXT        NOT NULL,
-  auth_masked       TEXT,
-  request_model     TEXT        NOT NULL,
-  request_messages  JSONB,
-  request_params    JSONB,
-  route_id          TEXT,
-  upstream_provider TEXT,
-  upstream_model    TEXT,
-  upstream_endpoint TEXT,
-  response_message  JSONB,
-  response_model    TEXT,
-  media_refs        JSONB,
-  prompt_tokens     INT         NOT NULL DEFAULT 0,
-  completion_tokens INT         NOT NULL DEFAULT 0,
-  request_status    TEXT        NOT NULL,
-  http_status       INT,
-  error_code        TEXT,
-  latency_ms        INT,
-  first_token_ms    INT,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
-CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_request_id ON ai_request_payloads (request_id);
-CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_tenant_ts  ON ai_request_payloads (tenant_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_apikey_ts  ON ai_request_payloads (api_key_id, created_at DESC);
+-- Drop old non-partitioned table (激進重構 v1→v2，不兼容历史数据).
+-- relkind='r' means regular (non-partitioned) heap table.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class WHERE relname = 'ai_request_payloads' AND relkind = 'r'
+  ) THEN
+    DROP TABLE ai_request_payloads;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS ai_request_payloads (
+  id               UUID        NOT NULL DEFAULT gen_random_uuid(),
+  request_id       TEXT        NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  client_protocol  TEXT        NOT NULL,
+  client_ip        TEXT,
+  user_agent       TEXT,
+  request_path     TEXT        NOT NULL,
+  auth_masked      TEXT,
+  request_model    TEXT        NOT NULL,
+  request_messages JSONB,
+  request_params   JSONB,
+  response_message JSONB,
+  media_refs       JSONB,
+  request_status   TEXT        NOT NULL,
+  http_status      INT,
+  error_code       TEXT,
+  PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+CREATE INDEX IF NOT EXISTS idx_arp_request_id ON ai_request_payloads (request_id, created_at);
+
+-- Pre-build partitions for the current month and the next two months.
+DO $$
+DECLARE
+  m      TIMESTAMPTZ;
+  pname  TEXT;
+  pstart TIMESTAMPTZ;
+  pend   TIMESTAMPTZ;
+BEGIN
+  FOR i IN 0..2 LOOP
+    m      := date_trunc('month', NOW()) + (i || ' months')::INTERVAL;
+    pname  := 'ai_request_payloads_' || to_char(m, 'YYYY_MM');
+    pstart := m;
+    pend   := m + INTERVAL '1 month';
+    IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = pname) THEN
+      EXECUTE format(
+        'CREATE TABLE %I PARTITION OF ai_request_payloads FOR VALUES FROM (%L) TO (%L)',
+        pname, pstart, pend
+      );
+    END IF;
+  END LOOP;
+END $$;
+
+-- ============================================================================
+-- AI Audit Blobs (content-addressed media store; sha256 dedup via ON CONFLICT)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_audit_blobs (
+  sha256       TEXT        PRIMARY KEY,
+  content      BYTEA       NOT NULL,
+  content_type TEXT        NOT NULL,
+  size_bytes   INT         NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
