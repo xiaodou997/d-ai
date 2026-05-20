@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,7 +50,9 @@ func newHandler() http.Handler {
 	mux.HandleFunc("/v1/embeddings", handleEmbeddings)
 	mux.HandleFunc("/embeddings", handleEmbeddings)
 	mux.HandleFunc("/v1/images/generations", handleImageGenerations)
+	mux.HandleFunc("/v1/images/edits", handleImageGenerations)
 	mux.HandleFunc("/images/generations", handleImageGenerations)
+	mux.HandleFunc("/images/edits", handleImageGenerations)
 	return mux
 }
 
@@ -243,12 +246,26 @@ func handleImageGenerations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var raw map[string]json.RawMessage
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-		writeJSON(w, http.StatusBadRequest, openAIError("Invalid request body."))
-		return
+	n := 1
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, openAIError("Invalid request body."))
+			return
+		}
+		if parsed, err := strconv.Atoi(r.FormValue("n")); err == nil && parsed > 0 {
+			n = parsed
+		}
+	} else {
+		var raw map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			writeJSON(w, http.StatusBadRequest, openAIError("Invalid request body."))
+			return
+		}
+		n = imageCount(raw)
 	}
-	n := imageCount(raw)
+	if n > 10 {
+		n = 10
+	}
 	data := make([]map[string]string, 0, n)
 	for i := 0; i < n; i++ {
 		data = append(data, map[string]string{

@@ -88,19 +88,20 @@ type Request struct {
 	BillingResolved bool
 
 	// Filled by Execute step
-	TokenUsage          domain.TokenUsage
-	TokenCountSource    string // "upstream" | "estimated" — set by Execute, read by UsageLogger
-	UpstreamBodySize    int    // byte length of the serialised upstream request body; used for token estimation
-	UpstreamBody        []byte // serialised upstream request body (for payload persistence / replay)
+	TokenUsage           domain.TokenUsage
+	TokenCountSource     string // "upstream" | "estimated" — set by Execute, read by UsageLogger
+	ClientPath           string
+	UpstreamBodySize     int    // byte length of the serialised upstream request body; used for token estimation
+	UpstreamBody         []byte // serialised upstream request body (for payload persistence / replay)
 	UpstreamResponseBody []byte // raw sync response body (nil for streams; used for replay)
-	BillingResult    domain.BillingResult
-	RequestStatus    domain.RequestStatus
-	HTTPStatus       int
-	UpstreamStatus   int
-	ErrorCode        string
-	ErrorMessage     string
-	LatencyMs        int
-	FirstTokenMs     int
+	BillingResult        domain.BillingResult
+	RequestStatus        domain.RequestStatus
+	HTTPStatus           int
+	UpstreamStatus       int
+	ErrorCode            string
+	ErrorMessage         string
+	LatencyMs            int
+	FirstTokenMs         int
 
 	// Internal timestamps
 	StartedAt time.Time

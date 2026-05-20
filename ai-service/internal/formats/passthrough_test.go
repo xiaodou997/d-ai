@@ -1,7 +1,10 @@
 package formats
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
+	"net/textproto"
 	"testing"
 
 	"xiaodou/uni-ai-api/internal/domain"
@@ -9,7 +12,7 @@ import (
 
 func TestRewriteModelNoOpWhenAlreadyMatches(t *testing.T) {
 	in := []byte(`{"model":"foo","messages":[{"role":"user","content":"hi"}]}`)
-	out, err := RewriteModel(in, "foo")
+	out, err := RewriteModel(in, "foo", "application/json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +24,7 @@ func TestRewriteModelNoOpWhenAlreadyMatches(t *testing.T) {
 
 func TestRewriteModelReplaces(t *testing.T) {
 	in := []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"hi"}],"cache_control":{"type":"ephemeral"}}`)
-	out, err := RewriteModel(in, "gpt-4-turbo-2026-05-01")
+	out, err := RewriteModel(in, "gpt-4-turbo-2026-05-01", "application/json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +68,59 @@ func TestApplyCodexRequestModifications(t *testing.T) {
 	// previous_response_id must be preserved — it's the multi-turn chain key.
 	if got["previous_response_id"] != "resp_abc" {
 		t.Errorf("previous_response_id was dropped — Codex multi-turn would break")
+	}
+}
+
+func TestParseRequestMetaMultipart(t *testing.T) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("model", "gpt-image-2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WriteField("size", "1024x1024"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	meta, err := ParseRequestMeta(buf.Bytes(), w.FormDataContentType())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Model != "gpt-image-2" || meta.Stream {
+		t.Fatalf("meta = %+v", meta)
+	}
+}
+
+func TestRewriteModelMultipart(t *testing.T) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if err := w.WriteField("model", "old-model"); err != nil {
+		t.Fatal(err)
+	}
+	part, err := w.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="image"; filename="a.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("fakepng")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := RewriteModel(buf.Bytes(), "gpt-image-2", w.FormDataContentType())
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := ParseRequestMeta(out, w.FormDataContentType())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.Model != "gpt-image-2" {
+		t.Fatalf("model not rewritten: %+v", meta)
 	}
 }
 

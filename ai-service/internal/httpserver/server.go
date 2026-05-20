@@ -31,8 +31,6 @@ import (
 // which is the interface used by RouteCandidatesStep. ExecuteStep uses stickyWriter
 // (a subset of routing.StickyStore); both are satisfied by *redisadapter.RedisSticky.
 
-
-
 type Config struct {
 	Server        config.ServerConfig
 	Security      config.SecurityConfig
@@ -62,17 +60,17 @@ type jwksValidator interface {
 }
 
 type Server struct {
-	httpServer    *http.Server
-	postgres      *pgxpool.Pool
-	redis         *redis.Client
-	logger        *zap.Logger
-	queries       *dbgen.Queries
-	security      config.SecurityConfig
-	urmClient     urmClient
-	urmClientID   string
-	jwksValidator jwksValidator
-	banSubscriber banChecker
-	httpClient    *http.Client
+	httpServer        *http.Server
+	postgres          *pgxpool.Pool
+	redis             *redis.Client
+	logger            *zap.Logger
+	queries           *dbgen.Queries
+	security          config.SecurityConfig
+	urmClient         urmClient
+	urmClientID       string
+	jwksValidator     jwksValidator
+	banSubscriber     banChecker
+	httpClient        *http.Client
 	oauthCreds        *pgadapter.OAuthCredentialStore
 	tokenRefresher    *tokenrefresh.Refresher
 	routeSelector     *pgadapter.RouteSelector
@@ -369,6 +367,7 @@ func New(cfg Config) *Server {
 		r.Post("/responses", s.handleRuntime(domain.CapabilityChat)) // Responses API uses chat capability
 		r.Post("/embeddings", s.handleRuntime(domain.CapabilityEmbedding))
 		r.Post("/images/generations", s.handleRuntime(domain.CapabilityImage))
+		r.Post("/images/edits", s.handleRuntime(domain.CapabilityImage))
 		r.Post("/messages", s.handleRuntime(domain.CapabilityChat)) // Native Anthropic client path
 		r.Post("/messages/count_tokens", s.handleCountTokens)       // Anthropic count_tokens API
 	})

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,6 +82,7 @@ func (s *Server) handleGeminiRuntime(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType domain.CapabilityType, override runtimeOverride) {
 	clientProto := formats.DetectClientProtocol(r)
+	contentType := r.Header.Get("Content-Type")
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 32*1024*1024))
 	if err != nil {
@@ -100,6 +103,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 		StartedAt:      time.Now(),
 		RequestID:      newRequestID(r),
 		TraceID:        r.Header.Get("X-Trace-Id"),
+		ClientPath:     r.URL.Path,
 	}
 
 	// Resolve model + stream. URL overrides (Gemini) take precedence over body
@@ -110,7 +114,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 		model = override.model
 		stream = override.stream
 	} else {
-		meta, err := formats.ParseRequestMeta(body)
+		meta, err := formats.ParseRequestMeta(body, contentType)
 		if err != nil {
 			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
 				"Invalid request body: "+err.Error(), "invalid_body")
@@ -130,17 +134,10 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 	case domain.CapabilityChat:
 		req.ConversationID = extractConversationID(body, r)
 	case domain.CapabilityImage:
-		var meta struct {
-			N    *int   `json:"n"`
-			Size string `json:"size"`
+		if count, size := parseImageBillingMeta(body, contentType); count > 0 || size != "" {
+			req.TokenUsage.ImageCount = count
+			req.TokenUsage.ImageResolution = size
 		}
-		_ = json.Unmarshal(body, &meta)
-		n := 1
-		if meta.N != nil && *meta.N > 0 {
-			n = *meta.N
-		}
-		req.TokenUsage.ImageCount = n
-		req.TokenUsage.ImageResolution = meta.Size
 	case domain.CapabilityVideo:
 		var meta struct {
 			Resolution string  `json:"resolution"`
@@ -159,7 +156,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 
 	if err := s.pipeline.Run(r.Context(), req); err != nil {
 		if req.HTTPStatus != 0 {
-			s.logger.Warn( "pipeline error after response committed",
+			s.logger.Warn("pipeline error after response committed",
 				zap.Error(err),
 				zap.String("request_id", req.RequestID),
 				zap.Int("http_status", req.HTTPStatus),
@@ -170,6 +167,31 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 		return
 	}
 	writeRouteHeaders(w, req)
+}
+
+func parseImageBillingMeta(body []byte, contentType string) (count int, size string) {
+	count = 1
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil && mediaType == "multipart/form-data" {
+		fields, err := formats.MultipartScalarFields(body, contentType, 1<<20)
+		if err != nil {
+			return count, ""
+		}
+		if v := fields["n"]; v != "" {
+			if parsed, perr := strconv.Atoi(v); perr == nil && parsed > 0 {
+				count = parsed
+			}
+		}
+		return count, fields["size"]
+	}
+	var meta struct {
+		N    *int   `json:"n"`
+		Size string `json:"size"`
+	}
+	_ = json.Unmarshal(body, &meta)
+	if meta.N != nil && *meta.N > 0 {
+		count = *meta.N
+	}
+	return count, meta.Size
 }
 
 // writeRuntimeError converts a pipeline error to a protocol-appropriate JSON

@@ -227,7 +227,7 @@ func (s *ExecuteStep) runAttempt(parentCtx context.Context, req *Request, cand *
 		defer s.Stats.DecrInflight(parentCtx, cand.RouteID)
 	}
 
-	upstreamURL := buildURL(cand, req.IsStream)
+	upstreamURL := buildURL(cand, req)
 	zap.L().Info("upstream call started",
 		zap.String("request_id", req.RequestID),
 		zap.String("upstream_url", upstreamURL),
@@ -1058,7 +1058,11 @@ func buildUpstreamBody(req *Request) ([]byte, error) {
 	// Model substitution. RewriteModel returns the original slice unchanged
 	// when the client already named upstream_model, so zero-cost in the
 	// common path.
-	body, err := formats.RewriteModel(body, req.Candidate.UpstreamModel)
+	contentType := ""
+	if req.Envelope != nil && req.Envelope.R != nil {
+		contentType = req.Envelope.R.Header.Get("Content-Type")
+	}
+	body, err := formats.RewriteModel(body, req.Candidate.UpstreamModel, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -1076,7 +1080,13 @@ func buildUpstreamBody(req *Request) ([]byte, error) {
 	return applyOAuthBodyTransform(req, body)
 }
 
-func buildURL(c *domain.RouteCandidate, isStream bool) string {
+func buildURL(c *domain.RouteCandidate, req *Request) string {
+	isStream := false
+	clientPath := ""
+	if req != nil {
+		isStream = req.IsStream
+		clientPath = req.ClientPath
+	}
 	// gemini_cli / antigravity use Google's internal CodeAssist endpoint with
 	// its own path template, independent of c.RequestPath.
 	if c.FixedProviderType == domain.FixedProviderGeminiCLI ||
@@ -1091,7 +1101,7 @@ func buildURL(c *domain.RouteCandidate, isStream bool) string {
 	base := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
 	path := c.RequestPath
 	if path == "" {
-		path = defaultPath(c.Protocol)
+		path = defaultPath(c.Protocol, clientPath)
 	}
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
@@ -1113,7 +1123,7 @@ func buildURL(c *domain.RouteCandidate, isStream bool) string {
 	return url
 }
 
-func defaultPath(protocol domain.UpstreamProtocol) string {
+func defaultPath(protocol domain.UpstreamProtocol, clientPath string) string {
 	switch protocol {
 	case domain.ProtocolOpenAIChat:
 		return "/v1/chat/completions"
@@ -1124,6 +1134,9 @@ func defaultPath(protocol domain.UpstreamProtocol) string {
 	case domain.ProtocolOpenAIEmbeddings:
 		return "/v1/embeddings"
 	case domain.ProtocolOpenAIImages:
+		if strings.Contains(clientPath, "/images/edits") {
+			return "/v1/images/edits"
+		}
 		return "/v1/images/generations"
 	case domain.ProtocolAnthropicMessages:
 		return "/v1/messages"
@@ -1139,6 +1152,11 @@ func defaultPath(protocol domain.UpstreamProtocol) string {
 func buildHeaders(c *domain.RouteCandidate, req *Request) map[string]string {
 	headers := map[string]string{
 		"Content-Type": "application/json",
+	}
+	if req != nil && req.Envelope != nil && req.Envelope.R != nil {
+		if ct := req.Envelope.R.Header.Get("Content-Type"); ct != "" {
+			headers["Content-Type"] = ct
+		}
 	}
 	if req.IsStream {
 		headers["Accept"] = "text/event-stream"

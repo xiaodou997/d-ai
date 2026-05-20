@@ -37,7 +37,7 @@ func DetectClientProtocol(r *http.Request) domain.UpstreamProtocol {
 		return domain.ProtocolOpenAIResponses
 	case strings.Contains(path, "/embeddings"):
 		return domain.ProtocolOpenAIEmbeddings
-	case strings.Contains(path, "/images/generations"):
+	case strings.Contains(path, "/images/generations"), strings.Contains(path, "/images/edits"):
 		return domain.ProtocolOpenAIImages
 	default:
 		return domain.ProtocolOpenAIChat

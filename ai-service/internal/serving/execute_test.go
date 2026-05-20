@@ -72,7 +72,7 @@ func TestBuildURL(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildURL(tc.cand, tc.stream)
+			got := buildURL(tc.cand, &Request{IsStream: tc.stream})
 			if tc.want != "" && got != tc.want {
 				t.Fatalf("buildURL = %q, want %q", got, tc.want)
 			}
@@ -82,6 +82,17 @@ func TestBuildURL(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildURLImageEditsDefaultPath(t *testing.T) {
+	cand := &domain.RouteCandidate{
+		BaseURL:  "https://api.openai.com",
+		Protocol: domain.ProtocolOpenAIImages,
+	}
+	got := buildURL(cand, &Request{ClientPath: "/v1/images/edits"})
+	if want := "https://api.openai.com/v1/images/edits"; got != want {
+		t.Fatalf("buildURL = %q, want %q", got, want)
 	}
 }
 
