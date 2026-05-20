@@ -19,12 +19,25 @@ type ResponseAccumulator struct {
 	oaiText  strings.Builder
 	oaiTools map[int]*oaiToolState // index → partial tool call
 
+	// OpenAI Responses
+	respOutputs map[int]*respOutputState // output_index → state
+	respOrder   []int
+
 	// Anthropic
 	antBlocks map[int]*antBlockState // index → block
 	antOrder  []int
 
 	// Gemini
 	gemText strings.Builder
+}
+
+type respOutputState struct {
+	itemType  string // "message" | "function_call"
+	textParts map[int]*strings.Builder // content_index → accumulated text
+	partOrder []int
+	callID    string
+	funcName  string
+	funcArgs  strings.Builder
 }
 
 type oaiToolState struct {
@@ -44,9 +57,10 @@ type antBlockState struct {
 // NewResponseAccumulator creates an accumulator for the given wire protocol.
 func NewResponseAccumulator(protocol domain.UpstreamProtocol) *ResponseAccumulator {
 	return &ResponseAccumulator{
-		protocol:  protocol,
-		oaiTools:  make(map[int]*oaiToolState),
-		antBlocks: make(map[int]*antBlockState),
+		protocol:    protocol,
+		oaiTools:    make(map[int]*oaiToolState),
+		respOutputs: make(map[int]*respOutputState),
+		antBlocks:   make(map[int]*antBlockState),
 	}
 }
 
@@ -61,6 +75,8 @@ func (a *ResponseAccumulator) AddChunk(data []byte) {
 		a.addOpenAIChat(data)
 	case domain.ProtocolOpenAICompletions:
 		a.addOpenAICompletions(data)
+	case domain.ProtocolOpenAIResponses:
+		a.addOpenAIResponses(data)
 	case domain.ProtocolAnthropicMessages:
 		a.addAnthropic(data)
 	case domain.ProtocolGeminiGenerate:
@@ -74,6 +90,8 @@ func (a *ResponseAccumulator) Build() json.RawMessage {
 	switch a.protocol {
 	case domain.ProtocolOpenAIChat:
 		return a.buildOpenAIChat()
+	case domain.ProtocolOpenAIResponses:
+		return a.buildOpenAIResponses()
 	case domain.ProtocolOpenAICompletions:
 		if a.oaiText.Len() == 0 {
 			return nil
@@ -343,4 +361,136 @@ func (a *ResponseAccumulator) addGemini(data []byte) {
 	for _, p := range chunk.Candidates[0].Content.Parts {
 		a.gemText.WriteString(p.Text)
 	}
+}
+
+// ============================================================================
+// OpenAI Responses (streaming)
+// ============================================================================
+//
+// Relevant event types:
+//   response.output_text.delta      → append text to output_index/content_index
+//   response.function_call_arguments.delta → append args to output_index
+//   response.output_item.done       → capture function_call metadata (id/name)
+
+func (a *ResponseAccumulator) addOpenAIResponses(data []byte) {
+	var frame struct {
+		Type         string `json:"type"`
+		OutputIndex  int    `json:"output_index"`
+		ContentIndex int    `json:"content_index"`
+		Delta        string `json:"delta"`
+		Item         *struct {
+			Type      string `json:"type"`
+			ID        string `json:"id"`
+			CallID    string `json:"call_id"`
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal(data, &frame); err != nil {
+		return
+	}
+
+	switch frame.Type {
+	case "response.output_text.delta":
+		out := a.ensureRespOutput(frame.OutputIndex)
+		out.itemType = "message"
+		if _, ok := out.textParts[frame.ContentIndex]; !ok {
+			out.textParts[frame.ContentIndex] = &strings.Builder{}
+			out.partOrder = append(out.partOrder, frame.ContentIndex)
+		}
+		out.textParts[frame.ContentIndex].WriteString(frame.Delta)
+
+	case "response.function_call_arguments.delta":
+		out := a.ensureRespOutput(frame.OutputIndex)
+		out.itemType = "function_call"
+		out.funcArgs.WriteString(frame.Delta)
+
+	case "response.output_item.done":
+		if frame.Item == nil || frame.Item.Type != "function_call" {
+			return
+		}
+		out := a.ensureRespOutput(frame.OutputIndex)
+		out.itemType = "function_call"
+		if out.callID == "" {
+			out.callID = frame.Item.CallID
+		}
+		if out.funcName == "" {
+			out.funcName = frame.Item.Name
+		}
+		// If arguments were not streamed incrementally, use the done item's value.
+		if out.funcArgs.Len() == 0 && frame.Item.Arguments != "" {
+			out.funcArgs.WriteString(frame.Item.Arguments)
+		}
+	}
+}
+
+func (a *ResponseAccumulator) ensureRespOutput(idx int) *respOutputState {
+	out, ok := a.respOutputs[idx]
+	if !ok {
+		out = &respOutputState{textParts: make(map[int]*strings.Builder)}
+		a.respOutputs[idx] = out
+		a.respOrder = append(a.respOrder, idx)
+	}
+	return out
+}
+
+func (a *ResponseAccumulator) buildOpenAIResponses() json.RawMessage {
+	if len(a.respOutputs) == 0 {
+		return nil
+	}
+
+	type textContent struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	type msgItem struct {
+		Type    string        `json:"type"`
+		Role    string        `json:"role"`
+		Content []textContent `json:"content"`
+	}
+	type funcItem struct {
+		Type      string `json:"type"`
+		CallID    string `json:"call_id,omitempty"`
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	}
+
+	var items []json.RawMessage
+	for _, idx := range a.respOrder {
+		out := a.respOutputs[idx]
+		switch out.itemType {
+		case "message":
+			var parts []textContent
+			for _, ci := range out.partOrder {
+				if sb := out.textParts[ci]; sb != nil && sb.Len() > 0 {
+					parts = append(parts, textContent{Type: "output_text", Text: sb.String()})
+				}
+			}
+			if len(parts) == 0 {
+				continue
+			}
+			b, _ := json.Marshal(msgItem{Type: "message", Role: "assistant", Content: parts})
+			items = append(items, b)
+		case "function_call":
+			if out.funcName == "" && out.funcArgs.Len() == 0 {
+				continue
+			}
+			args := out.funcArgs.String()
+			if args == "" {
+				args = "{}"
+			}
+			b, _ := json.Marshal(funcItem{
+				Type:      "function_call",
+				CallID:    out.callID,
+				Name:      out.funcName,
+				Arguments: args,
+			})
+			items = append(items, b)
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	// Return first item (mirrors ExtractSyncResponseMessage for Responses).
+	return items[0]
 }
