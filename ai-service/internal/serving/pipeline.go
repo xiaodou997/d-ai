@@ -10,6 +10,8 @@ package serving
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -130,13 +132,22 @@ type Step interface {
 	Rollback(ctx context.Context, req *Request)
 }
 
+// Finalizer runs unconditionally after the pipeline completes (whether success
+// or failure, after all rollbacks). Finalizers must not return errors — any
+// internal failures should be logged and swallowed.
+type Finalizer interface {
+	Name() string
+	Finalize(ctx context.Context, req *Request)
+}
+
 // ============================================================================
 // Pipeline
 // ============================================================================
 
 // Pipeline chains Steps and manages rollback on failure.
 type Pipeline struct {
-	steps []Step
+	steps      []Step
+	finalizers []Finalizer
 }
 
 // NewPipeline constructs a pipeline from an ordered list of steps.
@@ -144,8 +155,16 @@ func NewPipeline(steps ...Step) *Pipeline {
 	return &Pipeline{steps: steps}
 }
 
+// WithFinalizers attaches finalizers that run unconditionally after Run
+// completes (success or failure, after all rollbacks). Returns p for chaining.
+func (p *Pipeline) WithFinalizers(fns ...Finalizer) *Pipeline {
+	p.finalizers = append(p.finalizers, fns...)
+	return p
+}
+
 // Run executes all steps in order. On the first error, it rolls back
 // all previously-completed steps in reverse order, then returns the error.
+// Finalizers (if any) always run last, after rollback, with normalized req state.
 // The ResponseWriter should already have been written by the Execute step
 // before pipeline failure occurs (errors after execution are best-effort).
 func (p *Pipeline) Run(ctx context.Context, req *Request) error {
@@ -158,6 +177,16 @@ func (p *Pipeline) Run(ctx context.Context, req *Request) error {
 		span.SetAttributes(attribute.String("request.id", req.RequestID))
 	}
 	defer span.End()
+
+	var pipeErr error
+	if len(p.finalizers) > 0 {
+		defer func() {
+			normalizePipelineError(req, pipeErr)
+			for _, f := range p.finalizers {
+				f.Finalize(ctx, req)
+			}
+		}()
+	}
 
 	completed := make([]Step, 0, len(p.steps))
 
@@ -173,12 +202,43 @@ func (p *Pipeline) Run(ctx context.Context, req *Request) error {
 				completed[i].Rollback(stepCtx, req)
 			}
 			span.SetStatus(codes.Error, err.Error())
-			return &PipelineError{Step: step.Name(), Cause: err}
+			pipeErr = &PipelineError{Step: step.Name(), Cause: err}
+			return pipeErr
 		}
 		stepSpan.End()
 		completed = append(completed, step)
 	}
 	return nil
+}
+
+// normalizePipelineError fills any unset result fields on req from the pipeline
+// error. Fields already written by the Execute step are preserved.
+func normalizePipelineError(req *Request, err error) {
+	if err == nil {
+		if req.RequestStatus == "" {
+			req.RequestStatus = domain.RequestSuccess
+		}
+		return
+	}
+	if req.RequestStatus == "" {
+		req.RequestStatus = domain.RequestFailed
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		if req.HTTPStatus == 0 {
+			req.HTTPStatus = apiErr.Status
+		}
+		if req.ErrorCode == "" {
+			req.ErrorCode = apiErr.Code
+		}
+	} else {
+		if req.HTTPStatus == 0 {
+			req.HTTPStatus = http.StatusInternalServerError
+		}
+		if req.ErrorCode == "" {
+			req.ErrorCode = "internal_error"
+		}
+	}
 }
 
 // PipelineError wraps an error with the name of the step that failed.
