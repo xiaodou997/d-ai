@@ -59,6 +59,11 @@ request.interceptors.response.use(
         return Promise.reject(new Error(res.message || '登录已过期'))
       }
 
+      if (res.code === 10005) {
+        ElMessage.error(res.message || '账号已被封禁')
+        return Promise.reject(new Error(res.message || '账号已被封禁'))
+      }
+
       ElMessage.error(res.message || '请求失败')
       return Promise.reject(new Error(res.message || '请求失败'))
     }

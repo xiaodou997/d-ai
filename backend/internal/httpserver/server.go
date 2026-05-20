@@ -418,7 +418,7 @@ func (s *Server) requestLogger(next http.Handler) http.Handler {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				if ww.Status() == 0 {
-					http.Error(ww, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+					writeErr(ww, http.StatusInternalServerError, BizErrInternal, "internal server error")
 				}
 				s.logger.Error("http request panic",
 					"error", fmt.Sprint(recovered),

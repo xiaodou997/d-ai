@@ -99,7 +99,7 @@ func (c *Client) autoRegister(ctx context.Context) error {
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return fmt.Errorf("parse register response: %w", err)
 	}
-	if envelope.Code != 0 && envelope.Code != 200 {
+	if envelope.Code != 0 {
 		return fmt.Errorf("register error %d: %s", envelope.Code, envelope.Message)
 	}
 	if envelope.Data.ClientSecret == "" {
@@ -159,7 +159,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (*T
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return nil, fmt.Errorf("parse exchange response: %w", err)
 	}
-	if envelope.Code != 0 && envelope.Code != 200 {
+	if envelope.Code != 0 {
 		return nil, fmt.Errorf("exchange error %d: %s", envelope.Code, envelope.Message)
 	}
 	return &envelope.Data, nil
@@ -253,7 +253,7 @@ func (c *Client) bootstrapSecret(ctx context.Context) (string, error) {
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return "", fmt.Errorf("parse bootstrap response: %w", err)
 	}
-	if envelope.Code != 0 && envelope.Code != 200 {
+	if envelope.Code != 0 {
 		return "", fmt.Errorf("bootstrap error %d: %s", envelope.Code, envelope.Message)
 	}
 	if envelope.Data.ClientSecret == "" {
@@ -295,7 +295,7 @@ func (c *Client) fetchServiceToken(ctx context.Context) (string, time.Time, erro
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return "", time.Time{}, fmt.Errorf("parse token response: %w", err)
 	}
-	if envelope.Code != 0 && envelope.Code != 200 {
+	if envelope.Code != 0 {
 		return "", time.Time{}, fmt.Errorf("token error %d: %s", envelope.Code, envelope.Message)
 	}
 	if envelope.Data.AccessToken == "" {
@@ -354,7 +354,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return fmt.Errorf("parse urm envelope: %w", err)
 	}
-	if envelope.Code != 0 && envelope.Code != 200 {
+	if envelope.Code != 0 {
 		return fmt.Errorf("urm error %d: %s", envelope.Code, envelope.Message)
 	}
 
@@ -392,7 +392,7 @@ func (c *Client) doBearer(ctx context.Context, method, path, token string, out a
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return fmt.Errorf("parse urm envelope: %w", err)
 	}
-	if envelope.Code != 0 && envelope.Code != 200 {
+	if envelope.Code != 0 {
 		return fmt.Errorf("urm error %d: %s", envelope.Code, envelope.Message)
 	}
 

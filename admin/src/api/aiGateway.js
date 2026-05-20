@@ -78,6 +78,12 @@ gatewayRequest.interceptors.response.use(
         const bizCode = data?.code
         const refreshToken = localStorage.getItem('admin_refreshToken')
 
+        // code 10005: 账号被封禁，不跳转登录页，直接提示
+        if (bizCode === 10005) {
+          ElMessage.error(data?.message || '账号已被封禁')
+          return Promise.reject(error)
+        }
+
         // code 10001: token 无效/已吊销，无法刷新，直接跳转登录
         if (bizCode === 10001 || !refreshToken) {
           ElMessage.error(data?.message || '登录已失效，请重新登录')

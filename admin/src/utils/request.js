@@ -53,7 +53,7 @@ request.interceptors.response.use(
   (response) => {
     const res = response.data
 
-    if (res.code !== undefined && res.code !== 0 && res.code !== 200) {
+    if (res.code !== undefined && res.code !== 0) {
       if (res.code === 10001 || res.code === 10002) {
         const authStore = useAuthStore()
         authStore.clearState()
@@ -61,6 +61,11 @@ request.interceptors.response.use(
         ElMessage.error(res.message || '登录已过期，请重新登录')
         redirectToLogin()
         return Promise.reject(new Error(res.message || '登录已过期'))
+      }
+
+      if (res.code === 10005) {
+        ElMessage.error(res.message || '账号已被封禁')
+        return Promise.reject(new Error(res.message || '账号已被封禁'))
       }
 
       ElMessage.error(res.message || '请求失败')
