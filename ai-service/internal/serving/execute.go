@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"xiaodou/uni-ai-api/internal/audit"
 	"xiaodou/uni-ai-api/internal/domain"
 	"xiaodou/uni-ai-api/internal/formats"
 	"xiaodou/uni-ai-api/internal/formats/claude"
@@ -646,6 +647,11 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 	req.UpstreamResponseBody = bodyBytes
 
 	bodyBytes = unwrapCodeAssistResponse(req.Candidate, bodyBytes)
+	bodyBytes = formats.RewriteSyncResponseModel(bodyBytes, req.ModelCode, req.Candidate.Protocol)
+
+	// Extract the assistant reply for the audit log from the original body
+	// (before model-name rewrite, but model identity is captured separately).
+	req.AuditResponseMessage = audit.ExtractSyncResponseMessage(req.UpstreamResponseBody, req.Candidate.Protocol)
 
 	// A 200 whose body is actually an error object is a failed attempt — fail
 	// over to another route instead of relaying a broken success.
@@ -825,8 +831,12 @@ awaitLoop:
 	)
 
 	accumulatedOutputBytes := 0
+	modelRewriter := formats.NewStreamModelRewriter(req.ModelCode, req.Candidate.Protocol)
+	auditAcc := audit.NewResponseAccumulator(req.Candidate.Protocol)
+
 	// forward writes one already-framed SSE line to the client, stripping the
-	// CodeAssist envelope on data lines and side-extracting usage for billing.
+	// CodeAssist envelope on data lines, rewriting the model name to the
+	// public-facing model code, and side-extracting usage for billing.
 	forward := func(line []byte, evt string) error {
 		trimmed := trimEOL(line)
 		if !bytes.HasPrefix(trimmed, dataPrefix) {
@@ -839,18 +849,20 @@ awaitLoop:
 			return err
 		}
 		unwrapped := unwrapCodeAssistResponse(req.Candidate, data)
-		if bytes.Equal(unwrapped, data) {
+		finalData := modelRewriter.Rewrite(unwrapped)
+		auditAcc.AddChunk(finalData)
+		if bytes.Equal(finalData, data) {
 			if _, err := w.Write(line); err != nil {
 				return err
 			}
 		} else {
-			out := append(append([]byte(nil), dataPrefix...), unwrapped...)
+			out := append(append([]byte(nil), dataPrefix...), finalData...)
 			out = append(out, '\n')
 			if _, err := w.Write(out); err != nil {
 				return err
 			}
 		}
-		if u, ok := formats.ExtractStreamUsage(req.TokenUsage, unwrapped, evt, protocol); ok {
+		if u, ok := formats.ExtractStreamUsage(req.TokenUsage, finalData, evt, protocol); ok {
 			u.ImageCount = req.TokenUsage.ImageCount
 			u.ImageResolution = req.TokenUsage.ImageResolution
 			u.VideoSeconds = req.TokenUsage.VideoSeconds
@@ -858,7 +870,7 @@ awaitLoop:
 			req.TokenUsage = u
 			accumulatedOutputBytes = 0
 		} else {
-			accumulatedOutputBytes += len(unwrapped)
+			accumulatedOutputBytes += len(finalData)
 		}
 		return nil
 	}
@@ -876,6 +888,7 @@ awaitLoop:
 	eventType = ""
 
 	if awaitErr != nil {
+		req.AuditResponseMessage = auditAcc.Build()
 		return finishStream(req, startTime, accumulatedOutputBytes, awaitErr, dc, w, flusher)
 	}
 
@@ -899,6 +912,7 @@ awaitLoop:
 			}
 		}
 		if readErr != nil {
+			req.AuditResponseMessage = auditAcc.Build()
 			return finishStream(req, startTime, accumulatedOutputBytes, readErr, dc, w, flusher)
 		}
 	}

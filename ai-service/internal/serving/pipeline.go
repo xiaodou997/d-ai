@@ -87,6 +87,11 @@ type Request struct {
 	// UsageLogStep skips billing calculation when this is true.
 	BillingResolved bool
 
+	// Set by Execute step: rebuilt assistant message for the audit log.
+	// Sync requests: populated immediately after body read.
+	// Stream requests: populated after the stream drains (finishStream).
+	AuditResponseMessage []byte
+
 	// Filled by Execute step
 	TokenUsage           domain.TokenUsage
 	TokenCountSource     string // "upstream" | "estimated" — set by Execute, read by UsageLogger

@@ -15,6 +15,7 @@ import (
 	redisadapter "xiaodou/uni-ai-api/internal/adapters/redis"
 	urmadapter "xiaodou/uni-ai-api/internal/adapters/urm"
 	"xiaodou/uni-ai-api/internal/apikey"
+	"xiaodou/uni-ai-api/internal/audit"
 	"xiaodou/uni-ai-api/internal/config"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 	"xiaodou/uni-ai-api/internal/domain"
@@ -75,7 +76,7 @@ type Server struct {
 	tokenRefresher    *tokenrefresh.Refresher
 	routeSelector     *pgadapter.RouteSelector
 	routeWeightsStore *pgadapter.RouteWeightsStore
-	payloadStore      *pgadapter.PayloadStore // optional; nil when masterKey is empty
+	auditWorker *audit.Worker // optional; nil = audit log disabled
 
 	// Serving pipeline — shared across requests (steps are stateless)
 	pipeline    *serving.Pipeline
@@ -147,16 +148,11 @@ func New(cfg Config) *Server {
 		stickyStore = redisadapter.NewRedisSticky(cfg.Redis)
 	}
 
-	// P4: Payload store for failed-request body persistence.
-	var payloadStore *pgadapter.PayloadStore
-	if cfg.Security.ProviderKeyMaster != "" {
-		payloadStore = pgadapter.NewPayloadStore(cfg.Postgres, cfg.Security.ProviderKeyMaster)
-	}
+	// Audit log: async structured request/response persistence.
+	auditStore := pgadapter.NewAuditStore(cfg.Postgres)
+	auditWorker := audit.NewWorker(auditStore)
 
 	usageLogger := pgadapter.NewUsageLogger(q)
-	if payloadStore != nil {
-		usageLogger.SetPayloadStore(payloadStore)
-	}
 
 	var apiKeyCache *apikey.Cache
 	if cfg.Redis != nil {
@@ -177,7 +173,7 @@ func New(cfg Config) *Server {
 		tokenRefresher:    tokenrefresh.New(oauthCreds, cfg.Logger),
 		routeSelector:     routeSelector,
 		routeWeightsStore: routeWeightsStore,
-		payloadStore:      payloadStore,
+		auditWorker:       auditWorker,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -200,6 +196,7 @@ func New(cfg Config) *Server {
 			},
 			&serving.URMConfirmStep{Biller: urmBiller},
 			&serving.UsageLogStep{Logger: usageLogger, Metrics: gw},
+			&serving.AuditLogStep{Worker: auditWorker},
 		),
 		apiKeyCache: apiKeyCache,
 	}
@@ -393,8 +390,8 @@ func New(cfg Config) *Server {
 }
 
 func (s *Server) Start(addr string) error {
-	if s.payloadStore != nil {
-		s.payloadStore.StartCleanupJob(context.Background())
+	if s.auditWorker != nil {
+		s.auditWorker.Start(context.Background())
 	}
 	s.httpServer.Addr = addr
 	err := s.httpServer.ListenAndServe()

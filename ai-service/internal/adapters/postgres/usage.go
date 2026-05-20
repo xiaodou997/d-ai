@@ -21,18 +21,12 @@ import (
 //	2. ai_tenant_model_price_overrides (tenant override)
 //	3. ai_model_prices (base price)
 type UsageLogger struct {
-	q        *dbgen.Queries
-	prices   *PriceResolver
-	payloads *PayloadStore // optional; nil = payload persistence disabled
+	q      *dbgen.Queries
+	prices *PriceResolver
 }
 
 func NewUsageLogger(q *dbgen.Queries) *UsageLogger {
 	return &UsageLogger{q: q, prices: NewPriceResolver(q)}
-}
-
-// SetPayloadStore enables payload persistence for failed/sampled requests.
-func (l *UsageLogger) SetPayloadStore(ps *PayloadStore) {
-	l.payloads = ps
 }
 
 // Log records a usage entry regardless of request success/failure.
@@ -70,24 +64,8 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 		})
 	}()
 
-	logID, err := l.createUsageLog(ctx, req, billing)
-	if err != nil {
+	if _, err := l.createUsageLog(ctx, req, billing); err != nil {
 		return fmt.Errorf("create usage log: %w", err)
-	}
-
-	// Async payload persistence (failed + sampled). clientBody is not available
-	// here; pass a best-effort copy from Envelope (may be nil for non-chat).
-	if l.payloads != nil {
-		var clientBody []byte
-		if req.Envelope != nil {
-			clientBody = req.Envelope.ClientBody
-		}
-		go func() {
-			defer recoverGoroutine("payload save", req.RequestID)
-			bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			l.payloads.Save(bgCtx, logID, req, clientBody)
-		}()
 	}
 
 	// Async rollup — best effort

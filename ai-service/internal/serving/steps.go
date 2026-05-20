@@ -2,11 +2,15 @@ package serving
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"net/http"
+	"strings"
 
+	"go.uber.org/zap"
+
+	"xiaodou/uni-ai-api/internal/audit"
 	"xiaodou/uni-ai-api/internal/domain"
 	"xiaodou/uni-ai-api/internal/routing"
 )
@@ -354,6 +358,93 @@ func (s *UsageLogStep) Execute(ctx context.Context, req *Request) error {
 func (s *UsageLogStep) Rollback(_ context.Context, _ *Request) {}
 
 // ============================================================================
+// AuditLogStep — asynchronously persists the full request/response payload
+// ============================================================================
+
+// AuditSubmitter enqueues a payload for async persistence.
+type AuditSubmitter interface {
+	Submit(p *audit.Payload) bool
+}
+
+// AuditLogStep builds an audit.Payload from the completed request and submits
+// it to the Worker. It always returns nil — audit failures must never block
+// the response path.
+type AuditLogStep struct {
+	Worker AuditSubmitter
+}
+
+func (s *AuditLogStep) Name() string { return "audit_log" }
+
+func (s *AuditLogStep) Execute(_ context.Context, req *Request) error {
+	if s.Worker == nil || req.APIKey == nil {
+		return nil
+	}
+
+	upstreamEndpoint := ""
+	routeID := ""
+	upstreamProvider := ""
+	upstreamModel := ""
+	if req.Candidate != nil {
+		routeID = req.Candidate.RouteID
+		upstreamProvider = req.Candidate.ProviderCode
+		upstreamModel = req.Candidate.UpstreamModel
+		upstreamEndpoint = req.Candidate.BaseURL + req.Candidate.RequestPath
+	}
+
+	var messages, params json.RawMessage
+	authHeader := ""
+	requestPath := ""
+	clientIP := ""
+	userAgent := ""
+	if req.Envelope != nil {
+		messages, params = audit.ExtractRequestPayload(req.Envelope.ClientBody, req.ClientProtocol)
+		if req.Envelope.R != nil {
+			authHeader = audit.MaskAuthorization(req.Envelope.R.Header.Get("Authorization"))
+			requestPath = req.Envelope.R.URL.Path
+			clientIP = clientIPFromRequest(req.Envelope.R)
+			userAgent = req.Envelope.R.Header.Get("User-Agent")
+		}
+	}
+
+	p := &audit.Payload{
+		RequestID:        req.RequestID,
+		TenantID:         req.APIKey.TenantID,
+		APIKeyID:         req.APIKey.KeyID,
+		CapabilityType:   string(req.CapabilityType),
+		ClientProtocol:   string(req.ClientProtocol),
+		ClientIP:         clientIP,
+		UserAgent:        userAgent,
+		RequestPath:      requestPath,
+		AuthMasked:       authHeader,
+		RequestModel:     req.ModelCode,
+		RequestMessages:  messages,
+		RequestParams:    params,
+		RouteID:          routeID,
+		UpstreamProvider: upstreamProvider,
+		UpstreamModel:    upstreamModel,
+		UpstreamEndpoint: upstreamEndpoint,
+		ResponseMessage:  req.AuditResponseMessage,
+		ResponseModel:    upstreamModel,
+		PromptTokens:     int(req.TokenUsage.PromptTokens),
+		CompletionTokens: int(req.TokenUsage.CompletionTokens),
+		RequestStatus:    string(req.RequestStatus),
+		HTTPStatus:       req.HTTPStatus,
+		ErrorCode:        req.ErrorCode,
+		LatencyMs:        req.LatencyMs,
+		FirstTokenMs:     req.FirstTokenMs,
+	}
+
+	if !s.Worker.Submit(p) {
+		zap.L().Warn("audit_log: payload dropped (channel full)",
+			zap.String("request_id", req.RequestID),
+		)
+	}
+	return nil
+}
+
+func (s *AuditLogStep) Rollback(_ context.Context, _ *Request) {}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -370,6 +461,20 @@ func (e *APIError) Error() string {
 
 func apiError(status int, code, message string) *APIError {
 	return &APIError{Status: status, Code: code, Message: message}
+}
+
+// clientIPFromRequest returns the originating client IP, preferring the
+// X-Forwarded-For / X-Real-IP headers set by upstream proxies and falling
+// back to the raw connection address.
+func clientIPFromRequest(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		first, _, _ := strings.Cut(xff, ",")
+		return strings.TrimSpace(first)
+	}
+	if xr := r.Header.Get("X-Real-IP"); xr != "" {
+		return strings.TrimSpace(xr)
+	}
+	return r.RemoteAddr
 }
 
 func bearerToken(header string) string {
