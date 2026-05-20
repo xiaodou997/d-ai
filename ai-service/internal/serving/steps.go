@@ -376,19 +376,8 @@ type AuditLogStep struct {
 func (s *AuditLogStep) Name() string { return "audit_log" }
 
 func (s *AuditLogStep) Execute(_ context.Context, req *Request) error {
-	if s.Worker == nil || req.APIKey == nil {
+	if s.Worker == nil {
 		return nil
-	}
-
-	upstreamEndpoint := ""
-	routeID := ""
-	upstreamProvider := ""
-	upstreamModel := ""
-	if req.Candidate != nil {
-		routeID = req.Candidate.RouteID
-		upstreamProvider = req.Candidate.ProviderCode
-		upstreamModel = req.Candidate.UpstreamModel
-		upstreamEndpoint = req.Candidate.BaseURL + req.Candidate.RequestPath
 	}
 
 	var messages, params json.RawMessage
@@ -407,35 +396,23 @@ func (s *AuditLogStep) Execute(_ context.Context, req *Request) error {
 	}
 
 	p := &audit.Payload{
-		RequestID:        req.RequestID,
-		TenantID:         req.APIKey.TenantID,
-		APIKeyID:         req.APIKey.KeyID,
-		CapabilityType:   string(req.CapabilityType),
-		ClientProtocol:   string(req.ClientProtocol),
-		ClientIP:         clientIP,
-		UserAgent:        userAgent,
-		RequestPath:      requestPath,
-		AuthMasked:       authHeader,
-		RequestModel:     req.ModelCode,
-		RequestMessages:  messages,
-		RequestParams:    params,
-		RouteID:          routeID,
-		UpstreamProvider: upstreamProvider,
-		UpstreamModel:    upstreamModel,
-		UpstreamEndpoint: upstreamEndpoint,
-		ResponseMessage:  req.AuditResponseMessage,
-		ResponseModel:    upstreamModel,
-		PromptTokens:     int(req.TokenUsage.PromptTokens),
-		CompletionTokens: int(req.TokenUsage.CompletionTokens),
-		RequestStatus:    string(req.RequestStatus),
-		HTTPStatus:       req.HTTPStatus,
-		ErrorCode:        req.ErrorCode,
-		LatencyMs:        req.LatencyMs,
-		FirstTokenMs:     req.FirstTokenMs,
+		RequestID:       req.RequestID,
+		ClientProtocol:  string(req.ClientProtocol),
+		ClientIP:        clientIP,
+		UserAgent:       userAgent,
+		RequestPath:     requestPath,
+		AuthMasked:      authHeader,
+		RequestModel:    req.ModelCode,
+		RequestMessages: messages,
+		RequestParams:   params,
+		ResponseMessage: req.AuditResponseMessage,
+		RequestStatus:   string(req.RequestStatus),
+		HTTPStatus:      req.HTTPStatus,
+		ErrorCode:       req.ErrorCode,
 	}
 
 	if !s.Worker.Submit(p) {
-		zap.L().Warn("audit_log: payload dropped (channel full)",
+		zap.L().Warn("audit_log: payload dropped",
 			zap.String("request_id", req.RequestID),
 		)
 	}
