@@ -580,22 +580,41 @@ INSERT INTO ai_route_score_weights (scope, weights)
   ON CONFLICT (scope) DO NOTHING;
 
 -- ============================================================================
--- AI Request Payloads (请求落盘：失败请求必存 + 成功请求采样)
--- upstream_body / raw_client_body are AES-GCM encrypted (BYTEA).
+-- AI Request Payloads (结构化审计日志：每条请求完整记录，异步写入)
+-- request_messages / request_params 按协议拆分；response_message 为重建的 assistant 消息。
+-- media_refs 预留 object storage 迁移；无过期字段，由定时任务分表归档。
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_request_payloads (
   id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  usage_log_id      UUID,
-  upstream_body     BYTEA,
-  upstream_response BYTEA,
-  raw_client_body   BYTEA,
-  route_attempts    JSONB       NOT NULL DEFAULT '[]',
-  sampled           BOOLEAN     NOT NULL DEFAULT false,
-  client_protocol   TEXT        NOT NULL DEFAULT 'openai_chat',
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at        TIMESTAMPTZ NOT NULL
+  request_id        TEXT        NOT NULL,
+  tenant_id         TEXT        NOT NULL,
+  api_key_id        UUID,
+  capability_type   TEXT        NOT NULL,
+  client_protocol   TEXT        NOT NULL,
+  client_ip         TEXT,
+  user_agent        TEXT,
+  request_path      TEXT        NOT NULL,
+  auth_masked       TEXT,
+  request_model     TEXT        NOT NULL,
+  request_messages  JSONB,
+  request_params    JSONB,
+  route_id          TEXT,
+  upstream_provider TEXT,
+  upstream_model    TEXT,
+  upstream_endpoint TEXT,
+  response_message  JSONB,
+  response_model    TEXT,
+  media_refs        JSONB,
+  prompt_tokens     INT         NOT NULL DEFAULT 0,
+  completion_tokens INT         NOT NULL DEFAULT 0,
+  request_status    TEXT        NOT NULL,
+  http_status       INT,
+  error_code        TEXT,
+  latency_ms        INT,
+  first_token_ms    INT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_expires    ON ai_request_payloads (expires_at);
-CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_usage_log  ON ai_request_payloads (usage_log_id);
-CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_created    ON ai_request_payloads (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_request_id ON ai_request_payloads (request_id);
+CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_tenant_ts  ON ai_request_payloads (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_request_payloads_apikey_ts  ON ai_request_payloads (api_key_id, created_at DESC);
