@@ -20,14 +20,33 @@ const routes = [
     redirect: '/dashboard',
     meta: { requiresAuth: true },
     children: [
-      // 我的账户
+      // 工作台（首页）
       {
         path: '/dashboard',
-        name: 'MyAccount',
-        component: () => import('@/views/Dashboard/MyAccount.vue'),
-        meta: { title: '我的账户', requiresAuth: true }
+        name: 'Workspace',
+        component: () => import('@/views/AIGateway/MyUsage.vue'),
+        meta: { title: '工作台', requiresAuth: true }
+      },
+      // AI Gateway
+      {
+        path: '/ai/models',
+        name: 'AvailableModels',
+        component: () => import('@/views/AIGateway/AvailableModels.vue'),
+        meta: { title: '可用模型', requiresAuth: true }
+      },
+      {
+        path: '/ai/api-keys',
+        name: 'MyAPIKeys',
+        component: () => import('@/views/AIGateway/MyAPIKeys.vue'),
+        meta: { title: '我的 API Key', requiresAuth: true }
       },
       // 财务中心
+      {
+        path: '/finance/account',
+        name: 'MyAccount',
+        component: () => import('@/views/Dashboard/MyAccount.vue'),
+        meta: { title: '账户余额', requiresAuth: true }
+      },
       {
         path: '/finance/transactions',
         name: 'Transactions',
@@ -46,25 +65,6 @@ const routes = [
         name: 'Profile',
         component: () => import('@/views/Profile/index.vue'),
         meta: { title: '个人中心', requiresAuth: true }
-      },
-      // AI Gateway
-      {
-        path: '/ai/models',
-        name: 'AvailableModels',
-        component: () => import('@/views/AIGateway/AvailableModels.vue'),
-        meta: { title: '可用模型', requiresAuth: true }
-      },
-      {
-        path: '/ai/api-keys',
-        name: 'MyAPIKeys',
-        component: () => import('@/views/AIGateway/MyAPIKeys.vue'),
-        meta: { title: '我的 API Key', requiresAuth: true }
-      },
-      {
-        path: '/ai/usage',
-        name: 'MyUsage',
-        component: () => import('@/views/AIGateway/MyUsage.vue'),
-        meta: { title: '使用统计', requiresAuth: true }
       }
     ]
   },

@@ -3,8 +3,8 @@
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-black text-slate-800 tracking-tight">我的账户</h1>
-          <p class="text-slate-400 text-sm font-medium mt-1">查看我的积分余额和积分包详情</p>
+          <h1 class="text-2xl font-black text-slate-800 tracking-tight">账户余额</h1>
+          <p class="text-slate-400 text-sm font-medium mt-1">查看积分余额和积分包详情</p>
         </div>
         <el-button type="primary" class="rounded-2xl! font-bold" :loading="loading" @click="fetchData">
           <template #icon><el-icon><Refresh /></el-icon></template>

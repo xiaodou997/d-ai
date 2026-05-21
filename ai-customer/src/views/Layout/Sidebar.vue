@@ -13,15 +13,30 @@
     <!-- 菜单导航 -->
     <nav class="flex-1 overflow-y-auto py-4 px-3 custom-scrollbar">
       <el-menu :default-active="$route.path" :router="true" class="modern-menu border-none">
-        <!-- 账户 -->
-        <div class="menu-divider">我的账户</div>
+        <!-- 概览 -->
+        <div class="menu-divider">概览</div>
         <el-menu-item index="/dashboard">
-          <el-icon><Wallet /></el-icon>
-          <span>我的账户</span>
+          <el-icon><TrendCharts /></el-icon>
+          <span>工作台</span>
+        </el-menu-item>
+
+        <!-- AI Gateway -->
+        <div class="menu-divider">AI Gateway</div>
+        <el-menu-item index="/ai/models">
+          <el-icon><Grid /></el-icon>
+          <span>可用模型</span>
+        </el-menu-item>
+        <el-menu-item index="/ai/api-keys">
+          <el-icon><Key /></el-icon>
+          <span>我的 API Key</span>
         </el-menu-item>
 
         <!-- 财务中心 -->
         <div class="menu-divider">财务中心</div>
+        <el-menu-item index="/finance/account">
+          <el-icon><Wallet /></el-icon>
+          <span>账户余额</span>
+        </el-menu-item>
         <el-menu-item index="/finance/transactions">
           <el-icon><DataLine /></el-icon>
           <span>积分流水</span>
@@ -36,21 +51,6 @@
         <el-menu-item index="/profile">
           <el-icon><Setting /></el-icon>
           <span>个人中心</span>
-        </el-menu-item>
-
-        <!-- AI Gateway -->
-        <div class="menu-divider">AI Gateway</div>
-        <el-menu-item index="/ai/models">
-          <el-icon><Grid /></el-icon>
-          <span>可用模型</span>
-        </el-menu-item>
-        <el-menu-item index="/ai/api-keys">
-          <el-icon><Key /></el-icon>
-          <span>我的 API Key</span>
-        </el-menu-item>
-        <el-menu-item index="/ai/usage">
-          <el-icon><TrendCharts /></el-icon>
-          <span>使用统计</span>
         </el-menu-item>
       </el-menu>
     </nav>
