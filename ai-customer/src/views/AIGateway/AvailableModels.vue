@@ -37,9 +37,34 @@ const filteredModels = computed(() => {
   return models.value.filter((m) => m.capability_type === filterCapability.value)
 })
 
-const formatDate = (ts) => {
-  if (!ts) return '—'
-  return new Date(ts).toLocaleDateString('zh-CN')
+const formatCredits = (value) => {
+  if (value === null || value === undefined) return '—'
+  return value.toLocaleString()
+}
+
+const isTokenBased = (cap) => ['chat', 'embedding', 'rerank'].includes(cap)
+const isImageBased = (cap) => cap === 'image'
+const isVideoBased = (cap) => cap === 'video'
+const isAudioTTS = (cap) => cap === 'audio_tts'
+const isAudioSTT = (cap) => cap === 'audio_stt'
+
+const hasPrice = (model) => {
+  if (isTokenBased(model.capability_type)) {
+    return model.input_price_per_1m > 0 || model.output_price_per_1m > 0
+  }
+  if (isImageBased(model.capability_type)) {
+    return Array.isArray(model.image_prices) && model.image_prices.length > 0
+  }
+  if (isVideoBased(model.capability_type)) {
+    return Array.isArray(model.video_prices) && model.video_prices.length > 0
+  }
+  if (isAudioTTS(model.capability_type)) {
+    return model.audio_tts_price_per_1m_chars > 0
+  }
+  if (isAudioSTT(model.capability_type)) {
+    return model.audio_stt_price_per_minute > 0
+  }
+  return false
 }
 
 const fetchModels = async () => {
@@ -102,44 +127,70 @@ onMounted(fetchModels)
         <p class="mt-4 text-sm">暂无可用模型</p>
       </div>
 
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div v-else class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         <div
           v-for="model in filteredModels"
           :key="model.id"
-          class="group p-5 rounded-xl border border-slate-100 hover:border-primary-200 hover:shadow-md transition-all duration-200 bg-white"
+          class="group p-4 rounded-xl border border-slate-100 hover:border-primary-200 hover:shadow-md transition-all duration-200 bg-white"
         >
-          <div class="flex items-start justify-between mb-3">
-            <div class="flex-1 min-w-0">
-              <h3 class="font-bold text-slate-800 truncate">{{ model.display_name }}</h3>
-              <p class="text-xs text-slate-400 font-mono mt-0.5 truncate">{{ model.model_code }}</p>
-            </div>
+          <!-- 模型名称 + 类型标签 -->
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-sm text-slate-800 truncate min-w-0 flex-1 mr-2">{{ model.model_code }}</h3>
             <el-tag
               :type="capabilityColors[model.capability_type] || 'primary'"
               size="small"
-              class="ml-2 shrink-0"
+              class="shrink-0"
             >
               {{ capabilityLabels[model.capability_type] || model.capability_type }}
             </el-tag>
           </div>
 
-          <div class="space-y-1.5 text-xs text-slate-500">
-            <div v-if="model.context_window" class="flex items-center justify-between">
-              <span>上下文窗口</span>
-              <span class="font-semibold text-slate-700">{{ (model.context_window).toLocaleString() }} tokens</span>
-            </div>
-            <div v-if="model.default_max_output_tokens" class="flex items-center justify-between">
-              <span>默认最大输出</span>
-              <span class="font-semibold text-slate-700">{{ (model.default_max_output_tokens).toLocaleString() }} tokens</span>
-            </div>
-            <div v-if="model.max_output_tokens" class="flex items-center justify-between">
-              <span>最大输出上限</span>
-              <span class="font-semibold text-slate-700">{{ (model.max_output_tokens).toLocaleString() }} tokens</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <span>授权时间</span>
-              <span class="font-semibold text-slate-600">{{ formatDate(model.granted_at) }}</span>
-            </div>
+          <!-- 价格区域 -->
+          <div v-if="hasPrice(model)" class="space-y-1">
+            <!-- Token 计费模型 -->
+            <template v-if="isTokenBased(model.capability_type)">
+              <div class="flex items-baseline justify-between text-xs">
+                <span class="text-slate-400">输入</span>
+                <span class="font-semibold text-slate-700">{{ formatCredits(model.input_price_per_1m) }}<span class="text-slate-400 font-normal ml-0.5">积分/M</span></span>
+              </div>
+              <div class="flex items-baseline justify-between text-xs">
+                <span class="text-slate-400">输出</span>
+                <span class="font-semibold text-slate-700">{{ formatCredits(model.output_price_per_1m) }}<span class="text-slate-400 font-normal ml-0.5">积分/M</span></span>
+              </div>
+            </template>
+            <!-- 图片计费模型 -->
+            <template v-if="isImageBased(model.capability_type) && Array.isArray(model.image_prices)">
+              <div v-for="(entry, idx) in model.image_prices" :key="idx" class="flex items-baseline justify-between text-xs">
+                <span class="text-slate-400">{{ entry.resolution }}</span>
+                <span class="font-semibold text-slate-700">{{ formatCredits(entry.price) }}<span class="text-slate-400 font-normal ml-0.5">积分/张</span></span>
+              </div>
+            </template>
+            <!-- 视频计费模型 -->
+            <template v-if="isVideoBased(model.capability_type) && Array.isArray(model.video_prices)">
+              <div v-for="(entry, idx) in model.video_prices" :key="idx" class="flex items-baseline justify-between text-xs">
+                <span class="text-slate-400">{{ entry.resolution }}</span>
+                <span class="font-semibold text-slate-700">{{ formatCredits(entry.price) }}<span class="text-slate-400 font-normal ml-0.5">积分/秒</span></span>
+              </div>
+            </template>
+            <!-- 语音合成 -->
+            <template v-if="isAudioTTS(model.capability_type)">
+              <div class="flex items-baseline justify-between text-xs">
+                <span class="text-slate-400">TTS</span>
+                <span class="font-semibold text-slate-700">{{ formatCredits(model.audio_tts_price_per_1m_chars) }}<span class="text-slate-400 font-normal ml-0.5">积分/M字符</span></span>
+              </div>
+            </template>
+            <!-- 语音识别 -->
+            <template v-if="isAudioSTT(model.capability_type)">
+              <div class="flex items-baseline justify-between text-xs">
+                <span class="text-slate-400">STT</span>
+                <span class="font-semibold text-slate-700">{{ formatCredits(model.audio_stt_price_per_minute) }}<span class="text-slate-400 font-normal ml-0.5">积分/分钟</span></span>
+              </div>
+            </template>
           </div>
+          <div v-else class="text-xs text-slate-300 text-center py-1">
+            暂未定价
+          </div>
+
         </div>
       </div>
     </div>
