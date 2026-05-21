@@ -1,5 +1,6 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import {
   Connection,
   Cpu,
@@ -10,16 +11,22 @@ import {
   Key,
   Lock,
   Management,
-  OfficeBuilding,
   SwitchButton,
   Tickets,
-  User,
   UserFilled
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import { getUrmAdminMenuGroups, getUrmAdminPagePath, loadUrmAdminManifest } from '@/remote/urmAdminManifest'
 
 const authStore = useAuthStore()
+const urmMenuGroups = shallowRef([])
+
+const resolveIcon = (iconName) => {
+  return ElementPlusIconsVue[iconName] || ElementPlusIconsVue.Document
+}
+
+const hasUrmMenus = computed(() => authStore.isPlatformAdmin && urmMenuGroups.value.length > 0)
 
 const gatewayMenuItems = computed(() => {
   const shared = [
@@ -40,6 +47,16 @@ const gatewayMenuItems = computed(() => {
     { index: '/ai-gateway/routing', label: '路由策略', icon: DataAnalysis },
     { index: '/ai-gateway/audit', label: '网关审计', icon: DocumentChecked }
   ]
+})
+
+onMounted(async () => {
+  try {
+    const manifest = await loadUrmAdminManifest()
+    urmMenuGroups.value = getUrmAdminMenuGroups(manifest)
+  } catch (error) {
+    console.warn('URM admin manifest 加载失败', error)
+    urmMenuGroups.value = []
+  }
 })
 
 const handleLogout = () => {
@@ -102,20 +119,18 @@ const handleLogout = () => {
           <span>接入文档</span>
         </el-menu-item>
 
-        <template v-if="authStore.isPlatformAdmin">
-          <div class="menu-divider">运营管理</div>
-          <el-menu-item index="/tenants">
-            <el-icon><OfficeBuilding /></el-icon>
-            <span>租户管理</span>
-          </el-menu-item>
-          <el-menu-item index="/users">
-            <el-icon><User /></el-icon>
-            <span>终端用户</span>
-          </el-menu-item>
-          <el-menu-item index="/finance/recharge-records">
-            <el-icon><Tickets /></el-icon>
-            <span>充值记录</span>
-          </el-menu-item>
+        <template v-if="hasUrmMenus">
+          <template v-for="group in urmMenuGroups" :key="group.title">
+            <div class="menu-divider">{{ group.title }}</div>
+            <el-menu-item
+              v-for="item in group.items"
+              :key="item.key"
+              :index="getUrmAdminPagePath(item)"
+            >
+              <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
+              <span>{{ item.title }}</span>
+            </el-menu-item>
+          </template>
         </template>
       </el-menu>
     </nav>

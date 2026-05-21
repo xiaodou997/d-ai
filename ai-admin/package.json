@@ -19,6 +19,8 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "@module-federation/runtime": "^2.4.0",
+    "@module-federation/vite": "^1.15.5",
     "@tailwindcss/postcss": "^4.3.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "autoprefixer": "^10.5.0",

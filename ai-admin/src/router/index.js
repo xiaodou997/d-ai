@@ -36,34 +36,10 @@ const routes = [
         meta: { title: '系统状态', requiresAuth: true, roles: [1, 2] }
       },
       {
-        path: '/tenants',
-        name: 'TenantList',
-        component: () => import('@/views/Tenant/TenantList.vue'),
-        meta: { title: '租户管理', requiresAuth: true, roles: [1, 2] }
-      },
-      {
-        path: '/tenants/:id',
-        name: 'TenantDetail',
-        component: () => import('@/views/Tenant/TenantDetail.vue'),
-        meta: { title: '租户详情', requiresAuth: true, hidden: true, roles: [1, 2] }
-      },
-      {
-        path: '/users',
-        name: 'UserList',
-        component: () => import('@/views/User/UserList.vue'),
-        meta: { title: '终端用户', requiresAuth: true, roles: [1, 2] }
-      },
-      {
-        path: '/finance/recharge',
-        name: 'TenantRecharge',
-        component: () => import('@/views/Finance/Recharge.vue'),
-        meta: { title: '租户充值', requiresAuth: true, hidden: true, roles: [1, 2] }
-      },
-      {
-        path: '/finance/recharge-records',
-        name: 'TenantRechargeRecords',
-        component: () => import('@/views/Finance/RechargeRecords.vue'),
-        meta: { title: '充值记录', requiresAuth: true, roles: [1, 2] }
+        path: '/urm/:pathMatch(.*)*',
+        name: 'UrmAdminRemote',
+        component: () => import('@/views/Remote/UrmAdminRemoteView.vue'),
+        meta: { title: 'URM', requiresAuth: true, roles: [1, 2] }
       },
       {
         path: '/docs/api',
