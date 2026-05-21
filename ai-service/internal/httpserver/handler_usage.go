@@ -17,9 +17,9 @@ type usageStatsDTO struct {
 }
 
 type listUsageLogsResponse struct {
-	Total   int64          `json:"total"`
-	Stats   usageStatsDTO  `json:"stats"`
-	Records []usageLogDTO  `json:"records"`
+	Total   int64         `json:"total"`
+	Stats   usageStatsDTO `json:"stats"`
+	Records []usageLogDTO `json:"records"`
 }
 
 func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +56,7 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		RequestSource: optionalTextValue(filters.requestSource),
 		DateFrom:      filters.dateFrom,
 		DateTo:        filters.dateTo,
 	}
@@ -78,8 +79,9 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		  AND ($2::text IS NULL OR user_id = $2::text)
 		  AND ($3::text IS NULL OR model_code = $3::text)
 		  AND ($4::text IS NULL OR request_status = $4::text)
-		  AND ($5::timestamptz IS NULL OR created_at >= $5::timestamptz)
-		  AND ($6::timestamptz IS NULL OR created_at <= $6::timestamptz)
+		  AND ($5::text IS NULL OR request_source = $5::text)
+		  AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
+		  AND ($7::timestamptz IS NULL OR created_at <= $7::timestamptz)
 	`
 	var stats usageStatsDTO
 	statsRow := s.postgres.QueryRow(r.Context(), statsSQL,
@@ -87,6 +89,7 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		optionalTextValue(filters.userID),
 		optionalTextValue(filters.modelCode),
 		optionalTextValue(filters.requestStatus),
+		optionalTextValue(filters.requestSource),
 		filters.dateFrom,
 		filters.dateTo,
 	)
@@ -109,6 +112,7 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		RequestSource: optionalTextValue(filters.requestSource),
 		DateFrom:      filters.dateFrom,
 		DateTo:        filters.dateTo,
 	})
@@ -137,6 +141,7 @@ func (s *Server) handleAdminListUsageSummary(w http.ResponseWriter, r *http.Requ
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		RequestSource: optionalTextValue(filters.requestSource),
 		Since:         since,
 	})
 	if err != nil {
@@ -160,6 +165,7 @@ func (s *Server) handleAdminListUsageUnitSummary(w http.ResponseWriter, r *http.
 		UserID:        optionalTextValue(filters.userID),
 		ModelCode:     optionalTextValue(filters.modelCode),
 		RequestStatus: optionalTextValue(filters.requestStatus),
+		RequestSource: optionalTextValue(filters.requestSource),
 		Since:         since,
 	})
 	if err != nil {

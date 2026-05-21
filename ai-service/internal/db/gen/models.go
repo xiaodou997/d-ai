@@ -305,11 +305,14 @@ type AiUsageLog struct {
 	TraceID              pgtype.Text        `json:"trace_id"`
 	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
 	KeyOwnerType         string             `json:"key_owner_type"`
+	AuthMethod           string             `json:"auth_method"`
+	RequestSource        string             `json:"request_source"`
 	TenantID             string             `json:"tenant_id"`
 	UserID               pgtype.Text        `json:"user_id"`
 	ExternalUserID       pgtype.Text        `json:"external_user_id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
 	ModelCode            string             `json:"model_code"`
+	CapabilityType       string             `json:"capability_type"`
 	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID        `json:"endpoint_id"`
@@ -346,7 +349,7 @@ type AiUsageLog struct {
 	ClientProtocol       string             `json:"client_protocol"`
 	Resolution           pgtype.Text        `json:"resolution"`
 	UsageEstimated       bool               `json:"usage_estimated"`
-	UsageSource          string             `json:"usage_source"`
+	TokenUsageSource     string             `json:"token_usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -355,6 +358,8 @@ type AiUsageRollupsHourly struct {
 	TenantID            string             `json:"tenant_id"`
 	UserID              string             `json:"user_id"`
 	ApiKeyID            pgtype.UUID        `json:"api_key_id"`
+	RequestSource       string             `json:"request_source"`
+	CapabilityType      string             `json:"capability_type"`
 	ModelCode           string             `json:"model_code"`
 	ProviderCode        string             `json:"provider_code"`
 	RequestStatus       string             `json:"request_status"`

@@ -33,6 +33,10 @@
           <el-icon><Box /></el-icon>
           <span>已授权模型</span>
         </el-menu-item>
+        <el-menu-item index="/ai/chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>AI 对话</span>
+        </el-menu-item>
         <el-menu-item index="/ai/prices">
           <el-icon><PriceTag /></el-icon>
           <span>租户定价</span>
@@ -112,6 +116,7 @@ import {
   Document,
   PriceTag,
   Key,
+  ChatDotRound,
   TrendCharts
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'

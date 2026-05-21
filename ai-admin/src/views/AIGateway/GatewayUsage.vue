@@ -21,7 +21,8 @@ const filters = reactive({
   tenant_id: '',
   user_id: '',
   model_code: '',
-  request_status: ''
+  request_status: '',
+  request_source: ''
 })
 
 const statusTagType = (status) => {
@@ -69,8 +70,17 @@ const usageParams = computed(() => ({
   tenant_id: authStore.isPlatformAdmin ? filters.tenant_id || undefined : authStore.tenantId || undefined,
   user_id: filters.user_id || undefined,
   model_code: filters.model_code || undefined,
-  request_status: filters.request_status || undefined
+  request_status: filters.request_status || undefined,
+  request_source: filters.request_source || undefined
 }))
+
+const requestSourceOptions = [
+  { label: 'API Key 调用', value: 'api_key' },
+  { label: '网页对话', value: 'web_chat' }
+]
+
+const requestSourceLabel = (value) =>
+  requestSourceOptions.find((item) => item.value === value)?.label || value || '-'
 
 const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
   acc.requestCount += Number(row.request_count) || 0
@@ -136,6 +146,9 @@ onMounted(fetchUsage)
         <el-option label="success" value="success" />
         <el-option label="failed" value="failed" />
         <el-option label="rejected" value="rejected" />
+      </el-select>
+      <el-select v-model="filters.request_source" clearable placeholder="来源">
+        <el-option v-for="item in requestSourceOptions" :key="item.value" :label="item.label" :value="item.value" />
       </el-select>
       <el-input-number v-model="limit" :min="1" :max="500" :step="50" class="limit-input" controls-position="right" />
       <el-button type="primary" :icon="Refresh" :loading="loading || summaryLoading" @click="fetchUsage">刷新</el-button>
@@ -238,6 +251,13 @@ onMounted(fetchUsage)
       <el-table-column prop="model_code" label="模型" min-width="150" />
       <el-table-column prop="provider_code" label="厂商" width="120" />
       <el-table-column prop="upstream_model" label="上游模型" min-width="150" show-overflow-tooltip />
+      <el-table-column label="来源" width="110">
+        <template #default="{ row }">
+          <el-tag :type="row.request_source === 'web_chat' ? 'success' : 'info'" size="small">
+            {{ requestSourceLabel(row.request_source) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="total_tokens" label="Tokens" width="100" align="right" />
       <el-table-column label="计费量" width="130" align="right">
         <template #default="{ row }">
@@ -247,7 +267,7 @@ onMounted(fetchUsage)
       <el-table-column label="Usage" width="110">
         <template #default="{ row }">
           <el-tag :type="row.usage_estimated ? 'warning' : 'success'" size="small">
-            {{ row.usage_estimated ? '估算' : row.usage_source }}
+            {{ row.usage_estimated ? '估算' : row.token_usage_source }}
           </el-tag>
         </template>
       </el-table-column>

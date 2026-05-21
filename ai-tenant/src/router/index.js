@@ -49,6 +49,12 @@ const routes = [
         meta: { title: '已授权模型', requiresAuth: true }
       },
       {
+        path: '/ai/chat',
+        name: 'AIChat',
+        component: () => import('@/views/AIGateway/AIChat.vue'),
+        meta: { title: 'AI 对话', requiresAuth: true }
+      },
+      {
         path: '/ai/prices',
         name: 'AITenantPrices',
         component: () => import('@/views/AIGateway/TenantPrices.vue'),

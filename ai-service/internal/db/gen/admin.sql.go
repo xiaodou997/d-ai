@@ -18,8 +18,9 @@ WHERE tenant_id = $1
   AND ($2::text IS NULL OR user_id = $2::text)
   AND ($3::text IS NULL OR model_code = $3::text)
   AND ($4::text IS NULL OR request_status = $4::text)
-  AND ($5::timestamptz IS NULL OR created_at >= $5::timestamptz)
-  AND ($6::timestamptz IS NULL OR created_at <= $6::timestamptz)
+  AND ($5::text IS NULL OR request_source = $5::text)
+  AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR created_at <= $7::timestamptz)
 `
 
 type CountUsageLogsParams struct {
@@ -27,6 +28,7 @@ type CountUsageLogsParams struct {
 	UserID        pgtype.Text        `json:"user_id"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
+	RequestSource pgtype.Text        `json:"request_source"`
 	DateFrom      pgtype.Timestamptz `json:"date_from"`
 	DateTo        pgtype.Timestamptz `json:"date_to"`
 }
@@ -37,6 +39,7 @@ func (q *Queries) CountUsageLogs(ctx context.Context, arg CountUsageLogsParams) 
 		arg.UserID,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.RequestSource,
 		arg.DateFrom,
 		arg.DateTo,
 	)
@@ -63,15 +66,17 @@ SELECT COUNT(*) AS count
 FROM ai_usage_logs
 WHERE tenant_id = $1
   AND user_id = $2
+  AND ($3::text IS NULL OR request_source = $3)
 `
 
 type CountUsageLogsByTenantUserParams struct {
-	TenantID string      `json:"tenant_id"`
-	UserID   pgtype.Text `json:"user_id"`
+	TenantID      string      `json:"tenant_id"`
+	UserID        pgtype.Text `json:"user_id"`
+	RequestSource pgtype.Text `json:"request_source"`
 }
 
 func (q *Queries) CountUsageLogsByTenantUser(ctx context.Context, arg CountUsageLogsByTenantUserParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsageLogsByTenantUser, arg.TenantID, arg.UserID)
+	row := q.db.QueryRow(ctx, countUsageLogsByTenantUser, arg.TenantID, arg.UserID, arg.RequestSource)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -2362,11 +2367,14 @@ SELECT
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -2393,15 +2401,16 @@ SELECT
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
   AND ($4::text IS NULL OR user_id = $4::text)
   AND ($5::text IS NULL OR model_code = $5::text)
   AND ($6::text IS NULL OR request_status = $6::text)
-  AND ($7::timestamptz IS NULL OR created_at >= $7::timestamptz)
-  AND ($8::timestamptz IS NULL OR created_at <= $8::timestamptz)
+  AND ($7::text IS NULL OR request_source = $7::text)
+  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR created_at <= $9::timestamptz)
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -2413,6 +2422,7 @@ type ListUsageLogsParams struct {
 	UserID        pgtype.Text        `json:"user_id"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
+	RequestSource pgtype.Text        `json:"request_source"`
 	DateFrom      pgtype.Timestamptz `json:"date_from"`
 	DateTo        pgtype.Timestamptz `json:"date_to"`
 }
@@ -2423,11 +2433,14 @@ type ListUsageLogsRow struct {
 	TraceID              pgtype.Text        `json:"trace_id"`
 	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
 	KeyOwnerType         string             `json:"key_owner_type"`
+	AuthMethod           string             `json:"auth_method"`
+	RequestSource        string             `json:"request_source"`
 	TenantID             string             `json:"tenant_id"`
 	UserID               pgtype.Text        `json:"user_id"`
 	ExternalUserID       pgtype.Text        `json:"external_user_id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
 	ModelCode            string             `json:"model_code"`
+	CapabilityType       string             `json:"capability_type"`
 	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID        `json:"endpoint_id"`
@@ -2454,7 +2467,7 @@ type ListUsageLogsRow struct {
 	ErrorCode            pgtype.Text        `json:"error_code"`
 	ErrorMessage         pgtype.Text        `json:"error_message"`
 	UsageEstimated       bool               `json:"usage_estimated"`
-	UsageSource          string             `json:"usage_source"`
+	TokenUsageSource     string             `json:"token_usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -2469,6 +2482,7 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 		arg.UserID,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.RequestSource,
 		arg.DateFrom,
 		arg.DateTo,
 	)
@@ -2485,11 +2499,14 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.TraceID,
 			&i.ApiKeyID,
 			&i.KeyOwnerType,
+			&i.AuthMethod,
+			&i.RequestSource,
 			&i.TenantID,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.ModelID,
 			&i.ModelCode,
+			&i.CapabilityType,
 			&i.ModelRouteID,
 			&i.UpstreamDeploymentID,
 			&i.EndpointID,
@@ -2516,7 +2533,7 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.UsageEstimated,
-			&i.UsageSource,
+			&i.TokenUsageSource,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -2536,11 +2553,14 @@ SELECT
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -2567,7 +2587,7 @@ SELECT
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   created_at
 FROM ai_usage_logs
 WHERE api_key_id = $1
@@ -2587,11 +2607,14 @@ type ListUsageLogsByAPIKeyRow struct {
 	TraceID              pgtype.Text        `json:"trace_id"`
 	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
 	KeyOwnerType         string             `json:"key_owner_type"`
+	AuthMethod           string             `json:"auth_method"`
+	RequestSource        string             `json:"request_source"`
 	TenantID             string             `json:"tenant_id"`
 	UserID               pgtype.Text        `json:"user_id"`
 	ExternalUserID       pgtype.Text        `json:"external_user_id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
 	ModelCode            string             `json:"model_code"`
+	CapabilityType       string             `json:"capability_type"`
 	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID        `json:"endpoint_id"`
@@ -2618,7 +2641,7 @@ type ListUsageLogsByAPIKeyRow struct {
 	ErrorCode            pgtype.Text        `json:"error_code"`
 	ErrorMessage         pgtype.Text        `json:"error_message"`
 	UsageEstimated       bool               `json:"usage_estimated"`
-	UsageSource          string             `json:"usage_source"`
+	TokenUsageSource     string             `json:"token_usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -2637,11 +2660,14 @@ func (q *Queries) ListUsageLogsByAPIKey(ctx context.Context, arg ListUsageLogsBy
 			&i.TraceID,
 			&i.ApiKeyID,
 			&i.KeyOwnerType,
+			&i.AuthMethod,
+			&i.RequestSource,
 			&i.TenantID,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.ModelID,
 			&i.ModelCode,
+			&i.CapabilityType,
 			&i.ModelRouteID,
 			&i.UpstreamDeploymentID,
 			&i.EndpointID,
@@ -2668,7 +2694,7 @@ func (q *Queries) ListUsageLogsByAPIKey(ctx context.Context, arg ListUsageLogsBy
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.UsageEstimated,
-			&i.UsageSource,
+			&i.TokenUsageSource,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -2688,6 +2714,7 @@ SELECT
   trace_id,
   tenant_id,
   user_id,
+  request_source,
   model_id,
   model_code,
   prompt_tokens,
@@ -2705,14 +2732,16 @@ SELECT
 FROM ai_usage_logs
 WHERE tenant_id = $1
   AND user_id = $2
+  AND ($4::text IS NULL OR request_source = $4)
 ORDER BY created_at DESC
 LIMIT $3
 `
 
 type ListUsageLogsByTenantUserParams struct {
-	TenantID string      `json:"tenant_id"`
-	UserID   pgtype.Text `json:"user_id"`
-	Limit    int32       `json:"limit"`
+	TenantID      string      `json:"tenant_id"`
+	UserID        pgtype.Text `json:"user_id"`
+	Limit         int32       `json:"limit"`
+	RequestSource pgtype.Text `json:"request_source"`
 }
 
 type ListUsageLogsByTenantUserRow struct {
@@ -2721,6 +2750,7 @@ type ListUsageLogsByTenantUserRow struct {
 	TraceID          pgtype.Text        `json:"trace_id"`
 	TenantID         string             `json:"tenant_id"`
 	UserID           pgtype.Text        `json:"user_id"`
+	RequestSource    string             `json:"request_source"`
 	ModelID          pgtype.UUID        `json:"model_id"`
 	ModelCode        string             `json:"model_code"`
 	PromptTokens     int32              `json:"prompt_tokens"`
@@ -2738,7 +2768,12 @@ type ListUsageLogsByTenantUserRow struct {
 }
 
 func (q *Queries) ListUsageLogsByTenantUser(ctx context.Context, arg ListUsageLogsByTenantUserParams) ([]ListUsageLogsByTenantUserRow, error) {
-	rows, err := q.db.Query(ctx, listUsageLogsByTenantUser, arg.TenantID, arg.UserID, arg.Limit)
+	rows, err := q.db.Query(ctx, listUsageLogsByTenantUser,
+		arg.TenantID,
+		arg.UserID,
+		arg.Limit,
+		arg.RequestSource,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2752,6 +2787,7 @@ func (q *Queries) ListUsageLogsByTenantUser(ctx context.Context, arg ListUsageLo
 			&i.TraceID,
 			&i.TenantID,
 			&i.UserID,
+			&i.RequestSource,
 			&i.ModelID,
 			&i.ModelCode,
 			&i.PromptTokens,
@@ -2784,11 +2820,14 @@ SELECT
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -2815,7 +2854,7 @@ SELECT
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
@@ -2837,11 +2876,14 @@ type ListUsageLogsByUserRow struct {
 	TraceID              pgtype.Text        `json:"trace_id"`
 	ApiKeyID             pgtype.UUID        `json:"api_key_id"`
 	KeyOwnerType         string             `json:"key_owner_type"`
+	AuthMethod           string             `json:"auth_method"`
+	RequestSource        string             `json:"request_source"`
 	TenantID             string             `json:"tenant_id"`
 	UserID               pgtype.Text        `json:"user_id"`
 	ExternalUserID       pgtype.Text        `json:"external_user_id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
 	ModelCode            string             `json:"model_code"`
+	CapabilityType       string             `json:"capability_type"`
 	ModelRouteID         pgtype.UUID        `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID        `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID        `json:"endpoint_id"`
@@ -2868,7 +2910,7 @@ type ListUsageLogsByUserRow struct {
 	ErrorCode            pgtype.Text        `json:"error_code"`
 	ErrorMessage         pgtype.Text        `json:"error_message"`
 	UsageEstimated       bool               `json:"usage_estimated"`
-	UsageSource          string             `json:"usage_source"`
+	TokenUsageSource     string             `json:"token_usage_source"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -2892,11 +2934,14 @@ func (q *Queries) ListUsageLogsByUser(ctx context.Context, arg ListUsageLogsByUs
 			&i.TraceID,
 			&i.ApiKeyID,
 			&i.KeyOwnerType,
+			&i.AuthMethod,
+			&i.RequestSource,
 			&i.TenantID,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.ModelID,
 			&i.ModelCode,
+			&i.CapabilityType,
 			&i.ModelRouteID,
 			&i.UpstreamDeploymentID,
 			&i.EndpointID,
@@ -2923,7 +2968,7 @@ func (q *Queries) ListUsageLogsByUser(ctx context.Context, arg ListUsageLogsByUs
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.UsageEstimated,
-			&i.UsageSource,
+			&i.TokenUsageSource,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -2953,7 +2998,8 @@ WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = COALESCE($2::text, ''))
   AND ($3::text IS NULL OR model_code = $3)
   AND ($4::text IS NULL OR request_status = $4)
-  AND ($5::timestamptz IS NULL OR bucket_start >= date_trunc('hour', $5::timestamptz))
+  AND ($5::text IS NULL OR request_source = $5)
+  AND ($6::timestamptz IS NULL OR bucket_start >= date_trunc('hour', $6::timestamptz))
 GROUP BY model_code
 ORDER BY request_count DESC
 `
@@ -2963,6 +3009,7 @@ type ListUsageSummaryParams struct {
 	UserID        pgtype.Text        `json:"user_id"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
+	RequestSource pgtype.Text        `json:"request_source"`
 	Since         pgtype.Timestamptz `json:"since"`
 }
 
@@ -2987,6 +3034,7 @@ func (q *Queries) ListUsageSummary(ctx context.Context, arg ListUsageSummaryPara
 		arg.UserID,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.RequestSource,
 		arg.Since,
 	)
 	if err != nil {
@@ -3030,11 +3078,13 @@ SELECT
 FROM ai_usage_rollups_hourly
 WHERE tenant_id = $1
   AND user_id = $2
+  AND ($3::text IS NULL OR request_source = $3)
 `
 
 type ListUsageSummaryByTenantUserParams struct {
-	TenantID string `json:"tenant_id"`
-	UserID   string `json:"user_id"`
+	TenantID      string      `json:"tenant_id"`
+	UserID        string      `json:"user_id"`
+	RequestSource pgtype.Text `json:"request_source"`
 }
 
 type ListUsageSummaryByTenantUserRow struct {
@@ -3049,7 +3099,7 @@ type ListUsageSummaryByTenantUserRow struct {
 }
 
 func (q *Queries) ListUsageSummaryByTenantUser(ctx context.Context, arg ListUsageSummaryByTenantUserParams) (ListUsageSummaryByTenantUserRow, error) {
-	row := q.db.QueryRow(ctx, listUsageSummaryByTenantUser, arg.TenantID, arg.UserID)
+	row := q.db.QueryRow(ctx, listUsageSummaryByTenantUser, arg.TenantID, arg.UserID, arg.RequestSource)
 	var i ListUsageSummaryByTenantUserRow
 	err := row.Scan(
 		&i.RequestCount,
@@ -3077,7 +3127,8 @@ WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = COALESCE($2::text, ''))
   AND ($3::text IS NULL OR model_code = $3)
   AND ($4::text IS NULL OR request_status = $4)
-  AND ($5::timestamptz IS NULL OR bucket_start >= date_trunc('hour', $5::timestamptz))
+  AND ($5::text IS NULL OR request_source = $5)
+  AND ($6::timestamptz IS NULL OR bucket_start >= date_trunc('hour', $6::timestamptz))
 GROUP BY billable_unit_type
 ORDER BY request_count DESC
 `
@@ -3087,6 +3138,7 @@ type ListUsageUnitSummaryParams struct {
 	UserID        pgtype.Text        `json:"user_id"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
+	RequestSource pgtype.Text        `json:"request_source"`
 	Since         pgtype.Timestamptz `json:"since"`
 }
 
@@ -3105,6 +3157,7 @@ func (q *Queries) ListUsageUnitSummary(ctx context.Context, arg ListUsageUnitSum
 		arg.UserID,
 		arg.ModelCode,
 		arg.RequestStatus,
+		arg.RequestSource,
 		arg.Since,
 	)
 	if err != nil {

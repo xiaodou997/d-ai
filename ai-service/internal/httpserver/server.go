@@ -77,11 +77,11 @@ type Server struct {
 	tokenRefresher    *tokenrefresh.Refresher
 	routeSelector     *pgadapter.RouteSelector
 	routeWeightsStore *pgadapter.RouteWeightsStore
-	auditWorker  *audit.Worker // optional; nil = audit log disabled
-	shutdownAudit context.CancelFunc
+	auditWorker       *audit.Worker // optional; nil = audit log disabled
+	shutdownAudit     context.CancelFunc
 
 	// Serving pipeline — shared across requests (steps are stateless)
-	pipeline *serving.Pipeline
+	pipeline    *serving.Pipeline
 	apiKeyCache *apikey.Cache
 }
 
@@ -176,7 +176,7 @@ func New(cfg Config) *Server {
 		tokenRefresher:    tokenrefresh.New(oauthCreds, cfg.Logger),
 		routeSelector:     routeSelector,
 		routeWeightsStore: routeWeightsStore,
-		auditWorker:  auditWorker,
+		auditWorker:       auditWorker,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -214,6 +214,9 @@ func New(cfg Config) *Server {
 	router.Get("/ready", s.handleReady)
 	router.Get("/metrics", metrics.Handler().ServeHTTP)
 	router.Get("/api/auth/callback", s.handleAuthCallback)
+	router.Route("/console/v1", func(r chi.Router) {
+		r.Post("/chat/completions", s.handleConsoleChatCompletions)
+	})
 	router.Route("/api/v1", func(r chi.Router) {
 		// chi's Timeout middleware swaps the ResponseWriter for a buffered one
 		// that cancels the request after the deadline. It MUST NOT wrap the

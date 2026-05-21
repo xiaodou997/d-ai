@@ -17,9 +17,9 @@ import (
 // It creates the usage log row, upserts the hourly rollup, confirms quota, and
 // computes billing amounts using a three-tier price lookup:
 //
-//	1. ai_tenant_user_prices (user-specific override)
-//	2. ai_tenant_model_price_overrides (tenant override)
-//	3. ai_model_prices (base price)
+//  1. ai_tenant_user_prices (user-specific override)
+//  2. ai_tenant_model_price_overrides (tenant override)
+//  3. ai_model_prices (base price)
 type UsageLogger struct {
 	q      *dbgen.Queries
 	prices *PriceResolver
@@ -33,7 +33,8 @@ func NewUsageLogger(q *dbgen.Queries) *UsageLogger {
 // Billing amounts are written to req.BillingResult; if URMBiller.Confirm already
 // computed them (req.BillingResolved == true) the pricing lookup is skipped.
 func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
-	if req.APIKey == nil || req.Candidate == nil {
+	identity := req.RuntimeIdentity()
+	if identity == nil || req.Candidate == nil {
 		return nil
 	}
 
@@ -51,18 +52,20 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 	// amount we put aside in QuotaReserveStep (an estimate), not the actual
 	// billing cost — releasing the actual cost would leave the reservation
 	// counter drifting upward over time.
-	apiKeyID := mustParseUUID(req.APIKey.KeyID)
 	reservedAmount := req.QuotaReservedAmount
-	go func() {
-		defer recoverGoroutine("quota confirm", req.RequestID)
-		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = l.q.ConfirmAPIKeyQuotaUsage(bgCtx, dbgen.ConfirmAPIKeyQuotaUsageParams{
-			ID:            apiKeyID,
-			QuotaUsed:     billing.APIKeyQuotaCost,
-			QuotaReserved: reservedAmount,
-		})
-	}()
+	if identity.UsesAPIKeyQuota() {
+		apiKeyID := mustParseUUID(identity.APIKeyID)
+		go func() {
+			defer recoverGoroutine("quota confirm", req.RequestID)
+			bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = l.q.ConfirmAPIKeyQuotaUsage(bgCtx, dbgen.ConfirmAPIKeyQuotaUsageParams{
+				ID:            apiKeyID,
+				QuotaUsed:     billing.APIKeyQuotaCost,
+				QuotaReserved: reservedAmount,
+			})
+		}()
+	}
 
 	if _, err := l.createUsageLog(ctx, req, billing); err != nil {
 		return fmt.Errorf("create usage log: %w", err)
@@ -100,11 +103,14 @@ func recoverGoroutine(label, requestID string) {
 
 func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, billing domain.BillingResult) (pgtype.UUID, error) {
 	c := req.Candidate
-	key := req.APIKey
+	identity := req.RuntimeIdentity()
 	usage := req.TokenUsage
 
 	modelRouteUUID := mustParseUUID(c.RouteID)
-	apiKeyUUID := mustParseUUID(key.KeyID)
+	apiKeyUUID := pgtype.UUID{}
+	if identity.APIKeyID != "" {
+		apiKeyUUID = mustParseUUID(identity.APIKeyID)
+	}
 	modelUUID := mustParseUUID(c.ModelID)
 
 	// Pool routes have no deployment/endpoint; deployment routes have no pool.
@@ -126,11 +132,14 @@ func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, 
 		RequestID:            req.RequestID,
 		TraceID:              nullableText(req.TraceID),
 		ApiKeyID:             apiKeyUUID,
-		KeyOwnerType:         string(key.OwnerType),
-		TenantID:             key.TenantID,
-		UserID:               nullableText(key.UserID),
+		KeyOwnerType:         string(identity.OwnerType),
+		AuthMethod:           string(identity.AuthMethod),
+		RequestSource:        string(identity.RequestSource),
+		TenantID:             identity.TenantID,
+		UserID:               nullableText(identity.UserID),
 		ModelID:              modelUUID,
 		ModelCode:            req.ModelCode,
+		CapabilityType:       string(req.CapabilityType),
 		ModelRouteID:         modelRouteUUID,
 		UpstreamDeploymentID: deploymentUUID,
 		EndpointID:           endpointUUID,
@@ -161,25 +170,31 @@ func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, 
 		FirstTokenLatencyMs:  nullableInt4(req.FirstTokenMs),
 		ErrorCode:            nullableText(req.ErrorCode),
 		ErrorMessage:         nullableText(req.ErrorMessage),
-		UsageEstimated:  req.TokenCountSource == "estimated",
-		UsageSource:     tokenCountSource(req.TokenCountSource),
-		AttemptsCount:   int32(len(req.Attempts)),
-		FinalRouteID:    mustParseUUID(c.RouteID),
-		ClientProtocol:  string(req.ClientProtocol),
-		Resolution:      nullableText(resolution(req)),
+		UsageEstimated:       req.TokenCountSource == "estimated",
+		TokenUsageSource:     tokenCountSource(req.TokenCountSource),
+		AttemptsCount:        int32(len(req.Attempts)),
+		FinalRouteID:         mustParseUUID(c.RouteID),
+		ClientProtocol:       string(req.ClientProtocol),
+		Resolution:           nullableText(resolution(req)),
 	}
 
 	return l.q.CreateUsageLog(ctx, params)
 }
 
 func (l *UsageLogger) upsertRollup(ctx context.Context, req *serving.Request, billing domain.BillingResult) error {
-	key := req.APIKey
+	identity := req.RuntimeIdentity()
 	usage := req.TokenUsage
+	apiKeyID := mustParseUUID("00000000-0000-0000-0000-000000000000")
+	if identity.APIKeyID != "" {
+		apiKeyID = mustParseUUID(identity.APIKeyID)
+	}
 
 	return l.q.UpsertUsageRollupHourly(ctx, dbgen.UpsertUsageRollupHourlyParams{
-		TenantID:         key.TenantID,
-		UserID:           nullableText(key.UserID),
-		ApiKeyID:         mustParseUUID(key.KeyID),
+		TenantID:         identity.TenantID,
+		UserID:           nullableText(identity.UserID),
+		ApiKeyID:         apiKeyID,
+		RequestSource:    string(identity.RequestSource),
+		CapabilityType:   string(req.CapabilityType),
 		ModelCode:        req.ModelCode,
 		ProviderCode:     nullableText(req.Candidate.ProviderCode),
 		RequestStatus:    string(req.RequestStatus),
@@ -227,4 +242,3 @@ func billingStatus(req *serving.Request) string {
 	}
 	return string(domain.BillingPending)
 }
-

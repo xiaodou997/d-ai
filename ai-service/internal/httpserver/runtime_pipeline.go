@@ -38,8 +38,16 @@ type runtimeOverride struct {
 // the request body.
 func (s *Server) handleRuntime(capType domain.CapabilityType) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.serveRuntime(w, r, capType, runtimeOverride{})
+		s.serveRuntime(w, r, capType, runtimeOverride{}, nil, false)
 	}
+}
+
+func (s *Server) handleConsoleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	identity, ok := s.consoleRuntimeIdentity(w, r)
+	if !ok {
+		return
+	}
+	s.serveRuntime(w, r, domain.CapabilityChat, runtimeOverride{}, identity, true)
 }
 
 // handleGeminiRuntime handles Google's native paths
@@ -78,10 +86,10 @@ func (s *Server) handleGeminiRuntime(w http.ResponseWriter, r *http.Request) {
 		model:  model,
 		stream: stream,
 		apply:  true,
-	})
+	}, nil, false)
 }
 
-func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType domain.CapabilityType, override runtimeOverride) {
+func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType domain.CapabilityType, override runtimeOverride, identity *domain.RuntimeIdentity, forceStream bool) {
 	clientProto := formats.DetectClientProtocol(r)
 	contentType := r.Header.Get("Content-Type")
 
@@ -89,6 +97,21 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 	if err != nil {
 		writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Failed to read request body.", "body_read_error")
 		return
+	}
+	if forceStream {
+		var payload map[string]any
+		if err := json.Unmarshal(body, &payload); err != nil {
+			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
+				"Invalid request body: expected JSON object.", "invalid_body")
+			return
+		}
+		payload["stream"] = true
+		body, err = json.Marshal(payload)
+		if err != nil {
+			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
+				"Invalid request body.", "invalid_body")
+			return
+		}
 	}
 
 	envelope := &serving.RequestEnvelope{
@@ -105,6 +128,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 		RequestID:      newRequestID(r),
 		TraceID:        r.Header.Get("X-Trace-Id"),
 		ClientPath:     r.URL.Path,
+		Identity:       identity,
 	}
 
 	// Resolve model + stream. URL overrides (Gemini) take precedence over body

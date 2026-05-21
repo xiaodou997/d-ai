@@ -48,6 +48,10 @@ type Request struct {
 	IsStream       bool
 
 	// Resolved by AuthN step
+	Identity *domain.RuntimeIdentity
+	// APIKey is kept as a transition alias for API-key runtime callers. New
+	// serving logic should read Identity so JWT web calls can share the same
+	// pipeline without fabricating API keys.
 	APIKey *domain.APIKeyAuth
 
 	// Extracted from request body; used by RouteCandidates for sticky routing.
@@ -114,6 +118,20 @@ type Request struct {
 	StartedAt time.Time
 	RequestID string
 	TraceID   string
+}
+
+func (r *Request) RuntimeIdentity() *domain.RuntimeIdentity {
+	if r == nil {
+		return nil
+	}
+	if r.Identity != nil {
+		return r.Identity
+	}
+	if r.APIKey != nil {
+		r.Identity = domain.IdentityFromAPIKey(*r.APIKey)
+		return r.Identity
+	}
+	return nil
 }
 
 // ============================================================================

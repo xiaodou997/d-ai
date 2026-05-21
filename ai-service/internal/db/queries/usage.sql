@@ -4,11 +4,14 @@ INSERT INTO ai_usage_logs (
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -41,7 +44,7 @@ INSERT INTO ai_usage_logs (
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   attempts_count,
   final_route_id,
   client_protocol,
@@ -51,7 +54,7 @@ INSERT INTO ai_usage_logs (
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44, $45, $46
+  $41, $42, $43, $44, $45, $46, $47, $48, $49
 )
 RETURNING id;
 
@@ -61,6 +64,8 @@ INSERT INTO ai_usage_rollups_hourly (
   tenant_id,
   user_id,
   api_key_id,
+  request_source,
+  capability_type,
   model_code,
   provider_code,
   request_status,
@@ -86,6 +91,8 @@ INSERT INTO ai_usage_rollups_hourly (
   sqlc.arg('tenant_id'),
   COALESCE(sqlc.narg('user_id')::text, ''),
   sqlc.arg('api_key_id')::uuid,
+  sqlc.arg('request_source'),
+  sqlc.arg('capability_type'),
   sqlc.arg('model_code'),
   COALESCE(sqlc.narg('provider_code')::text, ''),
   sqlc.arg('request_status'),
@@ -116,7 +123,7 @@ INSERT INTO ai_usage_rollups_hourly (
   END
 )
 ON CONFLICT (
-  bucket_start, tenant_id, user_id, api_key_id,
+  bucket_start, tenant_id, user_id, api_key_id, request_source,
   model_code, provider_code, request_status, billable_unit_type
 ) DO UPDATE SET
   request_count           = ai_usage_rollups_hourly.request_count           + EXCLUDED.request_count,

@@ -68,7 +68,8 @@ func NewBiller(
 // If the passed-in estimate is non-zero it is used directly; otherwise the biller
 // computes an estimate from current pricing × defaultTokenEstimate.
 func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serving.BillingEstimate) error {
-	if req.APIKey == nil {
+	identity := req.RuntimeIdentity()
+	if identity == nil {
 		return nil
 	}
 
@@ -86,7 +87,7 @@ func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serv
 		// a transaction but no credits will be held until Confirm.
 	}
 
-	if req.APIKey.OwnerType == domain.OwnerTenant {
+	if identity.OwnerType == domain.OwnerTenant {
 		userAmount = 0
 	}
 
@@ -96,8 +97,8 @@ func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serv
 
 	resp, err := b.client.Freeze(ctx, urm.FreezeRequest{
 		IdempotencyKey: req.RequestID,
-		TenantID:       req.APIKey.TenantID,
-		UserID:         req.APIKey.UserID,
+		TenantID:       identity.TenantID,
+		UserID:         identity.UserID,
 		Description:    "ai-gateway: " + req.ModelCode,
 		TenantAmount:   tenantAmount,
 		UserAmount:     userAmount,
@@ -125,7 +126,7 @@ func (b *Biller) Confirm(ctx context.Context, req *serving.Request, _ serving.Bi
 
 	actualTenant := req.BillingResult.PlatformCost
 	actualUser := req.BillingResult.UserCost
-	if req.APIKey != nil && req.APIKey.OwnerType == domain.OwnerTenant {
+	if identity := req.RuntimeIdentity(); identity != nil && identity.OwnerType == domain.OwnerTenant {
 		actualUser = 0
 	}
 

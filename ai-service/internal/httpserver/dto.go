@@ -711,12 +711,12 @@ func fromListUpstreamDeployments(rows []dbgen.ListUpstreamDeploymentsRow) []list
 // ---------------------------------------------------------------------------
 
 type tenantModelGrantDTO struct {
-	ID             pgtype.UUID `json:"id"`
-	TenantID       string      `json:"tenant_id"`
-	ModelID        pgtype.UUID `json:"model_id"`
-	Status         string      `json:"status"`
-	CreatedBy      pgtype.Text `json:"created_by"`
-	CreatedAt      *int64      `json:"created_at"`
+	ID        pgtype.UUID `json:"id"`
+	TenantID  string      `json:"tenant_id"`
+	ModelID   pgtype.UUID `json:"model_id"`
+	Status    string      `json:"status"`
+	CreatedBy pgtype.Text `json:"created_by"`
+	CreatedAt *int64      `json:"created_at"`
 }
 
 func fromAiTenantModelGrant(r dbgen.AiTenantModelGrant) tenantModelGrantDTO {
@@ -785,13 +785,13 @@ type apiKeyDTO struct {
 }
 
 type createAPIKeyResponse struct {
-	PlaintextKey string     `json:"plaintext_key"`
-	Key          apiKeyDTO  `json:"key"`
+	PlaintextKey string    `json:"plaintext_key"`
+	Key          apiKeyDTO `json:"key"`
 }
 
 type rotateAPIKeyResponse struct {
-	PlaintextKey string     `json:"plaintext_key"`
-	Key          apiKeyDTO  `json:"key"`
+	PlaintextKey string    `json:"plaintext_key"`
+	Key          apiKeyDTO `json:"key"`
 }
 
 func apiKeyDTOFromCreate(r dbgen.CreateAPIKeyRow) apiKeyDTO {
@@ -932,11 +932,14 @@ type usageLogDTO struct {
 	TraceID              pgtype.Text `json:"trace_id"`
 	ApiKeyID             pgtype.UUID `json:"api_key_id"`
 	KeyOwnerType         string      `json:"key_owner_type"`
+	AuthMethod           string      `json:"auth_method"`
+	RequestSource        string      `json:"request_source"`
 	TenantID             string      `json:"tenant_id"`
 	UserID               pgtype.Text `json:"user_id"`
 	ExternalUserID       pgtype.Text `json:"external_user_id"`
 	ModelID              pgtype.UUID `json:"model_id"`
 	ModelCode            string      `json:"model_code"`
+	CapabilityType       string      `json:"capability_type"`
 	ModelRouteID         pgtype.UUID `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID `json:"endpoint_id"`
@@ -963,7 +966,7 @@ type usageLogDTO struct {
 	ErrorCode            pgtype.Text `json:"error_code"`
 	ErrorMessage         pgtype.Text `json:"error_message"`
 	UsageEstimated       bool        `json:"usage_estimated"`
-	UsageSource          string      `json:"usage_source"`
+	TokenUsageSource     string      `json:"token_usage_source"`
 	CreatedAt            *int64      `json:"created_at"`
 }
 
@@ -974,11 +977,14 @@ func fromListUsageLog(r dbgen.ListUsageLogsRow) usageLogDTO {
 		TraceID:              r.TraceID,
 		ApiKeyID:             r.ApiKeyID,
 		KeyOwnerType:         r.KeyOwnerType,
+		AuthMethod:           r.AuthMethod,
+		RequestSource:        r.RequestSource,
 		TenantID:             r.TenantID,
 		UserID:               r.UserID,
 		ExternalUserID:       r.ExternalUserID,
 		ModelID:              r.ModelID,
 		ModelCode:            r.ModelCode,
+		CapabilityType:       r.CapabilityType,
 		ModelRouteID:         r.ModelRouteID,
 		UpstreamDeploymentID: r.UpstreamDeploymentID,
 		EndpointID:           r.EndpointID,
@@ -1005,7 +1011,7 @@ func fromListUsageLog(r dbgen.ListUsageLogsRow) usageLogDTO {
 		ErrorCode:            r.ErrorCode,
 		ErrorMessage:         r.ErrorMessage,
 		UsageEstimated:       r.UsageEstimated,
-		UsageSource:          r.UsageSource,
+		TokenUsageSource:     r.TokenUsageSource,
 		CreatedAt:            millis(r.CreatedAt),
 	}
 }
@@ -1170,7 +1176,6 @@ func fromAuditLogs(rows []dbgen.ListAuditLogsRow) []auditLogDTO {
 	return out
 }
 
-
 // ---------------------------------------------------------------------------
 // User usage logs by tenant/user DTOs
 // ---------------------------------------------------------------------------
@@ -1181,6 +1186,7 @@ type usageLogByUserDTO struct {
 	TraceID          pgtype.Text `json:"trace_id"`
 	TenantID         string      `json:"tenant_id"`
 	UserID           pgtype.Text `json:"user_id"`
+	RequestSource    string      `json:"request_source"`
 	ModelID          pgtype.UUID `json:"model_id"`
 	ModelCode        string      `json:"model_code"`
 	PromptTokens     int32       `json:"prompt_tokens"`
@@ -1204,6 +1210,7 @@ func fromListUsageLogByUser(r dbgen.ListUsageLogsByTenantUserRow) usageLogByUser
 		TraceID:          r.TraceID,
 		TenantID:         r.TenantID,
 		UserID:           r.UserID,
+		RequestSource:    r.RequestSource,
 		ModelID:          r.ModelID,
 		ModelCode:        r.ModelCode,
 		PromptTokens:     r.PromptTokens,
@@ -1234,34 +1241,34 @@ func fromListUsageLogsByUser(rows []dbgen.ListUsageLogsByTenantUserRow) []usageL
 // ---------------------------------------------------------------------------
 
 type userAvailableModelDTO struct {
-	ID                     pgtype.UUID     `json:"id"`
-	ModelCode              string          `json:"model_code"`
-	CapabilityType         string          `json:"capability_type"`
-	ContextWindow          pgtype.Int4     `json:"context_window"`
-	DefaultMaxOutputTokens int32           `json:"default_max_output_tokens"`
-	MaxOutputTokens        pgtype.Int4     `json:"max_output_tokens"`
-	Status                 string          `json:"status"`
-	GrantStatus            string          `json:"grant_status"`
-	GrantedAt              *int64          `json:"granted_at"`
-	InputPricePer1m        int64           `json:"input_price_per_1m"`
-	OutputPricePer1m       int64           `json:"output_price_per_1m"`
-	ImagePrices            json.RawMessage `json:"image_prices"`
-	VideoPrices            json.RawMessage `json:"video_prices"`
-	AudioTtsPricePer1mChars int64          `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64          `json:"audio_stt_price_per_minute"`
+	ID                      pgtype.UUID     `json:"id"`
+	ModelCode               string          `json:"model_code"`
+	CapabilityType          string          `json:"capability_type"`
+	ContextWindow           pgtype.Int4     `json:"context_window"`
+	DefaultMaxOutputTokens  int32           `json:"default_max_output_tokens"`
+	MaxOutputTokens         pgtype.Int4     `json:"max_output_tokens"`
+	Status                  string          `json:"status"`
+	GrantStatus             string          `json:"grant_status"`
+	GrantedAt               *int64          `json:"granted_at"`
+	InputPricePer1m         int64           `json:"input_price_per_1m"`
+	OutputPricePer1m        int64           `json:"output_price_per_1m"`
+	ImagePrices             json.RawMessage `json:"image_prices"`
+	VideoPrices             json.RawMessage `json:"video_prices"`
+	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 }
 
 func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailableModelDTO {
 	return userAvailableModelDTO{
-		ID:                     r.ID,
-		ModelCode:              r.ModelCode,
-		CapabilityType:         r.CapabilityType,
-		ContextWindow:          r.ContextWindow,
-		DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,
-		MaxOutputTokens:        r.MaxOutputTokens,
-		Status:                 r.Status,
-		GrantStatus:            r.GrantStatus,
-		GrantedAt:              millis(r.GrantedAt),
+		ID:                      r.ID,
+		ModelCode:               r.ModelCode,
+		CapabilityType:          r.CapabilityType,
+		ContextWindow:           r.ContextWindow,
+		DefaultMaxOutputTokens:  r.DefaultMaxOutputTokens,
+		MaxOutputTokens:         r.MaxOutputTokens,
+		Status:                  r.Status,
+		GrantStatus:             r.GrantStatus,
+		GrantedAt:               millis(r.GrantedAt),
 		InputPricePer1m:         r.InputPricePer1m,
 		OutputPricePer1m:        r.OutputPricePer1m,
 		ImagePrices:             rawJSON(r.ImagePrices),

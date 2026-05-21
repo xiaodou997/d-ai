@@ -21,10 +21,11 @@ func NewQuotaReserver(q *dbgen.Queries) *QuotaReserver {
 // Reserve atomically reserves `amount` quota units on the API key.
 // Returns an error if the key has insufficient remaining quota.
 func (r *QuotaReserver) Reserve(ctx context.Context, req *serving.Request, amount int64) error {
-	if req.APIKey == nil {
+	identity := req.RuntimeIdentity()
+	if identity == nil || !identity.UsesAPIKeyQuota() {
 		return nil
 	}
-	keyID := mustParseUUID(req.APIKey.KeyID)
+	keyID := mustParseUUID(identity.APIKeyID)
 
 	rows, err := r.q.ReserveAPIKeyQuota(ctx, dbgen.ReserveAPIKeyQuotaParams{
 		ID:            keyID,
@@ -42,11 +43,12 @@ func (r *QuotaReserver) Reserve(ctx context.Context, req *serving.Request, amoun
 // Release returns reserved quota to the API key. Best-effort — errors are logged
 // by the caller but do not propagate.
 func (r *QuotaReserver) Release(ctx context.Context, req *serving.Request, amount int64) {
-	if req.APIKey == nil || amount == 0 {
+	identity := req.RuntimeIdentity()
+	if identity == nil || !identity.UsesAPIKeyQuota() || amount == 0 {
 		return
 	}
 	_ = r.q.ReleaseAPIKeyQuotaReserve(ctx, dbgen.ReleaseAPIKeyQuotaReserveParams{
-		ID:            mustParseUUID(req.APIKey.KeyID),
+		ID:            mustParseUUID(identity.APIKeyID),
 		QuotaReserved: amount,
 	})
 }

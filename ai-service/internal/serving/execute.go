@@ -515,7 +515,8 @@ func (s *ExecuteStep) Rollback(_ context.Context, _ *Request) {}
 // successful upstream call. No-op when Sticky is nil or req.ConversationID is
 // empty (opt-in by caller).
 func (s *ExecuteStep) writeSticky(ctx context.Context, req *Request, cand *domain.RouteCandidate) {
-	if s.Sticky == nil || req.ConversationID == "" || req.APIKey == nil {
+	identity := req.RuntimeIdentity()
+	if s.Sticky == nil || req.ConversationID == "" || identity == nil {
 		return
 	}
 	var b routing.StickyBinding
@@ -530,8 +531,7 @@ func (s *ExecuteStep) writeSticky(ctx context.Context, req *Request, cand *domai
 		b.DeploymentID = cand.DeploymentID
 		b.EndpointID = cand.EndpointID
 	}
-	identity := req.APIKey.KeyID
-	if err := s.Sticky.SetBinding(ctx, req.APIKey.TenantID, identity, req.ModelCode, req.ConversationID, &b); err != nil {
+	if err := s.Sticky.SetBinding(ctx, identity.TenantID, identity.StickyKey(), req.ModelCode, req.ConversationID, &b); err != nil {
 		zap.L().Warn("sticky write failed",
 			zap.String("conv_id", req.ConversationID),
 			zap.String("route_id", cand.RouteID),
@@ -1221,8 +1221,12 @@ func buildHeaders(c *domain.RouteCandidate, req *Request) map[string]string {
 			if accountID := cred.AccountID(); accountID != "" {
 				headers["chatgpt-account-id"] = accountID
 			}
-			// Stable session/conversation IDs derived from (api_key_id + pool_id).
-			sessionID := codexSessionID(req.APIKey.KeyID, c.PoolID)
+			// Stable session/conversation IDs derived from caller identity + pool.
+			identityKey := "web:" + req.RequestID
+			if identity := req.RuntimeIdentity(); identity != nil {
+				identityKey = identity.StickyKey()
+			}
+			sessionID := codexSessionID(identityKey, c.PoolID)
 			headers["session_id"] = sessionID
 			headers["conversation_id"] = sessionID
 		}

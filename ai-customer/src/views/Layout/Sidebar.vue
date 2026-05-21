@@ -26,6 +26,10 @@
           <el-icon><Grid /></el-icon>
           <span>可用模型</span>
         </el-menu-item>
+        <el-menu-item index="/ai/chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>AI 对话</span>
+        </el-menu-item>
         <el-menu-item index="/ai/api-keys">
           <el-icon><Key /></el-icon>
           <span>我的 API Key</span>
@@ -72,7 +76,8 @@ import {
   SwitchButton,
   Key,
   TrendCharts,
-  Grid
+  Grid,
+  ChatDotRound
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'

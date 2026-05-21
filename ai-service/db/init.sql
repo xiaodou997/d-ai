@@ -364,11 +364,14 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   trace_id               TEXT,
   api_key_id             UUID,
   key_owner_type         TEXT        NOT NULL,
+  auth_method            TEXT        NOT NULL DEFAULT 'api_key' CHECK (auth_method IN ('api_key', 'jwt')),
+  request_source         TEXT        NOT NULL DEFAULT 'api_key' CHECK (request_source IN ('api_key', 'web_chat')),
   tenant_id              TEXT        NOT NULL,
   user_id                TEXT,
   external_user_id       TEXT,
   model_id               UUID,
   model_code             TEXT        NOT NULL,
+  capability_type        TEXT        NOT NULL DEFAULT 'chat',
   model_route_id         UUID,
   upstream_deployment_id UUID,
   endpoint_id            UUID,
@@ -405,7 +408,7 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   client_protocol        TEXT        NOT NULL DEFAULT 'openai_chat',
   resolution             TEXT,
   usage_estimated        BOOLEAN     NOT NULL DEFAULT false,
-  usage_source           TEXT        NOT NULL DEFAULT 'upstream',
+  token_usage_source     TEXT        NOT NULL DEFAULT 'upstream',
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (billable_unit_type IN ('token', 'input_token', 'output_token', 'image', 'second', 'request')),
   CONSTRAINT ai_usage_logs_nonnegative CHECK (
@@ -421,6 +424,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_time       ON ai_usage_logs 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_user_time         ON ai_usage_logs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_key_time          ON ai_usage_logs (api_key_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_model_time        ON ai_usage_logs (model_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_source_time       ON ai_usage_logs (request_source, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_urm_transaction   ON ai_usage_logs (urm_transaction_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_route             ON ai_usage_logs (model_route_id);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_deployment        ON ai_usage_logs (upstream_deployment_id);
@@ -439,6 +443,8 @@ CREATE TABLE IF NOT EXISTS ai_usage_rollups_hourly (
   tenant_id              TEXT        NOT NULL,
   user_id                TEXT        NOT NULL DEFAULT '',
   api_key_id             UUID        NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+  request_source         TEXT        NOT NULL DEFAULT 'api_key',
+  capability_type        TEXT        NOT NULL DEFAULT 'chat',
   model_code             TEXT        NOT NULL,
   provider_code          TEXT        NOT NULL DEFAULT '',
   request_status         TEXT        NOT NULL,
@@ -461,9 +467,10 @@ CREATE TABLE IF NOT EXISTS ai_usage_rollups_hourly (
   latency_success_count  BIGINT      NOT NULL DEFAULT 0,
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (
-    bucket_start, tenant_id, user_id, api_key_id,
+    bucket_start, tenant_id, user_id, api_key_id, request_source,
     model_code, provider_code, request_status, billable_unit_type
   ),
+  CHECK (request_source IN ('api_key', 'web_chat')),
   CHECK (billable_unit_type IN ('token', 'input_token', 'output_token', 'image', 'second', 'request'))
 );
 

@@ -29,19 +29,20 @@ func NewModelGrantChecker(q *dbgen.Queries) *ModelGrantChecker {
 // CheckModelGrant verifies req.ModelCode is accessible to the API key owner.
 // It satisfies serving.ModelGrantChecker.
 func (c *ModelGrantChecker) CheckModelGrant(ctx context.Context, req *serving.Request) error {
-	if req.APIKey == nil {
-		return fmt.Errorf("no api key in request context")
+	identity := req.RuntimeIdentity()
+	if identity == nil {
+		return fmt.Errorf("no runtime identity in request context")
 	}
 
-	tenantID := req.APIKey.TenantID
-	userID := req.APIKey.UserID
+	tenantID := identity.TenantID
+	userID := identity.UserID
 	modelCode := req.ModelCode
 	capType := string(req.CapabilityType)
 
 	// --- Step 1: API key allowed_models filter ---
 	// If the key declares an explicit allowlist, the requested model must be in it.
-	if len(req.APIKey.AllowedModels) > 0 {
-		if !contains(req.APIKey.AllowedModels, modelCode) {
+	if len(identity.AllowedModels) > 0 {
+		if !contains(identity.AllowedModels, modelCode) {
 			return fmt.Errorf("model %q not in api key allowed_models", modelCode)
 		}
 	}

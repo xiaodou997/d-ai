@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
+	"xiaodou/uni-ai-api/internal/domain"
 	"xiaodou/uni-ai-api/internal/serving"
 )
 
@@ -95,15 +96,23 @@ const windowTTL = 120   // keep keys for 2 windows
 // Check loads active policies for the request and enforces RPM / TPM limits.
 // Returns an error (with a human-readable message) if any limit is exceeded.
 func (r *RateLimiter) Check(ctx context.Context, req *serving.Request) error {
-	if req.APIKey == nil || req.Candidate == nil {
+	identity := req.RuntimeIdentity()
+	if identity == nil || req.Candidate == nil {
 		return nil
+	}
+	// Only API-key callers carry an API-key scope. JWT web calls leave it
+	// empty so the api_key scope branch of the policy query cannot match.
+	isAPIKeyAuth := identity.AuthMethod == domain.AuthMethodAPIKey
+	apiKeyScope := ""
+	if isAPIKeyAuth {
+		apiKeyScope = identity.APIKeyID
 	}
 
 	policies, err := r.q.ListActiveRuntimeLimitPolicies(ctx, dbgen.ListActiveRuntimeLimitPoliciesParams{
 		CapabilityType: string(req.CapabilityType),
-		ScopeID:        req.APIKey.TenantID,
-		ScopeID_2:      req.APIKey.UserID,
-		ScopeID_3:      req.APIKey.KeyID,
+		ScopeID:        identity.TenantID,
+		ScopeID_2:      identity.UserID,
+		ScopeID_3:      apiKeyScope,
 		ScopeID_4:      req.Candidate.ProviderCode,
 		ScopeID_5:      req.Candidate.EndpointID,
 		ModelCode:      pgtype.Text{},
@@ -116,6 +125,11 @@ func (r *RateLimiter) Check(ctx context.Context, req *serving.Request) error {
 	nowMs := time.Now().UnixMilli()
 
 	for _, p := range policies {
+		// Web chat must never be throttled by an API-key scope policy, even
+		// if one was mis-configured with an empty scope_id.
+		if p.ScopeType == "api_key" && !isAPIKeyAuth {
+			continue
+		}
 		id := uuidString(p.ID)
 		member := fmt.Sprintf("%d-%d", nowMs, rand.Int63())
 

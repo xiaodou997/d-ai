@@ -862,11 +862,14 @@ SELECT
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -893,13 +896,14 @@ SELECT
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source')::text)
   AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
   AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at <= sqlc.narg('date_to')::timestamptz)
 ORDER BY created_at DESC
@@ -912,6 +916,7 @@ WHERE tenant_id = $1
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source')::text)
   AND (sqlc.narg('date_from')::timestamptz IS NULL OR created_at >= sqlc.narg('date_from')::timestamptz)
   AND (sqlc.narg('date_to')::timestamptz IS NULL OR created_at <= sqlc.narg('date_to')::timestamptz);
 
@@ -922,11 +927,14 @@ SELECT
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -953,7 +961,7 @@ SELECT
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   created_at
 FROM ai_usage_logs
 WHERE api_key_id = $1
@@ -972,11 +980,14 @@ SELECT
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -1003,7 +1014,7 @@ SELECT
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
@@ -1231,6 +1242,7 @@ WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status'))
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source'))
   AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz))
 GROUP BY model_code
 ORDER BY request_count DESC;
@@ -1248,6 +1260,7 @@ WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id'
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = COALESCE(sqlc.narg('user_id')::text, ''))
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code'))
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status'))
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source'))
   AND (sqlc.narg('since')::timestamptz IS NULL OR bucket_start >= date_trunc('hour', sqlc.narg('since')::timestamptz))
 GROUP BY billable_unit_type
 ORDER BY request_count DESC;
@@ -1376,6 +1389,7 @@ SELECT
   trace_id,
   tenant_id,
   user_id,
+  request_source,
   model_id,
   model_code,
   prompt_tokens,
@@ -1393,6 +1407,7 @@ SELECT
 FROM ai_usage_logs
 WHERE tenant_id = $1
   AND user_id = $2
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source'))
 ORDER BY created_at DESC
 LIMIT $3;
 
@@ -1400,7 +1415,8 @@ LIMIT $3;
 SELECT COUNT(*) AS count
 FROM ai_usage_logs
 WHERE tenant_id = $1
-  AND user_id = $2;
+  AND user_id = $2
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source'));
 
 -- name: ListUsageSummaryByTenantUser :one
 SELECT
@@ -1414,5 +1430,5 @@ SELECT
   COALESCE(SUM(latency_success_sum_ms)::double precision / NULLIF(SUM(latency_success_count), 0), 0)::double precision AS avg_latency_ms
 FROM ai_usage_rollups_hourly
 WHERE tenant_id = $1
-  AND user_id = $2;
-
+  AND user_id = $2
+  AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source'));

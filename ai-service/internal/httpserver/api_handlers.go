@@ -1,8 +1,8 @@
 package httpserver
 
 import (
-	"go.uber.org/zap"
 	"encoding/json"
+	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -246,9 +246,10 @@ func (s *Server) handleUserUsageLogsSelf(w http.ResponseWriter, r *http.Request)
 	}
 
 	rows, err := s.queries.ListUsageLogsByTenantUser(r.Context(), dbgen.ListUsageLogsByTenantUserParams{
-		TenantID: ac.TenantID,
-		UserID:   pgtype.Text{String: ac.UserID, Valid: true},
-		Limit:    limit,
+		TenantID:      ac.TenantID,
+		UserID:        pgtype.Text{String: ac.UserID, Valid: true},
+		Limit:         limit,
+		RequestSource: optionalTextValue(r.URL.Query().Get("request_source")),
 	})
 	if err != nil {
 		s.logger.Error("list user usage logs failed", zap.Error(err))
@@ -273,8 +274,9 @@ func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Reque
 	}
 
 	summary, err := s.queries.ListUsageSummaryByTenantUser(r.Context(), dbgen.ListUsageSummaryByTenantUserParams{
-		TenantID: ac.TenantID,
-		UserID:   ac.UserID,
+		TenantID:      ac.TenantID,
+		UserID:        ac.UserID,
+		RequestSource: optionalTextValue(r.URL.Query().Get("request_source")),
 	})
 	if err != nil {
 		s.logger.Error("list user usage summary failed", zap.Error(err))

@@ -37,11 +37,14 @@ INSERT INTO ai_usage_logs (
   trace_id,
   api_key_id,
   key_owner_type,
+  auth_method,
+  request_source,
   tenant_id,
   user_id,
   external_user_id,
   model_id,
   model_code,
+  capability_type,
   model_route_id,
   upstream_deployment_id,
   endpoint_id,
@@ -74,7 +77,7 @@ INSERT INTO ai_usage_logs (
   error_code,
   error_message,
   usage_estimated,
-  usage_source,
+  token_usage_source,
   attempts_count,
   final_route_id,
   client_protocol,
@@ -84,7 +87,7 @@ INSERT INTO ai_usage_logs (
   $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
   $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
   $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
-  $41, $42, $43, $44, $45, $46
+  $41, $42, $43, $44, $45, $46, $47, $48, $49
 )
 RETURNING id
 `
@@ -94,11 +97,14 @@ type CreateUsageLogParams struct {
 	TraceID              pgtype.Text `json:"trace_id"`
 	ApiKeyID             pgtype.UUID `json:"api_key_id"`
 	KeyOwnerType         string      `json:"key_owner_type"`
+	AuthMethod           string      `json:"auth_method"`
+	RequestSource        string      `json:"request_source"`
 	TenantID             string      `json:"tenant_id"`
 	UserID               pgtype.Text `json:"user_id"`
 	ExternalUserID       pgtype.Text `json:"external_user_id"`
 	ModelID              pgtype.UUID `json:"model_id"`
 	ModelCode            string      `json:"model_code"`
+	CapabilityType       string      `json:"capability_type"`
 	ModelRouteID         pgtype.UUID `json:"model_route_id"`
 	UpstreamDeploymentID pgtype.UUID `json:"upstream_deployment_id"`
 	EndpointID           pgtype.UUID `json:"endpoint_id"`
@@ -131,7 +137,7 @@ type CreateUsageLogParams struct {
 	ErrorCode            pgtype.Text `json:"error_code"`
 	ErrorMessage         pgtype.Text `json:"error_message"`
 	UsageEstimated       bool        `json:"usage_estimated"`
-	UsageSource          string      `json:"usage_source"`
+	TokenUsageSource     string      `json:"token_usage_source"`
 	AttemptsCount        int32       `json:"attempts_count"`
 	FinalRouteID         pgtype.UUID `json:"final_route_id"`
 	ClientProtocol       string      `json:"client_protocol"`
@@ -144,11 +150,14 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.TraceID,
 		arg.ApiKeyID,
 		arg.KeyOwnerType,
+		arg.AuthMethod,
+		arg.RequestSource,
 		arg.TenantID,
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.ModelID,
 		arg.ModelCode,
+		arg.CapabilityType,
 		arg.ModelRouteID,
 		arg.UpstreamDeploymentID,
 		arg.EndpointID,
@@ -181,7 +190,7 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.ErrorCode,
 		arg.ErrorMessage,
 		arg.UsageEstimated,
-		arg.UsageSource,
+		arg.TokenUsageSource,
 		arg.AttemptsCount,
 		arg.FinalRouteID,
 		arg.ClientProtocol,
@@ -473,6 +482,8 @@ INSERT INTO ai_usage_rollups_hourly (
   tenant_id,
   user_id,
   api_key_id,
+  request_source,
+  capability_type,
   model_code,
   provider_code,
   request_status,
@@ -499,14 +510,14 @@ INSERT INTO ai_usage_rollups_hourly (
   COALESCE($2::text, ''),
   $3::uuid,
   $4,
-  COALESCE($5::text, ''),
+  $5,
   $6,
-  $7,
+  COALESCE($7::text, ''),
+  $8,
+  $9,
   1,
-  CASE WHEN $6 = 'success' THEN 1 ELSE 0 END,
-  CASE WHEN $6 = 'failed'  THEN 1 ELSE 0 END,
-  $8::bigint,
-  $9::bigint,
+  CASE WHEN $8 = 'success' THEN 1 ELSE 0 END,
+  CASE WHEN $8 = 'failed'  THEN 1 ELSE 0 END,
   $10::bigint,
   $11::bigint,
   $12::bigint,
@@ -516,19 +527,21 @@ INSERT INTO ai_usage_rollups_hourly (
   $16::bigint,
   $17::bigint,
   $18::bigint,
+  $19::bigint,
+  $20::bigint,
   CASE
-    WHEN $6 = 'success' AND $19::integer IS NOT NULL
-      THEN $19::bigint
+    WHEN $8 = 'success' AND $21::integer IS NOT NULL
+      THEN $21::bigint
     ELSE 0
   END,
   CASE
-    WHEN $6 = 'success' AND $19::integer IS NOT NULL
+    WHEN $8 = 'success' AND $21::integer IS NOT NULL
       THEN 1
     ELSE 0
   END
 )
 ON CONFLICT (
-  bucket_start, tenant_id, user_id, api_key_id,
+  bucket_start, tenant_id, user_id, api_key_id, request_source,
   model_code, provider_code, request_status, billable_unit_type
 ) DO UPDATE SET
   request_count           = ai_usage_rollups_hourly.request_count           + EXCLUDED.request_count,
@@ -554,6 +567,8 @@ type UpsertUsageRollupHourlyParams struct {
 	TenantID         string      `json:"tenant_id"`
 	UserID           pgtype.Text `json:"user_id"`
 	ApiKeyID         pgtype.UUID `json:"api_key_id"`
+	RequestSource    string      `json:"request_source"`
+	CapabilityType   string      `json:"capability_type"`
 	ModelCode        string      `json:"model_code"`
 	ProviderCode     pgtype.Text `json:"provider_code"`
 	RequestStatus    string      `json:"request_status"`
@@ -577,6 +592,8 @@ func (q *Queries) UpsertUsageRollupHourly(ctx context.Context, arg UpsertUsageRo
 		arg.TenantID,
 		arg.UserID,
 		arg.ApiKeyID,
+		arg.RequestSource,
+		arg.CapabilityType,
 		arg.ModelCode,
 		arg.ProviderCode,
 		arg.RequestStatus,

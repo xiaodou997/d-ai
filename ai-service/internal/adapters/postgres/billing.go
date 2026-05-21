@@ -23,11 +23,12 @@ func NewPriceResolver(q *dbgen.Queries) *PriceResolver {
 }
 
 func (r *PriceResolver) ResolvePricing(ctx context.Context, req *serving.Request) (domain.ModelPricing, error) {
-	if req.APIKey == nil || req.Candidate == nil {
-		return domain.ModelPricing{}, errors.New("billing: missing api key or route candidate")
+	identity := req.RuntimeIdentity()
+	if identity == nil || req.Candidate == nil {
+		return domain.ModelPricing{}, errors.New("billing: missing runtime identity or route candidate")
 	}
-	tenantID := req.APIKey.TenantID
-	userID := req.APIKey.UserID
+	tenantID := identity.TenantID
+	userID := identity.UserID
 	modelID := mustParseUUID(req.Candidate.ModelID)
 
 	if userID != "" {

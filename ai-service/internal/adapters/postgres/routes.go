@@ -37,7 +37,6 @@ func oauthFixedTypesForProtocol(p domain.UpstreamProtocol) []string {
 	}
 }
 
-
 // routeRow holds one resolved route. All endpoint/pool fields may be nil
 // depending on whether the deployment is API Key-based or OAuth pool-based.
 type routeRow struct {
@@ -242,8 +241,12 @@ func (s *RouteSelector) WithOAuthCredentialStore(store *OAuthCredentialStore) *R
 // sticky target for the next call. Pool credential selection itself is
 // deferred to ExecuteStep so that retries can swap credentials cleanly.
 func (s *RouteSelector) SelectCandidates(ctx context.Context, req *serving.Request) ([]*domain.RouteCandidate, error) {
+	identity := req.RuntimeIdentity()
+	if identity == nil {
+		return nil, fmt.Errorf("missing runtime identity")
+	}
 	model, err := s.grantChecker.resolveModelID(ctx,
-		req.APIKey.TenantID, req.ModelCode, string(req.CapabilityType))
+		identity.TenantID, req.ModelCode, string(req.CapabilityType))
 	if err != nil {
 		return nil, fmt.Errorf("resolve model id: %w", err)
 	}
@@ -364,7 +367,6 @@ func (s *RouteSelector) HealthSnapshot() []routing.HealthRecord {
 	return s.health.Snapshot()
 }
 
-
 func filterStreamable(rows []routeRow) []routeRow {
 	out := rows[:0]
 	for _, r := range rows {
@@ -414,4 +416,3 @@ func weightedSelectRoute(rows []routeRow) routeRow {
 	}
 	return rows[len(rows)-1]
 }
-

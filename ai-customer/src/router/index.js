@@ -35,6 +35,12 @@ const routes = [
         meta: { title: '可用模型', requiresAuth: true }
       },
       {
+        path: '/ai/chat',
+        name: 'AIChat',
+        component: () => import('@/views/AIGateway/AIChat.vue'),
+        meta: { title: 'AI 对话', requiresAuth: true }
+      },
+      {
         path: '/ai/api-keys',
         name: 'MyAPIKeys',
         component: () => import('@/views/AIGateway/MyAPIKeys.vue'),

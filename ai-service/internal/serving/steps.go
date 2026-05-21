@@ -32,6 +32,9 @@ type AuthNStep struct {
 func (s *AuthNStep) Name() string { return "authn" }
 
 func (s *AuthNStep) Execute(ctx context.Context, req *Request) error {
+	if req.RuntimeIdentity() != nil {
+		return nil
+	}
 	if req.Envelope == nil || req.Envelope.R == nil {
 		return apiError(http.StatusInternalServerError, "missing_envelope", "request envelope not set")
 	}
@@ -81,10 +84,11 @@ type QuotaCheckStep struct{}
 func (s *QuotaCheckStep) Name() string { return "quota_check" }
 
 func (s *QuotaCheckStep) Execute(_ context.Context, req *Request) error {
-	if req.APIKey == nil {
+	identity := req.RuntimeIdentity()
+	if identity == nil || !identity.UsesAPIKeyQuota() {
 		return nil
 	}
-	avail := req.APIKey.QuotaAvailable()
+	avail := identity.QuotaAvailable()
 	if avail == 0 {
 		return apiError(http.StatusPaymentRequired, "quota_exceeded",
 			"API key quota exhausted")
@@ -134,9 +138,8 @@ func (s *RouteCandidatesStep) Execute(ctx context.Context, req *Request) error {
 	}
 
 	// Sticky routing: promote the bound candidate to position 0 when found.
-	if s.Sticky != nil && req.ConversationID != "" && req.APIKey != nil {
-		identity := req.APIKey.KeyID
-		binding, berr := s.Sticky.GetBinding(ctx, req.APIKey.TenantID, identity, req.ModelCode, req.ConversationID)
+	if identity := req.RuntimeIdentity(); s.Sticky != nil && req.ConversationID != "" && identity != nil {
+		binding, berr := s.Sticky.GetBinding(ctx, identity.TenantID, identity.StickyKey(), req.ModelCode, req.ConversationID)
 		if berr != nil {
 			zap.L().Warn("sticky read failed", zap.Error(berr))
 		} else if binding != nil {
@@ -224,7 +227,8 @@ type QuotaReserveStep struct {
 func (s *QuotaReserveStep) Name() string { return "quota_reserve" }
 
 func (s *QuotaReserveStep) Execute(ctx context.Context, req *Request) error {
-	if s.Reserver == nil || req.APIKey == nil || req.APIKey.QuotaLimit == nil {
+	identity := req.RuntimeIdentity()
+	if s.Reserver == nil || identity == nil || !identity.UsesAPIKeyQuota() || identity.QuotaLimit == nil {
 		return nil
 	}
 	estimate := s.EstimateTokens
@@ -278,7 +282,7 @@ func (s *URMFreezeStep) Execute(ctx context.Context, req *Request) error {
 		zap.L().Warn("urm freeze failed",
 			zap.Error(err),
 			zap.String("request_id", req.RequestID),
-			zap.String("tenant_id", req.APIKey.TenantID),
+			zap.String("tenant_id", req.RuntimeIdentity().TenantID),
 			zap.String("model_code", req.ModelCode),
 		)
 		return apiError(http.StatusPaymentRequired, "insufficient_balance",
@@ -421,7 +425,6 @@ func (f *AuditFinalizer) Finalize(_ context.Context, req *Request) {
 
 	f.Worker.Submit(p)
 }
-
 
 // ============================================================================
 // Helpers

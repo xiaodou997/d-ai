@@ -24,7 +24,6 @@ const (
 	defaultTimeoutMs      = int32(30000)
 )
 
-
 type adminActorContextKey struct{}
 type adminContextKey struct{}
 
@@ -79,8 +78,8 @@ type createModelRequest struct {
 type modelPriceRequest struct {
 	InputPricePer1M         int64           `json:"input_price_per_1m"`
 	OutputPricePer1M        int64           `json:"output_price_per_1m"`
-	ImagePrices              json.RawMessage `json:"image_prices"`
-	VideoPrices              json.RawMessage `json:"video_prices"`
+	ImagePrices             json.RawMessage `json:"image_prices"`
+	VideoPrices             json.RawMessage `json:"video_prices"`
 	AudioTTSPricePer1MChars int64           `json:"audio_tts_price_per_1m_chars"`
 	AudioSTTPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
 }
@@ -93,20 +92,20 @@ type createUpstreamDeploymentRequest struct {
 	RequestPath        *string         `json:"request_path"`
 	UpstreamParameters json.RawMessage `json:"upstream_parameters"`
 	Pricing            json.RawMessage `json:"pricing"`
-	CredentialPoolID    string          `json:"credential_pool_id"`
-	Status              string          `json:"status"`
+	CredentialPoolID   string          `json:"credential_pool_id"`
+	Status             string          `json:"status"`
 }
 
 type createModelRouteRequest struct {
 	// Deployment route (XOR with pool fields below)
 	UpstreamDeploymentID string `json:"upstream_deployment_id"`
 	// Pool route
-	CredentialPoolID   string `json:"credential_pool_id"`
-	PoolUpstreamModel  string `json:"pool_upstream_model"`
-	Priority           *int32 `json:"priority"`
-	Weight             *int32 `json:"weight"`
-	SupportsStream     *bool  `json:"supports_stream"`
-	Status             string `json:"status"`
+	CredentialPoolID  string `json:"credential_pool_id"`
+	PoolUpstreamModel string `json:"pool_upstream_model"`
+	Priority          *int32 `json:"priority"`
+	Weight            *int32 `json:"weight"`
+	SupportsStream    *bool  `json:"supports_stream"`
+	Status            string `json:"status"`
 }
 
 type grantModelToTenantRequest struct {
@@ -125,8 +124,8 @@ type createTenantAPIKeyRequest struct {
 }
 
 type createTenantAPIKeyResponse struct {
-	APIKey string     `json:"api_key"`
-	Key    apiKeyDTO  `json:"key"`
+	APIKey string    `json:"api_key"`
+	Key    apiKeyDTO `json:"key"`
 }
 
 type createUserAPIKeyResponse struct {
@@ -211,6 +210,7 @@ type usageFilters struct {
 	userID        string
 	modelCode     string
 	requestStatus string
+	requestSource string
 	dateFrom      pgtype.Timestamptz
 	dateTo        pgtype.Timestamptz
 }
@@ -312,6 +312,7 @@ func scopedUsageFilters(w http.ResponseWriter, r *http.Request) (usageFilters, b
 		userID:        r.URL.Query().Get("user_id"),
 		modelCode:     r.URL.Query().Get("model_code"),
 		requestStatus: r.URL.Query().Get("request_status"),
+		requestSource: r.URL.Query().Get("request_source"),
 		dateFrom:      dateFrom,
 		dateTo:        dateTo,
 	}

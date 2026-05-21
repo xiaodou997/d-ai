@@ -28,6 +28,7 @@ const filters = shallowRef({
   userId: '',
   modelCode: '',
   requestStatus: '',
+  requestSource: '',
 })
 
 const currentPage = shallowRef(1)
@@ -54,6 +55,7 @@ const buildParams = () => {
   if (f.userId) params.user_id = f.userId
   if (f.modelCode) params.model_code = f.modelCode
   if (f.requestStatus) params.request_status = f.requestStatus
+  if (f.requestSource) params.request_source = f.requestSource
   if (f.dateRange && f.dateRange[0]) params.date_from = new Date(f.dateRange[0]).toISOString()
   if (f.dateRange && f.dateRange[1]) params.date_to = new Date(f.dateRange[1]).toISOString()
   return params
@@ -87,6 +89,7 @@ const handleReset = () => {
     userId: '',
     modelCode: '',
     requestStatus: '',
+    requestSource: '',
   }
   currentPage.value = 1
   fetchData()
@@ -153,6 +156,14 @@ const statusOptions = [
   { label: '错误', value: 'error' },
   { label: '待处理', value: 'pending' },
 ]
+
+const requestSourceOptions = [
+  { label: 'API Key 调用', value: 'api_key' },
+  { label: '网页对话', value: 'web_chat' },
+]
+
+const requestSourceLabel = (value) =>
+  requestSourceOptions.find((item) => item.value === value)?.label || value || '-'
 
 onMounted(() => {
   fetchUsers()
@@ -236,6 +247,9 @@ onUnmounted(() => {
       <el-select v-model="filters.requestStatus" placeholder="全部状态" clearable style="width: 120px">
         <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
+      <el-select v-model="filters.requestSource" placeholder="全部来源" clearable style="width: 140px">
+        <el-option v-for="s in requestSourceOptions" :key="s.value" :label="s.label" :value="s.value" />
+      </el-select>
       <el-button type="primary" :icon="Search" @click="handleSearch" :loading="loading">查询</el-button>
     </section>
 
@@ -261,6 +275,13 @@ onUnmounted(() => {
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.request_status)" size="small">
               {{ row.request_status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.request_source === 'web_chat' ? 'success' : 'info'">
+              {{ requestSourceLabel(row.request_source) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -310,6 +331,8 @@ onUnmounted(() => {
               <dt>Trace ID</dt><dd class="mono">{{ pgTextVal(selectedRecord.trace_id) }}</dd>
               <dt>时间</dt><dd>{{ formatFullTimestamp(selectedRecord.created_at) }}</dd>
               <dt>流式</dt><dd>{{ selectedRecord.stream ? '是' : '否' }}</dd>
+              <dt>调用来源</dt><dd>{{ requestSourceLabel(selectedRecord.request_source) }}</dd>
+              <dt>认证方式</dt><dd>{{ selectedRecord.auth_method }}</dd>
             </dl>
           </section>
 
@@ -351,7 +374,7 @@ onUnmounted(() => {
               <dt>Total</dt><dd class="mono"><strong>{{ selectedRecord.total_tokens.toLocaleString() }}</strong></dd>
               <dt>计费单位类型</dt><dd>{{ selectedRecord.billable_unit_type }}</dd>
               <dt>计费单位数</dt><dd class="mono">{{ selectedRecord.billable_units.toLocaleString() }}</dd>
-              <dt>用量来源</dt><dd>{{ selectedRecord.usage_source }}</dd>
+              <dt>Token 来源</dt><dd>{{ selectedRecord.token_usage_source }}</dd>
               <dt>估算</dt><dd>{{ selectedRecord.usage_estimated ? '是' : '否' }}</dd>
             </dl>
           </section>

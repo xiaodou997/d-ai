@@ -91,6 +91,20 @@ const (
 // Auth context — populated from API key or JWT
 // ============================================================================
 
+type RuntimeAuthMethod string
+
+const (
+	AuthMethodAPIKey RuntimeAuthMethod = "api_key"
+	AuthMethodJWT    RuntimeAuthMethod = "jwt"
+)
+
+type RequestSource string
+
+const (
+	RequestSourceAPIKey  RequestSource = "api_key"
+	RequestSourceWebChat RequestSource = "web_chat"
+)
+
 // APIKeyAuth holds everything resolved from an API key DB lookup.
 type APIKeyAuth struct {
 	KeyID         string
@@ -109,6 +123,60 @@ func (a APIKeyAuth) QuotaAvailable() int64 {
 		return -1
 	}
 	return *a.QuotaLimit - a.QuotaUsed - a.QuotaReserved
+}
+
+// RuntimeIdentity is the normalized caller identity for every runtime request.
+// API-key calls populate APIKeyID, AllowedModels, and quota fields. JWT web
+// calls leave those fields empty and are governed by tenant/user authorization.
+type RuntimeIdentity struct {
+	AuthMethod    RuntimeAuthMethod
+	RequestSource RequestSource
+	OwnerType     OwnerType
+	TenantID      string
+	UserID        string
+	APIKeyID      string
+	AllowedModels []string
+	QuotaLimit    *int64
+	QuotaUsed     int64
+	QuotaReserved int64
+}
+
+func IdentityFromAPIKey(key APIKeyAuth) *RuntimeIdentity {
+	return &RuntimeIdentity{
+		AuthMethod:    AuthMethodAPIKey,
+		RequestSource: RequestSourceAPIKey,
+		OwnerType:     key.OwnerType,
+		TenantID:      key.TenantID,
+		UserID:        key.UserID,
+		APIKeyID:      key.KeyID,
+		AllowedModels: key.AllowedModels,
+		QuotaLimit:    key.QuotaLimit,
+		QuotaUsed:     key.QuotaUsed,
+		QuotaReserved: key.QuotaReserved,
+	}
+}
+
+func (i RuntimeIdentity) QuotaAvailable() int64 {
+	if i.QuotaLimit == nil {
+		return -1
+	}
+	return *i.QuotaLimit - i.QuotaUsed - i.QuotaReserved
+}
+
+func (i RuntimeIdentity) UsesAPIKeyQuota() bool {
+	return i.AuthMethod == AuthMethodAPIKey && i.APIKeyID != ""
+}
+
+// StickyKey returns a stable per-caller key used for sticky-routing bindings
+// and upstream session derivation. API-key calls key on the key ID; JWT web
+// calls key on request source + owner + tenant + user so that distinct web
+// callers never share a binding. Both tenant and user IDs are always included
+// to keep the key unambiguous.
+func (i RuntimeIdentity) StickyKey() string {
+	if i.APIKeyID != "" {
+		return i.APIKeyID
+	}
+	return string(i.RequestSource) + ":" + string(i.OwnerType) + ":" + i.TenantID + ":" + i.UserID
 }
 
 // JWTClaims holds parsed claims from a URM-issued JWT.
@@ -166,14 +234,14 @@ type RouteCandidate struct {
 	ProviderCode       string
 
 	// Pool-based route fields (OAuth Fixed Provider)
-	PoolID             string            // ai_credential_pools.id
-	PoolUpstreamModel  string            // model name to send to the upstream
-	FixedProviderType  FixedProviderType // "codex" | "claude_oauth" | "gemini_cli" | "antigravity"
-	OAuthStrategy      string            // "round_robin" | "weighted"
+	PoolID            string            // ai_credential_pools.id
+	PoolUpstreamModel string            // model name to send to the upstream
+	FixedProviderType FixedProviderType // "codex" | "claude_oauth" | "gemini_cli" | "antigravity"
+	OAuthStrategy     string            // "round_robin" | "weighted"
 
 	// P3: scoring hints loaded from ai_model_routes
-	CostPer1kTokens    float64                // 0 for free/pool routes → scorer treats as very cheap
-	ScoreWeightsOverride map[string]float64   // nil = use global weights
+	CostPer1kTokens      float64            // 0 for free/pool routes → scorer treats as very cheap
+	ScoreWeightsOverride map[string]float64 // nil = use global weights
 
 	// Upstream cost price (decoded from ai_upstream_deployments.pricing JSONB).
 	// nil for pool routes or when deployment has no pricing configured.
@@ -189,10 +257,10 @@ type RouteCandidate struct {
 // tokens; image/video prices are absolute per-unit charges. Stored in JSONB so
 // decimals (e.g. ¥0.525/M) survive round-trip without precision loss.
 type Pricing struct {
-	Tiers        []PricingTier              `json:"tiers,omitempty"`
-	RequestCost  float64                    `json:"request_cost,omitempty"`
-	ImagePrices  []ResolutionPrice          `json:"image_prices,omitempty"`
-	VideoPrices  []ResolutionPrice          `json:"video_prices,omitempty"`
+	Tiers       []PricingTier     `json:"tiers,omitempty"`
+	RequestCost float64           `json:"request_cost,omitempty"`
+	ImagePrices []ResolutionPrice `json:"image_prices,omitempty"`
+	VideoPrices []ResolutionPrice `json:"video_prices,omitempty"`
 }
 
 // PricingTier describes one band of token-volume-based pricing. The tier is
@@ -389,10 +457,10 @@ func (p ModelPricing) EffectiveReasoningPrice() int64 {
 
 // BillingResult is the output of cost calculation.
 type BillingResult struct {
-	ProviderCost     int64  // what the platform pays the upstream
-	PlatformCost     int64  // what the tenant pays the platform (→ URM TenantAmount)
-	UserCost         int64  // what the user pays the tenant (→ URM UserAmount; 0 for tenant-owned keys)
-	APIKeyQuotaCost  int64  // deducted from the API key's local quota counter
+	ProviderCost     int64 // what the platform pays the upstream
+	PlatformCost     int64 // what the tenant pays the platform (→ URM TenantAmount)
+	UserCost         int64 // what the user pays the tenant (→ URM UserAmount; 0 for tenant-owned keys)
+	APIKeyQuotaCost  int64 // deducted from the API key's local quota counter
 	BillableUnits    int64
 	BillableUnitType string
 }

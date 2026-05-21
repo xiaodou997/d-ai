@@ -10,6 +10,7 @@ const LOG_LIMIT = 500
 const loading = shallowRef(false)
 const usageLogs = shallowRef([])
 const summary = shallowRef(null)
+const requestSource = shallowRef('')
 
 const balanceInfo = reactive({
   totalCredits: 0,
@@ -108,9 +109,11 @@ const fetchBalance = async () => {
 const fetchUsageData = async () => {
   loading.value = true
   try {
+    const params = {}
+    if (requestSource.value) params.request_source = requestSource.value
     const [logsRes, summaryRes] = await Promise.all([
-      listMyUsageLogs({ limit: LOG_LIMIT }),
-      getMyUsageSummary()
+      listMyUsageLogs({ limit: LOG_LIMIT, ...params }),
+      getMyUsageSummary(params)
     ])
     usageLogs.value = logsRes || []
     summary.value = summaryRes || null
@@ -122,6 +125,15 @@ const fetchUsageData = async () => {
 const fetchAllData = async () => {
   await Promise.all([fetchUsageData(), fetchBalance()])
 }
+
+const requestSourceOptions = [
+  { label: '全部来源', value: '' },
+  { label: 'API Key 调用', value: 'api_key' },
+  { label: '网页对话', value: 'web_chat' }
+]
+
+const requestSourceLabel = (value) =>
+  requestSourceOptions.find((item) => item.value === value)?.label || value || '-'
 
 const renderCharts = async () => {
   await nextTick()
@@ -251,10 +263,20 @@ onUnmounted(() => {
           <h1 class="text-2xl font-black text-slate-800 tracking-tight">工作台</h1>
           <p class="text-slate-400 text-sm font-medium mt-1">账户余额与 AI 调用概览，模型分布和近 7 天趋势基于最近 {{ LOG_LIMIT }} 条调用日志</p>
         </div>
-        <el-button type="primary" class="rounded-2xl! font-bold" :loading="loading" @click="fetchAllData">
-          <template #icon><el-icon><Refresh /></el-icon></template>
-          刷新
-        </el-button>
+        <div class="flex items-center gap-3">
+          <el-select v-model="requestSource" placeholder="全部来源" style="width: 140px" @change="fetchUsageData">
+            <el-option
+              v-for="item in requestSourceOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+          <el-button type="primary" class="rounded-2xl! font-bold" :loading="loading" @click="fetchAllData">
+            <template #icon><el-icon><Refresh /></el-icon></template>
+            刷新
+          </el-button>
+        </div>
       </div>
     </div>
 
@@ -366,6 +388,13 @@ onUnmounted(() => {
           </template>
         </el-table-column>
         <el-table-column prop="request_status" label="状态" width="100" />
+        <el-table-column label="来源" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.request_source === 'web_chat' ? 'success' : 'info'">
+              {{ requestSourceLabel(row.request_source) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="request_id" label="请求 ID" min-width="160" show-overflow-tooltip />
         <el-table-column label="时间" min-width="160">
           <template #default="{ row }">

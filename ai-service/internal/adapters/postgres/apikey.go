@@ -64,7 +64,7 @@ func (r *APIKeyResolver) ResolveAPIKey(ctx context.Context, token string, req *s
 		userID = row.UserID.String
 	}
 
-	req.APIKey = &domain.APIKeyAuth{
+	key := domain.APIKeyAuth{
 		KeyID:         uuidToString(row.ID),
 		OwnerType:     domain.OwnerType(row.OwnerType),
 		TenantID:      row.TenantID,
@@ -74,6 +74,8 @@ func (r *APIKeyResolver) ResolveAPIKey(ctx context.Context, token string, req *s
 		QuotaUsed:     row.QuotaUsed,
 		QuotaReserved: row.QuotaReserved,
 	}
+	req.APIKey = &key
+	req.Identity = domain.IdentityFromAPIKey(key)
 	return nil
 }
 
