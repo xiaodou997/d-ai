@@ -35,6 +35,53 @@ func TestRewriteSyncResponseModel_OpenAI(t *testing.T) {
 	}
 }
 
+func TestSanitizePublicModelJSON_OpenAIResponsesNested(t *testing.T) {
+	body := mustJSON(map[string]any{
+		"type": "response.created",
+		"response": map[string]any{
+			"id":     "resp_abc",
+			"object": "response",
+			"model":  "gpt-5.4-mini-2026-03-17",
+			"status": "in_progress",
+		},
+		"sequence_number": 0,
+	})
+
+	got := SanitizePublicModelJSON(body, "gpt-5.4-mini", "gpt-5.4-mini-2026-03-17", domain.ProtocolOpenAIResponses)
+
+	var result map[string]any
+	if err := json.Unmarshal(got, &result); err != nil {
+		t.Fatalf("result is not valid JSON: %v", err)
+	}
+	resp := result["response"].(map[string]any)
+	if resp["model"] != "gpt-5.4-mini" {
+		t.Errorf("response.model = %q, want %q", resp["model"], "gpt-5.4-mini")
+	}
+}
+
+func TestSanitizePublicModelJSON_ExactUpstreamOnly(t *testing.T) {
+	body := mustJSON(map[string]any{
+		"model": "unrelated-model",
+		"nested": map[string]any{
+			"model": "upstream-internal",
+		},
+	})
+
+	got := SanitizePublicModelJSON(body, "public", "upstream-internal", domain.ProtocolOpenAIChat)
+
+	var result map[string]any
+	if err := json.Unmarshal(got, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["model"] != "unrelated-model" {
+		t.Errorf("top-level unrelated model was changed: %q", result["model"])
+	}
+	nested := result["nested"].(map[string]any)
+	if nested["model"] != "public" {
+		t.Errorf("nested model = %q, want public", nested["model"])
+	}
+}
+
 func TestRewriteSyncResponseModel_Anthropic(t *testing.T) {
 	body := mustJSON(map[string]any{
 		"id":    "msg_01",
@@ -96,18 +143,18 @@ func TestRewriteSyncResponseModel_NotJSON(t *testing.T) {
 	}
 }
 
-// ---- StreamModelRewriter ----------------------------------------------------
+// ---- PublicModelSanitizer ---------------------------------------------------
 
-func TestStreamModelRewriter_OpenAI(t *testing.T) {
-	rw := NewStreamModelRewriter("gpt-4", domain.ProtocolOpenAIChat)
+func TestPublicModelSanitizer_OpenAI(t *testing.T) {
+	rw := NewPublicModelSanitizer("gpt-4", "gpt-4-turbo-preview", domain.ProtocolOpenAIChat)
 
 	frame1 := mustJSON(map[string]any{"id": "chatcmpl-1", "model": "gpt-4-turbo-preview", "choices": []any{}})
 	frame2 := mustJSON(map[string]any{"id": "chatcmpl-1", "model": "gpt-4-turbo-preview", "choices": []any{}})
 	frame3 := mustJSON(map[string]any{"id": "chatcmpl-1", "model": "gpt-4-turbo-preview", "choices": []any{}})
 
-	r1 := rw.Rewrite(frame1)
-	r2 := rw.Rewrite(frame2)
-	r3 := rw.Rewrite(frame3)
+	r1 := rw.Sanitize(frame1)
+	r2 := rw.Sanitize(frame2)
+	r3 := rw.Sanitize(frame3)
 
 	for i, r := range [][]byte{r1, r2, r3} {
 		var obj map[string]any
@@ -120,19 +167,19 @@ func TestStreamModelRewriter_OpenAI(t *testing.T) {
 	}
 }
 
-func TestStreamModelRewriter_AlreadyPublic(t *testing.T) {
-	rw := NewStreamModelRewriter("gpt-4", domain.ProtocolOpenAIChat)
+func TestPublicModelSanitizer_AlreadyPublic(t *testing.T) {
+	rw := NewPublicModelSanitizer("gpt-4", "gpt-4", domain.ProtocolOpenAIChat)
 	frame := mustJSON(map[string]any{"model": "gpt-4"})
-	out := rw.Rewrite(frame)
+	out := rw.Sanitize(frame)
 	// Must return original slice.
 	if len(out) != len(frame) || (len(out) > 0 && &out[0] != &frame[0]) {
 		t.Error("expected original slice returned when model already matches")
 	}
 }
 
-func TestStreamModelRewriter_Anthropic_MessageStart(t *testing.T) {
+func TestPublicModelSanitizer_Anthropic_MessageStart(t *testing.T) {
 	// Anthropic message_start event: model is nested under "message".
-	rw := NewStreamModelRewriter("claude-my", domain.ProtocolAnthropicMessages)
+	rw := NewPublicModelSanitizer("claude-my", "claude-opus-4-5-20251101", domain.ProtocolAnthropicMessages)
 
 	frame := mustJSON(map[string]any{
 		"type": "message_start",
@@ -143,7 +190,7 @@ func TestStreamModelRewriter_Anthropic_MessageStart(t *testing.T) {
 		},
 	})
 
-	out := rw.Rewrite(frame)
+	out := rw.Sanitize(frame)
 
 	// The raw bytes should contain the new model name.
 	var obj map[string]any
@@ -154,9 +201,9 @@ func TestStreamModelRewriter_Anthropic_MessageStart(t *testing.T) {
 	}
 }
 
-func TestStreamModelRewriter_Anthropic_ContentDelta(t *testing.T) {
+func TestPublicModelSanitizer_Anthropic_ContentDelta(t *testing.T) {
 	// content_block_delta frames have no model field — rewriter must be noop.
-	rw := NewStreamModelRewriter("claude-my", domain.ProtocolAnthropicMessages)
+	rw := NewPublicModelSanitizer("claude-my", "claude-opus-4-5-20251101", domain.ProtocolAnthropicMessages)
 
 	frame := mustJSON(map[string]any{
 		"type":  "content_block_delta",
@@ -164,21 +211,21 @@ func TestStreamModelRewriter_Anthropic_ContentDelta(t *testing.T) {
 		"delta": map[string]any{"type": "text_delta", "text": "hello"},
 	})
 
-	out := rw.Rewrite(frame)
+	out := rw.Sanitize(frame)
 	if !bytesEqual(out, frame) {
 		t.Error("content_block_delta frame should be returned unchanged")
 	}
 }
 
-func TestStreamModelRewriter_Gemini(t *testing.T) {
-	rw := NewStreamModelRewriter("gemini-flash", domain.ProtocolGeminiGenerate)
+func TestPublicModelSanitizer_Gemini(t *testing.T) {
+	rw := NewPublicModelSanitizer("gemini-flash", "gemini-2.0-flash-001", domain.ProtocolGeminiGenerate)
 
 	frame := mustJSON(map[string]any{
 		"candidates":   []any{},
 		"modelVersion": "gemini-2.0-flash-001",
 	})
 
-	out := rw.Rewrite(frame)
+	out := rw.Sanitize(frame)
 
 	var obj map[string]any
 	json.Unmarshal(out, &obj) //nolint:errcheck
@@ -190,21 +237,24 @@ func TestStreamModelRewriter_Gemini(t *testing.T) {
 	}
 }
 
-func TestStreamModelRewriter_ByteReplacement_SubsequentFrames(t *testing.T) {
-	// Verify that after the first frame the rewriter uses byte replacement
-	// (not JSON parse) for subsequent frames. We inject a frame that is not
-	// valid JSON to confirm it still gets the expected textual substitution.
-	rw := NewStreamModelRewriter("public", domain.ProtocolOpenAIChat)
+func TestPublicModelSanitizer_DoesNotNoopAfterFirstFrameWithoutModel(t *testing.T) {
+	rw := NewPublicModelSanitizer("public", "upstream-internal", domain.ProtocolOpenAIResponses)
 
-	// First frame — valid JSON to seed the rewriter.
-	seed := mustJSON(map[string]any{"model": "upstream-internal", "id": "x"})
-	rw.Rewrite(seed)
+	first := mustJSON(map[string]any{"type": "response.output_text.delta", "delta": "hello"})
+	if out := rw.Sanitize(first); !bytesEqual(out, first) {
+		t.Errorf("first frame without upstream model should be unchanged: %s", out)
+	}
 
-	// Subsequent frames: textual replacement must work even without full JSON parse.
-	raw := []byte(`{"id":"x","model":"upstream-internal","choices":[]}`)
-	out := rw.Rewrite(raw)
+	second := mustJSON(map[string]any{
+		"type": "response.in_progress",
+		"response": map[string]any{
+			"id":    "resp_1",
+			"model": "upstream-internal",
+		},
+	})
+	out := rw.Sanitize(second)
 	if !bytes.Contains(out, []byte(`"model":"public"`)) && !bytes.Contains(out, []byte(`"model": "public"`)) {
-		t.Errorf("byte replacement did not produce expected output: %s", out)
+		t.Errorf("nested response.model was not sanitized: %s", out)
 	}
 }
 

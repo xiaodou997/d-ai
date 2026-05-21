@@ -647,7 +647,7 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 	req.UpstreamResponseBody = bodyBytes
 
 	bodyBytes = unwrapCodeAssistResponse(req.Candidate, bodyBytes)
-	bodyBytes = formats.RewriteSyncResponseModel(bodyBytes, req.ModelCode, req.Candidate.Protocol)
+	bodyBytes = formats.SanitizePublicModelJSON(bodyBytes, req.ModelCode, req.Candidate.UpstreamModel, req.Candidate.Protocol)
 
 	// Extract the assistant reply for the audit log from the original body
 	// (before model-name rewrite, but model identity is captured separately).
@@ -831,7 +831,7 @@ awaitLoop:
 	)
 
 	accumulatedOutputBytes := 0
-	modelRewriter := formats.NewStreamModelRewriter(req.ModelCode, req.Candidate.Protocol)
+	modelSanitizer := formats.NewPublicModelSanitizer(req.ModelCode, req.Candidate.UpstreamModel, req.Candidate.Protocol)
 	auditAcc := audit.NewResponseAccumulator(req.Candidate.Protocol)
 
 	// forward writes one already-framed SSE line to the client, stripping the
@@ -849,7 +849,7 @@ awaitLoop:
 			return err
 		}
 		unwrapped := unwrapCodeAssistResponse(req.Candidate, data)
-		finalData := modelRewriter.Rewrite(unwrapped)
+		finalData := modelSanitizer.Sanitize(unwrapped)
 		auditAcc.AddChunk(finalData)
 		if bytes.Equal(finalData, data) {
 			if _, err := w.Write(line); err != nil {

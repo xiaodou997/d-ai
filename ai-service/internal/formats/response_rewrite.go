@@ -20,209 +20,123 @@ func modelResponseField(protocol domain.UpstreamProtocol) string {
 	}
 }
 
-// RewriteSyncResponseModel replaces the model identifier in a sync upstream
-// response body with publicModel so the client always sees the logical model
-// name it requested, never the upstream-internal name.
+// SanitizePublicModelJSON replaces upstream model identifiers in a user-visible
+// JSON response with publicModel. It recursively walks the payload so nested
+// envelopes such as OpenAI Responses streaming events
+// {"response":{"model":"..."}} are covered by the same logic as top-level
+// Chat Completions responses.
 //
 // Returns body unchanged when:
 //   - publicModel is empty
-//   - the body does not parse as a JSON object
-//   - the body already contains publicModel in the relevant field
+//   - upstreamModel is provided and absent from body
+//   - the body does not parse as JSON
+//   - no model identity field equals upstreamModel
 //
-// Protocol-aware field selection:
-//   - Gemini: "modelVersion"
-//   - All others: "model"
-//
-// Unknown fields are preserved via map[string]json.RawMessage round-trip so
-// vendor-specific extensions (cache_control, usage, etc.) are not dropped.
-func RewriteSyncResponseModel(body []byte, publicModel string, protocol domain.UpstreamProtocol) []byte {
+// If upstreamModel is empty, any non-public model identity field is rewritten.
+// Runtime call sites should pass the selected candidate's upstream model to
+// avoid touching unrelated model-like values.
+func SanitizePublicModelJSON(body []byte, publicModel, upstreamModel string, protocol domain.UpstreamProtocol) []byte {
 	if publicModel == "" || len(body) == 0 {
 		return body
 	}
-	key := modelResponseField(protocol)
-
-	// Fast path: already carries the public model name → zero allocation.
-	var probe map[string]json.RawMessage
-	if err := json.Unmarshal(body, &probe); err != nil || probe == nil {
+	if upstreamModel != "" && upstreamModel == publicModel {
+		return body
+	}
+	if upstreamModel != "" && !bytes.Contains(body, []byte(upstreamModel)) {
 		return body
 	}
 
-	actualRaw, ok := probe[key]
-	if !ok {
-		// Anthropic streaming wraps the model inside a "message" object.
-		// For sync responses the field IS top-level, so this branch handles
-		// edge cases where the field is absent (e.g. error bodies).
-		if msgRaw, mok := probe["message"]; mok {
-			var msg map[string]json.RawMessage
-			if json.Unmarshal(msgRaw, &msg) == nil {
-				actualRaw, ok = msg[key]
-			}
-		}
-		if !ok {
-			return body
-		}
-	}
-
-	var actualModel string
-	if err := json.Unmarshal(actualRaw, &actualModel); err != nil || actualModel == publicModel {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	var payload any
+	if err := decoder.Decode(&payload); err != nil {
 		return body
 	}
 
-	newVal, err := json.Marshal(publicModel)
-	if err != nil {
+	if !sanitizePublicModelValue(payload, publicModel, upstreamModel, protocol) {
 		return body
 	}
-	probe[key] = newVal
-	out, err := json.Marshal(probe)
+
+	out, err := json.Marshal(payload)
 	if err != nil {
 		return body
 	}
 	return out
 }
 
-// StreamModelRewriter rewrites the model identifier field in SSE data payloads
-// (the bytes after "data: ", without the newline).
-//
-// On the first call it JSON-parses the payload to discover the actual model
-// value the upstream is sending. Subsequent calls use a pre-built byte
-// replacement so JSON parsing is paid only once per stream.
-//
-// Usage:
-//
-//	rw := NewStreamModelRewriter(req.ModelCode, cand.Protocol)
-//	// inside the forward loop:
-//	finalData := rw.Rewrite(unwrappedData)
-type StreamModelRewriter struct {
-	publicModel string
-	protocol    domain.UpstreamProtocol
-
-	// Set after initialization.
-	initialized bool
-	noop        bool   // true when no rewrite is needed for this stream
-	oldKV       []byte // e.g. `"model":"gpt-4-turbo-preview"`
-	newKV       []byte // e.g. `"model":"gpt-4"`
-	oldKVSpace  []byte // e.g. `"model": "gpt-4-turbo-preview"` (pretty-printed upstreams)
-	newKVSpace  []byte // e.g. `"model": "gpt-4"`
+// RewriteSyncResponseModel is kept for tests and legacy callers. Runtime paths
+// should call SanitizePublicModelJSON with a non-empty upstreamModel.
+func RewriteSyncResponseModel(body []byte, publicModel string, protocol domain.UpstreamProtocol) []byte {
+	return SanitizePublicModelJSON(body, publicModel, "", protocol)
 }
 
-// NewStreamModelRewriter creates a rewriter that will replace the upstream
-// model name with publicModel in every streaming data frame.
-func NewStreamModelRewriter(publicModel string, protocol domain.UpstreamProtocol) *StreamModelRewriter {
-	return &StreamModelRewriter{
-		publicModel: publicModel,
-		protocol:    protocol,
+// PublicModelSanitizer applies the same public model rewrite to every
+// user-visible SSE data payload. It is stateless by design: each frame is
+// inspected independently so a first frame without a model field cannot disable
+// rewriting for later frames.
+type PublicModelSanitizer struct {
+	publicModel   string
+	upstreamModel string
+	protocol      domain.UpstreamProtocol
+}
+
+// NewPublicModelSanitizer creates a sanitizer for sync/stream response payloads.
+func NewPublicModelSanitizer(publicModel, upstreamModel string, protocol domain.UpstreamProtocol) *PublicModelSanitizer {
+	return &PublicModelSanitizer{
+		publicModel:   publicModel,
+		upstreamModel: upstreamModel,
+		protocol:      protocol,
 	}
 }
 
-// Rewrite returns data with the model field replaced by the public model name.
-// Returns data unchanged when:
-//   - publicModel is empty
-//   - the model field is absent in the first frame
-//   - the upstream already sends the public model name
-func (r *StreamModelRewriter) Rewrite(data []byte) []byte {
-	if r.publicModel == "" {
-		return data
-	}
-	if r.noop {
-		return data
-	}
-	if !r.initialized {
-		r.init(data)
-	}
-	if r.noop {
-		return data
-	}
-
-	// Try compact form first (most APIs), then pretty-printed.
-	if out := bytes.Replace(data, r.oldKV, r.newKV, 1); !bytes.Equal(out, data) {
-		return out
-	}
-	return bytes.Replace(data, r.oldKVSpace, r.newKVSpace, 1)
+// Sanitize returns data with upstream model identity fields replaced by the
+// public model name.
+func (s *PublicModelSanitizer) Sanitize(data []byte) []byte {
+	return SanitizePublicModelJSON(data, s.publicModel, s.upstreamModel, s.protocol)
 }
 
-// init discovers the upstream model value from the first data frame and
-// pre-computes the byte patterns used for subsequent replacements.
-func (r *StreamModelRewriter) init(data []byte) {
-	r.initialized = true
-
-	key := modelResponseField(r.protocol)
-	actualModel := extractModelFromData(data, key)
-	if actualModel == "" {
-		// No model field in this frame (e.g. Anthropic content_block_delta).
-		// Mark noop so we skip JSON probing on every subsequent frame. If a
-		// later frame carries the field the byte-replace will simply not match
-		// (safe — we will never have initialized the KV pairs).
-		r.noop = true
-		return
-	}
-	if actualModel == r.publicModel {
-		r.noop = true
-		return
-	}
-
-	keyJSON, err := json.Marshal(key)
-	if err != nil {
-		r.noop = true
-		return
-	}
-	oldValJSON, err := json.Marshal(actualModel)
-	if err != nil {
-		r.noop = true
-		return
-	}
-	newValJSON, err := json.Marshal(r.publicModel)
-	if err != nil {
-		r.noop = true
-		return
-	}
-
-	// Compact:  "model":"gpt-4-turbo-preview"
-	r.oldKV = concat(keyJSON, []byte{':'}, oldValJSON)
-	r.newKV = concat(keyJSON, []byte{':'}, newValJSON)
-	// Space:    "model": "gpt-4-turbo-preview"
-	r.oldKVSpace = concat(keyJSON, []byte{':', ' '}, oldValJSON)
-	r.newKVSpace = concat(keyJSON, []byte{':', ' '}, newValJSON)
-}
-
-// extractModelFromData probes a JSON data payload for the model identifier.
-// It checks the top-level key first, then falls back to the nested
-// "message" object used by Anthropic's message_start streaming event.
-func extractModelFromData(data []byte, key string) string {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(data, &obj); err != nil || obj == nil {
-		return ""
-	}
-
-	if raw, ok := obj[key]; ok {
-		var s string
-		if json.Unmarshal(raw, &s) == nil {
-			return s
-		}
-	}
-
-	// Anthropic: {"type":"message_start","message":{"model":"claude-..."}}
-	if msgRaw, ok := obj["message"]; ok {
-		var msg map[string]json.RawMessage
-		if json.Unmarshal(msgRaw, &msg) == nil {
-			if raw, ok := msg[key]; ok {
-				var s string
-				if json.Unmarshal(raw, &s) == nil {
-					return s
+func sanitizePublicModelValue(v any, publicModel, upstreamModel string, protocol domain.UpstreamProtocol) bool {
+	changed := false
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			if isModelIdentityKey(k, protocol) {
+				if s, ok := child.(string); ok && shouldRewriteModelValue(s, publicModel, upstreamModel) {
+					x[k] = publicModel
+					changed = true
+					continue
 				}
 			}
+			if sanitizePublicModelValue(child, publicModel, upstreamModel, protocol) {
+				changed = true
+			}
+		}
+	case []any:
+		for _, child := range x {
+			if sanitizePublicModelValue(child, publicModel, upstreamModel, protocol) {
+				changed = true
+			}
 		}
 	}
-	return ""
+	return changed
 }
 
-func concat(parts ...[]byte) []byte {
-	n := 0
-	for _, p := range parts {
-		n += len(p)
+func isModelIdentityKey(key string, protocol domain.UpstreamProtocol) bool {
+	if key == "model" {
+		return true
 	}
-	out := make([]byte, 0, n)
-	for _, p := range parts {
-		out = append(out, p...)
+	if key != modelResponseField(protocol) {
+		return false
 	}
-	return out
+	return protocol == domain.ProtocolGeminiGenerate || protocol == domain.ProtocolGeminiEmbeddings
+}
+
+func shouldRewriteModelValue(value, publicModel, upstreamModel string) bool {
+	if value == "" || value == publicModel {
+		return false
+	}
+	if upstreamModel == "" {
+		return true
+	}
+	return value == upstreamModel
 }
