@@ -215,6 +215,7 @@ func New(cfg Config) *Server {
 	router.Get("/metrics", metrics.Handler().ServeHTTP)
 	router.Get("/api/auth/callback", s.handleAuthCallback)
 	router.Route("/console/v1", func(r chi.Router) {
+		r.Get("/models", s.handleConsoleModels)
 		r.Post("/chat/completions", s.handleConsoleChatCompletions)
 	})
 	router.Route("/api/v1", func(r chi.Router) {

@@ -2,8 +2,7 @@
 import { computed, nextTick, onMounted, shallowRef } from 'vue'
 import { ChatDotRound, Delete, Plus, Promotion, Refresh, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { listUserModelGrants } from '@/api/aiGateway'
-import { streamConsoleChat } from '@/api/consoleChat'
+import { listConsoleModels, streamConsoleChat } from '@/api/consoleChat'
 
 const loadingModels = shallowRef(false)
 const sending = shallowRef(false)
@@ -18,13 +17,13 @@ const showAdvanced = shallowRef(false)
 const messageListRef = shallowRef(null)
 let abortController = null
 
+// The backend already returns only chat-capable models reachable by web chat,
+// so the picker just maps them to options.
 const chatModels = computed(() =>
-  models.value
-    .filter((model) => model.capability_type === 'chat' && model.status !== 'disabled')
-    .map((model) => ({
-      label: model.model_code,
-      value: model.model_code
-    }))
+  models.value.map((model) => ({
+    label: model.model_code,
+    value: model.model_code
+  }))
 )
 
 const requestMessages = computed(() =>
@@ -57,7 +56,7 @@ const scrollToBottom = async () => {
 const fetchModels = async () => {
   loadingModels.value = true
   try {
-    const res = await listUserModelGrants()
+    const res = await listConsoleModels('chat')
     models.value = Array.isArray(res) ? res : []
     if (!selectedModel.value && chatModels.value.length > 0) {
       selectedModel.value = chatModels.value[0].value

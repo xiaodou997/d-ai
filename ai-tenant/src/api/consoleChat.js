@@ -1,4 +1,11 @@
 import { useAuthStore } from '@/stores/auth'
+import request from '@/utils/request'
+
+// listConsoleModels returns the models usable in the web console for a given
+// capability (default 'chat'): granted to the caller and backed by a route the
+// console can actually reach. Pass 'image' etc. for future web features.
+export const listConsoleModels = (capability = 'chat') =>
+  request.get('/console/v1/models', { params: { capability } })
 
 const parseErrorMessage = async (response) => {
   const text = await response.text().catch(() => '')

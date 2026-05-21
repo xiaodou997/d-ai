@@ -164,6 +164,66 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 	return out, pgRows.Err()
 }
 
+// ModelsWithProtocolRoute returns, as a set, the subset of modelIDs that are
+// active and have at least one active route reachable over clientProtocol.
+// When requireStream is true only routes whose ai_model_routes.supports_stream
+// is true count.
+//
+// It answers "which of these models can a console feature speaking
+// clientProtocol actually call" and is used to filter the web console model
+// picker. Transient health (health_status) is intentionally NOT considered —
+// this reflects configuration, so the picker stays stable while the runtime
+// path still fails over or surfaces health errors on its own.
+func (s *RouteSelector) ModelsWithProtocolRoute(
+	ctx context.Context,
+	modelIDs []pgtype.UUID,
+	clientProtocol domain.UpstreamProtocol,
+	requireStream bool,
+) (map[pgtype.UUID]bool, error) {
+	out := make(map[pgtype.UUID]bool, len(modelIDs))
+	if len(modelIDs) == 0 {
+		return out, nil
+	}
+	const q = `
+		SELECT DISTINCT r.model_id
+		FROM ai_model_routes r
+		JOIN ai_models               m  ON m.id  = r.model_id
+		JOIN ai_upstream_deployments ud ON ud.id = r.upstream_deployment_id
+		LEFT JOIN ai_provider_endpoints e  ON e.id  = ud.endpoint_id
+		LEFT JOIN ai_providers          p  ON p.id  = e.provider_id
+		LEFT JOIN ai_credential_pools   cp ON cp.id = ud.credential_pool_id
+		WHERE r.model_id = ANY($1)
+		  AND m.status  = 'active'
+		  AND r.status  = 'active'
+		  AND ud.status = 'active'
+		  AND (e.status = 'active' OR e.status IS NULL)
+		  AND (p.status = 'active' OR p.status IS NULL)
+		  AND (NOT $4::boolean OR r.supports_stream)
+		  AND (
+		    (ud.endpoint_id IS NOT NULL AND ud.upstream_protocol = $2)
+		    OR
+		    (ud.credential_pool_id IS NOT NULL AND cp.fixed_provider_type = ANY($3::text[]))
+		  )`
+
+	oauthTypes := oauthFixedTypesForProtocol(clientProtocol)
+	if oauthTypes == nil {
+		oauthTypes = []string{}
+	}
+	rows, err := s.pool.Query(ctx, q, modelIDs, string(clientProtocol), oauthTypes, requireStream)
+	if err != nil {
+		return nil, fmt.Errorf("models with protocol route: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan model id: %w", err)
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // RouteSelector loads all healthy routes for the requested model and selects
 // one according to priority → weighted random selection.
 // It satisfies serving.RouteSelector.
