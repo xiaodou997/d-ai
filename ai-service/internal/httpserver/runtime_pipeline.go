@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/uni-ai-api/internal/egress"
 	"xiaodou/uni-ai-api/internal/formats"
 	"xiaodou/uni-ai-api/internal/formats/claude"
 	"xiaodou/uni-ai-api/internal/observability"
@@ -163,7 +164,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 			)
 			return
 		}
-		writeRuntimeError(w, clientProto, err)
+		writeRuntimeError(w, clientProto, req, err)
 		return
 	}
 	writeRouteHeaders(w, req)
@@ -196,17 +197,18 @@ func parseImageBillingMeta(body []byte, contentType string) (count int, size str
 
 // writeRuntimeError converts a pipeline error to a protocol-appropriate JSON
 // response (Anthropic clients get Anthropic-shaped errors, etc.).
-func writeRuntimeError(w http.ResponseWriter, clientProto domain.UpstreamProtocol, err error) {
+func writeRuntimeError(w http.ResponseWriter, clientProto domain.UpstreamProtocol, req *serving.Request, err error) {
+	policy := serving.PublicEgressPolicy(req)
 	var apiErr *serving.APIError
 	if errors.As(err, &apiErr) {
-		writeRuntimeErrorByProtocol(w, clientProto, apiErr.Status, apiErr.Message, apiErr.Code)
+		writeRuntimeErrorByProtocol(w, clientProto, apiErr.Status, egress.SanitizeText(apiErr.Message, policy), apiErr.Code)
 		return
 	}
 	var pipeErr *serving.PipelineError
 	if errors.As(err, &pipeErr) {
 		var inner *serving.APIError
 		if errors.As(pipeErr.Cause, &inner) {
-			writeRuntimeErrorByProtocol(w, clientProto, inner.Status, inner.Message, inner.Code)
+			writeRuntimeErrorByProtocol(w, clientProto, inner.Status, egress.SanitizeText(inner.Message, policy), inner.Code)
 			return
 		}
 	}

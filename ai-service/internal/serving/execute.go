@@ -19,6 +19,7 @@ import (
 
 	"xiaodou/uni-ai-api/internal/audit"
 	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/uni-ai-api/internal/egress"
 	"xiaodou/uni-ai-api/internal/formats"
 	"xiaodou/uni-ai-api/internal/formats/claude"
 	"xiaodou/uni-ai-api/internal/formats/gemini"
@@ -646,8 +647,9 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 	}
 	req.UpstreamResponseBody = bodyBytes
 
+	policy := publicEgressPolicy(req, req.Candidate)
 	bodyBytes = unwrapCodeAssistResponse(req.Candidate, bodyBytes)
-	bodyBytes = formats.SanitizePublicModelJSON(bodyBytes, req.ModelCode, req.Candidate.UpstreamModel, req.Candidate.Protocol)
+	bodyBytes = egress.SanitizeJSON(bodyBytes, policy)
 
 	// Extract the assistant reply for the audit log from the original body
 	// (before model-name rewrite, but model identity is captured separately).
@@ -831,7 +833,7 @@ awaitLoop:
 	)
 
 	accumulatedOutputBytes := 0
-	modelSanitizer := formats.NewPublicModelSanitizer(req.ModelCode, req.Candidate.UpstreamModel, req.Candidate.Protocol)
+	publicSanitizer := egress.NewSanitizer(publicEgressPolicy(req, req.Candidate))
 	auditAcc := audit.NewResponseAccumulator(req.Candidate.Protocol)
 
 	// forward writes one already-framed SSE line to the client, stripping the
@@ -849,7 +851,7 @@ awaitLoop:
 			return err
 		}
 		unwrapped := unwrapCodeAssistResponse(req.Candidate, data)
-		finalData := modelSanitizer.Sanitize(unwrapped)
+		finalData := publicSanitizer.SanitizeSSEData(unwrapped)
 		auditAcc.AddChunk(finalData)
 		if bytes.Equal(finalData, data) {
 			if _, err := w.Write(line); err != nil {
@@ -940,6 +942,7 @@ func finishStream(req *Request, startTime time.Time, accumulatedOutputBytes int,
 
 	// Post-commit failure — 200 OK is already sent and the body is partial.
 	code, msg := streamFailureReason(dc, readErr)
+	msg = egress.SanitizeText(msg, PublicEgressPolicy(req))
 	req.RequestStatus = domain.RequestFailed
 	req.HTTPStatus = http.StatusOK
 	req.ErrorCode = code
@@ -1041,6 +1044,35 @@ func streamClientWriteError(req *Request, err error) error {
 	req.ErrorCode = "stream_write_error"
 	req.ErrorMessage = err.Error()
 	return nil
+}
+
+// PublicEgressPolicy returns the route-derived public egress policy for this
+// request. The policy is intentionally built from routing metadata, not from
+// upstream response bytes.
+func PublicEgressPolicy(req *Request) egress.Policy {
+	if req == nil {
+		return egress.Policy{}
+	}
+	return publicEgressPolicy(req, req.Candidate)
+}
+
+func publicEgressPolicy(req *Request, cand *domain.RouteCandidate) egress.Policy {
+	if req == nil || cand == nil {
+		return egress.Policy{}
+	}
+	aliases := make([]string, 0, 1)
+	if cand.PoolUpstreamModel != "" && cand.PoolUpstreamModel != cand.UpstreamModel {
+		aliases = append(aliases, cand.PoolUpstreamModel)
+	}
+	return egress.Policy{
+		PublicModel:        req.ModelCode,
+		UpstreamModel:      cand.UpstreamModel,
+		Protocol:           cand.Protocol,
+		ProviderCode:       cand.ProviderCode,
+		EndpointBaseURL:    cand.BaseURL,
+		Aliases:            aliases,
+		AllowVersionSuffix: true,
+	}
 }
 
 // ============================================================================

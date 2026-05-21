@@ -289,7 +289,8 @@ func newStreamReq() *Request {
 	return &Request{
 		IsStream:       true,
 		ClientProtocol: domain.ProtocolOpenAIChat,
-		Candidate:      &domain.RouteCandidate{Protocol: domain.ProtocolOpenAIChat, RouteID: "r1"},
+		ModelCode:      "public-model",
+		Candidate:      &domain.RouteCandidate{Protocol: domain.ProtocolOpenAIChat, RouteID: "r1", UpstreamModel: "upstream-model"},
 		Attempts:       []AttemptRecord{{RouteID: "r1"}},
 	}
 }
@@ -320,6 +321,31 @@ func TestExecuteStreamSuccess(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "hi") || !strings.Contains(w.Body.String(), "[DONE]") {
 		t.Fatalf("stream body not forwarded verbatim: %q", w.Body.String())
+	}
+}
+
+func TestExecuteStreamSanitizesResponsesModel(t *testing.T) {
+	body := "event: response.created\n" +
+		"data: {\"type\":\"response.created\",\"response\":{\"model\":\"gpt-5.4-mini-2026-03-17\"}}\n\n" +
+		"data: [DONE]\n\n"
+	w := httptest.NewRecorder()
+	dc := genTestDC()
+	defer dc.stop()
+	req := newStreamReq()
+	req.ClientProtocol = domain.ProtocolOpenAIResponses
+	req.ModelCode = "gpt-5.4-mini"
+	req.Candidate.Protocol = domain.ProtocolOpenAIResponses
+	req.Candidate.UpstreamModel = "gpt-5.4-mini"
+
+	if err := (&ExecuteStep{}).executeStream(dc, req, sseResp(body), w, time.Now()); err != nil {
+		t.Fatalf("executeStream err = %v, want nil", err)
+	}
+	got := w.Body.String()
+	if !strings.Contains(got, `"model":"gpt-5.4-mini"`) {
+		t.Fatalf("stream did not sanitize response.model: %q", got)
+	}
+	if strings.Contains(got, "gpt-5.4-mini-2026-03-17") {
+		t.Fatalf("stream leaked upstream versioned model: %q", got)
 	}
 }
 
@@ -428,5 +454,32 @@ func TestExecuteSyncFirstByteTimeout(t *testing.T) {
 	}
 	if w.Body.Len() != 0 {
 		t.Fatalf("nothing must be written before sync first-byte commit, got %q", w.Body.String())
+	}
+}
+
+func TestExecuteSyncSanitizesModel(t *testing.T) {
+	dc := genTestDC()
+	defer dc.stop()
+	dc.headersReceived()
+
+	resp := &UpstreamResponse{
+		StatusCode: http.StatusOK,
+		Headers:    http.Header{},
+		Body:       io.NopCloser(strings.NewReader(`{"id":"x","model":"upstream-model","choices":[]}`)),
+	}
+	req := &Request{
+		ModelCode: "public-model",
+		Candidate: &domain.RouteCandidate{
+			Protocol:      domain.ProtocolOpenAIChat,
+			UpstreamModel: "upstream-model",
+		},
+	}
+	w := httptest.NewRecorder()
+
+	if err := (&ExecuteStep{}).executeSync(dc, req, resp, w); err != nil {
+		t.Fatalf("executeSync err = %v, want nil", err)
+	}
+	if !strings.Contains(w.Body.String(), `"model":"public-model"`) {
+		t.Fatalf("sync response did not sanitize model: %q", w.Body.String())
 	}
 }
