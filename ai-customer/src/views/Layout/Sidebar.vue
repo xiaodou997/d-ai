@@ -31,27 +31,17 @@
           <span>我的 API Key</span>
         </el-menu-item>
 
-        <!-- 财务中心 -->
-        <div class="menu-divider">财务中心</div>
-        <el-menu-item index="/finance/account">
-          <el-icon><Wallet /></el-icon>
-          <span>账户余额</span>
-        </el-menu-item>
-        <el-menu-item index="/finance/transactions">
-          <el-icon><DataLine /></el-icon>
-          <span>积分流水</span>
-        </el-menu-item>
-        <el-menu-item index="/finance/recharge">
-          <el-icon><List /></el-icon>
-          <span>充值记录</span>
-        </el-menu-item>
-
-        <!-- 个人设置 -->
-        <div class="menu-divider">个人设置</div>
-        <el-menu-item index="/profile">
-          <el-icon><Setting /></el-icon>
-          <span>个人中心</span>
-        </el-menu-item>
+        <template v-for="group in urmMenuGroups" :key="group.title">
+          <div class="menu-divider">{{ group.title }}</div>
+          <el-menu-item
+            v-for="item in group.items"
+            :key="item.key"
+            :index="getUrmCustomerPagePath(item)"
+          >
+            <el-icon><component :is="getMenuIcon(item.icon)" /></el-icon>
+            <span>{{ item.title }}</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </nav>
 
@@ -72,11 +62,46 @@
 </template>
 
 <script setup>
-import { User, Wallet, DataLine, List, Setting, SwitchButton, Key, TrendCharts, Grid } from '@element-plus/icons-vue'
+import { onMounted, shallowRef } from 'vue'
+import {
+  User,
+  Wallet,
+  DataLine,
+  List,
+  Setting,
+  SwitchButton,
+  Key,
+  TrendCharts,
+  Grid
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import {
+  getUrmCustomerMenuGroups,
+  getUrmCustomerPagePath,
+  loadUrmCustomerManifest
+} from '@/remote/urmCustomerManifest'
 
 const authStore = useAuthStore()
+const urmMenuGroups = shallowRef([])
+
+const menuIcons = {
+  Wallet,
+  DataLine,
+  List,
+  Setting
+}
+
+const getMenuIcon = (name) => menuIcons[name] || Setting
+
+onMounted(async () => {
+  try {
+    const manifest = await loadUrmCustomerManifest()
+    urmMenuGroups.value = getUrmCustomerMenuGroups(manifest)
+  } catch (error) {
+    console.error('加载 URM 菜单失败:', error)
+  }
+})
 
 const handleLogout = () => {
   ElMessageBox.confirm('确定要退出登录吗？', '提示', {

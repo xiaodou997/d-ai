@@ -40,31 +40,12 @@ const routes = [
         component: () => import('@/views/AIGateway/MyAPIKeys.vue'),
         meta: { title: '我的 API Key', requiresAuth: true }
       },
-      // 财务中心
+      // URM remote pages are resolved from the URM customer manifest.
       {
-        path: '/finance/account',
-        name: 'MyAccount',
-        component: () => import('@/views/Dashboard/MyAccount.vue'),
-        meta: { title: '账户余额', requiresAuth: true }
-      },
-      {
-        path: '/finance/transactions',
-        name: 'Transactions',
-        component: () => import('@/views/Finance/Transactions.vue'),
-        meta: { title: '积分流水', requiresAuth: true }
-      },
-      {
-        path: '/finance/recharge',
-        name: 'Recharge',
-        component: () => import('@/views/Finance/Recharge.vue'),
-        meta: { title: '充值记录', requiresAuth: true }
-      },
-      // 个人中心
-      {
-        path: '/profile',
-        name: 'Profile',
-        component: () => import('@/views/Profile/index.vue'),
-        meta: { title: '个人中心', requiresAuth: true }
+        path: '/urm/:pathMatch(.*)*',
+        name: 'UrmCustomerRemote',
+        component: () => import('@/views/Remote/UrmCustomerRemoteView.vue'),
+        meta: { title: 'URM', requiresAuth: true }
       }
     ]
   },
