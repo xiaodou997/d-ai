@@ -186,72 +186,77 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-container">
-    <!-- Header -->
-    <header class="page-header">
-      <div class="page-title">
-        <p class="eyebrow">My API Keys</p>
-        <h1>我的 API Key</h1>
-        <p>创建和管理个人 API Key，用于调用 AI Gateway 接口</p>
+  <div class="space-y-6">
+    <!-- Header Card -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-black text-slate-800 tracking-tight">我的 API Key</h1>
+          <p class="text-slate-400 text-sm font-medium mt-1">创建和管理个人 API Key，用于调用 AI Gateway 接口</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <el-button class="rounded-2xl! font-bold" :loading="loading" @click="fetchAPIKeys">
+            <template #icon><el-icon><Refresh /></el-icon></template>
+            刷新
+          </el-button>
+          <el-button type="primary" class="rounded-2xl! font-bold" @click="openCreateDialog">
+            <template #icon><el-icon><Plus /></el-icon></template>
+            创建 Key
+          </el-button>
+        </div>
       </div>
-      <div class="header-actions">
-        <el-button :icon="Refresh" @click="fetchAPIKeys" :loading="loading">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建 Key</el-button>
-      </div>
-    </header>
+    </div>
 
-    <!-- Content -->
-    <main class="page-main">
-      <section class="list-panel">
-        <el-table :data="apiKeys" v-loading="loading" stripe>
-          <el-table-column prop="name" label="名称" min-width="140" />
-          <el-table-column label="API Key" min-width="200">
-            <template #default="{ row }">
-              <code class="key-prefix">····{{ row.last_four || '????' }}</code>
-            </template>
-          </el-table-column>
-          <el-table-column label="配额限制" min-width="120">
-            <template #default="{ row }">
-              {{ row.quota_limit ? formatCredits(row.quota_limit) + ' 积分' : '无限制' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="已使用" min-width="120">
-            <template #default="{ row }">
-              {{ formatCredits(row.quota_used) }} 积分
-            </template>
-          </el-table-column>
-          <el-table-column label="允许模型" min-width="100">
-            <template #default="{ row }">
-              <span class="text-sm">{{ getModelsDisplay(row) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" min-width="80">
-            <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="创建时间" min-width="160">
-            <template #default="{ row }">
-              {{ formatDate(row.created_at) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
-            <template #default="{ row }">
-              <el-button link type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
-              <el-button link type="info" @click="rotateKey(row)">轮换</el-button>
-              <el-button
-                link
-                :type="row.status === 'active' ? 'warning' : 'success'"
-                @click="toggleStatus(row)"
-              >
-                {{ row.status === 'active' ? '停用' : '启用' }}
-              </el-button>
-              <el-button link type="danger" :icon="DeleteIcon" @click="deleteKey(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </section>
-    </main>
+    <!-- Table Card -->
+    <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-6">
+      <el-table :data="apiKeys" v-loading="loading" stripe>
+        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column label="API Key" min-width="200">
+          <template #default="{ row }">
+            <code class="font-mono text-sm text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded">····{{ row.last_four || '????' }}</code>
+          </template>
+        </el-table-column>
+        <el-table-column label="配额限制" min-width="120">
+          <template #default="{ row }">
+            {{ row.quota_limit ? formatCredits(row.quota_limit) + ' 积分' : '无限制' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="已使用" min-width="120">
+          <template #default="{ row }">
+            {{ formatCredits(row.quota_used) }} 积分
+          </template>
+        </el-table-column>
+        <el-table-column label="允许模型" min-width="100">
+          <template #default="{ row }">
+            <span class="text-sm">{{ getModelsDisplay(row) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" min-width="80">
+          <template #default="{ row }">
+            <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" min-width="160">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="240" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
+            <el-button link type="info" @click="rotateKey(row)">轮换</el-button>
+            <el-button
+              link
+              :type="row.status === 'active' ? 'warning' : 'success'"
+              @click="toggleStatus(row)"
+            >
+              {{ row.status === 'active' ? '停用' : '启用' }}
+            </el-button>
+            <el-button link type="danger" :icon="DeleteIcon" @click="deleteKey(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <!-- Create/Edit Dialog -->
     <el-dialog
@@ -294,9 +299,9 @@ onMounted(() => {
 
     <!-- Show Generated Key Dialog -->
     <el-dialog v-model="showKeyDialog" title="API Key 已生成" width="480px" append-to-body>
-      <div class="key-display">
-        <code class="full-key">{{ generatedKey }}</code>
-        <el-button :icon="CopyDocument" type="primary" @click="copyKey()">复制 Key</el-button>
+      <div class="flex flex-col gap-4">
+        <code class="font-mono text-sm word-break-all bg-slate-50 p-3 rounded-xl border border-slate-100">{{ generatedKey }}</code>
+        <el-button :icon="CopyDocument" type="primary" class="rounded-2xl! font-bold" @click="copyKey()">复制 Key</el-button>
       </div>
       <template #footer>
         <el-button type="primary" @click="showKeyDialog = false">关闭</el-button>
@@ -304,97 +309,3 @@ onMounted(() => {
     </el-dialog>
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #f5f7fa;
-}
-
-.page-header {
-  padding: 16px 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-title {
-  display: flex;
-  flex-direction: column;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.page-title h1 {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.page-title p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.page-main {
-  padding: 24px;
-  flex: 1;
-  min-height: 0;
-}
-
-.list-panel {
-  background: #ffffff;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.key-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.key-prefix {
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 13px;
-  color: #606266;
-  background: #f5f7fa;
-  padding: 2px 6px;
-  border-radius: 4px;
-  word-break: break-all;
-}
-
-.key-display {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.full-key {
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 14px;
-  word-break: break-all;
-  background: #f5f7fa;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #e4e7ed;
-}
-</style>

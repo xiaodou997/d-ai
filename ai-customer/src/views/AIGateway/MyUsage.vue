@@ -151,215 +151,87 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page-container">
-    <header class="page-header">
-      <div class="page-title">
-        <p class="eyebrow">Usage Analytics</p>
-        <h1>使用统计</h1>
-        <p>查看个人 AI 调用消耗、模型分布和近 7 天趋势，图表基于最近 {{ LOG_LIMIT }} 条调用日志。</p>
+  <div class="space-y-6">
+    <!-- Header Card -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-black text-slate-800 tracking-tight">使用统计</h1>
+          <p class="text-slate-400 text-sm font-medium mt-1">查看个人 AI 调用消耗、模型分布和近 7 天趋势，图表基于最近 {{ LOG_LIMIT }} 条调用日志</p>
+        </div>
+        <el-button type="primary" class="rounded-2xl! font-bold" :loading="loading" @click="fetchUsageData">
+          <template #icon><el-icon><Refresh /></el-icon></template>
+          刷新
+        </el-button>
       </div>
-      <el-button :icon="Refresh" @click="fetchUsageData" :loading="loading">刷新</el-button>
-    </header>
+    </div>
 
-    <main class="page-main">
-      <section class="summary-stats mb-6">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon bg-blue-100">
-              <el-icon class="text-blue-500" :size="20"><Wallet /></el-icon>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">总消耗积分</p>
-              <p class="stat-value">{{ formatCredits(summary?.total_user_cost || 0) }}</p>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon bg-green-100">
-              <el-icon class="text-green-500" :size="20"><DataLine /></el-icon>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">总 Token 数</p>
-              <p class="stat-value">{{ formatCredits(summary?.total_tokens || 0) }}</p>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon bg-purple-100">
-              <el-icon class="text-purple-500" :size="20"><TrendCharts /></el-icon>
-            </div>
-            <div class="stat-content">
-              <p class="stat-label">总请求次数</p>
-              <p class="stat-value">{{ summary?.request_count || 0 }}</p>
-            </div>
-          </div>
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-3 gap-4">
+      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+          <el-icon class="text-blue-500" :size="20"><Wallet /></el-icon>
         </div>
-      </section>
-
-      <section class="charts-section mb-6">
-        <div class="charts-grid">
-          <div class="chart-card">
-            <h3 class="chart-title">模型消耗分布</h3>
-            <div ref="chartModelRef" class="chart" style="height: 280px"></div>
-          </div>
-          <div class="chart-card">
-            <h3 class="chart-title">近 7 天消耗趋势</h3>
-            <div ref="chartTimelineRef" class="chart" style="height: 280px"></div>
-          </div>
+        <div class="min-w-0">
+          <p class="text-xs text-slate-400 mb-1">总消耗积分</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">{{ formatCredits(summary?.total_user_cost || 0) }}</p>
         </div>
-      </section>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+          <el-icon class="text-green-500" :size="20"><DataLine /></el-icon>
+        </div>
+        <div class="min-w-0">
+          <p class="text-xs text-slate-400 mb-1">总 Token 数</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">{{ formatCredits(summary?.total_tokens || 0) }}</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
+          <el-icon class="text-purple-500" :size="20"><TrendCharts /></el-icon>
+        </div>
+        <div class="min-w-0">
+          <p class="text-xs text-slate-400 mb-1">总请求次数</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">{{ summary?.request_count || 0 }}</p>
+        </div>
+      </div>
+    </div>
 
-      <section class="logs-panel">
-        <h3 class="panel-title">使用记录</h3>
-        <el-table :data="usageLogs" v-loading="loading" stripe>
-          <el-table-column prop="model_code" label="模型" min-width="140" />
-          <el-table-column label="消耗积分" min-width="100">
-            <template #default="{ row }">
-              {{ formatCredits(row.user_cost || 0) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="Token 数" min-width="100">
-            <template #default="{ row }">
-              {{ formatCredits(row.total_tokens || 0) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="request_status" label="状态" width="100" />
-          <el-table-column prop="request_id" label="请求 ID" min-width="160" show-overflow-tooltip />
-          <el-table-column label="时间" min-width="160">
-            <template #default="{ row }">
-              {{ formatDate(row.created_at) }}
-            </template>
-          </el-table-column>
-        </el-table>
-      </section>
-    </main>
+    <!-- Charts -->
+    <div class="grid grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-6">
+        <h3 class="text-base font-bold text-slate-800 mb-4">模型消耗分布</h3>
+        <div ref="chartModelRef" style="height: 280px; width: 100%"></div>
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-6">
+        <h3 class="text-base font-bold text-slate-800 mb-4">近 7 天消耗趋势</h3>
+        <div ref="chartTimelineRef" style="height: 280px; width: 100%"></div>
+      </div>
+    </div>
+
+    <!-- Logs Table -->
+    <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-6">
+      <h3 class="text-base font-bold text-slate-800 mb-4">使用记录</h3>
+      <el-table :data="usageLogs" v-loading="loading" stripe>
+        <el-table-column prop="model_code" label="模型" min-width="140" />
+        <el-table-column label="消耗积分" min-width="100">
+          <template #default="{ row }">
+            {{ formatCredits(row.user_cost || 0) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Token 数" min-width="100">
+          <template #default="{ row }">
+            {{ formatCredits(row.total_tokens || 0) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="request_status" label="状态" width="100" />
+        <el-table-column prop="request_id" label="请求 ID" min-width="160" show-overflow-tooltip />
+        <el-table-column label="时间" min-width="160">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.page-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #f5f7fa;
-}
-
-.page-header {
-  padding: 16px 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e4e7ed;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-title {
-  display: flex;
-  flex-direction: column;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.page-title h1 {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.page-title p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.page-main {
-  padding: 24px;
-  flex: 1;
-  min-height: 0;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.stat-card {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  border: 1px solid #e4e7ed;
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #303133;
-}
-
-.charts-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-.chart-card {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid #e4e7ed;
-}
-
-.chart-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  margin: 0 0 16px;
-}
-
-.chart {
-  width: 100%;
-}
-
-.logs-panel {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid #e4e7ed;
-}
-
-.panel-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #303133;
-  margin: 0 0 16px;
-}
-</style>
