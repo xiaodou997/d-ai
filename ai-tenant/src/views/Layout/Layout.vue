@@ -14,7 +14,7 @@
 
       <!-- 页面主内容 -->
       <main class="flex-1 overflow-y-auto custom-scrollbar p-6">
-        <div class="max-w-[1800px] mx-auto px-4">
+        <div class="max-w-[1800px] mx-auto px-4 h-full">
           <router-view v-slot="{ Component, route }">
             <transition name="page-fade" mode="out-in" appear>
               <component :is="Component" :key="route.path" />

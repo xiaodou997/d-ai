@@ -35,6 +35,10 @@ export default defineConfig({
         target: 'http://localhost:13010',
         changeOrigin: true
       },
+      '/console': {
+        target: 'http://localhost:13010',
+        changeOrigin: true
+      },
       '/urm/v1': {
         target: 'http://localhost:6900',
         changeOrigin: true,
