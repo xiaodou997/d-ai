@@ -338,10 +338,22 @@ type CreateModelParams struct {
 	Status                 string      `json:"status"`
 }
 
+type CreateModelRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	ModelCode              string             `json:"model_code"`
+	CapabilityType         string             `json:"capability_type"`
+	ContextWindow          pgtype.Int4        `json:"context_window"`
+	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
+	Status                 string             `json:"status"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
 // ============================================================================
 // Model CRUD
 // ============================================================================
-func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (AiModel, error) {
+func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (CreateModelRow, error) {
 	row := q.db.QueryRow(ctx, createModel,
 		arg.ModelCode,
 		arg.CapabilityType,
@@ -350,7 +362,7 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (AiMod
 		arg.MaxOutputTokens,
 		arg.Status,
 	)
-	var i AiModel
+	var i CreateModelRow
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
@@ -377,7 +389,7 @@ INSERT INTO ai_model_routes (
 ) VALUES (
   $1, $2, $3, $4, $5, $6
 )
-RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
+RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, connect_timeout_ms, first_byte_timeout_ms, idle_timeout_ms, max_duration_ms, status, created_at, updated_at
 `
 
 type CreateModelRouteParams struct {
@@ -412,6 +424,10 @@ func (q *Queries) CreateModelRoute(ctx context.Context, arg CreateModelRoutePara
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.ConnectTimeoutMs,
+		&i.FirstByteTimeoutMs,
+		&i.IdleTimeoutMs,
+		&i.MaxDurationMs,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -855,9 +871,21 @@ FROM ai_models
 WHERE id = $1
 `
 
-func (q *Queries) GetModel(ctx context.Context, id pgtype.UUID) (AiModel, error) {
+type GetModelRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	ModelCode              string             `json:"model_code"`
+	CapabilityType         string             `json:"capability_type"`
+	ContextWindow          pgtype.Int4        `json:"context_window"`
+	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
+	Status                 string             `json:"status"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetModel(ctx context.Context, id pgtype.UUID) (GetModelRow, error) {
 	row := q.db.QueryRow(ctx, getModel, id)
-	var i AiModel
+	var i GetModelRow
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
@@ -924,7 +952,7 @@ func (q *Queries) GetModelPrice(ctx context.Context, modelID pgtype.UUID) (GetMo
 }
 
 const getModelRoute = `-- name: GetModelRoute :one
-SELECT id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
+SELECT id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, connect_timeout_ms, first_byte_timeout_ms, idle_timeout_ms, max_duration_ms, status, created_at, updated_at
 FROM ai_model_routes
 WHERE id = $1
 `
@@ -942,6 +970,10 @@ func (q *Queries) GetModelRoute(ctx context.Context, id pgtype.UUID) (AiModelRou
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.ConnectTimeoutMs,
+		&i.FirstByteTimeoutMs,
+		&i.IdleTimeoutMs,
+		&i.MaxDurationMs,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1459,15 +1491,27 @@ FROM ai_models
 ORDER BY model_code ASC
 `
 
-func (q *Queries) ListAdminModels(ctx context.Context) ([]AiModel, error) {
+type ListAdminModelsRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	ModelCode              string             `json:"model_code"`
+	CapabilityType         string             `json:"capability_type"`
+	ContextWindow          pgtype.Int4        `json:"context_window"`
+	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
+	Status                 string             `json:"status"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListAdminModels(ctx context.Context) ([]ListAdminModelsRow, error) {
 	rows, err := q.db.Query(ctx, listAdminModels)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AiModel{}
+	items := []ListAdminModelsRow{}
 	for rows.Next() {
-		var i AiModel
+		var i ListAdminModelsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ModelCode,
@@ -3099,9 +3143,18 @@ SELECT
   m.max_output_tokens,
   m.status,
   tg.status AS grant_status,
-  tg.created_at AS granted_at
+  tg.created_at AS granted_at,
+  COALESCE(up.input_price_per_1m, tp.input_price_per_1m, bp.input_price_per_1m, 0) AS input_price_per_1m,
+  COALESCE(up.output_price_per_1m, tp.output_price_per_1m, bp.output_price_per_1m, 0) AS output_price_per_1m,
+  COALESCE(up.image_prices, tp.image_prices, bp.image_prices) AS image_prices,
+  COALESCE(up.video_prices, tp.video_prices, bp.video_prices) AS video_prices,
+  COALESCE(up.audio_tts_price_per_1m_chars, tp.audio_tts_price_per_1m_chars, bp.audio_tts_price_per_1m_chars, 0) AS audio_tts_price_per_1m_chars,
+  COALESCE(up.audio_stt_price_per_minute, tp.audio_stt_price_per_minute, bp.audio_stt_price_per_minute, 0) AS audio_stt_price_per_minute
 FROM ai_models m
 JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
+LEFT JOIN ai_tenant_user_prices up ON up.tenant_id = tg.tenant_id AND up.model_id = m.id
+LEFT JOIN ai_tenant_model_price_overrides tp ON tp.tenant_id = tg.tenant_id AND tp.model_id = m.id
+LEFT JOIN ai_model_prices bp ON bp.model_id = m.id
 WHERE tg.tenant_id = $1
   AND tg.status = 'active'
   AND m.status = 'active'
@@ -3109,21 +3162,27 @@ ORDER BY m.model_code ASC
 `
 
 type ListUserAvailableModelsRow struct {
-	ID                     pgtype.UUID        `json:"id"`
-	ModelCode              string             `json:"model_code"`
-	CapabilityType         string             `json:"capability_type"`
-	ContextWindow          pgtype.Int4        `json:"context_window"`
-	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
-	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
-	Status                 string             `json:"status"`
-	GrantStatus            string             `json:"grant_status"`
-	GrantedAt              pgtype.Timestamptz `json:"granted_at"`
+	ID                      pgtype.UUID        `json:"id"`
+	ModelCode               string             `json:"model_code"`
+	CapabilityType          string             `json:"capability_type"`
+	ContextWindow           pgtype.Int4        `json:"context_window"`
+	DefaultMaxOutputTokens  int32              `json:"default_max_output_tokens"`
+	MaxOutputTokens         pgtype.Int4        `json:"max_output_tokens"`
+	Status                  string             `json:"status"`
+	GrantStatus             string             `json:"grant_status"`
+	GrantedAt               pgtype.Timestamptz `json:"granted_at"`
+	InputPricePer1m         int64              `json:"input_price_per_1m"`
+	OutputPricePer1m        int64              `json:"output_price_per_1m"`
+	ImagePrices             []byte             `json:"image_prices"`
+	VideoPrices             []byte             `json:"video_prices"`
+	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
 }
 
 // ============================================================================
 // API Queries for /api/v1/* routes (role-based filtering)
 // ============================================================================
-// 用户可用的模型 = 租户授权的模型
+// 用户可用的模型 = 租户授权的模型 + 三级定价 fallback（用户售价 → 租户折扣价 → 平台公价）
 func (q *Queries) ListUserAvailableModels(ctx context.Context, tenantID string) ([]ListUserAvailableModelsRow, error) {
 	rows, err := q.db.Query(ctx, listUserAvailableModels, tenantID)
 	if err != nil {
@@ -3143,6 +3202,12 @@ func (q *Queries) ListUserAvailableModels(ctx context.Context, tenantID string) 
 			&i.Status,
 			&i.GrantStatus,
 			&i.GrantedAt,
+			&i.InputPricePer1m,
+			&i.OutputPricePer1m,
+			&i.ImagePrices,
+			&i.VideoPrices,
+			&i.AudioTtsPricePer1mChars,
+			&i.AudioSttPricePerMinute,
 		); err != nil {
 			return nil, err
 		}
@@ -3300,7 +3365,19 @@ type UpdateModelParams struct {
 	Status                 string      `json:"status"`
 }
 
-func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (AiModel, error) {
+type UpdateModelRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	ModelCode              string             `json:"model_code"`
+	CapabilityType         string             `json:"capability_type"`
+	ContextWindow          pgtype.Int4        `json:"context_window"`
+	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
+	Status                 string             `json:"status"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (UpdateModelRow, error) {
 	row := q.db.QueryRow(ctx, updateModel,
 		arg.ID,
 		arg.ModelCode,
@@ -3310,7 +3387,7 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (AiMod
 		arg.MaxOutputTokens,
 		arg.Status,
 	)
-	var i AiModel
+	var i UpdateModelRow
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,
@@ -3335,7 +3412,7 @@ SET upstream_deployment_id = $3,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
-RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
+RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, connect_timeout_ms, first_byte_timeout_ms, idle_timeout_ms, max_duration_ms, status, created_at, updated_at
 `
 
 type UpdateModelRouteParams struct {
@@ -3369,6 +3446,10 @@ func (q *Queries) UpdateModelRoute(ctx context.Context, arg UpdateModelRoutePara
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.ConnectTimeoutMs,
+		&i.FirstByteTimeoutMs,
+		&i.IdleTimeoutMs,
+		&i.MaxDurationMs,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -3382,7 +3463,7 @@ SET status = $3,
     updated_at = now()
 WHERE model_id = $1
   AND id = $2
-RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, status, created_at, updated_at
+RETURNING id, model_id, upstream_deployment_id, priority, weight, supports_stream, cost_per_1k_tokens, score_weights_override, sticky_enabled, connect_timeout_ms, first_byte_timeout_ms, idle_timeout_ms, max_duration_ms, status, created_at, updated_at
 `
 
 type UpdateModelRouteStatusParams struct {
@@ -3404,6 +3485,10 @@ func (q *Queries) UpdateModelRouteStatus(ctx context.Context, arg UpdateModelRou
 		&i.CostPer1kTokens,
 		&i.ScoreWeightsOverride,
 		&i.StickyEnabled,
+		&i.ConnectTimeoutMs,
+		&i.FirstByteTimeoutMs,
+		&i.IdleTimeoutMs,
+		&i.MaxDurationMs,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -3433,9 +3518,21 @@ type UpdateModelStatusParams struct {
 	Status string      `json:"status"`
 }
 
-func (q *Queries) UpdateModelStatus(ctx context.Context, arg UpdateModelStatusParams) (AiModel, error) {
+type UpdateModelStatusRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	ModelCode              string             `json:"model_code"`
+	CapabilityType         string             `json:"capability_type"`
+	ContextWindow          pgtype.Int4        `json:"context_window"`
+	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
+	Status                 string             `json:"status"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateModelStatus(ctx context.Context, arg UpdateModelStatusParams) (UpdateModelStatusRow, error) {
 	row := q.db.QueryRow(ctx, updateModelStatus, arg.ID, arg.Status)
-	var i AiModel
+	var i UpdateModelStatusRow
 	err := row.Scan(
 		&i.ID,
 		&i.ModelCode,

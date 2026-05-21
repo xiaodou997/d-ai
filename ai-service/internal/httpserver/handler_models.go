@@ -48,7 +48,7 @@ func (s *Server) handleAdminCreateModel(w http.ResponseWriter, r *http.Request) 
 		writeDBErr(w, err)
 		return
 	}
-	writeOK(w, fromModel(row))
+	writeOK(w, fromCreateModelRow(row))
 }
 
 func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +79,7 @@ func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) 
 		writeDBErr(w, err)
 		return
 	}
-	writeOK(w, fromModel(row))
+	writeOK(w, fromUpdateModelRow(row))
 }
 
 func (s *Server) handleAdminUpdateModelStatus(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +100,7 @@ func (s *Server) handleAdminUpdateModelStatus(w http.ResponseWriter, r *http.Req
 		writeDBErr(w, err)
 		return
 	}
-	writeOK(w, fromModel(row))
+	writeOK(w, fromUpdateModelStatusRow(row))
 }
 
 func (s *Server) handleAdminGetModelPrice(w http.ResponseWriter, r *http.Request) {

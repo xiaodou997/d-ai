@@ -580,21 +580,11 @@ INSERT INTO ai_route_score_weights (scope, weights)
   ON CONFLICT (scope) DO NOTHING;
 
 -- ============================================================================
--- AI Request Payloads v2 (按月分区审计日志，按需 JOIN ai_usage_logs 获取冗余字段)
+-- AI Request Payloads v3 (普通表，业务无感知；归档由存储过程 + 定时任务处理)
 -- 只存 usage_log 没有的 wire 层信息 + 正文 JSONB + 早期失败自带的结果字段。
--- 归档 = DETACH PARTITION；blob GC / detach 由手动 SQL 执行。
+-- 归档策略：每月将 6 个月前的数据搬到 ai_request_payloads_archive_YYYY_MM，
+--           然后从主表删除，保持主表始终只保留近期数据。
 -- ============================================================================
-
--- Drop old non-partitioned table (激進重構 v1→v2，不兼容历史数据).
--- relkind='r' means regular (non-partitioned) heap table.
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_class WHERE relname = 'ai_request_payloads' AND relkind = 'r'
-  ) THEN
-    DROP TABLE ai_request_payloads;
-  END IF;
-END $$;
 
 CREATE TABLE IF NOT EXISTS ai_request_payloads (
   id               UUID        NOT NULL DEFAULT gen_random_uuid(),
@@ -613,32 +603,78 @@ CREATE TABLE IF NOT EXISTS ai_request_payloads (
   request_status   TEXT        NOT NULL,
   http_status      INT,
   error_code       TEXT,
-  PRIMARY KEY (id, created_at)
-) PARTITION BY RANGE (created_at);
+  PRIMARY KEY (id)
+);
 
-CREATE INDEX IF NOT EXISTS idx_arp_request_id ON ai_request_payloads (request_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_arp_request_id ON ai_request_payloads (request_id);
+CREATE INDEX IF NOT EXISTS idx_arp_created_at ON ai_request_payloads (created_at);
 
--- Pre-build partitions for the current month and the next two months.
-DO $$
+-- ============================================================================
+-- 归档存储过程：将 N 个月前的数据搬到归档表，然后从主表删除。
+-- 归档表命名格式：ai_request_payloads_archive_YYYY_MM
+-- 用法：SELECT archive_request_payloads(6);  -- 保留最近 6 个月
+-- ============================================================================
+CREATE OR REPLACE FUNCTION archive_request_payloads(retain_months INT DEFAULT 6)
+RETURNS TABLE(archived_table TEXT, rows_moved BIGINT) AS $$
 DECLARE
-  m      TIMESTAMPTZ;
-  pname  TEXT;
-  pstart TIMESTAMPTZ;
-  pend   TIMESTAMPTZ;
+  cutoff        TIMESTAMPTZ;
+  archive_name  TEXT;
+  moved_count   BIGINT;
 BEGIN
-  FOR i IN 0..2 LOOP
-    m      := date_trunc('month', NOW()) + (i || ' months')::INTERVAL;
-    pname  := 'ai_request_payloads_' || to_char(m, 'YYYY_MM');
-    pstart := m;
-    pend   := m + INTERVAL '1 month';
-    IF NOT EXISTS (SELECT 1 FROM pg_class WHERE relname = pname) THEN
+  -- 算出归档分界点：保留 retain_months 个月的数据
+  cutoff := date_trunc('month', NOW() - (retain_months || ' months')::INTERVAL);
+
+  -- 如果没有需要归档的数据，直接返回
+  IF NOT EXISTS (SELECT 1 FROM ai_request_payloads WHERE created_at < cutoff) THEN
+    archived_table := NULL;
+    rows_moved := 0;
+    RETURN NEXT;
+    RETURN;
+  END IF;
+
+  -- 逐月归档：找出所有早于 cutoff 的月份
+  FOR archive_name IN
+    SELECT DISTINCT 'ai_request_payloads_archive_' || to_char(date_trunc('month', created_at), 'YYYY_MM')
+    FROM ai_request_payloads
+    WHERE created_at < cutoff
+    ORDER BY 1
+  LOOP
+    -- 提取月份用于过滤
+    DECLARE
+      month_start  TIMESTAMPTZ;
+      month_end    TIMESTAMPTZ;
+      month_label  TEXT;
+    BEGIN
+      -- 从归档表名解析月份，如 'ai_request_payloads_archive_2026_01' → '2026_01'
+      month_label := substring(archive_name from '(\d{4}_\d{2})$');
+      month_start := to_timestamp(replace(month_label, '_', '-'), 'YYYY-MM')::TIMESTAMPTZ;
+      month_end   := month_start + INTERVAL '1 month';
+
+      -- 创建归档表（如果不存在），只继承默认值，不继承索引
       EXECUTE format(
-        'CREATE TABLE %I PARTITION OF ai_request_payloads FOR VALUES FROM (%L) TO (%L)',
-        pname, pstart, pend
+        'CREATE TABLE IF NOT EXISTS %I (LIKE ai_request_payloads INCLUDING DEFAULTS)',
+        archive_name
       );
-    END IF;
+
+      -- 搬数据
+      EXECUTE format(
+        'INSERT INTO %I SELECT * FROM ai_request_payloads WHERE created_at >= %L AND created_at < %L',
+        archive_name, month_start, month_end
+      );
+
+      GET DIAGNOSTICS moved_count = ROW_COUNT;
+
+      -- 从主表删除已归档的数据
+      DELETE FROM ai_request_payloads WHERE created_at >= month_start AND created_at < month_end;
+
+      -- 返回本次归档结果
+      archived_table := archive_name;
+      rows_moved := moved_count;
+      RETURN NEXT;
+    END;
   END LOOP;
-END $$;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- AI Audit Blobs (content-addressed media store; sha256 dedup via ON CONFLICT)

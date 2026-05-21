@@ -62,6 +62,14 @@ type AiAsyncTask struct {
 	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
 }
 
+type AiAuditBlob struct {
+	Sha256      string             `json:"sha256"`
+	Content     []byte             `json:"content"`
+	ContentType string             `json:"content_type"`
+	SizeBytes   int32              `json:"size_bytes"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type AiConversationBinding struct {
 	ConversationID       string             `json:"conversation_id"`
 	TenantID             string             `json:"tenant_id"`
@@ -93,6 +101,10 @@ type AiModel struct {
 	ContextWindow          pgtype.Int4        `json:"context_window"`
 	DefaultMaxOutputTokens int32              `json:"default_max_output_tokens"`
 	MaxOutputTokens        pgtype.Int4        `json:"max_output_tokens"`
+	ConnectTimeoutMs       pgtype.Int4        `json:"connect_timeout_ms"`
+	FirstByteTimeoutMs     pgtype.Int4        `json:"first_byte_timeout_ms"`
+	IdleTimeoutMs          pgtype.Int4        `json:"idle_timeout_ms"`
+	MaxDurationMs          pgtype.Int4        `json:"max_duration_ms"`
 	Status                 string             `json:"status"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
@@ -124,6 +136,10 @@ type AiModelRoute struct {
 	CostPer1kTokens      pgtype.Numeric     `json:"cost_per_1k_tokens"`
 	ScoreWeightsOverride []byte             `json:"score_weights_override"`
 	StickyEnabled        bool               `json:"sticky_enabled"`
+	ConnectTimeoutMs     pgtype.Int4        `json:"connect_timeout_ms"`
+	FirstByteTimeoutMs   pgtype.Int4        `json:"first_byte_timeout_ms"`
+	IdleTimeoutMs        pgtype.Int4        `json:"idle_timeout_ms"`
+	MaxDurationMs        pgtype.Int4        `json:"max_duration_ms"`
 	Status               string             `json:"status"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -180,16 +196,22 @@ type AiProviderOauthCredential struct {
 }
 
 type AiRequestPayload struct {
-	ID               pgtype.UUID        `json:"id"`
-	UsageLogID       pgtype.UUID        `json:"usage_log_id"`
-	UpstreamBody     []byte             `json:"upstream_body"`
-	UpstreamResponse []byte             `json:"upstream_response"`
-	RawClientBody    []byte             `json:"raw_client_body"`
-	RouteAttempts    []byte             `json:"route_attempts"`
-	Sampled          bool               `json:"sampled"`
-	ClientProtocol   string             `json:"client_protocol"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
+	ID              pgtype.UUID        `json:"id"`
+	RequestID       string             `json:"request_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ClientProtocol  string             `json:"client_protocol"`
+	ClientIp        pgtype.Text        `json:"client_ip"`
+	UserAgent       pgtype.Text        `json:"user_agent"`
+	RequestPath     string             `json:"request_path"`
+	AuthMasked      pgtype.Text        `json:"auth_masked"`
+	RequestModel    string             `json:"request_model"`
+	RequestMessages []byte             `json:"request_messages"`
+	RequestParams   []byte             `json:"request_params"`
+	ResponseMessage []byte             `json:"response_message"`
+	MediaRefs       []byte             `json:"media_refs"`
+	RequestStatus   string             `json:"request_status"`
+	HttpStatus      pgtype.Int4        `json:"http_status"`
+	ErrorCode       pgtype.Text        `json:"error_code"`
 }
 
 type AiRouteScoreWeight struct {

@@ -28,12 +28,6 @@ import (
 	"xiaodou/uni-ai-api/internal/urm"
 )
 
-// auditPartitioner is a minimal interface for partition maintenance.
-type auditPartitioner interface {
-	EnsurePartitions(ctx context.Context) error
-	Run(ctx context.Context)
-}
-
 // stickyStoreAdapter adapts redisadapter.RedisSticky to serving.stickyWriter
 // without creating an import cycle. RedisSticky already implements routing.StickyStore
 // which is the interface used by RouteCandidatesStep. ExecuteStep uses stickyWriter
@@ -84,7 +78,6 @@ type Server struct {
 	routeSelector     *pgadapter.RouteSelector
 	routeWeightsStore *pgadapter.RouteWeightsStore
 	auditWorker  *audit.Worker // optional; nil = audit log disabled
-	partitioner  auditPartitioner
 	shutdownAudit context.CancelFunc
 
 	// Serving pipeline — shared across requests (steps are stateless)
@@ -160,7 +153,6 @@ func New(cfg Config) *Server {
 	// Audit log: async structured request/response persistence.
 	auditStore := pgadapter.NewAuditStore(cfg.Postgres)
 	blobStore := blobstore.NewPGStore(cfg.Postgres)
-	partitioner := blobstore.NewPartitioner(cfg.Postgres)
 	auditWorker := audit.NewWorker(auditStore, blobStore)
 
 	usageLogger := pgadapter.NewUsageLogger(q)
@@ -185,7 +177,6 @@ func New(cfg Config) *Server {
 		routeSelector:     routeSelector,
 		routeWeightsStore: routeWeightsStore,
 		auditWorker:  auditWorker,
-		partitioner:  partitioner,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -408,12 +399,6 @@ func (s *Server) Start(addr string) error {
 
 	if s.auditWorker != nil {
 		s.auditWorker.Start(auditCtx)
-	}
-	if s.partitioner != nil {
-		if err := s.partitioner.EnsurePartitions(auditCtx); err != nil {
-			s.logger.Warn("audit: partition pre-check failed", zap.Error(err))
-		}
-		go s.partitioner.Run(auditCtx)
 	}
 
 	s.httpServer.Addr = addr

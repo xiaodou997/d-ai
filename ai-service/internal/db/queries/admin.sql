@@ -1342,7 +1342,7 @@ LIMIT $1;
 -- ============================================================================
 
 -- name: ListUserAvailableModels :many
--- 用户可用的模型 = 租户授权的模型
+-- 用户可用的模型 = 租户授权的模型 + 三级定价 fallback（用户售价 → 租户折扣价 → 平台公价）
 SELECT
   m.id,
   m.model_code,
@@ -1352,9 +1352,18 @@ SELECT
   m.max_output_tokens,
   m.status,
   tg.status AS grant_status,
-  tg.created_at AS granted_at
+  tg.created_at AS granted_at,
+  COALESCE(up.input_price_per_1m, tp.input_price_per_1m, bp.input_price_per_1m, 0) AS input_price_per_1m,
+  COALESCE(up.output_price_per_1m, tp.output_price_per_1m, bp.output_price_per_1m, 0) AS output_price_per_1m,
+  COALESCE(up.image_prices, tp.image_prices, bp.image_prices) AS image_prices,
+  COALESCE(up.video_prices, tp.video_prices, bp.video_prices) AS video_prices,
+  COALESCE(up.audio_tts_price_per_1m_chars, tp.audio_tts_price_per_1m_chars, bp.audio_tts_price_per_1m_chars, 0) AS audio_tts_price_per_1m_chars,
+  COALESCE(up.audio_stt_price_per_minute, tp.audio_stt_price_per_minute, bp.audio_stt_price_per_minute, 0) AS audio_stt_price_per_minute
 FROM ai_models m
 JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
+LEFT JOIN ai_tenant_user_prices up ON up.tenant_id = tg.tenant_id AND up.model_id = m.id
+LEFT JOIN ai_tenant_model_price_overrides tp ON tp.tenant_id = tg.tenant_id AND tp.model_id = m.id
+LEFT JOIN ai_model_prices bp ON bp.model_id = m.id
 WHERE tg.tenant_id = $1
   AND tg.status = 'active'
   AND m.status = 'active'

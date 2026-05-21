@@ -174,10 +174,62 @@ func fromModel(r dbgen.AiModel) modelDTO {
 	}
 }
 
-func fromModels(rows []dbgen.AiModel) []modelDTO {
+func fromCreateModelRow(r dbgen.CreateModelRow) modelDTO {
+	return modelDTO{
+		ID:                     r.ID,
+		ModelCode:              r.ModelCode,
+		CapabilityType:         r.CapabilityType,
+		ContextWindow:          r.ContextWindow,
+		DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,
+		MaxOutputTokens:        r.MaxOutputTokens,
+		Status:                 r.Status,
+		CreatedAt:              millis(r.CreatedAt),
+		UpdatedAt:              millis(r.UpdatedAt),
+	}
+}
+
+func fromUpdateModelRow(r dbgen.UpdateModelRow) modelDTO {
+	return modelDTO{
+		ID:                     r.ID,
+		ModelCode:              r.ModelCode,
+		CapabilityType:         r.CapabilityType,
+		ContextWindow:          r.ContextWindow,
+		DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,
+		MaxOutputTokens:        r.MaxOutputTokens,
+		Status:                 r.Status,
+		CreatedAt:              millis(r.CreatedAt),
+		UpdatedAt:              millis(r.UpdatedAt),
+	}
+}
+
+func fromUpdateModelStatusRow(r dbgen.UpdateModelStatusRow) modelDTO {
+	return modelDTO{
+		ID:                     r.ID,
+		ModelCode:              r.ModelCode,
+		CapabilityType:         r.CapabilityType,
+		ContextWindow:          r.ContextWindow,
+		DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,
+		MaxOutputTokens:        r.MaxOutputTokens,
+		Status:                 r.Status,
+		CreatedAt:              millis(r.CreatedAt),
+		UpdatedAt:              millis(r.UpdatedAt),
+	}
+}
+
+func fromModels(rows []dbgen.ListAdminModelsRow) []modelDTO {
 	out := make([]modelDTO, len(rows))
 	for i, r := range rows {
-		out[i] = fromModel(r)
+		out[i] = modelDTO{
+			ID:                     r.ID,
+			ModelCode:              r.ModelCode,
+			CapabilityType:         r.CapabilityType,
+			ContextWindow:          r.ContextWindow,
+			DefaultMaxOutputTokens: r.DefaultMaxOutputTokens,
+			MaxOutputTokens:        r.MaxOutputTokens,
+			Status:                 r.Status,
+			CreatedAt:              millis(r.CreatedAt),
+			UpdatedAt:              millis(r.UpdatedAt),
+		}
 	}
 	return out
 }
@@ -1182,15 +1234,21 @@ func fromListUsageLogsByUser(rows []dbgen.ListUsageLogsByTenantUserRow) []usageL
 // ---------------------------------------------------------------------------
 
 type userAvailableModelDTO struct {
-	ID                     pgtype.UUID `json:"id"`
-	ModelCode              string      `json:"model_code"`
-	CapabilityType         string      `json:"capability_type"`
-	ContextWindow          pgtype.Int4 `json:"context_window"`
-	DefaultMaxOutputTokens int32       `json:"default_max_output_tokens"`
-	MaxOutputTokens        pgtype.Int4 `json:"max_output_tokens"`
-	Status                 string      `json:"status"`
-	GrantStatus            string      `json:"grant_status"`
-	GrantedAt              *int64      `json:"granted_at"`
+	ID                     pgtype.UUID     `json:"id"`
+	ModelCode              string          `json:"model_code"`
+	CapabilityType         string          `json:"capability_type"`
+	ContextWindow          pgtype.Int4     `json:"context_window"`
+	DefaultMaxOutputTokens int32           `json:"default_max_output_tokens"`
+	MaxOutputTokens        pgtype.Int4     `json:"max_output_tokens"`
+	Status                 string          `json:"status"`
+	GrantStatus            string          `json:"grant_status"`
+	GrantedAt              *int64          `json:"granted_at"`
+	InputPricePer1m        int64           `json:"input_price_per_1m"`
+	OutputPricePer1m       int64           `json:"output_price_per_1m"`
+	ImagePrices            json.RawMessage `json:"image_prices"`
+	VideoPrices            json.RawMessage `json:"video_prices"`
+	AudioTtsPricePer1mChars int64          `json:"audio_tts_price_per_1m_chars"`
+	AudioSttPricePerMinute  int64          `json:"audio_stt_price_per_minute"`
 }
 
 func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailableModelDTO {
@@ -1204,6 +1262,12 @@ func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailabl
 		Status:                 r.Status,
 		GrantStatus:            r.GrantStatus,
 		GrantedAt:              millis(r.GrantedAt),
+		InputPricePer1m:         r.InputPricePer1m,
+		OutputPricePer1m:        r.OutputPricePer1m,
+		ImagePrices:             rawJSON(r.ImagePrices),
+		VideoPrices:             rawJSON(r.VideoPrices),
+		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
+		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
 	}
 }
 
