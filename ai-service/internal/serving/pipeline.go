@@ -108,6 +108,12 @@ type Request struct {
 	BillingResult        domain.BillingResult
 	RequestStatus        domain.RequestStatus
 	HTTPStatus           int
+	// ResponseCommitted is true once the Execute step has written response
+	// headers to the client. Past this point the pipeline can no longer emit
+	// a fresh HTTP error status — only an in-band (SSE) error frame. It must
+	// not be conflated with HTTPStatus, which normalizePipelineError also sets
+	// for audit logging on errors that never reached the wire.
+	ResponseCommitted    bool
 	UpstreamStatus       int
 	ErrorCode            string
 	ErrorMessage         string

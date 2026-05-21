@@ -686,6 +686,7 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 		w.Header().Set("Content-Type", "application/json")
 	}
 	w.WriteHeader(resp.StatusCode)
+	req.ResponseCommitted = true
 	_, _ = w.Write(bodyBytes)
 
 	req.RequestStatus = domain.RequestSuccess
@@ -817,6 +818,7 @@ awaitLoop:
 	hdr.Set("Connection", "keep-alive")
 	hdr.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
+	req.ResponseCommitted = true
 	req.HTTPStatus = http.StatusOK
 	dc.firstByte()
 	req.FirstTokenMs = int(time.Since(startTime).Milliseconds())

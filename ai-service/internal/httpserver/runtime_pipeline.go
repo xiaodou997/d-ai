@@ -180,7 +180,12 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 	}
 
 	if err := s.pipeline.Run(r.Context(), req); err != nil {
-		if req.HTTPStatus != 0 {
+		// Once the Execute step has flushed response headers we can no longer
+		// send a fresh HTTP error — the stream/body is already on the wire.
+		// req.HTTPStatus alone is not a reliable signal here: it is also set
+		// by normalizePipelineError for pre-Execute failures (auth, quota,
+		// routing) that never touched the wire.
+		if req.ResponseCommitted {
 			s.logger.Warn("pipeline error after response committed",
 				zap.Error(err),
 				zap.String("request_id", req.RequestID),
