@@ -280,7 +280,7 @@
           <h2 class="text-base font-bold text-slate-800">近期用户充值记录</h2>
           <p class="text-xs text-slate-400 mt-0.5">给终端用户充值积分的历史（最近 5 条）</p>
         </div>
-        <el-button text type="primary" class="!text-xs font-bold" @click="$router.push('/finance/user-recharge-records')">
+        <el-button text type="primary" class="!text-xs font-bold" @click="$router.push('/urm/finance/user-recharge-records')">
           查看全部 <el-icon class="ml-1"><ArrowRight /></el-icon>
         </el-button>
       </div>
@@ -315,7 +315,7 @@
           <h2 class="text-base font-bold text-slate-800">近期交易流水</h2>
           <p class="text-xs text-slate-400 mt-0.5">最近 10 条扣费流水记录</p>
         </div>
-        <el-button text type="primary" class="!text-xs font-bold" @click="$router.push('/finance/transactions')">
+        <el-button text type="primary" class="!text-xs font-bold" @click="$router.push('/urm/finance/transactions')">
           查看全部 <el-icon class="ml-1"><ArrowRight /></el-icon>
         </el-button>
       </div>

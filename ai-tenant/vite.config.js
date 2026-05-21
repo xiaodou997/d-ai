@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { federation } from '@module-federation/vite'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -10,7 +11,15 @@ const __dirname = dirname(__filename)
 export default defineConfig({
   root: __dirname,
 
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    federation({
+      name: 'ai_tenant_host',
+      filename: 'remoteEntry.js',
+      dts: false,
+      shared: ['vue', 'vue-router', 'pinia', 'element-plus']
+    })
+  ],
 
   resolve: {
     alias: {
@@ -26,7 +35,12 @@ export default defineConfig({
         target: 'http://localhost:13010',
         changeOrigin: true
       },
-      '/urm': {
+      '/urm/v1': {
+        target: 'http://localhost:6900',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/urm/, '/api')
+      },
+      '/urm/oauth2': {
         target: 'http://localhost:6900',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/urm/, '/api')
@@ -41,36 +55,6 @@ export default defineConfig({
 
     rolldownOptions: {
       output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: 'echarts',
-              test: /node_modules[\\/]echarts/,
-              priority: 20
-            },
-            {
-              name: 'ui',
-              test: /node_modules[\\/]element-plus/,
-              priority: 15
-            },
-            {
-              name: 'framework',
-              test: /node_modules[\\/]vue/,
-              priority: 10
-            },
-            {
-              name: 'vendor',
-              test: /node_modules/,
-              priority: 5
-            },
-            {
-              name: 'common',
-              minShareCount: 2,
-              minSize: 10000,
-              priority: 1
-            }
-          ]
-        },
         // 文件命名格式，加上 [name] 方便你区分是哪个包
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',

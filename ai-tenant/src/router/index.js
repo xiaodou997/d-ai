@@ -27,38 +27,12 @@ const routes = [
         component: () => import('@/views/Dashboard/index.vue'),
         meta: { title: '控制概览', requiresAuth: true }
       },
-      // 用户管理
+      // URM remote pages are resolved from the URM tenant manifest.
       {
-        path: '/users',
-        name: 'UserList',
-        component: () => import('@/views/Users/UserList.vue'),
-        meta: { title: '终端用户', requiresAuth: true }
-      },
-      // 邀请码
-      {
-        path: '/invite-codes',
-        name: 'InviteCodeList',
-        component: () => import('@/views/InviteCodes/InviteCodeList.vue'),
-        meta: { title: '邀请码管理', requiresAuth: true }
-      },
-      // 财务中心
-      {
-        path: '/finance/account',
-        name: 'FinanceAccount',
-        component: () => import('@/views/Finance/Account.vue'),
-        meta: { title: '我的账户', requiresAuth: true }
-      },
-      {
-        path: '/finance/transactions',
-        name: 'FinanceTransactions',
-        component: () => import('@/views/Finance/Transactions.vue'),
-        meta: { title: '交易流水', requiresAuth: true }
-      },
-      {
-        path: '/finance/user-recharge-records',
-        name: 'UserRechargeRecords',
-        component: () => import('@/views/Finance/UserRechargeRecords.vue'),
-        meta: { title: '用户充值记录', requiresAuth: true }
+        path: '/urm/:pathMatch(.*)*',
+        name: 'UrmTenantRemote',
+        component: () => import('@/views/Remote/UrmTenantRemoteView.vue'),
+        meta: { title: 'URM', requiresAuth: true }
       },
       // 接入文档
       {

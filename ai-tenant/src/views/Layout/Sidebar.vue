@@ -27,39 +27,6 @@
           <span>控制概览</span>
         </el-menu-item>
 
-        <!-- 用户管理 -->
-        <div class="menu-divider">用户管理</div>
-        <el-menu-item index="/users">
-          <el-icon><User /></el-icon>
-          <span>终端用户</span>
-        </el-menu-item>
-        <el-menu-item index="/invite-codes">
-          <el-icon><Ticket /></el-icon>
-          <span>邀请码管理</span>
-        </el-menu-item>
-
-        <!-- 财务中心 -->
-        <div class="menu-divider">财务中心</div>
-        <el-menu-item index="/finance/account">
-          <el-icon><Wallet /></el-icon>
-          <span>我的账户</span>
-        </el-menu-item>
-        <el-menu-item index="/finance/transactions">
-          <el-icon><DataLine /></el-icon>
-          <span>交易流水</span>
-        </el-menu-item>
-        <el-menu-item index="/finance/user-recharge-records">
-          <el-icon><Money /></el-icon>
-          <span>用户充值记录</span>
-        </el-menu-item>
-
-        <!-- 开发者 -->
-        <div class="menu-divider">开发者</div>
-        <el-menu-item index="/docs/api">
-          <el-icon><Document /></el-icon>
-          <span>接入文档</span>
-        </el-menu-item>
-
         <!-- AI Gateway -->
         <div class="menu-divider">AI Gateway</div>
         <el-menu-item index="/ai/models">
@@ -77,6 +44,25 @@
         <el-menu-item index="/ai/user-consumption">
           <el-icon><TrendCharts /></el-icon>
           <span>用户消耗</span>
+        </el-menu-item>
+
+        <template v-for="group in urmMenuGroups" :key="group.title">
+          <div class="menu-divider">{{ group.title }}</div>
+          <el-menu-item
+            v-for="item in group.items"
+            :key="item.key"
+            :index="getUrmTenantPagePath(item)"
+          >
+            <el-icon><component :is="getMenuIcon(item.icon)" /></el-icon>
+            <span>{{ item.title }}</span>
+          </el-menu-item>
+        </template>
+
+        <!-- 开发者 -->
+        <div class="menu-divider">开发者</div>
+        <el-menu-item index="/docs/api">
+          <el-icon><Document /></el-icon>
+          <span>接入文档</span>
         </el-menu-item>
       </el-menu>
     </nav>
@@ -112,6 +98,7 @@
 </template>
 
 <script setup>
+import { onMounted, shallowRef } from 'vue'
 import {
   OfficeBuilding,
   Odometer,
@@ -129,8 +116,33 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import {
+  getUrmTenantMenuGroups,
+  getUrmTenantPagePath,
+  loadUrmTenantManifest
+} from '@/remote/urmTenantManifest'
 
 const authStore = useAuthStore()
+const urmMenuGroups = shallowRef([])
+
+const menuIcons = {
+  User,
+  Ticket,
+  Wallet,
+  DataLine,
+  Money
+}
+
+const getMenuIcon = (name) => menuIcons[name] || Document
+
+onMounted(async () => {
+  try {
+    const manifest = await loadUrmTenantManifest()
+    urmMenuGroups.value = getUrmTenantMenuGroups(manifest)
+  } catch (error) {
+    console.error('加载 URM 菜单失败:', error)
+  }
+})
 
 const handleLogout = () => {
   ElMessageBox.confirm('您确定要退出 URM 租户中心吗？', '提示', {

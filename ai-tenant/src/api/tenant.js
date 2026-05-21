@@ -10,48 +10,12 @@ export const getUsers = (params = {}) => {
   })
 }
 
-export const updateUserStatus = (id, status) =>
-  request.patch(`/urm/v1/users/${id}/status`, { status })
-
-export const resetUserPassword = (id) =>
-  request.post(`/urm/v1/users/${id}/reset-password`)
-
-export const rechargeUser = (data) =>
-  request.post('/urm/v1/recharges', { ...data, packageType: 2 })
-
-export const reverseRecharge = (orderId, data) =>
-  request.post(`/urm/v1/recharges/${orderId}/reverse`, data)
-
-export const getInviteCodes = (params = {}) => {
-  return request.get('/urm/v1/invitations', {
-    params: { page: 1, size: 20, ...params }
-  })
-}
-
-export const createInviteCode = (data) => {
-  return request.post('/urm/v1/invitations', data)
-}
-
-export const updateInviteCode = (id, data) => {
-  return request.put(`/urm/v1/invitations/${id}`, data)
-}
-
-export const deleteInviteCode = (id) => {
-  return request.delete(`/urm/v1/invitations/${id}`)
-}
-
 export const getAccountBalance = (detail = true) => {
   return request.get(`/urm/v1/account/balance?detail=${detail}`)
 }
 
 export const getTransactions = (params = {}) => {
   return request.get('/urm/v1/account/transactions', {
-    params: { page: 1, size: 20, ...params }
-  })
-}
-
-export const getRechargeRecords = (params = {}) => {
-  return request.get('/urm/v1/account/recharge-records', {
     params: { page: 1, size: 20, ...params }
   })
 }
