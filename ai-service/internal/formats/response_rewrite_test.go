@@ -59,6 +59,49 @@ func TestSanitizePublicModelJSON_OpenAIResponsesNested(t *testing.T) {
 	}
 }
 
+func TestSanitizePublicModelJSON_RewritesVersionedPublicModelWhenUpstreamMatchesPublic(t *testing.T) {
+	body := mustJSON(map[string]any{
+		"type": "response.created",
+		"response": map[string]any{
+			"model": "gpt-5.4-mini-2026-03-17",
+		},
+	})
+
+	got := SanitizePublicModelJSON(body, "gpt-5.4-mini", "gpt-5.4-mini", domain.ProtocolOpenAIResponses)
+
+	var result map[string]any
+	if err := json.Unmarshal(got, &result); err != nil {
+		t.Fatal(err)
+	}
+	resp := result["response"].(map[string]any)
+	if resp["model"] != "gpt-5.4-mini" {
+		t.Errorf("response.model = %q, want gpt-5.4-mini", resp["model"])
+	}
+}
+
+func TestSanitizePublicModelJSON_DoesNotRewriteDifferentModelWithSharedPrefix(t *testing.T) {
+	body := mustJSON(map[string]any{
+		"model": "gpt-4o",
+		"nested": map[string]any{
+			"model": "gpt-4-turbo",
+		},
+	})
+
+	got := SanitizePublicModelJSON(body, "gpt-4", "gpt-4", domain.ProtocolOpenAIChat)
+
+	var result map[string]any
+	if err := json.Unmarshal(got, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result["model"] != "gpt-4o" {
+		t.Errorf("shared-prefix model was changed: %q", result["model"])
+	}
+	nested := result["nested"].(map[string]any)
+	if nested["model"] != "gpt-4-turbo" {
+		t.Errorf("non-version model variant was changed: %q", nested["model"])
+	}
+}
+
 func TestSanitizePublicModelJSON_ExactUpstreamOnly(t *testing.T) {
 	body := mustJSON(map[string]any{
 		"model": "unrelated-model",

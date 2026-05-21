@@ -3,6 +3,7 @@ package formats
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"xiaodou/uni-ai-api/internal/domain"
 )
@@ -28,7 +29,7 @@ func modelResponseField(protocol domain.UpstreamProtocol) string {
 //
 // Returns body unchanged when:
 //   - publicModel is empty
-//   - upstreamModel is provided and absent from body
+//   - upstreamModel/publicModel are absent from body
 //   - the body does not parse as JSON
 //   - no model identity field equals upstreamModel
 //
@@ -39,10 +40,9 @@ func SanitizePublicModelJSON(body []byte, publicModel, upstreamModel string, pro
 	if publicModel == "" || len(body) == 0 {
 		return body
 	}
-	if upstreamModel != "" && upstreamModel == publicModel {
-		return body
-	}
-	if upstreamModel != "" && !bytes.Contains(body, []byte(upstreamModel)) {
+	if upstreamModel != "" &&
+		!bytes.Contains(body, []byte(upstreamModel)) &&
+		!bytes.Contains(body, []byte(publicModel)) {
 		return body
 	}
 
@@ -138,5 +138,19 @@ func shouldRewriteModelValue(value, publicModel, upstreamModel string) bool {
 	if upstreamModel == "" {
 		return true
 	}
-	return value == upstreamModel
+	return value == upstreamModel || isVersionedPublicModel(value, publicModel)
+}
+
+func isVersionedPublicModel(value, publicModel string) bool {
+	if publicModel == "" || !strings.HasPrefix(value, publicModel+"-") {
+		return false
+	}
+	suffix := strings.TrimPrefix(value, publicModel+"-")
+	if suffix == "" {
+		return false
+	}
+	// Treat date/snapshot suffixes as provider-specific versions of the public
+	// model. This covers values like gpt-5.4-mini-2026-03-17 and
+	// claude-sonnet-4-20250514 without folding names like gpt-4o into gpt-4.
+	return suffix[0] >= '0' && suffix[0] <= '9'
 }
