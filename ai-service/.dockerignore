@@ -1,0 +1,10 @@
+bin/
+release/
+.git/
+.claude/
+.gocache/
+.gomodcache/
+logs/
+config.yaml
+*.tar.gz
+*.test
