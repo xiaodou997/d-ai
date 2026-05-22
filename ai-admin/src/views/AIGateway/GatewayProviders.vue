@@ -178,7 +178,7 @@ const setupSteps = [
   '创建厂商分组，标记上游归属和厂商类型。',
   '添加 API 账户，填入 Base URL、API Key、权重和超时。',
   '在模型配置中维护可调用的模型名、协议和上游成本价（含阶梯/分辨率档）。',
-  '在授权与 Key 页面分配对外模型调用权限。'
+  '在模型授权页面分配公开模型调用权限。'
 ]
 
 const statusTagType = (status) => {
@@ -666,8 +666,8 @@ onMounted(fetchProviders)
     <aside class="provider-rail">
       <div class="rail-head">
         <div>
-          <p class="eyebrow">Provider Directory</p>
-          <h2>厂商接入</h2>
+          <p class="eyebrow">Upstream Management</p>
+          <h2>上游管理</h2>
         </div>
         <el-button type="primary" :icon="Plus" @click="openProviderDialog">新增</el-button>
       </div>
