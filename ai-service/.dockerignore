@@ -1,5 +1,6 @@
 bin/
 release/
+db/
 .git/
 .claude/
 .gocache/

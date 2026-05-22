@@ -20,9 +20,6 @@ COPY ai-server /app/ai-server
 RUN test -f /app/ai-server || (echo "Error: ai-server binary not found" && exit 1)
 RUN chmod +x /app/ai-server
 
-# 复制数据库初始化脚本
-COPY db/ /app/db/
-
 # 创建日志目录
 RUN mkdir -p /app/logs
 
