@@ -1,0 +1,28 @@
+services:
+  ai-service:
+    image: ai-service:latest
+    container_name: ai-service
+    restart: always
+    environment:
+      - AI_APP_ENV=production
+      # 数据库
+      - AI_DATABASE_URL=postgres://postgres:YOUR_PASSWORD@postgres:5432/uni_ai_api?sslmode=disable
+      # Redis
+      - AI_REDIS_ADDR=ai-redis:6379
+      # URM 认证服务
+      - AI_URM_BASE_URL=http://urm-service:6900
+      - AI_URM_CLIENT_ID=uni-ai-api
+      - AI_URM_DISPLAY_NAME=Uni AI Gateway
+      - AI_URM_DESCRIPTION=AI 网关服务
+      # Provider API Key 加密主密钥
+      - AI_PROVIDER_KEY_MASTER=CHANGE_ME
+    expose:
+      - '13010'
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - dev-network
+
+networks:
+  dev-network:
+    external: true
