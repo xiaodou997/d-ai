@@ -1,8 +1,11 @@
 package httpserver
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/jackc/pgx/v5"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 )
 
@@ -10,163 +13,138 @@ import (
 // Upstream Deployment Handlers
 // ============================================================================
 
+const upstreamDeploymentListBaseQuery = `
+SELECT
+  ud.id,
+  ud.endpoint_id,
+  ud.credential_pool_id,
+  ud.upstream_model,
+  ud.capability_type,
+  ud.upstream_protocol,
+  ud.request_path,
+  ud.upstream_parameters,
+  ud.pricing,
+  ud.health_status,
+  ud.last_health_check_at,
+  ud.last_health_error,
+  ud.status,
+  ud.created_at,
+  ud.updated_at,
+  CASE WHEN ud.endpoint_id IS NOT NULL THEN 'endpoint' ELSE 'pool' END AS credential_source,
+  COALESCE(e.name, '')          AS endpoint_name,
+  COALESCE(e.base_url, '')      AS base_url,
+  COALESCE(e.weight, 0)         AS endpoint_weight,
+  COALESCE(p.id, '00000000-0000-0000-0000-000000000000'::uuid) AS provider_id,
+  COALESCE(p.code, '')          AS provider_code,
+  COALESCE(p.name, '')          AS provider_name,
+  COALESCE(cp.name, '')         AS pool_name,
+  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
+FROM ai_upstream_deployments ud
+LEFT JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
+LEFT JOIN ai_providers p ON p.id = e.provider_id
+LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id`
+
 func (s *Server) handleAdminListUpstreamDeployments(w http.ResponseWriter, r *http.Request) {
-	endpointIDParam := r.URL.Query().Get("endpoint_id")
-	poolIDParam := r.URL.Query().Get("credential_pool_id")
-
-	var rows []dbgen.ListUpstreamDeploymentsRow
-	var err error
-
-	if endpointIDParam != "" {
-		endpointID, parseErr := parseUUID(endpointIDParam)
-		if parseErr != nil {
-			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid endpoint_id")
-			return
-		}
-		rows, err = s.queries.ListUpstreamDeployments(r.Context(), endpointID)
-	} else if poolIDParam != "" {
-		poolID, parseErr := parseUUID(poolIDParam)
-		if parseErr != nil {
-			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid credential_pool_id")
-			return
-		}
-		const poolQuery = `
-			SELECT
-			  ud.id,
-			  ud.endpoint_id,
-			  ud.credential_pool_id,
-			  ud.upstream_model,
-			  ud.capability_type,
-			  ud.upstream_protocol,
-			  ud.request_path,
-			  ud.upstream_parameters,
-			  ud.pricing,
-			  ud.health_status,
-			  ud.last_health_check_at,
-			  ud.last_health_error,
-			  ud.status,
-			  ud.created_at,
-			  ud.updated_at,
-			  'pool'                          AS credential_source,
-			  ''                              AS endpoint_name,
-			  ''                              AS base_url,
-			  0                               AS endpoint_weight,
-			  '00000000-0000-0000-0000-000000000000'::uuid AS provider_id,
-			  ''                              AS provider_code,
-			  ''                              AS provider_name,
-			  COALESCE(cp.name, '')           AS pool_name,
-			  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
-			FROM ai_upstream_deployments ud
-			LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
-			WHERE ud.credential_pool_id = $1
-			ORDER BY ud.upstream_model ASC`
-		dbRows, queryErr := s.postgres.Query(r.Context(), poolQuery, poolID)
-		if queryErr != nil {
-			err = queryErr
-		} else {
-			defer dbRows.Close()
-			for dbRows.Next() {
-				var row dbgen.ListUpstreamDeploymentsRow
-				if scanErr := dbRows.Scan(
-					&row.ID, &row.EndpointID, &row.CredentialPoolID,
-					&row.UpstreamModel, &row.CapabilityType, &row.UpstreamProtocol,
-					&row.RequestPath, &row.UpstreamParameters, &row.Pricing,
-					&row.HealthStatus, &row.LastHealthCheckAt, &row.LastHealthError,
-					&row.Status, &row.CreatedAt, &row.UpdatedAt,
-					&row.CredentialSource, &row.EndpointName, &row.BaseUrl,
-					&row.EndpointWeight, &row.ProviderID, &row.ProviderCode,
-					&row.ProviderName, &row.PoolName, &row.FixedProviderType,
-				); scanErr != nil {
-					err = scanErr
-					break
-				}
-				rows = append(rows, row)
-			}
-			if closeErr := dbRows.Err(); closeErr != nil {
-				err = closeErr
-			}
-		}
-	} else {
-		const query = `
-			SELECT
-			  ud.id,
-			  ud.endpoint_id,
-			  ud.credential_pool_id,
-			  ud.upstream_model,
-			  ud.capability_type,
-			  ud.upstream_protocol,
-			  ud.request_path,
-			  ud.upstream_parameters,
-			  ud.pricing,
-			  ud.health_status,
-			  ud.last_health_check_at,
-			  ud.last_health_error,
-			  ud.status,
-			  ud.created_at,
-			  ud.updated_at,
-			  CASE WHEN ud.endpoint_id IS NOT NULL THEN 'endpoint' ELSE 'pool' END AS credential_source,
-			  COALESCE(e.name, '')          AS endpoint_name,
-			  COALESCE(e.base_url, '')      AS base_url,
-			  COALESCE(e.weight, 0)         AS endpoint_weight,
-			  COALESCE(p.id, '00000000-0000-0000-0000-000000000000'::uuid) AS provider_id,
-			  COALESCE(p.code, '')          AS provider_code,
-			  COALESCE(p.name, '')          AS provider_name,
-			  COALESCE(cp.name, '')         AS pool_name,
-			  COALESCE(cp.fixed_provider_type, '') AS fixed_provider_type
-			FROM ai_upstream_deployments ud
-			LEFT JOIN ai_provider_endpoints e ON e.id = ud.endpoint_id
-			LEFT JOIN ai_providers p ON p.id = e.provider_id
-			LEFT JOIN ai_credential_pools cp ON cp.id = ud.credential_pool_id
-			ORDER BY ud.upstream_model ASC`
-		dbRows, queryErr := s.postgres.Query(r.Context(), query)
-		if queryErr != nil {
-			err = queryErr
-		} else {
-			defer dbRows.Close()
-			for dbRows.Next() {
-				var row dbgen.ListUpstreamDeploymentsRow
-				if scanErr := dbRows.Scan(
-					&row.ID,
-					&row.EndpointID,
-					&row.CredentialPoolID,
-					&row.UpstreamModel,
-					&row.CapabilityType,
-					&row.UpstreamProtocol,
-					&row.RequestPath,
-					&row.UpstreamParameters,
-					&row.Pricing,
-					&row.HealthStatus,
-					&row.LastHealthCheckAt,
-					&row.LastHealthError,
-					&row.Status,
-					&row.CreatedAt,
-					&row.UpdatedAt,
-					&row.CredentialSource,
-					&row.EndpointName,
-					&row.BaseUrl,
-					&row.EndpointWeight,
-					&row.ProviderID,
-					&row.ProviderCode,
-					&row.ProviderName,
-					&row.PoolName,
-					&row.FixedProviderType,
-				); scanErr != nil {
-					err = scanErr
-					break
-				}
-				rows = append(rows, row)
-			}
-			if closeErr := dbRows.Err(); closeErr != nil {
-				err = closeErr
-			}
-		}
-	}
-
+	query, args, err := buildUpstreamDeploymentListQuery(r)
 	if err != nil {
-		s.writeAdminServerError(w, r, "list upstream deployments failed", err)
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, err.Error())
 		return
 	}
+
+	dbRows, queryErr := s.postgres.Query(r.Context(), query, args...)
+	if queryErr != nil {
+		s.writeAdminServerError(w, r, "list upstream deployments failed", queryErr)
+		return
+	}
+	defer dbRows.Close()
+
+	rows, scanErr := scanUpstreamDeploymentRows(dbRows)
+	if scanErr != nil {
+		s.writeAdminServerError(w, r, "list upstream deployments failed", scanErr)
+		return
+	}
+
 	writeOK(w, fromListUpstreamDeployments(rows))
+}
+
+func buildUpstreamDeploymentListQuery(r *http.Request) (string, []any, error) {
+	endpointIDParam := r.URL.Query().Get("endpoint_id")
+	providerIDParam := r.URL.Query().Get("provider_id")
+	poolIDParam := r.URL.Query().Get("credential_pool_id")
+
+	where := ""
+	args := make([]any, 0, 1)
+
+	switch {
+	case endpointIDParam != "":
+		endpointID, err := parseUUID(endpointIDParam)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid endpoint_id")
+		}
+		where = "WHERE ud.endpoint_id = $1"
+		args = append(args, endpointID)
+	case providerIDParam != "":
+		providerID, err := parseUUID(providerIDParam)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid provider_id")
+		}
+		where = "WHERE e.provider_id = $1"
+		args = append(args, providerID)
+	case poolIDParam != "":
+		poolID, err := parseUUID(poolIDParam)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid credential_pool_id")
+		}
+		where = "WHERE ud.credential_pool_id = $1"
+		args = append(args, poolID)
+	}
+
+	query := strings.TrimSpace(upstreamDeploymentListBaseQuery)
+	if where != "" {
+		query += "\n" + where
+	}
+	query += "\nORDER BY ud.upstream_model ASC"
+	return query, args, nil
+}
+
+func scanUpstreamDeploymentRows(rows pgx.Rows) ([]dbgen.ListUpstreamDeploymentsRow, error) {
+	items := make([]dbgen.ListUpstreamDeploymentsRow, 0)
+	for rows.Next() {
+		var row dbgen.ListUpstreamDeploymentsRow
+		if err := rows.Scan(
+			&row.ID,
+			&row.EndpointID,
+			&row.CredentialPoolID,
+			&row.UpstreamModel,
+			&row.CapabilityType,
+			&row.UpstreamProtocol,
+			&row.RequestPath,
+			&row.UpstreamParameters,
+			&row.Pricing,
+			&row.HealthStatus,
+			&row.LastHealthCheckAt,
+			&row.LastHealthError,
+			&row.Status,
+			&row.CreatedAt,
+			&row.UpdatedAt,
+			&row.CredentialSource,
+			&row.EndpointName,
+			&row.BaseUrl,
+			&row.EndpointWeight,
+			&row.ProviderID,
+			&row.ProviderCode,
+			&row.ProviderName,
+			&row.PoolName,
+			&row.FixedProviderType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 func (s *Server) handleAdminCreateUpstreamDeployment(w http.ResponseWriter, r *http.Request) {

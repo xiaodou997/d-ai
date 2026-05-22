@@ -351,37 +351,52 @@ const fetchProviders = async () => {
 }
 
 const fetchSelectedProviderDetail = async () => {
-  await Promise.all([fetchEndpoints(), fetchDeployments()])
+  const providerId = selectedProviderId.value
+  await Promise.all([fetchEndpoints(providerId), fetchDeployments(providerId)])
 }
 
-const fetchEndpoints = async () => {
-  if (!selectedProviderId.value) {
+const fetchEndpoints = async (providerId = selectedProviderId.value) => {
+  if (!providerId) {
     endpoints.value = []
     return
   }
   endpointLoading.value = true
   try {
-    endpoints.value = await listProviderEndpoints(selectedProviderId.value)
+    const rows = await listProviderEndpoints(providerId)
+    if (selectedProviderId.value === providerId) {
+      endpoints.value = rows
+    }
   } finally {
-    endpointLoading.value = false
+    if (selectedProviderId.value === providerId) {
+      endpointLoading.value = false
+    }
   }
 }
 
-const fetchDeployments = async () => {
-  if (!selectedProviderId.value) {
+const fetchDeployments = async (providerId = selectedProviderId.value) => {
+  if (!providerId) {
     deployments.value = []
     return
   }
   deploymentLoading.value = true
   try {
-    deployments.value = await listUpstreamDeployments({ provider_id: selectedProviderId.value })
+    const rows = await listUpstreamDeployments({ provider_id: providerId })
+    if (selectedProviderId.value === providerId) {
+      deployments.value = rows
+    }
   } finally {
-    deploymentLoading.value = false
+    if (selectedProviderId.value === providerId) {
+      deploymentLoading.value = false
+    }
   }
 }
 
 const selectProvider = async (row) => {
-  selectedProviderId.value = row?.id || ''
+  const providerId = row?.id || ''
+  if (providerId === selectedProviderId.value) return
+  selectedProviderId.value = providerId
+  endpoints.value = []
+  deployments.value = []
   await fetchSelectedProviderDetail()
 }
 
