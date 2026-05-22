@@ -1,30 +1,54 @@
 <script setup>
-import { computed, nextTick, onMounted, shallowRef } from 'vue'
-import { ChatDotRound, Delete, Plus, Promotion, Refresh, Setting } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { listConsoleModels, streamConsoleChat } from '@/api/consoleChat'
+import { computed, onMounted, shallowRef, watch } from 'vue'
+import { Plus, Refresh } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import ChatComposer from './chat/components/ChatComposer.vue'
+import MessageList from './chat/components/MessageList.vue'
+import ModelProtocolPanel from './chat/components/ModelProtocolPanel.vue'
+import SessionList from './chat/components/SessionList.vue'
+import {
+  createConsoleChatSession,
+  deleteConsoleChatSession,
+  getConsoleChatSession,
+  listConsoleChatModels,
+  listConsoleChatSessions,
+  streamConsoleChatMessage
+} from '@/api/consoleChat'
+
+const protocolLabels = {
+  openai_chat: 'OpenAI Chat',
+  openai_responses: 'OpenAI Responses',
+  anthropic_messages: 'Claude Messages',
+  gemini_generate: 'Gemini Native'
+}
 
 const loadingModels = shallowRef(false)
+const loadingSessions = shallowRef(false)
 const sending = shallowRef(false)
 const models = shallowRef([])
+const sessions = shallowRef([])
+const selectedSessionId = shallowRef('')
 const selectedModel = shallowRef('')
+const protocolPolicy = shallowRef('auto')
+const selectedProtocol = shallowRef('')
 const input = shallowRef('')
 const messages = shallowRef([])
-const conversationId = shallowRef('')
 const temperature = shallowRef(0.7)
 const maxTokens = shallowRef(2048)
 const showAdvanced = shallowRef(false)
 const messageListRef = shallowRef(null)
 let abortController = null
 
-// The backend already returns only chat-capable models reachable by web chat,
-// so the picker just maps them to options.
-const chatModels = computed(() =>
-  models.value.map((model) => ({
-    label: model.model_code,
-    value: model.model_code
-  }))
+const selectedModelInfo = computed(() =>
+  models.value.find((model) => model.model_code === selectedModel.value)
 )
+
+const activeProtocolLabel = computed(() => {
+  const protocol = protocolPolicy.value === 'manual'
+    ? selectedProtocol.value
+    : selectedModelInfo.value?.default_protocol
+  return protocolLabels[protocol] || protocol || '自动'
+})
 
 const requestMessages = computed(() =>
   messages.value
@@ -37,42 +61,94 @@ const canSend = computed(() =>
   Boolean(selectedModel.value && input.value.trim() && !sending.value)
 )
 
-const newConversationId = () => {
-  if (crypto.randomUUID) return crypto.randomUUID()
-  return `web-chat-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
 const newMessageId = () => {
   if (crypto.randomUUID) return crypto.randomUUID()
   return `message-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
 const scrollToBottom = async () => {
-  await nextTick()
-  const el = messageListRef.value
-  if (el) el.scrollTop = el.scrollHeight
+  await messageListRef.value?.scrollToBottom()
 }
+
+const normalizeMessage = (message) => ({
+  id: message.id || newMessageId(),
+  role: message.role,
+  content: message.content || '',
+  protocol: message.protocol || ''
+})
 
 const fetchModels = async () => {
   loadingModels.value = true
   try {
-    const res = await listConsoleModels('chat')
-    models.value = Array.isArray(res) ? res : []
-    if (!selectedModel.value && chatModels.value.length > 0) {
-      selectedModel.value = chatModels.value[0].value
+    models.value = await listConsoleChatModels()
+    if (!selectedModel.value && models.value.length > 0) {
+      selectedModel.value = models.value[0].model_code
     }
   } finally {
     loadingModels.value = false
   }
 }
 
-const resetConversation = () => {
+const fetchSessions = async () => {
+  loadingSessions.value = true
+  try {
+    sessions.value = await listConsoleChatSessions()
+  } finally {
+    loadingSessions.value = false
+  }
+}
+
+const createSession = async () => {
+  if (!selectedModel.value) {
+    ElMessage.warning('请先选择模型')
+    return null
+  }
+  const session = await createConsoleChatSession({
+    model_code: selectedModel.value,
+    title: '新对话'
+  })
+  sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)]
+  selectedSessionId.value = session.id
+  messages.value = []
+  return session
+}
+
+const loadSession = async (sessionId) => {
+  if (!sessionId || sending.value) return
+  const detail = await getConsoleChatSession(sessionId)
+  selectedSessionId.value = detail.session.id
+  selectedModel.value = detail.session.model_code || selectedModel.value
+  if (detail.session.selected_protocol) {
+    selectedProtocol.value = detail.session.selected_protocol
+  }
+  messages.value = (detail.messages || []).map(normalizeMessage)
+  await scrollToBottom()
+}
+
+const newConversation = async () => {
   abortController?.abort()
   abortController = null
   sending.value = false
-  messages.value = []
-  conversationId.value = newConversationId()
   input.value = ''
+  await createSession()
+}
+
+const removeSession = async (session) => {
+  try {
+    await ElMessageBox.confirm(`确定删除「${session.title || '新对话'}」吗？`, '删除对话', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  await deleteConsoleChatSession(session.id)
+  sessions.value = sessions.value.filter((item) => item.id !== session.id)
+  if (selectedSessionId.value === session.id) {
+    selectedSessionId.value = ''
+    messages.value = []
+  }
 }
 
 const appendMessage = (message) => {
@@ -91,21 +167,34 @@ const stopGeneration = () => {
   abortController?.abort()
 }
 
+const clearConversation = () => {
+  messages.value = []
+}
+
 const sendMessage = async () => {
   if (!canSend.value) return
+  let sessionId = selectedSessionId.value
+  if (!sessionId) {
+    const session = await createSession()
+    if (!session) return
+    sessionId = session.id
+  }
+
   const content = input.value.trim()
   input.value = ''
   appendMessage({ id: newMessageId(), role: 'user', content })
-  appendMessage({ id: newMessageId(), role: 'assistant', content: '' })
+  appendMessage({ id: newMessageId(), role: 'assistant', content: '', protocol: activeProtocolLabel.value })
   await scrollToBottom()
 
   abortController = new AbortController()
   sending.value = true
   try {
-    await streamConsoleChat({
+    await streamConsoleChatMessage({
+      sessionId,
       model: selectedModel.value,
+      protocolPolicy: protocolPolicy.value,
+      protocol: selectedProtocol.value,
       messages: requestMessages.value,
-      conversationId: conversationId.value,
       temperature: temperature.value,
       maxTokens: maxTokens.value,
       signal: abortController.signal,
@@ -114,6 +203,7 @@ const sendMessage = async () => {
         scrollToBottom()
       }
     })
+    await fetchSessions()
   } catch (error) {
     if (error.name !== 'AbortError') {
       updateLastAssistant(`\n\n请求失败：${error.message}`)
@@ -126,16 +216,18 @@ const sendMessage = async () => {
   }
 }
 
-const handleInputKeydown = (event) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault()
-    sendMessage()
+watch(selectedModelInfo, (model) => {
+  if (!model) return
+  if (!selectedProtocol.value || !model.available_protocols?.includes(selectedProtocol.value)) {
+    selectedProtocol.value = model.default_protocol || model.available_protocols?.[0] || ''
   }
-}
+})
 
-onMounted(() => {
-  conversationId.value = newConversationId()
-  fetchModels()
+onMounted(async () => {
+  await Promise.all([fetchModels(), fetchSessions()])
+  if (sessions.value.length > 0) {
+    await loadSession(sessions.value[0].id)
+  }
 })
 </script>
 
@@ -143,91 +235,52 @@ onMounted(() => {
   <div class="chat-page">
     <header class="chat-header">
       <div class="title-block">
-        <p class="eyebrow">Web Chat</p>
+        <p class="eyebrow">Console Chat v2</p>
         <h1>AI 对话</h1>
-        <p>通过网页对话入口调用模型，消耗记为网页对话并计入租户用量。</p>
+        <p>选择模型即可对话，后台会自动选择可用协议与健康路由，消耗计入租户用量。</p>
       </div>
       <div class="header-actions">
         <el-button :icon="Refresh" :loading="loadingModels" @click="fetchModels">刷新模型</el-button>
-        <el-button :icon="Plus" type="primary" @click="resetConversation">新对话</el-button>
+        <el-button :icon="Plus" type="primary" @click="newConversation">新对话</el-button>
       </div>
     </header>
 
     <section class="chat-shell">
-      <aside class="chat-sidebar">
-        <label class="field-label">模型</label>
-        <el-select
-          v-model="selectedModel"
-          class="w-full"
-          filterable
-          :loading="loadingModels"
-          placeholder="选择模型"
-        >
-          <el-option
-            v-for="model in chatModels"
-            :key="model.value"
-            :label="model.label"
-            :value="model.value"
-          />
-        </el-select>
+      <aside class="control-rail">
+        <ModelProtocolPanel
+          v-model:selected-model="selectedModel"
+          v-model:protocol-policy="protocolPolicy"
+          v-model:selected-protocol="selectedProtocol"
+          v-model:temperature="temperature"
+          v-model:max-tokens="maxTokens"
+          v-model:show-advanced="showAdvanced"
+          :models="models"
+          :loading-models="loadingModels"
+          :selected-model-info="selectedModelInfo"
+          :active-protocol-label="activeProtocolLabel"
+          :protocol-labels="protocolLabels"
+        />
 
-        <button class="advanced-toggle" type="button" @click="showAdvanced = !showAdvanced">
-          <el-icon><Setting /></el-icon>
-          <span>高级设置</span>
-        </button>
-
-        <div v-show="showAdvanced" class="advanced-panel">
-          <label class="field-label">Temperature</label>
-          <el-slider v-model="temperature" :min="0" :max="2" :step="0.1" />
-          <label class="field-label">Max tokens</label>
-          <el-input-number v-model="maxTokens" :min="256" :max="32768" :step="256" class="w-full" />
-        </div>
-
-        <div class="source-note">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>当前调用来源：网页对话</span>
-        </div>
+        <SessionList
+          :sessions="sessions"
+          :loading="loadingSessions"
+          :selected-session-id="selectedSessionId"
+          @new-session="newConversation"
+          @select-session="loadSession"
+          @remove-session="removeSession"
+        />
       </aside>
 
       <main class="conversation">
-        <div ref="messageListRef" class="message-list">
-          <div v-if="messages.length === 0" class="empty-state">
-            <el-icon :size="42"><ChatDotRound /></el-icon>
-            <h2>开始一次文本对话</h2>
-            <p>选择已授权的文本模型后发送消息。</p>
-          </div>
-
-          <article
-            v-for="message in messages"
-            :key="message.id"
-            class="message-row"
-            :class="message.role"
-          >
-            <div class="message-avatar">{{ message.role === 'user' ? '我' : 'AI' }}</div>
-            <div class="message-bubble">
-              <p v-if="message.content">{{ message.content }}</p>
-              <span v-else class="typing-dot">生成中...</span>
-            </div>
-          </article>
-        </div>
-
-        <footer class="composer">
-          <el-input
-            v-model="input"
-            type="textarea"
-            :rows="3"
-            resize="none"
-            placeholder="输入消息，Enter 发送，Shift + Enter 换行"
-            @keydown="handleInputKeydown"
-          />
-          <div class="composer-actions">
-            <el-button :icon="Delete" @click="resetConversation">清空</el-button>
-            <el-button v-if="sending" type="warning" @click="stopGeneration">停止生成</el-button>
-            <el-button v-else type="primary" :icon="Promotion" :disabled="!canSend" @click="sendMessage">
-              发送
-            </el-button>
-          </div>
-        </footer>
+        <MessageList ref="messageListRef" :messages="messages" />
+        <ChatComposer
+          v-model="input"
+          :sending="sending"
+          :can-send="canSend"
+          @send="sendMessage"
+          @stop="stopGeneration"
+          @clear="clearConversation"
+        />
       </main>
     </section>
   </div>
@@ -238,9 +291,17 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   padding: 24px;
   color: #0f172a;
+}
+
+.chat-header,
+.conversation {
+  min-height: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
 }
 
 .chat-header {
@@ -249,10 +310,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
+  padding: 20px 22px;
 }
 
 .title-block {
@@ -264,7 +322,7 @@ onMounted(() => {
   color: #64748b;
   font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -290,63 +348,15 @@ onMounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 18px;
 }
 
-.chat-sidebar,
-.conversation {
+.control-rail {
   min-height: 0;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-}
-
-.chat-sidebar {
-  padding: 18px;
-}
-
-.field-label {
-  display: block;
-  margin: 0 0 8px;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.advanced-toggle {
-  width: 100%;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 18px 0 10px;
-  padding: 10px 0;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 800;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.advanced-panel {
-  padding: 12px;
-  border: 1px solid #eef2f7;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.source-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 18px;
-  padding: 10px 12px;
-  color: #0369a1;
-  font-size: 12px;
-  font-weight: 700;
-  border-radius: 10px;
-  background: #e0f2fe;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .conversation {
@@ -355,119 +365,9 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.message-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 24px;
-  background: #f8fafc;
-}
-
-.empty-state {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  text-align: center;
-}
-
-.empty-state h2 {
-  margin: 14px 0 4px;
-  color: #334155;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 13px;
-}
-
-.message-row {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.message-row.user {
-  flex-direction: row-reverse;
-}
-
-.message-avatar {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 900;
-  border-radius: 10px;
-  background: #3b82f6;
-}
-
-.message-row.assistant .message-avatar {
-  background: #0f766e;
-}
-
-.message-bubble {
-  max-width: min(720px, 76%);
-  padding: 12px 14px;
-  color: #0f172a;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-}
-
-.message-row.user .message-bubble {
-  color: #fff;
-  background: #2563eb;
-  border-color: #2563eb;
-}
-
-.message-bubble p {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.7;
-  font-size: 14px;
-}
-
-.typing-dot {
-  color: #64748b;
-  font-size: 13px;
-}
-
-.composer {
-  flex-shrink: 0;
-  padding: 16px;
-  border-top: 1px solid #e5e7eb;
-  background: #fff;
-}
-
-.composer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   .chat-shell {
     grid-template-columns: 1fr;
-  }
-
-  .chat-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .header-actions {
-    width: 100%;
   }
 }
 </style>

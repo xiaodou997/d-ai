@@ -214,9 +214,13 @@ func New(cfg Config) *Server {
 	router.Get("/ready", s.handleReady)
 	router.Get("/metrics", metrics.Handler().ServeHTTP)
 	router.Get("/api/auth/callback", s.handleAuthCallback)
-	router.Route("/console/v1", func(r chi.Router) {
-		r.Get("/models", s.handleConsoleModels)
-		r.Post("/chat/completions", s.handleConsoleChatCompletions)
+	router.Route("/console/v2", func(r chi.Router) {
+		r.Get("/chat/models", s.handleConsoleChatModelsV2)
+		r.Get("/chat/sessions", s.handleConsoleChatListSessionsV2)
+		r.Post("/chat/sessions", s.handleConsoleChatCreateSessionV2)
+		r.Get("/chat/sessions/{sessionID}", s.handleConsoleChatGetSessionV2)
+		r.Delete("/chat/sessions/{sessionID}", s.handleConsoleChatDeleteSessionV2)
+		r.Post("/chat/sessions/{sessionID}/messages:stream", s.handleConsoleChatStreamV2)
 	})
 	router.Route("/api/v1", func(r chi.Router) {
 		// chi's Timeout middleware swaps the ResponseWriter for a buffered one

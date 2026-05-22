@@ -231,6 +231,48 @@ CREATE INDEX IF NOT EXISTS idx_ai_model_routes_model      ON ai_model_routes (mo
 CREATE INDEX IF NOT EXISTS idx_ai_model_routes_deployment ON ai_model_routes (upstream_deployment_id);
 
 -- ============================================================================
+-- Console Chat Sessions (网页聊天)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_console_sessions (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id         TEXT        NOT NULL,
+  user_id           TEXT,
+  owner_type        TEXT        NOT NULL CHECK (owner_type IN ('tenant', 'user')),
+  title             TEXT        NOT NULL DEFAULT '新对话',
+  model_code        TEXT        NOT NULL DEFAULT '',
+  selected_protocol TEXT,
+  selected_route_id UUID,
+  status            TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'deleted')),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (selected_protocol IS NULL OR selected_protocol IN (
+    'openai_chat',
+    'openai_responses',
+    'anthropic_messages',
+    'gemini_generate'
+  ))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_console_sessions_owner
+  ON ai_console_sessions (tenant_id, owner_type, COALESCE(user_id, ''), updated_at DESC)
+  WHERE status <> 'deleted';
+
+CREATE TABLE IF NOT EXISTS ai_console_messages (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id   UUID        NOT NULL REFERENCES ai_console_sessions(id) ON DELETE CASCADE,
+  role         TEXT        NOT NULL CHECK (role IN ('system', 'user', 'assistant', 'tool')),
+  content      TEXT        NOT NULL DEFAULT '',
+  protocol     TEXT,
+  route_id     UUID,
+  usage_json   JSONB       NOT NULL DEFAULT '{}',
+  error_json   JSONB       NOT NULL DEFAULT '{}',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_console_messages_session
+  ON ai_console_messages (session_id, created_at ASC);
+
+-- ============================================================================
 -- AI Model Prices (平台对外售价)
 -- cache_write / cache_read / reasoning 价格列预留：默认 0 表示按 input_price 计费。
 -- 盈利点：provider 对 cache_read 打折，平台按 input 原价向客户收取。

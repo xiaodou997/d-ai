@@ -24,13 +24,16 @@ import (
 	"xiaodou/uni-ai-api/internal/serving"
 )
 
-// runtimeOverride carries values resolved from the URL path that must override
-// what would otherwise be parsed from the request body. Used by the Gemini
-// native endpoint where model and stream-ness live in the URL, not the body.
+// runtimeOverride carries request metadata that must override what would
+// otherwise be detected from the HTTP path/body. Gemini native routes use it
+// for URL model/action metadata; Console Chat v2 uses it after mapping the
+// internal chat payload to a concrete upstream protocol.
 type runtimeOverride struct {
-	model  string // upstream model code (when provided by URL)
-	stream bool   // true if this URL is a streaming variant
-	apply  bool   // false → ignore overrides and parse from body
+	model          string // upstream model code (when provided by URL)
+	stream         bool   // true if this URL is a streaming variant
+	apply          bool   // false → ignore model/stream overrides and parse from body
+	clientProtocol domain.UpstreamProtocol
+	clientPath     string
 }
 
 // handleRuntime is the unified entrypoint for OpenAI / Anthropic native client
@@ -40,14 +43,6 @@ func (s *Server) handleRuntime(capType domain.CapabilityType) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.serveRuntime(w, r, capType, runtimeOverride{}, nil, false)
 	}
-}
-
-func (s *Server) handleConsoleChatCompletions(w http.ResponseWriter, r *http.Request) {
-	identity, ok := s.consoleRuntimeIdentity(w, r)
-	if !ok {
-		return
-	}
-	s.serveRuntime(w, r, domain.CapabilityChat, runtimeOverride{}, identity, true)
 }
 
 // handleGeminiRuntime handles Google's native paths
@@ -89,28 +84,31 @@ func (s *Server) handleGeminiRuntime(w http.ResponseWriter, r *http.Request) {
 	}, nil, false)
 }
 
-func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType domain.CapabilityType, override runtimeOverride, identity *domain.RuntimeIdentity, forceStream bool) {
+func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType domain.CapabilityType, override runtimeOverride, identity *domain.RuntimeIdentity, forceStream bool) *serving.Request {
 	clientProto := formats.DetectClientProtocol(r)
+	if override.clientProtocol != "" {
+		clientProto = override.clientProtocol
+	}
 	contentType := r.Header.Get("Content-Type")
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 32*1024*1024))
 	if err != nil {
 		writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest, "Failed to read request body.", "body_read_error")
-		return
+		return nil
 	}
 	if forceStream {
 		var payload map[string]any
 		if err := json.Unmarshal(body, &payload); err != nil {
 			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
 				"Invalid request body: expected JSON object.", "invalid_body")
-			return
+			return nil
 		}
 		payload["stream"] = true
 		body, err = json.Marshal(payload)
 		if err != nil {
 			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
 				"Invalid request body.", "invalid_body")
-			return
+			return nil
 		}
 	}
 
@@ -130,6 +128,9 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 		ClientPath:     r.URL.Path,
 		Identity:       identity,
 	}
+	if override.clientPath != "" {
+		req.ClientPath = override.clientPath
+	}
 
 	// Resolve model + stream. URL overrides (Gemini) take precedence over body
 	// fields because the body of a Gemini request typically has no `model`.
@@ -143,7 +144,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 		if err != nil {
 			writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
 				"Invalid request body: "+err.Error(), "invalid_body")
-			return
+			return req
 		}
 		model = meta.Model
 		stream = meta.Stream
@@ -176,7 +177,7 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 	if req.ModelCode == "" {
 		writeRuntimeErrorByProtocol(w, clientProto, http.StatusBadRequest,
 			"Missing required parameter: model.", "missing_required_parameter")
-		return
+		return req
 	}
 
 	if err := s.pipeline.Run(r.Context(), req); err != nil {
@@ -191,12 +192,13 @@ func (s *Server) serveRuntime(w http.ResponseWriter, r *http.Request, capType do
 				zap.String("request_id", req.RequestID),
 				zap.Int("http_status", req.HTTPStatus),
 			)
-			return
+			return req
 		}
 		writeRuntimeError(w, clientProto, req, err)
-		return
+		return req
 	}
 	writeRouteHeaders(w, req)
+	return req
 }
 
 func parseImageBillingMeta(body []byte, contentType string) (count int, size string) {

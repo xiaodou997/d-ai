@@ -1,11 +1,15 @@
 import { useAuthStore } from '@/stores/auth'
 import request from '@/utils/request'
 
-// listConsoleModels returns the models usable in the web console for a given
-// capability (default 'chat'): granted to the caller and backed by a route the
-// console can actually reach. Pass 'image' etc. for future web features.
-export const listConsoleModels = (capability = 'chat') =>
-  request.get('/console/v1/models', { params: { capability } })
+export const listConsoleChatModels = () => request.get('/console/v2/chat/models')
+
+export const listConsoleChatSessions = () => request.get('/console/v2/chat/sessions')
+
+export const createConsoleChatSession = (data) => request.post('/console/v2/chat/sessions', data)
+
+export const getConsoleChatSession = (sessionId) => request.get(`/console/v2/chat/sessions/${sessionId}`)
+
+export const deleteConsoleChatSession = (sessionId) => request.delete(`/console/v2/chat/sessions/${sessionId}`)
 
 const parseErrorMessage = async (response) => {
   const text = await response.text().catch(() => '')
@@ -18,30 +22,48 @@ const parseErrorMessage = async (response) => {
   }
 }
 
-export const streamConsoleChat = async ({
+const extractDelta = (payload, eventType) => {
+  if (!payload || typeof payload !== 'object') return ''
+  const choice = payload.choices?.[0]
+  if (choice?.delta?.content) return choice.delta.content
+  if (choice?.text) return choice.text
+  if (typeof payload.delta === 'string') return payload.delta
+  if (typeof payload.text === 'string' && eventType?.includes('delta')) return payload.text
+  if (payload.delta?.text) return payload.delta.text
+  const parts = payload.candidates?.[0]?.content?.parts
+  if (Array.isArray(parts)) return parts.map((part) => part.text || '').join('')
+  return ''
+}
+
+export const streamConsoleChatMessage = async ({
+  sessionId,
   model,
+  protocolPolicy,
+  protocol,
   messages,
-  conversationId,
   temperature,
   maxTokens,
   signal,
-  onDelta
+  onDelta,
+  onEvent
 }) => {
   const authStore = useAuthStore()
-  const response = await fetch('/console/v1/chat/completions', {
+  const response = await fetch(`/console/v2/chat/sessions/${sessionId}/messages:stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
-      Authorization: `Bearer ${authStore.accessToken}`,
-      'X-Conversation-Id': conversationId
+      Authorization: `Bearer ${authStore.accessToken}`
     },
     body: JSON.stringify({
       model,
+      protocol_policy: protocolPolicy || 'auto',
+      protocol: protocol || '',
       messages,
-      stream: true,
-      temperature,
-      max_tokens: maxTokens || undefined
+      options: {
+        temperature,
+        max_tokens: maxTokens || undefined
+      }
     }),
     signal
   })
@@ -56,6 +78,7 @@ export const streamConsoleChat = async ({
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let eventType = ''
 
   while (true) {
     const { value, done } = await reader.read()
@@ -65,14 +88,21 @@ export const streamConsoleChat = async ({
     buffer = events.pop() || ''
 
     for (const event of events) {
-      const lines = event.split('\n').filter((line) => line.startsWith('data:'))
+      const lines = event.split('\n')
       for (const line of lines) {
+        if (line.startsWith('event:')) {
+          eventType = line.slice(6).trim()
+          onEvent?.(eventType)
+          continue
+        }
+        if (!line.startsWith('data:')) continue
         const data = line.slice(5).trim()
         if (!data || data === '[DONE]') continue
         const parsed = JSON.parse(data)
-        const delta = parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || ''
+        const delta = extractDelta(parsed, eventType)
         if (delta) onDelta(delta)
       }
+      eventType = ''
     }
   }
 }
