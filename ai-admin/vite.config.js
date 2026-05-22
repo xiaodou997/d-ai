@@ -31,6 +31,7 @@ export default defineConfig({
     port: 13011,
     host: '0.0.0.0',
     proxy: {
+      // AI Gateway management/runtime API.
       '/admin': {
         target: 'http://localhost:13010',
         changeOrigin: true
@@ -43,6 +44,7 @@ export default defineConfig({
         target: 'http://localhost:13010',
         changeOrigin: true
       },
+      // URM shared pages call URM APIs through the host app's /urm prefix.
       '/urm/v1': {
         target: 'http://localhost:6900',
         changeOrigin: true,

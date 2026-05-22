@@ -31,14 +31,17 @@ export default defineConfig({
     port: 13012,
     host: '0.0.0.0',
     proxy: {
+      // AI Gateway management API.
       '/api': {
         target: 'http://localhost:13010',
         changeOrigin: true
       },
+      // JWT web runtime APIs, including streaming console chat.
       '/console': {
         target: 'http://localhost:13010',
         changeOrigin: true
       },
+      // URM shared pages call URM APIs through the host app's /urm prefix.
       '/urm/v1': {
         target: 'http://localhost:6900',
         changeOrigin: true,
