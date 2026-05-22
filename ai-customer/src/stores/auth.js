@@ -17,6 +17,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
   const userId = ref(localStorage.getItem('customer_userId') || '')
   const tenantId = ref(localStorage.getItem('customer_tenantId') || '')
   const userType = ref(parseInt(localStorage.getItem('customer_userType') || '0'))
+  const clientType = ref(localStorage.getItem('customer_clientType') || '')
 
   const roleName = computed(() => '终端用户')
 
@@ -42,6 +43,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     username.value = userInfo.username || ''
     tenantId.value = userInfo.tenantId || ''
     userType.value = Number(userInfo.userType || 0)
+    clientType.value = userInfo.clientType || ''
     saveToLocalStorage()
     if (userType.value !== 4) {
       clearState()
@@ -51,6 +53,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
   }
 
   const logout = async () => {
+    const ct = clientType.value
     try {
       if (accessToken.value) {
         await logoutApi()
@@ -60,9 +63,9 @@ export const useAuthStore = defineStore('customerAuth', () => {
     } finally {
       clearState()
       stopAutoRefresh()
-      if (SSO_LOGOUT_URL) {
+      if (SSO_LOGOUT_URL && ct) {
         const postLogoutUri = encodeURIComponent(window.location.origin + '/login')
-        window.location.href = `${SSO_LOGOUT_URL}?post_logout_redirect_uri=${postLogoutUri}`
+        window.location.href = `${SSO_LOGOUT_URL}?client_type=${ct}&post_logout_redirect_uri=${postLogoutUri}`
       } else {
         await redirectToLogin()
       }
@@ -102,6 +105,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     localStorage.setItem('customer_username', username.value)
     localStorage.setItem('customer_tenantId', tenantId.value)
     localStorage.setItem('customer_userType', userType.value.toString())
+    localStorage.setItem('customer_clientType', clientType.value)
     localStorage.setItem('customer_expiresIn', expiresIn.value.toString())
   }
 
@@ -112,6 +116,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     username.value = ''
     tenantId.value = ''
     userType.value = 0
+    clientType.value = ''
     expiresIn.value = 7200
     localStorage.removeItem('customer_accessToken')
     localStorage.removeItem('customer_refreshToken')
@@ -119,6 +124,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     localStorage.removeItem('customer_username')
     localStorage.removeItem('customer_tenantId')
     localStorage.removeItem('customer_userType')
+    localStorage.removeItem('customer_clientType')
     localStorage.removeItem('customer_expiresIn')
   }
 
@@ -152,6 +158,7 @@ export const useAuthStore = defineStore('customerAuth', () => {
     username,
     tenantId,
     userType,
+    clientType,
     expiresIn,
     roleName,
     logout,

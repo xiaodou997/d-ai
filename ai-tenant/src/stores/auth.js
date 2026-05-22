@@ -17,6 +17,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
   const tenantId = ref(localStorage.getItem('tenant_tenantId') || '')
   const tenantName = ref(localStorage.getItem('tenant_tenantName') || '')
   const userType = ref(parseInt(localStorage.getItem('tenant_userType') || '0'))
+  const clientType = ref(localStorage.getItem('tenant_clientType') || '')
   const expiresIn = ref(parseInt(localStorage.getItem('tenant_expiresIn') || '7200'))
 
   const roleName = computed(() => '租户管理员')
@@ -44,6 +45,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     tenantId.value = userInfo.tenantId || ''
     tenantName.value = userInfo.tenantName || ''
     userType.value = Number(userInfo.userType || 0)
+    clientType.value = userInfo.clientType || ''
     saveToLocalStorage()
     if (userType.value !== 3) {
       clearState()
@@ -53,6 +55,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
   }
 
   const logout = async () => {
+    const ct = clientType.value
     try {
       if (accessToken.value) {
         await logoutApi()
@@ -62,9 +65,9 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     } finally {
       clearState()
       stopAutoRefresh()
-      if (SSO_LOGOUT_URL) {
+      if (SSO_LOGOUT_URL && ct) {
         const postLogoutUri = encodeURIComponent(window.location.origin + '/login')
-        window.location.href = `${SSO_LOGOUT_URL}?post_logout_redirect_uri=${postLogoutUri}`
+        window.location.href = `${SSO_LOGOUT_URL}?client_type=${ct}&post_logout_redirect_uri=${postLogoutUri}`
       } else {
         await redirectToLogin()
       }
@@ -106,6 +109,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     localStorage.setItem('tenant_tenantId', tenantId.value)
     localStorage.setItem('tenant_tenantName', tenantName.value)
     localStorage.setItem('tenant_userType', userType.value.toString())
+    localStorage.setItem('tenant_clientType', clientType.value)
     localStorage.setItem('tenant_expiresIn', expiresIn.value.toString())
   }
 
@@ -117,6 +121,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     tenantId.value = ''
     tenantName.value = ''
     userType.value = 0
+    clientType.value = ''
     expiresIn.value = 7200
     localStorage.removeItem('tenant_accessToken')
     localStorage.removeItem('tenant_refreshToken')
@@ -125,6 +130,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     localStorage.removeItem('tenant_tenantId')
     localStorage.removeItem('tenant_tenantName')
     localStorage.removeItem('tenant_userType')
+    localStorage.removeItem('tenant_clientType')
     localStorage.removeItem('tenant_expiresIn')
   }
 
@@ -159,6 +165,7 @@ export const useAuthStore = defineStore('tenantAuth', () => {
     tenantId,
     tenantName,
     userType,
+    clientType,
     expiresIn,
     roleName,
     logout,

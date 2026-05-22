@@ -16,6 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
   const tenantId = ref(localStorage.getItem('admin_tenantId') || '')
   const username = ref(localStorage.getItem('admin_username') || '')
   const userType = ref(parseInt(localStorage.getItem('admin_userType') || '0'))
+  const clientType = ref(localStorage.getItem('admin_clientType') || '')
   const expiresIn = ref(parseInt(localStorage.getItem('admin_expiresIn') || '7200'))
 
   let refreshTimer = null
@@ -40,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
     tenantId.value = userInfo.tenantId || ''
     username.value = userInfo.username || ''
     userType.value = Number(userInfo.userType || 0)
+    clientType.value = userInfo.clientType || ''
     saveToLocalStorage()
     if (userType.value !== 1 && userType.value !== 2) {
       clearState()
@@ -49,6 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const logout = async () => {
+    const ct = clientType.value
     try {
       if (accessToken.value) {
         await logoutApi()
@@ -58,9 +61,9 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       clearState()
       stopAutoRefresh()
-      if (SSO_LOGOUT_URL) {
+      if (SSO_LOGOUT_URL && ct) {
         const postLogoutUri = encodeURIComponent(window.location.origin + '/login')
-        window.location.href = `${SSO_LOGOUT_URL}?post_logout_redirect_uri=${postLogoutUri}`
+        window.location.href = `${SSO_LOGOUT_URL}?client_type=${ct}&post_logout_redirect_uri=${postLogoutUri}`
       } else {
         await redirectToLogin()
       }
@@ -113,6 +116,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('admin_tenantId', tenantId.value)
     localStorage.setItem('admin_username', username.value)
     localStorage.setItem('admin_userType', userType.value.toString())
+    localStorage.setItem('admin_clientType', clientType.value)
     localStorage.setItem('admin_expiresIn', expiresIn.value.toString())
   }
 
@@ -123,6 +127,7 @@ export const useAuthStore = defineStore('auth', () => {
     tenantId.value = ''
     username.value = ''
     userType.value = 0
+    clientType.value = ''
     expiresIn.value = 7200
 
     localStorage.removeItem('admin_accessToken')
@@ -131,6 +136,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('admin_tenantId')
     localStorage.removeItem('admin_username')
     localStorage.removeItem('admin_userType')
+    localStorage.removeItem('admin_clientType')
     localStorage.removeItem('admin_expiresIn')
   }
 
@@ -164,6 +170,7 @@ export const useAuthStore = defineStore('auth', () => {
     tenantId,
     username,
     userType,
+    clientType,
     expiresIn,
     isPlatformAdmin,
     roleName,
