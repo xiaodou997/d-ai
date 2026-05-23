@@ -5,7 +5,10 @@
 // Default pipeline order:
 //
 //	AuthN → AuthZ → QuotaCheck → RouteSelect → RateLimit →
-//	QuotaReserve → URMFreeze → Execute → URMConfirm → UsageLog
+//	QuotaReserve → Execute → UsageLog
+//
+// Phase 3 切流后请求结束的扣款由 LedgerStep finalizer + 异步 settle worker
+// 聚合到 URM Consume，不再有同步 Freeze/Confirm 调用。
 package serving
 
 import (
@@ -80,18 +83,11 @@ type Request struct {
 	// sticky Redis binding rather than freshly scored.
 	StickyHit bool
 
-	// Resolved by URMFreeze step
-	URMTransactionID string
-
 	// Set by QuotaReserveStep — the exact amount reserved against the API key's
 	// quota_reserved column. UsageLogger must release this same amount during
 	// confirmation; releasing the post-hoc billing cost instead would let the
 	// reserved balance drift (estimate ≠ actual cost).
 	QuotaReservedAmount int64
-
-	// Set to true by URMBiller.Confirm after it has computed and written BillingResult.
-	// UsageLogStep skips billing calculation when this is true.
-	BillingResolved bool
 
 	// Set by Execute step: rebuilt assistant message for the audit log.
 	// Sync requests: populated immediately after body read.

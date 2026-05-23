@@ -114,7 +114,6 @@ func New(cfg Config) *Server {
 		healthTracker = rht
 	}
 	routeSelector.WithHealth(healthTracker)
-	priceResolver := pgadapter.NewPriceResolver(q)
 	gw := metrics.NewGateway()
 
 	var rateLimiter serving.RateLimiter
@@ -122,12 +121,9 @@ func New(cfg Config) *Server {
 		rateLimiter = redisadapter.NewRateLimiter(cfg.Redis, q, 4096)
 	}
 
-	// Phase 3 分账层切流：不再每请求 Freeze/Confirm。改为请求结束后的
-	// LedgerStep finalizer 聚合到本地账本，settle worker 异步推 URM Consume。
-	// priceResolver 仍由 UsageLogger 持有，用于在 BillingResolved=false 时
-	// 现算 BillingResult；这里只是显式 silence 旧 biller 装配点。
-	_ = priceResolver
-
+	// 分账层装配：每请求结束后 LedgerStep finalizer 把 BillingResult 累加到
+	// ai_user_credit_ledger.pending_*_micro；settle worker 按 60s tick / 阈值
+	// 触发批量调 URM Consume。
 	var creditLedger *ledger.Ledger
 	var settleWorker *ledger.Worker
 	if cfg.URM != nil {

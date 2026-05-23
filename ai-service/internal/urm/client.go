@@ -110,29 +110,9 @@ func (c *Client) autoRegister(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) Freeze(ctx context.Context, req FreezeRequest) (*FreezeResponse, error) {
-	var resp Response[FreezeResponse]
-	if err := c.do(ctx, http.MethodPost, "/internal/v1/settle/freeze", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-func (c *Client) Confirm(ctx context.Context, req ConfirmRequest) (*ConfirmResponse, error) {
-	var resp Response[ConfirmResponse]
-	if err := c.do(ctx, http.MethodPost, "/internal/v1/settle/confirm", req, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
-}
-
-func (c *Client) Cancel(ctx context.Context, transactionID string) error {
-	var resp Response[map[string]any]
-	return c.do(ctx, http.MethodPost, "/internal/v1/settle/cancel/"+url.PathEscape(transactionID), nil, &resp)
-}
-
-// Consume 调用 URM 单阶段幂等扣款接口。Phase 1 起 ai-service 的分账层用此
-// 接口替代 Freeze/Confirm 两阶段流程，把聚合后的整数积分一次性扣掉。
+// Consume 调用 URM 单阶段幂等扣款接口。ai-service 分账层 settle worker 把聚合
+// 后的整数积分一次性扣掉，失败时不需要反向 Cancel（URM 端 idempotencyKey 保证
+// 重试幂等）。Phase 3 起这是 ai-service 唯一调用的 URM 计费 API。
 func (c *Client) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
 	var resp Response[ConsumeResponse]
 	if err := c.do(ctx, http.MethodPost, "/internal/v1/settle/consume", req, &resp); err != nil {
@@ -173,22 +153,6 @@ func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (*T
 		return nil, fmt.Errorf("exchange error %d: %s", envelope.Code, envelope.Message)
 	}
 	return &envelope.Data, nil
-}
-
-func (c *Client) QueryBalance(ctx context.Context, accountType int, accountID string, detail bool) (*BalanceResponse, error) {
-	q := url.Values{}
-	q.Set("accountType", fmt.Sprintf("%d", accountType))
-	q.Set("accountId", accountID)
-	if detail {
-		q.Set("detail", "true")
-	}
-
-	var resp Response[BalanceResponse]
-	path := "/internal/v1/assets/balance?" + q.Encode()
-	if err := c.do(ctx, http.MethodGet, path, nil, &resp); err != nil {
-		return nil, err
-	}
-	return &resp.Data, nil
 }
 
 func (c *Client) UserInfo(ctx context.Context, token string) (*UserInfoResponse, error) {

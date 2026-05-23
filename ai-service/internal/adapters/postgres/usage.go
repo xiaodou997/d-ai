@@ -30,21 +30,19 @@ func NewUsageLogger(q *dbgen.Queries) *UsageLogger {
 }
 
 // Log records a usage entry regardless of request success/failure.
-// Billing amounts are written to req.BillingResult; if URMBiller.Confirm already
-// computed them (req.BillingResolved == true) the pricing lookup is skipped.
+// Phase 3 起 BillingResult 永远在这里现算（URMBiller 已下线）；后续 LedgerStep
+// finalizer 再用 BillingResult 累加进本地账本，结算交给 settle worker。
 func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 	identity := req.RuntimeIdentity()
 	if identity == nil || req.Candidate == nil {
 		return nil
 	}
 
-	if !req.BillingResolved {
-		pricing, err := l.prices.ResolvePricing(ctx, req)
-		if err != nil {
-			pricing = domain.ModelPricing{}
-		}
-		req.BillingResult = CalculateBilling(req.TokenUsage, pricing)
+	pricing, err := l.prices.ResolvePricing(ctx, req)
+	if err != nil {
+		pricing = domain.ModelPricing{}
 	}
+	req.BillingResult = CalculateBilling(req.TokenUsage, pricing)
 
 	billing := req.BillingResult
 
@@ -161,7 +159,7 @@ func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, 
 		PlatformCost:         billing.PlatformCost,
 		UserCost:             billing.UserCost,
 		ApiKeyQuotaCost:      billing.APIKeyQuotaCost,
-		UrmTransactionID:     nullableText(req.URMTransactionID),
+		UrmTransactionID:     pgtype.Text{}, // Phase 3 后不再写入，结算 event_id 走 settled_event_id 列
 		BillingStatus:        billingStatus(req),
 		RequestStatus:        string(req.RequestStatus),
 		HttpStatus:           nullableInt4(req.HTTPStatus),

@@ -6,43 +6,6 @@ type Response[T any] struct {
 	Data    T      `json:"data,omitempty"`
 }
 
-type FreezeRequest struct {
-	IdempotencyKey string `json:"idempotencyKey"`
-	TenantID       string `json:"tenantId"`
-	UserID         string `json:"userId,omitempty"`
-	Description    string `json:"description,omitempty"`
-	TenantAmount   int64  `json:"tenantAmount"`
-	UserAmount     int64  `json:"userAmount"`
-}
-
-type FreezeResponse struct {
-	EventID      string `json:"eventId"`
-	FrozenTenant int64  `json:"frozenTenant"`
-	FrozenUser   int64  `json:"frozenUser"`
-	Status       string `json:"status"`
-}
-
-type ConfirmRequest struct {
-	EventID            string `json:"eventId"`
-	ActualTenantAmount int64  `json:"actualTenantAmount"`
-	ActualUserAmount   int64  `json:"actualUserAmount"`
-}
-
-type ConfirmResponse struct {
-	EventID string `json:"eventId"`
-	Status  string `json:"status"`
-}
-
-type BalanceResponse struct {
-	PackageType      int    `json:"packageType"`
-	CustomerID       string `json:"customerId"`
-	TotalCredits     int64  `json:"totalCredits"`
-	FrozenCredits    int64  `json:"frozenCredits"`
-	AvailableCredits int64  `json:"availableCredits"`
-	OverdraftLimit   int64  `json:"overdraftLimit"`
-	CurrentOverdraft int64  `json:"currentOverdraft"`
-}
-
 // ConsumeRequest 单阶段聚合扣款请求（POST /internal/v1/settle/consume）。
 // 适用于业务系统在本地完成精细计费后聚合扣款的场景。失败时不需要反向 Cancel。
 type ConsumeRequest struct {
