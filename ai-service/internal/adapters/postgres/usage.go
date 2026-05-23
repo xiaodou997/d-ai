@@ -233,12 +233,15 @@ func resolution(req *serving.Request) string {
 }
 
 // billingStatus returns the appropriate billing_status value for the usage log.
+// Phase 3 切流后 ai-service 不再调 URM Freeze/Confirm，所有费用通过本地账本
+// 聚合后由 settle worker 推 URM Consume：
+//   - cost == 0          → free          （无成本，不入账本）
+//   - cost  > 0          → pending_settle（已入账本，等结算 worker）
+//
+// settled 状态由 settle worker 在事务里同事务回填，与本函数无关。
 func billingStatus(req *serving.Request) string {
-	if req.URMTransactionID != "" {
-		return string(domain.BillingConfirmed)
-	}
-	if req.BillingResult.PlatformCost == 0 {
+	if req.BillingResult.PlatformCost == 0 && req.BillingResult.UserCost == 0 {
 		return string(domain.BillingFree)
 	}
-	return string(domain.BillingPending)
+	return string(domain.BillingPendingSettle)
 }

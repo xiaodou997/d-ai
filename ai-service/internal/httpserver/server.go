@@ -13,13 +13,13 @@ import (
 
 	pgadapter "xiaodou/uni-ai-api/internal/adapters/postgres"
 	redisadapter "xiaodou/uni-ai-api/internal/adapters/redis"
-	urmadapter "xiaodou/uni-ai-api/internal/adapters/urm"
 	"xiaodou/uni-ai-api/internal/apikey"
 	"xiaodou/uni-ai-api/internal/audit"
 	"xiaodou/uni-ai-api/internal/blobstore"
 	"xiaodou/uni-ai-api/internal/config"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/uni-ai-api/internal/ledger"
 	"xiaodou/uni-ai-api/internal/observability/metrics"
 	"xiaodou/uni-ai-api/internal/routing"
 	"xiaodou/uni-ai-api/internal/serving"
@@ -51,9 +51,9 @@ type banChecker interface {
 }
 
 type urmClient interface {
-	Freeze(ctx context.Context, req urm.FreezeRequest) (*urm.FreezeResponse, error)
-	Confirm(ctx context.Context, req urm.ConfirmRequest) (*urm.ConfirmResponse, error)
-	Cancel(ctx context.Context, transactionID string) error
+	// Consume 单阶段聚合扣款：Phase 3 起 ai-service 唯一调用的 URM 计费 API。
+	// 由本地账本 settle worker 在窗口结算时调用。
+	Consume(ctx context.Context, req urm.ConsumeRequest) (*urm.ConsumeResponse, error)
 	ExchangeCode(ctx context.Context, code, redirectURI string) (*urm.TokenPairResponse, error)
 }
 
@@ -79,6 +79,8 @@ type Server struct {
 	routeWeightsStore *pgadapter.RouteWeightsStore
 	auditWorker       *audit.Worker // optional; nil = audit log disabled
 	shutdownAudit     context.CancelFunc
+	settleWorker      *ledger.Worker // optional; nil when URM not configured
+	shutdownSettle    context.CancelFunc
 
 	// Serving pipeline — shared across requests (steps are stateless)
 	pipeline    *serving.Pipeline
@@ -120,15 +122,17 @@ func New(cfg Config) *Server {
 		rateLimiter = redisadapter.NewRateLimiter(cfg.Redis, q, 4096)
 	}
 
-	var urmBiller serving.URMBiller
+	// Phase 3 分账层切流：不再每请求 Freeze/Confirm。改为请求结束后的
+	// LedgerStep finalizer 聚合到本地账本，settle worker 异步推 URM Consume。
+	// priceResolver 仍由 UsageLogger 持有，用于在 BillingResolved=false 时
+	// 现算 BillingResult；这里只是显式 silence 旧 biller 装配点。
+	_ = priceResolver
+
+	var creditLedger *ledger.Ledger
+	var settleWorker *ledger.Worker
 	if cfg.URM != nil {
-		urmBiller = urmadapter.NewBiller(
-			cfg.URM,
-			priceResolver,
-			pgadapter.CalculateBilling,
-			4096,
-			cfg.Logger,
-		)
+		creditLedger = ledger.New(cfg.Postgres, cfg.URM, cfg.Logger)
+		settleWorker = ledger.NewWorker(creditLedger, ledger.WorkerConfig{})
 	}
 
 	// P3: multi-dim scorer. RouteStats backed by Redis when available; otherwise
@@ -177,6 +181,7 @@ func New(cfg Config) *Server {
 		routeSelector:     routeSelector,
 		routeWeightsStore: routeWeightsStore,
 		auditWorker:       auditWorker,
+		settleWorker:      settleWorker,
 		httpClient: &http.Client{
 			Timeout: 0,
 		},
@@ -187,7 +192,6 @@ func New(cfg Config) *Server {
 			&serving.RouteCandidatesStep{Selector: routeSelector, Sticky: stickyStore},
 			&serving.RateLimitStep{Limiter: rateLimiter},
 			&serving.QuotaReserveStep{Reserver: pgadapter.NewQuotaReserver(q)},
-			&serving.URMFreezeStep{Biller: urmBiller},
 			&serving.ExecuteStep{
 				Transport: transport.NewClient(120 * time.Second),
 				Health:    healthTracker,
@@ -197,9 +201,9 @@ func New(cfg Config) *Server {
 				Stats:     routeStats,
 				Sticky:    stickyStore,
 			},
-			&serving.URMConfirmStep{Biller: urmBiller},
 			&serving.UsageLogStep{Logger: usageLogger, Metrics: gw},
 		).WithFinalizers(
+			&serving.LedgerStep{Ledger: creditLedger, Trigger: workerTrigger(settleWorker)},
 			&serving.AuditFinalizer{Worker: auditWorker},
 		),
 		apiKeyCache: apiKeyCache,
@@ -401,12 +405,26 @@ func New(cfg Config) *Server {
 	return s
 }
 
+// workerTrigger returns w.Trigger() or nil when the worker is unset, so
+// LedgerStep.Trigger receives a typed-nil channel that select drops on.
+func workerTrigger(w *ledger.Worker) chan<- struct{} {
+	if w == nil {
+		return nil
+	}
+	return w.Trigger()
+}
+
 func (s *Server) Start(addr string) error {
 	auditCtx, auditCancel := context.WithCancel(context.Background())
 	s.shutdownAudit = auditCancel
-
 	if s.auditWorker != nil {
 		s.auditWorker.Start(auditCtx)
+	}
+
+	if s.settleWorker != nil {
+		settleCtx, settleCancel := context.WithCancel(context.Background())
+		s.shutdownSettle = settleCancel
+		go s.settleWorker.Run(settleCtx)
 	}
 
 	s.httpServer.Addr = addr
@@ -422,6 +440,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Cancel audit context: Worker.run drains remaining entries then exits.
 	if s.shutdownAudit != nil {
 		s.shutdownAudit()
+	}
+	if s.shutdownSettle != nil {
+		s.shutdownSettle()
 	}
 	return err
 }
