@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
-    "@module-federation/runtime": "^2.4.0",
+    "@module-federation/runtime": "^2.5.0",
     "axios": "^1.16.1",
     "dayjs": "^1.11.20",
     "echarts": "^6.1.0",

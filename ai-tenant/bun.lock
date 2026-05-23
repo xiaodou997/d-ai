@@ -6,7 +6,7 @@
       "name": "uni-ai-api-tenant",
       "dependencies": {
         "@element-plus/icons-vue": "^2.3.2",
-        "@module-federation/runtime": "^2.4.0",
+        "@module-federation/runtime": "^2.5.0",
         "axios": "^1.16.1",
         "dayjs": "^1.11.20",
         "echarts": "^6.1.0",
@@ -69,13 +69,13 @@
 
     "@module-federation/dts-plugin": ["@module-federation/dts-plugin@2.4.0", "https://registry.npmmirror.com/@module-federation/dts-plugin/-/dts-plugin-2.4.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.4.0", "@module-federation/managers": "2.4.0", "@module-federation/sdk": "2.4.0", "@module-federation/third-party-dts-extractor": "2.4.0", "adm-zip": "0.5.10", "ansi-colors": "4.1.3", "isomorphic-ws": "5.0.0", "node-schedule": "2.1.1", "undici": "7.24.7", "ws": "8.18.0" }, "peerDependencies": { "typescript": "^4.9.0 || ^5.0.0", "vue-tsc": ">=1.0.24" }, "optionalPeers": ["vue-tsc"] }, "sha512-sa6v5ByyqMRHzpwDu0zc7s5mZ39EFIkG0jkRfZU09pzkrJEIy4uZ1Kt9SLysFB8RBMIAvAakAfqDlVWvf1lndg=="],
 
-    "@module-federation/error-codes": ["@module-federation/error-codes@2.4.0", "https://registry.npmmirror.com/@module-federation/error-codes/-/error-codes-2.4.0.tgz", {}, "sha512-ktCZtwOoiKR1URJyBt223OsOFAUvc13rICYif55mt7+DomtELlh5FicnEz6mPLBUwmNM9vyBMvkxOdp+fQ5oUg=="],
+    "@module-federation/error-codes": ["@module-federation/error-codes@2.5.0", "https://registry.npmmirror.com/@module-federation/error-codes/-/error-codes-2.5.0.tgz", {}, "sha512-sq05/8Gp3csy1nr2/f76K3vLy0/xRqVtP71ibGy8BiLg7h1UxWN7G4EwAKSrPZ4FnsERGeFlIszg5Z+MqlwhFg=="],
 
     "@module-federation/managers": ["@module-federation/managers@2.4.0", "https://registry.npmmirror.com/@module-federation/managers/-/managers-2.4.0.tgz", { "dependencies": { "@module-federation/sdk": "2.4.0", "find-pkg": "2.0.0" } }, "sha512-Z8j6aog44G1gt4yIAaeDowwZ7xg0aAxTA1Hq69euJK9cR9MDEaLbLUk57jDoiRj6xLwlCiw7ozY+U15BQATk6Q=="],
 
-    "@module-federation/runtime": ["@module-federation/runtime@2.4.0", "https://registry.npmmirror.com/@module-federation/runtime/-/runtime-2.4.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.4.0", "@module-federation/runtime-core": "2.4.0", "@module-federation/sdk": "2.4.0" } }, "sha512-IrLAMwUuteRgFlEkg9jrn4bk8uC897FnXvfNmkKD8/qIoNtSd+32e5ouQn+PEYbX/RjRUB1TYveY6rYHpTPkyg=="],
+    "@module-federation/runtime": ["@module-federation/runtime@2.5.0", "https://registry.npmmirror.com/@module-federation/runtime/-/runtime-2.5.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.5.0", "@module-federation/runtime-core": "2.5.0", "@module-federation/sdk": "2.5.0" } }, "sha512-dOc7pFEf8aruHBk5hoJLnvwkCa5ELT78q3o9dqcdaa/TT74X5z0FT0BsaGaRBPcse/iP6czK3fWd7RLv5ZKP5g=="],
 
-    "@module-federation/runtime-core": ["@module-federation/runtime-core@2.4.0", "https://registry.npmmirror.com/@module-federation/runtime-core/-/runtime-core-2.4.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.4.0", "@module-federation/sdk": "2.4.0" } }, "sha512-0S8fDw28DXDW17lTQwq5vfJWe2lG0Lw3+w4vk3DVVImLwXXay+OGxLDxzWUfypWcMznfpnoAnFUMO3PtuXziuA=="],
+    "@module-federation/runtime-core": ["@module-federation/runtime-core@2.5.0", "https://registry.npmmirror.com/@module-federation/runtime-core/-/runtime-core-2.5.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.5.0", "@module-federation/sdk": "2.5.0" } }, "sha512-STmhQ3c6/hunba2FMP6GrHazXU/8GuN7Gk4dOkWNRpnqYIoD8Wx4MNl76j3HdCzBESC7uSMXTniksVaM1+xxyA=="],
 
     "@module-federation/sdk": ["@module-federation/sdk@2.4.0", "https://registry.npmmirror.com/@module-federation/sdk/-/sdk-2.4.0.tgz", { "peerDependencies": { "node-fetch": "^2.7.0 || ^3.3.2" }, "optionalPeers": ["node-fetch"] }, "sha512-eZDdF5B69W9npuka0VL24FY7XDM+YAwwfkscSeWOSqv4/8Hm0xmcmSurlP6NIOrwbeogerRCtEcnx/TFXYjoow=="],
 
@@ -499,6 +499,14 @@
 
     "@emnapi/wasi-threads/tslib": ["tslib@2.8.1", "https://registry.npmmirror.com/tslib/-/tslib-2.8.1.tgz", {}, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
+    "@module-federation/dts-plugin/@module-federation/error-codes": ["@module-federation/error-codes@2.4.0", "https://registry.npmmirror.com/@module-federation/error-codes/-/error-codes-2.4.0.tgz", {}, "sha512-ktCZtwOoiKR1URJyBt223OsOFAUvc13rICYif55mt7+DomtELlh5FicnEz6mPLBUwmNM9vyBMvkxOdp+fQ5oUg=="],
+
+    "@module-federation/runtime/@module-federation/sdk": ["@module-federation/sdk@2.5.0", "https://registry.npmmirror.com/@module-federation/sdk/-/sdk-2.5.0.tgz", { "peerDependencies": { "node-fetch": "^2.7.0 || ^3.3.2" }, "optionalPeers": ["node-fetch"] }, "sha512-ScU22XDyV77l50njjzewMpMlNN1CYo0tHS1D6iy+vNKWrHGq8DWVB0vwG8dmvx/WZ4uq+sXgUsQet17MoKsfZw=="],
+
+    "@module-federation/runtime-core/@module-federation/sdk": ["@module-federation/sdk@2.5.0", "https://registry.npmmirror.com/@module-federation/sdk/-/sdk-2.5.0.tgz", { "peerDependencies": { "node-fetch": "^2.7.0 || ^3.3.2" }, "optionalPeers": ["node-fetch"] }, "sha512-ScU22XDyV77l50njjzewMpMlNN1CYo0tHS1D6iy+vNKWrHGq8DWVB0vwG8dmvx/WZ4uq+sXgUsQet17MoKsfZw=="],
+
+    "@module-federation/vite/@module-federation/runtime": ["@module-federation/runtime@2.4.0", "https://registry.npmmirror.com/@module-federation/runtime/-/runtime-2.4.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.4.0", "@module-federation/runtime-core": "2.4.0", "@module-federation/sdk": "2.4.0" } }, "sha512-IrLAMwUuteRgFlEkg9jrn4bk8uC897FnXvfNmkKD8/qIoNtSd+32e5ouQn+PEYbX/RjRUB1TYveY6rYHpTPkyg=="],
+
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.10.0", "https://registry.npmmirror.com/@emnapi/core/-/core-1.10.0.tgz", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" }, "bundled": true }, "sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw=="],
 
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/runtime": ["@emnapi/runtime@1.10.0", "https://registry.npmmirror.com/@emnapi/runtime/-/runtime-1.10.0.tgz", { "dependencies": { "tslib": "^2.4.0" }, "bundled": true }, "sha512-ewvYlk86xUoGI0zQRNq/mC+16R1QeDlKQy21Ki3oSYXNgLb45GV1P6A0M+/s6nyCuNDqe5VpaY84BzXGwVbwFA=="],
@@ -530,6 +538,10 @@
     "@babel/parser/@babel/types/@babel/helper-string-parser": ["@babel/helper-string-parser@7.27.1", "https://registry.npmmirror.com/@babel/helper-string-parser/-/helper-string-parser-7.27.1.tgz", {}, "sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA=="],
 
     "@babel/parser/@babel/types/@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.28.5", "https://registry.npmmirror.com/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz", {}, "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="],
+
+    "@module-federation/vite/@module-federation/runtime/@module-federation/error-codes": ["@module-federation/error-codes@2.4.0", "https://registry.npmmirror.com/@module-federation/error-codes/-/error-codes-2.4.0.tgz", {}, "sha512-ktCZtwOoiKR1URJyBt223OsOFAUvc13rICYif55mt7+DomtELlh5FicnEz6mPLBUwmNM9vyBMvkxOdp+fQ5oUg=="],
+
+    "@module-federation/vite/@module-federation/runtime/@module-federation/runtime-core": ["@module-federation/runtime-core@2.4.0", "https://registry.npmmirror.com/@module-federation/runtime-core/-/runtime-core-2.4.0.tgz", { "dependencies": { "@module-federation/error-codes": "2.4.0", "@module-federation/sdk": "2.4.0" } }, "sha512-0S8fDw28DXDW17lTQwq5vfJWe2lG0Lw3+w4vk3DVVImLwXXay+OGxLDxzWUfypWcMznfpnoAnFUMO3PtuXziuA=="],
 
     "@vue-macros/common/@vue/compiler-sfc/@babel/parser": ["@babel/parser@7.29.2", "https://registry.npmmirror.com/@babel/parser/-/parser-7.29.2.tgz", { "dependencies": { "@babel/types": "^7.29.0" }, "bin": "./bin/babel-parser.js" }, "sha512-4GgRzy/+fsBa72/RZVJmGKPmZu9Byn8o4MoLpmNe1m8ZfYnz5emHLQz3U4gLud6Zwl0RZIcgiLD7Uq7ySFuDLA=="],
 
