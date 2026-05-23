@@ -1025,6 +1025,90 @@ func fromListUsageLogs(rows []dbgen.ListUsageLogsRow) []usageLogDTO {
 }
 
 // ---------------------------------------------------------------------------
+// Usage log DTO for tenant (filtered — no upstream/internal fields)
+// ---------------------------------------------------------------------------
+
+// billingStatusLabel returns a Chinese label for the given billing status.
+func billingStatusLabel(status string) string {
+	switch status {
+	case "pending":
+		return "待确认"
+	case "frozen":
+		return "已冻结"
+	case "confirmed":
+		return "已确认"
+	case "cancelled":
+		return "已取消"
+	case "free":
+		return "免费"
+	default:
+		return status
+	}
+}
+
+type usageLogForTenantDTO struct {
+	ID                  pgtype.UUID `json:"id"`
+	RequestID           string      `json:"request_id"`
+	RequestSource       string      `json:"request_source"`
+	TenantID            string      `json:"tenant_id"`
+	UserID              pgtype.Text `json:"user_id"`
+	ExternalUserID      pgtype.Text `json:"external_user_id"`
+	ModelCode           string      `json:"model_code"`
+	CapabilityType      string      `json:"capability_type"`
+	Stream              bool        `json:"stream"`
+	PromptTokens        int32       `json:"prompt_tokens"`
+	CompletionTokens    int32       `json:"completion_tokens"`
+	TotalTokens         int32       `json:"total_tokens"`
+	PlatformCost        int64       `json:"platform_cost"`
+	UserCost            int64       `json:"user_cost"`
+	BillingStatus       string      `json:"billing_status"`
+	BillingStatusLabel  string      `json:"billing_status_label"`
+	RequestStatus       string      `json:"request_status"`
+	HttpStatus          pgtype.Int4 `json:"http_status"`
+	LatencyMs           pgtype.Int4 `json:"latency_ms"`
+	FirstTokenLatencyMs pgtype.Int4 `json:"first_token_latency_ms"`
+	ErrorCode           pgtype.Text `json:"error_code"`
+	ErrorMessage        pgtype.Text `json:"error_message"`
+	CreatedAt           *int64      `json:"created_at"`
+}
+
+func fromListUsageLogForTenant(r dbgen.ListUsageLogsRow) usageLogForTenantDTO {
+	return usageLogForTenantDTO{
+		ID:                  r.ID,
+		RequestID:           r.RequestID,
+		RequestSource:       r.RequestSource,
+		TenantID:            r.TenantID,
+		UserID:              r.UserID,
+		ExternalUserID:      r.ExternalUserID,
+		ModelCode:           r.ModelCode,
+		CapabilityType:      r.CapabilityType,
+		Stream:              r.Stream,
+		PromptTokens:        r.PromptTokens,
+		CompletionTokens:    r.CompletionTokens,
+		TotalTokens:         r.TotalTokens,
+		PlatformCost:        r.PlatformCost,
+		UserCost:            r.UserCost,
+		BillingStatus:       r.BillingStatus,
+		BillingStatusLabel:  billingStatusLabel(r.BillingStatus),
+		RequestStatus:       r.RequestStatus,
+		HttpStatus:          r.HttpStatus,
+		LatencyMs:           r.LatencyMs,
+		FirstTokenLatencyMs: r.FirstTokenLatencyMs,
+		ErrorCode:           r.ErrorCode,
+		ErrorMessage:        r.ErrorMessage,
+		CreatedAt:           millis(r.CreatedAt),
+	}
+}
+
+func fromListUsageLogsForTenant(rows []dbgen.ListUsageLogsRow) []usageLogForTenantDTO {
+	out := make([]usageLogForTenantDTO, len(rows))
+	for i, r := range rows {
+		out[i] = fromListUsageLogForTenant(r)
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard recent errors DTO
 // ---------------------------------------------------------------------------
 

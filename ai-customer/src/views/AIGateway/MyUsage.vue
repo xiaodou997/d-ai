@@ -1,7 +1,28 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, reactive, shallowRef, watch } from 'vue'
-import { Refresh, Wallet, DataLine, TrendCharts, Coin, Lock, Check, Upload, Download } from '@element-plus/icons-vue'
-import { listMyUsageLogs, getMyUsageSummary, formatCredits } from '@/api/aiGateway'
+import {
+  computed,
+  nextTick,
+  onMounted,
+  onUnmounted,
+  reactive,
+  shallowRef,
+  watch
+} from 'vue'
+import {
+  Refresh,
+  Wallet,
+  TrendCharts,
+  Coin,
+  Lock,
+  Check,
+  Upload,
+  Download
+} from '@element-plus/icons-vue'
+import {
+  listMyUsageLogs,
+  getMyUsageSummary,
+  formatCredits
+} from '@/api/aiGateway'
 import { getBalance } from '@/api/customer'
 import * as echarts from 'echarts'
 
@@ -53,7 +74,10 @@ const timelineDayKeys = computed(() => last7DayKeys())
 
 const timelineLabels = computed(() =>
   timelineDayKeys.value.map((dayKey) =>
-    new Date(`${dayKey}T00:00:00`).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+    new Date(`${dayKey}T00:00:00`).toLocaleDateString('zh-CN', {
+      month: 'short',
+      day: 'numeric'
+    })
   )
 )
 
@@ -64,7 +88,10 @@ const timelineValues = computed(() => {
     const createdAt = new Date(row.created_at)
     if (Number.isNaN(createdAt.getTime())) continue
     const dayKey = createdAt.toISOString().slice(0, 10)
-    grouped.set(dayKey, (grouped.get(dayKey) || 0) + (Number(row.user_cost) || 0))
+    grouped.set(
+      dayKey,
+      (grouped.get(dayKey) || 0) + (Number(row.user_cost) || 0)
+    )
   }
   return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0)
 })
@@ -76,7 +103,10 @@ const timelinePromptTokens = computed(() => {
     const createdAt = new Date(row.created_at)
     if (Number.isNaN(createdAt.getTime())) continue
     const dayKey = createdAt.toISOString().slice(0, 10)
-    grouped.set(dayKey, (grouped.get(dayKey) || 0) + (Number(row.prompt_tokens) || 0))
+    grouped.set(
+      dayKey,
+      (grouped.get(dayKey) || 0) + (Number(row.prompt_tokens) || 0)
+    )
   }
   return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0)
 })
@@ -88,7 +118,10 @@ const timelineCompletionTokens = computed(() => {
     const createdAt = new Date(row.created_at)
     if (Number.isNaN(createdAt.getTime())) continue
     const dayKey = createdAt.toISOString().slice(0, 10)
-    grouped.set(dayKey, (grouped.get(dayKey) || 0) + (Number(row.completion_tokens) || 0))
+    grouped.set(
+      dayKey,
+      (grouped.get(dayKey) || 0) + (Number(row.completion_tokens) || 0)
+    )
   }
   return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0)
 })
@@ -133,7 +166,9 @@ const requestSourceOptions = [
 ]
 
 const requestSourceLabel = (value) =>
-  requestSourceOptions.find((item) => item.value === value)?.label || value || '-'
+  requestSourceOptions.find((item) => item.value === value)?.label ||
+  value ||
+  '-'
 
 const renderCharts = async () => {
   await nextTick()
@@ -191,7 +226,13 @@ const renderCharts = async () => {
     chartToken.setOption({
       tooltip: { trigger: 'axis' },
       legend: { data: ['输入 Token', '输出 Token'], bottom: 0 },
-      grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '12%',
+        top: '8%',
+        containLabel: true
+      },
       xAxis: {
         type: 'category',
         boundaryGap: false,
@@ -258,13 +299,25 @@ onUnmounted(() => {
   <div class="space-y-6">
     <!-- Header Card -->
     <div class="bg-white p-6 rounded-2xl border border-slate-50 shadow-soft">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
         <div>
-          <h1 class="text-2xl font-black text-slate-800 tracking-tight">工作台</h1>
-          <p class="text-slate-400 text-sm font-medium mt-1">账户余额与 AI 调用概览，模型分布和近 7 天趋势基于最近 {{ LOG_LIMIT }} 条调用日志</p>
+          <h1 class="text-2xl font-black text-slate-800 tracking-tight">
+            工作台
+          </h1>
+          <p class="text-slate-400 text-sm font-medium mt-1">
+            账户余额与 AI 调用概览，模型分布和近 7 天趋势基于最近
+            {{ LOG_LIMIT }} 条调用日志
+          </p>
         </div>
         <div class="flex items-center gap-3">
-          <el-select v-model="requestSource" placeholder="全部来源" style="width: 140px" @change="fetchUsageData">
+          <el-select
+            v-model="requestSource"
+            placeholder="全部来源"
+            style="width: 140px"
+            @change="fetchUsageData"
+          >
             <el-option
               v-for="item in requestSourceOptions"
               :key="item.value"
@@ -272,8 +325,15 @@ onUnmounted(() => {
               :value="item.value"
             />
           </el-select>
-          <el-button type="primary" class="rounded-2xl! font-bold" :loading="loading" @click="fetchAllData">
-            <template #icon><el-icon><Refresh /></el-icon></template>
+          <el-button
+            type="primary"
+            class="rounded-2xl! font-bold"
+            :loading="loading"
+            @click="fetchAllData"
+          >
+            <template #icon
+              ><el-icon><Refresh /></el-icon
+            ></template>
             刷新
           </el-button>
         </div>
@@ -282,71 +342,113 @@ onUnmounted(() => {
 
     <!-- Balance Cards -->
     <div class="grid grid-cols-3 gap-4">
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-cyan-500" :size="20"><Coin /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">总积分</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ balanceInfo.totalCredits.toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ balanceInfo.totalCredits.toLocaleString() }}
+          </p>
         </div>
       </div>
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-amber-500" :size="20"><Lock /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">冻结积分</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ balanceInfo.frozenCredits.toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ balanceInfo.frozenCredits.toLocaleString() }}
+          </p>
         </div>
       </div>
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-emerald-500" :size="20"><Check /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">可用积分</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ balanceInfo.availableCredits.toLocaleString() }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ balanceInfo.availableCredits.toLocaleString() }}
+          </p>
         </div>
       </div>
     </div>
 
     <!-- Usage Stats Cards -->
     <div class="grid grid-cols-4 gap-4">
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-blue-500" :size="20"><Wallet /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">总消耗积分</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ formatCredits(summary?.total_user_cost || 0) }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ formatCredits(summary?.total_user_cost || 0) }}
+          </p>
         </div>
       </div>
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-sky-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-sky-500" :size="20"><Upload /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">输入 Token</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ formatCredits(summary?.total_prompt_tokens || 0) }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ formatCredits(summary?.total_prompt_tokens || 0) }}
+          </p>
         </div>
       </div>
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-amber-500" :size="20"><Download /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">输出 Token</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ formatCredits(summary?.total_completion_tokens || 0) }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ formatCredits(summary?.total_completion_tokens || 0) }}
+          </p>
         </div>
       </div>
-      <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4">
-        <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
+      <div
+        class="bg-white rounded-2xl border border-slate-50 shadow-soft p-5 flex items-center gap-4"
+      >
+        <div
+          class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center shrink-0"
+        >
           <el-icon class="text-purple-500" :size="20"><TrendCharts /></el-icon>
         </div>
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">总请求次数</p>
-          <p class="text-2xl font-bold text-slate-800 truncate">{{ summary?.request_count || 0 }}</p>
+          <p class="text-2xl font-bold text-slate-800 truncate">
+            {{ summary?.request_count || 0 }}
+          </p>
         </div>
       </div>
     </div>
@@ -362,7 +464,9 @@ onUnmounted(() => {
         <div ref="chartTimelineRef" style="height: 280px; width: 100%"></div>
       </div>
       <div class="bg-white rounded-2xl border border-slate-50 shadow-soft p-6">
-        <h3 class="text-base font-bold text-slate-800 mb-4">近 7 天 Token 趋势</h3>
+        <h3 class="text-base font-bold text-slate-800 mb-4">
+          近 7 天 Token 趋势
+        </h3>
         <div ref="chartTokenRef" style="height: 280px; width: 100%"></div>
       </div>
     </div>
@@ -390,12 +494,20 @@ onUnmounted(() => {
         <el-table-column prop="request_status" label="状态" width="100" />
         <el-table-column label="来源" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.request_source === 'web_chat' ? 'success' : 'info'">
+            <el-tag
+              size="small"
+              :type="row.request_source === 'web_chat' ? 'success' : 'info'"
+            >
               {{ requestSourceLabel(row.request_source) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="request_id" label="请求 ID" min-width="160" show-overflow-tooltip />
+        <el-table-column
+          prop="request_id"
+          label="请求 ID"
+          min-width="160"
+          show-overflow-tooltip
+        />
         <el-table-column label="时间" min-width="160">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}

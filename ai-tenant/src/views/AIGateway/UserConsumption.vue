@@ -328,29 +328,10 @@ onUnmounted(() => {
             <h3>基础信息</h3>
             <dl>
               <dt>Request ID</dt><dd class="mono">{{ selectedRecord.request_id }}</dd>
-              <dt>Trace ID</dt><dd class="mono">{{ pgTextVal(selectedRecord.trace_id) }}</dd>
               <dt>时间</dt><dd>{{ formatFullTimestamp(selectedRecord.created_at) }}</dd>
+              <dt>模型</dt><dd class="model-chip">{{ selectedRecord.model_code }}</dd>
               <dt>流式</dt><dd>{{ selectedRecord.stream ? '是' : '否' }}</dd>
               <dt>调用来源</dt><dd>{{ requestSourceLabel(selectedRecord.request_source) }}</dd>
-              <dt>认证方式</dt><dd>{{ selectedRecord.auth_method }}</dd>
-            </dl>
-          </section>
-
-          <section class="detail-section">
-            <h3>路由信息</h3>
-            <dl>
-              <dt>模型</dt><dd class="model-chip">{{ selectedRecord.model_code }}</dd>
-              <dt>Provider</dt><dd>{{ pgTextVal(selectedRecord.provider_code) }}</dd>
-              <dt>上游模型</dt><dd class="mono">{{ pgTextVal(selectedRecord.upstream_model) }}</dd>
-            </dl>
-          </section>
-
-          <section class="detail-section">
-            <h3>用户</h3>
-            <dl>
-              <dt>内部 User ID</dt><dd class="mono">{{ pgTextVal(selectedRecord.user_id) }}</dd>
-              <dt>外部 User ID</dt><dd class="mono">{{ pgTextVal(selectedRecord.external_user_id) }}</dd>
-              <dt>Conversation ID</dt><dd class="mono">{{ pgTextVal(selectedRecord.conversation_id) }}</dd>
             </dl>
           </section>
 
@@ -360,7 +341,6 @@ onUnmounted(() => {
               <dt>请求状态</dt>
               <dd><el-tag :type="statusTagType(selectedRecord.request_status)" size="small">{{ selectedRecord.request_status }}</el-tag></dd>
               <dt>HTTP 状态</dt><dd>{{ selectedRecord.http_status?.value ?? '-' }}</dd>
-              <dt>上游状态</dt><dd>{{ selectedRecord.upstream_status?.value ?? '-' }}</dd>
               <dt>错误码</dt><dd class="mono">{{ pgTextVal(selectedRecord.error_code) }}</dd>
               <dt>错误信息</dt><dd class="error-msg">{{ pgTextVal(selectedRecord.error_message) }}</dd>
             </dl>
@@ -369,24 +349,18 @@ onUnmounted(() => {
           <section class="detail-section">
             <h3>Token 用量</h3>
             <dl>
-              <dt>Prompt</dt><dd class="mono">{{ selectedRecord.prompt_tokens.toLocaleString() }}</dd>
-              <dt>Completion</dt><dd class="mono">{{ selectedRecord.completion_tokens.toLocaleString() }}</dd>
-              <dt>Total</dt><dd class="mono"><strong>{{ selectedRecord.total_tokens.toLocaleString() }}</strong></dd>
-              <dt>计费单位类型</dt><dd>{{ selectedRecord.billable_unit_type }}</dd>
-              <dt>计费单位数</dt><dd class="mono">{{ selectedRecord.billable_units.toLocaleString() }}</dd>
-              <dt>Token 来源</dt><dd>{{ selectedRecord.token_usage_source }}</dd>
-              <dt>估算</dt><dd>{{ selectedRecord.usage_estimated ? '是' : '否' }}</dd>
+              <dt>输入 Token</dt><dd class="mono">{{ selectedRecord.prompt_tokens.toLocaleString() }}</dd>
+              <dt>输出 Token</dt><dd class="mono">{{ selectedRecord.completion_tokens.toLocaleString() }}</dd>
+              <dt>总 Token</dt><dd class="mono"><strong>{{ selectedRecord.total_tokens.toLocaleString() }}</strong></dd>
             </dl>
           </section>
 
           <section class="detail-section">
             <h3>费用</h3>
             <dl>
+              <dt>租户积分</dt><dd class="mono">{{ formatCredits(selectedRecord.platform_cost) }}</dd>
               <dt>用户积分</dt><dd class="mono accent"><strong>{{ formatCredits(selectedRecord.user_cost) }}</strong></dd>
-              <dt>平台积分</dt><dd class="mono">{{ formatCredits(selectedRecord.platform_cost) }}</dd>
-              <dt>上游成本</dt><dd class="mono">{{ formatCredits(selectedRecord.provider_cost) }}</dd>
-              <dt>计费状态</dt><dd>{{ selectedRecord.billing_status }}</dd>
-              <dt>URM 交易 ID</dt><dd class="mono">{{ pgTextVal(selectedRecord.urm_transaction_id) }}</dd>
+              <dt>计费状态</dt><dd>{{ selectedRecord.billing_status_label || selectedRecord.billing_status }}</dd>
             </dl>
           </section>
 

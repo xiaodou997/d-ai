@@ -189,8 +189,13 @@ func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Req
 // Usage Logs（根据角色返回不同范围数据）
 // ============================================================================
 
-// handleUsageLogsByRole - 使用日志，根据角色返回不同范围
+// handleUsageLogsByRole - 使用日志，根据角色返回不同范围和不同字段可见性
 func (s *Server) handleUsageLogsByRole(w http.ResponseWriter, r *http.Request) {
+	ac, ok := apiContextFromContext(r.Context())
+	if ok && ac.Role == apiRoleTenant {
+		s.handleTenantListUsageLogs(w, r)
+		return
+	}
 	s.handleAdminListUsageLogs(w, r)
 }
 

@@ -119,9 +119,9 @@ const fetchUsage = async () => {
       listUsageSummary(params),
       listUsageLogs({ ...params, limit: limit.value })
     ])
-    unitRows.value = nextUnitSummary
-    summaryRows.value = nextSummary
-    logs.value = nextLogs
+    unitRows.value = Array.isArray(nextUnitSummary) ? nextUnitSummary : []
+    summaryRows.value = Array.isArray(nextSummary) ? nextSummary : []
+    logs.value = Array.isArray(nextLogs) ? nextLogs : []
   } finally {
     loading.value = false
     summaryLoading.value = false
