@@ -57,13 +57,13 @@ const routes = [
             path: 'providers',
             name: 'GatewayProviders',
             component: () => import('@/views/AIGateway/GatewayProviders.vue'),
-            meta: { title: '厂商接入', requiresAuth: true, roles: [1, 2] }
+            meta: { title: '上游管理', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'models',
             name: 'GatewayModels',
             component: () => import('@/views/AIGateway/GatewayModels.vue'),
-            meta: { title: '模型映射', requiresAuth: true, roles: [1, 2] }
+            meta: { title: '模型管理', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'access',

@@ -565,7 +565,7 @@ onMounted(() => { fetchModels() })
       <div class="rail-head">
         <div>
           <p class="eyebrow">Public Models</p>
-          <h2>对外模型</h2>
+          <h2>公开模型</h2>
         </div>
         <el-button type="primary" :icon="Plus" @click="openModelDialog">新增</el-button>
       </div>
@@ -768,15 +768,15 @@ onMounted(() => { fetchModels() })
 
     <main v-else class="empty-workspace">
       <p class="eyebrow">No Model</p>
-      <h2>先创建一个对外模型</h2>
-      <p>对外模型是用户调用时的统一入口。创建后即可配置路由映射和销售价格。</p>
+      <h2>先创建一个公开模型</h2>
+      <p>公开模型是用户调用时的统一入口。创建后即可配置路由映射和销售价格。</p>
       <el-button type="primary" :icon="Plus" @click="openModelDialog">新增模型</el-button>
     </main>
 
     <!-- ── 模型对话框（分步） ── -->
     <el-dialog
       v-model="modelDialogVisible"
-      :title="isEditingModel ? '编辑对外模型' : '新增对外模型'"
+      :title="isEditingModel ? '编辑公开模型' : '新增公开模型'"
       width="680px"
       append-to-body
       :close-on-click-modal="false"

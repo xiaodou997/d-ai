@@ -1,4 +1,4 @@
-// 主流模型催化表：成本价（CNY/百万 token）+ 对外模型默认 token 配置
+// 主流模型催化表：成本价（CNY/百万 token）+ 公开模型默认 token 配置
 // USD → CNY 按 1:7 折算；CNY 原生模型直接使用厂商挂牌价
 //
 // 数据更新口径：参考厂商官网公开定价，截至 2026-05。
@@ -8,7 +8,7 @@
 //
 // 字段说明：
 //   - input/output:    上游成本价，单位 CNY/M tokens
-//   - context:         上下文窗口 tokens（对外模型默认值）
+//   - context:         上下文窗口 tokens（公开模型默认值）
 //   - defaultOutput:   默认最大输出 tokens
 //   - maxOutput:       硬性最大输出 tokens
 
@@ -93,7 +93,7 @@ export function suggestPricingForModel(upstreamModel) {
   }
 }
 
-// 对外模型默认配置建议：基于模型编码 → { label, context_window, default_max_output_tokens, max_output_tokens }
+// 公开模型默认配置建议：基于模型编码 → { label, context_window, default_max_output_tokens, max_output_tokens }
 // 同时也带上输入/输出参考价（积分单位由调用方自行换算）
 export function suggestModelConfig(modelCode) {
   const hit = matchCatalog(modelCode)

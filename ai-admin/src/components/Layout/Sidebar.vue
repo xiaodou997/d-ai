@@ -30,7 +30,7 @@ const hasUrmMenus = computed(() => authStore.isPlatformAdmin && urmMenuGroups.va
 
 const gatewayMenuItems = computed(() => {
   const shared = [
-    { index: '/ai-gateway/access', label: '授权与 Key', icon: Key },
+    { index: '/ai-gateway/access', label: '模型授权', icon: Key },
     { index: '/ai-gateway/usage', label: '调用日志', icon: Tickets }
   ]
 
@@ -39,8 +39,8 @@ const gatewayMenuItems = computed(() => {
   }
 
   return [
-    { index: '/ai-gateway/providers', label: '厂商接入', icon: Connection },
-    { index: '/ai-gateway/models', label: '模型映射', icon: Cpu },
+    { index: '/ai-gateway/providers', label: '上游管理', icon: Connection },
+    { index: '/ai-gateway/models', label: '模型管理', icon: Cpu },
     { index: '/ai-gateway/credential-pools', label: '账号池', icon: UserFilled },
     ...shared,
     { index: '/ai-gateway/limits', label: '限流策略', icon: Lock },

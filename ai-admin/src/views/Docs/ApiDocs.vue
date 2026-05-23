@@ -161,7 +161,7 @@ function scrollTo(id) {
             </thead>
             <tbody>
               <tr><td>API Key 格式</td><td><code>sk-</code> 前缀的字符串</td></tr>
-              <tr><td>Key 获取途径</td><td>租户管理员在"授权与 Key"页面创建并分发给终端用户</td></tr>
+              <tr><td>Key 获取途径</td><td>租户管理员在"模型授权"页面创建并分发给终端用户</td></tr>
               <tr><td>传输要求</td><td>生产环境必须使用 HTTPS，明文传输会导致 Key 泄漏</td></tr>
               <tr><td>Key 权限范围</td><td>每个 Key 只能访问其被授权的模型列表</td></tr>
             </tbody>
