@@ -8,8 +8,8 @@
 
 | 域名 | 前端 | 静态目录 |
 |---|---|---|
-| `admin-ai.ainm.store` | `ai-admin` | `/opt/html/ai-admin` |
-| `tenant-ai.ainm.store` | `ai-tenant` | `/opt/html/ai-tenant` |
+| `ai.admin.ainm.store` | `ai-admin` | `/opt/html/ai-admin` |
+| `ai.tenant.ainm.store` | `ai-tenant` | `/opt/html/ai-tenant` |
 | `ai.ainm.store` | `ai-customer` | `/opt/html/ai-customer` |
 
 配置默认后端 upstream：
