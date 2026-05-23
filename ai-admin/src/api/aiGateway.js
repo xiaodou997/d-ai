@@ -435,13 +435,11 @@ export function formatTimestamp(value) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
-// formatCredits 兼容整数计数（请求数/Token）和小数积分（_credits float）。
-// 整数原样千分位展示；浮点保留最多 4 位小数（1 积分 = 10000 micro-credit 精度上限）。
+// formatCredits 千分位展示数字，保留最多 4 位小数（积分精度上限：1 = 10000 micro）。
+// 后端 _credits 字段已统一是 float；整数计数（request_count/total_tokens）
+// 直接显示原值无小数。
 export function formatCredits(value) {
   const n = Number(value) || 0
-  if (Number.isInteger(n)) {
-    return n.toLocaleString('zh-CN')
-  }
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
 }
 

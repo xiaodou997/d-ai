@@ -5,11 +5,10 @@ import request from '@/utils/request'
 /**
  * 格式化积分显示
  */
-// 兼容整数计数和小数积分（后端 _credits float），浮点保留最多 4 位小数。
+// 后端 _credits 字段已统一是 float，最多 4 位小数；整数计数无小数自然展示。
 export const formatCredits = (value) => {
   if (value === null || value === undefined) return '-'
   const n = Number(value) || 0
-  if (Number.isInteger(n)) return n.toLocaleString()
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })
 }
 

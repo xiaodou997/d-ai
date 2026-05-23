@@ -959,15 +959,10 @@ type usageLogDTO struct {
 	TotalTokens          int32       `json:"total_tokens"`
 	BillableUnitType     string      `json:"billable_unit_type"`
 	BillableUnits        int64       `json:"billable_units"`
-	ProviderCost         int64       `json:"provider_cost"`         // micro-credits
-	PlatformCost         int64       `json:"platform_cost"`         // micro-credits
-	UserCost             int64       `json:"user_cost"`             // micro-credits
-	ApiKeyQuotaCost      int64       `json:"api_key_quota_cost"`    // micro-credits
-	ProviderCredits      float64     `json:"provider_credits"`      // decimal credits
-	PlatformCredits      float64     `json:"platform_credits"`      // decimal credits
-	UserCredits          float64     `json:"user_credits"`          // decimal credits
-	ApiKeyQuotaCredits   float64     `json:"api_key_quota_credits"` // decimal credits
-	UrmTransactionID     pgtype.Text `json:"urm_transaction_id"`
+	ProviderCredits      float64     `json:"provider_credits"`
+	PlatformCredits      float64     `json:"platform_credits"`
+	UserCredits          float64     `json:"user_credits"`
+	ApiKeyQuotaCredits   float64     `json:"api_key_quota_credits"`
 	BillingStatus        string      `json:"billing_status"`
 	RequestStatus        string      `json:"request_status"`
 	HttpStatus           pgtype.Int4 `json:"http_status"`
@@ -1008,15 +1003,10 @@ func fromListUsageLog(r dbgen.ListUsageLogsRow) usageLogDTO {
 		TotalTokens:          r.TotalTokens,
 		BillableUnitType:     r.BillableUnitType,
 		BillableUnits:        r.BillableUnits,
-		ProviderCost:         r.ProviderCost,
-		PlatformCost:         r.PlatformCost,
-		UserCost:             r.UserCost,
-		ApiKeyQuotaCost:      r.ApiKeyQuotaCost,
 		ProviderCredits:      microToCredits(r.ProviderCost),
 		PlatformCredits:      microToCredits(r.PlatformCost),
 		UserCredits:          microToCredits(r.UserCost),
 		ApiKeyQuotaCredits:   microToCredits(r.ApiKeyQuotaCost),
-		UrmTransactionID:     r.UrmTransactionID,
 		BillingStatus:        r.BillingStatus,
 		RequestStatus:        r.RequestStatus,
 		HttpStatus:           r.HttpStatus,
@@ -1078,10 +1068,8 @@ type usageLogForTenantDTO struct {
 	PromptTokens        int32       `json:"prompt_tokens"`
 	CompletionTokens    int32       `json:"completion_tokens"`
 	TotalTokens         int32       `json:"total_tokens"`
-	PlatformCost        int64       `json:"platform_cost"`     // micro-credits
-	UserCost            int64       `json:"user_cost"`         // micro-credits
-	PlatformCredits     float64     `json:"platform_credits"`  // decimal credits
-	UserCredits         float64     `json:"user_credits"`      // decimal credits
+	PlatformCredits     float64     `json:"platform_credits"`
+	UserCredits         float64     `json:"user_credits"`
 	BillingStatus       string      `json:"billing_status"`
 	BillingStatusLabel  string      `json:"billing_status_label"`
 	RequestStatus       string      `json:"request_status"`
@@ -1107,8 +1095,6 @@ func fromListUsageLogForTenant(r dbgen.ListUsageLogsRow) usageLogForTenantDTO {
 		PromptTokens:        r.PromptTokens,
 		CompletionTokens:    r.CompletionTokens,
 		TotalTokens:         r.TotalTokens,
-		PlatformCost:        r.PlatformCost,
-		UserCost:            r.UserCost,
 		PlatformCredits:     microToCredits(r.PlatformCost),
 		UserCredits:         microToCredits(r.UserCost),
 		BillingStatus:       r.BillingStatus,
@@ -1301,8 +1287,7 @@ type usageLogByUserDTO struct {
 	TotalTokens      int32       `json:"total_tokens"`
 	BillableUnitType string      `json:"billable_unit_type"`
 	BillableUnits    int64       `json:"billable_units"`
-	UserCost         int64       `json:"user_cost"`    // micro-credits
-	UserCredits      float64     `json:"user_credits"` // decimal credits
+	UserCredits      float64     `json:"user_credits"`
 	RequestStatus    string      `json:"request_status"`
 	HttpStatus       pgtype.Int4 `json:"http_status"`
 	LatencyMs        pgtype.Int4 `json:"latency_ms"`
@@ -1326,7 +1311,6 @@ func fromListUsageLogByUser(r dbgen.ListUsageLogsByTenantUserRow) usageLogByUser
 		TotalTokens:      r.TotalTokens,
 		BillableUnitType: r.BillableUnitType,
 		BillableUnits:    r.BillableUnits,
-		UserCost:         r.UserCost,
 		UserCredits:      microToCredits(r.UserCost),
 		RequestStatus:    r.RequestStatus,
 		HttpStatus:       r.HttpStatus,

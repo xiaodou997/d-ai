@@ -12,14 +12,13 @@ type usageStatsDTO struct {
 	SuccessCount  int64   `json:"success_count"`
 	FailedCount   int64   `json:"failed_count"`
 	TotalTokens   int64   `json:"total_tokens"`
-	TotalCost     int64   `json:"total_cost"`    // micro-credits (1 credit = 10000 micro)
-	TotalCredits  float64 `json:"total_credits"` // decimal credits = TotalCost / 10000
+	TotalCredits  float64 `json:"total_credits"` // 小数积分（micro÷10000）
 	AvgLatencyMs  float64 `json:"avg_latency_ms"`
 }
 
 // microToCredits 把 micro-credit 精度的 int64 转成展示用的 decimal 积分 float。
-// 用于在每个 DTO 中和原始 _cost 字段并列输出 _credits 字段，前端直接读
-// _credits 不用再做 ÷10000 的折算。1 积分 = 10000 micro-credit。
+// 所有对外 DTO 只暴露 `_credits` float 字段；内部 BillingResult / DB 列仍保持
+// micro-credit int64。1 积分 = 10000 micro-credit。
 func microToCredits(micro int64) float64 {
 	return float64(micro) / 10000.0
 }
@@ -107,18 +106,19 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		filters.dateFrom,
 		filters.dateTo,
 	)
+	var totalCostMicro int64
 	if err := statsRow.Scan(
 		&stats.TotalRequests,
 		&stats.SuccessCount,
 		&stats.FailedCount,
 		&stats.TotalTokens,
-		&stats.TotalCost,
+		&totalCostMicro,
 		&stats.AvgLatencyMs,
 	); err != nil {
 		s.writeAdminServerError(w, r, "query usage stats failed", err)
 		return
 	}
-	stats.TotalCredits = microToCredits(stats.TotalCost)
+	stats.TotalCredits = microToCredits(totalCostMicro)
 
 	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
 		TenantID:      filters.tenantID,
@@ -143,8 +143,8 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 }
 
 // ============================================================================
-// Aggregation DTOs — wrap sqlc-generated rows to expose `_credits` floats
-// alongside the raw micro-credit `_cost` ints.
+// Aggregation DTOs — wrap sqlc-generated rows to expose `_credits` floats only.
+// 内部 BillingResult / DB 列保持 micro-credit int64；对外接口只暴露小数积分。
 // ============================================================================
 
 type dashboardSummaryDTO struct {
@@ -154,9 +154,6 @@ type dashboardSummaryDTO struct {
 	TotalTokens           int64   `json:"total_tokens"`
 	TotalPromptTokens     int64   `json:"total_prompt_tokens"`
 	TotalCompletionTokens int64   `json:"total_completion_tokens"`
-	TotalProviderCost     int64   `json:"total_provider_cost"`
-	TotalPlatformCost     int64   `json:"total_platform_cost"`
-	TotalUserCost         int64   `json:"total_user_cost"`
 	TotalProviderCredits  float64 `json:"total_provider_credits"`
 	TotalPlatformCredits  float64 `json:"total_platform_credits"`
 	TotalUserCredits      float64 `json:"total_user_credits"`
@@ -171,9 +168,6 @@ func fromDashboardSummary(r dbgen.GetDashboardSummaryRow) dashboardSummaryDTO {
 		TotalTokens:           r.TotalTokens,
 		TotalPromptTokens:     r.TotalPromptTokens,
 		TotalCompletionTokens: r.TotalCompletionTokens,
-		TotalProviderCost:     r.TotalProviderCost,
-		TotalPlatformCost:     r.TotalPlatformCost,
-		TotalUserCost:         r.TotalUserCost,
 		TotalProviderCredits:  microToCredits(r.TotalProviderCost),
 		TotalPlatformCredits:  microToCredits(r.TotalPlatformCost),
 		TotalUserCredits:      microToCredits(r.TotalUserCost),
@@ -187,10 +181,6 @@ type usageSummaryRowDTO struct {
 	TotalPromptTokens     int64   `json:"total_prompt_tokens"`
 	TotalCompletionTokens int64   `json:"total_completion_tokens"`
 	TotalTokens           int64   `json:"total_tokens"`
-	TotalProviderCost     int64   `json:"total_provider_cost"`
-	TotalPlatformCost     int64   `json:"total_platform_cost"`
-	TotalUserCost         int64   `json:"total_user_cost"`
-	TotalQuotaCost        int64   `json:"total_quota_cost"`
 	TotalProviderCredits  float64 `json:"total_provider_credits"`
 	TotalPlatformCredits  float64 `json:"total_platform_credits"`
 	TotalUserCredits      float64 `json:"total_user_credits"`
@@ -206,10 +196,6 @@ func fromUsageSummary(rows []dbgen.ListUsageSummaryRow) []usageSummaryRowDTO {
 			TotalPromptTokens:     r.TotalPromptTokens,
 			TotalCompletionTokens: r.TotalCompletionTokens,
 			TotalTokens:           r.TotalTokens,
-			TotalProviderCost:     r.TotalProviderCost,
-			TotalPlatformCost:     r.TotalPlatformCost,
-			TotalUserCost:         r.TotalUserCost,
-			TotalQuotaCost:        r.TotalQuotaCost,
 			TotalProviderCredits:  microToCredits(r.TotalProviderCost),
 			TotalPlatformCredits:  microToCredits(r.TotalPlatformCost),
 			TotalUserCredits:      microToCredits(r.TotalUserCost),
@@ -223,9 +209,6 @@ type usageUnitSummaryRowDTO struct {
 	BillableUnitType     string  `json:"billable_unit_type"`
 	RequestCount         int64   `json:"request_count"`
 	TotalBillableUnits   int64   `json:"total_billable_units"`
-	TotalProviderCost    int64   `json:"total_provider_cost"`
-	TotalPlatformCost    int64   `json:"total_platform_cost"`
-	TotalUserCost        int64   `json:"total_user_cost"`
 	TotalProviderCredits float64 `json:"total_provider_credits"`
 	TotalPlatformCredits float64 `json:"total_platform_credits"`
 	TotalUserCredits     float64 `json:"total_user_credits"`
@@ -238,9 +221,6 @@ func fromUsageUnitSummary(rows []dbgen.ListUsageUnitSummaryRow) []usageUnitSumma
 			BillableUnitType:     r.BillableUnitType,
 			RequestCount:         r.RequestCount,
 			TotalBillableUnits:   r.TotalBillableUnits,
-			TotalProviderCost:    r.TotalProviderCost,
-			TotalPlatformCost:    r.TotalPlatformCost,
-			TotalUserCost:        r.TotalUserCost,
 			TotalProviderCredits: microToCredits(r.TotalProviderCost),
 			TotalPlatformCredits: microToCredits(r.TotalPlatformCost),
 			TotalUserCredits:     microToCredits(r.TotalUserCost),
@@ -256,7 +236,6 @@ type userUsageSummaryDTO struct {
 	TotalTokens           int64   `json:"total_tokens"`
 	TotalPromptTokens     int64   `json:"total_prompt_tokens"`
 	TotalCompletionTokens int64   `json:"total_completion_tokens"`
-	TotalUserCost         int64   `json:"total_user_cost"`
 	TotalUserCredits      float64 `json:"total_user_credits"`
 	AvgLatencyMs          float64 `json:"avg_latency_ms"`
 }
@@ -269,18 +248,16 @@ func fromUserUsageSummary(r dbgen.ListUsageSummaryByTenantUserRow) userUsageSumm
 		TotalTokens:           r.TotalTokens,
 		TotalPromptTokens:     r.TotalPromptTokens,
 		TotalCompletionTokens: r.TotalCompletionTokens,
-		TotalUserCost:         r.TotalUserCost,
 		TotalUserCredits:      microToCredits(r.TotalUserCost),
 		AvgLatencyMs:          r.AvgLatencyMs,
 	}
 }
 
 type dashboardTopModelDTO struct {
-	ModelCode      string  `json:"model_code"`
-	RequestCount   int64   `json:"request_count"`
-	TotalTokens    int64   `json:"total_tokens"`
-	TotalCost      int64   `json:"total_cost"`
-	TotalCredits   float64 `json:"total_credits"`
+	ModelCode    string  `json:"model_code"`
+	RequestCount int64   `json:"request_count"`
+	TotalTokens  int64   `json:"total_tokens"`
+	TotalCredits float64 `json:"total_credits"`
 }
 
 func fromDashboardTopModels(rows []dbgen.ListDashboardTopModelsRow) []dashboardTopModelDTO {
@@ -290,7 +267,6 @@ func fromDashboardTopModels(rows []dbgen.ListDashboardTopModelsRow) []dashboardT
 			ModelCode:    r.ModelCode,
 			RequestCount: r.RequestCount,
 			TotalTokens:  r.TotalTokens,
-			TotalCost:    r.TotalCost,
 			TotalCredits: microToCredits(r.TotalCost),
 		}
 	}
@@ -301,7 +277,6 @@ type dashboardTopTenantDTO struct {
 	TenantID     string  `json:"tenant_id"`
 	RequestCount int64   `json:"request_count"`
 	TotalTokens  int64   `json:"total_tokens"`
-	TotalCost    int64   `json:"total_cost"`
 	TotalCredits float64 `json:"total_credits"`
 }
 
@@ -312,7 +287,6 @@ func fromDashboardTopTenants(rows []dbgen.ListDashboardTopTenantsRow) []dashboar
 			TenantID:     r.TenantID,
 			RequestCount: r.RequestCount,
 			TotalTokens:  r.TotalTokens,
-			TotalCost:    r.TotalCost,
 			TotalCredits: microToCredits(r.TotalCost),
 		}
 	}
@@ -392,18 +366,19 @@ func (s *Server) handleTenantListUsageLogs(w http.ResponseWriter, r *http.Reques
 		filters.dateFrom,
 		filters.dateTo,
 	)
+	var totalCostMicro int64
 	if err := statsRow.Scan(
 		&stats.TotalRequests,
 		&stats.SuccessCount,
 		&stats.FailedCount,
 		&stats.TotalTokens,
-		&stats.TotalCost,
+		&totalCostMicro,
 		&stats.AvgLatencyMs,
 	); err != nil {
 		s.writeAdminServerError(w, r, "query usage stats failed", err)
 		return
 	}
-	stats.TotalCredits = microToCredits(stats.TotalCost)
+	stats.TotalCredits = microToCredits(totalCostMicro)
 
 	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
 		TenantID:      filters.tenantID,
@@ -520,9 +495,6 @@ func (s *Server) handleAdminListDailyTrend(w http.ResponseWriter, r *http.Reques
 		TotalTokens      int64   `json:"total_tokens"`
 		PromptTokens     int64   `json:"prompt_tokens"`
 		CompletionTokens int64   `json:"completion_tokens"`
-		ProviderCost     int64   `json:"provider_cost"`
-		PlatformCost     int64   `json:"platform_cost"`
-		UserCost         int64   `json:"user_cost"`
 		ProviderCredits  float64 `json:"provider_credits"`
 		PlatformCredits  float64 `json:"platform_credits"`
 		UserCredits      float64 `json:"user_credits"`
@@ -539,17 +511,18 @@ func (s *Server) handleAdminListDailyTrend(w http.ResponseWriter, r *http.Reques
 	out := make([]dailyRow, 0)
 	for rows.Next() {
 		var row dailyRow
+		var providerCostMicro, platformCostMicro, userCostMicro int64
 		if err := rows.Scan(
 			&row.Date, &row.RequestCount, &row.SuccessCount, &row.FailedCount,
 			&row.TotalTokens, &row.PromptTokens, &row.CompletionTokens,
-			&row.ProviderCost, &row.PlatformCost, &row.UserCost, &row.AvgLatencyMs,
+			&providerCostMicro, &platformCostMicro, &userCostMicro, &row.AvgLatencyMs,
 		); err != nil {
 			s.writeAdminServerError(w, r, "scan daily trend row failed", err)
 			return
 		}
-		row.ProviderCredits = microToCredits(row.ProviderCost)
-		row.PlatformCredits = microToCredits(row.PlatformCost)
-		row.UserCredits = microToCredits(row.UserCost)
+		row.ProviderCredits = microToCredits(providerCostMicro)
+		row.PlatformCredits = microToCredits(platformCostMicro)
+		row.UserCredits = microToCredits(userCostMicro)
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
