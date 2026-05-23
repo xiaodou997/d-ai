@@ -66,6 +66,11 @@ const (
 	BillingConfirmed BillingStatus = "confirmed"
 	BillingCancelled BillingStatus = "cancelled"
 	BillingFree      BillingStatus = "free"
+	// Phase 2 (分账层) 新状态：
+	// PendingSettle = 已写入本地账本聚合表 pending_micro，等待结算聚合
+	// Settled       = 已被一次聚合 Consume 调用扣款，settled_event_id 已回填
+	BillingPendingSettle BillingStatus = "pending_settle"
+	BillingSettled       BillingStatus = "settled"
 )
 
 // RequestStatus describes the outcome of an AI request.
@@ -415,18 +420,54 @@ func (u TokenUsage) TotalTokens() int {
 		u.CacheWriteTokens + u.CacheReadTokens + u.ReasoningTokens
 }
 
-// ResolutionCreditPrice is a per-resolution price denominated in integer credits.
+// MicroCreditsPerCredit is the precision unit for internal billing math.
+// 1 积分 (credit, == 1 分人民币) = 10000 micro-credits.
+//
+// All in-memory price and amount fields in this package use micro-credit units
+// to avoid the "300 tokens of a cheap model rounds to 0 (or 1) credit" loss
+// that integer credit math suffered from. Conversion to integer credits happens
+// only at the URM boundary (floor for actual deduction, ceil for pre-auth holds)
+// and at the public DTO boundary (micro/10000.0 → float credits for display).
+const MicroCreditsPerCredit int64 = 10000
+
+// MicroToCreditsFloor truncates a micro-credit amount to whole credits, dropping
+// any fractional remainder. Used when actually deducting from URM.
+func MicroToCreditsFloor(micro int64) int64 {
+	return micro / MicroCreditsPerCredit
+}
+
+// MicroToCreditsCeil rounds a micro-credit amount up to whole credits. Used
+// when pre-authorizing (freezing) credits to ensure we hold enough.
+func MicroToCreditsCeil(micro int64) int64 {
+	if micro <= 0 {
+		return 0
+	}
+	return (micro + MicroCreditsPerCredit - 1) / MicroCreditsPerCredit
+}
+
+// MicroToCreditsFloat returns the micro amount as fractional credits, suitable
+// for human-facing display (e.g. "0.03 积分").
+func MicroToCreditsFloat(micro int64) float64 {
+	return float64(micro) / float64(MicroCreditsPerCredit)
+}
+
+// CreditsToMicro converts integer credits back into micro-credits.
+func CreditsToMicro(credits int64) int64 {
+	return credits * MicroCreditsPerCredit
+}
+
+// ResolutionCreditPrice is a per-resolution price in micro-credits.
 // Used for image (per image) and video (per second) sales pricing.
 type ResolutionCreditPrice struct {
 	Resolution string `json:"resolution"`
-	Price      int64  `json:"price"`
+	Price      int64  `json:"price"` // micro-credits
 }
 
-// ModelPricing holds per-1M-token prices in integer credits.
+// ModelPricing holds per-1M-token prices in micro-credits.
 // Zero values mean "use the corresponding base price" — see Effective* methods.
 type ModelPricing struct {
-	InputPer1M      int64
-	OutputPer1M     int64
+	InputPer1M      int64 // micro-credits per 1M input tokens
+	OutputPer1M     int64 // micro-credits per 1M output tokens
 	CacheWritePer1M int64 // 0 = bill at InputPer1M
 	CacheReadPer1M  int64 // 0 = bill at InputPer1M (profit: provider charges less)
 	ReasoningPer1M  int64 // 0 = bill at OutputPer1M
@@ -455,12 +496,14 @@ func (p ModelPricing) EffectiveReasoningPrice() int64 {
 	return p.OutputPer1M
 }
 
-// BillingResult is the output of cost calculation.
+// BillingResult is the output of cost calculation. All cost fields are in
+// micro-credits (1 credit = 10000 micro). Conversion to integer credits for
+// URM happens at the Biller boundary (floor for actual, ceil for freeze).
 type BillingResult struct {
-	ProviderCost     int64 // what the platform pays the upstream
-	PlatformCost     int64 // what the tenant pays the platform (→ URM TenantAmount)
-	UserCost         int64 // what the user pays the tenant (→ URM UserAmount; 0 for tenant-owned keys)
-	APIKeyQuotaCost  int64 // deducted from the API key's local quota counter
+	ProviderCost     int64 // micro-credits the platform pays upstream
+	PlatformCost     int64 // micro-credits the tenant pays the platform (→ URM TenantAmount, floored)
+	UserCost         int64 // micro-credits the user pays the tenant (→ URM UserAmount; 0 for tenant-owned keys)
+	APIKeyQuotaCost  int64 // micro-credits deducted from the API key's local quota counter
 	BillableUnits    int64
 	BillableUnitType string
 }

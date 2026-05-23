@@ -91,7 +91,14 @@ func decodeResolutionCreditPrices(raw []byte) []domain.ResolutionCreditPrice {
 	return prices
 }
 
-// CalculateBilling computes all cost tiers from usage and pricing.
+// CalculateBilling computes all cost tiers from usage and pricing. All output
+// fields are in micro-credits (1 credit = 10000 micro). Pricing inputs are
+// micro-credits per 1M tokens (or per image / per second of video).
+//
+// Precision: with micro-credit units, a 300-token request at 1 credit/M tokens
+// produces 300 × 10000 / 1_000_000 = 3 micro-credits (= 0.0003 credit), no
+// longer rounded up to a full integer credit.
+//
 // For token-based models, cache tokens are billed at input price to create margin.
 // For image models, cost = price-per-image × count (resolved by resolution).
 // For video models, cost = price-per-second × duration (resolved by resolution).
@@ -129,12 +136,6 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 
 	total := promptCost + completionCost + cacheWriteCost + cacheReadCost + reasoningCost
 	totalTokens := int64(usage.TotalTokens())
-
-	// Integer division truncates sub-1 results to 0 for small token counts.
-	// Apply a floor of 1 when there is real token usage and the model has non-zero pricing.
-	if total == 0 && totalTokens > 0 && (pricing.InputPer1M > 0 || pricing.OutputPer1M > 0) {
-		total = 1
-	}
 
 	return domain.BillingResult{
 		PlatformCost:     total,

@@ -254,10 +254,12 @@ func (s *QuotaReserveStep) Rollback(ctx context.Context, req *Request) {
 // ============================================================================
 
 // BillingEstimate carries the pre-request cost estimate passed to URMBiller.Freeze,
-// and the actual cost passed to URMBiller.Confirm.
+// and the actual cost passed to URMBiller.Confirm. All amounts are in
+// micro-credits (1 credit = 10000 micro). The Biller adapter converts to
+// integer credits at the URM boundary.
 type BillingEstimate struct {
-	PlatformCost int64
-	UserCost     int64
+	PlatformCost int64 // micro-credits
+	UserCost     int64 // micro-credits
 }
 
 // URMBiller handles URM freeze / confirm / cancel operations.

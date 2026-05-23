@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS ai_api_keys (
   key_hash       TEXT        NOT NULL,
   last_four      CHAR(4),
   name           TEXT        NOT NULL,
+  -- quota_* 列单位：微积分 (micro-credits)。NULL = 无上限。
+  -- quota_used 由 ai_usage_logs.api_key_quota_cost 累加；预扣 quota_reserved 也是同单位。
   quota_limit    BIGINT,
   quota_used     BIGINT      NOT NULL DEFAULT 0,
   quota_reserved BIGINT      NOT NULL DEFAULT 0,
@@ -276,6 +278,12 @@ CREATE INDEX IF NOT EXISTS idx_ai_console_messages_session
 -- AI Model Prices (平台对外售价)
 -- cache_write / cache_read / reasoning 价格列预留：默认 0 表示按 input_price 计费。
 -- 盈利点：provider 对 cache_read 打折，平台按 input 原价向客户收取。
+--
+-- 单位约定（自 2026-05 起）：所有 *_price_per_1m 列的单位是「微积分 / 1M token」
+-- (micro-credits per 1M tokens)。1 积分 = 10000 微积分 = 1 分人民币。
+-- 例：input_price_per_1m = 1_000_000 表示 100 积分 / 1M token (= 1 元 / 1M token)。
+-- image_prices / video_prices JSON 中的 price 字段同样是微积分。
+-- audio_*_price_* 列同样使用微积分单位。
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_model_prices (
   id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -430,11 +438,16 @@ CREATE TABLE IF NOT EXISTS ai_usage_logs (
   total_tokens           INTEGER     NOT NULL DEFAULT 0,
   billable_unit_type     TEXT        NOT NULL DEFAULT 'token',
   billable_units         BIGINT      NOT NULL DEFAULT 0,
+  -- 自 2026-05 起，以下 *_cost 列单位均为「微积分」(micro-credits)。
+  -- 1 积分 = 10000 微积分 = 1 分人民币。报表展示时除以 10000 即得小数积分。
   provider_cost          BIGINT      NOT NULL DEFAULT 0,
   platform_cost          BIGINT      NOT NULL DEFAULT 0,
   user_cost              BIGINT      NOT NULL DEFAULT 0,
   api_key_quota_cost     BIGINT      NOT NULL DEFAULT 0,
   urm_transaction_id     TEXT,
+  -- Phase 2 起：分账层聚合扣款后回填这两列，关联到 URM bill_events.event_id
+  settled_event_id       TEXT,
+  settled_at             TIMESTAMPTZ,
   billing_status         TEXT        NOT NULL,
   request_status         TEXT        NOT NULL,
   http_status            INTEGER,
@@ -735,3 +748,36 @@ CREATE TABLE IF NOT EXISTS ai_audit_blobs (
   size_bytes   INT         NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ============================================================================
+-- Local Credit Ledger (Phase 2, 2026-05)
+-- 每 (owner_type, tenant_id, user_id) 一行的本地账本。
+-- pending_micro 累计未结算微积分，达到阈值或定时器触发时聚合调 URM Consume。
+-- settle_window_id 是当前结算窗口的 ULID 幂等键。
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS ai_user_credit_ledger (
+  id                          BIGSERIAL    PRIMARY KEY,
+  owner_type                  TEXT         NOT NULL CHECK (owner_type IN ('user', 'tenant')),
+  tenant_id                   TEXT         NOT NULL,
+  user_id                     TEXT         NOT NULL DEFAULT '',
+  pending_tenant_micro        BIGINT       NOT NULL DEFAULT 0 CHECK (pending_tenant_micro >= 0),
+  pending_user_micro          BIGINT       NOT NULL DEFAULT 0 CHECK (pending_user_micro >= 0),
+  settled_tenant_micro        BIGINT       NOT NULL DEFAULT 0 CHECK (settled_tenant_micro >= 0),
+  settled_user_micro          BIGINT       NOT NULL DEFAULT 0 CHECK (settled_user_micro >= 0),
+  settle_window_id            TEXT,
+  settle_window_tenant_micro  BIGINT       NOT NULL DEFAULT 0 CHECK (settle_window_tenant_micro >= 0),
+  settle_window_user_micro    BIGINT       NOT NULL DEFAULT 0 CHECK (settle_window_user_micro >= 0),
+  settle_window_opened_at     TIMESTAMPTZ,
+  last_settled_at             TIMESTAMPTZ,
+  created_at                  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  CONSTRAINT ai_user_credit_ledger_unique UNIQUE (owner_type, tenant_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_user_credit_ledger_pending
+  ON ai_user_credit_ledger (last_settled_at NULLS FIRST)
+  WHERE (pending_tenant_micro + pending_user_micro) > 0;
+
+CREATE INDEX IF NOT EXISTS idx_ai_user_credit_ledger_in_flight
+  ON ai_user_credit_ledger (settle_window_opened_at)
+  WHERE settle_window_id IS NOT NULL;

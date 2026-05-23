@@ -67,31 +67,34 @@ func NewBiller(
 // Freeze holds estimated credits in URM before the upstream request executes.
 // If the passed-in estimate is non-zero it is used directly; otherwise the biller
 // computes an estimate from current pricing × defaultTokenEstimate.
+//
+// estimate values are in micro-credits; we ceil-convert to integer credits at
+// the URM boundary so the hold always covers the estimated cost.
 func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serving.BillingEstimate) error {
 	identity := req.RuntimeIdentity()
 	if identity == nil {
 		return nil
 	}
 
-	tenantAmount := estimate.PlatformCost
-	userAmount := estimate.UserCost
+	tenantMicro := estimate.PlatformCost
+	userMicro := estimate.UserCost
 
-	if tenantAmount == 0 {
+	if tenantMicro == 0 {
 		if pricing, err := b.pricing.ResolvePricing(ctx, req); err == nil {
 			usage := domain.TokenUsage{PromptTokens: b.defaultTokenEstimate}
 			billing := b.calculate(usage, pricing)
-			tenantAmount = billing.PlatformCost
-			userAmount = billing.UserCost
+			tenantMicro = billing.PlatformCost
+			userMicro = billing.UserCost
 		}
 		// If pricing lookup fails, fall through with 0 — URM will still create
 		// a transaction but no credits will be held until Confirm.
 	}
 
 	if identity.OwnerType == domain.OwnerTenant {
-		userAmount = 0
+		userMicro = 0
 	}
 
-	if tenantAmount == 0 && userAmount == 0 {
+	if tenantMicro == 0 && userMicro == 0 {
 		return nil
 	}
 
@@ -100,8 +103,8 @@ func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serv
 		TenantID:       identity.TenantID,
 		UserID:         identity.UserID,
 		Description:    "ai-gateway: " + req.ModelCode,
-		TenantAmount:   tenantAmount,
-		UserAmount:     userAmount,
+		TenantAmount:   domain.MicroToCreditsCeil(tenantMicro),
+		UserAmount:     domain.MicroToCreditsCeil(userMicro),
 	})
 	if err != nil {
 		return err
@@ -112,6 +115,11 @@ func (b *Biller) Freeze(ctx context.Context, req *serving.Request, estimate serv
 
 // Confirm computes the actual billing from real token usage, writes it to
 // req.BillingResult (so UsageLogger can skip recomputing), then calls URM confirm.
+//
+// BillingResult cost fields are in micro-credits; we floor-convert at the URM
+// boundary. Sub-1-credit remainders are dropped in Phase 0 (e.g. 0.03 credit
+// of consumption deducts 0 credit from URM). Phase 1 (分账层) will carry the
+// remainder forward in a local ledger and settle it on aggregation.
 func (b *Biller) Confirm(ctx context.Context, req *serving.Request, _ serving.BillingEstimate) error {
 	if req.URMTransactionID == "" {
 		return nil
@@ -124,16 +132,16 @@ func (b *Biller) Confirm(ctx context.Context, req *serving.Request, _ serving.Bi
 		req.BillingResolved = true
 	}
 
-	actualTenant := req.BillingResult.PlatformCost
-	actualUser := req.BillingResult.UserCost
+	actualTenantMicro := req.BillingResult.PlatformCost
+	actualUserMicro := req.BillingResult.UserCost
 	if identity := req.RuntimeIdentity(); identity != nil && identity.OwnerType == domain.OwnerTenant {
-		actualUser = 0
+		actualUserMicro = 0
 	}
 
 	_, err = b.client.Confirm(ctx, urm.ConfirmRequest{
 		EventID:            req.URMTransactionID,
-		ActualTenantAmount: actualTenant,
-		ActualUserAmount:   actualUser,
+		ActualTenantAmount: domain.MicroToCreditsFloor(actualTenantMicro),
+		ActualUserAmount:   domain.MicroToCreditsFloor(actualUserMicro),
 	})
 	if err != nil {
 		b.logger.Error("urm confirm failed",

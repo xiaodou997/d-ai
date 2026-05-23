@@ -131,6 +131,16 @@ func (c *Client) Cancel(ctx context.Context, transactionID string) error {
 	return c.do(ctx, http.MethodPost, "/internal/v1/settle/cancel/"+url.PathEscape(transactionID), nil, &resp)
 }
 
+// Consume 调用 URM 单阶段幂等扣款接口。Phase 1 起 ai-service 的分账层用此
+// 接口替代 Freeze/Confirm 两阶段流程，把聚合后的整数积分一次性扣掉。
+func (c *Client) Consume(ctx context.Context, req ConsumeRequest) (*ConsumeResponse, error) {
+	var resp Response[ConsumeResponse]
+	if err := c.do(ctx, http.MethodPost, "/internal/v1/settle/consume", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 // ExchangeCode exchanges an SSO authorization code for a token pair.
 // This is a public client endpoint — no service JWT required, body is form-encoded.
 func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (*TokenPairResponse, error) {
