@@ -61,7 +61,7 @@ const modelDistribution = computed(() => {
   const grouped = new Map()
   for (const row of usageLogs.value) {
     const modelCode = row.model_code || 'unknown'
-    const cost = Number(row.user_cost) || 0
+    const cost = Number(row.user_credits) || 0
     grouped.set(modelCode, (grouped.get(modelCode) || 0) + cost)
   }
   return Array.from(grouped.entries())
@@ -90,7 +90,7 @@ const timelineValues = computed(() => {
     const dayKey = createdAt.toISOString().slice(0, 10)
     grouped.set(
       dayKey,
-      (grouped.get(dayKey) || 0) + (Number(row.user_cost) || 0)
+      (grouped.get(dayKey) || 0) + (Number(row.user_credits) || 0)
     )
   }
   return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0)
@@ -402,7 +402,7 @@ onUnmounted(() => {
         <div class="min-w-0">
           <p class="text-xs text-slate-400 mb-1">总消耗积分</p>
           <p class="text-2xl font-bold text-slate-800 truncate">
-            {{ formatCredits(summary?.total_user_cost || 0) }}
+            {{ formatCredits(summary?.total_user_credits || 0) }}
           </p>
         </div>
       </div>
@@ -478,7 +478,7 @@ onUnmounted(() => {
         <el-table-column prop="model_code" label="模型" min-width="140" />
         <el-table-column label="消耗积分" min-width="100">
           <template #default="{ row }">
-            {{ formatCredits(row.user_cost || 0) }}
+            {{ formatCredits(row.user_credits || 0) }}
           </template>
         </el-table-column>
         <el-table-column label="输入 Token" min-width="90">

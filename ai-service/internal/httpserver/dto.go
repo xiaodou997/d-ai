@@ -6,6 +6,13 @@ package httpserver
 // fields are wrapped here. Timestamps are converted to Unix milliseconds
 // (int64, nil = absent), and JSONB bytes become json.RawMessage so the wire
 // format is actual JSON rather than RFC3339 strings or base64.
+//
+// 单位约定（自 2026-05 计费精度升级起）：
+//   - 所有 *_cost / *_price_per_1m / quota_* 字段的整型值单位是「微积分」
+//     (micro-credits，1 积分 = 10000 微积分 = 1 分人民币)。
+//   - 前端展示时除以 10000 得到「积分」（保留 4 位小数足以无损展示任何
+//     真实账单金额）。
+//   - 后续 Phase 5 会新增对应的 *_credits 浮点字段，前端可按需切换。
 
 import (
 	"encoding/json"
@@ -952,10 +959,14 @@ type usageLogDTO struct {
 	TotalTokens          int32       `json:"total_tokens"`
 	BillableUnitType     string      `json:"billable_unit_type"`
 	BillableUnits        int64       `json:"billable_units"`
-	ProviderCost         int64       `json:"provider_cost"`
-	PlatformCost         int64       `json:"platform_cost"`
-	UserCost             int64       `json:"user_cost"`
-	ApiKeyQuotaCost      int64       `json:"api_key_quota_cost"`
+	ProviderCost         int64       `json:"provider_cost"`         // micro-credits
+	PlatformCost         int64       `json:"platform_cost"`         // micro-credits
+	UserCost             int64       `json:"user_cost"`             // micro-credits
+	ApiKeyQuotaCost      int64       `json:"api_key_quota_cost"`    // micro-credits
+	ProviderCredits      float64     `json:"provider_credits"`      // decimal credits
+	PlatformCredits      float64     `json:"platform_credits"`      // decimal credits
+	UserCredits          float64     `json:"user_credits"`          // decimal credits
+	ApiKeyQuotaCredits   float64     `json:"api_key_quota_credits"` // decimal credits
 	UrmTransactionID     pgtype.Text `json:"urm_transaction_id"`
 	BillingStatus        string      `json:"billing_status"`
 	RequestStatus        string      `json:"request_status"`
@@ -1001,6 +1012,10 @@ func fromListUsageLog(r dbgen.ListUsageLogsRow) usageLogDTO {
 		PlatformCost:         r.PlatformCost,
 		UserCost:             r.UserCost,
 		ApiKeyQuotaCost:      r.ApiKeyQuotaCost,
+		ProviderCredits:      microToCredits(r.ProviderCost),
+		PlatformCredits:      microToCredits(r.PlatformCost),
+		UserCredits:          microToCredits(r.UserCost),
+		ApiKeyQuotaCredits:   microToCredits(r.ApiKeyQuotaCost),
 		UrmTransactionID:     r.UrmTransactionID,
 		BillingStatus:        r.BillingStatus,
 		RequestStatus:        r.RequestStatus,
@@ -1033,6 +1048,10 @@ func billingStatusLabel(status string) string {
 	switch status {
 	case "pending":
 		return "待确认"
+	case "pending_settle":
+		return "待结算"
+	case "settled":
+		return "已结算"
 	case "frozen":
 		return "已冻结"
 	case "confirmed":
@@ -1059,8 +1078,10 @@ type usageLogForTenantDTO struct {
 	PromptTokens        int32       `json:"prompt_tokens"`
 	CompletionTokens    int32       `json:"completion_tokens"`
 	TotalTokens         int32       `json:"total_tokens"`
-	PlatformCost        int64       `json:"platform_cost"`
-	UserCost            int64       `json:"user_cost"`
+	PlatformCost        int64       `json:"platform_cost"`     // micro-credits
+	UserCost            int64       `json:"user_cost"`         // micro-credits
+	PlatformCredits     float64     `json:"platform_credits"`  // decimal credits
+	UserCredits         float64     `json:"user_credits"`      // decimal credits
 	BillingStatus       string      `json:"billing_status"`
 	BillingStatusLabel  string      `json:"billing_status_label"`
 	RequestStatus       string      `json:"request_status"`
@@ -1088,6 +1109,8 @@ func fromListUsageLogForTenant(r dbgen.ListUsageLogsRow) usageLogForTenantDTO {
 		TotalTokens:         r.TotalTokens,
 		PlatformCost:        r.PlatformCost,
 		UserCost:            r.UserCost,
+		PlatformCredits:     microToCredits(r.PlatformCost),
+		UserCredits:         microToCredits(r.UserCost),
 		BillingStatus:       r.BillingStatus,
 		BillingStatusLabel:  billingStatusLabel(r.BillingStatus),
 		RequestStatus:       r.RequestStatus,
@@ -1278,7 +1301,8 @@ type usageLogByUserDTO struct {
 	TotalTokens      int32       `json:"total_tokens"`
 	BillableUnitType string      `json:"billable_unit_type"`
 	BillableUnits    int64       `json:"billable_units"`
-	UserCost         int64       `json:"user_cost"`
+	UserCost         int64       `json:"user_cost"`    // micro-credits
+	UserCredits      float64     `json:"user_credits"` // decimal credits
 	RequestStatus    string      `json:"request_status"`
 	HttpStatus       pgtype.Int4 `json:"http_status"`
 	LatencyMs        pgtype.Int4 `json:"latency_ms"`
@@ -1303,6 +1327,7 @@ func fromListUsageLogByUser(r dbgen.ListUsageLogsByTenantUserRow) usageLogByUser
 		BillableUnitType: r.BillableUnitType,
 		BillableUnits:    r.BillableUnits,
 		UserCost:         r.UserCost,
+		UserCredits:      microToCredits(r.UserCost),
 		RequestStatus:    r.RequestStatus,
 		HttpStatus:       r.HttpStatus,
 		LatencyMs:        r.LatencyMs,

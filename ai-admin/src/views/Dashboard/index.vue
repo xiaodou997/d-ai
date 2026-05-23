@@ -41,6 +41,9 @@ const summary = reactive({
   total_provider_cost: 0,
   total_platform_cost: 0,
   total_user_cost: 0,
+  total_provider_credits: 0,
+  total_platform_credits: 0,
+  total_user_credits: 0,
   avg_latency_ms: 0
 })
 const topModels = shallowRef([])
@@ -97,8 +100,8 @@ function maxVal(data, ...fns) {
 const costSvg = computed(() => {
   const d = rows.value
   if (!d.length) return ''
-  const mx = maxVal(d, r => r.platform_cost, r => r.provider_cost)
-  return [polyline(d, r => r.platform_cost, '#4f46e5', mx), polyline(d, r => r.provider_cost, '#e11d48', mx), xLabels(d)].join('')
+  const mx = maxVal(d, r => r.platform_credits, r => r.provider_credits)
+  return [polyline(d, r => r.platform_credits, '#4f46e5', mx), polyline(d, r => r.provider_credits, '#e11d48', mx), xLabels(d)].join('')
 })
 
 const volumeSvg = computed(() => {
@@ -227,7 +230,7 @@ onMounted(refreshAll)
       </div>
       <div class="metric">
         <span>用户计费</span>
-        <strong>{{ formatCredits(summary.total_user_cost) }}</strong>
+        <strong>{{ formatCredits(summary.total_user_credits) }}</strong>
         <p>按业务扣费口径统计</p>
       </div>
       <div class="metric">
@@ -237,7 +240,7 @@ onMounted(refreshAll)
       </div>
       <div class="metric">
         <span>平台成本</span>
-        <strong>{{ formatCredits(summary.total_platform_cost) }}</strong>
+        <strong>{{ formatCredits(summary.total_platform_credits) }}</strong>
         <p>平台承担成本</p>
       </div>
       <div class="metric">
@@ -315,7 +318,7 @@ onMounted(refreshAll)
             <template #default="{ row }">{{ formatCredits(row.request_count) }}</template>
           </el-table-column>
           <el-table-column label="业务计费" width="110" align="right">
-            <template #default="{ row }">{{ formatCredits(row.total_cost) }}</template>
+            <template #default="{ row }">{{ formatCredits(row.total_credits) }}</template>
           </el-table-column>
           <el-table-column label="Token" width="110" align="right">
             <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
@@ -336,7 +339,7 @@ onMounted(refreshAll)
             <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
           </el-table-column>
           <el-table-column label="业务计费" width="120" align="right">
-            <template #default="{ row }">{{ formatCredits(row.total_cost) }}</template>
+            <template #default="{ row }">{{ formatCredits(row.total_credits) }}</template>
           </el-table-column>
         </el-table>
       </div>
@@ -441,10 +444,10 @@ onMounted(refreshAll)
           <template #default="{ row }">{{ formatCredits(row.completion_tokens) }}</template>
         </el-table-column>
         <el-table-column label="平台成本" width="110" align="right">
-          <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
+          <template #default="{ row }">{{ formatCredits(row.platform_credits) }}</template>
         </el-table-column>
         <el-table-column label="Provider成本" width="120" align="right">
-          <template #default="{ row }">{{ formatCredits(row.provider_cost) }}</template>
+          <template #default="{ row }">{{ formatCredits(row.provider_credits) }}</template>
         </el-table-column>
         <el-table-column label="均延迟(ms)" width="110" align="right">
           <template #default="{ row }">{{ formatCredits(row.avg_latency_ms) }}</template>

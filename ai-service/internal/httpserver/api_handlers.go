@@ -182,7 +182,7 @@ func (s *Server) handleDashboardSummaryByRole(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeOK(w, summary)
+	writeOK(w, fromDashboardSummary(summary))
 }
 
 // ============================================================================
@@ -289,7 +289,7 @@ func (s *Server) handleUserUsageSummarySelf(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeOK(w, summary)
+	writeOK(w, fromUserUsageSummary(summary))
 }
 
 // ============================================================================

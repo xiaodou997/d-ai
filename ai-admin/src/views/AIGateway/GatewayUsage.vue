@@ -87,10 +87,10 @@ const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
   acc.promptTokens += Number(row.total_prompt_tokens) || 0
   acc.completionTokens += Number(row.total_completion_tokens) || 0
   acc.totalTokens += Number(row.total_tokens) || 0
-  acc.providerCost += Number(row.total_provider_cost) || 0
-  acc.platformCost += Number(row.total_platform_cost) || 0
-  acc.userCost += Number(row.total_user_cost) || 0
-  acc.quotaCost += Number(row.total_quota_cost) || 0
+  acc.providerCost += Number(row.total_provider_credits) || 0
+  acc.platformCost += Number(row.total_platform_credits) || 0
+  acc.userCost += Number(row.total_user_credits) || 0
+  acc.quotaCost += Number(row.total_quota_credits) || 0
   return acc
 }, {
   requestCount: 0,
@@ -106,7 +106,7 @@ const summaryTotals = computed(() => summaryRows.value.reduce((acc, row) => {
 const unitCostShare = (row) => {
   const total = summaryTotals.value.userCost
   if (!total) return '0%'
-  return `${((Number(row.total_user_cost) || 0) * 100 / total).toFixed(1)}%`
+  return `${((Number(row.total_user_credits) || 0) * 100 / total).toFixed(1)}%`
 }
 
 const fetchUsage = async () => {
@@ -201,16 +201,16 @@ onMounted(fetchUsage)
         <template #default="{ row }">{{ formatCredits(row.total_billable_units) }}</template>
       </el-table-column>
       <el-table-column label="用户计费" width="120" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_user_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_user_credits) }}</template>
       </el-table-column>
       <el-table-column label="用户计费占比" width="120" align="right">
         <template #default="{ row }">{{ unitCostShare(row) }}</template>
       </el-table-column>
       <el-table-column label="平台成本" width="110" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_platform_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_platform_credits) }}</template>
       </el-table-column>
       <el-table-column label="供应商成本" width="120" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_provider_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_provider_credits) }}</template>
       </el-table-column>
     </el-table>
 
@@ -229,16 +229,16 @@ onMounted(fetchUsage)
         <template #default="{ row }">{{ formatCredits(row.total_tokens) }}</template>
       </el-table-column>
       <el-table-column label="Key 额度消耗" width="130" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_quota_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_quota_credits) }}</template>
       </el-table-column>
       <el-table-column label="平台成本(积分)" width="140" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_platform_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_platform_credits) }}</template>
       </el-table-column>
       <el-table-column label="用户计费(积分)" width="140" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_user_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_user_credits) }}</template>
       </el-table-column>
       <el-table-column label="供应商成本(积分)" width="150" align="right">
-        <template #default="{ row }">{{ formatCredits(row.total_provider_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.total_provider_credits) }}</template>
       </el-table-column>
     </el-table>
 
@@ -272,13 +272,13 @@ onMounted(fetchUsage)
         </template>
       </el-table-column>
       <el-table-column label="Key 额度消耗" width="130" align="right">
-        <template #default="{ row }">{{ formatCredits(row.api_key_quota_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.api_key_quota_credits) }}</template>
       </el-table-column>
       <el-table-column label="平台成本(积分)" width="130" align="right">
-        <template #default="{ row }">{{ formatCredits(row.platform_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.platform_credits) }}</template>
       </el-table-column>
       <el-table-column label="用户计费(积分)" width="130" align="right">
-        <template #default="{ row }">{{ formatCredits(row.user_cost) }}</template>
+        <template #default="{ row }">{{ formatCredits(row.user_credits) }}</template>
       </el-table-column>
       <el-table-column prop="latency_ms" label="耗时(ms)" width="100" align="right" />
       <el-table-column label="状态" width="110">

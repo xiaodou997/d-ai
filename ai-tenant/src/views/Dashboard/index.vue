@@ -241,7 +241,7 @@
           </el-table-column>
           <el-table-column label="积分消耗" width="100" align="right">
             <template #default="{ row }">
-              <span class="font-bold text-purple-600">{{ formatCredits(row.total_cost) }}</span>
+              <span class="font-bold text-purple-600">{{ formatCredits(row.total_credits) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -485,7 +485,7 @@ const fetchAIStats = async () => {
     ])
     aiStats.modelCount = Array.isArray(modelsRes) ? modelsRes.length : 0
     aiStats.apiKeyCount = Array.isArray(keysRes) ? keysRes.length : 0
-    aiStats.totalCost = summaryRes.total_user_cost || 0
+    aiStats.totalCost = summaryRes.total_user_credits || 0
     aiStats.totalRequests = summaryRes.total_requests || 0
     aiStats.successRequests = summaryRes.successful_requests || 0
     aiStats.avgLatency = summaryRes.avg_latency_ms || 0

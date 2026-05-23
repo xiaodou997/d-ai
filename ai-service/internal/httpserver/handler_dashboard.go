@@ -25,7 +25,7 @@ func (s *Server) handleAdminDashboardTopModels(w http.ResponseWriter, r *http.Re
 		s.writeAdminServerError(w, r, "list dashboard top models failed", err)
 		return
 	}
-	writeOK(w, rows)
+	writeOK(w, fromDashboardTopModels(rows))
 }
 
 func (s *Server) handleAdminDashboardTopTenants(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +47,7 @@ func (s *Server) handleAdminDashboardTopTenants(w http.ResponseWriter, r *http.R
 		s.writeAdminServerError(w, r, "list dashboard top tenants failed", err)
 		return
 	}
-	writeOK(w, rows)
+	writeOK(w, fromDashboardTopTenants(rows))
 }
 
 func (s *Server) handleAdminDashboardRecentErrors(w http.ResponseWriter, r *http.Request) {

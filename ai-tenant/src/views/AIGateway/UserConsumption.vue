@@ -9,7 +9,7 @@ const PAGE_SIZE = 20
 const loading = shallowRef(false)
 const total = shallowRef(0)
 const records = shallowRef([])
-const stats = shallowRef({ total_requests: 0, success_count: 0, failed_count: 0, total_tokens: 0, total_cost: 0, avg_latency_ms: 0 })
+const stats = shallowRef({ total_requests: 0, success_count: 0, failed_count: 0, total_tokens: 0, total_cost: 0, total_credits: 0, avg_latency_ms: 0 })
 const users = shallowRef([])
 const drawerVisible = shallowRef(false)
 const selectedRecord = shallowRef(null)
@@ -218,7 +218,7 @@ onUnmounted(() => {
       </div>
       <div class="stat-card">
         <span class="stat-label">消耗积分</span>
-        <span class="stat-value accent">{{ formatCredits(stats.total_cost) }}</span>
+        <span class="stat-value accent">{{ formatCredits(stats.total_credits) }}</span>
         <span class="stat-sub">均延 {{ Math.round(stats.avg_latency_ms) }} ms</span>
       </div>
     </section>
@@ -294,7 +294,7 @@ onUnmounted(() => {
         </el-table-column>
         <el-table-column label="积分" min-width="90" align="right">
           <template #default="{ row }">
-            <span class="mono">{{ formatCredits(row.user_cost) }}</span>
+            <span class="mono">{{ formatCredits(row.user_credits) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="延迟" width="90" align="right">
@@ -358,8 +358,8 @@ onUnmounted(() => {
           <section class="detail-section">
             <h3>费用</h3>
             <dl>
-              <dt>租户积分</dt><dd class="mono">{{ formatCredits(selectedRecord.platform_cost) }}</dd>
-              <dt>用户积分</dt><dd class="mono accent"><strong>{{ formatCredits(selectedRecord.user_cost) }}</strong></dd>
+              <dt>租户积分</dt><dd class="mono">{{ formatCredits(selectedRecord.platform_credits) }}</dd>
+              <dt>用户积分</dt><dd class="mono accent"><strong>{{ formatCredits(selectedRecord.user_credits) }}</strong></dd>
               <dt>计费状态</dt><dd>{{ selectedRecord.billing_status_label || selectedRecord.billing_status }}</dd>
             </dl>
           </section>

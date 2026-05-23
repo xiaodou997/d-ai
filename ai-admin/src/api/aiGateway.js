@@ -435,8 +435,14 @@ export function formatTimestamp(value) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
+// formatCredits 兼容整数计数（请求数/Token）和小数积分（_credits float）。
+// 整数原样千分位展示；浮点保留最多 4 位小数（1 积分 = 10000 micro-credit 精度上限）。
 export function formatCredits(value) {
-  return (Number(value) || 0).toLocaleString('zh-CN')
+  const n = Number(value) || 0
+  if (Number.isInteger(n)) {
+    return n.toLocaleString('zh-CN')
+  }
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
 }
 
 // ============================================================================
