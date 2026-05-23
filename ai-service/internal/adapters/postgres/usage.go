@@ -59,7 +59,7 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 			defer cancel()
 			_ = l.q.ConfirmAPIKeyQuotaUsage(bgCtx, dbgen.ConfirmAPIKeyQuotaUsageParams{
 				ID:            apiKeyID,
-				QuotaUsed:     billing.APIKeyQuotaCost,
+				QuotaUsed:     billing.APIKeyQuotaCostMicro,
 				QuotaReserved: reservedAmount,
 			})
 		}()
@@ -155,10 +155,10 @@ func (l *UsageLogger) createUsageLog(ctx context.Context, req *serving.Request, 
 		TotalTokens:          int32(usage.TotalTokens()),
 		BillableUnitType:     billing.BillableUnitType,
 		BillableUnits:        billing.BillableUnits,
-		ProviderCost:         billing.ProviderCost,
-		PlatformCost:         billing.PlatformCost,
-		UserCost:             billing.UserCost,
-		ApiKeyQuotaCost:      billing.APIKeyQuotaCost,
+		ProviderCost:         billing.ProviderCostMicro,
+		PlatformCost:         billing.PlatformCostMicro,
+		UserCost:             billing.UserCostMicro,
+		ApiKeyQuotaCost:      billing.APIKeyQuotaCostMicro,
 		UrmTransactionID:     pgtype.Text{}, // Phase 3 后不再写入，结算 event_id 走 settled_event_id 列
 		BillingStatus:        billingStatus(req),
 		RequestStatus:        string(req.RequestStatus),
@@ -204,10 +204,10 @@ func (l *UsageLogger) upsertRollup(ctx context.Context, req *serving.Request, bi
 		ReasoningTokens:  int64(usage.ReasoningTokens),
 		TotalTokens:      int64(usage.TotalTokens()),
 		BillableUnits:    billing.BillableUnits,
-		ProviderCost:     billing.ProviderCost,
-		PlatformCost:     billing.PlatformCost,
-		UserCost:         billing.UserCost,
-		ApiKeyQuotaCost:  billing.APIKeyQuotaCost,
+		ProviderCost:     billing.ProviderCostMicro,
+		PlatformCost:     billing.PlatformCostMicro,
+		UserCost:         billing.UserCostMicro,
+		ApiKeyQuotaCost:  billing.APIKeyQuotaCostMicro,
 		LatencyMs:        nullableInt4(req.LatencyMs),
 	})
 }
@@ -238,7 +238,7 @@ func resolution(req *serving.Request) string {
 //
 // settled 状态由 settle worker 在事务里同事务回填，与本函数无关。
 func billingStatus(req *serving.Request) string {
-	if req.BillingResult.PlatformCost == 0 && req.BillingResult.UserCost == 0 {
+	if req.BillingResult.PlatformCostMicro == 0 && req.BillingResult.UserCostMicro == 0 {
 		return string(domain.BillingFree)
 	}
 	return string(domain.BillingPendingSettle)

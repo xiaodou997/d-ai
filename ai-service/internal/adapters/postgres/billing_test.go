@@ -74,18 +74,18 @@ func TestCalculateBilling_MicroPrecision(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := CalculateBilling(c.usage, c.pricing)
-			if got.PlatformCost != c.wantPlatMic {
-				t.Errorf("PlatformCost = %d micro, want %d micro (= %.4f credits, want %.4f credits)",
-					got.PlatformCost, c.wantPlatMic,
-					domain.MicroToCreditsFloat(got.PlatformCost),
+			if got.PlatformCostMicro != c.wantPlatMic {
+				t.Errorf("PlatformCostMicro = %d micro, want %d micro (= %.4f credits, want %.4f credits)",
+					got.PlatformCostMicro, c.wantPlatMic,
+					domain.MicroToCreditsFloat(got.PlatformCostMicro),
 					domain.MicroToCreditsFloat(c.wantPlatMic))
 			}
-			// PlatformCost / UserCost / APIKeyQuotaCost should be equal for token billing
-			if got.UserCost != got.PlatformCost {
-				t.Errorf("UserCost (%d) != PlatformCost (%d)", got.UserCost, got.PlatformCost)
+			// Platform / User / APIKeyQuota Micro 应该相等（token 计费）
+			if got.UserCostMicro != got.PlatformCostMicro {
+				t.Errorf("UserCostMicro (%d) != PlatformCostMicro (%d)", got.UserCostMicro, got.PlatformCostMicro)
 			}
-			if got.APIKeyQuotaCost != got.PlatformCost {
-				t.Errorf("APIKeyQuotaCost (%d) != PlatformCost (%d)", got.APIKeyQuotaCost, got.PlatformCost)
+			if got.APIKeyQuotaCostMicro != got.PlatformCostMicro {
+				t.Errorf("APIKeyQuotaCostMicro (%d) != PlatformCostMicro (%d)", got.APIKeyQuotaCostMicro, got.PlatformCostMicro)
 			}
 		})
 	}

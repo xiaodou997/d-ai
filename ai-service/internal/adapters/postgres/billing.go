@@ -106,11 +106,11 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 	if usage.ImageCount > 0 {
 		cost := lookupCreditPrice(pricing.ImagePrices, usage.ImageResolution) * int64(usage.ImageCount)
 		return domain.BillingResult{
-			PlatformCost:     cost,
-			UserCost:         cost,
-			APIKeyQuotaCost:  cost,
-			BillableUnits:    int64(usage.ImageCount),
-			BillableUnitType: "image",
+			PlatformCostMicro:    cost,
+			UserCostMicro:        cost,
+			APIKeyQuotaCostMicro: cost,
+			BillableUnits:        int64(usage.ImageCount),
+			BillableUnitType:     "image",
 		}
 	}
 
@@ -119,11 +119,11 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 		cost := int64(usage.VideoSeconds * float64(pricePerSec))
 		seconds := int64(usage.VideoSeconds)
 		return domain.BillingResult{
-			PlatformCost:     cost,
-			UserCost:         cost,
-			APIKeyQuotaCost:  cost,
-			BillableUnits:    seconds,
-			BillableUnitType: "second",
+			PlatformCostMicro:    cost,
+			UserCostMicro:        cost,
+			APIKeyQuotaCostMicro: cost,
+			BillableUnits:        seconds,
+			BillableUnitType:     "second",
 		}
 	}
 
@@ -138,11 +138,11 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 	totalTokens := int64(usage.TotalTokens())
 
 	return domain.BillingResult{
-		PlatformCost:     total,
-		UserCost:         total,
-		APIKeyQuotaCost:  total,
-		BillableUnits:    totalTokens,
-		BillableUnitType: "token",
+		PlatformCostMicro:    total,
+		UserCostMicro:        total,
+		APIKeyQuotaCostMicro: total,
+		BillableUnits:        totalTokens,
+		BillableUnitType:     "token",
 	}
 }
 

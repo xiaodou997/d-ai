@@ -496,16 +496,16 @@ func (p ModelPricing) EffectiveReasoningPrice() int64 {
 	return p.OutputPer1M
 }
 
-// BillingResult is the output of cost calculation. All cost fields are in
-// micro-credits (1 credit = 10000 micro). Conversion to integer credits for
-// URM happens at the Biller boundary (floor for actual, ceil for freeze).
+// BillingResult is the output of cost calculation. *CostMicro 字段统一使用
+// micro-credit 精度（1 积分 = 10000 micro-credit）。settle worker 在调 URM
+// Consume 前 floor 到整数积分；DTO 层折成 _credits float 展示。
 type BillingResult struct {
-	ProviderCost     int64 // micro-credits the platform pays upstream
-	PlatformCost     int64 // micro-credits the tenant pays the platform (→ URM TenantAmount, floored)
-	UserCost         int64 // micro-credits the user pays the tenant (→ URM UserAmount; 0 for tenant-owned keys)
-	APIKeyQuotaCost  int64 // micro-credits deducted from the API key's local quota counter
-	BillableUnits    int64
-	BillableUnitType string
+	ProviderCostMicro     int64 // 平台付给上游
+	PlatformCostMicro     int64 // 租户付给平台（→ URM TenantAmount，floor 整数积分）
+	UserCostMicro         int64 // 用户付给租户（→ URM UserAmount；tenant-owned key 为 0）
+	APIKeyQuotaCostMicro  int64 // 扣减 API key 本地配额计数
+	BillableUnits         int64
+	BillableUnitType      string
 }
 
 // ============================================================================

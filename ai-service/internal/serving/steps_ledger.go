@@ -39,8 +39,8 @@ func (s *LedgerStep) Finalize(ctx context.Context, req *Request) {
 		return
 	}
 
-	tenantMicro := req.BillingResult.PlatformCost
-	userMicro := req.BillingResult.UserCost
+	tenantMicro := req.BillingResult.PlatformCostMicro
+	userMicro := req.BillingResult.UserCostMicro
 	if tenantMicro <= 0 && userMicro <= 0 {
 		return
 	}
