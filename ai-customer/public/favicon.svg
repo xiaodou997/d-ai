@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>UniAI API User</title>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2E1065"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="core" x1="16" y1="14" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C084FC"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <path d="M32 13l17 10v18L32 51 15 41V23l17-10z" fill="none" stroke="url(#core)" stroke-width="5" stroke-linejoin="round"/>
+  <circle cx="32" cy="32" r="6" fill="#FEF3C7"/>
+  <path d="M20 25l12 7 12-7M20 39l12-7 12 7" stroke="#F5D0FE" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="51" cy="45" r="6" fill="#FFFBEB"/>
+  <path d="M41 58c1.4-6.1 5.2-9 10-9s8.6 2.9 10 9H41z" fill="#FFFBEB"/>
+  <circle cx="51" cy="45" r="3" fill="#D97706"/>
+</svg>
