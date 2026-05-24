@@ -277,7 +277,7 @@ CREATE TABLE ai_model_prices (
 );
 ```
 
-Sale prices bind to models. Database price columns and JSON `price` values are micro-credits; HTTP DTO fields expose decimal credits with explicit `*_credits` names.
+Sale prices bind to models. Database price columns and JSON `price` values are micro-credits; HTTP price configuration DTO fields expose integer credits with explicit `*_credits` names.
 
 ### ai_upstream_deployment_cost_prices
 
@@ -401,7 +401,7 @@ tenant_estimated_micro = input_tokens * input_price_per_1m_micro + output_tokens
 provider_estimated = input_tokens * input_cost_per_1m + output_tokens * output_cost_per_1m
 ```
 
-Token prices are integer micro-credits per 1M tokens internally. The API boundary converts them to decimal credits.
+Configured token prices are integer credits at the API boundary and integer micro-credits internally. Usage, summaries, and dashboards expose calculated results as decimal credits.
 
 Images use a different billable unit:
 

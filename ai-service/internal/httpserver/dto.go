@@ -10,15 +10,14 @@ package httpserver
 // 单位约定（自 2026-05 计费精度升级 + API 统一积分单位重构起）：
 //   - 数据库 / 内部计算使用「微积分」(micro-credits, int64)，
 //     1 积分 = 10000 微积分 = 1 分人民币。
-//   - API 边界（DTO 响应 + 请求）统一使用「积分」(float64)，
-//     后端在 DTO 层做 ÷10000 / ×10000 转换。
+//   - API 边界统一使用「积分」；配置型字段使用整数积分，结果型字段使用小数积分。
+//     后端在 DTO 层做 micro-credit 与 credit 的单位转换。
 //   - 前端只看到「积分」，不再需要感知微积分。
 //   - usage DTO、价格 DTO、配额 DTO 都通过 internal/credits 在边界转换单位。
 
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -33,8 +32,8 @@ import (
 // ---------------------------------------------------------------------------
 
 type resolutionPriceDTO struct {
-	Resolution   string  `json:"resolution"`
-	PriceCredits float64 `json:"price_credits"`
+	Resolution   string `json:"resolution"`
+	PriceCredits int64  `json:"price_credits"`
 }
 
 func resolutionPricesMicroToCredits(raw []byte) []resolutionPriceDTO {
@@ -49,7 +48,7 @@ func resolutionPricesMicroToCredits(raw []byte) []resolutionPriceDTO {
 	for _, item := range stored {
 		out = append(out, resolutionPriceDTO{
 			Resolution:   item.Resolution,
-			PriceCredits: credits.MicroToCredits(item.Price),
+			PriceCredits: credits.MicroToWholeCredits(item.Price),
 		})
 	}
 	return out
@@ -75,7 +74,7 @@ func resolutionPricesCreditsToMicro(entries []resolutionPriceDTO, fieldName stri
 		}
 		stored = append(stored, domain.ResolutionCreditPrice{
 			Resolution: resolution,
-			Price:      credits.CreditsToMicro(entry.PriceCredits),
+			Price:      credits.WholeCreditsToMicro(entry.PriceCredits),
 		})
 	}
 	out, err := json.Marshal(stored)
@@ -85,24 +84,17 @@ func resolutionPricesCreditsToMicro(entries []resolutionPriceDTO, fieldName stri
 	return out, ""
 }
 
-func validateCreditAmount(name string, value float64) string {
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return fmt.Sprintf("%s must be a finite credit value", name)
-	}
+func validateCreditAmount(name string, value int64) string {
 	if value < 0 {
 		return fmt.Sprintf("%s must be a non-negative credit value", name)
 	}
-	scaled := value * float64(credits.MicroPerCredit)
-	if math.Abs(scaled-math.Round(scaled)) > 1e-7 {
-		return fmt.Sprintf("%s must have at most 4 decimal places", name)
-	}
 	if value > maxCreditsPerField {
-		return fmt.Sprintf("%s exceeds maximum allowed value (%.0f credits)", name, maxCreditsPerField)
+		return fmt.Sprintf("%s exceeds maximum allowed value (%d credits)", name, maxCreditsPerField)
 	}
 	return ""
 }
 
-func validateOptionalCreditAmount(name string, value *float64) string {
+func validateOptionalCreditAmount(name string, value *int64) string {
 	if value == nil {
 		return ""
 	}
@@ -335,12 +327,12 @@ func fromModels(rows []dbgen.ListAdminModelsRow) []modelDTO {
 type modelPriceDTO struct {
 	ID                             pgtype.UUID          `json:"id"`
 	ModelID                        pgtype.UUID          `json:"model_id"`
-	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
-	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	InputPricePer1mCredits         int64                `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        int64                `json:"output_price_per_1m_credits"` // 积分
 	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
 	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
-	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
-	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	AudioTtsPricePer1mCharsCredits int64                `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  int64                `json:"audio_stt_price_per_minute_credits"`   // 积分
 	CreatedAt                      *int64               `json:"created_at"`
 	UpdatedAt                      *int64               `json:"updated_at"`
 }
@@ -349,12 +341,12 @@ func fromGetModelPrice(r dbgen.GetModelPriceRow) modelPriceDTO {
 	return modelPriceDTO{
 		ID:                             r.ID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
 	}
@@ -364,12 +356,12 @@ func fromUpsertModelPrice(r dbgen.UpsertModelPriceRow) modelPriceDTO {
 	return modelPriceDTO{
 		ID:                             r.ID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
 	}
@@ -383,12 +375,12 @@ type tenantModelPriceDTO struct {
 	ID                             pgtype.UUID          `json:"id"`
 	TenantID                       string               `json:"tenant_id"`
 	ModelID                        pgtype.UUID          `json:"model_id"`
-	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
-	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	InputPricePer1mCredits         int64                `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        int64                `json:"output_price_per_1m_credits"` // 积分
 	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
 	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
-	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
-	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	AudioTtsPricePer1mCharsCredits int64                `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  int64                `json:"audio_stt_price_per_minute_credits"`   // 积分
 	CreatedBy                      pgtype.Text          `json:"created_by"`
 	CreatedAt                      *int64               `json:"created_at"`
 	UpdatedAt                      *int64               `json:"updated_at"`
@@ -402,12 +394,12 @@ func fromGetTenantModelPriceOverride(r dbgen.GetTenantModelPriceOverrideRow) ten
 		ID:                             r.ID,
 		TenantID:                       r.TenantID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedBy:                      r.CreatedBy,
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
@@ -419,12 +411,12 @@ func fromUpsertTenantModelPriceOverride(r dbgen.UpsertTenantModelPriceOverrideRo
 		ID:                             r.ID,
 		TenantID:                       r.TenantID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedBy:                      r.CreatedBy,
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
@@ -436,12 +428,12 @@ func fromListTenantModelPriceOverride(r dbgen.ListTenantModelPriceOverridesRow) 
 		ID:                             r.ID,
 		TenantID:                       r.TenantID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedBy:                      r.CreatedBy,
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
@@ -466,12 +458,12 @@ type tenantUserPriceDTO struct {
 	ID                             pgtype.UUID          `json:"id"`
 	TenantID                       string               `json:"tenant_id"`
 	ModelID                        pgtype.UUID          `json:"model_id"`
-	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
-	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	InputPricePer1mCredits         int64                `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        int64                `json:"output_price_per_1m_credits"` // 积分
 	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
 	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
-	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
-	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	AudioTtsPricePer1mCharsCredits int64                `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  int64                `json:"audio_stt_price_per_minute_credits"`   // 积分
 	CreatedBy                      pgtype.Text          `json:"created_by"`
 	CreatedAt                      *int64               `json:"created_at"`
 	UpdatedAt                      *int64               `json:"updated_at"`
@@ -485,12 +477,12 @@ func fromGetTenantUserPrice(r dbgen.GetTenantUserPriceRow) tenantUserPriceDTO {
 		ID:                             r.ID,
 		TenantID:                       r.TenantID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedBy:                      r.CreatedBy,
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
@@ -502,12 +494,12 @@ func fromUpsertTenantUserPrice(r dbgen.UpsertTenantUserPriceRow) tenantUserPrice
 		ID:                             r.ID,
 		TenantID:                       r.TenantID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedBy:                      r.CreatedBy,
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
@@ -519,12 +511,12 @@ func fromListTenantUserPrice(r dbgen.ListTenantUserPricesRow) tenantUserPriceDTO
 		ID:                             r.ID,
 		TenantID:                       r.TenantID,
 		ModelID:                        r.ModelID,
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 		CreatedBy:                      r.CreatedBy,
 		CreatedAt:                      millis(r.CreatedAt),
 		UpdatedAt:                      millis(r.UpdatedAt),
@@ -867,7 +859,7 @@ type apiKeyDTO struct {
 	UserID               pgtype.Text     `json:"user_id"`
 	LastFour             pgtype.Text     `json:"last_four"`
 	Name                 string          `json:"name"`
-	QuotaLimitCredits    *float64        `json:"quota_limit_credits"`    // 积分 (nil=无限制)
+	QuotaLimitCredits    *int64          `json:"quota_limit_credits"`    // 积分 (nil=无限制)
 	QuotaUsedCredits     float64         `json:"quota_used_credits"`     // 积分
 	QuotaReservedCredits float64         `json:"quota_reserved_credits"` // 积分
 	AllowedModels        json.RawMessage `json:"allowed_models"`
@@ -896,7 +888,7 @@ func apiKeyDTOFromCreate(r dbgen.CreateAPIKeyRow) apiKeyDTO {
 		UserID:               r.UserID,
 		LastFour:             r.LastFour,
 		Name:                 r.Name,
-		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaLimitCredits:    credits.Int8ToWholeCreditsPtr(r.QuotaLimit),
 		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
 		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
 		AllowedModels:        rawJSON(r.AllowedModels),
@@ -916,7 +908,7 @@ func apiKeyDTOFromList(r dbgen.ListAPIKeysRow) apiKeyDTO {
 		UserID:               r.UserID,
 		LastFour:             r.LastFour,
 		Name:                 r.Name,
-		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaLimitCredits:    credits.Int8ToWholeCreditsPtr(r.QuotaLimit),
 		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
 		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
 		AllowedModels:        rawJSON(r.AllowedModels),
@@ -944,7 +936,7 @@ func apiKeyDTOFromGetByID(r dbgen.AiApiKey) apiKeyDTO {
 		UserID:               r.UserID,
 		LastFour:             r.LastFour,
 		Name:                 r.Name,
-		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaLimitCredits:    credits.Int8ToWholeCreditsPtr(r.QuotaLimit),
 		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
 		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
 		AllowedModels:        rawJSON(r.AllowedModels),
@@ -964,7 +956,7 @@ func apiKeyDTOFromUpdate(r dbgen.UpdateAPIKeyRow) apiKeyDTO {
 		UserID:               r.UserID,
 		LastFour:             r.LastFour,
 		Name:                 r.Name,
-		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaLimitCredits:    credits.Int8ToWholeCreditsPtr(r.QuotaLimit),
 		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
 		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
 		AllowedModels:        rawJSON(r.AllowedModels),
@@ -984,7 +976,7 @@ func apiKeyDTOFromUpdateStatus(r dbgen.UpdateAPIKeyStatusRow) apiKeyDTO {
 		UserID:               r.UserID,
 		LastFour:             r.LastFour,
 		Name:                 r.Name,
-		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaLimitCredits:    credits.Int8ToWholeCreditsPtr(r.QuotaLimit),
 		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
 		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
 		AllowedModels:        rawJSON(r.AllowedModels),
@@ -1004,7 +996,7 @@ func apiKeyDTOFromRotate(r dbgen.RotateAPIKeyRow) apiKeyDTO {
 		UserID:               r.UserID,
 		LastFour:             r.LastFour,
 		Name:                 r.Name,
-		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaLimitCredits:    credits.Int8ToWholeCreditsPtr(r.QuotaLimit),
 		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
 		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
 		AllowedModels:        rawJSON(r.AllowedModels),
@@ -1430,12 +1422,12 @@ type userAvailableModelDTO struct {
 	Status                         string               `json:"status"`
 	GrantStatus                    string               `json:"grant_status"`
 	GrantedAt                      *int64               `json:"granted_at"`
-	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
-	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	InputPricePer1mCredits         int64                `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        int64                `json:"output_price_per_1m_credits"` // 积分
 	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
 	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
-	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
-	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	AudioTtsPricePer1mCharsCredits int64                `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  int64                `json:"audio_stt_price_per_minute_credits"`   // 积分
 }
 
 func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailableModelDTO {
@@ -1449,12 +1441,12 @@ func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailabl
 		Status:                         r.Status,
 		GrantStatus:                    r.GrantStatus,
 		GrantedAt:                      millis(r.GrantedAt),
-		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
-		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		InputPricePer1mCredits:         credits.MicroToWholeCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToWholeCredits(r.OutputPricePer1m),
 		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
 		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
-		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
-		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToWholeCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToWholeCredits(r.AudioSttPricePerMinute),
 	}
 }
 

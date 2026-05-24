@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { listTenantModelGrants, capabilityOptions, formatCredits } from '@/api/aiGateway'
+import { listTenantModelGrants, capabilityOptions, formatWholeCredits } from '@/api/aiGateway'
 import { getModelPrice } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
@@ -106,11 +106,11 @@ onMounted(fetchModels)
             <template v-if="publicPrice">
               <div class="price-row">
                 <span class="label">输入价格</span>
-                <span class="value">{{ formatCredits(publicPrice.input_price_per_1m_credits) }} 积分/百万token</span>
+                <span class="value">{{ formatWholeCredits(publicPrice.input_price_per_1m_credits) }} 积分/百万token</span>
               </div>
               <div class="price-row">
                 <span class="label">输出价格</span>
-                <span class="value">{{ formatCredits(publicPrice.output_price_per_1m_credits) }} 积分/百万token</span>
+                <span class="value">{{ formatWholeCredits(publicPrice.output_price_per_1m_credits) }} 积分/百万token</span>
               </div>
               <template v-if="resolutionPrices(publicPrice.image_prices).length > 0">
                 <div class="price-row">
@@ -119,7 +119,7 @@ onMounted(fetchModels)
                 <div class="size-prices">
                   <div v-for="item in resolutionPrices(publicPrice.image_prices)" :key="item.resolution" class="size-item">
                     <span>{{ item.resolution }}</span>
-                    <span>{{ formatCredits(item.price_credits) }} 积分</span>
+                    <span>{{ formatWholeCredits(item.price_credits) }} 积分</span>
                   </div>
                 </div>
               </template>
@@ -130,7 +130,7 @@ onMounted(fetchModels)
                 <div class="size-prices">
                   <div v-for="item in resolutionPrices(publicPrice.video_prices)" :key="item.resolution" class="size-item">
                     <span>{{ item.resolution }}</span>
-                    <span>{{ formatCredits(item.price_credits) }} 积分/秒</span>
+                    <span>{{ formatWholeCredits(item.price_credits) }} 积分/秒</span>
                   </div>
                 </div>
               </template>

@@ -7,7 +7,7 @@ import {
   createModel,
   createModelRoute,
   deleteModelRoute,
-  formatCredits,
+  formatWholeCredits,
   formatTimestamp,
   getModelPrice,
   listModelRoutes,
@@ -723,17 +723,17 @@ onMounted(() => { fetchModels() })
             <template v-if="showTokenPrice">
               <div class="price-item">
                 <span>输入 / 1M tokens</span>
-                <strong>{{ formatCredits(modelPrice.input_price_per_1m_credits) }} 积分</strong>
+                <strong>{{ formatWholeCredits(modelPrice.input_price_per_1m_credits) }} 积分</strong>
               </div>
               <div v-if="showOutputPrice" class="price-item">
                 <span>输出 / 1M tokens</span>
-                <strong>{{ formatCredits(modelPrice.output_price_per_1m_credits) }} 积分</strong>
+                <strong>{{ formatWholeCredits(modelPrice.output_price_per_1m_credits) }} 积分</strong>
               </div>
             </template>
             <template v-if="showImagePrice">
               <div v-for="(entry, idx) in (modelPrice.image_prices || [])" :key="idx" class="price-item">
                 <span>{{ entry.resolution }}</span>
-                <strong>{{ formatCredits(entry.price_credits) }} 积分 / 张</strong>
+                <strong>{{ formatWholeCredits(entry.price_credits) }} 积分 / 张</strong>
               </div>
               <div v-if="!(modelPrice.image_prices?.length)" class="price-empty-hint">
                 尚未配置尺寸定价
@@ -742,7 +742,7 @@ onMounted(() => { fetchModels() })
             <template v-if="showVideoPrice">
               <div v-for="(entry, idx) in (modelPrice.video_prices || [])" :key="idx" class="price-item">
                 <span>{{ entry.resolution }}</span>
-                <strong>{{ formatCredits(entry.price_credits) }} 积分 / 秒</strong>
+                <strong>{{ formatWholeCredits(entry.price_credits) }} 积分 / 秒</strong>
               </div>
               <div v-if="!(modelPrice.video_prices?.length)" class="price-empty-hint">
                 尚未配置分辨率定价
@@ -750,11 +750,11 @@ onMounted(() => { fetchModels() })
             </template>
             <div v-if="showAudioTTSPrice" class="price-item">
               <span>TTS / 1M 字符</span>
-              <strong>{{ formatCredits(modelPrice.audio_tts_price_per_1m_chars_credits) }} 积分</strong>
+              <strong>{{ formatWholeCredits(modelPrice.audio_tts_price_per_1m_chars_credits) }} 积分</strong>
             </div>
             <div v-if="showAudioSTTPrice" class="price-item">
               <span>STT / 分钟</span>
-              <strong>{{ formatCredits(modelPrice.audio_stt_price_per_minute_credits) }} 积分</strong>
+              <strong>{{ formatWholeCredits(modelPrice.audio_stt_price_per_minute_credits) }} 积分</strong>
             </div>
             <div class="price-updated">上次更新：{{ formatTimestamp(modelPrice.updated_at) }}</div>
           </div>
@@ -840,10 +840,10 @@ onMounted(() => { fetchModels() })
         <template v-if="isChatLike(modelForm.capability_type)">
           <div class="grid grid-cols-2 gap-4">
             <el-form-item label="输入 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
             <el-form-item v-if="modelForm.capability_type === 'chat'" label="输出 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
           </div>
         </template>
@@ -863,11 +863,11 @@ onMounted(() => { fetchModels() })
         </template>
 
         <el-form-item v-if="isAudioTTS(modelForm.capability_type)" label="TTS / 1M 字符（积分）">
-          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
         </el-form-item>
 
         <el-form-item v-if="isAudioSTT(modelForm.capability_type)" label="STT / 分钟（积分）">
-          <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+          <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
         </el-form-item>
       </el-form>
 
@@ -890,10 +890,10 @@ onMounted(() => { fetchModels() })
         <template v-if="showTokenPrice">
           <div class="grid grid-cols-2 gap-4">
             <el-form-item label="输入 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
             <el-form-item v-if="showOutputPrice" label="输出 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
           </div>
         </template>
@@ -913,11 +913,11 @@ onMounted(() => { fetchModels() })
         </template>
 
         <el-form-item v-if="showAudioTTSPrice" label="TTS / 1M 字符（积分）">
-          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
         </el-form-item>
 
         <el-form-item v-if="showAudioSTTPrice" label="STT / 分钟（积分）">
-          <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+          <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
         </el-form-item>
       </el-form>
       <template #footer>

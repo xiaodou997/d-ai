@@ -332,7 +332,7 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
+		QuotaLimit:    credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
@@ -377,7 +377,7 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 		TenantID:      ac.TenantID,
 		ID:            apiKeyID,
 		Name:          req.Name,
-		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
+		QuotaLimit:    credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 	})
@@ -507,12 +507,12 @@ func (s *Server) handleTenantsMeUserPricesUpsert(w http.ResponseWriter, r *http.
 	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
 		TenantID:                ac.TenantID,
 		ModelID:                 modelID,
-		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1mCredits),
-		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1mCredits),
+		InputPricePer1m:         credits.WholeCreditsToMicro(req.InputPricePer1mCredits),
+		OutputPricePer1m:        credits.WholeCreditsToMicro(req.OutputPricePer1mCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTtsPricePer1mCharsCredits),
-		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSttPricePerMinuteCredits),
+		AudioTtsPricePer1mChars: credits.WholeCreditsToMicro(req.AudioTtsPricePer1mCharsCredits),
+		AudioSttPricePerMinute:  credits.WholeCreditsToMicro(req.AudioSttPricePerMinuteCredits),
 	})
 	if err != nil {
 		writeDBErr(w, err)
@@ -590,7 +590,7 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
+		QuotaLimit:    credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
@@ -635,7 +635,7 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 		TenantID:      ac.TenantID,
 		ID:            apiKeyID,
 		Name:          req.Name,
-		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
+		QuotaLimit:    credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 	})
@@ -779,27 +779,27 @@ func (s *Server) handleUsersMeAPIKeysDelete(w http.ResponseWriter, r *http.Reque
 
 type createAPIKeyRequest struct {
 	Name              string   `json:"name"`
-	QuotaLimitCredits *float64 `json:"quota_limit_credits"` // 积分，nil=无限制
+	QuotaLimitCredits *int64   `json:"quota_limit_credits"` // 积分，nil=无限制
 	AllowedModels     []string `json:"allowed_models"`
 }
 
 type updateAPIKeyRequest struct {
 	Name              string   `json:"name"`
-	QuotaLimitCredits *float64 `json:"quota_limit_credits"` // 积分，nil=无限制
+	QuotaLimitCredits *int64   `json:"quota_limit_credits"` // 积分，nil=无限制
 	AllowedModels     []string `json:"allowed_models"`
 }
 
 type upsertTenantUserPriceRequest struct {
-	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
-	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	InputPricePer1mCredits         int64                `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        int64                `json:"output_price_per_1m_credits"` // 积分
 	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
 	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
-	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
-	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	AudioTtsPricePer1mCharsCredits int64                `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  int64                `json:"audio_stt_price_per_minute_credits"`   // 积分
 }
 
 func validateTenantUserPriceCredits(req upsertTenantUserPriceRequest) string {
-	fields := map[string]float64{
+	fields := map[string]int64{
 		"input_price_per_1m_credits":           req.InputPricePer1mCredits,
 		"output_price_per_1m_credits":          req.OutputPricePer1mCredits,
 		"audio_tts_price_per_1m_chars_credits": req.AudioTtsPricePer1mCharsCredits,

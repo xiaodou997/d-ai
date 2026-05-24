@@ -145,12 +145,12 @@ func (s *Server) handleAdminUpsertModelPrice(w http.ResponseWriter, r *http.Requ
 	}
 	row, err := s.queries.UpsertModelPrice(r.Context(), dbgen.UpsertModelPriceParams{
 		ModelID:                 modelID,
-		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1MCredits),
-		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1MCredits),
+		InputPricePer1m:         credits.WholeCreditsToMicro(req.InputPricePer1MCredits),
+		OutputPricePer1m:        credits.WholeCreditsToMicro(req.OutputPricePer1MCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
-		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSTTPricePerMinuteCredits),
+		AudioTtsPricePer1mChars: credits.WholeCreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
+		AudioSttPricePerMinute:  credits.WholeCreditsToMicro(req.AudioSTTPricePerMinuteCredits),
 	})
 	if err != nil {
 		writeDBErr(w, err)
@@ -234,12 +234,12 @@ func (s *Server) handleAdminUpsertTenantModelPriceOverride(w http.ResponseWriter
 	row, err := s.queries.UpsertTenantModelPriceOverride(r.Context(), dbgen.UpsertTenantModelPriceOverrideParams{
 		TenantID:                tenantID,
 		ModelID:                 modelID,
-		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1MCredits),
-		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1MCredits),
+		InputPricePer1m:         credits.WholeCreditsToMicro(req.InputPricePer1MCredits),
+		OutputPricePer1m:        credits.WholeCreditsToMicro(req.OutputPricePer1MCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
-		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSTTPricePerMinuteCredits),
+		AudioTtsPricePer1mChars: credits.WholeCreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
+		AudioSttPricePerMinute:  credits.WholeCreditsToMicro(req.AudioSTTPricePerMinuteCredits),
 		CreatedBy:               optionalTextString(adminCtx.Actor),
 	})
 	if err != nil {
@@ -345,12 +345,12 @@ func (s *Server) handleAdminUpsertTenantUserPrice(w http.ResponseWriter, r *http
 	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
 		TenantID:                tenantID,
 		ModelID:                 modelID,
-		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1MCredits),
-		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1MCredits),
+		InputPricePer1m:         credits.WholeCreditsToMicro(req.InputPricePer1MCredits),
+		OutputPricePer1m:        credits.WholeCreditsToMicro(req.OutputPricePer1MCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
-		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSTTPricePerMinuteCredits),
+		AudioTtsPricePer1mChars: credits.WholeCreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
+		AudioSttPricePerMinute:  credits.WholeCreditsToMicro(req.AudioSTTPricePerMinuteCredits),
 		CreatedBy:               optionalTextString(adminCtx.Actor),
 	})
 	if err != nil {
@@ -547,10 +547,10 @@ func (s *Server) handleAdminDeleteModelRoute(w http.ResponseWriter, r *http.Requ
 // maxCreditsPerField is the maximum allowed value for a single price field in credits.
 // This prevents accidental input of absurdly large values (e.g. entering micro-credits
 // as credits). 1,000,000 积分 = 10,000 元人民币 should be more than enough.
-const maxCreditsPerField = 1_000_000.0
+const maxCreditsPerField int64 = 1_000_000
 
 func validateModelPriceCredits(req modelPriceRequest) string {
-	fields := map[string]float64{
+	fields := map[string]int64{
 		"input_price_per_1m_credits":           req.InputPricePer1MCredits,
 		"output_price_per_1m_credits":          req.OutputPricePer1MCredits,
 		"audio_tts_price_per_1m_chars_credits": req.AudioTTSPricePer1MCharsCredits,

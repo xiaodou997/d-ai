@@ -245,7 +245,7 @@ curl -X DELETE http://127.0.0.1:13010/admin/models/{model_id}/routes/{route_id} 
 
 ## Model Prices
 
-Model prices define the platform public price for a model. API requests and responses use credits (`*_credits`) as decimal numbers. The database keeps micro-credits internally, but that unit is not exposed at the HTTP boundary. Token prices are credits per 1M tokens; image and video arrays use one entry per resolution.
+Model prices define the platform public price for a model. Price configuration requests and responses use integer credits (`*_credits`). The database keeps micro-credits internally, but that unit is not exposed at the HTTP boundary. Token prices are credits per 1M tokens; image and video arrays use one entry per resolution.
 
 Upsert a model price:
 
@@ -456,9 +456,9 @@ Usage rows include token fields plus unified billable units:
 - Images: `billable_unit_type=image`, `billable_units=image_count`.
 - `usage_source=upstream` means provider usage was available; `estimated_length` marks fallback estimation.
 
-Cost fields in usage logs are integer credits:
+Cost fields in usage logs are micro-credits in the database and decimal credits in API responses:
 
-- Token capabilities calculate token costs from prompt/completion tokens and per-1M-token prices, rounded up to whole credits.
+- Token capabilities calculate costs from prompt/completion tokens and per-1M-token integer credit prices, then keep exact micro-credit results internally.
 - Image capability calculates `api_key_quota_cost` and `user_cost` as `image_count * image_price` (using tenant sale price).
 - Provider image cost is recorded from `image_size_prices` based on the requested image size.
 

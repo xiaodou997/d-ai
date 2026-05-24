@@ -70,8 +70,8 @@ function applyPreset(preset) {
         <el-input-number
           :model-value="row.price_credits"
           :min="0"
-          :precision="4"
-          :step="0.0001"
+          :precision="0"
+          :step="1"
           controls-position="right"
           @update:model-value="(v) => updateRow(idx, { price_credits: v || 0 })"
         />

@@ -15,7 +15,7 @@ import {
   listTenantModelGrants,
   updateTenantModelGrantStatus,
   upsertTenantModelPriceOverride,
-  formatCredits
+  formatWholeCredits
 } from '@/api/aiGateway'
 
 const authStore = useAuthStore()
@@ -104,7 +104,7 @@ const showAudioSTTPrice = (capabilityType) => capabilityType === 'audio_stt'
 const formatResolutionPrices = (entries, unit) => {
   if (!Array.isArray(entries) || entries.length === 0) return '暂无定价'
   return entries
-    .map((entry) => `${entry.resolution || '-'} ${formatCredits(entry.price_credits)} 积分/${unit}`)
+    .map((entry) => `${entry.resolution || '-'} ${formatWholeCredits(entry.price_credits)} 积分/${unit}`)
     .join('；')
 }
 
@@ -440,8 +440,8 @@ onMounted(async () => {
       <div v-if="overridePublicPrice" class="public-price-hint">
         <span class="hint-label">公共价格参考</span>
         <span v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
-          输入 {{ formatCredits(overridePublicPrice.input_price_per_1m_credits) }} /
-          输出 {{ formatCredits(overridePublicPrice.output_price_per_1m_credits) }} 积分/1M tokens
+          输入 {{ formatWholeCredits(overridePublicPrice.input_price_per_1m_credits) }} /
+          输出 {{ formatWholeCredits(overridePublicPrice.output_price_per_1m_credits) }} 积分/1M tokens
         </span>
         <span v-else-if="showImagePrice(overrideTargetGrant?.capability_type)">
           {{ formatResolutionPrices(overridePublicPrice.image_prices, '张') }}
@@ -450,10 +450,10 @@ onMounted(async () => {
           {{ formatResolutionPrices(overridePublicPrice.video_prices, '秒') }}
         </span>
         <span v-else-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)">
-          {{ formatCredits(overridePublicPrice.audio_tts_price_per_1m_chars_credits) }} 积分/1M字符
+          {{ formatWholeCredits(overridePublicPrice.audio_tts_price_per_1m_chars_credits) }} 积分/1M字符
         </span>
         <span v-else-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)">
-          {{ formatCredits(overridePublicPrice.audio_stt_price_per_minute_credits) }} 积分/分钟
+          {{ formatWholeCredits(overridePublicPrice.audio_stt_price_per_minute_credits) }} 积分/分钟
         </span>
       </div>
 
@@ -461,10 +461,10 @@ onMounted(async () => {
         <template v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
           <div class="grid grid-cols-2 gap-4">
             <el-form-item label="输入价格 / 1M tokens（积分）">
-              <el-input-number v-model="priceOverrideForm.input_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceOverrideForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
             <el-form-item v-if="showOutputPrice(overrideTargetGrant?.capability_type)" label="输出价格 / 1M tokens（积分）">
-              <el-input-number v-model="priceOverrideForm.output_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceOverrideForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
           </div>
         </template>
@@ -479,10 +479,10 @@ onMounted(async () => {
           </el-form-item>
         </template>
         <el-form-item v-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)" label="TTS 价格 / 1M 字符（积分）">
-          <el-input-number v-model="priceOverrideForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+          <el-input-number v-model="priceOverrideForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
         </el-form-item>
         <el-form-item v-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)" label="STT 价格 / 分钟（积分）">
-          <el-input-number v-model="priceOverrideForm.audio_stt_price_per_minute_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+          <el-input-number v-model="priceOverrideForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
         </el-form-item>
       </el-form>
 

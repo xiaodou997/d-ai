@@ -12,6 +12,13 @@ export const formatCredits = (value) => {
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })
 }
 
+// 售价/配额配置的展示单位是整数积分；小数只用于实际消耗/统计。
+export const formatWholeCredits = (value) => {
+  if (value === null || value === undefined) return '-'
+  const n = Number(value) || 0
+  return Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
 // ==================== 常量选项 ====================
 
 export const statusOptions = [

@@ -77,7 +77,7 @@ func (s *Server) handleAdminCreateTenantAPIKey(w http.ResponseWriter, r *http.Re
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
+		QuotaLimit:    credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        req.Status,
 		ExpiresAt:     expiresAt,
@@ -127,7 +127,7 @@ func (s *Server) handleAdminUpdateTenantAPIKey(w http.ResponseWriter, r *http.Re
 	}
 	row, err := s.queries.UpdateAPIKey(r.Context(), dbgen.UpdateAPIKeyParams{
 		ID: apiKeyID, TenantID: tenantID, Name: req.Name,
-		QuotaLimit: credits.CreditsPtrToInt8(req.QuotaLimitCredits), AllowedModels: allowedModels,
+		QuotaLimit: credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits), AllowedModels: allowedModels,
 		Status: req.Status, ExpiresAt: expiresAt,
 	})
 	if err != nil {
@@ -282,7 +282,7 @@ func (s *Server) handleAdminCreateUserAPIKey(w http.ResponseWriter, r *http.Requ
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
+		QuotaLimit:    credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        req.Status,
 		ExpiresAt:     expiresAt,
@@ -331,7 +331,7 @@ func (s *Server) handleAdminUpdateUserAPIKey(w http.ResponseWriter, r *http.Requ
 	}
 	row, err := s.queries.UpdateAPIKey(r.Context(), dbgen.UpdateAPIKeyParams{
 		ID: apiKeyID, TenantID: tenantID, Name: req.Name,
-		QuotaLimit: credits.CreditsPtrToInt8(req.QuotaLimitCredits), AllowedModels: allowedModels,
+		QuotaLimit: credits.WholeCreditsPtrToInt8(req.QuotaLimitCredits), AllowedModels: allowedModels,
 		Status: req.Status, ExpiresAt: expiresAt,
 	})
 	if err != nil {

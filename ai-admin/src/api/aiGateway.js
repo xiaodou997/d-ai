@@ -443,6 +443,12 @@ export function formatCredits(value) {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
 }
 
+// 售价/配额配置的展示单位是整数积分；小数只用于实际消耗/统计。
+export function formatWholeCredits(value) {
+  const n = Number(value) || 0
+  return Math.round(n).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
 // ============================================================================
 // Usage & Dashboard APIs
 // ============================================================================

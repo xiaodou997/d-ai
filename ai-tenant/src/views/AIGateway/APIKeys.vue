@@ -11,7 +11,8 @@ import {
   deleteTenantAPIKey,
   listTenantModelGrants,
   statusOptions,
-  formatCredits
+  formatCredits,
+  formatWholeCredits
 } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
@@ -223,7 +224,7 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="配额限制" min-width="120">
             <template #default="{ row }">
-              {{ row.quota_limit_credits !== null && row.quota_limit_credits !== undefined ? formatCredits(row.quota_limit_credits) + ' 积分' : '无限制' }}
+              {{ row.quota_limit_credits !== null && row.quota_limit_credits !== undefined ? formatWholeCredits(row.quota_limit_credits) + ' 积分' : '无限制' }}
             </template>
           </el-table-column>
           <el-table-column label="已使用" min-width="120">
@@ -279,8 +280,8 @@ onMounted(() => {
           <el-input-number
             v-model="keyForm.quota_limit_credits"
             :min="0"
-            :precision="4"
-            :step="0.0001"
+            :precision="0"
+            :step="1"
             placeholder="不填则无限制"
             class="w-full"
           />

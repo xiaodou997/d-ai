@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, shallowRef } from 'vue'
 import { Refresh, Loading, Box } from '@element-plus/icons-vue'
-import { listUserModelGrants, formatCredits } from '@/api/aiGateway'
+import { listUserModelGrants, formatWholeCredits } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const models = shallowRef([])
@@ -37,7 +37,7 @@ const filteredModels = computed(() => {
   return models.value.filter((m) => m.capability_type === filterCapability.value)
 })
 
-// formatCredits 已从 @/api/aiGateway 导入，后端 API 现在统一返回「积分」float
+// 售价配置字段是整数积分；实际消耗/统计字段才允许小数积分。
 
 const isTokenBased = (cap) => ['chat', 'embedding', 'rerank'].includes(cap)
 const isImageBased = (cap) => cap === 'image'
@@ -148,39 +148,39 @@ onMounted(fetchModels)
             <template v-if="isTokenBased(model.capability_type)">
               <div class="flex items-baseline justify-between text-xs">
                 <span class="text-slate-400">输入</span>
-                <span class="font-semibold text-slate-700">{{ formatCredits(model.input_price_per_1m_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/M</span></span>
+                <span class="font-semibold text-slate-700">{{ formatWholeCredits(model.input_price_per_1m_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/M</span></span>
               </div>
               <div class="flex items-baseline justify-between text-xs">
                 <span class="text-slate-400">输出</span>
-                <span class="font-semibold text-slate-700">{{ formatCredits(model.output_price_per_1m_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/M</span></span>
+                <span class="font-semibold text-slate-700">{{ formatWholeCredits(model.output_price_per_1m_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/M</span></span>
               </div>
             </template>
             <!-- 图片计费模型 -->
             <template v-if="isImageBased(model.capability_type) && Array.isArray(model.image_prices)">
               <div v-for="(entry, idx) in model.image_prices" :key="idx" class="flex items-baseline justify-between text-xs">
                 <span class="text-slate-400">{{ entry.resolution }}</span>
-                <span class="font-semibold text-slate-700">{{ formatCredits(entry.price_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/张</span></span>
+                <span class="font-semibold text-slate-700">{{ formatWholeCredits(entry.price_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/张</span></span>
               </div>
             </template>
             <!-- 视频计费模型 -->
             <template v-if="isVideoBased(model.capability_type) && Array.isArray(model.video_prices)">
               <div v-for="(entry, idx) in model.video_prices" :key="idx" class="flex items-baseline justify-between text-xs">
                 <span class="text-slate-400">{{ entry.resolution }}</span>
-                <span class="font-semibold text-slate-700">{{ formatCredits(entry.price_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/秒</span></span>
+                <span class="font-semibold text-slate-700">{{ formatWholeCredits(entry.price_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/秒</span></span>
               </div>
             </template>
             <!-- 语音合成 -->
             <template v-if="isAudioTTS(model.capability_type)">
               <div class="flex items-baseline justify-between text-xs">
                 <span class="text-slate-400">TTS</span>
-                <span class="font-semibold text-slate-700">{{ formatCredits(model.audio_tts_price_per_1m_chars_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/M字符</span></span>
+                <span class="font-semibold text-slate-700">{{ formatWholeCredits(model.audio_tts_price_per_1m_chars_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/M字符</span></span>
               </div>
             </template>
             <!-- 语音识别 -->
             <template v-if="isAudioSTT(model.capability_type)">
               <div class="flex items-baseline justify-between text-xs">
                 <span class="text-slate-400">STT</span>
-                <span class="font-semibold text-slate-700">{{ formatCredits(model.audio_stt_price_per_minute_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/分钟</span></span>
+                <span class="font-semibold text-slate-700">{{ formatWholeCredits(model.audio_stt_price_per_minute_credits) }}<span class="text-slate-400 font-normal ml-0.5">积分/分钟</span></span>
               </div>
             </template>
           </div>

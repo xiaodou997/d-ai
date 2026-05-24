@@ -8,7 +8,9 @@ const props = defineProps({
   // 'image' -> price/张; 'video' -> price/秒
   mode: { type: String, default: 'image' },
   presets: { type: Array, default: () => [] },
-  priceKey: { type: String, default: 'price_credits' }
+  priceKey: { type: String, default: 'price_credits' },
+  precision: { type: Number, default: 0 },
+  step: { type: Number, default: 1 }
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -74,8 +76,8 @@ function applyPreset(preset) {
         <el-input-number
           :model-value="row[priceKey]"
           :min="0"
-          :precision="4"
-          :step="0.1"
+          :precision="precision"
+          :step="step"
           controls-position="right"
           @update:model-value="(v) => updateRow(idx, { [priceKey]: v || 0 })"
         />

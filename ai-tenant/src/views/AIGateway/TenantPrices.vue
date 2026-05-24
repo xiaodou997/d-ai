@@ -10,7 +10,7 @@ import {
   deleteTenantUserPrice,
   getModelPrice,
   capabilityOptions,
-  formatCredits
+  formatWholeCredits
 } from '@/api/aiGateway'
 import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
 
@@ -213,34 +213,34 @@ onMounted(fetchModels)
             <template v-if="isChatLike">
               <div class="ref-row">
                 <span>输入</span>
-                <span>{{ formatCredits(publicPrice.input_price_per_1m_credits) }} 积分/M tokens</span>
+                <span>{{ formatWholeCredits(publicPrice.input_price_per_1m_credits) }} 积分/M tokens</span>
               </div>
               <div v-if="isChat" class="ref-row">
                 <span>输出</span>
-                <span>{{ formatCredits(publicPrice.output_price_per_1m_credits) }} 积分/M tokens</span>
+                <span>{{ formatWholeCredits(publicPrice.output_price_per_1m_credits) }} 积分/M tokens</span>
               </div>
             </template>
             <template v-if="isImage">
               <div v-for="(entry, idx) in (publicPrice.image_prices || [])" :key="idx" class="ref-row">
                 <span>{{ entry.resolution }}</span>
-                <span>{{ formatCredits(entry.price_credits) }} 积分/张</span>
+                <span>{{ formatWholeCredits(entry.price_credits) }} 积分/张</span>
               </div>
               <p v-if="!(publicPrice.image_prices?.length)" class="text-slate-400 text-xs">暂无尺寸定价</p>
             </template>
             <template v-if="isVideo">
               <div v-for="(entry, idx) in (publicPrice.video_prices || [])" :key="idx" class="ref-row">
                 <span>{{ entry.resolution }}</span>
-                <span>{{ formatCredits(entry.price_credits) }} 积分/秒</span>
+                <span>{{ formatWholeCredits(entry.price_credits) }} 积分/秒</span>
               </div>
               <p v-if="!(publicPrice.video_prices?.length)" class="text-slate-400 text-xs">暂无分辨率定价</p>
             </template>
             <div v-if="isAudioTTS" class="ref-row">
               <span>语音合成</span>
-              <span>{{ formatCredits(publicPrice.audio_tts_price_per_1m_chars_credits) }} 积分/M 字符</span>
+              <span>{{ formatWholeCredits(publicPrice.audio_tts_price_per_1m_chars_credits) }} 积分/M 字符</span>
             </div>
             <div v-if="isAudioSTT" class="ref-row">
               <span>语音识别</span>
-              <span>{{ formatCredits(publicPrice.audio_stt_price_per_minute_credits) }} 积分/分钟</span>
+              <span>{{ formatWholeCredits(publicPrice.audio_stt_price_per_minute_credits) }} 积分/分钟</span>
             </div>
           </div>
           <p v-else class="text-slate-400 text-xs mb-4">暂无平台定价</p>
@@ -256,10 +256,10 @@ onMounted(fetchModels)
             <template v-if="isChatLike">
               <div class="grid grid-cols-2 gap-4">
                 <el-form-item label="输入（积分/百万 token）">
-                  <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+                  <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
                 </el-form-item>
                 <el-form-item v-if="isChat" label="输出（积分/百万 token）">
-                  <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+                  <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
                 </el-form-item>
               </div>
             </template>
@@ -276,12 +276,12 @@ onMounted(fetchModels)
 
             <!-- audio TTS -->
             <el-form-item v-if="isAudioTTS" label="语音合成（积分/百万字符）">
-              <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
 
             <!-- audio STT -->
             <el-form-item v-if="isAudioSTT" label="语音识别（积分/分钟）">
-              <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
+              <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
             </el-form-item>
           </el-form>
 

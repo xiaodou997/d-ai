@@ -76,12 +76,12 @@ type createModelRequest struct {
 }
 
 type modelPriceRequest struct {
-	InputPricePer1MCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
-	OutputPricePer1MCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	InputPricePer1MCredits         int64                `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1MCredits        int64                `json:"output_price_per_1m_credits"` // 积分
 	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
 	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
-	AudioTTSPricePer1MCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
-	AudioSTTPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	AudioTTSPricePer1MCharsCredits int64                `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSTTPricePerMinuteCredits  int64                `json:"audio_stt_price_per_minute_credits"`   // 积分
 }
 
 type createUpstreamDeploymentRequest struct {
@@ -116,7 +116,7 @@ type grantModelToTenantRequest struct {
 
 type createTenantAPIKeyRequest struct {
 	Name              string          `json:"name"`
-	QuotaLimitCredits *float64        `json:"quota_limit_credits"` // 积分 (nil=无限制)
+	QuotaLimitCredits *int64          `json:"quota_limit_credits"` // 积分 (nil=无限制)
 	AllowedModels     []string        `json:"allowed_models"`
 	Status            string          `json:"status"`
 	ExpiresAt         *adminTimestamp `json:"expires_at"`

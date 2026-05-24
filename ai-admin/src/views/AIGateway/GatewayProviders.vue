@@ -1055,6 +1055,8 @@ onMounted(fetchProviders)
               mode="image"
               :presets="imagePresets"
               price-key="price"
+              :precision="4"
+              :step="0.0001"
             />
           </template>
 
@@ -1065,6 +1067,8 @@ onMounted(fetchProviders)
               mode="video"
               :presets="videoPresets"
               price-key="price"
+              :precision="4"
+              :step="0.0001"
             />
           </template>
 
