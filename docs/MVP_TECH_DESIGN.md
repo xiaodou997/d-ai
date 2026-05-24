@@ -64,7 +64,7 @@ API keys are local to `uni-ai-api`. Only hashes are stored. Plaintext keys are s
 | User key | End user | `tenant_id + user_id` | `tenantAmount = tenant sale price`, `userAmount = tenant sale price` | Charged at tenant sale price |
 | Tenant key | Tenant | `tenant_id` | `tenantAmount = tenant sale price`, `userAmount = 0` | Charged at tenant sale price |
 
-All billing values are integer credits. URM recharge flows convert money into credits before this service is called, so Uni AI API never converts cents to yuan or yuan to credits in runtime billing. Frontend and backend admin time fields are exchanged as Unix millisecond timestamps; the frontend owns display formatting.
+Sale-price and quota configuration fields use integer credits at the HTTP boundary. Runtime billing and database columns use integer micro-credits, while usage logs, summaries, and dashboards expose calculated results as decimal credits. URM recharge flows convert money into credits before this service is called, so Uni AI API never converts cents to yuan or yuan to credits in runtime billing. Frontend and backend admin time fields are exchanged as Unix millisecond timestamps; the frontend owns display formatting.
 
 Tenant-owned keys support anonymous resale scenarios. Optional request fields such as `user` or `X-End-User` may be logged for tenant analytics but do not participate in URM user billing.
 
@@ -105,11 +105,11 @@ Key tables:
 
 - **ai_providers**: Provider grouping (DeepSeek, OpenAI Compatible, etc.)
 - **ai_provider_endpoints**: Connection configuration (base URL, API key, weight)
-- **ai_upstream_deployments**: Upstream model configuration (upstream_model, protocol, parameters)
+- **ai_upstream_deployments**: Upstream model configuration plus provider pricing JSON
 - **ai_models**: Public model catalog
 - **ai_model_routes**: Routes connecting public models to upstream deployments
 - **ai_model_prices**: Tenant sale prices (binds to model)
-- **ai_upstream_deployment_cost_prices**: Provider cost prices (binds to upstream deployment)
+- **ai_upstream_deployments.pricing**: Provider cost JSON (binds to upstream deployment)
 
 This separation allows:
 - Reusing an upstream deployment across multiple public models
@@ -192,7 +192,7 @@ CREATE TABLE ai_upstream_deployments (
   upstream_protocol TEXT NOT NULL DEFAULT 'openai_chat_completions',
   request_path TEXT,
   upstream_parameters JSONB NOT NULL DEFAULT '{}',
-  tags JSONB NOT NULL DEFAULT '{}',
+  pricing JSONB NOT NULL DEFAULT '{}',
   health_status TEXT NOT NULL DEFAULT 'unknown',
   last_health_check_at TIMESTAMPTZ,
   last_health_error TEXT,
@@ -279,27 +279,7 @@ CREATE TABLE ai_model_prices (
 
 Sale prices bind to models. Database price columns and JSON `price` values are micro-credits; HTTP price configuration DTO fields expose integer credits with explicit `*_credits` names.
 
-### ai_upstream_deployment_cost_prices
-
-```sql
-CREATE TABLE ai_upstream_deployment_cost_prices (
-  id UUID PRIMARY KEY,
-  upstream_deployment_id UUID NOT NULL REFERENCES ai_upstream_deployments(id),
-  capability_type TEXT NOT NULL DEFAULT 'chat',
-  currency TEXT NOT NULL DEFAULT 'CNY_CREDITS',
-  input_cost_per_1m BIGINT NOT NULL DEFAULT 0,
-  output_cost_per_1m BIGINT NOT NULL DEFAULT 0,
-  request_cost BIGINT NOT NULL DEFAULT 0,
-  image_cost BIGINT NOT NULL DEFAULT 0,
-  image_size_prices JSONB NOT NULL DEFAULT '{}',
-  video_cost_per_second BIGINT NOT NULL DEFAULT 0,
-  effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status TEXT NOT NULL DEFAULT 'active',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
-
-Cost prices bind to upstream deployments. `image_size_prices` is a JSONB map of size to cost, for example `{"256x256": 1, "512x512": 2, "1024x1024": 4}`.
+Provider cost prices live in `ai_upstream_deployments.pricing`. Provider costs are raw decimal CNY amounts, not user-facing credits. Resolution prices use arrays such as `[{"resolution":"1024x1024","price":0.08}]` for images and `[{"resolution":"720p","price":0.12}]` for per-second video costs.
 
 ### ai_tenant_model_grants
 
@@ -408,7 +388,7 @@ Images use a different billable unit:
 ```text
 billable_unit_type = image
 billable_units = image_count
-provider_cost = request_cost + image_size_prices[image_size] OR image_cost
+provider_cost = request_cost + image_prices[resolution].price OR image_cost
 tenant_cost_micro = image_count * image_prices[resolution].price_micro
 user_cost_micro = image_count * image_prices[resolution].price_micro for user-owned keys
 api_key_quota_cost_micro = image_count * image_prices[resolution].price_micro

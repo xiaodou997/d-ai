@@ -102,7 +102,7 @@ curl -X PATCH http://127.0.0.1:13010/admin/providers/{provider_id}/endpoints/{en
 
 ## Upstream Deployments
 
-Upstream deployments define how to call a specific upstream model through an endpoint. They are independent of public models and can be reused across multiple model routes.
+Upstream deployments define how to call a specific upstream model through an endpoint. They are independent of public models and can be reused across multiple model routes. The optional `pricing` object records provider-side cost inputs for audit and margin reporting; these values are raw decimal CNY amounts, not user-facing credits and not used for URM billing.
 
 Create upstream deployment:
 
@@ -120,7 +120,22 @@ curl -X POST http://127.0.0.1:13010/admin/upstream-deployments \
     "upstream_parameters": {
       "reasoning_effort": "high"
     },
-    "tags": {"tier": "premium"},
+    "pricing": {
+      "tiers": [
+        {
+          "up_to": null,
+          "input_per_1m": 0.8,
+          "output_per_1m": 1.6
+        }
+      ],
+      "request_cost": 0,
+      "image_prices": [
+        {"resolution": "1024x1024", "price": 0.08}
+      ],
+      "video_prices": [
+        {"resolution": "720p", "price": 0.12}
+      ]
+    },
     "status": "active"
   }'
 ```
@@ -274,45 +289,6 @@ curl http://127.0.0.1:13010/admin/models/{model_id}/price \
   -H 'X-Admin-Token: local-admin-token'
 ```
 
-## Upstream Deployment Cost Prices
-
-Upstream deployment cost prices define provider-side costs for audit and margin reporting. This is not used for user billing. All cost fields are non-negative integer credits.
-
-Create a deployment cost price:
-
-```bash
-curl -X POST http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/cost-prices \
-  -H 'X-Admin-Token: local-admin-token' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "capability_type": "chat",
-    "currency": "CNY_CREDITS",
-    "input_cost_per_1m": 800,
-    "output_cost_per_1m": 1600,
-    "request_cost": 0,
-    "image_cost": 0,
-    "image_size_prices": {"256x256": 1, "512x512": 2, "1024x1024": 4},
-    "effective_from": 1777248000000,
-    "status": "active"
-  }'
-```
-
-List deployment cost prices:
-
-```bash
-curl http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/cost-prices \
-  -H 'X-Admin-Token: local-admin-token'
-```
-
-Update deployment cost price status:
-
-```bash
-curl -X PATCH http://127.0.0.1:13010/admin/upstream-deployments/{deployment_id}/cost-prices/{price_id}/status \
-  -H 'X-Admin-Token: local-admin-token' \
-  -H 'Content-Type: application/json' \
-  -d '{"status": "inactive"}'
-```
-
 ## Tenant Grants
 
 Grant a model to a tenant:
@@ -460,7 +436,7 @@ Cost fields in usage logs are micro-credits in the database and decimal credits 
 
 - Token capabilities calculate costs from prompt/completion tokens and per-1M-token integer credit prices, then keep exact micro-credit results internally.
 - Image capability calculates `api_key_quota_cost` and `user_cost` as `image_count * image_price` (using tenant sale price).
-- Provider image cost is recorded from `image_size_prices` based on the requested image size.
+- Provider image cost is recorded from `image_prices` based on the requested image size.
 
 ## Runtime Limits
 

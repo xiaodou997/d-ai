@@ -435,9 +435,8 @@ export function formatTimestamp(value) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
-// formatCredits 千分位展示数字，保留最多 4 位小数（积分精度上限：1 = 10000 micro）。
-// 后端 _credits 字段已统一是 float；整数计数（request_count/total_tokens）
-// 直接显示原值无小数。
+// formatCredits 用于实际消耗/统计结果，保留最多 4 位小数（1 积分 = 10000 micro）。
+// 售价/配额这类配置值必须走 formatWholeCredits，避免把配置小数展示出来。
 export function formatCredits(value) {
   const n = Number(value) || 0
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })

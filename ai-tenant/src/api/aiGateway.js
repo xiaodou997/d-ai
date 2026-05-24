@@ -5,7 +5,8 @@ import request from '@/utils/request'
 /**
  * 格式化积分显示
  */
-// 后端 _credits 字段已统一是 float，最多 4 位小数；整数计数无小数自然展示。
+// formatCredits 用于实际消耗/统计结果，保留最多 4 位小数。
+// 售价/配额这类配置值必须走 formatWholeCredits。
 export const formatCredits = (value) => {
   if (value === null || value === undefined) return '-'
   const n = Number(value) || 0
