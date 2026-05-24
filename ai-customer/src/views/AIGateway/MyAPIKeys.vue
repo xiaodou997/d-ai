@@ -25,7 +25,7 @@ const showKeyDialog = shallowRef(false)
 
 const keyForm = reactive({
   name: '',
-  quota_limit: null,
+  quota_limit_credits: null,
   allowed_models: [],
   status: 'active'
 })
@@ -59,7 +59,7 @@ const resetForm = () => {
   editingKeyId.value = ''
   Object.assign(keyForm, {
     name: '',
-    quota_limit: null,
+    quota_limit_credits: null,
     allowed_models: [],
     status: 'active'
   })
@@ -74,12 +74,14 @@ const openEditDialog = (row) => {
   editingKeyId.value = row.id
   Object.assign(keyForm, {
     name: row.name,
-    quota_limit: row.quota_limit,
+    quota_limit_credits: row.quota_limit_credits,
     allowed_models: row.allowed_models || [],
     status: row.status
   })
   dialogVisible.value = true
 }
+
+const quotaLimitPayload = () => (keyForm.quota_limit_credits === undefined ? null : keyForm.quota_limit_credits)
 
 const submitForm = async () => {
   if (!keyForm.name) {
@@ -91,7 +93,7 @@ const submitForm = async () => {
     if (isEditing.value) {
       await updateUserAPIKey(editingKeyId.value, {
         name: keyForm.name,
-        quota_limit: keyForm.quota_limit,
+        quota_limit_credits: quotaLimitPayload(),
         allowed_models: keyForm.allowed_models,
         status: keyForm.status
       })
@@ -100,7 +102,7 @@ const submitForm = async () => {
     } else {
       const res = await createUserAPIKey({
         name: keyForm.name,
-        quota_limit: keyForm.quota_limit,
+        quota_limit_credits: quotaLimitPayload(),
         allowed_models: keyForm.allowed_models,
         status: keyForm.status
       })
@@ -218,12 +220,12 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="配额限制" min-width="120">
           <template #default="{ row }">
-            {{ row.quota_limit ? formatCredits(row.quota_limit) + ' 积分' : '无限制' }}
+            {{ row.quota_limit_credits !== null && row.quota_limit_credits !== undefined ? formatCredits(row.quota_limit_credits) + ' 积分' : '无限制' }}
           </template>
         </el-table-column>
         <el-table-column label="已使用" min-width="120">
           <template #default="{ row }">
-            {{ formatCredits(row.quota_used) }} 积分
+            {{ formatCredits(row.quota_used_credits) }} 积分
           </template>
         </el-table-column>
         <el-table-column label="允许模型" min-width="100">
@@ -271,9 +273,10 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="配额限制">
           <el-input-number
-            v-model="keyForm.quota_limit"
+            v-model="keyForm.quota_limit_credits"
             :min="0"
-            :precision="0"
+            :precision="4"
+            :step="0.0001"
             placeholder="不填则无限制"
             class="w-full"
           />

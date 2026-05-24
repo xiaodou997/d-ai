@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"xiaodou/uni-ai-api/internal/credits"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 )
 
@@ -14,13 +15,6 @@ type usageStatsDTO struct {
 	TotalTokens   int64   `json:"total_tokens"`
 	TotalCredits  float64 `json:"total_credits"` // 小数积分（micro÷10000）
 	AvgLatencyMs  float64 `json:"avg_latency_ms"`
-}
-
-// microToCredits 把 micro-credit 精度的 int64 转成展示用的 decimal 积分 float。
-// 所有对外 DTO 只暴露 `_credits` float 字段；内部 BillingResult / DB 列仍保持
-// micro-credit int64。1 积分 = 10000 micro-credit。
-func microToCredits(micro int64) float64 {
-	return float64(micro) / 10000.0
 }
 
 type listUsageLogsResponse struct {
@@ -118,7 +112,7 @@ func (s *Server) handleAdminListUsageLogs(w http.ResponseWriter, r *http.Request
 		s.writeAdminServerError(w, r, "query usage stats failed", err)
 		return
 	}
-	stats.TotalCredits = microToCredits(totalCostMicro)
+	stats.TotalCredits = credits.MicroToCredits(totalCostMicro)
 
 	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
 		TenantID:      filters.tenantID,
@@ -168,9 +162,9 @@ func fromDashboardSummary(r dbgen.GetDashboardSummaryRow) dashboardSummaryDTO {
 		TotalTokens:           r.TotalTokens,
 		TotalPromptTokens:     r.TotalPromptTokens,
 		TotalCompletionTokens: r.TotalCompletionTokens,
-		TotalProviderCredits:  microToCredits(r.TotalProviderCost),
-		TotalPlatformCredits:  microToCredits(r.TotalPlatformCost),
-		TotalUserCredits:      microToCredits(r.TotalUserCost),
+		TotalProviderCredits:  credits.MicroToCredits(r.TotalProviderCost),
+		TotalPlatformCredits:  credits.MicroToCredits(r.TotalPlatformCost),
+		TotalUserCredits:      credits.MicroToCredits(r.TotalUserCost),
 		AvgLatencyMs:          r.AvgLatencyMs,
 	}
 }
@@ -196,10 +190,10 @@ func fromUsageSummary(rows []dbgen.ListUsageSummaryRow) []usageSummaryRowDTO {
 			TotalPromptTokens:     r.TotalPromptTokens,
 			TotalCompletionTokens: r.TotalCompletionTokens,
 			TotalTokens:           r.TotalTokens,
-			TotalProviderCredits:  microToCredits(r.TotalProviderCost),
-			TotalPlatformCredits:  microToCredits(r.TotalPlatformCost),
-			TotalUserCredits:      microToCredits(r.TotalUserCost),
-			TotalQuotaCredits:     microToCredits(r.TotalQuotaCost),
+			TotalProviderCredits:  credits.MicroToCredits(r.TotalProviderCost),
+			TotalPlatformCredits:  credits.MicroToCredits(r.TotalPlatformCost),
+			TotalUserCredits:      credits.MicroToCredits(r.TotalUserCost),
+			TotalQuotaCredits:     credits.MicroToCredits(r.TotalQuotaCost),
 		}
 	}
 	return out
@@ -221,9 +215,9 @@ func fromUsageUnitSummary(rows []dbgen.ListUsageUnitSummaryRow) []usageUnitSumma
 			BillableUnitType:     r.BillableUnitType,
 			RequestCount:         r.RequestCount,
 			TotalBillableUnits:   r.TotalBillableUnits,
-			TotalProviderCredits: microToCredits(r.TotalProviderCost),
-			TotalPlatformCredits: microToCredits(r.TotalPlatformCost),
-			TotalUserCredits:     microToCredits(r.TotalUserCost),
+			TotalProviderCredits: credits.MicroToCredits(r.TotalProviderCost),
+			TotalPlatformCredits: credits.MicroToCredits(r.TotalPlatformCost),
+			TotalUserCredits:     credits.MicroToCredits(r.TotalUserCost),
 		}
 	}
 	return out
@@ -248,7 +242,7 @@ func fromUserUsageSummary(r dbgen.ListUsageSummaryByTenantUserRow) userUsageSumm
 		TotalTokens:           r.TotalTokens,
 		TotalPromptTokens:     r.TotalPromptTokens,
 		TotalCompletionTokens: r.TotalCompletionTokens,
-		TotalUserCredits:      microToCredits(r.TotalUserCost),
+		TotalUserCredits:      credits.MicroToCredits(r.TotalUserCost),
 		AvgLatencyMs:          r.AvgLatencyMs,
 	}
 }
@@ -267,7 +261,7 @@ func fromDashboardTopModels(rows []dbgen.ListDashboardTopModelsRow) []dashboardT
 			ModelCode:    r.ModelCode,
 			RequestCount: r.RequestCount,
 			TotalTokens:  r.TotalTokens,
-			TotalCredits: microToCredits(r.TotalCost),
+			TotalCredits: credits.MicroToCredits(r.TotalCost),
 		}
 	}
 	return out
@@ -287,7 +281,7 @@ func fromDashboardTopTenants(rows []dbgen.ListDashboardTopTenantsRow) []dashboar
 			TenantID:     r.TenantID,
 			RequestCount: r.RequestCount,
 			TotalTokens:  r.TotalTokens,
-			TotalCredits: microToCredits(r.TotalCost),
+			TotalCredits: credits.MicroToCredits(r.TotalCost),
 		}
 	}
 	return out
@@ -378,7 +372,7 @@ func (s *Server) handleTenantListUsageLogs(w http.ResponseWriter, r *http.Reques
 		s.writeAdminServerError(w, r, "query usage stats failed", err)
 		return
 	}
-	stats.TotalCredits = microToCredits(totalCostMicro)
+	stats.TotalCredits = credits.MicroToCredits(totalCostMicro)
 
 	rows, err := s.queries.ListUsageLogs(r.Context(), dbgen.ListUsageLogsParams{
 		TenantID:      filters.tenantID,
@@ -520,9 +514,9 @@ func (s *Server) handleAdminListDailyTrend(w http.ResponseWriter, r *http.Reques
 			s.writeAdminServerError(w, r, "scan daily trend row failed", err)
 			return
 		}
-		row.ProviderCredits = microToCredits(providerCostMicro)
-		row.PlatformCredits = microToCredits(platformCostMicro)
-		row.UserCredits = microToCredits(userCostMicro)
+		row.ProviderCredits = credits.MicroToCredits(providerCostMicro)
+		row.PlatformCredits = credits.MicroToCredits(platformCostMicro)
+		row.UserCredits = credits.MicroToCredits(userCostMicro)
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {

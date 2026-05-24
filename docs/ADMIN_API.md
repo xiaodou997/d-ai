@@ -245,37 +245,33 @@ curl -X DELETE http://127.0.0.1:13010/admin/models/{model_id}/routes/{route_id} 
 
 ## Model Prices
 
-Model prices define tenant sale prices. All price fields are non-negative integer credits. Token prices are credits per 1M tokens; image prices are credits per generated image. `effective_from` and other admin timestamps use Unix milliseconds in API requests and responses.
+Model prices define the platform public price for a model. API requests and responses use credits (`*_credits`) as decimal numbers. The database keeps micro-credits internally, but that unit is not exposed at the HTTP boundary. Token prices are credits per 1M tokens; image and video arrays use one entry per resolution.
 
-Create a model sale price:
+Upsert a model price:
 
 ```bash
-curl -X POST http://127.0.0.1:13010/admin/models/{model_id}/prices \
+curl -X PUT http://127.0.0.1:13010/admin/models/{model_id}/price \
   -H 'X-Admin-Token: local-admin-token' \
   -H 'Content-Type: application/json' \
   -d '{
-    "tenant_input_price_per_1m": 1500,
-    "tenant_output_price_per_1m": 3000,
-    "tenant_image_price": 80,
-    "effective_from": 1777248000000,
-    "status": "active"
+    "input_price_per_1m_credits": 100,
+    "output_price_per_1m_credits": 300,
+    "image_prices": [
+      {"resolution": "1024x1024", "price_credits": 80}
+    ],
+    "video_prices": [
+      {"resolution": "720p", "price_credits": 120}
+    ],
+    "audio_tts_price_per_1m_chars_credits": 50,
+    "audio_stt_price_per_minute_credits": 2
   }'
 ```
 
-List model prices:
+Get model price:
 
 ```bash
-curl http://127.0.0.1:13010/admin/models/{model_id}/prices \
+curl http://127.0.0.1:13010/admin/models/{model_id}/price \
   -H 'X-Admin-Token: local-admin-token'
-```
-
-Update model price status:
-
-```bash
-curl -X PATCH http://127.0.0.1:13010/admin/models/{model_id}/prices/{price_id}/status \
-  -H 'X-Admin-Token: local-admin-token' \
-  -H 'Content-Type: application/json' \
-  -d '{"status": "inactive"}'
 ```
 
 ## Upstream Deployment Cost Prices
@@ -358,7 +354,7 @@ curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/api-keys \
   -H 'Content-Type: application/json' \
   -d '{
     "name": "Tenant test key",
-    "quota_limit": 1000000000,
+    "quota_limit_credits": 1000,
     "allowed_models": ["deepseek-v4-pro"],
     "created_by": "admin"
   }'
@@ -394,7 +390,7 @@ curl -X POST http://127.0.0.1:13010/admin/tenants/tenant-local/users/user-local/
   -H 'Content-Type: application/json' \
   -d '{
     "name": "User test key",
-    "quota_limit": 100000000,
+    "quota_limit_credits": 100,
     "allowed_models": ["deepseek-v4-pro"],
     "created_by": "admin"
   }'

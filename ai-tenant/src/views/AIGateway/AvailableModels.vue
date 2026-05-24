@@ -42,15 +42,7 @@ const statusTagType = (status) => {
 const capabilityLabel = (value) =>
   capabilityOptions.find((o) => o.value === value)?.label || value || '-'
 
-const parseSizePrices = (raw) => {
-  if (!raw) return []
-  try {
-    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Object.entries(obj).map(([size, price]) => ({ size, price: Number(price) }))
-  } catch {
-    return []
-  }
-}
+const resolutionPrices = (raw) => (Array.isArray(raw) ? raw : [])
 
 onMounted(fetchModels)
 </script>
@@ -114,20 +106,31 @@ onMounted(fetchModels)
             <template v-if="publicPrice">
               <div class="price-row">
                 <span class="label">输入价格</span>
-                <span class="value">{{ formatCredits(publicPrice.input_price_per_1m) }} 积分/百万token</span>
+                <span class="value">{{ formatCredits(publicPrice.input_price_per_1m_credits) }} 积分/百万token</span>
               </div>
               <div class="price-row">
                 <span class="label">输出价格</span>
-                <span class="value">{{ formatCredits(publicPrice.output_price_per_1m) }} 积分/百万token</span>
+                <span class="value">{{ formatCredits(publicPrice.output_price_per_1m_credits) }} 积分/百万token</span>
               </div>
-              <template v-if="parseSizePrices(publicPrice.image_size_prices).length > 0">
+              <template v-if="resolutionPrices(publicPrice.image_prices).length > 0">
                 <div class="price-row">
                   <span class="label">图片尺寸价格</span>
                 </div>
                 <div class="size-prices">
-                  <div v-for="item in parseSizePrices(publicPrice.image_size_prices)" :key="item.size" class="size-item">
-                    <span>{{ item.size }}</span>
-                    <span>{{ formatCredits(item.price) }} 积分</span>
+                  <div v-for="item in resolutionPrices(publicPrice.image_prices)" :key="item.resolution" class="size-item">
+                    <span>{{ item.resolution }}</span>
+                    <span>{{ formatCredits(item.price_credits) }} 积分</span>
+                  </div>
+                </div>
+              </template>
+              <template v-if="resolutionPrices(publicPrice.video_prices).length > 0">
+                <div class="price-row">
+                  <span class="label">视频分辨率价格</span>
+                </div>
+                <div class="size-prices">
+                  <div v-for="item in resolutionPrices(publicPrice.video_prices)" :key="item.resolution" class="size-item">
+                    <span>{{ item.resolution }}</span>
+                    <span>{{ formatCredits(item.price_credits) }} 积分/秒</span>
                   </div>
                 </div>
               </template>

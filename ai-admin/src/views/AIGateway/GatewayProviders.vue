@@ -1054,6 +1054,7 @@ onMounted(fetchProviders)
               v-model="deploymentForm.pricing.image_prices"
               mode="image"
               :presets="imagePresets"
+              price-key="price"
             />
           </template>
 
@@ -1063,6 +1064,7 @@ onMounted(fetchProviders)
               v-model="deploymentForm.pricing.video_prices"
               mode="video"
               :presets="videoPresets"
+              price-key="price"
             />
           </template>
 

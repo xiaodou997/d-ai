@@ -2,12 +2,12 @@ package httpserver
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
+	"xiaodou/uni-ai-api/internal/credits"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 )
 
@@ -133,16 +133,24 @@ func (s *Server) handleAdminUpsertModelPrice(w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
 		return
 	}
-	imagePrices := jsonArrayOrDefault(req.ImagePrices)
-	videoPrices := jsonArrayOrDefault(req.VideoPrices)
+	imagePrices, message := resolutionPricesCreditsToMicro(req.ImagePrices, "image_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
+	videoPrices, message := resolutionPricesCreditsToMicro(req.VideoPrices, "video_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	row, err := s.queries.UpsertModelPrice(r.Context(), dbgen.UpsertModelPriceParams{
 		ModelID:                 modelID,
-		InputPricePer1m:         req.InputPricePer1M,
-		OutputPricePer1m:        req.OutputPricePer1M,
+		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1MCredits),
+		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1MCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
-		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
+		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
+		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSTTPricePerMinuteCredits),
 	})
 	if err != nil {
 		writeDBErr(w, err)
@@ -212,18 +220,26 @@ func (s *Server) handleAdminUpsertTenantModelPriceOverride(w http.ResponseWriter
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
 		return
 	}
-	imagePrices := jsonArrayOrDefault(req.ImagePrices)
-	videoPrices := jsonArrayOrDefault(req.VideoPrices)
+	imagePrices, message := resolutionPricesCreditsToMicro(req.ImagePrices, "image_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
+	videoPrices, message := resolutionPricesCreditsToMicro(req.VideoPrices, "video_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	adminCtx, _ := adminFromContext(r.Context())
 	row, err := s.queries.UpsertTenantModelPriceOverride(r.Context(), dbgen.UpsertTenantModelPriceOverrideParams{
 		TenantID:                tenantID,
 		ModelID:                 modelID,
-		InputPricePer1m:         req.InputPricePer1M,
-		OutputPricePer1m:        req.OutputPricePer1M,
+		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1MCredits),
+		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1MCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
-		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
+		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
+		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSTTPricePerMinuteCredits),
 		CreatedBy:               optionalTextString(adminCtx.Actor),
 	})
 	if err != nil {
@@ -315,18 +331,26 @@ func (s *Server) handleAdminUpsertTenantUserPrice(w http.ResponseWriter, r *http
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
 		return
 	}
-	imagePrices := jsonArrayOrDefault(req.ImagePrices)
-	videoPrices := jsonArrayOrDefault(req.VideoPrices)
+	imagePrices, message := resolutionPricesCreditsToMicro(req.ImagePrices, "image_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
+	videoPrices, message := resolutionPricesCreditsToMicro(req.VideoPrices, "video_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	adminCtx, _ := adminFromContext(r.Context())
 	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
 		TenantID:                tenantID,
 		ModelID:                 modelID,
-		InputPricePer1m:         req.InputPricePer1M,
-		OutputPricePer1m:        req.OutputPricePer1M,
+		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1MCredits),
+		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1MCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: req.AudioTTSPricePer1MChars,
-		AudioSttPricePerMinute:  req.AudioSTTPricePerMinute,
+		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTTSPricePer1MCharsCredits),
+		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSTTPricePerMinuteCredits),
 		CreatedBy:               optionalTextString(adminCtx.Actor),
 	})
 	if err != nil {
@@ -520,16 +544,21 @@ func (s *Server) handleAdminDeleteModelRoute(w http.ResponseWriter, r *http.Requ
 	writeOK(w, map[string]string{"status": "deleted"})
 }
 
+// maxCreditsPerField is the maximum allowed value for a single price field in credits.
+// This prevents accidental input of absurdly large values (e.g. entering micro-credits
+// as credits). 1,000,000 积分 = 10,000 元人民币 should be more than enough.
+const maxCreditsPerField = 1_000_000.0
+
 func validateModelPriceCredits(req modelPriceRequest) string {
-	fields := map[string]int64{
-		"input_price_per_1m":           req.InputPricePer1M,
-		"output_price_per_1m":          req.OutputPricePer1M,
-		"audio_tts_price_per_1m_chars": req.AudioTTSPricePer1MChars,
-		"audio_stt_price_per_minute":   req.AudioSTTPricePerMinute,
+	fields := map[string]float64{
+		"input_price_per_1m_credits":           req.InputPricePer1MCredits,
+		"output_price_per_1m_credits":          req.OutputPricePer1MCredits,
+		"audio_tts_price_per_1m_chars_credits": req.AudioTTSPricePer1MCharsCredits,
+		"audio_stt_price_per_minute_credits":   req.AudioSTTPricePerMinuteCredits,
 	}
 	for name, value := range fields {
-		if value < 0 {
-			return fmt.Sprintf("%s must be a non-negative integer credit value", name)
+		if message := validateCreditAmount(name, value); message != "" {
+			return message
 		}
 	}
 	return ""

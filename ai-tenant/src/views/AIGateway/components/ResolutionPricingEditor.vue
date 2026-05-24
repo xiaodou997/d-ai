@@ -15,7 +15,7 @@ const rows = computed(() => props.modelValue || [])
 const priceLabel = computed(() => (props.mode === 'video' ? '积分 (每秒)' : '积分 (每张)'))
 
 function pushRow(resolution) {
-  emit('update:modelValue', [...rows.value, { resolution, price: 0 }])
+  emit('update:modelValue', [...rows.value, { resolution, price_credits: 0 }])
 }
 
 function updateRow(index, patch) {
@@ -30,7 +30,7 @@ function applyPreset(preset) {
   const existing = new Set(rows.value.map((r) => r.resolution))
   const additions = preset.resolutions
     .filter((res) => !existing.has(res))
-    .map((res) => ({ resolution: res, price: 0 }))
+    .map((res) => ({ resolution: res, price_credits: 0 }))
   if (additions.length === 0) return
   emit('update:modelValue', [...rows.value, ...additions])
 }
@@ -68,11 +68,12 @@ function applyPreset(preset) {
           @update:model-value="(v) => updateRow(idx, { resolution: v })"
         />
         <el-input-number
-          :model-value="row.price"
+          :model-value="row.price_credits"
           :min="0"
-          :precision="0"
+          :precision="4"
+          :step="0.0001"
           controls-position="right"
-          @update:model-value="(v) => updateRow(idx, { price: v || 0 })"
+          @update:model-value="(v) => updateRow(idx, { price_credits: v || 0 })"
         />
         <el-button link type="danger" :icon="Delete" @click="removeRow(idx)" />
       </div>

@@ -7,20 +7,107 @@ package httpserver
 // (int64, nil = absent), and JSONB bytes become json.RawMessage so the wire
 // format is actual JSON rather than RFC3339 strings or base64.
 //
-// 单位约定（自 2026-05 计费精度升级起）：
-//   - 所有 *_cost / *_price_per_1m / quota_* 字段的整型值单位是「微积分」
-//     (micro-credits，1 积分 = 10000 微积分 = 1 分人民币)。
-//   - 前端展示时除以 10000 得到「积分」（保留 4 位小数足以无损展示任何
-//     真实账单金额）。
-//   - 后续 Phase 5 会新增对应的 *_credits 浮点字段，前端可按需切换。
+// 单位约定（自 2026-05 计费精度升级 + API 统一积分单位重构起）：
+//   - 数据库 / 内部计算使用「微积分」(micro-credits, int64)，
+//     1 积分 = 10000 微积分 = 1 分人民币。
+//   - API 边界（DTO 响应 + 请求）统一使用「积分」(float64)，
+//     后端在 DTO 层做 ÷10000 / ×10000 转换。
+//   - 前端只看到「积分」，不再需要感知微积分。
+//   - usage DTO、价格 DTO、配额 DTO 都通过 internal/credits 在边界转换单位。
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"xiaodou/uni-ai-api/internal/credits"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
+	"xiaodou/uni-ai-api/internal/domain"
 )
+
+// ---------------------------------------------------------------------------
+// Price DTO helpers
+// ---------------------------------------------------------------------------
+
+type resolutionPriceDTO struct {
+	Resolution   string  `json:"resolution"`
+	PriceCredits float64 `json:"price_credits"`
+}
+
+func resolutionPricesMicroToCredits(raw []byte) []resolutionPriceDTO {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []resolutionPriceDTO{}
+	}
+	var stored []domain.ResolutionCreditPrice
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return []resolutionPriceDTO{}
+	}
+	out := make([]resolutionPriceDTO, 0, len(stored))
+	for _, item := range stored {
+		out = append(out, resolutionPriceDTO{
+			Resolution:   item.Resolution,
+			PriceCredits: credits.MicroToCredits(item.Price),
+		})
+	}
+	return out
+}
+
+func resolutionPricesCreditsToMicro(entries []resolutionPriceDTO, fieldName string) ([]byte, string) {
+	if len(entries) == 0 {
+		return []byte("[]"), ""
+	}
+	seen := make(map[string]struct{}, len(entries))
+	stored := make([]domain.ResolutionCreditPrice, 0, len(entries))
+	for i, entry := range entries {
+		resolution := strings.TrimSpace(entry.Resolution)
+		if resolution == "" {
+			return nil, fmt.Sprintf("%s[%d].resolution is required", fieldName, i)
+		}
+		if _, ok := seen[resolution]; ok {
+			return nil, fmt.Sprintf("%s contains duplicate resolution %q", fieldName, resolution)
+		}
+		seen[resolution] = struct{}{}
+		if message := validateCreditAmount(fmt.Sprintf("%s[%d].price_credits", fieldName, i), entry.PriceCredits); message != "" {
+			return nil, message
+		}
+		stored = append(stored, domain.ResolutionCreditPrice{
+			Resolution: resolution,
+			Price:      credits.CreditsToMicro(entry.PriceCredits),
+		})
+	}
+	out, err := json.Marshal(stored)
+	if err != nil {
+		return nil, fmt.Sprintf("%s is invalid", fieldName)
+	}
+	return out, ""
+}
+
+func validateCreditAmount(name string, value float64) string {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return fmt.Sprintf("%s must be a finite credit value", name)
+	}
+	if value < 0 {
+		return fmt.Sprintf("%s must be a non-negative credit value", name)
+	}
+	scaled := value * float64(credits.MicroPerCredit)
+	if math.Abs(scaled-math.Round(scaled)) > 1e-7 {
+		return fmt.Sprintf("%s must have at most 4 decimal places", name)
+	}
+	if value > maxCreditsPerField {
+		return fmt.Sprintf("%s exceeds maximum allowed value (%.0f credits)", name, maxCreditsPerField)
+	}
+	return ""
+}
+
+func validateOptionalCreditAmount(name string, value *float64) string {
+	if value == nil {
+		return ""
+	}
+	return validateCreditAmount(name, *value)
+}
 
 // ---------------------------------------------------------------------------
 // Timestamp / JSONB helpers
@@ -246,45 +333,45 @@ func fromModels(rows []dbgen.ListAdminModelsRow) []modelDTO {
 // ---------------------------------------------------------------------------
 
 type modelPriceDTO struct {
-	ID                      pgtype.UUID     `json:"id"`
-	ModelID                 pgtype.UUID     `json:"model_id"`
-	InputPricePer1m         int64           `json:"input_price_per_1m"`
-	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImagePrices             json.RawMessage `json:"image_prices"`
-	VideoPrices             json.RawMessage `json:"video_prices"`
-	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
-	CreatedAt               *int64          `json:"created_at"`
-	UpdatedAt               *int64          `json:"updated_at"`
+	ID                             pgtype.UUID          `json:"id"`
+	ModelID                        pgtype.UUID          `json:"model_id"`
+	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
+	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
+	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	CreatedAt                      *int64               `json:"created_at"`
+	UpdatedAt                      *int64               `json:"updated_at"`
 }
 
 func fromGetModelPrice(r dbgen.GetModelPriceRow) modelPriceDTO {
 	return modelPriceDTO{
-		ID:                      r.ID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
+		ID:                             r.ID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
 	}
 }
 
 func fromUpsertModelPrice(r dbgen.UpsertModelPriceRow) modelPriceDTO {
 	return modelPriceDTO{
-		ID:                      r.ID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
+		ID:                             r.ID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
 	}
 }
 
@@ -293,18 +380,18 @@ func fromUpsertModelPrice(r dbgen.UpsertModelPriceRow) modelPriceDTO {
 // ---------------------------------------------------------------------------
 
 type tenantModelPriceDTO struct {
-	ID                      pgtype.UUID     `json:"id"`
-	TenantID                string          `json:"tenant_id"`
-	ModelID                 pgtype.UUID     `json:"model_id"`
-	InputPricePer1m         int64           `json:"input_price_per_1m"`
-	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImagePrices             json.RawMessage `json:"image_prices"`
-	VideoPrices             json.RawMessage `json:"video_prices"`
-	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
-	CreatedBy               pgtype.Text     `json:"created_by"`
-	CreatedAt               *int64          `json:"created_at"`
-	UpdatedAt               *int64          `json:"updated_at"`
+	ID                             pgtype.UUID          `json:"id"`
+	TenantID                       string               `json:"tenant_id"`
+	ModelID                        pgtype.UUID          `json:"model_id"`
+	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
+	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
+	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	CreatedBy                      pgtype.Text          `json:"created_by"`
+	CreatedAt                      *int64               `json:"created_at"`
+	UpdatedAt                      *int64               `json:"updated_at"`
 	// Extra fields from list query
 	ModelCode      string `json:"model_code,omitempty"`
 	CapabilityType string `json:"capability_type,omitempty"`
@@ -312,54 +399,54 @@ type tenantModelPriceDTO struct {
 
 func fromGetTenantModelPriceOverride(r dbgen.GetTenantModelPriceOverrideRow) tenantModelPriceDTO {
 	return tenantModelPriceDTO{
-		ID:                      r.ID,
-		TenantID:                r.TenantID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedBy:               r.CreatedBy,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
+		ID:                             r.ID,
+		TenantID:                       r.TenantID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedBy:                      r.CreatedBy,
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
 	}
 }
 
 func fromUpsertTenantModelPriceOverride(r dbgen.UpsertTenantModelPriceOverrideRow) tenantModelPriceDTO {
 	return tenantModelPriceDTO{
-		ID:                      r.ID,
-		TenantID:                r.TenantID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedBy:               r.CreatedBy,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
+		ID:                             r.ID,
+		TenantID:                       r.TenantID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedBy:                      r.CreatedBy,
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
 	}
 }
 
 func fromListTenantModelPriceOverride(r dbgen.ListTenantModelPriceOverridesRow) tenantModelPriceDTO {
 	return tenantModelPriceDTO{
-		ID:                      r.ID,
-		TenantID:                r.TenantID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedBy:               r.CreatedBy,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
-		ModelCode:               r.ModelCode,
-		CapabilityType:          r.CapabilityType,
+		ID:                             r.ID,
+		TenantID:                       r.TenantID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedBy:                      r.CreatedBy,
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
+		ModelCode:                      r.ModelCode,
+		CapabilityType:                 r.CapabilityType,
 	}
 }
 
@@ -376,18 +463,18 @@ func fromListTenantModelPriceOverrides(rows []dbgen.ListTenantModelPriceOverride
 // ---------------------------------------------------------------------------
 
 type tenantUserPriceDTO struct {
-	ID                      pgtype.UUID     `json:"id"`
-	TenantID                string          `json:"tenant_id"`
-	ModelID                 pgtype.UUID     `json:"model_id"`
-	InputPricePer1m         int64           `json:"input_price_per_1m"`
-	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImagePrices             json.RawMessage `json:"image_prices"`
-	VideoPrices             json.RawMessage `json:"video_prices"`
-	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
-	CreatedBy               pgtype.Text     `json:"created_by"`
-	CreatedAt               *int64          `json:"created_at"`
-	UpdatedAt               *int64          `json:"updated_at"`
+	ID                             pgtype.UUID          `json:"id"`
+	TenantID                       string               `json:"tenant_id"`
+	ModelID                        pgtype.UUID          `json:"model_id"`
+	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
+	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
+	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+	CreatedBy                      pgtype.Text          `json:"created_by"`
+	CreatedAt                      *int64               `json:"created_at"`
+	UpdatedAt                      *int64               `json:"updated_at"`
 	// Extra fields from list query
 	ModelCode      string `json:"model_code,omitempty"`
 	CapabilityType string `json:"capability_type,omitempty"`
@@ -395,54 +482,54 @@ type tenantUserPriceDTO struct {
 
 func fromGetTenantUserPrice(r dbgen.GetTenantUserPriceRow) tenantUserPriceDTO {
 	return tenantUserPriceDTO{
-		ID:                      r.ID,
-		TenantID:                r.TenantID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedBy:               r.CreatedBy,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
+		ID:                             r.ID,
+		TenantID:                       r.TenantID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedBy:                      r.CreatedBy,
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
 	}
 }
 
 func fromUpsertTenantUserPrice(r dbgen.UpsertTenantUserPriceRow) tenantUserPriceDTO {
 	return tenantUserPriceDTO{
-		ID:                      r.ID,
-		TenantID:                r.TenantID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedBy:               r.CreatedBy,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
+		ID:                             r.ID,
+		TenantID:                       r.TenantID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedBy:                      r.CreatedBy,
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
 	}
 }
 
 func fromListTenantUserPrice(r dbgen.ListTenantUserPricesRow) tenantUserPriceDTO {
 	return tenantUserPriceDTO{
-		ID:                      r.ID,
-		TenantID:                r.TenantID,
-		ModelID:                 r.ModelID,
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
-		CreatedBy:               r.CreatedBy,
-		CreatedAt:               millis(r.CreatedAt),
-		UpdatedAt:               millis(r.UpdatedAt),
-		ModelCode:               r.ModelCode,
-		CapabilityType:          r.CapabilityType,
+		ID:                             r.ID,
+		TenantID:                       r.TenantID,
+		ModelID:                        r.ModelID,
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
+		CreatedBy:                      r.CreatedBy,
+		CreatedAt:                      millis(r.CreatedAt),
+		UpdatedAt:                      millis(r.UpdatedAt),
+		ModelCode:                      r.ModelCode,
+		CapabilityType:                 r.CapabilityType,
 	}
 }
 
@@ -774,21 +861,21 @@ func fromListTenantModelGrants(rows []dbgen.ListTenantModelGrantsRow) []listTena
 // ---------------------------------------------------------------------------
 
 type apiKeyDTO struct {
-	ID            pgtype.UUID     `json:"id"`
-	OwnerType     string          `json:"owner_type"`
-	TenantID      string          `json:"tenant_id"`
-	UserID        pgtype.Text     `json:"user_id"`
-	LastFour      pgtype.Text     `json:"last_four"`
-	Name          string          `json:"name"`
-	QuotaLimit    pgtype.Int8     `json:"quota_limit"`
-	QuotaUsed     int64           `json:"quota_used"`
-	QuotaReserved int64           `json:"quota_reserved"`
-	AllowedModels json.RawMessage `json:"allowed_models"`
-	Status        string          `json:"status"`
-	ExpiresAt     *int64          `json:"expires_at"`
-	CreatedBy     pgtype.Text     `json:"created_by"`
-	CreatedAt     *int64          `json:"created_at"`
-	UpdatedAt     *int64          `json:"updated_at"`
+	ID                   pgtype.UUID     `json:"id"`
+	OwnerType            string          `json:"owner_type"`
+	TenantID             string          `json:"tenant_id"`
+	UserID               pgtype.Text     `json:"user_id"`
+	LastFour             pgtype.Text     `json:"last_four"`
+	Name                 string          `json:"name"`
+	QuotaLimitCredits    *float64        `json:"quota_limit_credits"`    // 积分 (nil=无限制)
+	QuotaUsedCredits     float64         `json:"quota_used_credits"`     // 积分
+	QuotaReservedCredits float64         `json:"quota_reserved_credits"` // 积分
+	AllowedModels        json.RawMessage `json:"allowed_models"`
+	Status               string          `json:"status"`
+	ExpiresAt            *int64          `json:"expires_at"`
+	CreatedBy            pgtype.Text     `json:"created_by"`
+	CreatedAt            *int64          `json:"created_at"`
+	UpdatedAt            *int64          `json:"updated_at"`
 }
 
 type createAPIKeyResponse struct {
@@ -803,41 +890,41 @@ type rotateAPIKeyResponse struct {
 
 func apiKeyDTOFromCreate(r dbgen.CreateAPIKeyRow) apiKeyDTO {
 	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		LastFour:      r.LastFour,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
+		ID:                   r.ID,
+		OwnerType:            r.OwnerType,
+		TenantID:             r.TenantID,
+		UserID:               r.UserID,
+		LastFour:             r.LastFour,
+		Name:                 r.Name,
+		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
+		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
+		AllowedModels:        rawJSON(r.AllowedModels),
+		Status:               r.Status,
+		ExpiresAt:            millis(r.ExpiresAt),
+		CreatedBy:            r.CreatedBy,
+		CreatedAt:            millis(r.CreatedAt),
+		UpdatedAt:            millis(r.UpdatedAt),
 	}
 }
 
 func apiKeyDTOFromList(r dbgen.ListAPIKeysRow) apiKeyDTO {
 	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		LastFour:      r.LastFour,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
+		ID:                   r.ID,
+		OwnerType:            r.OwnerType,
+		TenantID:             r.TenantID,
+		UserID:               r.UserID,
+		LastFour:             r.LastFour,
+		Name:                 r.Name,
+		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
+		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
+		AllowedModels:        rawJSON(r.AllowedModels),
+		Status:               r.Status,
+		ExpiresAt:            millis(r.ExpiresAt),
+		CreatedBy:            r.CreatedBy,
+		CreatedAt:            millis(r.CreatedAt),
+		UpdatedAt:            millis(r.UpdatedAt),
 	}
 }
 
@@ -851,81 +938,81 @@ func apiKeyDTOsFromList(rows []dbgen.ListAPIKeysRow) []apiKeyDTO {
 
 func apiKeyDTOFromGetByID(r dbgen.AiApiKey) apiKeyDTO {
 	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		LastFour:      r.LastFour,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
+		ID:                   r.ID,
+		OwnerType:            r.OwnerType,
+		TenantID:             r.TenantID,
+		UserID:               r.UserID,
+		LastFour:             r.LastFour,
+		Name:                 r.Name,
+		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
+		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
+		AllowedModels:        rawJSON(r.AllowedModels),
+		Status:               r.Status,
+		ExpiresAt:            millis(r.ExpiresAt),
+		CreatedBy:            r.CreatedBy,
+		CreatedAt:            millis(r.CreatedAt),
+		UpdatedAt:            millis(r.UpdatedAt),
 	}
 }
 
 func apiKeyDTOFromUpdate(r dbgen.UpdateAPIKeyRow) apiKeyDTO {
 	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		LastFour:      r.LastFour,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
+		ID:                   r.ID,
+		OwnerType:            r.OwnerType,
+		TenantID:             r.TenantID,
+		UserID:               r.UserID,
+		LastFour:             r.LastFour,
+		Name:                 r.Name,
+		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
+		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
+		AllowedModels:        rawJSON(r.AllowedModels),
+		Status:               r.Status,
+		ExpiresAt:            millis(r.ExpiresAt),
+		CreatedBy:            r.CreatedBy,
+		CreatedAt:            millis(r.CreatedAt),
+		UpdatedAt:            millis(r.UpdatedAt),
 	}
 }
 
 func apiKeyDTOFromUpdateStatus(r dbgen.UpdateAPIKeyStatusRow) apiKeyDTO {
 	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		LastFour:      r.LastFour,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
+		ID:                   r.ID,
+		OwnerType:            r.OwnerType,
+		TenantID:             r.TenantID,
+		UserID:               r.UserID,
+		LastFour:             r.LastFour,
+		Name:                 r.Name,
+		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
+		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
+		AllowedModels:        rawJSON(r.AllowedModels),
+		Status:               r.Status,
+		ExpiresAt:            millis(r.ExpiresAt),
+		CreatedBy:            r.CreatedBy,
+		CreatedAt:            millis(r.CreatedAt),
+		UpdatedAt:            millis(r.UpdatedAt),
 	}
 }
 
 func apiKeyDTOFromRotate(r dbgen.RotateAPIKeyRow) apiKeyDTO {
 	return apiKeyDTO{
-		ID:            r.ID,
-		OwnerType:     r.OwnerType,
-		TenantID:      r.TenantID,
-		UserID:        r.UserID,
-		LastFour:      r.LastFour,
-		Name:          r.Name,
-		QuotaLimit:    r.QuotaLimit,
-		QuotaUsed:     r.QuotaUsed,
-		QuotaReserved: r.QuotaReserved,
-		AllowedModels: rawJSON(r.AllowedModels),
-		Status:        r.Status,
-		ExpiresAt:     millis(r.ExpiresAt),
-		CreatedBy:     r.CreatedBy,
-		CreatedAt:     millis(r.CreatedAt),
-		UpdatedAt:     millis(r.UpdatedAt),
+		ID:                   r.ID,
+		OwnerType:            r.OwnerType,
+		TenantID:             r.TenantID,
+		UserID:               r.UserID,
+		LastFour:             r.LastFour,
+		Name:                 r.Name,
+		QuotaLimitCredits:    credits.Int8ToCreditsPtr(r.QuotaLimit),
+		QuotaUsedCredits:     credits.MicroToCredits(r.QuotaUsed),
+		QuotaReservedCredits: credits.MicroToCredits(r.QuotaReserved),
+		AllowedModels:        rawJSON(r.AllowedModels),
+		Status:               r.Status,
+		ExpiresAt:            millis(r.ExpiresAt),
+		CreatedBy:            r.CreatedBy,
+		CreatedAt:            millis(r.CreatedAt),
+		UpdatedAt:            millis(r.UpdatedAt),
 	}
 }
 
@@ -1003,10 +1090,10 @@ func fromListUsageLog(r dbgen.ListUsageLogsRow) usageLogDTO {
 		TotalTokens:          r.TotalTokens,
 		BillableUnitType:     r.BillableUnitType,
 		BillableUnits:        r.BillableUnits,
-		ProviderCredits:      microToCredits(r.ProviderCost),
-		PlatformCredits:      microToCredits(r.PlatformCost),
-		UserCredits:          microToCredits(r.UserCost),
-		ApiKeyQuotaCredits:   microToCredits(r.ApiKeyQuotaCost),
+		ProviderCredits:      credits.MicroToCredits(r.ProviderCost),
+		PlatformCredits:      credits.MicroToCredits(r.PlatformCost),
+		UserCredits:          credits.MicroToCredits(r.UserCost),
+		ApiKeyQuotaCredits:   credits.MicroToCredits(r.ApiKeyQuotaCost),
 		BillingStatus:        r.BillingStatus,
 		RequestStatus:        r.RequestStatus,
 		HttpStatus:           r.HttpStatus,
@@ -1095,8 +1182,8 @@ func fromListUsageLogForTenant(r dbgen.ListUsageLogsRow) usageLogForTenantDTO {
 		PromptTokens:        r.PromptTokens,
 		CompletionTokens:    r.CompletionTokens,
 		TotalTokens:         r.TotalTokens,
-		PlatformCredits:     microToCredits(r.PlatformCost),
-		UserCredits:         microToCredits(r.UserCost),
+		PlatformCredits:     credits.MicroToCredits(r.PlatformCost),
+		UserCredits:         credits.MicroToCredits(r.UserCost),
 		BillingStatus:       r.BillingStatus,
 		BillingStatusLabel:  billingStatusLabel(r.BillingStatus),
 		RequestStatus:       r.RequestStatus,
@@ -1311,7 +1398,7 @@ func fromListUsageLogByUser(r dbgen.ListUsageLogsByTenantUserRow) usageLogByUser
 		TotalTokens:      r.TotalTokens,
 		BillableUnitType: r.BillableUnitType,
 		BillableUnits:    r.BillableUnits,
-		UserCredits:      microToCredits(r.UserCost),
+		UserCredits:      credits.MicroToCredits(r.UserCost),
 		RequestStatus:    r.RequestStatus,
 		HttpStatus:       r.HttpStatus,
 		LatencyMs:        r.LatencyMs,
@@ -1334,40 +1421,40 @@ func fromListUsageLogsByUser(rows []dbgen.ListUsageLogsByTenantUserRow) []usageL
 // ---------------------------------------------------------------------------
 
 type userAvailableModelDTO struct {
-	ID                      pgtype.UUID     `json:"id"`
-	ModelCode               string          `json:"model_code"`
-	CapabilityType          string          `json:"capability_type"`
-	ContextWindow           pgtype.Int4     `json:"context_window"`
-	DefaultMaxOutputTokens  int32           `json:"default_max_output_tokens"`
-	MaxOutputTokens         pgtype.Int4     `json:"max_output_tokens"`
-	Status                  string          `json:"status"`
-	GrantStatus             string          `json:"grant_status"`
-	GrantedAt               *int64          `json:"granted_at"`
-	InputPricePer1m         int64           `json:"input_price_per_1m"`
-	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImagePrices             json.RawMessage `json:"image_prices"`
-	VideoPrices             json.RawMessage `json:"video_prices"`
-	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
+	ID                             pgtype.UUID          `json:"id"`
+	ModelCode                      string               `json:"model_code"`
+	CapabilityType                 string               `json:"capability_type"`
+	ContextWindow                  pgtype.Int4          `json:"context_window"`
+	DefaultMaxOutputTokens         int32                `json:"default_max_output_tokens"`
+	MaxOutputTokens                pgtype.Int4          `json:"max_output_tokens"`
+	Status                         string               `json:"status"`
+	GrantStatus                    string               `json:"grant_status"`
+	GrantedAt                      *int64               `json:"granted_at"`
+	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
+	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
+	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
 }
 
 func fromListUserAvailableModel(r dbgen.ListUserAvailableModelsRow) userAvailableModelDTO {
 	return userAvailableModelDTO{
-		ID:                      r.ID,
-		ModelCode:               r.ModelCode,
-		CapabilityType:          r.CapabilityType,
-		ContextWindow:           r.ContextWindow,
-		DefaultMaxOutputTokens:  r.DefaultMaxOutputTokens,
-		MaxOutputTokens:         r.MaxOutputTokens,
-		Status:                  r.Status,
-		GrantStatus:             r.GrantStatus,
-		GrantedAt:               millis(r.GrantedAt),
-		InputPricePer1m:         r.InputPricePer1m,
-		OutputPricePer1m:        r.OutputPricePer1m,
-		ImagePrices:             rawJSON(r.ImagePrices),
-		VideoPrices:             rawJSON(r.VideoPrices),
-		AudioTtsPricePer1mChars: r.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  r.AudioSttPricePerMinute,
+		ID:                             r.ID,
+		ModelCode:                      r.ModelCode,
+		CapabilityType:                 r.CapabilityType,
+		ContextWindow:                  r.ContextWindow,
+		DefaultMaxOutputTokens:         r.DefaultMaxOutputTokens,
+		MaxOutputTokens:                r.MaxOutputTokens,
+		Status:                         r.Status,
+		GrantStatus:                    r.GrantStatus,
+		GrantedAt:                      millis(r.GrantedAt),
+		InputPricePer1mCredits:         credits.MicroToCredits(r.InputPricePer1m),
+		OutputPricePer1mCredits:        credits.MicroToCredits(r.OutputPricePer1m),
+		ImagePrices:                    resolutionPricesMicroToCredits(r.ImagePrices),
+		VideoPrices:                    resolutionPricesMicroToCredits(r.VideoPrices),
+		AudioTtsPricePer1mCharsCredits: credits.MicroToCredits(r.AudioTtsPricePer1mChars),
+		AudioSttPricePerMinuteCredits:  credits.MicroToCredits(r.AudioSttPricePerMinute),
 	}
 }
 

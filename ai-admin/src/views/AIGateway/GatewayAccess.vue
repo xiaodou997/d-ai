@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { queryTenants } from '@/api/tenant'
+import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
 import {
   capabilityOptions,
   deleteTenantModelPriceOverride,
@@ -30,12 +31,12 @@ const models = shallowRef([])
 const tenantGrants = shallowRef([])
 
 const priceOverrideForm = reactive({
-  input_price_per_1m: 0,
-  output_price_per_1m: 0,
-  image_size_prices: [],
-  video_price_per_second: 0,
-  audio_tts_price_per_1m_chars: 0,
-  audio_stt_price_per_minute: 0
+  input_price_per_1m_credits: 0,
+  output_price_per_1m_credits: 0,
+  image_prices: [],
+  video_prices: [],
+  audio_tts_price_per_1m_chars_credits: 0,
+  audio_stt_price_per_minute_credits: 0
 })
 const tenantSearchResults = shallowRef([])
 
@@ -80,24 +81,18 @@ const statusTagType = (status) => {
 const capabilityLabel = (value) =>
   capabilityOptions.find((o) => o.value === value)?.label || value || '-'
 
-const parseSizePrices = (raw) => {
-  if (!raw) return []
-  try {
-    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Object.entries(obj).map(([size, price]) => ({ size, price: Number(price) }))
-  } catch { return [] }
-}
+const imagePresets = [
+  { label: '1024x1024', resolutions: ['1024x1024'] },
+  { label: '1024x1792', resolutions: ['1024x1792'] },
+  { label: '1792x1024', resolutions: ['1792x1024'] },
+  { label: '512x512', resolutions: ['512x512'] }
+]
 
-const serializeSizePrices = (arr) => {
-  const obj = {}
-  for (const { size, price } of arr) {
-    if (size && size.trim()) obj[size.trim()] = Number(price) || 0
-  }
-  return obj
-}
-
-const addSizePrice = () => priceOverrideForm.image_size_prices.push({ size: '', price: 0 })
-const removeSizePrice = (idx) => priceOverrideForm.image_size_prices.splice(idx, 1)
+const videoPresets = [
+  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
+  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
+  { label: 'Veo', resolutions: ['720p', '1080p', '4k'] }
+]
 
 const showTokenPrice = (capabilityType) => ['chat', 'embedding', 'rerank'].includes(capabilityType)
 const showOutputPrice = (capabilityType) => capabilityType === 'chat'
@@ -105,6 +100,13 @@ const showImagePrice = (capabilityType) => capabilityType === 'image'
 const showVideoPrice = (capabilityType) => capabilityType === 'video'
 const showAudioTTSPrice = (capabilityType) => capabilityType === 'audio_tts'
 const showAudioSTTPrice = (capabilityType) => capabilityType === 'audio_stt'
+
+const formatResolutionPrices = (entries, unit) => {
+  if (!Array.isArray(entries) || entries.length === 0) return '暂无定价'
+  return entries
+    .map((entry) => `${entry.resolution || '-'} ${formatCredits(entry.price_credits)} 积分/${unit}`)
+    .join('；')
+}
 
 const resetGrantForm = () => {
   editingGrantId.value = ''
@@ -258,12 +260,12 @@ const openPriceOverrideDialog = async (row) => {
     const existing = await getTenantModelPriceOverride(selectedTenant.tenantId, row.model_id).catch(() => null)
     const src = existing || overridePublicPrice.value
     Object.assign(priceOverrideForm, {
-      input_price_per_1m: src?.input_price_per_1m ?? 0,
-      output_price_per_1m: src?.output_price_per_1m ?? 0,
-      image_size_prices: parseSizePrices(src?.image_size_prices),
-      video_price_per_second: src?.video_price_per_second ?? 0,
-      audio_tts_price_per_1m_chars: src?.audio_tts_price_per_1m_chars ?? 0,
-      audio_stt_price_per_minute: src?.audio_stt_price_per_minute ?? 0
+      input_price_per_1m_credits: src?.input_price_per_1m_credits ?? 0,
+      output_price_per_1m_credits: src?.output_price_per_1m_credits ?? 0,
+      image_prices: Array.isArray(src?.image_prices) ? src.image_prices : [],
+      video_prices: Array.isArray(src?.video_prices) ? src.video_prices : [],
+      audio_tts_price_per_1m_chars_credits: src?.audio_tts_price_per_1m_chars_credits ?? 0,
+      audio_stt_price_per_minute_credits: src?.audio_stt_price_per_minute_credits ?? 0
     })
   } finally {
     overrideLoading.value = false
@@ -274,12 +276,12 @@ const submitPriceOverride = async () => {
   const grant = overrideTargetGrant.value
   if (!grant) return
   const payload = {
-    input_price_per_1m: priceOverrideForm.input_price_per_1m,
-    output_price_per_1m: priceOverrideForm.output_price_per_1m,
-    image_size_prices: serializeSizePrices(priceOverrideForm.image_size_prices),
-    video_price_per_second: priceOverrideForm.video_price_per_second,
-    audio_tts_price_per_1m_chars: priceOverrideForm.audio_tts_price_per_1m_chars,
-    audio_stt_price_per_minute: priceOverrideForm.audio_stt_price_per_minute
+    input_price_per_1m_credits: priceOverrideForm.input_price_per_1m_credits,
+    output_price_per_1m_credits: priceOverrideForm.output_price_per_1m_credits,
+    image_prices: priceOverrideForm.image_prices,
+    video_prices: priceOverrideForm.video_prices,
+    audio_tts_price_per_1m_chars_credits: priceOverrideForm.audio_tts_price_per_1m_chars_credits,
+    audio_stt_price_per_minute_credits: priceOverrideForm.audio_stt_price_per_minute_credits
   }
   await upsertTenantModelPriceOverride(selectedTenant.tenantId, grant.model_id, payload)
   ElMessage.success('租户价格已保存')
@@ -438,20 +440,20 @@ onMounted(async () => {
       <div v-if="overridePublicPrice" class="public-price-hint">
         <span class="hint-label">公共价格参考</span>
         <span v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
-          输入 {{ formatCredits(overridePublicPrice.input_price_per_1m) }} /
-          输出 {{ formatCredits(overridePublicPrice.output_price_per_1m) }} 积分/1M tokens
+          输入 {{ formatCredits(overridePublicPrice.input_price_per_1m_credits) }} /
+          输出 {{ formatCredits(overridePublicPrice.output_price_per_1m_credits) }} 积分/1M tokens
         </span>
         <span v-else-if="showImagePrice(overrideTargetGrant?.capability_type)">
-          按尺寸定价
+          {{ formatResolutionPrices(overridePublicPrice.image_prices, '张') }}
         </span>
         <span v-else-if="showVideoPrice(overrideTargetGrant?.capability_type)">
-          {{ formatCredits(overridePublicPrice.video_price_per_second) }} 积分/秒
+          {{ formatResolutionPrices(overridePublicPrice.video_prices, '秒') }}
         </span>
         <span v-else-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)">
-          {{ formatCredits(overridePublicPrice.audio_tts_price_per_1m_chars) }} 积分/1M字符
+          {{ formatCredits(overridePublicPrice.audio_tts_price_per_1m_chars_credits) }} 积分/1M字符
         </span>
         <span v-else-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)">
-          {{ formatCredits(overridePublicPrice.audio_stt_price_per_minute) }} 积分/分钟
+          {{ formatCredits(overridePublicPrice.audio_stt_price_per_minute_credits) }} 积分/分钟
         </span>
       </div>
 
@@ -459,33 +461,28 @@ onMounted(async () => {
         <template v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
           <div class="grid grid-cols-2 gap-4">
             <el-form-item label="输入价格 / 1M tokens（积分）">
-              <el-input-number v-model="priceOverrideForm.input_price_per_1m" :min="0" :precision="0" class="w-full" />
+              <el-input-number v-model="priceOverrideForm.input_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
             </el-form-item>
             <el-form-item v-if="showOutputPrice(overrideTargetGrant?.capability_type)" label="输出价格 / 1M tokens（积分）">
-              <el-input-number v-model="priceOverrideForm.output_price_per_1m" :min="0" :precision="0" class="w-full" />
+              <el-input-number v-model="priceOverrideForm.output_price_per_1m_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
             </el-form-item>
           </div>
         </template>
         <template v-if="showImagePrice(overrideTargetGrant?.capability_type)">
           <el-form-item label="尺寸定价（积分/张）">
-            <div class="size-price-editor">
-              <div v-for="(entry, idx) in priceOverrideForm.image_size_prices" :key="idx" class="size-price-row">
-                <el-input v-model="entry.size" placeholder="1024x1024" class="size-input" />
-                <el-input-number v-model="entry.price" :min="0" :precision="0" class="price-input" />
-                <el-button link type="danger" :icon="Delete" @click="removeSizePrice(idx)" />
-              </div>
-              <el-button :icon="Plus" size="small" @click="addSizePrice">添加尺寸</el-button>
-            </div>
+            <ResolutionPricingEditor v-model="priceOverrideForm.image_prices" mode="image" :presets="imagePresets" />
           </el-form-item>
         </template>
-        <el-form-item v-if="showVideoPrice(overrideTargetGrant?.capability_type)" label="视频价格 / 秒（积分）">
-          <el-input-number v-model="priceOverrideForm.video_price_per_second" :min="0" :precision="0" class="w-full" />
-        </el-form-item>
+        <template v-if="showVideoPrice(overrideTargetGrant?.capability_type)">
+          <el-form-item label="视频分辨率定价（积分/秒）">
+            <ResolutionPricingEditor v-model="priceOverrideForm.video_prices" mode="video" :presets="videoPresets" />
+          </el-form-item>
+        </template>
         <el-form-item v-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)" label="TTS 价格 / 1M 字符（积分）">
-          <el-input-number v-model="priceOverrideForm.audio_tts_price_per_1m_chars" :min="0" :precision="0" class="w-full" />
+          <el-input-number v-model="priceOverrideForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
         </el-form-item>
         <el-form-item v-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)" label="STT 价格 / 分钟（积分）">
-          <el-input-number v-model="priceOverrideForm.audio_stt_price_per_minute" :min="0" :precision="0" class="w-full" />
+          <el-input-number v-model="priceOverrideForm.audio_stt_price_per_minute_credits" :min="0" :precision="4" :step="0.0001" class="w-full" />
         </el-form-item>
       </el-form>
 

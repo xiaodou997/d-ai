@@ -267,16 +267,17 @@ Routes connect public models to upstream deployments. Each route has its own pri
 CREATE TABLE ai_model_prices (
   id UUID PRIMARY KEY,
   model_id UUID NOT NULL REFERENCES ai_models(id),
-  tenant_input_price_per_1m BIGINT NOT NULL DEFAULT 0,
-  tenant_output_price_per_1m BIGINT NOT NULL DEFAULT 0,
-  tenant_image_price BIGINT NOT NULL DEFAULT 0,
-  effective_from TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status TEXT NOT NULL DEFAULT 'active',
+  input_price_per_1m BIGINT NOT NULL DEFAULT 0,
+  output_price_per_1m BIGINT NOT NULL DEFAULT 0,
+  image_prices JSONB NOT NULL DEFAULT '[]',
+  video_prices JSONB NOT NULL DEFAULT '[]',
+  audio_tts_price_per_1m_chars BIGINT NOT NULL DEFAULT 0,
+  audio_stt_price_per_minute BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-Sale prices bind to models and only have tenant-level fields. Platform-level pricing has been removed.
+Sale prices bind to models. Database price columns and JSON `price` values are micro-credits; HTTP DTO fields expose decimal credits with explicit `*_credits` names.
 
 ### ai_upstream_deployment_cost_prices
 
@@ -396,11 +397,11 @@ Pre-estimate:
 ```text
 estimated_input_tokens = tokenizer(messages)
 estimated_output_tokens = request.max_tokens OR model.default_max_output_tokens
-tenant_estimated = input_tokens * tenant_input_price_per_1m + output_tokens * tenant_output_price_per_1m
+tenant_estimated_micro = input_tokens * input_price_per_1m_micro + output_tokens * output_price_per_1m_micro
 provider_estimated = input_tokens * input_cost_per_1m + output_tokens * output_cost_per_1m
 ```
 
-Token prices are integer credits per 1M tokens and round up to whole credits.
+Token prices are integer micro-credits per 1M tokens internally. The API boundary converts them to decimal credits.
 
 Images use a different billable unit:
 
@@ -408,9 +409,9 @@ Images use a different billable unit:
 billable_unit_type = image
 billable_units = image_count
 provider_cost = request_cost + image_size_prices[image_size] OR image_cost
-tenant_cost = image_count * tenant_image_price
-user_cost = image_count * tenant_image_price for user-owned keys
-api_key_quota_cost = image_count * tenant_image_price
+tenant_cost_micro = image_count * image_prices[resolution].price_micro
+user_cost_micro = image_count * image_prices[resolution].price_micro for user-owned keys
+api_key_quota_cost_micro = image_count * image_prices[resolution].price_micro
 ```
 
 For all API keys:

@@ -7,7 +7,8 @@ const props = defineProps({
   modelValue: { type: Array, default: () => [] },
   // 'image' -> price/张; 'video' -> price/秒
   mode: { type: String, default: 'image' },
-  presets: { type: Array, default: () => [] }
+  presets: { type: Array, default: () => [] },
+  priceKey: { type: String, default: 'price_credits' }
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -16,7 +17,7 @@ const rows = computed(() => props.modelValue || [])
 const priceLabel = computed(() => (props.mode === 'video' ? '价格 (每秒)' : '价格 (每张)'))
 
 function pushRow(resolution) {
-  const next = [...rows.value, { resolution, price: 0 }]
+  const next = [...rows.value, { resolution, [props.priceKey]: 0 }]
   emit('update:modelValue', next)
 }
 
@@ -33,7 +34,7 @@ function applyPreset(preset) {
   const existing = new Set(rows.value.map((r) => r.resolution))
   const additions = preset.resolutions
     .filter((res) => !existing.has(res))
-    .map((res) => ({ resolution: res, price: 0 }))
+    .map((res) => ({ resolution: res, [props.priceKey]: 0 }))
   if (additions.length === 0) return
   emit('update:modelValue', [...rows.value, ...additions])
 }
@@ -71,12 +72,12 @@ function applyPreset(preset) {
           @update:model-value="(v) => updateRow(idx, { resolution: v })"
         />
         <el-input-number
-          :model-value="row.price"
+          :model-value="row[priceKey]"
           :min="0"
           :precision="4"
           :step="0.1"
           controls-position="right"
-          @update:model-value="(v) => updateRow(idx, { price: v || 0 })"
+          @update:model-value="(v) => updateRow(idx, { [priceKey]: v || 0 })"
         />
         <el-button link type="danger" :icon="Delete" @click="removeRow(idx)" />
       </div>

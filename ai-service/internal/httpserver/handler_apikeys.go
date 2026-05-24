@@ -1,15 +1,16 @@
 package httpserver
 
 import (
-	"go.uber.org/zap"
 	"context"
 	"encoding/json"
+	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"xiaodou/uni-ai-api/internal/apikey"
+	"xiaodou/uni-ai-api/internal/credits"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 )
 
@@ -51,6 +52,10 @@ func (s *Server) handleAdminCreateTenantAPIKey(w http.ResponseWriter, r *http.Re
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	key, err := apikey.Generate()
 	if err != nil {
 		s.writeAdminServerError(w, r, "generate api key failed", err)
@@ -72,7 +77,7 @@ func (s *Server) handleAdminCreateTenantAPIKey(w http.ResponseWriter, r *http.Re
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    optionalInt8(req.QuotaLimit),
+		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        req.Status,
 		ExpiresAt:     expiresAt,
@@ -106,6 +111,10 @@ func (s *Server) handleAdminUpdateTenantAPIKey(w http.ResponseWriter, r *http.Re
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
@@ -118,7 +127,7 @@ func (s *Server) handleAdminUpdateTenantAPIKey(w http.ResponseWriter, r *http.Re
 	}
 	row, err := s.queries.UpdateAPIKey(r.Context(), dbgen.UpdateAPIKeyParams{
 		ID: apiKeyID, TenantID: tenantID, Name: req.Name,
-		QuotaLimit: optionalInt8(req.QuotaLimit), AllowedModels: allowedModels,
+		QuotaLimit: credits.CreditsPtrToInt8(req.QuotaLimitCredits), AllowedModels: allowedModels,
 		Status: req.Status, ExpiresAt: expiresAt,
 	})
 	if err != nil {
@@ -247,6 +256,10 @@ func (s *Server) handleAdminCreateUserAPIKey(w http.ResponseWriter, r *http.Requ
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	key, err := apikey.Generate()
 	if err != nil {
 		s.writeAdminServerError(w, r, "generate api key failed", err)
@@ -269,7 +282,7 @@ func (s *Server) handleAdminCreateUserAPIKey(w http.ResponseWriter, r *http.Requ
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    optionalInt8(req.QuotaLimit),
+		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        req.Status,
 		ExpiresAt:     expiresAt,
@@ -302,6 +315,10 @@ func (s *Server) handleAdminUpdateUserAPIKey(w http.ResponseWriter, r *http.Requ
 	if req.Status == "" {
 		req.Status = defaultStatus
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
@@ -314,7 +331,7 @@ func (s *Server) handleAdminUpdateUserAPIKey(w http.ResponseWriter, r *http.Requ
 	}
 	row, err := s.queries.UpdateAPIKey(r.Context(), dbgen.UpdateAPIKeyParams{
 		ID: apiKeyID, TenantID: tenantID, Name: req.Name,
-		QuotaLimit: optionalInt8(req.QuotaLimit), AllowedModels: allowedModels,
+		QuotaLimit: credits.CreditsPtrToInt8(req.QuotaLimitCredits), AllowedModels: allowedModels,
 		Status: req.Status, ExpiresAt: expiresAt,
 	})
 	if err != nil {

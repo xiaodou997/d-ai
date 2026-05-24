@@ -76,12 +76,12 @@ type createModelRequest struct {
 }
 
 type modelPriceRequest struct {
-	InputPricePer1M         int64           `json:"input_price_per_1m"`
-	OutputPricePer1M        int64           `json:"output_price_per_1m"`
-	ImagePrices             json.RawMessage `json:"image_prices"`
-	VideoPrices             json.RawMessage `json:"video_prices"`
-	AudioTTSPricePer1MChars int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSTTPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
+	InputPricePer1MCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1MCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
+	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
+	AudioTTSPricePer1MCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSTTPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
 }
 
 type createUpstreamDeploymentRequest struct {
@@ -115,12 +115,12 @@ type grantModelToTenantRequest struct {
 }
 
 type createTenantAPIKeyRequest struct {
-	Name          string          `json:"name"`
-	QuotaLimit    *int64          `json:"quota_limit"`
-	AllowedModels []string        `json:"allowed_models"`
-	Status        string          `json:"status"`
-	ExpiresAt     *adminTimestamp `json:"expires_at"`
-	CreatedBy     string          `json:"created_by"`
+	Name              string          `json:"name"`
+	QuotaLimitCredits *float64        `json:"quota_limit_credits"` // 积分 (nil=无限制)
+	AllowedModels     []string        `json:"allowed_models"`
+	Status            string          `json:"status"`
+	ExpiresAt         *adminTimestamp `json:"expires_at"`
+	CreatedBy         string          `json:"created_by"`
 }
 
 type createTenantAPIKeyResponse struct {
@@ -493,13 +493,6 @@ func optionalInt4Value(value int32) pgtype.Int4 {
 		return pgtype.Int4{}
 	}
 	return pgtype.Int4{Int32: value, Valid: true}
-}
-
-func optionalInt8(value *int64) pgtype.Int8 {
-	if value == nil {
-		return pgtype.Int8{}
-	}
-	return pgtype.Int8{Int64: *value, Valid: true}
 }
 
 type adminTimestamp struct {

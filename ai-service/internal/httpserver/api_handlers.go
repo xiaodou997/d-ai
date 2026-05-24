@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"xiaodou/uni-ai-api/internal/apikey"
+	"xiaodou/uni-ai-api/internal/credits"
 	dbgen "xiaodou/uni-ai-api/internal/db/gen"
 )
 
@@ -311,6 +312,10 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	key, err := apikey.Generate()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
@@ -327,7 +332,7 @@ func (s *Server) handleTenantsMeAPIKeysCreate(w http.ResponseWriter, r *http.Req
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
@@ -359,6 +364,10 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
@@ -368,7 +377,7 @@ func (s *Server) handleTenantsMeAPIKeysUpdate(w http.ResponseWriter, r *http.Req
 		TenantID:      ac.TenantID,
 		ID:            apiKeyID,
 		Name:          req.Name,
-		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 	})
@@ -480,24 +489,30 @@ func (s *Server) handleTenantsMeUserPricesUpsert(w http.ResponseWriter, r *http.
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
-
-	imagePrices := req.ImagePrices
-	if len(imagePrices) == 0 {
-		imagePrices = json.RawMessage("[]")
+	if message := validateTenantUserPriceCredits(req); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
 	}
-	videoPrices := req.VideoPrices
-	if len(videoPrices) == 0 {
-		videoPrices = json.RawMessage("[]")
+
+	imagePrices, message := resolutionPricesCreditsToMicro(req.ImagePrices, "image_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
+	videoPrices, message := resolutionPricesCreditsToMicro(req.VideoPrices, "video_prices")
+	if message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
 	}
 	row, err := s.queries.UpsertTenantUserPrice(r.Context(), dbgen.UpsertTenantUserPriceParams{
 		TenantID:                ac.TenantID,
 		ModelID:                 modelID,
-		InputPricePer1m:         req.InputPricePer1m,
-		OutputPricePer1m:        req.OutputPricePer1m,
+		InputPricePer1m:         credits.CreditsToMicro(req.InputPricePer1mCredits),
+		OutputPricePer1m:        credits.CreditsToMicro(req.OutputPricePer1mCredits),
 		ImagePrices:             imagePrices,
 		VideoPrices:             videoPrices,
-		AudioTtsPricePer1mChars: req.AudioTtsPricePer1mChars,
-		AudioSttPricePerMinute:  req.AudioSttPricePerMinute,
+		AudioTtsPricePer1mChars: credits.CreditsToMicro(req.AudioTtsPricePer1mCharsCredits),
+		AudioSttPricePerMinute:  credits.CreditsToMicro(req.AudioSttPricePerMinuteCredits),
 	})
 	if err != nil {
 		writeDBErr(w, err)
@@ -554,6 +569,10 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	key, err := apikey.Generate()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, BizErrInternal, "key generation failed")
@@ -571,7 +590,7 @@ func (s *Server) handleUsersMeAPIKeysCreate(w http.ResponseWriter, r *http.Reque
 		KeyHash:       apikey.Hash(key),
 		LastFour:      pgtype.Text{String: apikey.LastFour(key), Valid: true},
 		Name:          req.Name,
-		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 		CreatedBy:     pgtype.Text{String: ac.UserID, Valid: true},
@@ -603,6 +622,10 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 	if !decodeAPIJSON(w, r, &req) {
 		return
 	}
+	if message := validateOptionalCreditAmount("quota_limit_credits", req.QuotaLimitCredits); message != "" {
+		writeErr(w, http.StatusBadRequest, BizErrBadRequest, message)
+		return
+	}
 	allowedModels, err := json.Marshal(req.AllowedModels)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid allowed_models")
@@ -612,7 +635,7 @@ func (s *Server) handleUsersMeAPIKeysUpdate(w http.ResponseWriter, r *http.Reque
 		TenantID:      ac.TenantID,
 		ID:            apiKeyID,
 		Name:          req.Name,
-		QuotaLimit:    pgtype.Int8{Int64: req.QuotaLimit, Valid: req.QuotaLimit > 0},
+		QuotaLimit:    credits.CreditsPtrToInt8(req.QuotaLimitCredits),
 		AllowedModels: allowedModels,
 		Status:        defaultStatus,
 	})
@@ -755,24 +778,39 @@ func (s *Server) handleUsersMeAPIKeysDelete(w http.ResponseWriter, r *http.Reque
 // ============================================================================
 
 type createAPIKeyRequest struct {
-	Name          string   `json:"name"`
-	QuotaLimit    int64    `json:"quota_limit"`
-	AllowedModels []string `json:"allowed_models"`
+	Name              string   `json:"name"`
+	QuotaLimitCredits *float64 `json:"quota_limit_credits"` // 积分，nil=无限制
+	AllowedModels     []string `json:"allowed_models"`
 }
 
 type updateAPIKeyRequest struct {
-	Name          string   `json:"name"`
-	QuotaLimit    int64    `json:"quota_limit"`
-	AllowedModels []string `json:"allowed_models"`
+	Name              string   `json:"name"`
+	QuotaLimitCredits *float64 `json:"quota_limit_credits"` // 积分，nil=无限制
+	AllowedModels     []string `json:"allowed_models"`
 }
 
 type upsertTenantUserPriceRequest struct {
-	InputPricePer1m         int64           `json:"input_price_per_1m"`
-	OutputPricePer1m        int64           `json:"output_price_per_1m"`
-	ImagePrices             json.RawMessage `json:"image_prices"`
-	VideoPrices             json.RawMessage `json:"video_prices"`
-	AudioTtsPricePer1mChars int64           `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64           `json:"audio_stt_price_per_minute"`
+	InputPricePer1mCredits         float64              `json:"input_price_per_1m_credits"`  // 积分
+	OutputPricePer1mCredits        float64              `json:"output_price_per_1m_credits"` // 积分
+	ImagePrices                    []resolutionPriceDTO `json:"image_prices"`
+	VideoPrices                    []resolutionPriceDTO `json:"video_prices"`
+	AudioTtsPricePer1mCharsCredits float64              `json:"audio_tts_price_per_1m_chars_credits"` // 积分
+	AudioSttPricePerMinuteCredits  float64              `json:"audio_stt_price_per_minute_credits"`   // 积分
+}
+
+func validateTenantUserPriceCredits(req upsertTenantUserPriceRequest) string {
+	fields := map[string]float64{
+		"input_price_per_1m_credits":           req.InputPricePer1mCredits,
+		"output_price_per_1m_credits":          req.OutputPricePer1mCredits,
+		"audio_tts_price_per_1m_chars_credits": req.AudioTtsPricePer1mCharsCredits,
+		"audio_stt_price_per_minute_credits":   req.AudioSttPricePerMinuteCredits,
+	}
+	for name, value := range fields {
+		if message := validateCreditAmount(name, value); message != "" {
+			return message
+		}
+	}
+	return ""
 }
 
 func decodeAPIJSON(w http.ResponseWriter, r *http.Request, v interface{}) bool {
