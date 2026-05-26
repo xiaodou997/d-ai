@@ -27,8 +27,9 @@ func main() {
 	}
 
 	logCfg := logger.LogConfig{
-		Level: cfg.Log.Level,
-		File:  cfg.Log.File,
+		Level:  cfg.Log.Level,
+		File:   cfg.Log.File,
+		Redact: cfg.Log.Redact,
 	}
 	appLogger := logger.InitLogger(cfg.App.Env, logCfg)
 	defer appLogger.Sync()

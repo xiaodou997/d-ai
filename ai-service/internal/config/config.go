@@ -66,11 +66,12 @@ type SecurityConfig struct {
 }
 
 type LogConfig struct {
-	Level      string `mapstructure:"level"`       // debug | info | warn | error
-	File       string `mapstructure:"file"`        // 日志文件路径，空表示只输出到控制台
-	MaxSize    int    `mapstructure:"max_size"`    // lumberjack max size in MB (default 100)
-	MaxBackups int    `mapstructure:"max_backups"` // lumberjack max backup count (default 30)
-	MaxAge     int    `mapstructure:"max_age"`     // lumberjack max age in days (default 30)
+	Level      string   `mapstructure:"level"`       // debug | info | warn | error
+	File       string   `mapstructure:"file"`        // 日志文件路径，空表示只输出到控制台
+	MaxSize    int      `mapstructure:"max_size"`    // lumberjack max size in MB (default 100)
+	MaxBackups int      `mapstructure:"max_backups"` // lumberjack max backup count (default 30)
+	MaxAge     int      `mapstructure:"max_age"`     // lumberjack max age in days (default 30)
+	Redact     []string `mapstructure:"redact"`      // custom redact field names; empty → built-in defaults
 }
 
 func Load() (*Config, error) {
@@ -136,6 +137,7 @@ func bindEnvs(v *viper.Viper) {
 		"AI_PROVIDER_KEY_MASTER":    "security.provider_key_master",
 		"AI_LOG_LEVEL":              "log.level",
 		"AI_LOG_FILE":               "log.file",
+		"AI_LOG_REDACT":             "log.redact",
 	}
 	for env, key := range envBindings {
 		_ = v.BindEnv(key, env)
