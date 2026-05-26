@@ -8,6 +8,11 @@ import "xiaodou/uni-ai-api/internal/domain"
 // Usage carries the observable units of one upstream call.
 type Usage struct {
 	// Token counts for chat / embedding / completion calls.
+	// IMPORTANT subset relationships (per upstream API semantics):
+	//   - CacheWriteTokens + CacheReadTokens ⊆ PromptTokens
+	//   - ReasoningTokens ⊆ CompletionTokens
+	// Upstream billing must SPLIT these apart to apply the correct per-type
+	// price; tenant/user billing simply uses PromptTokens and CompletionTokens.
 	PromptTokens     int64
 	CompletionTokens int64
 	CacheWriteTokens int64
@@ -45,17 +50,60 @@ func CostForUsage(pricing *domain.Pricing, capability domain.CapabilityType, u U
 }
 
 // tokenCost picks the tier whose UpTo bound covers PromptTokens (last tier with
-// UpTo == nil is unbounded), then applies per-token charges.
+// UpTo == nil is unbounded), then applies per-token charges using SPLIT billing
+// to avoid double-counting.
+//
+// Upstream API semantics: CacheWriteTokens/CacheReadTokens are subsets of
+// PromptTokens; ReasoningTokens is a subset of CompletionTokens. Therefore:
+//
+//	input side  = (PromptTokens - CacheWrite - CacheRead) × InputPer1M
+//	            + CacheWriteTokens × CacheWritePer1M   (0 → InputPer1M)
+//	            + CacheReadTokens  × CacheReadPer1M    (0 → InputPer1M)
+//	output side = (CompletionTokens - Reasoning) × OutputPer1M
+//	            + ReasoningTokens  × ReasoningPer1M   (0 → OutputPer1M)
 func tokenCost(tiers []domain.PricingTier, u Usage) float64 {
 	if len(tiers) == 0 {
 		return 0
 	}
 	tier := selectTier(tiers, u.PromptTokens)
-	return perMillion(u.PromptTokens, tier.InputPer1M) +
-		perMillion(u.CompletionTokens, tier.OutputPer1M) +
-		perMillion(u.CacheWriteTokens, tier.CacheWritePer1M) +
-		perMillion(u.CacheReadTokens, tier.CacheReadPer1M) +
-		perMillion(u.ReasoningTokens, tier.ReasoningPer1M)
+
+	// Input side: split into non-cached, cache-write, cache-read
+	inputPrice := tier.InputPer1M
+	cacheWritePrice := tier.CacheWritePer1M
+	if cacheWritePrice <= 0 {
+		cacheWritePrice = inputPrice
+	}
+	cacheReadPrice := tier.CacheReadPer1M
+	if cacheReadPrice <= 0 {
+		cacheReadPrice = inputPrice
+	}
+
+	cacheTotal := u.CacheWriteTokens + u.CacheReadTokens
+	nonCachedInput := u.PromptTokens - cacheTotal
+	if nonCachedInput < 0 {
+		nonCachedInput = 0
+	}
+
+	inputCost := perMillion(nonCachedInput, inputPrice) +
+		perMillion(u.CacheWriteTokens, cacheWritePrice) +
+		perMillion(u.CacheReadTokens, cacheReadPrice)
+
+	// Output side: split into non-reasoning and reasoning
+	outputPrice := tier.OutputPer1M
+	reasoningPrice := tier.ReasoningPer1M
+	if reasoningPrice <= 0 {
+		reasoningPrice = outputPrice
+	}
+
+	nonReasoningOutput := u.CompletionTokens - u.ReasoningTokens
+	if nonReasoningOutput < 0 {
+		nonReasoningOutput = 0
+	}
+
+	outputCost := perMillion(nonReasoningOutput, outputPrice) +
+		perMillion(u.ReasoningTokens, reasoningPrice)
+
+	return inputCost + outputCost
 }
 
 func selectTier(tiers []domain.PricingTier, promptTokens int64) domain.PricingTier {

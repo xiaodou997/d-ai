@@ -99,7 +99,10 @@ func decodeResolutionCreditPrices(raw []byte) []domain.ResolutionCreditPrice {
 // produces 300 × 10000 / 1_000_000 = 3 micro-credits (= 0.0003 credit), no
 // longer rounded up to a full integer credit.
 //
-// For token-based models, cache tokens are billed at input price to create margin.
+// For token-based models, only PromptTokens and CompletionTokens are billed
+// (at input and output price respectively). Cache and reasoning tokens are
+// NOT billed separately because they are subsets of PromptTokens and
+// CompletionTokens per upstream API semantics (OpenAI, Anthropic, Gemini).
 // For image models, cost = price-per-image × count (resolved by resolution).
 // For video models, cost = price-per-second × duration (resolved by resolution).
 func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) domain.BillingResult {
@@ -128,13 +131,14 @@ func CalculateBilling(usage domain.TokenUsage, pricing domain.ModelPricing) doma
 	}
 
 	const perM = int64(1_000_000)
+	// CacheWriteTokens/CacheReadTokens are subsets of PromptTokens;
+	// ReasoningTokens is a subset of CompletionTokens.
+	// We bill only PromptTokens at input price and CompletionTokens at
+	// output price — no separate cache/reasoning charges.
 	promptCost := int64(usage.PromptTokens) * pricing.InputPer1M / perM
 	completionCost := int64(usage.CompletionTokens) * pricing.OutputPer1M / perM
-	cacheWriteCost := int64(usage.CacheWriteTokens) * pricing.EffectiveCacheWritePrice() / perM
-	cacheReadCost := int64(usage.CacheReadTokens) * pricing.EffectiveCacheReadPrice() / perM
-	reasoningCost := int64(usage.ReasoningTokens) * pricing.EffectiveReasoningPrice() / perM
 
-	total := promptCost + completionCost + cacheWriteCost + cacheReadCost + reasoningCost
+	total := promptCost + completionCost
 	totalTokens := int64(usage.TotalTokens())
 
 	return domain.BillingResult{

@@ -402,9 +402,9 @@ func (c *OAuthCredential) AccountID() string {
 type TokenUsage struct {
 	PromptTokens     int
 	CompletionTokens int
-	CacheWriteTokens int // tokens written to provider cache (billed at input price)
-	CacheReadTokens  int // tokens read from provider cache (billed at input price, margin opportunity)
-	ReasoningTokens  int // extended thinking / reasoning tokens
+	CacheWriteTokens int // subset of PromptTokens: tokens written to provider cache
+	CacheReadTokens  int // subset of PromptTokens: tokens read from provider cache
+	ReasoningTokens  int // subset of CompletionTokens: extended thinking / reasoning tokens
 
 	// Image generation billing fields (populated from request, not upstream response).
 	ImageCount      int    // number of images generated
@@ -415,9 +415,14 @@ type TokenUsage struct {
 	VideoResolution string  // e.g. "1920x1080"
 }
 
+// TotalTokens returns the total number of billable tokens.
+// Note: CacheWriteTokens/CacheReadTokens are subsets of PromptTokens,
+// and ReasoningTokens is a subset of CompletionTokens (per upstream API
+// semantics — OpenAI, Anthropic, Gemini all follow this convention).
+// Therefore TotalTokens = PromptTokens + CompletionTokens to avoid
+// double-counting.
 func (u TokenUsage) TotalTokens() int {
-	return u.PromptTokens + u.CompletionTokens +
-		u.CacheWriteTokens + u.CacheReadTokens + u.ReasoningTokens
+	return u.PromptTokens + u.CompletionTokens
 }
 
 // MicroCreditsPerCredit is the precision unit for internal billing math.

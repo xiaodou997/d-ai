@@ -59,15 +59,34 @@ func TestCalculateBilling_MicroPrecision(t *testing.T) {
 			wantPlatMic: 5,
 		},
 		{
-			name: "cache read uses input price by default",
+			name: "cache read tokens are NOT billed separately (subset of PromptTokens)",
 			usage: domain.TokenUsage{
-				PromptTokens:    100,
-				CacheReadTokens: 200,
+				PromptTokens:     100,
+				CacheReadTokens:  200,
 			},
 			pricing: domain.ModelPricing{
 				InputPer1M: 1_000_000, // 100 credits/M
 			},
-			wantPlatMic: 100*1_000_000/1_000_000 + 200*1_000_000/1_000_000, // 100 + 200 = 300 micro
+			// CacheReadTokens is a subset of PromptTokens, so only PromptTokens is billed.
+			// 100 * 1_000_000 / 1_000_000 = 100 micro
+			wantPlatMic: 100,
+		},
+		{
+			name: "reasoning tokens are NOT billed separately (subset of CompletionTokens)",
+			usage: domain.TokenUsage{
+				PromptTokens:     13,
+				CompletionTokens: 170,
+				ReasoningTokens:  64,
+			},
+			pricing: domain.ModelPricing{
+				InputPer1M:  1_120_000, // 112 credits/M (e.g. gpt-5.4-mini input)
+				OutputPer1M: 6_800_000, // 680 credits/M (e.g. gpt-5.4-mini output)
+			},
+			// ReasoningTokens is a subset of CompletionTokens, not billed separately.
+			// prompt: 13 * 1_120_000 / 1_000_000 = 14 micro
+			// completion: 170 * 6_800_000 / 1_000_000 = 1156 micro
+			// total: 14 + 1156 = 1170 micro (= 0.117 credits)
+			wantPlatMic: 1170,
 		},
 	}
 
