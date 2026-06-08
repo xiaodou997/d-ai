@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { federation } from '@module-federation/vite'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -12,18 +11,22 @@ export default defineConfig({
   root: __dirname,
 
   plugins: [
-    vue(),
-    federation({
-      name: 'ai_tenant_host',
-      filename: 'remoteEntry.js',
-      dts: false,
-      shared: ['vue', 'vue-router', 'pinia', 'element-plus']
-    })
+    vue()
   ],
 
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      '@unihub/ui': resolve(__dirname, '../../packages/ui'),
+      '@unihub/billing': resolve(__dirname, '../../packages/billing'),
+      'vue': resolve(__dirname, 'node_modules/vue'),
+      'vue-router': resolve(__dirname, 'node_modules/vue-router'),
+      'pinia': resolve(__dirname, 'node_modules/pinia'),
+      'element-plus': resolve(__dirname, 'node_modules/element-plus'),
+      '@element-plus/icons-vue': resolve(__dirname, 'node_modules/@element-plus/icons-vue'),
+      'dayjs': resolve(__dirname, 'node_modules/dayjs'),
+      'echarts': resolve(__dirname, 'node_modules/echarts'),
+      'tailwindcss': resolve(__dirname, 'node_modules/tailwindcss/index.css')
     }
   },
 
@@ -58,6 +61,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    cssMinify: false,
     chunkSizeWarningLimit: 1500,
 
     rolldownOptions: {

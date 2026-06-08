@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, shallowRef } from 'vue'
+import { computed } from 'vue'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import {
   Connection,
@@ -11,22 +11,37 @@ import {
   Key,
   Lock,
   Management,
+  Money,
   SwitchButton,
   Tickets,
   UserFilled
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { getUrmAdminMenuGroups, getUrmAdminPagePath, loadUrmAdminManifest } from '@/remote/urmAdminManifest'
 
 const authStore = useAuthStore()
-const urmMenuGroups = shallowRef([])
+const urmMenuGroups = [
+  {
+    title: '运营管理',
+    items: [
+      { key: 'tenants', title: '租户管理', path: '/urm/tenants', icon: 'OfficeBuilding' },
+      { key: 'users', title: '终端用户', path: '/urm/users', icon: 'User' }
+    ]
+  },
+  {
+    title: '财务中心',
+    items: [
+      { key: 'rechargeRecords', title: '充值记录', path: '/urm/finance/recharge-records', icon: 'Tickets' },
+      { key: 'transactions', title: '交易流水', path: '/urm/finance/transactions', icon: 'DataLine' }
+    ]
+  }
+]
 
 const resolveIcon = (iconName) => {
   return ElementPlusIconsVue[iconName] || ElementPlusIconsVue.Document
 }
 
-const hasUrmMenus = computed(() => authStore.isPlatformAdmin && urmMenuGroups.value.length > 0)
+const hasUrmMenus = computed(() => authStore.isPlatformAdmin)
 
 const gatewayMenuItems = computed(() => {
   const shared = [
@@ -41,22 +56,13 @@ const gatewayMenuItems = computed(() => {
   return [
     { index: '/ai-gateway/providers', label: '上游管理', icon: Connection },
     { index: '/ai-gateway/models', label: '模型管理', icon: Cpu },
+    { index: '/ai-gateway/pricing', label: '定价管理', icon: Money },
     { index: '/ai-gateway/credential-pools', label: '账号池', icon: UserFilled },
     ...shared,
     { index: '/ai-gateway/limits', label: '限流策略', icon: Lock },
     { index: '/ai-gateway/routing', label: '路由策略', icon: DataAnalysis },
     { index: '/ai-gateway/audit', label: '网关审计', icon: DocumentChecked }
   ]
-})
-
-onMounted(async () => {
-  try {
-    const manifest = await loadUrmAdminManifest()
-    urmMenuGroups.value = getUrmAdminMenuGroups(manifest)
-  } catch (error) {
-    console.warn('URM admin manifest 加载失败', error)
-    urmMenuGroups.value = []
-  }
 })
 
 const handleLogout = () => {
@@ -125,7 +131,7 @@ const handleLogout = () => {
             <el-menu-item
               v-for="item in group.items"
               :key="item.key"
-              :index="getUrmAdminPagePath(item)"
+              :index="item.path"
             >
               <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
               <span>{{ item.title }}</span>

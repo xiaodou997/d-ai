@@ -1,14 +1,11 @@
 <script setup>
 import { onMounted, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { listTenantModelGrants, capabilityOptions, formatWholeCredits } from '@/api/aiGateway'
-import { getModelPrice } from '@/api/aiGateway'
+import { listTenantModelGrants, capabilityOptions } from '@/api/aiGateway'
 
 const loading = shallowRef(false)
 const models = shallowRef([])
 const selectedModel = shallowRef(null)
-const priceLoading = shallowRef(false)
-const publicPrice = shallowRef(null)
 
 const fetchModels = async () => {
   loading.value = true
@@ -20,18 +17,8 @@ const fetchModels = async () => {
   }
 }
 
-const selectModel = async (model) => {
+const selectModel = (model) => {
   selectedModel.value = model
-  priceLoading.value = true
-  publicPrice.value = null
-  try {
-    const res = await getModelPrice(model.model_id)
-    publicPrice.value = res
-  } catch {
-    publicPrice.value = null
-  } finally {
-    priceLoading.value = false
-  }
 }
 
 const statusTagType = (status) => {
@@ -41,8 +28,6 @@ const statusTagType = (status) => {
 
 const capabilityLabel = (value) =>
   capabilityOptions.find((o) => o.value === value)?.label || value || '-'
-
-const resolutionPrices = (raw) => (Array.isArray(raw) ? raw : [])
 
 onMounted(fetchModels)
 </script>
@@ -100,50 +85,10 @@ onMounted(fetchModels)
             <p class="text-sm text-slate-500 mb-4">能力类型: {{ capabilityLabel(selectedModel.capability_type) }}</p>
           </div>
 
-          <el-divider content-position="left">平台定价（参考）</el-divider>
-
-          <div v-loading="priceLoading" class="price-section">
-            <template v-if="publicPrice">
-              <div class="price-row">
-                <span class="label">输入价格</span>
-                <span class="value">{{ formatWholeCredits(publicPrice.input_price_per_1m_credits) }} 积分/百万token</span>
-              </div>
-              <div class="price-row">
-                <span class="label">输出价格</span>
-                <span class="value">{{ formatWholeCredits(publicPrice.output_price_per_1m_credits) }} 积分/百万token</span>
-              </div>
-              <template v-if="resolutionPrices(publicPrice.image_prices).length > 0">
-                <div class="price-row">
-                  <span class="label">图片尺寸价格</span>
-                </div>
-                <div class="size-prices">
-                  <div v-for="item in resolutionPrices(publicPrice.image_prices)" :key="item.resolution" class="size-item">
-                    <span>{{ item.resolution }}</span>
-                    <span>{{ formatWholeCredits(item.price_credits) }} 积分</span>
-                  </div>
-                </div>
-              </template>
-              <template v-if="resolutionPrices(publicPrice.video_prices).length > 0">
-                <div class="price-row">
-                  <span class="label">视频分辨率价格</span>
-                </div>
-                <div class="size-prices">
-                  <div v-for="item in resolutionPrices(publicPrice.video_prices)" :key="item.resolution" class="size-item">
-                    <span>{{ item.resolution }}</span>
-                    <span>{{ formatWholeCredits(item.price_credits) }} 积分/秒</span>
-                  </div>
-                </div>
-              </template>
-            </template>
-            <template v-else-if="!priceLoading">
-              <p class="text-slate-400 text-sm">暂无平台定价信息</p>
-            </template>
-          </div>
-
           <el-divider />
 
           <p class="text-xs text-slate-400">
-            以上为平台公价，实际扣费请参考「租户定价」页面设置售价
+            该模型的积分单价与售价请在「租户定价」页面查看与设置。
           </p>
         </el-card>
       </section>

@@ -55,7 +55,7 @@
           <el-menu-item
             v-for="item in group.items"
             :key="item.key"
-            :index="getUrmTenantPagePath(item)"
+            :index="item.path"
           >
             <el-icon><component :is="getMenuIcon(item.icon)" /></el-icon>
             <span>{{ item.title }}</span>
@@ -102,7 +102,6 @@
 </template>
 
 <script setup>
-import { onMounted, shallowRef } from 'vue'
 import {
   OfficeBuilding,
   Odometer,
@@ -121,14 +120,25 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import {
-  getUrmTenantMenuGroups,
-  getUrmTenantPagePath,
-  loadUrmTenantManifest
-} from '@/remote/urmTenantManifest'
 
 const authStore = useAuthStore()
-const urmMenuGroups = shallowRef([])
+const urmMenuGroups = [
+  {
+    title: '用户管理',
+    items: [
+      { key: 'users', title: '终端用户', path: '/urm/users', icon: 'User' },
+      { key: 'inviteCodes', title: '邀请码管理', path: '/urm/invite-codes', icon: 'Ticket' }
+    ]
+  },
+  {
+    title: '财务中心',
+    items: [
+      { key: 'account', title: '我的账户', path: '/urm/finance/account', icon: 'Wallet' },
+      { key: 'transactions', title: '积分流水', path: '/urm/finance/transactions', icon: 'DataLine' },
+      { key: 'userRechargeRecords', title: '用户充值记录', path: '/urm/finance/user-recharge-records', icon: 'Money' }
+    ]
+  }
+]
 
 const menuIcons = {
   User,
@@ -139,15 +149,6 @@ const menuIcons = {
 }
 
 const getMenuIcon = (name) => menuIcons[name] || Document
-
-onMounted(async () => {
-  try {
-    const manifest = await loadUrmTenantManifest()
-    urmMenuGroups.value = getUrmTenantMenuGroups(manifest)
-  } catch (error) {
-    console.error('加载 URM 菜单失败:', error)
-  }
-})
 
 const handleLogout = () => {
   ElMessageBox.confirm('您确定要退出 URM 租户中心吗？', '提示', {

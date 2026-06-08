@@ -4,40 +4,22 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Edit, Plus, Refresh, Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { queryTenants } from '@/api/tenant'
-import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
 import {
   capabilityOptions,
-  deleteTenantModelPriceOverride,
-  getModelPrice,
-  getTenantModelPriceOverride,
   grantModelToTenant,
   listModels,
   listTenantModelGrants,
-  updateTenantModelGrantStatus,
-  upsertTenantModelPriceOverride,
-  formatWholeCredits
+  updateTenantModelGrantStatus
 } from '@/api/aiGateway'
 
 const authStore = useAuthStore()
 const loading = shallowRef(false)
 const tenantLoading = shallowRef(false)
 const grantDialogVisible = shallowRef(false)
-const priceOverrideDialogVisible = shallowRef(false)
 const editingGrantId = shallowRef('')
-const overrideTargetGrant = shallowRef(null) // the grant row we're setting override for
-const overridePublicPrice = shallowRef(null)  // public price for reference
-const overrideLoading = shallowRef(false)
 const models = shallowRef([])
 const tenantGrants = shallowRef([])
 
-const priceOverrideForm = reactive({
-  input_price_per_1m_credits: 0,
-  output_price_per_1m_credits: 0,
-  image_prices: [],
-  video_prices: [],
-  audio_tts_price_per_1m_chars_credits: 0,
-  audio_stt_price_per_minute_credits: 0
-})
 const tenantSearchResults = shallowRef([])
 
 const selectedTenant = reactive({
@@ -80,33 +62,6 @@ const statusTagType = (status) => {
 
 const capabilityLabel = (value) =>
   capabilityOptions.find((o) => o.value === value)?.label || value || '-'
-
-const imagePresets = [
-  { label: '1024x1024', resolutions: ['1024x1024'] },
-  { label: '1024x1792', resolutions: ['1024x1792'] },
-  { label: '1792x1024', resolutions: ['1792x1024'] },
-  { label: '512x512', resolutions: ['512x512'] }
-]
-
-const videoPresets = [
-  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
-  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
-  { label: 'Veo', resolutions: ['720p', '1080p', '4k'] }
-]
-
-const showTokenPrice = (capabilityType) => ['chat', 'embedding', 'rerank'].includes(capabilityType)
-const showOutputPrice = (capabilityType) => capabilityType === 'chat'
-const showImagePrice = (capabilityType) => capabilityType === 'image'
-const showVideoPrice = (capabilityType) => capabilityType === 'video'
-const showAudioTTSPrice = (capabilityType) => capabilityType === 'audio_tts'
-const showAudioSTTPrice = (capabilityType) => capabilityType === 'audio_stt'
-
-const formatResolutionPrices = (entries, unit) => {
-  if (!Array.isArray(entries) || entries.length === 0) return '暂无定价'
-  return entries
-    .map((entry) => `${entry.resolution || '-'} ${formatWholeCredits(entry.price_credits)} 积分/${unit}`)
-    .join('；')
-}
 
 const resetGrantForm = () => {
   editingGrantId.value = ''
@@ -249,57 +204,6 @@ const submitGrant = async () => {
   await fetchGrants()
 }
 
-const openPriceOverrideDialog = async (row) => {
-  overrideTargetGrant.value = row
-  overrideLoading.value = true
-  priceOverrideDialogVisible.value = true
-  try {
-    // Load public price for reference
-    overridePublicPrice.value = await getModelPrice(row.model_id).catch(() => null)
-    // Try to load existing override
-    const existing = await getTenantModelPriceOverride(selectedTenant.tenantId, row.model_id).catch(() => null)
-    const src = existing || overridePublicPrice.value
-    Object.assign(priceOverrideForm, {
-      input_price_per_1m_credits: src?.input_price_per_1m_credits ?? 0,
-      output_price_per_1m_credits: src?.output_price_per_1m_credits ?? 0,
-      image_prices: Array.isArray(src?.image_prices) ? src.image_prices : [],
-      video_prices: Array.isArray(src?.video_prices) ? src.video_prices : [],
-      audio_tts_price_per_1m_chars_credits: src?.audio_tts_price_per_1m_chars_credits ?? 0,
-      audio_stt_price_per_minute_credits: src?.audio_stt_price_per_minute_credits ?? 0
-    })
-  } finally {
-    overrideLoading.value = false
-  }
-}
-
-const submitPriceOverride = async () => {
-  const grant = overrideTargetGrant.value
-  if (!grant) return
-  const payload = {
-    input_price_per_1m_credits: priceOverrideForm.input_price_per_1m_credits,
-    output_price_per_1m_credits: priceOverrideForm.output_price_per_1m_credits,
-    image_prices: priceOverrideForm.image_prices,
-    video_prices: priceOverrideForm.video_prices,
-    audio_tts_price_per_1m_chars_credits: priceOverrideForm.audio_tts_price_per_1m_chars_credits,
-    audio_stt_price_per_minute_credits: priceOverrideForm.audio_stt_price_per_minute_credits
-  }
-  await upsertTenantModelPriceOverride(selectedTenant.tenantId, grant.model_id, payload)
-  ElMessage.success('租户价格已保存')
-  priceOverrideDialogVisible.value = false
-  await fetchGrants()
-}
-
-const removePriceOverride = async (row) => {
-  try {
-    await ElMessageBox.confirm('删除后该租户将使用公共价格，确定删除？', '删除确认', {
-      confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning'
-    })
-    await deleteTenantModelPriceOverride(selectedTenant.tenantId, row.model_id)
-    ElMessage.success('租户价格已恢复为公共价格')
-    await fetchGrants()
-  } catch { /* cancelled */ }
-}
-
 const toggleGrant = async (row) => {
   const nextStatus = row.status === 'active' ? 'disabled' : 'active'
   await updateTenantModelGrantStatus(selectedTenant.tenantId, row.model_id, nextStatus)
@@ -412,16 +316,9 @@ onMounted(async () => {
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="租户价格" width="120" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.has_price_override" type="warning" size="small" effect="plain">自定义</el-tag>
-            <span v-else class="price-tag-public">公共价格</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" :icon="Edit" @click="openGrantEditDialog(row)">编辑</el-button>
-            <el-button link type="primary" @click="openPriceOverrideDialog(row)">定价</el-button>
             <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="toggleGrant(row)">
               {{ row.status === 'active' ? '禁用' : '启用' }}
             </el-button>
@@ -429,69 +326,6 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
     </section>
-
-    <!-- 租户价格覆盖对话框 -->
-    <el-dialog
-      v-model="priceOverrideDialogVisible"
-      :title="`租户定价 · ${overrideTargetGrant?.model_code || ''}`"
-      width="520px"
-      append-to-body
-    >
-      <div v-if="overridePublicPrice" class="public-price-hint">
-        <span class="hint-label">公共价格参考</span>
-        <span v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
-          输入 {{ formatWholeCredits(overridePublicPrice.input_price_per_1m_credits) }} /
-          输出 {{ formatWholeCredits(overridePublicPrice.output_price_per_1m_credits) }} 积分/1M tokens
-        </span>
-        <span v-else-if="showImagePrice(overrideTargetGrant?.capability_type)">
-          {{ formatResolutionPrices(overridePublicPrice.image_prices, '张') }}
-        </span>
-        <span v-else-if="showVideoPrice(overrideTargetGrant?.capability_type)">
-          {{ formatResolutionPrices(overridePublicPrice.video_prices, '秒') }}
-        </span>
-        <span v-else-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)">
-          {{ formatWholeCredits(overridePublicPrice.audio_tts_price_per_1m_chars_credits) }} 积分/1M字符
-        </span>
-        <span v-else-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)">
-          {{ formatWholeCredits(overridePublicPrice.audio_stt_price_per_minute_credits) }} 积分/分钟
-        </span>
-      </div>
-
-      <el-form v-loading="overrideLoading" :model="priceOverrideForm" label-position="top">
-        <template v-if="showTokenPrice(overrideTargetGrant?.capability_type)">
-          <div class="grid grid-cols-2 gap-4">
-            <el-form-item label="输入价格 / 1M tokens（积分）">
-              <el-input-number v-model="priceOverrideForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
-            </el-form-item>
-            <el-form-item v-if="showOutputPrice(overrideTargetGrant?.capability_type)" label="输出价格 / 1M tokens（积分）">
-              <el-input-number v-model="priceOverrideForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
-            </el-form-item>
-          </div>
-        </template>
-        <template v-if="showImagePrice(overrideTargetGrant?.capability_type)">
-          <el-form-item label="尺寸定价（积分/张）">
-            <ResolutionPricingEditor v-model="priceOverrideForm.image_prices" mode="image" :presets="imagePresets" />
-          </el-form-item>
-        </template>
-        <template v-if="showVideoPrice(overrideTargetGrant?.capability_type)">
-          <el-form-item label="视频分辨率定价（积分/秒）">
-            <ResolutionPricingEditor v-model="priceOverrideForm.video_prices" mode="video" :presets="videoPresets" />
-          </el-form-item>
-        </template>
-        <el-form-item v-if="showAudioTTSPrice(overrideTargetGrant?.capability_type)" label="TTS 价格 / 1M 字符（积分）">
-          <el-input-number v-model="priceOverrideForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
-        </el-form-item>
-        <el-form-item v-if="showAudioSTTPrice(overrideTargetGrant?.capability_type)" label="STT 价格 / 分钟（积分）">
-          <el-input-number v-model="priceOverrideForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
-        </el-form-item>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="priceOverrideDialogVisible = false">取消</el-button>
-        <el-button type="danger" plain @click="removePriceOverride(overrideTargetGrant)">恢复公共价格</el-button>
-        <el-button type="primary" @click="submitPriceOverride">保存租户价格</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 授权对话框 -->
     <el-dialog v-model="grantDialogVisible" :title="isEditingGrant ? '编辑模型授权' : '新增模型授权'" width="480px" append-to-body>

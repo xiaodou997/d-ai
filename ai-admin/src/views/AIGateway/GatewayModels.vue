@@ -7,9 +7,6 @@ import {
   createModel,
   createModelRoute,
   deleteModelRoute,
-  formatWholeCredits,
-  formatTimestamp,
-  getModelPrice,
   listModelRoutes,
   listModels,
   listUpstreamDeployments,
@@ -17,31 +14,25 @@ import {
   updateModel,
   updateModelRoute,
   updateModelRouteStatus,
-  updateModelStatus,
-  upsertModelPrice
+  updateModelStatus
 } from '@/api/aiGateway'
-import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
 import { suggestModelConfig } from './modelPricingCatalog'
 
 // ── Loading states ──────────────────────────────────────────────────────────
 const loading = shallowRef(false)
-const priceLoading = shallowRef(false)
 const routeLoading = shallowRef(false)
 const submittingRoutes = shallowRef(false)
 
 // ── Dialog visibility ───────────────────────────────────────────────────────
 const modelDialogVisible = shallowRef(false)
-const priceDialogVisible = shallowRef(false)
 const routeDialogVisible = shallowRef(false)
 
 // ── Editing state ───────────────────────────────────────────────────────────
 const editingModelId = shallowRef('')
 const editingRouteId = shallowRef('')
-const modelDialogStep = shallowRef(0) // 0 基础信息 | 1 价格
 
 // ── Data ────────────────────────────────────────────────────────────────────
 const models = shallowRef([])
-const modelPrice = shallowRef(null)
 const modelRoutes = shallowRef([])
 const allUpstreamDeployments = shallowRef([])
 
@@ -49,20 +40,6 @@ const allUpstreamDeployments = shallowRef([])
 const selectedModelId = shallowRef('')
 const searchQuery = shallowRef('')
 const capabilityFilter = shallowRef('all')
-
-// ── Image / video price presets ─────────────────────────────────────────────
-const imagePresets = [
-  { label: '1024×1024', resolutions: ['1024x1024'] },
-  { label: '1024×1792', resolutions: ['1024x1792'] },
-  { label: '1792×1024', resolutions: ['1792x1024'] },
-  { label: '512×512',   resolutions: ['512x512'] }
-]
-
-const videoPresets = [
-  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
-  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
-  { label: 'Veo',  resolutions: ['720p', '1080p', '4k'] }
-]
 
 // ── Forms ───────────────────────────────────────────────────────────────────
 const modelForm = reactive({
@@ -72,15 +49,6 @@ const modelForm = reactive({
   default_max_output_tokens: 4096,
   max_output_tokens: null,
   status: 'active'
-})
-
-const priceForm = reactive({
-  input_price_per_1m_credits: 0,
-  output_price_per_1m_credits: 0,
-  image_prices: [],   // [{resolution, price}]
-  video_prices: [],   // [{resolution, price}] (price = credits per second)
-  audio_tts_price_per_1m_chars_credits: 0,
-  audio_stt_price_per_minute_credits: 0
 })
 
 const suggestionHint = shallowRef(null)
@@ -124,19 +92,6 @@ const capabilityFilterOptions = computed(() => [
   ...capabilityOptions
 ])
 
-const isChatLike = (cap) => ['chat', 'embedding', 'rerank'].includes(cap)
-const isImage = (cap) => cap === 'image'
-const isVideo = (cap) => cap === 'video'
-const isAudioTTS = (cap) => cap === 'audio_tts'
-const isAudioSTT = (cap) => cap === 'audio_stt'
-
-const showTokenPrice = computed(() => isChatLike(selectedCapabilityType.value))
-const showOutputPrice = computed(() => selectedCapabilityType.value === 'chat')
-const showImagePrice = computed(() => isImage(selectedCapabilityType.value))
-const showVideoPrice = computed(() => isVideo(selectedCapabilityType.value))
-const showAudioTTSPrice = computed(() => isAudioTTS(selectedCapabilityType.value))
-const showAudioSTTPrice = computed(() => isAudioSTT(selectedCapabilityType.value))
-
 const formCap = computed(() => modelForm.capability_type)
 const showChatFieldsInForm = computed(() => formCap.value === 'chat')
 
@@ -155,7 +110,6 @@ const capabilityDotClass = (value) => {
 // ── Reset forms ─────────────────────────────────────────────────────────────
 const resetModelForm = () => {
   editingModelId.value = ''
-  modelDialogStep.value = 0
   suggestionHint.value = null
   Object.assign(modelForm, {
     model_code: '',
@@ -165,35 +119,10 @@ const resetModelForm = () => {
     max_output_tokens: null,
     status: 'active'
   })
-  resetPriceFormDefaults()
-}
-
-const resetPriceFormDefaults = () => {
-  Object.assign(priceForm, {
-    input_price_per_1m_credits: 0,
-    output_price_per_1m_credits: 0,
-    image_prices: [],
-    video_prices: [],
-    audio_tts_price_per_1m_chars_credits: 0,
-    audio_stt_price_per_minute_credits: 0
-  })
-}
-
-const seedPriceFormFromModel = () => {
-  const p = modelPrice.value
-  Object.assign(priceForm, {
-    input_price_per_1m_credits: p?.input_price_per_1m_credits ?? 0,
-    output_price_per_1m_credits: p?.output_price_per_1m_credits ?? 0,
-    image_prices: Array.isArray(p?.image_prices) ? p.image_prices : [],
-    video_prices: Array.isArray(p?.video_prices) ? p.video_prices : [],
-    audio_tts_price_per_1m_chars_credits: p?.audio_tts_price_per_1m_chars_credits ?? 0,
-    audio_stt_price_per_minute_credits: p?.audio_stt_price_per_minute_credits ?? 0
-  })
 }
 
 const applyModelForm = (row) => {
   editingModelId.value = row.id
-  modelDialogStep.value = 0
   suggestionHint.value = null
   Object.assign(modelForm, {
     model_code: row.model_code,
@@ -205,7 +134,7 @@ const applyModelForm = (row) => {
   })
 }
 
-// 编辑时切换 capability，priceForm 不主动重置，避免误清。新增时切 capability 不影响 step1。
+// 切到非 chat 能力时清掉仅 chat 适用的字段。
 const onModelCapabilityChange = () => {
   // 切到非 chat 时清掉 context_window / max_output_tokens 字段值（保留 default_max_output_tokens 让后端有默认）
   if (modelForm.capability_type !== 'chat') {
@@ -251,19 +180,7 @@ const fetchModels = async () => {
 }
 
 const fetchSelectedModelDetail = async () => {
-  await Promise.all([fetchModelPrice(), fetchModelRoutes()])
-}
-
-const fetchModelPrice = async () => {
-  if (!selectedModelId.value) { modelPrice.value = null; return }
-  priceLoading.value = true
-  try {
-    modelPrice.value = await getModelPrice(selectedModelId.value)
-  } catch {
-    modelPrice.value = null
-  } finally {
-    priceLoading.value = false
-  }
+  await fetchModelRoutes()
 }
 
 const fetchModelRoutes = async () => {
@@ -291,14 +208,6 @@ const selectModel = async (model) => {
 const openModelDialog = () => { resetModelForm(); modelDialogVisible.value = true }
 const openModelEditDialog = (row) => { applyModelForm(row); modelDialogVisible.value = true }
 
-const modelStepNext = () => {
-  if (!modelForm.model_code.trim()) {
-    ElMessage.error('请填写模型名称')
-    return
-  }
-  modelDialogStep.value = 1
-}
-
 const submitModel = async () => {
   const payload = {
     model_code: modelForm.model_code.trim(),
@@ -320,38 +229,13 @@ const submitModel = async () => {
       ElMessage.error('创建模型失败：未返回 id')
       return
     }
-    // 新建模型时一并写入价格
-    await upsertModelPrice(modelId, buildPricePayload(modelForm.capability_type))
-    ElMessage.success('模型与价格已创建')
+    ElMessage.success('模型已创建')
   }
 
   modelDialogVisible.value = false
   selectedModelId.value = modelId
   await fetchModels()
   await fetchSelectedModelDetail()
-}
-
-const buildPricePayload = (cap) => ({
-  input_price_per_1m_credits: isChatLike(cap) ? (priceForm.input_price_per_1m_credits || 0) : 0,
-  output_price_per_1m_credits: cap === 'chat' ? (priceForm.output_price_per_1m_credits || 0) : 0,
-  image_prices: isImage(cap) ? priceForm.image_prices : [],
-  video_prices: isVideo(cap) ? priceForm.video_prices : [],
-  audio_tts_price_per_1m_chars_credits: isAudioTTS(cap) ? (priceForm.audio_tts_price_per_1m_chars_credits || 0) : 0,
-  audio_stt_price_per_minute_credits: isAudioSTT(cap) ? (priceForm.audio_stt_price_per_minute_credits || 0) : 0
-})
-
-// ── Price dialog (单独编辑现有模型价格) ─────────────────────────────────────
-const openPriceDialog = () => {
-  if (!selectedModelId.value) { ElMessage.warning('请先选择模型'); return }
-  seedPriceFormFromModel()
-  priceDialogVisible.value = true
-}
-
-const submitModelPrice = async () => {
-  await upsertModelPrice(selectedModelId.value, buildPricePayload(selectedCapabilityType.value))
-  ElMessage.success('销售价已保存')
-  priceDialogVisible.value = false
-  await fetchModelPrice()
 }
 
 // ── Route dialog ────────────────────────────────────────────────────────────
@@ -706,74 +590,16 @@ onMounted(() => { fetchModels() })
         </el-table>
       </section>
 
-      <!-- Price -->
-      <section class="panel">
-        <div class="section-head">
-          <div>
-            <h3>销售价配置</h3>
-            <p>所有价格为积分单位</p>
-          </div>
-          <el-button type="primary" :icon="Edit" @click="openPriceDialog">
-            {{ modelPrice ? '修改价格' : '设置价格' }}
-          </el-button>
-        </div>
-
-        <div v-loading="priceLoading">
-          <div v-if="modelPrice" class="price-display">
-            <template v-if="showTokenPrice">
-              <div class="price-item">
-                <span>输入 / 1M tokens</span>
-                <strong>{{ formatWholeCredits(modelPrice.input_price_per_1m_credits) }} 积分</strong>
-              </div>
-              <div v-if="showOutputPrice" class="price-item">
-                <span>输出 / 1M tokens</span>
-                <strong>{{ formatWholeCredits(modelPrice.output_price_per_1m_credits) }} 积分</strong>
-              </div>
-            </template>
-            <template v-if="showImagePrice">
-              <div v-for="(entry, idx) in (modelPrice.image_prices || [])" :key="idx" class="price-item">
-                <span>{{ entry.resolution }}</span>
-                <strong>{{ formatWholeCredits(entry.price_credits) }} 积分 / 张</strong>
-              </div>
-              <div v-if="!(modelPrice.image_prices?.length)" class="price-empty-hint">
-                尚未配置尺寸定价
-              </div>
-            </template>
-            <template v-if="showVideoPrice">
-              <div v-for="(entry, idx) in (modelPrice.video_prices || [])" :key="idx" class="price-item">
-                <span>{{ entry.resolution }}</span>
-                <strong>{{ formatWholeCredits(entry.price_credits) }} 积分 / 秒</strong>
-              </div>
-              <div v-if="!(modelPrice.video_prices?.length)" class="price-empty-hint">
-                尚未配置分辨率定价
-              </div>
-            </template>
-            <div v-if="showAudioTTSPrice" class="price-item">
-              <span>TTS / 1M 字符</span>
-              <strong>{{ formatWholeCredits(modelPrice.audio_tts_price_per_1m_chars_credits) }} 积分</strong>
-            </div>
-            <div v-if="showAudioSTTPrice" class="price-item">
-              <span>STT / 分钟</span>
-              <strong>{{ formatWholeCredits(modelPrice.audio_stt_price_per_minute_credits) }} 积分</strong>
-            </div>
-            <div class="price-updated">上次更新：{{ formatTimestamp(modelPrice.updated_at) }}</div>
-          </div>
-
-          <div v-else class="price-unset">
-            <p>该模型尚未设置销售价，运行时请求将被拒绝。</p>
-          </div>
-        </div>
-      </section>
     </main>
 
     <main v-else class="empty-workspace">
       <p class="eyebrow">No Model</p>
       <h2>先创建一个公开模型</h2>
-      <p>公开模型是用户调用时的统一入口。创建后即可配置路由映射和销售价格。</p>
+      <p>公开模型是用户调用时的统一入口。创建后即可配置路由映射；售价在「定价管理」统一维护。</p>
       <el-button type="primary" :icon="Plus" @click="openModelDialog">新增模型</el-button>
     </main>
 
-    <!-- ── 模型对话框（分步） ── -->
+    <!-- ── 模型对话框 ── -->
     <el-dialog
       v-model="modelDialogVisible"
       :title="isEditingModel ? '编辑公开模型' : '新增公开模型'"
@@ -781,13 +607,7 @@ onMounted(() => { fetchModels() })
       append-to-body
       :close-on-click-modal="false"
     >
-      <el-steps v-if="!isEditingModel" :active="modelDialogStep" simple class="model-stepper">
-        <el-step title="基础信息" />
-        <el-step title="销售价格" />
-      </el-steps>
-
-      <!-- Step 1: 基础信息 -->
-      <el-form v-if="modelDialogStep === 0 || isEditingModel" :model="modelForm" label-position="top">
+      <el-form :model="modelForm" label-position="top">
         <el-form-item label="模型名称（调用 model 字段）" required>
           <el-input
             v-model="modelForm.model_code"
@@ -833,96 +653,9 @@ onMounted(() => { fetchModels() })
         </div>
       </el-form>
 
-      <!-- Step 2: 销售价格 -->
-      <el-form v-if="!isEditingModel && modelDialogStep === 1" :model="priceForm" label-position="top">
-        <p class="form-section-hint">当前能力：<strong>{{ capabilityLabel(modelForm.capability_type) }}</strong>，下方仅显示该能力相关的价格字段（积分）。</p>
-
-        <template v-if="isChatLike(modelForm.capability_type)">
-          <div class="grid grid-cols-2 gap-4">
-            <el-form-item label="输入 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
-            </el-form-item>
-            <el-form-item v-if="modelForm.capability_type === 'chat'" label="输出 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
-            </el-form-item>
-          </div>
-        </template>
-
-        <template v-if="isImage(modelForm.capability_type)">
-          <el-form-item label="尺寸定价（积分 / 张）">
-            <ResolutionPricingEditor v-model="priceForm.image_prices" mode="image" :presets="imagePresets" />
-            <small class="form-hint">不在列表中的尺寸将拒绝请求</small>
-          </el-form-item>
-        </template>
-
-        <template v-if="isVideo(modelForm.capability_type)">
-          <el-form-item label="分辨率定价（积分 / 秒）">
-            <ResolutionPricingEditor v-model="priceForm.video_prices" mode="video" :presets="videoPresets" />
-            <small class="form-hint">不在列表中的分辨率将拒绝请求</small>
-          </el-form-item>
-        </template>
-
-        <el-form-item v-if="isAudioTTS(modelForm.capability_type)" label="TTS / 1M 字符（积分）">
-          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
-        </el-form-item>
-
-        <el-form-item v-if="isAudioSTT(modelForm.capability_type)" label="STT / 分钟（积分）">
-          <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
-        </el-form-item>
-      </el-form>
-
       <template #footer>
         <el-button @click="modelDialogVisible = false">取消</el-button>
-        <template v-if="isEditingModel">
-          <el-button type="primary" @click="submitModel">保存</el-button>
-        </template>
-        <template v-else>
-          <el-button v-if="modelDialogStep === 1" @click="modelDialogStep = 0">上一步</el-button>
-          <el-button v-if="modelDialogStep === 0" type="primary" @click="modelStepNext">下一步</el-button>
-          <el-button v-else type="primary" @click="submitModel">创建</el-button>
-        </template>
-      </template>
-    </el-dialog>
-
-    <!-- ── 销售价对话框（编辑现有模型） ── -->
-    <el-dialog v-model="priceDialogVisible" title="修改销售价" width="600px" append-to-body>
-      <el-form :model="priceForm" label-position="top">
-        <template v-if="showTokenPrice">
-          <div class="grid grid-cols-2 gap-4">
-            <el-form-item label="输入 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.input_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
-            </el-form-item>
-            <el-form-item v-if="showOutputPrice" label="输出 / 1M tokens（积分）">
-              <el-input-number v-model="priceForm.output_price_per_1m_credits" :min="0" :precision="0" :step="1" class="w-full" />
-            </el-form-item>
-          </div>
-        </template>
-
-        <template v-if="showImagePrice">
-          <el-form-item label="尺寸定价（积分 / 张）">
-            <ResolutionPricingEditor v-model="priceForm.image_prices" mode="image" :presets="imagePresets" />
-            <small class="form-hint">不在列表中的尺寸将拒绝请求</small>
-          </el-form-item>
-        </template>
-
-        <template v-if="showVideoPrice">
-          <el-form-item label="分辨率定价（积分 / 秒）">
-            <ResolutionPricingEditor v-model="priceForm.video_prices" mode="video" :presets="videoPresets" />
-            <small class="form-hint">不在列表中的分辨率将拒绝请求</small>
-          </el-form-item>
-        </template>
-
-        <el-form-item v-if="showAudioTTSPrice" label="TTS / 1M 字符（积分）">
-          <el-input-number v-model="priceForm.audio_tts_price_per_1m_chars_credits" :min="0" :precision="0" :step="1" class="w-full" />
-        </el-form-item>
-
-        <el-form-item v-if="showAudioSTTPrice" label="STT / 分钟（积分）">
-          <el-input-number v-model="priceForm.audio_stt_price_per_minute_credits" :min="0" :precision="0" :step="1" class="w-full" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="priceDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitModelPrice">保存价格</el-button>
+        <el-button type="primary" @click="submitModel">{{ isEditingModel ? '保存' : '创建' }}</el-button>
       </template>
     </el-dialog>
 

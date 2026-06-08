@@ -46,11 +46,16 @@ const routes = [
         component: () => import('@/views/AIGateway/MyAPIKeys.vue'),
         meta: { title: '我的 API Key', requiresAuth: true }
       },
-      // URM remote pages are resolved from the URM customer manifest.
+      {
+        path: '/ai/prices',
+        name: 'MyPrices',
+        component: () => import('@/views/AIGateway/MyPrices.vue'),
+        meta: { title: '价格', requiresAuth: true }
+      },
       {
         path: '/urm/:pathMatch(.*)*',
-        name: 'UrmCustomerRemote',
-        component: () => import('@/views/Remote/UrmCustomerRemoteView.vue'),
+        name: 'UrmCustomerBilling',
+        component: () => import('@unihub/billing/customer/HostView.vue'),
         meta: { title: 'URM', requiresAuth: true }
       }
     ]

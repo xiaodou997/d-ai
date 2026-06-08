@@ -96,3 +96,10 @@ export const getMyUsageSummary = (params = {}) => {
 export const listUserModelGrants = () => {
   return request.get('/api/v1/user-model-grants')
 }
+
+// ==================== 我的价格（生效积分单价） ====================
+
+// 终端用户查看自己被计费的积分单价（级联结果）
+export const getMyEffectivePrices = () => {
+  return request.get('/api/v1/users/me/effective-prices')
+}

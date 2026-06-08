@@ -34,13 +34,17 @@
           <el-icon><Key /></el-icon>
           <span>我的 API Key</span>
         </el-menu-item>
+        <el-menu-item index="/ai/prices">
+          <el-icon><Wallet /></el-icon>
+          <span>价格</span>
+        </el-menu-item>
 
         <template v-for="group in urmMenuGroups" :key="group.title">
           <div class="menu-divider">{{ group.title }}</div>
           <el-menu-item
             v-for="item in group.items"
             :key="item.key"
-            :index="getUrmCustomerPagePath(item)"
+            :index="item.path"
           >
             <el-icon><component :is="getMenuIcon(item.icon)" /></el-icon>
             <span>{{ item.title }}</span>
@@ -66,7 +70,6 @@
 </template>
 
 <script setup>
-import { onMounted, shallowRef } from 'vue'
 import {
   User,
   Wallet,
@@ -81,14 +84,29 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import {
-  getUrmCustomerMenuGroups,
-  getUrmCustomerPagePath,
-  loadUrmCustomerManifest
-} from '@/remote/urmCustomerManifest'
 
 const authStore = useAuthStore()
-const urmMenuGroups = shallowRef([])
+const urmMenuGroups = [
+  {
+    title: '我的账户',
+    items: [
+      { key: 'account', title: '我的账户', path: '/urm/account', icon: 'Wallet' }
+    ]
+  },
+  {
+    title: '财务中心',
+    items: [
+      { key: 'transactions', title: '积分流水', path: '/urm/finance/transactions', icon: 'DataLine' },
+      { key: 'recharge', title: '充值记录', path: '/urm/finance/recharge', icon: 'List' }
+    ]
+  },
+  {
+    title: '个人设置',
+    items: [
+      { key: 'profile', title: '个人中心', path: '/urm/profile', icon: 'Setting' }
+    ]
+  }
+]
 
 const menuIcons = {
   Wallet,
@@ -98,15 +116,6 @@ const menuIcons = {
 }
 
 const getMenuIcon = (name) => menuIcons[name] || Setting
-
-onMounted(async () => {
-  try {
-    const manifest = await loadUrmCustomerManifest()
-    urmMenuGroups.value = getUrmCustomerMenuGroups(manifest)
-  } catch (error) {
-    console.error('加载 URM 菜单失败:', error)
-  }
-})
 
 const handleLogout = () => {
   ElMessageBox.confirm('确定要退出登录吗？', '提示', {

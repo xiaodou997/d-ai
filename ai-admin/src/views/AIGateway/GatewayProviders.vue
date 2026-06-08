@@ -13,6 +13,7 @@ import {
   endpointProtocolOptions,
   fetchEndpointUpstreamModels,
   importEndpointUpstreamModels,
+  listPriceBooks,
   listProviderEndpoints,
   listProviders,
   listUpstreamDeployments,
@@ -26,10 +27,7 @@ import {
   updateUpstreamDeployment,
   updateUpstreamDeploymentStatus
 } from '@/api/aiGateway'
-import TieredPricingEditor from './components/TieredPricingEditor.vue'
-import ResolutionPricingEditor from './components/ResolutionPricingEditor.vue'
 import KeyValueEditor from './components/KeyValueEditor.vue'
-import { suggestPricingForModel } from './modelPricingCatalog'
 
 const loading = shallowRef(false)
 const endpointLoading = shallowRef(false)
@@ -65,14 +63,9 @@ const endpointForm = reactive({
   weight: 100,
   timeout_ms: 60000,
   default_protocol: 'openai_compatible',
+  price_book_id: '',
+  cost_multiplier: null,
   status: 'active'
-})
-
-const emptyPricing = () => ({
-  tiers: [{ up_to: null, input_per_1m: 0, output_per_1m: 0, cache_write_per_1m: 0, cache_read_per_1m: 0, reasoning_per_1m: 0 }],
-  request_cost: 0,
-  image_prices: [],
-  video_prices: []
 })
 
 const deploymentForm = reactive({
@@ -82,72 +75,30 @@ const deploymentForm = reactive({
   upstream_protocol: 'openai_chat',
   request_path: '',
   upstream_parameters: {},
-  pricing: emptyPricing(),
+  price_book_id: '', // 覆盖：留空=继承账户
+  cost_multiplier: null, // 覆盖：留空=继承账户
   status: 'active'
 })
 
-const pricingSuggestion = ref(null) // { label, vendor, input_per_1m, output_per_1m, cache_write_per_1m, cache_read_per_1m, reasoning_per_1m }
-
-const isFirstTierAllZero = () => {
-  const t = deploymentForm.pricing.tiers[0]
-  if (!t) return true
-  return !t.input_per_1m && !t.output_per_1m && !t.cache_write_per_1m && !t.cache_read_per_1m && !t.reasoning_per_1m
+// 上游成本价格表选项（Price Book 统一定价）
+const priceBookOptions = ref([])
+async function loadPriceBookOptions() {
+  try {
+    const res = await listPriceBooks()
+    priceBookOptions.value = Array.isArray(res) ? res : []
+  } catch (e) { /* interceptor toasts */ }
 }
 
-const applyPricingSuggestion = () => {
-  if (!pricingSuggestion.value) return
-  const s = pricingSuggestion.value
-  const tiers = deploymentForm.pricing.tiers.length ? [...deploymentForm.pricing.tiers] : [{ up_to: null }]
-  tiers[0] = {
-    ...tiers[0],
-    up_to: tiers[0].up_to ?? null,
-    input_per_1m: s.input_per_1m,
-    output_per_1m: s.output_per_1m,
-    cache_write_per_1m: s.cache_write_per_1m,
-    cache_read_per_1m: s.cache_read_per_1m,
-    reasoning_per_1m: s.reasoning_per_1m
-  }
-  deploymentForm.pricing.tiers = tiers
-  pricingSuggestion.value = null
-  ElMessage.success(`已应用 ${s.label} 建议价`)
+const priceBookName = (id) => priceBookOptions.value.find((b) => b.id === id)?.name || ''
+const endpointOf = (endpointId) => endpoints.value.find((e) => e.id === endpointId) || null
+
+// 部署的有效成本价格表（自身覆盖 → 否则继承账户）
+const effectivePriceBook = (row) => {
+  if (row.price_book_id) return { id: row.price_book_id, name: priceBookName(row.price_book_id), inherited: false }
+  const ep = endpointOf(row.endpoint_id)
+  if (ep?.price_book_id) return { id: ep.price_book_id, name: priceBookName(ep.price_book_id), inherited: true }
+  return null
 }
-
-const onUpstreamModelBlur = () => {
-  if (!deploymentForm.upstream_model) {
-    pricingSuggestion.value = null
-    return
-  }
-  if (!supportsTieredPricing(deploymentForm.capability_type)) {
-    pricingSuggestion.value = null
-    return
-  }
-  const suggestion = suggestPricingForModel(deploymentForm.upstream_model)
-  if (!suggestion) {
-    pricingSuggestion.value = null
-    return
-  }
-  if (isFirstTierAllZero()) {
-    pricingSuggestion.value = suggestion
-    applyPricingSuggestion()
-  } else {
-    // 用户已填了价，仅提示
-    pricingSuggestion.value = suggestion
-  }
-}
-
-const imagePresets = [
-  { label: '1024×1024', resolutions: ['1024x1024'] },
-  { label: '1024×1792', resolutions: ['1024x1792'] },
-  { label: '1792×1024', resolutions: ['1792x1024'] }
-]
-
-const videoPresets = [
-  { label: '通用', resolutions: ['480p', '720p', '1080p', '4k'] },
-  { label: 'Sora', resolutions: ['720x1280', '1024x1792'] },
-  { label: 'Veo', resolutions: ['720p', '1080p', '4k'] }
-]
-
-const supportsTieredPricing = (cap) => cap !== 'image' && cap !== 'video'
 
 const selectedProvider = computed(() =>
   providers.value.find((item) => item.id === selectedProviderId.value)
@@ -177,7 +128,7 @@ const providerSummary = computed(() => ({
 const setupSteps = [
   '创建厂商分组，标记上游归属和厂商类型。',
   '添加 API 账户，填入 Base URL、API Key、权重和超时。',
-  '在模型配置中维护可调用的模型名、协议和上游成本价（含阶梯/分辨率档）。',
+  '在 API 账户上绑定成本价格表，账户下模型默认继承；个别模型可在配置里覆盖。',
   '在模型授权页面分配公开模型调用权限。'
 ]
 
@@ -195,65 +146,6 @@ const capabilityLabel = (value) =>
 const getEndpointName = (endpointId) => {
   const endpoint = endpoints.value.find((item) => item.id === endpointId)
   return endpoint?.name || endpointId || '-'
-}
-
-const parsePricing = (raw) => {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return emptyPricing()
-  const tiers = Array.isArray(raw.tiers) && raw.tiers.length > 0
-    ? raw.tiers.map(normalizeTier)
-    : emptyPricing().tiers
-  return {
-    tiers,
-    request_cost: Number(raw.request_cost) || 0,
-    image_prices: Array.isArray(raw.image_prices) ? raw.image_prices.map(normalizeResPrice) : [],
-    video_prices: Array.isArray(raw.video_prices) ? raw.video_prices.map(normalizeResPrice) : []
-  }
-}
-
-const normalizeTier = (t) => ({
-  up_to: t.up_to == null ? null : Number(t.up_to),
-  input_per_1m: Number(t.input_per_1m) || 0,
-  output_per_1m: Number(t.output_per_1m) || 0,
-  cache_write_per_1m: Number(t.cache_write_per_1m) || 0,
-  cache_read_per_1m: Number(t.cache_read_per_1m) || 0,
-  reasoning_per_1m: Number(t.reasoning_per_1m) || 0
-})
-
-const normalizeResPrice = (r) => ({
-  resolution: String(r.resolution || ''),
-  price: Number(r.price) || 0
-})
-
-// 价格列展示
-const firstTier = (row) => parsePricing(row.pricing).tiers[0]
-const tierCount = (row) => parsePricing(row.pricing).tiers.length
-const minResolutionPrice = (list) => {
-  if (!list || list.length === 0) return null
-  return list.reduce((acc, cur) => (cur.price < acc ? cur.price : acc), list[0].price)
-}
-
-const fmtMoney = (v) => {
-  if (v == null) return '0'
-  const n = Number(v)
-  if (!Number.isFinite(n)) return '0'
-  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '')
-}
-
-const pricingCellChat = (row) => {
-  const t = firstTier(row)
-  return { input: fmtMoney(t.input_per_1m), output: fmtMoney(t.output_per_1m) }
-}
-
-const pricingCellImage = (row) => {
-  const pricing = parsePricing(row.pricing)
-  const min = minResolutionPrice(pricing.image_prices)
-  return min == null ? null : fmtMoney(min)
-}
-
-const pricingCellVideo = (row) => {
-  const pricing = parsePricing(row.pricing)
-  const min = minResolutionPrice(pricing.video_prices)
-  return min == null ? null : fmtMoney(min)
 }
 
 const resetProviderForm = () => {
@@ -274,6 +166,8 @@ const resetEndpointForm = () => {
     weight: 100,
     timeout_ms: 60000,
     default_protocol: 'openai_compatible',
+    price_book_id: '',
+    cost_multiplier: null,
     status: 'active'
   })
 }
@@ -287,7 +181,8 @@ const resetDeploymentForm = () => {
     upstream_protocol: 'openai_chat',
     request_path: '',
     upstream_parameters: {},
-    pricing: emptyPricing(),
+    price_book_id: '',
+    cost_multiplier: null,
     status: 'active'
   })
 }
@@ -310,6 +205,8 @@ const applyEndpointForm = (row) => {
     weight: row.weight,
     timeout_ms: row.timeout_ms,
     default_protocol: row.default_protocol || 'openai_compatible',
+    price_book_id: row.price_book_id || '',
+    cost_multiplier: row.cost_multiplier ?? null,
     status: row.status
   })
 }
@@ -326,7 +223,8 @@ const applyDeploymentForm = (row) => {
     upstream_protocol: row.upstream_protocol || 'openai_chat',
     request_path: row.request_path || '',
     upstream_parameters: { ...params },
-    pricing: parsePricing(row.pricing),
+    price_book_id: row.price_book_id || '',
+    cost_multiplier: row.cost_multiplier ?? null,
     status: row.status || 'active'
   })
 }
@@ -442,7 +340,6 @@ const openDeploymentDialog = () => {
     return
   }
   resetDeploymentForm()
-  pricingSuggestion.value = null
   deploymentDialogVisible.value = true
 }
 
@@ -452,21 +349,8 @@ const openDeploymentEditDialog = (row) => {
     return
   }
   applyDeploymentForm(row)
-  pricingSuggestion.value = null
   deploymentDialogVisible.value = true
 }
-
-// 切换能力类型时，清理不再适用的价格区块（避免误存）
-watch(
-  () => deploymentForm.capability_type,
-  (cap) => {
-    if (cap !== 'image') deploymentForm.pricing.image_prices = []
-    if (cap !== 'video') deploymentForm.pricing.video_prices = []
-    if (!supportsTieredPricing(cap) && deploymentForm.pricing.tiers.length === 0) {
-      deploymentForm.pricing.tiers = emptyPricing().tiers
-    }
-  }
-)
 
 const submitProvider = async () => {
   if (editingProviderId.value) {
@@ -494,21 +378,15 @@ const submitEndpoint = async () => {
 }
 
 const submitDeployment = async () => {
-  const cap = deploymentForm.capability_type
-  const pricing = {
-    tiers: supportsTieredPricing(cap) ? deploymentForm.pricing.tiers : [],
-    request_cost: Number(deploymentForm.pricing.request_cost) || 0,
-    image_prices: cap === 'image' ? deploymentForm.pricing.image_prices : [],
-    video_prices: cap === 'video' ? deploymentForm.pricing.video_prices : []
-  }
   const payload = {
     endpoint_id: deploymentForm.endpoint_id,
     upstream_model: deploymentForm.upstream_model,
-    capability_type: cap,
+    capability_type: deploymentForm.capability_type,
     upstream_protocol: deploymentForm.upstream_protocol,
     request_path: deploymentForm.request_path || null,
     upstream_parameters: deploymentForm.upstream_parameters || {},
-    pricing,
+    price_book_id: deploymentForm.price_book_id || '',
+    cost_multiplier: deploymentForm.cost_multiplier == null ? null : Number(deploymentForm.cost_multiplier),
     status: deploymentForm.status
   }
   if (editingDeploymentId.value) {
@@ -623,27 +501,11 @@ const submitDiscovery = async () => {
       discoveryEndpointProviderId.value,
       discoveryEndpointId.value,
       {
-        models: toImport.map((m) => {
-          const suggestion = suggestPricingForModel(m.id)
-          const item = {
-            upstream_model: m.id,
-            capability_type: m.capability_type,
-            upstream_protocol: m.upstream_protocol
-          }
-          if (suggestion && m.capability_type !== 'image' && m.capability_type !== 'video') {
-            item.pricing = {
-              tiers: [{
-                up_to: null,
-                input_per_1m: suggestion.input_per_1m,
-                output_per_1m: suggestion.output_per_1m,
-                cache_write_per_1m: suggestion.cache_write_per_1m,
-                cache_read_per_1m: suggestion.cache_read_per_1m,
-                reasoning_per_1m: suggestion.reasoning_per_1m
-              }]
-            }
-          }
-          return item
-        })
+        models: toImport.map((m) => ({
+          upstream_model: m.id,
+          capability_type: m.capability_type,
+          upstream_protocol: m.upstream_protocol
+        }))
       }
     )
     const createdCount = result.created?.length ?? 0
@@ -658,7 +520,10 @@ const submitDiscovery = async () => {
   }
 }
 
-onMounted(fetchProviders)
+onMounted(() => {
+  fetchProviders()
+  loadPriceBookOptions()
+})
 </script>
 
 <template>
@@ -740,7 +605,7 @@ onMounted(fetchProviders)
           <div class="metric-cell">
             <span>计费单位</span>
             <strong>积分</strong>
-            <small>成本价在部署维护</small>
+            <small>成本价按账户价格表</small>
           </div>
         </div>
       </section>
@@ -753,7 +618,7 @@ onMounted(fetchProviders)
         <ol>
           <li v-for="step in setupSteps" :key="step">{{ step }}</li>
         </ol>
-        <p class="guide-note">文本类按 token 计成本（支持阶梯定价），图片按分辨率/张，视频按分辨率/秒。所有金额单位均为整数积分。</p>
+        <p class="guide-note">上游成本统一由「定价管理」里的 USD 价格表提供，按 upstream_model 自动查价。在 API 账户上绑定一次，账户下模型默认继承。</p>
       </section>
 
       <section class="panel">
@@ -815,35 +680,17 @@ onMounted(fetchProviders)
               <span class="protocol-text">{{ protocolLabel(row.upstream_protocol) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="价格" min-width="220">
+          <el-table-column label="成本价格表" min-width="180">
             <template #default="{ row }">
-              <template v-if="row.capability_type === 'image'">
-                <span v-if="pricingCellImage(row) == null" class="price-empty">—</span>
-                <span v-else class="price-pill price-pill-image">
-                  <span class="price-pill-label">图</span>
-                  <span class="price-pill-value">¥{{ pricingCellImage(row) }}/张 起</span>
+              <template v-if="effectivePriceBook(row)">
+                <span class="price-pill price-pill-input">
+                  <span class="price-pill-value">{{ effectivePriceBook(row).name || '未知' }}</span>
                 </span>
+                <el-tag size="small" effect="plain" :type="effectivePriceBook(row).inherited ? 'info' : 'warning'" class="tier-badge">
+                  {{ effectivePriceBook(row).inherited ? '继承账户' : '覆盖' }}
+                </el-tag>
               </template>
-              <template v-else-if="row.capability_type === 'video'">
-                <span v-if="pricingCellVideo(row) == null" class="price-empty">—</span>
-                <span v-else class="price-pill price-pill-video">
-                  <span class="price-pill-label">视</span>
-                  <span class="price-pill-value">¥{{ pricingCellVideo(row) }}/s 起</span>
-                </span>
-              </template>
-              <template v-else>
-                <div class="price-pair">
-                  <span class="price-pill price-pill-input">
-                    <span class="price-pill-label">In</span>
-                    <span class="price-pill-value">¥{{ pricingCellChat(row).input }}</span>
-                  </span>
-                  <span class="price-pill price-pill-output">
-                    <span class="price-pill-label">Out</span>
-                    <span class="price-pill-value">¥{{ pricingCellChat(row).output }}</span>
-                  </span>
-                  <el-tag v-if="tierCount(row) > 1" size="small" effect="plain" class="tier-badge">阶梯</el-tag>
-                </div>
-              </template>
+              <span v-else class="price-empty">未绑定</span>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="95">
@@ -921,6 +768,17 @@ onMounted(fetchProviders)
             <el-input-number v-model="endpointForm.timeout_ms" :min="1000" class="w-full" />
           </el-form-item>
         </div>
+        <div class="grid grid-cols-2 gap-4">
+          <el-form-item label="上游成本价格表">
+            <el-select v-model="endpointForm.price_book_id" placeholder="不绑定（不计成本）" clearable class="w-full">
+              <el-option v-for="b in priceBookOptions" :key="b.id" :label="b.name" :value="b.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="成本倍率">
+            <el-input-number v-model="endpointForm.cost_multiplier" :min="0" :step="0.1" :precision="4" :value-on-clear="null" placeholder="默认 1" class="w-full" />
+          </el-form-item>
+        </div>
+        <p class="endpoint-cost-hint">该账户下的所有模型默认按此价格表 × 倍率计算上游成本；个别模型可在模型配置里单独覆盖。</p>
         <el-form-item label="状态">
           <el-select v-model="endpointForm.status" class="w-full">
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -990,7 +848,6 @@ onMounted(fetchProviders)
               <el-input
                 v-model="deploymentForm.upstream_model"
                 placeholder="gpt-4o"
-                @blur="onUpstreamModelBlur"
               />
             </el-form-item>
           </div>
@@ -1026,55 +883,17 @@ onMounted(fetchProviders)
         </div>
 
         <div class="section-card">
-          <p class="section-title">价格配置</p>
-          <p class="section-sub">单位：人民币（¥/百万 token）；图片/视频按张/秒。所有字段填 0 表示该项不计成本。</p>
-
-          <el-alert
-            v-if="pricingSuggestion"
-            class="suggestion-banner"
-            type="info"
-            show-icon
-            :closable="false"
-          >
-            <template #title>
-              <span>检测到 <strong>{{ pricingSuggestion.label }}</strong>，建议价：输入 ¥{{ pricingSuggestion.input_per_1m }}/M、输出 ¥{{ pricingSuggestion.output_per_1m }}/M</span>
-              <el-button type="primary" size="small" link @click="applyPricingSuggestion">应用建议价</el-button>
-              <el-button size="small" link @click="pricingSuggestion = null">忽略</el-button>
-            </template>
-          </el-alert>
-
-          <template v-if="supportsTieredPricing(deploymentForm.capability_type)">
-            <p class="sub-label">阶梯定价（按输入 token 用量分档）</p>
-            <TieredPricingEditor v-model="deploymentForm.pricing.tiers" />
-          </template>
-
-          <template v-if="deploymentForm.capability_type === 'image'">
-            <p class="sub-label">图片计费（按分辨率）</p>
-            <ResolutionPricingEditor
-              v-model="deploymentForm.pricing.image_prices"
-              mode="image"
-              :presets="imagePresets"
-              price-key="price"
-              :precision="4"
-              :step="0.0001"
-            />
-          </template>
-
-          <template v-if="deploymentForm.capability_type === 'video'">
-            <p class="sub-label">视频计费（按分辨率 × 秒）</p>
-            <ResolutionPricingEditor
-              v-model="deploymentForm.pricing.video_prices"
-              mode="video"
-              :presets="videoPresets"
-              price-key="price"
-              :precision="4"
-              :step="0.0001"
-            />
-          </template>
-
-          <div class="request-cost-row">
-            <span class="sub-label">按次计费（每次请求叠加，¥）</span>
-            <el-input-number v-model="deploymentForm.pricing.request_cost" :min="0" :precision="4" :step="0.01" controls-position="right" />
+          <p class="section-title">上游成本覆盖（可选）</p>
+          <p class="section-sub">默认继承所属 API 账户绑定的价格表与成本倍率。仅当此模型成本与账户默认不同才需在此覆盖；留空即继承。</p>
+          <div class="grid grid-cols-2 gap-4">
+            <el-form-item label="成本价格表（覆盖）">
+              <el-select v-model="deploymentForm.price_book_id" placeholder="继承账户" clearable class="w-full">
+                <el-option v-for="b in priceBookOptions" :key="b.id" :label="b.name" :value="b.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="成本倍率（覆盖）">
+              <el-input-number v-model="deploymentForm.cost_multiplier" :min="0" :step="0.1" :precision="4" :value-on-clear="null" placeholder="继承账户" class="w-full" />
+            </el-form-item>
           </div>
         </div>
       </el-form>
@@ -1457,6 +1276,13 @@ onMounted(fetchProviders)
 
 .tier-badge {
   margin-left: 2px;
+}
+
+.endpoint-cost-hint {
+  margin: -4px 0 16px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .section-card {

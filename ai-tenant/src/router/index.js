@@ -27,11 +27,10 @@ const routes = [
         component: () => import('@/views/Dashboard/index.vue'),
         meta: { title: '控制概览', requiresAuth: true }
       },
-      // URM remote pages are resolved from the URM tenant manifest.
       {
         path: '/urm/:pathMatch(.*)*',
-        name: 'UrmTenantRemote',
-        component: () => import('@/views/Remote/UrmTenantRemoteView.vue'),
+        name: 'UrmTenantBilling',
+        component: () => import('@unihub/billing/tenant/HostView.vue'),
         meta: { title: 'URM', requiresAuth: true }
       },
       // 接入文档

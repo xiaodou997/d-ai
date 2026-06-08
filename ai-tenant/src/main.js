@@ -8,7 +8,7 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth'
-import './assets/styles/index.css'
+import '@unihub/ui/base.css'
 
 const app = createApp(App)
 

@@ -9,26 +9,26 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@unihub/billing": "file:../../packages/billing",
+    "@unihub/ui": "file:../../packages/ui",
     "@element-plus/icons-vue": "^2.3.2",
-    "@module-federation/runtime": "^2.5.0",
     "axios": "^1.16.1",
     "dayjs": "^1.11.20",
     "echarts": "^6.1.0",
-    "element-plus": "^2.14.0",
+    "element-plus": "^2.14.1",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
-    "vue": "^3.5.34",
-    "vue-router": "^5.0.7"
+    "vue": "^3.5.35",
+    "vue-router": "^5.1.0"
   },
   "packageManager": "bun@latest",
   "devDependencies": {
-    "@module-federation/vite": "^1.15.5",
     "@tailwindcss/postcss": "^4.3.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.15",
     "prettier": "3.8.3",
     "tailwindcss": "^4.3.0",
-    "vite": "8.0.14"
+    "vite": "8.0.16"
   }
 }

@@ -47,45 +47,6 @@ export const listTenantModelGrants = () => {
   return request.get('/api/v1/tenant-model-grants')
 }
 
-// ==================== 租户售价（租户对用户的定价） ====================
-
-/**
- * 获取租户售价列表（自动过滤为当前租户）
- */
-export const listTenantUserPrices = () => {
-  return request.get('/api/v1/user-prices')
-}
-
-/**
- * 获取单个模型的租户售价
- */
-export const getTenantUserPrice = (modelId) => {
-  return request.get(`/api/v1/tenants/me/user-prices/${modelId}`)
-}
-
-/**
- * 设置租户售价
- */
-export const upsertTenantUserPrice = (modelId, data) => {
-  return request.put(`/api/v1/tenants/me/user-prices/${modelId}`, data)
-}
-
-/**
- * 删除租户售价
- */
-export const deleteTenantUserPrice = (modelId) => {
-  return request.delete(`/api/v1/tenants/me/user-prices/${modelId}`)
-}
-
-// ==================== 平台定价（参考用） ====================
-
-/**
- * 获取平台公价（用于参考）
- */
-export const getModelPrice = (modelId) => {
-  return request.get(`/api/v1/models/${modelId}/price`)
-}
-
 // ==================== 租户 API Key ====================
 
 /**
@@ -166,4 +127,29 @@ export const getDashboardTopModels = (params = {}) => {
 
 export const listDashboardRecentErrors = (params = {}) => {
   return request.get('/api/v1/dashboard/recent-errors', { params })
+}
+
+// ==================== Price Book 自助定价（租户自助） ====================
+
+// 平台给本租户的售价绑定（只读）
+export const getMySellBinding = () => {
+  return request.get('/api/v1/tenants/me/sell-binding')
+}
+
+// 本租户给其用户的售价绑定（级联倍率 + 缓存开关）
+export const getMyUserSellBinding = () => {
+  return request.get('/api/v1/tenants/me/user-sell-binding')
+}
+
+export const upsertMyUserSellBinding = (data) => {
+  return request.put('/api/v1/tenants/me/user-sell-binding', data)
+}
+
+export const deleteMyUserSellBinding = () => {
+  return request.delete('/api/v1/tenants/me/user-sell-binding')
+}
+
+// 生效积分单价：scope=tenant（我的成本）| user（我卖给用户）
+export const getMyEffectivePrices = (scope = 'tenant') => {
+  return request.get('/api/v1/tenants/me/effective-prices', { params: { scope } })
 }

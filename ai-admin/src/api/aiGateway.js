@@ -287,54 +287,6 @@ export function updateModelStatus(modelId, status) {
 }
 
 // ============================================================================
-// Model Price APIs (1:1 with model, upsert pattern)
-// ============================================================================
-
-export function getModelPrice(modelId) {
-  return gatewayRequest.get(`/api/v1/models/${modelId}/price`)
-}
-
-export function upsertModelPrice(modelId, data) {
-  return gatewayRequest.put(`/api/v1/models/${modelId}/price`, data)
-}
-
-// ============================================================================
-// Tenant Model Price Override APIs
-// ============================================================================
-
-export function listTenantModelPriceOverrides(tenantId) {
-  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/model-price-overrides`)
-}
-
-export function getTenantModelPriceOverride(tenantId, modelId) {
-  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/model-price-overrides/${modelId}`)
-}
-
-export function upsertTenantModelPriceOverride(tenantId, modelId, data) {
-  return gatewayRequest.put(`/api/v1/tenants/${tenantId}/model-price-overrides/${modelId}`, data)
-}
-
-export function deleteTenantModelPriceOverride(tenantId, modelId) {
-  return gatewayRequest.delete(`/api/v1/tenants/${tenantId}/model-price-overrides/${modelId}`)
-}
-
-// ============================================================================
-// Tenant User Price APIs（平台管理员为租户设定对用户的售价）
-// ============================================================================
-
-export function listTenantUserPrices(tenantId) {
-  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/user-prices`)
-}
-
-export function upsertTenantUserPrice(tenantId, modelId, data) {
-  return gatewayRequest.put(`/api/v1/tenants/${tenantId}/user-prices/${modelId}`, data)
-}
-
-export function deleteTenantUserPrice(tenantId, modelId) {
-  return gatewayRequest.delete(`/api/v1/tenants/${tenantId}/user-prices/${modelId}`)
-}
-
-// ============================================================================
 // Model Route APIs (新增)
 // ============================================================================
 
@@ -576,4 +528,93 @@ export function putRouteWeights(scope = 'global', weights) {
 // P4: Replay usage log
 export function replayUsageLog(usageLogId) {
   return gatewayRequest.post(`/api/v1/usage-logs/${usageLogId}/replay`)
+}
+
+// ============================================================================
+// Price Book (统一定价) APIs
+// ============================================================================
+
+export function listPriceBooks() {
+  return gatewayRequest.get('/api/v1/price-books')
+}
+
+export function createPriceBook(data) {
+  return gatewayRequest.post('/api/v1/price-books', data)
+}
+
+export function getPriceBook(bookId) {
+  return gatewayRequest.get(`/api/v1/price-books/${bookId}`)
+}
+
+export function updatePriceBook(bookId, data) {
+  return gatewayRequest.patch(`/api/v1/price-books/${bookId}`, data)
+}
+
+export function deletePriceBook(bookId) {
+  return gatewayRequest.delete(`/api/v1/price-books/${bookId}`)
+}
+
+export function listPriceBookEntries(bookId) {
+  return gatewayRequest.get(`/api/v1/price-books/${bookId}/entries`)
+}
+
+export function upsertPriceBookEntry(bookId, data) {
+  return gatewayRequest.put(`/api/v1/price-books/${bookId}/entries`, data)
+}
+
+export function deletePriceBookEntry(bookId, modelCode) {
+  return gatewayRequest.delete(`/api/v1/price-books/${bookId}/entries`, { params: { model_code: modelCode } })
+}
+
+export function importPriceBookFromLiteLLM(bookId) {
+  return gatewayRequest.post(`/api/v1/price-books/${bookId}/import-litellm`)
+}
+
+// 搜索 LiteLLM 参考价目（按需填充，不全量入库）
+export function searchLiteLLMModels(q, limit = 50) {
+  return gatewayRequest.get('/api/v1/price-books/litellm/models', { params: { q, limit } })
+}
+
+// 一键同步常用模型（白名单）的价格
+export function syncCommonModels(bookId) {
+  return gatewayRequest.post(`/api/v1/price-books/${bookId}/sync-common`)
+}
+
+// USD→积分 全局汇率
+export function getCreditsPerUSD() {
+  return gatewayRequest.get('/api/v1/pricing/credits-per-usd')
+}
+
+export function setCreditsPerUSD(creditsPerUsd) {
+  return gatewayRequest.put('/api/v1/pricing/credits-per-usd', { credits_per_usd: creditsPerUsd })
+}
+
+// 平台→租户售价绑定
+export function listTenantSellBindings() {
+  return gatewayRequest.get('/api/v1/tenant-sell-bindings')
+}
+
+export function getTenantSellBinding(tenantId) {
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/sell-binding`)
+}
+
+export function upsertTenantSellBinding(tenantId, data) {
+  return gatewayRequest.put(`/api/v1/tenants/${tenantId}/sell-binding`, data)
+}
+
+export function deleteTenantSellBinding(tenantId) {
+  return gatewayRequest.delete(`/api/v1/tenants/${tenantId}/sell-binding`)
+}
+
+// 租户→用户售价绑定（级联）
+export function getUserSellBinding(tenantId) {
+  return gatewayRequest.get(`/api/v1/tenants/${tenantId}/user-sell-binding`)
+}
+
+export function upsertUserSellBinding(tenantId, data) {
+  return gatewayRequest.put(`/api/v1/tenants/${tenantId}/user-sell-binding`, data)
+}
+
+export function deleteUserSellBinding(tenantId) {
+  return gatewayRequest.delete(`/api/v1/tenants/${tenantId}/user-sell-binding`)
 }

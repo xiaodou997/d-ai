@@ -37,8 +37,8 @@ const routes = [
       },
       {
         path: '/urm/:pathMatch(.*)*',
-        name: 'UrmAdminRemote',
-        component: () => import('@/views/Remote/UrmAdminRemoteView.vue'),
+        name: 'UrmAdminBilling',
+        component: () => import('@unihub/billing/admin/HostView.vue'),
         meta: { title: 'URM', requiresAuth: true, roles: [1, 2] }
       },
       {
@@ -64,6 +64,12 @@ const routes = [
             name: 'GatewayModels',
             component: () => import('@/views/AIGateway/GatewayModels.vue'),
             meta: { title: '模型管理', requiresAuth: true, roles: [1, 2] }
+          },
+          {
+            path: 'pricing',
+            name: 'GatewayPricing',
+            component: () => import('@/views/AIGateway/GatewayPricing.vue'),
+            meta: { title: '定价管理', requiresAuth: true, roles: [1, 2] }
           },
           {
             path: 'access',
