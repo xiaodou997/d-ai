@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // Phase-timeout cause sentinels. They are attached via context.Cause so the

@@ -3,7 +3,7 @@ package formats
 import (
 	"encoding/json"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // StreamErrorFrame builds a protocol-appropriate SSE error event. When a

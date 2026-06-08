@@ -3,7 +3,7 @@ package serving
 import (
 	"net/http"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // RequestEnvelope carries the HTTP transport layer (ResponseWriter + Request)

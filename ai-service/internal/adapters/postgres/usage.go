@@ -8,25 +8,22 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	dbgen "xiaodou/uni-ai-api/internal/db/gen"
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/serving"
+	dbgen "xiaodou/unihub/ai-service/internal/db/gen"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 // UsageLogger implements serving.UsageLogger.
 // It creates the usage log row, upserts the hourly rollup, confirms quota, and
-// computes billing amounts using a three-tier price lookup:
-//
-//  1. ai_tenant_user_prices (user-specific override)
-//  2. ai_tenant_model_price_overrides (tenant override)
-//  3. ai_model_prices (base price)
+// computes billing amounts via the unified Price Book model (PriceBookBiller):
+// platform (tenant) price, cascaded user price, and the API-key quota debit.
 type UsageLogger struct {
 	q      *dbgen.Queries
-	prices *PriceResolver
+	biller *PriceBookBiller
 }
 
-func NewUsageLogger(q *dbgen.Queries) *UsageLogger {
-	return &UsageLogger{q: q, prices: NewPriceResolver(q)}
+func NewUsageLogger(q *dbgen.Queries, biller *PriceBookBiller) *UsageLogger {
+	return &UsageLogger{q: q, biller: biller}
 }
 
 // Log records a usage entry regardless of request success/failure.
@@ -38,11 +35,7 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 		return nil
 	}
 
-	pricing, err := l.prices.ResolvePricing(ctx, req)
-	if err != nil {
-		pricing = domain.ModelPricing{}
-	}
-	req.BillingResult = CalculateBilling(req.TokenUsage, pricing)
+	req.BillingResult = l.biller.Calculate(ctx, req)
 
 	billing := req.BillingResult
 

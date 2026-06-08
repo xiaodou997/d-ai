@@ -70,6 +70,32 @@ type AiAuditBlob struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type AiConsoleMessage struct {
+	ID        pgtype.UUID        `json:"id"`
+	SessionID pgtype.UUID        `json:"session_id"`
+	Role      string             `json:"role"`
+	Content   string             `json:"content"`
+	Protocol  pgtype.Text        `json:"protocol"`
+	RouteID   pgtype.UUID        `json:"route_id"`
+	UsageJson []byte             `json:"usage_json"`
+	ErrorJson []byte             `json:"error_json"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AiConsoleSession struct {
+	ID               pgtype.UUID        `json:"id"`
+	TenantID         string             `json:"tenant_id"`
+	UserID           pgtype.Text        `json:"user_id"`
+	OwnerType        string             `json:"owner_type"`
+	Title            string             `json:"title"`
+	ModelCode        string             `json:"model_code"`
+	SelectedProtocol pgtype.Text        `json:"selected_protocol"`
+	SelectedRouteID  pgtype.UUID        `json:"selected_route_id"`
+	Status           string             `json:"status"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AiConversationBinding struct {
 	ConversationID       string             `json:"conversation_id"`
 	TenantID             string             `json:"tenant_id"`
@@ -110,22 +136,6 @@ type AiModel struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AiModelPrice struct {
-	ID                      pgtype.UUID        `json:"id"`
-	ModelID                 pgtype.UUID        `json:"model_id"`
-	InputPricePer1m         int64              `json:"input_price_per_1m"`
-	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
-	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
-	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
-	ImagePrices             []byte             `json:"image_prices"`
-	VideoPrices             []byte             `json:"video_prices"`
-	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-}
-
 type AiModelRoute struct {
 	ID                   pgtype.UUID        `json:"id"`
 	ModelID              pgtype.UUID        `json:"model_id"`
@@ -143,6 +153,35 @@ type AiModelRoute struct {
 	Status               string             `json:"status"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiPriceBook struct {
+	ID          pgtype.UUID        `json:"id"`
+	Name        string             `json:"name"`
+	Description string             `json:"description"`
+	Status      string             `json:"status"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiPriceBookEntry struct {
+	ID                 pgtype.UUID        `json:"id"`
+	PriceBookID        pgtype.UUID        `json:"price_book_id"`
+	ModelCode          string             `json:"model_code"`
+	CapabilityType     string             `json:"capability_type"`
+	InputPerToken      pgtype.Numeric     `json:"input_per_token"`
+	OutputPerToken     pgtype.Numeric     `json:"output_per_token"`
+	CacheWritePerToken pgtype.Numeric     `json:"cache_write_per_token"`
+	CacheReadPerToken  pgtype.Numeric     `json:"cache_read_per_token"`
+	ReasoningPerToken  pgtype.Numeric     `json:"reasoning_per_token"`
+	ImagePrices        []byte             `json:"image_prices"`
+	VideoPrices        []byte             `json:"video_prices"`
+	AudioTtsPerChar    pgtype.Numeric     `json:"audio_tts_per_char"`
+	AudioSttPerMinute  pgtype.Numeric     `json:"audio_stt_per_minute"`
+	Source             string             `json:"source"`
+	ManuallyEdited     bool               `json:"manually_edited"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiProvider struct {
@@ -165,6 +204,8 @@ type AiProviderEndpoint struct {
 	Weight           int32              `json:"weight"`
 	TimeoutMs        int32              `json:"timeout_ms"`
 	DefaultProtocol  string             `json:"default_protocol"`
+	PriceBookID      pgtype.UUID        `json:"price_book_id"`
+	CostMultiplier   pgtype.Numeric     `json:"cost_multiplier"`
 	Status           string             `json:"status"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
@@ -236,6 +277,12 @@ type AiRuntimeLimitPolicy struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiSetting struct {
+	Key       string             `json:"key"`
+	Value     []byte             `json:"value"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AiTenantModelGrant struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  string             `json:"tenant_id"`
@@ -245,40 +292,14 @@ type AiTenantModelGrant struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type AiTenantModelPriceOverride struct {
-	ID                      pgtype.UUID        `json:"id"`
-	TenantID                string             `json:"tenant_id"`
-	ModelID                 pgtype.UUID        `json:"model_id"`
-	InputPricePer1m         int64              `json:"input_price_per_1m"`
-	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
-	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
-	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
-	ImagePrices             []byte             `json:"image_prices"`
-	VideoPrices             []byte             `json:"video_prices"`
-	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
-	CreatedBy               pgtype.Text        `json:"created_by"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
-}
-
-type AiTenantUserPrice struct {
-	ID                      pgtype.UUID        `json:"id"`
-	TenantID                string             `json:"tenant_id"`
-	ModelID                 pgtype.UUID        `json:"model_id"`
-	InputPricePer1m         int64              `json:"input_price_per_1m"`
-	OutputPricePer1m        int64              `json:"output_price_per_1m"`
-	CacheWritePricePer1m    int64              `json:"cache_write_price_per_1m"`
-	CacheReadPricePer1m     int64              `json:"cache_read_price_per_1m"`
-	ReasoningPricePer1m     int64              `json:"reasoning_price_per_1m"`
-	ImagePrices             []byte             `json:"image_prices"`
-	VideoPrices             []byte             `json:"video_prices"`
-	AudioTtsPricePer1mChars int64              `json:"audio_tts_price_per_1m_chars"`
-	AudioSttPricePerMinute  int64              `json:"audio_stt_price_per_minute"`
-	CreatedBy               pgtype.Text        `json:"created_by"`
-	CreatedAt               pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+type AiTenantSellBinding struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            string             `json:"tenant_id"`
+	PriceBookID         pgtype.UUID        `json:"price_book_id"`
+	SellMultiplier      pgtype.Numeric     `json:"sell_multiplier"`
+	CacheBillingEnabled bool               `json:"cache_billing_enabled"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiUpstreamDeployment struct {
@@ -290,7 +311,8 @@ type AiUpstreamDeployment struct {
 	UpstreamProtocol   string             `json:"upstream_protocol"`
 	RequestPath        pgtype.Text        `json:"request_path"`
 	UpstreamParameters []byte             `json:"upstream_parameters"`
-	Pricing            []byte             `json:"pricing"`
+	PriceBookID        pgtype.UUID        `json:"price_book_id"`
+	CostMultiplier     pgtype.Numeric     `json:"cost_multiplier"`
 	HealthStatus       string             `json:"health_status"`
 	LastHealthCheckAt  pgtype.Timestamptz `json:"last_health_check_at"`
 	LastHealthError    pgtype.Text        `json:"last_health_error"`
@@ -334,6 +356,8 @@ type AiUsageLog struct {
 	UserCost             int64              `json:"user_cost"`
 	ApiKeyQuotaCost      int64              `json:"api_key_quota_cost"`
 	UrmTransactionID     pgtype.Text        `json:"urm_transaction_id"`
+	SettledEventID       pgtype.Text        `json:"settled_event_id"`
+	SettledAt            pgtype.Timestamptz `json:"settled_at"`
 	BillingStatus        string             `json:"billing_status"`
 	RequestStatus        string             `json:"request_status"`
 	HttpStatus           pgtype.Int4        `json:"http_status"`
@@ -383,6 +407,24 @@ type AiUsageRollupsHourly struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiUserCreditLedger struct {
+	ID                      int64              `json:"id"`
+	OwnerType               string             `json:"owner_type"`
+	TenantID                string             `json:"tenant_id"`
+	UserID                  string             `json:"user_id"`
+	PendingTenantMicro      int64              `json:"pending_tenant_micro"`
+	PendingUserMicro        int64              `json:"pending_user_micro"`
+	SettledTenantMicro      int64              `json:"settled_tenant_micro"`
+	SettledUserMicro        int64              `json:"settled_user_micro"`
+	SettleWindowID          pgtype.Text        `json:"settle_window_id"`
+	SettleWindowTenantMicro int64              `json:"settle_window_tenant_micro"`
+	SettleWindowUserMicro   int64              `json:"settle_window_user_micro"`
+	SettleWindowOpenedAt    pgtype.Timestamptz `json:"settle_window_opened_at"`
+	LastSettledAt           pgtype.Timestamptz `json:"last_settled_at"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AiUserModelGrant struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  string             `json:"tenant_id"`
@@ -391,4 +433,13 @@ type AiUserModelGrant struct {
 	Status    string             `json:"status"`
 	CreatedBy pgtype.Text        `json:"created_by"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AiUserSellBinding struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            string             `json:"tenant_id"`
+	UserMultiplier      pgtype.Numeric     `json:"user_multiplier"`
+	CacheBillingEnabled bool               `json:"cache_billing_enabled"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }

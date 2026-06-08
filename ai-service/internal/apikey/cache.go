@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 
-	dbgen "xiaodou/uni-ai-api/internal/db/gen"
+	dbgen "xiaodou/unihub/ai-service/internal/db/gen"
 )
 
 const (

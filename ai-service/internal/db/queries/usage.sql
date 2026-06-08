@@ -144,50 +144,6 @@ ON CONFLICT (
   latency_success_count   = ai_usage_rollups_hourly.latency_success_count   + EXCLUDED.latency_success_count,
   updated_at = now();
 
--- name: GetActiveModelPrice :one
-SELECT
-  input_price_per_1m,
-  output_price_per_1m,
-  cache_write_price_per_1m,
-  cache_read_price_per_1m,
-  reasoning_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute
-FROM ai_model_prices
-WHERE model_id = $1;
-
--- name: GetTenantModelPriceOverrideForRuntime :one
-SELECT
-  input_price_per_1m,
-  output_price_per_1m,
-  cache_write_price_per_1m,
-  cache_read_price_per_1m,
-  reasoning_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute
-FROM ai_tenant_model_price_overrides
-WHERE tenant_id = $1
-  AND model_id = $2;
-
--- name: GetTenantUserPriceForRuntime :one
-SELECT
-  input_price_per_1m,
-  output_price_per_1m,
-  cache_write_price_per_1m,
-  cache_read_price_per_1m,
-  reasoning_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute
-FROM ai_tenant_user_prices
-WHERE tenant_id = $1
-  AND model_id = $2;
-
 -- name: ConfirmAPIKeyQuotaUsage :exec
 UPDATE ai_api_keys
 SET

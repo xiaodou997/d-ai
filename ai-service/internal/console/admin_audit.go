@@ -1,0 +1,160 @@
+package console
+
+import (
+	"encoding/json"
+	"go.uber.org/zap"
+	"net/http"
+	"strconv"
+	"strings"
+
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	dbgen "xiaodou/unihub/ai-service/internal/db/gen"
+	"xiaodou/unihub/ai-service/internal/domain"
+)
+
+func (s *Console) adminAudit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ww := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+			return
+		}
+		s.writeAdminAuditLog(r, ww.Status())
+	})
+}
+
+func (s *Console) writeAdminAuditLog(r *http.Request, status int) {
+	admin, _ := adminFromContext(r.Context())
+	actor := admin.Actor
+	action := strings.ToLower(r.Method) + " " + r.URL.Path
+	objectType, objectID := adminAuditObject(r.URL.Path)
+	result := "success"
+	if status >= 400 {
+		result = "failed"
+	}
+	summary, _ := json.Marshal(map[string]any{
+		"request_id": requestIDFromContext(r.Context()),
+		"method":     r.Method,
+		"path":       r.URL.Path,
+		"query":      r.URL.RawQuery,
+		"role":       admin.Role,
+		"tenant_id":  admin.TenantID,
+		"user_id":    admin.UserID,
+		"remote_ip":  r.RemoteAddr,
+		"user_agent": r.UserAgent(),
+	})
+	if _, err := s.queries.CreateAuditLog(r.Context(), dbgen.CreateAuditLogParams{
+		Actor:          optionalTextValue(actor),
+		Action:         action,
+		ObjectType:     optionalTextValue(objectType),
+		ObjectID:       optionalTextValue(objectID),
+		RequestSummary: summary,
+		Result:         result,
+		HttpStatus:     optionalInt4Value(int32(status)),
+	}); err != nil {
+		s.logger.Error("record admin audit log failed", zap.Error(err), zap.String("request_id", requestIDFromContext(r.Context())))
+	}
+}
+
+func adminAuditObject(path string) (string, string) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) >= 3 && parts[0] == "api" && parts[1] == "v1" {
+		parts = parts[2:]
+	}
+	if len(parts) == 0 {
+		return "", ""
+	}
+	switch parts[0] {
+	case "providers":
+		if len(parts) >= 2 {
+			if len(parts) >= 4 && parts[2] == "endpoints" {
+				return "provider_endpoint", parts[3]
+			}
+			return "provider", parts[1]
+		}
+		return "provider", ""
+	case "upstream-deployments":
+		if len(parts) >= 2 {
+			if len(parts) >= 4 && parts[2] == "cost-prices" {
+				return "upstream_deployment_cost_price", parts[3]
+			}
+			return "upstream_deployment", parts[1]
+		}
+		return "upstream_deployment", ""
+	case "models":
+		if len(parts) >= 2 {
+			if len(parts) >= 4 && parts[2] == "routes" {
+				return "model_route", parts[3]
+			}
+			if len(parts) >= 4 && parts[2] == "prices" {
+				return "model_price", parts[3]
+			}
+			return "model", parts[1]
+		}
+		return "model", ""
+	case "limit-policies":
+		if len(parts) >= 2 {
+			return "runtime_limit_policy", parts[1]
+		}
+		return "runtime_limit_policy", ""
+	case "tenants":
+		if len(parts) >= 2 {
+			return "tenant", parts[1]
+		}
+	}
+	return parts[0], ""
+}
+
+func (s *Console) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	limit := int32(100)
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || parsed <= 0 {
+			writeErr(w, http.StatusBadRequest, BizErrBadRequest, "invalid limit")
+			return
+		}
+		if parsed > 500 {
+			parsed = 500
+		}
+		limit = int32(parsed)
+	}
+
+	logs, err := s.auditSvc.List(r.Context(), limit)
+	if err != nil {
+		s.writeServiceErr(w, r, err)
+		return
+	}
+	writeOK(w, auditLogsFromDomain(logs))
+}
+
+// auditLogsFromDomain maps domain.AuditLog onto the wire DTO, reconstructing the
+// pgtype values so the JSON contract is byte-identical to the legacy mapper
+// (nullable text → null when empty, matching how rows were written).
+func auditLogsFromDomain(logs []domain.AuditLog) []auditLogDTO {
+	out := make([]auditLogDTO, len(logs))
+	for i, l := range logs {
+		var id pgtype.UUID
+		_ = id.Scan(l.ID)
+		dto := auditLogDTO{
+			ID:             id,
+			Actor:          optionalTextValue(l.Actor),
+			Action:         l.Action,
+			ObjectType:     optionalTextValue(l.ObjectType),
+			ObjectID:       optionalTextValue(l.ObjectID),
+			RequestSummary: rawJSON(l.RequestSummary),
+			Result:         l.Result,
+		}
+		if l.HttpStatus != nil {
+			dto.HttpStatus = pgtype.Int4{Int32: *l.HttpStatus, Valid: true}
+		}
+		if !l.CreatedAt.IsZero() {
+			ms := l.CreatedAt.UnixMilli()
+			dto.CreatedAt = &ms
+		}
+		out[i] = dto
+	}
+	return out
+}

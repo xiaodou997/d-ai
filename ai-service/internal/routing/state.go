@@ -17,8 +17,8 @@ type targetEntry struct {
 	kind        TargetKind
 	state       HealthState
 	consecFail  int
-	openCount   int       // monotone: incremented on each CLOSED/HALF_OPEN→OPEN transition for backoff
-	probing     bool      // true = a HALF_OPEN probe request is in flight
+	openCount   int  // monotone: incremented on each CLOSED/HALF_OPEN→OPEN transition for backoff
+	probing     bool // true = a HALF_OPEN probe request is in flight
 	openedAt    time.Time
 	nextProbeAt time.Time
 }

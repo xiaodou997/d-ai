@@ -133,8 +133,8 @@ type AttemptRecord struct {
 	TargetID    string // deployment_id or credential_id
 	HTTPStatus  int
 	Outcome     ResultStatus
-	LatencyMs   int    // connect phase: request sent → response headers
-	FirstByteMs int    // headers → first committed byte (0 when not committed)
+	LatencyMs   int // connect phase: request sent → response headers
+	FirstByteMs int // headers → first committed byte (0 when not committed)
 	ErrorMsg    string
 	Score       float64 // scorer probability from softmax (0 when scorer unavailable)
 }

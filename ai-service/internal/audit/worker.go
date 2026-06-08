@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 const (
@@ -36,8 +36,8 @@ type BlobPutter interface {
 type Worker struct {
 	ch        chan *Payload
 	store     Store
-	blobStore BlobPutter  // optional; nil = skip media extraction
-	byteUsed  int64       // approximate in-flight bytes (benign data race)
+	blobStore BlobPutter // optional; nil = skip media extraction
+	byteUsed  int64      // approximate in-flight bytes (benign data race)
 }
 
 // NewWorker creates a Worker backed by store. blobStore may be nil (no blob extraction).

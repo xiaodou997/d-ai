@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // ============================================================================

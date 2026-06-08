@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 func TestBuildURL(t *testing.T) {

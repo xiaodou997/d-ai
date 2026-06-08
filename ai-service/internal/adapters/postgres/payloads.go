@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"xiaodou/uni-ai-api/internal/audit"
+	"xiaodou/unihub/ai-service/internal/audit"
 )
 
 // AuditStore implements audit.Store backed by PostgreSQL.

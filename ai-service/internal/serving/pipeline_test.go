@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // fakeSelector returns canned candidates/error for testing RouteCandidatesStep.
@@ -21,10 +21,10 @@ func (f *fakeSelector) SelectCandidates(_ context.Context, _ *Request) ([]*domai
 
 // fakeStep is a configurable Step used to exercise Pipeline.Run.
 type fakeStep struct {
-	name        string
-	execErr     error
-	executed    bool
-	rolledBack  bool
+	name       string
+	execErr    error
+	executed   bool
+	rolledBack bool
 }
 
 func (s *fakeStep) Name() string { return s.name }
@@ -216,7 +216,7 @@ type sequenceStep struct {
 	tag  string
 }
 
-func (s *sequenceStep) Name() string { return s.name }
+func (s *sequenceStep) Name() string                                { return s.name }
 func (s *sequenceStep) Execute(_ context.Context, _ *Request) error { return nil }
 func (s *sequenceStep) Rollback(_ context.Context, _ *Request) {
 	*s.seq = append(*s.seq, s.tag)
@@ -296,7 +296,7 @@ type apiErrorStep struct {
 	err  *APIError
 }
 
-func (s *apiErrorStep) Name() string                               { return s.name }
+func (s *apiErrorStep) Name() string                                { return s.name }
 func (s *apiErrorStep) Execute(_ context.Context, _ *Request) error { return s.err }
 func (s *apiErrorStep) Rollback(_ context.Context, _ *Request)      {}
 

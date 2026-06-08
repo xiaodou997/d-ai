@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // ExtractSyncUsage parses an upstream non-streaming response body and returns
@@ -110,10 +110,10 @@ func mergeOpenAIChatStreamUsage(prev domain.TokenUsage, data []byte) (domain.Tok
 // ============================================================================
 
 type openaiResponsesUsage struct {
-	InputTokens         int `json:"input_tokens"`
-	OutputTokens        int `json:"output_tokens"`
-	TotalTokens         int `json:"total_tokens"`
-	InputTokensDetails  *struct {
+	InputTokens        int `json:"input_tokens"`
+	OutputTokens       int `json:"output_tokens"`
+	TotalTokens        int `json:"total_tokens"`
+	InputTokensDetails *struct {
 		CachedTokens int `json:"cached_tokens"`
 	} `json:"input_tokens_details,omitempty"`
 	OutputTokensDetails *struct {

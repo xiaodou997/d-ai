@@ -248,44 +248,11 @@ type RouteCandidate struct {
 	CostPer1kTokens      float64            // 0 for free/pool routes → scorer treats as very cheap
 	ScoreWeightsOverride map[string]float64 // nil = use global weights
 
-	// Upstream cost price (decoded from ai_upstream_deployments.pricing JSONB).
-	// nil for pool routes or when deployment has no pricing configured.
-	Pricing *Pricing
-}
-
-// ============================================================================
-// Upstream cost pricing
-// ============================================================================
-
-// Pricing carries everything needed to compute the upstream cost of one call.
-// All numeric values are CNY in原值 (no scaling). Token prices are per 1,000,000
-// tokens; image/video prices are absolute per-unit charges. Stored in JSONB so
-// decimals (e.g. ¥0.525/M) survive round-trip without precision loss.
-type Pricing struct {
-	Tiers       []PricingTier     `json:"tiers,omitempty"`
-	RequestCost float64           `json:"request_cost,omitempty"`
-	ImagePrices []ResolutionPrice `json:"image_prices,omitempty"`
-	VideoPrices []ResolutionPrice `json:"video_prices,omitempty"`
-}
-
-// PricingTier describes one band of token-volume-based pricing. The tier is
-// selected by prompt_tokens (input). The last tier must use UpTo == nil to
-// mean "no upper bound".
-type PricingTier struct {
-	UpTo            *int64  `json:"up_to"`
-	InputPer1M      float64 `json:"input_per_1m"`
-	OutputPer1M     float64 `json:"output_per_1m"`
-	CacheWritePer1M float64 `json:"cache_write_per_1m,omitempty"`
-	CacheReadPer1M  float64 `json:"cache_read_per_1m,omitempty"`
-	ReasoningPer1M  float64 `json:"reasoning_per_1m,omitempty"`
-}
-
-// ResolutionPrice expresses a per-resolution image or per-resolution-per-second
-// video price. For images, Price is per generated image. For videos, Price is
-// per second at that resolution.
-type ResolutionPrice struct {
-	Resolution string  `json:"resolution"`
-	Price      float64 `json:"price"`
+	// Upstream cost binding (Price Book). ProviderCost = entry(PriceBookID,
+	// UpstreamModel) × CostMultiplier. PriceBookID empty → no cost recorded.
+	// Effective values already COALESCE'd through deployment → endpoint.
+	PriceBookID    string
+	CostMultiplier float64
 }
 
 // IsPoolRoute returns true when this route targets a CredentialPool (OAuth Fixed Provider).
@@ -461,56 +428,16 @@ func CreditsToMicro(credits int64) int64 {
 	return credits * MicroCreditsPerCredit
 }
 
-// ResolutionCreditPrice is a per-resolution price in micro-credits.
-// Used for image (per image) and video (per second) sales pricing.
-type ResolutionCreditPrice struct {
-	Resolution string `json:"resolution"`
-	Price      int64  `json:"price"` // micro-credits
-}
-
-// ModelPricing holds per-1M-token prices in micro-credits.
-// Zero values mean "use the corresponding base price" — see Effective* methods.
-type ModelPricing struct {
-	InputPer1M      int64 // micro-credits per 1M input tokens
-	OutputPer1M     int64 // micro-credits per 1M output tokens
-	CacheWritePer1M int64 // 0 = bill at InputPer1M
-	CacheReadPer1M  int64 // 0 = bill at InputPer1M (profit: provider charges less)
-	ReasoningPer1M  int64 // 0 = bill at OutputPer1M
-	ImagePrices     []ResolutionCreditPrice
-	VideoPrices     []ResolutionCreditPrice
-}
-
-func (p ModelPricing) EffectiveCacheWritePrice() int64 {
-	if p.CacheWritePer1M > 0 {
-		return p.CacheWritePer1M
-	}
-	return p.InputPer1M
-}
-
-func (p ModelPricing) EffectiveCacheReadPrice() int64 {
-	if p.CacheReadPer1M > 0 {
-		return p.CacheReadPer1M
-	}
-	return p.InputPer1M
-}
-
-func (p ModelPricing) EffectiveReasoningPrice() int64 {
-	if p.ReasoningPer1M > 0 {
-		return p.ReasoningPer1M
-	}
-	return p.OutputPer1M
-}
-
 // BillingResult is the output of cost calculation. *CostMicro 字段统一使用
 // micro-credit 精度（1 积分 = 10000 micro-credit）。settle worker 在调 URM
 // Consume 前 floor 到整数积分；DTO 层折成 _credits float 展示。
 type BillingResult struct {
-	ProviderCostMicro     int64 // 平台付给上游
-	PlatformCostMicro     int64 // 租户付给平台（→ URM TenantAmount，floor 整数积分）
-	UserCostMicro         int64 // 用户付给租户（→ URM UserAmount；tenant-owned key 为 0）
-	APIKeyQuotaCostMicro  int64 // 扣减 API key 本地配额计数
-	BillableUnits         int64
-	BillableUnitType      string
+	ProviderCostMicro    int64 // 平台付给上游
+	PlatformCostMicro    int64 // 租户付给平台（→ URM TenantAmount，floor 整数积分）
+	UserCostMicro        int64 // 用户付给租户（→ URM UserAmount；tenant-owned key 为 0）
+	APIKeyQuotaCostMicro int64 // 扣减 API key 本地配额计数
+	BillableUnits        int64
+	BillableUnitType     string
 }
 
 // ============================================================================

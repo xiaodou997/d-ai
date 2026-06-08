@@ -7,8 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"go.uber.org/zap"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	pgadapter "xiaodou/uni-ai-api/internal/adapters/postgres"
-	"xiaodou/uni-ai-api/internal/domain"
+	pgadapter "xiaodou/unihub/ai-service/internal/adapters/postgres"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // sanitizeOAuthError truncates an OAuth error response body and masks

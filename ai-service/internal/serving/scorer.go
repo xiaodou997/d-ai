@@ -5,8 +5,8 @@ import (
 	"math"
 	"math/rand"
 
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/routing"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/routing"
 )
 
 // ScoreWeights holds the four dimension weights for multi-dim route scoring.
@@ -48,9 +48,9 @@ type ScoreWeightsSource interface {
 // When Redis stats are unavailable (all zero), it falls back to the simpler
 // priority+weighted random algorithm.
 type MultiDimScorer struct {
-	Health  routing.HealthTracker      // optional; nil = no health signals
-	Stats   routing.RouteStatsStore    // optional; nil = priority+weighted fallback
-	Weights ScoreWeightsSource         // optional; nil = DefaultScoreWeights
+	Health  routing.HealthTracker   // optional; nil = no health signals
+	Stats   routing.RouteStatsStore // optional; nil = priority+weighted fallback
+	Weights ScoreWeightsSource      // optional; nil = DefaultScoreWeights
 }
 
 // Pick returns the best candidate using multi-dim scoring with softmax sampling,

@@ -3,17 +3,16 @@ package urm
 import (
 	"context"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	sharedjwks "xiaodou/unihub/shared/jwks"
 )
 
 // Claims JWT claims — mirrors the URM JWT structure (both user and service tokens)
@@ -28,17 +27,6 @@ type Claims struct {
 	ClientID        string `json:"client_id"`
 	Scope           string `json:"scope"`
 	jwt.RegisteredClaims
-}
-
-type jwksKey struct {
-	Kty string `json:"kty"`
-	Kid string `json:"kid"`
-	N   string `json:"n"`
-	E   string `json:"e"`
-}
-
-type jwksResponse struct {
-	Keys []jwksKey `json:"keys"`
 }
 
 // JWKSValidator fetches URM JWKS and validates JWT tokens locally
@@ -87,7 +75,7 @@ func (v *JWKSValidator) refresh(ctx context.Context) error {
 		return fmt.Errorf("jwks status %d", resp.StatusCode)
 	}
 
-	var jwks jwksResponse
+	var jwks sharedjwks.Set
 	if err := json.Unmarshal(body, &jwks); err != nil {
 		return fmt.Errorf("jwks parse: %w", err)
 	}
@@ -97,7 +85,7 @@ func (v *JWKSValidator) refresh(ctx context.Context) error {
 		if k.Kty != "RSA" {
 			continue
 		}
-		pub, err := parseRSAPublicKey(k.N, k.E)
+		pub, err := sharedjwks.ParseRSAPublicKey(k)
 		if err != nil {
 			continue
 		}
@@ -174,25 +162,4 @@ func (v *JWKSValidator) ValidateToken(ctx context.Context, tokenStr string) (*Cl
 	}
 
 	return claims, nil
-}
-
-func parseRSAPublicKey(nB64, eB64 string) (*rsa.PublicKey, error) {
-	nBytes, err := base64.RawURLEncoding.DecodeString(nB64)
-	if err != nil {
-		return nil, fmt.Errorf("decode N: %w", err)
-	}
-	eBytes, err := base64.RawURLEncoding.DecodeString(eB64)
-	if err != nil {
-		return nil, fmt.Errorf("decode E: %w", err)
-	}
-
-	e := new(big.Int).SetBytes(eBytes)
-	if !e.IsInt64() {
-		return nil, fmt.Errorf("E too large")
-	}
-
-	return &rsa.PublicKey{
-		N: new(big.Int).SetBytes(nBytes),
-		E: int(e.Int64()),
-	}, nil
 }

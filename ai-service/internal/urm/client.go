@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"xiaodou/uni-ai-api/internal/config"
+	"xiaodou/unihub/ai-service/internal/config"
 )
 
 type Client struct {

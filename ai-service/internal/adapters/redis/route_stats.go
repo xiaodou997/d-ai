@@ -9,7 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"xiaodou/uni-ai-api/internal/routing"
+	"xiaodou/unihub/ai-service/internal/routing"
 )
 
 const (

@@ -60,7 +60,7 @@ cd ai-customer && bun install && bun run dev  # http://localhost:13013
 
 ### 后端（ai-service）
 
-- **语言**：Go 1.25，module 名 `xiaodou/uni-ai-api`
+- **语言**：Go 1.25，module 名 `xiaodou/unihub/ai-service`
 - **框架**：Gin
 - **数据库**：PostgreSQL（pgx/v5，连接池 pgxpool）
 - **代码生成**：SQLC（`sqlc.yaml`）

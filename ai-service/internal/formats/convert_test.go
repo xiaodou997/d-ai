@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 func TestDetectClientProtocolImagesEdits(t *testing.T) {

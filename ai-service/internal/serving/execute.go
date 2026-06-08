@@ -17,13 +17,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"xiaodou/uni-ai-api/internal/audit"
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/egress"
-	"xiaodou/uni-ai-api/internal/formats"
-	"xiaodou/uni-ai-api/internal/formats/claude"
-	"xiaodou/uni-ai-api/internal/formats/gemini"
-	"xiaodou/uni-ai-api/internal/routing"
+	"xiaodou/unihub/ai-service/internal/audit"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/egress"
+	"xiaodou/unihub/ai-service/internal/formats"
+	"xiaodou/unihub/ai-service/internal/formats/claude"
+	"xiaodou/unihub/ai-service/internal/formats/gemini"
+	"xiaodou/unihub/ai-service/internal/routing"
 )
 
 // stickyWriter writes a sticky binding after a successful upstream call.

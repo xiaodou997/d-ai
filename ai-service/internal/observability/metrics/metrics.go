@@ -10,16 +10,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"xiaodou/uni-ai-api/internal/serving"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 // Gateway holds all Prometheus metrics for the AI serving pipeline.
 type Gateway struct {
-	requestsTotal    *prometheus.CounterVec
-	requestDuration  *prometheus.HistogramVec
-	tokenUsage       *prometheus.CounterVec
-	pipelineErrors   *prometheus.CounterVec
-	circuitBreaker   *prometheus.GaugeVec
+	requestsTotal   *prometheus.CounterVec
+	requestDuration *prometheus.HistogramVec
+	tokenUsage      *prometheus.CounterVec
+	pipelineErrors  *prometheus.CounterVec
+	circuitBreaker  *prometheus.GaugeVec
 }
 
 var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000}

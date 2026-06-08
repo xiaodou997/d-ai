@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // ResponseAccumulator rebuilds an assistant message from streaming SSE data
@@ -32,7 +32,7 @@ type ResponseAccumulator struct {
 }
 
 type respOutputState struct {
-	itemType  string // "message" | "function_call"
+	itemType  string                   // "message" | "function_call"
 	textParts map[int]*strings.Builder // content_index → accumulated text
 	partOrder []int
 	callID    string
@@ -126,9 +126,9 @@ func (a *ResponseAccumulator) addOpenAIChat(data []byte) {
 	var chunk struct {
 		Choices []struct {
 			Delta struct {
-				Role      string          `json:"role"`
-				Content   string          `json:"content"`
-				ToolCalls []oaiToolDelta  `json:"tool_calls"`
+				Role      string         `json:"role"`
+				Content   string         `json:"content"`
+				ToolCalls []oaiToolDelta `json:"tool_calls"`
 			} `json:"delta"`
 		} `json:"choices"`
 	}
@@ -208,9 +208,9 @@ func (a *ResponseAccumulator) buildOpenAIChat() json.RawMessage {
 	}
 
 	type msg struct {
-		Role      string      `json:"role"`
-		Content   *string     `json:"content"`
-		ToolCalls []toolCall  `json:"tool_calls,omitempty"`
+		Role      string     `json:"role"`
+		Content   *string    `json:"content"`
+		ToolCalls []toolCall `json:"tool_calls,omitempty"`
 	}
 	m := msg{Role: role, ToolCalls: tools}
 	if hasText {

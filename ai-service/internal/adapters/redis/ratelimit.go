@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 
-	dbgen "xiaodou/uni-ai-api/internal/db/gen"
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/serving"
+	dbgen "xiaodou/unihub/ai-service/internal/db/gen"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 // RateLimiter implements serving.RateLimiter.

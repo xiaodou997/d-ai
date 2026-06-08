@@ -16,6 +16,14 @@ type Config struct {
 	Security SecurityConfig `mapstructure:"security"`
 	Log      LogConfig      `mapstructure:"log"`
 	Serving  ServingConfig  `mapstructure:"serving"`
+	Pricing  PricingConfig  `mapstructure:"pricing"`
+}
+
+// PricingConfig holds price-book / billing tunables.
+type PricingConfig struct {
+	// LiteLLMURL is the source for the "import from LiteLLM" admin action.
+	// Empty falls back to pricebook.DefaultLiteLLMURL.
+	LiteLLMURL string `mapstructure:"litellm_url"`
 }
 
 // ServingConfig holds request-execution-layer tuning.
@@ -121,23 +129,24 @@ func Load() (*Config, error) {
 
 func bindEnvs(v *viper.Viper) {
 	envBindings := map[string]string{
-		"AI_APP_ENV":                "app.env",
-		"AI_SERVER_ADDR":            "server.addr",
-		"AI_DATABASE_URL":           "postgres.dsn",
-		"AI_DB_MAX_CONNS":           "postgres.max_conns",
-		"AI_DB_MIN_CONNS":           "postgres.min_conns",
-		"AI_DB_MAX_CONN_LIFETIME":   "postgres.max_conn_lifetime",
-		"AI_REDIS_ADDR":             "redis.addr",
-		"AI_REDIS_PASSWORD":         "redis.password",
-		"AI_URM_BASE_URL":           "urm.base_url",
-		"AI_URM_CLIENT_ID":          "urm.client_id",
-		"AI_URM_DISPLAY_NAME":       "urm.display_name",
-		"AI_URM_DESCRIPTION":        "urm.description",
-		"AI_URM_TIMEOUT":            "urm.timeout",
-		"AI_PROVIDER_KEY_MASTER":    "security.provider_key_master",
-		"AI_LOG_LEVEL":              "log.level",
-		"AI_LOG_FILE":               "log.file",
-		"AI_LOG_REDACT":             "log.redact",
+		"AI_APP_ENV":              "app.env",
+		"AI_SERVER_ADDR":          "server.addr",
+		"AI_DATABASE_URL":         "postgres.dsn",
+		"AI_DB_MAX_CONNS":         "postgres.max_conns",
+		"AI_DB_MIN_CONNS":         "postgres.min_conns",
+		"AI_DB_MAX_CONN_LIFETIME": "postgres.max_conn_lifetime",
+		"AI_REDIS_ADDR":           "redis.addr",
+		"AI_REDIS_PASSWORD":       "redis.password",
+		"AI_URM_BASE_URL":         "urm.base_url",
+		"AI_URM_CLIENT_ID":        "urm.client_id",
+		"AI_URM_DISPLAY_NAME":     "urm.display_name",
+		"AI_URM_DESCRIPTION":      "urm.description",
+		"AI_URM_TIMEOUT":          "urm.timeout",
+		"AI_PROVIDER_KEY_MASTER":  "security.provider_key_master",
+		"AI_LOG_LEVEL":            "log.level",
+		"AI_LOG_FILE":             "log.file",
+		"AI_LOG_REDACT":           "log.redact",
+		"AI_PRICING_LITELLM_URL":  "pricing.litellm_url",
 	}
 	for env, key := range envBindings {
 		_ = v.BindEnv(key, env)

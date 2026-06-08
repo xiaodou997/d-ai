@@ -22,8 +22,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/urm"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/urm"
 )
 
 // Key identifies one ledger row (one aggregation account).

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 func TestSanitizeJSON_OpenAIResponsesNested(t *testing.T) {

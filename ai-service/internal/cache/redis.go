@@ -6,7 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"xiaodou/uni-ai-api/internal/config"
+	"xiaodou/unihub/ai-service/internal/config"
 )
 
 func Open(ctx context.Context, cfg config.RedisConfig) (*redis.Client, error) {

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // MediaBlob is a single media item extracted from a request/response payload.

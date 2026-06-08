@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/ledger"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/ledger"
 )
 
 // LedgerStep is a pipeline Finalizer that accrues the resolved per-request

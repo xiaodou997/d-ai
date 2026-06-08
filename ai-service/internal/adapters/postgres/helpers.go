@@ -5,9 +5,66 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// numericToFloat converts a pgtype.Numeric to float64 (0 for NULL/invalid).
+// Used by the pricing layer where NUMERIC columns hold USD prices/multipliers.
+func numericToFloat(n pgtype.Numeric) float64 {
+	if !n.Valid {
+		return 0
+	}
+	f, err := n.Float64Value()
+	if err != nil || !f.Valid {
+		return 0
+	}
+	return f.Float64
+}
+
+// numericToFloatPtr converts a pgtype.Numeric to *float64 (nil for NULL/invalid).
+// Used where a NULL multiplier means "inherit / unset".
+func numericToFloatPtr(n pgtype.Numeric) *float64 {
+	if !n.Valid {
+		return nil
+	}
+	f, err := n.Float64Value()
+	if err != nil || !f.Valid {
+		return nil
+	}
+	v := f.Float64
+	return &v
+}
+
+// floatPtrToNumeric converts a *float64 to pgtype.Numeric (NULL when nil).
+func floatPtrToNumeric(v *float64) pgtype.Numeric {
+	if v == nil {
+		return pgtype.Numeric{}
+	}
+	return floatToNumeric(*v)
+}
+
+// nullableUUID parses an optional UUID string into pgtype.UUID; "" → NULL.
+func nullableUUID(s string) pgtype.UUID {
+	if s == "" {
+		return pgtype.UUID{}
+	}
+	u, err := akUUID(s)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return u
+}
+
+// floatToNumeric converts a float64 to pgtype.Numeric via its decimal string
+// form ('f' format never uses exponent, which pgtype.Numeric.Scan rejects).
+// Postgres coerces the value to each column's declared scale on write.
+func floatToNumeric(f float64) pgtype.Numeric {
+	var n pgtype.Numeric
+	_ = n.Scan(strconv.FormatFloat(f, 'f', -1, 64))
+	return n
+}
 
 // hashAPIKey returns the hex-encoded SHA-256 of the raw API key token.
 // This must match the hash stored in ai_api_keys.key_hash.

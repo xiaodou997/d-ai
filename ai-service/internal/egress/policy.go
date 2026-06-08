@@ -3,7 +3,7 @@ package egress
 import (
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // Policy describes the public contract for one runtime response. It is derived

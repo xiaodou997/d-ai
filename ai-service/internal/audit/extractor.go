@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // messageKey returns the JSON field that carries conversation messages for

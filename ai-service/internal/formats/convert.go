@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // DetectClientProtocol returns the upstream protocol that matches the client's

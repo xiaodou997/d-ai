@@ -6,6 +6,97 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================================================
+-- 定价体系（Price Book 统一定价）
+-- 一套 USD 价格表，上游成本与对外售价共用同一目录；各处引用时设单倍率。
+-- 详见 docs/PRICING_REFACTOR_PLAN.md。
+-- 注意：定义在所有引用方（endpoints / deployments）之前，因为它们的 price_book_id 外键引用本表。
+-- ============================================================================
+
+-- 价格表：USD 目录。可手建，也可从 LiteLLM JSON 自动填充。
+CREATE TABLE IF NOT EXISTS ai_price_books (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT        NOT NULL UNIQUE,        -- "标准价" / "中转便宜价"
+  description TEXT        NOT NULL DEFAULT '',
+  status      TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 价格表条目：每 (price_book, model_code) 一行。
+-- 单位约定：所有 *_per_token 为「USD / token」（与 LiteLLM 原生 input_cost_per_token 一致）。
+--   image_prices/video_prices JSON 内 price 为 USD（每图 / 每秒）。
+--   audio_tts_per_char 为 USD/字符，audio_stt_per_minute 为 USD/分钟。
+-- 0 值语义：cache_write/cache_read 为 0 → 按 input 计；reasoning 为 0 → 按 output 计。
+-- model_code 不外键 ai_models：成本价格表可包含未对外转售的上游模型。
+-- manually_edited=true 时 LiteLLM 导入「仅填空」会跳过该条目，不覆盖手改价。
+CREATE TABLE IF NOT EXISTS ai_price_book_entries (
+  id                    UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+  price_book_id         UUID           NOT NULL REFERENCES ai_price_books(id) ON DELETE CASCADE,
+  model_code            TEXT           NOT NULL,
+  capability_type       TEXT           NOT NULL DEFAULT 'chat'
+                        CHECK (capability_type IN ('chat', 'image', 'video', 'embedding', 'audio_tts', 'audio_stt', 'rerank')),
+  input_per_token       NUMERIC(20,12) NOT NULL DEFAULT 0,
+  output_per_token      NUMERIC(20,12) NOT NULL DEFAULT 0,
+  cache_write_per_token NUMERIC(20,12) NOT NULL DEFAULT 0,
+  cache_read_per_token  NUMERIC(20,12) NOT NULL DEFAULT 0,
+  reasoning_per_token   NUMERIC(20,12) NOT NULL DEFAULT 0,
+  image_prices          JSONB          NOT NULL DEFAULT '[]',   -- [{"resolution":"1024x1024","price":0.04}]
+  video_prices          JSONB          NOT NULL DEFAULT '[]',   -- [{"resolution":"720p","price":0.05}]
+  audio_tts_per_char    NUMERIC(20,12) NOT NULL DEFAULT 0,
+  audio_stt_per_minute  NUMERIC(20,12) NOT NULL DEFAULT 0,
+  source                TEXT           NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'litellm')),
+  manually_edited       BOOLEAN        NOT NULL DEFAULT false,
+  created_at            TIMESTAMPTZ    NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ    NOT NULL DEFAULT now(),
+  UNIQUE (price_book_id, model_code),
+  CONSTRAINT ai_price_book_entries_nonnegative CHECK (
+    input_per_token >= 0 AND output_per_token >= 0
+    AND cache_write_per_token >= 0 AND cache_read_per_token >= 0 AND reasoning_per_token >= 0
+    AND audio_tts_per_char >= 0 AND audio_stt_per_minute >= 0
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_price_book_entries_book  ON ai_price_book_entries (price_book_id);
+CREATE INDEX IF NOT EXISTS idx_ai_price_book_entries_model ON ai_price_book_entries (price_book_id, model_code);
+
+-- 全局设置：key-value。当前用途：USD→积分汇率 credits_per_usd（默认 7，可动态调）。
+CREATE TABLE IF NOT EXISTS ai_settings (
+  key        TEXT        PRIMARY KEY,
+  value      JSONB       NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO ai_settings (key, value) VALUES ('credits_per_usd', '7'::jsonb)
+  ON CONFLICT (key) DO NOTHING;
+
+-- 平台→租户售价绑定（一租户一倍率，覆盖该价格表所有模型）。
+-- 租户售价(积分/token) = entry × sell_multiplier × credits_per_usd。
+-- 缺绑定或缺条目 → 拒绝请求（fail-closed）。
+-- cache_billing_enabled=false（默认）→ 缓存 token 按 input 价计。
+CREATE TABLE IF NOT EXISTS ai_tenant_sell_bindings (
+  id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id             TEXT          NOT NULL UNIQUE,
+  price_book_id         UUID          NOT NULL REFERENCES ai_price_books(id),
+  sell_multiplier       NUMERIC(10,4) NOT NULL DEFAULT 1 CHECK (sell_multiplier >= 0),
+  cache_billing_enabled BOOLEAN       NOT NULL DEFAULT false,
+  created_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+
+-- 租户→用户售价绑定（级联：基准=平台给该租户的售价，再×user_multiplier）。
+-- 用户售价(积分/token) = entry × sell_multiplier × user_multiplier × credits_per_usd。
+-- 租户不另选价格表，跟随平台为其选定的价格表。
+CREATE TABLE IF NOT EXISTS ai_user_sell_bindings (
+  id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id             TEXT          NOT NULL UNIQUE,
+  user_multiplier       NUMERIC(10,4) NOT NULL DEFAULT 1 CHECK (user_multiplier >= 0),
+  cache_billing_enabled BOOLEAN       NOT NULL DEFAULT false,
+  created_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+
+
+-- ============================================================================
 -- AI API Keys
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS ai_api_keys (
@@ -66,6 +157,10 @@ CREATE TABLE IF NOT EXISTS ai_provider_endpoints (
   weight             INTEGER     NOT NULL DEFAULT 100 CHECK (weight >= 0),
   timeout_ms         INTEGER     NOT NULL DEFAULT 30000 CHECK (timeout_ms > 0),
   default_protocol   TEXT        NOT NULL DEFAULT 'openai_compatible' CHECK (default_protocol IN ('openai_compatible', 'anthropic', 'gemini')),
+  -- 账户级上游成本绑定：该账户下所有 deployment 默认继承此价格表/倍率。
+  -- deployment 可在自身上覆盖（见 ai_upstream_deployments）。NULL = 未绑定。
+  price_book_id      UUID        REFERENCES ai_price_books(id),
+  cost_multiplier    NUMERIC(10,4) CHECK (cost_multiplier IS NULL OR cost_multiplier >= 0),
   status             TEXT        NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -148,7 +243,11 @@ CREATE TABLE IF NOT EXISTS ai_upstream_deployments (
   upstream_protocol    TEXT        NOT NULL DEFAULT 'openai_chat',
   request_path         TEXT,
   upstream_parameters  JSONB       NOT NULL DEFAULT '{}',
-  pricing              JSONB       NOT NULL DEFAULT '{}',
+  -- 上游成本绑定（覆盖层）：留空则继承所属 endpoint 的绑定。
+  -- 有效成本 = entry(COALESCE(此处, endpoint) price_book, upstream_model) × COALESCE(此处, endpoint, 1) 倍率。
+  -- 二者最终都为 NULL（含 endpoint）或条目缺失 → 成本记 0 + 告警（不阻断请求）。
+  price_book_id        UUID        REFERENCES ai_price_books(id),
+  cost_multiplier      NUMERIC(10,4) CHECK (cost_multiplier IS NULL OR cost_multiplier >= 0),
   health_status        TEXT        NOT NULL DEFAULT 'unknown',
   last_health_check_at TIMESTAMPTZ,
   last_health_error    TEXT,
@@ -273,102 +372,6 @@ CREATE TABLE IF NOT EXISTS ai_console_messages (
 
 CREATE INDEX IF NOT EXISTS idx_ai_console_messages_session
   ON ai_console_messages (session_id, created_at ASC);
-
--- ============================================================================
--- AI Model Prices (平台对外售价)
--- cache_write / cache_read / reasoning 价格列预留：默认 0 表示按 input_price 计费。
--- 盈利点：provider 对 cache_read 打折，平台按 input 原价向客户收取。
---
--- 单位约定（自 2026-05 起）：所有 *_price_per_1m 列的单位是「微积分 / 1M token」
--- (micro-credits per 1M tokens)。1 积分 = 10000 微积分 = 1 分人民币。
--- 例：input_price_per_1m = 1_000_000 表示 100 积分 / 1M token (= 1 元 / 1M token)。
--- image_prices / video_prices JSON 中的 price 字段同样是微积分。
--- audio_*_price_* 列同样使用微积分单位。
--- ============================================================================
-CREATE TABLE IF NOT EXISTS ai_model_prices (
-  id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id                     UUID        NOT NULL UNIQUE,
-  input_price_per_1m           BIGINT      NOT NULL DEFAULT 0,
-  output_price_per_1m          BIGINT      NOT NULL DEFAULT 0,
-  cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
-  cache_read_price_per_1m      BIGINT      NOT NULL DEFAULT 0,
-  reasoning_price_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  image_prices                 JSONB       NOT NULL DEFAULT '[]',
-  video_prices                 JSONB       NOT NULL DEFAULT '[]',
-  audio_tts_price_per_1m_chars BIGINT      NOT NULL DEFAULT 0,
-  audio_stt_price_per_minute   BIGINT      NOT NULL DEFAULT 0,
-  created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT ai_model_prices_nonnegative CHECK (
-    input_price_per_1m >= 0 AND output_price_per_1m >= 0
-    AND cache_write_price_per_1m >= 0 AND cache_read_price_per_1m >= 0
-    AND reasoning_price_per_1m >= 0
-    AND audio_tts_price_per_1m_chars >= 0 AND audio_stt_price_per_minute >= 0
-  )
-);
-
--- ============================================================================
--- AI Tenant Model Price Overrides (平台给租户的特殊定价)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS ai_tenant_model_price_overrides (
-  id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id                    TEXT        NOT NULL,
-  model_id                     UUID        NOT NULL,
-  input_price_per_1m           BIGINT      NOT NULL DEFAULT 0,
-  output_price_per_1m          BIGINT      NOT NULL DEFAULT 0,
-  cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
-  cache_read_price_per_1m      BIGINT      NOT NULL DEFAULT 0,
-  reasoning_price_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  image_prices                 JSONB       NOT NULL DEFAULT '[]',
-  video_prices                 JSONB       NOT NULL DEFAULT '[]',
-  audio_tts_price_per_1m_chars BIGINT      NOT NULL DEFAULT 0,
-  audio_stt_price_per_minute   BIGINT      NOT NULL DEFAULT 0,
-  created_by                   TEXT,
-  created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (tenant_id, model_id),
-  CONSTRAINT ai_tenant_model_price_overrides_nonnegative CHECK (
-    input_price_per_1m >= 0 AND output_price_per_1m >= 0
-    AND cache_write_price_per_1m >= 0 AND cache_read_price_per_1m >= 0
-    AND reasoning_price_per_1m >= 0
-    AND audio_tts_price_per_1m_chars >= 0 AND audio_stt_price_per_minute >= 0
-  )
-);
-
-CREATE INDEX IF NOT EXISTS idx_ai_tenant_model_price_overrides_lookup
-  ON ai_tenant_model_price_overrides (tenant_id, model_id);
-
--- ============================================================================
--- AI Tenant User Prices (租户对其用户的定价)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS ai_tenant_user_prices (
-  id                           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id                    TEXT        NOT NULL,
-  model_id                     UUID        NOT NULL,
-  input_price_per_1m           BIGINT      NOT NULL DEFAULT 0,
-  output_price_per_1m          BIGINT      NOT NULL DEFAULT 0,
-  cache_write_price_per_1m     BIGINT      NOT NULL DEFAULT 0,
-  cache_read_price_per_1m      BIGINT      NOT NULL DEFAULT 0,
-  reasoning_price_per_1m       BIGINT      NOT NULL DEFAULT 0,
-  image_prices                 JSONB       NOT NULL DEFAULT '[]',
-  video_prices                 JSONB       NOT NULL DEFAULT '[]',
-  audio_tts_price_per_1m_chars BIGINT      NOT NULL DEFAULT 0,
-  audio_stt_price_per_minute   BIGINT      NOT NULL DEFAULT 0,
-  created_by                   TEXT,
-  created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (tenant_id, model_id),
-  CONSTRAINT ai_tenant_user_prices_nonnegative CHECK (
-    input_price_per_1m >= 0 AND output_price_per_1m >= 0
-    AND cache_write_price_per_1m >= 0 AND cache_read_price_per_1m >= 0
-    AND reasoning_price_per_1m >= 0
-    AND audio_tts_price_per_1m_chars >= 0
-    AND audio_stt_price_per_minute >= 0
-  )
-);
-
-CREATE INDEX IF NOT EXISTS idx_ai_tenant_user_prices_lookup
-  ON ai_tenant_user_prices (tenant_id, model_id);
 
 -- ============================================================================
 -- AI Tenant Model Grants (租户级模型授权)

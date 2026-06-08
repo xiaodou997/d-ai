@@ -105,12 +105,12 @@ func TestHealthTracker_ExponentialBackoff(t *testing.T) {
 	tr := newFastTracker(1, base)
 
 	openAndProbe := func() {
-		tr.RecordFailure("d", TargetDeployment)                         // threshold=1 → OPEN
-		for tr.State("d") == StateOpen && tr.IsBlocked("d") {          // wait for probe window
+		tr.RecordFailure("d", TargetDeployment)               // threshold=1 → OPEN
+		for tr.State("d") == StateOpen && tr.IsBlocked("d") { // wait for probe window
 			time.Sleep(base)
 		}
-		tr.IsBlocked("d")                                              // claim probe
-		tr.RecordFailure("d", TargetDeployment)                        // probe fails → OPEN with backoff
+		tr.IsBlocked("d")                       // claim probe
+		tr.RecordFailure("d", TargetDeployment) // probe fails → OPEN with backoff
 	}
 
 	// First open: openCount=1, next wait=base (10ms)

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	dbgen "xiaodou/uni-ai-api/internal/db/gen"
-	"xiaodou/uni-ai-api/internal/serving"
+	dbgen "xiaodou/unihub/ai-service/internal/db/gen"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 // QuotaReserver implements serving.QuotaReserver using atomic DB updates.

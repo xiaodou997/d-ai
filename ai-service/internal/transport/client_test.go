@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/serving"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 func TestResolveURLGeminiAppendsKey(t *testing.T) {

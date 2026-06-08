@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 func waitCancel(t *testing.T, dc *deadlineController, want error, within time.Duration) {

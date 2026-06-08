@@ -1,6 +1,6 @@
 package ledger
 
-import "xiaodou/uni-ai-api/internal/domain"
+import "xiaodou/unihub/ai-service/internal/domain"
 
 // settleAction is the pure-math decision of "given the current ledger state,
 // what should the next settle round push to URM and what leftover should we

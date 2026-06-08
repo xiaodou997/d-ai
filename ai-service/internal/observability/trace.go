@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"xiaodou/uni-ai-api/internal/serving"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 // TraceAttempt is one upstream call in the X-Route-Trace payload.

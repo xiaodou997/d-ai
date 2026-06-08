@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // SanitizeJSON rewrites user-visible JSON according to policy. It is safe to

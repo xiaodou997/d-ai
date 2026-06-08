@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"xiaodou/uni-ai-api/internal/serving"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 const (

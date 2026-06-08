@@ -89,9 +89,11 @@ INSERT INTO ai_provider_endpoints (
   weight,
   timeout_ms,
   default_protocol,
+  price_book_id,
+  cost_multiplier,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING
   id,
@@ -102,6 +104,8 @@ RETURNING
   weight,
   timeout_ms,
   default_protocol,
+  price_book_id,
+  cost_multiplier,
   status,
   created_at,
   updated_at;
@@ -116,6 +120,8 @@ SELECT
   weight,
   timeout_ms,
   default_protocol,
+  price_book_id,
+  cost_multiplier,
   status,
   created_at,
   updated_at
@@ -134,6 +140,8 @@ SELECT
   weight,
   timeout_ms,
   default_protocol,
+  price_book_id,
+  cost_multiplier,
   status,
   created_at,
   updated_at
@@ -156,6 +164,8 @@ RETURNING
   weight,
   timeout_ms,
   default_protocol,
+  price_book_id,
+  cost_multiplier,
   status,
   created_at,
   updated_at;
@@ -169,7 +179,9 @@ SET name = $3,
     weight = $7,
     timeout_ms = $8,
     default_protocol = $9,
-    status = $10,
+    price_book_id = $10,
+    cost_multiplier = $11,
+    status = $12,
     updated_at = now()
 WHERE provider_id = $1
   AND id = $2
@@ -182,6 +194,8 @@ RETURNING
   weight,
   timeout_ms,
   default_protocol,
+  price_book_id,
+  cost_multiplier,
   status,
   created_at,
   updated_at;
@@ -198,11 +212,12 @@ INSERT INTO ai_upstream_deployments (
   upstream_protocol,
   request_path,
   upstream_parameters,
-  pricing,
+  price_book_id,
+  cost_multiplier,
   health_status,
   status
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, 'unknown', $8
+  $1, $2, $3, $4, $5, $6, $7, $8, 'unknown', $9
 )
 RETURNING
   id,
@@ -213,7 +228,8 @@ RETURNING
   upstream_protocol,
   request_path,
   upstream_parameters,
-  pricing,
+  price_book_id,
+  cost_multiplier,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -240,7 +256,8 @@ RETURNING
   upstream_protocol,
   request_path,
   upstream_parameters,
-  pricing,
+  price_book_id,
+  cost_multiplier,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -258,7 +275,8 @@ SELECT
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
-  ud.pricing,
+  ud.price_book_id,
+  ud.cost_multiplier,
   ud.health_status,
   ud.last_health_check_at,
   ud.last_health_error,
@@ -291,7 +309,8 @@ SELECT
   ud.upstream_protocol,
   ud.request_path,
   ud.upstream_parameters,
-  ud.pricing,
+  ud.price_book_id,
+  ud.cost_multiplier,
   ud.health_status,
   ud.last_health_check_at,
   ud.last_health_error,
@@ -329,7 +348,8 @@ RETURNING
   upstream_protocol,
   request_path,
   upstream_parameters,
-  pricing,
+  price_book_id,
+  cost_multiplier,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -344,8 +364,9 @@ SET upstream_model = $2,
     upstream_protocol = $4,
     request_path = $5,
     upstream_parameters = $6,
-    pricing = $7,
-    status = $8,
+    price_book_id = $7,
+    cost_multiplier = $8,
+    status = $9,
     updated_at = now()
 WHERE id = $1
 RETURNING
@@ -357,7 +378,8 @@ RETURNING
   upstream_protocol,
   request_path,
   upstream_parameters,
-  pricing,
+  price_book_id,
+  cost_multiplier,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -381,7 +403,8 @@ RETURNING
   upstream_protocol,
   request_path,
   upstream_parameters,
-  pricing,
+  price_book_id,
+  cost_multiplier,
   health_status,
   last_health_check_at,
   last_health_error,
@@ -505,57 +528,6 @@ RETURNING
 
 -- ============================================================================
 -- Model Price CRUD (1:1 with model, upsert pattern)
--- ============================================================================
-
--- name: GetModelPrice :one
-SELECT
-  id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_at,
-  updated_at
-FROM ai_model_prices
-WHERE model_id = $1;
-
--- name: UpsertModelPrice :one
-INSERT INTO ai_model_prices (
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
-)
-ON CONFLICT (model_id) DO UPDATE SET
-  input_price_per_1m           = EXCLUDED.input_price_per_1m,
-  output_price_per_1m          = EXCLUDED.output_price_per_1m,
-  image_prices            = EXCLUDED.image_prices,
-  video_prices       = EXCLUDED.video_prices,
-  audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
-  updated_at                   = now()
-RETURNING
-  id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_at,
-  updated_at;
-
--- ============================================================================
--- Model Route CRUD
 -- ============================================================================
 
 -- name: CreateModelRoute :one
@@ -684,175 +656,6 @@ RETURNING
 
 -- ============================================================================
 -- Tenant Model Price Overrides CRUD
--- ============================================================================
-
--- name: GetTenantModelPriceOverride :one
-SELECT
-  id,
-  tenant_id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_by,
-  created_at,
-  updated_at
-FROM ai_tenant_model_price_overrides
-WHERE tenant_id = $1
-  AND model_id = $2;
-
--- name: UpsertTenantModelPriceOverride :one
-INSERT INTO ai_tenant_model_price_overrides (
-  tenant_id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_by
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9
-)
-ON CONFLICT (tenant_id, model_id) DO UPDATE SET
-  input_price_per_1m           = EXCLUDED.input_price_per_1m,
-  output_price_per_1m          = EXCLUDED.output_price_per_1m,
-  image_prices            = EXCLUDED.image_prices,
-  video_prices       = EXCLUDED.video_prices,
-  audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
-  updated_at                   = now()
-RETURNING
-  id,
-  tenant_id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_by,
-  created_at,
-  updated_at;
-
--- name: DeleteTenantModelPriceOverride :exec
-DELETE FROM ai_tenant_model_price_overrides
-WHERE tenant_id = $1
-  AND model_id = $2;
-
--- name: ListTenantModelPriceOverrides :many
-SELECT
-  o.id,
-  o.tenant_id,
-  o.model_id,
-  o.input_price_per_1m,
-  o.output_price_per_1m,
-  o.image_prices,
-  o.video_prices,
-  o.audio_tts_price_per_1m_chars,
-  o.audio_stt_price_per_minute,
-  o.created_by,
-  o.created_at,
-  o.updated_at,
-  m.model_code,
-  m.capability_type
-FROM ai_tenant_model_price_overrides o
-JOIN ai_models m ON m.id = o.model_id
-WHERE o.tenant_id = $1
-ORDER BY m.model_code ASC;
-
--- ============================================================================
--- Tenant User Prices CRUD (租户售价 - 租户对用户的定价)
--- ============================================================================
-
--- name: GetTenantUserPrice :one
-SELECT
-  id,
-  tenant_id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_by,
-  created_at,
-  updated_at
-FROM ai_tenant_user_prices
-WHERE tenant_id = $1
-  AND model_id = $2;
-
--- name: UpsertTenantUserPrice :one
-INSERT INTO ai_tenant_user_prices (
-  tenant_id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_by
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9
-)
-ON CONFLICT (tenant_id, model_id) DO UPDATE SET
-  input_price_per_1m           = EXCLUDED.input_price_per_1m,
-  output_price_per_1m          = EXCLUDED.output_price_per_1m,
-  image_prices            = EXCLUDED.image_prices,
-  video_prices       = EXCLUDED.video_prices,
-  audio_tts_price_per_1m_chars = EXCLUDED.audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute   = EXCLUDED.audio_stt_price_per_minute,
-  updated_at                   = now()
-RETURNING
-  id,
-  tenant_id,
-  model_id,
-  input_price_per_1m,
-  output_price_per_1m,
-  image_prices,
-  video_prices,
-  audio_tts_price_per_1m_chars,
-  audio_stt_price_per_minute,
-  created_by,
-  created_at,
-  updated_at;
-
--- name: DeleteTenantUserPrice :exec
-DELETE FROM ai_tenant_user_prices
-WHERE tenant_id = $1
-  AND model_id = $2;
-
--- name: ListTenantUserPrices :many
-SELECT
-  p.id,
-  p.tenant_id,
-  p.model_id,
-  p.input_price_per_1m,
-  p.output_price_per_1m,
-  p.image_prices,
-  p.video_prices,
-  p.audio_tts_price_per_1m_chars,
-  p.audio_stt_price_per_minute,
-  p.created_by,
-  p.created_at,
-  p.updated_at,
-  m.model_code,
-  m.capability_type
-FROM ai_tenant_user_prices p
-JOIN ai_models m ON m.id = p.model_id
-WHERE p.tenant_id = $1
-ORDER BY m.model_code ASC;
-
-
--- ============================================================================
--- Usage Logs Queries
 -- ============================================================================
 
 -- name: ListUsageLogs :many
@@ -1355,7 +1158,8 @@ LIMIT $1;
 -- ============================================================================
 
 -- name: ListUserAvailableModels :many
--- 用户可用的模型 = 租户授权的模型 + 三级定价 fallback（用户售价 → 租户折扣价 → 平台公价）
+-- 用户可用的模型 = 租户授权的模型。售价由 Price Book + 租户售价绑定 统一提供，
+-- 不再随模型返回（见 /tenants/me/effective-prices、/users/me/effective-prices）。
 SELECT
   m.id,
   m.model_code,
@@ -1365,18 +1169,9 @@ SELECT
   m.max_output_tokens,
   m.status,
   tg.status AS grant_status,
-  tg.created_at AS granted_at,
-  COALESCE(up.input_price_per_1m, tp.input_price_per_1m, bp.input_price_per_1m, 0) AS input_price_per_1m,
-  COALESCE(up.output_price_per_1m, tp.output_price_per_1m, bp.output_price_per_1m, 0) AS output_price_per_1m,
-  COALESCE(up.image_prices, tp.image_prices, bp.image_prices) AS image_prices,
-  COALESCE(up.video_prices, tp.video_prices, bp.video_prices) AS video_prices,
-  COALESCE(up.audio_tts_price_per_1m_chars, tp.audio_tts_price_per_1m_chars, bp.audio_tts_price_per_1m_chars, 0) AS audio_tts_price_per_1m_chars,
-  COALESCE(up.audio_stt_price_per_minute, tp.audio_stt_price_per_minute, bp.audio_stt_price_per_minute, 0) AS audio_stt_price_per_minute
+  tg.created_at AS granted_at
 FROM ai_models m
 JOIN ai_tenant_model_grants tg ON tg.model_id = m.id
-LEFT JOIN ai_tenant_user_prices up ON up.tenant_id = tg.tenant_id AND up.model_id = m.id
-LEFT JOIN ai_tenant_model_price_overrides tp ON tp.tenant_id = tg.tenant_id AND tp.model_id = m.id
-LEFT JOIN ai_model_prices bp ON bp.model_id = m.id
 WHERE tg.tenant_id = $1
   AND tg.status = 'active'
   AND m.status = 'active'

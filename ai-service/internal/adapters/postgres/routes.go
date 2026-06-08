@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	dbgen "xiaodou/uni-ai-api/internal/db/gen"
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/routing"
-	"xiaodou/uni-ai-api/internal/secret"
-	"xiaodou/uni-ai-api/internal/serving"
+	dbgen "xiaodou/unihub/ai-service/internal/db/gen"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/routing"
+	"xiaodou/unihub/ai-service/internal/secret"
+	"xiaodou/unihub/ai-service/internal/serving"
 )
 
 // oauthFixedTypesForProtocol maps a client_protocol to the set of
@@ -51,7 +51,8 @@ type routeRow struct {
 	UpstreamProtocol   *string
 	RequestPath        *string
 	UpstreamParameters []byte
-	Pricing            []byte
+	PriceBookID        *string
+	CostMultiplier     float64
 	HealthStatus       *string
 
 	// Endpoint fields — nil for pool deployments
@@ -99,7 +100,8 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		  ud.upstream_protocol,
 		  ud.request_path,
 		  ud.upstream_parameters,
-		  ud.pricing,
+		  COALESCE(ud.price_book_id, e.price_book_id)::text       AS price_book_id,
+		  COALESCE(ud.cost_multiplier, e.cost_multiplier, 1)      AS cost_multiplier,
 		  ud.health_status,
 		  e.id::text                  AS endpoint_id,
 		  e.base_url,
@@ -149,7 +151,7 @@ func (s *RouteSelector) listRoutesForModel(ctx context.Context, modelID pgtype.U
 		if err := pgRows.Scan(
 			&r.RouteID, &r.RoutePriority, &r.RouteWeight, &r.SupportsStream,
 			&r.DeploymentID, &r.UpstreamModel, &r.CapabilityType, &r.UpstreamProtocol,
-			&r.RequestPath, &r.UpstreamParameters, &r.Pricing, &r.HealthStatus,
+			&r.RequestPath, &r.UpstreamParameters, &r.PriceBookID, &r.CostMultiplier, &r.HealthStatus,
 			&r.EndpointID, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.EndpointWeight, &r.ProviderCode,
 			&r.PoolID, &r.FixedProviderType, &r.OAuthStrategy,
@@ -373,6 +375,11 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 	}
 	c.Timeouts = s.resolveTimeouts(row)
 
+	// Upstream cost binding (Price Book). Applies to both pool and deployment
+	// routes; provider cost is computed from the entry × cost_multiplier.
+	c.PriceBookID = row.strVal(row.PriceBookID)
+	c.CostMultiplier = row.CostMultiplier
+
 	if row.PoolID != nil {
 		// Pool-based route — cost is 0 (free/OAuth), scorer will use costCapFree.
 		c.CostPer1kTokens = 0
@@ -401,12 +408,6 @@ func (s *RouteSelector) buildCandidate(modelID string, row routeRow) *domain.Rou
 	c.ExtraHeaders = unmarshalStringMap(row.ExtraHeaders)
 	if len(row.UpstreamParameters) > 0 {
 		_ = json.Unmarshal(row.UpstreamParameters, &c.UpstreamParameters)
-	}
-	if len(row.Pricing) > 0 {
-		var p domain.Pricing
-		if err := json.Unmarshal(row.Pricing, &p); err == nil {
-			c.Pricing = &p
-		}
 	}
 	return c
 }

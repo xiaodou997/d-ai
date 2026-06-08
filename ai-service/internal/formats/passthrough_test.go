@@ -7,7 +7,7 @@ import (
 	"net/textproto"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 func TestRewriteModelNoOpWhenAlreadyMatches(t *testing.T) {

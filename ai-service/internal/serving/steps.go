@@ -10,9 +10,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"xiaodou/uni-ai-api/internal/audit"
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/routing"
+	"xiaodou/unihub/ai-service/internal/audit"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/routing"
 )
 
 // ============================================================================

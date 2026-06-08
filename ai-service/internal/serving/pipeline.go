@@ -21,7 +21,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // ============================================================================
@@ -109,12 +109,12 @@ type Request struct {
 	// a fresh HTTP error status — only an in-band (SSE) error frame. It must
 	// not be conflated with HTTPStatus, which normalizePipelineError also sets
 	// for audit logging on errors that never reached the wire.
-	ResponseCommitted    bool
-	UpstreamStatus       int
-	ErrorCode            string
-	ErrorMessage         string
-	LatencyMs            int
-	FirstTokenMs         int
+	ResponseCommitted bool
+	UpstreamStatus    int
+	ErrorCode         string
+	ErrorMessage      string
+	LatencyMs         int
+	FirstTokenMs      int
 
 	// Internal timestamps
 	StartedAt time.Time

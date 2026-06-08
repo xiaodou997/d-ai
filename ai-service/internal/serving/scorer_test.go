@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
-	"xiaodou/uni-ai-api/internal/routing"
+	"xiaodou/unihub/ai-service/internal/domain"
+	"xiaodou/unihub/ai-service/internal/routing"
 )
 
 // ─── pickPriorityWeighted ────────────────────────────────────────────────────
@@ -45,9 +45,9 @@ type stubStats struct{ latency float64 }
 func (s *stubStats) Stats(_ context.Context, _ string) routing.RouteStats {
 	return routing.RouteStats{EWMALatencyMs: s.latency}
 }
-func (s *stubStats) IncrInflight(_ context.Context, _ string)               {}
-func (s *stubStats) DecrInflight(_ context.Context, _ string)               {}
-func (s *stubStats) RecordLatency(_ context.Context, _ string, _ int)       {}
+func (s *stubStats) IncrInflight(_ context.Context, _ string)         {}
+func (s *stubStats) DecrInflight(_ context.Context, _ string)         {}
+func (s *stubStats) RecordLatency(_ context.Context, _ string, _ int) {}
 
 func TestMultiDimScorer_NoStatsFallsThroughToPriorityWeighted(t *testing.T) {
 	scorer := &MultiDimScorer{Stats: &stubStats{latency: 0}} // zero latency → no stats

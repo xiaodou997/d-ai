@@ -3,7 +3,7 @@ package postgres
 import (
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 // oauthFixedTypesForProtocol gates which OAuth credential pools are eligible

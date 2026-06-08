@@ -4,19 +4,19 @@ import (
 	"context"
 	"testing"
 
-	"xiaodou/uni-ai-api/internal/domain"
+	"xiaodou/unihub/ai-service/internal/domain"
 )
 
 func TestComputeSettleAction(t *testing.T) {
 	const C = domain.MicroCreditsPerCredit // 10000 micro = 1 credit
 
 	cases := []struct {
-		name                                  string
-		pendingTenant, pendingUser            int64
-		reuseT, reuseU                        int64
-		wantNoOp                              bool
-		wantTC, wantUC                        int64
-		wantLeftoverTenant, wantLeftoverUser  int64
+		name                                 string
+		pendingTenant, pendingUser           int64
+		reuseT, reuseU                       int64
+		wantNoOp                             bool
+		wantTC, wantUC                       int64
+		wantLeftoverTenant, wantLeftoverUser int64
 	}{
 		{
 			name:          "both sides below 1 credit → NoOp, leftover preserved",
@@ -61,7 +61,7 @@ func TestComputeSettleAction(t *testing.T) {
 			// window so URM dedups it.
 			name:          "reuse window — overrides current pending",
 			pendingTenant: 90000, pendingUser: 120000,
-			reuseT:        30000, reuseU: 50000,
+			reuseT: 30000, reuseU: 50000,
 			wantNoOp: false, wantTC: 3, wantUC: 5,
 			wantLeftoverTenant: 60000, wantLeftoverUser: 70000,
 		},

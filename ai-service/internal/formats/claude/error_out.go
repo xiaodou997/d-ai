@@ -5,12 +5,12 @@ import "encoding/json"
 // ErrorBody is the Anthropic-style error envelope returned to clients
 // hitting /v1/messages or /v1/messages/count_tokens.
 type ErrorBody struct {
-	Type  string     `json:"type"`  // always "error"
+	Type  string     `json:"type"` // always "error"
 	Error ErrorInner `json:"error"`
 }
 
 type ErrorInner struct {
-	Type    string `json:"type"`    // "invalid_request_error" | "authentication_error" | ...
+	Type    string `json:"type"` // "invalid_request_error" | "authentication_error" | ...
 	Message string `json:"message"`
 }
 
