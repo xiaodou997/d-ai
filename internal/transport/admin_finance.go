@@ -1,0 +1,389 @@
+package transport
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+
+	"xiaodou/dai/libs/go/httpx"
+	billingdomain "xiaodou/dai/internal/billing"
+	billingsvc "xiaodou/dai/internal/billing/service"
+)
+
+// ---- DTO ----
+
+type rechargeInput struct {
+	Body struct {
+		PackageType  int    `json:"packageType" doc:"1=租户充值 2=用户充值"`
+		UserID       string `json:"userId" required:"false"`
+		TenantID     string `json:"tenantId" required:"false"`
+		PaidAmount   int64  `json:"paidAmount" required:"false"`
+		CreditAmount int64  `json:"creditAmount" doc:"充值积分数"`
+		Note         string `json:"note" required:"false"`
+		PaymentRef   string `json:"paymentRef" required:"false"`
+		ExpireTime   *int64 `json:"expireTime" required:"false"`
+	}
+}
+
+type rechargeOutput struct {
+	Body struct {
+		OrderID          string  `json:"orderId"`
+		PackageID        string  `json:"packageId"`
+		TenantID         string  `json:"tenantId"`
+		UserID           string  `json:"userId"`
+		CreditAmount     int64   `json:"creditAmount"`
+		PaidAmount       int64   `json:"paidAmount"`
+		ClearedOverdraft float64 `json:"clearedOverdraft"`
+		PackageCredits   float64 `json:"packageCredits"`
+		OrderTime        int64   `json:"orderTime"`
+	}
+}
+
+type reverseRechargeInput struct {
+	OrderID string `path:"orderId"`
+	Body    struct {
+		Reason string `json:"reason"`
+	}
+}
+
+type reverseRechargeOutput struct {
+	Body struct {
+		Status          string  `json:"status"`
+		OrderID         string  `json:"orderId"`
+		PackageID       string  `json:"packageId"`
+		ReversedCredits float64 `json:"reversedCredits"`
+		OriginalCredits float64 `json:"originalCredits"`
+		LostCredits     float64 `json:"lostCredits"`
+		PackageStatus   string  `json:"packageStatus"`
+	}
+}
+
+type refundInput struct {
+	Body struct {
+		EventID string `json:"eventId"`
+		Reason  string `json:"reason" required:"false"`
+	}
+}
+
+type debtStatusInput struct {
+	OwnerType string `path:"owner_type" enum:"tenant,user"`
+	AccountID string `path:"id"`
+}
+
+type debtStatusOutput struct {
+	Body struct {
+		OwnerType            string `json:"owner_type"`
+		AccountID            string `json:"account_id"`
+		OutstandingDebtMicro int64  `json:"outstanding_debt_micro"`
+		ServiceState         string `json:"service_state" enum:"active,blocked_debt"`
+	}
+}
+
+type auditLogItem struct {
+	ID            int64    `json:"id"`
+	EventType     string   `json:"eventType"`
+	PrincipalType string   `json:"principalType"`
+	ClientID      string   `json:"clientId,omitempty"`
+	UserID        string   `json:"userId,omitempty"`
+	Scopes        []string `json:"scopes"`
+	Decision      string   `json:"decision"`
+	ReasonCode    string   `json:"reasonCode,omitempty"`
+	ReasonMessage string   `json:"reasonMessage,omitempty"`
+	CreatedAt     int64    `json:"createdAt"`
+}
+
+type auditLogsInput struct {
+	EventType     string `query:"eventType" required:"false"`
+	PrincipalType string `query:"principalType" required:"false"`
+	ClientID      string `query:"clientId" required:"false"`
+	UserID        string `query:"userId" required:"false"`
+	Decision      string `query:"decision" required:"false"`
+	Page          int    `query:"page" default:"1"`
+	Size          int    `query:"size" default:"20"`
+}
+
+type auditLogsOutput struct {
+	Body httpx.Page[auditLogItem]
+}
+
+func timePtrFromMillis(ms *int64) *time.Time {
+	if ms == nil {
+		return nil
+	}
+	t := time.UnixMilli(*ms).UTC()
+	return &t
+}
+
+func orderTypeFromPackageType(packageType int) (string, error) {
+	switch packageType {
+	case 1:
+		return billingdomain.OrderTypePlatformToTenant, nil
+	case 2:
+		return billingdomain.OrderTypeTenantToUser, nil
+	default:
+		return "", fmt.Errorf("invalid packageType: %d", packageType)
+	}
+}
+
+// registerAdminFinance 注册充值/撤销/退款/债务/审计日志端点。
+func registerAdminFinance(api huma.API, d Deps) {
+	h := newAdminHandlers(d)
+	ua := userAuth(api, d.JWT, d.Blacklist)
+	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
+	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	superAdmin := huma.Middlewares{ua, requireUserType(api, 1)}
+
+	huma.Register(api, huma.Operation{OperationID: "admin-recharge", Method: http.MethodPost, Path: "/api/v1/recharges",
+		Summary: "充值（租户/用户）", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant, DefaultStatus: http.StatusCreated}, h.recharge)
+	huma.Register(api, huma.Operation{OperationID: "admin-reverse-recharge", Method: http.MethodPost, Path: "/api/v1/recharges/{orderId}/reverse",
+		Summary: "撤销充值", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant}, h.reverseRecharge)
+	huma.Register(api, huma.Operation{OperationID: "admin-refund", Method: http.MethodPost, Path: "/api/v1/refunds",
+		Summary: "手动全额退款", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.refund)
+	huma.Register(api, huma.Operation{OperationID: "admin-get-debt", Method: http.MethodGet, Path: "/api/v2/admin/debts/{owner_type}/{id}",
+		Summary: "查询账户当前债务", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.getDebt)
+	huma.Register(api, huma.Operation{OperationID: "admin-auth-audit-logs", Method: http.MethodGet, Path: "/api/v1/auth-audit-logs",
+		Summary: "认证审计日志", Tags: []string{"admin-finance"}, Middlewares: superAdmin}, h.authAuditLogs)
+}
+
+func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*rechargeOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	userType := claims.UserType
+	loginTenantID := claims.TenantID
+
+	if userType == 3 && in.Body.PackageType != 2 {
+		return nil, httpx.ErrForbidden.WithDetail("租户用户只能进行用户充值")
+	}
+	orderType, err := orderTypeFromPackageType(in.Body.PackageType)
+	if err != nil {
+		return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+	}
+	expiresAt := timePtrFromMillis(in.Body.ExpireTime)
+
+	var tenantID, userID string
+	if orderType == billingdomain.OrderTypePlatformToTenant {
+		if userType != 1 && userType != 2 {
+			return nil, httpx.ErrForbidden.WithDetail("只有平台管理员才能进行租户充值")
+		}
+		tenantID = in.Body.TenantID
+		if tenantID == "" {
+			return nil, httpx.ErrBadRequest.WithDetail("租户充值时 tenantId 必填")
+		}
+		var exists int
+		if err := h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_tenants WHERE tenant_id = $1`, tenantID).Scan(&exists); err != nil || exists == 0 {
+			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
+		}
+	} else {
+		if in.Body.UserID == "" {
+			return nil, httpx.ErrBadRequest.WithDetail("用户充值时 userId 必填")
+		}
+		var userTenantID string
+		if err := h.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_users WHERE user_id = $1 AND status <> 'deleted'`, in.Body.UserID).Scan(&userTenantID); err != nil || userTenantID == "" {
+			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
+		}
+		if userType == 3 && loginTenantID != "" && loginTenantID != userTenantID {
+			return nil, httpx.ErrForbidden.WithDetail("只能为本租户用户充值")
+		}
+		tenantID = userTenantID
+		userID = in.Body.UserID
+	}
+
+	pkgSource := billingdomain.PackageSourceAdminRecharge
+	if orderType == billingdomain.OrderTypeTenantToUser {
+		pkgSource = billingdomain.PackageSourceTenantRecharge
+	}
+	creditMicro, err := billingdomain.CreditsToMicro(in.Body.CreditAmount)
+	if err != nil {
+		return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+	}
+
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer tx.Rollback(ctx)
+	if userID != "" {
+		var active bool
+		if err := tx.QueryRow(ctx, `
+			SELECT true FROM iam_users
+			WHERE user_id = $1 AND tenant_id = $2 AND status = 'active'
+			FOR UPDATE
+		`, userID, tenantID).Scan(&active); err != nil {
+			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或已删除")
+		}
+	}
+
+	grant, err := billingsvc.GrantCredits(ctx, tx, billingsvc.GrantParams{
+		OrderType:         orderType,
+		TenantID:          tenantID,
+		UserID:            userID,
+		CreditAmountMicro: creditMicro,
+		PaidAmount:        in.Body.PaidAmount,
+		PaymentRef:        in.Body.PaymentRef,
+		Note:              in.Body.Note,
+		OperatorID:        claims.UserID,
+		Source:            pkgSource,
+		ExpiresAt:         expiresAt,
+	})
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	out := &rechargeOutput{}
+	out.Body.OrderID = grant.OrderID
+	out.Body.PackageID = grant.PackageID
+	out.Body.TenantID = tenantID
+	out.Body.UserID = userID
+	out.Body.CreditAmount = in.Body.CreditAmount
+	out.Body.PaidAmount = in.Body.PaidAmount
+	out.Body.ClearedOverdraft = billingdomain.MicroToCredits(grant.ClearedDebtMicro)
+	out.Body.PackageCredits = billingdomain.MicroToCredits(grant.PackageMicro)
+	out.Body.OrderTime = millisFromTime(grant.OrderTime)
+	return out, nil
+}
+
+func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRechargeInput) (*reverseRechargeOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	if in.Body.Reason == "" {
+		return nil, httpx.ErrBadRequest.WithDetail("reason is required")
+	}
+	// 租户用户只能撤销本租户的 tenant_to_user 充值
+	if claims.UserType == 3 && claims.TenantID != "" {
+		var orderTenantID, orderType string
+		err := h.pool.QueryRow(ctx, `SELECT tenant_id, order_type FROM bill_recharge_orders WHERE order_id = $1`, in.OrderID).Scan(&orderTenantID, &orderType)
+		if err != nil || orderTenantID != claims.TenantID || orderType != billingdomain.OrderTypeTenantToUser {
+			return nil, httpx.ErrForbidden.WithDetail("只能撤销本租户的用户充值记录")
+		}
+	}
+
+	result, err := h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, claims.UserID)
+	if err != nil {
+		return nil, toProblem(err)
+	}
+	out := &reverseRechargeOutput{}
+	out.Body.Status = "SUCCESS"
+	if result.IsPartial {
+		out.Body.Status = "PARTIAL_REVERSAL"
+	}
+	out.Body.OrderID = result.OrderID
+	out.Body.PackageID = result.PackageID
+	out.Body.ReversedCredits = billingdomain.MicroToCredits(result.ReversedCredits)
+	out.Body.OriginalCredits = billingdomain.MicroToCredits(result.OriginalCredits)
+	out.Body.LostCredits = billingdomain.MicroToCredits(result.LostCredits)
+	out.Body.PackageStatus = result.PackageStatus
+	return out, nil
+}
+
+func (h *adminHandlers) refund(ctx context.Context, in *refundInput) (*messageOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	reason := in.Body.Reason
+	if reason == "" {
+		reason = "管理员手动退款"
+	}
+	if err := h.deduction.Refund(in.Body.EventID, reason, claims.UserID); err != nil {
+		return nil, toProblem(err)
+	}
+	out := &messageOutput{}
+	out.Body.Message = "退款成功"
+	return out, nil
+}
+
+func (h *adminHandlers) getDebt(ctx context.Context, in *debtStatusInput) (*debtStatusOutput, error) {
+	var debt int64
+	var err error
+	if in.OwnerType == "tenant" {
+		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_tenants WHERE tenant_id = $1`, in.AccountID).Scan(&debt)
+	} else {
+		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_users WHERE user_id = $1`, in.AccountID).Scan(&debt)
+	}
+	if err != nil {
+		return nil, httpx.ErrBadRequest.WithDetail("账户不存在")
+	}
+	out := &debtStatusOutput{}
+	out.Body.OwnerType = in.OwnerType
+	out.Body.AccountID = in.AccountID
+	out.Body.OutstandingDebtMicro = debt
+	out.Body.ServiceState = "active"
+	if debt > 0 {
+		out.Body.ServiceState = "blocked_debt"
+	}
+	return out, nil
+}
+
+func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (*auditLogsOutput, error) {
+	where := "WHERE 1=1"
+	args := []any{}
+	idx := 1
+	addFilter := func(col, val string) {
+		if val != "" {
+			where += fmt.Sprintf(" AND %s = $%d", col, idx)
+			args = append(args, val)
+			idx++
+		}
+	}
+	addFilter("event_type", in.EventType)
+	addFilter("principal_type", in.PrincipalType)
+	addFilter("client_id", in.ClientID)
+	addFilter("user_id", in.UserID)
+	addFilter("decision", in.Decision)
+
+	var total int64
+	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM auth_audit_logs "+where, args...).Scan(&total)
+
+	size := in.Size
+	if size < 1 || size > 100 {
+		size = 20
+	}
+	offset := (in.Page - 1) * size
+	qargs := append(append([]any{}, args...), size, offset)
+	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
+		SELECT id, event_type, principal_type, client_id, user_id, scopes,
+		       decision, reason_code, reason_message, created_at
+		FROM auth_audit_logs %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1), qargs...)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer rows.Close()
+
+	items := make([]auditLogItem, 0)
+	for rows.Next() {
+		var it auditLogItem
+		var clientID, userID, reasonCode, reasonMsg *string
+		var createdAt time.Time
+		if err := rows.Scan(&it.ID, &it.EventType, &it.PrincipalType, &clientID, &userID, &it.Scopes,
+			&it.Decision, &reasonCode, &reasonMsg, &createdAt); err != nil {
+			continue
+		}
+		it.CreatedAt = millisFromTime(createdAt)
+		if clientID != nil {
+			it.ClientID = *clientID
+		}
+		if userID != nil {
+			it.UserID = *userID
+		}
+		if reasonCode != nil {
+			it.ReasonCode = *reasonCode
+		}
+		if reasonMsg != nil {
+			it.ReasonMessage = *reasonMsg
+		}
+		items = append(items, it)
+	}
+	return &auditLogsOutput{Body: httpx.NewPage(items, total, in.Page, size)}, nil
+}

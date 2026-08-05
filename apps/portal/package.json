@@ -1,0 +1,34 @@
+{
+  "name": "@dai/portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "bun run --filter @dai/api-client ensure && vite build",
+    "typecheck": "bun run --filter @dai/api-client ensure && vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "catalog:",
+    "@dai/api-client": "workspace:*",
+    "@dai/app-core": "workspace:*",
+    "@dai/auth": "workspace:*",
+    "@dai/billing": "workspace:*",
+    "@dai/ui": "workspace:*",
+    "echarts": "catalog:",
+    "element-plus": "catalog:",
+    "lucide-vue-next": "catalog:",
+    "marked": "catalog:",
+    "pinia": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

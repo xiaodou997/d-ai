@@ -1,0 +1,30 @@
+# Build
+release/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+
+# Frontend
+node_modules/
+apps/*/dist/
+apps/*/.env.*.local
+packages/*/dist/
+
+# Config (local only)
+config.yaml
+**/config.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Test
+coverage/
+*.test

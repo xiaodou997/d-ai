@@ -1,0 +1,22 @@
+{
+  "name": "@dai/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "豆栈 DouStack 设计系统底座：token、基础样式、portal shell 组件",
+  "exports": {
+    ".": "./src/index.ts",
+    "./base.css": "./src/styles/base.css",
+    "./preset": "./preset.ts"
+  },
+  "types": "./src/index.ts",
+  "main": "./src/index.ts",
+  "peerDependencies": {
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "dependencies": {
+    "lucide-vue-next": "catalog:",
+    "vue-sonner": "catalog:"
+  }
+}

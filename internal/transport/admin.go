@@ -1,0 +1,90 @@
+package transport
+
+import (
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/auth"
+	billingpg "xiaodou/dai/internal/billing/pg"
+	billingsvc "xiaodou/dai/internal/billing/service"
+	serviceaccesssvc "xiaodou/dai/internal/serviceaccess"
+	systempg "xiaodou/dai/internal/system/pg"
+	tenantpg "xiaodou/dai/internal/tenant/pg"
+)
+
+// adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
+// handler 的逻辑（部分内联 SQL + 已搬 repo），输出强类型 DTO、错误 problem+json。
+type adminHandlers struct {
+	pool          *pgxpool.Pool
+	tenantRepo    *tenantpg.TenantRepository
+	systemRepo    *systempg.SystemRepository
+	txRepo        *billingpg.EventRepository
+	deduction     *billingsvc.DeductionService
+	blacklist     *auth.BlacklistService
+	log           *zap.Logger
+	serviceAccess *serviceaccesssvc.Service
+}
+
+func newAdminHandlers(d Deps) *adminHandlers {
+	return &adminHandlers{
+		pool:          d.Pool,
+		tenantRepo:    tenantpg.NewTenantRepository(d.Pool),
+		systemRepo:    systempg.NewSystemRepository(d.Pool),
+		txRepo:        billingpg.NewEventRepository(d.Pool),
+		deduction:     d.Deduction,
+		blacklist:     d.Blacklist,
+		log:           d.Logger,
+		serviceAccess: d.ServiceAccess,
+	}
+}
+
+// isAdminClaims 判断是否系统管理员（userType 1 超管 / 2 平台管理员）。
+func isAdminClaims(c *auth.Claims) bool {
+	return c != nil && (c.UserType == 1 || c.UserType == 2)
+}
+
+// userIDOf 安全取出 Claims 的 UserID（nil 返回空串）。
+func userIDOf(c *auth.Claims) string {
+	if c == nil {
+		return ""
+	}
+	return c.UserID
+}
+
+// adminStatusFromInt 把前端整型状态映射为存储字符串。
+func adminStatusFromInt(value int) string {
+	switch value {
+	case 2:
+		return "disabled"
+	case 3:
+		return "suspended"
+	default:
+		return "active"
+	}
+}
+
+// adminTenantStatusToInt 把存储字符串状态映射为前端整型。
+func adminTenantStatusToInt(value string) int {
+	switch value {
+	case "disabled":
+		return 2
+	case "suspended":
+		return 3
+	default:
+		return 1
+	}
+}
+
+// tenantStatusText 返回租户状态中文展示名。
+func tenantStatusText(status int) string {
+	switch status {
+	case 1:
+		return "启用"
+	case 2:
+		return "停用"
+	case 3:
+		return "欠费封禁"
+	default:
+		return "未知"
+	}
+}

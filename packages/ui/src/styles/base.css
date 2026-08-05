@@ -1,0 +1,97 @@
+:root {
+  --ds-font-display: "Inter", system-ui, -apple-system, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --ds-font-body: "Inter", system-ui, -apple-system, "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --ds-font-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Consolas", monospace;
+
+  --ds-radius-shell: 12px;
+  --ds-radius-panel: 10px;
+  --ds-radius-control: 8px;
+  --ds-radius-pill: 999px;
+
+  --ds-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ds-shadow-panel: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ds-shadow-pop: 0 10px 30px -12px rgba(15, 23, 42, 0.25);
+
+  --ds-positive: #059669;
+  --ds-positive-soft: #ecfdf5;
+  --ds-warning: #d97706;
+  --ds-warning-soft: #fffbeb;
+  --ds-danger: #dc2626;
+  --ds-danger-soft: #fef2f2;
+  --ds-info: #0284c7;
+  --ds-info-soft: #f0f9ff;
+
+  /* shared neutral scale (slate) — default = admin palette */
+  --ds-paper: #f6f7f9;
+  --ds-panel: #ffffff;
+  --ds-panel-strong: #ffffff;
+  --ds-panel-muted: #f8fafc;
+  --ds-line: #e2e8f0;
+  --ds-line-strong: #cbd5e1;
+  --ds-ink: #0f172a;
+  --ds-ink-soft: #334155;
+  --ds-muted: #64748b;
+  --ds-faint: #94a3b8;
+  --ds-accent: #7c3aed;
+  --ds-accent-soft: #f3f0ff;
+  --ds-accent-hover: #6d28d9;
+  --ds-accent-contrast: #ffffff;
+}
+
+:root[data-theme="admin"],
+.ds-theme-admin {
+  --ds-accent: #7c3aed;
+  --ds-accent-soft: #f3f0ff;
+  --ds-accent-hover: #6d28d9;
+}
+
+:root[data-theme="tenant"],
+.ds-theme-tenant {
+  --ds-accent: #2563eb;
+  --ds-accent-soft: #eff6ff;
+  --ds-accent-hover: #1d4ed8;
+}
+
+:root[data-theme="customer"],
+.ds-theme-customer {
+  --ds-accent: #b0603c;
+  --ds-accent-soft: #f4e5db;
+  --ds-accent-hover: #98502f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--ds-paper);
+  color: var(--ds-ink);
+  font-family: var(--ds-font-body);
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--ds-paper);
+  color: var(--ds-ink);
+  font-family: var(--ds-font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+#app {
+  min-height: 100dvh;
+}

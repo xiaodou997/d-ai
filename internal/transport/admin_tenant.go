@@ -1,0 +1,423 @@
+package transport
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"golang.org/x/crypto/bcrypt"
+
+	"xiaodou/dai/libs/go/httpx"
+	billingdomain "xiaodou/dai/internal/billing"
+	util "xiaodou/dai/internal/domain"
+	serviceaccesssvc "xiaodou/dai/internal/serviceaccess"
+	tenantpg "xiaodou/dai/internal/tenant/pg"
+)
+
+// ---- DTO ----
+
+type tenantListItem struct {
+	TenantID      string  `json:"tenantId"`
+	TenantName    string  `json:"tenantName"`
+	ContactPerson string  `json:"contactPerson"`
+	ContactEmail  string  `json:"contactEmail"`
+	Status        int     `json:"status"`
+	StatusDisplay string  `json:"statusDisplay"`
+	CreatedTime   int64   `json:"createdTime"`
+	Credits       float64 `json:"credits"`
+	UserCount     int64   `json:"userCount"`
+}
+
+type tenantListInput struct {
+	Page    int    `query:"page" default:"1"`
+	Size    int    `query:"size" default:"10"`
+	Keyword string `query:"keyword" required:"false"`
+	Status  int    `query:"status" required:"false" doc:"1=启用 2=停用 3=欠费封禁，0/省略表示全部"`
+}
+
+type tenantListOutput struct {
+	Body httpx.Page[tenantListItem]
+}
+
+type createTenantInput struct {
+	Body struct {
+		TenantName    string                        `json:"tenantName"`
+		ContactPerson string                        `json:"contactPerson" required:"false"`
+		ContactEmail  string                        `json:"contactEmail" required:"false"`
+		Status        int                           `json:"status" required:"false"`
+		InitUsername  string                        `json:"initUsername" required:"false"`
+		InitEmail     string                        `json:"initEmail" required:"false"`
+		ServiceAccess *serviceaccesssvc.PolicyInput `json:"serviceAccess,omitempty" required:"false"`
+	}
+}
+
+type createTenantOutput struct {
+	Body struct {
+		TenantID     string `json:"tenantId"`
+		InitUserID   string `json:"initUserId,omitempty"`
+		InitUsername string `json:"initUsername,omitempty"`
+	}
+}
+
+type tenantIDInput struct {
+	ID string `path:"id"`
+}
+
+type tenantDetailOutput struct {
+	Body struct {
+		TenantID      string `json:"tenantId"`
+		TenantName    string `json:"tenantName"`
+		ContactPerson string `json:"contactPerson,omitempty"`
+		ContactEmail  string `json:"contactEmail,omitempty"`
+		Status        int    `json:"status"`
+		StatusDisplay string `json:"statusDisplay"`
+		CreatedTime   int64  `json:"createdTime"`
+	}
+}
+
+type updateTenantInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		TenantName    string `json:"tenantName"`
+		ContactPerson string `json:"contactPerson" required:"false"`
+		ContactEmail  string `json:"contactEmail" required:"false"`
+		Status        int    `json:"status" required:"false"`
+	}
+}
+
+type updateTenantStatusInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		Status string `json:"status" enum:"active,disabled" doc:"active 或 disabled"`
+	}
+}
+
+// registerAdminTenants 注册 /api/v1/tenants 租户 CRUD。
+func registerAdminTenants(api huma.API, d Deps) {
+	h := newAdminHandlers(d)
+	ua := userAuth(api, d.JWT, d.Blacklist)
+	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-list-tenants", Method: http.MethodGet, Path: "/api/v1/tenants",
+		Summary: "租户列表", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+	}, h.listTenants)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-create-tenant", Method: http.MethodPost, Path: "/api/v1/tenants",
+		Summary: "创建租户", Tags: []string{"admin-tenants"}, Middlewares: sysUser, DefaultStatus: http.StatusCreated,
+	}, h.createTenant)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-get-tenant", Method: http.MethodGet, Path: "/api/v1/tenants/{id}",
+		Summary: "租户详情", Tags: []string{"admin-tenants"}, Middlewares: sysOrTenant,
+	}, h.getTenant)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-update-tenant", Method: http.MethodPut, Path: "/api/v1/tenants/{id}",
+		Summary: "更新租户", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+	}, h.updateTenant)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-delete-tenant", Method: http.MethodDelete, Path: "/api/v1/tenants/{id}",
+		Summary: "删除租户", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+	}, h.deleteTenant)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-update-tenant-status", Method: http.MethodPatch, Path: "/api/v1/tenants/{id}/status",
+		Summary: "启用/停用租户（级联）", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+	}, h.updateTenantStatus)
+}
+
+func (h *adminHandlers) listTenants(ctx context.Context, in *tenantListInput) (*tenantListOutput, error) {
+	var statusFilter string
+	if in.Status != 0 {
+		statusFilter = adminStatusFromInt(in.Status)
+	}
+	result, err := h.tenantRepo.List(ctx, tenantpg.ListTenantsParams{
+		Keyword:    in.Keyword,
+		Status:     statusFilter,
+		Pagination: tenantpg.NewPagination(int64(in.Page), int64(in.Size)),
+	})
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	items := make([]tenantListItem, 0, len(result.Records))
+	for _, row := range result.Records {
+		status := 1
+		if row.Status != nil {
+			status = adminTenantStatusToInt(*row.Status)
+		}
+		item := tenantListItem{
+			TenantID: row.TenantID, TenantName: row.TenantName,
+			Status: status, StatusDisplay: tenantStatusText(status),
+			Credits: row.Credits, UserCount: row.UserCount,
+		}
+		if row.ContactPerson != nil {
+			item.ContactPerson = *row.ContactPerson
+		}
+		if row.ContactEmail != nil {
+			item.ContactEmail = *row.ContactEmail
+		}
+		if row.CreatedTime != nil {
+			item.CreatedTime = *row.CreatedTime
+		}
+		items = append(items, item)
+	}
+	out := &tenantListOutput{Body: httpx.NewPage(items, result.Total, int(result.Page), int(result.Size))}
+	return out, nil
+}
+
+func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput) (*createTenantOutput, error) {
+	if h.serviceAccess == nil {
+		return nil, serviceAccessHTTPError(serviceaccesssvc.ErrUnavailable)
+	}
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	tenantName := strings.TrimSpace(in.Body.TenantName)
+	if tenantName == "" {
+		return nil, httpx.ErrBadRequest.WithDetail("租户名称不能为空")
+	}
+	var count int
+	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_tenants WHERE tenant_name = $1", tenantName).Scan(&count)
+	if count > 0 {
+		return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
+	}
+
+	tenantID := "T_" + strings.ToUpper(util.GenerateRandomString(6))
+	now := billingdomain.NowUTC()
+	status := in.Body.Status
+	if status == 0 {
+		status = 1
+	}
+
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer tx.Rollback(ctx)
+	if err := serviceaccesssvc.LockMutationTx(ctx, tx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, contact_person, contact_email, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $6)
+	`, tenantID, tenantName, in.Body.ContactPerson, in.Body.ContactEmail, adminStatusFromInt(status), now); err != nil {
+		if tenantpg.IsTenantNameTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
+		}
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	actor := serviceaccesssvc.Actor{UserType: claims.UserType, UserID: claims.UserID}
+	if err := serviceaccesssvc.CreateTenantTx(ctx, tx, actor, tenantID, in.Body.ServiceAccess); err != nil {
+		h.serviceAccess.AuditFailure(ctx, actor, "service_access_create", "tenant", tenantID, err)
+		return nil, serviceAccessHTTPError(err)
+	}
+
+	out := &createTenantOutput{}
+	out.Body.TenantID = tenantID
+	if in.Body.InitUsername != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		initUserID := "TU_" + uuid.New().String()[:24]
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO iam_tenant_users (user_id, tenant_id, username, password_hash, email, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, 'active', $6, $6)
+		`, initUserID, tenantID, in.Body.InitUsername, string(hash), in.Body.InitEmail, now); err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		out.Body.InitUserID = initUserID
+		out.Body.InitUsername = in.Body.InitUsername
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if err := h.serviceAccess.ReconcileSubject(ctx, "tenant", tenantID); err != nil {
+		return nil, serviceAccessHTTPError(err)
+	}
+	return out, nil
+}
+
+func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tenantDetailOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	if !isAdminClaims(claims) && claims.TenantID != in.ID {
+		return nil, httpx.ErrForbidden.WithDetail("无权查看其他租户信息")
+	}
+
+	var (
+		tenantID, tenantName, status string
+		contactPerson, contactEmail  *string
+		createdTime                  int64
+	)
+	err := h.pool.QueryRow(ctx, `
+		SELECT tenant_id, tenant_name, contact_person, contact_email, status,
+		       EXTRACT(EPOCH FROM created_at)*1000
+		FROM iam_tenants WHERE tenant_id = $1
+	`, in.ID).Scan(&tenantID, &tenantName, &contactPerson, &contactEmail, &status, &createdTime)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
+		}
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	statusInt := adminTenantStatusToInt(status)
+	out := &tenantDetailOutput{}
+	out.Body.TenantID = tenantID
+	out.Body.TenantName = tenantName
+	out.Body.Status = statusInt
+	out.Body.StatusDisplay = tenantStatusText(statusInt)
+	out.Body.CreatedTime = createdTime
+	if contactPerson != nil {
+		out.Body.ContactPerson = *contactPerson
+	}
+	if contactEmail != nil {
+		out.Body.ContactEmail = *contactEmail
+	}
+	return out, nil
+}
+
+func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput) (*successOutput, error) {
+	tenantName := strings.TrimSpace(in.Body.TenantName)
+	if tenantName == "" {
+		return nil, httpx.ErrBadRequest.WithDetail("租户名称不能为空")
+	}
+	now := billingdomain.NowUTC()
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer tx.Rollback(ctx)
+
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM iam_tenants WHERE tenant_name = $1 AND tenant_id <> $2`, tenantName, in.ID).Scan(&count); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if count > 0 {
+		return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE iam_tenants SET tenant_name = $1, contact_person = $2, contact_email = $3, status = $4, updated_at = $5
+		WHERE tenant_id = $6
+	`, tenantName, in.Body.ContactPerson, in.Body.ContactEmail, adminStatusFromInt(in.Body.Status), now, in.ID); err != nil {
+		if tenantpg.IsTenantNameTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
+		}
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	return okSuccess(), nil
+}
+
+func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
+	if h.serviceAccess == nil {
+		return nil, serviceAccessHTTPError(serviceaccesssvc.ErrUnavailable)
+	}
+	deleted, err := h.serviceAccess.DeleteSubject(ctx, "tenant", in.ID)
+	if err != nil {
+		return nil, serviceAccessHTTPError(err)
+	}
+	if !deleted {
+		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
+	}
+	return okSuccess(), nil
+}
+
+func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenantStatusInput) (*successOutput, error) {
+	now := billingdomain.NowUTC()
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer tx.Rollback(ctx)
+
+	if in.Body.Status == "disabled" {
+		// 停用：级联停用组织用户、终端用户、冻结租户积分包
+		stmts := []string{
+			`UPDATE iam_tenants SET status = 'disabled', updated_at = $1 WHERE tenant_id = $2`,
+			`UPDATE iam_tenant_users SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND status = 'active'`,
+			`UPDATE iam_users SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND status = 'active'`,
+			`UPDATE bill_credit_packages SET status = 'expired', updated_at = $1 WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'available'`,
+		}
+		for _, s := range stmts {
+			if _, err := tx.Exec(ctx, s, now, in.ID); err != nil {
+				return nil, httpx.ErrInternal.WithCause(err)
+			}
+		}
+	}
+
+	// Collect the user IDs restored to 'active' so we can clear any per-user
+	// ban key BanReconciler may have cascaded for them while the tenant was
+	// disabled (trueBannedUsers() treats 'inherited_disabled' as banned) —
+	// UnbanTenant alone only clears the tenant-level key, not these.
+	var restoredUserIDs []string
+	if in.Body.Status != "disabled" {
+		// 启用：级联恢复
+		stmts := []string{
+			`UPDATE iam_tenants SET status = 'active', updated_at = $1 WHERE tenant_id = $2`,
+			`UPDATE iam_tenant_users SET status = 'active', updated_at = $1 WHERE tenant_id = $2 AND status = 'inherited_disabled'`,
+			`UPDATE iam_users SET status = 'active', updated_at = $1 WHERE tenant_id = $2 AND status = 'inherited_disabled'`,
+			`UPDATE bill_credit_packages SET status = 'available', updated_at = $1 WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'expired'`,
+		}
+		for i, s := range stmts {
+			if i == 1 || i == 2 {
+				rows, err := tx.Query(ctx, s+" RETURNING user_id", now, in.ID)
+				if err != nil {
+					return nil, httpx.ErrInternal.WithCause(err)
+				}
+				err = func() error {
+					defer rows.Close()
+					for rows.Next() {
+						var id string
+						if err := rows.Scan(&id); err != nil {
+							return err
+						}
+						restoredUserIDs = append(restoredUserIDs, id)
+					}
+					return rows.Err()
+				}()
+				if err != nil {
+					return nil, httpx.ErrInternal.WithCause(err)
+				}
+				continue
+			}
+			if _, err := tx.Exec(ctx, s, now, in.ID); err != nil {
+				return nil, httpx.ErrInternal.WithCause(err)
+			}
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	if h.blacklist != nil {
+		if in.Body.Status == "disabled" {
+			_ = h.blacklist.BanTenant(ctx, in.ID)
+		} else {
+			_ = h.blacklist.UnbanTenant(ctx, in.ID)
+			for _, id := range restoredUserIDs {
+				_ = h.blacklist.UnbanUser(ctx, id)
+			}
+		}
+	}
+
+	return okSuccess(), nil
+}

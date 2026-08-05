@@ -1,0 +1,23 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Hello! How can I help you today?"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 17,
+    "candidatesTokenCount": 10,
+    "totalTokenCount": 27
+  },
+  "modelVersion": "gemini-2.5-pro",
+  "responseId": "kW9tZ8fLDpKfmtkP1qKp2Ao"
+}

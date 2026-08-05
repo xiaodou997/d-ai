@@ -1,0 +1,209 @@
+package transport
+
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+	"go.uber.org/zap"
+
+	"xiaodou/dai/libs/go/httpx"
+	"xiaodou/dai/internal/auth"
+	"xiaodou/dai/internal/config"
+	invitepkg "xiaodou/dai/internal/invite"
+	invitepg "xiaodou/dai/internal/invite/pg"
+)
+
+type publicSessionService interface {
+	IsEnabled() bool
+	CreateSession(ctx context.Context, data auth.SessionData) (string, error)
+}
+
+type publicHandlers struct {
+	invite  *invitepkg.InviteService
+	session publicSessionService
+	sso     config.SSOConfig
+	legal   config.LegalConfig
+	logger  *zap.Logger
+}
+
+func newPublicHandlers(d Deps) *publicHandlers {
+	return &publicHandlers{
+		invite:  d.Invite,
+		session: d.Session,
+		sso:     d.SSO,
+		legal:   d.Legal,
+		logger:  d.Logger,
+	}
+}
+
+type publicInvitationInput struct {
+	Code string `path:"code"`
+}
+
+type publicInvitationOutput struct {
+	Body struct {
+		Code             string                           `json:"code"`
+		TenantName       string                           `json:"tenantName"`
+		CustomerSiteName string                           `json:"customerSiteName"`
+		FaviconPath      string                           `json:"faviconPath,omitempty"`
+		Description      string                           `json:"description"`
+		ExpireTime       *int64                           `json:"expiresAt,omitempty"`
+		Status           invitepkg.PublicInvitationStatus `json:"status"`
+		CanRegister      bool                             `json:"canRegister"`
+		Message          string                           `json:"message"`
+		Legal            struct {
+			TermsURL       string `json:"termsUrl"`
+			TermsVersion   string `json:"termsVersion"`
+			PrivacyURL     string `json:"privacyUrl"`
+			PrivacyVersion string `json:"privacyVersion"`
+		} `json:"legal"`
+	}
+}
+
+type publicRegistrationInput struct {
+	Code string `path:"code"`
+	Body struct {
+		Username       string  `json:"username"`
+		Password       string  `json:"password" minLength:"6"`
+		Email          *string `json:"email" required:"false"`
+		Phone          *string `json:"phone" required:"false"`
+		TermsVersion   string  `json:"termsVersion" minLength:"1"`
+		PrivacyVersion string  `json:"privacyVersion" minLength:"1"`
+	}
+}
+
+type publicRegistrationOutput struct {
+	SetCookie []http.Cookie `header:"Set-Cookie"`
+	Body      struct {
+		Success            bool   `json:"success"`
+		UserID             string `json:"userId"`
+		SessionEstablished bool   `json:"sessionEstablished"`
+		Message            string `json:"message"`
+	}
+}
+
+// registerPublic 注册无需认证的公开端点（邀请查询 + 邀请注册）。
+func registerPublic(api huma.API, d Deps) {
+	h := newPublicHandlers(d)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "public-get-invitation",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/public/invitations/{code}",
+		Summary:     "公开查看邀请码",
+		Tags:        []string{"public"},
+	}, h.getInvitation)
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "public-register-invitation-user",
+		Method:        http.MethodPost,
+		Path:          "/api/v1/public/invitations/{code}/registrations",
+		Summary:       "通过邀请注册链接注册终端用户",
+		Tags:          []string{"public"},
+		DefaultStatus: http.StatusCreated,
+	}, h.registerInvitation)
+}
+
+func (h *publicHandlers) getInvitation(ctx context.Context, in *publicInvitationInput) (*publicInvitationOutput, error) {
+	view, err := h.invite.DescribePublicInvitation(ctx, in.Code)
+	if err != nil {
+		if errors.Is(err, invitepkg.ErrInvalidInvitationCodeFormat) {
+			return nil, httpx.ErrBadRequest.WithDetail("邀请码格式无效")
+		}
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+
+	out := &publicInvitationOutput{}
+	out.Body.Code = view.Code
+	out.Body.TenantName = view.TenantName
+	out.Body.CustomerSiteName = view.CustomerSiteName
+	if view.FaviconVersion > 0 {
+		out.Body.FaviconPath = publicTenantFaviconPath(view.TenantID, view.FaviconVersion)
+	}
+	out.Body.Description = view.Description
+	out.Body.ExpireTime = view.ExpireTime
+	out.Body.Status = view.Status
+	out.Body.CanRegister = view.CanRegister
+	out.Body.Message = view.Message
+	out.Body.Legal.TermsURL = legalDocumentURL(h.legal, "terms")
+	out.Body.Legal.TermsVersion = h.legal.TermsVersion
+	out.Body.Legal.PrivacyURL = legalDocumentURL(h.legal, "privacy")
+	out.Body.Legal.PrivacyVersion = h.legal.PrivacyVersion
+	return out, nil
+}
+
+func (h *publicHandlers) registerInvitation(ctx context.Context, in *publicRegistrationInput) (*publicRegistrationOutput, error) {
+	if h.session == nil || !h.session.IsEnabled() {
+		return nil, httpx.ErrInternal.WithDetail("SSO session is not available")
+	}
+	if in.Body.TermsVersion != h.legal.TermsVersion || in.Body.PrivacyVersion != h.legal.PrivacyVersion {
+		return nil, httpx.ErrBadRequest.WithDetail("请重新阅读并同意最新服务条款和隐私政策")
+	}
+
+	user, err := h.invite.RegisterUser(ctx, in.Code, in.Body.Username, in.Body.Password, in.Body.Email, in.Body.Phone, invitepkg.LegalAcceptance{
+		TermsVersion:   in.Body.TermsVersion,
+		PrivacyVersion: in.Body.PrivacyVersion,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, invitepkg.ErrUsernameExists):
+			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
+		case errors.Is(err, invitepkg.ErrInvalidUsername):
+			return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
+		case errors.Is(err, invitepkg.ErrInvalidInvitationCodeFormat):
+			return nil, httpx.ErrBadRequest.WithDetail("邀请码格式无效")
+		case errors.Is(err, invitepkg.ErrLegalAcceptanceRequired):
+			return nil, httpx.ErrBadRequest.WithDetail("请同意服务条款和隐私政策")
+		case errors.Is(err, invitepg.ErrInvitationCodeNotFound):
+			return nil, httpx.ErrConflict.WithDetail("邀请码不存在")
+		case errors.Is(err, invitepkg.ErrInvitationCodeUnavailable):
+			return nil, httpx.ErrConflict.WithDetail("邀请码不可用")
+		default:
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+	}
+
+	sessionID, err := h.session.CreateSession(ctx, auth.SessionData{
+		UserID:          user.UserID,
+		Username:        user.Username,
+		UserType:        user.UserType,
+		UserTypeDisplay: userTypeDisplayName(user.UserType),
+		TenantID:        user.TenantID,
+		ClientType:      "customer",
+		ClientID:        urmClientID,
+	})
+	out := &publicRegistrationOutput{}
+	out.Body.Success = true
+	out.Body.UserID = user.UserID
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("create customer session failed after invitation registration",
+				zap.String("userId", user.UserID),
+				zap.String("tenantId", user.TenantID),
+				zap.Error(err),
+			)
+		}
+		out.Body.SessionEstablished = false
+		out.Body.Message = "registered_login_required"
+		return out, nil
+	}
+	out.SetCookie = []http.Cookie{publicSessionCookie(h.sso, "customer", sessionID)}
+	out.Body.SessionEstablished = true
+	out.Body.Message = "registered"
+	return out, nil
+}
+
+func publicSessionCookie(cfg config.SSOConfig, clientType, value string) http.Cookie {
+	return http.Cookie{
+		Name:     ssoCookieName(clientType),
+		Value:    value,
+		Path:     "/",
+		Domain:   cfg.CookieDomain,
+		MaxAge:   int(cfg.SessionTTL.Seconds()),
+		HttpOnly: true,
+		Secure:   cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	}
+}

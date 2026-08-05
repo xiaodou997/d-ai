@@ -1,0 +1,50 @@
+{
+  "name": "@dai/app-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "豆栈 portal 公共前端层：环境、HTTP、菜单模型、portal shell 帮助函数",
+  "exports": {
+    ".": "./src/index.ts",
+    "./guide": "./src/guide/index.ts",
+    "./ai/chat": "./src/ai/chat/index.ts",
+    "./ai/images": "./src/ai/images/index.ts",
+    "./ai/apps": "./src/ai/apps/index.ts",
+    "./ai/api-keys": "./src/ai/apikeys/index.ts",
+    "./ai/app-keys": "./src/ai/appkeys/index.ts",
+    "./ai/keys": "./src/ai/keys/index.ts",
+    "./ai/groups": "./src/ai/groups/index.ts",
+    "./ai/models": "./src/ai/models/index.ts",
+    "./ai/docs": "./src/ai/docs/index.ts",
+    "./ai/runtime": "./src/ai/runtime.ts",
+    "./ai/utils": "./src/ai/utils.ts",
+    "./ai/tasks": "./src/ai/tasks/index.ts",
+    "./ai/usage": "./src/ai/usage/index.ts",
+    "./ai/identity": "./src/ai/identity/index.ts",
+    "./announcements": "./src/announcements/index.ts",
+    "./announcements/inbox": "./src/announcements/inbox.ts",
+    "./legal": "./src/legal/index.ts"
+  },
+  "types": "./src/index.ts",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@dai/api-client": "workspace:*",
+    "@dai/auth": "workspace:*",
+    "@dai/ui": "workspace:*",
+    "dompurify": "catalog:",
+    "element-plus": "catalog:",
+    "lucide-vue-next": "catalog:",
+    "marked": "catalog:",
+    "qrcode": "catalog:"
+  },
+  "peerDependencies": {
+    "@element-plus/icons-vue": "catalog:",
+    "element-plus": "catalog:",
+    "pinia": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6"
+  }
+}

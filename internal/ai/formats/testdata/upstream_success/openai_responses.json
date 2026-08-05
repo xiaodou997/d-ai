@@ -1,0 +1,63 @@
+{
+  "id": "resp_07f88c96efc9fff5016a694f8ef7908190aaa920df961b6fd2",
+  "object": "response",
+  "created_at": 1785286542,
+  "status": "completed",
+  "background": false,
+  "completed_at": 1785286545,
+  "error": null,
+  "incomplete_details": null,
+  "frequency_penalty": 0.0,
+  "instructions": "You split one resolved commercial image brief into exactly 1 distinct, standalone image-generation prompts.",
+  "max_output_tokens": 128000,
+  "model": "gpt-5.6-terra",
+  "parallel_tool_calls": true,
+  "previous_response_id": null,
+  "store": false,
+  "temperature": 1.0,
+  "tool_choice": "auto",
+  "tools": [],
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "user": null,
+  "metadata": {},
+  "output": [
+    {
+      "id": "rs_07f88c96efc9fff5016a694f8f11a48190a2d6b1c4f9a01b3e",
+      "type": "reasoning",
+      "summary": []
+    },
+    {
+      "id": "msg_07f88c96efc9fff5016a694f8ef7908190aaa920df961b6fd2",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"prompts\":[\"Hi. What image brief would you like me to turn into a standalone image-generation prompt?\"]}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ]
+    }
+  ],
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "prompt_plan",
+      "strict": true
+    }
+  },
+  "usage": {
+    "input_tokens": 96,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 231,
+    "output_tokens_details": {
+      "reasoning_tokens": 192
+    },
+    "total_tokens": 327
+  }
+}

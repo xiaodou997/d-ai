@@ -1,0 +1,22 @@
+{
+  "id": "chatcmpl-Cs4v8QpZx2NrTdK6mWyBfLhJa5Ueo",
+  "object": "chat.completion",
+  "created": 1785286563,
+  "model": "gpt-5.6-terra",
+  "error": null,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Sure — here is the summary you asked for."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 24,
+    "completion_tokens": 12,
+    "total_tokens": 36
+  }
+}
