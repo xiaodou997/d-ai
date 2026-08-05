@@ -229,7 +229,7 @@ import { Plus, Search } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { Users } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
+import { PortalPagePanel } from "@/platform";
 import {
   DsEmpty,
   DsFilterBar,
@@ -238,11 +238,11 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from "@dai/ui";
+} from "@/shared/ui";
 
-import { urmTenantApi } from "../../api/urmTenant";
-import type { EndUserItem } from "../../types/urmTenant";
-import { GuideHelpLink } from "@dai/app-core/guide";
+import { urmTenantApi } from "@/api/urmTenant";
+import type { EndUserItem } from "@/api/types/urmTenant";
+import { GuideHelpLink } from "@/platform/guide";
 
 const columns: DsTableColumn[] = [
   { key: "userId", title: "用户 ID", width: 110, mono: true },

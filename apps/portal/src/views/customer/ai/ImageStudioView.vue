@@ -2,15 +2,15 @@
 import {
   notifyError,
   notifySuccess
-} from "@dai/app-core";
+} from "@/platform";
 import {
   portalImageWorkspaceIconProps,
   PortalImageStudioWorkspace,
   type PortalImageApi
-} from "@dai/app-core/ai/images";
+} from "@/platform/ai/images";
 
-import { formatCredits, runtimeImageApi } from "../../api/aiCustomer";
-import { serviceBaseUrl } from "../../api/request";
+import { formatCredits, runtimeImageApi } from "@/api/aiCustomer";
+import { serviceBaseUrl } from "@/api/request";
 
 const imageApi: PortalImageApi = {
   listModels: () => runtimeImageApi.listModels(),

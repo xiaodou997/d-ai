@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { DsEmpty } from "@dai/ui";
-import type { TenantListItem } from "../../../../../types/admin";
+import { DsEmpty } from "@/shared/ui";
+import type { TenantListItem } from "@/api/types/admin";
 import type { AdminTenantLimitForm } from "../types";
 
 defineProps<{

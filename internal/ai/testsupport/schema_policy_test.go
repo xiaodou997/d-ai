@@ -19,6 +19,11 @@ func TestCanonicalSchemaConstraintPolicy(t *testing.T) {
 		t.Fatalf("read canonical schema: %v", err)
 	}
 	schema := string(raw)
+	aiStart := strings.Index(schema, "-- AI domain")
+	if aiStart < 0 {
+		t.Fatal("canonical schema is missing AI domain marker")
+	}
+	schema = schema[aiStart:]
 
 	for _, forbidden := range []string{
 		"CHECK (auth_method IN",

@@ -2,7 +2,7 @@
 import { computed, reactive, watch } from "vue";
 import { Landmark } from "lucide-vue-next";
 
-import type { TenantCashAccount } from "../../../../types/tenant";
+import type { TenantCashAccount } from "@/api/types/tenant";
 import { formatCents } from "../model";
 
 const props = defineProps<{

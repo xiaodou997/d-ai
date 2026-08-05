@@ -1,14 +1,14 @@
 <!--
   密钥管理页(智能服务/应用与密钥):本身只是容器,按 ?tab 在「模型 API 密钥」与
   「应用运行密钥」两个 embedded 工作区之间切换,实际渲染在
-  @dai/app-core 的 PortalKeyManagementWorkspace(DsUI 一体面板 + DsTabs)。
+  @/platform 的 PortalKeyManagementWorkspace(DsUI 一体面板 + DsTabs)。
   每把模型密钥的接入配置由行内操作打开，避免页头说明和具体密钥脱节。
 -->
 <script setup lang="ts">
 import { computed, provide, reactive } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { PortalKeyManagementWorkspace, type PortalKeyManagementTab } from "@dai/app-core/ai/keys";
+import { PortalKeyManagementWorkspace, type PortalKeyManagementTab } from "@/platform/ai/keys";
 
 import ApiKeysView from "./ApiKeysView.vue";
 import AppKeysView from "./apps/AppKeysView.vue";

@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { Setting } from '@element-plus/icons-vue'
-import { DsTag } from '@dai/ui'
+import { DsTag } from '@/shared/ui'
 
 import { useRiskControlConfig } from '../composables/useRiskControlConfig'
 

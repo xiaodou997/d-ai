@@ -3,8 +3,8 @@ import { computed, reactive, shallowRef, useTemplateRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TableInstance } from 'element-plus'
 import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
-import { aiAdminApi } from '../../../../api/aiAdmin'
-import { useModelBindingBatchDelete } from '../../../../features/ai/upstream-model-bindings'
+import { aiAdminApi } from '@/api/aiAdmin'
+import { useModelBindingBatchDelete } from '@/features/ai/upstream-model-bindings'
 import {
   bindingFormatGroups,
   bindingFormatValue,
@@ -19,7 +19,7 @@ import type {
   DiscoveredUpstreamModelDTO,
   UpstreamModelBindingDTO,
   UpstreamModelBindingWriteRequest
-} from '../../../../types/ai'
+} from '@/api/types/ai'
 
 interface ImportOption {
   id: string

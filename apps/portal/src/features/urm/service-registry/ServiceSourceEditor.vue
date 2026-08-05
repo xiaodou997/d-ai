@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from "vue";
 
-import type { ServiceSourceItem } from "../../../types/admin";
+import type { ServiceSourceItem } from "@/api/types/admin";
 
 const props = defineProps<{ modelValue: boolean; source?: ServiceSourceItem | null; saving?: boolean }>();
 const emit = defineEmits<{

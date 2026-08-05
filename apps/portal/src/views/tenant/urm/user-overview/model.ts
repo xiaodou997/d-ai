@@ -15,12 +15,6 @@ export interface UserOverviewGroupSummary {
   customBindings: number;
 }
 
-export interface UserOverviewRoutePermissionSummary {
-  total: number;
-  allowed: number;
-  denied: number;
-}
-
 export interface UserOverviewRiskSignal {
   id: string;
   tone: "success" | "warning" | "danger" | "info";

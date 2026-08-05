@@ -14,12 +14,6 @@
     "skipLibCheck": true,
     "noEmit": true,
     "types": ["node"],
-    "paths": {
-      "@dai/api-client": ["./packages/api-client/src/index.ts"],
-      "@dai/app-core": ["./packages/app-core/src/index.ts"],
-      "@dai/auth": ["./packages/auth/src/index.ts"],
-      "@dai/billing": ["./packages/billing/src/index.ts"],
-      "@dai/ui": ["./packages/ui/src/index.ts"]
-    }
+    "paths": {}
   }
 }

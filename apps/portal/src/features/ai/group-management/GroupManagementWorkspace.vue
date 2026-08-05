@@ -10,8 +10,8 @@ import { computed, onMounted, shallowRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Eye, Layers, Plus, RefreshCw } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
+import { PortalPagePanel } from "@/platform";
+import { formatMultiplier } from "@/platform/ai/utils";
 import {
   DsEmpty,
   DsFilterBar,
@@ -19,14 +19,14 @@ import {
   DsPagination,
   DsTable,
   type DsTableColumn
-} from "@dai/ui";
+} from "@/shared/ui";
 
-import { aiTenantApi } from "../../../api/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import type {
   TenantAiGroupWriteRequest,
   TenantAiPriceBook,
   TenantAiVisibleGroup
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import GroupFormDialog from "./components/GroupFormDialog.vue";
 import GroupModelPreviewDialog from "./components/GroupModelPreviewDialog.vue";
 import {

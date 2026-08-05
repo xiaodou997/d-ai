@@ -5,9 +5,9 @@ vi.mock("element-plus", () => ({
   ElMessage: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
   ElMessageBox: { confirm: vi.fn(async () => undefined) }
 }));
-vi.mock("../../../../api/aiTenant", () => ({ aiTenantApi: {} }));
+vi.mock("@/api/aiTenant", () => ({ aiTenantApi: {} }));
 
-import type { TenantAiClientSurfacePolicy } from "../../../../types/aiTenant";
+import type { TenantAiClientSurfacePolicy } from "@/api/types/aiTenant";
 import { useGroupClientSurfacePolicy, type GroupClientSurfacePolicyApi } from "./useGroupClientSurfacePolicy";
 
 function policy(groupId: string, mode: "all" | "restricted", allowed: TenantAiClientSurfacePolicy["allowed_surfaces"]): TenantAiClientSurfacePolicy {

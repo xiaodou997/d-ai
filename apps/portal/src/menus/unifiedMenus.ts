@@ -1,4 +1,4 @@
-import type { AppShellNavItem, BackendService } from "@dai/app-core";
+import type { AppShellNavItem, BackendService } from "@/platform";
 
 /**
  * 统一菜单 —— 合并三端菜单，按 userType 过滤可见性。
@@ -77,8 +77,8 @@ const urmModule: BusinessModule = {
       id: "urm-security",
       label: "安全审计",
       children: [
-        { id: "urm-audit-log", label: "认证审计", to: "/security/audit-log", icon: "shield", userTypes: [1] },
-        { id: "urm-admins", label: "平台管理员", to: "/security/admins", icon: "user-cog", userTypes: [1] }
+        { id: "urm-audit-log", label: "认证审计", to: "/urm/audit-log", icon: "shield", userTypes: [1] },
+        { id: "urm-admins", label: "平台管理员", to: "/urm/admins", icon: "user-cog", userTypes: [1] }
       ]
     },
     {

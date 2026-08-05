@@ -1,14 +1,109 @@
-import type { RequestAdapter } from "@dai/api-client";
-import type { components } from "@dai/api-client/ai";
+import type { RequestAdapter } from "@/api";
+import type { components as AiComponents } from "@/api/ai";
+import type { components as UrmComponents } from "@/api/urm";
 
-import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "../../../api/request";
-import type { CustomerUsageQuery } from "./model";
+import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "@/api/request";
+import type {
+  AdminUsageQuery,
+  AdminUsageRankingQuery,
+  AdminUsageSummaryQuery,
+  AdminUsageTrendQuery,
+  AdminUsageUpstreamSummaryQuery,
+  CustomerUsageQuery,
+  TenantUsageQuery,
+  TenantUsageSummaryQuery
+} from "./model";
 
-type Schemas = components["schemas"];
+type AiSchemas = AiComponents["schemas"];
+type UrmSchemas = UrmComponents["schemas"];
+
+export interface AdminUsageApi {
+  listLogs: (query: AdminUsageQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageLogsOutputBody"]>;
+  getDetail: (requestId: string, signal?: AbortSignal) => Promise<AiSchemas["UsageLogDetailDTO"]>;
+  listSummary: (query: AdminUsageSummaryQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageSummaryOutputBody"]>;
+  listUnitSummary: (query: AdminUsageSummaryQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageUnitSummaryOutputBody"]>;
+  listUpstreamSummary: (query: AdminUsageUpstreamSummaryQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageUpstreamSummaryOutputBody"]>;
+  listUserRanking: (query: AdminUsageRankingQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageUserRankingOutputBody"]>;
+  listDailyTrend: (query: AdminUsageTrendQuery, signal?: AbortSignal) => Promise<AiSchemas["DailyTrendOutputBody"]>;
+}
+
+export function createAdminUsageApi(adapter: RequestAdapter = authenticatedRequest("ai")): AdminUsageApi {
+  const base = serviceBaseUrl("ai");
+  const headers = portalHeadersFor("ai");
+  return {
+    listLogs: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-logs", query, headers, baseUrl: base, signal }),
+    getDetail: (requestId, signal) => adapter({
+      method: "GET",
+      path: `/api/v1/usage-logs/${encodeURIComponent(requestId)}`,
+      headers,
+      baseUrl: base,
+      signal
+    }),
+    listSummary: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-summary", query, headers, baseUrl: base, signal }),
+    listUnitSummary: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-unit-summary", query, headers, baseUrl: base, signal }),
+    listUpstreamSummary: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-upstream-summary", query, headers, baseUrl: base, signal }),
+    listUserRanking: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-ranking/users", query, headers, baseUrl: base, signal }),
+    listDailyTrend: (query, signal) => adapter({ method: "GET", path: "/api/v1/analytics/daily-trend", query, headers, baseUrl: base, signal })
+  };
+}
+
+export const adminUsageApi = createAdminUsageApi();
+
+export function listAdminUsageDailyTrend(query: AdminUsageTrendQuery, signal?: AbortSignal) {
+  return adminUsageApi.listDailyTrend(query, signal);
+}
+
+export interface TenantUsageApi {
+  listRecords: (query: TenantUsageQuery, signal?: AbortSignal) => Promise<AiSchemas["TenantUsageLogsOutputBody"]>;
+  listSummary: (query: TenantUsageSummaryQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageSummaryOutputBody"]>;
+  listUsers: (signal?: AbortSignal) => Promise<UrmSchemas["PageEndUserItem"]>;
+}
+
+export function createTenantUsageApi(
+  aiRequest: RequestAdapter = authenticatedRequest("ai"),
+  urmRequest: RequestAdapter = authenticatedRequest("urm")
+): TenantUsageApi {
+  return {
+    listRecords: (query, signal) => aiRequest({
+      method: "GET",
+      path: "/api/v1/tenants/me/usage-logs",
+      query,
+      headers: portalHeadersFor("ai"),
+      baseUrl: serviceBaseUrl("ai"),
+      signal
+    }),
+    listSummary: (query, signal) => aiRequest({
+      method: "GET",
+      path: "/api/v1/tenants/me/usage-summary",
+      query,
+      headers: portalHeadersFor("ai"),
+      baseUrl: serviceBaseUrl("ai"),
+      signal
+    }),
+    listUsers: (signal) => urmRequest({
+      method: "GET",
+      path: "/api/v1/users",
+      query: { page: 1, size: 200 },
+      headers: portalHeadersFor("urm"),
+      baseUrl: serviceBaseUrl("urm"),
+      signal
+    })
+  };
+}
+
+export const tenantUsageApi = createTenantUsageApi();
+
+export function listTenantUsageRecords(query: TenantUsageQuery, signal?: AbortSignal) {
+  return tenantUsageApi.listRecords(query, signal);
+}
+
+export function listTenantUsageSummary(query: TenantUsageSummaryQuery, signal?: AbortSignal) {
+  return tenantUsageApi.listSummary(query, signal);
+}
 
 export interface CustomerUsageApi {
-  listRecords: (query: CustomerUsageQuery, signal?: AbortSignal) => Promise<Schemas["UserUsageLogsOutputBody"]>;
-  getSummary: (requestSource?: string, signal?: AbortSignal) => Promise<Schemas["UserUsageSummaryDTO"]>;
+  listRecords: (query: CustomerUsageQuery, signal?: AbortSignal) => Promise<AiSchemas["UserUsageLogsOutputBody"]>;
+  getSummary: (requestSource?: string, signal?: AbortSignal) => Promise<AiSchemas["UserUsageSummaryDTO"]>;
 }
 
 export function createCustomerUsageApi(adapter: RequestAdapter = authenticatedRequest("ai")): CustomerUsageApi {
@@ -39,5 +134,5 @@ export function listCustomerUsageRecords(query: CustomerUsageQuery, signal?: Abo
 }
 
 export function getCustomerUsageSummary(requestSource?: string, signal?: AbortSignal) {
-  return customerUsageApi.getSummary(requestSource, signal);
+  return customerUsageApi.getSummary(requestSource);
 }

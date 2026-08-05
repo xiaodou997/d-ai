@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { urmAdminApi } from "../../../api/urmAdmin";
-import type { ServiceRegistryDetail, ServiceRegistryItem } from "../../../types/admin";
+import { urmAdminApi } from "@/api/urmAdmin";
+import type { ServiceRegistryDetail, ServiceRegistryItem } from "@/api/types/admin";
 import { useServiceRegistry } from "./useServiceRegistry";
 
-vi.mock("../../../api/urmAdmin", () => ({
+vi.mock("@/api/urmAdmin", () => ({
   urmAdminApi: {
     listServices: vi.fn(),
     getService: vi.fn()
@@ -54,22 +54,22 @@ describe("useServiceRegistry", () => {
     vi.mocked(urmAdminApi.getService)
       .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
       .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
-    const proxySummary: ServiceRegistryItem = {
+    const secondSummary: ServiceRegistryItem = {
       ...summary,
       id: 2,
-      serviceId: "uni-api-proxy",
-      displayName: "API Proxy"
+      serviceId: "urm",
+      displayName: "User Management"
     };
     const registry = useServiceRegistry();
 
     const firstRequest = registry.selectService(summary);
-    const secondRequest = registry.selectService(proxySummary);
-    resolveSecond({ ...proxySummary, sources: [], instances: [] });
+    const secondRequest = registry.selectService(secondSummary);
+    resolveSecond({ ...secondSummary, sources: [], instances: [] });
     await secondRequest;
     resolveFirst({ ...summary, sources: [], instances: [] });
     await firstRequest;
 
-    expect(registry.selected.value?.serviceId).toBe("uni-api-proxy");
+    expect(registry.selected.value?.serviceId).toBe("urm");
     expect(registry.detailLoading.value).toBe(false);
   });
 });

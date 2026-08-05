@@ -51,11 +51,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { ArrowLeftRight } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
-import { urmCustomerApi } from "../../api/urmCustomer";
-import type { AccountTransactionItem } from "../../types/urmCustomer";
+import { PortalPagePanel } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import { urmCustomerApi } from "@/api/urmCustomer";
+import type { AccountTransactionItem } from "@/api/types/urmCustomer";
 
 const columns: DsTableColumn[] = [
   { key: "eventId", title: "流水 ID", mono: true },

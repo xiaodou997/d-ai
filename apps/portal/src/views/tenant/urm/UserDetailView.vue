@@ -1,17 +1,17 @@
 <!--
-  租户端终端用户详情页:按路由参数 userId 聚合基础资料、充值、访问、AI 配置与风险信号。
+  租户端终端用户详情页:按路由参数 userId 聚合基础资料、充值、AI 配置与风险信号。
   重构:迁移至 DsUI 一体面板(PortalPagePanel:图标徽章+面包屑,面包屑「终端用户」可点回列表),
-       面板 body 承载四个 user-overview 区块;数据接线与组件对外 props/emits 不变。
+       面板 body 承载四个 user-overview 区块。
 -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { UserRound } from "lucide-vue-next";
 
-import { PortalPagePanel } from "@dai/app-core";
+import { PortalPagePanel } from "@/platform";
 
-import { portalEnv } from "../../env";
-import { useAuthStore } from "../../stores/auth";
+import { portalEnv } from "@/env";
+import { useAuthStore } from "@/stores/auth";
 import UserOverviewActivityGrid from "./user-overview/components/UserOverviewActivityGrid.vue";
 import UserOverviewControlGrid from "./user-overview/components/UserOverviewControlGrid.vue";
 import UserOverviewHero from "./user-overview/components/UserOverviewHero.vue";
@@ -24,13 +24,12 @@ const authStore = useAuthStore();
 
 const userId = computed(() => (typeof route.params.userId === "string" ? route.params.userId : ""));
 const serviceAvailability = computed(() => ({
-  ai: hasServiceAccess("ai"),
-  proxy: hasServiceAccess("proxy")
+  ai: hasServiceAccess("ai")
 }));
 
 const overview = useTenantUserOverview(userId, serviceAvailability);
 
-function hasServiceAccess(service: "ai" | "proxy") {
+function hasServiceAccess(service: "ai") {
   const clientID = portalEnv.serviceClientIds?.[service];
   return Boolean(clientID && authStore.hasClientAccess(clientID));
 }
@@ -47,13 +46,6 @@ function openAiConfig() {
   });
 }
 
-function openProxyPermissions() {
-  if (!userId.value || !serviceAvailability.value.proxy) return;
-  void router.push({
-    path: "/gateway/permissions",
-    query: { userId: userId.value }
-  });
-}
 </script>
 
 <template>
@@ -67,7 +59,7 @@ function openProxyPermissions() {
         { label: '终端用户', to: '/users' },
         { label: '用户详情' }
       ]"
-      description="聚合基础资料、充值、访问、AI 配置与风险信号"
+      description="聚合基础资料、充值、AI 配置与风险信号"
     >
       <div class="overview-page__body">
         <UserOverviewHero
@@ -76,13 +68,10 @@ function openProxyPermissions() {
           :loading="overview.loading.value"
           :last-activity-time="overview.lastActivityTime.value"
           :group-accessible-count="overview.groupSummary.value.accessible"
-          :route-permission-summary="overview.routePermissionSummary.value"
           :warnings="overview.warnings.value"
           :ai-available="overview.serviceAvailability.value.ai"
-          :proxy-available="overview.serviceAvailability.value.proxy"
           @back="goBack"
           @open-ai-config="openAiConfig"
-          @open-proxy-permissions="openProxyPermissions"
           @refresh="overview.refresh"
         />
 
@@ -90,24 +79,20 @@ function openProxyPermissions() {
           :user="overview.user.value"
           :recharge-total="overview.rechargeTotal.value"
           :latest-recharge-time="overview.rechargeRecords.value[0]?.createdTime ?? null"
-          :access-stats="overview.accessStats.value"
           :ai-usage-stats="overview.aiUsageStats.value"
           :group-summary="overview.groupSummary.value"
           :risk-signals="overview.riskSignals.value"
           :activity-window-label="overview.activityWindowLabel"
           :ai-available="overview.serviceAvailability.value.ai"
-          :proxy-available="overview.serviceAvailability.value.proxy"
         />
 
         <UserOverviewActivityGrid
           :loading="overview.loading.value"
           :recharge-records="overview.rechargeRecords.value"
           :recharge-total="overview.rechargeTotal.value"
-          :access-logs="overview.accessLogs.value"
           :ai-usage-logs="overview.aiUsageLogs.value"
           :activity-window-label="overview.activityWindowLabel"
           :ai-available="overview.serviceAvailability.value.ai"
-          :proxy-available="overview.serviceAvailability.value.proxy"
         />
 
         <UserOverviewControlGrid
@@ -115,10 +100,8 @@ function openProxyPermissions() {
           :ai-policy="overview.aiPolicy.value"
           :accessible-groups="overview.accessibleGroups.value"
           :group-summary="overview.groupSummary.value"
-          :route-permission-summary="overview.routePermissionSummary.value"
           :risk-signals="overview.riskSignals.value"
           :ai-available="overview.serviceAvailability.value.ai"
-          :proxy-available="overview.serviceAvailability.value.proxy"
         />
       </div>
     </PortalPagePanel>

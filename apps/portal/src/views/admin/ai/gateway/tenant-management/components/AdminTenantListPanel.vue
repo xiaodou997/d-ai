@@ -6,8 +6,8 @@
 import { computed } from "vue";
 import { RefreshRight } from "@element-plus/icons-vue";
 
-import { DsEmpty, DsPagination, DsTag } from "@dai/ui";
-import type { TenantListItem } from "../../../../../types/admin";
+import { DsEmpty, DsPagination, DsTag } from "@/shared/ui";
+import type { TenantListItem } from "@/api/types/admin";
 
 const props = defineProps<{
   loading: boolean;

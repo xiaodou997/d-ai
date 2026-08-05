@@ -6,25 +6,28 @@
 
 ## 项目状态
 
-> 开发中：当前版本尚不能作为完整产品直接运行或部署。
+> 开发中：后端、数据库和 Portal 工程链已打通；完整产品仍需按业务流程做运行时验收。
 
 本仓库于 2026-08-05 从 UniHub 的未跟踪 `v3/` 工作目录中独立出来，UniHub 基线提交为 `cc5bc36bc93a77c0eb7aa8bd4f654e6ad5d08ad4`。当前已知状态：
 
-- Go 后端可以编译；全量测试仍有两项旧 schema 路径测试待迁移。
-- 本地启动配置和数据库初始化流程尚未形成可复现的一键启动环境。
-- 统一 Portal 仍有旧三端 API、类型和组件导入未完成迁移，生产构建暂不通过。
-- Makefile、前端 embed 和独立发布流程仍需打通。
+- Go 后端可在 `19641` 启动，PostgreSQL/Redis 和完整 schema 初始化可复现。
+- 数据库已改为单一 `init.sql` 完整基线；应用只校验版本，不执行自动迁移。
+- Portal 已合并为单一前端项目，API facade、领域类型、设计系统和运行时基础设施均位于 `apps/portal/src`。
+- Proxy 产品域已删除；后端只保留 URM + AI 两个业务服务。
+- OpenAPI 已由统一后端导出到 `contracts/openapi.yaml`，Portal 类型生成链已接通。
+
+完整缺口、验收标准和待确认的产品决策见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)。
 
 ## 目录结构
 
 ```
-v3/
+./
 ├── go.mod                      # module xiaodou/dai
-├── package.json                # bun workspace
+├── package.json                # 单一 Portal 前端依赖与脚本
 ├── Makefile
 ├── cmd/
-│   └── server/
-│       └── main.go             # 唯一二进制入口
+│   ├── openapi/main.go         # 导出统一 OpenAPI 契约
+│   └── server/main.go          # 唯一二进制入口
 ├── internal/
 │   ├── config/                 # 统一配置
 │   ├── auth/                   # JWT / 黑名单 / 会话
@@ -40,43 +43,68 @@ v3/
 │   ├── scheduler/              # 定时任务
 │   ├── ai/                     # AI 网关核心
 │   └── transport/              # 统一 HTTP 层
-├── migrations/                 # 合并的 DB migration（全 public）
+├── internal/db/
+│   ├── init.sql                # 合并后的唯一完整 schema
+│   └── changes/                # 人工执行的已有环境变更
 ├── libs/                       # 后端公共库
 ├── apps/
-│   └── portal/                 # 单一前端应用
-└── packages/                   # 前端公共包
-    ├── ui/                     #   @dai/ui 设计系统
-    ├── app-core/               #   @dai/app-core
-    ├── api-client/             #   @dai/api-client
-    ├── auth/                   #   @dai/auth
-    └── billing/                #   @dai/billing
+│   └── portal/                 # 单一前端应用与全部前端模块
+│       ├── scripts/             # OpenAPI 类型生成与 freshness 检查
+│       └── src/
+│           ├── api/              # 统一请求层、facade、领域类型、生成类型
+│           ├── platform/         # shell、鉴权、路由、公共业务能力
+│           ├── shared/ui/        # DsUI 设计系统
+│           ├── features/         # 可复用领域工作区
+│           └── views/            # userType 路由页面
+└── contracts/
+    └── openapi.yaml             # 当前后端导出的单一契约快照
 ```
 
 ## 本地开发
 
+需要 Go、Bun 和 Docker Compose。D-AI 后端监听 `http://localhost:19641`；本地 PostgreSQL/Redis 分别映射到 `15432/16379`，避免与其他项目的默认端口冲突。
+
 ```bash
-# 后端
+# 首次准备
 go mod download
+bun install --frozen-lockfile
+
+# 自动创建 config.yaml、启动已初始化的 PostgreSQL/Redis，并启动后端
 make dev
 
-# 前端
-bun install
+# 另开终端启动前端开发服务器
 make dev-frontend
+
+# 停止本地依赖
+make deps-down
+
+# schema 调整后重建本地数据库（会清空 D-AI 本地数据）
+make db-recreate
 ```
+
+后端可用 `curl http://localhost:19641/health` 和 `curl http://localhost:19641/ready` 检查。Portal 开发服务器使用同一后端的 Vite 代理。
+本地开发管理员和数据库维护规则见 [`docs/DATABASE.md`](docs/DATABASE.md)。
 
 ## 构建
 
 ```bash
-# 单二进制（含前端 embed）
+# 单二进制（前端构建后 embed）
 make build
 
-# 仅后端
+# 仅后端（当前可用于验证 Go 编译）
 make build-server
 ```
+
+## 文档
+
+- [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：项目现状、已完成重构、剩余验收项和实施顺序。
+- [`docs/DATABASE.md`](docs/DATABASE.md)：完整 schema、人工变更和版本校验规则。
+- [`apps/portal/README.md`](apps/portal/README.md)：Portal 目录、API facade 和契约生成说明。
 
 ## 架构原则
 
 - **单进程单二进制**：URM + AI 合并，计费进程内调用
 - **单数据库**：全 public schema，单事务覆盖计费全链路
+- **人工 schema 维护**：新库执行完整 `init.sql`；应用启动不执行 DDL，只校验 schema version
 - **HTTP 层**：薄 chi + Huma（code-first），成功 = 强类型 2xx body，错误 = RFC 7807 `application/problem+json`
 - **前端 embed**：`go:embed` 静态文件，真正单文件部署

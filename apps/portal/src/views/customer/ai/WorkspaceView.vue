@@ -9,18 +9,18 @@ import {
   PortalContentCard,
   PortalMetricGrid,
   PortalPagePanel
-} from "@dai/app-core";
-import { DsTable, DsTag, type DsTableColumn } from "@dai/ui";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
+} from "@/platform";
+import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
 import {
   PortalImageJobTable
-} from "@dai/app-core/ai/images";
+} from "@/platform/ai/images";
 import {
   UsageCostCell,
   UsageTag,
   UsageTokenCell,
   requestSourceOptions
-} from "@dai/app-core/ai/usage";
+} from "@/platform/ai/usage";
 import { computed, nextTick, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { LayoutDashboard } from "lucide-vue-next";
@@ -30,15 +30,15 @@ import { init, use, type EChartsType } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useRouter } from "vue-router";
 
-import { aiCustomerApi, formatCredits } from "../../api/aiCustomer";
-import { urmCustomerApi } from "../../api/urmCustomer";
+import { aiCustomerApi, formatCredits } from "@/api/aiCustomer";
+import { urmCustomerApi } from "@/api/urmCustomer";
 import {
   getCustomerUsageSummary,
   listCustomerUsageRecords,
   type CustomerUsageLog,
   type CustomerUsageSummary
-} from "../../features/ai/usage";
-import type { ChatSession, ConsoleImageJob, AiVisibleGroup } from "../../types/aiCustomer";
+} from "@/features/ai/usage";
+import type { ChatSession, ConsoleImageJob, AiVisibleGroup } from "@/api/types/aiCustomer";
 
 use([LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 

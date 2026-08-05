@@ -111,7 +111,7 @@ import { reactive, ref } from "vue";
 import { Search, RefreshRight } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { Coins } from "lucide-vue-next";
-import { PortalPagePanel, useListPage } from "@dai/app-core";
+import { PortalPagePanel, useListPage } from "@/platform";
 import {
   DsEmpty,
   DsFilterBar,
@@ -120,10 +120,10 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from "@dai/ui";
+} from "@/shared/ui";
 
-import { urmTenantApi } from "../../api/urmTenant";
-import type { RechargeRecordItem } from "../../types/urmTenant";
+import { urmTenantApi } from "@/api/urmTenant";
+import type { RechargeRecordItem } from "@/api/types/urmTenant";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "充值单号", width: 200, mono: true },

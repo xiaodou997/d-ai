@@ -143,12 +143,12 @@
 import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { CreditCard } from "lucide-vue-next";
-import { PortalPagePanel, PortalQrPayDialog } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import type { QrPayPollResult } from "@dai/app-core";
-import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
-import { urmCustomerApi } from "../../api/urmCustomer";
-import type { TopupConfig, TopupOrderCreated, TopupOrderItem, TopupPackage } from "../../types/urmCustomer";
+import { PortalPagePanel, PortalQrPayDialog } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import type { QrPayPollResult } from "@/platform";
+import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import { urmCustomerApi } from "@/api/urmCustomer";
+import type { TopupConfig, TopupOrderCreated, TopupOrderItem, TopupPackage } from "@/api/types/urmCustomer";
 
 const columns: DsTableColumn[] = [
   { key: "type", title: "类型", width: 140 },

@@ -5,13 +5,13 @@
        生图表复用已迁移的 PortalImageJobTable(DsTable 版)。
 -->
 <script setup lang="ts">
-import { PortalImageJobTable } from "@dai/app-core/ai/images";
+import { PortalImageJobTable } from "@/platform/ai/images";
 import { Loading } from "@element-plus/icons-vue";
-import { DsEmpty, DsTable, type DsTableColumn } from "@dai/ui";
+import { DsEmpty, DsTable, type DsTableColumn } from "@/shared/ui";
 
 import AiWorkbenchSection from "./AiWorkbenchSection.vue";
-import { formatCredits } from "../../../api/aiTenant";
-import type { ChatSession, ConsoleImageJob } from "../../../types/aiTenant";
+import { formatCredits } from "@/api/aiTenant";
+import type { ChatSession, ConsoleImageJob } from "@/api/types/aiTenant";
 
 defineProps<{
   sessions: ChatSession[];

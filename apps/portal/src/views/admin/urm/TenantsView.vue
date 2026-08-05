@@ -171,7 +171,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { Building2 } from 'lucide-vue-next'
-import { PortalPagePanel, useListPage } from '@dai/app-core'
+import { PortalPagePanel, useListPage } from '@/platform'
 import {
   DsFilterBar,
   DsFilterField,
@@ -179,11 +179,11 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
-import { useAuthStore } from '../../stores/auth'
-import ServiceAccessEditor from '../../features/urm/service-access/ServiceAccessEditor.vue'
-import { editablePolicyForActor } from '../../features/urm/service-access/policy'
+} from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
+import { useAuthStore } from '@/stores/auth'
+import ServiceAccessEditor from '@/features/urm/service-access/ServiceAccessEditor.vue'
+import { editablePolicyForActor } from '@/features/urm/service-access/policy'
 
 const router = useRouter()
 const authStore = useAuthStore()

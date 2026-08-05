@@ -11,17 +11,17 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch 
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download, Edit, Plus, Refresh, Upload, VideoPlay } from '@element-plus/icons-vue'
 import { Database } from 'lucide-vue-next'
-import { PortalContentCard, PortalPagePanel } from '@dai/app-core'
-import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from '@dai/ui'
-import { formatMultiplier } from '@dai/app-core/ai/utils'
-import { aiAdminApi } from '../../../api/aiAdmin'
+import { PortalContentCard, PortalPagePanel } from '@/platform'
+import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { formatMultiplier } from '@/platform/ai/utils'
+import { aiAdminApi } from '@/api/aiAdmin'
 import type {
   UpstreamAccountImportPreviewOutputBody,
   UpstreamAccountImportRequest,
   UpstreamAccountTransferAccountDTO,
   UpstreamAccountTestImage,
   UpstreamAccountTestResult
-} from '../../../types/ai'
+} from '@/api/types/ai'
 import { defaultBindingProtocolForProviderFamily, endpointProtocolOptions } from './constants'
 import { firstActivePriceBookId } from './priceBookSelection'
 import type { PriceBookRecord } from './pricingTypes'

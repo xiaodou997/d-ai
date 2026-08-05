@@ -130,7 +130,7 @@ import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { ShieldCheck } from 'lucide-vue-next'
-import { PortalPagePanel, useListPage } from '@dai/app-core'
+import { PortalPagePanel, useListPage } from '@/platform'
 import {
   DsEmpty,
   DsFilterBar,
@@ -139,9 +139,9 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
-import ServiceAccessEditor from '../../features/urm/service-access/ServiceAccessEditor.vue'
+} from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
+import ServiceAccessEditor from '@/features/urm/service-access/ServiceAccessEditor.vue'
 
 const columns: DsTableColumn[] = [
   { key: 'userId', title: '用户 ID', width: 160, mono: true },

@@ -6,8 +6,8 @@ import {
   formatMs,
   formatTokenCount,
   requestSourceLabel
-} from "@dai/app-core/ai/usage";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
+} from "@/platform/ai/usage";
+import { formatMultiplier } from "@/platform/ai/utils";
 
 import type { CustomerUsageLog } from "../model";
 

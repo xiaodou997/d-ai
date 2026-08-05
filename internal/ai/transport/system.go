@@ -16,6 +16,11 @@ type systemStatusOutput struct {
 	Body systemStatusDTO
 }
 
+type componentStatus struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
 type systemStatusDTO struct {
 	Timestamp int64            `json:"timestamp" doc:"状态生成时间，Unix 毫秒"`
 	DB        componentStatus  `json:"db" doc:"PostgreSQL 状态"`

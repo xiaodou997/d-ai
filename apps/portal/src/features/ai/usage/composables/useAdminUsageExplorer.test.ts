@@ -2,7 +2,7 @@ import { defineComponent, h } from "vue";
 import { mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { components } from "@dai/api-client/ai";
+import type { components } from "@/api/ai";
 
 import type { AdminUsageApi } from "../api";
 import { mapAdminUsageRows, type UsageLogDTO } from "../model";

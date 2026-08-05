@@ -11,8 +11,8 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import { init, use, type EChartsType, graphic } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 
-import { formatCredits } from "../../../api/aiTenant";
-import type { TenantAiDashboardTopModel } from "../../../types/aiTenant";
+import { formatCredits } from "@/api/aiTenant";
+import type { TenantAiDashboardTopModel } from "@/api/types/aiTenant";
 import { resolveDsColor } from "./chartTokens";
 
 use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);

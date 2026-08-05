@@ -10,9 +10,9 @@ import {
   formatMs,
   formatTokenCount,
   UsageTag
-} from "@dai/app-core/ai/usage";
-import { PortalIdentityCell } from "@dai/app-core/ai/identity";
-import { DsTable, type DsTableColumn } from "@dai/ui";
+} from "@/platform/ai/usage";
+import { PortalIdentityCell } from "@/platform/ai/identity";
+import { DsTable, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRow } from "../model";
 import {

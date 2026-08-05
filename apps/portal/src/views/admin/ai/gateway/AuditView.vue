@@ -11,9 +11,9 @@
 import { onMounted, reactive, shallowRef } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { FileText } from 'lucide-vue-next'
-import { PortalPagePanel } from '@dai/app-core'
-import { DsFilterBar, DsFilterField, DsTable, DsTag, type DsTableColumn } from '@dai/ui'
-import { aiAdminApi } from '../../../api/aiAdmin'
+import { PortalPagePanel } from '@/platform'
+import { DsFilterBar, DsFilterField, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { aiAdminApi } from '@/api/aiAdmin'
 
 const formatTimestamp = (value: any) => {
   if (!value) return ''

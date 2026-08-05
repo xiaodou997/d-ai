@@ -8,8 +8,8 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { BarChart3 } from "lucide-vue-next";
 
-import { PortalPagePanel } from "@dai/app-core";
-import { DsTabs } from "@dai/ui";
+import { PortalPagePanel } from "@/platform";
+import { DsTabs } from "@/shared/ui";
 
 import UsageAnalyticsPanel from "./components/UsageAnalyticsPanel.vue";
 import UsageRangeSelector from "./components/UsageRangeSelector.vue";
@@ -19,7 +19,7 @@ import { adminUsageApi } from "./api";
 import { useAdminUsageExplorer } from "./composables/useAdminUsageExplorer";
 import type { AdminUsageRow } from "./model";
 import { buildUsageRecordsRouteQuery } from "./usageNavigation";
-import { useAuthStore } from "../../../stores/auth";
+import { useAuthStore } from "@/stores/auth";
 
 type AnalyticsTab = "overview" | "ranking" | "upstream";
 

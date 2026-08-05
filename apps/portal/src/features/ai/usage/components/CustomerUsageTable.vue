@@ -12,8 +12,8 @@ import {
   UsageTag,
   UsageTokenCell,
   formatUsageTimestamp
-} from "@dai/app-core/ai/usage";
-import { DsPagination, DsTable, type DsTableColumn } from "@dai/ui";
+} from "@/platform/ai/usage";
+import { DsPagination, DsTable, type DsTableColumn } from "@/shared/ui";
 
 import type { CustomerUsageLog } from "../model";
 

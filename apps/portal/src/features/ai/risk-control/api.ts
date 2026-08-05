@@ -1,4 +1,4 @@
-import { aiAdminApi } from '../../../api/aiAdmin'
+import { aiAdminApi } from '@/api/aiAdmin'
 import type {
   RiskControlConfigDTO,
   RiskControlConfigWriteRequest,

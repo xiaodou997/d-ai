@@ -125,7 +125,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { RefreshRight, Search } from '@element-plus/icons-vue'
 import { Users } from 'lucide-vue-next'
-import { PortalPagePanel, useListPage } from '@dai/app-core'
+import { PortalPagePanel, useListPage } from '@/platform'
 import {
   DsFilterBar,
   DsFilterField,
@@ -133,9 +133,9 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
-import DebtStatusPanel from '../../components/DebtStatusPanel.vue'
+} from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
+import DebtStatusPanel from '@/components/DebtStatusPanel.vue'
 
 const router = useRouter()
 

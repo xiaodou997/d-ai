@@ -5,10 +5,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RefreshLeft } from "@element-plus/icons-vue";
-import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
-import type { TenantListItem } from "../../../../../types/admin";
-import type { TenantUpstreamAccessDTO } from "../../../../../types/ai";
+import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
+import type { TenantListItem } from "@/api/types/admin";
+import type { TenantUpstreamAccessDTO } from "@/api/types/ai";
 import type { AdminTenantUpstreamPolicyDraft } from "../types";
 
 const props = defineProps<{

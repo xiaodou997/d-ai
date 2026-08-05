@@ -9,12 +9,12 @@
 import { computed, onMounted, shallowRef } from "vue";
 import { ArrowDown, ArrowUp, Check, Close, Plus, Rank, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { formatCredits, formatWholeCredits } from "@dai/app-core/ai/usage";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
-import { DsEmpty, DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { formatCredits, formatWholeCredits } from "@/platform/ai/usage";
+import { formatMultiplier } from "@/platform/ai/utils";
+import { DsEmpty, DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import { aiTenantApi } from "../../../api/aiTenant";
-import type { TenantAiVisibleGroup, TenantSubPlan } from "../../../types/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
+import type { TenantAiVisibleGroup, TenantSubPlan } from "@/api/types/aiTenant";
 import SubscriptionPlanDialog from "./SubscriptionPlanDialog.vue";
 import SubscriptionPurchasePolicyHistoryDrawer from "./SubscriptionPurchasePolicyHistoryDrawer.vue";
 import { subscriptionPurchasePolicyLabel } from "./subscriptionPurchasePolicy";

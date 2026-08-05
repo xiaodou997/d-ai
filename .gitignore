@@ -13,6 +13,7 @@ node_modules/
 apps/*/dist/
 apps/*/.env.*.local
 packages/*/dist/
+cmd/server/frontend_dist/assets/
 
 # Config (local only)
 config.yaml

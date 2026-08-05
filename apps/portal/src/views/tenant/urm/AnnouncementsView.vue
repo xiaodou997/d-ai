@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import TenantAnnouncementManagement from "../../features/urm/announcements/TenantAnnouncementManagement.vue";
+import TenantAnnouncementManagement from "@/features/urm/announcements/TenantAnnouncementManagement.vue";
 </script>
 
 <template>

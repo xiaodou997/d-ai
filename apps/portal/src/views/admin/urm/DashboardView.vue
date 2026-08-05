@@ -155,18 +155,18 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import { graphic, init, use, type EChartsType } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LayoutDashboard } from 'lucide-vue-next'
-import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from '@dai/app-core'
-import { DsMetricCard } from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
-import type { ResourceStatItem } from '../../types/admin'
-import AlertList from '../../components/AlertList.vue'
+import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from '@/platform'
+import { DsMetricCard } from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
+import type { ResourceStatItem } from '@/api/types/admin'
+import AlertList from '@/components/AlertList.vue'
 import {
   buildWorkbenchRangeWindow,
   DEFAULT_WORKBENCH_RANGE_ID,
   getWorkbenchRangeOption,
   WORKBENCH_RANGE_OPTIONS,
   type WorkbenchRangeId
-} from '../../components/workbench/workbenchRanges'
+} from '@/components/workbench/workbenchRanges'
 
 use([LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 

@@ -165,10 +165,10 @@ func TestRequireService(t *testing.T) {
 		return rec.Code
 	}
 
-	svcTok := env.sign(t, Claims{PrincipalType: "service", TokenUse: "access", ClientID: "proxy-service"}, testKID)
+	svcTok := env.sign(t, Claims{PrincipalType: "service", TokenUse: "access", ClientID: "other-service"}, testKID)
 	userTok := env.sign(t, Claims{UserID: "u1"}, testKID)
 
-	if code := do(chain("proxy-service"), svcTok); code != http.StatusOK {
+	if code := do(chain("other-service"), svcTok); code != http.StatusOK {
 		t.Errorf("matching service token: status = %d, want 200", code)
 	}
 	if code := do(chain("ai-service"), svcTok); code != http.StatusForbidden {

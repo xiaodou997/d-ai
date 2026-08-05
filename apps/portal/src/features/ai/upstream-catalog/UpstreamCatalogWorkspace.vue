@@ -9,10 +9,10 @@ import { computed, onMounted, shallowRef } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { Network } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
+import { PortalPagePanel } from "@/platform";
 
-import { aiTenantApi } from "../../../api/aiTenant";
-import type { TenantAiUpstreamResource } from "../../../types/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
+import type { TenantAiUpstreamResource } from "@/api/types/aiTenant";
 import UpstreamAccountRail from "./components/UpstreamAccountRail.vue";
 import UpstreamModelPricingGrid from "./components/UpstreamModelPricingGrid.vue";
 

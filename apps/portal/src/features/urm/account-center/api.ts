@@ -1,6 +1,6 @@
-import { tenantApi } from "../../../api/tenant";
-import { urmTenantApi } from "../../../api/urmTenant";
-import type { AccountBalance, RechargeRecordItem } from "../../../types/urmTenant";
+import { tenantApi } from "@/api/tenant";
+import { urmTenantApi } from "@/api/urmTenant";
+import type { AccountBalance, RechargeRecordItem } from "@/api/types/urmTenant";
 import type {
   PageTenantCashLedgerItem,
   PageTenantTopupOrderItem,
@@ -11,7 +11,7 @@ import type {
   TenantTopupOrderCreated,
   TenantTopupOrderStatus,
   TenantWithdrawal
-} from "../../../types/tenant";
+} from "@/api/types/tenant";
 import type { AccountCenterPage } from "./model";
 
 export interface AccountCenterApi {

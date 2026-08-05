@@ -2,7 +2,7 @@
 import { shallowRef } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Play, Plus } from "lucide-vue-next";
-import type { TenantAiClientSurface, TenantAiDispatchRule, TenantAiDispatchRuleWriteRequest } from "../../../../types/aiTenant";
+import type { TenantAiClientSurface, TenantAiDispatchRule, TenantAiDispatchRuleWriteRequest } from "@/api/types/aiTenant";
 import { useGroupDispatchRules } from "../composables/useGroupDispatchRules";
 import { errorMessage, showDispatchPriceConflict } from "../problemPresentation";
 import DispatchRuleDialog from "../components/DispatchRuleDialog.vue";

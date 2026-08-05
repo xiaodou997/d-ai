@@ -1,4 +1,4 @@
-import type { TenantAiClientSurface } from "../../../types/aiTenant";
+import type { TenantAiClientSurface } from "@/api/types/aiTenant";
 import { capabilityForSurface, clientSurfaceOptions } from "./catalog";
 
 export type DispatchMatchType = "exact" | "prefix" | "wildcard" | "regex";

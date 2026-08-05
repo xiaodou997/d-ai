@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { PortalShellLayout, usePortalShellScaffold } from "@dai/app-core";
+import { PortalShellLayout, usePortalShellScaffold } from "@/platform";
 
-import { portalEnv, themeForUserType } from "../env";
-import { useAuthStore } from "../stores/auth";
-import { useMenuStore } from "../stores/menus";
+import { portalEnv, themeForUserType } from "@/env";
+import { useAuthStore } from "@/stores/auth";
+import { useMenuStore } from "@/stores/menus";
 
 const route = useRoute();
 const authStore = useAuthStore();

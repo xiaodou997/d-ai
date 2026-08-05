@@ -7,7 +7,7 @@
 import { computed } from "vue";
 import { Trophy, UsersRound } from "lucide-vue-next";
 
-import type { UserConsumptionItem } from "../../../../types/urmTenant";
+import type { UserConsumptionItem } from "@/api/types/urmTenant";
 
 const props = defineProps<{
   items: readonly UserConsumptionItem[];

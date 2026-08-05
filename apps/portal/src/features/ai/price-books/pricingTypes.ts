@@ -2,7 +2,7 @@ import type {
   TenantAiLiteLLMPriceModel,
   TenantAiPriceBookEntry,
   TenantAiTokenPriceTierUSD
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 
 export type PriceBookEntryRecord = TenantAiPriceBookEntry;
 export type TokenPriceTier = TenantAiTokenPriceTierUSD;

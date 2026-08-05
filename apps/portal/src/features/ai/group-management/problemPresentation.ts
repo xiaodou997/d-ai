@@ -1,11 +1,11 @@
 import { h } from "vue";
 import { ElMessageBox } from "element-plus";
-import { HttpProblem } from "@dai/app-core";
+import { HttpProblem } from "@/platform";
 
 import type {
   TenantAiDispatchPriceConflict,
   TenantAiGroupDependencyCounts
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 export { errorMessage } from "./errorMessage";
 
 export function dispatchPriceConflicts(error: unknown): TenantAiDispatchPriceConflict[] {

@@ -1,8 +1,8 @@
 import { computed, shallowRef } from "vue";
 import { ElMessage } from "element-plus";
 
-import { urmAdminApi } from "../../../api/urmAdmin";
-import type { ServiceRegistryDetail, ServiceRegistryItem } from "../../../types/admin";
+import { urmAdminApi } from "@/api/urmAdmin";
+import type { ServiceRegistryDetail, ServiceRegistryItem } from "@/api/types/admin";
 
 export function useServiceRegistry() {
   const services = shallowRef<ServiceRegistryItem[]>([]);

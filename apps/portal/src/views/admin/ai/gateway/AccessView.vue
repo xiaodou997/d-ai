@@ -11,12 +11,12 @@ import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { SlidersHorizontal } from "lucide-vue-next";
 
-import { PortalPagePanel } from "@dai/app-core";
-import { DsTabs } from "@dai/ui";
-import { aiAdminApi } from "../../../api/aiAdmin";
-import { urmAdminApi } from "../../../api/urmAdmin";
-import type { RuntimeLimitPolicyDTO, TenantUpstreamAccessDTO, TenantUpstreamPolicyRef } from "../../../types/ai";
-import type { TenantListItem } from "../../../types/admin";
+import { PortalPagePanel } from "@/platform";
+import { DsTabs } from "@/shared/ui";
+import { aiAdminApi } from "@/api/aiAdmin";
+import { urmAdminApi } from "@/api/urmAdmin";
+import type { RuntimeLimitPolicyDTO, TenantUpstreamAccessDTO, TenantUpstreamPolicyRef } from "@/api/types/ai";
+import type { TenantListItem } from "@/api/types/admin";
 import AdminTenantLimitPanel from "./tenant-management/components/AdminTenantLimitPanel.vue";
 import AdminTenantListPanel from "./tenant-management/components/AdminTenantListPanel.vue";
 import AdminTenantUpstreamAccessPanel from "./tenant-management/components/AdminTenantUpstreamAccessPanel.vue";

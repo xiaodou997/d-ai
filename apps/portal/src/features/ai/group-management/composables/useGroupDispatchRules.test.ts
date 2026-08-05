@@ -1,9 +1,9 @@
 import { nextTick, shallowRef } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../../api/aiTenant", () => ({ aiTenantApi: {} }));
+vi.mock("@/api/aiTenant", () => ({ aiTenantApi: {} }));
 
-import type { TenantAiDispatchRule, TenantAiDispatchRuleWriteRequest } from "../../../../types/aiTenant";
+import type { TenantAiDispatchRule, TenantAiDispatchRuleWriteRequest } from "@/api/types/aiTenant";
 import { useGroupDispatchRules, type GroupDispatchRulesApi } from "./useGroupDispatchRules";
 
 function rule(patch: Partial<TenantAiDispatchRule> = {}): TenantAiDispatchRule {

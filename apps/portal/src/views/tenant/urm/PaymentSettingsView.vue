@@ -8,9 +8,9 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Wallet } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { tenantApi } from "../../api/tenant";
-import type { TenantPaymentSettings, TopupPackage } from "../../types/tenant";
+import { PortalPagePanel } from "@/platform";
+import { tenantApi } from "@/api/tenant";
+import type { TenantPaymentSettings, TopupPackage } from "@/api/types/tenant";
 
 interface PackageForm {
   id: string;

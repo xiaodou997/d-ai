@@ -13,18 +13,15 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	// ── AI 域 ──
-	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/adapters/bridgefmt"
 	"xiaodou/dai/internal/ai/adapters/clientcredentials"
 	"xiaodou/dai/internal/ai/adapters/clienttransport"
+	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
 	redisadapter "xiaodou/dai/internal/ai/adapters/redis"
-	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/apikey"
 	"xiaodou/dai/internal/ai/asynctask"
 	"xiaodou/dai/internal/ai/audit"
@@ -36,6 +33,7 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/console"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
+	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/identitycontrol"
@@ -67,6 +65,7 @@ import (
 	"xiaodou/dai/internal/cache"
 	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
+	daidb "xiaodou/dai/internal/db"
 	invitepkg "xiaodou/dai/internal/invite"
 	invitepg "xiaodou/dai/internal/invite/pg"
 	paymentsvc "xiaodou/dai/internal/payment/service"
@@ -81,7 +80,6 @@ import (
 	"xiaodou/dai/libs/go/banstate"
 	"xiaodou/dai/libs/go/logger"
 	"xiaodou/dai/libs/go/server"
-	"xiaodou/dai/migrations"
 )
 
 //go:embed all:frontend_dist
@@ -140,17 +138,10 @@ func main() {
 	}
 	defer pool.Close()
 
-	// 数据库迁移（embed FS）
-	goose.SetBaseFS(migrations.FS)
-	if err := goose.SetDialect("postgres"); err != nil {
-		appLogger.Fatal("set goose dialect failed", zap.Error(err))
+	if err := daidb.VerifySchema(ctx, pool); err != nil {
+		appLogger.Fatal("database schema verification failed", zap.Error(err))
 	}
-	dbConn := stdlib.OpenDBFromPool(pool)
-	defer dbConn.Close()
-	if err := goose.Up(dbConn, "."); err != nil {
-		appLogger.Fatal("migration failed", zap.Error(err))
-	}
-	appLogger.Info("database migration completed")
+	appLogger.Info("database schema verified", zap.Int("version", daidb.ExpectedSchemaVersion))
 
 	// Redis
 	redisClient := redis.NewClient(&redis.Options{
@@ -468,20 +459,20 @@ func main() {
 	}
 
 	var runtimeGateway = gateway.New(gateway.Deps{
-		Logger:                appLogger,
-		Postgres:              pool,
-		Pipeline:              pipeline,
-		Queries:               q,
-		APIKeyCache:           apiKeyCache,
-		ServiceAccess:         gatewayServiceAccessAdapter{svc: serviceAccessSvc},
-		ExpectedClientID:      "dai-ai-gateway",
-		BanChecker:            banChecker,
-		RuntimeInvokeExpander: runtimeInvokeExpander,
-		RuntimeEngine:         runtimeEngine,
-		AsyncTasks:            asyncTasks,
-		TaskAdmission:         taskAdmission,
-		TaskInvokeExpander:    runtimeInvokeExpander,
-		JWKSValidator:         jwksValidator,
+		Logger:                   appLogger,
+		Postgres:                 pool,
+		Pipeline:                 pipeline,
+		Queries:                  q,
+		APIKeyCache:              apiKeyCache,
+		ServiceAccess:            gatewayServiceAccessAdapter{svc: serviceAccessSvc},
+		ExpectedClientID:         "dai-ai-gateway",
+		BanChecker:               banChecker,
+		RuntimeInvokeExpander:    runtimeInvokeExpander,
+		RuntimeEngine:            runtimeEngine,
+		AsyncTasks:               asyncTasks,
+		TaskAdmission:            taskAdmission,
+		TaskInvokeExpander:       runtimeInvokeExpander,
+		JWKSValidator:            jwksValidator,
 		DelegationAllowedClients: cfg.Delegation.AllowedClients,
 	})
 	runtimeGateway.RegisterTaskHandlers(asyncTasks)
@@ -520,6 +511,8 @@ func main() {
 	// ──────────────────────────────────────────────────────
 
 	deps := transport.Deps{
+		Service:       "dai",
+		Version:       version,
 		Pool:          pool,
 		Redis:         redisClient,
 		Logger:        appLogger,
@@ -541,14 +534,14 @@ func main() {
 
 		Queries:            q,
 		BillingCoordinator: billingCoordinator,
-		JWKSValidator:       jwksValidator,
-		BanChecker:          banChecker,
-		Security:            cfg.Security,
-		Audit:               cfg.Audit,
-		AsyncTasks:          cfg.AsyncTasks,
-		Files:               cfg.Files,
-		Image:               cfg.Image,
-		Pricing:             cfg.Pricing,
+		JWKSValidator:      jwksValidator,
+		BanChecker:         banChecker,
+		Security:           cfg.Security,
+		Audit:              cfg.Audit,
+		AsyncTasks:         cfg.AsyncTasks,
+		Files:              cfg.Files,
+		Image:              cfg.Image,
+		Pricing:            cfg.Pricing,
 
 		// AI 服务
 		PriceBookSvc:         priceBookSvc,
@@ -592,9 +585,14 @@ func main() {
 	})
 	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if err := pool.Ping(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "component": "postgres"})
+			return
+		}
 		if err := redisClient.Ping(r.Context()).Err(); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]any{"status": "error"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "component": "redis"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
@@ -690,4 +688,3 @@ type gatewayServiceAccessAdapter struct {
 func (a gatewayServiceAccessAdapter) Check(ctx context.Context, userType int, userID, tenantID, serviceID, clientID string) error {
 	return a.svc.Check(ctx, userType, userID, tenantID, serviceID)
 }
-

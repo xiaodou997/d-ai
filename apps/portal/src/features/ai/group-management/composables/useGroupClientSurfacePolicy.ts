@@ -1,12 +1,12 @@
 import { computed, readonly, shallowRef, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 
-import { aiTenantApi } from "../../../../api/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import type {
   TenantAiClientSurface,
   TenantAiClientSurfacePolicy,
   TenantAiClientSurfacePolicyWrite
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import { allClientSurfaces, clientSurfacePresets } from "../catalog";
 import { errorMessage } from "../errorMessage";
 

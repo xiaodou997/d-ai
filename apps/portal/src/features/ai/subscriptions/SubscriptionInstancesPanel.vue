@@ -6,12 +6,12 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from "vue";
 import { Refresh, Search } from "@element-plus/icons-vue";
-import { formatCredits } from "@dai/app-core/ai/usage";
-import { EMPTY_IDENTITY_INCLUDED, normalizeIdentityIncluded, PortalIdentityCell, resolveIdentityUserLabel, resolveIdentityUserMeta, type IdentityIncluded } from "@dai/app-core/ai/identity";
-import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { formatCredits } from "@/platform/ai/usage";
+import { EMPTY_IDENTITY_INCLUDED, normalizeIdentityIncluded, PortalIdentityCell, resolveIdentityUserLabel, resolveIdentityUserMeta, type IdentityIncluded } from "@/platform/ai/identity";
+import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import { aiTenantApi } from "../../../api/aiTenant";
-import type { TenantSubscription } from "../../../types/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
+import type { TenantSubscription } from "@/api/types/aiTenant";
 
 const MICRO_PER_CREDIT = 10_000;
 const userId = shallowRef("");

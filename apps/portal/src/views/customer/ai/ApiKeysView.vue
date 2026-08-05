@@ -6,17 +6,17 @@ import {
   notifySuccess,
   notifyWarning,
   resolvePortalPublicBaseUrl
-} from "@dai/app-core";
+} from "@/platform";
 import {
   portalApiKeyWorkspaceIconProps,
   PortalApiKeyWorkspace,
   type PortalApiKeyApi,
   type PortalApiKeyWriteInput
-} from "@dai/app-core/ai/api-keys";
+} from "@/platform/ai/apikeys";
 
-import { aiCustomerApi, formatCredits, formatWholeCredits, statusOptions } from "../../api/aiCustomer";
-import { portalEnv } from "../../env";
-import type { AiApiKey, AiApiKeyWriteRequest } from "../../types/aiCustomer";
+import { aiCustomerApi, formatCredits, formatWholeCredits, statusOptions } from "@/api/aiCustomer";
+import { portalEnv } from "@/env";
+import type { AiApiKey, AiApiKeyWriteRequest } from "@/api/types/aiCustomer";
 
 defineProps<{
   embedded?: boolean;

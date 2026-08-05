@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { Coins, WalletCards } from "lucide-vue-next";
-import { PortalQrPayDialog, type QrPayPollResult } from "@dai/app-core";
+import { PortalQrPayDialog, type QrPayPollResult } from "@/platform";
 
-import type { TenantCashAccount, TenantTopupConfig, TenantTopupOrderCreated, TopupPackage } from "../../../../types/tenant";
+import type { TenantCashAccount, TenantTopupConfig, TenantTopupOrderCreated, TopupPackage } from "@/api/types/tenant";
 import { formatCents, formatCredits, type PurchaseMethod } from "../model";
 
 const props = defineProps<{

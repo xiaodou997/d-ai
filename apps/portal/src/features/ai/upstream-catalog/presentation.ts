@@ -1,10 +1,10 @@
-import { formatMultiplier as formatMultiplierValue } from "@dai/app-core/ai/utils";
+import { formatMultiplier as formatMultiplierValue } from "@/platform/ai/utils";
 
 import type {
   TenantAiPriceBookEntry,
   TenantAiTokenPriceTierUSD,
   TenantAiUpstreamResource
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 
 export type PriceTone = "input" | "output" | "cache" | "default" | "resolution" | "audio";
 export type CapabilityTheme = "token" | "image" | "video" | "audio";

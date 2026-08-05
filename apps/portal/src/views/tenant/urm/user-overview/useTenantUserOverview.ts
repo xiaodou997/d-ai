@@ -1,42 +1,24 @@
 import { computed, shallowRef, watch, type MaybeRefOrGetter, toValue } from "vue";
 
-import { aiTenantApi } from "../../../api/aiTenant";
-import {
-  listTenantUsageRecords,
-  type TenantUsageLog,
-  type TenantUsageStats
-} from "../../../features/ai/usage";
-import { proxyTenantApi } from "../../../api/proxyTenant";
-import { urmTenantApi } from "../../../api/urmTenant";
-import type { TenantAiLimitPolicy, TenantAiUserGroup, TenantAiVisibleGroup } from "../../../types/aiTenant";
-import type { ProxyAccessLog, ProxyConsumptionStats, ProxyRouteWithPermission } from "../../../types/proxyTenant";
-import type { EndUserItem, RechargeRecordItem } from "../../../types/urmTenant";
-import { findEndUserById } from "../../../utils/endUsers";
+import { aiTenantApi } from "@/api/aiTenant";
+import { listTenantUsageRecords, type TenantUsageLog, type TenantUsageStats } from "@/features/ai/usage";
+import { urmTenantApi } from "@/api/urmTenant";
+import type { TenantAiLimitPolicy, TenantAiUserGroup, TenantAiVisibleGroup } from "@/api/types/aiTenant";
+import type { EndUserItem, RechargeRecordItem } from "@/api/types/urmTenant";
+import { findEndUserById } from "@/utils/endUsers";
 import { parseTimestamp } from "./formatters";
 import type {
   UserOverviewAccessibleGroup,
   UserOverviewGroupSummary,
-  UserOverviewRiskSignal,
-  UserOverviewRoutePermissionSummary
+  UserOverviewRiskSignal
 } from "./model";
 
 const RECENT_RECHARGE_LIMIT = 8;
-const RECENT_ACTIVITY_LIMIT = 8;
 const ACTIVITY_WINDOW_DAYS = 30;
 
 export interface UserOverviewServiceAvailability {
   ai: boolean;
-  proxy: boolean;
 }
-
-const EMPTY_ACCESS_STATS: ProxyConsumptionStats = {
-  totalRequests: 0,
-  successRequests: 0,
-  failedRequests: 0,
-  tenantTotalCost: 0,
-  userTotalCost: 0,
-  avgLatencyMs: 0
-};
 
 const EMPTY_AI_USAGE_STATS: TenantUsageStats = {
   total_requests: 0,
@@ -58,8 +40,6 @@ function buildActivityWindow(days: number) {
   start.setHours(0, 0, 0, 0);
   end.setHours(23, 59, 59, 999);
   return {
-    startMs: start.getTime(),
-    endMs: end.getTime(),
     startIso: start.toISOString(),
     endIso: end.toISOString()
   };
@@ -67,7 +47,7 @@ function buildActivityWindow(days: number) {
 
 export function useTenantUserOverview(
   userIdSource: MaybeRefOrGetter<string>,
-  serviceAvailabilitySource: MaybeRefOrGetter<UserOverviewServiceAvailability> = { ai: true, proxy: true }
+  serviceAvailabilitySource: MaybeRefOrGetter<UserOverviewServiceAvailability> = { ai: true }
 ) {
   const loading = shallowRef(false);
   const warnings = shallowRef<string[]>([]);
@@ -75,14 +55,11 @@ export function useTenantUserOverview(
   const user = shallowRef<EndUserItem | null>(null);
   const rechargeRecords = shallowRef<RechargeRecordItem[]>([]);
   const rechargeTotal = shallowRef(0);
-  const accessStats = shallowRef<ProxyConsumptionStats>(EMPTY_ACCESS_STATS);
-  const accessLogs = shallowRef<ProxyAccessLog[]>([]);
   const aiUsageStats = shallowRef<TenantUsageStats>(EMPTY_AI_USAGE_STATS);
   const aiUsageLogs = shallowRef<TenantUsageLog[]>([]);
   const aiPolicy = shallowRef<TenantAiLimitPolicy | null>(null);
   const visibleGroups = shallowRef<TenantAiVisibleGroup[]>([]);
   const userGroups = shallowRef<TenantAiUserGroup[]>([]);
-  const routePermissions = shallowRef<ProxyRouteWithPermission[]>([]);
   const serviceAvailability = computed(() => toValue(serviceAvailabilitySource));
 
   const activityWindow = buildActivityWindow(ACTIVITY_WINDOW_DAYS);
@@ -90,7 +67,9 @@ export function useTenantUserOverview(
 
   const groupSummary = computed<UserOverviewGroupSummary>(() => {
     const defaultVisible = visibleGroups.value.filter((group) => group.user_default_visible).length;
-    const accessible = visibleGroups.value.filter((group) => group.user_default_visible || userGroups.value.some((item) => item.group_id === group.id)).length;
+    const accessible = visibleGroups.value.filter(
+      (group) => group.user_default_visible || userGroups.value.some((item) => item.group_id === group.id)
+    ).length;
     return {
       totalAvailable: visibleGroups.value.length,
       accessible,
@@ -117,17 +96,10 @@ export function useTenantUserOverview(
       });
   });
 
-  const routePermissionSummary = computed<UserOverviewRoutePermissionSummary>(() => ({
-    total: routePermissions.value.length,
-    allowed: routePermissions.value.filter((item) => item.isAllowed).length,
-    denied: routePermissions.value.filter((item) => !item.isAllowed).length
-  }));
-
   const lastActivityTime = computed<number | null>(() => {
     const candidates = [
       user.value?.lastLoginTime ?? null,
-      parseTimestamp(accessLogs.value[0]?.createdAt),
-      aiUsageLogs.value[0]?.created_at ?? null,
+      parseTimestamp(aiUsageLogs.value[0]?.created_at),
       rechargeRecords.value[0]?.createdTime ?? null
     ].filter((item): item is number => item != null);
     if (!candidates.length) return null;
@@ -144,16 +116,6 @@ export function useTenantUserOverview(
         title: "账号状态",
         value: "已停用",
         description: "该终端用户当前无法正常登录或继续调用服务。"
-      });
-    }
-
-    if (accessStats.value.failedRequests > 0) {
-      signals.push({
-        id: "proxy-failed",
-        tone: accessStats.value.failedRequests >= 10 ? "danger" : "warning",
-        title: "Proxy 调用失败",
-        value: `${accessStats.value.failedRequests} 次`,
-        description: `${activityWindowLabel} 内代理调用失败，需结合最近访问日志判断是上游故障还是权限问题。`
       });
     }
 
@@ -202,50 +164,20 @@ export function useTenantUserOverview(
     user.value = null;
     rechargeRecords.value = [];
     rechargeTotal.value = 0;
-    accessStats.value = { ...EMPTY_ACCESS_STATS };
-    accessLogs.value = [];
     aiUsageStats.value = { ...EMPTY_AI_USAGE_STATS };
     aiUsageLogs.value = [];
     aiPolicy.value = null;
     visibleGroups.value = [];
     userGroups.value = [];
-    routePermissions.value = [];
 
     const issues: string[] = [];
     const services = serviceAvailability.value;
-
-    const [
-      userResult,
-      accessStatsResult,
-      accessLogsResult,
-      routePermissionsResult,
-      aiUsageResult,
-      visibleGroupsResult,
-      userGroupsResult,
-      aiPolicyResult
-    ] = await Promise.allSettled([
+    const [userResult, aiUsageResult, visibleGroupsResult, userGroupsResult, aiPolicyResult] = await Promise.allSettled([
       findEndUserById<EndUserItem>((params) => urmTenantApi.getUsers(params), userId),
-      services.proxy
-        ? proxyTenantApi.getConsumptionStats({
-            userId,
-            startTime: activityWindow.startMs,
-            endTime: activityWindow.endMs
-          })
-        : Promise.resolve(null),
-      services.proxy
-        ? proxyTenantApi.listLogs({
-            userId,
-            page: 1,
-            size: RECENT_ACTIVITY_LIMIT,
-            startTime: activityWindow.startMs,
-            endTime: activityWindow.endMs
-          })
-        : Promise.resolve(null),
-      services.proxy ? proxyTenantApi.listUserRoutePermissions(userId) : Promise.resolve(null),
       services.ai
         ? listTenantUsageRecords({
             user_id: userId,
-            limit: RECENT_ACTIVITY_LIMIT,
+            limit: 8,
             offset: 0,
             date_from: activityWindow.startIso,
             date_to: activityWindow.endIso
@@ -260,29 +192,9 @@ export function useTenantUserOverview(
 
     if (userResult.status === "fulfilled") {
       user.value = userResult.value;
-      if (!user.value) {
-        issues.push("未在当前租户用户目录里定位到该用户，基础资料可能不完整。");
-      }
+      if (!user.value) issues.push("未在当前租户用户目录里定位到该用户，基础资料可能不完整。");
     } else {
       issues.push("基础资料加载失败。");
-    }
-
-    if (accessStatsResult.status === "fulfilled") {
-      accessStats.value = accessStatsResult.value ?? { ...EMPTY_ACCESS_STATS };
-    } else if (services.proxy) {
-      issues.push("访问统计加载失败。");
-    }
-
-    if (accessLogsResult.status === "fulfilled") {
-      accessLogs.value = accessLogsResult.value?.items ?? [];
-    } else if (services.proxy) {
-      issues.push("最近访问日志加载失败。");
-    }
-
-    if (routePermissionsResult.status === "fulfilled") {
-      routePermissions.value = routePermissionsResult.value?.items ?? [];
-    } else if (services.proxy) {
-      issues.push("接口权限摘要加载失败。");
     }
 
     if (aiUsageResult.status === "fulfilled") {
@@ -311,7 +223,7 @@ export function useTenantUserOverview(
     }
 
     if (user.value?.username) {
-      const rechargeResult = await Promise.allSettled([
+      const result = await Promise.allSettled([
         urmTenantApi.getUserRechargeRecords({
           page: 1,
           size: RECENT_RECHARGE_LIMIT,
@@ -320,11 +232,10 @@ export function useTenantUserOverview(
       ]);
 
       if (token !== requestToken) return;
-
-      const [result] = rechargeResult;
-      if (result.status === "fulfilled") {
-        rechargeRecords.value = result.value.items ?? [];
-        rechargeTotal.value = result.value.total ?? 0;
+      const [rechargeResult] = result;
+      if (rechargeResult.status === "fulfilled") {
+        rechargeRecords.value = rechargeResult.value.items ?? [];
+        rechargeTotal.value = rechargeResult.value.total ?? 0;
       } else {
         issues.push("充值记录加载失败。");
       }
@@ -352,14 +263,11 @@ export function useTenantUserOverview(
     user,
     rechargeRecords,
     rechargeTotal,
-    accessStats,
-    accessLogs,
     aiUsageStats,
     aiUsageLogs,
     aiPolicy,
     accessibleGroups,
     groupSummary,
-    routePermissionSummary,
     riskSignals,
     riskCount,
     serviceAvailability,

@@ -4,7 +4,7 @@
   (指标卡 + 筛选带 + 使用记录表格 + 调用详情抽屉)。
 -->
 <script setup lang="ts">
-import { TenantUsageWorkspace } from "../../features/ai/usage";
+import { TenantUsageWorkspace } from "@/features/ai/usage";
 </script>
 
 <template>

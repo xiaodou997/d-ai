@@ -10,8 +10,8 @@
 import { computed, onMounted, reactive, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Route } from 'lucide-vue-next'
-import { PortalContentCard, PortalPagePanel } from '@dai/app-core'
-import { aiAdminApi } from '../../../api/aiAdmin'
+import { PortalContentCard, PortalPagePanel } from '@/platform'
+import { aiAdminApi } from '@/api/aiAdmin'
 
 // ── State ───────────────────────────────────────────────────────────────────
 const loading = shallowRef(false)

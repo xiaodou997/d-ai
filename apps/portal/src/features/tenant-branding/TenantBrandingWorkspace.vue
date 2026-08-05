@@ -7,10 +7,10 @@
 import { ElMessage } from "element-plus";
 import { computed } from "vue";
 import { Palette } from "lucide-vue-next";
-import { PortalContentCard, PortalPagePanel, resolvePortalResourceUrl } from "@dai/app-core";
+import { PortalContentCard, PortalPagePanel, resolvePortalResourceUrl } from "@/platform";
 
-import { portalEnv } from "../../env";
-import { useAuthStore } from "../../stores/auth";
+import { portalEnv } from "@/env";
+import { useAuthStore } from "@/stores/auth";
 import TenantBrandIconControl from "./TenantBrandIconControl.vue";
 import TenantBrandNameForm from "./TenantBrandNameForm.vue";
 import { useTenantBranding } from "./useTenantBranding";

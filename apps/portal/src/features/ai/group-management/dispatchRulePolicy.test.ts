@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TenantAiDispatchRule } from "../../../types/aiTenant";
+import type { TenantAiDispatchRule } from "@/api/types/aiTenant";
 import {
   eligibleModels,
   isRulePriced,

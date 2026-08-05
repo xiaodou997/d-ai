@@ -7,8 +7,8 @@
 import { computed, onBeforeUnmount, onMounted, shallowRef } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { CheckSquare, RefreshCw, RotateCcw, Save, Search } from "lucide-vue-next";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
-import { DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
+import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import { useGroupTargets } from "../composables/useGroupTargets";
 import type { GroupTargetDraft, GroupTargetSaveFailure, GroupTargetStatus } from "../groupTargets";

@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { urmAdminApi } from '../../../api/urmAdmin'
+import { urmAdminApi } from '@/api/urmAdmin'
 import TransactionAlert from './TransactionAlert.vue'
 
 const emit = defineEmits<{

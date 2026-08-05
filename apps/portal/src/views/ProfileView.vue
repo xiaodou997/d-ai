@@ -1,10 +1,19 @@
 <script setup lang="ts">
-// 个人资料页 —— 后续迁移
+import { computed, defineAsyncComponent } from "vue";
+import { useAuthStore } from "@/stores/auth";
+
+const authStore = useAuthStore();
+const adminProfile = defineAsyncComponent(() => import("./admin/ProfileView.vue"));
+const tenantProfile = defineAsyncComponent(() => import("./tenant/ProfileView.vue"));
+const customerProfile = defineAsyncComponent(() => import("./customer/ProfileView.vue"));
+
+const profileView = computed(() => {
+  if (authStore.userType <= 2) return adminProfile;
+  if (authStore.userType === 3) return tenantProfile;
+  return customerProfile;
+});
 </script>
 
 <template>
-  <div class="p-6">
-    <h1 class="text-2xl font-semibold mb-4">个人资料</h1>
-    <p class="text-gray-500">个人资料页（迁移中）</p>
-  </div>
+  <component :is="profileView" />
 </template>

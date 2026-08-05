@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { PortalContentCard } from "@dai/app-core";
-import { DsTag } from "@dai/ui";
+import { PortalContentCard } from "@/platform";
+import { DsTag } from "@/shared/ui";
 
-import type { TenantAiUpstreamResource } from "../../../../types/aiTenant";
+import type { TenantAiUpstreamResource } from "@/api/types/aiTenant";
 import { formatMultiplier, protocolTagTone, resourceProtocolLabels } from "../presentation";
 
 const props = defineProps<{

@@ -149,8 +149,8 @@
 import { computed, ref } from 'vue'
 import { RefreshRight, Search } from '@element-plus/icons-vue'
 import { ArrowLeftRight } from 'lucide-vue-next'
-import { PortalPagePanel, useListPage } from '@dai/app-core'
-import { formatCredits } from '@dai/app-core/ai/utils'
+import { PortalPagePanel, useListPage } from '@/platform'
+import { formatCredits } from '@/platform/ai/utils'
 import {
   DsFilterBar,
   DsFilterField,
@@ -158,8 +158,8 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
+} from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
 import OpsTimeline from './components/TransactionOpsTimeline.vue'
 import TransactionRefundDialog from './components/TransactionRefundDialog.vue'
 import TransactionConfirmDialog from './components/TransactionConfirmDialog.vue'

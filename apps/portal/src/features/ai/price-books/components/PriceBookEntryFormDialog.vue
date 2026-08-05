@@ -2,7 +2,7 @@
 import { computed, watch } from "vue";
 import { Delete, Plus } from "@element-plus/icons-vue";
 
-import { capabilityOptions } from "../../../../api/aiTenant";
+import { capabilityOptions } from "@/api/aiTenant";
 import {
   isTokenPricedCapability,
   type LiteLLMPriceModel,

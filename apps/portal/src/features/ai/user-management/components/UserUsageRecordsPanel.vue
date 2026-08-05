@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { formatCredits } from "@dai/app-core/ai/usage";
+import { formatCredits } from "@/platform/ai/usage";
 
 import { listTenantUsageRecords } from "../../usage/api";
 import TenantUsageDetailDrawer from "../../usage/components/TenantUsageDetailDrawer.vue";
 import TenantUsageTable from "../../usage/components/TenantUsageTable.vue";
 import { EMPTY_TENANT_USAGE_STATS, type TenantUsageRow, type TenantUsageStats } from "../../usage/model";
-import type { TenantEndUserItem } from "../../../../types/tenant";
+import type { TenantEndUserItem } from "@/api/types/tenant";
 import type { UserUsageFilters } from "../model";
 
 const props = defineProps<{

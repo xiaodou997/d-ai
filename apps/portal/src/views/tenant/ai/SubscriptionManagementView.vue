@@ -8,13 +8,13 @@
 import { computed, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Layers } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { DsTabs } from "@dai/ui";
+import { PortalPagePanel } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import { DsTabs } from "@/shared/ui";
 
-import SubscriptionInstancesPanel from "../../features/ai/subscriptions/SubscriptionInstancesPanel.vue";
-import SubscriptionOrdersPanel from "../../features/ai/subscriptions/SubscriptionOrdersPanel.vue";
-import SubscriptionPlansPanel from "../../features/ai/subscriptions/SubscriptionPlansPanel.vue";
+import SubscriptionInstancesPanel from "@/features/ai/subscriptions/SubscriptionInstancesPanel.vue";
+import SubscriptionOrdersPanel from "@/features/ai/subscriptions/SubscriptionOrdersPanel.vue";
+import SubscriptionPlansPanel from "@/features/ai/subscriptions/SubscriptionPlansPanel.vue";
 
 type SubscriptionTab = "plans" | "subscriptions" | "orders";
 

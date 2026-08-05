@@ -1,11 +1,11 @@
 import { computed, readonly, shallowRef, watch } from "vue";
 
-import { aiTenantApi } from "../../../../api/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import type {
   TenantAiGroupTarget,
   TenantAiGroupTargetWriteRequest,
   TenantAiUpstreamResource
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import {
   bindingKey,
   bindingKind,

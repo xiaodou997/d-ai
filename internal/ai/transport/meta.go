@@ -30,7 +30,6 @@ import (
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/libs/go/httpx"
-	"xiaodou/dai/libs/go/server"
 )
 
 // Version is the public ai-service API version exposed in OpenAPI and meta endpoints.
@@ -53,7 +52,7 @@ type AIDeps struct {
 
 	// IdentityProvider 替代原 URMClient——合并后进程内获取用户/租户信息。
 	// nil 时 identity enrichment 返回空结果（和原 URMClient == nil 行为一致）。
-	IdentityProvider  IdentityProvider
+	IdentityProvider IdentityProvider
 
 	JWKSValidator    HumaJWKSValidator
 	BanChecker       HumaBanChecker
@@ -83,25 +82,6 @@ type AIDeps struct {
 	RiskControlChecker   *riskcontrol.Checker // 供 /risk-control/test 复用 Detect()，不落库
 }
 
-type infoOutput struct {
-	Body struct {
-		Name    string `json:"name"`
-		Version string `json:"version"`
-	}
-}
-
-type readyOutput struct {
-	Body struct {
-		Status     string                     `json:"status"`
-		Components map[string]componentStatus `json:"components"`
-	}
-}
-
-type componentStatus struct {
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
-}
-
 func RegisterAI(api huma.API, d AIDeps) {
 	if d.Service == "" {
 		d.Service = "ai-service"
@@ -109,10 +89,6 @@ func RegisterAI(api huma.API, d AIDeps) {
 	if d.Version == "" {
 		d.Version = Version
 	}
-	server.Health(api, d.Service, d.Version)
-	registerInfo(api, d)
-	registerReady(api, d)
-
 	pricingRead := huma.NewGroup(api)
 	pricingRead.UseMiddleware(platformOrTenantUserAuth(api, d))
 	registerPricingRead(pricingRead, d)
@@ -240,75 +216,4 @@ func mapServiceError(err error) error {
 
 func isInvalidUUIDError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "cannot parse UUID")
-}
-
-func registerInfo(api huma.API, d AIDeps) {
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-get-info",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/info",
-		Summary:     "服务信息",
-		Tags:        []string{"meta"},
-	}, func(_ context.Context, _ *struct{}) (*infoOutput, error) {
-		out := &infoOutput{}
-		out.Body.Name = d.Service
-		out.Body.Version = d.Version
-		return out, nil
-	})
-}
-
-func registerReady(api huma.API, d AIDeps) {
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-ready-check",
-		Method:      http.MethodGet,
-		Path:        "/readyz",
-		Summary:     "就绪检查",
-		Description: "检查 ai-service 依赖的 PostgreSQL 与 Redis 是否可用。",
-		Tags:        []string{"meta"},
-	}, func(ctx context.Context, _ *struct{}) (*readyOutput, error) {
-		components := map[string]componentStatus{}
-		ready := true
-
-		if d.Postgres == nil {
-			ready = false
-			components["postgres"] = componentStatus{Status: "error", Error: "postgres dependency is not configured"}
-		} else if err := d.Postgres.Ping(ctx); err != nil {
-			ready = false
-			components["postgres"] = componentStatus{Status: "error", Error: err.Error()}
-		} else {
-			components["postgres"] = componentStatus{Status: "ok"}
-		}
-
-		if d.Redis == nil {
-			components["redis"] = componentStatus{Status: "disabled"}
-		} else if err := d.Redis.Ping(ctx).Err(); err != nil {
-			ready = false
-			components["redis"] = componentStatus{Status: "error", Error: err.Error()}
-		} else {
-			components["redis"] = componentStatus{Status: "ok"}
-		}
-
-		if d.ServiceIdentity == nil {
-			ready = false
-			components["service_identity"] = componentStatus{Status: "error", Error: "service identity is not configured"}
-		} else if ok, err := d.ServiceIdentity.Ready(); !ok {
-			ready = false
-			message := "service session has not been established"
-			if err != nil {
-				message = err.Error()
-			}
-			components["service_identity"] = componentStatus{Status: "error", Error: message}
-		} else {
-			components["service_identity"] = componentStatus{Status: "ok"}
-		}
-
-		out := &readyOutput{}
-		out.Body.Components = components
-		out.Body.Status = "ok"
-		if !ready {
-			out.Body.Status = "error"
-			return out, httpx.ErrUnavailable.WithDetail("ai-service dependencies are not ready")
-		}
-		return out, nil
-	})
 }

@@ -1,21 +1,21 @@
 <!--
   任务中心页(智能服务/任务管理):仅做 API 适配与确认弹窗注入,实际渲染在
-  @dai/app-core 的 PortalTaskWorkspace(DsUI 一体面板 + DsFilterBar/DsTable)。
+  @/platform 的 PortalTaskWorkspace(DsUI 一体面板 + DsFilterBar/DsTable)。
 -->
 <script setup lang="ts">
 import {
   confirmDialog,
   notifyError,
   notifySuccess
-} from "@dai/app-core";
+} from "@/platform";
 import {
   PortalTaskWorkspace,
   portalTaskTypeLabel,
   type PortalTaskApi,
   type PortalTaskRecord
-} from "@dai/app-core/ai/tasks";
+} from "@/platform/ai/tasks";
 
-import { runtimeTaskApi } from "../../api/aiTenant";
+import { runtimeTaskApi } from "@/api/aiTenant";
 
 const taskApi: PortalTaskApi = {
   listTasks: (query) => runtimeTaskApi.listTasks(query),

@@ -29,7 +29,7 @@ func TestCheckerEnforcesClientAndServiceStateForAllUserTypes(t *testing.T) {
 	defer closeRedis()
 	setJSON(t, client, ServiceKey("ai"), ServiceSnapshot{ServiceID: "ai", Active: true, PortalEnabled: true})
 
-	if err := checker.Check(ctx, 1, "root", "", "ai", "proxy"); !errors.Is(err, ErrDenied) {
+	if err := checker.Check(ctx, 1, "root", "", "ai", "other-service"); !errors.Is(err, ErrDenied) {
 		t.Fatalf("super-admin client mismatch error = %v, want ErrDenied", err)
 	}
 	if err := checker.Check(ctx, 1, "root", "", "ai", "ai"); err != nil {

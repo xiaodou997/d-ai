@@ -8,8 +8,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 import { ShieldAlert } from 'lucide-vue-next'
-import { PortalPagePanel } from '@dai/app-core'
-import { DsTabs } from '@dai/ui'
+import { PortalPagePanel } from '@/platform'
+import { DsTabs } from '@/shared/ui'
 
 import RiskControlConfigPanel from './RiskControlConfigPanel.vue'
 import RiskControlEventsPanel from './RiskControlEventsPanel.vue'

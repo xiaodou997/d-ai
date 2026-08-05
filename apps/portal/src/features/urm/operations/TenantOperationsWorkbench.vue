@@ -3,15 +3,15 @@
   重构:页头 TenantWorkbenchHeader(旧 PortalPageHeader 封装) → PortalPagePanel 一体面板
        (图标徽章 + 面包屑标题 + 描述同行,#actions 保留时间窗切换与刷新),
        指标与双栏面板收进同卡 body 的 24px 容器;fill 链:根 flex:1 → PortalPagePanel fill → body 伸展。
-       业务逻辑与请求不变;TenantWorkbenchHeader 仍由接口代理 DashboardView 使用,保留原文件。
+       业务逻辑与请求不变;TenantWorkbenchHeader 由租户运营工作台使用,保留原文件。
 -->
 <script setup lang="ts">
 import { LayoutDashboard, RefreshCw } from "lucide-vue-next";
 import { useRouter } from "vue-router";
-import { PortalPagePanel } from "@dai/app-core";
+import { PortalPagePanel } from "@/platform";
 
-import TenantWorkbenchRangeTabs from "../../../components/workbench/TenantWorkbenchRangeTabs.vue";
-import { WORKBENCH_RANGE_OPTIONS } from "../../../components/workbench/workbenchRanges";
+import TenantWorkbenchRangeTabs from "@/components/workbench/TenantWorkbenchRangeTabs.vue";
+import { WORKBENCH_RANGE_OPTIONS } from "@/components/workbench/workbenchRanges";
 import TenantBusinessMetrics from "./components/TenantBusinessMetrics.vue";
 import TenantConsumptionRanking from "./components/TenantConsumptionRanking.vue";
 import TenantRecentConsumption from "./components/TenantRecentConsumption.vue";

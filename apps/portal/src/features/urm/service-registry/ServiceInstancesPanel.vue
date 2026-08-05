@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ServiceInstanceItem } from "../../../types/admin";
+import type { ServiceInstanceItem } from "@/api/types/admin";
 
 defineProps<{ instances: ServiceInstanceItem[] }>();
 

@@ -6,11 +6,11 @@
 <script setup lang="ts">
 import { ArrowRight, Loading } from "@element-plus/icons-vue";
 import { useRouter } from "vue-router";
-import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import AiWorkbenchSection from "./AiWorkbenchSection.vue";
 import AiUsageUserInsight from "./AiUsageUserInsight.vue";
-import type { TenantAiDashboardRecentError } from "../../../types/aiTenant";
+import type { TenantAiDashboardRecentError } from "@/api/types/aiTenant";
 
 interface UserInsightItem {
   key: string;

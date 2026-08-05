@@ -8,10 +8,10 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { CreditCard } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { DsTabs } from "@dai/ui";
-import { urmAdminApi } from "../../api/urmAdmin";
-import type { PaymentGlobalSettings, TopupPackage, WechatConfig } from "../../types/admin";
+import { PortalPagePanel } from "@/platform";
+import { DsTabs } from "@/shared/ui";
+import { urmAdminApi } from "@/api/urmAdmin";
+import type { PaymentGlobalSettings, TopupPackage, WechatConfig } from "@/api/types/admin";
 
 const activeTab = ref("wechat");
 const tabs = [

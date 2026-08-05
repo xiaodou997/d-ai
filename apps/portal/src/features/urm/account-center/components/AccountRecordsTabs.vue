@@ -7,10 +7,10 @@
 -->
 <script setup lang="ts">
 import { FileClock } from "lucide-vue-next";
-import { DsTable, DsTabs, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import type { TenantCashLedgerItem, TenantWithdrawal } from "../../../../types/tenant";
-import type { RechargeRecordItem } from "../../../../types/urmTenant";
+import type { TenantCashLedgerItem, TenantWithdrawal } from "@/api/types/tenant";
+import type { RechargeRecordItem } from "@/api/types/urmTenant";
 import {
   cashTransactionText,
   creditSourceText,

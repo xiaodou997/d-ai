@@ -5,7 +5,7 @@
 -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { PortalIdentityCell } from "@dai/app-core/ai/identity";
+import { PortalIdentityCell } from "@/platform/ai/identity";
 import {
   UsageCostCell,
   UsageLatencyCell,
@@ -13,8 +13,8 @@ import {
   UsageTokenCell,
   formatCredits,
   formatUsageTimestamp
-} from "@dai/app-core/ai/usage";
-import { DsPagination, DsTable, type DsTableColumn } from "@dai/ui";
+} from "@/platform/ai/usage";
+import { DsPagination, DsTable, type DsTableColumn } from "@/shared/ui";
 
 import type { TenantUsageRow } from "../model";
 

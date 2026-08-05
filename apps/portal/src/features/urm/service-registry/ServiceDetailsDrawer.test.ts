@@ -2,7 +2,7 @@ import { defineComponent } from "vue";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
-import type { ServiceRegistryDetail } from "../../../types/admin";
+import type { ServiceRegistryDetail } from "@/api/types/admin";
 import ServiceDetailsDrawer from "./ServiceDetailsDrawer.vue";
 
 const DrawerStub = defineComponent({

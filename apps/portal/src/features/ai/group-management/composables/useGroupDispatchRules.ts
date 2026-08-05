@@ -1,11 +1,11 @@
 import { computed, readonly, shallowRef, watch } from "vue";
 
-import { aiTenantApi } from "../../../../api/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import type {
   TenantAiDispatchModel,
   TenantAiDispatchRule,
   TenantAiDispatchRuleWriteRequest
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import { errorMessage } from "../errorMessage";
 
 export interface GroupDispatchRulesApi {

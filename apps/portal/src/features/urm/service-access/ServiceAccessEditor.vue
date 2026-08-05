@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { Check, Server } from "lucide-vue-next";
 
-import type { ServiceRegistryItem } from "../../../types/admin";
+import type { ServiceRegistryItem } from "@/api/types/admin";
 
 const props = defineProps<{
   services: ServiceRegistryItem[];

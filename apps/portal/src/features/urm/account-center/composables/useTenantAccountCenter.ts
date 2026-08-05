@@ -1,8 +1,8 @@
 import { computed, onMounted, reactive, shallowRef } from "vue";
 import { ElMessage } from "element-plus";
 
-import type { TenantTopupConfig, TenantTopupOrderCreated, TenantTopupOrderStatus } from "../../../../types/tenant";
-import type { AccountBalance, RechargeRecordItem } from "../../../../types/urmTenant";
+import type { TenantTopupConfig, TenantTopupOrderCreated, TenantTopupOrderStatus } from "@/api/types/tenant";
+import type { AccountBalance, RechargeRecordItem } from "@/api/types/urmTenant";
 import { accountCenterApi, type AccountCenterApi } from "../api";
 import {
   emptyAccountBalance,
@@ -12,7 +12,7 @@ import {
   type AccountCenterTab,
   type PurchaseMethod
 } from "../model";
-import type { TenantCashAccount, TenantCashLedgerItem, TenantWithdrawal } from "../../../../types/tenant";
+import type { TenantCashAccount, TenantCashLedgerItem, TenantWithdrawal } from "@/api/types/tenant";
 
 const pageSize = 20;
 

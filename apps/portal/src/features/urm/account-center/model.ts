@@ -1,5 +1,5 @@
-import type { AccountBalance } from "../../../types/urmTenant";
-import type { TenantCashAccount } from "../../../types/tenant";
+import type { AccountBalance } from "@/api/types/urmTenant";
+import type { TenantCashAccount } from "@/api/types/tenant";
 
 export type AccountCenterTab = "points" | "balance" | "withdrawals";
 export type PurchaseMethod = "balance" | "wechat";

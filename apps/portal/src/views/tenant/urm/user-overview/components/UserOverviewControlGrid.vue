@@ -3,17 +3,15 @@
   重构:el-tag → DsTag(tone 语义色)、el-empty → DsEmpty;布局与数据渲染逻辑不变。
 -->
 <script setup lang="ts">
-import { computed } from "vue";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
-import { DsEmpty, DsTag } from "@dai/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
+import { DsEmpty, DsTag } from "@/shared/ui";
 
-import type { TenantAiLimitPolicy } from "../../../../types/aiTenant";
-import { formatNumber, formatPercent } from "../formatters";
+import type { TenantAiLimitPolicy } from "@/api/types/aiTenant";
+import { formatNumber } from "../formatters";
 import type {
   UserOverviewAccessibleGroup,
   UserOverviewGroupSummary,
-  UserOverviewRiskSignal,
-  UserOverviewRoutePermissionSummary
+  UserOverviewRiskSignal
 } from "../model";
 
 const props = defineProps<{
@@ -21,16 +19,9 @@ const props = defineProps<{
   aiPolicy: TenantAiLimitPolicy | null;
   accessibleGroups: UserOverviewAccessibleGroup[];
   groupSummary: UserOverviewGroupSummary;
-  routePermissionSummary: UserOverviewRoutePermissionSummary;
   riskSignals: UserOverviewRiskSignal[];
   aiAvailable: boolean;
-  proxyAvailable: boolean;
 }>()
-
-const permissionCoverage = computed(() => {
-  if (!props.routePermissionSummary.total) return 0;
-  return (props.routePermissionSummary.allowed / props.routePermissionSummary.total) * 100;
-});
 
 function toneClass(tone: UserOverviewRiskSignal["tone"]) {
   return `risk-item--${tone}`;
@@ -111,19 +102,8 @@ function sourceLabel(source: UserOverviewAccessibleGroup["source"]) {
       </header>
 
       <div class="permission-card">
-        <template v-if="proxyAvailable">
-          <div class="permission-head">
-            <strong class="permission-title">接口授权覆盖</strong>
-            <span class="permission-value">
-              {{ routePermissionSummary.total ? `${routePermissionSummary.allowed}/${routePermissionSummary.total}` : "—" }}
-            </span>
-          </div>
-          <div class="permission-bar">
-            <span class="permission-bar-fill" :style="{ width: `${permissionCoverage}%` }"></span>
-          </div>
-          <p class="permission-meta">覆盖率 {{ formatPercent(permissionCoverage) }}，未授权 {{ formatNumber(routePermissionSummary.denied) }} 条。</p>
-        </template>
-        <p v-else class="permission-meta">当前租户未开通接口代理，暂无接口授权数据。</p>
+        <strong class="permission-title">平台限制</strong>
+        <p class="permission-meta">权限、限流和账号状态统一由当前 Portal 的 AI 运营策略决定。</p>
       </div>
 
       <div class="risk-list">

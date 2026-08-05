@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
-import { DsFilterBar, DsFilterField, DsTable, DsTag, type DsTableColumn } from '@dai/ui'
+import { DsFilterBar, DsFilterField, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 
 import { useRiskControlEvents } from '../composables/useRiskControlEvents'
 

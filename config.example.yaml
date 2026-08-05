@@ -6,17 +6,17 @@ app:
   env: development
 
 server:
-  addr: ':13000'
-  port: 13000
+  addr: ':19641'
+  port: 19641
   read_timeout: 30
   write_timeout: 0
   idle_timeout: 60
 
 database:
-  url: postgres://postgres:postgres@localhost:5432/dai?sslmode=disable
+  url: postgres://postgres:postgres@localhost:15432/dai?sslmode=disable
 
 redis:
-  addr: 127.0.0.1:6379
+  addr: 127.0.0.1:16379
 
 jwt:
   expiration: 2h
@@ -32,13 +32,13 @@ security:
 sso:
   cookie_domain: ''
   cookie_secure: false
-  issuer_url: http://localhost:13000
-  customer_portal_base_url: http://localhost:13000
+  issuer_url: http://localhost:19641
+  customer_portal_base_url: http://localhost:19641
   allowed_redirect_uris:
-    - http://localhost:13000
+    - http://localhost:19641
 
 legal:
-  base_url: http://localhost:13000/legal
+  base_url: http://localhost:19641/legal
   terms_version: '2026-07-19'
   privacy_version: '2026-07-19'
 

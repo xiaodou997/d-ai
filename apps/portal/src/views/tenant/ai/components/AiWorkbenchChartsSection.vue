@@ -10,7 +10,7 @@ import { useRouter } from "vue-router";
 import AiWorkbenchSection from "./AiWorkbenchSection.vue";
 import AiUsageModelInsight from "./AiUsageModelInsight.vue";
 import AiUsageSourceInsight from "./AiUsageSourceInsight.vue";
-import type { TenantAiDashboardTopModel } from "../../../types/aiTenant";
+import type { TenantAiDashboardTopModel } from "@/api/types/aiTenant";
 
 interface SourceInsightItem {
   key: string;

@@ -4,15 +4,15 @@ import {
   notifyError,
   notifySuccess,
   notifyWarning
-} from "@dai/app-core";
+} from "@/platform";
 import {
   portalChatWorkspaceIconProps,
   PortalChatWorkspace,
   type PortalChatApi
-} from "@dai/app-core/ai/chat";
+} from "@/platform/ai/chat";
 
-import { runtimeChatApi, streamRuntimeChatMessage } from "../../../api/aiTenant";
-import type { ChatMessageDTO, ChatModel, ChatSession } from "../../../types/aiTenant";
+import { runtimeChatApi, streamRuntimeChatMessage } from "@/api/aiTenant";
+import type { ChatMessageDTO, ChatModel, ChatSession } from "@/api/types/aiTenant";
 
 const chatApi: PortalChatApi<ChatModel, ChatSession, ChatMessageDTO> = {
   listModels: () => runtimeChatApi.listModels(),

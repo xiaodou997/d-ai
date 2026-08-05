@@ -5,7 +5,7 @@ import type {
   TenantSubPurchaseCalendarUnit,
   TenantSubPurchasePeriodType,
   TenantSubPurchasePolicyInput
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 
 const policy = defineModel<TenantSubPurchasePolicyInput>({ required: true });
 const rollingUnit = shallowRef<"hour" | "day">("day");

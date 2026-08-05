@@ -6,15 +6,15 @@ import {
   notifySuccess,
   notifyWarning,
   resolvePortalPublicBaseUrl
-} from "@dai/app-core";
+} from "@/platform";
 import {
   portalAppKeyWorkspaceIconProps,
   PortalAppKeyWorkspace,
   type PortalAppKeyApi
-} from "@dai/app-core/ai/app-keys";
+} from "@/platform/ai/appkeys";
 
-import { aiCustomerApi } from "../../api/aiCustomer";
-import { portalEnv } from "../../env";
+import { aiCustomerApi } from "@/api/aiCustomer";
+import { portalEnv } from "@/env";
 
 defineProps<{
   embedded?: boolean;

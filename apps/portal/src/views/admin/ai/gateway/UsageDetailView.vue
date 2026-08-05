@@ -8,12 +8,12 @@ import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ScrollText } from "lucide-vue-next";
 
-import { PortalPagePanel } from "@dai/app-core";
-import { DsEmpty } from "@dai/ui";
+import { PortalPagePanel } from "@/platform";
+import { DsEmpty } from "@/shared/ui";
 
-import { adminUsageApi } from "../../../features/ai/usage/api";
-import UsageDetailContent from "../../../features/ai/usage/components/UsageDetailContent.vue";
-import type { UsageLogDetailDTO } from "../../../features/ai/usage/model";
+import { adminUsageApi } from "@/features/ai/usage/api";
+import UsageDetailContent from "@/features/ai/usage/components/UsageDetailContent.vue";
+import type { UsageLogDetailDTO } from "@/features/ai/usage/model";
 
 const route = useRoute();
 const router = useRouter();

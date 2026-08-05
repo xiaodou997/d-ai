@@ -1,7 +1,7 @@
 import type {
   RiskControlConfigDTO as LegacyRiskControlConfigDTO,
   RiskEventDTO as LegacyRiskEventDTO
-} from '../../../types/ai'
+} from '@/api/types/ai'
 
 export type {
   KeywordEntryDTO,
@@ -14,7 +14,7 @@ export type {
   RiskControlTestResultDTO,
   RiskEventDTO,
   RiskEventsOutputBody
-} from '../../../types/ai'
+} from '@/api/types/ai'
 
 export type RiskControlLogMode = Extract<LegacyRiskControlConfigDTO['mode'], 'observe' | 'pre_block'>
 export type RiskControlLogAction = 'allow' | 'block' | 'keyword_block' | 'error'

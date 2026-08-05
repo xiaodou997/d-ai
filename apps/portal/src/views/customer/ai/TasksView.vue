@@ -3,15 +3,15 @@ import {
   confirmDialog,
   notifyError,
   notifySuccess
-} from "@dai/app-core";
+} from "@/platform";
 import {
   PortalTaskWorkspace,
   portalTaskTypeLabel,
   type PortalTaskApi,
   type PortalTaskRecord
-} from "@dai/app-core/ai/tasks";
+} from "@/platform/ai/tasks";
 
-import { runtimeTaskApi } from "../../api/aiCustomer";
+import { runtimeTaskApi } from "@/api/aiCustomer";
 
 const taskApi: PortalTaskApi = {
   listTasks: (query) => runtimeTaskApi.listTasks(query),

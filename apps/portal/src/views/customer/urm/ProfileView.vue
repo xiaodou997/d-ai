@@ -66,9 +66,9 @@
 import { computed, reactive, ref, shallowRef } from "vue";
 import type { FormInstance, FormRules } from "element-plus";
 import { UserRound } from "lucide-vue-next";
-import { PortalPagePanel, notifyError, notifySuccess } from "@dai/app-core";
-import { useAuthStore } from "../../stores/auth";
-import { urmCustomerApi } from "../../api/urmCustomer";
+import { PortalPagePanel, notifyError, notifySuccess } from "@/platform";
+import { useAuthStore } from "@/stores/auth";
+import { urmCustomerApi } from "@/api/urmCustomer";
 
 interface ProfileField {
   label: string;

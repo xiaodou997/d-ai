@@ -11,11 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"go.uber.org/zap"
 
+	"xiaodou/dai/internal/dbtest"
 	shared "xiaodou/dai/internal/domain"
-	"xiaodou/dai/migrations"
 )
 
 func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
@@ -185,10 +184,8 @@ func applyURMTestMigrations(t *testing.T, dsn string) {
 	}
 	sqlDB := stdlib.OpenDB(*cfg)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	goose.SetDialect("postgres")
-	goose.SetBaseFS(migrations.FS)
-	if err := goose.Up(sqlDB, "."); err != nil {
-		t.Fatalf("apply URM migrations: %v", err)
+	if err := dbtest.EnsureCanonicalSchema(context.Background(), sqlDB); err != nil {
+		t.Fatalf("initialize canonical test schema: %v", err)
 	}
 }
 

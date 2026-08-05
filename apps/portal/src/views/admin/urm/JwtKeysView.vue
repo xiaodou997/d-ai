@@ -59,9 +59,9 @@ import { ref, onMounted } from 'vue'
 import { InfoFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { KeyRound } from 'lucide-vue-next'
-import { PortalPagePanel } from '@dai/app-core'
-import { DsTable, DsTag, type DsTableColumn } from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
+import { PortalPagePanel } from '@/platform'
+import { DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
 
 const loading = ref(false)
 const rotating = ref(false)

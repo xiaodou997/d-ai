@@ -1,10 +1,10 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 
-import type { TenantAiUpstreamResource } from "../../../../types/aiTenant";
+import type { TenantAiUpstreamResource } from "@/api/types/aiTenant";
 import UpstreamAccountRail from "./UpstreamAccountRail.vue";
 
-vi.mock("@dai/app-core", () => ({
+vi.mock("@/platform", () => ({
   PortalContentCard: {
     props: ["title"],
     template: "<section><h2>{{ title }}</h2><slot /></section>"

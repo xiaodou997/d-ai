@@ -11,8 +11,8 @@ import { computed } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
-import { PortalMetricGrid, PortalPagePanel } from "@dai/app-core";
-import { formatCredits } from "@dai/app-core/ai/usage";
+import { PortalMetricGrid, PortalPagePanel } from "@/platform";
+import { formatCredits } from "@/platform/ai/usage";
 
 import { tenantUsageApi } from "./api";
 import TenantUsageDetailDrawer from "./components/TenantUsageDetailDrawer.vue";

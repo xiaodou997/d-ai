@@ -5,11 +5,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { DsTag } from "@dai/ui";
+import { DsTag } from "@/shared/ui";
 
-import type { EndUserItem } from "../../../../types/urmTenant";
+import type { EndUserItem } from "@/api/types/urmTenant";
 import { formatDateTime } from "../formatters";
-import type { UserOverviewRoutePermissionSummary } from "../model";
 
 const props = defineProps<{
   userId: string;
@@ -17,16 +16,13 @@ const props = defineProps<{
   loading: boolean;
   lastActivityTime: number | null;
   groupAccessibleCount: number;
-  routePermissionSummary: UserOverviewRoutePermissionSummary;
   warnings: string[];
   aiAvailable: boolean;
-  proxyAvailable: boolean;
 }>()
 
 const emit = defineEmits<{
   (e: "back"): void;
   (e: "open-ai-config"): void;
-  (e: "open-proxy-permissions"): void;
   (e: "refresh"): void;
 }>()
 
@@ -46,12 +42,6 @@ const detailItems = computed(() => [
   { label: "注册时间", value: formatDateTime(props.user?.createdTime) },
   { label: "上次登录", value: formatDateTime(props.user?.lastLoginTime) },
   { label: "最近活跃", value: formatDateTime(props.lastActivityTime) },
-  {
-    label: "接口授权",
-    value: props.routePermissionSummary.total
-      ? `${props.routePermissionSummary.allowed}/${props.routePermissionSummary.total}`
-      : "—"
-  },
   { label: "AI 可见分组", value: `${props.groupAccessibleCount}` }
 ]);
 </script>
@@ -66,13 +56,12 @@ const detailItems = computed(() => [
           <DsTag :tone="statusTone">{{ statusText }}</DsTag>
         </div>
         <p class="hero-subtitle">
-          把基础资料、充值、访问、AI 配置和风险信号放在一个上下文里看，避免在多个业务模块之间来回切换。
+          把基础资料、充值、AI 配置和风险信号放在一个上下文里看，避免在多个业务模块之间来回切换。
         </p>
       </div>
 
       <div class="hero-actions">
         <el-button plain @click="emit('back')">返回列表</el-button>
-        <el-button plain :disabled="!proxyAvailable" @click="emit('open-proxy-permissions')">接口权限</el-button>
         <el-button plain :disabled="!aiAvailable" @click="emit('open-ai-config')">AI 配置</el-button>
         <el-button type="primary" @click="emit('refresh')">刷新数据</el-button>
       </div>

@@ -2,10 +2,10 @@
 import {
   PortalContentCard,
   PortalMetricGrid
-} from "@dai/app-core";
+} from "@/platform";
 import {
   UsageTag
-} from "@dai/app-core/ai/usage";
+} from "@/platform/ai/usage";
 
 import type { AdminUsageRow, DailyTrendRowDTO, UsageMetric } from "../model";
 import type { UsageDistributionItem } from "../format";

@@ -3,7 +3,7 @@ import type { LocationQuery } from "vue-router";
 import {
   WORKBENCH_RANGE_OPTIONS,
   type WorkbenchRangeId
-} from "../../../components/workbench/workbenchRanges";
+} from "@/components/workbench/workbenchRanges";
 import type { UsageFilters } from "./model";
 
 const recordFilterKeys = ["tenant_id", "user_id", "model_code", "request_status", "request_source"] as const;

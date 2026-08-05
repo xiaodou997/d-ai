@@ -8,9 +8,9 @@
 import { computed, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { Coins, RefreshCw, Wallet } from "lucide-vue-next";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { PortalPagePanel } from "@dai/app-core";
-import { DsPagination } from "@dai/ui";
+import { GuideHelpLink } from "@/platform/guide";
+import { PortalPagePanel } from "@/platform";
+import { DsPagination } from "@/shared/ui";
 
 import { useRoute, useRouter } from "vue-router";
 import AccountAssetOverview from "./components/AccountAssetOverview.vue";

@@ -12,21 +12,21 @@ import (
 )
 
 func TestNormalizeServiceIDs(t *testing.T) {
-	got := NormalizeServiceIDs([]string{" proxy ", "ai", "", "ai"})
-	if !slices.Equal(got, []string{"ai", "proxy"}) {
+	got := NormalizeServiceIDs([]string{" urm ", "ai", "", "ai"})
+	if !slices.Equal(got, []string{"ai", "urm"}) {
 		t.Fatalf("NormalizeServiceIDs() = %v", got)
 	}
 }
 
 func TestRequestedPolicyNormalizesAndValidates(t *testing.T) {
-	mode, ids, err := requestedPolicy(&PolicyInput{Mode: "selected", ServiceIDs: []string{" proxy ", "ai", "ai"}}, "all", nil)
+	mode, ids, err := requestedPolicy(&PolicyInput{Mode: "selected", ServiceIDs: []string{" urm ", "ai", "ai"}}, "all", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mode != "selected" || !slices.Equal(ids, []string{"ai", "proxy"}) {
+	if mode != "selected" || !slices.Equal(ids, []string{"ai", "urm"}) {
 		t.Fatalf("requestedPolicy() = %q, %v", mode, ids)
 	}
-	if _, _, err := requestedPolicy(&PolicyInput{Mode: "all", ServiceIDs: []string{"ai"}}, "selected", []string{"proxy"}); err == nil {
+	if _, _, err := requestedPolicy(&PolicyInput{Mode: "all", ServiceIDs: []string{"ai"}}, "selected", []string{"urm"}); err == nil {
 		t.Fatal("requestedPolicy() accepted service IDs in all mode")
 	}
 }
@@ -128,7 +128,7 @@ func TestCreateTenantTxStoresRequestedPolicyAtomically(t *testing.T) {
 			reason_code text,
 			metadata jsonb NOT NULL
 		);
-		INSERT INTO gov_clients (client_id, portal_enabled) VALUES ('ai', true), ('proxy', true), ('internal', false);
+		INSERT INTO gov_clients (client_id, portal_enabled) VALUES ('ai', true), ('urm', true), ('internal', false);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestCreateTenantTxStoresRequestedPolicyAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx)
-	requested := &PolicyInput{Mode: "selected", ServiceIDs: []string{" proxy ", "ai", "ai"}}
+	requested := &PolicyInput{Mode: "selected", ServiceIDs: []string{" urm ", "ai", "ai"}}
 	if err := CreateTenantTx(ctx, tx, Actor{UserType: 1, UserID: "root"}, "tenant-1", requested); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestCreateTenantTxStoresRequestedPolicyAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if policy.Mode != "selected" || !slices.Equal(policy.ServiceIDs, []string{"ai", "proxy"}) || policy.Version != 1 {
+	if policy.Mode != "selected" || !slices.Equal(policy.ServiceIDs, []string{"ai", "urm"}) || policy.Version != 1 {
 		t.Fatalf("unexpected created policy: %#v", policy)
 	}
 	var eventType, actorID, targetID string
@@ -180,10 +180,10 @@ func TestCreateTenantTxLocksOperatorAndEnforcesSubset(t *testing.T) {
 			updated_by text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(),
 			PRIMARY KEY (subject_type, subject_id)
 		);
-		INSERT INTO gov_clients (client_id, portal_enabled) VALUES ('ai', true), ('proxy', true);
+		INSERT INTO gov_clients (client_id, portal_enabled) VALUES ('ai', true), ('urm', true);
 		INSERT INTO gov_subject_service_access
 			(subject_type, subject_id, access_mode, service_ids, version, created_by, updated_by)
-		VALUES ('admin', 'operator-1', 'selected', ARRAY['proxy'], 3, 'root', 'root');
+		VALUES ('admin', 'operator-1', 'selected', ARRAY['urm'], 3, 'root', 'root');
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestSuperAdminCapabilitiesFollowRuntimePortalState(t *testing.T) {
 		);
 		INSERT INTO gov_clients (client_id, portal_enabled, status) VALUES
 			('ai', false, 'active'),
-			('proxy', true, 'active'),
+			('urm', true, 'active'),
 			('disabled', true, 'disabled');
 	`); err != nil {
 		t.Fatal(err)
@@ -222,8 +222,8 @@ func TestSuperAdminCapabilitiesFollowRuntimePortalState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(capabilities, []string{"proxy"}) {
-		t.Fatalf("initial capabilities = %v, want [proxy]", capabilities)
+	if !slices.Equal(capabilities, []string{"urm"}) {
+		t.Fatalf("initial capabilities = %v, want [urm]", capabilities)
 	}
 
 	if _, err := pool.Exec(ctx, `UPDATE gov_clients SET portal_enabled = true WHERE client_id = 'ai'`); err != nil {
@@ -233,11 +233,11 @@ func TestSuperAdminCapabilitiesFollowRuntimePortalState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(capabilities, []string{"ai", "proxy"}) {
-		t.Fatalf("enabled capabilities = %v, want [ai proxy]", capabilities)
+	if !slices.Equal(capabilities, []string{"ai", "urm"}) {
+		t.Fatalf("enabled capabilities = %v, want [ai urm]", capabilities)
 	}
 
-	if _, err := pool.Exec(ctx, `UPDATE gov_clients SET portal_enabled = false WHERE client_id = 'proxy'`); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE gov_clients SET portal_enabled = false WHERE client_id = 'urm'`); err != nil {
 		t.Fatal(err)
 	}
 	capabilities, err = service.ListCapabilities(ctx, 1, "root", "")

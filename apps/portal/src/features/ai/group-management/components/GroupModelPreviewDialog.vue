@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { RefreshCw } from "lucide-vue-next";
-import { DsEmpty, DsSkeleton, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsEmpty, DsSkeleton, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type {
   TenantAiGroupEffectivePrice,
   TenantAiGroupEffectivePricesOutputBody,
   TenantAiVisibleGroup
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import { capabilityLabels } from "../catalog";
 import { errorMessage } from "../errorMessage";
 

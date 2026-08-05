@@ -8,7 +8,7 @@
 import { computed, ref, watch, type Component } from "vue";
 import { Plus, RefreshCw, Search } from "lucide-vue-next";
 
-import { PortalPagePanel, type PortalPagePanelBreadcrumb } from "@dai/app-core";
+import { PortalPagePanel, type PortalPagePanelBreadcrumb } from "@/platform";
 import {
   DsFilterBar,
   DsFilterField,
@@ -16,9 +16,9 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from "@dai/ui";
+} from "@/shared/ui";
 
-import type { ServiceRegistryItem } from "../../../types/admin";
+import type { ServiceRegistryItem } from "@/api/types/admin";
 
 const props = defineProps<{
   /** 页头身份图标(lucide 组件),由页面组合层传入 */

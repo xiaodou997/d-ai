@@ -6,7 +6,7 @@ import {
   getWorkbenchRangeOption,
   WORKBENCH_RANGE_OPTIONS,
   type WorkbenchRangeId
-} from "../../../../components/workbench/workbenchRanges";
+} from "@/components/workbench/workbenchRanges";
 import type { AdminUsageApi } from "../api";
 import {
   mapAdminUsageRankingRows,

@@ -15,18 +15,18 @@ import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { Crown } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { DsEmpty, DsTable, DsTabs, DsTag, type DsTableColumn } from "@dai/ui";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
+import { PortalPagePanel } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import { DsEmpty, DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
 import {
   formatCredits,
   formatWholeCredits
-} from "@dai/app-core/ai/usage";
+} from "@/platform/ai/usage";
 
-import { aiCustomerApi } from "../../api/aiCustomer";
-import { urmCustomerApi } from "../../api/urmCustomer";
-import SubscriptionPurchaseEligibility from "../../features/ai/subscriptions/SubscriptionPurchaseEligibility.vue";
+import { aiCustomerApi } from "@/api/aiCustomer";
+import { urmCustomerApi } from "@/api/urmCustomer";
+import SubscriptionPurchaseEligibility from "@/features/ai/subscriptions/SubscriptionPurchaseEligibility.vue";
 import type {
   AiSubOrder,
   AiSubPlan,
@@ -34,7 +34,7 @@ import type {
   AiSubPurchaseProblemMeta,
   AiSubWindow,
   AiSubscription
-} from "../../types/aiCustomer";
+} from "@/api/types/aiCustomer";
 
 const router = useRouter();
 

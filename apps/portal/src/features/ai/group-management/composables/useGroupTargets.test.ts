@@ -1,12 +1,12 @@
 import { nextTick, shallowRef } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../../api/aiTenant", () => ({ aiTenantApi: {} }));
+vi.mock("@/api/aiTenant", () => ({ aiTenantApi: {} }));
 
 import type {
   TenantAiGroupTarget,
   TenantAiUpstreamResource
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import { useGroupTargets, type GroupTargetsApi } from "./useGroupTargets";
 
 const resources: TenantAiUpstreamResource[] = [

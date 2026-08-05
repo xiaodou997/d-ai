@@ -3,9 +3,8 @@
 // itself is the single source of truth shared by every consuming service and
 // every replica, so there is no local cache to go stale on restart or drop
 // an event: a plain Redis GET is already sub-millisecond and cheap enough to
-// do on every request. Shared by every service that authenticates requests
-// (ai-service, proxy-service) so the key format only needs to change in one
-// place.
+// do on every request. Shared by the AI gateway and other authenticating
+// components so the key format only needs to change in one place.
 package banstate
 
 import (

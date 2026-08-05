@@ -9,15 +9,15 @@ import { computed, shallowRef, useTemplateRef, watch } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Layers, RefreshCw } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { DsEmpty, DsTabs } from "@dai/ui";
+import { PortalPagePanel } from "@/platform";
+import { DsEmpty, DsTabs } from "@/shared/ui";
 
-import { aiTenantApi } from "../../../api/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import type {
   TenantAiGroupWriteRequest,
   TenantAiPriceBook,
   TenantAiVisibleGroup
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import GroupFormDialog from "./components/GroupFormDialog.vue";
 import GroupSummaryCard from "./components/GroupSummaryCard.vue";
 import GroupClientSurfacePolicyPanel from "./tabs/GroupClientSurfacePolicyPanel.vue";

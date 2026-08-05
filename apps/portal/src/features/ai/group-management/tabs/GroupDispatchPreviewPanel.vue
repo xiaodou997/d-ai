@@ -7,10 +7,10 @@
 import { computed, reactive, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { Play } from "lucide-vue-next";
-import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import { aiTenantApi } from "../../../../api/aiTenant";
-import type { TenantAiDispatchPreview } from "../../../../types/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
+import type { TenantAiDispatchPreview } from "@/api/types/aiTenant";
 import { clientSurfaceOptions, surfaceLabel } from "../catalog";
 import { errorMessage } from "../problemPresentation";
 

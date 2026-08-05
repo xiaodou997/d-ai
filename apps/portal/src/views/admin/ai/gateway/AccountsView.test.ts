@@ -16,11 +16,11 @@ const api = vi.hoisted(() => ({
   updateUpstreamAccountStatus: vi.fn()
 }))
 
-vi.mock('../../../api/aiAdmin', () => ({ aiAdminApi: api }))
-vi.mock('../../../features/ai/upstream-model-bindings', () => ({
+vi.mock('@/api/aiAdmin', () => ({ aiAdminApi: api }))
+vi.mock('@/features/ai/upstream-model-bindings', () => ({
   useModelBindingBatchDelete: vi.fn()
 }))
-vi.mock('@dai/app-core', () => ({
+vi.mock('@/platform', () => ({
   PortalContentCard: { template: '<div><slot name="header" /><slot name="actions" /><slot /></div>' },
   PortalPagePanel: { template: '<div><slot name="actions" /><slot name="filters" /><slot /><slot name="pagination" /></div>' }
 }))

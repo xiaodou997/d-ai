@@ -11,9 +11,9 @@ import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
 import { LayoutDashboard } from "lucide-vue-next";
 
-import { PortalPagePanel } from "@dai/app-core";
+import { PortalPagePanel } from "@/platform";
 
-import TenantWorkbenchRangeTabs from "../../components/workbench/TenantWorkbenchRangeTabs.vue";
+import TenantWorkbenchRangeTabs from "@/components/workbench/TenantWorkbenchRangeTabs.vue";
 import AiWorkbenchMetricsSection from "./components/AiWorkbenchMetricsSection.vue";
 import AiWorkbenchChartsSection from "./components/AiWorkbenchChartsSection.vue";
 import AiWorkbenchQualitySection from "./components/AiWorkbenchQualitySection.vue";
@@ -26,17 +26,17 @@ import {
   isWorkbenchRangeId,
   type WorkbenchRangeId,
   type WorkbenchRangeOption
-} from "../../components/workbench/workbenchRanges";
-import { aiTenantApi, formatCredits } from "../../api/aiTenant";
-import { listTenantUsageRecords, type TenantUsageLog } from "../../features/ai/usage";
-import { tenantApi } from "../../api/tenant";
+} from "@/components/workbench/workbenchRanges";
+import { aiTenantApi, formatCredits } from "@/api/aiTenant";
+import { listTenantUsageRecords, type TenantUsageLog } from "@/features/ai/usage";
+import { tenantApi } from "@/api/tenant";
 import type {
   ChatSession,
   ConsoleImageJob,
   TenantAiDashboardRecentError,
   TenantAiDashboardTopModel,
-} from "../../types/aiTenant";
-import type { TenantEndUserItem } from "../../types/tenant";
+} from "@/api/types/aiTenant";
+import type { TenantEndUserItem } from "@/api/types/tenant";
 
 const router = useRouter();
 const loading = ref(false);

@@ -21,8 +21,8 @@ const messages = vi.hoisted(() => ({
   warning: vi.fn()
 }))
 
-vi.mock('../../../../api/aiAdmin', () => ({ aiAdminApi: api }))
-vi.mock('../../../../features/ai/upstream-model-bindings/api', () => ({
+vi.mock('@/api/aiAdmin', () => ({ aiAdminApi: api }))
+vi.mock('@/features/ai/upstream-model-bindings/api', () => ({
   upstreamModelBindingBatchApi: batchApi
 }))
 vi.mock('element-plus', () => ({

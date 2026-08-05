@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { DsNumberInput } from "@dai/ui";
+import { DsNumberInput } from "@/shared/ui";
 
 import type {
   TenantAiGroupWriteRequest,
   TenantAiPriceBook,
   TenantAiVisibleGroup
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 
 const props = defineProps<{
   group?: TenantAiVisibleGroup | null;

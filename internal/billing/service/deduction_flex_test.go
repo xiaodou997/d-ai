@@ -183,7 +183,7 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 	tenantID := "t_owner_" + suffix
 	userID := "u_owner_" + suffix
 	ownerClientID := "ai-service-" + suffix
-	otherClientID := "proxy-service-" + suffix
+	otherClientID := "other-client-" + suffix
 	mustExec := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := pool.Exec(ctx, sql, args...); err != nil {

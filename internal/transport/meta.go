@@ -24,7 +24,7 @@ func registerInfo(api huma.API, version string) {
 		Tags:        []string{"meta"},
 	}, func(_ context.Context, _ *struct{}) (*infoOutput, error) {
 		out := &infoOutput{}
-		out.Body.Name = "URM"
+		out.Body.Name = "D-AI"
 		out.Body.Version = version
 		return out, nil
 	})

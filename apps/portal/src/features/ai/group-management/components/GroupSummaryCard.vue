@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { PortalContentCard } from "@dai/app-core";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
+import { PortalContentCard } from "@/platform";
+import { formatMultiplier } from "@/platform/ai/utils";
 
-import type { TenantAiVisibleGroup } from "../../../../types/aiTenant";
+import type { TenantAiVisibleGroup } from "@/api/types/aiTenant";
 
 defineProps<{
   group: TenantAiVisibleGroup;

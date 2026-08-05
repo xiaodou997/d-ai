@@ -1,7 +1,7 @@
 import type {
   TenantAiGroupTarget,
   TenantAiUpstreamResource
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 
 export type GroupTargetChange = "add" | "update" | "remove";
 export type GroupTargetStatus = "active" | "disabled";

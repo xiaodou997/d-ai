@@ -4,9 +4,9 @@ import { Refresh } from "@element-plus/icons-vue";
 import {
   PortalContentCard,
   PortalMetricGrid
-} from "@dai/app-core";
-import { DsFilterBar, DsPagination, DsTag } from "@dai/ui";
-import { requestSourceOptions } from "@dai/app-core/ai/usage";
+} from "@/platform";
+import { DsFilterBar, DsPagination, DsTag } from "@/shared/ui";
+import { requestSourceOptions } from "@/platform/ai/usage";
 
 import type {
   AdminUsageRow,

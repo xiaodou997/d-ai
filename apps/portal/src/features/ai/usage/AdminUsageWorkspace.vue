@@ -9,8 +9,8 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
 
-import { PortalPagePanel } from "@dai/app-core";
-import { DsTabs } from "@dai/ui";
+import { PortalPagePanel } from "@/platform";
+import { DsTabs } from "@/shared/ui";
 
 import UsageErrorsPanel from "./components/UsageErrorsPanel.vue";
 import UsageExplorerWorkspace from "./components/UsageExplorerWorkspace.vue";
@@ -19,7 +19,7 @@ import { adminUsageApi } from "./api";
 import { useAdminUsageExplorer } from "./composables/useAdminUsageExplorer";
 import type { AdminUsageRow, UsageFilters, UsageWorkbenchTab } from "./model";
 import { restoreUsageRecordRouteQuery } from "./usageNavigation";
-import { useAuthStore } from "../../../stores/auth";
+import { useAuthStore } from "@/stores/auth";
 
 const route = useRoute();
 const router = useRouter();

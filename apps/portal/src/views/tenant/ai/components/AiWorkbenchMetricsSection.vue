@@ -4,7 +4,7 @@
        外层卡片改为 AiWorkbenchSection 分区(一体面板内 1px 分隔线),loading 时值显示「—」。
 -->
 <script setup lang="ts">
-import { DsMetricCard } from "@dai/ui";
+import { DsMetricCard } from "@/shared/ui";
 
 import AiWorkbenchSection from "./AiWorkbenchSection.vue";
 

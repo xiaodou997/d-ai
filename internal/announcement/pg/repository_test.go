@@ -10,11 +10,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"xiaodou/dai/internal/announcement"
 	announcementpg "xiaodou/dai/internal/announcement/pg"
-	"xiaodou/dai/migrations"
+	"xiaodou/dai/internal/dbtest"
 )
 
 func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
@@ -121,10 +120,8 @@ func openAnnouncementTestPool(t *testing.T) *pgxpool.Pool {
 
 	db := stdlib.OpenDBFromPool(pool)
 	defer func(db *sql.DB) { _ = db.Close() }(db)
-	goose.SetDialect("postgres")
-	goose.SetBaseFS(migrations.FS)
-	if err := goose.Up(db, "."); err != nil {
-		t.Fatalf("migrate test database: %v", err)
+	if err := dbtest.EnsureCanonicalSchema(ctx, db); err != nil {
+		t.Fatalf("initialize canonical test schema: %v", err)
 	}
 	return pool
 }

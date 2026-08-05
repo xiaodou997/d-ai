@@ -3,15 +3,15 @@ import {
   createNamedConfirmDialog,
   notifyError,
   notifySuccess
-} from "@dai/app-core";
+} from "@/platform";
 import {
   PortalPromptManagementWorkspace,
   portalAppManagementIconProps,
   type PortalAppPromptApi
-} from "@dai/app-core/ai/apps";
+} from "@/platform/ai/apps";
 
-import { aiCustomerApi } from "../../../api/aiCustomer";
-import type { UserAppPromptDTO, UserAppPromptDetailDTO } from "../../../types/aiCustomer";
+import { aiCustomerApi } from "@/api/aiCustomer";
+import type { UserAppPromptDTO, UserAppPromptDetailDTO } from "@/api/types/aiCustomer";
 
 const promptApi: PortalAppPromptApi<UserAppPromptDTO, UserAppPromptDetailDTO> = {
   listPrompts: () => aiCustomerApi.listUserAppPrompts(),

@@ -14,14 +14,14 @@ import { ElMessage } from "element-plus";
 import {
   PortalContentCard,
   PortalDetailLayout
-} from "@dai/app-core";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
+} from "@/platform";
+import { formatMultiplier } from "@/platform/ai/utils";
 import {
   formatMs,
   UsageTag,
   UsageTimingCell,
   UsageTokenCell
-} from "@dai/app-core/ai/usage";
+} from "@/platform/ai/usage";
 
 import { normalizeUsageAttempts, type UsageAttemptDetail, type UsageLogDetailDTO } from "../model";
 import {

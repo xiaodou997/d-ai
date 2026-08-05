@@ -4,7 +4,7 @@
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import { PortalKeyManagementWorkspace, type PortalKeyManagementTab } from "@dai/app-core/ai/keys";
+import { PortalKeyManagementWorkspace, type PortalKeyManagementTab } from "@/platform/ai/keys";
 
 import ApiKeysView from "./ApiKeysView.vue";
 import AppKeysView from "./AppKeysView.vue";

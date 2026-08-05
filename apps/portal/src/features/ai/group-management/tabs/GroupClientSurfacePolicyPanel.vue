@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { Image, MessageSquareText, Save, ScanSearch } from "lucide-vue-next";
 
-import type { TenantAiClientSurface } from "../../../../types/aiTenant";
+import type { TenantAiClientSurface } from "@/api/types/aiTenant";
 import { clientSurfaceOptions } from "../catalog";
 import { useGroupClientSurfacePolicy } from "../composables/useGroupClientSurfacePolicy";
 

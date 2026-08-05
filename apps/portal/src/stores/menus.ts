@@ -3,7 +3,7 @@ import { defineStore } from "pinia";
 
 import { buildUnifiedNav } from "../menus/unifiedMenus";
 import { useAuthStore } from "./auth";
-import type { AppShellNavItem } from "@dai/app-core";
+import type { AppShellNavItem } from "@/platform";
 
 /**
  * 统一 Menu Store —— 根据 userType 动态生成菜单

@@ -173,8 +173,8 @@ import { PieChart } from 'echarts/charts'
 import { TooltipComponent } from 'echarts/components'
 import { init, use, type EChartsType } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { PortalPagePanel } from '@dai/app-core'
-import { formatMicroCredits } from '@dai/app-core/ai/usage'
+import { PortalPagePanel } from '@/platform'
+import { formatMicroCredits } from '@/platform/ai/usage'
 import {
   DsEmpty,
   DsFilterBar,
@@ -183,8 +183,8 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
+} from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
 
 use([PieChart, TooltipComponent, CanvasRenderer])
 

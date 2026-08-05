@@ -4,10 +4,10 @@ import { Megaphone } from "lucide-vue-next";
 import {
   createAnnouncementManagementClient,
   PortalAnnouncementManagementWorkspace
-} from "@dai/app-core/announcements";
+} from "@/platform/announcements";
 
-import { urmAdminApi } from "../../../api/urmAdmin";
-import { authenticatedRequest, portalHeaders, serviceBaseUrl } from "../../../api/request";
+import { urmAdminApi } from "@/api/urmAdmin";
+import { authenticatedRequest, portalHeaders, serviceBaseUrl } from "@/api/request";
 
 const client = createAnnouncementManagementClient({
   request: authenticatedRequest("urm"),

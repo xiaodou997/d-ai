@@ -4,9 +4,9 @@
        无拖拽排序等附加交互。
 -->
 <script setup lang="ts">
-import { DsTable, type DsTableColumn } from "@dai/ui";
+import { DsTable, type DsTableColumn } from "@/shared/ui";
 
-import type { TenantAiDispatchRule } from "../../../../types/aiTenant";
+import type { TenantAiDispatchRule } from "@/api/types/aiTenant";
 import { surfaceLabel } from "../catalog";
 import { dispatchMatchOptions } from "../dispatchRulePresentation";
 

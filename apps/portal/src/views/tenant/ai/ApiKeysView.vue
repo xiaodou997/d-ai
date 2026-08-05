@@ -1,6 +1,6 @@
 <!--
   租户模型 API 密钥页:仅做 API/确认弹窗/文案适配,实际渲染在
-  @dai/app-core 的 PortalApiKeyWorkspace(DsUI 一体面板 + DsTable + DsPagination,
+  @/platform 的 PortalApiKeyWorkspace(DsUI 一体面板 + DsTable + DsPagination,
   本页始终以 embedded 模式嵌在 KeysView 的密钥管理面板内)。
 -->
 <script setup lang="ts">
@@ -11,17 +11,17 @@ import {
   notifySuccess,
   notifyWarning,
   resolvePortalPublicBaseUrl
-} from "@dai/app-core";
+} from "@/platform";
 import {
   portalApiKeyWorkspaceIconProps,
   PortalApiKeyWorkspace,
   type PortalApiKeyApi,
   type PortalApiKeyWriteInput
-} from "@dai/app-core/ai/api-keys";
+} from "@/platform/ai/apikeys";
 
-import { aiTenantApi, formatCredits, formatWholeCredits, statusOptions } from "../../api/aiTenant";
-import { portalEnv } from "../../env";
-import type { TenantAiApiKey, TenantAiApiKeyWriteRequest } from "../../types/aiTenant";
+import { aiTenantApi, formatCredits, formatWholeCredits, statusOptions } from "@/api/aiTenant";
+import { portalEnv } from "@/env";
+import type { TenantAiApiKey, TenantAiApiKeyWriteRequest } from "@/api/types/aiTenant";
 
 defineProps<{
   embedded?: boolean;

@@ -1,7 +1,7 @@
 import { computed, onMounted, shallowRef } from "vue";
 
-import { tenantApi } from "../../../../api/tenant";
-import { urmTenantApi } from "../../../../api/urmTenant";
+import { tenantApi } from "@/api/tenant";
+import { urmTenantApi } from "@/api/urmTenant";
 import {
   DEFAULT_WORKBENCH_RANGE_ID,
   buildWorkbenchRangeWindow,
@@ -9,14 +9,14 @@ import {
   isWorkbenchRangeId,
   type WorkbenchRangeId,
   type WorkbenchRangeOption
-} from "../../../../components/workbench/workbenchRanges";
-import type { TenantCashAccount } from "../../../../types/tenant";
+} from "@/components/workbench/workbenchRanges";
+import type { TenantCashAccount } from "@/api/types/tenant";
 import type {
   AccountBalance,
   AccountTransactionItem,
   TenantAnalyticsOverview,
   UserConsumptionItem
-} from "../../../../types/urmTenant";
+} from "@/api/types/urmTenant";
 
 const emptyOverview = (): TenantAnalyticsOverview => ({
   endUserCount: 0,

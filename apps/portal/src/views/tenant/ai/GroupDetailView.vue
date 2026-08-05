@@ -3,7 +3,7 @@
   (已迁移 DsUI:PortalPagePanel 面包屑可回跳列表,页签为 DsTabs)。
 -->
 <script setup lang="ts">
-import { GroupDetailWorkspace } from "../../features/ai/group-management";
+import { GroupDetailWorkspace } from "@/features/ai/group-management";
 </script>
 
 <template>

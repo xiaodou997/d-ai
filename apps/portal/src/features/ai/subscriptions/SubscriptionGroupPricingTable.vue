@@ -5,10 +5,10 @@
 -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { formatMultiplier } from "@dai/app-core/ai/utils";
-import { DsNumberInput, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { formatMultiplier } from "@/platform/ai/utils";
+import { DsNumberInput, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import type { TenantAiVisibleGroup, TenantSubPlanGroupInput } from "../../../types/aiTenant";
+import type { TenantAiVisibleGroup, TenantSubPlanGroupInput } from "@/api/types/aiTenant";
 
 const props = defineProps<{
   groups: TenantAiVisibleGroup[];

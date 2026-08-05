@@ -1,7 +1,7 @@
 import { onMounted, shallowRef } from "vue";
 
-import { urmCustomerApi } from "../../api/urmCustomer";
-import type { CustomerPortalBrand } from "../../types/urmCustomer";
+import { urmCustomerApi } from "@/api/urmCustomer";
+import type { CustomerPortalBrand } from "@/api/types/urmCustomer";
 
 /**
  * 终端用户门户的品牌信息（站点名 + favicon）。

@@ -188,9 +188,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Clock, WarningFilled } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { Wallet } from 'lucide-vue-next'
-import { PortalContentCard, PortalPagePanel } from '@dai/app-core'
-import { DsTable, DsTag, type DsTableColumn } from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
+import { PortalContentCard, PortalPagePanel } from '@/platform'
+import { DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
 
 const route = useRoute()
 const rechargeFormRef = ref<any>(null)

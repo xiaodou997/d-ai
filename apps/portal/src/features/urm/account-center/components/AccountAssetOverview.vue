@@ -2,8 +2,8 @@
 import { computed } from "vue";
 import { ArrowRight, CircleAlert, Coins, Landmark, WalletCards } from "lucide-vue-next";
 
-import type { AccountBalance } from "../../../../types/urmTenant";
-import type { TenantCashAccount } from "../../../../types/tenant";
+import type { AccountBalance } from "@/api/types/urmTenant";
+import type { TenantCashAccount } from "@/api/types/tenant";
 import { formatCents, formatCredits, formatTime } from "../model";
 
 const props = defineProps<{

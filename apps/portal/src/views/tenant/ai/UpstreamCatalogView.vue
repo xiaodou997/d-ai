@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { UpstreamCatalogWorkspace } from "../../features/ai/upstream-catalog";
+import { UpstreamCatalogWorkspace } from "@/features/ai/upstream-catalog";
 </script>
 
 <template>

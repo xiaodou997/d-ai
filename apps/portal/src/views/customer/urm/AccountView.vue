@@ -104,11 +104,11 @@
 import { ref, reactive, onMounted } from "vue";
 import { Refresh, Loading } from "@element-plus/icons-vue";
 import { Wallet } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { DsEmpty, DsMetricCard, DsTag } from "@dai/ui";
-import { urmCustomerApi } from "../../api/urmCustomer";
-import type { PackageView } from "../../types/urmCustomer";
+import { PortalPagePanel } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import { DsEmpty, DsMetricCard, DsTag } from "@/shared/ui";
+import { urmCustomerApi } from "@/api/urmCustomer";
+import type { PackageView } from "@/api/types/urmCustomer";
 
 const loading = ref(false);
 const pkgLoading = ref(false);

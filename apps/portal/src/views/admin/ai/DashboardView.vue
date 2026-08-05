@@ -16,24 +16,24 @@ import { useRouter } from 'vue-router'
 import { Refresh, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { BarChart3 } from 'lucide-vue-next'
-import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from '@dai/app-core'
-import { DsTable, DsTag, type DsTableColumn } from '@dai/ui'
+import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from '@/platform'
+import { DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 import {
   EMPTY_IDENTITY_INCLUDED,
   normalizeIdentityIncluded,
   PortalIdentityCell,
   resolveIdentityTenantLabel,
   resolveIdentityTenantMeta
-} from '@dai/app-core/ai/identity'
-import { aiAdminApi } from '../../api/aiAdmin'
-import { adminUsageApi, listAdminUsageDailyTrend } from '../../features/ai/usage'
-import type { IdentityIncludedDTO } from '../../types/ai'
+} from '@/platform/ai/identity'
+import { aiAdminApi } from '@/api/aiAdmin'
+import { adminUsageApi, listAdminUsageDailyTrend } from '@/features/ai/usage'
+import type { IdentityIncludedDTO } from '@/api/types/ai'
 import {
   buildWorkbenchRangeWindow,
   getWorkbenchRangeOption,
   WORKBENCH_RANGE_OPTIONS,
   type WorkbenchRangeId
-} from '../../components/workbench/workbenchRanges'
+} from '@/components/workbench/workbenchRanges'
 
 const router = useRouter()
 

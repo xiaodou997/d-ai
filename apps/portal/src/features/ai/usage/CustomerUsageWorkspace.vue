@@ -9,8 +9,8 @@ import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
 
-import { PortalMetricGrid, PortalPagePanel } from "@dai/app-core";
-import { formatCredits, formatMs, formatTokenCount } from "@dai/app-core/ai/usage";
+import { PortalMetricGrid, PortalPagePanel } from "@/platform";
+import { formatCredits, formatMs, formatTokenCount } from "@/platform/ai/usage";
 
 import { customerUsageApi } from "./api";
 import CustomerUsageDetailDrawer from "./components/CustomerUsageDetailDrawer.vue";

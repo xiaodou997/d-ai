@@ -100,8 +100,8 @@
 <script setup lang="ts">
 import { Search, RefreshRight } from "@element-plus/icons-vue";
 import { ArrowLeftRight } from "lucide-vue-next";
-import { PortalPagePanel, useListPage } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
+import { PortalPagePanel, useListPage } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
 import {
   DsEmpty,
   DsFilterBar,
@@ -110,10 +110,10 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from "@dai/ui";
+} from "@/shared/ui";
 
-import { urmTenantApi } from "../../api/urmTenant";
-import type { AccountTransactionItem } from "../../types/urmTenant";
+import { urmTenantApi } from "@/api/urmTenant";
+import type { AccountTransactionItem } from "@/api/types/urmTenant";
 
 const columns: DsTableColumn[] = [
   { key: "eventId", title: "交易流水", width: 200, mono: true },

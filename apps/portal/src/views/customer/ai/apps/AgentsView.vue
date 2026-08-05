@@ -3,15 +3,15 @@ import {
   createNamedConfirmDialog,
   notifyError,
   notifySuccess
-} from "@dai/app-core";
+} from "@/platform";
 import {
   portalAppManagementIconProps,
   PortalAppManagementWorkspace,
   type PortalAppApi
-} from "@dai/app-core/ai/apps";
+} from "@/platform/ai/apps";
 
-import { aiCustomerApi, runtimeChatApi, runtimeImageApi } from "../../../api/aiCustomer";
-import type { ChatModel, ConsoleImageModel, UserAppDTO, UserAppPromptDTO, UserAppPromptDetailDTO } from "../../../types/aiCustomer";
+import { aiCustomerApi, runtimeChatApi, runtimeImageApi } from "@/api/aiCustomer";
+import type { ChatModel, ConsoleImageModel, UserAppDTO, UserAppPromptDTO, UserAppPromptDetailDTO } from "@/api/types/aiCustomer";
 
 type UserAppModel = ChatModel | ConsoleImageModel;
 

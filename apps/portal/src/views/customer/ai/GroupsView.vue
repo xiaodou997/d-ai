@@ -6,15 +6,15 @@
 <script setup lang="ts">
 import { useRouter } from "vue-router";
 import { Layers } from "lucide-vue-next";
-import { notifyError } from "@dai/app-core";
+import { notifyError } from "@/platform";
 import {
   portalVisibleGroupsWorkspaceIconProps,
   PortalGroupPricingWorkspace,
   type PortalGroupPricingApi
-} from "@dai/app-core/ai/groups";
+} from "@/platform/ai/groups";
 
-import { aiCustomerApi } from "../../api/aiCustomer";
-import type { AiGroupEffectivePrice, AiVisibleGroup } from "../../types/aiCustomer";
+import { aiCustomerApi } from "@/api/aiCustomer";
+import type { AiGroupEffectivePrice, AiVisibleGroup } from "@/api/types/aiCustomer";
 
 const router = useRouter();
 

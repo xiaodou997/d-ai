@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { createPortalAnnouncementClient, PortalAnnouncementCenter } from "@dai/app-core/announcements/inbox";
+import { createPortalAnnouncementClient, PortalAnnouncementCenter } from "@/platform/announcements/inbox";
 
-import { authenticatedRequest, portalHeaders, serviceBaseUrl } from "../../api/request";
+import { authenticatedRequest, portalHeaders, serviceBaseUrl } from "@/api/request";
 
 const customerAnnouncementClient = createPortalAnnouncementClient({
   request: authenticatedRequest("urm"),

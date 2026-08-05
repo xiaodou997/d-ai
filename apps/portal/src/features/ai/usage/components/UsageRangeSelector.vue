@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkbenchRangeId, WorkbenchRangeOption } from "../../../../components/workbench/workbenchRanges";
+import type { WorkbenchRangeId, WorkbenchRangeOption } from "@/components/workbench/workbenchRanges";
 
 defineProps<{
   modelValue: WorkbenchRangeId;

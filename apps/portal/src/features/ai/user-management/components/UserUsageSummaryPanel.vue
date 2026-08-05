@@ -5,12 +5,12 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { formatCredits, formatTokenCount } from "@dai/app-core/ai/usage";
-import { DsTable, type DsTableColumn } from "@dai/ui";
+import { formatCredits, formatTokenCount } from "@/platform/ai/usage";
+import { DsTable, type DsTableColumn } from "@/shared/ui";
 
 import { listTenantUsageSummary } from "../../usage/api";
 import type { TenantUsageSummaryRow } from "../../usage/model";
-import type { TenantEndUserItem } from "../../../../types/tenant";
+import type { TenantEndUserItem } from "@/api/types/tenant";
 import type { UserUsageFilters } from "../model";
 
 // DsTable 列:model_code 为标识符用 mono;请求/Token/积分列右对齐走 #cell-* 格式化

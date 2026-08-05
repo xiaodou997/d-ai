@@ -13,8 +13,8 @@ type jwksOutput struct {
 	Body auth.JWKSResponse
 }
 
-// registerJWKS 注册 JWKS 公钥端点。保留 v1 的两个对外契约路径，供下游服务
-// （ai/proxy）按既有配置拉取公钥验签。
+// registerJWKS 注册 JWKS 公钥端点，供 AI 网关和其他受信调用方按配置拉取
+// 公钥验签。
 func registerJWKS(api huma.API, jwt *auth.JWTService) {
 	handler := func(_ context.Context, _ *struct{}) (*jwksOutput, error) {
 		return &jwksOutput{Body: *jwt.GetJWKS()}, nil

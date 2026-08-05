@@ -2,12 +2,12 @@
 import { computed, onMounted, reactive, shallowRef } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Server } from "lucide-vue-next";
-import { portalModuleForClientID } from "@dai/app-core";
+import { portalModuleForClientID } from "@/platform";
 
-import { urmAdminApi } from "../../../api/urmAdmin";
-import { portalEnv } from "../../../env";
-import { useAuthStore } from "../../../stores/auth";
-import type { ServiceRegistryItem, ServiceSourceItem } from "../../../types/admin";
+import { urmAdminApi } from "@/api/urmAdmin";
+import { portalEnv } from "@/env";
+import { useAuthStore } from "@/stores/auth";
+import type { ServiceRegistryItem, ServiceSourceItem } from "@/api/types/admin";
 import ServiceDetailsDrawer from "./ServiceDetailsDrawer.vue";
 import ServiceList from "./ServiceList.vue";
 import ServiceSourceEditor from "./ServiceSourceEditor.vue";

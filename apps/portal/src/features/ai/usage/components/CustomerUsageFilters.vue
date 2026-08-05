@@ -5,8 +5,8 @@
 -->
 <script setup lang="ts">
 import { Search } from "@element-plus/icons-vue";
-import { DsFilterBar, DsFilterField } from "@dai/ui";
-import { requestSourceOptions } from "@dai/app-core/ai/usage";
+import { DsFilterBar, DsFilterField } from "@/shared/ui";
+import { requestSourceOptions } from "@/platform/ai/usage";
 
 import type { CustomerUsageFilters } from "../model";
 

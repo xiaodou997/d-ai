@@ -5,7 +5,7 @@ import { CircleCheck, Clock } from "@element-plus/icons-vue";
 import type {
   AiSubPlan,
   AiSubPurchaseBlockReason
-} from "../../../types/aiCustomer";
+} from "@/api/types/aiCustomer";
 
 const props = defineProps<{
   plan: AiSubPlan;

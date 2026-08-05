@@ -199,17 +199,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { Building2 } from 'lucide-vue-next'
-import { PortalPagePanel, useListPage } from '@dai/app-core'
+import { PortalPagePanel, useListPage } from '@/platform'
 import {
   DsPagination,
   DsTable,
   DsTabs,
   DsTag,
   type DsTableColumn
-} from '@dai/ui'
-import { urmAdminApi } from '../../api/urmAdmin'
-import type { TenantDetailOutput } from '../../types/admin'
-import DebtStatusPanel from '../../components/DebtStatusPanel.vue'
+} from '@/shared/ui'
+import { urmAdminApi } from '@/api/urmAdmin'
+import type { TenantDetailOutput } from '@/api/types/admin'
+import DebtStatusPanel from '@/components/DebtStatusPanel.vue'
 
 const route = useRoute()
 const router = useRouter()

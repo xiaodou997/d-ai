@@ -4,9 +4,9 @@
        el-switch → DsSwitch,空态 → DsEmpty;props/emits 与业务逻辑保持不变。
 -->
 <script setup lang="ts">
-import { DsEmpty, DsSwitch, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsEmpty, DsSwitch, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import type { TenantEndUserItem } from "../../../../types/tenant";
+import type { TenantEndUserItem } from "@/api/types/tenant";
 import { formatMultiplier } from "../presentation";
 
 interface UserPricingGroupRow {

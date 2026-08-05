@@ -5,7 +5,7 @@
 -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRankingRow, UsageFilterChip } from "../model";
 import {

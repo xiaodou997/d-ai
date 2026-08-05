@@ -1,7 +1,7 @@
-import type { RequestAdapter } from "@dai/api-client";
-import type { operations } from "@dai/api-client/ai";
+import type { RequestAdapter } from "@/api";
+import type { operations } from "@/api/ai";
 
-import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "../../../api/request";
+import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "@/api/request";
 
 type AccountBatchDeleteOperation = operations["ai-batch-delete-account-model-bindings"];
 type PoolBatchDeleteOperation = operations["ai-batch-delete-pool-model-bindings"];

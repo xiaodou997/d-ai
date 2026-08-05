@@ -12,7 +12,7 @@ import (
 // distinct pieces of Redis-backed auth state:
 //   - JWT token blacklist / user logout markers (AddToBlacklist, LogoutUser)
 //   - Ban state for user/tenant accounts (BanUser, BanTenant, ...), read
-//     directly by every downstream service (ai-service, proxy-service) —
+//     directly by the AI gateway —
 //     no pub/sub involved. The Redis key IS the source of truth: a service
 //     restart or a Redis reconnect never loses state, and every replica of
 //     every consuming service always sees the same answer.
@@ -27,8 +27,8 @@ const (
 	blacklistPrefix = "token:blacklist:"
 	// 默认 Token 过期时间（用于黑名单 TTL）
 	defaultTokenTTL = 24 * time.Hour
-	// 封禁状态 Key 前缀（无 TTL，显式 DEL 才会清除）。ai-service /
-	// proxy-service 直接 EXISTS 查询这两个前缀，不再通过 pub/sub 通知。
+	// 封禁状态 Key 前缀（无 TTL，显式 DEL 才会清除）。AI 网关直接 EXISTS
+	// 查询这两个前缀，不再通过 pub/sub 通知。
 	banUserPrefix   = "urc:banned:user:"
 	banTenantPrefix = "urc:banned:tenant:"
 )
@@ -137,8 +137,8 @@ func (s *BlacklistService) IsEnabled() bool {
 }
 
 // ============================================================================
-// Ban state — single source of truth, read directly by ai-service /
-// proxy-service (no pub/sub, no local cache to go stale on restart).
+// Ban state — single source of truth, read directly by the AI gateway (no
+// pub/sub, no local cache to go stale on restart).
 // ============================================================================
 
 // BanUser marks a user as banned (Redis key, no TTL) and kills its existing

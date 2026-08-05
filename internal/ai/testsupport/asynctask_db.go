@@ -129,7 +129,7 @@ func openAsyncTaskWithDSN(ctx context.Context, dsn, schemaSQL string, opts Async
 	return pool, cleanup, nil
 }
 
-// loadCanonicalSchema reads db/init.sql, found by walking up from the working
+// loadCanonicalSchema reads internal/db/init.sql, found by walking up from the working
 // directory so any package's tests can call this regardless of their depth.
 func loadCanonicalSchema() (string, error) {
 	dir, err := os.Getwd()
@@ -137,7 +137,7 @@ func loadCanonicalSchema() (string, error) {
 		return "", err
 	}
 	for {
-		candidate := filepath.Join(dir, "db", "init.sql")
+		candidate := filepath.Join(dir, "internal", "db", "init.sql")
 		if _, err := os.Stat(candidate); err == nil {
 			raw, err := os.ReadFile(candidate)
 			if err != nil {
@@ -147,7 +147,7 @@ func loadCanonicalSchema() (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("could not locate db/init.sql above the working directory")
+			return "", fmt.Errorf("could not locate internal/db/init.sql above the working directory")
 		}
 		dir = parent
 	}

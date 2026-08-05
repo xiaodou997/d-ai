@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from "vue";
 import { ElMessage } from "element-plus";
-import type { TenantAiClientSurface, TenantAiDispatchModel, TenantAiDispatchRule, TenantAiDispatchRuleWriteRequest } from "../../../../types/aiTenant";
+import type { TenantAiClientSurface, TenantAiDispatchModel, TenantAiDispatchRule, TenantAiDispatchRuleWriteRequest } from "@/api/types/aiTenant";
 import { capabilityLabels, clientSurfaceOptions } from "../catalog";
 import { selectableDispatchModels, validateMatchPattern } from "../dispatchRulePolicy";
 import { capabilityDescription, dispatchMatchOptions, matchPresentation, surfacePresentation, type DispatchMatchType } from "../dispatchRulePresentation";

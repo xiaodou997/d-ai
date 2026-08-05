@@ -2,14 +2,14 @@
 import { computed, reactive, shallowRef, watch, useTemplateRef } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 
-import { aiTenantApi } from '../../../api/aiTenant'
+import { aiTenantApi } from '@/api/aiTenant'
 import type {
   TenantAiVisibleGroup,
   TenantSubPlan,
   TenantSubPlanGroupInput,
   TenantSubPurchasePolicyInput,
   TenantSubPlanWriteRequest
-} from '../../../types/aiTenant'
+} from '@/api/types/aiTenant'
 import SubscriptionGroupPricingTable from './SubscriptionGroupPricingTable.vue'
 import SubscriptionPlanBasicsEditor from './SubscriptionPlanBasicsEditor.vue'
 import SubscriptionPurchasePolicyEditor from './SubscriptionPurchasePolicyEditor.vue'

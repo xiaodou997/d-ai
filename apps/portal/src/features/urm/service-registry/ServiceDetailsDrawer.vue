@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PanelTopClose, PanelTopOpen, Pencil, Plus, Power, Trash2 } from "lucide-vue-next";
 
-import type { ServiceRegistryDetail, ServiceSourceItem } from "../../../types/admin";
+import type { ServiceRegistryDetail, ServiceSourceItem } from "@/api/types/admin";
 import ServiceInstancesPanel from "./ServiceInstancesPanel.vue";
 
 defineProps<{

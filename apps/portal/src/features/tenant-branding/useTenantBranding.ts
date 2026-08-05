@@ -1,7 +1,7 @@
 import { onMounted, reactive, shallowRef } from "vue";
 
-import { tenantApi } from "../../api/tenant";
-import type { TenantPortalBranding } from "../../types/tenant";
+import { tenantApi } from "@/api/tenant";
+import type { TenantPortalBranding } from "@/api/types/tenant";
 import { normalizeFaviconToPngDataUrl } from "./normalizeFavicon";
 
 export function useTenantBranding() {

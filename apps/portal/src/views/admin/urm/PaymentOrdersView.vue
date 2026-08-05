@@ -107,7 +107,7 @@
 import { ElMessage } from "element-plus";
 import { RefreshRight, Search } from "@element-plus/icons-vue";
 import { ShoppingCart } from "lucide-vue-next";
-import { PortalPagePanel, useListPage } from "@dai/app-core";
+import { PortalPagePanel, useListPage } from "@/platform";
 import {
   DsFilterBar,
   DsFilterField,
@@ -115,9 +115,9 @@ import {
   DsTable,
   DsTag,
   type DsTableColumn
-} from "@dai/ui";
-import { urmAdminApi } from "../../api/urmAdmin";
-import type { PaymentOrderItem } from "../../types/admin";
+} from "@/shared/ui";
+import { urmAdminApi } from "@/api/urmAdmin";
+import type { PaymentOrderItem } from "@/api/types/admin";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "订单号", width: 200, mono: true },

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
-import { attachPortalSSOGuard, type BackendService } from "@dai/app-core";
+import { attachPortalSSOGuard, type BackendService } from "@/platform";
 
 import { portalEnv } from "./env";
 import { useAuthStore } from "./stores/auth";
@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
       { path: "urm/tenants", component: () => import("./views/admin/urm/TenantsView.vue"), meta: { service: "urm" as BackendService, title: "租户管理", allowedUserTypes: [1, 2] } },
       { path: "urm/tenants/:id", component: () => import("./views/admin/urm/TenantDetailView.vue"), meta: { service: "urm", title: "租户详情", allowedUserTypes: [1, 2] } },
       { path: "urm/users", component: () => import("./views/admin/urm/EndUsersView.vue"), meta: { service: "urm", title: "终端用户", allowedUserTypes: [1, 2] } },
+      { path: "urm/invitations", component: () => import("./views/tenant/urm/InviteCodesView.vue"), meta: { service: "urm", title: "邀请码", allowedUserTypes: [3] } },
       { path: "urm/dashboard", component: () => import("./views/admin/urm/DashboardView.vue"), meta: { service: "urm", title: "管理大盘", allowedUserTypes: [1, 2] } },
       { path: "urm/admins", component: () => import("./views/admin/urm/AdminUsersView.vue"), meta: { service: "urm", title: "平台管理员", allowedUserTypes: [1] } },
       { path: "urm/audit-log", component: () => import("./views/admin/urm/AuditLogView.vue"), meta: { service: "urm", title: "认证审计", allowedUserTypes: [1] } },
@@ -71,6 +72,7 @@ const routes: RouteRecordRaw[] = [
       { path: "help", component: () => import("./views/PlaceholderView.vue"), meta: { title: "使用说明" } },
     ]
   },
+  { path: "/login", component: () => import("./views/LoginView.vue"), meta: { public: true, title: "登录" } },
   { path: "/:pathMatch(.*)*", redirect: "/overview" }
 ];
 

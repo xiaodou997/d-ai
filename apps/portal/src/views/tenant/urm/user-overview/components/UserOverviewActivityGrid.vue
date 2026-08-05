@@ -1,14 +1,8 @@
-<!--
-  用户详情动态区:最近充值 / 最近访问 / AI 调用三卡列表。
-  重构:el-tag → DsTag(tone 语义色)、el-empty → DsEmpty;布局与数据渲染逻辑不变。
--->
 <script setup lang="ts">
-import { DsEmpty, DsTag } from "@dai/ui";
-
-import type { TenantUsageLog } from "../../../../features/ai/usage";
-import type { ProxyAccessLog } from "../../../../types/proxyTenant";
-import type { RechargeRecordItem } from "../../../../types/urmTenant";
-import { formatCurrencyYuanFromCent, formatLatency, formatNumber, formatShortDateTime } from "../formatters";
+import { DsEmpty, DsTag } from "@/shared/ui";
+import type { TenantUsageLog } from "@/features/ai/usage";
+import type { RechargeRecordItem } from "@/api/types/urmTenant";
+import { formatCurrencyYuanFromCent, formatNumber, formatShortDateTime } from "../formatters";
 
 type DsTagTone = "neutral" | "accent" | "positive" | "warning" | "danger" | "info";
 
@@ -16,22 +10,13 @@ defineProps<{
   loading: boolean;
   rechargeRecords: RechargeRecordItem[];
   rechargeTotal: number;
-  accessLogs: ProxyAccessLog[];
   aiUsageLogs: TenantUsageLog[];
   activityWindowLabel: string;
   aiAvailable: boolean;
-  proxyAvailable: boolean;
-}>()
+}>();
 
 function rechargeStatusTone(status: string): DsTagTone {
   return status === "reversed" ? "neutral" : "positive";
-}
-
-function accessStatusTone(status: number): DsTagTone {
-  if (status >= 500) return "danger";
-  if (status >= 400) return "warning";
-  if (status >= 200) return "positive";
-  return "neutral";
 }
 
 function aiStatusTone(status: string): DsTagTone {
@@ -53,50 +38,18 @@ function aiStatusTone(status: string): DsTagTone {
       </header>
 
       <DsEmpty v-if="!rechargeRecords.length" title="暂无充值记录" />
-
       <div v-else class="activity-list">
         <div v-for="record in rechargeRecords" :key="record.orderId" class="activity-item">
           <div class="activity-item-main">
             <div class="activity-item-title-row">
               <strong class="activity-item-title">{{ record.orderId }}</strong>
-              <DsTag :tone="rechargeStatusTone(record.status)">
-                {{ record.status === "reversed" ? "已撤销" : "有效" }}
-              </DsTag>
+              <DsTag :tone="rechargeStatusTone(record.status)">{{ record.status === "reversed" ? "已撤销" : "有效" }}</DsTag>
             </div>
             <p class="activity-item-meta">
               实付 {{ formatCurrencyYuanFromCent(record.paidAmount) }} · 到账 {{ formatNumber(record.creditAmount) }} 积分
             </p>
           </div>
           <span class="activity-item-time">{{ formatShortDateTime(record.createdTime) }}</span>
-        </div>
-      </div>
-    </article>
-
-    <article v-loading="loading" class="activity-card activity-card--proxy">
-      <header class="activity-header">
-        <div>
-          <h2 class="activity-title">最近访问</h2>
-          <p class="activity-desc">{{ activityWindowLabel }}内最近 8 条代理访问记录。</p>
-        </div>
-      </header>
-
-      <DsEmpty v-if="!accessLogs.length" :title="proxyAvailable ? '暂无代理访问记录' : '当前租户未开通接口代理'" />
-
-      <div v-else class="activity-list">
-        <div v-for="log in accessLogs" :key="`${log.id}`" class="activity-item">
-          <div class="activity-item-main">
-            <div class="activity-item-title-row">
-              <strong class="activity-item-title">{{ log.routeName || log.requestPath }}</strong>
-              <div class="activity-tag-row">
-                <DsTag :tone="accessStatusTone(log.responseStatus)">{{ log.responseStatus }}</DsTag>
-                <DsTag>{{ log.billingStatus }}</DsTag>
-              </div>
-            </div>
-            <p class="activity-item-meta">
-              {{ log.requestMethod }} · {{ formatLatency(log.latencyMs) }} · 用户消费 {{ formatNumber(log.userCostPoints ?? 0) }} 积分
-            </p>
-          </div>
-          <span class="activity-item-time">{{ formatShortDateTime(log.createdAt) }}</span>
         </div>
       </div>
     </article>
@@ -110,7 +63,6 @@ function aiStatusTone(status: string): DsTagTone {
       </header>
 
       <DsEmpty v-if="!aiUsageLogs.length" :title="aiAvailable ? '暂无 AI 调用记录' : '当前租户未开通智能服务'" />
-
       <div v-else class="activity-list">
         <div v-for="log in aiUsageLogs" :key="log.id" class="activity-item">
           <div class="activity-item-main">
@@ -154,12 +106,8 @@ function aiStatusTone(status: string): DsTagTone {
   grid-column: span 4;
 }
 
-.activity-card--proxy {
-  grid-column: span 8;
-}
-
 .activity-card--ai {
-  grid-column: span 12;
+  grid-column: span 8;
 }
 
 .activity-header {
@@ -203,11 +151,16 @@ function aiStatusTone(status: string): DsTagTone {
   min-width: 0;
 }
 
-.activity-item-title-row {
+.activity-item-title-row,
+.activity-tag-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.activity-tag-row {
+  gap: 8px;
 }
 
 .activity-item-title {
@@ -231,16 +184,8 @@ function aiStatusTone(status: string): DsTagTone {
   color: var(--ds-faint);
 }
 
-.activity-tag-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
 @media (max-width: 1200px) {
   .activity-card--recharge,
-  .activity-card--proxy,
   .activity-card--ai {
     grid-column: span 12;
   }

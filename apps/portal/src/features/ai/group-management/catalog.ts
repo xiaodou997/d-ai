@@ -1,4 +1,4 @@
-import type { TenantAiClientSurface } from "../../../types/aiTenant";
+import type { TenantAiClientSurface } from "@/api/types/aiTenant";
 
 export interface ClientSurfaceOption {
   id: TenantAiClientSurface;

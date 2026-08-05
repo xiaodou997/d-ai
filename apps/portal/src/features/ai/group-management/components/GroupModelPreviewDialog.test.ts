@@ -5,7 +5,7 @@ import type {
   TenantAiGroupEffectivePrice,
   TenantAiGroupEffectivePricesOutputBody,
   TenantAiVisibleGroup
-} from "../../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import GroupModelPreviewDialog from "./GroupModelPreviewDialog.vue";
 
 const ElDialogStub = {

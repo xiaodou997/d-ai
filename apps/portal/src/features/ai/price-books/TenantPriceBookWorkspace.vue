@@ -11,11 +11,11 @@ import { computed, onMounted, reactive, ref, shallowRef } from "vue";
 import { CopyDocument, Delete, Edit, Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Tags } from "lucide-vue-next";
-import { PortalContentCard, PortalPagePanel } from "@dai/app-core";
-import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { PortalContentCard, PortalPagePanel } from "@/platform";
+import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import { aiTenantApi } from "../../../api/aiTenant";
-import type { TenantAiPriceBook } from "../../../types/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
+import type { TenantAiPriceBook } from "@/api/types/aiTenant";
 import PriceBookEntryFormDialog from "./components/PriceBookEntryFormDialog.vue";
 import {
   isTokenPricedCapability,

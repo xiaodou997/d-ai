@@ -98,15 +98,15 @@
 import { ref } from "vue";
 import { RefreshRight, Search } from "@element-plus/icons-vue";
 import { Landmark } from "lucide-vue-next";
-import { PortalPagePanel, useListPage } from "@dai/app-core";
+import { PortalPagePanel, useListPage } from "@/platform";
 import {
   DsFilterBar,
   DsPagination,
   DsTable,
   type DsTableColumn
-} from "@dai/ui";
-import { urmAdminApi } from "../../api/urmAdmin";
-import type { CashAccountItem, CashLedgerItem } from "../../types/admin";
+} from "@/shared/ui";
+import { urmAdminApi } from "@/api/urmAdmin";
+import type { CashAccountItem, CashLedgerItem } from "@/api/types/admin";
 
 const columns: DsTableColumn[] = [
   { key: "tenantId", title: "租户 ID", width: 200, mono: true },

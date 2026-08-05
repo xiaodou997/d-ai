@@ -3,7 +3,7 @@
   (已迁移 DsUI 一体面板:PortalPagePanel + DsFilterBar + DsTable + DsPagination)。
 -->
 <script setup lang="ts">
-import { GroupManagementWorkspace } from "../../features/ai/group-management";
+import { GroupManagementWorkspace } from "@/features/ai/group-management";
 </script>
 
 <template>

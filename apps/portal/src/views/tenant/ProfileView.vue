@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { PortalProfileWorkspace } from "@dai/app-core";
+import { PortalProfileWorkspace } from "@/platform";
 
-import { useAuthStore } from "../stores/auth";
-import { urmTenantApi } from "../api/urmTenant";
+import { useAuthStore } from "@/stores/auth";
+import { urmTenantApi } from "@/api/urmTenant";
 
 const authStore = useAuthStore();
 

@@ -6,9 +6,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ReceiptText } from "lucide-vue-next";
-import { DsTable, type DsTableColumn } from "@dai/ui";
+import { DsTable, type DsTableColumn } from "@/shared/ui";
 
-import type { AccountTransactionItem } from "../../../../types/urmTenant";
+import type { AccountTransactionItem } from "@/api/types/urmTenant";
 
 const props = defineProps<{
   items: readonly AccountTransactionItem[];

@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import { computed } from "vue";
-import { DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { UsageFilterChip, UsageUpstreamSummaryRowDTO } from "../model";
 import { formatCredits } from "../format";

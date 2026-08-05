@@ -2,13 +2,13 @@ import { computed, defineComponent, shallowRef } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { urmAdminApi } from "../../../api/urmAdmin";
-import { useAuthStore } from "../../../stores/auth";
-import type { ServiceRegistryDetail } from "../../../types/admin";
+import { urmAdminApi } from "@/api/urmAdmin";
+import { useAuthStore } from "@/stores/auth";
+import type { ServiceRegistryDetail } from "@/api/types/admin";
 import ServiceRegistryWorkspace from "./ServiceRegistryWorkspace.vue";
 import { useServiceRegistry } from "./useServiceRegistry";
 
-vi.mock("../../../api/urmAdmin", () => ({
+vi.mock("@/api/urmAdmin", () => ({
   urmAdminApi: {
     createService: vi.fn(),
     updateService: vi.fn(),
@@ -16,19 +16,18 @@ vi.mock("../../../api/urmAdmin", () => ({
   }
 }));
 
-vi.mock("../../../stores/auth", () => ({ useAuthStore: vi.fn() }));
+vi.mock("@/stores/auth", () => ({ useAuthStore: vi.fn() }));
 vi.mock("./useServiceRegistry", () => ({ useServiceRegistry: vi.fn() }));
-vi.mock("@dai/app-core", () => ({
+vi.mock("@/platform", () => ({
   // ServiceList 被 stub 但模块仍会被加载，需保留其依赖的 PortalPagePanel 导出
   PortalPagePanel: { template: `<div />` },
   createStandardPortalEnv: ({ portal }: { portal: string }) => ({
     portal,
-    serviceClientIds: { urm: "urm", ai: "uni-ai-api", proxy: "uni-api-proxy" }
+    serviceClientIds: { urm: "urm", ai: "uni-ai-api" }
   }),
   portalModuleForClientID: (_env: unknown, clientID: string) => ({
     urm: { service: "urm", label: "用户中心" },
-    "uni-ai-api": { service: "ai", label: "智能服务" },
-    "uni-api-proxy": { service: "proxy", label: "接口代理" }
+    "uni-ai-api": { service: "ai", label: "智能服务" }
   })[clientID]
 }));
 

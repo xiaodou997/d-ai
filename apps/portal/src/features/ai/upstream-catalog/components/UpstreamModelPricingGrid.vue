@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { PortalContentCard } from "@dai/app-core";
+import { PortalContentCard } from "@/platform";
 
-import type { TenantAiUpstreamResource } from "../../../../types/aiTenant";
+import type { TenantAiUpstreamResource } from "@/api/types/aiTenant";
 import { buildPricingCards } from "../presentation";
 
 const props = defineProps<{

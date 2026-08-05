@@ -2,11 +2,11 @@
 import { shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
 
-import { aiTenantApi } from "../../../api/aiTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import type {
   TenantSubPlan,
   TenantSubPurchasePolicyRevision
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 import { subscriptionPurchasePolicyLabel } from "./subscriptionPurchasePolicy";
 
 const props = defineProps<{

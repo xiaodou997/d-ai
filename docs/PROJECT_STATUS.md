@@ -1,0 +1,69 @@
+# D-AI 项目状态与实施清单
+
+更新日期：2026-08-05
+
+## 当前结论
+
+D-AI 已完成从“多服务/多前端迁移原型”到“单后端 + 单 Portal”工程结构的第一轮激进重构。数据库、Go 后端、OpenAPI 导出、Portal 类型检查、生产构建和前端测试均已打通；剩余工作主要是运行时业务验收、契约细节校准和发布自动化。
+
+## 已完成
+
+- URM + AI 合并为一个 Go 进程、一个 PostgreSQL 数据库和一个二进制入口。
+- 数据库使用 `internal/db/init.sql` 唯一完整基线；应用只校验 `dai_schema_metadata.version`，不执行自动 DDL。
+- Goose 迁移目录、依赖和启动路径已删除；已有环境的人工变更放在 `internal/db/changes/`。
+- `make dev` 负责本地配置、PostgreSQL、Redis 和后端启动。
+- Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。
+- API facade、领域类型、请求适配器、鉴权、shell、DsUI 和 billing 能力均在 `apps/portal/src` 内通过清晰目录边界组织。
+- Proxy 产品域、旧 proxy API、proxy generated 类型、Proxy 菜单和页面表面均已删除；后端业务服务只保留 URM 与 AI。
+- `cmd/openapi` 从统一 Go route registration 导出 `contracts/openapi.yaml`。
+- `apps/portal/scripts/generate.mjs` 只消费统一契约，并生成 `apps/portal/src/api/generated/dai.ts`；`ensure:api` 在契约或生成物缺失/过期时失败。
+
+## 目录约定
+
+| 边界 | 位置 | 责任 |
+| --- | --- | --- |
+| 后端 HTTP | `internal/transport`, `internal/ai/transport` | chi + Huma code-first 路由和 DTO |
+| 后端契约 | `cmd/openapi`, `contracts/openapi.yaml` | 统一 OpenAPI 导出与快照 |
+| Portal API | `apps/portal/src/api` | request adapter、URM/AI facade、领域类型、生成类型 |
+| Portal 平台层 | `apps/portal/src/platform` | 环境、鉴权、路由、shell 和公共工作区 |
+| Portal 设计系统 | `apps/portal/src/shared/ui` | token、DsUI 组件和布局 |
+| Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
+| 数据库 | `internal/db/init.sql`, `internal/db/changes` | 新库基线和人工变更 |
+
+## 当前剩余任务
+
+### P0：运行时产品验收
+
+- 用真实本地管理员完成 admin、tenant、customer 三种 `userType` 的登录、动态菜单、动态主题和关键页面冒烟。
+- 逐个校验 facade 的路径、请求参数、错误处理和分页字段与 `contracts/openapi.yaml` 及后端实际响应一致。
+- 对 Portal 页面做一次浏览器级验收，重点覆盖登录、租户邀请/用户管理、AI 工作台、用量、计费和异步任务。
+
+### P1：发布门禁
+
+- 将 `make openapi`、`bun run ensure:api`、`bun run typecheck`、`bun run test`、`bun run build:frontend` 纳入 CI。
+- 增加 `make build` 后的单二进制 `/health`、`/ready`、首页和 `/api/v1/info` smoke。
+- 补充应用 Dockerfile、release 构建说明和跨平台构建矩阵。
+
+### P1：测试环境统一
+
+- 统一并文档化 Go 集成测试使用的 PostgreSQL/Redis 环境变量。
+- 保持默认单元测试无需外部服务；真实数据库测试明确标注 skip 条件和 schema 初始化方式。
+
+## 验证结果
+
+| 命令/检查 | 结果 |
+| --- | --- |
+| `bun run typecheck` | 通过 |
+| `bun run build:frontend` | 通过，产物写入 `cmd/server/frontend_dist` |
+| `bun run test` | 52 个测试文件、185 个测试通过 |
+| `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
+| `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
+| `make dev`、后端 health/ready/info | 已验证，详见数据库与本地运行记录 |
+| Go 后端单元/集成测试 | 基础轮次已通过；本轮 Go 注释/测试数据清理后需再跑一次全量确认 |
+
+## 后续顺序
+
+1. 完成真实浏览器流程和三类用户的运行时验收。
+2. 校准 API facade 与统一 OpenAPI 契约的字段/错误/分页细节。
+3. 将前后端检查接入 CI，并补单二进制 smoke。
+4. 再做 Docker/release 和部署文档。

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TenantAiPriceBookEntry, TenantAiUpstreamResource } from "../../../types/aiTenant";
+import type { TenantAiPriceBookEntry, TenantAiUpstreamResource } from "@/api/types/aiTenant";
 import {
   buildPricingCards,
   formatMultiplier,

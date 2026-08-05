@@ -42,7 +42,7 @@ func TestManagerRegistersWithoutSecretAndTracksReadiness(t *testing.T) {
 }
 
 func TestManagerRenewFailureDegradesReadinessButKeepsLiveToken(t *testing.T) {
-	manager, _ := NewManager(SessionConfig{ServiceBaseURL: "http://urm-service.test", ServiceID: "proxy-service"})
+	manager, _ := NewManager(SessionConfig{ServiceBaseURL: "http://urm-service.test", ServiceID: "ai-service"})
 	manager.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("URM unavailable") })
 	manager.mu.Lock()
 	manager.token = "still-valid"

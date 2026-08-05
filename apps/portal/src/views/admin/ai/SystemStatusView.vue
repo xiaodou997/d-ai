@@ -12,9 +12,9 @@ import { computed, onMounted, shallowRef } from 'vue'
 import { Refresh, CircleCheck, CircleClose, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { HeartPulse } from 'lucide-vue-next'
-import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from '@dai/app-core'
-import { DsEmpty, DsTable, DsTag, type DsTableColumn } from '@dai/ui'
-import { aiAdminApi } from '../../api/aiAdmin'
+import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from '@/platform'
+import { DsEmpty, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
+import { aiAdminApi } from '@/api/aiAdmin'
 
 const loading = shallowRef(false)
 const sysStatus = shallowRef<any>(null)

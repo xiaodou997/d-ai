@@ -122,7 +122,7 @@ type loginPageData struct {
 	PrivacyURL string
 }
 
-// loginTheme 与系统 @unihub/ui 的 ds-theme-{admin,tenant,customer} 主题色严格对齐，
+// loginTheme 与 Portal 的 ds-theme-{admin,tenant,customer} 主题色严格对齐，
 // 使登录页从配色上即可区分平台：admin 紫 / tenant 蓝 / customer 陶土橙。
 type loginTheme struct {
 	Label       string // 平台名（醒目徽标）

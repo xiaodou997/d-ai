@@ -148,12 +148,12 @@ import { CopyDocument, Plus } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { Ticket } from "lucide-vue-next";
-import { PortalPagePanel, useListPage } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+import { PortalPagePanel, useListPage } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import { urmTenantApi } from "../../api/urmTenant";
-import type { InviteCodeItem } from "../../types/urmTenant";
+import { urmTenantApi } from "@/api/urmTenant";
+import type { InviteCodeItem } from "@/api/types/urmTenant";
 
 const columns: DsTableColumn[] = [
   { key: "code", title: "邀请码", width: 200, mono: true },

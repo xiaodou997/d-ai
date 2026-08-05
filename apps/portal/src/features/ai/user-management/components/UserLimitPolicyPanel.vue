@@ -2,9 +2,9 @@
 import { computed, reactive, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
 
-import { aiTenantApi } from "../../../../api/aiTenant";
-import type { TenantAiLimitPolicy } from "../../../../types/aiTenant";
-import type { TenantEndUserItem } from "../../../../types/tenant";
+import { aiTenantApi } from "@/api/aiTenant";
+import type { TenantAiLimitPolicy } from "@/api/types/aiTenant";
+import type { TenantEndUserItem } from "@/api/types/tenant";
 
 const props = defineProps<{
   user: TenantEndUserItem | null;

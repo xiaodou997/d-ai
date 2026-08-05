@@ -13,9 +13,9 @@ import {
   WalletCards
 } from "lucide-vue-next";
 
-import TenantWorkbenchMetricCard from "../../../../components/workbench/TenantWorkbenchMetricCard.vue";
-import type { TenantCashAccount } from "../../../../types/tenant";
-import type { AccountBalance, TenantAnalyticsOverview } from "../../../../types/urmTenant";
+import TenantWorkbenchMetricCard from "@/components/workbench/TenantWorkbenchMetricCard.vue";
+import type { TenantCashAccount } from "@/api/types/tenant";
+import type { AccountBalance, TenantAnalyticsOverview } from "@/api/types/urmTenant";
 
 const props = defineProps<{
   cashAccount: TenantCashAccount;

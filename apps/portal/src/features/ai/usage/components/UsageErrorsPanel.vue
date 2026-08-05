@@ -7,8 +7,8 @@ import { computed } from "vue";
 import {
   UsageTag,
   formatMs
-} from "@dai/app-core/ai/usage";
-import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
+} from "@/platform/ai/usage";
+import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRow, UsageFilterChip, UsagePagination } from "../model";
 import {

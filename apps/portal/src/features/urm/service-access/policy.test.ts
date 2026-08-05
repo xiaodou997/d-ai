@@ -11,14 +11,14 @@ describe("editablePolicyForActor", () => {
   });
 
   it("projects all access onto a platform administrator's capabilities", () => {
-    expect(editablePolicyForActor({ mode: "all", serviceIds: [] }, 2, ["ai", "proxy"])).toEqual({
+    expect(editablePolicyForActor({ mode: "all", serviceIds: [] }, 2, ["ai"])).toEqual({
       mode: "selected",
-      serviceIds: ["ai", "proxy"]
+      serviceIds: ["ai"]
     });
   });
 
   it("removes selected services outside a platform administrator's capabilities", () => {
-    expect(editablePolicyForActor({ mode: "selected", serviceIds: ["ai", "billing"] }, 2, ["ai", "proxy"])).toEqual({
+    expect(editablePolicyForActor({ mode: "selected", serviceIds: ["ai", "billing"] }, 2, ["ai"])).toEqual({
       mode: "selected",
       serviceIds: ["ai"]
     });

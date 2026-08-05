@@ -1,4 +1,4 @@
-import type { TenantAiDispatchRule } from "../../../types/aiTenant";
+import type { TenantAiDispatchRule } from "@/api/types/aiTenant";
 import { capabilityForSurface } from "./catalog";
 
 type PricedModel = { readonly model_code: string; readonly capability_type: string };

@@ -56,11 +56,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { ReceiptText } from "lucide-vue-next";
-import { PortalPagePanel } from "@dai/app-core";
-import { GuideHelpLink } from "@dai/app-core/guide";
-import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@dai/ui";
-import { urmCustomerApi } from "../../api/urmCustomer";
-import type { RechargeRecordItem } from "../../types/urmCustomer";
+import { PortalPagePanel } from "@/platform";
+import { GuideHelpLink } from "@/platform/guide";
+import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import { urmCustomerApi } from "@/api/urmCustomer";
+import type { RechargeRecordItem } from "@/api/types/urmCustomer";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "充值单号", width: 200, mono: true },

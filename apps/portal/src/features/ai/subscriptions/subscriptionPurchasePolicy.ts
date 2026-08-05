@@ -1,6 +1,6 @@
 import type {
   TenantSubPurchasePolicyInput
-} from "../../../types/aiTenant";
+} from "@/api/types/aiTenant";
 
 export function defaultSubscriptionPurchasePolicy(): TenantSubPurchasePolicyInput {
   return {

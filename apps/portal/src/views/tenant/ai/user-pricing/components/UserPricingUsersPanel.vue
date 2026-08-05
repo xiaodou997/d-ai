@@ -3,10 +3,10 @@
   重构:空态 → DsEmpty;卡片结构、搜索输入与 props/emits 保持不变(表单控件仍为 element-plus)。
 -->
 <script setup lang="ts">
-import { PortalContentCard } from "@dai/app-core";
-import { DsEmpty } from "@dai/ui";
+import { PortalContentCard } from "@/platform";
+import { DsEmpty } from "@/shared/ui";
 
-import type { TenantEndUserItem } from "../../../../types/tenant";
+import type { TenantEndUserItem } from "@/api/types/tenant";
 
 const keyword = defineModel<string>("keyword", { required: true });
 
