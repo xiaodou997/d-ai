@@ -149,6 +149,17 @@
       </div>
     </PortalPagePanel>
 
+    <RechargeDialog
+      v-model="rechargeDialogVisible"
+      title="租户充值"
+      target-type-label="租户"
+      :target-name="tenantInfo?.tenantName || ''"
+      :target-identity="`租户 ID ${tenantId}`"
+      :target-credits="credits"
+      :submitting="rechargeSubmitting"
+      @submit="submitTenantRecharge"
+    />
+
     <!-- 创建组织用户弹窗 -->
     <el-dialog v-model="createOrgUserVisible" title="创建组织用户" width="440px" append-to-body>
       <el-form :model="createOrgUserForm" :rules="createOrgUserRules" ref="createOrgUserFormRef" label-position="top">
@@ -175,6 +186,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { Building2, SlidersHorizontal } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
+import RechargeDialog from '@/components/RechargeDialog.vue'
+import type { RechargeFormPayload } from '@/components/recharge'
 import {
   DsPagination,
   DsTable,
@@ -200,6 +213,8 @@ const tabs = [
 
 const tenantInfo = ref<TenantDetailOutput | null>(null)
 const credits = ref(0)
+const rechargeDialogVisible = ref(false)
+const rechargeSubmitting = ref(false)
 
 // 页头副标题集中展示关键信息
 const headerDescription = computed(
@@ -285,7 +300,33 @@ const TX_STATUS_MAP: Record<string, { label: string; tone: 'positive' | 'danger'
 const txStatusInfo = (status: string) => TX_STATUS_MAP[status] ?? { label: status || '—', tone: 'info' as const }
 
 const handleRecharge = () => {
-  router.push({ path: '/admin/billing/recharges', query: { tenantId, tenantName: tenantInfo.value?.tenantName || '' } })
+  rechargeDialogVisible.value = true
+}
+
+const submitTenantRecharge = async (payload: RechargeFormPayload) => {
+  if (!tenantInfo.value) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确认对租户「${tenantInfo.value.tenantName}」执行${payload.expireTime ? '【限时】' : '【永久】'}入账操作？`,
+      '财务安全确认',
+      { confirmButtonText: '确定入账', cancelButtonText: '取消', roundButton: true, type: 'warning' }
+    )
+  } catch {
+    return
+  }
+
+  rechargeSubmitting.value = true
+  try {
+    await platformAdminApi.createRecharge({ packageType: 1, tenantId, ...payload })
+    ElMessage.success(`已成功充值 ${payload.creditAmount.toLocaleString()} 积分`)
+    rechargeDialogVisible.value = false
+    void fetchBalance()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '充值失败')
+  } finally {
+    rechargeSubmitting.value = false
+  }
 }
 
 const goTenantPolicy = () => {

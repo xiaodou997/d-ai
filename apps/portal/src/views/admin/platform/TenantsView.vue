@@ -11,7 +11,7 @@
     <PortalPagePanel
       :icon="Building2"
       :breadcrumbs="[{ label: '用户中心' }, { label: '业务管理' }, { label: '租户管理' }]"
-      description="管理平台租户，支持创建、编辑、充值、启停与关联业务系统维护。"
+      description="管理平台租户，支持创建、编辑、充值、状态调整与关联业务系统维护。"
     >
       <template #actions>
         <el-button type="primary" @click="handleCreate">
@@ -71,9 +71,21 @@
           </button>
         </template>
         <template #cell-status="{ row }">
-          <DsTag :tone="statusTone(row.status)">
-            {{ row.statusDisplay || statusText(row.status) }}
-          </DsTag>
+          <el-tooltip
+            :content="row.status === 3 ? '欠费封禁状态不可手动切换' : row.status === 1 ? '点击停用租户' : '点击启用租户'"
+            placement="top"
+          >
+            <el-switch
+              :model-value="row.status === 1"
+              :loading="isStatusUpdating(row.tenantId)"
+              :disabled="row.status === 3 || isStatusUpdating(row.tenantId)"
+              :aria-label="`${row.tenantName}状态`"
+              inline-prompt
+              active-text="启"
+              :inactive-text="row.status === 3 ? '封' : '停'"
+              @change="handleStatusChange(row, Boolean($event))"
+            />
+          </el-tooltip>
         </template>
         <template #cell-credits="{ row }">
           <span class="tenants-num tenants-credits" :class="{ 'tenants-credits--danger': row.status === 3 }">
@@ -90,9 +102,6 @@
           <el-button link type="primary" @click="goTenantPolicy(row.tenantId)">策略</el-button>
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
           <el-button link type="success" @click="handleRecharge(row)">充值</el-button>
-          <el-button link :type="row.status === 1 ? 'warning' : 'success'" @click="handleToggleStatus(row)">
-            {{ row.status === 1 ? '停用' : '启用' }}
-          </el-button>
           <el-popconfirm title="确定删除该租户吗？" @confirm="handleDelete(row.tenantId)">
             <template #reference>
               <el-button link type="danger">删除</el-button>
@@ -111,6 +120,17 @@
         />
       </template>
     </PortalPagePanel>
+
+    <RechargeDialog
+      v-model="rechargeDialogVisible"
+      title="租户充值"
+      target-type-label="租户"
+      :target-name="rechargeTarget?.tenantName || ''"
+      :target-identity="rechargeTarget ? `租户 ID ${rechargeTarget.tenantId}` : ''"
+      :target-credits="rechargeTarget?.credits ?? 0"
+      :submitting="rechargeSubmitting"
+      @submit="submitTenantRecharge"
+    />
 
     <!-- 租户表单对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑租户' : '创建租户'" width="560px" append-to-body>
@@ -165,15 +185,17 @@ import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { Building2 } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
+import RechargeDialog from '@/components/RechargeDialog.vue'
+import type { RechargeFormPayload } from '@/components/recharge'
 import {
   DsFilterBar,
   DsFilterField,
   DsPagination,
   DsTable,
-  DsTag,
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
+import type { TenantListItem } from '@/api/types/admin'
 
 const router = useRouter()
 
@@ -182,11 +204,11 @@ const columns: DsTableColumn[] = [
   { key: 'tenantName', title: '租户名称' },
   { key: 'contactPerson', title: '联系人' },
   { key: 'contactEmail', title: '联系邮箱' },
-  { key: 'status', title: '状态' },
+  { key: 'status', title: '状态', width: 100 },
   { key: 'credits', title: '平台积分', align: 'right' },
   { key: 'userCount', title: '用户数', align: 'center' },
   { key: 'createdTime', title: '入驻时间' },
-  { key: 'actions', title: '操作', width: 290 }
+  { key: 'actions', title: '操作', width: 220 }
 ]
 
 const {
@@ -223,6 +245,10 @@ const {
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)
+const statusUpdatingIds = ref<Set<string>>(new Set())
+const rechargeDialogVisible = ref(false)
+const rechargeSubmitting = ref(false)
+const rechargeTarget = ref<TenantListItem | null>(null)
 const formRef = ref<any>(null)
 const form = reactive({
   tenantId: '',
@@ -239,11 +265,15 @@ const rules = {
   contactEmail: [{ type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }]
 }
 
-const statusTone = (status: number): 'positive' | 'neutral' | 'danger' =>
-  (({ 1: 'positive', 2: 'neutral', 3: 'danger' } as const)[status] ?? 'neutral')
-const statusText = (status: number) => (({ 1: '正常', 2: '停用', 3: '欠费封禁' } as any)[status] || '未知')
-
 const formatTime = (ts?: number) => (ts ? new Date(ts).toLocaleString() : '')
+const isStatusUpdating = (tenantId: string) => statusUpdatingIds.value.has(tenantId)
+
+const setStatusUpdating = (tenantId: string, updating: boolean) => {
+  const next = new Set(statusUpdatingIds.value)
+  if (updating) next.add(tenantId)
+  else next.delete(tenantId)
+  statusUpdatingIds.value = next
+}
 
 const handleCreate = () => {
   isEdit.value = false
@@ -251,8 +281,39 @@ const handleCreate = () => {
   dialogVisible.value = true
 }
 
-const handleRecharge = (row: any) => {
-  router.push({ path: '/admin/billing/recharges', query: { tenantId: row.tenantId, tenantName: row.tenantName } })
+const handleRecharge = (row: TenantListItem) => {
+  rechargeTarget.value = row
+  rechargeDialogVisible.value = true
+}
+
+const submitTenantRecharge = async (payload: RechargeFormPayload) => {
+  if (!rechargeTarget.value) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确认对租户「${rechargeTarget.value.tenantName}」执行${payload.expireTime ? '【限时】' : '【永久】'}入账操作？`,
+      '财务安全确认',
+      { confirmButtonText: '确定入账', cancelButtonText: '取消', roundButton: true, type: 'warning' }
+    )
+  } catch {
+    return
+  }
+
+  rechargeSubmitting.value = true
+  try {
+    await platformAdminApi.createRecharge({
+      packageType: 1,
+      tenantId: rechargeTarget.value.tenantId,
+      ...payload
+    })
+    ElMessage.success(`已成功为租户「${rechargeTarget.value.tenantName}」充值 ${payload.creditAmount.toLocaleString()} 积分`)
+    rechargeDialogVisible.value = false
+    void refresh()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '充值失败')
+  } finally {
+    rechargeSubmitting.value = false
+  }
 }
 
 const goTenantDetail = (tenantId: string) => {
@@ -277,12 +338,15 @@ const handleEdit = (row: any) => {
   dialogVisible.value = true
 }
 
-const handleToggleStatus = async (row: any) => {
-  const isDisable = row.status === 1
-  const actionText = isDisable ? '停用' : '启用'
-  const tips = isDisable
-    ? '停用后将级联停用该租户下的所有组织用户和终端用户，确定继续吗？'
-    : '确定要启用该租户吗？启用后将恢复被级联停用的用户。'
+const handleStatusChange = async (row: any, enabled: boolean) => {
+  if (row.status === 3 || isStatusUpdating(row.tenantId) || enabled === (row.status === 1)) return
+
+  const actionText = enabled ? '启用' : '停用'
+  const tips = enabled
+    ? '确定要启用该租户吗？启用后将恢复被级联停用的用户。'
+    : '停用后将级联停用该租户下的所有组织用户和终端用户，确定继续吗？'
+
+  setStatusUpdating(row.tenantId, true)
   try {
     await ElMessageBox.confirm(tips, '状态变更确认', {
       confirmButtonText: `立即${actionText}`,
@@ -290,11 +354,15 @@ const handleToggleStatus = async (row: any) => {
       type: 'warning',
       roundButton: true
     })
-    await platformAdminApi.updateTenantStatus(row.tenantId, isDisable ? 'disabled' : 'active')
+    await platformAdminApi.updateTenantStatus(row.tenantId, enabled ? 'active' : 'disabled')
+    row.status = enabled ? 1 : 2
+    row.statusDisplay = enabled ? '正常' : '停用'
     ElMessage.success(`${actionText}成功`)
-    refresh()
+    void refresh()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(`${actionText}失败`)
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(`${actionText}失败`)
+  } finally {
+    setStatusUpdating(row.tenantId, false)
   }
 }
 
