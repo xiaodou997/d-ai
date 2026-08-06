@@ -11,7 +11,7 @@
     <PortalPagePanel
       fill
       :icon="Ticket"
-      :breadcrumbs="[{ label: '租户运营' }, { label: '用户运营' }, { label: '邀请码管理' }]"
+      :breadcrumbs="[{ label: '用户与权限' }, { label: '邀请码' }]"
       description="创建和管理用于用户注册的邀请码"
     >
       <template #actions>

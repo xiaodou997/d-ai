@@ -62,7 +62,7 @@ const detailItems = computed(() => [
 
       <div class="hero-actions">
         <el-button plain @click="emit('back')">返回列表</el-button>
-        <el-button plain :disabled="!aiAvailable" @click="emit('open-ai-config')">AI 配置</el-button>
+        <el-button plain :disabled="!aiAvailable" @click="emit('open-ai-config')">AI 策略</el-button>
         <el-button type="primary" @click="emit('refresh')">刷新数据</el-button>
       </div>
     </div>

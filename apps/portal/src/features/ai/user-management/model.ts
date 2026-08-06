@@ -8,6 +8,11 @@ export interface UserGroupPolicyRow {
   availability_state: "default" | "custom" | "unavailable";
 }
 
+export interface UserAiPolicyTarget {
+  userId: string;
+  username: string;
+}
+
 export interface UserUsageFilters {
   dateRange: [number, number];
   modelCode: string;

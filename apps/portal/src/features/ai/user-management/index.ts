@@ -1,1 +1,1 @@
-export { default as UserManagementWorkspace } from "./UserManagementWorkspace.vue";
+export { default as UserAiPolicyDrawer } from "./UserAiPolicyDrawer.vue";

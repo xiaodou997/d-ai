@@ -4,10 +4,12 @@
        面板 body 承载四个 user-overview 区块。
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { UserRound } from "lucide-vue-next";
 
+import { UserAiPolicyDrawer } from "@/features/ai/user-management";
+import type { UserAiPolicyTarget } from "@/features/ai/user-management/model";
 import { PortalPagePanel } from "@/platform";
 
 import UserOverviewActivityGrid from "./user-overview/components/UserOverviewActivityGrid.vue";
@@ -25,6 +27,14 @@ const serviceAvailability = computed(() => ({
 }));
 
 const overview = useTenantUserOverview(userId, serviceAvailability);
+const aiPolicyDrawerOpen = ref(route.query.policy === "1");
+const aiPolicyUser = computed<UserAiPolicyTarget | null>(() => {
+  if (!userId.value) return null;
+  return {
+    userId: userId.value,
+    username: overview.user.value?.username ?? `用户 ${userId.value}`
+  };
+});
 
 function goBack() {
   void router.push("/tenant/users/directory");
@@ -32,12 +42,22 @@ function goBack() {
 
 function openAiConfig() {
   if (!userId.value || !serviceAvailability.value.ai) return;
-  void router.push({
-    name: "ai-user-management",
-    params: { userId: userId.value }
-  });
+  aiPolicyDrawerOpen.value = true;
 }
 
+function closeAiPolicy() {
+  aiPolicyDrawerOpen.value = false;
+  if (route.query.policy !== "1") return;
+  const { policy: _policy, ...query } = route.query;
+  void router.replace({ query });
+}
+
+watch(
+  () => route.query.policy,
+  (policy) => {
+    if (policy === "1") aiPolicyDrawerOpen.value = true;
+  }
+);
 </script>
 
 <template>
@@ -46,9 +66,8 @@ function openAiConfig() {
       fill
       :icon="UserRound"
       :breadcrumbs="[
-        { label: '租户运营' },
-        { label: '用户运营' },
-        { label: '终端用户', to: '/tenant/users/directory' },
+        { label: '用户与权限' },
+        { label: '用户管理', to: '/tenant/users/directory' },
         { label: '用户详情' }
       ]"
       description="聚合基础资料、充值、AI 配置与风险信号"
@@ -94,9 +113,16 @@ function openAiConfig() {
           :group-summary="overview.groupSummary.value"
           :risk-signals="overview.riskSignals.value"
           :ai-available="overview.serviceAvailability.value.ai"
+          @open-ai-config="openAiConfig"
         />
       </div>
     </PortalPagePanel>
+
+    <UserAiPolicyDrawer
+      :open="aiPolicyDrawerOpen"
+      :user="aiPolicyUser"
+      @close="closeAiPolicy"
+    />
   </div>
 </template>
 

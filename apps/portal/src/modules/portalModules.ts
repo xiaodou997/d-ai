@@ -104,7 +104,7 @@ const adminOrganization = { id: "admin-organization", label: "组织与权限", 
 const adminFinance = { id: "admin-finance", label: "资金与账务", order: 20 };
 const adminAi = { id: "admin-ai", label: "AI 网关", order: 30 };
 const adminOperations = { id: "admin-operations", label: "平台运营", order: 40 };
-const tenantUsers = { id: "tenant-users", label: "用户运营", order: 10 };
+const tenantUsers = { id: "tenant-users", label: "用户与权限", order: 10 };
 const tenantAi = { id: "tenant-ai", label: "AI 服务", order: 20 };
 const tenantWorkbench = { id: "tenant-workbench", label: "AI 工作台", order: 30 };
 const tenantAccount = { id: "tenant-account", label: "账户与设置", order: 40 };
@@ -276,24 +276,34 @@ export const portalModules: PortalModule[] = [
     order: 0,
     navTabs: true,
     tabs: [
-      { id: "business", label: "业务经营", navLabel: "经营", icon: "bar-chart-3", path: "business", component: () => import("@/views/tenant/platform/DashboardView.vue") },
+      { id: "business", label: "业务经营", navLabel: "仪表盘", icon: "bar-chart-3", path: "business", component: () => import("@/views/tenant/platform/DashboardView.vue") },
       { id: "ai", label: "AI 运营", icon: "bot", path: "ai", component: () => import("@/views/tenant/ai/DashboardView.vue") }
     ]
   },
   {
     id: "tenant-user-workspace",
-    label: "用户与权限",
+    label: "用户管理",
     path: "/tenant/users",
     icon: "users",
     capability: "tenant.users",
     navGroup: tenantUsers,
     order: 10,
+    navTabs: true,
     tabs: [
       { id: "directory", label: "用户管理", path: "directory", component: () => import("@/views/tenant/platform/UsersView.vue") },
       { id: "user-detail", label: "用户详情", path: "directory/:userId", component: () => import("@/views/tenant/platform/UserDetailView.vue"), name: "tenant-user-detail", nav: false, activeTabId: "directory" },
-      { id: "invitations", label: "邀请码", path: "invitations", component: () => import("@/views/tenant/platform/InviteCodesView.vue") },
-      { id: "policy", label: "AI 策略", path: "policy/:userId?", component: () => import("@/views/tenant/ai/UserManagementView.vue"), name: "ai-user-management" }
+      { id: "policy", label: "AI 策略", path: "policy/:userId?", component: () => import("@/views/tenant/ai/UserManagementView.vue"), name: "ai-user-management", nav: false, activeTabId: "directory" }
     ]
+  },
+  {
+    id: "tenant-invitations",
+    label: "邀请码",
+    path: "/tenant/users/invitations",
+    icon: "ticket",
+    capability: "tenant.users",
+    navGroup: tenantUsers,
+    order: 20,
+    component: () => import("@/views/tenant/platform/InviteCodesView.vue")
   },
   {
     id: "tenant-model-workspace",

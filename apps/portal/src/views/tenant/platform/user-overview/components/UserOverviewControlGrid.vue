@@ -23,6 +23,10 @@ const props = defineProps<{
   aiAvailable: boolean;
 }>()
 
+const emit = defineEmits<{
+  (e: "open-ai-config"): void;
+}>()
+
 function toneClass(tone: UserOverviewRiskSignal["tone"]) {
   return `risk-item--${tone}`;
 }
@@ -40,6 +44,7 @@ function sourceLabel(source: UserOverviewAccessibleGroup["source"]) {
           <h2 class="control-title">AI 配置摘要</h2>
           <p class="control-desc">这里聚合当前用户能看到的 AI 分组，以及用户级专属限流策略。</p>
         </div>
+        <el-button v-if="aiAvailable" link type="primary" @click="emit('open-ai-config')">配置策略</el-button>
       </header>
 
       <template v-if="aiAvailable">

@@ -16,7 +16,7 @@ describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
     expect(leavesFor(1)).toHaveLength(13);
     expect(leavesFor(2)).toHaveLength(12);
-    expect(leavesFor(3)).toHaveLength(13);
+    expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(8);
   });
 
@@ -65,7 +65,7 @@ describe("portal module registry", () => {
       label: "概览",
       active: true,
       children: [
-        { label: "经营", to: "/tenant/overview/business", active: true },
+        { label: "仪表盘", to: "/tenant/overview/business", active: true },
         { label: "AI 运营", to: "/tenant/overview/ai", active: false }
       ]
     });
@@ -86,10 +86,38 @@ describe("portal module registry", () => {
     const activeTenant = leavesFor(3, "/tenant/users/directory/user-1").find((item) => item.active);
     const activeAdmin = leavesFor(1, "/admin/ai/usage/request-1").find((item) => item.active);
 
-    expect(activeTenant?.id).toBe("tenant-user-workspace");
+    expect(activeTenant?.id).toBe("tenant-user-workspace-directory");
     expect(activeAdmin?.id).toBe("admin-usage");
     expect(leavesFor(4, "/customer/workbench/chat").filter((item) => item.active).map((item) => item.id)).toEqual([
       "customer-chat"
+    ]);
+  });
+
+  it("exposes user management and invitations as separate tenant menus", () => {
+    const userMenus = buildPortalNav(3, "/tenant/users/invitations")
+      .find((item) => item.id === "tenant-users")
+      ?.children;
+
+    expect(userMenus).toMatchObject([
+      {
+        id: "tenant-user-workspace-directory",
+        label: "用户管理",
+        to: "/tenant/users/directory",
+        icon: "users",
+        active: false
+      },
+      {
+        id: "tenant-invitations",
+        label: "邀请码",
+        to: "/tenant/users/invitations",
+        icon: "ticket",
+        active: true
+      }
+    ]);
+
+    const userWorkspace = portalModules.find((module) => module.id === "tenant-user-workspace");
+    expect(userWorkspace?.tabs?.filter((tab) => tab.nav !== false).map((tab) => tab.label)).toEqual([
+      "用户管理"
     ]);
   });
 

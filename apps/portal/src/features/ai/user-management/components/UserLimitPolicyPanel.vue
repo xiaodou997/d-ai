@@ -4,10 +4,10 @@ import { ElMessage } from "element-plus";
 
 import { aiTenantApi } from "@/api/aiTenant";
 import type { TenantAiLimitPolicy } from "@/api/types/aiTenant";
-import type { TenantEndUserItem } from "@/api/types/tenant";
+import type { UserAiPolicyTarget } from "../model";
 
 const props = defineProps<{
-  user: TenantEndUserItem | null;
+  user: UserAiPolicyTarget | null;
 }>();
 
 const statusOptions = [

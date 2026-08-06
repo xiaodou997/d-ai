@@ -6,7 +6,7 @@
 <script setup lang="ts">
 import { DsEmpty, DsSwitch, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
-import type { TenantEndUserItem } from "@/api/types/tenant";
+import type { UserAiPolicyTarget } from "@/features/ai/user-management/model";
 import { formatMultiplier } from "../presentation";
 
 interface UserPricingGroupRow {
@@ -29,7 +29,7 @@ const columns: DsTableColumn[] = [
 ];
 
 defineProps<{
-  selectedUser: TenantEndUserItem | null;
+  selectedUser: UserAiPolicyTarget | null;
   loading: boolean;
   rows: UserPricingGroupRow[];
 }>()

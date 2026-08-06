@@ -1,18 +1,18 @@
 <!--
-  租户端终端用户列表:搜索 + 表格 + 分页 + 创建/充值弹窗。
+  租户端终端用户列表:搜索 + 表格 + 分页 + 用户级 AI 策略抽屉 + 创建/充值弹窗。
   重构:迁移至 DsUI 一体面板(PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       筛选/表格/分页同卡),el-table → DsTable,el-tag → DsTag,空态 DsEmpty,
-       分页始终渲染;创建/充值弹窗仍为 element-plus,业务逻辑与请求参数不变。
+       筛选/表格/分页同卡),el-table → DsTable,状态改为确认式开关,空态 DsEmpty,
+       分页始终渲染;AI 策略在当前用户抽屉中配置,创建/充值弹窗仍为 element-plus。
 -->
 <template>
   <div class="page-container users-page">
     <PortalPagePanel
       :icon="Users"
-      :breadcrumbs="[{ label: '租户运营' }, { label: '用户运营' }, { label: '终端用户' }]"
+      :breadcrumbs="[{ label: '用户与权限' }, { label: '用户管理' }]"
       description="管理属于本租户的所有终端用户"
     >
       <template #actions>
-        <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建用户</el-button>
+        <el-button data-testid="create-user-button" type="primary" :icon="Plus" @click="openCreateDialog">创建用户</el-button>
       </template>
 
       <template #filters>
@@ -50,19 +50,27 @@
           </DsEmpty>
         </template>
         <template #cell-status="{ row }">
-          <DsTag :tone="row.status === 1 ? 'positive' : 'danger'">
-            {{ row.status === 1 ? '正常' : '禁用' }}
-          </DsTag>
+          <el-tooltip :content="row.status === 1 ? '点击停用用户' : '点击启用用户'" placement="top">
+            <el-switch
+              :model-value="row.status === 1"
+              :loading="isStatusUpdating(row.userId)"
+              :disabled="isStatusUpdating(row.userId)"
+              :aria-label="`${row.username}状态`"
+              inline-prompt
+              active-text="启"
+              inactive-text="停"
+              @change="handleStatusChange(row, Boolean($event))"
+            />
+          </el-tooltip>
         </template>
         <template #cell-createdTime="{ row }">
           <span class="users-time">{{ formatTime(row.createdTime) }}</span>
         </template>
         <template #cell-actions="{ row }">
           <el-button type="primary" link @click="openOverview(row)">详情</el-button>
-          <el-button v-if="row.status === 1" type="danger" link @click="handleDisable(row)">停用</el-button>
-          <el-button v-else type="success" link @click="handleEnable(row)">启用</el-button>
-          <el-button type="warning" link @click="handleResetPassword(row)">重置密码</el-button>
+          <el-button type="primary" link @click="openAiPolicy(row)">AI 策略</el-button>
           <el-button type="primary" link @click="openRecharge(row)">充值</el-button>
+          <el-button type="warning" link @click="handleResetPassword(row)">重置密码</el-button>
           <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
         </template>
       </DsTable>
@@ -77,6 +85,12 @@
         />
       </template>
     </PortalPagePanel>
+
+    <UserAiPolicyDrawer
+      :open="aiPolicyDrawerOpen"
+      :user="aiPolicyTarget"
+      @close="closeAiPolicy"
+    />
 
     <!-- 创建用户弹窗 -->
     <el-dialog
@@ -133,13 +147,13 @@ import { Users } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import RechargeDialog from "@/components/RechargeDialog.vue";
 import type { RechargeFormPayload } from "@/components/recharge";
+import { UserAiPolicyDrawer } from "@/features/ai/user-management";
 import {
   DsEmpty,
   DsFilterBar,
   DsFilterField,
   DsPagination,
   DsTable,
-  DsTag,
   type DsTableColumn
 } from "@/shared/ui";
 
@@ -150,9 +164,9 @@ const columns: DsTableColumn[] = [
   { key: "userId", title: "用户 ID", width: 110, mono: true },
   { key: "username", title: "用户名", width: 130 },
   { key: "email", title: "邮箱" },
-  { key: "status", title: "状态", width: 80 },
+  { key: "status", title: "状态", width: 90 },
   { key: "createdTime", title: "注册时间", width: 170 },
-  { key: "actions", title: "操作", width: 285 }
+  { key: "actions", title: "操作", width: 310 }
 ];
 
 const router = useRouter();
@@ -162,6 +176,9 @@ const pageSize = ref(20);
 const total = ref(0);
 const loading = ref(false);
 const userList = ref<EndUserItem[]>([]);
+const statusUpdatingIds = ref<Set<string>>(new Set());
+const aiPolicyDrawerOpen = ref(false);
+const aiPolicyTarget = ref<EndUserItem | null>(null);
 
 const showCreateDialog = ref(false);
 const createLoading = ref(false);
@@ -245,30 +262,42 @@ async function submitCreateUser() {
   }
 }
 
-async function handleToggleStatus(row: EndUserItem, status: "active" | "disabled") {
-  const action = status === "active" ? "启用" : "停用";
-  const isDisable = status === "disabled";
+function setStatusUpdating(userId: string, updating: boolean) {
+  const next = new Set(statusUpdatingIds.value);
+  if (updating) next.add(userId);
+  else next.delete(userId);
+  statusUpdatingIds.value = next;
+}
+
+function isStatusUpdating(userId: string) {
+  return statusUpdatingIds.value.has(userId);
+}
+
+async function handleStatusChange(row: EndUserItem, enabled: boolean) {
+  if (isStatusUpdating(row.userId) || enabled === (row.status === 1)) return;
+  const status = enabled ? "active" : "disabled";
+  const action = enabled ? "启用" : "停用";
+  setStatusUpdating(row.userId, true);
   try {
     await ElMessageBox.confirm(
-      `确定要${action}用户「${row.username}」吗？${isDisable ? "停用后该用户将立即无法登录。" : ""}`,
+      `确定要${action}用户「${row.username}」吗？${enabled ? "" : "停用后该用户将立即无法登录。"}`,
       `确认${action}`,
       {
         confirmButtonText: `确认${action}`,
         cancelButtonText: "取消",
-        type: isDisable ? "warning" : "info",
-        confirmButtonClass: isDisable ? "el-button--danger" : ""
+        type: enabled ? "info" : "warning",
+        confirmButtonClass: enabled ? "" : "el-button--danger"
       }
     );
     await platformTenantApi.updateUserStatus(row.userId, status);
+    row.status = enabled ? 1 : 2;
     ElMessage.success(`用户已${action}`);
-    fetchUsers();
   } catch (e: any) {
-    if (e !== "cancel") ElMessage.error(e?.message || "操作失败");
+    if (e !== "cancel" && e !== "close") ElMessage.error(e?.message || "操作失败");
+  } finally {
+    setStatusUpdating(row.userId, false);
   }
 }
-
-const handleDisable = (row: EndUserItem) => handleToggleStatus(row, "disabled");
-const handleEnable = (row: EndUserItem) => handleToggleStatus(row, "active");
 
 async function handleDelete(row: EndUserItem) {
   try {
@@ -295,6 +324,15 @@ async function handleDelete(row: EndUserItem) {
 
 function openOverview(row: EndUserItem) {
   void router.push(`/tenant/users/directory/${encodeURIComponent(row.userId)}`);
+}
+
+function openAiPolicy(row: EndUserItem) {
+  aiPolicyTarget.value = row;
+  aiPolicyDrawerOpen.value = true;
+}
+
+function closeAiPolicy() {
+  aiPolicyDrawerOpen.value = false;
 }
 
 async function handleResetPassword(row: EndUserItem) {
