@@ -96,6 +96,9 @@
         <template #cell-createdTime="{ row }">
           <span class="endusers-time">{{ formatTime(row.createdTime) }}</span>
         </template>
+        <template #cell-actions="{ row }">
+          <el-button link type="primary" @click="openAccount(row)">账户</el-button>
+        </template>
       </DsTable>
 
       <template #pagination>
@@ -109,6 +112,13 @@
       </template>
     </PortalPagePanel>
 
+    <AccountOverviewDrawer
+      :open="accountDrawerVisible"
+      :account-type="2"
+      :account-id="accountTarget?.userId || ''"
+      :account-name="accountTarget?.username"
+      @close="accountDrawerVisible = false"
+    />
   </div>
 </template>
 
@@ -119,6 +129,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { RefreshRight, Search } from '@element-plus/icons-vue'
 import { Users } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
+import AccountOverviewDrawer from '@/components/AccountOverviewDrawer.vue'
 import {
   DsFilterBar,
   DsFilterField,
@@ -127,6 +138,7 @@ import {
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
+import type { EndUserItem } from '@/api/types/admin'
 
 const router = useRouter()
 
@@ -138,7 +150,8 @@ const columns: DsTableColumn[] = [
   { key: 'status', title: '状态', width: 130 },
   { key: 'credits', title: '积分余额', align: 'right' },
   { key: 'lastLoginTime', title: '最后登录' },
-  { key: 'createdTime', title: '注册时间' }
+  { key: 'createdTime', title: '注册时间' },
+  { key: 'actions', title: '操作', width: 80 }
 ]
 
 const {
@@ -180,12 +193,19 @@ const {
 })
 
 const statusUpdatingIds = ref<Set<string>>(new Set())
+const accountDrawerVisible = ref(false)
+const accountTarget = ref<EndUserItem | null>(null)
 const isStatusUpdating = (userId: string) => statusUpdatingIds.value.has(userId)
 const isStatusControllable = (status: number) => status === 1 || status === 2
 const statusSwitchTip = (status: number) => {
   if (status === 3) return '账号已锁定，不能手动切换状态'
   if (status === 4) return '账号随所属租户停用，不能单独启用'
   return status === 1 ? '点击禁用用户' : '点击启用用户'
+}
+
+const openAccount = (row: EndUserItem) => {
+  accountTarget.value = row
+  accountDrawerVisible.value = true
 }
 
 const setStatusUpdating = (userId: string, updating: boolean) => {

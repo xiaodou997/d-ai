@@ -99,6 +99,7 @@
           <span class="tenants-time">{{ formatTime(row.createdTime) }}</span>
         </template>
         <template #cell-actions="{ row }">
+          <el-button link type="primary" @click="openAccount(row)">账户</el-button>
           <el-button link type="primary" @click="goTenantPolicy(row.tenantId)">策略</el-button>
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
           <el-button link type="success" @click="handleRecharge(row)">充值</el-button>
@@ -120,6 +121,14 @@
         />
       </template>
     </PortalPagePanel>
+
+    <AccountOverviewDrawer
+      :open="accountDrawerVisible"
+      :account-type="1"
+      :account-id="accountTarget?.tenantId || ''"
+      :account-name="accountTarget?.tenantName"
+      @close="accountDrawerVisible = false"
+    />
 
     <RechargeDialog
       v-model="rechargeDialogVisible"
@@ -185,6 +194,7 @@ import { Plus, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { Building2 } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
+import AccountOverviewDrawer from '@/components/AccountOverviewDrawer.vue'
 import RechargeDialog from '@/components/RechargeDialog.vue'
 import type { RechargeFormPayload } from '@/components/recharge'
 import {
@@ -208,7 +218,7 @@ const columns: DsTableColumn[] = [
   { key: 'credits', title: '平台积分', align: 'right' },
   { key: 'userCount', title: '用户数', align: 'center' },
   { key: 'createdTime', title: '入驻时间' },
-  { key: 'actions', title: '操作', width: 220 }
+  { key: 'actions', title: '操作', width: 260 }
 ]
 
 const {
@@ -249,6 +259,8 @@ const statusUpdatingIds = ref<Set<string>>(new Set())
 const rechargeDialogVisible = ref(false)
 const rechargeSubmitting = ref(false)
 const rechargeTarget = ref<TenantListItem | null>(null)
+const accountDrawerVisible = ref(false)
+const accountTarget = ref<TenantListItem | null>(null)
 const formRef = ref<any>(null)
 const form = reactive({
   tenantId: '',
@@ -284,6 +296,11 @@ const handleCreate = () => {
 const handleRecharge = (row: TenantListItem) => {
   rechargeTarget.value = row
   rechargeDialogVisible.value = true
+}
+
+const openAccount = (row: TenantListItem) => {
+  accountTarget.value = row
+  accountDrawerVisible.value = true
 }
 
 const submitTenantRecharge = async (payload: RechargeFormPayload) => {

@@ -128,6 +128,13 @@ describe("portal module registry", () => {
     expect(portalModules.some((module) => module.path === "/admin/ai/tenant-policy")).toBe(false);
   });
 
+  it("keeps account lookup in tenant and user context instead of billing tabs", () => {
+    const billing = portalModules.find((module) => module.id === "admin-billing-workspace");
+
+    expect(billing?.tabs?.map((tab) => tab.id)).toEqual(["recharges", "transactions", "orders"]);
+    expect(billing?.tabs?.some((tab) => tab.path === "accounts")).toBe(false);
+  });
+
   it("uses capabilities as the role access source", () => {
     expect(userHasPortalCapability(1, "admin.identity")).toBe(true);
     expect(userHasPortalCapability(2, "admin.identity")).toBe(false);

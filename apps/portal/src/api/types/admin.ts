@@ -94,6 +94,13 @@ export interface AccountBalanceOutput {
 	timedCredits: number;
 	outstandingDebtMicro: number;
 	serviceState: "active" | "blocked_debt";
+	packages?: Array<{
+		packageId: string;
+		totalCredits: number;
+		remainingCredits: number;
+		expiresAt?: string | null;
+		source: string;
+	}>;
 }
 
 export interface PageTenantListItem {

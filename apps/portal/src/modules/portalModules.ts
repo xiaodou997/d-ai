@@ -164,7 +164,6 @@ export const portalModules: PortalModule[] = [
     navGroup: adminFinance,
     order: 10,
     tabs: [
-      { id: "accounts", label: "租户积分", path: "accounts", component: () => import("@/views/admin/platform/AccountOverviewView.vue") },
       { id: "recharges", label: "充值记录", path: "recharges", component: () => import("@/views/admin/platform/RechargeRecordsView.vue") },
       { id: "transactions", label: "积分明细", path: "transactions", component: () => import("@/views/admin/platform/TransactionsView.vue") },
       { id: "orders", label: "支付订单", path: "orders", component: () => import("@/views/admin/platform/PaymentOrdersView.vue") }

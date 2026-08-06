@@ -27,6 +27,7 @@
         <el-button @click="goTenantPolicy">
           <SlidersHorizontal class="td-button-icon" />平台策略
         </el-button>
+        <el-button @click="accountDrawerVisible = true">账户详情</el-button>
         <el-button type="primary" @click="handleRecharge">账户充值</el-button>
       </template>
 
@@ -149,6 +150,14 @@
       </div>
     </PortalPagePanel>
 
+    <AccountOverviewDrawer
+      :open="accountDrawerVisible"
+      :account-type="1"
+      :account-id="tenantId"
+      :account-name="tenantInfo?.tenantName"
+      @close="accountDrawerVisible = false"
+    />
+
     <RechargeDialog
       v-model="rechargeDialogVisible"
       title="租户充值"
@@ -186,6 +195,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { Building2, SlidersHorizontal } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
+import AccountOverviewDrawer from '@/components/AccountOverviewDrawer.vue'
 import RechargeDialog from '@/components/RechargeDialog.vue'
 import type { RechargeFormPayload } from '@/components/recharge'
 import {
@@ -213,6 +223,7 @@ const tabs = [
 
 const tenantInfo = ref<TenantDetailOutput | null>(null)
 const credits = ref(0)
+const accountDrawerVisible = ref(false)
 const rechargeDialogVisible = ref(false)
 const rechargeSubmitting = ref(false)
 
