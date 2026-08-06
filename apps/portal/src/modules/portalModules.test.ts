@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(11);
-    expect(leavesFor(2)).toHaveLength(10);
+    expect(leavesFor(1)).toHaveLength(13);
+    expect(leavesFor(2)).toHaveLength(12);
     expect(leavesFor(3)).toHaveLength(13);
     expect(leavesFor(4)).toHaveLength(8);
   });
@@ -31,6 +31,8 @@ describe("portal module registry", () => {
       "账户与交易",
       "结算与支付",
       "上游与定价",
+      "路由策略",
+      "使用记录",
       "审计与风控",
       "公告管理"
     ]);
@@ -82,10 +84,10 @@ describe("portal module registry", () => {
 
   it("marks a workspace active for any child or detail route", () => {
     const activeTenant = leavesFor(3, "/tenant/users/directory/user-1").find((item) => item.active);
-    const activeAdmin = leavesFor(1, "/admin/ai/security/usage/request-1").find((item) => item.active);
+    const activeAdmin = leavesFor(1, "/admin/ai/usage/request-1").find((item) => item.active);
 
     expect(activeTenant?.id).toBe("tenant-user-workspace");
-    expect(activeAdmin?.id).toBe("admin-security-workspace");
+    expect(activeAdmin?.id).toBe("admin-usage");
     expect(leavesFor(4, "/customer/workbench/chat").filter((item) => item.active).map((item) => item.id)).toEqual([
       "customer-chat"
     ]);
@@ -133,6 +135,40 @@ describe("portal module registry", () => {
 
     expect(billing?.tabs?.map((tab) => tab.id)).toEqual(["recharges", "transactions", "orders"]);
     expect(billing?.tabs?.some((tab) => tab.path === "accounts")).toBe(false);
+  });
+
+  it("exposes routing policy as a standalone AI gateway menu", () => {
+    const aiGatewayMenus = buildPortalNav(1, "/admin/ai/routing")
+      .find((item) => item.id === "admin-ai")
+      ?.children;
+    const monitoring = portalModules.find((module) => module.id === "admin-monitoring-workspace");
+
+    expect(aiGatewayMenus).toMatchObject([
+      { id: "admin-upstream-workspace", label: "上游与定价", active: false },
+      {
+        id: "admin-routing-policy",
+        label: "路由策略",
+        to: "/admin/ai/routing",
+        icon: "route",
+        active: true
+      },
+      { id: "admin-usage", label: "使用记录", active: false },
+      { id: "admin-security-workspace", label: "审计与风控", active: false }
+    ]);
+    expect(monitoring?.tabs?.map((tab) => tab.id)).toEqual(["status", "analytics"]);
+  });
+
+  it("exposes usage records separately from security controls", () => {
+    const usageMenu = leavesFor(1, "/admin/ai/usage/request-1").find((item) => item.id === "admin-usage");
+    const security = portalModules.find((module) => module.id === "admin-security-workspace");
+
+    expect(usageMenu).toMatchObject({
+      label: "使用记录",
+      to: "/admin/ai/usage",
+      icon: "scroll-text",
+      active: true
+    });
+    expect(security?.tabs?.map((tab) => tab.id)).toEqual(["audit", "risk"]);
   });
 
   it("uses capabilities as the role access source", () => {

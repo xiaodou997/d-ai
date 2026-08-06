@@ -93,6 +93,8 @@ export interface PortalModule {
   navGroup?: PortalNavGroup;
   navTabs?: boolean;
   nav?: boolean;
+  name?: string;
+  props?: boolean | Record<string, unknown> | ((route: RouteLocationNormalizedLoaded) => Record<string, unknown>);
   component?: NonNullable<RouteRecordRaw["component"]>;
   tabs?: PortalModuleTab[];
 }
@@ -193,8 +195,7 @@ export const portalModules: PortalModule[] = [
     order: 10,
     tabs: [
       { id: "status", label: "系统状态", path: "status", component: () => import("@/views/admin/ai/SystemStatusView.vue") },
-      { id: "analytics", label: "用量分析", path: "analytics", component: () => import("@/views/admin/ai/gateway/UsageAnalyticsView.vue") },
-      { id: "routing", label: "路由分析", path: "routing", component: () => import("@/views/admin/ai/gateway/RoutingView.vue") }
+      { id: "analytics", label: "用量分析", path: "analytics", component: () => import("@/views/admin/ai/gateway/UsageAnalyticsView.vue") }
     ]
   },
   {
@@ -212,16 +213,46 @@ export const portalModules: PortalModule[] = [
     ]
   },
   {
+    id: "admin-routing-policy",
+    label: "路由策略",
+    path: "/admin/ai/routing",
+    icon: "route",
+    capability: "admin.ai.upstream",
+    navGroup: adminAi,
+    order: 30,
+    component: () => import("@/views/admin/ai/gateway/RoutingView.vue")
+  },
+  {
+    id: "admin-usage",
+    label: "使用记录",
+    path: "/admin/ai/usage",
+    icon: "scroll-text",
+    capability: "admin.ai.security",
+    navGroup: adminAi,
+    order: 40,
+    name: "ai-usage",
+    component: () => import("@/views/admin/ai/gateway/UsageView.vue")
+  },
+  {
+    id: "admin-usage-detail",
+    label: "使用详情",
+    path: "/admin/ai/usage/:requestId",
+    icon: "scroll-text",
+    capability: "admin.ai.security",
+    order: 41,
+    nav: false,
+    name: "ai-usage-detail",
+    component: () => import("@/views/admin/ai/gateway/UsageDetailView.vue")
+  },
+  {
     id: "admin-security-workspace",
     label: "审计与风控",
     path: "/admin/ai/security",
     icon: "shield-alert",
     capability: "admin.ai.security",
     navGroup: adminAi,
-    order: 40,
+    order: 50,
     tabs: [
-      { id: "usage", label: "使用记录", path: "usage", component: () => import("@/views/admin/ai/gateway/UsageView.vue"), name: "ai-usage" },
-      { id: "usage-detail", label: "使用详情", path: "usage/:requestId", component: () => import("@/views/admin/ai/gateway/UsageDetailView.vue"), name: "ai-usage-detail", nav: false, activeTabId: "usage" },
       { id: "audit", label: "网关审计", path: "audit", component: () => import("@/views/admin/ai/gateway/AuditView.vue") },
       { id: "risk", label: "风控中心", path: "risk", component: () => import("@/views/admin/ai/gateway/RiskControlView.vue") }
     ]
@@ -628,7 +659,9 @@ export function buildPortalModuleRoutes(): RouteRecordRaw[] {
       if (!module.component) throw new Error(`Portal module ${module.id} has no component`);
       return {
         path,
+        name: module.name,
         component: module.component,
+        props: module.props,
         meta: routeMeta(module.capability, module.label, { portalModuleId: module.id })
       };
     }

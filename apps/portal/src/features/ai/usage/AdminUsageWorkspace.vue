@@ -92,9 +92,8 @@ function switchToRecords() {
       fill
       :icon="ScrollText"
       :breadcrumbs="[
-        { label: '智能服务' },
-        { label: '日志审计' },
-        { label: '请求记录' }
+        { label: 'AI 网关' },
+        { label: '使用记录' }
       ]"
       :description="`${periodLabel}内筛选、审计并排查单次 AI 请求。`"
     >

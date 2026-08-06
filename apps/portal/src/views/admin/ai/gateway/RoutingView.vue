@@ -210,7 +210,7 @@ onMounted(fetchWeights)
   <div class="routing-page">
     <PortalPagePanel
       :icon="Route"
-      :breadcrumbs="[{ label: '智能服务' }, { label: '运营管理' }, { label: '路由策略' }]"
+      :breadcrumbs="[{ label: 'AI 网关' }, { label: '路由策略' }]"
       description="设置系统选上游路线时更看重什么：更省钱、更快、更空闲，还是更稳定。"
     >
       <!-- 配置 + 说明两张内容卡:body 无内边距,用 24px 容器承载 -->
