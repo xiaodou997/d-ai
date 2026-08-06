@@ -37,7 +37,7 @@ const activeTab = computed({
 
 <template>
   <div class="portal-workspace-layout">
-    <nav class="portal-workspace-layout__tabs" :aria-label="`${portalModule.label}视图`">
+    <nav v-if="!portalModule.navTabs" class="portal-workspace-layout__tabs" :aria-label="`${portalModule.label}视图`">
       <DsTabs v-model="activeTab" :tabs="tabs" />
     </nav>
     <div class="portal-workspace-layout__view">

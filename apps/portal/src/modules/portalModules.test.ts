@@ -24,11 +24,11 @@ describe("portal module registry", () => {
     expect(leavesFor(1).map((item) => item.label)).toEqual([
       "经营",
       "AI 运营",
+      "运行监控",
       "租户与用户",
       "管理员与身份",
       "账户与交易",
       "结算与支付",
-      "运行监控",
       "上游与定价",
       "租户策略",
       "审计与风控",
@@ -46,7 +46,7 @@ describe("portal module registry", () => {
     ]);
   });
 
-  it("exposes overview as a category with business and AI operation menus", () => {
+  it("exposes overview as a category with business, AI operation, and admin monitoring menus", () => {
     const adminOverview = buildPortalNav(1, "/admin/overview/ai")[0];
     const tenantOverview = buildPortalNav(3, "/tenant/overview/business")[0];
 
@@ -55,7 +55,8 @@ describe("portal module registry", () => {
       active: true,
       children: [
         { label: "经营", to: "/admin/overview/platform", active: false },
-        { label: "AI 运营", to: "/admin/overview/ai", active: true }
+        { label: "AI 运营", to: "/admin/overview/ai", active: true },
+        { label: "运行监控", to: "/admin/ai/monitoring", active: false }
       ]
     });
     expect(tenantOverview).toMatchObject({
@@ -64,6 +65,17 @@ describe("portal module registry", () => {
       children: [
         { label: "经营", to: "/tenant/overview/business", active: true },
         { label: "AI 运营", to: "/tenant/overview/ai", active: false }
+      ]
+    });
+
+    const monitoringOverview = buildPortalNav(1, "/admin/ai/monitoring/status")[0];
+    expect(monitoringOverview).toMatchObject({
+      label: "概览",
+      active: true,
+      children: [
+        { label: "经营", active: false },
+        { label: "AI 运营", active: false },
+        { label: "运行监控", active: true }
       ]
     });
   });

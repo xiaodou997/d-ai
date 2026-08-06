@@ -99,6 +99,7 @@ export interface PortalModule {
   tabs?: PortalModuleTab[];
 }
 
+const adminOverview = { id: "admin-overview-category", label: "概览", order: 0 };
 const adminOrganization = { id: "admin-organization", label: "组织与权限", order: 10 };
 const adminFinance = { id: "admin-finance", label: "资金与账务", order: 20 };
 const adminAi = { id: "admin-ai", label: "AI 网关", order: 30 };
@@ -118,6 +119,7 @@ export const portalModules: PortalModule[] = [
     path: "/admin/overview",
     icon: "layout-dashboard",
     capability: "admin.overview",
+    navGroup: adminOverview,
     order: 0,
     navTabs: true,
     tabs: [
@@ -188,7 +190,7 @@ export const portalModules: PortalModule[] = [
     path: "/admin/ai/monitoring",
     icon: "heart-pulse",
     capability: "admin.ai.monitor",
-    navGroup: adminAi,
+    navGroup: adminOverview,
     order: 10,
     tabs: [
       { id: "status", label: "系统状态", path: "status", component: () => import("@/views/admin/ai/SystemStatusView.vue") },
@@ -537,6 +539,29 @@ function pathMatches(currentPath: string, targetPath: string): boolean {
   return currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
 }
 
+function moduleTabNavItems(
+  module: PortalModule,
+  userType: number,
+  currentPath: string
+): AppShellNavItem[] {
+  return (module.tabs ?? [])
+    .filter(
+      (tab) => tab.nav !== false && userHasPortalCapability(userType, tab.capability ?? module.capability)
+    )
+    .map((tab, index) => {
+      const tabPath = `${module.path}/${tab.path.split("/:", 1)[0]}`;
+      return {
+        id: `${module.id}-${tab.id}`,
+        label: tab.navLabel ?? tab.label,
+        to: tabPath,
+        icon: tab.icon ?? module.icon,
+        active:
+          pathMatches(currentPath, tabPath) ||
+          (currentPath === module.path && index === 0)
+      };
+    });
+}
+
 export function buildPortalNav(userType: number, currentPath: string): AppShellNavItem[] {
   const visibleModules = portalModules
     .filter((module) => module.nav !== false && userHasPortalCapability(userType, module.capability))
@@ -556,29 +581,13 @@ export function buildPortalNav(userType: number, currentPath: string): AppShellN
     }));
 
   const tabCategories = visibleModules
-    .filter((module) => module.navTabs)
-    .map((module) => {
-      const tabs = (module.tabs ?? []).filter(
-        (tab) => tab.nav !== false && userHasPortalCapability(userType, tab.capability ?? module.capability)
-      );
-      return {
-        id: `${module.id}-category`,
-        label: module.label,
-        active: module.id === activeModuleId,
-        children: tabs.map((tab, index) => {
-          const tabPath = `${module.path}/${tab.path.split("/:", 1)[0]}`;
-          return {
-            id: `${module.id}-${tab.id}`,
-            label: tab.navLabel ?? tab.label,
-            to: tabPath,
-            icon: tab.icon ?? module.icon,
-            active:
-              pathMatches(currentPath, tabPath) ||
-              (currentPath === module.path && index === 0)
-          };
-        })
-      };
-    });
+    .filter((module) => module.navTabs && !module.navGroup)
+    .map((module) => ({
+      id: `${module.id}-category`,
+      label: module.label,
+      active: module.id === activeModuleId,
+      children: moduleTabNavItems(module, userType, currentPath)
+    }));
 
   const groups = new Map<string, { group: PortalNavGroup; modules: PortalModule[] }>();
   for (const module of visibleModules) {
@@ -599,13 +608,17 @@ export function buildPortalNav(userType: number, currentPath: string): AppShellN
         active: modules.some((module) => module.id === activeModuleId),
         children: modules
           .sort((left, right) => left.order - right.order)
-          .map((module) => ({
-            id: module.id,
-            label: module.label,
-            to: module.path,
-            icon: module.icon,
-            active: module.id === activeModuleId
-          }))
+          .flatMap((module) =>
+            module.navTabs
+              ? moduleTabNavItems(module, userType, currentPath)
+              : [{
+                  id: module.id,
+                  label: module.label,
+                  to: module.path,
+                  icon: module.icon,
+                  active: module.id === activeModuleId
+                }]
+          )
       }))
   ];
 }
