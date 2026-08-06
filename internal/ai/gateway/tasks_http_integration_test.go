@@ -21,12 +21,6 @@ import (
 	"xiaodou/dai/internal/ai/testsupport"
 )
 
-type allowTaskServiceAccess struct{}
-
-func (allowTaskServiceAccess) Check(context.Context, int, string, string, string, string) error {
-	return nil
-}
-
 type fixedModelTaskHandler struct{}
 
 func (fixedModelTaskHandler) Prepare(_ context.Context, sub asynctask.Submission) (asynctask.Prepared, error) {
@@ -110,12 +104,10 @@ func TestAPITaskCreateAndGetAreIdempotentAndEchoMetadata(t *testing.T) {
 	engine.Register(apiChatCompletionTaskType, &chatTaskHandler{}, asynctask.Options{MaxAttempts: 1})
 
 	g := New(Deps{
-		Logger:           zap.NewNop(),
-		Postgres:         pool,
-		Queries:          dbgen.New(pool),
-		ServiceAccess:    allowTaskServiceAccess{},
-		ExpectedClientID: "uni-ai-api",
-		AsyncTasks:       engine,
+		Logger:     zap.NewNop(),
+		Postgres:   pool,
+		Queries:    dbgen.New(pool),
+		AsyncTasks: engine,
 	})
 	router := chi.NewRouter()
 	g.Routes(router)

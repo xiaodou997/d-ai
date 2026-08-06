@@ -11,11 +11,6 @@ import (
 	billingpg "xiaodou/dai/internal/billing/pg"
 )
 
-const (
-	serviceInstanceRetention       = 24 * time.Hour
-	serviceInstanceCleanupInterval = time.Hour
-)
-
 // jwtKeyRetirer 定义 JWT 密钥退役接口，避免循环依赖
 type jwtKeyRetirer interface {
 	RetireExpiredGraceKeys() error
@@ -63,8 +58,6 @@ func (s *Scheduler) Start() {
 	go s.runPackageExpiryTask()
 	go s.runDepletedPackageTask()
 	go s.runJWTKeyRetireTask()
-	go s.runExpiredAuthCodeTask()
-	go s.runServiceInstanceCleanupTask()
 	go s.runPaymentSweepTask()
 	go s.runCreditLeaseReaperTask()
 }
@@ -130,11 +123,11 @@ func (s *Scheduler) releaseTimeoutPreAuth() {
 	ctx := context.Background()
 
 	var locked bool
-	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('urm_scheduler_preauth'))`).Scan(&locked); err != nil || !locked {
+	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_preauth'))`).Scan(&locked); err != nil || !locked {
 		s.logger.Info("[定时任务] 预授权释放任务已被其他实例持有，跳过")
 		return
 	}
-	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('urm_scheduler_preauth'))`) //nolint
+	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_preauth'))`) //nolint
 
 	s.logger.Info("[定时任务] 开始释放超时预授权")
 
@@ -422,93 +415,6 @@ func (s *Scheduler) retireExpiredGraceKeys() {
 	}
 }
 
-// ==================== 过期 auth code 清理 ====================
-
-func (s *Scheduler) runExpiredAuthCodeTask() {
-	s.cleanupExpiredAuthCodes()
-
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			s.cleanupExpiredAuthCodes()
-		}
-	}
-}
-
-func (s *Scheduler) cleanupExpiredAuthCodes() {
-	ctx := context.Background()
-	result, err := s.pool.Exec(ctx, `DELETE FROM auth_oauth_codes WHERE expires_at < now()`)
-	if err != nil {
-		s.logger.Error("[定时任务] 清理过期 auth code 失败", zap.Error(err))
-		return
-	}
-	if affected := result.RowsAffected(); affected > 0 {
-		s.logger.Info("[定时任务] 过期 auth code 清理完成", zap.Int64("count", affected))
-	}
-}
-
-// ==================== 服务实例历史清理 ====================
-
-func (s *Scheduler) runServiceInstanceCleanupTask() {
-	s.cleanupStaleServiceInstances()
-
-	ticker := time.NewTicker(serviceInstanceCleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			s.cleanupStaleServiceInstances()
-		}
-	}
-}
-
-func (s *Scheduler) cleanupStaleServiceInstances() {
-	cutoff := time.Now().UTC().Add(-serviceInstanceRetention)
-	count, locked, err := s.cleanupServiceInstancesBefore(context.Background(), cutoff)
-	if err != nil {
-		s.logger.Error("[定时任务] 清理过期服务实例失败", zap.Error(err))
-		return
-	}
-	if !locked {
-		return
-	}
-	if count > 0 {
-		s.logger.Info("[定时任务] 过期服务实例清理完成", zap.Int64("count", count))
-	}
-}
-
-func (s *Scheduler) cleanupServiceInstancesBefore(ctx context.Context, cutoff time.Time) (int64, bool, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return 0, false, err
-	}
-	defer tx.Rollback(ctx)
-
-	var locked bool
-	if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock(hashtext('urm_scheduler_service_instances'))`).Scan(&locked); err != nil {
-		return 0, false, err
-	}
-	if !locked {
-		return 0, false, nil
-	}
-	result, err := tx.Exec(ctx, `DELETE FROM gov_service_instances WHERE last_seen < $1`, cutoff)
-	if err != nil {
-		return 0, true, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, true, err
-	}
-	return result.RowsAffected(), true, nil
-}
-
 // ==================== 支付兜底 sweep（超时关单 + 在途补偿，设计文档 §4.5） ====================
 
 func (s *Scheduler) runPaymentSweepTask() {
@@ -534,10 +440,10 @@ func (s *Scheduler) sweepPayments() {
 	ctx := context.Background()
 
 	var locked bool
-	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('urm_scheduler_payment'))`).Scan(&locked); err != nil || !locked {
+	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment'))`).Scan(&locked); err != nil || !locked {
 		return
 	}
-	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('urm_scheduler_payment'))`) //nolint
+	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment'))`) //nolint
 
 	s.paymentSweeper.SweepOnce(ctx)
 }
@@ -549,7 +455,5 @@ func (s *Scheduler) RunAllTasks() {
 	s.reportPreAuthStatistics()
 	s.cleanupExpiredPackages()
 	s.cleanupDepletedPackages()
-	s.cleanupExpiredAuthCodes()
-	s.cleanupStaleServiceInstances()
 	s.sweepPayments()
 }

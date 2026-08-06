@@ -157,16 +157,16 @@ function optionalNumber(value: unknown): number | undefined {
 }
 
 // 租户侧使用记录
-import type { components as UrmComponents } from "@/api/urm";
+import type { components as PlatformComponents } from "@/api/platform";
 
-type UrmSchemas = UrmComponents["schemas"];
+type PlatformSchemas = PlatformComponents["schemas"];
 
 export type TenantUsageLog = Schemas["TenantUsageLogDTO"];
 export type TenantUsageStats = Schemas["UsageStatsDTO"];
 export type TenantUsageQuery = NonNullable<operations["ai-list-tenant-self-usage-logs"]["parameters"]["query"]>;
 export type TenantUsageSummaryQuery = NonNullable<operations["ai-list-tenant-self-usage-summary"]["parameters"]["query"]>;
 export type TenantUsageSummaryRow = Schemas["UsageSummaryRowDTO"];
-export type TenantUsageUser = UrmSchemas["EndUserItem"];
+export type TenantUsageUser = PlatformSchemas["EndUserItem"];
 
 export interface TenantUsageFilters {
   dateRange: [number, number] | null;

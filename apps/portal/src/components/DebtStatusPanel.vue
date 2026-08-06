@@ -23,7 +23,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { formatMicroCredits } from "@/platform/ai/usage";
-import { urmAdminApi } from "../api/urmAdmin";
+import { platformAdminApi } from "../api/platformAdmin";
 import type { DebtStatusOutputBody } from "@/api/types/admin";
 
 const props = defineProps<{
@@ -39,7 +39,7 @@ async function fetchStatus() {
   if (!props.accountId) return;
   loading.value = true;
   try {
-    status.value = await urmAdminApi.getDebtStatus(props.ownerType, props.accountId);
+    status.value = await platformAdminApi.getDebtStatus(props.ownerType, props.accountId);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "查询债务状态失败");
   } finally {

@@ -1,5 +1,5 @@
 <!--
-  账号池 — 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/AIGateway/GatewayCredentialPools.vue。
+  账号池。
   适配 v4：aiGateway → aiAdminApi（list* 返回 {items} 已取 .items；listUpstreamDeployments 参数走 camelCase credentialPoolId）；
        capabilityOptions/statusOptions/protocolOptions 走共享 constants；错误读 err.message。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行，

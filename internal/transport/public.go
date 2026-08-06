@@ -6,35 +6,22 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
-	"go.uber.org/zap"
 
-	"xiaodou/dai/libs/go/httpx"
-	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/config"
 	invitepkg "xiaodou/dai/internal/invite"
 	invitepg "xiaodou/dai/internal/invite/pg"
+	"xiaodou/dai/libs/go/httpx"
 )
 
-type publicSessionService interface {
-	IsEnabled() bool
-	CreateSession(ctx context.Context, data auth.SessionData) (string, error)
-}
-
 type publicHandlers struct {
-	invite  *invitepkg.InviteService
-	session publicSessionService
-	sso     config.SSOConfig
-	legal   config.LegalConfig
-	logger  *zap.Logger
+	invite *invitepkg.InviteService
+	legal  config.LegalConfig
 }
 
 func newPublicHandlers(d Deps) *publicHandlers {
 	return &publicHandlers{
-		invite:  d.Invite,
-		session: d.Session,
-		sso:     d.SSO,
-		legal:   d.Legal,
-		logger:  d.Logger,
+		invite: d.Invite,
+		legal:  d.Legal,
 	}
 }
 
@@ -75,12 +62,10 @@ type publicRegistrationInput struct {
 }
 
 type publicRegistrationOutput struct {
-	SetCookie []http.Cookie `header:"Set-Cookie"`
-	Body      struct {
-		Success            bool   `json:"success"`
-		UserID             string `json:"userId"`
-		SessionEstablished bool   `json:"sessionEstablished"`
-		Message            string `json:"message"`
+	Body struct {
+		Success bool   `json:"success"`
+		UserID  string `json:"userId"`
+		Message string `json:"message"`
 	}
 }
 
@@ -135,9 +120,6 @@ func (h *publicHandlers) getInvitation(ctx context.Context, in *publicInvitation
 }
 
 func (h *publicHandlers) registerInvitation(ctx context.Context, in *publicRegistrationInput) (*publicRegistrationOutput, error) {
-	if h.session == nil || !h.session.IsEnabled() {
-		return nil, httpx.ErrInternal.WithDetail("SSO session is not available")
-	}
 	if in.Body.TermsVersion != h.legal.TermsVersion || in.Body.PrivacyVersion != h.legal.PrivacyVersion {
 		return nil, httpx.ErrBadRequest.WithDetail("请重新阅读并同意最新服务条款和隐私政策")
 	}
@@ -165,45 +147,9 @@ func (h *publicHandlers) registerInvitation(ctx context.Context, in *publicRegis
 		}
 	}
 
-	sessionID, err := h.session.CreateSession(ctx, auth.SessionData{
-		UserID:          user.UserID,
-		Username:        user.Username,
-		UserType:        user.UserType,
-		UserTypeDisplay: userTypeDisplayName(user.UserType),
-		TenantID:        user.TenantID,
-		ClientType:      "customer",
-		ClientID:        urmClientID,
-	})
 	out := &publicRegistrationOutput{}
 	out.Body.Success = true
 	out.Body.UserID = user.UserID
-	if err != nil {
-		if h.logger != nil {
-			h.logger.Warn("create customer session failed after invitation registration",
-				zap.String("userId", user.UserID),
-				zap.String("tenantId", user.TenantID),
-				zap.Error(err),
-			)
-		}
-		out.Body.SessionEstablished = false
-		out.Body.Message = "registered_login_required"
-		return out, nil
-	}
-	out.SetCookie = []http.Cookie{publicSessionCookie(h.sso, "customer", sessionID)}
-	out.Body.SessionEstablished = true
 	out.Body.Message = "registered"
 	return out, nil
-}
-
-func publicSessionCookie(cfg config.SSOConfig, clientType, value string) http.Cookie {
-	return http.Cookie{
-		Name:     ssoCookieName(clientType),
-		Value:    value,
-		Path:     "/",
-		Domain:   cfg.CookieDomain,
-		MaxAge:   int(cfg.SessionTTL.Seconds()),
-		HttpOnly: true,
-		Secure:   cfg.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
-	}
 }

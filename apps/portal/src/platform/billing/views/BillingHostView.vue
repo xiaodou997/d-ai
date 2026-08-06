@@ -15,7 +15,7 @@ const currentPath = computed(() => {
 
 <template>
   <section class="billing-host">
-    <div class="billing-host__eyebrow">URM Shared Surface</div>
+    <div class="billing-host__eyebrow">Platform Shared Surface</div>
     <h2 class="billing-host__title">共享账单与账户页面将在下一步迁入</h2>
     <p class="billing-host__description">
       当前路由已挂载 `@/platform/billing` 宿主入口，后续 T4.3/T4.4/T4.5 会把 V1 的账户、

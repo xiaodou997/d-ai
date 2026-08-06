@@ -8,9 +8,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/libs/go/httpx"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingsvc "xiaodou/dai/internal/billing/service"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 // ---- DTO ----
@@ -86,7 +86,6 @@ type auditLogItem struct {
 	ID            int64    `json:"id"`
 	EventType     string   `json:"eventType"`
 	PrincipalType string   `json:"principalType"`
-	ClientID      string   `json:"clientId,omitempty"`
 	UserID        string   `json:"userId,omitempty"`
 	Scopes        []string `json:"scopes"`
 	Decision      string   `json:"decision"`
@@ -98,7 +97,6 @@ type auditLogItem struct {
 type auditLogsInput struct {
 	EventType     string `query:"eventType" required:"false"`
 	PrincipalType string `query:"principalType" required:"false"`
-	ClientID      string `query:"clientId" required:"false"`
 	UserID        string `query:"userId" required:"false"`
 	Decision      string `query:"decision" required:"false"`
 	Page          int    `query:"page" default:"1"`
@@ -142,7 +140,7 @@ func registerAdminFinance(api huma.API, d Deps) {
 		Summary: "撤销充值", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant}, h.reverseRecharge)
 	huma.Register(api, huma.Operation{OperationID: "admin-refund", Method: http.MethodPost, Path: "/api/v1/refunds",
 		Summary: "手动全额退款", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.refund)
-	huma.Register(api, huma.Operation{OperationID: "admin-get-debt", Method: http.MethodGet, Path: "/api/v2/admin/debts/{owner_type}/{id}",
+	huma.Register(api, huma.Operation{OperationID: "admin-get-debt", Method: http.MethodGet, Path: "/api/v1/admin/debts/{owner_type}/{id}",
 		Summary: "查询账户当前债务", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.getDebt)
 	huma.Register(api, huma.Operation{OperationID: "admin-auth-audit-logs", Method: http.MethodGet, Path: "/api/v1/auth-audit-logs",
 		Summary: "认证审计日志", Tags: []string{"admin-finance"}, Middlewares: superAdmin}, h.authAuditLogs)
@@ -338,7 +336,6 @@ func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (
 	}
 	addFilter("event_type", in.EventType)
 	addFilter("principal_type", in.PrincipalType)
-	addFilter("client_id", in.ClientID)
 	addFilter("user_id", in.UserID)
 	addFilter("decision", in.Decision)
 
@@ -352,7 +349,7 @@ func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (
 	offset := (in.Page - 1) * size
 	qargs := append(append([]any{}, args...), size, offset)
 	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
-		SELECT id, event_type, principal_type, client_id, user_id, scopes,
+		SELECT id, event_type, principal_type, user_id, scopes,
 		       decision, reason_code, reason_message, created_at
 		FROM auth_audit_logs %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d
 	`, where, idx, idx+1), qargs...)
@@ -364,16 +361,13 @@ func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (
 	items := make([]auditLogItem, 0)
 	for rows.Next() {
 		var it auditLogItem
-		var clientID, userID, reasonCode, reasonMsg *string
+		var userID, reasonCode, reasonMsg *string
 		var createdAt time.Time
-		if err := rows.Scan(&it.ID, &it.EventType, &it.PrincipalType, &clientID, &userID, &it.Scopes,
+		if err := rows.Scan(&it.ID, &it.EventType, &it.PrincipalType, &userID, &it.Scopes,
 			&it.Decision, &reasonCode, &reasonMsg, &createdAt); err != nil {
 			continue
 		}
 		it.CreatedAt = millisFromTime(createdAt)
-		if clientID != nil {
-			it.ClientID = *clientID
-		}
 		if userID != nil {
 			it.UserID = *userID
 		}

@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-// AppError 是 UniHub 的统一业务错误：携带稳定业务码、HTTP 状态与可读标题，并实现
+// AppError 是 D-AI 的统一业务错误：携带稳定业务码、HTTP 状态与可读标题，并实现
 // error 接口。它同时满足 Huma 的 huma.StatusError（GetStatus）与 ContentTypeFilter
 // （ContentType）鸭子接口，因此 handler 可直接返回 *AppError，由 Huma 用其 json tag
 // 反射序列化为 RFC 7807 application/problem+json 响应体（字段与 Problem 对齐）。
@@ -124,8 +124,7 @@ func ProblemFrom(err error, requestID string) Problem {
 	}
 }
 
-// 通用错误模板，覆盖跨服务共用的 HTTP 语义。业务专属错误由各服务在自己的包内用
-// New 定义（如 urm 的 "insufficient_balance"）。
+// 通用 HTTP 错误模板。业务专属错误由各领域包通过 New 定义。
 var (
 	ErrBadRequest   = New("bad_request", http.StatusBadRequest, "Bad Request")
 	ErrUnauthorized = New("unauthorized", http.StatusUnauthorized, "Unauthorized")

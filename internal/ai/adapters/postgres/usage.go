@@ -207,7 +207,7 @@ func (l *UsageLogger) invalidateAPIKeyCache(subject *coreidentity.Subject) {
 
 // accrueFinancials runs in the same transaction as the unique usage insert.
 // The usage row is therefore the idempotency anchor for quota, subscription,
-// and Billing Ledger V3 accrual.
+// and billing ledger accrual.
 func (l *UsageLogger) accrueFinancials(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -374,7 +374,7 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		ApiKeyQuotaCost:                    billing.APIKeyQuotaCostMicro,
 		ServiceTier:                        string(billing.ServiceTier),
 		BillingBreakdown:                   billing.BillingBreakdownJSON,
-		UrmTransactionID:                   nullableText(req.BillingLeaseID),
+		BillingEventID:                     nullableText(req.BillingLeaseID),
 		BillingStatus:                      billingStatus(req),
 		RequestStatus:                      string(req.RequestStatus),
 		HttpStatus:                         nullableInt4(req.HTTPStatus),

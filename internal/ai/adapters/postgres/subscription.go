@@ -149,7 +149,7 @@ func toOrder(r dbgen.AiSubOrder) subscription.Order {
 		PurchasePolicySnapshot:             parsePurchasePolicy(r.PurchasePolicySnapshot),
 		InventoryReserved:                  r.InventoryReserved,
 		Status:                             r.Status,
-		URMEventID:                         txtStr(r.UrmEventID),
+		BillingEventID:                     txtStr(r.BillingEventID),
 		SubscriptionID:                     uuidToString(r.SubscriptionID),
 		FailReason:                         txtStr(r.FailReason),
 		PaidAt:                             tsPtr(r.PaidAt),
@@ -808,7 +808,7 @@ func (r *SubscriptionRepo) EvaluatePlansForUser(ctx context.Context, tenantID, u
 }
 
 // ReservePurchase owns the complete local acceptance decision. Its transaction
-// is intentionally committed before URM is called; the created order is the
+// is intentionally committed before billing is called; the created order is the
 // durable reservation observed by concurrent attempts and the janitor.
 func (r *SubscriptionRepo) ReservePurchase(ctx context.Context, orderNo string, p subscription.PurchaseParams, maxQueue int) (*subscription.PurchaseReservation, error) {
 	tx, err := r.pool.Begin(ctx)
@@ -1190,7 +1190,7 @@ func (r *SubscriptionRepo) FinalizeOrder(ctx context.Context, order *subscriptio
 	}
 
 	n, err := q.MarkOrderPaid(ctx, dbgen.MarkOrderPaidParams{
-		ID: cur.ID, UrmEventID: nullableText(eventID), SubscriptionID: sub.ID,
+		ID: cur.ID, BillingEventID: nullableText(eventID), SubscriptionID: sub.ID,
 	})
 	if err != nil {
 		return nil, err

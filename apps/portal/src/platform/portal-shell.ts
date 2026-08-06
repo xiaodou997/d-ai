@@ -19,7 +19,6 @@ export interface PortalShellAuthLike {
   accessToken: string;
   userInfo?: unknown;
   userType?: number;
-  enabledClientIds?: string[];
   init: () => void;
   fetchUserInfo: () => Promise<unknown>;
   logout: () => Promise<boolean>;
@@ -72,15 +71,6 @@ export function usePortalShellScaffold(options: UsePortalShellScaffoldOptions) {
   if (options.watchUserType) {
     watch(
       () => options.authStore.userType,
-      () => {
-        options.menuStore.refresh(options.routePath());
-      },
-    );
-  }
-
-  if (options.authStore.enabledClientIds) {
-    watch(
-      () => options.authStore.enabledClientIds?.join(",") || "",
       () => {
         options.menuStore.refresh(options.routePath());
       },

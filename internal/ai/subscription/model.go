@@ -3,7 +3,7 @@
 //
 // 额度单位为微积分（基准价微积分 × 命中分组套餐扣额倍率；RetailBaseMicro = 售价表基准价
 // × credits_per_usd × 10000，用户倍率不参与套餐计量）；
-// 价格单位为整数积分；购买时在 URM V2 边界乘 10000 转为微积分。套餐必须绑定 ≥1 个分组，订阅覆盖期
+// 价格单位为整数积分；购买时乘 10000 转为微积分。套餐必须绑定 ≥1 个分组，订阅覆盖期
 // 硬限制路由到套餐分组交集。二期重构见 docs/ai-subscription-group-refactor.md。
 package subscription
 
@@ -12,7 +12,7 @@ import (
 	"errors"
 	"time"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 )
 
 // 计费来源常量（与 ai_usage_logs.billing_source / pipeline.Request 对齐）。
@@ -38,7 +38,7 @@ const (
 	OrderFailed    = "failed"
 )
 
-// 领域错误（service 向上层/urm 语义化透传）。
+// 领域错误。
 var (
 	ErrPlanNotFound  = errors.New("subscription: plan not found")
 	ErrPlanNotOnSale = errors.New("subscription: plan not on sale")
@@ -46,9 +46,9 @@ var (
 	ErrQueueFull     = errors.New("subscription: subscription queue is full")
 	// ErrPlanAlreadyQueued：待激活队列（pending 订阅 + 在途订单）里已有同一套餐；active 同套餐不拦（预购续期）。
 	ErrPlanAlreadyQueued = errors.New("subscription: plan already queued")
-	// ErrInsufficientBalance：购买时用户积分不足（由 urm.ErrInsufficientBalance 映射）。
+	// ErrInsufficientBalance：购买时用户积分不足（由 platform.ErrInsufficientBalance 映射）。
 	ErrInsufficientBalance = errors.New("subscription: insufficient balance")
-	// ErrOrderProcessing：urm 扣款处于未知态，订单停在 deducting，交由 janitor 补偿。
+	// ErrOrderProcessing：扣款处于未知态，订单停在 deducting，交由 janitor 补偿。
 	ErrOrderProcessing     = errors.New("subscription: order still processing")
 	ErrOrderNotFound       = errors.New("subscription: order not found")
 	ErrIdempotencyConflict = errors.New("subscription: idempotency key belongs to another purchase")
@@ -109,7 +109,7 @@ type Plan struct {
 	PurchaseEligibility *PurchaseDecision
 }
 
-// Order 购买订单（跨服务一致性锚点）。
+// Order 购买订单（一致性锚点）。
 type Order struct {
 	ID                                 string
 	OrderNo                            string
@@ -127,7 +127,7 @@ type Order struct {
 	PurchasePolicySnapshot             PurchasePolicy
 	InventoryReserved                  bool
 	Status                             string
-	URMEventID                         string
+	BillingEventID                     string
 	SubscriptionID                     string
 	FailReason                         string
 	PaidAt                             *time.Time
@@ -243,16 +243,16 @@ type PurchaseParams struct {
 	IdempotencyKey string
 }
 
-// PurchaseReservation is the atomic local result before the remote URM debit.
+// PurchaseReservation is the atomic result before the billing debit.
 // Replayed means the idempotency key already owned the returned order.
 type PurchaseReservation struct {
 	Order    *Order
 	Replayed bool
 }
 
-// Purchaser 是 urm.Client 的购买窄接口（strict：不足额整单失败，不许透支）。
+// Purchaser 是订阅购买需要的计费窄接口（strict：不足额整单失败，不许透支）。
 type Purchaser interface {
-	DebitStrict(ctx context.Context, req urm.StrictDebitRequest) (*urm.StrictDebitResponse, error)
+	DebitStrict(ctx context.Context, req platform.StrictDebitRequest) (*platform.StrictDebitResponse, error)
 }
 
 // Repo 是订阅领域的持久化接口，由 adapters/postgres 实现。

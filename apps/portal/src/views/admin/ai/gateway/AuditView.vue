@@ -1,5 +1,5 @@
 <!--
-  网关审计 — 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/AIGateway/GatewayAudit.vue。
+  网关审计。
   适配：listGatewayAuditLogs → aiAdminApi.listGatewayAuditLogs；v4 返回 {items,total}，取 .items；formatTimestamp 内联。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        筛选/表格同卡）,el-table → DsTable,el-tag → DsTag。

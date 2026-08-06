@@ -18,7 +18,7 @@ import (
 // wired) in which case the step is a no-op; Worker handles the observe-mode
 // async path so this step never adds upstream latency in that mode.
 //
-// ai-service never mutates account status here: pre_block only rejects the
+// This step never mutates account status: pre_block only rejects the
 // current request, and repeated violations only raise an ai_risk_events row
 // for an admin to act on (see internal/riskcontrol).
 type ContentModerationStep struct {

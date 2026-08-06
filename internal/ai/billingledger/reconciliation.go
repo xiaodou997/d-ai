@@ -20,7 +20,7 @@ type ReconciliationItem struct {
 }
 
 // ListReconciliations returns requests whose completion could not be proven.
-// The lease may already have left escrow; settlement remains legal in URM.
+// The lease may already have left escrow; settlement remains legal in billing.
 func (c *Coordinator) ListReconciliations(ctx context.Context) ([]ReconciliationItem, error) {
 	if c == nil || c.pool == nil {
 		return nil, ErrDependencyUnavailable

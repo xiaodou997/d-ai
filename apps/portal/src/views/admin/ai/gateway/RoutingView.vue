@@ -1,5 +1,5 @@
 <!--
-  路由策略（多维评分权重）— 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/AIGateway/GatewayRouting.vue。
+  路由策略（多维评分权重）。
   适配 v4：aiGateway getRouteWeights/putRouteWeights → aiAdminApi（v4 GET/PUT /api/v1/route-weights/{scope}
   返回 strong-typed {scope, weights:{cost,latency,load,health}}，与 V1 形状一致）；错误读 err.message。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,

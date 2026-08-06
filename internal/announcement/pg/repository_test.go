@@ -103,9 +103,9 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 
 func openAnnouncementTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)

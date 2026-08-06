@@ -7,7 +7,7 @@
 //	AuthN → AuthZ → QuotaCheck → RouteSelect → RateLimit → Execute
 //
 // 请求结束时 finalizer 将使用记录、配额和 V3 请求入账原子完成，再由异步
-// settlement worker 聚合到 URM，不做每请求同步扣款。
+// settlement worker 聚合到统一计费域，不做每请求同步扣款。
 package serving
 
 import (
@@ -90,7 +90,7 @@ type Request struct {
 	UsedCandidates map[string]bool // route_id → already attempted
 
 	// The currently-selected (or last-attempted) candidate. ExecuteStep sets
-	// this on every attempt and downstream steps (URMConfirm, UsageLog,
+	// this on every attempt and downstream steps (billing confirmation, UsageLog,
 	// observability) read it as "the route that actually served this request".
 	Candidate *domain.RouteCandidate
 
@@ -325,7 +325,7 @@ func (p *Pipeline) WithFinalizers(fns ...Finalizer) *Pipeline {
 // The ResponseWriter should already have been written by the Execute step
 // before pipeline failure occurs (errors after execution are best-effort).
 func (p *Pipeline) Run(ctx context.Context, req *Request) error {
-	tracer := otel.Tracer("uni-ai-api/serving")
+	tracer := otel.Tracer("dai/serving")
 	ctx, span := tracer.Start(ctx, "pipeline.run")
 	if req.ModelCode != "" {
 		span.SetAttributes(attribute.String("ai.model", req.ModelCode))

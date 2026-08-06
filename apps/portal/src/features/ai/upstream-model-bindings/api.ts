@@ -1,7 +1,7 @@
 import type { RequestAdapter } from "@/api";
 import type { operations } from "@/api/ai";
 
-import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "@/api/request";
+import { authenticatedRequest, apiHeaders, apiBaseUrl } from "@/api/request";
 
 type AccountBatchDeleteOperation = operations["ai-batch-delete-account-model-bindings"];
 type PoolBatchDeleteOperation = operations["ai-batch-delete-pool-model-bindings"];
@@ -15,10 +15,10 @@ export interface UpstreamModelBindingBatchApi {
 }
 
 export function createUpstreamModelBindingBatchApi(
-  adapter: RequestAdapter = authenticatedRequest("ai")
+  adapter: RequestAdapter = authenticatedRequest()
 ): UpstreamModelBindingBatchApi {
-  const headers = portalHeadersFor("ai");
-  const baseUrl = serviceBaseUrl("ai");
+  const headers = apiHeaders;
+  const baseUrl = apiBaseUrl;
   const body = (bindingIds: string[]): BatchDeleteRequest => ({ binding_ids: bindingIds });
 
   return {

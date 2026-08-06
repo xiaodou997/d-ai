@@ -1,5 +1,5 @@
 <!--
-  数据大盘 — 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/Dashboard/index.vue。
+  数据大盘。
   保留 V1 的手绘 SVG polyline 趋势图（V1 此页本就不用 echarts）、指标卡、Top 模型/租户、最近错误、OAuth 池、每日明细。
   适配：aiGateway axios → aiAdminApi；list* 在 v4 返回 {items,total}，已取 .items；summary 直接是 DTO；
        formatCredits/formatTimestamp 内联实现；基础设施徽标跳转改为真实路由 /ai-gateway/status；
@@ -98,7 +98,7 @@ const CHART_W = 600
 const CHART_H = 120
 const PAD = { t: 8, r: 8, b: 24, l: 8 }
 
-// SVG 画不进 CSS 变量,挂载时把 --ds-* token 解析成具体色值(与 URM 控制概览同一套做法)
+// SVG 画不进 CSS 变量,挂载时把 --ds-* token 解析成具体色值(与 Platform 控制概览同一套做法)
 const resolveTokenColor = (token: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(token).trim()
 

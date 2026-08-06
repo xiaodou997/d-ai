@@ -170,12 +170,6 @@ func (s *DeductionService) Freeze(params FreezeParams) (*FreezeResult, error) {
 		return nil, shared.ErrTenantSuspended
 	}
 
-	if params.ClientID != "" {
-		if allowed, err := s.tenantServiceAllowed(ctx, params.TenantID, params.ClientID); err != nil || !allowed {
-			return nil, fmt.Errorf("client %q is not authorized for tenant %q", params.ClientID, params.TenantID)
-		}
-	}
-
 	if params.UserID != "" {
 		var count int
 		err := s.pool.QueryRow(ctx, `
@@ -628,8 +622,8 @@ func (s *DeductionService) Cancel(params CancelParams) (*CancelResult, error) {
 
 // ConsumeParams 单阶段聚合扣款请求（不经过 Freeze/Confirm 两阶段）。
 //
-// 适用场景：业务系统已在本地完成精细计费（如 uni-ai-api 的分账层聚合多次
-// 微小消费），仅在达到阈值时调一次 URM 把整数积分一次性扣掉。失败时不需要
+// 适用场景：AI 业务域已在本地完成精细计费（如分账层聚合多次
+// 微小消费），仅在达到阈值时通过进程内计费服务把整数积分一次性扣掉。失败时不需要
 // 反向 Cancel —— 单 SQL 事务，原子。
 //
 // 与 Freeze/Confirm 不同：
@@ -689,13 +683,6 @@ func (s *DeductionService) Consume(params ConsumeParams) (*ConsumeResult, error)
 	}
 	if tenantStatus != "active" {
 		return nil, shared.ErrTenantSuspended
-	}
-
-	// client 授权校验
-	if params.ClientID != "" {
-		if allowed, err := s.tenantServiceAllowed(ctx, params.TenantID, params.ClientID); err != nil || !allowed {
-			return nil, fmt.Errorf("client %q is not authorized for tenant %q", params.ClientID, params.TenantID)
-		}
 	}
 
 	// 用户归属校验
@@ -857,18 +844,6 @@ func (s *DeductionService) Consume(params ConsumeParams) (*ConsumeResult, error)
 	)
 
 	return result, nil
-}
-
-func (s *DeductionService) tenantServiceAllowed(ctx context.Context, tenantID, clientID string) (bool, error) {
-	var allowed bool
-	err := s.pool.QueryRow(ctx, `
-		SELECT c.status = 'active' AND c.portal_enabled
-		   AND (p.access_mode = 'all' OR (p.access_mode = 'selected' AND c.client_id = ANY(p.service_ids)))
-		FROM gov_subject_service_access p
-		JOIN gov_clients c ON c.client_id = $2
-		WHERE p.subject_type = 'tenant' AND p.subject_id = $1
-	`, tenantID, clientID).Scan(&allowed)
-	return allowed, err
 }
 
 // Refund 全额退款（仅平台管理员可操作）

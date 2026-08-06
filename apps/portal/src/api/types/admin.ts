@@ -15,7 +15,6 @@ export interface AuditLogItem {
   principalType: string;
   decision: string;
   userId?: string;
-  clientId?: string;
   scopes?: string[];
   createdAt: number;
   reasonCode?: string;
@@ -158,46 +157,6 @@ export interface DashboardRecentErrorDTO {
 export interface DashboardRecentErrorsOutputBody {
   items: DashboardRecentErrorDTO[];
   total: number;
-}
-
-export interface ServiceRegistryItem {
-  id: number;
-  serviceId: string;
-  displayName: string;
-  description?: string;
-  status: "active" | "disabled";
-  portalEnabled: boolean;
-  sourceCount: number;
-  instanceCount: number;
-  onlineInstances: number;
-  lastSeen?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ServiceSourceItem {
-  id: number;
-  sourceCidr: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ServiceInstanceItem {
-  instanceId: string;
-  observedIp: string;
-  sourceCidr: string;
-  serviceName?: string;
-  version?: string;
-  environment?: string;
-  firstSeen: string;
-  lastSeen: string;
-  online: boolean;
-}
-
-export interface ServiceRegistryDetail extends ServiceRegistryItem {
-  sources: ServiceSourceItem[];
-  instances: ServiceInstanceItem[];
 }
 
 export interface PriceBookDTO {
@@ -380,15 +339,6 @@ export interface UpstreamAccountImportOutputBody {
   created_model_bindings: { account_name: string; model_code: string; binding_id: string }[];
   skipped_model_bindings: { name: string; reason: string }[];
   summary: UpstreamAccountImportSummaryDTO;
-}
-
-export interface ServiceAccessPolicy {
-  subjectType: "admin" | "tenant";
-  subjectId: string;
-  mode: "all" | "selected";
-  serviceIds: string[];
-  version: number;
-  updatedAt: string;
 }
 
 export interface RechargeRecordItem {

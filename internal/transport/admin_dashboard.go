@@ -8,10 +8,10 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/libs/go/httpx"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 // ---- DTO ----
@@ -91,26 +91,11 @@ type globalStatsOutput struct {
 	Body systempg.GlobalStatsRow
 }
 
-type clientServiceItem struct {
-	ClientID    string `json:"clientId"`
-	DisplayName string `json:"displayName"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-}
-
-type clientServicesOutput struct {
-	Body struct {
-		ClientServices []clientServiceItem `json:"clientServices"`
-		IsWildcard     bool                `json:"isWildcard"`
-	}
-}
-
 // registerAdminDashboard 注册 dashboard / 分析 / 预授权取消 / 租户应用授权查询端点。
 func registerAdminDashboard(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
-	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-dashboard-alerts", Method: http.MethodGet, Path: "/api/v1/dashboard/alerts",
 		Summary: "Dashboard 告警（超时预授权 / 异常释放）", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.dashboardAlerts)
@@ -122,8 +107,6 @@ func registerAdminDashboard(api huma.API, d Deps) {
 		Summary: "资源消耗占比", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.resourceStatistics)
 	huma.Register(api, huma.Operation{OperationID: "admin-global-stats", Method: http.MethodGet, Path: "/api/v1/analytics/global-stats",
 		Summary: "全局统计", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.globalStats)
-	huma.Register(api, huma.Operation{OperationID: "admin-tenant-client-services", Method: http.MethodGet, Path: "/api/v1/tenants/{id}/client-services",
-		Summary: "租户可用应用授权", Tags: []string{"admin-tenants"}, Middlewares: sysOrTenant}, h.listTenantClientServices)
 }
 
 func (h *adminHandlers) dashboardAlerts(ctx context.Context, _ *struct{}) (*dashboardAlertsOutput, error) {
@@ -253,56 +236,4 @@ func applyDefaultAdminAnalyticsWindow(timeFrom, timeTo *time.Time, duration time
 	endAt := billingdomain.NowUTC()
 	startAt := endAt.Add(-duration)
 	return &startAt, &endAt
-}
-
-func (h *adminHandlers) listTenantClientServices(ctx context.Context, in *tenantIDInput) (*clientServicesOutput, error) {
-	claims := userClaimsFromCtx(ctx)
-	if claims == nil {
-		return nil, httpx.ErrUnauthorized
-	}
-	if !isAdminClaims(claims) && claims.TenantID != in.ID {
-		return nil, httpx.ErrForbidden.WithDetail("无权查看其他租户的应用授权")
-	}
-
-	out := &clientServicesOutput{}
-	out.Body.ClientServices = []clientServiceItem{}
-	if h.serviceAccess == nil {
-		return nil, httpx.New("service_access_unavailable", http.StatusServiceUnavailable, "Service Access Unavailable")
-	}
-	policy, err := h.serviceAccess.Get(ctx, "tenant", in.ID)
-	if err != nil {
-		return nil, serviceAccessHTTPError(err)
-	}
-	out.Body.IsWildcard = policy.Mode == "all"
-	rows, err := h.pool.Query(ctx, `
-		SELECT client_id, display_name, description, status FROM gov_clients
-		WHERE portal_enabled AND ($1 = 'all' OR client_id = ANY($2))
-		ORDER BY created_at DESC
-	`, policy.Mode, policy.ServiceIDs)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer rows.Close()
-	out.Body.ClientServices = scanClientServices(rows)
-	return out, nil
-}
-
-func scanClientServices(rows interface {
-	Next() bool
-	Scan(...any) error
-}) []clientServiceItem {
-	items := []clientServiceItem{}
-	for rows.Next() {
-		var clientID, displayName, status string
-		var description *string
-		if err := rows.Scan(&clientID, &displayName, &description, &status); err != nil {
-			continue
-		}
-		it := clientServiceItem{ClientID: clientID, DisplayName: displayName, Status: status}
-		if description != nil {
-			it.Description = *description
-		}
-		items = append(items, it)
-	}
-	return items
 }

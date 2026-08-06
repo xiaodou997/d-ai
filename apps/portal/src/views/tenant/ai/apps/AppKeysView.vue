@@ -35,7 +35,7 @@ const appKeyApi: PortalAppKeyApi = {
   rotateAppKey: (appKeyId) => aiTenantApi.rotateRunKey(appKeyId)
 };
 
-const publicBaseUrl = resolvePortalPublicBaseUrl(portalEnv.aiPublicBaseUrl);
+const publicBaseUrl = resolvePortalPublicBaseUrl(portalEnv.publicBaseUrl);
 const confirmDelete = createNamedConfirmDialog({
   title: "删除应用运行密钥",
   message: (name) => `确定删除应用运行密钥「${name}」吗？`,

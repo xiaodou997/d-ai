@@ -136,16 +136,15 @@ type GetResourceStatisticsParams struct {
 func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params GetResourceStatisticsParams) ([]ResourceStatisticsRow, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT COALESCE(dt.client_id, '') AS client_id,
-		       COALESCE(bs.display_name, '') AS client_name,
+		       COALESCE(NULLIF(dt.client_id, ''), 'D-AI') AS client_name,
 		       SUM(COALESCE(dt.tenant_credits, 0) + COALESCE(dt.user_credits, 0)) AS total
 		FROM bill_events dt
-		LEFT JOIN gov_clients bs ON dt.client_id = bs.client_id
 		WHERE dt.status = 'succeeded'
 		  AND dt.event_type = 'charge'
 		  AND ($1::timestamptz IS NULL OR dt.created_at >= $1::timestamptz)
 		  AND ($2::timestamptz IS NULL OR dt.created_at < $2::timestamptz)
 		  AND ($3::text IS NULL OR dt.tenant_id = $3::text)
-		GROUP BY dt.client_id, bs.display_name ORDER BY total DESC
+		GROUP BY dt.client_id ORDER BY total DESC
 	`, params.TimeFrom, params.TimeTo, params.TenantID)
 	if err != nil {
 		return nil, err

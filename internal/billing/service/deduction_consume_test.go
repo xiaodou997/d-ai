@@ -18,11 +18,11 @@ import (
 //  2. 余额不足 + 显式允许尾差透支 ⇒ 照常成交并记透支；
 //  3. 同幂等键重放 ⇒ 返回同一 event，不重复扣减。
 //
-// 需要真实 Postgres：设置 URM_TEST_DATABASE_URL 后运行，否则跳过。
+// 需要真实 Postgres：设置 DAI_TEST_DATABASE_URL 后运行，否则跳过。
 func TestConsumeDisallowOverdraft(t *testing.T) {
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)

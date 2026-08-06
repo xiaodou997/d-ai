@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	AntigravityProfileRevision = "antigravity-cli@1.0.16+unihub.1"
+	AntigravityProfileRevision = "antigravity-cli@1.0.16+dai.1"
 	antigravityBaseURL         = "https://cloudcode-pa.googleapis.com"
 	antigravityUserAgent       = "antigravity/cli/1.0.16 (aidev_client; os_type=linux; arch=arm64; auth_method=consumer)"
 	antigravityGoogleAPIClient = "gl-node/18.18.2 fire/0.8.6 grpc/1.10.x"

@@ -49,7 +49,7 @@ const apiKeyApi: PortalApiKeyApi<AiApiKey> = {
   listGroups: () => aiCustomerApi.listMyGroups()
 };
 
-const publicBaseUrl = resolvePortalPublicBaseUrl(portalEnv.aiPublicBaseUrl);
+const publicBaseUrl = resolvePortalPublicBaseUrl(portalEnv.publicBaseUrl);
 
 const confirmDelete = createNamedConfirmDialog({
   title: "删除 API 密钥",

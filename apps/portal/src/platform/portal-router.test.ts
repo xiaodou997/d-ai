@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PortalEnv } from "./env";
 import { redirectPortalToLogin } from "./http";
 import {
-  attachPortalSSOGuard,
+  attachPortalAuthGuard,
   routeAllowedForUserType,
   type PortalAuthStoreLike,
   type PortalRouteLike
@@ -39,20 +39,13 @@ describe("unified Portal route authorization", () => {
     expect(useAuthStore).not.toHaveBeenCalled();
   });
 
-  it("redirects routes whose AI service is unavailable", async () => {
-    const { guard } = guardHarness(false);
-    await expect(
-      guard({ ...baseRoute, path: "/workspace", matched: [{ meta: { service: "ai" } }, { meta: {} }] })
-    ).resolves.toEqual({ path: "/overview", replace: true });
-  });
-
-  it("clears local auth state before redirecting an invalid session to SSO login", async () => {
+  it("clears local auth state before redirecting an invalid session to login", async () => {
     vi.mocked(redirectPortalToLogin).mockClear();
     const { guard, store } = guardHarness();
     store.ensureSession = vi.fn().mockRejectedValue(new Error("account disabled"));
 
     await expect(
-      guard({ ...baseRoute, path: "/overview", matched: [{ meta: { service: "urm" } }] })
+      guard({ ...baseRoute, path: "/overview", matched: [{ meta: {} }] })
     ).resolves.toBe(false);
 
     expect(store.clear).toHaveBeenCalledOnce();
@@ -63,7 +56,7 @@ describe("unified Portal route authorization", () => {
   });
 });
 
-function guardHarness(hasClientAccess = true) {
+function guardHarness() {
   let guard!: (route: PortalRouteLike) => unknown;
   const router = {
     beforeEach(callback: (route: PortalRouteLike) => unknown) {
@@ -76,18 +69,14 @@ function guardHarness(hasClientAccess = true) {
     userType: 3,
     init: vi.fn(),
     ensureSession: vi.fn().mockResolvedValue(undefined),
-    exchangeCode: vi.fn(),
-    exchangeServiceCode: vi.fn(),
     fetchUserInfo: vi.fn(),
-    hasClientAccess: vi.fn(() => hasClientAccess),
     clear: vi.fn()
   };
   const useAuthStore = vi.fn(() => store);
   const env = {
-    portal: "unified",
-    serviceClientIds: { urm: "urm-client", ai: "ai-client" }
+    portal: "unified"
   } as PortalEnv;
 
-  attachPortalSSOGuard(router, { env, useAuthStore });
+  attachPortalAuthGuard(router, { env, useAuthStore });
   return { guard: guard as (route: PortalRouteLike) => Promise<unknown>, useAuthStore, store };
 }

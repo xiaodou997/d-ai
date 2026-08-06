@@ -78,20 +78,6 @@ func (r *taskSubjectResolver) Resolve(ctx context.Context, ref asynctask.Subject
 			TenantID:      ref.TenantID,
 			UserID:        ref.UserID,
 		}, nil
-	case coreidentity.AuthMethodDelegated:
-		// 委托任务与 JWT 一样在提交时已由 URM 背书，worker 重解析不回放短期 Token，
-		// 直接按持久化的 tenant/user 重建主体（scope 由 UserID 是否存在决定，对齐 billing_scope）。
-		scope := coreidentity.ScopeTenant
-		if ref.UserID != "" {
-			scope = coreidentity.ScopeUser
-		}
-		return coreidentity.Subject{
-			AuthMethod:    coreidentity.AuthMethodDelegated,
-			RequestSource: coreidentity.RequestSourceDelegated,
-			Scope:         scope,
-			TenantID:      ref.TenantID,
-			UserID:        ref.UserID,
-		}, nil
 	case coreidentity.AuthMethodInvokeKey:
 		if r == nil || r.invokeExpander == nil {
 			return coreidentity.Subject{}, fmt.Errorf("app key task subject resolver is not configured")

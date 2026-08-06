@@ -10,9 +10,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"xiaodou/dai/libs/go/httpx"
 	billingdomain "xiaodou/dai/internal/billing"
-	serviceaccesssvc "xiaodou/dai/internal/serviceaccess"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 // ---- DTO ----
@@ -38,10 +37,9 @@ type adminUserListOutput struct {
 
 type createSystemAdminInput struct {
 	Body struct {
-		Username      string                        `json:"username"`
-		Email         string                        `json:"email" required:"false"`
-		Password      string                        `json:"password" required:"false"`
-		ServiceAccess *serviceaccesssvc.PolicyInput `json:"serviceAccess,omitempty" required:"false"`
+		Username string `json:"username"`
+		Email    string `json:"email" required:"false"`
+		Password string `json:"password" required:"false"`
 	}
 }
 
@@ -193,13 +191,6 @@ func (h *adminHandlers) listSystemAdmins(ctx context.Context, in *listSystemAdmi
 }
 
 func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemAdminInput) (*createUserOutput, error) {
-	if h.serviceAccess == nil {
-		return nil, serviceAccessHTTPError(serviceaccesssvc.ErrUnavailable)
-	}
-	claims := userClaimsFromCtx(ctx)
-	if claims == nil {
-		return nil, httpx.ErrUnauthorized
-	}
 	var count int
 	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_admins WHERE username = $1", in.Body.Username).Scan(&count)
 	if count > 0 {
@@ -215,30 +206,11 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 	}
 	userID := "SA_" + uuid.New().String()[:24]
 	now := billingdomain.NowUTC()
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer tx.Rollback(ctx)
-	if err := serviceaccesssvc.LockMutationTx(ctx, tx); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if _, err := tx.Exec(ctx, `
+	if _, err := h.pool.Exec(ctx, `
 		INSERT INTO iam_admins (user_id, username, password_hash, email, user_type, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, 2, 'active', $5, $5)
 	`, userID, in.Body.Username, string(hash), in.Body.Email, now); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	actor := serviceaccesssvc.Actor{UserType: claims.UserType, UserID: claims.UserID}
-	if err := serviceaccesssvc.CreateAdminTx(ctx, tx, actor, userID, in.Body.ServiceAccess); err != nil {
-		h.serviceAccess.AuditFailure(ctx, actor, "service_access_create", "admin", userID, err)
-		return nil, serviceAccessHTTPError(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if hErr := h.serviceAccess.ReconcileSubject(ctx, "admin", userID); hErr != nil {
-		return nil, serviceAccessHTTPError(hErr)
 	}
 	out := &createUserOutput{}
 	out.Body.UserID = userID
@@ -286,14 +258,11 @@ func (h *adminHandlers) deleteSystemAdmin(ctx context.Context, in *tenantIDInput
 	if userType != 2 {
 		return nil, httpx.ErrForbidden.WithDetail("不允许删除超级管理员")
 	}
-	if h.serviceAccess == nil {
-		return nil, serviceAccessHTTPError(serviceaccesssvc.ErrUnavailable)
-	}
-	deleted, err := h.serviceAccess.DeleteSubject(ctx, "admin", in.ID)
+	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_admins WHERE user_id = $1 AND user_type = 2`, in.ID)
 	if err != nil {
-		return nil, serviceAccessHTTPError(err)
+		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if !deleted {
+	if deleted.RowsAffected() == 0 {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	return okSuccess(), nil

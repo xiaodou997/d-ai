@@ -153,7 +153,7 @@ func New(cfg Config, deps Deps) (*Engine, error) {
 
 	host, _ := os.Hostname()
 	if host == "" {
-		host = "ai-service"
+		host = "dai"
 	}
 
 	return &Engine{

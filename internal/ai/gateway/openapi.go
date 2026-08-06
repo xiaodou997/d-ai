@@ -538,7 +538,7 @@ func registerAsyncTaskOpenAPI(doc *huma.OpenAPI, schemas huma.Registry, errSchem
 		Path:        "/v1/tasks",
 		OperationID: "ai-create-task",
 		Summary:     "创建异步任务",
-		Description: "使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=UniHub、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。",
+		Description: "使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。",
 		Tags:        []string{"runtime", "tasks"},
 		Security:    security,
 		Parameters: []*huma.Param{{

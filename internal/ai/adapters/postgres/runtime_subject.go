@@ -48,9 +48,6 @@ func runtimeSubjectAuthMethod(subject *coreidentity.Subject) domain.RuntimeAuthM
 		return domain.AuthMethodJWT
 	case coreidentity.AuthMethodInvokeKey:
 		return domain.AuthMethodJWT
-	case coreidentity.AuthMethodDelegated:
-		// 委托属 JWT 家族；用量审计的 actor 服务身份走 Subject.ActorClientID，不在此枚举。
-		return domain.AuthMethodJWT
 	default:
 		return domain.AuthMethodJWT
 	}

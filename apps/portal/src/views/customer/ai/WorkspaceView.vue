@@ -31,7 +31,7 @@ import { CanvasRenderer } from "echarts/renderers";
 import { useRouter } from "vue-router";
 
 import { aiCustomerApi, formatCredits } from "@/api/aiCustomer";
-import { urmCustomerApi } from "@/api/urmCustomer";
+import { platformCustomerApi } from "@/api/platformCustomer";
 import {
   getCustomerUsageSummary,
   listCustomerUsageRecords,
@@ -171,7 +171,7 @@ const groupMetricValue = (value: number) => {
 
 const fetchBalance = async () => {
   try {
-    const data = await urmCustomerApi.getBalance(false);
+    const data = await platformCustomerApi.getBalance(false);
     if (data) {
       balanceInfo.totalCredits = data.totalCredits ?? 0;
       balanceInfo.frozenCredits = data.frozenCredits ?? 0;

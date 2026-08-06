@@ -8,10 +8,10 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 )
 
-// janitor 参数（沿用 ledger.Worker 的 ticker 模式；过期 UPDATE 幂等、卡单重放靠 urm
+// janitor 参数（沿用 ledger.Worker 的 ticker 模式；过期 UPDATE 幂等、卡单重放靠计费
 // 幂等键，无需 advisory lock，多实例安全）。
 const (
 	janitorInterval = 60 * time.Second
@@ -23,7 +23,7 @@ const (
 //
 //	a) 批量过期到期的 active 订阅（懒惰判定的兜底）
 //	b) 卡单补偿：created/deducting 停滞超 reconcileCutoff 的订单，用同一幂等键重放
-//	   urm V2 strict debit → 成功则 FinalizeOrder 推进到 paid；明确余额不足则置 failed。
+//	   strict debit → 成功则 FinalizeOrder 推进到 paid；明确余额不足则置 failed。
 func (s *Service) RunJanitor(ctx context.Context) {
 	t := time.NewTicker(janitorInterval)
 	defer t.Stop()
@@ -69,8 +69,8 @@ func (s *Service) reconcileOrder(ctx context.Context, order *Order) {
 		}
 		return
 	}
-	// 同一幂等键重放：urm 已扣则返回同 event 不重扣，未扣则重试。
-	resp, err := s.urm.DebitStrict(ctx, urm.StrictDebitRequest{
+	// 同一幂等键重放：已扣则返回同 event 不重扣，未扣则重试。
+	resp, err := s.purchaser.DebitStrict(ctx, platform.StrictDebitRequest{
 		IdempotencyKey: "ai-sub-" + order.OrderNo,
 		TenantID:       order.TenantID,
 		UserID:         order.UserID,
@@ -78,7 +78,7 @@ func (s *Service) reconcileOrder(ctx context.Context, order *Order) {
 		UserMicro:      priceMicro,
 	})
 	if err != nil {
-		if errors.Is(err, urm.ErrInsufficientBalance) {
+		if errors.Is(err, platform.ErrInsufficientBalance) {
 			if _, ferr := s.repo.MarkOrderFailed(ctx, order.ID, "insufficient_balance"); ferr != nil {
 				s.logger.Warn("janitor: mark stuck order failed",
 					zap.String("order", order.OrderNo), zap.Error(ferr))

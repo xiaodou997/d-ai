@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 )
 
 type reconcileOnlyRepo struct {
@@ -28,12 +28,12 @@ func (r *reconcileOnlyRepo) FinalizeOrder(_ context.Context, order *Order, event
 }
 
 type reconcilePurchaser struct {
-	request urm.StrictDebitRequest
+	request platform.StrictDebitRequest
 }
 
-func (p *reconcilePurchaser) DebitStrict(_ context.Context, request urm.StrictDebitRequest) (*urm.StrictDebitResponse, error) {
+func (p *reconcilePurchaser) DebitStrict(_ context.Context, request platform.StrictDebitRequest) (*platform.StrictDebitResponse, error) {
 	p.request = request
-	return &urm.StrictDebitResponse{AuthorizationID: "auth-snapshot"}, nil
+	return &platform.StrictDebitResponse{AuthorizationID: "auth-snapshot"}, nil
 }
 
 func TestReconcileOrderUsesImmutableOrderSnapshotWithoutPlanLookup(t *testing.T) {

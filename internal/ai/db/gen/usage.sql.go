@@ -83,7 +83,7 @@ INSERT INTO ai_usage_logs (
   api_key_quota_cost,
   service_tier,
   billing_breakdown,
-  urm_transaction_id,
+  billing_event_id,
   billing_status,
   request_status,
   http_status,
@@ -178,7 +178,7 @@ type CreateUsageLogParams struct {
 	ApiKeyQuotaCost                    int64          `json:"api_key_quota_cost"`
 	ServiceTier                        string         `json:"service_tier"`
 	BillingBreakdown                   []byte         `json:"billing_breakdown"`
-	UrmTransactionID                   pgtype.Text    `json:"urm_transaction_id"`
+	BillingEventID                     pgtype.Text    `json:"billing_event_id"`
 	BillingStatus                      string         `json:"billing_status"`
 	RequestStatus                      string         `json:"request_status"`
 	HttpStatus                         pgtype.Int4    `json:"http_status"`
@@ -262,7 +262,7 @@ func (q *Queries) CreateUsageLog(ctx context.Context, arg CreateUsageLogParams) 
 		arg.ApiKeyQuotaCost,
 		arg.ServiceTier,
 		arg.BillingBreakdown,
-		arg.UrmTransactionID,
+		arg.BillingEventID,
 		arg.BillingStatus,
 		arg.RequestStatus,
 		arg.HttpStatus,

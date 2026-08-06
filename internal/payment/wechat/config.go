@@ -1,6 +1,5 @@
-// Package wechat 是微信支付网关的自闭环模块：商户配置读写（含敏感字段加解密）+
-// Gateway 接口（真实 wechatpay-go 实现 / mock 仿真实现）。不依赖 urm 业务概念
-// （积分、租户余额等），只认「金额分 + 商户单号 + 回调」，方便日后其他服务照抄。
+// Package wechat 实现微信支付网关：商户配置读写（含敏感字段加解密）和
+// Gateway 接口（真实 wechatpay-go 实现 / mock 仿真实现）。它只处理金额、商户单号和回调。
 package wechat
 
 import (

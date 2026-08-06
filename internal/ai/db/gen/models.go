@@ -137,7 +137,7 @@ type AiAsyncTask struct {
 	ErrorMessage           pgtype.Text        `json:"error_message"`
 	InternalErrorDetail    pgtype.Text        `json:"internal_error_detail"`
 	FailedStep             pgtype.Text        `json:"failed_step"`
-	UrmTransactionID       pgtype.Text        `json:"urm_transaction_id"`
+	BillingEventID         pgtype.Text        `json:"billing_event_id"`
 	CallerCharge           int64              `json:"caller_charge"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	StartedAt              pgtype.Timestamptz `json:"started_at"`
@@ -206,7 +206,7 @@ type AiBillingSettlementBatch struct {
 	ActualTenantMicro    int64              `json:"actual_tenant_micro"`
 	ActualUserMicro      int64              `json:"actual_user_micro"`
 	Status               string             `json:"status"`
-	UrmEventID           pgtype.Text        `json:"urm_event_id"`
+	BillingEventID       pgtype.Text        `json:"billing_event_id"`
 	TenantDeductedMicro  int64              `json:"tenant_deducted_micro"`
 	UserDeductedMicro    int64              `json:"user_deducted_micro"`
 	TenantDebtAddedMicro int64              `json:"tenant_debt_added_micro"`
@@ -530,7 +530,7 @@ type AiSubOrder struct {
 	PurchasePolicySnapshot             []byte             `json:"purchase_policy_snapshot"`
 	InventoryReserved                  bool               `json:"inventory_reserved"`
 	Status                             string             `json:"status"`
-	UrmEventID                         pgtype.Text        `json:"urm_event_id"`
+	BillingEventID                     pgtype.Text        `json:"billing_event_id"`
 	SubscriptionID                     pgtype.UUID        `json:"subscription_id"`
 	FailReason                         pgtype.Text        `json:"fail_reason"`
 	PaidAt                             pgtype.Timestamptz `json:"paid_at"`
@@ -721,7 +721,7 @@ type AiUsageLog struct {
 	ApiKeyQuotaCost                    int64              `json:"api_key_quota_cost"`
 	ServiceTier                        string             `json:"service_tier"`
 	BillingBreakdown                   []byte             `json:"billing_breakdown"`
-	UrmTransactionID                   pgtype.Text        `json:"urm_transaction_id"`
+	BillingEventID                     pgtype.Text        `json:"billing_event_id"`
 	BillingWindowID                    pgtype.Text        `json:"billing_window_id"`
 	SettlementBatchID                  pgtype.UUID        `json:"settlement_batch_id"`
 	SettledEventID                     pgtype.Text        `json:"settled_event_id"`

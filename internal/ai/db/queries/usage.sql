@@ -49,7 +49,7 @@ INSERT INTO ai_usage_logs (
   api_key_quota_cost,
   service_tier,
   billing_breakdown,
-  urm_transaction_id,
+  billing_event_id,
   billing_status,
   request_status,
   http_status,

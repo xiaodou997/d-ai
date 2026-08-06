@@ -19,7 +19,6 @@ import (
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/httpx"
-	"xiaodou/dai/libs/go/serviceaccess"
 )
 
 type runtimeAuthContextKey struct{}
@@ -61,18 +60,6 @@ func (s *Gateway) runtimeAuth(next http.Handler) http.Handler {
 			return
 		}
 		if s.rejectIfBanned(w, r.Context(), subject.TenantID, subject.UserID) {
-			return
-		}
-		if s.serviceAccess == nil {
-			writeOpenAIError(w, http.StatusServiceUnavailable, "Service access unavailable.", "service_access_unavailable", "service_access_unavailable")
-			return
-		}
-		if err := s.serviceAccess.Check(r.Context(), 4, subject.UserID, subject.TenantID, s.expectedClientID, s.expectedClientID); err != nil {
-			if errors.Is(err, serviceaccess.ErrDenied) {
-				writeOpenAIError(w, http.StatusForbidden, "Service access denied.", "service_access_denied", "service_access_denied")
-			} else {
-				writeOpenAIError(w, http.StatusServiceUnavailable, "Service access unavailable.", "service_access_unavailable", "service_access_unavailable")
-			}
 			return
 		}
 		if subject.GroupID == "" {

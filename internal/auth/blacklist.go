@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// BlacklistService is URM's canonical, single writer for two related but
+// BlacklistService is D-AI's canonical, single writer for two related but
 // distinct pieces of Redis-backed auth state:
 //   - JWT token blacklist / user logout markers (AddToBlacklist, LogoutUser)
 //   - Ban state for user/tenant accounts (BanUser, BanTenant, ...), read
@@ -29,8 +29,8 @@ const (
 	defaultTokenTTL = 24 * time.Hour
 	// 封禁状态 Key 前缀（无 TTL，显式 DEL 才会清除）。AI 网关直接 EXISTS
 	// 查询这两个前缀，不再通过 pub/sub 通知。
-	banUserPrefix   = "urc:banned:user:"
-	banTenantPrefix = "urc:banned:tenant:"
+	banUserPrefix   = "dai:banned:user:"
+	banTenantPrefix = "dai:banned:tenant:"
 )
 
 // NewBlacklistService 创建黑名单服务

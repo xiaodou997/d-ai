@@ -1,12 +1,9 @@
 import {
   authenticatedRequest,
-  portalHeadersFor,
-  serviceBaseUrl
+  apiHeaders,
+  apiBaseUrl
 } from "./request";
-import {
-  redirectPortalToLogin,
-  recoverPortalSession
-} from "@/platform";
+import { redirectPortalToLogin } from "@/platform";
 import {
   appendPortalQuery,
   createPortalRuntimeTransport,
@@ -63,30 +60,28 @@ import type {
 } from "./types/aiCustomer";
 
 function request() {
-  return authenticatedRequest("ai");
+  return authenticatedRequest();
 }
 
-const headers = () => portalHeadersFor("ai");
-const baseUrl = () => serviceBaseUrl("ai");
+const headers = () => apiHeaders;
+const baseUrl = () => apiBaseUrl;
 const runtimeBasePath = "/runtime/v1";
 
 export { formatCredits, formatWholeCredits };
 
 const runtimeTransport = createPortalRuntimeTransport({
   baseUrl,
-  portalHeadersForAI: () => portalHeadersFor("ai"),
-  getAccessToken: () => useAuthStore().serviceTokens.ai?.accessToken || "",
+  getAccessToken: () => useAuthStore().accessToken,
   async onUnauthorized() {
     const authStore = useAuthStore();
     try {
-      await authStore.refreshServiceAccessToken("ai");
+      await authStore.refreshAccessToken();
       return "retry";
     } catch {
       authStore.clear();
       return (await redirectPortalToLogin(portalEnv)) ? "handled" : false;
     }
   },
-  onAccessDenied: (status, code) => recoverPortalSession(portalEnv, useAuthStore, status, code, "ai"),
   runtimeBasePath
 });
 

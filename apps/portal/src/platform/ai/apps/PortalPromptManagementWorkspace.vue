@@ -268,13 +268,13 @@ function handleExportPrompts() {
   try {
     downloadJSON(
       {
-        format: "unihub-app-prompts",
+        format: "dai-app-prompts",
         version: 2,
         scope: props.scope,
         exported_at: new Date().toISOString(),
         items: prompts.value.map(({ name, description, status, template_text }) => ({ name, description, status, template_text }))
       },
-      `unihub-${props.scope}-prompts-${new Date().toISOString().slice(0, 10)}.json`
+      `dai-${props.scope}-prompts-${new Date().toISOString().slice(0, 10)}.json`
     );
     props.notifySuccess?.("导出文件已生成");
   } finally {

@@ -219,7 +219,7 @@ UPDATE ai_sub_orders SET status='deducting', updated_at=now()
 WHERE id=$1 AND status='created';
 
 -- name: MarkOrderPaid :execrows
-UPDATE ai_sub_orders SET status='paid', urm_event_id=$2, subscription_id=$3,
+UPDATE ai_sub_orders SET status='paid', billing_event_id=$2, subscription_id=$3,
   paid_at=now(), updated_at=now()
 WHERE id=$1 AND status IN ('created','deducting');
 

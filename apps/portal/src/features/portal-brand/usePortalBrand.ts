@@ -1,7 +1,7 @@
 import { onMounted, shallowRef } from "vue";
 
-import { urmCustomerApi } from "@/api/urmCustomer";
-import type { CustomerPortalBrand } from "@/api/types/urmCustomer";
+import { platformCustomerApi } from "@/api/platformCustomer";
+import type { CustomerPortalBrand } from "@/api/types/platformCustomer";
 
 /**
  * 终端用户门户的品牌信息（站点名 + favicon）。
@@ -17,7 +17,7 @@ export function usePortalBrand() {
 
   async function load() {
     try {
-      portalBrand.value = await urmCustomerApi.getPortalBrand();
+      portalBrand.value = await platformCustomerApi.getPortalBrand();
     } catch {
       portalBrand.value = null;
     }

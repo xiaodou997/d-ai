@@ -221,7 +221,7 @@ func (s *postgresStore) complete(ctx context.Context, taskID, workerID string, r
 		), enqueued AS (
 		  INSERT INTO ai_async_task_deliveries (task_id, url, payload)
 		  SELECT id, webhook_url, jsonb_build_object(
-		    'source', 'UniHub',
+		    'source', 'D-AI',
 		    'event', 'task.' || status,
 		    'task_id', id::text
 		  )
@@ -296,7 +296,7 @@ WITH dead AS (
 ), enqueued AS (
     INSERT INTO ai_async_task_deliveries (task_id, url, payload)
     SELECT id, webhook_url, jsonb_build_object(
-        'source', 'UniHub',
+		'source', 'D-AI',
         'event', 'task.' || status,
         'task_id', id::text
     )
@@ -450,7 +450,7 @@ func (s *postgresStore) cancel(ctx context.Context, taskID string) (bool, error)
 		), enqueued AS (
 		  INSERT INTO ai_async_task_deliveries (task_id, url, payload)
 		  SELECT id, webhook_url, jsonb_build_object(
-		    'source', 'UniHub',
+		    'source', 'D-AI',
 		    'event', 'task.' || status,
 		    'task_id', id::text
 		  )

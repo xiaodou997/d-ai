@@ -29,7 +29,7 @@ import (
 const (
 	sourceURLEnv     = "AI_EXTERNAL_MODELS_URL"
 	sourceURLDefault = "https://models.dev/api.json"
-	redisCacheKey    = "ai-service:external:models_dev"
+	redisCacheKey    = "dai:external:models_dev"
 	cacheTTL         = 15 * time.Minute
 	fetchTimeout     = 60 * time.Second
 	// failureBackoff 是拉取失败后的冷却期：冷却期内的调用直接跳过网络请求，

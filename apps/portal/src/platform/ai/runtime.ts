@@ -4,10 +4,8 @@ import type { RequestRecoveryResult } from "../http";
 
 export interface CreatePortalRuntimeTransportOptions {
   baseUrl: () => string;
-  portalHeadersForAI: () => Record<string, string>;
   getAccessToken: () => string;
   onUnauthorized?: () => Promise<RequestRecoveryResult> | RequestRecoveryResult;
-  onAccessDenied?: (status: number, code?: string) => Promise<RequestRecoveryResult> | RequestRecoveryResult;
   runtimeBasePath?: string;
 }
 
@@ -28,7 +26,6 @@ export function createPortalRuntimeTransport(options: CreatePortalRuntimeTranspo
   function runtimeHeaders(extra: Record<string, string> = {}): Record<string, string> {
     const token = options.getAccessToken();
     return {
-      ...options.portalHeadersForAI(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...extra
     };
@@ -156,17 +153,6 @@ export function createPortalRuntimeTransport(options: CreatePortalRuntimeTranspo
       }
     }
 
-    const accessCode = await readProblemCode(response);
-    if (accessCode === "service_access_denied" && options.onAccessDenied) {
-      const result = await options.onAccessDenied(response.status, accessCode);
-      if (result === "handled") {
-        return null;
-      }
-      if (result === true || result === "retry") {
-        response = await execute();
-      }
-    }
-
     return response;
   }
 }
@@ -210,17 +196,6 @@ function protocolDelta(payload: Record<string, unknown>, eventType: string): str
     ?.content?.parts;
   if (Array.isArray(parts)) return parts.map((part) => part.text || "").join("");
   return "";
-}
-
-async function readProblemCode(response: Response): Promise<string | undefined> {
-  if (response.ok) return undefined;
-  try {
-    const body = (await response.clone().json()) as { code?: unknown; error?: { code?: unknown } };
-    if (typeof body.code === "string") return body.code;
-    return typeof body.error?.code === "string" ? body.error.code : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 function suspendForNavigation<T>(): Promise<T> {

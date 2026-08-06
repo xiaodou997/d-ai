@@ -1,4 +1,4 @@
-// Package logger provides unified zap-based logging across UniHub services.
+// Package logger provides unified zap-based logging for D-AI.
 //
 // Design principles:
 //   - Development: ConsoleEncoder with colorized levels, human-readable key=value output

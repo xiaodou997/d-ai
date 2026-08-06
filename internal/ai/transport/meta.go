@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -32,7 +31,7 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// Version is the public ai-service API version exposed in OpenAPI and meta endpoints.
+// Version is the public AI API version exposed in OpenAPI and meta endpoints.
 const Version = "1.0.0"
 
 type AIDeps struct {
@@ -50,17 +49,13 @@ type AIDeps struct {
 	Health            routing.HealthTracker
 	Weights           *pgadapter.RouteWeightsStore
 
-	// IdentityProvider 替代原 URMClient——合并后进程内获取用户/租户信息。
-	// nil 时 identity enrichment 返回空结果（和原 URMClient == nil 行为一致）。
+	// IdentityProvider 在进程内获取用户和租户信息。
+	// nil 时 identity enrichment 返回空结果。
 	IdentityProvider IdentityProvider
 
-	JWKSValidator    HumaJWKSValidator
-	BanChecker       HumaBanChecker
-	ExpectedClientID string
-	TenantEndUsers   TenantEndUserVerifier
-	ServiceAccess    interface {
-		Check(context.Context, int, string, string, string, string) error
-	}
+	JWKSValidator  HumaJWKSValidator
+	BanChecker     HumaBanChecker
+	TenantEndUsers TenantEndUserVerifier
 
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service // 上游账号管理
@@ -72,7 +67,7 @@ type AIDeps struct {
 	AuditSvc          *observabilitycontrol.AuditService
 	APIKeySvc         *identitycontrol.Service
 	WorkspaceSvc      *workspacesvc.Service
-	Subscriptions     *subscription.Service // AI 订阅制套餐（nil = urm 未装配时禁用）
+	Subscriptions     *subscription.Service // AI 订阅制套餐（nil 时禁用）
 	ServiceIdentity   interface{ Ready() (bool, error) }
 
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。
@@ -84,7 +79,7 @@ type AIDeps struct {
 
 func RegisterAI(api huma.API, d AIDeps) {
 	if d.Service == "" {
-		d.Service = "ai-service"
+		d.Service = "dai"
 	}
 	if d.Version == "" {
 		d.Version = Version

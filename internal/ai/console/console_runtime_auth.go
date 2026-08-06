@@ -64,11 +64,6 @@ func (s *Console) consoleRuntimeSubject(w http.ResponseWriter, r *http.Request) 
 		return nil, false
 	}
 
-	if s.urmClientID != "" && claims.ClientID != s.urmClientID {
-		gateway.WriteRuntimeErrorByProtocol(w, domain.ProtocolOpenAIChat, http.StatusForbidden,
-			"Token not authorized for this service.", "forbidden")
-		return nil, false
-	}
 	if msg, code, status, blocked, err := bannedMessage(r.Context(), s.banChecker, claims.TenantID, claims.UserID); blocked {
 		if err != nil {
 			s.logger.Warn("runtime ban check failed",

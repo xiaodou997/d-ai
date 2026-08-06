@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { PortalProfileWorkspace } from "@/platform";
 
 import { useAuthStore } from "@/stores/auth";
-import { urmAdminApi } from "@/api/urmAdmin";
+import { platformAdminApi } from "@/api/platformAdmin";
 
 const authStore = useAuthStore();
 
@@ -23,7 +23,7 @@ const handlePasswordChanged = async () => {
 <template>
   <PortalProfileWorkspace
     :fields="profileFields"
-    :change-password="urmAdminApi.changePassword"
+    :change-password="platformAdminApi.changePassword"
     :after-password-changed="handlePasswordChanged"
   />
 </template>

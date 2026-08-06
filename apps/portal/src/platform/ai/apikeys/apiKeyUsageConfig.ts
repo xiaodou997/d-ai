@@ -111,7 +111,7 @@ OPENAI_API_KEY="${quoteShellValue(options.apiKey)}"`;
       id: "openai-env",
       label: "OpenAI 兼容环境变量",
       path: options.platform === "windows" ? "PowerShell" : "项目 .env",
-      filename: options.platform === "windows" ? "unihub-openai.ps1" : ".env",
+      filename: options.platform === "windows" ? "dai-openai.ps1" : ".env",
       content: shellContent,
       mimeType: "text/plain;charset=utf-8",
       containsSecret: true

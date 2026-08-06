@@ -2,7 +2,7 @@
 
 统一 AI 服务（单后端 + 单前端 + 单二进制部署）。
 
-合并原 UniHub 的 urm-service（身份/计费/认证）+ ai-service（AI 网关）为单一服务，消除跨服务 HTTP 计费调用。三端前端合并为单一 portal，按 `userType` 动态菜单 + 动态主题。
+D-AI 在一个进程中提供身份、权限、计费和 AI 能力，Portal 按 `userType` 动态展示菜单和主题。
 
 ## 项目状态
 
@@ -13,7 +13,7 @@
 - Go 后端可在 `19641` 启动，PostgreSQL/Redis 和完整 schema 初始化可复现。
 - 数据库已改为单一 `init.sql` 完整基线；应用只校验版本，不执行自动迁移。
 - Portal 已合并为单一前端项目，API facade、领域类型、设计系统和运行时基础设施均位于 `apps/portal/src`。
-- Proxy 产品域已删除；后端只保留 URM + AI 两个业务服务。
+- 后端按身份、计费和 AI 等业务域组织代码，对外只部署一个服务。
 - OpenAPI 已由统一后端导出到 `contracts/openapi.yaml`，Portal 类型生成链已接通。
 
 完整缺口、验收标准和待确认的产品决策见 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)。
@@ -103,7 +103,7 @@ make build-server
 
 ## 架构原则
 
-- **单进程单二进制**：URM + AI 合并，计费进程内调用
+- **单进程单二进制**：身份、计费和 AI 领域统一运行，计费进程内调用
 - **单数据库**：全 public schema，单事务覆盖计费全链路
 - **人工 schema 维护**：新库执行完整 `init.sql`；应用启动不执行 DDL，只校验 schema version
 - **HTTP 层**：薄 chi + Huma（code-first），成功 = 强类型 2xx body，错误 = RFC 7807 `application/problem+json`

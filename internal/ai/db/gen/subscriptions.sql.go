@@ -149,7 +149,7 @@ INSERT INTO ai_sub_orders (
   group_quota_debit_multipliers_snapshot,
   purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'created')
-RETURNING id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, urm_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at
+RETURNING id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at
 `
 
 type CreateOrderParams struct {
@@ -207,7 +207,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (AiSub
 		&i.PurchasePolicySnapshot,
 		&i.InventoryReserved,
 		&i.Status,
-		&i.UrmEventID,
+		&i.BillingEventID,
 		&i.SubscriptionID,
 		&i.FailReason,
 		&i.PaidAt,
@@ -547,7 +547,7 @@ func (q *Queries) GetLiveSubsForUser(ctx context.Context, arg GetLiveSubsForUser
 }
 
 const getOrderByID = `-- name: GetOrderByID :one
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, urm_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE id = $1
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE id = $1
 `
 
 func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (AiSubOrder, error) {
@@ -570,7 +570,7 @@ func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (AiSubOrder,
 		&i.PurchasePolicySnapshot,
 		&i.InventoryReserved,
 		&i.Status,
-		&i.UrmEventID,
+		&i.BillingEventID,
 		&i.SubscriptionID,
 		&i.FailReason,
 		&i.PaidAt,
@@ -581,7 +581,7 @@ func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (AiSubOrder,
 }
 
 const getOrderByOrderNo = `-- name: GetOrderByOrderNo :one
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, urm_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE order_no = $1
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE order_no = $1
 `
 
 func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (AiSubOrder, error) {
@@ -604,7 +604,7 @@ func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (AiSubO
 		&i.PurchasePolicySnapshot,
 		&i.InventoryReserved,
 		&i.Status,
-		&i.UrmEventID,
+		&i.BillingEventID,
 		&i.SubscriptionID,
 		&i.FailReason,
 		&i.PaidAt,
@@ -830,7 +830,7 @@ func (q *Queries) ListGroupNames(ctx context.Context, dollar_1 []pgtype.UUID) ([
 }
 
 const listOrdersPage = `-- name: ListOrdersPage :many
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, urm_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR status = $3)
@@ -878,7 +878,7 @@ func (q *Queries) ListOrdersPage(ctx context.Context, arg ListOrdersPageParams) 
 			&i.PurchasePolicySnapshot,
 			&i.InventoryReserved,
 			&i.Status,
-			&i.UrmEventID,
+			&i.BillingEventID,
 			&i.SubscriptionID,
 			&i.FailReason,
 			&i.PaidAt,
@@ -1075,7 +1075,7 @@ func (q *Queries) ListPlansPage(ctx context.Context, arg ListPlansPageParams) ([
 }
 
 const listReconcileOrders = `-- name: ListReconcileOrders :many
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, urm_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
 WHERE status IN ('created','deducting') AND updated_at < $1
 ORDER BY updated_at ASC
 LIMIT $2
@@ -1113,7 +1113,7 @@ func (q *Queries) ListReconcileOrders(ctx context.Context, arg ListReconcileOrde
 			&i.PurchasePolicySnapshot,
 			&i.InventoryReserved,
 			&i.Status,
-			&i.UrmEventID,
+			&i.BillingEventID,
 			&i.SubscriptionID,
 			&i.FailReason,
 			&i.PaidAt,
@@ -1293,19 +1293,19 @@ func (q *Queries) MarkOrderFailed(ctx context.Context, arg MarkOrderFailedParams
 }
 
 const markOrderPaid = `-- name: MarkOrderPaid :execrows
-UPDATE ai_sub_orders SET status='paid', urm_event_id=$2, subscription_id=$3,
+UPDATE ai_sub_orders SET status='paid', billing_event_id=$2, subscription_id=$3,
   paid_at=now(), updated_at=now()
 WHERE id=$1 AND status IN ('created','deducting')
 `
 
 type MarkOrderPaidParams struct {
 	ID             pgtype.UUID `json:"id"`
-	UrmEventID     pgtype.Text `json:"urm_event_id"`
+	BillingEventID pgtype.Text `json:"billing_event_id"`
 	SubscriptionID pgtype.UUID `json:"subscription_id"`
 }
 
 func (q *Queries) MarkOrderPaid(ctx context.Context, arg MarkOrderPaidParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markOrderPaid, arg.ID, arg.UrmEventID, arg.SubscriptionID)
+	result, err := q.db.Exec(ctx, markOrderPaid, arg.ID, arg.BillingEventID, arg.SubscriptionID)
 	if err != nil {
 		return 0, err
 	}

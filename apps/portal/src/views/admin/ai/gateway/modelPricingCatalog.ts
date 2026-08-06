@@ -1,5 +1,4 @@
 // 主流模型催化表：成本价（CNY/百万 token）+ 公开模型默认 token 配置
-// 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/AIGateway/modelPricingCatalog.js（转 ts + any）
 // USD → CNY 按 1:7 折算；CNY 原生模型直接使用厂商挂牌价
 //
 // 字段说明：

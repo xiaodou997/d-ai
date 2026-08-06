@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"net/http"
 	"os/signal"
+	"path"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -53,10 +55,7 @@ import (
 	// AI transport (for upstream HTTP client)
 	aitransport "xiaodou/dai/internal/ai/transport"
 
-	// URM libs
-	// (serviceaccess imported as internal above)
-
-	// ── URM 域 ──
+	// ── 平台身份、计费与运营域 ──
 	announcementpkg "xiaodou/dai/internal/announcement"
 	announcementpg "xiaodou/dai/internal/announcement/pg"
 	"xiaodou/dai/internal/auth"
@@ -71,7 +70,6 @@ import (
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/internal/payment/wechat"
 	"xiaodou/dai/internal/scheduler"
-	"xiaodou/dai/internal/serviceaccess"
 	"xiaodou/dai/internal/transport"
 	userpkg "xiaodou/dai/internal/user"
 	userpg "xiaodou/dai/internal/user/pg"
@@ -156,18 +154,11 @@ func main() {
 	appLogger.Info("redis connected", zap.String("addr", cfg.Redis.Addr))
 
 	// ──────────────────────────────────────────────────────
-	// 2. URM 域服务装配
+	// 2. 平台身份与计费域装配
 	// ──────────────────────────────────────────────────────
 
 	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
 	blacklist := auth.NewBlacklistService(redisClient, appLogger)
-	sessionSvc := auth.NewSessionService(redisClient, cfg.SSO.SessionTTL, cfg.SSO.SessionMaxTTL)
-	serviceAccessSvc := serviceaccess.New(pool, redisClient, appLogger)
-	if saErr := serviceAccessSvc.Start(5 * time.Minute); saErr != nil {
-		appLogger.Fatal("service access reconciliation failed", zap.Error(saErr))
-	}
-	defer serviceAccessSvc.Stop()
-
 	if cfg.Security.SecretMasterKey != "" {
 		if err := clientsecret.Configure(cfg.Security.SecretMasterKey); err != nil {
 			appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
@@ -209,11 +200,11 @@ func main() {
 	q := aidb.New(pool)
 	banChecker := banstate.NewChecker(redisClient)
 
-	// ★ 关键改造：通过 InProcessLeasePort 直接调 billing service，不走 HTTP ★
-	leasePort := billingledger.NewInProcessLeasePort(creditLeaseSvc, "dai-ai-gateway")
+	// AI 计费通过进程内端口直接调用统一计费域。
+	leasePort := billingledger.NewInProcessLeasePort(creditLeaseSvc, "dai")
 	billingCoordinator := billingledger.New(
 		pool,
-		leasePort, // ← 进程内调用，不再 HTTP POST /internal/v3/ledger/leases
+		leasePort,
 		billingledger.Config{
 			RequestedTenantMicro: cfg.Billing.RequestedTenantMicro,
 			RequestedUserMicro:   cfg.Billing.RequestedUserMicro,
@@ -293,7 +284,7 @@ func main() {
 	go auditWorker.Start(ctx)
 
 	// Subscription
-	purchaser := subscription.NewInProcessPurchaser(deductionSvc, "dai-ai-gateway")
+	purchaser := subscription.NewInProcessPurchaser(deductionSvc, "dai")
 	subsSvc := subscription.NewService(aiadapters.NewSubscriptionRepo(q, pool), purchaser, appLogger)
 
 	// Workspace
@@ -459,21 +450,17 @@ func main() {
 	}
 
 	var runtimeGateway = gateway.New(gateway.Deps{
-		Logger:                   appLogger,
-		Postgres:                 pool,
-		Pipeline:                 pipeline,
-		Queries:                  q,
-		APIKeyCache:              apiKeyCache,
-		ServiceAccess:            gatewayServiceAccessAdapter{svc: serviceAccessSvc},
-		ExpectedClientID:         "dai-ai-gateway",
-		BanChecker:               banChecker,
-		RuntimeInvokeExpander:    runtimeInvokeExpander,
-		RuntimeEngine:            runtimeEngine,
-		AsyncTasks:               asyncTasks,
-		TaskAdmission:            taskAdmission,
-		TaskInvokeExpander:       runtimeInvokeExpander,
-		JWKSValidator:            jwksValidator,
-		DelegationAllowedClients: cfg.Delegation.AllowedClients,
+		Logger:                appLogger,
+		Postgres:              pool,
+		Pipeline:              pipeline,
+		Queries:               q,
+		APIKeyCache:           apiKeyCache,
+		BanChecker:            banChecker,
+		RuntimeInvokeExpander: runtimeInvokeExpander,
+		RuntimeEngine:         runtimeEngine,
+		AsyncTasks:            asyncTasks,
+		TaskAdmission:         taskAdmission,
+		TaskInvokeExpander:    runtimeInvokeExpander,
 	})
 	runtimeGateway.RegisterTaskHandlers(asyncTasks)
 
@@ -484,8 +471,6 @@ func main() {
 		Logger:         appLogger,
 		Queries:        q,
 		Security:       cfg.Security,
-		URMClient:      console.NewInProcessURMExchanger(jwtSvc),
-		URMClientID:    "dai-ai-gateway",
 		JWKSValidator:  jwksValidator,
 		BanChecker:     banChecker,
 		HTTPClient:     &http.Client{Timeout: 0},
@@ -516,11 +501,9 @@ func main() {
 		Pool:          pool,
 		Redis:         redisClient,
 		Logger:        appLogger,
-		Config:        cfg,
+		PortalBaseURL: cfg.Portal.BaseURL,
 		JWT:           jwtSvc,
 		Blacklist:     blacklist,
-		Session:       sessionSvc,
-		SSO:           cfg.SSO,
 		Legal:         cfg.Legal,
 		UserService:   userSvc,
 		Deduction:     deductionSvc,
@@ -528,9 +511,7 @@ func main() {
 		BillingRepo:   billingRepo,
 		Invite:        inviteSvc,
 		Payment:       paymentSvc,
-		ServiceAccess: serviceAccessSvc,
 		Announcements: announcementSvc,
-		Delegation:    cfg.Delegation,
 
 		Queries:            q,
 		BillingCoordinator: billingCoordinator,
@@ -575,7 +556,6 @@ func main() {
 	// AI gateway + console + fileStore 路由
 	fileStore.Routes(router)
 	runtimeGateway.Routes(router)
-	runtimeGateway.RegisterInternalTaskRoutes(router)
 	mgmtConsole.Routes(router)
 
 	// 健康检查
@@ -603,7 +583,7 @@ func main() {
 	// ──────────────────────────────────────────────────────
 
 	if frontendSub, err := fs.Sub(frontendFS, "frontend_dist"); err == nil {
-		router.Handle("/*", http.FileServer(http.FS(frontendSub)))
+		router.Handle("/*", newPortalHandler(frontendSub))
 	} else {
 		appLogger.Warn("frontend embed not available, serving API only", zap.Error(err))
 	}
@@ -643,6 +623,48 @@ func main() {
 
 // ── 辅助函数 ──────────────────────────────────────────
 
+func newPortalHandler(dist fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(dist))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		filePath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if info, err := fs.Stat(dist, filePath); err == nil && !info.IsDir() {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || isBackendPath(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+
+		request := r.Clone(r.Context())
+		request.URL.Path = "/"
+		request.URL.RawPath = ""
+		fileServer.ServeHTTP(w, request)
+	})
+}
+
+func isBackendPath(requestPath string) bool {
+	for _, prefix := range []string{
+		"/api",
+		"/runtime",
+		"/v1",
+		"/v1beta",
+		"/.well-known",
+		"/assets",
+		"/docs",
+		"/openapi.json",
+		"/health",
+		"/ready",
+	} {
+		if requestPath == prefix || strings.HasPrefix(requestPath, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // subsPort adapts a possibly-nil *subscription.Service into the serving
 // Subscriptions port, returning a genuinely nil interface when the service is
 // unset so the gate step's nil-check works.
@@ -674,17 +696,4 @@ func runHourlyCleanup(ctx context.Context, cleanup func()) {
 			cleanup()
 		}
 	}
-}
-
-// gatewayServiceAccessAdapter 适配 internal/serviceaccess.Service
-// 到 gateway.Deps.ServiceAccess 接口（6 参数 Check）。
-// 原始 libs/go/serviceaccess.Checker.Check 有 6 个参数（含 clientID），
-// internal/serviceaccess.Service.Check 有 5 个参数（无 clientID）。
-// 合并后 clientID 固定为 "dai-ai-gateway"，适配器注入这个常量。
-type gatewayServiceAccessAdapter struct {
-	svc *serviceaccess.Service
-}
-
-func (a gatewayServiceAccessAdapter) Check(ctx context.Context, userType int, userID, tenantID, serviceID, clientID string) error {
-	return a.svc.Check(ctx, userType, userID, tenantID, serviceID)
 }

@@ -133,7 +133,7 @@ const (
 	MaxImageOutputCount     = 10
 )
 
-// JWTClaims holds parsed claims from a URM-issued JWT.
+// JWTClaims holds parsed claims from a D-AI JWT.
 type JWTClaims struct {
 	UserID   string
 	Username string
@@ -424,7 +424,7 @@ func (u TokenUsage) TotalTokens() int {
 //
 // All in-memory price and amount fields in this package use micro-credit units
 // to avoid the "300 tokens of a cheap model rounds to 0 (or 1) credit" loss
-// that integer credit math suffered from. URM ledger APIs accept the same
+// that integer credit math suffered from. The billing domain accepts the same
 // microcredit unit directly; conversion is only needed for human-facing
 // display and the integer-priced subscription catalog.
 const MicroCreditsPerCredit int64 = 10000
@@ -448,7 +448,7 @@ func CreditsToMicro(credits int64) (int64, bool) {
 	return credits * MicroCreditsPerCredit, true
 }
 
-// BillingResult uses microcredit precision end to end, including URM V3 lease
+// BillingResult uses microcredit precision end to end, including lease
 // settlement and the remaining V2 strict-debit subscription path.
 type BillingResult struct {
 	CatalogBaseMicro           int64 // 目录基准价（倍率 1），谁都不付这个数，只作基数与参照

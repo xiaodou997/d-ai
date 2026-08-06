@@ -1,8 +1,8 @@
 import type { RequestAdapter } from "@/api";
 import type { components as AiComponents } from "@/api/ai";
-import type { components as UrmComponents } from "@/api/urm";
+import type { components as PlatformComponents } from "@/api/platform";
 
-import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "@/api/request";
+import { authenticatedRequest, apiHeaders, apiBaseUrl } from "@/api/request";
 import type {
   AdminUsageQuery,
   AdminUsageRankingQuery,
@@ -15,7 +15,7 @@ import type {
 } from "./model";
 
 type AiSchemas = AiComponents["schemas"];
-type UrmSchemas = UrmComponents["schemas"];
+type PlatformSchemas = PlatformComponents["schemas"];
 
 export interface AdminUsageApi {
   listLogs: (query: AdminUsageQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageLogsOutputBody"]>;
@@ -27,9 +27,9 @@ export interface AdminUsageApi {
   listDailyTrend: (query: AdminUsageTrendQuery, signal?: AbortSignal) => Promise<AiSchemas["DailyTrendOutputBody"]>;
 }
 
-export function createAdminUsageApi(adapter: RequestAdapter = authenticatedRequest("ai")): AdminUsageApi {
-  const base = serviceBaseUrl("ai");
-  const headers = portalHeadersFor("ai");
+export function createAdminUsageApi(adapter: RequestAdapter = authenticatedRequest()): AdminUsageApi {
+  const base = apiBaseUrl;
+  const headers = apiHeaders;
   return {
     listLogs: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-logs", query, headers, baseUrl: base, signal }),
     getDetail: (requestId, signal) => adapter({
@@ -56,36 +56,36 @@ export function listAdminUsageDailyTrend(query: AdminUsageTrendQuery, signal?: A
 export interface TenantUsageApi {
   listRecords: (query: TenantUsageQuery, signal?: AbortSignal) => Promise<AiSchemas["TenantUsageLogsOutputBody"]>;
   listSummary: (query: TenantUsageSummaryQuery, signal?: AbortSignal) => Promise<AiSchemas["UsageSummaryOutputBody"]>;
-  listUsers: (signal?: AbortSignal) => Promise<UrmSchemas["PageEndUserItem"]>;
+  listUsers: (signal?: AbortSignal) => Promise<PlatformSchemas["PageEndUserItem"]>;
 }
 
 export function createTenantUsageApi(
-  aiRequest: RequestAdapter = authenticatedRequest("ai"),
-  urmRequest: RequestAdapter = authenticatedRequest("urm")
+  aiRequest: RequestAdapter = authenticatedRequest(),
+  platformRequest: RequestAdapter = authenticatedRequest()
 ): TenantUsageApi {
   return {
     listRecords: (query, signal) => aiRequest({
       method: "GET",
       path: "/api/v1/tenants/me/usage-logs",
       query,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai"),
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl,
       signal
     }),
     listSummary: (query, signal) => aiRequest({
       method: "GET",
       path: "/api/v1/tenants/me/usage-summary",
       query,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai"),
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl,
       signal
     }),
-    listUsers: (signal) => urmRequest({
+    listUsers: (signal) => platformRequest({
       method: "GET",
       path: "/api/v1/users",
       query: { page: 1, size: 200 },
-      headers: portalHeadersFor("urm"),
-      baseUrl: serviceBaseUrl("urm"),
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl,
       signal
     })
   };
@@ -106,22 +106,22 @@ export interface CustomerUsageApi {
   getSummary: (requestSource?: string, signal?: AbortSignal) => Promise<AiSchemas["UserUsageSummaryDTO"]>;
 }
 
-export function createCustomerUsageApi(adapter: RequestAdapter = authenticatedRequest("ai")): CustomerUsageApi {
+export function createCustomerUsageApi(adapter: RequestAdapter = authenticatedRequest()): CustomerUsageApi {
   return {
     listRecords: (query, signal) => adapter({
       method: "GET",
       path: "/api/v1/user-usage-logs",
       query,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai"),
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl,
       signal
     }),
     getSummary: (requestSource, signal) => adapter({
       method: "GET",
       path: "/api/v1/user-usage-summary",
       query: { request_source: requestSource || undefined },
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai"),
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl,
       signal
     })
   };

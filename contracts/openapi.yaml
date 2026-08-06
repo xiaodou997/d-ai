@@ -1528,8 +1528,6 @@ components:
     AuditLogItem:
       additionalProperties: false
       properties:
-        clientId:
-          type: string
         createdAt:
           format: int64
           type: integer
@@ -1584,51 +1582,6 @@ components:
       required:
         - items
         - total
-      type: object
-    BalanceOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BalanceOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        accountId:
-          type: string
-        availableCredits:
-          format: int64
-          type: integer
-        currentOverdraft:
-          format: int64
-          type: integer
-        frozenCredits:
-          format: int64
-          type: integer
-        overdraftLimit:
-          format: int64
-          type: integer
-        packageType:
-          format: int64
-          type: integer
-        packages:
-          items:
-            $ref: "#/components/schemas/PackageSummary"
-          type:
-            - array
-            - "null"
-        totalCredits:
-          format: int64
-          type: integer
-      required:
-        - packageType
-        - accountId
-        - totalCredits
-        - frozenCredits
-        - availableCredits
-        - overdraftLimit
-        - currentOverdraft
       type: object
     BalanceResponse:
       additionalProperties: false
@@ -1821,50 +1774,6 @@ components:
         - eventIds
         - reason
       type: object
-    BatchTenantsInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BatchTenantsInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        tenantIds:
-          description: 租户 ID 列表
-          items:
-            type: string
-          maxItems: 100
-          minItems: 1
-          type:
-            - array
-            - "null"
-      required:
-        - tenantIds
-      type: object
-    BatchUsersInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BatchUsersInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        userIds:
-          description: 用户 ID 列表
-          items:
-            type: string
-          maxItems: 100
-          minItems: 1
-          type:
-            - array
-            - "null"
-      required:
-        - userIds
-      type: object
     BuyCreditsInputBody:
       additionalProperties: false
       properties:
@@ -1901,21 +1810,6 @@ components:
       required:
         - creditOrderId
         - credits
-      type: object
-    CancelInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CancelInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        eventId:
-          type: string
-        idempotencyKey:
-          type: string
       type: object
     CancelPreAuthInputBody:
       additionalProperties: false
@@ -2053,45 +1947,6 @@ components:
         - credits
         - percentage
       type: object
-    ClientServiceItem:
-      additionalProperties: false
-      properties:
-        clientId:
-          type: string
-        description:
-          type: string
-        displayName:
-          type: string
-        status:
-          type: string
-      required:
-        - clientId
-        - displayName
-        - description
-        - status
-      type: object
-    ClientServicesOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ClientServicesOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        clientServices:
-          items:
-            $ref: "#/components/schemas/ClientServiceItem"
-          type:
-            - array
-            - "null"
-        isWildcard:
-          type: boolean
-      required:
-        - clientServices
-        - isWildcard
-      type: object
     ComponentStatus:
       additionalProperties: false
       properties:
@@ -2100,103 +1955,6 @@ components:
         status:
           type: string
       required:
-        - status
-      type: object
-    ConfirmInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ConfirmInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        actualTenantAmount:
-          format: int64
-          type: integer
-        actualUserAmount:
-          format: int64
-          type: integer
-        allowOverdraft:
-          type: boolean
-        eventId:
-          type: string
-        idempotencyKey:
-          type: string
-      type: object
-    ConsumeInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ConsumeInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        allowOverdraft:
-          type: boolean
-        description:
-          type: string
-        disallowOverdraft:
-          type: boolean
-        idempotencyKey:
-          description: 幂等键
-          type: string
-        tenantAmount:
-          format: int64
-          type: integer
-        tenantId:
-          description: 租户 ID
-          type: string
-        userAmount:
-          format: int64
-          type: integer
-        userId:
-          type: string
-      required:
-        - idempotencyKey
-        - tenantId
-      type: object
-    ConsumeOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ConsumeOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        accountState:
-          type: string
-        allowFurtherUsage:
-          type: boolean
-        eventId:
-          type: string
-        status:
-          type: string
-        tenantDeducted:
-          format: int64
-          type: integer
-        tenantOverdraftAdd:
-          format: int64
-          type: integer
-        userDeducted:
-          format: int64
-          type: integer
-        userOverdraftAdd:
-          format: int64
-          type: integer
-      required:
-        - eventId
-        - tenantDeducted
-        - userDeducted
-        - tenantOverdraftAdd
-        - userOverdraftAdd
-        - accountState
-        - allowFurtherUsage
         - status
       type: object
     ConsumerAppDTO:
@@ -2578,8 +2336,6 @@ components:
           type: string
         password:
           type: string
-        serviceAccess:
-          $ref: "#/components/schemas/PolicyInput"
         username:
           type: string
       required:
@@ -2603,8 +2359,6 @@ components:
           type: string
         initUsername:
           type: string
-        serviceAccess:
-          $ref: "#/components/schemas/PolicyInput"
         status:
           format: int64
           type: integer
@@ -2832,183 +2586,6 @@ components:
       required:
         - items
         - total
-      type: object
-    CreditLeaseAcquireInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CreditLeaseAcquireInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        client_window_id:
-          type: string
-        description:
-          type: string
-        grace_seconds:
-          format: int64
-          minimum: 0
-          type: integer
-        requested_tenant_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        requested_user_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        tenant_id:
-          type: string
-        ttl_seconds:
-          format: int64
-          minimum: 0
-          type: integer
-        user_id:
-          type: string
-      required:
-        - client_window_id
-        - tenant_id
-      type: object
-    CreditLeaseOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CreditLeaseOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        account_state:
-          type: string
-        actual_tenant_micro:
-          format: int64
-          type: integer
-        actual_user_micro:
-          format: int64
-          type: integer
-        allow_further_usage:
-          type: boolean
-        client_window_id:
-          type: string
-        escrow_state:
-          enum:
-            - active
-            - grace
-            - released
-          type: string
-        expires_at:
-          format: date-time
-          type: string
-        grace_until:
-          format: date-time
-          type: string
-        granted_tenant_micro:
-          format: int64
-          type: integer
-        granted_user_micro:
-          format: int64
-          type: integer
-        lease_id:
-          type: string
-        settled_at:
-          format: date-time
-          type: string
-        settled_event_id:
-          type: string
-        settlement_id:
-          type: string
-        settlement_state:
-          enum:
-            - unsettled
-            - settled
-          type: string
-        tenant_debt_added_micro:
-          format: int64
-          type: integer
-        tenant_deducted_micro:
-          format: int64
-          type: integer
-        tenant_id:
-          type: string
-        user_debt_added_micro:
-          format: int64
-          type: integer
-        user_deducted_micro:
-          format: int64
-          type: integer
-        user_id:
-          type: string
-        version:
-          format: int64
-          type: integer
-      required:
-        - lease_id
-        - client_window_id
-        - tenant_id
-        - granted_tenant_micro
-        - granted_user_micro
-        - escrow_state
-        - settlement_state
-        - version
-        - expires_at
-        - grace_until
-        - tenant_deducted_micro
-        - user_deducted_micro
-        - tenant_debt_added_micro
-        - user_debt_added_micro
-        - account_state
-        - allow_further_usage
-      type: object
-    CreditLeaseRenewInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CreditLeaseRenewInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        grace_seconds:
-          format: int64
-          minimum: 0
-          type: integer
-        ttl_seconds:
-          format: int64
-          minimum: 0
-          type: integer
-        version:
-          format: int64
-          minimum: 1
-          type: integer
-      required:
-        - version
-      type: object
-    CreditLeaseSettleInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CreditLeaseSettleInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        actual_tenant_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        actual_user_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        settlement_id:
-          type: string
-      required:
-        - settlement_id
       type: object
     CreditsPerUSDOutputBody:
       additionalProperties: false
@@ -3861,70 +3438,6 @@ components:
       required:
         - field
         - message
-      type: object
-    FreezeInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/FreezeInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        allowOverdraft:
-          type: boolean
-        description:
-          type: string
-        idempotencyKey:
-          description: 幂等键
-          type: string
-        tenantAmount:
-          format: int64
-          type: integer
-        tenantId:
-          description: 租户 ID
-          type: string
-        userAmount:
-          format: int64
-          type: integer
-        userId:
-          type: string
-      required:
-        - idempotencyKey
-        - tenantId
-      type: object
-    FreezeOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/FreezeOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        accountState:
-          type: string
-        allowFurtherUsage:
-          type: boolean
-        eventId:
-          type: string
-        frozenTenant:
-          format: int64
-          type: integer
-        frozenUser:
-          format: int64
-          type: integer
-        status:
-          type: string
-      required:
-        - eventId
-        - frozenTenant
-        - frozenUser
-        - accountState
-        - allowFurtherUsage
-        - status
       type: object
     GlobalSettings:
       additionalProperties: false
@@ -5258,30 +4771,6 @@ components:
         - name
         - version
       type: object
-    InternalEndUserOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/InternalEndUserOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        status:
-          type: string
-        tenantId:
-          type: string
-        userId:
-          type: string
-        username:
-          type: string
-      required:
-        - userId
-        - tenantId
-        - username
-        - status
-      type: object
     InviteCodeItem:
       additionalProperties: false
       properties:
@@ -5464,189 +4953,6 @@ components:
         - level
         - require_with
         - note
-      type: object
-    LedgerAuthorizationInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/LedgerAuthorizationInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        description:
-          type: string
-        idempotency_key:
-          description: Stable block idempotency key
-          type: string
-        requested_tenant_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        requested_user_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        tenant_id:
-          type: string
-        user_id:
-          type: string
-      required:
-        - idempotency_key
-        - tenant_id
-      type: object
-    LedgerAuthorizationOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/LedgerAuthorizationOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        account_state:
-          type: string
-        allow_further_usage:
-          type: boolean
-        authorization_id:
-          type: string
-        granted_tenant_micro:
-          format: int64
-          type: integer
-        granted_user_micro:
-          format: int64
-          type: integer
-      required:
-        - authorization_id
-        - granted_tenant_micro
-        - granted_user_micro
-        - account_state
-        - allow_further_usage
-      type: object
-    LedgerBalanceV2OutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/LedgerBalanceV2OutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        account_id:
-          type: string
-        available_micro:
-          format: int64
-          type: integer
-        frozen_micro:
-          format: int64
-          type: integer
-        outstanding_debt_micro:
-          format: int64
-          type: integer
-        owner_type:
-          type: string
-        service_state:
-          enum:
-            - active
-            - insufficient_balance
-            - blocked_debt
-          type: string
-      required:
-        - owner_type
-        - account_id
-        - available_micro
-        - frozen_micro
-        - outstanding_debt_micro
-        - service_state
-      type: object
-    LedgerCaptureInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/LedgerCaptureInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        actual_tenant_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        actual_user_micro:
-          format: int64
-          minimum: 0
-          type: integer
-      type: object
-    LedgerCaptureOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/LedgerCaptureOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        account_state:
-          type: string
-        allow_further_usage:
-          type: boolean
-        authorization_id:
-          type: string
-        tenant_debt_added_micro:
-          format: int64
-          type: integer
-        tenant_deducted_micro:
-          format: int64
-          type: integer
-        user_debt_added_micro:
-          format: int64
-          type: integer
-        user_deducted_micro:
-          format: int64
-          type: integer
-      required:
-        - authorization_id
-        - tenant_deducted_micro
-        - user_deducted_micro
-        - tenant_debt_added_micro
-        - user_debt_added_micro
-        - account_state
-        - allow_further_usage
-      type: object
-    LedgerDebitInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/LedgerDebitInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        description:
-          type: string
-        idempotency_key:
-          type: string
-        tenant_id:
-          type: string
-        tenant_micro:
-          format: int64
-          minimum: 0
-          type: integer
-        user_id:
-          type: string
-        user_micro:
-          format: int64
-          minimum: 0
-          type: integer
-      required:
-        - idempotency_key
-        - tenant_id
       type: object
     LegalStruct:
       additionalProperties: false
@@ -5930,27 +5236,6 @@ components:
       required:
         - items
         - total
-      type: object
-    PackageSummary:
-      additionalProperties: false
-      properties:
-        expireTime:
-          format: int64
-          type:
-            - integer
-            - "null"
-        packageId:
-          type: string
-        remaining:
-          format: int64
-          type: integer
-        source:
-          type: string
-      required:
-        - packageId
-        - remaining
-        - expireTime
-        - source
       type: object
     PageAdminUserItem:
       additionalProperties: false
@@ -6373,24 +5658,6 @@ components:
         - enabled
         - entries
         - include_initials
-      type: object
-    PolicyInput:
-      additionalProperties: false
-      properties:
-        mode:
-          enum:
-            - all
-            - selected
-          type: string
-        serviceIds:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-      required:
-        - mode
-        - serviceIds
       type: object
     PoolAvailableModelsDTO:
       additionalProperties: false
@@ -6968,8 +6235,6 @@ components:
           type: string
         message:
           type: string
-        sessionEstablished:
-          type: boolean
         success:
           type: boolean
         userId:
@@ -6977,7 +6242,6 @@ components:
       required:
         - success
         - userId
-        - sessionEstablished
         - message
       type: object
     RechargeInputBody:
@@ -8206,6 +7470,8 @@ components:
           format: uri
           readOnly: true
           type: string
+        billing_event_id:
+          type: string
         created_at:
           format: date-time
           type: string
@@ -8238,8 +7504,6 @@ components:
           type: string
         updated_at:
           format: date-time
-          type: string
-        urm_event_id:
           type: string
         user_id:
           type: string
@@ -8901,19 +8165,6 @@ components:
         - db
         - redis
         - health
-      type: object
-    Tenant:
-      additionalProperties: false
-      properties:
-        status:
-          type: string
-        tenantId:
-          type: string
-        tenantName:
-          type: string
-      required:
-        - tenantId
-        - tenantName
       type: object
     TenantBrandingOutputBody:
       additionalProperties: false
@@ -11682,52 +10933,6 @@ components:
         - total_tokens
         - total_user_charged_credits
       type: object
-    User:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/User.json
-          format: uri
-          readOnly: true
-          type: string
-        avatar:
-          type:
-            - string
-            - "null"
-        createdTime:
-          format: int64
-          type:
-            - integer
-            - "null"
-        email:
-          type:
-            - string
-            - "null"
-        nickname:
-          type:
-            - string
-            - "null"
-        status:
-          format: int32
-          type: integer
-        tenantId:
-          type: string
-        userId:
-          type: string
-        username:
-          type: string
-      required:
-        - userId
-        - tenantId
-        - username
-        - email
-        - nickname
-        - avatar
-        - status
-        - createdTime
-      type: object
     UserAvailableModelDTO:
       additionalProperties: false
       properties:
@@ -11963,10 +11168,6 @@ components:
           format: uri
           readOnly: true
           type: string
-        clientId:
-          type: string
-        clientType:
-          type: string
         sub:
           type: string
         tenantId:
@@ -11982,10 +11183,8 @@ components:
         - sub
         - username
         - userType
-        - clientType
         - tenantId
         - tenantName
-        - clientId
       type: object
     UserUsageLogDTO:
       additionalProperties: false
@@ -13450,6 +12649,39 @@ paths:
       summary: 任意租户现金流水
       tags:
         - admin-payment
+  /api/v1/admin/debts/{owner_type}/{id}:
+    get:
+      operationId: admin-get-debt
+      parameters:
+        - in: path
+          name: owner_type
+          required: true
+          schema:
+            enum:
+              - tenant
+              - user
+            type: string
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DebtStatusOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 查询账户当前债务
+      tags:
+        - admin-finance
   /api/v1/admin/payment-orders:
     get:
       operationId: admin-list-payment-orders
@@ -13996,11 +13228,6 @@ paths:
         - explode: false
           in: query
           name: principalType
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: clientId
           schema:
             type: string
         - explode: false
@@ -15860,10 +15087,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/PublicRegistrationOutputBody"
           description: Created
-          headers:
-            Set-Cookie:
-              schema:
-                type: string
         default:
           content:
             application/problem+json:
@@ -16053,7 +15276,7 @@ paths:
         - risk-control
   /api/v1/risk-control/events/{eventID}/resolve:
     post:
-      description: 仅更新事件状态；如需封禁用户/租户请在 URM 管理端单独操作。
+      description: 仅更新事件状态；如需封禁用户或租户，请在用户管理中单独操作。
       operationId: ai-resolve-risk-event
       parameters:
         - in: path
@@ -20174,31 +19397,6 @@ paths:
       summary: 更新租户
       tags:
         - admin-tenants
-  /api/v1/tenants/{id}/client-services:
-    get:
-      operationId: admin-tenant-client-services
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientServicesOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户可用应用授权
-      tags:
-        - admin-tenants
   /api/v1/tenants/{id}/status:
     patch:
       operationId: admin-update-tenant-status
@@ -23156,39 +22354,6 @@ paths:
       summary: 启用/停用终端用户
       tags:
         - admin-end-users
-  /api/v2/admin/debts/{owner_type}/{id}:
-    get:
-      operationId: admin-get-debt
-      parameters:
-        - in: path
-          name: owner_type
-          required: true
-          schema:
-            enum:
-              - tenant
-              - user
-            type: string
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DebtStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 查询账户当前债务
-      tags:
-        - admin-finance
   /healthz:
     get:
       description: 返回服务存活状态，用于探针与冒烟。
@@ -23209,574 +22374,6 @@ paths:
       summary: 健康检查
       tags:
         - meta
-  /internal/v1/assets/balance:
-    get:
-      operationId: internal-query-balance
-      parameters:
-        - description: 1=租户账户 2=用户账户
-          explode: false
-          in: query
-          name: packageType
-          schema:
-            default: "2"
-            description: 1=租户账户 2=用户账户
-            type: string
-        - description: 账户 ID
-          explode: false
-          in: query
-          name: accountId
-          schema:
-            description: 账户 ID
-            type: string
-        - description: 是否返回积分包明细
-          explode: false
-          in: query
-          name: detail
-          schema:
-            description: 是否返回积分包明细
-            type: boolean
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BalanceOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 查询账户余额
-      tags:
-        - internal-billing
-  /internal/v1/end-users/{id}:
-    get:
-      operationId: internal-get-end-user
-      parameters:
-        - description: 终端用户 ID
-          in: path
-          name: id
-          required: true
-          schema:
-            description: 终端用户 ID
-            type: string
-        - description: 租户 ID
-          explode: false
-          in: query
-          name: tenant_id
-          schema:
-            description: 租户 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/InternalEndUserOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 按租户查询单个终端用户
-      tags:
-        - internal-users
-  /internal/v1/settle/cancel:
-    post:
-      operationId: internal-settle-cancel-by-key
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CancelInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 取消预授权（按 eventId 或幂等键）
-      tags:
-        - internal-billing
-  /internal/v1/settle/cancel/{id}:
-    post:
-      operationId: internal-settle-cancel
-      parameters:
-        - description: 用户 ID
-          in: path
-          name: id
-          required: true
-          schema:
-            description: 用户 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 取消预授权
-      tags:
-        - internal-billing
-  /internal/v1/settle/confirm:
-    post:
-      operationId: internal-settle-confirm
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConfirmInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 确认扣费（多退少补）
-      tags:
-        - internal-billing
-  /internal/v1/settle/consume:
-    post:
-      operationId: internal-settle-consume
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ConsumeInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ConsumeOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 单阶段幂等扣款
-      tags:
-        - internal-billing
-  /internal/v1/settle/freeze:
-    post:
-      operationId: internal-settle-freeze
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/FreezeInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FreezeOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 双账户预授权冻结
-      tags:
-        - internal-billing
-  /internal/v1/tenants/batch:
-    post:
-      operationId: internal-batch-get-tenants
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchTenantsInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  $ref: "#/components/schemas/Tenant"
-                type: object
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 批量查询租户
-      tags:
-        - internal-users
-  /internal/v1/users/batch:
-    post:
-      operationId: internal-batch-get-users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchUsersInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  $ref: "#/components/schemas/User"
-                type: object
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 批量查询用户
-      tags:
-        - internal-users
-  /internal/v1/users/{id}:
-    get:
-      operationId: internal-get-user
-      parameters:
-        - description: 用户 ID
-          in: path
-          name: id
-          required: true
-          schema:
-            description: 用户 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 查询单个用户
-      tags:
-        - internal-users
-  /internal/v2/ledger/authorizations:
-    post:
-      operationId: internal-v2-ledger-open-authorization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LedgerAuthorizationInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LedgerAuthorizationOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Open a partially grantable microcredit authorization block
-      tags:
-        - internal-ledger-v2
-  /internal/v2/ledger/authorizations/{id}/capture:
-    post:
-      operationId: internal-v2-ledger-capture-authorization
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LedgerCaptureInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LedgerCaptureOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Capture actual microcredits for completed work
-      tags:
-        - internal-ledger-v2
-  /internal/v2/ledger/authorizations/{id}/void:
-    post:
-      operationId: internal-v2-ledger-void-authorization
-      parameters:
-        - description: 用户 ID
-          in: path
-          name: id
-          required: true
-          schema:
-            description: 用户 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Void an unused microcredit authorization block
-      tags:
-        - internal-ledger-v2
-  /internal/v2/ledger/balances/{owner_type}/{id}:
-    get:
-      operationId: internal-v2-ledger-get-balance
-      parameters:
-        - in: path
-          name: owner_type
-          required: true
-          schema:
-            enum:
-              - tenant
-              - user
-            type: string
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LedgerBalanceV2OutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Get microcredit balance and debt state
-      tags:
-        - internal-ledger-v2
-  /internal/v2/ledger/debits:
-    post:
-      operationId: internal-v2-ledger-strict-debit
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LedgerDebitInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LedgerCaptureOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Strictly debit a known microcredit amount
-      tags:
-        - internal-ledger-v2
-  /internal/v3/ledger/leases:
-    post:
-      operationId: internal-v3-ledger-acquire-credit-lease
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreditLeaseAcquireInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreditLeaseOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Acquire an expiring, renewable credit lease
-      tags:
-        - internal-ledger-v3
-  /internal/v3/ledger/leases/{id}:
-    get:
-      operationId: internal-v3-ledger-get-credit-lease
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreditLeaseOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Read credit lease state for reconciliation
-      tags:
-        - internal-ledger-v3
-  /internal/v3/ledger/leases/{id}/renew:
-    post:
-      operationId: internal-v3-ledger-renew-credit-lease
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreditLeaseRenewInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreditLeaseOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Renew a credit lease using its fencing version
-      tags:
-        - internal-ledger-v3
-  /internal/v3/ledger/leases/{id}/settle:
-    post:
-      operationId: internal-v3-ledger-settle-credit-lease
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreditLeaseSettleInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreditLeaseOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Idempotently settle a credit lease, including after escrow release
-      tags:
-        - internal-ledger-v3
-  /internal/v3/ledger/legacy-authorizations/{id}/settle:
-    post:
-      operationId: internal-v3-ledger-settle-legacy-authorization
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LedgerCaptureInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LedgerCaptureOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: Settle a V2 authorization during the controlled V3 cutover
-      tags:
-        - internal-ledger-v3-migration
   /public/jwks.json:
     get:
       operationId: get-jwks-public
@@ -24075,7 +22672,7 @@ paths:
         - runtime
         - tasks
     post:
-      description: 使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=UniHub、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。
+      description: 使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。
       operationId: ai-create-task
       parameters:
         - description: 可选幂等键；作用域按当前 API key 或 app key 隔离，生命周期与任务一致。

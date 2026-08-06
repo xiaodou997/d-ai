@@ -137,7 +137,7 @@ func (s *CreditLeaseService) Acquire(ctx context.Context, params AcquireLeasePar
 		return nil, err
 	}
 
-	if err := validateLeaseSubject(ctx, tx, params.ClientID, params.TenantID, params.UserID); err != nil {
+	if err := validateLeaseSubject(ctx, tx, params.TenantID, params.UserID); err != nil {
 		return nil, err
 	}
 
@@ -614,23 +614,13 @@ func validateAcquireLease(params AcquireLeaseParams) error {
 	return nil
 }
 
-func validateLeaseSubject(ctx context.Context, tx pgx.Tx, clientID, tenantID, userID string) error {
+func validateLeaseSubject(ctx context.Context, tx pgx.Tx, tenantID, userID string) error {
 	var tenantStatus string
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(status, 'active') FROM iam_tenants WHERE tenant_id=$1`, tenantID).Scan(&tenantStatus); err != nil {
 		return shared.ErrAccountNotFound
 	}
 	if tenantStatus != "active" {
 		return shared.ErrTenantSuspended
-	}
-	var allowed bool
-	if err := tx.QueryRow(ctx, `
-		SELECT c.status='active' AND c.portal_enabled
-		   AND (p.access_mode='all' OR (p.access_mode='selected' AND c.client_id=ANY(p.service_ids)))
-		FROM gov_subject_service_access p
-		JOIN gov_clients c ON c.client_id=$2
-		WHERE p.subject_type='tenant' AND p.subject_id=$1
-	`, tenantID, clientID).Scan(&allowed); err != nil || !allowed {
-		return shared.ErrForbidden
 	}
 	if userID != "" {
 		var exists bool

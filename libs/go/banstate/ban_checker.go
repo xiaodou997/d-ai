@@ -1,5 +1,5 @@
 // Package banstate reads user/tenant ban state directly from the Redis keys
-// urm-service writes (SET on ban, DEL on unban — no TTL, no pub/sub). Redis
+// The identity domain writes (SET on ban, DEL on unban; no TTL or pub/sub). Redis
 // itself is the single source of truth shared by every consuming service and
 // every replica, so there is no local cache to go stale on restart or drop
 // an event: a plain Redis GET is already sub-millisecond and cheap enough to
@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	banUserKeyPrefix   = "urc:banned:user:"
-	banTenantKeyPrefix = "urc:banned:tenant:"
+	banUserKeyPrefix   = "dai:banned:user:"
+	banTenantKeyPrefix = "dai:banned:tenant:"
 )
 
 // Checker reads ban state from Redis.

@@ -18,9 +18,9 @@ import (
 // TestConfirmAllowOverdraftOverflow 验证 flex Confirm 可以超过原冻结额确认，
 // 不足部分进入 overdraft，且响应显式标记 exhausted。
 func TestConfirmAllowOverdraftOverflow(t *testing.T) {
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -110,9 +110,9 @@ func TestConfirmAllowOverdraftOverflow(t *testing.T) {
 
 // TestFreezeAllowOverdraftSoftReserve 验证 flex Freeze 在未 exhausted 时允许 soft reservation。
 func TestFreezeAllowOverdraftSoftReserve(t *testing.T) {
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -165,9 +165,9 @@ func TestFreezeAllowOverdraftSoftReserve(t *testing.T) {
 }
 
 func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -182,7 +182,7 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	tenantID := "t_owner_" + suffix
 	userID := "u_owner_" + suffix
-	ownerClientID := "ai-service-" + suffix
+	ownerClientID := "dai-test-" + suffix
 	otherClientID := "other-client-" + suffix
 	mustExec := func(sql string, args ...any) {
 		t.Helper()
@@ -193,8 +193,6 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM gov_subject_service_access WHERE subject_type='tenant' AND subject_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM gov_clients WHERE client_id=$1`, ownerClientID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
@@ -205,12 +203,6 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 	          VALUES ($1, $2, $3, 'x', 0, 0)`, userID, tenantID, "user-"+suffix)
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 10, 10, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
-	mustExec(`INSERT INTO gov_clients (client_id, display_name, portal_enabled, status)
-	          VALUES ($1, $1, true, 'active')`, ownerClientID)
-	mustExec(`INSERT INTO gov_subject_service_access
-	          (subject_type, subject_id, access_mode, service_ids, version, created_by, updated_by)
-	          VALUES ('tenant', $1, 'selected', ARRAY[$2], 1, 'test', 'test')`, tenantID, ownerClientID)
-
 	svc := NewDeductionService(pool, nil, zap.NewNop())
 	freeze, err := svc.Freeze(FreezeParams{
 		IdempotencyKey: "owner-freeze-" + suffix,
@@ -242,9 +234,9 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 }
 
 func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dsn)
@@ -259,7 +251,7 @@ func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	tenantID := "t_settle_race_" + suffix
 	userID := "u_settle_race_" + suffix
-	ownerClientID := "ai-service-" + suffix
+	ownerClientID := "dai-test-" + suffix
 	mustExec := func(sql string, args ...any) {
 		t.Helper()
 		if _, err := pool.Exec(ctx, sql, args...); err != nil {
@@ -269,8 +261,6 @@ func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM gov_subject_service_access WHERE subject_type='tenant' AND subject_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM gov_clients WHERE client_id=$1`, ownerClientID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
@@ -281,12 +271,6 @@ func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
 	          VALUES ($1, $2, $3, 'x', 0, 0)`, userID, tenantID, "user-"+suffix)
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 100, 100, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
-	mustExec(`INSERT INTO gov_clients (client_id, display_name, portal_enabled, status)
-	          VALUES ($1, $1, true, 'active')`, ownerClientID)
-	mustExec(`INSERT INTO gov_subject_service_access
-	          (subject_type, subject_id, access_mode, service_ids, version, created_by, updated_by)
-	          VALUES ('tenant', $1, 'selected', ARRAY[$2], 1, 'test', 'test')`, tenantID, ownerClientID)
-
 	svc := NewDeductionService(pool, nil, zap.NewNop())
 	freeze, err := svc.Freeze(FreezeParams{
 		IdempotencyKey: "settlement-race-freeze-" + suffix,

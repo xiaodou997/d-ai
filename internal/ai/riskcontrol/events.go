@@ -12,8 +12,7 @@ const (
 )
 
 // EventRepository persists and queries ai_risk_events, the human-in-the-loop
-// queue. Resolution never mutates account status — that stays the exclusive
-// responsibility of urm-service.
+// queue. Resolution never mutates account status; identity administration owns it.
 type EventRepository interface {
 	InsertEvent(ctx context.Context, ev domain.RiskEvent) (id string, err error)
 	ListEvents(ctx context.Context, f domain.RiskEventFilter, limit, offset int32) ([]domain.RiskEvent, error)

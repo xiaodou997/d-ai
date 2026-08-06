@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// BanReconciler periodically re-syncs the Redis ban keys (urc:banned:user:*,
-// urc:banned:tenant:*) against Postgres ground truth (iam_users,
+// BanReconciler periodically re-syncs the Redis ban keys (dai:banned:user:*,
+// dai:banned:tenant:*) against Postgres ground truth (iam_users,
 // iam_tenant_users, iam_tenants). Redis is treated as the fast-path source of
 // truth for BanUser/BanTenant/UnbanUser/UnbanTenant, but it has no built-in
 // recovery from data loss (Redis restart without AOF, a wrong snapshot

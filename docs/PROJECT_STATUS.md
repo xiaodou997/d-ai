@@ -4,19 +4,20 @@
 
 ## 当前结论
 
-D-AI 已完成从“多服务/多前端迁移原型”到“单后端 + 单 Portal”工程结构的第一轮激进重构。数据库、Go 后端、OpenAPI 导出、Portal 类型检查、生产构建和前端测试均已打通；剩余工作主要是运行时业务验收、契约细节校准和发布自动化。
+D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后端、OpenAPI 导出、Portal 类型检查、生产构建和前端测试均已打通；剩余工作主要是运行时业务验收、契约细节校准和发布自动化。
 
 ## 已完成
 
-- URM + AI 合并为一个 Go 进程、一个 PostgreSQL 数据库和一个二进制入口。
-- 数据库使用 `internal/db/init.sql` 唯一完整基线；应用只校验 `dai_schema_metadata.version`，不执行自动 DDL。
+- 身份、权限、计费和 AI 能力运行在同一个 Go 进程、PostgreSQL 数据库和二进制入口中。
+- 数据库使用 `internal/db/init.sql` 唯一完整基线；应用只校验 `dai_schema_metadata.version`，`make dev` 负责本地开发库升级。
 - Goose 迁移目录、依赖和启动路径已删除；已有环境的人工变更放在 `internal/db/changes/`。
-- `make dev` 负责本地配置、PostgreSQL、Redis 和后端启动。
+- `make dev` 负责本地配置、PostgreSQL、Redis、数据库迁移和后端启动。
 - Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。
 - API facade、领域类型、请求适配器、鉴权、shell、DsUI 和 billing 能力均在 `apps/portal/src` 内通过清晰目录边界组织。
-- Proxy 产品域、旧 proxy API、proxy generated 类型、Proxy 菜单和页面表面均已删除；后端业务服务只保留 URM 与 AI。
+- 旧服务注册、服务准入、服务令牌、跨服务 HTTP API 与 SSO 会话流程均已删除。
 - `cmd/openapi` 从统一 Go route registration 导出 `contracts/openapi.yaml`。
 - `apps/portal/scripts/generate.mjs` 只消费统一契约，并生成 `apps/portal/src/api/generated/dai.ts`；`ensure:api` 在契约或生成物缺失/过期时失败。
+- 登录上下文已统一为单一 `portal`；后端根据账号凭证跨管理员、租户用户和终端用户表解析 `userType`，Portal 再按身份和权限生成菜单、路由与主题。
 
 ## 目录约定
 
@@ -24,7 +25,7 @@ D-AI 已完成从“多服务/多前端迁移原型”到“单后端 + 单 Port
 | --- | --- | --- |
 | 后端 HTTP | `internal/transport`, `internal/ai/transport` | chi + Huma code-first 路由和 DTO |
 | 后端契约 | `cmd/openapi`, `contracts/openapi.yaml` | 统一 OpenAPI 导出与快照 |
-| Portal API | `apps/portal/src/api` | request adapter、URM/AI facade、领域类型、生成类型 |
+| Portal API | `apps/portal/src/api` | request adapter、业务 facade、领域类型、生成类型 |
 | Portal 平台层 | `apps/portal/src/platform` | 环境、鉴权、路由、shell 和公共工作区 |
 | Portal 设计系统 | `apps/portal/src/shared/ui` | token、DsUI 组件和布局 |
 | Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
@@ -55,7 +56,7 @@ D-AI 已完成从“多服务/多前端迁移原型”到“单后端 + 单 Port
 | --- | --- |
 | `bun run typecheck` | 通过 |
 | `bun run build:frontend` | 通过，产物写入 `cmd/server/frontend_dist` |
-| `bun run test` | 52 个测试文件、185 个测试通过 |
+| `bun run test` | 55 个测试文件、191 个测试通过 |
 | `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
 | `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
 | `make dev`、后端 health/ready/info | 已验证，详见数据库与本地运行记录 |

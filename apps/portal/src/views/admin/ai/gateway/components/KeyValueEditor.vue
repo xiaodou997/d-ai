@@ -1,4 +1,3 @@
-<!-- 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/AIGateway/components/KeyValueEditor.vue（无 API；转 ts + any） -->
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElButton, ElInput } from 'element-plus'

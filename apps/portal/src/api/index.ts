@@ -22,11 +22,6 @@ export interface RequestAdapter {
   }): Promise<T>;
 }
 
-export interface ServiceRuntime {
-  service: "urm" | "ai";
-  baseUrl: string;
-}
-
 export function joinUrl(baseUrl: string, path: string): string {
   const prefix = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const suffix = path.startsWith("/") ? path : `/${path}`;

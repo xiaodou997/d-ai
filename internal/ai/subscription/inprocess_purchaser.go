@@ -4,15 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 	billingsvc "xiaodou/dai/internal/billing/service"
 )
 
-// InProcessPurchaser 是 Purchaser 接口的进程内实现——直接调用
-// billingsvc.DeductionService.Consume()，不再走 HTTP。
-//
-// 原 ai-service 通过 urm.Client.DebitStrict HTTP 调用
-// urm-service 的 /internal/v2/ledger/debits。合并后直接函数调用。
+// InProcessPurchaser 直接连接订阅购买与统一计费域。
 type InProcessPurchaser struct {
 	deduction *billingsvc.DeductionService
 	clientID  string
@@ -22,7 +18,7 @@ func NewInProcessPurchaser(deduction *billingsvc.DeductionService, clientID stri
 	return &InProcessPurchaser{deduction: deduction, clientID: clientID}
 }
 
-func (p *InProcessPurchaser) DebitStrict(ctx context.Context, req urm.StrictDebitRequest) (*urm.StrictDebitResponse, error) {
+func (p *InProcessPurchaser) DebitStrict(ctx context.Context, req platform.StrictDebitRequest) (*platform.StrictDebitResponse, error) {
 	res, err := p.deduction.Consume(billingsvc.ConsumeParams{
 		IdempotencyKey:    req.IdempotencyKey,
 		ClientID:          p.clientID,
@@ -36,13 +32,13 @@ func (p *InProcessPurchaser) DebitStrict(ctx context.Context, req urm.StrictDebi
 	if err != nil {
 		return nil, mapDeductionError(err)
 	}
-	return &urm.StrictDebitResponse{
+	return &platform.StrictDebitResponse{
 		AuthorizationID:      res.EventID,
 		TenantDeductedMicro:  res.TenantDeducted,
 		UserDeductedMicro:    res.UserDeducted,
 		TenantDebtAddedMicro: res.TenantOverdraftAdd,
 		UserDebtAddedMicro:   res.UserOverdraftAdd,
-		AccountState:         urm.AccountState(res.AccountState),
+		AccountState:         platform.AccountState(res.AccountState),
 		AllowFurtherUsage:    res.AllowFurtherUsage,
 	}, nil
 }
@@ -53,7 +49,7 @@ func mapDeductionError(err error) error {
 	}
 	msg := err.Error()
 	if contains(msg, "insufficient") || contains(msg, "overdraft") {
-		return fmt.Errorf("%w: %s", urm.ErrInsufficientBalance, msg)
+		return fmt.Errorf("%w: %s", platform.ErrInsufficientBalance, msg)
 	}
 	return err
 }

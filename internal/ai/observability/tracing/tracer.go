@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
-const ServiceName = "uni-ai-api"
+const ServiceName = "dai"
 
 // Init sets up the global TracerProvider and returns a shutdown function.
 // If OTEL_EXPORTER_OTLP_ENDPOINT is empty, a no-op provider is installed.

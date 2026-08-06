@@ -1,0 +1,228 @@
+// Portal 租户自助业务 API。
+import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
+import type {
+  AccountBalance,
+  AccountTransactionItem,
+  ClientConsumptionItem,
+  CreateEndUserOutput,
+  CreateInviteCodeOutput,
+  EndUserItem,
+  InviteCodeItem,
+  Page,
+  RechargeOutput,
+  RechargeRecordItem,
+  ReverseRechargeOutput,
+  TenantAnalyticsOverview,
+  UserConsumptionItem
+} from "./types/platformTenant";
+
+function platform() {
+  return authenticatedRequest();
+}
+
+const baseUrl = apiBaseUrl;
+
+export const platformTenantApi = {
+  // ===== 账号自助 =====
+  // 修改密码（旧密码校验 + 新密码 ≥6 位）
+  changePassword(body: { oldPassword: string; newPassword: string }) {
+    return platform()<{ message: string }>({
+      method: "PUT",
+      path: "/api/oauth2/password",
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+
+  // ===== 统计 / 概览 =====
+  getAnalyticsOverview(params: { timeFrom?: number; timeTo?: number } = {}) {
+    return platform()<TenantAnalyticsOverview>({
+      method: "GET",
+      path: "/api/v1/tenants/analytics/overview",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+  getAppConsumption(params: { timeFrom?: number; timeTo?: number } = {}) {
+    return platform()<ClientConsumptionItem[]>({
+      method: "GET",
+      path: "/api/v1/tenants/analytics/app-consumption",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+  getUserConsumption(params: { timeFrom?: number; timeTo?: number; limit?: number } = {}) {
+    return platform()<UserConsumptionItem[]>({
+      method: "GET",
+      path: "/api/v1/tenants/analytics/user-consumption",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+
+  // ===== 统一账户 =====
+  getAccountBalance(detail = true) {
+    return platform()<AccountBalance>({
+      method: "GET",
+      path: "/api/v1/account/balance",
+      headers: apiHeaders,
+      query: { detail },
+      baseUrl
+    });
+  },
+  getTransactions(params: {
+    page?: number;
+    size?: number;
+    username?: string;
+    clientName?: string;
+    status?: string;
+    timeFrom?: number;
+    timeTo?: number;
+  }) {
+    return platform()<Page<AccountTransactionItem>>({
+      method: "GET",
+      path: "/api/v1/account/transactions",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+  getRechargeRecords(params: {
+    page?: number;
+    size?: number;
+    username?: string;
+    rechargeType?: string;
+    timeFrom?: number;
+    timeTo?: number;
+  }) {
+    return platform()<Page<RechargeRecordItem>>({
+      method: "GET",
+      path: "/api/v1/account/recharge-records",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+  // 用户充值记录：租户充用户（rechargeType=2）
+  getUserRechargeRecords(params: { page?: number; size?: number; username?: string; timeFrom?: number; timeTo?: number }) {
+    return platform()<Page<RechargeRecordItem>>({
+      method: "GET",
+      path: "/api/v1/account/recharge-records",
+      headers: apiHeaders,
+      query: { ...params, rechargeType: "2" },
+      baseUrl
+    });
+  },
+
+  // ===== 终端用户 =====
+  getUsers(params: { keyword?: string; page?: number; size?: number }) {
+    return platform()<Page<EndUserItem>>({
+      method: "GET",
+      path: "/api/v1/users",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+  createEndUser(body: { username: string; email?: string; phone?: string }) {
+    return platform()<CreateEndUserOutput>({
+      method: "POST",
+      path: "/api/v1/users",
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+  updateUserStatus(userId: string, status: "active" | "disabled") {
+    return platform()<{ message: string }>({
+      method: "PATCH",
+      path: `/api/v1/users/${encodeURIComponent(userId)}/status`,
+      headers: apiHeaders,
+      body: { status },
+      baseUrl
+    });
+  },
+  resetUserPassword(userId: string) {
+    return platform()<{ message: string }>({
+      method: "POST",
+      path: `/api/v1/users/${encodeURIComponent(userId)}/reset-password`,
+      headers: apiHeaders,
+      baseUrl
+    });
+  },
+  deleteEndUser(userId: string) {
+    return platform()<{ success: boolean }>({
+      method: "DELETE",
+      path: `/api/v1/users/${encodeURIComponent(userId)}`,
+      headers: apiHeaders,
+      baseUrl
+    });
+  },
+
+  // ===== 充值 / 撤销 =====
+  rechargeUser(body: {
+    userId: string;
+    paidAmount?: number;
+    creditAmount: number;
+    note?: string;
+    expireTime?: number | null;
+  }) {
+    return platform()<RechargeOutput>({
+      method: "POST",
+      path: "/api/v1/recharges",
+      headers: apiHeaders,
+      body: { packageType: 2, ...body },
+      baseUrl
+    });
+  },
+  reverseRecharge(orderId: string, body: { reason: string }) {
+    return platform()<ReverseRechargeOutput>({
+      method: "POST",
+      path: `/api/v1/recharges/${encodeURIComponent(orderId)}/reverse`,
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+
+  // ===== 邀请码 =====
+  getInviteCodes(params: { page?: number; size?: number }) {
+    return platform()<Page<InviteCodeItem>>({
+      method: "GET",
+      path: "/api/v1/invitations",
+      headers: apiHeaders,
+      query: params,
+      baseUrl
+    });
+  },
+  createInviteCode(body: { description?: string; max_uses?: number; expire_time?: number | null }) {
+    return platform()<CreateInviteCodeOutput>({
+      method: "POST",
+      path: "/api/v1/invitations",
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+  updateInviteCode(id: number, body: { status: number; description?: string }) {
+    return platform()<{ success: boolean }>({
+      method: "PUT",
+      path: `/api/v1/invitations/${encodeURIComponent(String(id))}`,
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+  deleteInviteCode(id: number) {
+    return platform()<{ success: boolean }>({
+      method: "DELETE",
+      path: `/api/v1/invitations/${encodeURIComponent(String(id))}`,
+      headers: apiHeaders,
+      baseUrl
+    });
+  }
+};

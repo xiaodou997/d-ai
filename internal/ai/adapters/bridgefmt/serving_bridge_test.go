@@ -48,30 +48,6 @@ func TestBuildUpstreamRequest(t *testing.T) {
 	}
 }
 
-func TestBuildUpstreamRequestUsesWebOutboundUserAgent(t *testing.T) {
-	runtime := NewRuntime()
-	httpReq := httptest.NewRequest("POST", "/runtime/v1/chat/sessions/s1/messages:stream", nil)
-	httpReq.Header.Set("User-Agent", "Mozilla/5.0")
-	httpReq.Header.Set("X-Client-Type", "customer-portal")
-	req := &serving.Request{
-		ClientPath: "/v1/chat/completions",
-		Candidate: &domain.RouteCandidate{
-			BaseURL:          "https://api.openai.com",
-			Protocol:         domain.ProtocolOpenAIChat,
-			APIKeyCiphertext: "sk-abc",
-		},
-		Envelope: &serving.RequestEnvelope{R: httpReq},
-	}
-
-	upReq, err := runtime.BuildUpstreamRequest(req, corebridge.PreparedRequest{Body: []byte(`{"model":"gpt-5"}`)})
-	if err != nil {
-		t.Fatalf("BuildUpstreamRequest err = %v", err)
-	}
-	if got := upReq.Headers["user-agent"]; got != webOutboundUserAgent {
-		t.Fatalf("user-agent = %q, want %q", got, webOutboundUserAgent)
-	}
-}
-
 func TestBuildUpstreamRequestForwardsAPIUserAgent(t *testing.T) {
 	runtime := NewRuntime()
 	httpReq := httptest.NewRequest("POST", "/v1/responses", nil)

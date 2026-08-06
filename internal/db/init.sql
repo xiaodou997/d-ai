@@ -6,7 +6,6 @@
 
 BEGIN;
 
--- URM domain
 -- Identity and tenant management
 CREATE TABLE iam_admins (
     id BIGSERIAL PRIMARY KEY,
@@ -108,37 +107,17 @@ CREATE TABLE auth_signing_keys (
     private_key TEXT NOT NULL,
     public_key TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'grace', 'retired')),
-    key_use TEXT NOT NULL DEFAULT 'shared' CHECK (key_use IN ('shared', 'user_access', 'user_refresh', 'service_access')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     grace_until TIMESTAMPTZ,
     retired_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_auth_signing_keys_status_use ON auth_signing_keys (status, key_use);
-
-CREATE TABLE auth_oauth_codes (
-    id BIGSERIAL PRIMARY KEY,
-    code TEXT NOT NULL UNIQUE,
-    client_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    username TEXT NOT NULL,
-    tenant_id TEXT,
-    user_type INTEGER NOT NULL CHECK (user_type IN (1, 2, 3, 4)),
-    client_type TEXT NOT NULL CHECK (client_type IN ('admin', 'tenant', 'customer')),
-    redirect_uri TEXT NOT NULL,
-    code_challenge TEXT NOT NULL DEFAULT '',
-    code_challenge_method TEXT NOT NULL DEFAULT '',
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_auth_oauth_codes_expires ON auth_oauth_codes (expires_at);
+CREATE INDEX idx_auth_signing_keys_status ON auth_signing_keys (status);
 
 CREATE TABLE auth_audit_logs (
     id BIGSERIAL PRIMARY KEY,
     event_type TEXT NOT NULL,
-    principal_type TEXT NOT NULL CHECK (principal_type IN ('user', 'service', 'admin')),
-    client_id TEXT,
+    principal_type TEXT NOT NULL CHECK (principal_type IN ('user', 'admin')),
     user_id TEXT,
     scopes TEXT[] NOT NULL DEFAULT '{}',
     jti TEXT,
@@ -150,74 +129,7 @@ CREATE TABLE auth_audit_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_auth_audit_logs_client_time ON auth_audit_logs (client_id, created_at DESC);
 CREATE INDEX idx_auth_audit_logs_event_time ON auth_audit_logs (event_type, created_at DESC);
-CREATE INDEX idx_auth_audit_logs_client_jti_time ON auth_audit_logs (client_id, jti, created_at DESC);
-
--- Service governance
-CREATE TABLE gov_clients (
-    id BIGSERIAL PRIMARY KEY,
-    client_id TEXT NOT NULL UNIQUE,
-    display_name TEXT NOT NULL,
-    description TEXT,
-    portal_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-    created_by TEXT,
-    last_seen_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_gov_clients_client_id ON gov_clients (client_id);
-CREATE INDEX idx_gov_clients_status ON gov_clients (status);
-CREATE INDEX idx_gov_clients_last_seen_at ON gov_clients (last_seen_at DESC);
-
-CREATE TABLE gov_service_sources (
-    id BIGSERIAL PRIMARY KEY,
-    service_id TEXT NOT NULL,
-    source_cidr CIDR NOT NULL,
-    description TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (service_id, source_cidr)
-);
-
-CREATE INDEX idx_gov_service_sources_cidr ON gov_service_sources USING gist (source_cidr inet_ops);
-
-CREATE TABLE gov_service_instances (
-    service_id TEXT NOT NULL,
-    instance_id TEXT NOT NULL,
-    observed_ip INET NOT NULL,
-    source_cidr CIDR NOT NULL,
-    service_name TEXT,
-    version TEXT,
-    environment TEXT,
-    first_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (service_id, instance_id)
-);
-
-CREATE INDEX idx_gov_service_instances_last_seen ON gov_service_instances (last_seen DESC);
-
--- Service access
--- URM controls entry into portal business services. Business-domain
--- permissions remain owned by each service.
-CREATE TABLE gov_subject_service_access (
-    subject_type TEXT NOT NULL CHECK (subject_type IN ('admin', 'tenant')),
-    subject_id TEXT NOT NULL,
-    access_mode TEXT NOT NULL CHECK (access_mode IN ('all', 'selected')),
-    service_ids TEXT[] NOT NULL DEFAULT '{}',
-    version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0),
-    created_by TEXT NOT NULL,
-    updated_by TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (subject_type, subject_id),
-    CHECK (access_mode <> 'all' OR cardinality(service_ids) = 0)
-);
-
-CREATE INDEX idx_gov_subject_service_access_updated_at
-    ON gov_subject_service_access (updated_at);
 
 -- Billing and payment
 -- Ledger amounts use microcredits (1 credit = 10,000 microcredits). Legacy
@@ -652,7 +564,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   -- D-AI AI domain canonical schema
   -- ----------------------------------------------------------------------------
   -- 说明：
-  -- 1. 本段与上面的 URM 域共同组成 D-AI 新数据库的完整基线。
+  -- 1. 本段与上面的身份计费域共同组成 D-AI 新数据库的完整基线。
   -- 2. 项目不保留旧服务的历史迁移链，结构变化直接维护本文件。
   -- 3. 数据库只负责稳定的结构、数值和状态机不变量；易变的业务枚举由服务层校验。
   -- 4. 租户授权关联使用组合外键固定归属；多态路由等无法稳定表达的引用由业务模块事务负责。
@@ -1214,10 +1126,10 @@ CREATE INDEX idx_ledger_credit_leases_account
     api_key_quota_cost     BIGINT      NOT NULL DEFAULT 0,
     service_tier           TEXT        NOT NULL DEFAULT 'standard',
     billing_breakdown      JSONB       NOT NULL DEFAULT '{}'::jsonb,
-    urm_transaction_id     TEXT,
+    billing_event_id     TEXT,
     billing_window_id      TEXT,
     settlement_batch_id    UUID,
-    -- Phase 2 起：分账层聚合扣款后回填这两列，关联到 URM bill_events.event_id
+    -- 分账层聚合扣款后回填这两列，关联到 bill_events.event_id。
     settled_event_id       TEXT,
     settled_at             TIMESTAMPTZ,
     billing_status         TEXT        NOT NULL,
@@ -1278,7 +1190,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_source_time       ON ai_usage_logs (request_source, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_app_time          ON ai_usage_logs (app_id, created_at DESC) WHERE app_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_subscription      ON ai_usage_logs (subscription_id, created_at DESC) WHERE subscription_id IS NOT NULL;
-  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_urm_transaction   ON ai_usage_logs (urm_transaction_id);
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_billing_event   ON ai_usage_logs (billing_event_id);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_route             ON ai_usage_logs (group_target_id);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_error_time ON ai_usage_logs (tenant_id, created_at DESC)
     WHERE request_status = 'failed';
@@ -1544,7 +1456,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     -- 仅管理员详情接口可查：未脱敏/未截断的真实底层错误（Go 错误链 + 上游原始报文全文）
     internal_error_detail TEXT,
     failed_step        VARCHAR(64),
-    urm_transaction_id TEXT,
+    billing_event_id TEXT,
     -- 计费是纯后扣：提交时的准入闸门只拒绝，不预扣，因此没有 estimated_cost。
     caller_charge        BIGINT      NOT NULL DEFAULT 0,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1897,7 +1809,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   );
 
   -- ============================================================================
-  -- Billing Ledger V3
+  -- Billing ledger
   -- Credit lease、请求准入和结算投递分别建模。Redis 仅可作为唤醒/缓存，
   -- 不参与任何资金状态机判断。
   -- ============================================================================
@@ -1985,7 +1897,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     actual_tenant_micro       BIGINT      NOT NULL CHECK (actual_tenant_micro >= 0),
     actual_user_micro         BIGINT      NOT NULL CHECK (actual_user_micro >= 0),
     status                    TEXT        NOT NULL CHECK (status IN ('pending', 'delivered', 'reconciling')),
-    urm_event_id              TEXT,
+    billing_event_id              TEXT,
     tenant_deducted_micro     BIGINT      NOT NULL DEFAULT 0 CHECK (tenant_deducted_micro >= 0),
     user_deducted_micro       BIGINT      NOT NULL DEFAULT 0 CHECK (user_deducted_micro >= 0),
     tenant_debt_added_micro   BIGINT      NOT NULL DEFAULT 0 CHECK (tenant_debt_added_micro >= 0),
@@ -2112,10 +2024,10 @@ CREATE INDEX idx_ledger_credit_leases_account
     PRIMARY KEY (plan_id, version)
   );
 
-  -- 购买订单表（跨服务一致性锚点）：created → deducting → paid | failed
+  -- 购买订单表（一致性锚点）：created → deducting → paid | failed
   CREATE TABLE IF NOT EXISTS ai_sub_orders (
     id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    order_no           TEXT        NOT NULL UNIQUE,      -- 'SUB' + 无横线短 uuid，urm 幂等键 = 'ai-sub-' || order_no
+    order_no           TEXT        NOT NULL UNIQUE,      -- 'SUB' + 无横线短 uuid，计费幂等键 = 'ai-sub-' || order_no
     tenant_id          TEXT        NOT NULL,
     user_id            TEXT        NOT NULL,
     plan_id            UUID        NOT NULL,
@@ -2132,7 +2044,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     inventory_reserved BOOLEAN     NOT NULL DEFAULT false,
     status             TEXT        NOT NULL DEFAULT 'created'
                            CHECK (status IN ('created', 'deducting', 'paid', 'failed')),
-    urm_event_id       TEXT,                             -- 扣款成功后回填 bill_events.event_id
+    billing_event_id       TEXT,                             -- 扣款成功后回填 bill_events.event_id
     subscription_id    UUID,                             -- paid 后回填
     fail_reason        TEXT,
     paid_at            TIMESTAMPTZ,
@@ -2251,6 +2163,6 @@ CREATE TABLE dai_schema_metadata (
     initialized_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 1);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 5);
 
 COMMIT;

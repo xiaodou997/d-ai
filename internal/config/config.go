@@ -12,25 +12,24 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config 统一应用配置（合并原 URM + AI 服务配置）
+// Config 是 D-AI 单进程应用配置。
 type Config struct {
-	App        AppConfig        `mapstructure:"app"`
-	Server     ServerConfig     `mapstructure:"server"`
-	Database   DatabaseConfig   `mapstructure:"database"`
-	Redis      RedisConfig      `mapstructure:"redis"`
-	JWT        JWTConfig        `mapstructure:"jwt"`
-	Security   SecurityConfig   `mapstructure:"security"`
-	SSO        SSOConfig        `mapstructure:"sso"`
-	Legal      LegalConfig      `mapstructure:"legal"`
-	Log        LogConfig        `mapstructure:"log"`
-	Scheduler  SchedulerConfig  `mapstructure:"scheduler"`
-	Delegation DelegationConfig `mapstructure:"delegation"`
-	Billing    BillingConfig    `mapstructure:"billing"`
-	Pricing    PricingConfig    `mapstructure:"pricing"`
-	Image      ImageConfig      `mapstructure:"image_assets"`
-	AsyncTasks AsyncTaskConfig  `mapstructure:"async_tasks"`
-	Files      FileStoreConfig  `mapstructure:"file_store"`
-	Audit      AuditConfig      `mapstructure:"audit"`
+	App        AppConfig       `mapstructure:"app"`
+	Server     ServerConfig    `mapstructure:"server"`
+	Database   DatabaseConfig  `mapstructure:"database"`
+	Redis      RedisConfig     `mapstructure:"redis"`
+	JWT        JWTConfig       `mapstructure:"jwt"`
+	Security   SecurityConfig  `mapstructure:"security"`
+	Portal     PortalConfig    `mapstructure:"portal"`
+	Legal      LegalConfig     `mapstructure:"legal"`
+	Log        LogConfig       `mapstructure:"log"`
+	Scheduler  SchedulerConfig `mapstructure:"scheduler"`
+	Billing    BillingConfig   `mapstructure:"billing"`
+	Pricing    PricingConfig   `mapstructure:"pricing"`
+	Image      ImageConfig     `mapstructure:"image_assets"`
+	AsyncTasks AsyncTaskConfig `mapstructure:"async_tasks"`
+	Files      FileStoreConfig `mapstructure:"file_store"`
+	Audit      AuditConfig     `mapstructure:"audit"`
 }
 
 // ─── 通用配置 ──────────────────────────────────────────
@@ -40,24 +39,24 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	Addr            string `mapstructure:"addr"`              // e.g. ":13000"
-	Port            int    `mapstructure:"port"`              // URM 风格端口
-	ReadTimeout     int    `mapstructure:"read_timeout"`      // 秒
-	WriteTimeout    int    `mapstructure:"write_timeout"`     // 秒
-	IdleTimeout     int    `mapstructure:"idle_timeout"`      // 秒
+	Addr              string   `mapstructure:"addr"` // e.g. ":13000"
+	Port              int      `mapstructure:"port"`
+	ReadTimeout       int      `mapstructure:"read_timeout"`  // 秒
+	WriteTimeout      int      `mapstructure:"write_timeout"` // 秒
+	IdleTimeout       int      `mapstructure:"idle_timeout"`  // 秒
 	TrustedProxyCIDRs []string `mapstructure:"trusted_proxy_cidrs"`
 	InternalCIDRs     []string `mapstructure:"internal_cidrs"`
 }
 
 type DatabaseConfig struct {
-	URL              string        `mapstructure:"url"`               // URM 风格
-	DSN              string        `mapstructure:"dsn"`                // AI 风格
-	MaxOpenConns     int           `mapstructure:"max_open_conns"`
-	MaxIdleConns     int           `mapstructure:"max_idle_conns"`
-	ConnMaxLifetime  int           `mapstructure:"conn_max_lifetime"`  // 分钟
-	MaxConns         int32         `mapstructure:"max_conns"`         // AI 风格
-	MinConns         int32         `mapstructure:"min_conns"`
-	MaxConnLifetime  time.Duration `mapstructure:"max_conn_lifetime"`  // AI 风格
+	URL             string        `mapstructure:"url"`
+	DSN             string        `mapstructure:"dsn"`
+	MaxOpenConns    int           `mapstructure:"max_open_conns"`
+	MaxIdleConns    int           `mapstructure:"max_idle_conns"`
+	ConnMaxLifetime int           `mapstructure:"conn_max_lifetime"` // 分钟
+	MaxConns        int32         `mapstructure:"max_conns"`
+	MinConns        int32         `mapstructure:"min_conns"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
 }
 
 type RedisConfig struct {
@@ -73,20 +72,12 @@ type JWTConfig struct {
 }
 
 type SecurityConfig struct {
-	SecretMasterKey     string `mapstructure:"secret_master_key"`      // URM: 微信支付等敏感配置加密
-	ProviderKeyMaster   string `mapstructure:"provider_key_master"`    // AI: provider API key 加密
+	SecretMasterKey   string `mapstructure:"secret_master_key"`   // 微信支付等敏感配置加密
+	ProviderKeyMaster string `mapstructure:"provider_key_master"` // provider API key 加密
 }
 
-// ─── URM 原有配置 ──────────────────────────────────────
-
-type SSOConfig struct {
-	IssuerURL            string        `mapstructure:"issuer_url"`
-	AllowedRedirectURIs  []string      `mapstructure:"allowed_redirect_uris"`
-	CookieDomain         string        `mapstructure:"cookie_domain"`
-	CookieSecure         bool          `mapstructure:"cookie_secure"`
-	SessionTTL           time.Duration `mapstructure:"session_ttl"`
-	SessionMaxTTL        time.Duration `mapstructure:"session_max_ttl"`
-	CustomerPortalBaseURL string       `mapstructure:"customer_portal_base_url"`
+type PortalConfig struct {
+	BaseURL string `mapstructure:"base_url"`
 }
 
 type LegalConfig struct {
@@ -97,13 +88,6 @@ type LegalConfig struct {
 
 type SchedulerConfig struct {
 	PreAuthTimeoutMinutes int `mapstructure:"pre_auth_timeout_minutes"`
-}
-
-type DelegationConfig struct {
-	AllowedClients []string      `mapstructure:"allowed_clients"`
-	Audience       []string      `mapstructure:"audience"`
-	Scope          string        `mapstructure:"scope"`
-	TTL            time.Duration `mapstructure:"ttl"`
 }
 
 // ─── AI 原有配置 ───────────────────────────────────────
@@ -207,14 +191,8 @@ func Load() (*Config, error) {
 	v.SetDefault("security.secret_master_key", "")
 	v.SetDefault("security.provider_key_master", "")
 
-	// 默认值 —— SSO
-	v.SetDefault("sso.issuer_url", "")
-	v.SetDefault("sso.allowed_redirect_uris", []string{})
-	v.SetDefault("sso.cookie_domain", "")
-	v.SetDefault("sso.cookie_secure", false)
-	v.SetDefault("sso.session_ttl", "168h")
-	v.SetDefault("sso.session_max_ttl", "720h")
-	v.SetDefault("sso.customer_portal_base_url", "")
+	// 默认值 —— Portal
+	v.SetDefault("portal.base_url", "")
 
 	// 默认值 —— Legal
 	v.SetDefault("legal.base_url", "http://localhost:13000/legal")
@@ -231,12 +209,6 @@ func Load() (*Config, error) {
 
 	// 默认值 —— Scheduler
 	v.SetDefault("scheduler.pre_auth_timeout_minutes", 30)
-
-	// 默认值 —— Delegation
-	v.SetDefault("delegation.allowed_clients", []string{})
-	v.SetDefault("delegation.audience", []string{})
-	v.SetDefault("delegation.scope", "ai.invoke")
-	v.SetDefault("delegation.ttl", "3m")
 
 	// 默认值 —— Billing
 	v.SetDefault("billing.requested_tenant_micro", 300_000)
@@ -308,38 +280,32 @@ func Load() (*Config, error) {
 func bindEnvs(v *viper.Viper) {
 	envBindings := map[string]string{
 		// 通用
-		"DAI_APP_ENV":             "app.env",
-		"DAI_SERVER_ADDR":          "server.addr",
-		"DAI_SERVER_PORT":         "server.port",
-		"DAI_DATABASE_URL":        "database.url",
-		"DAI_DATABASE_DSN":        "database.dsn",
-		"DAI_DB_MAX_CONNS":        "database.max_conns",
-		"DAI_DB_MIN_CONNS":        "database.min_conns",
-		"DAI_DB_MAX_CONN_LIFETIME": "database.max_conn_lifetime",
-		"DAI_REDIS_ADDR":          "redis.addr",
-		"DAI_REDIS_PASSWORD":      "redis.password",
-		"DAI_REDIS_DB":            "redis.db",
-		"DAI_JWT_EXPIRATION":      "jwt.expiration",
+		"DAI_APP_ENV":                "app.env",
+		"DAI_SERVER_ADDR":            "server.addr",
+		"DAI_SERVER_PORT":            "server.port",
+		"DAI_DATABASE_URL":           "database.url",
+		"DAI_DATABASE_DSN":           "database.dsn",
+		"DAI_DB_MAX_CONNS":           "database.max_conns",
+		"DAI_DB_MIN_CONNS":           "database.min_conns",
+		"DAI_DB_MAX_CONN_LIFETIME":   "database.max_conn_lifetime",
+		"DAI_REDIS_ADDR":             "redis.addr",
+		"DAI_REDIS_PASSWORD":         "redis.password",
+		"DAI_REDIS_DB":               "redis.db",
+		"DAI_JWT_EXPIRATION":         "jwt.expiration",
 		"DAI_JWT_REFRESH_EXPIRATION": "jwt.refresh_expiration",
 		// Security
-		"DAI_SECURITY_SECRET_MASTER_KEY":  "security.secret_master_key",
-		"DAI_PROVIDER_KEY_MASTER":         "security.provider_key_master",
-		// SSO
-		"DAI_SSO_ISSUER_URL":            "sso.issuer_url",
-		"DAI_SSO_COOKIE_DOMAIN":         "sso.cookie_domain",
-		"DAI_SSO_COOKIE_SECURE":         "sso.cookie_secure",
-		"DAI_SSO_SESSION_TTL":           "sso.session_ttl",
-		"DAI_SSO_SESSION_MAX_TTL":       "sso.session_max_ttl",
-		"DAI_SSO_CUSTOMER_PORTAL_BASE_URL": "sso.customer_portal_base_url",
-		"DAI_SSO_ALLOWED_REDIRECT_URIS": "sso.allowed_redirect_uris",
+		"DAI_SECURITY_SECRET_MASTER_KEY": "security.secret_master_key",
+		"DAI_PROVIDER_KEY_MASTER":        "security.provider_key_master",
+		// Portal
+		"DAI_PORTAL_BASE_URL": "portal.base_url",
 		// Legal
-		"DAI_LEGAL_BASE_URL":         "legal.base_url",
-		"DAI_LEGAL_TERMS_VERSION":    "legal.terms_version",
+		"DAI_LEGAL_BASE_URL":        "legal.base_url",
+		"DAI_LEGAL_TERMS_VERSION":   "legal.terms_version",
 		"DAI_LEGAL_PRIVACY_VERSION": "legal.privacy_version",
 		// Log
-		"DAI_LOG_LEVEL":   "log.level",
-		"DAI_LOG_FILE":    "log.file",
-		"DAI_LOG_REDACT":  "log.redact",
+		"DAI_LOG_LEVEL":  "log.level",
+		"DAI_LOG_FILE":   "log.file",
+		"DAI_LOG_REDACT": "log.redact",
 		// Scheduler
 		"DAI_SCHEDULER_PRE_AUTH_TIMEOUT": "scheduler.pre_auth_timeout_minutes",
 		// Billing
@@ -354,27 +320,27 @@ func bindEnvs(v *viper.Viper) {
 		"DAI_BILLING_DISPATCH_LEASE":         "billing.dispatch_lease",
 		"DAI_BILLING_PICK_LIMIT":             "billing.pick_limit",
 		// AI
-		"DAI_PRICING_LITELLM_URL":            "pricing.litellm_url",
-		"DAI_AUDIT_STORE_IMAGE_BLOBS":        "audit.store_image_blobs",
-		"DAI_IMAGE_ASSET_STORAGE_DIR":        "image_assets.storage_dir",
-		"DAI_IMAGE_ASSET_RETENTION":          "image_assets.retention",
-		"DAI_IMAGE_ASSET_BASE_PATH":           "image_assets.public_base_path",
-		"DAI_ASYNC_TASK_WORKERS":             "async_tasks.workers",
-		"DAI_ASYNC_TASK_POLL_INTERVAL":       "async_tasks.poll_interval",
-		"DAI_ASYNC_TASK_LEASE_TTL":           "async_tasks.lease_ttl",
-		"DAI_ASYNC_TASK_MAX_IN_FLIGHT":       "async_tasks.max_in_flight_per_tenant",
-		"DAI_ASYNC_TASK_RETENTION":           "async_tasks.retention",
-		"DAI_ASYNC_TASK_REAP_INTERVAL":       "async_tasks.reap_interval",
-		"DAI_ASYNC_TASK_REAP_BATCH":          "async_tasks.reap_batch",
-		"DAI_ASYNC_TASK_MAX_UPLOAD_BYTES":    "async_tasks.max_upload_body_size",
-		"DAI_ASYNC_TASK_WEBHOOK_WORKERS":     "async_tasks.webhook_workers",
-		"DAI_ASYNC_TASK_WEBHOOK_POLL":        "async_tasks.webhook_poll_interval",
-		"DAI_ASYNC_TASK_WEBHOOK_LEASE_TTL":   "async_tasks.webhook_lease_ttl",
-		"DAI_FILE_STORAGE_DIR":               "file_store.storage_dir",
-		"DAI_FILE_ASSET_TTL":                 "file_store.asset_ttl",
-		"DAI_FILE_URL_TTL":                   "file_store.url_ttl",
-		"DAI_PUBLIC_BASE_URL":                "file_store.public_base_url",
-		"DAI_FILE_MAX_BYTES":                 "file_store.max_bytes",
+		"DAI_PRICING_LITELLM_URL":          "pricing.litellm_url",
+		"DAI_AUDIT_STORE_IMAGE_BLOBS":      "audit.store_image_blobs",
+		"DAI_IMAGE_ASSET_STORAGE_DIR":      "image_assets.storage_dir",
+		"DAI_IMAGE_ASSET_RETENTION":        "image_assets.retention",
+		"DAI_IMAGE_ASSET_BASE_PATH":        "image_assets.public_base_path",
+		"DAI_ASYNC_TASK_WORKERS":           "async_tasks.workers",
+		"DAI_ASYNC_TASK_POLL_INTERVAL":     "async_tasks.poll_interval",
+		"DAI_ASYNC_TASK_LEASE_TTL":         "async_tasks.lease_ttl",
+		"DAI_ASYNC_TASK_MAX_IN_FLIGHT":     "async_tasks.max_in_flight_per_tenant",
+		"DAI_ASYNC_TASK_RETENTION":         "async_tasks.retention",
+		"DAI_ASYNC_TASK_REAP_INTERVAL":     "async_tasks.reap_interval",
+		"DAI_ASYNC_TASK_REAP_BATCH":        "async_tasks.reap_batch",
+		"DAI_ASYNC_TASK_MAX_UPLOAD_BYTES":  "async_tasks.max_upload_body_size",
+		"DAI_ASYNC_TASK_WEBHOOK_WORKERS":   "async_tasks.webhook_workers",
+		"DAI_ASYNC_TASK_WEBHOOK_POLL":      "async_tasks.webhook_poll_interval",
+		"DAI_ASYNC_TASK_WEBHOOK_LEASE_TTL": "async_tasks.webhook_lease_ttl",
+		"DAI_FILE_STORAGE_DIR":             "file_store.storage_dir",
+		"DAI_FILE_ASSET_TTL":               "file_store.asset_ttl",
+		"DAI_FILE_URL_TTL":                 "file_store.url_ttl",
+		"DAI_PUBLIC_BASE_URL":              "file_store.public_base_url",
+		"DAI_FILE_MAX_BYTES":               "file_store.max_bytes",
 	}
 	for env, key := range envBindings {
 		_ = v.BindEnv(key, env)
@@ -419,26 +385,14 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DAI_LOG_LEVEL"); v != "" {
 		cfg.Log.Level = v
 	}
-	if v := os.Getenv("DAI_SSO_ISSUER_URL"); v != "" {
-		cfg.SSO.IssuerURL = v
-	}
-	if v := os.Getenv("DAI_SSO_CUSTOMER_PORTAL_BASE_URL"); v != "" {
-		cfg.SSO.CustomerPortalBaseURL = v
-	}
-	if v := os.Getenv("DAI_SSO_ALLOWED_REDIRECT_URIS"); v != "" {
-		cfg.SSO.AllowedRedirectURIs = normalizeStringList(nil, v)
+	if v := os.Getenv("DAI_PORTAL_BASE_URL"); v != "" {
+		cfg.Portal.BaseURL = v
 	}
 	if v := os.Getenv("DAI_SERVER_TRUSTED_PROXY_CIDRS"); v != "" {
 		cfg.Server.TrustedProxyCIDRs = normalizeStringList(nil, v)
 	}
 	if v := os.Getenv("DAI_SERVER_INTERNAL_CIDRS"); v != "" {
 		cfg.Server.InternalCIDRs = normalizeStringList(nil, v)
-	}
-	if v := os.Getenv("DAI_DELEGATION_ALLOWED_CLIENTS"); v != "" {
-		cfg.Delegation.AllowedClients = normalizeStringList(nil, v)
-	}
-	if v := os.Getenv("DAI_DELEGATION_AUDIENCE"); v != "" {
-		cfg.Delegation.Audience = normalizeStringList(nil, v)
 	}
 }
 
@@ -461,16 +415,16 @@ func validate(cfg *Config) error {
 
 	// Security: 两个主密钥都可选（但生产建议都配）
 
-	// SSO 校验
-	if strings.TrimSpace(cfg.SSO.CustomerPortalBaseURL) != "" {
-		parsed, err := url.Parse(cfg.SSO.CustomerPortalBaseURL)
+	// Portal 校验
+	if strings.TrimSpace(cfg.Portal.BaseURL) != "" {
+		parsed, err := url.Parse(cfg.Portal.BaseURL)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return fmt.Errorf("sso.customer_portal_base_url must be an absolute URL")
+			return fmt.Errorf("portal.base_url must be an absolute URL")
 		}
 		if parsed.Scheme != "http" && parsed.Scheme != "https" {
-			return fmt.Errorf("sso.customer_portal_base_url must use http or https")
+			return fmt.Errorf("portal.base_url must use http or https")
 		}
-		cfg.SSO.CustomerPortalBaseURL = strings.TrimRight(cfg.SSO.CustomerPortalBaseURL, "/")
+		cfg.Portal.BaseURL = strings.TrimRight(cfg.Portal.BaseURL, "/")
 	}
 
 	// Legal 校验

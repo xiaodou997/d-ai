@@ -242,7 +242,6 @@ func (r *AccountRepository) ListTransactions(p ListTransactionsParams) ([]EventR
 		FROM bill_events dt
 		LEFT JOIN iam_tenants t ON t.tenant_id = dt.tenant_id
 		LEFT JOIN iam_users eu ON eu.user_id = dt.user_id
-		LEFT JOIN gov_clients bs ON bs.client_id = dt.client_id
 		WHERE dt.event_type = 'charge'`
 
 	var args []any
@@ -269,7 +268,7 @@ func (r *AccountRepository) ListTransactions(p ListTransactionsParams) ([]EventR
 		argIdx++
 	}
 	if p.ClientName != "" {
-		base += fmt.Sprintf(" AND bs.display_name LIKE $%d", argIdx)
+		base += fmt.Sprintf(" AND dt.client_id ILIKE $%d", argIdx)
 		args = append(args, "%"+p.ClientName+"%")
 		argIdx++
 	}
@@ -300,7 +299,7 @@ func (r *AccountRepository) ListTransactions(p ListTransactionsParams) ([]EventR
 		        dt.status, COALESCE(dt.terminal_note,''), COALESCE(dt.metadata::text,'{}'),
 		        dt.created_at, dt.finished_at,
 		        COALESCE(eu.username,''), COALESCE(t.tenant_name,''), COALESCE(dt.client_id,''),
-		        COALESCE(bs.display_name,'') `+
+		        COALESCE(NULLIF(dt.client_id,''),'D-AI') `+
 			base+` ORDER BY dt.created_at DESC LIMIT $%d OFFSET $%d`,
 		argIdx, argIdx+1,
 	)

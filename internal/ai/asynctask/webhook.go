@@ -123,7 +123,7 @@ func (s *httpWebhookSender) Send(ctx context.Context, delivery WebhookRequest) (
 		return 0, fmt.Errorf("build webhook request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "UniHub-Webhook/1.0")
+	req.Header.Set("User-Agent", "D-AI-Webhook/1.0")
 
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"xiaodou/dai/libs/go/httpx"
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 type userInfoOutput struct {
@@ -20,10 +20,8 @@ type userInfoOutput struct {
 		Sub        string `json:"sub"`
 		Username   string `json:"username"`
 		UserType   int    `json:"userType"`
-		ClientType string `json:"clientType"`
 		TenantID   string `json:"tenantId"`
 		TenantName string `json:"tenantName"`
-		ClientID   string `json:"clientId"`
 	}
 }
 
@@ -41,7 +39,7 @@ type messageOutput struct {
 }
 
 // registerOAuth2Protected 注册 /api/oauth2 下需用户 JWT 的端点（userinfo/revoke/
-// password）。SSO 浏览器流程（authorize/exchange/logout）与 token 端点见后续。
+// password）。登录与刷新统一通过 token 端点完成。
 func registerOAuth2Protected(api huma.API, d Deps, mw huma.Middlewares) {
 	// OIDC UserInfo
 	huma.Register(api, huma.Operation{
@@ -66,10 +64,8 @@ func registerOAuth2Protected(api huma.API, d Deps, mw huma.Middlewares) {
 		out.Body.Sub = snapshot.userID
 		out.Body.Username = snapshot.username
 		out.Body.UserType = snapshot.userType
-		out.Body.ClientType = claims.ClientType
 		out.Body.TenantID = snapshot.tenantID
 		out.Body.TenantName = snapshot.tenantName
-		out.Body.ClientID = claims.ClientID
 		return out, nil
 	})
 
@@ -161,24 +157,14 @@ func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (
 	}
 
 	repo := authpg.NewAuthRepository(d.Pool)
-	if claims.ClientID == "" || claims.ClientID == urmClientID {
-		if snapshot.userType == 3 || snapshot.userType == 4 {
-			active, err := repo.CheckTenantActive(ctx, snapshot.tenantID)
-			if err != nil {
-				return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
-			}
-			if !active {
-				return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("租户已被停用或暂停，请重新登录")
-			}
+	if snapshot.userType == 3 || snapshot.userType == 4 {
+		active, err := repo.CheckTenantActive(ctx, snapshot.tenantID)
+		if err != nil {
+			return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
 		}
-		return snapshot, nil
-	}
-
-	if d.ServiceAccess == nil {
-		return currentUserSnapshot{}, httpx.New("service_access_unavailable", http.StatusServiceUnavailable, "Service Access Unavailable")
-	}
-	if err := d.ServiceAccess.Check(ctx, snapshot.userType, snapshot.userID, snapshot.tenantID, claims.ClientID); err != nil {
-		return currentUserSnapshot{}, serviceAccessHTTPError(err)
+		if !active {
+			return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("租户已被停用或暂停，请重新登录")
+		}
 	}
 	return snapshot, nil
 }

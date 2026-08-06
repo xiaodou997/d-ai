@@ -346,7 +346,7 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Method:      http.MethodPost,
 		Path:        "/api/v1/risk-control/events/{eventID}/resolve",
 		Summary:     "处置风险事件",
-		Description: "仅更新事件状态；如需封禁用户/租户请在 URM 管理端单独操作。",
+		Description: "仅更新事件状态；如需封禁用户或租户，请在用户管理中单独操作。",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, in *resolveRiskEventInput) (*riskEventOutput, error) {
 		if d.RiskControlEventSvc == nil {

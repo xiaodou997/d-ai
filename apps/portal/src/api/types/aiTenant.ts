@@ -684,7 +684,7 @@ export interface TenantSubOrder {
   plan_name: string;
   price_credits: number;
   status: string;
-  urm_event_id?: string;
+  billing_event_id?: string;
   subscription_id?: string;
   fail_reason?: string;
   purchase_policy_version: number;

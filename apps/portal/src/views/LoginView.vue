@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRoute } from "vue-router";
+import { Eye, EyeOff } from "lucide-vue-next";
+import { useRoute, useRouter } from "vue-router";
 
-import {
-  beginSSOAuthorize,
-  currentRedirectUri,
-  rememberPortalClientType,
-  type PortalClientType
-} from "@/platform";
-import { portalEnv } from "@/env";
+import { useAuthStore } from "@/stores/auth";
 
 const route = useRoute();
-const pending = ref<PortalClientType | null>(null);
+const router = useRouter();
+const authStore = useAuthStore();
+const username = ref("");
+const password = ref("");
+const showPassword = ref(false);
+const pending = ref(false);
 const errorMessage = ref("");
 
 const redirectPath = computed(() => {
@@ -19,33 +19,16 @@ const redirectPath = computed(() => {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/overview";
 });
 
-const loginOptions: Array<{ type: PortalClientType; title: string; description: string }> = [
-  { type: "admin", title: "管理端", description: "平台管理员和系统管理员" },
-  { type: "tenant", title: "租户端", description: "租户运营、成员和额度管理" },
-  { type: "customer", title: "用户端", description: "AI 工作台、账户和个人服务" }
-];
-
-async function startLogin(clientType: PortalClientType) {
-  pending.value = clientType;
+async function startLogin() {
+  pending.value = true;
   errorMessage.value = "";
-  rememberPortalClientType(clientType);
-  portalEnv.clientTypeHeader = clientType;
   try {
-    const authorizeUrl = await beginSSOAuthorize(
-      portalEnv,
-      currentRedirectUri(redirectPath.value),
-      "",
-      "urm"
-    );
-    if (!authorizeUrl) {
-      errorMessage.value = "SSO 尚未配置，请检查 Portal 的 VITE_SSO_AUTHORIZE_URL。";
-      return;
-    }
-    window.location.assign(authorizeUrl);
+    await authStore.login(username.value, password.value);
+    await router.replace(redirectPath.value);
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "无法发起登录";
+    errorMessage.value = error instanceof Error ? error.message : "登录失败，请重试";
   } finally {
-    pending.value = null;
+    pending.value = false;
   }
 }
 </script>
@@ -55,25 +38,51 @@ async function startLogin(clientType: PortalClientType) {
     <section class="login-card" aria-labelledby="login-title">
       <div class="login-brand">D-AI</div>
       <p class="login-kicker">统一 AI 服务平台</p>
-      <h1 id="login-title">选择登录入口</h1>
-      <p class="login-description">同一个 Portal 根据登录身份展示对应的工作区、菜单和主题。</p>
+      <h1 id="login-title">登录</h1>
+      <p class="login-description">使用账号登录，系统会根据你的身份和权限展示对应的工作区。</p>
 
-      <div class="login-options">
-        <button
-          v-for="option in loginOptions"
-          :key="option.type"
-          type="button"
-          class="login-option"
-          :disabled="pending !== null"
-          @click="startLogin(option.type)"
-        >
-          <span class="login-option__copy">
-            <strong>{{ option.title }}</strong>
-            <span>{{ option.description }}</span>
+      <form class="login-form" @submit.prevent="startLogin">
+        <label class="login-field">
+          <span>用户名</span>
+          <input
+            v-model.trim="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            placeholder="请输入用户名"
+            required
+            autofocus
+          />
+        </label>
+
+        <label class="login-field">
+          <span>密码</span>
+          <span class="login-password">
+            <input
+              v-model="password"
+              name="password"
+              :type="showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              placeholder="请输入密码"
+              required
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+              :title="showPassword ? '隐藏密码' : '显示密码'"
+              @click="showPassword = !showPassword"
+            >
+              <EyeOff v-if="showPassword" :size="18" />
+              <Eye v-else :size="18" />
+            </button>
           </span>
-          <span class="login-option__action">{{ pending === option.type ? "跳转中…" : "登录" }}</span>
+        </label>
+
+        <button type="submit" class="login-button" :disabled="pending">
+          {{ pending ? "登录中…" : "登录" }}
         </button>
-      </div>
+      </form>
 
       <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
     </section>
@@ -101,7 +110,7 @@ async function startLogin(clientType: PortalClientType) {
 .login-brand {
   color: var(--ds-accent);
   font: 700 28px/1 var(--ds-font-display);
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .login-kicker {
@@ -109,7 +118,7 @@ async function startLogin(clientType: PortalClientType) {
   color: var(--ds-accent);
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -125,55 +134,92 @@ h1 {
   line-height: 1.6;
 }
 
-.login-options {
+.login-form {
   display: grid;
-  gap: 12px;
+  gap: 18px;
 }
 
-.login-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+.login-field {
+  display: grid;
+  gap: 8px;
+  color: var(--ds-ink);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.login-field input {
   width: 100%;
-  padding: 16px;
+  min-height: 46px;
+  padding: 10px 12px;
   border: 1px solid var(--ds-line);
-  border-radius: var(--ds-radius-panel);
+  border-radius: var(--ds-radius-control);
+  outline: none;
   background: var(--ds-panel);
   color: var(--ds-ink);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 160ms ease, background 160ms ease;
+  font: inherit;
+  font-weight: 500;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.login-option:hover:not(:disabled) {
+.login-field input:focus {
   border-color: var(--ds-accent);
-  background: var(--ds-accent-soft);
+  box-shadow: 0 0 0 3px var(--ds-accent-soft);
 }
 
-.login-option:disabled {
+.login-field input::placeholder {
+  color: var(--ds-muted);
+  font-weight: 400;
+}
+
+.login-password {
+  position: relative;
+  display: block;
+}
+
+.login-password input {
+  padding-right: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--ds-muted);
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  color: var(--ds-ink);
+}
+
+.login-button {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--ds-radius-panel);
+  background: var(--ds-accent);
+  color: var(--ds-accent-contrast);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.login-button:hover:not(:disabled) {
+  background: var(--ds-accent-hover);
+}
+
+.login-button:disabled {
   cursor: wait;
   opacity: 0.65;
-}
-
-.login-option__copy {
-  display: grid;
-  gap: 4px;
-}
-
-.login-option__copy strong {
-  font-size: 15px;
-}
-
-.login-option__copy span {
-  color: var(--ds-muted);
-  font-size: 13px;
-}
-
-.login-option__action {
-  flex: none;
-  color: var(--ds-accent);
-  font-weight: 700;
 }
 
 .login-error {

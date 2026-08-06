@@ -11,15 +11,14 @@ import (
 )
 
 // ==================== Redis 键命名规范 ====================
-// 格式：urm:{type}:{id}
+// 格式：dai:{type}:{id}
 // 统一前缀便于监控和管理，避免键名冲突
 const (
-	KeyPrefix     = "urm:"                    // 系统前缀
-	KeyNonce      = KeyPrefix + "nonce:"      // Nonce 防重放：urm:nonce:{nonce}
-	KeyIdempotent = KeyPrefix + "idempotent:" // 幂等性缓存：urm:idempotent:{requestID}
-	KeyUser       = KeyPrefix + "user:"       // 用户缓存：urm:user:{userID}
-	KeyUserBan    = KeyPrefix + "user_ban:"   // 用户封禁标记：urm:user_ban:{userID}
-	KeyLogoutTime = KeyPrefix + "logout:"     // 登出时间戳：urm:logout:{userID}
+	KeyPrefix     = "dai:"                    // 系统前缀
+	KeyNonce      = KeyPrefix + "nonce:"      // Nonce 防重放
+	KeyIdempotent = KeyPrefix + "idempotent:" // 幂等性缓存
+	KeyUser       = KeyPrefix + "user:"       // 用户缓存
+	KeyLogoutTime = KeyPrefix + "logout:"     // 登出时间戳
 )
 
 // 键 TTL 配置（生产环境可根据实际情况调整）
@@ -70,7 +69,7 @@ func (s *RedisService) SetIdempotentKey(requestID string, result interface{}) er
 // GetIdempotentKey 获取幂等键
 func (s *RedisService) GetIdempotentKey(requestID string, result interface{}) (bool, error) {
 	ctx := context.Background()
-	key := KeyIdempotent + requestID // urm:idempotent:{requestID}
+	key := KeyIdempotent + requestID
 
 	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {

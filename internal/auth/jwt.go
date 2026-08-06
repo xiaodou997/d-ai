@@ -19,29 +19,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ActClaim 是 RFC 8693 的 `act`（actor）声明：委托 Token 中记录实际发起调用的服务身份，
-// 便于审计「谁代表主体执行」（OBO Subject 是被代表方，act.sub 是代理方）。
-type ActClaim struct {
-	Sub string `json:"sub,omitempty"`
-}
-
 // Claims JWT Token 声明
 type Claims struct {
 	PrincipalType   string `json:"principal_type"`
 	TokenUse        string `json:"token_use"`
-	ClientID        string `json:"client_id,omitempty"`
-	ClientType      string `json:"client_type,omitempty"`
 	UserID          string `json:"user_id,omitempty"`
 	Username        string `json:"username,omitempty"`
 	TenantID        string `json:"tenant_id,omitempty"`
 	UserType        int    `json:"user_type,omitempty"`
 	UserTypeDisplay string `json:"user_type_display,omitempty"`
 	Scope           string `json:"scope,omitempty"`
-	InstanceID      string `json:"instance_id,omitempty"`
-	SourceCIDR      string `json:"source_cidr,omitempty"`
-	// BillingScope / Act 仅出现在委托（delegated）Token 中，见 GenerateDelegatedToken。
-	BillingScope string    `json:"billing_scope,omitempty"`
-	Act          *ActClaim `json:"act,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -155,8 +142,8 @@ func (s *JWTService) generateAndSaveKey() error {
 	now := time.Now().UTC()
 	ctx := context.Background()
 	_, err = s.database.Exec(ctx, `
-		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, key_use, created_at)
-		VALUES ($1, $2, $3, 'active', 'shared', $4)
+		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
+		VALUES ($1, $2, $3, 'active', $4)
 	`, kid, privateKeyPEM, publicKeyPEM, now)
 	return err
 }
@@ -212,8 +199,8 @@ func (s *JWTService) reloadKeys() error {
 }
 
 // GenerateToken 生成单一 Access Token
-func (s *JWTService) GenerateToken(userID, username, tenantID string, userType int, userTypeDisplay, clientID, clientType string) (string, error) {
-	pair, err := s.GenerateTokenPair(userID, username, tenantID, userType, userTypeDisplay, clientID, clientType)
+func (s *JWTService) GenerateToken(userID, username, tenantID string, userType int, userTypeDisplay string) (string, error) {
+	pair, err := s.GenerateTokenPair(userID, username, tenantID, userType, userTypeDisplay)
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +208,7 @@ func (s *JWTService) GenerateToken(userID, username, tenantID string, userType i
 }
 
 // GenerateTokenPair 生成 Token 对，token header 携带 kid
-func (s *JWTService) GenerateTokenPair(userID, username, tenantID string, userType int, userTypeDisplay, clientID, clientType string) (*TokenPair, error) {
+func (s *JWTService) GenerateTokenPair(userID, username, tenantID string, userType int, userTypeDisplay string) (*TokenPair, error) {
 	s.mu.RLock()
 	activeKey := s.activeKey
 	s.mu.RUnlock()
@@ -236,8 +223,6 @@ func (s *JWTService) GenerateTokenPair(userID, username, tenantID string, userTy
 		claims := Claims{
 			PrincipalType:   "user",
 			TokenUse:        tokenType,
-			ClientID:        clientID,
-			ClientType:      clientType,
 			UserID:          userID,
 			Username:        username,
 			TenantID:        tenantID,
@@ -271,115 +256,6 @@ func (s *JWTService) GenerateTokenPair(userID, username, tenantID string, userTy
 		ExpiresIn:        int64(s.accessTokenExpiration.Seconds()),
 		RefreshExpiresIn: int64(s.refreshTokenExpiration.Seconds()),
 	}, nil
-}
-
-func (s *JWTService) GenerateServiceAccessToken(clientID, instanceID, sourceCIDR string, expiration time.Duration) (string, int64, error) {
-	s.mu.RLock()
-	activeKey := s.activeKey
-	s.mu.RUnlock()
-
-	if activeKey == nil {
-		return "", 0, fmt.Errorf("no active signing key")
-	}
-	if expiration <= 0 {
-		expiration = 5 * time.Minute
-	}
-
-	now := time.Now()
-	claims := Claims{
-		PrincipalType: "service",
-		TokenUse:      "access",
-		ClientID:      clientID,
-		InstanceID:    instanceID,
-		SourceCIDR:    sourceCIDR,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			Issuer:    s.issuer,
-			ID:        uuid.New().String(),
-			Subject:   clientID,
-			Audience:  jwt.ClaimStrings{"unihub-services"},
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	token.Header["kid"] = activeKey.kid
-	tokenStr, err := token.SignedString(activeKey.privateKey)
-	if err != nil {
-		return "", 0, err
-	}
-	return tokenStr, int64(expiration.Seconds()), nil
-}
-
-// DelegationRequest 描述一次 OBO 委托签发（服务代表某主体调用下游服务）。
-type DelegationRequest struct {
-	// ClientID 发起委托的服务身份（写入 client_id 与 act.sub）。
-	ClientID string
-	// InstanceID 发起委托的服务副本标识。
-	InstanceID string
-	// TenantID / UserID 被代表的计费/权限主体。UserID 仅在 BillingScope=user 时有值。
-	TenantID string
-	UserID   string
-	// BillingScope 计费归属：user | tenant。
-	BillingScope string
-	// Audience 允许消费该 Token 的下游服务（如 ["ai-service"]）。
-	Audience []string
-	// Scope 授予的能力（如 "ai.invoke"）。
-	Scope string
-	// Expiration 有效期（2~5 分钟）。
-	Expiration time.Duration
-}
-
-// GenerateDelegatedToken 签发短期 OBO 委托 Token（§8.3）。服务身份用于认证与审计，
-// OBO Subject（tenant/user + billing_scope）用于下游的权限、配额与计费。不入库、无 Refresh。
-func (s *JWTService) GenerateDelegatedToken(req DelegationRequest) (string, int64, error) {
-	s.mu.RLock()
-	activeKey := s.activeKey
-	s.mu.RUnlock()
-
-	if activeKey == nil {
-		return "", 0, fmt.Errorf("no active signing key")
-	}
-	if req.Expiration <= 0 || req.Expiration > 5*time.Minute {
-		req.Expiration = 3 * time.Minute
-	}
-
-	// Subject 取被代表主体：user 作用域用 userID，tenant 作用域用 tenantID。
-	subject := req.TenantID
-	if req.BillingScope == "user" && req.UserID != "" {
-		subject = req.UserID
-	}
-
-	now := time.Now()
-	claims := Claims{
-		PrincipalType: "delegated",
-		TokenUse:      "access",
-		ClientID:      req.ClientID,
-		InstanceID:    req.InstanceID,
-		TenantID:      req.TenantID,
-		UserID:        req.UserID,
-		BillingScope:  req.BillingScope,
-		Scope:         req.Scope,
-		Act:           &ActClaim{Sub: req.ClientID},
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(req.Expiration)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now),
-			Issuer:    s.issuer,
-			ID:        uuid.New().String(),
-			Subject:   subject,
-			Audience:  jwt.ClaimStrings(req.Audience),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	token.Header["kid"] = activeKey.kid
-	tokenStr, err := token.SignedString(activeKey.privateKey)
-	if err != nil {
-		return "", 0, err
-	}
-	return tokenStr, int64(req.Expiration.Seconds()), nil
 }
 
 // ParseToken 解析并验证 Token，根据 kid 选择公钥
@@ -431,7 +307,7 @@ func (s *JWTService) RefreshToken(tokenString string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.GenerateToken(claims.UserID, claims.Username, claims.TenantID, claims.UserType, claims.UserTypeDisplay, claims.ClientID, claims.ClientType)
+	return s.GenerateToken(claims.UserID, claims.Username, claims.TenantID, claims.UserType, claims.UserTypeDisplay)
 }
 
 // RefreshTokenPair 使用 Refresh Token 获取新的 Token 对
@@ -454,8 +330,6 @@ func (s *JWTService) RefreshTokenPair(refreshTokenString string, rotateRefreshTo
 		newClaims := Claims{
 			PrincipalType:   "user",
 			TokenUse:        tokenType,
-			ClientID:        claims.ClientID,
-			ClientType:      claims.ClientType,
 			UserID:          claims.UserID,
 			Username:        claims.Username,
 			TenantID:        claims.TenantID,
@@ -525,9 +399,9 @@ func (s *JWTService) RotateKey() error {
 
 	// 插入新 active 密钥
 	_, err = tx.Exec(ctx, `
-		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, key_use, created_at)
-		VALUES ($1, $2, $3, 'active', $4, $5)
-	`, newKid, privateKeyPEM, publicKeyPEM, "shared", now)
+		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
+		VALUES ($1, $2, $3, 'active', $4)
+	`, newKid, privateKeyPEM, publicKeyPEM, now)
 	if err != nil {
 		return fmt.Errorf("insert new key: %w", err)
 	}

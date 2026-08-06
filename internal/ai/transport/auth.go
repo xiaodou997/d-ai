@@ -2,19 +2,16 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/internal/ai/urm"
-	sharedaccess "xiaodou/dai/libs/go/serviceaccess"
+	"xiaodou/dai/internal/ai/platform"
 )
 
 type HumaJWKSValidator interface {
-	ValidateToken(ctx context.Context, tokenStr string) (*urm.Claims, error)
+	ValidateToken(ctx context.Context, tokenStr string) (*platform.Claims, error)
 }
 
 type HumaBanChecker interface {
@@ -66,14 +63,6 @@ func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessag
 			huma.WriteErr(api, ctx, http.StatusForbidden, forbiddenMessage)
 			return
 		}
-		if d.ServiceAccess == nil {
-			writeServiceAccessProblem(ctx, sharedaccess.ErrUnavailable)
-			return
-		}
-		if err := d.ServiceAccess.Check(ctx.Context(), claims.UserType, claims.UserID, claims.TenantID, d.ExpectedClientID, claims.ClientID); err != nil {
-			writeServiceAccessProblem(ctx, err)
-			return
-		}
 		if status, msg, blocked := bannedMessage(ctx.Context(), d.BanChecker, claims.TenantID, claims.UserID); blocked {
 			huma.WriteErr(api, ctx, status, msg)
 			return
@@ -81,16 +70,6 @@ func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessag
 
 		next(huma.WithValue(ctx, authClaimsContextKey{}, claims))
 	}
-}
-
-func writeServiceAccessProblem(ctx huma.Context, err error) {
-	status, code, title := http.StatusServiceUnavailable, "service_access_unavailable", "Service Access Unavailable"
-	if errors.Is(err, sharedaccess.ErrDenied) {
-		status, code, title = http.StatusForbidden, "service_access_denied", "Service Access Denied"
-	}
-	ctx.SetHeader("Content-Type", "application/problem+json")
-	ctx.SetStatus(status)
-	_ = json.NewEncoder(ctx.BodyWriter()).Encode(map[string]any{"status": status, "code": code, "title": title})
 }
 
 // bannedMessage checks tenantID (always) and userID (when non-empty)
@@ -121,8 +100,8 @@ func bannedMessage(ctx context.Context, bc HumaBanChecker, tenantID, userID stri
 	return 0, "", false
 }
 
-func claimsFromContext(ctx context.Context) *urm.Claims {
-	claims, _ := ctx.Value(authClaimsContextKey{}).(*urm.Claims)
+func claimsFromContext(ctx context.Context) *platform.Claims {
+	claims, _ := ctx.Value(authClaimsContextKey{}).(*platform.Claims)
 	return claims
 }
 

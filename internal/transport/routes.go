@@ -22,42 +22,39 @@ import (
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
-	aidb "xiaodou/dai/internal/ai/db/gen"
-	"xiaodou/dai/internal/ai/billingledger"
 	"xiaodou/dai/internal/ai/billingcontrol"
+	"xiaodou/dai/internal/ai/billingledger"
 	"xiaodou/dai/internal/ai/commercial"
+	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/imageassets"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/subscription"
+	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
-	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/libs/go/banstate"
-	serviceaccess "xiaodou/dai/internal/serviceaccess"
 )
 
 // Version 是 D-AI 对外版本号。
 const Version = "0.1.0"
 
-// Deps 汇集 transport 层注册端点所需的全部领域依赖（URM + AI 统一）。
+// Deps 汇集统一 transport 层注册端点所需的领域依赖。
 type Deps struct {
 	// 基础设施
-	Service string
-	Version string
-	Pool    *pgxpool.Pool
-	Redis   *redis.Client
-	Logger  *zap.Logger
-	Config  *config.Config
+	Service       string
+	Version       string
+	Pool          *pgxpool.Pool
+	Redis         *redis.Client
+	Logger        *zap.Logger
+	PortalBaseURL string
 
-	// URM 域
+	// 平台身份与计费域
 	JWT           *auth.JWTService
 	Blacklist     *auth.BlacklistService
-	Session       *auth.SessionService
-	SSO           config.SSOConfig
 	Legal         config.LegalConfig
 	UserService   *userpkg.UserService
 	Deduction     *billingsvc.DeductionService
@@ -65,9 +62,7 @@ type Deps struct {
 	BillingRepo   *billingpg.BillingRepository
 	Invite        *invitepkg.InviteService
 	Payment       *paymentsvc.PaymentService
-	ServiceAccess *serviceaccess.Service
 	Announcements *announcementpkg.Service
-	Delegation    config.DelegationConfig
 
 	// AI 域
 	Queries            *aidb.Queries
@@ -119,11 +114,10 @@ func (v *InProcessJWKSValidator) ValidateToken(ctx context.Context, token string
 	return v.jwt.ParseToken(token)
 }
 
-// Register 在 Huma API 上注册全部端点（URM + AI）。
+// Register 在 Huma API 上注册全部端点。
 func Register(api huma.API, d Deps) {
 	registerMeta(api, d)
 	registerPublicPlane(api, d)
-	// service plane 已移除——合并后不再有跨服务调用
 }
 
 func registerMeta(api huma.API, d Deps) {
@@ -155,10 +149,6 @@ func registerPublicPlane(api huma.API, d Deps) {
 
 	// 公开端点（无认证）
 	registerPublic(api, d)
-
-	// 内部计费端点（原 service plane，合并后移到 public plane）
-	registerInternalUsers(api, d, usrAuth)
-	registerInternalBilling(api, d, usrAuth, usrAuth)
 
 	// AI 域端点
 	registerAITransport(api, d)
@@ -205,11 +195,6 @@ func RegisterRaw(mux *chi.Mux, d Deps) {
 func RegisterPublicRaw(mux *chi.Mux, d Deps) {
 	h := newAuthHandlers(d)
 	mux.Post("/api/oauth2/token", h.token)
-	mux.Get("/api/oauth2/authorize", h.authorize)
-	mux.Post("/api/oauth2/authorize", h.authorize)
-	mux.Get("/api/oauth2/login", h.ssoLogin)
-	mux.Post("/api/oauth2/login", h.ssoLogin)
-	mux.Get("/api/oauth2/logout", h.ssoLogout)
 
 	// 微信支付回调（无认证，验签即鉴权）
 	notifyHandler := newPaymentNotifyHandlers(d)

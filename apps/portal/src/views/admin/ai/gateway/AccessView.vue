@@ -14,7 +14,7 @@ import { SlidersHorizontal } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import { DsTabs } from "@/shared/ui";
 import { aiAdminApi } from "@/api/aiAdmin";
-import { urmAdminApi } from "@/api/urmAdmin";
+import { platformAdminApi } from "@/api/platformAdmin";
 import type { RuntimeLimitPolicyDTO, TenantUpstreamAccessDTO, TenantUpstreamPolicyRef } from "@/api/types/ai";
 import type { TenantListItem } from "@/api/types/admin";
 import AdminTenantLimitPanel from "./tenant-management/components/AdminTenantLimitPanel.vue";
@@ -83,7 +83,7 @@ function syncSelectedTenant(items: TenantListItem[]) {
 async function loadTenants() {
   tenantsLoading.value = true;
   try {
-    const res = await urmAdminApi.listTenants({
+    const res = await platformAdminApi.listTenants({
       page: tenantFilters.page,
       size: tenantFilters.size,
       keyword: tenantFilters.keyword.trim() || undefined

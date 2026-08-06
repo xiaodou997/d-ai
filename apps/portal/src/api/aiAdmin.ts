@@ -1,4 +1,4 @@
-import { authenticatedRequest, portalHeadersFor, serviceBaseUrl } from "./request";
+import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import type {
   AccountDTO,
   AccountsOutputBody,
@@ -53,8 +53,8 @@ import type {
   RiskEventsOutputBody
 } from "./types/ai";
 
-function request(service: "urm" | "ai" = "urm") {
-  return authenticatedRequest(service);
+function request() {
+  return authenticatedRequest();
 }
 
 type AiWorkbenchWindowQuery = {
@@ -65,579 +65,579 @@ type AiWorkbenchWindowQuery = {
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
-    return request("ai")<AccountsOutputBody>({
+    return request()<AccountsOutputBody>({
       method: "GET",
       path: "/api/v1/upstream-accounts",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   createUpstreamAccount(body: AccountWriteRequest) {
-    return request("ai")<AccountDTO>({
+    return request()<AccountDTO>({
       method: "POST",
       path: "/api/v1/upstream-accounts",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updateUpstreamAccount(accountId: string, body: AccountWriteRequest) {
-    return request("ai")<AccountDTO>({
+    return request()<AccountDTO>({
       method: "PATCH",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updateUpstreamAccountStatus(accountId: string, status: "active" | "disabled") {
-    return request("ai")<AccountDTO>({
+    return request()<AccountDTO>({
       method: "PATCH",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/status`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body: { status },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deleteUpstreamAccount(accountId: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   exportUpstreamAccounts(body: UpstreamAccountExportRequest) {
-    return request("ai")<UpstreamAccountExportOutputBody>({
+    return request()<UpstreamAccountExportOutputBody>({
       method: "POST",
       path: "/api/v1/upstream-accounts/export",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   previewImportUpstreamAccounts(body: UpstreamAccountImportRequest) {
-    return request("ai")<UpstreamAccountImportPreviewOutputBody>({
+    return request()<UpstreamAccountImportPreviewOutputBody>({
       method: "POST",
       path: "/api/v1/upstream-accounts/import/preview",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   importUpstreamAccounts(body: UpstreamAccountImportRequest) {
-    return request("ai")<UpstreamAccountImportOutputBody>({
+    return request()<UpstreamAccountImportOutputBody>({
       method: "POST",
       path: "/api/v1/upstream-accounts/import",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   // ---- 上游模型发现 / 导入（账号维度）----
   fetchAccountUpstreamModels(accountId: string) {
-    return request("ai")<{ items: DiscoveredUpstreamModelDTO[] }>({
+    return request()<{ items: DiscoveredUpstreamModelDTO[] }>({
       method: "GET",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/upstream-models`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listAccountModelBindings(accountId: string) {
-    return request("ai")<UpstreamModelBindingsOutputBody>({
+    return request()<UpstreamModelBindingsOutputBody>({
       method: "GET",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   testUpstreamAccount(accountId: string, body: UpstreamAccountTestRequest) {
-    return request("ai")<UpstreamAccountTestResult>({
+    return request()<UpstreamAccountTestResult>({
       method: "POST",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/test`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   createAccountModelBinding(accountId: string, body: UpstreamModelBindingWriteRequest) {
-    return request("ai")<UpstreamModelBindingDTO>({
+    return request()<UpstreamModelBindingDTO>({
       method: "POST",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updateAccountModelBinding(accountId: string, bindingId: string, body: UpstreamModelBindingWriteRequest) {
-    return request("ai")<UpstreamModelBindingDTO>({
+    return request()<UpstreamModelBindingDTO>({
       method: "PATCH",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings/${encodeURIComponent(bindingId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deleteAccountModelBinding(accountId: string, bindingId: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings/${encodeURIComponent(bindingId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   importAccountUpstreamModels(accountId: string, body: ImportUpstreamModelsRequest) {
-    return request("ai")<{ created: string[]; skipped: string[] }>({
+    return request()<{ created: string[]; skipped: string[] }>({
       method: "POST",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/import-upstream-models`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   inferModelCapability(modelCode: string, endpointProtocol?: string) {
-    return request("ai")<ModelCapabilityInferResult>({
+    return request()<ModelCapabilityInferResult>({
       method: "GET",
       path: "/api/v1/model-capability/infer",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       query: { model_code: modelCode, endpoint_protocol: endpointProtocol || undefined },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- 价格表 ----
   listPriceBooks() {
-    return request("ai")<PriceBooksOutputBody>({
+    return request()<PriceBooksOutputBody>({
       method: "GET",
       path: "/api/v1/price-books",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   createPriceBook(body: { name: string; description?: string }) {
-    return request("ai")<PriceBookDTO>({
+    return request()<PriceBookDTO>({
       method: "POST",
       path: "/api/v1/price-books",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   getPriceBook(bookId: string) {
-    return request("ai")<PriceBookDTO>({
+    return request()<PriceBookDTO>({
       method: "GET",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   updatePriceBook(bookId: string, body: PriceBookWriteRequest) {
-    return request("ai")<PriceBookDTO>({
+    return request()<PriceBookDTO>({
       method: "PATCH",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deletePriceBook(bookId: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listPriceBookEntries(bookId: string) {
-    return request("ai")<PriceBookEntriesOutputBody>({
+    return request()<PriceBookEntriesOutputBody>({
       method: "GET",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/entries`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   upsertPriceBookEntry(bookId: string, modelCode: string, body: PriceBookEntryWriteRequest) {
-    return request("ai")<PriceBookEntryDTO>({
+    return request()<PriceBookEntryDTO>({
       method: "PUT",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deletePriceBookEntry(bookId: string, modelCode: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   searchLiteLLMModels(q: string, limit = 50) {
-    return request("ai")<{ items: any[]; total: number }>({
+    return request()<{ items: any[]; total: number }>({
       method: "GET",
       path: "/api/v1/price-books/litellm/models",
       query: { q, limit },
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   syncCommonModels(bookId: string) {
-    return request("ai")<{ synced: number; missing: string[] }>({
+    return request()<{ synced: number; missing: string[] }>({
       method: "POST",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/sync-common`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- 全局汇率 ----
   getCreditsPerUSD() {
-    return request("ai")<CreditsPerUSDOutputBody>({
+    return request()<CreditsPerUSDOutputBody>({
       method: "GET",
       path: "/api/v1/pricing/credits-per-usd",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   setCreditsPerUSD(creditsPerUsd: number) {
-    return request("ai")<CreditsPerUSDOutputBody>({
+    return request()<CreditsPerUSDOutputBody>({
       method: "PUT",
       path: "/api/v1/pricing/credits-per-usd",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body: { credits_per_usd: creditsPerUsd },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- Dashboard ----
   getDashboardSummary(params: AiWorkbenchWindowQuery = {}) {
-    return request("ai")<DashboardSummaryDTO>({
+    return request()<DashboardSummaryDTO>({
       method: "GET",
       path: "/api/v1/dashboard/summary",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listDashboardTopModels(params: AiWorkbenchWindowQuery & { limit?: number } = {}) {
-    return request("ai")<DashboardTopModelsOutputBody>({
+    return request()<DashboardTopModelsOutputBody>({
       method: "GET",
       path: "/api/v1/dashboard/top-models",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listDashboardTopTenants(params: AiWorkbenchWindowQuery & { limit?: number } = {}) {
-    return request("ai")<DashboardTopTenantsOutputBody>({
+    return request()<DashboardTopTenantsOutputBody>({
       method: "GET",
       path: "/api/v1/dashboard/top-tenants",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listDashboardRecentErrors(params: AiWorkbenchWindowQuery & { limit?: number } = {}) {
-    return request("ai")<DashboardRecentErrorsOutputBody>({
+    return request()<DashboardRecentErrorsOutputBody>({
       method: "GET",
       path: "/api/v1/dashboard/recent-errors",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   // ---- Runtime limit policies ----
   listRuntimeLimitPolicies(params: Record<string, string | number | undefined> = {}) {
-    return request("ai")<RuntimeLimitPoliciesOutputBody>({
+    return request()<RuntimeLimitPoliciesOutputBody>({
       method: "GET",
       path: "/api/v1/limit-policies",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   createRuntimeLimitPolicy(body: Record<string, unknown>) {
-    return request("ai")<RuntimeLimitPolicyDTO>({
+    return request()<RuntimeLimitPolicyDTO>({
       method: "POST",
       path: "/api/v1/limit-policies",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updateRuntimeLimitPolicy(policyId: string, body: Record<string, unknown>) {
-    return request("ai")<RuntimeLimitPolicyDTO>({
+    return request()<RuntimeLimitPolicyDTO>({
       method: "PATCH",
       path: `/api/v1/limit-policies/${encodeURIComponent(policyId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updateRuntimeLimitPolicyStatus(policyId: string, status: string) {
-    return request("ai")<RuntimeLimitPolicyDTO>({
+    return request()<RuntimeLimitPolicyDTO>({
       method: "PATCH",
       path: `/api/v1/limit-policies/${encodeURIComponent(policyId)}/status`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body: { status },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   listTenantUpstreamAccess(tenantId: string) {
-    return request("ai")<TenantUpstreamAccessOutputBody>({
+    return request()<TenantUpstreamAccessOutputBody>({
       method: "GET",
       path: `/api/v1/tenants/${encodeURIComponent(tenantId)}/upstream-access`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   replaceTenantUpstreamAccess(tenantId: string, policies: TenantUpstreamPolicyRef[]) {
-    return request("ai")<{ updated: boolean }>({
+    return request()<{ updated: boolean }>({
       method: "PUT",
       path: `/api/v1/tenants/${encodeURIComponent(tenantId)}/upstream-access`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body: { policies },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- Audit logs ----
   listGatewayAuditLogs(params: Record<string, string | number | undefined> = {}) {
-    return request("ai")<AuditLogsOutputBody>({
+    return request()<AuditLogsOutputBody>({
       method: "GET",
       path: "/api/v1/audit-logs",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- 风控中心（内容安全审核）----
   getRiskControlConfig() {
-    return request("ai")<RiskControlConfigDTO>({
+    return request()<RiskControlConfigDTO>({
       method: "GET",
       path: "/api/v1/risk-control/config",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   updateRiskControlConfig(body: RiskControlConfigWriteRequest) {
-    return request("ai")<RiskControlConfigDTO>({
+    return request()<RiskControlConfigDTO>({
       method: "PUT",
       path: "/api/v1/risk-control/config",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   testRiskControlModeration(text: string) {
-    return request("ai")<RiskControlTestResultDTO>({
+    return request()<RiskControlTestResultDTO>({
       method: "POST",
       path: "/api/v1/risk-control/test",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body: { text },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   listRiskControlLogs(params: Record<string, string | number | undefined> = {}) {
-    return request("ai")<RiskControlLogsOutputBody>({
+    return request()<RiskControlLogsOutputBody>({
       method: "GET",
       path: "/api/v1/risk-control/logs",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listRiskControlEvents(params: Record<string, string | number | undefined> = {}) {
-    return request("ai")<RiskEventsOutputBody>({
+    return request()<RiskEventsOutputBody>({
       method: "GET",
       path: "/api/v1/risk-control/events",
       query: params,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   resolveRiskControlEvent(eventId: string, body: { status: string; note?: string }) {
-    return request("ai")<RiskEventDTO>({
+    return request()<RiskEventDTO>({
       method: "POST",
       path: `/api/v1/risk-control/events/${encodeURIComponent(eventId)}/resolve`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- System & 路由策略 ----
   getSystemStatus() {
-    return request("ai")<SystemStatusDTO>({
+    return request()<SystemStatusDTO>({
       method: "GET",
       path: "/api/v1/system/status",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   getRouteWeights(scope = "global") {
-    return request("ai")<RouteWeightsOutputBody>({
+    return request()<RouteWeightsOutputBody>({
       method: "GET",
       path: `/api/v1/route-weights/${encodeURIComponent(scope)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   putRouteWeights(scope: string, body: { cost: number; latency: number; load: number; health: number }) {
-    return request("ai")<RouteWeightsOutputBody>({
+    return request()<RouteWeightsOutputBody>({
       method: "PUT",
       path: `/api/v1/route-weights/${encodeURIComponent(scope)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
 
   // ---- Credential pools ----
   listCredentialPools() {
-    return request("ai")<CredentialPoolsOutputBody>({
+    return request()<CredentialPoolsOutputBody>({
       method: "GET",
       path: "/api/v1/credential-pools",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   createCredentialPool(body: CredentialPoolWriteRequest) {
-    return request("ai")<CredentialPoolDTO>({
+    return request()<CredentialPoolDTO>({
       method: "POST",
       path: "/api/v1/credential-pools",
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   patchCredentialPool(poolId: string, body: CredentialPoolWriteRequest) {
-    return request("ai")<CredentialPoolDTO>({
+    return request()<CredentialPoolDTO>({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updateCredentialPoolStatus(poolId: string, status: "active" | "disabled") {
-    return request("ai")<CredentialPoolDTO>({
+    return request()<CredentialPoolDTO>({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/status`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body: { status },
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deleteCredentialPool(poolId: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listPoolCredentials(poolId: string) {
-    return request("ai")<PoolCredentialsOutputBody>({
+    return request()<PoolCredentialsOutputBody>({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   createPoolCredential(poolId: string, body: PoolCredentialWriteRequest) {
-    return request("ai")<PoolCredentialDTO>({
+    return request()<PoolCredentialDTO>({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   patchPoolCredential(poolId: string, credId: string, body: PoolCredentialPatchRequest) {
-    return request("ai")<PoolCredentialDTO>({
+    return request()<PoolCredentialDTO>({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials/${encodeURIComponent(credId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deletePoolCredential(poolId: string, credId: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials/${encodeURIComponent(credId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   refreshPoolCredential(poolId: string, credId: string) {
-    return request("ai")<PoolCredentialDTO>({
+    return request()<PoolCredentialDTO>({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials/${encodeURIComponent(credId)}/refresh`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   getPoolAvailableModels(poolId: string) {
-    return request("ai")<PoolAvailableModelsDTO>({
+    return request()<PoolAvailableModelsDTO>({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/available-models`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   listPoolModelBindings(poolId: string) {
-    return request("ai")<UpstreamModelBindingsOutputBody>({
+    return request()<UpstreamModelBindingsOutputBody>({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   createPoolModelBinding(poolId: string, body: UpstreamModelBindingWriteRequest) {
-    return request("ai")<UpstreamModelBindingDTO>({
+    return request()<UpstreamModelBindingDTO>({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   updatePoolModelBinding(poolId: string, bindingId: string, body: UpstreamModelBindingWriteRequest) {
-    return request("ai")<UpstreamModelBindingDTO>({
+    return request()<UpstreamModelBindingDTO>({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings/${encodeURIComponent(bindingId)}`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   deletePoolModelBinding(poolId: string, bindingId: string) {
-    return request("ai")<{ deleted: boolean }>({
+    return request()<{ deleted: boolean }>({
       method: "DELETE",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings/${encodeURIComponent(bindingId)}`,
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
   importPoolAvailableModels(poolId: string, body: { models: string[] }) {
-    return request("ai")<{ created: string[]; skipped: string[] }>({
+    return request()<{ created: string[]; skipped: string[] }>({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/import-available-models`,
-      headers: portalHeadersFor("ai"),
+      headers: apiHeaders,
       body,
-      baseUrl: serviceBaseUrl("ai")
+      baseUrl: apiBaseUrl
     });
   },
   getOAuthPoolHealth() {
-    return request("ai")<OAuthPoolHealthOutputBody>({
+    return request()<OAuthPoolHealthOutputBody>({
       method: "GET",
       path: "/api/v1/oauth-pool-health",
-      headers: portalHeadersFor("ai"),
-      baseUrl: serviceBaseUrl("ai")
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
     });
   },
 };

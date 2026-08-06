@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/libs/go/httpx"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 const inviteCharset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -129,7 +129,7 @@ type userConsumptionOutput struct {
 
 // registerTenantSelf 注册租户自助端点（requireUserType(3)）。
 func registerTenantSelf(api huma.API, d Deps) {
-	h := newTenantSelfHandlers(d.Pool, d.Logger, d.SSO.CustomerPortalBaseURL)
+	h := newTenantSelfHandlers(d.Pool, d.Logger, d.PortalBaseURL)
 	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",

@@ -18,9 +18,9 @@ import (
 )
 
 func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
-	dsn := os.Getenv("URM_TEST_DATABASE_URL")
+	dsn := os.Getenv("DAI_TEST_DATABASE_URL")
 	if dsn == "" {
-		t.Skip("set URM_TEST_DATABASE_URL to run this DB-backed test")
+		t.Skip("set DAI_TEST_DATABASE_URL to run this DB-backed test")
 	}
 	applyURMTestMigrations(t, dsn)
 
@@ -40,8 +40,6 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM ledger_credit_leases WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM gov_subject_service_access WHERE subject_type='tenant' AND subject_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM gov_clients WHERE client_id=$1`, clientID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE user_id=$1`, userID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
@@ -59,16 +57,6 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		  total_credits, remaining_credits, status, source
 		) VALUES ($1, 'user', $2, $3, 100, 100, 'available', 'ADMIN_RECHARGE')
 	`, packageID, tenantID, userID)
-	mustLeaseExec(t, ctx, pool, `
-		INSERT INTO gov_clients (client_id, display_name, portal_enabled, status)
-		VALUES ($1, $1, true, 'active')
-	`, clientID)
-	mustLeaseExec(t, ctx, pool, `
-		INSERT INTO gov_subject_service_access (
-		  subject_type, subject_id, access_mode, service_ids, version, created_by, updated_by
-		) VALUES ('tenant', $1, 'selected', ARRAY[$2], 1, 'test', 'test')
-	`, tenantID, clientID)
-
 	now := time.Now().UTC()
 	service := NewCreditLeaseService(pool, zap.NewNop())
 	service.now = func() time.Time { return now }

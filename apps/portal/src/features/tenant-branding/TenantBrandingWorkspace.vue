@@ -27,7 +27,7 @@ const {
   deleteFavicon
 } = useTenantBranding();
 
-const faviconUrl = computed(() => resolvePortalResourceUrl(portalEnv.urmBaseUrl, faviconPath.value));
+const faviconUrl = computed(() => resolvePortalResourceUrl(portalEnv.apiBaseUrl, faviconPath.value));
 const effectiveSiteName = computed(() => form.customerSiteName.trim() || form.tenantName || "用户平台");
 
 async function handleSave() {

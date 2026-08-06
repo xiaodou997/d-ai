@@ -11,11 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"xiaodou/dai/libs/go/httpx"
 	billingdomain "xiaodou/dai/internal/billing"
 	util "xiaodou/dai/internal/domain"
-	serviceaccesssvc "xiaodou/dai/internal/serviceaccess"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 // ---- DTO ----
@@ -45,13 +44,12 @@ type tenantListOutput struct {
 
 type createTenantInput struct {
 	Body struct {
-		TenantName    string                        `json:"tenantName"`
-		ContactPerson string                        `json:"contactPerson" required:"false"`
-		ContactEmail  string                        `json:"contactEmail" required:"false"`
-		Status        int                           `json:"status" required:"false"`
-		InitUsername  string                        `json:"initUsername" required:"false"`
-		InitEmail     string                        `json:"initEmail" required:"false"`
-		ServiceAccess *serviceaccesssvc.PolicyInput `json:"serviceAccess,omitempty" required:"false"`
+		TenantName    string `json:"tenantName"`
+		ContactPerson string `json:"contactPerson" required:"false"`
+		ContactEmail  string `json:"contactEmail" required:"false"`
+		Status        int    `json:"status" required:"false"`
+		InitUsername  string `json:"initUsername" required:"false"`
+		InitEmail     string `json:"initEmail" required:"false"`
 	}
 }
 
@@ -174,13 +172,6 @@ func (h *adminHandlers) listTenants(ctx context.Context, in *tenantListInput) (*
 }
 
 func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput) (*createTenantOutput, error) {
-	if h.serviceAccess == nil {
-		return nil, serviceAccessHTTPError(serviceaccesssvc.ErrUnavailable)
-	}
-	claims := userClaimsFromCtx(ctx)
-	if claims == nil {
-		return nil, httpx.ErrUnauthorized
-	}
 	tenantName := strings.TrimSpace(in.Body.TenantName)
 	if tenantName == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("租户名称不能为空")
@@ -203,10 +194,6 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	defer tx.Rollback(ctx)
-	if err := serviceaccesssvc.LockMutationTx(ctx, tx); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO iam_tenants (tenant_id, tenant_name, contact_person, contact_email, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $6)
@@ -215,12 +202,6 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
-	}
-
-	actor := serviceaccesssvc.Actor{UserType: claims.UserType, UserID: claims.UserID}
-	if err := serviceaccesssvc.CreateTenantTx(ctx, tx, actor, tenantID, in.Body.ServiceAccess); err != nil {
-		h.serviceAccess.AuditFailure(ctx, actor, "service_access_create", "tenant", tenantID, err)
-		return nil, serviceAccessHTTPError(err)
 	}
 
 	out := &createTenantOutput{}
@@ -243,9 +224,6 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := h.serviceAccess.ReconcileSubject(ctx, "tenant", tenantID); err != nil {
-		return nil, serviceAccessHTTPError(err)
 	}
 	return out, nil
 }
@@ -328,14 +306,11 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 }
 
 func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
-	if h.serviceAccess == nil {
-		return nil, serviceAccessHTTPError(serviceaccesssvc.ErrUnavailable)
-	}
-	deleted, err := h.serviceAccess.DeleteSubject(ctx, "tenant", in.ID)
+	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = $1`, in.ID)
 	if err != nil {
-		return nil, serviceAccessHTTPError(err)
+		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if !deleted {
+	if deleted.RowsAffected() == 0 {
 		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 	}
 	return okSuccess(), nil

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	GeminiCLIProfileRevision = "gemini-cli@0.1.5+unihub.1"
+	GeminiCLIProfileRevision = "gemini-cli@0.1.5+dai.1"
 	geminiCLIBaseURL         = "https://cloudcode-pa.googleapis.com"
 	geminiCLIUserAgent       = "GeminiCLI/0.1.5 (Windows; AMD64)"
 )
@@ -142,5 +142,5 @@ var (
 )
 
 func stableClientID(kind, seed string) string {
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("unihub:"+kind+":v1:"+seed)).String()
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("dai:"+kind+":v1:"+seed)).String()
 }

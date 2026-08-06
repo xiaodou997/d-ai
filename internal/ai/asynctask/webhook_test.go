@@ -60,9 +60,9 @@ func TestWebhookAddressGuardRejectsNonPublicNetworks(t *testing.T) {
 	}
 }
 
-func TestHTTPWebhookSenderIdentifiesUniHubAndPreservesBody(t *testing.T) {
+func TestHTTPWebhookSenderIdentifiesDAIAndPreservesBody(t *testing.T) {
 	const taskID = "00000000-0000-0000-0000-000000000001"
-	payload := []byte(`{"source":"UniHub","event":"task.completed","task_id":"` + taskID + `"}`)
+	payload := []byte(`{"source":"D-AI","event":"task.completed","task_id":"` + taskID + `"}`)
 	var gotBody []byte
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
@@ -76,11 +76,8 @@ func TestHTTPWebhookSenderIdentifiesUniHubAndPreservesBody(t *testing.T) {
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
 			t.Errorf("content type = %q", got)
 		}
-		if got := r.Header.Get("User-Agent"); got != "UniHub-Webhook/1.0" {
+		if got := r.Header.Get("User-Agent"); got != "D-AI-Webhook/1.0" {
 			t.Errorf("user agent = %q", got)
-		}
-		if got := r.Header.Get("X-UniHub-Signature"); got != "" {
-			t.Errorf("unexpected signature header = %q", got)
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -189,11 +186,11 @@ func TestEngineDeliversTerminalWebhookEndToEnd(t *testing.T) {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("decode payload: %v", err)
 		}
-		if len(payload) != 3 || payload["source"] != "UniHub" ||
+		if len(payload) != 3 || payload["source"] != "D-AI" ||
 			payload["event"] != "task.completed" || payload["task_id"] != created.ID {
 			t.Fatalf("payload = %#v", payload)
 		}
-		if request.Header.Get("User-Agent") != "UniHub-Webhook/1.0" {
+		if request.Header.Get("User-Agent") != "D-AI-Webhook/1.0" {
 			t.Fatalf("user agent = %q", request.Header.Get("User-Agent"))
 		}
 	case <-time.After(5 * time.Second):

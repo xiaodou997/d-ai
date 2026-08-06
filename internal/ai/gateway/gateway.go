@@ -26,7 +26,7 @@ type runRuntimeInvokeExpander interface {
 }
 
 // BanChecker reports whether a user or tenant is currently banned/disabled in
-// URM. Implemented by *banstate.Checker (direct Redis key read; see
+// the identity domain. Implemented by *banstate.Checker (direct Redis key read; see
 // libs/go/banstate).
 type BanChecker interface {
 	IsBanned(ctx context.Context, userID string) (bool, error)
@@ -35,49 +35,33 @@ type BanChecker interface {
 
 // Deps are the runtime-plane dependencies assembled in cmd/server.
 type Deps struct {
-	Logger        *zap.Logger
-	Postgres      *pgxpool.Pool
-	Pipeline      *serving.Pipeline
-	Queries       *dbgen.Queries
-	APIKeyCache   *apikey.Cache // optional; nil disables the key cache
-	BanChecker    BanChecker    // optional; nil disables ban enforcement
-	ServiceAccess interface {
-		Check(context.Context, int, string, string, string, string) error
-	}
-	ExpectedClientID      string
+	Logger                *zap.Logger
+	Postgres              *pgxpool.Pool
+	Pipeline              *serving.Pipeline
+	Queries               *dbgen.Queries
+	APIKeyCache           *apikey.Cache // optional; nil disables the key cache
+	BanChecker            BanChecker    // optional; nil disables ban enforcement
 	RuntimeInvokeExpander runRuntimeInvokeExpander
 	RuntimeEngine         coreruntime.Engine
 	AsyncTasks            *asynctask.Engine
 	TaskAdmission         *serving.AdmissionGate
 	TaskInvokeExpander    taskRuntimeInvokeExpander
-
-	// JWKSValidator 校验 URM 委托 Token（内部 OBO 任务入口用）；nil 则禁用委托入口。
-	JWKSValidator delegatedTokenValidator
-	// DelegationAllowedClients 允许经 OBO 调用内部任务入口的服务 client_id 白名单。
-	DelegationAllowedClients []string
 }
 
 // Gateway serves the runtime API. Steps are stateless and shared across
 // requests through the serving pipeline.
 type Gateway struct {
-	logger        *zap.Logger
-	postgres      *pgxpool.Pool
-	queries       *dbgen.Queries
-	pipeline      *serving.Pipeline
-	apiKeyCache   *apikey.Cache
-	banChecker    BanChecker
-	serviceAccess interface {
-		Check(context.Context, int, string, string, string, string) error
-	}
-	expectedClientID      string
+	logger                *zap.Logger
+	postgres              *pgxpool.Pool
+	queries               *dbgen.Queries
+	pipeline              *serving.Pipeline
+	apiKeyCache           *apikey.Cache
+	banChecker            BanChecker
 	runtimeInvokeExpander runRuntimeInvokeExpander
 	runtimeEngine         coreruntime.Engine
 	asyncTasks            *asynctask.Engine
 	taskAdmission         *serving.AdmissionGate
 	taskInvokeExpander    taskRuntimeInvokeExpander
-
-	jwksValidator            delegatedTokenValidator
-	delegationAllowedClients []string
 }
 
 func New(deps Deps) *Gateway {
@@ -85,21 +69,17 @@ func New(deps Deps) *Gateway {
 		panic("gateway: logger is required")
 	}
 	return &Gateway{
-		logger:                   deps.Logger,
-		postgres:                 deps.Postgres,
-		queries:                  deps.Queries,
-		pipeline:                 deps.Pipeline,
-		apiKeyCache:              deps.APIKeyCache,
-		banChecker:               deps.BanChecker,
-		serviceAccess:            deps.ServiceAccess,
-		expectedClientID:         deps.ExpectedClientID,
-		runtimeInvokeExpander:    deps.RuntimeInvokeExpander,
-		runtimeEngine:            deps.RuntimeEngine,
-		asyncTasks:               deps.AsyncTasks,
-		taskAdmission:            deps.TaskAdmission,
-		taskInvokeExpander:       deps.TaskInvokeExpander,
-		jwksValidator:            deps.JWKSValidator,
-		delegationAllowedClients: deps.DelegationAllowedClients,
+		logger:                deps.Logger,
+		postgres:              deps.Postgres,
+		queries:               deps.Queries,
+		pipeline:              deps.Pipeline,
+		apiKeyCache:           deps.APIKeyCache,
+		banChecker:            deps.BanChecker,
+		runtimeInvokeExpander: deps.RuntimeInvokeExpander,
+		runtimeEngine:         deps.RuntimeEngine,
+		asyncTasks:            deps.AsyncTasks,
+		taskAdmission:         deps.TaskAdmission,
+		taskInvokeExpander:    deps.TaskInvokeExpander,
 	}
 }
 

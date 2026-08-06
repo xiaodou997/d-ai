@@ -1,4 +1,3 @@
-<!-- 运营告警 — 1:1 搬运自 v1/urm/urm-admin/src/components/AlertList.vue（cancelPreAuth → urmAdminApi，dayjs → 本地）-->
 <template>
   <div class="bg-white rounded-3xl border border-slate-100 shadow-soft overflow-hidden h-full flex flex-col">
     <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
@@ -70,7 +69,7 @@
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { WarningFilled, Clock, CircleCloseFilled, CircleCheck } from '@element-plus/icons-vue'
-import { urmAdminApi } from '../api/urmAdmin'
+import { platformAdminApi } from '../api/platformAdmin'
 
 const props = defineProps<{
   timeoutPreAuths: any[]
@@ -92,7 +91,7 @@ const formatDateTime = (ts?: number) => {
 const handleCancel = async (eventId: string) => {
   cancellingId.value = eventId
   try {
-    await urmAdminApi.cancelPreAuth(eventId)
+    await platformAdminApi.cancelPreAuth(eventId)
     ElMessage.success('已手动取消预授权，积分冻结已释放')
     emit('refresh')
   } catch (e: any) {

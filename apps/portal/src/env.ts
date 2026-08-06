@@ -1,21 +1,13 @@
-import {
-  createStandardPortalEnv,
-  resolvePortalClientType,
-  type BackendService,
-  type PortalEnv
-} from "@/platform/env";
+import { createStandardPortalEnv, type PortalArea, type PortalEnv } from "@/platform/env";
 import type { PortalThemeName } from "@/shared/ui";
 
-export type { BackendService, PortalEnv } from "@/platform/env";
+export type { PortalArea, PortalEnv } from "@/platform/env";
 
 const standardPortalEnv = createStandardPortalEnv({
   env: import.meta.env as unknown as Record<string, unknown>
 });
 
-export const portalEnv: PortalEnv = {
-  ...standardPortalEnv,
-  clientTypeHeader: resolvePortalClientType(standardPortalEnv.clientTypeHeader)
-};
+export const portalEnv: PortalEnv = standardPortalEnv;
 
 /**
  * The shell stays single, while its accent follows the authenticated user type.

@@ -6,7 +6,6 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
-	"net/http"
 	"net/textproto"
 	"strconv"
 	"strings"
@@ -21,7 +20,6 @@ import (
 )
 
 const (
-	portalClientTypeHeader    = "X-Client-Type"
 	outboundUserAgentMaxBytes = 512
 	serviceVersion            = "1.0.0"
 	webOutboundUserAgent      = "doustack-web/" + serviceVersion
@@ -363,7 +361,7 @@ func bridgeOutboundUserAgent(req *serving.Request) string {
 	if req == nil || req.Envelope == nil || req.Envelope.R == nil {
 		return ""
 	}
-	if isPortalRuntimeRequest(req.Envelope.R) || isWebRuntimeSubject(req.RuntimeSubject()) {
+	if isWebRuntimeSubject(req.RuntimeSubject()) {
 		return webOutboundUserAgent
 	}
 	if isAppRuntimeSubject(req.RuntimeSubject()) {
@@ -374,13 +372,6 @@ func bridgeOutboundUserAgent(req *serving.Request) string {
 		return ua[:outboundUserAgentMaxBytes]
 	}
 	return ua
-}
-
-func isPortalRuntimeRequest(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	return strings.TrimSpace(r.Header.Get(portalClientTypeHeader)) != ""
 }
 
 func isWebRuntimeSubject(subject *coreidentity.Subject) bool {

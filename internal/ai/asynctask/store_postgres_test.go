@@ -79,7 +79,7 @@ func assertWebhookNotification(t *testing.T, pool *pgxpool.Pool, taskID, event s
 	if err := json.Unmarshal(payload, &notification); err != nil {
 		t.Fatalf("decode webhook notification: %v", err)
 	}
-	if len(notification) != 3 || notification["source"] != "UniHub" ||
+	if len(notification) != 3 || notification["source"] != "D-AI" ||
 		notification["event"] != event || notification["task_id"] != taskID {
 		t.Fatalf("notification = %#v", notification)
 	}

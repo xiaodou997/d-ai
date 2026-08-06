@@ -1,4 +1,4 @@
-import type { AppShellNavItem, BackendService } from "@/platform";
+import type { AppShellNavItem, PortalArea } from "@/platform";
 
 /**
  * 统一菜单 —— 合并三端菜单，按 userType 过滤可见性。
@@ -25,67 +25,67 @@ interface MenuGroup {
 }
 
 interface BusinessModule {
-  id: BackendService;
+  id: PortalArea;
   label: string;
   userTypes: number[];
   groups: MenuGroup[];
 }
 
 // ===== 用户中心（所有人可见，功能按 userType 分化） =====
-const urmModule: BusinessModule = {
-  id: "urm",
+const platformModule: BusinessModule = {
+  id: "platform",
   label: "用户中心",
   userTypes: [1, 2, 3, 4],
   groups: [
     {
-      id: "urm-account",
+      id: "platform-account",
       label: "积分账户",
       children: [
-        { id: "urm-my-account", label: "我的账户", to: "/account", icon: "wallet", userTypes: [3, 4] },
-        { id: "urm-tenant-credit", label: "租户积分", to: "/billing/tenant-credit", icon: "wallet", userTypes: [1, 2, 3] }
+        { id: "platform-my-account", label: "我的账户", to: "/account", icon: "wallet", userTypes: [3, 4] },
+        { id: "platform-tenant-credit", label: "租户积分", to: "/billing/tenant-credit", icon: "wallet", userTypes: [1, 2, 3] }
       ]
     },
     {
-      id: "urm-recharge",
+      id: "platform-recharge",
       label: "充值与明细",
       children: [
-        { id: "urm-topup", label: "充值积分", to: "/billing/topup", icon: "credit-card", userTypes: [3, 4] },
-        { id: "urm-recharge-orders", label: "充值记录", to: "/billing/recharge", icon: "receipt-text", userTypes: [1, 2, 3, 4] },
-        { id: "urm-transactions", label: "积分明细", to: "/billing/transactions", icon: "arrow-left-right", userTypes: [1, 2, 3, 4] }
+        { id: "platform-topup", label: "充值积分", to: "/billing/topup", icon: "credit-card", userTypes: [3, 4] },
+        { id: "platform-recharge-orders", label: "充值记录", to: "/billing/recharge", icon: "receipt-text", userTypes: [1, 2, 3, 4] },
+        { id: "platform-transactions", label: "积分明细", to: "/billing/transactions", icon: "arrow-left-right", userTypes: [1, 2, 3, 4] }
       ]
     },
     {
-      id: "urm-finance",
+      id: "platform-finance",
       label: "财务管理",
       children: [
-        { id: "urm-payment-settings", label: "支付配置", to: "/billing/payment-settings", icon: "settings", userTypes: [1, 2] },
-        { id: "urm-payment-orders", label: "支付订单", to: "/billing/payment-orders", icon: "receipt", userTypes: [1, 2] },
-        { id: "urm-withdrawals", label: "提现审核", to: "/billing/withdrawals", icon: "banknote", userTypes: [1, 2] },
-        { id: "urm-cash-accounts", label: "现金账户", to: "/billing/cash-accounts", icon: "banknote", userTypes: [1, 2, 3] }
+        { id: "platform-payment-settings", label: "支付配置", to: "/billing/payment-settings", icon: "settings", userTypes: [1, 2] },
+        { id: "platform-payment-orders", label: "支付订单", to: "/billing/payment-orders", icon: "receipt", userTypes: [1, 2] },
+        { id: "platform-withdrawals", label: "提现审核", to: "/billing/withdrawals", icon: "banknote", userTypes: [1, 2] },
+        { id: "platform-cash-accounts", label: "现金账户", to: "/billing/cash-accounts", icon: "banknote", userTypes: [1, 2, 3] }
       ]
     },
     {
-      id: "urm-users",
+      id: "platform-users",
       label: "用户管理",
       children: [
-        { id: "urm-tenants", label: "租户管理", to: "/urm/tenants", icon: "building", userTypes: [1, 2] },
-        { id: "urm-end-users", label: "终端用户", to: "/urm/users", icon: "users", userTypes: [1, 2, 3] },
-        { id: "urm-invitations", label: "邀请码", to: "/urm/invitations", icon: "ticket", userTypes: [3] }
+        { id: "platform-tenants", label: "租户管理", to: "/platform/tenants", icon: "building", userTypes: [1, 2] },
+        { id: "platform-end-users", label: "终端用户", to: "/platform/users", icon: "users", userTypes: [1, 2, 3] },
+        { id: "platform-invitations", label: "邀请码", to: "/platform/invitations", icon: "ticket", userTypes: [3] }
       ]
     },
     {
-      id: "urm-security",
+      id: "platform-security",
       label: "安全审计",
       children: [
-        { id: "urm-audit-log", label: "认证审计", to: "/urm/audit-log", icon: "shield", userTypes: [1] },
-        { id: "urm-admins", label: "平台管理员", to: "/urm/admins", icon: "user-cog", userTypes: [1] }
+        { id: "platform-audit-log", label: "认证审计", to: "/platform/audit-log", icon: "shield", userTypes: [1] },
+        { id: "platform-admins", label: "平台管理员", to: "/platform/admins", icon: "user-cog", userTypes: [1] }
       ]
     },
     {
-      id: "urm-settings",
+      id: "platform-settings",
       label: "账户设置",
       children: [
-        { id: "urm-profile", label: "个人资料", to: "/profile", icon: "user", userTypes: [1, 2, 3, 4] }
+        { id: "platform-profile", label: "个人资料", to: "/profile", icon: "user", userTypes: [1, 2, 3, 4] }
       ]
     }
   ]
@@ -160,7 +160,7 @@ const aiModule: BusinessModule = {
   ]
 };
 
-const allModules: BusinessModule[] = [urmModule, aiModule];
+const allModules: BusinessModule[] = [platformModule, aiModule];
 
 /**
  * 根据 userType 过滤菜单，返回 AppShellNavItem 格式

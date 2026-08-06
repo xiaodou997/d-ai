@@ -116,8 +116,7 @@ const (
 func resolveTaskType(authMethod coreidentity.AuthMethod, wireType string, appType application.AppType) (string, error) {
 	wireType = strings.TrimSpace(wireType)
 	switch authMethod {
-	// 委托（OBO）调用与 API key 一样按显式 type 路由到通用 image/edit/chat 任务。
-	case coreidentity.AuthMethodAPIKey, coreidentity.AuthMethodDelegated:
+	case coreidentity.AuthMethodAPIKey:
 		if wireType == "" {
 			return "", asynctask.Errorf(http.StatusBadRequest, "task_type_required", "task type is required")
 		}

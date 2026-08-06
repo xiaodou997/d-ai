@@ -1,4 +1,4 @@
-// Package server 提供 UniHub 各后端服务共用的 HTTP 基座：chi 路由 + Huma v2
+// Package server 提供 D-AI 后端的 HTTP 基座：chi 路由 + Huma v2
 // （code-first OpenAPI）+ 统一中间件链，并把 Huma 内部错误（请求体校验、路由未命中
 // 等）一并归一为 RFC 7807 application/problem+json。
 package server
@@ -19,7 +19,7 @@ import (
 
 func init() {
 	// 覆写 Huma 的错误工厂，使框架自身产生的错误（如 422 请求校验、404 路由未命中）
-	// 也走 UniHub 统一的 problem+json 模型，与业务 AppError 同形。
+	// 也走 D-AI 统一的 problem+json 模型，与业务 AppError 同形。
 	huma.NewErrorWithContext = func(ctx huma.Context, status int, message string, errs ...error) huma.StatusError {
 		ae := &httpx.AppError{Status: status, Title: http.StatusText(status), Detail: message}
 		switch status {
@@ -67,7 +67,7 @@ func New(opts Options) (*chi.Mux, huma.API) {
 		r.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   opts.CORSOrigins,
 			AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-			AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Request-ID", "X-Service-Token"},
+			AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Request-ID"},
 			ExposedHeaders:   []string{"X-Request-ID"},
 			AllowCredentials: true,
 			MaxAge:           300,

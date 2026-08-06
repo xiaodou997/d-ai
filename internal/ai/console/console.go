@@ -1,5 +1,4 @@
-// Package console serves the web runtime plane and OAuth callback on the
-// canonical /runtime/v1/* surface.
+// Package console serves the web runtime plane on the canonical /runtime/v1/* surface.
 package console
 
 import (
@@ -16,7 +15,6 @@ import (
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/apikey"
 	"xiaodou/dai/internal/ai/asynctask"
-	"xiaodou/dai/internal/config"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -24,19 +22,15 @@ import (
 	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/imageassets"
+	"xiaodou/dai/internal/ai/platform"
 	"xiaodou/dai/internal/ai/tokenrefresh"
-	"xiaodou/dai/internal/ai/urm"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
+	"xiaodou/dai/internal/config"
 )
 
-// URMExchanger exchanges an OAuth2 authorization code for a token pair.
-type URMExchanger interface {
-	ExchangeCode(ctx context.Context, code, redirectURI string) (*urm.TokenPairResponse, error)
-}
-
-// JWKSValidator validates a URM-issued JWT and returns its claims.
+// JWKSValidator validates a D-AI JWT and returns its claims.
 type JWKSValidator interface {
-	ValidateToken(ctx context.Context, tokenStr string) (*urm.Claims, error)
+	ValidateToken(ctx context.Context, tokenStr string) (*platform.Claims, error)
 }
 
 // BanChecker reports whether a user or tenant has been banned (real-time revocation).
@@ -57,8 +51,6 @@ type Deps struct {
 	Logger         *zap.Logger
 	Queries        *dbgen.Queries
 	Security       config.SecurityConfig
-	URMClient      URMExchanger
-	URMClientID    string
 	JWKSValidator  JWKSValidator
 	BanChecker     BanChecker
 	HTTPClient     *http.Client
@@ -74,15 +66,13 @@ type Deps struct {
 	AsyncTasks     config.AsyncTaskConfig
 }
 
-// Console serves the web runtime endpoints + OAuth callback.
+// Console serves the web runtime endpoints.
 type Console struct {
 	postgres        *pgxpool.Pool
 	redis           *redis.Client
 	logger          *zap.Logger
 	queries         *dbgen.Queries
 	security        config.SecurityConfig
-	urmClient       URMExchanger
-	urmClientID     string
 	jwksValidator   JWKSValidator
 	banChecker      BanChecker
 	httpClient      *http.Client
@@ -109,8 +99,6 @@ func New(deps Deps) *Console {
 		logger:          deps.Logger,
 		queries:         deps.Queries,
 		security:        deps.Security,
-		urmClient:       deps.URMClient,
-		urmClientID:     deps.URMClientID,
 		jwksValidator:   deps.JWKSValidator,
 		banChecker:      deps.BanChecker,
 		httpClient:      deps.HTTPClient,
@@ -152,8 +140,6 @@ func (s *Console) recoverer(next http.Handler) http.Handler {
 
 // Routes registers the web runtime endpoints on r.
 func (s *Console) Routes(r chi.Router) {
-	r.With(s.recoverer).Get("/api/auth/callback", s.handleAuthCallback)
-
 	r.Route("/runtime/v1", s.registerRuntimeRoutes)
 }
 

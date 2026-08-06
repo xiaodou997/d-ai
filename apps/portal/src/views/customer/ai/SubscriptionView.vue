@@ -25,7 +25,7 @@ import {
 } from "@/platform/ai/usage";
 
 import { aiCustomerApi } from "@/api/aiCustomer";
-import { urmCustomerApi } from "@/api/urmCustomer";
+import { platformCustomerApi } from "@/api/platformCustomer";
 import SubscriptionPurchaseEligibility from "@/features/ai/subscriptions/SubscriptionPurchaseEligibility.vue";
 import type {
   AiSubOrder,
@@ -221,7 +221,7 @@ async function loadShop() {
     const [planRes, cur, bal] = await Promise.all([
       aiCustomerApi.listSubscriptionPlans({ limit: 100 }),
       aiCustomerApi.getCurrentSubscription(),
-      urmCustomerApi.getBalance(false).catch(() => null)
+      platformCustomerApi.getBalance(false).catch(() => null)
     ]);
     plans.value = planRes?.items ?? [];
     current.value = cur ?? null;
@@ -270,7 +270,7 @@ function openBuy(plan: AiSubPlan) {
   purchaseHint.value = "";
   buyVisible.value = true;
   // 打开时刷新一次余额，避免过期。
-  void urmCustomerApi
+  void platformCustomerApi
     .getBalance(false)
     .then((bal) => {
       if (bal) availableCredits.value = bal.availableCredits ?? 0;

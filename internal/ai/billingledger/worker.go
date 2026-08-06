@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 )
 
 type outboxItem struct {
@@ -31,13 +31,13 @@ func (c *Coordinator) Run(ctx context.Context) {
 	if c == nil || c.pool == nil || c.port == nil {
 		return
 	}
-	c.logger.Info("billing ledger v3 worker started")
+	c.logger.Info("billing ledger worker started")
 	ticker := time.NewTicker(c.config.WorkerInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Info("billing ledger v3 worker stopped")
+			c.logger.Info("billing ledger worker stopped")
 			return
 		case <-ticker.C:
 			c.runOnce(ctx)
@@ -225,7 +225,7 @@ func shouldDrainAfterRenewFailure(err error, win *window, now time.Time, headroo
 	if errors.Is(err, ErrProtocolViolation) {
 		return true
 	}
-	var apiErr *urm.APIError
+	var apiErr *platform.APIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}
@@ -335,7 +335,7 @@ func (c *Coordinator) createSettlementBatch(ctx context.Context, windowID string
 	}
 	batchID := uuid.New()
 	settlementID := "bs_" + batchID.String()
-	payload, err := json.Marshal(urm.SettleCreditLeaseRequest{
+	payload, err := json.Marshal(platform.SettleCreditLeaseRequest{
 		SettlementID:      settlementID,
 		ActualTenantMicro: win.AccruedTenantMicro,
 		ActualUserMicro:   win.AccruedUserMicro,
@@ -427,13 +427,13 @@ func (c *Coordinator) claimOutbox(ctx context.Context) (*outboxItem, error) {
 
 func (c *Coordinator) dispatchOutbox(ctx context.Context, item *outboxItem) {
 	reconciled := false
-	res, err := c.port.SettleCreditLease(ctx, item.LeaseID, urm.SettleCreditLeaseRequest{
+	res, err := c.port.SettleCreditLease(ctx, item.LeaseID, platform.SettleCreditLeaseRequest{
 		SettlementID:      item.SettlementID,
 		ActualTenantMicro: item.ActualTenantMicro,
 		ActualUserMicro:   item.ActualUserMicro,
 	})
 	if err != nil {
-		var apiErr *urm.APIError
+		var apiErr *platform.APIError
 		if errors.As(err, &apiErr) && apiErr.Status == 409 {
 			if current, getErr := c.port.GetCreditLease(ctx, item.LeaseID); getErr == nil &&
 				current.SettlementState == "settled" && current.SettlementID == item.SettlementID &&
@@ -512,7 +512,7 @@ func (c *Coordinator) observeSnapshot(ctx context.Context) error {
 	return nil
 }
 
-func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *urm.CreditLeaseResponse) error {
+func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *platform.CreditLeaseResponse) error {
 	if err := validateSettlementReceipt(item, res); err != nil {
 		return err
 	}
@@ -536,7 +536,7 @@ func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *
 	}
 	tag, err = tx.Exec(ctx, `
 		UPDATE ai_billing_settlement_batches
-		SET status='delivered', urm_event_id=NULLIF($1,''),
+		SET status='delivered', billing_event_id=NULLIF($1,''),
 		    tenant_deducted_micro=$2, user_deducted_micro=$3,
 		    tenant_debt_added_micro=$4, user_debt_added_micro=$5,
 		    delivered_at=$6, updated_at=$6,
@@ -577,7 +577,7 @@ func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *
 	return tx.Commit(ctx)
 }
 
-func validateSettlementReceipt(item *outboxItem, res *urm.CreditLeaseResponse) error {
+func validateSettlementReceipt(item *outboxItem, res *platform.CreditLeaseResponse) error {
 	if item == nil || res == nil ||
 		res.LeaseID != item.LeaseID ||
 		res.EscrowState != "released" ||

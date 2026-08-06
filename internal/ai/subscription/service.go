@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 )
 
 const defaultMaxQueue = 2
@@ -21,18 +21,18 @@ const (
 	window7d = 7 * 24 * time.Hour
 )
 
-// Service 订阅领域服务。热路径（ResolveForGate/Debit）低延迟；购买跨服务一致性靠
+// Service 订阅领域服务。热路径（ResolveForGate/Debit）低延迟；购买一致性靠
 // 订单状态机 + janitor 幂等重放补偿。
 type Service struct {
-	repo     Repo
-	urm      Purchaser
-	logger   *zap.Logger
-	maxQueue int
+	repo      Repo
+	purchaser Purchaser
+	logger    *zap.Logger
+	maxQueue  int
 }
 
 // NewService 构造订阅服务。maxQueue 为排队订阅上限（不含 active），默认 2。
 func NewService(repo Repo, purchaser Purchaser, logger *zap.Logger, opts ...func(*Service)) *Service {
-	s := &Service{repo: repo, urm: purchaser, logger: logger, maxQueue: defaultMaxQueue}
+	s := &Service{repo: repo, purchaser: purchaser, logger: logger, maxQueue: defaultMaxQueue}
 	for _, o := range opts {
 		o(s)
 	}
@@ -179,7 +179,7 @@ func windowHasRemaining(limit *int64, start *time.Time, used int64, dur time.Dur
 // Purchase 购买套餐。状态机见 docs/ai-subscription-design.md §6。
 // 返回 (order, subscription, error)：
 //   - 余额不足 ⇒ ErrInsufficientBalance（订单置 failed）
-//   - urm 未知态 / finalize 失败 ⇒ ErrOrderProcessing（订单停 deducting，janitor 补偿），subscription 为 nil
+//   - 扣款未知态 / finalize 失败 ⇒ ErrOrderProcessing（订单停 deducting，janitor 补偿），subscription 为 nil
 //   - 成功 ⇒ order.Status=paid + subscription
 func (s *Service) Purchase(ctx context.Context, p PurchaseParams) (*Order, *Subscription, error) {
 	if p.IdempotencyKey == "" {
@@ -216,7 +216,7 @@ func (s *Service) Purchase(ctx context.Context, p PurchaseParams) (*Order, *Subs
 		return nil, nil, err
 	}
 
-	resp, err := s.urm.DebitStrict(ctx, urm.StrictDebitRequest{
+	resp, err := s.purchaser.DebitStrict(ctx, platform.StrictDebitRequest{
 		IdempotencyKey: "ai-sub-" + order.OrderNo,
 		TenantID:       p.TenantID,
 		UserID:         p.UserID,
@@ -224,21 +224,21 @@ func (s *Service) Purchase(ctx context.Context, p PurchaseParams) (*Order, *Subs
 		UserMicro:      priceMicro,
 	})
 	if err != nil {
-		if errors.Is(err, urm.ErrInsufficientBalance) {
+		if errors.Is(err, platform.ErrInsufficientBalance) {
 			if _, ferr := s.repo.MarkOrderFailed(ctx, order.ID, "insufficient_balance"); ferr != nil {
 				s.logger.Warn("mark order failed after insufficient balance", zap.String("order", order.OrderNo), zap.Error(ferr))
 			}
 			return nil, nil, ErrInsufficientBalance
 		}
 		// 未知错误：订单留在 deducting，janitor 用同一幂等键重放推进。
-		s.logger.Warn("urm consume unknown error, order left deducting for janitor",
+		s.logger.Warn("billing consume unknown error, order left deducting for janitor",
 			zap.String("order", order.OrderNo), zap.Error(err))
 		return order, nil, ErrOrderProcessing
 	}
 
 	sub, err := s.repo.FinalizeOrder(ctx, order, resp.AuthorizationID)
 	if err != nil {
-		// urm 已扣款但本地开通失败 ⇒ 留 deducting，janitor 重放 FinalizeOrder 推进到 paid。
+		// 已扣款但本地开通失败 ⇒ 留 deducting，janitor 重放 FinalizeOrder 推进到 paid。
 		s.logger.Error("finalize order failed, order left deducting for janitor",
 			zap.String("order", order.OrderNo), zap.String("authorization", resp.AuthorizationID), zap.Error(err))
 		return order, nil, ErrOrderProcessing

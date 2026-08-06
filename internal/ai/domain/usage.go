@@ -62,7 +62,7 @@ type UsageLog struct {
 	APIKeyQuotaCostMicro               int64
 	ServiceTier                        string
 	BillingBreakdownJSON               []byte
-	URMTransactionID                   string
+	BillingEventID                     string
 	BillingStatus                      string
 	RequestStatus                      string
 	HTTPStatus                         *int32

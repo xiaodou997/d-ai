@@ -5,16 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 	billingsvc "xiaodou/dai/internal/billing/service"
 )
 
-// InProcessLeasePort 是 LeasePort 的进程内实现——直接调用
-// billingsvc.CreditLeaseService，不再走 HTTP。
-//
-// 原 ai-service 通过 urm.Client.HTTP 调用 urm-service 的
-// /internal/v3/ledger/leases 系列端点。合并后同一进程，
-// 直接函数调用，消除网络延迟和序列化开销。
+// InProcessLeasePort 直接连接 AI 计费协调器与统一计费域。
 type InProcessLeasePort struct {
 	leases   *billingsvc.CreditLeaseService
 	clientID string
@@ -24,7 +19,7 @@ func NewInProcessLeasePort(leases *billingsvc.CreditLeaseService, clientID strin
 	return &InProcessLeasePort{leases: leases, clientID: clientID}
 }
 
-func (p *InProcessLeasePort) AcquireCreditLease(ctx context.Context, req urm.AcquireCreditLeaseRequest) (*urm.CreditLeaseResponse, error) {
+func (p *InProcessLeasePort) AcquireCreditLease(ctx context.Context, req platform.AcquireCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
 	lease, err := p.leases.Acquire(ctx, billingsvc.AcquireLeaseParams{
 		ClientID:             p.clientID,
 		ClientWindowID:       req.ClientWindowID,
@@ -42,7 +37,7 @@ func (p *InProcessLeasePort) AcquireCreditLease(ctx context.Context, req urm.Acq
 	return leaseToResponse(lease), nil
 }
 
-func (p *InProcessLeasePort) RenewCreditLease(ctx context.Context, leaseID string, req urm.RenewCreditLeaseRequest) (*urm.CreditLeaseResponse, error) {
+func (p *InProcessLeasePort) RenewCreditLease(ctx context.Context, leaseID string, req platform.RenewCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
 	lease, err := p.leases.Renew(ctx, billingsvc.RenewLeaseParams{
 		LeaseID:  leaseID,
 		ClientID: p.clientID,
@@ -56,7 +51,7 @@ func (p *InProcessLeasePort) RenewCreditLease(ctx context.Context, leaseID strin
 	return leaseToResponse(lease), nil
 }
 
-func (p *InProcessLeasePort) SettleCreditLease(ctx context.Context, leaseID string, req urm.SettleCreditLeaseRequest) (*urm.CreditLeaseResponse, error) {
+func (p *InProcessLeasePort) SettleCreditLease(ctx context.Context, leaseID string, req platform.SettleCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
 	lease, err := p.leases.Settle(ctx, billingsvc.SettleLeaseParams{
 		LeaseID:           leaseID,
 		ClientID:          p.clientID,
@@ -70,7 +65,7 @@ func (p *InProcessLeasePort) SettleCreditLease(ctx context.Context, leaseID stri
 	return leaseToResponse(lease), nil
 }
 
-func (p *InProcessLeasePort) GetCreditLease(ctx context.Context, leaseID string) (*urm.CreditLeaseResponse, error) {
+func (p *InProcessLeasePort) GetCreditLease(ctx context.Context, leaseID string) (*platform.CreditLeaseResponse, error) {
 	lease, err := p.leases.Get(ctx, leaseID, p.clientID)
 	if err != nil {
 		return nil, mapServiceError(err)
@@ -80,33 +75,33 @@ func (p *InProcessLeasePort) GetCreditLease(ctx context.Context, leaseID string)
 
 // ─── 映射 ─────────────────────────────────────────────
 
-func leaseToResponse(l *billingsvc.CreditLease) *urm.CreditLeaseResponse {
+func leaseToResponse(l *billingsvc.CreditLease) *platform.CreditLeaseResponse {
 	if l == nil {
 		return nil
 	}
-	resp := &urm.CreditLeaseResponse{
-		LeaseID:            l.LeaseID,
-		ClientWindowID:     l.ClientWindowID,
-		TenantID:           l.TenantID,
-		UserID:             l.UserID,
-		GrantedTenantMicro: l.GrantedTenantMicro,
-		GrantedUserMicro:   l.GrantedUserMicro,
-		EscrowState:        l.EscrowState,
-		SettlementState:    l.SettlementState,
-		Version:            l.Version,
-		ExpiresAt:          l.ExpiresAt,
-		GraceUntil:         l.GraceUntil,
-		SettlementID:       l.SettlementID,
-		ActualTenantMicro:  l.ActualTenantMicro,
-		ActualUserMicro:    l.ActualUserMicro,
-		SettledEventID:     l.SettledEventID,
-		SettledAt:          l.SettledAt,
-		TenantDeductedMicro: l.TenantDeducted,
-		UserDeductedMicro:   l.UserDeducted,
+	resp := &platform.CreditLeaseResponse{
+		LeaseID:              l.LeaseID,
+		ClientWindowID:       l.ClientWindowID,
+		TenantID:             l.TenantID,
+		UserID:               l.UserID,
+		GrantedTenantMicro:   l.GrantedTenantMicro,
+		GrantedUserMicro:     l.GrantedUserMicro,
+		EscrowState:          l.EscrowState,
+		SettlementState:      l.SettlementState,
+		Version:              l.Version,
+		ExpiresAt:            l.ExpiresAt,
+		GraceUntil:           l.GraceUntil,
+		SettlementID:         l.SettlementID,
+		ActualTenantMicro:    l.ActualTenantMicro,
+		ActualUserMicro:      l.ActualUserMicro,
+		SettledEventID:       l.SettledEventID,
+		SettledAt:            l.SettledAt,
+		TenantDeductedMicro:  l.TenantDeducted,
+		UserDeductedMicro:    l.UserDeducted,
 		TenantDebtAddedMicro: l.TenantDebtAdded,
 		UserDebtAddedMicro:   l.UserDebtAdded,
-		AccountState:        urm.AccountState(l.AccountState),
-		AllowFurtherUsage:   l.AllowFurtherUsage,
+		AccountState:         platform.AccountState(l.AccountState),
+		AllowFurtherUsage:    l.AllowFurtherUsage,
 	}
 	return resp
 }

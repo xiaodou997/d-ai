@@ -10,7 +10,7 @@ import {
 } from "@/platform/ai/images";
 
 import { formatCredits, runtimeImageApi } from "@/api/aiTenant";
-import { serviceBaseUrl } from "@/api/request";
+import { apiBaseUrl } from "@/api/request";
 
 const imageApi: PortalImageApi = {
   listModels: () => runtimeImageApi.listModels(),
@@ -27,7 +27,7 @@ const imageApi: PortalImageApi = {
     :api="imageApi"
     :format-credits="formatCredits"
     usage-message="消耗会计入租户用量"
-    :asset-base-url="serviceBaseUrl('ai')"
+    :asset-base-url="apiBaseUrl"
     v-bind="portalImageWorkspaceIconProps"
     :notify-success="notifySuccess"
     :notify-error="notifyError"

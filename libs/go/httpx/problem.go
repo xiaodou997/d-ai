@@ -1,4 +1,4 @@
-// Package httpx defines UniHub 的统一 HTTP 契约原语：RFC 7807 problem+json
+// Package httpx defines D-AI 的统一 HTTP 契约原语：RFC 7807 problem+json
 // 错误模型、业务错误（AppError）与强类型分页结构。这些类型刻意不依赖任何 HTTP
 // 框架，可被 chi handler、Huma 适配层与单测共用。
 package httpx
@@ -25,7 +25,7 @@ type Problem struct {
 	// Instance 标识本次错误的具体出处（如 request 路径）。
 	Instance string `json:"instance,omitempty"`
 
-	// --- UniHub 扩展字段 ---
+	// --- D-AI 扩展字段 ---
 
 	// Code 是稳定的业务错误码（snake_case），供前端做语义分支。
 	Code string `json:"code,omitempty"`

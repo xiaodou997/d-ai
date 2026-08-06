@@ -11,7 +11,7 @@ import (
 )
 
 func TestRegisterOpenAPIAddsRunRuntimeSpec(t *testing.T) {
-	_, api := server.New(server.Options{Title: "AI Service", Version: "test"})
+	_, api := server.New(server.Options{Title: "D-AI", Version: "test"})
 
 	RegisterOpenAPI(api)
 
@@ -109,7 +109,7 @@ func TestRegisterOpenAPIAddsRunRuntimeSpec(t *testing.T) {
 }
 
 func TestRegisterOpenAPIAddsAsyncTaskSpec(t *testing.T) {
-	_, api := server.New(server.Options{Title: "AI Service", Version: "test"})
+	_, api := server.New(server.Options{Title: "D-AI", Version: "test"})
 
 	RegisterOpenAPI(api)
 
@@ -141,10 +141,9 @@ func TestRegisterOpenAPIAddsAsyncTaskSpec(t *testing.T) {
 	if !schemaEnumContains(jsonSchema.Properties["type"], "chat.completions") {
 		t.Fatal("chat.completions is missing from the task submission type enum")
 	}
-	if !strings.Contains(create.Description, "source=UniHub") ||
+	if !strings.Contains(create.Description, "source=D-AI") ||
 		!strings.Contains(create.Description, "GET /v1/tasks/{id}") ||
-		!strings.Contains(create.Description, "stream=false") ||
-		strings.Contains(create.Description, "X-UniHub-Signature") {
+		!strings.Contains(create.Description, "stream=false") {
 		t.Fatal("minimal webhook notification contract is not documented")
 	}
 	if create.Responses["202"] == nil {

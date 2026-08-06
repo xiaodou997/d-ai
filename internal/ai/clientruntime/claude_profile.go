@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	ClaudeProfileRevision = "claude-code@2.1.220+unihub.1"
+	ClaudeProfileRevision = "claude-code@2.1.220+dai.1"
 	claudeBaseURL         = "https://api.anthropic.com"
 	claudeUserAgent       = "claude-cli/2.1.220 (external, cli)"
 )

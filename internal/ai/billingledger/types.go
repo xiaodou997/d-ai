@@ -1,6 +1,5 @@
 // Package billingledger coordinates PAYG credit leases, durable request
-// admission, and asynchronous settlement. PostgreSQL is the source of truth;
-// the remote URM dependency is accessed through LeasePort.
+// admission, and asynchronous settlement. PostgreSQL is the source of truth.
 package billingledger
 
 import (
@@ -14,7 +13,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
+)
+
+const (
+	// UsageRecoveryStream contains durable usage-completion envelopes.
+	UsageRecoveryStream = "dai:usage:completion:v2"
+	// UsageRecoveryQuarantineStream holds malformed envelopes for inspection.
+	UsageRecoveryQuarantineStream = "dai:usage:completion:v2:quarantine"
 )
 
 var (
@@ -25,10 +31,10 @@ var (
 )
 
 type LeasePort interface {
-	AcquireCreditLease(context.Context, urm.AcquireCreditLeaseRequest) (*urm.CreditLeaseResponse, error)
-	RenewCreditLease(context.Context, string, urm.RenewCreditLeaseRequest) (*urm.CreditLeaseResponse, error)
-	SettleCreditLease(context.Context, string, urm.SettleCreditLeaseRequest) (*urm.CreditLeaseResponse, error)
-	GetCreditLease(context.Context, string) (*urm.CreditLeaseResponse, error)
+	AcquireCreditLease(context.Context, platform.AcquireCreditLeaseRequest) (*platform.CreditLeaseResponse, error)
+	RenewCreditLease(context.Context, string, platform.RenewCreditLeaseRequest) (*platform.CreditLeaseResponse, error)
+	SettleCreditLease(context.Context, string, platform.SettleCreditLeaseRequest) (*platform.CreditLeaseResponse, error)
+	GetCreditLease(context.Context, string) (*platform.CreditLeaseResponse, error)
 }
 
 type BillingSnapshot struct {
@@ -176,7 +182,7 @@ func classifyPortError(err error) error {
 		errors.Is(err, ErrProtocolViolation) || errors.Is(err, ErrDependencyUnavailable) {
 		return err
 	}
-	var apiErr *urm.APIError
+	var apiErr *platform.APIError
 	if errors.As(err, &apiErr) {
 		if apiErr.Status == http.StatusPaymentRequired {
 			return fmt.Errorf("%w: %w", ErrInsufficientBalance, err)

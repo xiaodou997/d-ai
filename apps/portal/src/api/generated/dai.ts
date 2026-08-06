@@ -279,6 +279,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/debts/{owner_type}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询账户当前债务 */
+        get: operations["admin-get-debt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/payment-orders": {
         parameters: {
             query?: never;
@@ -1526,7 +1543,7 @@ export interface paths {
         put?: never;
         /**
          * 处置风险事件
-         * @description 仅更新事件状态；如需封禁用户/租户请在 URM 管理端单独操作。
+         * @description 仅更新事件状态；如需封禁用户或租户，请在用户管理中单独操作。
          */
         post: operations["ai-resolve-risk-event"];
         delete?: never;
@@ -3308,23 +3325,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenants/{id}/client-services": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户可用应用授权 */
-        get: operations["admin-tenant-client-services"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tenants/{id}/status": {
         parameters: {
             query?: never;
@@ -4688,23 +4688,6 @@ export interface paths {
         patch: operations["admin-update-end-user-status"];
         trace?: never;
     };
-    "/api/v2/admin/debts/{owner_type}/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 查询账户当前债务 */
-        get: operations["admin-get-debt"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -4719,346 +4702,6 @@ export interface paths {
         get: operations["health-check"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/assets/balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 查询账户余额 */
-        get: operations["internal-query-balance"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/end-users/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 按租户查询单个终端用户 */
-        get: operations["internal-get-end-user"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/settle/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 取消预授权（按 eventId 或幂等键） */
-        post: operations["internal-settle-cancel-by-key"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/settle/cancel/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 取消预授权 */
-        post: operations["internal-settle-cancel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/settle/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 确认扣费（多退少补） */
-        post: operations["internal-settle-confirm"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/settle/consume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 单阶段幂等扣款 */
-        post: operations["internal-settle-consume"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/settle/freeze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 双账户预授权冻结 */
-        post: operations["internal-settle-freeze"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/tenants/batch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 批量查询租户 */
-        post: operations["internal-batch-get-tenants"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/users/batch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 批量查询用户 */
-        post: operations["internal-batch-get-users"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v1/users/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 查询单个用户 */
-        get: operations["internal-get-user"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v2/ledger/authorizations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Open a partially grantable microcredit authorization block */
-        post: operations["internal-v2-ledger-open-authorization"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v2/ledger/authorizations/{id}/capture": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Capture actual microcredits for completed work */
-        post: operations["internal-v2-ledger-capture-authorization"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v2/ledger/authorizations/{id}/void": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Void an unused microcredit authorization block */
-        post: operations["internal-v2-ledger-void-authorization"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v2/ledger/balances/{owner_type}/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get microcredit balance and debt state */
-        get: operations["internal-v2-ledger-get-balance"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v2/ledger/debits": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Strictly debit a known microcredit amount */
-        post: operations["internal-v2-ledger-strict-debit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v3/ledger/leases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Acquire an expiring, renewable credit lease */
-        post: operations["internal-v3-ledger-acquire-credit-lease"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v3/ledger/leases/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read credit lease state for reconciliation */
-        get: operations["internal-v3-ledger-get-credit-lease"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v3/ledger/leases/{id}/renew": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Renew a credit lease using its fencing version */
-        post: operations["internal-v3-ledger-renew-credit-lease"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v3/ledger/leases/{id}/settle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Idempotently settle a credit lease, including after escrow release */
-        post: operations["internal-v3-ledger-settle-credit-lease"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/v3/ledger/legacy-authorizations/{id}/settle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Settle a V2 authorization during the controlled V3 cutover */
-        post: operations["internal-v3-ledger-settle-legacy-authorization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5117,7 +4760,7 @@ export interface paths {
         put?: never;
         /**
          * 创建异步任务
-         * @description 使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=UniHub、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。
+         * @description 使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。
          */
         post: operations["ai-create-task"];
         delete?: never;
@@ -6000,7 +5643,6 @@ export interface components {
             result: string;
         };
         AuditLogItem: {
-            clientId?: string;
             /** Format: int64 */
             createdAt: number;
             decision: string;
@@ -6023,28 +5665,6 @@ export interface components {
             items: components["schemas"]["AuditLogDTO"][] | null;
             /** Format: int64 */
             total: number;
-        };
-        BalanceOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BalanceOutputBody.json
-             */
-            readonly $schema?: string;
-            accountId: string;
-            /** Format: int64 */
-            availableCredits: number;
-            /** Format: int64 */
-            currentOverdraft: number;
-            /** Format: int64 */
-            frozenCredits: number;
-            /** Format: int64 */
-            overdraftLimit: number;
-            /** Format: int64 */
-            packageType: number;
-            packages?: components["schemas"]["PackageSummary"][] | null;
-            /** Format: int64 */
-            totalCredits: number;
         };
         BalanceResponse: {
             /**
@@ -6137,26 +5757,6 @@ export interface components {
             eventIds: string[] | null;
             reason: string;
         };
-        BatchTenantsInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchTenantsInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description 租户 ID 列表 */
-            tenantIds: string[] | null;
-        };
-        BatchUsersInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchUsersInputBody.json
-             */
-            readonly $schema?: string;
-            /** @description 用户 ID 列表 */
-            userIds: string[] | null;
-        };
         BuyCreditsInputBody: {
             /**
              * Format: uri
@@ -6180,16 +5780,6 @@ export interface components {
             creditOrderId: string;
             /** Format: double */
             credits: number;
-        };
-        CancelInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CancelInputBody.json
-             */
-            readonly $schema?: string;
-            eventId?: string;
-            idempotencyKey?: string;
         };
         CancelPreAuthInputBody: {
             /**
@@ -6259,80 +5849,9 @@ export interface components {
             credits: number;
             percentage: string;
         };
-        ClientServiceItem: {
-            clientId: string;
-            description: string;
-            displayName: string;
-            status: string;
-        };
-        ClientServicesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ClientServicesOutputBody.json
-             */
-            readonly $schema?: string;
-            clientServices: components["schemas"]["ClientServiceItem"][] | null;
-            isWildcard: boolean;
-        };
         ComponentStatus: {
             error?: string;
             status: string;
-        };
-        ConfirmInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ConfirmInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            actualTenantAmount?: number;
-            /** Format: int64 */
-            actualUserAmount?: number;
-            allowOverdraft?: boolean;
-            eventId?: string;
-            idempotencyKey?: string;
-        };
-        ConsumeInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ConsumeInputBody.json
-             */
-            readonly $schema?: string;
-            allowOverdraft?: boolean;
-            description?: string;
-            disallowOverdraft?: boolean;
-            /** @description 幂等键 */
-            idempotencyKey: string;
-            /** Format: int64 */
-            tenantAmount?: number;
-            /** @description 租户 ID */
-            tenantId: string;
-            /** Format: int64 */
-            userAmount?: number;
-            userId?: string;
-        };
-        ConsumeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ConsumeOutputBody.json
-             */
-            readonly $schema?: string;
-            accountState: string;
-            allowFurtherUsage: boolean;
-            eventId: string;
-            status: string;
-            /** Format: int64 */
-            tenantDeducted: number;
-            /** Format: int64 */
-            tenantOverdraftAdd: number;
-            /** Format: int64 */
-            userDeducted: number;
-            /** Format: int64 */
-            userOverdraftAdd: number;
         };
         ConsumerAppDTO: {
             capability: string;
@@ -6532,7 +6051,6 @@ export interface components {
             readonly $schema?: string;
             email?: string;
             password?: string;
-            serviceAccess?: components["schemas"]["PolicyInput"];
             username: string;
         };
         CreateTenantInputBody: {
@@ -6546,7 +6064,6 @@ export interface components {
             contactPerson?: string;
             initEmail?: string;
             initUsername?: string;
-            serviceAccess?: components["schemas"]["PolicyInput"];
             /** Format: int64 */
             status?: number;
             tenantName: string;
@@ -6691,97 +6208,6 @@ export interface components {
             items: components["schemas"]["CredentialPoolDTO"][] | null;
             /** Format: int64 */
             total: number;
-        };
-        CreditLeaseAcquireInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreditLeaseAcquireInputBody.json
-             */
-            readonly $schema?: string;
-            client_window_id: string;
-            description?: string;
-            /** Format: int64 */
-            grace_seconds?: number;
-            /** Format: int64 */
-            requested_tenant_micro?: number;
-            /** Format: int64 */
-            requested_user_micro?: number;
-            tenant_id: string;
-            /** Format: int64 */
-            ttl_seconds?: number;
-            user_id?: string;
-        };
-        CreditLeaseOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreditLeaseOutputBody.json
-             */
-            readonly $schema?: string;
-            account_state: string;
-            /** Format: int64 */
-            actual_tenant_micro?: number;
-            /** Format: int64 */
-            actual_user_micro?: number;
-            allow_further_usage: boolean;
-            client_window_id: string;
-            /** @enum {string} */
-            escrow_state: "active" | "grace" | "released";
-            /** Format: date-time */
-            expires_at: string;
-            /** Format: date-time */
-            grace_until: string;
-            /** Format: int64 */
-            granted_tenant_micro: number;
-            /** Format: int64 */
-            granted_user_micro: number;
-            lease_id: string;
-            /** Format: date-time */
-            settled_at?: string;
-            settled_event_id?: string;
-            settlement_id?: string;
-            /** @enum {string} */
-            settlement_state: "unsettled" | "settled";
-            /** Format: int64 */
-            tenant_debt_added_micro: number;
-            /** Format: int64 */
-            tenant_deducted_micro: number;
-            tenant_id: string;
-            /** Format: int64 */
-            user_debt_added_micro: number;
-            /** Format: int64 */
-            user_deducted_micro: number;
-            user_id?: string;
-            /** Format: int64 */
-            version: number;
-        };
-        CreditLeaseRenewInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreditLeaseRenewInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            grace_seconds?: number;
-            /** Format: int64 */
-            ttl_seconds?: number;
-            /** Format: int64 */
-            version: number;
-        };
-        CreditLeaseSettleInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreditLeaseSettleInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            actual_tenant_micro?: number;
-            /** Format: int64 */
-            actual_user_micro?: number;
-            settlement_id: string;
         };
         CreditsPerUSDOutputBody: {
             /**
@@ -7296,41 +6722,6 @@ export interface components {
         FieldError: {
             field: string;
             message: string;
-        };
-        FreezeInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/FreezeInputBody.json
-             */
-            readonly $schema?: string;
-            allowOverdraft?: boolean;
-            description?: string;
-            /** @description 幂等键 */
-            idempotencyKey: string;
-            /** Format: int64 */
-            tenantAmount?: number;
-            /** @description 租户 ID */
-            tenantId: string;
-            /** Format: int64 */
-            userAmount?: number;
-            userId?: string;
-        };
-        FreezeOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/FreezeOutputBody.json
-             */
-            readonly $schema?: string;
-            accountState: string;
-            allowFurtherUsage: boolean;
-            eventId: string;
-            /** Format: int64 */
-            frozenTenant: number;
-            /** Format: int64 */
-            frozenUser: number;
-            status: string;
         };
         GlobalSettings: {
             /**
@@ -7959,18 +7350,6 @@ export interface components {
             name: string;
             version: string;
         };
-        InternalEndUserOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/InternalEndUserOutputBody.json
-             */
-            readonly $schema?: string;
-            status: string;
-            tenantId: string;
-            userId: string;
-            username: string;
-        };
         InviteCodeItem: {
             code: string;
             createdBy: string;
@@ -8048,103 +7427,6 @@ export interface components {
             /** @description 共现词；全部出现才算命中 */
             require_with: string[] | null;
             word: string;
-        };
-        LedgerAuthorizationInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/LedgerAuthorizationInputBody.json
-             */
-            readonly $schema?: string;
-            description?: string;
-            /** @description Stable block idempotency key */
-            idempotency_key: string;
-            /** Format: int64 */
-            requested_tenant_micro?: number;
-            /** Format: int64 */
-            requested_user_micro?: number;
-            tenant_id: string;
-            user_id?: string;
-        };
-        LedgerAuthorizationOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/LedgerAuthorizationOutputBody.json
-             */
-            readonly $schema?: string;
-            account_state: string;
-            allow_further_usage: boolean;
-            authorization_id: string;
-            /** Format: int64 */
-            granted_tenant_micro: number;
-            /** Format: int64 */
-            granted_user_micro: number;
-        };
-        LedgerBalanceV2OutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/LedgerBalanceV2OutputBody.json
-             */
-            readonly $schema?: string;
-            account_id: string;
-            /** Format: int64 */
-            available_micro: number;
-            /** Format: int64 */
-            frozen_micro: number;
-            /** Format: int64 */
-            outstanding_debt_micro: number;
-            owner_type: string;
-            /** @enum {string} */
-            service_state: "active" | "insufficient_balance" | "blocked_debt";
-        };
-        LedgerCaptureInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/LedgerCaptureInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            actual_tenant_micro?: number;
-            /** Format: int64 */
-            actual_user_micro?: number;
-        };
-        LedgerCaptureOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/LedgerCaptureOutputBody.json
-             */
-            readonly $schema?: string;
-            account_state: string;
-            allow_further_usage: boolean;
-            authorization_id: string;
-            /** Format: int64 */
-            tenant_debt_added_micro: number;
-            /** Format: int64 */
-            tenant_deducted_micro: number;
-            /** Format: int64 */
-            user_debt_added_micro: number;
-            /** Format: int64 */
-            user_deducted_micro: number;
-        };
-        LedgerDebitInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/LedgerDebitInputBody.json
-             */
-            readonly $schema?: string;
-            description?: string;
-            idempotency_key: string;
-            tenant_id: string;
-            /** Format: int64 */
-            tenant_micro?: number;
-            user_id?: string;
-            /** Format: int64 */
-            user_micro?: number;
         };
         LegalStruct: {
             privacyUrl: string;
@@ -8308,14 +7590,6 @@ export interface components {
             items: components["schemas"]["OauthPoolHealthDTO"][] | null;
             /** Format: int64 */
             total: number;
-        };
-        PackageSummary: {
-            /** Format: int64 */
-            expireTime: number | null;
-            packageId: string;
-            /** Format: int64 */
-            remaining: number;
-            source: string;
         };
         PageAdminUserItem: {
             /**
@@ -8517,11 +7791,6 @@ export interface components {
             entries: components["schemas"]["KeywordEntryDTO"][] | null;
             /** @description 首字母缩写匹配（预留，P0 固定 false） */
             include_initials: boolean;
-        };
-        PolicyInput: {
-            /** @enum {string} */
-            mode: "all" | "selected";
-            serviceIds: string[] | null;
         };
         PoolAvailableModelsDTO: {
             /**
@@ -8884,7 +8153,6 @@ export interface components {
              */
             readonly $schema?: string;
             message: string;
-            sessionEstablished: boolean;
             success: boolean;
             userId: string;
         };
@@ -9603,6 +8871,7 @@ export interface components {
              * @example https://example.com/schemas/SubOrderDTO.json
              */
             readonly $schema?: string;
+            billing_event_id?: string;
             /** Format: date-time */
             created_at: string;
             fail_reason?: string;
@@ -9622,7 +8891,6 @@ export interface components {
             tenant_id: string;
             /** Format: date-time */
             updated_at: string;
-            urm_event_id?: string;
             user_id: string;
         };
         SubPlanDTO: {
@@ -9967,11 +9235,6 @@ export interface components {
              * @description 状态生成时间，Unix 毫秒
              */
             timestamp: number;
-        };
-        Tenant: {
-            status?: string;
-            tenantId: string;
-            tenantName: string;
         };
         TenantBrandingOutputBody: {
             /**
@@ -11669,24 +10932,6 @@ export interface components {
             /** @description 用户 ID */
             user_id: string;
         };
-        User: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/User.json
-             */
-            readonly $schema?: string;
-            avatar: string | null;
-            /** Format: int64 */
-            createdTime: number | null;
-            email: string | null;
-            nickname: string | null;
-            /** Format: int32 */
-            status: number;
-            tenantId: string;
-            userId: string;
-            username: string;
-        };
         UserAvailableModelDTO: {
             /**
              * Format: double
@@ -11834,8 +11079,6 @@ export interface components {
              * @example https://example.com/schemas/UserInfoOutputBody.json
              */
             readonly $schema?: string;
-            clientId: string;
-            clientType: string;
             sub: string;
             tenantId: string;
             tenantName: string;
@@ -12916,6 +12159,38 @@ export interface operations {
             };
         };
     };
+    "admin-get-debt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                owner_type: "tenant" | "user";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DebtStatusOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "admin-list-payment-orders": {
         parameters: {
             query?: {
@@ -13475,7 +12750,6 @@ export interface operations {
             query?: {
                 eventType?: string;
                 principalType?: string;
-                clientId?: string;
                 userId?: string;
                 decision?: string;
                 page?: number;
@@ -15497,7 +14771,6 @@ export interface operations {
             /** @description Created */
             201: {
                 headers: {
-                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -20296,37 +19569,6 @@ export interface operations {
             };
         };
     };
-    "admin-tenant-client-services": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClientServicesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "admin-update-tenant-status": {
         parameters: {
             query?: never;
@@ -23413,38 +22655,6 @@ export interface operations {
             };
         };
     };
-    "admin-get-debt": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                owner_type: "tenant" | "user";
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DebtStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "health-check": {
         parameters: {
             query?: never;
@@ -23461,677 +22671,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-query-balance": {
-        parameters: {
-            query?: {
-                /** @description 1=租户账户 2=用户账户 */
-                packageType?: string;
-                /** @description 账户 ID */
-                accountId?: string;
-                /** @description 是否返回积分包明细 */
-                detail?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BalanceOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-get-end-user": {
-        parameters: {
-            query?: {
-                /** @description 租户 ID */
-                tenant_id?: string;
-            };
-            header?: never;
-            path: {
-                /** @description 终端用户 ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InternalEndUserOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-settle-cancel-by-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CancelInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-settle-cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 用户 ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-settle-confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfirmInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-settle-consume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConsumeInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ConsumeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-settle-freeze": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FreezeInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FreezeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-batch-get-tenants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BatchTenantsInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["Tenant"];
-                    };
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-batch-get-users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BatchUsersInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["User"];
-                    };
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-get-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 用户 ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["User"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v2-ledger-open-authorization": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LedgerAuthorizationInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerAuthorizationOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v2-ledger-capture-authorization": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LedgerCaptureInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerCaptureOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v2-ledger-void-authorization": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 用户 ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v2-ledger-get-balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                owner_type: "tenant" | "user";
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerBalanceV2OutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v2-ledger-strict-debit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LedgerDebitInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerCaptureOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v3-ledger-acquire-credit-lease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreditLeaseAcquireInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditLeaseOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v3-ledger-get-credit-lease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditLeaseOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v3-ledger-renew-credit-lease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreditLeaseRenewInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditLeaseOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v3-ledger-settle-credit-lease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreditLeaseSettleInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditLeaseOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "internal-v3-ledger-settle-legacy-authorization": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LedgerCaptureInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerCaptureOutputBody"];
                 };
             };
             /** @description Error */

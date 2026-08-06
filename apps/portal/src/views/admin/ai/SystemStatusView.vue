@@ -1,5 +1,5 @@
 <!--
-  系统状态 — 1:1 搬运自 v1/uni-ai-api/ai-admin/src/views/SystemStatus/index.vue。
+  系统状态。
   适配：getSystemStatus → aiAdminApi.getSystemStatus()；v4 返回强类型 SystemStatusDTO。
   V1 表格用 row.kind===1（数值）与 row.state_str；v4 返回 kind 为字符串("deployment"/"credential")、字段名为 state。已按 v4 字段适配，UI 1:1。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,

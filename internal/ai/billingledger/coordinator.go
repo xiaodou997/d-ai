@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"xiaodou/dai/internal/ai/urm"
+	"xiaodou/dai/internal/ai/platform"
 )
 
 type window struct {
@@ -175,7 +175,7 @@ func (c *Coordinator) Complete(ctx context.Context, tx pgx.Tx, completion Comple
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE ai_usage_logs
-		SET billing_window_id=$1, urm_transaction_id=$2
+		SET billing_window_id=$1, billing_event_id=$2
 		WHERE request_id=$3
 	`, windowID, leaseID, completion.RequestID); err != nil {
 		return fmt.Errorf("link usage to billing window: %w", err)
@@ -255,7 +255,7 @@ func (c *Coordinator) selectOrCreateWindow(ctx context.Context, intent Intent) (
 }
 
 func (c *Coordinator) activateWindow(ctx context.Context, win *window) error {
-	res, err := c.port.AcquireCreditLease(ctx, urm.AcquireCreditLeaseRequest{
+	res, err := c.port.AcquireCreditLease(ctx, platform.AcquireCreditLeaseRequest{
 		ClientWindowID:       win.ID,
 		TenantID:             win.TenantID,
 		UserID:               win.UserID,
@@ -312,8 +312,8 @@ func (c *Coordinator) activateWindow(ctx context.Context, win *window) error {
 func (c *Coordinator) prepareOpeningLease(
 	ctx context.Context,
 	win *window,
-	res *urm.CreditLeaseResponse,
-) (*urm.CreditLeaseResponse, string, error) {
+	res *platform.CreditLeaseResponse,
+) (*platform.CreditLeaseResponse, string, error) {
 	for attempt := 0; attempt < 3; attempt++ {
 		if err := validateOpeningLeaseIdentity(win, res); err != nil {
 			return nil, "", err
@@ -327,7 +327,7 @@ func (c *Coordinator) prepareOpeningLease(
 		case (res.EscrowState == "active" || res.EscrowState == "grace") &&
 			res.GraceUntil.After(now):
 			previousVersion := res.Version
-			renewed, renewErr := c.port.RenewCreditLease(ctx, res.LeaseID, urm.RenewCreditLeaseRequest{
+			renewed, renewErr := c.port.RenewCreditLease(ctx, res.LeaseID, platform.RenewCreditLeaseRequest{
 				Version:      previousVersion,
 				TTLSeconds:   int64(c.config.LeaseTTL / time.Second),
 				GraceSeconds: int64(c.config.LeaseGrace / time.Second),
@@ -358,7 +358,7 @@ func (c *Coordinator) prepareOpeningLease(
 }
 
 func (c *Coordinator) renewWindow(ctx context.Context, win *window) error {
-	res, err := c.port.RenewCreditLease(ctx, win.LeaseID, urm.RenewCreditLeaseRequest{
+	res, err := c.port.RenewCreditLease(ctx, win.LeaseID, platform.RenewCreditLeaseRequest{
 		Version:      win.LeaseVersion,
 		TTLSeconds:   int64(c.config.LeaseTTL / time.Second),
 		GraceSeconds: int64(c.config.LeaseGrace / time.Second),
@@ -406,7 +406,7 @@ func (c *Coordinator) renewWindow(ctx context.Context, win *window) error {
 	return nil
 }
 
-func (c *Coordinator) reconcileRenewFailure(ctx context.Context, win *window) (*urm.CreditLeaseResponse, error) {
+func (c *Coordinator) reconcileRenewFailure(ctx context.Context, win *window) (*platform.CreditLeaseResponse, error) {
 	current, err := c.port.GetCreditLease(ctx, win.LeaseID)
 	if err != nil {
 		return nil, err
@@ -419,7 +419,7 @@ func (c *Coordinator) reconcileRenewFailure(ctx context.Context, win *window) (*
 		current.ExpiresAt.After(c.now().Add(c.config.AdmissionHeadroom)) {
 		return current, nil
 	}
-	return c.port.RenewCreditLease(ctx, win.LeaseID, urm.RenewCreditLeaseRequest{
+	return c.port.RenewCreditLease(ctx, win.LeaseID, platform.RenewCreditLeaseRequest{
 		Version:      current.Version,
 		TTLSeconds:   int64(c.config.LeaseTTL / time.Second),
 		GraceSeconds: int64(c.config.LeaseGrace / time.Second),
@@ -566,7 +566,7 @@ func windowCapacityReached(win *window) bool {
 		(win.GrantedUserMicro > 0 && win.AccruedUserMicro >= (win.GrantedUserMicro*3)/4)
 }
 
-func validateOpeningLeaseIdentity(win *window, res *urm.CreditLeaseResponse) error {
+func validateOpeningLeaseIdentity(win *window, res *platform.CreditLeaseResponse) error {
 	if res == nil || res.LeaseID == "" || res.ClientWindowID != win.ID ||
 		res.TenantID != win.TenantID || res.UserID != win.UserID ||
 		res.Version <= 0 || res.SettlementState != "unsettled" ||
@@ -582,7 +582,7 @@ func validateOpeningLeaseIdentity(win *window, res *urm.CreditLeaseResponse) err
 	return nil
 }
 
-func validateRenewResponse(win *window, res *urm.CreditLeaseResponse, now time.Time) error {
+func validateRenewResponse(win *window, res *platform.CreditLeaseResponse, now time.Time) error {
 	if res == nil || res.LeaseID != win.LeaseID || res.ClientWindowID != win.ID ||
 		res.TenantID != win.TenantID || res.UserID != win.UserID ||
 		res.GrantedTenantMicro != win.GrantedTenantMicro ||
@@ -611,7 +611,7 @@ func portErrorCode(err error) string {
 	case errors.Is(err, ErrInsufficientBalance):
 		return "insufficient_balance"
 	}
-	var apiErr *urm.APIError
+	var apiErr *platform.APIError
 	if errors.As(err, &apiErr) && apiErr.Code != "" {
 		return apiErr.Code
 	}
@@ -619,6 +619,6 @@ func portErrorCode(err error) string {
 }
 
 func isConflictResponse(err error) bool {
-	var apiErr *urm.APIError
+	var apiErr *platform.APIError
 	return errors.As(err, &apiErr) && apiErr.Status == http.StatusConflict
 }

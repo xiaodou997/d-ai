@@ -592,10 +592,9 @@ func (r *TenantRepo) GetClientConsumption(ctx context.Context, tenantID string, 
 	query := `
 			SELECT
 				COALESCE(dt.client_id, '') AS client_id,
-				COALESCE(bs.display_name, '其他/未知') AS client_name,
+				COALESCE(NULLIF(dt.client_id, ''), 'D-AI') AS client_name,
 				SUM(COALESCE(dt.user_credits, 0)) AS credits
 			FROM bill_events dt
-			LEFT JOIN gov_clients bs ON dt.client_id = bs.client_id
 			WHERE dt.tenant_id = $1 AND dt.status = 'succeeded' AND dt.event_type = 'charge'
 	`
 	args := []any{tenantID}
@@ -611,7 +610,7 @@ func (r *TenantRepo) GetClientConsumption(ctx context.Context, tenantID string, 
 		argIdx++
 	}
 	query += `
-				GROUP BY dt.client_id, bs.display_name
+				GROUP BY dt.client_id
 				HAVING SUM(COALESCE(dt.user_credits, 0)) > 0
 				ORDER BY credits DESC
 	`

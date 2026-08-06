@@ -1,6 +1,5 @@
-// Package payment 实现微信支付在线充值：下单/回调核销/兜底 sweep、租户现金账户与提现、
-// 管理端费率与微信商户配置。子包 payment/wechat 是与本包及 urm 业务解耦的自闭环模块
-// （Gateway 接口 + wechatpay-go 真实实现 + mock 实现 + 商户配置读写），方便日后其他服务照抄参考。
+// Package payment 实现微信支付在线充值：下单、回调核销、兜底 sweep、租户现金账户与提现，
+// 以及管理端费率与微信商户配置。
 package payment
 
 import "time"

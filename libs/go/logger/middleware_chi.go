@@ -11,7 +11,7 @@ import (
 )
 
 // ChiRequestLogger returns an http.Handler middleware that logs every HTTP request
-// with a unified format aligned across all UniHub services.
+// with a unified format across the D-AI server.
 //
 // Fields (snake_case, Go convention):
 //

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	CodexProfileRevision = "codex-cli@0.144.1+unihub.1"
+	CodexProfileRevision = "codex-cli@0.144.1+dai.1"
 	codexBaseURL         = "https://chatgpt.com/backend-api/codex"
 	codexUserAgent       = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
 	codexOriginator      = "codex_cli_rs"
@@ -378,7 +378,7 @@ func codexPromptCacheKey(body []byte) string {
 }
 
 func stableCodexID(kind, seed string) string {
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("unihub:codex:"+kind+":v1:"+seed)).String()
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("dai:codex:"+kind+":v1:"+seed)).String()
 }
 
 func validHeaderValue(value string) bool {

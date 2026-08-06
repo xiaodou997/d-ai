@@ -180,9 +180,8 @@ type ContentModerationLogFilter struct {
 
 // RiskEvent is a row in ai_risk_events: a human-in-the-loop item generated
 // when violations accumulate past RiskControlConfig.RiskEventThreshold
-// within the rolling window. ai-service never auto-mutates account status;
-// an admin resolves the event and, if needed, separately bans the user via
-// urm-service's own tenant-user status endpoint.
+// within the rolling window. Risk handling never auto-mutates account status;
+// an admin resolves the event and, if needed, separately bans the user.
 type RiskEvent struct {
 	ID             string
 	EventType      string

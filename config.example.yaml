@@ -29,13 +29,8 @@ security:
   # Provider API key 加密主密钥（≥32 字节随机串）
   provider_key_master: '0c52fb81af673f1fae576eef73d36364'
 
-sso:
-  cookie_domain: ''
-  cookie_secure: false
-  issuer_url: http://localhost:19641
-  customer_portal_base_url: http://localhost:19641
-  allowed_redirect_uris:
-    - http://localhost:19641
+portal:
+  base_url: http://localhost:19641
 
 legal:
   base_url: http://localhost:19641/legal
@@ -59,9 +54,3 @@ billing:
   worker_interval: 5s
   dispatch_lease: 30s
   pick_limit: 32
-
-delegation:
-  allowed_clients: []
-  audience: []
-  scope: ai.invoke
-  ttl: 3m
