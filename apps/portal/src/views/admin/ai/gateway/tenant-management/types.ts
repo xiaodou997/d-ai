@@ -3,6 +3,11 @@ export interface AdminTenantLimitForm {
   status: "active" | "disabled";
 }
 
+export interface AdminTenantPolicySubject {
+  tenantId: string;
+  tenantName: string;
+}
+
 export interface AdminTenantUpstreamPolicyDraft {
   access_granted: boolean;
   tenant_multiplier_override: number | null;

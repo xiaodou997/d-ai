@@ -12,7 +12,6 @@ export type PortalCapability =
   | "admin.settlement"
   | "admin.ai.monitor"
   | "admin.ai.upstream"
-  | "admin.ai.policy"
   | "admin.ai.security"
   | "admin.announcements"
   | "tenant.overview"
@@ -42,7 +41,6 @@ const capabilityUserTypes: Record<PortalCapability, readonly PortalUserType[]> =
   "admin.settlement": [1, 2],
   "admin.ai.monitor": [1, 2],
   "admin.ai.upstream": [1, 2],
-  "admin.ai.policy": [1, 2],
   "admin.ai.security": [1, 2],
   "admin.announcements": [1, 2],
   "tenant.overview": [3],
@@ -138,6 +136,7 @@ export const portalModules: PortalModule[] = [
     navTabs: true,
     tabs: [
       { id: "tenants", label: "租户管理", icon: "building-2", path: "tenants", component: () => import("@/views/admin/platform/TenantsView.vue") },
+      { id: "tenant-policy", label: "平台策略", path: "tenants/:id/policy", component: () => import("@/views/admin/platform/TenantPolicyView.vue"), name: "platform-tenant-policy", nav: false, activeTabId: "tenants" },
       { id: "tenant-detail", label: "租户详情", path: "tenants/:id", component: () => import("@/views/admin/platform/TenantDetailView.vue"), name: "platform-tenant-detail", nav: false, activeTabId: "tenants" },
       { id: "users", label: "终端用户", icon: "users", path: "users", component: () => import("@/views/admin/platform/EndUsersView.vue") }
     ]
@@ -212,16 +211,6 @@ export const portalModules: PortalModule[] = [
       { id: "pools", label: "账号池", path: "pools", component: () => import("@/views/admin/ai/gateway/CredentialPoolsView.vue") },
       { id: "pricing", label: "价格表", path: "pricing", component: () => import("@/views/admin/ai/gateway/PricingView.vue") }
     ]
-  },
-  {
-    id: "admin-tenant-policy",
-    label: "租户策略",
-    path: "/admin/ai/tenant-policy",
-    icon: "sliders-horizontal",
-    capability: "admin.ai.policy",
-    navGroup: adminAi,
-    order: 30,
-    component: () => import("@/views/admin/ai/gateway/AccessView.vue")
   },
   {
     id: "admin-security-workspace",

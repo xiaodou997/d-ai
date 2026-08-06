@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(12);
-    expect(leavesFor(2)).toHaveLength(11);
+    expect(leavesFor(1)).toHaveLength(11);
+    expect(leavesFor(2)).toHaveLength(10);
     expect(leavesFor(3)).toHaveLength(13);
     expect(leavesFor(4)).toHaveLength(8);
   });
@@ -31,7 +31,6 @@ describe("portal module registry", () => {
       "账户与交易",
       "结算与支付",
       "上游与定价",
-      "租户策略",
       "审计与风控",
       "公告管理"
     ]);
@@ -122,6 +121,11 @@ describe("portal module registry", () => {
       .find((item) => item.id === "admin-organization")
       ?.children;
     expect(tenantDetailMenus?.find((item) => item.id === "admin-organization-workspace-tenants")?.active).toBe(true);
+  });
+
+  it("does not expose tenant policy as a standalone admin menu", () => {
+    expect(leavesFor(1).some((item) => item.label === "租户策略")).toBe(false);
+    expect(portalModules.some((module) => module.path === "/admin/ai/tenant-policy")).toBe(false);
   });
 
   it("uses capabilities as the role access source", () => {

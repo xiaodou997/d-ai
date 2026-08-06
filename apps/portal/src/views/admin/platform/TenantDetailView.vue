@@ -15,7 +15,7 @@
       :breadcrumbs="[
         { label: '用户中心' },
         { label: '业务管理' },
-        { label: '租户管理', to: '/tenants' },
+        { label: '租户管理', to: '/admin/organization/tenants' },
         { label: '租户详情' }
       ]"
       :description="headerDescription"
@@ -24,6 +24,9 @@
         <DsTag v-if="tenantInfo" :tone="tenantInfo.status === 1 ? 'positive' : 'danger'">
           {{ tenantInfo.statusDisplay }}
         </DsTag>
+        <el-button @click="goTenantPolicy">
+          <SlidersHorizontal class="td-button-icon" />平台策略
+        </el-button>
         <el-button type="primary" @click="handleRecharge">账户充值</el-button>
       </template>
 
@@ -170,7 +173,7 @@ import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { Building2 } from 'lucide-vue-next'
+import { Building2, SlidersHorizontal } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
 import {
   DsPagination,
@@ -283,6 +286,10 @@ const txStatusInfo = (status: string) => TX_STATUS_MAP[status] ?? { label: statu
 
 const handleRecharge = () => {
   router.push({ path: '/admin/billing/recharges', query: { tenantId, tenantName: tenantInfo.value?.tenantName || '' } })
+}
+
+const goTenantPolicy = () => {
+  router.push(`/admin/organization/tenants/${tenantId}/policy`)
 }
 
 const fetchTenantInfo = async () => {

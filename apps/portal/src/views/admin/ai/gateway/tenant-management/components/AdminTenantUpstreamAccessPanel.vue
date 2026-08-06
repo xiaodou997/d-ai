@@ -1,5 +1,5 @@
 <!--
-  租户上游权限面板 — 嵌在 AccessView 一体面板右栏 Tab 内。
+  租户上游权限面板 — 嵌在租户详情的平台策略区域内。
   重构:el-table/el-tag/el-empty 换为 DsTable/DsTag/DsEmpty;倍率编辑使用 DsNumberInput。
 -->
 <script setup lang="ts">
@@ -7,12 +7,11 @@ import { computed } from "vue";
 import { RefreshLeft } from "@element-plus/icons-vue";
 import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { formatMultiplier } from "@/platform/ai/utils";
-import type { TenantListItem } from "@/api/types/admin";
 import type { TenantUpstreamAccessDTO } from "@/api/types/ai";
-import type { AdminTenantUpstreamPolicyDraft } from "../types";
+import type { AdminTenantPolicySubject, AdminTenantUpstreamPolicyDraft } from "../types";
 
 const props = defineProps<{
-  selectedTenant: TenantListItem | null;
+  selectedTenant: AdminTenantPolicySubject | null;
   loading: boolean;
   resources: TenantUpstreamAccessDTO[];
   policies: Record<string, AdminTenantUpstreamPolicyDraft>;

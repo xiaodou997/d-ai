@@ -87,6 +87,7 @@
           <span class="tenants-time">{{ formatTime(row.createdTime) }}</span>
         </template>
         <template #cell-actions="{ row }">
+          <el-button link type="primary" @click="goTenantPolicy(row.tenantId)">策略</el-button>
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
           <el-button link type="success" @click="handleRecharge(row)">充值</el-button>
           <el-button link :type="row.status === 1 ? 'warning' : 'success'" @click="handleToggleStatus(row)">
@@ -185,7 +186,7 @@ const columns: DsTableColumn[] = [
   { key: 'credits', title: '平台积分', align: 'right' },
   { key: 'userCount', title: '用户数', align: 'center' },
   { key: 'createdTime', title: '入驻时间' },
-  { key: 'actions', title: '操作', width: 240 }
+  { key: 'actions', title: '操作', width: 290 }
 ]
 
 const {
@@ -256,6 +257,10 @@ const handleRecharge = (row: any) => {
 
 const goTenantDetail = (tenantId: string) => {
   router.push(`/admin/organization/tenants/${tenantId}`)
+}
+
+const goTenantPolicy = (tenantId: string) => {
+  router.push(`/admin/organization/tenants/${tenantId}/policy`)
 }
 
 const handleEdit = (row: any) => {

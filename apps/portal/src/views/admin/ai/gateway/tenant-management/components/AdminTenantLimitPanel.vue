@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { DsEmpty } from "@/shared/ui";
-import type { TenantListItem } from "@/api/types/admin";
-import type { AdminTenantLimitForm } from "../types";
+import type { AdminTenantLimitForm, AdminTenantPolicySubject } from "../types";
 
 defineProps<{
-  selectedTenant: TenantListItem | null;
+  selectedTenant: AdminTenantPolicySubject | null;
   loading: boolean;
   configured: boolean;
   summaryText: string;
