@@ -21,16 +21,17 @@ import (
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
+	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/billingcontrol"
-	"xiaodou/dai/internal/ai/billingledger"
+	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	aidb "xiaodou/dai/internal/ai/db/gen"
-	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/identitycontrol"
-	"xiaodou/dai/internal/ai/imageassets"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
+	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
+	"xiaodou/dai/internal/ai/tokenrefresh"
 	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
@@ -60,15 +61,15 @@ type Deps struct {
 	Announcements *announcementpkg.Service
 
 	// AI 域
-	Queries            *aidb.Queries
-	BillingCoordinator *billingledger.Coordinator
-	BanChecker         *banstate.Checker
-	Security           config.SecurityConfig
-	Audit              config.AuditConfig
-	AsyncTasks         config.AsyncTaskConfig
-	Files              config.FileStoreConfig
-	Image              config.ImageConfig
-	Pricing            config.PricingConfig
+	Queries           *aidb.Queries
+	OAuth             *pgadapter.OAuthCredentialStore
+	TokenRefresher    *tokenrefresh.Refresher
+	ClientCatalog     *clientcatalog.Service
+	ProviderKeyMaster string
+	AIHTTPClient      *http.Client
+	Health            routing.HealthTracker
+	Weights           *pgadapter.RouteWeightsStore
+	BanChecker        *banstate.Checker
 
 	// AI 域
 	PriceBookSvc         *billingcontrol.Service
@@ -82,8 +83,6 @@ type Deps struct {
 	APIKeySvc            *identitycontrol.Service
 	WorkspaceSvc         *workspacesvc.Service
 	Subscriptions        *subscription.Service
-	FileStore            *filestore.Service
-	ImageAssets          *imageassets.Service
 	RiskControlConfigSvc *riskcontrol.ConfigService
 	RiskControlLogSvc    *riskcontrol.LogService
 	RiskControlEventSvc  *riskcontrol.EventService
@@ -134,15 +133,26 @@ func registerPublicPlane(api huma.API, d Deps) {
 
 // registerAITransport 将 AI 域端点注册到统一 Huma API 上。
 func registerAITransport(api huma.API, d Deps) {
+	aiDeps := buildAIDeps(d)
+	aitransport.RegisterAI(api, aiDeps)
+}
+
+func buildAIDeps(d Deps) aitransport.AIDeps {
 	identity := newAIIdentityAdapter(d.Pool, d.UserService)
 	aiDeps := aitransport.AIDeps{
 		Postgres:             d.Pool,
 		Redis:                d.Redis,
 		Queries:              d.Queries,
+		OAuth:                d.OAuth,
+		TokenRefresher:       d.TokenRefresher,
+		ClientCatalog:        d.ClientCatalog,
 		Logger:               d.Logger,
+		HTTPClient:           d.AIHTTPClient,
+		Health:               d.Health,
+		Weights:              d.Weights,
 		TokenVerifier:        d.JWT,
 		BanChecker:           d.BanChecker,
-		ProviderKeyMaster:    d.Security.ProviderKeyMaster,
+		ProviderKeyMaster:    d.ProviderKeyMaster,
 		PriceBookSvc:         d.PriceBookSvc,
 		CommercialSvc:        d.CommercialSvc,
 		GroupTransferSvc:     d.GroupTransferSvc,
@@ -163,7 +173,7 @@ func registerAITransport(api huma.API, d Deps) {
 		aiDeps.IdentityProvider = identity
 		aiDeps.TenantEndUsers = identity
 	}
-	aitransport.RegisterAI(api, aiDeps)
+	return aiDeps
 }
 
 // RegisterRaw 注册非 JSON 契约的 chi 原生端点。

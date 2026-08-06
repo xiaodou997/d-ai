@@ -42,7 +42,7 @@ const platformModule: BusinessModule = {
       label: "积分账户",
       children: [
         { id: "platform-my-account", label: "我的账户", to: "/account", icon: "wallet", userTypes: [3, 4] },
-        { id: "platform-tenant-credit", label: "租户积分", to: "/billing/tenant-credit", icon: "wallet", userTypes: [1, 2, 3] }
+        { id: "platform-tenant-credit", label: "租户积分", to: "/billing/tenant-credit", icon: "wallet", userTypes: [1, 2] }
       ]
     },
     {
@@ -61,7 +61,7 @@ const platformModule: BusinessModule = {
         { id: "platform-payment-settings", label: "支付配置", to: "/billing/payment-settings", icon: "settings", userTypes: [1, 2] },
         { id: "platform-payment-orders", label: "支付订单", to: "/billing/payment-orders", icon: "receipt", userTypes: [1, 2] },
         { id: "platform-withdrawals", label: "提现审核", to: "/billing/withdrawals", icon: "banknote", userTypes: [1, 2] },
-        { id: "platform-cash-accounts", label: "现金账户", to: "/billing/cash-accounts", icon: "banknote", userTypes: [1, 2, 3] }
+        { id: "platform-cash-accounts", label: "现金账户", to: "/billing/cash-accounts", icon: "banknote", userTypes: [1, 2] }
       ]
     },
     {
@@ -119,14 +119,14 @@ const aiModule: BusinessModule = {
       label: "运营管理",
       children: [
         { id: "ai-access", label: "租户策略", to: "/ai-gateway/access", icon: "sliders-horizontal", userTypes: [1, 2] },
-        { id: "ai-subscription-plans", label: "订阅套餐", to: "/ai-gateway/subscriptions", icon: "calendar-clock", userTypes: [1, 2, 3] }
+        { id: "ai-subscription-plans", label: "订阅套餐", to: "/ai-gateway/subscriptions", icon: "calendar-clock", userTypes: [3] }
       ]
     },
     {
       id: "ai-audit",
       label: "日志审计",
       children: [
-        { id: "ai-usage", label: "使用记录", to: "/ai-gateway/usage", icon: "scroll-text", userTypes: [1, 2, 3, 4] },
+        { id: "ai-usage", label: "使用记录", to: "/ai-gateway/usage", icon: "scroll-text", userTypes: [1, 2] },
         { id: "ai-audit-log", label: "网关审计", to: "/ai-gateway/audit", icon: "file-text", userTypes: [1, 2] },
         { id: "ai-risk-control", label: "风控中心", to: "/ai-gateway/risk-control", icon: "shield-alert", userTypes: [1, 2] }
       ]

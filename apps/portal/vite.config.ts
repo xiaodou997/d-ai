@@ -3,6 +3,8 @@ import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
+const devProxyTarget = process.env.DAI_DEV_PROXY_TARGET?.trim() || "http://127.0.0.1:19641";
+
 export default defineConfig({
   // Build commands run from the repository root; the Portal owns the Vite root.
   root: import.meta.dirname,
@@ -16,15 +18,15 @@ export default defineConfig({
     port: 6900,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:19641",
+        target: devProxyTarget,
         changeOrigin: true
       },
       "/v1": {
-        target: "http://127.0.0.1:19641",
+        target: devProxyTarget,
         changeOrigin: true
       },
       "/internal": {
-        target: "http://127.0.0.1:19641",
+        target: devProxyTarget,
         changeOrigin: true
       }
     }

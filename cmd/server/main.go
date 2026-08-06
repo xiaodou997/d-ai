@@ -41,6 +41,7 @@ import (
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/imageassets"
 	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
+	"xiaodou/dai/internal/ai/observability/tracing"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
@@ -106,6 +107,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	shutdownTracing := tracing.Init(ctx)
 
 	// ──────────────────────────────────────────────────────
 	// 1. 基础设施：PostgreSQL（单库）+ Redis
@@ -286,7 +288,12 @@ func main() {
 
 	// Workspace
 	workspaceRepo := aiadapters.NewWorkspaceRepo(pool, aiadapters.NewGroupAccessReader(pool), aiadapters.NewRouteInspector(pool))
-	workspaceSvc := workspacesvc.NewService(workspaceRepo)
+	workspaceSvc := workspacesvc.NewService(
+		workspaceRepo,
+		workspacesvc.WithChatCatalog(aiadapters.NewWorkspaceChatCatalog(workspaceRepo)),
+		workspacesvc.WithChatWriter(workspaceRepo),
+		workspacesvc.WithChatRuntimeWriter(workspaceRepo),
+	)
 
 	// File store
 	fileStore, fsErr := filestore.New(pool, filestore.Config{
@@ -383,7 +390,7 @@ func main() {
 		clientcredentials.New(oauthCreds, refresher),
 	)
 	poolModelCatalog := clientcatalog.New(oauthCreds, fixedClientRuntime, appLogger)
-	_ = poolModelCatalog // used by AIDeps later
+	managementHTTPClient := &http.Client{}
 
 	executeStep := &serving.ExecuteStep{
 		Transport:       upstreamHTTPTransport,
@@ -470,7 +477,7 @@ func main() {
 		Security:       cfg.Security,
 		TokenVerifier:  jwtSvc,
 		BanChecker:     banChecker,
-		HTTPClient:     &http.Client{Timeout: 0},
+		HTTPClient:     managementHTTPClient,
 		OAuthCreds:     oauthCreds,
 		TokenRefresher: refresher,
 		RouteInspector: routeInspector,
@@ -483,6 +490,7 @@ func main() {
 		AsyncTasks:     cfg.AsyncTasks,
 	})
 	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
+	asyncTasks.Start(ctx)
 
 	// Hourly cleanups
 	go runHourlyCleanup(ctx, func() { imageAssetSvc.CleanupExpired() })
@@ -509,15 +517,15 @@ func main() {
 		Payment:       paymentSvc,
 		Announcements: announcementSvc,
 
-		Queries:            q,
-		BillingCoordinator: billingCoordinator,
-		BanChecker:         banChecker,
-		Security:           cfg.Security,
-		Audit:              cfg.Audit,
-		AsyncTasks:         cfg.AsyncTasks,
-		Files:              cfg.Files,
-		Image:              cfg.Image,
-		Pricing:            cfg.Pricing,
+		Queries:           q,
+		OAuth:             oauthCreds,
+		TokenRefresher:    refresher,
+		ClientCatalog:     poolModelCatalog,
+		ProviderKeyMaster: cfg.Security.ProviderKeyMaster,
+		AIHTTPClient:      managementHTTPClient,
+		Health:            healthTracker,
+		Weights:           routeWeightsStore,
+		BanChecker:        banChecker,
 
 		// AI 域
 		PriceBookSvc:         priceBookSvc,
@@ -531,8 +539,6 @@ func main() {
 		APIKeySvc:            apiKeySvc,
 		WorkspaceSvc:         workspaceSvc,
 		Subscriptions:        subsSvc,
-		FileStore:            fileStore,
-		ImageAssets:          imageAssetSvc,
 		RiskControlConfigSvc: riskControlConfigSvc,
 		RiskControlLogSvc:    riskControlLogSvc,
 		RiskControlEventSvc:  riskControlEventSvc,
@@ -613,6 +619,8 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+	asyncTasks.Stop(shutdownCtx)
+	_ = shutdownTracing(shutdownCtx)
 	appLogger.Info("server shutdown complete")
 }
 
