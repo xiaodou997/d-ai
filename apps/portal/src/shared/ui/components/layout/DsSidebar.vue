@@ -60,9 +60,9 @@ function isGroup(item: SidebarItem): boolean {
         <span class="ds-sidebar__label">{{ group.label }}</span>
       </span>
 
-      <!-- 分组（目录标题 → 菜单，恒展开不折叠，对齐 V1） -->
+      <!-- 分类标题只表达信息层级，分类内菜单始终可见。 -->
       <div v-else class="ds-sidebar__group">
-        <div class="ds-sidebar__group-head">{{ group.label }}</div>
+        <h2 class="ds-sidebar__group-head">{{ group.label }}</h2>
         <div class="ds-sidebar__group-body">
           <template v-for="child in group.children" :key="child.id">
             <RouterLink
@@ -142,6 +142,7 @@ function isGroup(item: SidebarItem): boolean {
 }
 
 .ds-sidebar__group-head {
+  margin: 0;
   padding: 12px 10px 6px;
   color: var(--ds-faint);
   font-size: 11px;

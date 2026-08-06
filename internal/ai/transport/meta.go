@@ -48,9 +48,10 @@ type AIDeps struct {
 	// nil 时 identity enrichment 返回空结果。
 	IdentityProvider IdentityProvider
 
-	TokenVerifier  TokenVerifier
-	BanChecker     HumaBanChecker
-	TenantEndUsers TenantEndUserVerifier
+	TokenVerifier    TokenVerifier
+	TokenRevocations TokenRevocationChecker
+	BanChecker       HumaBanChecker
+	TenantEndUsers   TenantEndUserVerifier
 
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service // 上游账号管理

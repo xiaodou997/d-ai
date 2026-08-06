@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 
+import { resolvePortalPublicBaseUrl } from "../../portal-router";
 import type { PortalAiDocsScope, PortalAiDocsSectionKey } from "../docs";
 import { portalAiDocsSectionByKey, PORTAL_AI_DOC_SECTIONS } from "../docs";
 import PortalAiDocsLayout from "./PortalAiDocsLayout.vue";
@@ -25,7 +26,7 @@ const props = withDefaults(
 
 const route = useRoute();
 
-const normalizedBaseUrl = computed(() => (props.baseUrl || window.location.origin).replace(/\/$/, ""));
+const normalizedBaseUrl = computed(() => resolvePortalPublicBaseUrl(props.baseUrl));
 const currentSection = computed(() => portalAiDocsSectionByKey(props.section));
 const basePath = computed(() => {
   const suffix = `/${currentSection.value.slug}`;

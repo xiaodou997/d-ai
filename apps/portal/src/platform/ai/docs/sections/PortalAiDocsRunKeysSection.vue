@@ -190,7 +190,7 @@ const imageEditCurl = computed(() => appCurlExample("image_edit", imageVariables
         <p class="ai-docs-callout__body">
           对话、文生图、图生图三类应用统一通过
           <span class="ai-docs-inline-code">{{ baseUrl }}/v1/run</span>
-          调用——密钥绑定的应用类型决定了具体行为，调用方不需要区分路径。如果地址里已经带 <code>/ai</code>，保持不变。
+          调用——密钥绑定的应用类型决定了具体行为，调用方不需要区分不同服务路径。
         </p>
       </div>
     </PortalContentCard>

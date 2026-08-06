@@ -1,7 +1,7 @@
 <!--
   充值记录 — 查看历史充值明细。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       GuideHelpLink 收进 #actions);el-table → DsTable(:frame="false",单号 mono、
+       el-table → DsTable(:frame="false",单号 mono、
        金额/积分右对齐),el-tag → DsTag;DsPagination 始终渲染(去掉 total>0 才显示)。
        业务逻辑与请求参数保持不变。
 -->
@@ -13,10 +13,6 @@
       :breadcrumbs="[{ label: '用户中心' }, { label: '充值与明细' }, { label: '充值记录' }]"
       description="查看我的历史充值明细"
     >
-      <template #actions>
-        <GuideHelpLink to="/help/account/topup" />
-      </template>
-
       <DsTable
         :frame="false"
         :columns="columns"
@@ -57,7 +53,6 @@
 import { ref, onMounted } from "vue";
 import { ReceiptText } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { RechargeRecordItem } from "@/api/types/platformCustomer";

@@ -4,7 +4,7 @@
        表格/分页同卡);el-table → DsTable(邀请码列 mono),el-tag → DsTag(有效=positive、
        禁用=danger),text-slate-*/text-primary-* 颜色类全部换 --ds-* token;
        数据接入 useListPage,分页始终渲染;创建/禁用/删除逻辑与请求参数保持不变,
-       创建弹窗仍为 element-plus;GuideHelpLink 保留在 #actions。
+       创建弹窗仍为 element-plus。
 -->
 <template>
   <div class="page-container invite-codes-page">
@@ -15,7 +15,6 @@
       description="创建和管理用于用户注册的邀请码"
     >
       <template #actions>
-        <GuideHelpLink to="/help/platform/invite-codes" />
         <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建邀请码</el-button>
       </template>
 
@@ -149,7 +148,6 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import type { FormInstance, FormRules } from "element-plus";
 import { Ticket } from "lucide-vue-next";
 import { PortalPagePanel, useListPage } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import { platformTenantApi } from "@/api/platformTenant";

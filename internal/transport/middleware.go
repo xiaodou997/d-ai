@@ -29,8 +29,12 @@ func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistSe
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token 无效或已过期")
 			return
 		}
+		if !isUserAccessClaims(claims) {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token 类型无效")
+			return
+		}
 		// 黑名单：单 token 撤销（jti）与用户级强制登出时间戳（封号/全端登出）
-		if blacklist != nil && claims.PrincipalType == "user" {
+		if blacklist != nil {
 			if blacklist.IsBlacklisted(claims.ID) {
 				_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token 已撤销")
 				return
@@ -44,6 +48,10 @@ func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistSe
 		}
 		next(huma.WithValue(ctx, userClaimsCtxKey, claims))
 	}
+}
+
+func isUserAccessClaims(claims *auth.Claims) bool {
+	return claims != nil && claims.PrincipalType == "user" && claims.TokenUse == "access"
 }
 
 // requireUserType 要求当前用户类型在 allowed 内，否则 403。须挂在 userAuth 之后。

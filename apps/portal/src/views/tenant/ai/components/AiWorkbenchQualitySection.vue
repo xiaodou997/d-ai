@@ -55,7 +55,7 @@ const errorTone = (value: string): "positive" | "danger" | "warning" | "neutral"
     :description="`把 ${props.rangeLabel} 的失败请求和调用样本中的高消耗用户放在同一区块，快速判断哪里不稳、谁最值得盯。`"
   >
     <template #actions>
-      <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/workspace/user-consumption')">
+      <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/tenant/ai/usage')">
         查看更多信号 <el-icon class="ml-1"><ArrowRight /></el-icon>
       </el-button>
     </template>

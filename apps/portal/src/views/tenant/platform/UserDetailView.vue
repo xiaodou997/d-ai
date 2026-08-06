@@ -27,7 +27,7 @@ const serviceAvailability = computed(() => ({
 const overview = useTenantUserOverview(userId, serviceAvailability);
 
 function goBack() {
-  void router.push("/users");
+  void router.push("/tenant/users/directory");
 }
 
 function openAiConfig() {
@@ -48,7 +48,7 @@ function openAiConfig() {
       :breadcrumbs="[
         { label: '租户运营' },
         { label: '用户运营' },
-        { label: '终端用户', to: '/users' },
+        { label: '终端用户', to: '/tenant/users/directory' },
         { label: '用户详情' }
       ]"
       description="聚合基础资料、充值、AI 配置与风险信号"

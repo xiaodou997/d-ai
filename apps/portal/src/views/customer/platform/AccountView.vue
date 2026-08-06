@@ -1,7 +1,7 @@
 <!--
   我的积分账户 — 查看积分余额与积分包详情。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       GuideHelpLink/刷新按钮收进 #actions);指标条 PortalMetricGrid → DsMetricCard,
+       刷新按钮收进 #actions);指标条 PortalMetricGrid → DsMetricCard,
        el-tag → DsTag,空态 → DsEmpty;积分包卡片/进度条保留,业务逻辑与请求不变。
 -->
 <template>
@@ -13,7 +13,6 @@
       description="查看我的积分余额和积分包详情"
     >
       <template #actions>
-        <GuideHelpLink to="/help/account/account" />
         <el-button type="primary" :icon="Refresh" :loading="loading" @click="fetchData">立即刷新</el-button>
       </template>
 
@@ -105,7 +104,6 @@ import { ref, reactive, onMounted } from "vue";
 import { Refresh, Loading } from "@element-plus/icons-vue";
 import { Wallet } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsEmpty, DsMetricCard, DsTag } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { PackageView } from "@/api/types/platformCustomer";

@@ -1,7 +1,7 @@
-import { createStandardPortalEnv, type PortalArea, type PortalEnv } from "@/platform/env";
+import { createStandardPortalEnv, type PortalEnv } from "@/platform/env";
 import type { PortalThemeName } from "@/shared/ui";
 
-export type { PortalArea, PortalEnv } from "@/platform/env";
+export type { PortalEnv } from "@/platform/env";
 
 const standardPortalEnv = createStandardPortalEnv({
   env: import.meta.env as unknown as Record<string, unknown>

@@ -1,6 +1,51 @@
 -- D-AI local-development seed
 -- Never apply this file in production.
 
+INSERT INTO iam_tenants (tenant_id, tenant_name, contact_person, contact_email, status)
+VALUES ('DAI_DEV_TENANT', 'D-AI Development Tenant', 'D-AI Developer', 'dev-tenant@localhost', 'active')
+ON CONFLICT (tenant_id) DO UPDATE SET
+    tenant_name = EXCLUDED.tenant_name,
+    contact_person = EXCLUDED.contact_person,
+    contact_email = EXCLUDED.contact_email,
+    status = EXCLUDED.status,
+    updated_at = now();
+
 INSERT INTO iam_admins (user_id, username, password_hash, email, user_type, status)
 VALUES ('DAI_ADMIN', 'dai_admin', '$2a$10$VI.y0TjcNQQX/5X/ukr7xOMmmRPfAEnrFs9fnJhkEajX6JPl43JXS', NULL, 1, 'active')
-ON CONFLICT (user_id) DO NOTHING;
+ON CONFLICT (user_id) DO UPDATE SET
+    username = EXCLUDED.username,
+    password_hash = EXCLUDED.password_hash,
+    user_type = EXCLUDED.user_type,
+    status = EXCLUDED.status,
+    updated_at = now();
+
+INSERT INTO iam_admins (user_id, username, password_hash, email, user_type, status)
+VALUES ('DAI_PLATFORM_ADMIN', 'dai_platform_admin', '$2a$10$VI.y0TjcNQQX/5X/ukr7xOMmmRPfAEnrFs9fnJhkEajX6JPl43JXS', 'dev-platform-admin@localhost', 2, 'active')
+ON CONFLICT (user_id) DO UPDATE SET
+    username = EXCLUDED.username,
+    password_hash = EXCLUDED.password_hash,
+    email = EXCLUDED.email,
+    user_type = EXCLUDED.user_type,
+    status = EXCLUDED.status,
+    updated_at = now();
+
+INSERT INTO iam_tenant_users (user_id, tenant_id, username, password_hash, email, status)
+VALUES ('DAI_TENANT_USER', 'DAI_DEV_TENANT', 'dai_tenant', '$2a$10$VI.y0TjcNQQX/5X/ukr7xOMmmRPfAEnrFs9fnJhkEajX6JPl43JXS', 'dev-tenant-user@localhost', 'active')
+ON CONFLICT (user_id) DO UPDATE SET
+    tenant_id = EXCLUDED.tenant_id,
+    username = EXCLUDED.username,
+    password_hash = EXCLUDED.password_hash,
+    email = EXCLUDED.email,
+    status = EXCLUDED.status,
+    updated_at = now();
+
+INSERT INTO iam_users (user_id, tenant_id, username, password_hash, email, nickname, status)
+VALUES ('DAI_END_USER', 'DAI_DEV_TENANT', 'dai_user', '$2a$10$VI.y0TjcNQQX/5X/ukr7xOMmmRPfAEnrFs9fnJhkEajX6JPl43JXS', 'dev-user@localhost', 'D-AI Development User', 'active')
+ON CONFLICT (user_id) DO UPDATE SET
+    tenant_id = EXCLUDED.tenant_id,
+    username = EXCLUDED.username,
+    password_hash = EXCLUDED.password_hash,
+    email = EXCLUDED.email,
+    nickname = EXCLUDED.nickname,
+    status = EXCLUDED.status,
+    updated_at = now();

@@ -433,9 +433,8 @@ onMounted(() => {
           aria-label="AI 工作台分析窗口"
           @update:model-value="handleRangeChange"
         />
-        <el-button @click="router.push('/workspace/prices')">价格表</el-button>
-        <!-- 应用层分阶段开放，入口代码保留，现阶段先隐藏。 -->
-        <!-- <el-button @click="router.push('/workspace/keys?tab=application')">应用运行密钥</el-button> -->
+        <el-button @click="router.push('/tenant/ai/models/prices')">价格表</el-button>
+        <el-button @click="router.push('/tenant/developer/keys?tab=application')">应用密钥</el-button>
         <el-button type="primary" :loading="loading" @click="fetchData">
           <template #icon><el-icon><Refresh /></el-icon></template>
           刷新工作台

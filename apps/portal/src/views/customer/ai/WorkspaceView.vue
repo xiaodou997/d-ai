@@ -233,20 +233,20 @@ const fetchAllData = async () => {
 };
 
 const openChatWorkspace = () => {
-  router.push("/workspace/chat");
+  router.push("/customer/workbench/chat");
 };
 
 const openImageWorkspace = () => {
-  router.push("/workspace/images");
+  router.push("/customer/workbench/images");
 };
 
 const openMyGroups = () => {
-  router.push("/workspace/groups");
+  router.push("/customer/services/models");
 };
 
 const openChatSession = (session: ChatSession) => {
   router.push({
-    path: "/workspace/chat",
+    path: "/customer/workbench/chat",
     query: { session: session.id }
   });
 };

@@ -38,11 +38,10 @@ provide("keyManagementTabActions", tabActions);
 </script>
 
 <template>
-  <!-- 应用层分阶段开放：保留应用密钥工作区代码，现阶段仅展示模型 API 密钥。 -->
   <PortalKeyManagementWorkspace
     v-model:active-tab="activeTab"
     eyebrow="智能服务 / 开发接入"
-    :show-application-keys="false"
+    :show-application-keys="true"
   >
     <template #api><ApiKeysView embedded /></template>
     <template #application><AppKeysView embedded /></template>

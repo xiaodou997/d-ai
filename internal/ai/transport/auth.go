@@ -14,6 +14,11 @@ type TokenVerifier interface {
 	ParseToken(token string) (*auth.Claims, error)
 }
 
+type TokenRevocationChecker interface {
+	IsBlacklisted(tokenID string) bool
+	GetUserLogoutTime(userID string) int64
+}
+
 type HumaBanChecker interface {
 	IsBanned(ctx context.Context, userID string) (bool, error)
 	IsTenantBanned(ctx context.Context, tenantID string) (bool, error)
@@ -59,6 +64,10 @@ func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessag
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid bearer token")
 			return
 		}
+		if tokenRevoked(d.TokenRevocations, claims) {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "bearer token has been revoked")
+			return
+		}
 		if len(allowedTypes) > 0 && !allowedTypes[claims.UserType] {
 			huma.WriteErr(api, ctx, http.StatusForbidden, forbiddenMessage)
 			return
@@ -70,6 +79,16 @@ func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessag
 
 		next(huma.WithValue(ctx, authClaimsContextKey{}, claims))
 	}
+}
+
+func tokenRevoked(checker TokenRevocationChecker, claims *auth.Claims) bool {
+	if checker == nil || claims == nil {
+		return false
+	}
+	if checker.IsBlacklisted(claims.ID) {
+		return true
+	}
+	return claims.IssuedAt != nil && checker.GetUserLogoutTime(claims.UserID) > claims.IssuedAt.Unix()
 }
 
 // bannedMessage checks tenantID (always) and userID (when non-empty)

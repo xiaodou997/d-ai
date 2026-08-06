@@ -164,7 +164,7 @@ onBeforeRouteUpdate((to, from) => to.params.groupId === from.params.groupId || c
       :icon="Layers"
       :breadcrumbs="[
         { label: '智能服务' },
-        { label: '分组管理', to: '/workspace/groups' },
+        { label: '分组管理', to: '/tenant/ai/models/groups' },
         { label: '分组详情' }
       ]"
       description="配置客户端入口、模型调度和上游目标。"

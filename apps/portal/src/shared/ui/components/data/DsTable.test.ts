@@ -50,6 +50,15 @@ describe("DsTable", () => {
     expect(overrides[0].text()).toBe("启用");
   });
 
+  it("keeps operational cells single-line unless a column opts into wrapping", () => {
+    const wrapper = mountTable({
+      columns: [columns[0], { ...columns[1], wrap: true }]
+    });
+
+    expect(wrapper.findAll("tbody td")[0].classes()).not.toContain("ds-table__cell--wrap");
+    expect(wrapper.findAll("tbody td")[1].classes()).toContain("ds-table__cell--wrap");
+  });
+
   it("emits update:selection when a row checkbox is toggled", async () => {
     const wrapper = mountTable({ selectable: true, selection: [] });
 

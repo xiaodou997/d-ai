@@ -5,14 +5,14 @@ VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 BUILD_DIR := release
 FRONTEND_DIST := cmd/server/frontend_dist
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version db-migrate db-recreate build build-server frontend embed clean test test-frontend typecheck openapi generate-api ensure-api help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version db-migrate dev-seed db-recreate build build-server frontend embed clean test test-frontend typecheck openapi generate-api ensure-api help
 
 # ---- 本地开发 ----
 
 dev: dev-setup ## 准备依赖并启动后端
 	go run ./cmd/server
 
-dev-setup: deps-up db-migrate ## 初始化本地配置、依赖和数据库版本
+dev-setup: dev-seed ## 初始化本地配置、依赖、数据库版本和开发账号
 	@test -f config.yaml || cp config.example.yaml config.yaml
 
 dev-frontend: ## 启动前端 dev server
@@ -30,7 +30,7 @@ deps-logs: ## 查看本地依赖日志
 db-version: ## 查看当前数据库 schema 版本
 	docker compose exec -T postgres psql -U postgres -d dai -c "SELECT version, initialized_at FROM dai_schema_metadata WHERE singleton = TRUE"
 
-db-migrate: ## 将本地数据库迁移到当前 schema 版本（保留数据）
+db-migrate: deps-up ## 将本地数据库迁移到当前 schema 版本（保留数据）
 	@version=$$(docker compose exec -T postgres psql -U postgres -d dai -Atc "SELECT version FROM dai_schema_metadata WHERE singleton = TRUE"); \
 	if [ "$$version" = "1" ]; then \
 		echo "Migrating database schema 1 -> 2..."; \
@@ -61,6 +61,9 @@ db-migrate: ## 将本地数据库迁移到当前 schema 版本（保留数据）
 		echo "ERROR: unsupported database schema version $$version"; \
 		exit 1; \
 	fi
+
+dev-seed: db-migrate ## 幂等初始化本地 userType 1/2/3/4 测试账号
+	docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/dev_seed.sql
 
 db-recreate: ## 删除本地数据卷并用 init.sql 重建（会清空本地数据）
 	docker compose down -v

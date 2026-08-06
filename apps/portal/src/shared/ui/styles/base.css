@@ -59,6 +59,60 @@
   --ds-accent-hover: #98502f;
 }
 
+/* Keep Element Plus controls on the same token contract as DsUI. */
+:root {
+  --el-font-family: var(--ds-font-body);
+  --el-font-size-base: 14px;
+  --el-font-size-small: 13px;
+  --el-font-size-extra-small: 12px;
+  --el-border-radius-base: var(--ds-radius-control);
+  --el-border-radius-small: 6px;
+
+  --el-color-primary: var(--ds-accent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--ds-accent) 70%, var(--ds-panel));
+  --el-color-primary-light-5: color-mix(in srgb, var(--ds-accent) 50%, var(--ds-panel));
+  --el-color-primary-light-7: color-mix(in srgb, var(--ds-accent) 30%, var(--ds-panel));
+  --el-color-primary-light-8: color-mix(in srgb, var(--ds-accent) 20%, var(--ds-panel));
+  --el-color-primary-light-9: var(--ds-accent-soft);
+  --el-color-primary-dark-2: var(--ds-accent-hover);
+  --el-color-success: var(--ds-positive);
+  --el-color-success-light-9: var(--ds-positive-soft);
+  --el-color-warning: var(--ds-warning);
+  --el-color-warning-light-9: var(--ds-warning-soft);
+  --el-color-danger: var(--ds-danger);
+  --el-color-danger-light-9: var(--ds-danger-soft);
+  --el-color-error: var(--ds-danger);
+  --el-color-error-light-9: var(--ds-danger-soft);
+  --el-color-info: var(--ds-info);
+  --el-color-info-light-9: var(--ds-info-soft);
+
+  --el-bg-color: var(--ds-panel);
+  --el-bg-color-page: var(--ds-paper);
+  --el-bg-color-overlay: var(--ds-panel);
+  --el-fill-color: var(--ds-panel-muted);
+  --el-fill-color-light: var(--ds-panel-muted);
+  --el-fill-color-lighter: color-mix(in srgb, var(--ds-panel-muted) 55%, var(--ds-panel));
+  --el-fill-color-extra-light: var(--ds-panel);
+  --el-fill-color-blank: var(--ds-panel);
+  --el-text-color-primary: var(--ds-ink);
+  --el-text-color-regular: var(--ds-ink-soft);
+  --el-text-color-secondary: var(--ds-muted);
+  --el-text-color-placeholder: var(--ds-faint);
+  --el-text-color-disabled: var(--ds-faint);
+  --el-border-color: var(--ds-line-strong);
+  --el-border-color-light: var(--ds-line);
+  --el-border-color-lighter: var(--ds-line);
+  --el-border-color-extra-light: var(--ds-panel-muted);
+  --el-border-color-dark: var(--ds-line-strong);
+  --el-border-color-darker: var(--ds-line-strong);
+  --el-box-shadow: var(--ds-shadow-pop);
+  --el-box-shadow-light: var(--ds-shadow-panel);
+  --el-box-shadow-lighter: var(--ds-shadow-sm);
+  --el-overlay-color: color-mix(in srgb, var(--ds-ink) 80%, transparent);
+  --el-overlay-color-light: color-mix(in srgb, var(--ds-ink) 64%, transparent);
+  --el-overlay-color-lighter: color-mix(in srgb, var(--ds-ink) 48%, transparent);
+}
+
 * {
   box-sizing: border-box;
 }

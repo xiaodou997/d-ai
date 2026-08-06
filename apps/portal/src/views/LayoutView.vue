@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { PortalShellLayout, usePortalShellScaffold } from "@/platform";
 
 import { portalEnv, themeForUserType } from "@/env";
+import { profilePathForUserType } from "@/modules/portalModules";
 import { useAuthStore } from "@/stores/auth";
 import { useMenuStore } from "@/stores/menus";
 
@@ -11,7 +12,9 @@ const route = useRoute();
 const authStore = useAuthStore();
 const menuStore = useMenuStore();
 
-const userMenu = [{ id: "profile", label: "个人中心", to: "/profile" }];
+const userMenu = computed(() => [
+  { id: "profile", label: "个人中心", to: profilePathForUserType(authStore.userType) }
+]);
 const user = computed(() => {
   const labels: Record<number, string> = {
     1: "超级管理员",

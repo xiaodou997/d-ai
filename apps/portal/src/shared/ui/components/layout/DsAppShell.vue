@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 
-import type { PortalThemeName } from "../../theme";
+import { applyPortalTheme, type PortalThemeName } from "../../theme";
 
 import DsSidebar from "./DsSidebar.vue";
 import DsTopbar from "./DsTopbar.vue";
@@ -47,21 +47,17 @@ defineSlots<{ default(): unknown; footer(): unknown; "topbar-actions"(): unknown
 
 const shellClass = computed(() => `ds-theme-${props.theme}`);
 
-// 顶部一级模块 = nav 顶层节点
-const modules = computed(() => props.nav);
+watch(
+  () => props.theme,
+  (theme) => applyPortalTheme(theme),
+  { immediate: true }
+);
 
-// 找出当前激活模块：优先 active，回退第一个
-const activeModule = computed<AppShellNavItem | undefined>(() => {
-  return modules.value.find((item) => item.active) ?? modules.value[0];
-});
-
-// 左栏分组 = 激活模块的子树（目录 / 直达菜单）
-const sidebarGroups = computed<AppShellNavItem[]>(() => activeModule.value?.children ?? []);
-
-const activeModuleId = computed(() => activeModule.value?.id ?? "");
+const sidebarGroups = computed<AppShellNavItem[]>(() => props.nav);
 
 // 侧栏折叠态（壳层持有，持久化到 localStorage）
 const SIDEBAR_COLLAPSED_KEY = "ds-sidebar-collapsed";
+const mobileNavigationOpen = ref(false);
 const sidebarCollapsed = ref(
   typeof window !== "undefined" &&
     window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1"
@@ -77,12 +73,12 @@ watch(sidebarCollapsed, (value) => {
     <DsTopbar
       :brand="brand"
       :brand-icon-url="brandIconUrl"
-      :modules="modules"
-      :active-id="activeModuleId"
       :user="user"
       :user-menu="userMenu"
+      :navigation-open="mobileNavigationOpen"
       :sidebar-collapsed="sidebarCollapsed"
       @logout="emit('logout')"
+      @toggle-navigation="mobileNavigationOpen = !mobileNavigationOpen"
       @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed"
     >
       <template v-if="$slots['topbar-actions']" #actions>
@@ -90,7 +86,18 @@ watch(sidebarCollapsed, (value) => {
       </template>
     </DsTopbar>
     <div class="ds-app-shell__body" :class="{ 'is-sidebar-collapsed': sidebarCollapsed }">
-      <aside class="ds-app-shell__sidebar">
+      <button
+        v-if="mobileNavigationOpen"
+        type="button"
+        class="ds-app-shell__nav-backdrop"
+        aria-label="关闭导航"
+        @click="mobileNavigationOpen = false"
+      />
+      <aside
+        class="ds-app-shell__sidebar"
+        :class="{ 'is-mobile-open': mobileNavigationOpen }"
+        @click="mobileNavigationOpen = false"
+      >
         <DsSidebar :collapsed="sidebarCollapsed" :groups="sidebarGroups" :version="version" />
       </aside>
       <main class="ds-app-shell__content">
@@ -132,6 +139,10 @@ watch(sidebarCollapsed, (value) => {
   overflow: hidden;
 }
 
+.ds-app-shell__nav-backdrop {
+  display: none;
+}
+
 .ds-app-shell__content {
   min-width: 0;
   min-height: 0;
@@ -157,7 +168,33 @@ watch(sidebarCollapsed, (value) => {
   }
 
   .ds-app-shell__sidebar {
-    display: none;
+    position: fixed;
+    top: 56px;
+    bottom: 0;
+    left: 0;
+    z-index: 25;
+    display: block;
+    width: min(300px, 86vw);
+    height: auto;
+    transform: translateX(-100%);
+    background: var(--ds-panel);
+    box-shadow: var(--ds-shadow-panel);
+    pointer-events: none;
+    transition: transform 160ms ease;
+  }
+
+  .ds-app-shell__sidebar.is-mobile-open {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .ds-app-shell__nav-backdrop {
+    position: fixed;
+    inset: 56px 0 0;
+    z-index: 24;
+    display: block;
+    border: none;
+    background: color-mix(in srgb, var(--ds-ink) 24%, transparent);
   }
 
   .ds-app-shell__content {

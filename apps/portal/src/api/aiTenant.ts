@@ -454,16 +454,6 @@ export const aiTenantApi = {
       baseUrl: baseUrl()
     });
   },
-  updateMyGroupUserDefaultPolicy(groupId: string, body: Pick<TenantAiUserGroupWriteRequest, "user_default_visible" | "user_default_multiplier">) {
-    return request()<TenantAiDeleteOutputBody>({
-      method: "PUT",
-      path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/user-default-policy`,
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-
   // ---- 租户→用户 分组绑定（套餐收窄 + 加价倍率） ----
   listUserGroups(userId: string) {
     return request()<TenantAiUserGroupsOutputBody>({

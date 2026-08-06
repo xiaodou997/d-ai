@@ -59,8 +59,8 @@ const dashboard = useTenantOperationsDashboard();
           :range-label="dashboard.selectedRangeLabel.value"
           :loading="dashboard.summaryLoading.value"
           :service-balance-loading="dashboard.serviceBalanceLoading.value"
-          @open-settlement="router.push('/account?tab=balance')"
-          @top-up-service-balance="router.push('/account?action=buy')"
+          @open-settlement="router.push('/tenant/account?tab=balance')"
+          @top-up-service-balance="router.push('/tenant/account?action=buy')"
         />
 
         <div class="operations-workbench__insights">
@@ -68,13 +68,13 @@ const dashboard = useTenantOperationsDashboard();
             :items="dashboard.consumptionRanking.value"
             :range-label="dashboard.selectedRangeLabel.value"
             :loading="dashboard.rankingLoading.value"
-            @open-details="router.push('/billing/transactions')"
+            @open-details="router.push('/tenant/account?tab=points')"
           />
           <TenantRecentConsumption
             :items="dashboard.recentConsumption.value"
             :range-label="dashboard.selectedRangeLabel.value"
             :loading="dashboard.recentLoading.value"
-            @open-details="router.push('/billing/transactions')"
+            @open-details="router.push('/tenant/account?tab=points')"
           />
         </div>
       </div>

@@ -1,7 +1,7 @@
 <!--
   充值积分 — 微信扫码充值,实时到账个人积分。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       GuideHelpLink 收进 #actions);充值方式/订单收进同卡 body 的 24px 容器,
+       充值方式/订单收进同卡 body 的 24px 容器,
        订单 el-table → DsTable(:frame="false",金额/积分右对齐),el-tag → DsTag,
        未开放空态 el-empty → DsEmpty;全部色值改用 --ds-* token,无硬编码 hex。
        DsPagination 始终渲染;扫码支付弹窗(PortalQrPayDialog)与业务逻辑保持不变。
@@ -14,10 +14,6 @@
       :breadcrumbs="[{ label: '用户中心' }, { label: '充值与明细' }, { label: '充值积分' }]"
       description="微信扫码充值，实时到账个人积分"
     >
-      <template #actions>
-        <GuideHelpLink to="/help/account/topup" />
-      </template>
-
       <div class="topup-body">
         <DsEmpty
           v-if="!configLoading && !config?.enabled"
@@ -144,7 +140,6 @@ import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { CreditCard } from "lucide-vue-next";
 import { PortalPagePanel, PortalQrPayDialog } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import type { QrPayPollResult } from "@/platform";
 import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";

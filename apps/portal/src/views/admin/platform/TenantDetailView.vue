@@ -282,7 +282,7 @@ const TX_STATUS_MAP: Record<string, { label: string; tone: 'positive' | 'danger'
 const txStatusInfo = (status: string) => TX_STATUS_MAP[status] ?? { label: status || '—', tone: 'info' as const }
 
 const handleRecharge = () => {
-  router.push({ path: '/billing/recharge', query: { tenantId, tenantName: tenantInfo.value?.tenantName || '' } })
+  router.push({ path: '/admin/billing/recharges', query: { tenantId, tenantName: tenantInfo.value?.tenantName || '' } })
 }
 
 const fetchTenantInfo = async () => {

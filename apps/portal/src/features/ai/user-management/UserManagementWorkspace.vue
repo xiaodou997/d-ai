@@ -13,7 +13,6 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Users } from "lucide-vue-next";
 import { PortalContentCard, PortalPagePanel } from "@/platform";
 import { formatMultiplier } from "@/platform/ai/utils";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsEmpty, DsTabs, DsTag } from "@/shared/ui";
 
 import { aiTenantApi } from "@/api/aiTenant";
@@ -21,8 +20,8 @@ import { tenantApi } from "@/api/tenant";
 import type { TenantAiVisibleGroup } from "@/api/types/aiTenant";
 import type { TenantEndUserItem } from "@/api/types/tenant";
 import { END_USER_LOOKUP_PAGE_SIZE, findEndUserById } from "@/utils/endUsers";
-import UserPricingGroupsPanel from "../../../views/ai/user-pricing/components/UserPricingGroupsPanel.vue";
-import UserPricingUsersPanel from "../../../views/ai/user-pricing/components/UserPricingUsersPanel.vue";
+import UserPricingGroupsPanel from "@/views/tenant/ai/user-pricing/components/UserPricingGroupsPanel.vue";
+import UserPricingUsersPanel from "@/views/tenant/ai/user-pricing/components/UserPricingUsersPanel.vue";
 import UserLimitPolicyPanel from "./components/UserLimitPolicyPanel.vue";
 import UserUsageFilters from "./components/UserUsageFilters.vue";
 import UserUsageRecordsPanel from "./components/UserUsageRecordsPanel.vue";
@@ -133,7 +132,7 @@ async function selectUser(user: TenantEndUserItem, syncRoute = true) {
 
 function openOverview() {
   if (!selectedUser.value) return;
-  void router.push(`/users/${encodeURIComponent(selectedUser.value.userId)}`);
+  void router.push(`/tenant/users/directory/${encodeURIComponent(selectedUser.value.userId)}`);
 }
 
 async function toggleBinding(group: Pick<UserGroupPolicyRow, "id" | "name">, bind: boolean) {
@@ -220,7 +219,6 @@ watch(
       description="为单个终端用户配置 AI 服务权限和调用限额，并查看该用户的使用记录与使用统计。"
     >
       <template #actions>
-        <GuideHelpLink to="/help/ai/users" />
         <el-button :icon="Refresh" @click="refreshAll">刷新</el-button>
       </template>
 

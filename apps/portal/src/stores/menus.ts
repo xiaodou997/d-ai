@@ -1,12 +1,12 @@
 import { ref, watch } from "vue";
 import { defineStore } from "pinia";
 
-import { buildUnifiedNav } from "../menus/unifiedMenus";
+import { buildPortalNav } from "../modules/portalModules";
 import { useAuthStore } from "./auth";
 import type { AppShellNavItem } from "@/platform";
 
 /**
- * 统一 Menu Store —— 根据 userType 动态生成菜单
+ * Menu and routes share the portal module registry.
  */
 export const useMenuStore = defineStore("unified-menus", () => {
   const items = ref<AppShellNavItem[]>([]);
@@ -15,7 +15,7 @@ export const useMenuStore = defineStore("unified-menus", () => {
   function refresh(path?: string) {
     if (path) currentPath.value = path;
     const authStore = useAuthStore();
-    items.value = buildUnifiedNav(authStore.userType || 4);
+    items.value = buildPortalNav(authStore.userType || 4, currentPath.value || "/overview");
   }
 
   // userType 变化时自动刷新菜单

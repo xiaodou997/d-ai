@@ -1,7 +1,5 @@
 import type { PortalThemeName } from "@/shared/ui";
 
-/** Functional areas within the one D-AI backend. */
-export type PortalArea = "platform" | "ai";
 export type PortalKind = "unified";
 
 export interface PortalBuildEnv {

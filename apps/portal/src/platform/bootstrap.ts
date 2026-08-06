@@ -1,9 +1,6 @@
 import * as ElementPlusIconsVue from "@element-plus/icons-vue";
+import ElementPlus from "element-plus";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
-import "element-plus/es/components/loading/style/css";
-import "element-plus/es/components/message/style/css";
-import "element-plus/es/components/message-box/style/css";
-import "element-plus/es/components/notification/style/css";
 import { createApp, type Component, type Plugin } from "vue";
 import { createPinia } from "pinia";
 
@@ -28,6 +25,7 @@ export function bootstrapPortalApp(options: BootstrapPortalAppOptions) {
   const app = createApp(options.root, options.rootProps);
   app.use(createPinia());
   app.use(options.router);
+  app.use(ElementPlus, { locale: zhCn });
 
   for (const [name, component] of Object.entries(options.icons ?? {}) as Array<[string, Component]>) {
     app.component(name, component);

@@ -42,7 +42,7 @@ const router = useRouter();
     :description="`围绕 ${props.rangeLabel} 聚合模型消耗与入口结构，先看版图，再进明细。`"
   >
     <template #actions>
-      <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/workspace/user-consumption')">
+      <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/tenant/ai/usage')">
         查看消耗明细 <el-icon class="ml-1"><ArrowRight /></el-icon>
       </el-button>
     </template>

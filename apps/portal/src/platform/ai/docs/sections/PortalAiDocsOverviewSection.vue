@@ -13,16 +13,6 @@ const props = defineProps<{
 
 const authHeader = 'Authorization: Bearer YOUR_API_KEY';
 const appLabel = computed(() => portalAiDocsAppLabel(props.scope));
-const publicBasePath = computed(() => {
-  try {
-    return new URL(props.baseUrl).pathname.replace(/\/$/, "") || "/";
-  } catch {
-    const match = props.baseUrl.match(/^https?:\/\/[^/]+(\/.*)?$/);
-    return (match?.[1] || "/").replace(/\/$/, "") || "/";
-  }
-});
-const publicBaseHasGatewayPath = computed(() => publicBasePath.value !== "/");
-const wrongOpenAIBaseUrl = computed(() => `${props.baseUrl}${publicBaseHasGatewayPath.value ? publicBasePath.value : "/ai"}`);
 
 const startItems = computed(() => [
   {
@@ -38,7 +28,7 @@ const startItems = computed(() => [
   {
     title: "公开地址",
     keyType: props.baseUrl,
-    desc: "Base URL 里可能已经带了路径（如 /ai），直接用就行，不要再自己拼。"
+    desc: "直接使用平台展示的 Base URL，不要手动追加管理接口或推理接口路径。"
   }
 ]);
 </script>
@@ -75,13 +65,6 @@ const startItems = computed(() => [
             <strong class="ai-docs-rule-card__value">{{ baseUrl }}/v1/run</strong>
             <p class="ai-docs-rule-card__desc">应用密钥统一走这一个入口，绑定的应用类型决定具体行为。</p>
           </article>
-        </div>
-        <div v-if="publicBaseHasGatewayPath" class="ai-docs-callout ai-docs-callout--warning">
-          <strong class="ai-docs-callout__title">常见错误</strong>
-          <p class="ai-docs-callout__body">
-            OpenAI SDK 应该写 <span class="ai-docs-inline-code">{{ baseUrl }}</span>，而不是
-            <span class="ai-docs-inline-code">{{ wrongOpenAIBaseUrl }}</span>（地址里的 <code>{{ publicBasePath }}</code> 不要重复拼）。
-          </p>
         </div>
       </PortalContentCard>
 

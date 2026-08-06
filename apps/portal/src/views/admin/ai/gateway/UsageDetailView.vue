@@ -71,7 +71,7 @@ watch(
       :breadcrumbs="[
         { label: '智能服务' },
         { label: '日志审计' },
-        { label: '请求记录', to: '/ai-gateway/usage' },
+        { label: '请求记录', to: '/admin/ai/security/usage' },
         { label: '请求详情' }
       ]"
       description="按请求 ID 查看单条请求的完整链路、耗时拆解、计费档位与原始载荷。"

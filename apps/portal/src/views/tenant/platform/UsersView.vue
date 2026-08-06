@@ -12,7 +12,6 @@
       description="管理属于本租户的所有终端用户"
     >
       <template #actions>
-        <GuideHelpLink to="/help/platform/create-users" />
         <el-button type="primary" :icon="Plus" @click="openCreateDialog">创建用户</el-button>
       </template>
 
@@ -242,7 +241,6 @@ import {
 
 import { platformTenantApi } from "@/api/platformTenant";
 import type { EndUserItem } from "@/api/types/platformTenant";
-import { GuideHelpLink } from "@/platform/guide";
 
 const columns: DsTableColumn[] = [
   { key: "userId", title: "用户 ID", width: 110, mono: true },
@@ -392,7 +390,7 @@ async function handleDelete(row: EndUserItem) {
 }
 
 function openOverview(row: EndUserItem) {
-  void router.push(`/users/${encodeURIComponent(row.userId)}`);
+  void router.push(`/tenant/users/directory/${encodeURIComponent(row.userId)}`);
 }
 
 async function handleResetPassword(row: EndUserItem) {

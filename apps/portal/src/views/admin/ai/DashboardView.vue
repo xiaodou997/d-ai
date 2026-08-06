@@ -351,7 +351,7 @@ onMounted(() => {
         <button
           v-if="infraAlert"
           class="infra-alert-badge"
-          @click="router.push('/ai-gateway/status')"
+          @click="router.push('/admin/ai/monitoring/status')"
         >
           <el-icon :size="14"><Warning /></el-icon>
           基础设施：{{ infraAlert.reason }}

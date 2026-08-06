@@ -34,7 +34,7 @@ const capabilityOptions = [
 ];
 
 const openApiKeys = () => {
-  router.push("/workspace/keys");
+  router.push("/customer/developer/keys");
 };
 </script>
 

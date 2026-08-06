@@ -4,7 +4,7 @@
        筛选/表格/分页同卡);el-table → DsTable(mono 单号、金额右对齐、DsTag 状态),
        PortalFilterBar → DsFilterBar/DsFilterField,空态 → DsEmpty;数据接入 useListPage,
        请求参数与筛选语义保持不变;状态点颜色由 DsTag tone 承接(成功=positive、
-       进行中=warning、其余=danger);GuideHelpLink 保留在 #actions。
+       进行中=warning、其余=danger)。
 -->
 <template>
   <div class="page-container transactions-page">
@@ -14,10 +14,6 @@
       :breadcrumbs="[{ label: '租户运营' }, { label: '使用记录' }, { label: '消费记录' }]"
       description="查看每次服务使用时扣除的积分"
     >
-      <template #actions>
-        <GuideHelpLink to="/help/platform/transactions" />
-      </template>
-
       <template #filters>
         <DsFilterBar>
           <DsFilterField label="用户名">
@@ -101,7 +97,6 @@
 import { Search, RefreshRight } from "@element-plus/icons-vue";
 import { ArrowLeftRight } from "lucide-vue-next";
 import { PortalPagePanel, useListPage } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import {
   DsEmpty,
   DsFilterBar,

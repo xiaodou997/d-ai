@@ -251,11 +251,11 @@ const handleCreate = () => {
 }
 
 const handleRecharge = (row: any) => {
-  router.push({ path: '/billing/recharge', query: { tenantId: row.tenantId, tenantName: row.tenantName } })
+  router.push({ path: '/admin/billing/recharges', query: { tenantId: row.tenantId, tenantName: row.tenantName } })
 }
 
 const goTenantDetail = (tenantId: string) => {
-  router.push(`/tenants/${tenantId}`)
+  router.push(`/admin/organization/tenants/${tenantId}`)
 }
 
 const handleEdit = (row: any) => {

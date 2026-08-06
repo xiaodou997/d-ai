@@ -1,16 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { ChevronsLeft, ChevronsRight } from "lucide-vue-next";
-
-interface ModuleItem {
-  id: string;
-  label: string;
-  to?: string;
-  active?: boolean;
-  disabled?: boolean;
-  children?: ModuleItem[];
-}
+import { ChevronsLeft, ChevronsRight, Menu, X } from "lucide-vue-next";
 
 interface TopbarUser {
   name: string;
@@ -26,15 +17,14 @@ export interface TopbarUserMenuItem {
 const props = defineProps<{
   brand: string;
   brandIconUrl?: string;
-  modules: ModuleItem[];
-  activeId: string;
   user: TopbarUser;
   userMenu?: TopbarUserMenuItem[];
+  navigationOpen?: boolean;
   /** 侧栏折叠态;传入时品牌区右端渲染折叠按钮,品牌区宽度与侧栏同步(260px/64px) */
   sidebarCollapsed?: boolean;
 }>();
 
-const emit = defineEmits<{ logout: []; toggleSidebar: [] }>();
+const emit = defineEmits<{ logout: []; toggleNavigation: []; toggleSidebar: [] }>();
 defineSlots<{ actions(): unknown }>();
 
 const open = ref(false);
@@ -58,25 +48,6 @@ if (typeof window !== "undefined") {
   window.addEventListener("keydown", onKeydown);
   onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
-
-// 一级模块没有自己的路由时，落到其第一个可达菜单
-function firstLeaf(item: ModuleItem): string | undefined {
-  if (item.to && !item.disabled) return item.to;
-  for (const child of item.children ?? []) {
-    const leaf = firstLeaf(child);
-    if (leaf) return leaf;
-  }
-  return undefined;
-}
-
-const tabs = computed(() =>
-  props.modules.map((item) => ({
-    id: item.id,
-    label: item.label,
-    to: firstLeaf(item),
-    active: item.id === props.activeId
-  }))
-);
 
 const initial = computed(() => props.user.name.slice(0, 1) || "U");
 </script>
@@ -102,19 +73,18 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
       </button>
     </div>
 
-    <nav class="ds-topbar__modules">
-      <template v-for="tab in tabs" :key="tab.id">
-        <RouterLink
-          v-if="tab.to"
-          class="ds-topbar__module"
-          :class="{ 'is-active': tab.active }"
-          :to="tab.to"
-        >
-          {{ tab.label }}
-        </RouterLink>
-        <span v-else class="ds-topbar__module is-disabled">{{ tab.label }}</span>
-      </template>
-    </nav>
+    <button
+      type="button"
+      class="ds-topbar__mobile-nav"
+      :aria-label="navigationOpen ? '关闭导航' : '打开导航'"
+      :title="navigationOpen ? '关闭导航' : '打开导航'"
+      @click="emit('toggleNavigation')"
+    >
+      <X v-if="navigationOpen" :size="18" />
+      <Menu v-else :size="18" />
+    </button>
+
+    <div class="ds-topbar__spacer" />
 
     <div v-if="$slots.actions" class="ds-topbar__actions">
       <slot name="actions" />
@@ -209,6 +179,23 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   color: var(--ds-ink);
 }
 
+.ds-topbar__mobile-nav {
+  display: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--ds-radius-control);
+  background: transparent;
+  color: var(--ds-ink-soft);
+  cursor: pointer;
+}
+
+.ds-topbar__mobile-nav:hover {
+  background: var(--ds-panel-muted);
+  color: var(--ds-ink);
+}
+
 /* 折叠态只留展开按钮居中(桌面端);移动端侧栏隐藏,品牌区恢复自适应 */
 @media (min-width: 961px) {
   .ds-topbar__brand--collapsed .ds-topbar__mark,
@@ -235,6 +222,10 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   .ds-topbar__collapse {
     display: none;
   }
+
+  .ds-topbar__mobile-nav {
+    display: grid;
+  }
 }
 
 .ds-topbar__mark {
@@ -259,60 +250,13 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
 .ds-topbar__brand-name {
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--ds-ink);
 }
 
-.ds-topbar__modules {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.ds-topbar__spacer {
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
-}
-
-.ds-topbar__module {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: var(--ds-radius-control);
-  color: var(--ds-muted);
-  font-size: 13.5px;
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-
-.ds-topbar__module:hover {
-  background: var(--ds-panel-muted);
-  color: var(--ds-ink);
-}
-
-.ds-topbar__module.is-active {
-  color: var(--ds-ink);
-  font-weight: 600;
-}
-
-.ds-topbar__module.is-active::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 2px;
-  height: 2px;
-  border-radius: var(--ds-radius-pill);
-  background: var(--ds-accent);
-}
-
-.ds-topbar__module.is-disabled {
-  color: var(--ds-faint);
-  cursor: not-allowed;
 }
 
 .ds-topbar__user {

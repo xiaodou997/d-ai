@@ -35,3 +35,14 @@ export const portalThemes: Record<PortalThemeName, PortalThemeMeta> = {
 export function resolvePortalTheme(name: PortalThemeName): PortalThemeMeta {
   return portalThemes[name];
 }
+
+const portalThemeClasses = Object.keys(portalThemes).map((name) => `ds-theme-${name}`);
+
+export function applyPortalTheme(name: PortalThemeName): void {
+  if (typeof document === "undefined") return;
+
+  const root = document.documentElement;
+  root.dataset.theme = name;
+  root.classList.remove(...portalThemeClasses);
+  root.classList.add(`ds-theme-${name}`);
+}

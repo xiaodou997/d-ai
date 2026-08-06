@@ -1,7 +1,7 @@
 <!--
   积分明细 — 查看积分扣费与充值流水。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       GuideHelpLink 收进 #actions);el-table → DsTable(:frame="false",流水号 mono、
+       el-table → DsTable(:frame="false",流水号 mono、
        扣减积分右对齐),el-tag → DsTag;DsPagination 始终渲染(去掉 total>0 才显示)。
        业务逻辑与请求参数保持不变。
 -->
@@ -13,10 +13,6 @@
       :breadcrumbs="[{ label: '用户中心' }, { label: '充值与明细' }, { label: '积分明细' }]"
       description="查看我的积分扣费与充值明细"
     >
-      <template #actions>
-        <GuideHelpLink to="/help/account/transactions" />
-      </template>
-
       <DsTable
         :frame="false"
         :columns="columns"
@@ -52,7 +48,6 @@
 import { ref, onMounted } from "vue";
 import { ArrowLeftRight } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { AccountTransactionItem } from "@/api/types/platformCustomer";

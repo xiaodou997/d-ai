@@ -16,7 +16,6 @@ import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { Crown } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsEmpty, DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
 import { formatMultiplier } from "@/platform/ai/utils";
 import {
@@ -280,7 +279,7 @@ function openBuy(plan: AiSubPlan) {
 
 function goRecharge() {
   buyVisible.value = false;
-  void router.push("/billing/recharge");
+  void router.push("/customer/account/topup");
 }
 
 // 202 处理中：轮询订单终态。
@@ -396,7 +395,6 @@ onBeforeUnmount(() => {
       description="用积分购买固定时长的 AI 额度套餐，订阅期内的用量优先扣套餐额度，额度用尽自动回落按量计费。"
     >
       <template #actions>
-        <GuideHelpLink to="/help/ai/subscription" />
         <el-button :icon="Refresh" :loading="loadingShop || loadingMine" @click="refresh">刷新</el-button>
       </template>
 

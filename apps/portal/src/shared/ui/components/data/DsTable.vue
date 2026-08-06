@@ -201,7 +201,11 @@ function toggleExpand(row: unknown) {
               v-for="col in columns"
               :key="col.key"
               class="ds-table__td"
-              :class="[`ds-table__cell--${col.align ?? 'left'}`, { 'ds-table__cell--mono': col.mono }]"
+              :class="[
+                `ds-table__cell--${col.align ?? 'left'}`,
+                { 'ds-table__cell--mono': col.mono, 'ds-table__cell--wrap': col.wrap }
+              ]"
+              :style="col.width ? { width: columnWidth(col.width) } : undefined"
             >
               <slot :name="`cell-${col.key}`" :row="row" :value="cellValue(row, col.key)" :index="index">
                 {{ displayValue(cellValue(row, col.key)) }}
@@ -246,7 +250,8 @@ function toggleExpand(row: unknown) {
 }
 
 .ds-table__table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
 }
 
@@ -277,6 +282,14 @@ function toggleExpand(row: unknown) {
   color: var(--ds-ink-soft);
   border-top: 1px solid var(--ds-line);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ds-table__cell--wrap {
+  min-width: 180px;
+  max-width: 420px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ds-table__td--selection,

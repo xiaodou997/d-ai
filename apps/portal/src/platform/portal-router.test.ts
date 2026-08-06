@@ -4,6 +4,7 @@ import type { PortalEnv } from "./env";
 import { redirectPortalToLogin } from "./http";
 import {
   attachPortalAuthGuard,
+  resolvePortalPublicBaseUrl,
   routeAllowedForUserType,
   type PortalAuthStoreLike,
   type PortalRouteLike
@@ -21,10 +22,25 @@ const baseRoute: PortalRouteLike = {
 };
 
 describe("unified Portal route authorization", () => {
+  it("resolves same-origin and relative public gateway URLs", () => {
+    expect(resolvePortalPublicBaseUrl("/")).toBe(window.location.origin);
+    expect(resolvePortalPublicBaseUrl("/gateway")).toBe(`${window.location.origin}/gateway`);
+    expect(resolvePortalPublicBaseUrl("https://dai.example.com/gateway/")).toBe("https://dai.example.com/gateway");
+  });
+
   it("rejects platform administrators from super-admin-only routes", () => {
     const route = { ...baseRoute, matched: [{ meta: { allowedUserTypes: [1] } }] };
     expect(routeAllowedForUserType(route, 1)).toBe(true);
     expect(routeAllowedForUserType(route, 2)).toBe(false);
+  });
+
+  it("enforces capability metadata when the portal supplies a capability resolver", () => {
+    const route = { ...baseRoute, matched: [{ meta: { capability: "admin.identity" } }] };
+    const hasCapability = (userType: number, capability: string) =>
+      userType === 1 && capability === "admin.identity";
+
+    expect(routeAllowedForUserType(route, 1, hasCapability)).toBe(true);
+    expect(routeAllowedForUserType(route, 2, hasCapability)).toBe(false);
   });
 
   it("keeps public routes public", async () => {

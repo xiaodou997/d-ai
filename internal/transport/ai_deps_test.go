@@ -8,6 +8,7 @@ import (
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
+	"xiaodou/dai/internal/auth"
 )
 
 func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
@@ -17,6 +18,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	httpClient := &http.Client{}
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
+	blacklist := &auth.BlacklistService{}
 
 	got := buildAIDeps(Deps{
 		OAuth:             oauth,
@@ -26,6 +28,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		AIHTTPClient:      httpClient,
 		Health:            health,
 		Weights:           weights,
+		Blacklist:         blacklist,
 	})
 
 	if got.OAuth != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
@@ -36,5 +39,8 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.Health != health || got.Weights != weights {
 		t.Fatal("routing management dependencies were not preserved")
+	}
+	if got.TokenRevocations != blacklist {
+		t.Fatal("portal token revocation dependency was not preserved")
 	}
 }

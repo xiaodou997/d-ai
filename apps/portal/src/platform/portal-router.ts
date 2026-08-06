@@ -14,6 +14,8 @@ export interface PortalAuthStoreLike {
 export interface PortalAuthGuardOptions {
   env: PortalEnv;
   useAuthStore: () => PortalAuthStoreLike;
+  defaultPathForUserType?: (userType: number) => string;
+  hasCapability?: (userType: number, capability: string) => boolean;
 }
 
 export interface PortalRouteLike {
@@ -23,8 +25,16 @@ export interface PortalRouteLike {
   matched: Array<{ meta: Record<string, unknown> }>;
 }
 
-export function routeAllowedForUserType(route: PortalRouteLike, userType: number): boolean {
+export function routeAllowedForUserType(
+  route: PortalRouteLike,
+  userType: number,
+  hasCapability?: (userType: number, capability: string) => boolean
+): boolean {
   return route.matched.every((record) => {
+    const capability = record.meta.capability;
+    if (typeof capability === "string" && hasCapability && !hasCapability(userType, capability)) {
+      return false;
+    }
     const allowed = record.meta.allowedUserTypes;
     return !Array.isArray(allowed) || allowed.includes(userType);
   });
@@ -35,7 +45,12 @@ export interface PortalRouterLike {
 }
 
 export function resolvePortalPublicBaseUrl(baseUrl?: string): string {
-  return (baseUrl || window.location.origin).replace(/\/$/, "");
+  const value = baseUrl?.trim();
+  if (!value || value === "/") return window.location.origin;
+  if (value.startsWith("/")) {
+    return new URL(value, window.location.origin).toString().replace(/\/$/, "");
+  }
+  return value.replace(/\/$/, "");
 }
 
 export function attachPortalAuthGuard(router: PortalRouterLike, options: PortalAuthGuardOptions) {
@@ -62,8 +77,11 @@ export function attachPortalAuthGuard(router: PortalRouterLike, options: PortalA
       return redirectToLogin(to.path);
     }
 
-    if (!routeAllowedForUserType(to, authStore.userType)) {
-      return { path: defaultPortalPath(options.env.portal), replace: true };
+    if (!routeAllowedForUserType(to, authStore.userType, options.hasCapability)) {
+      return {
+        path: options.defaultPathForUserType?.(authStore.userType) ?? defaultPortalPath(options.env.portal),
+        replace: true
+      };
     }
 
     return true;

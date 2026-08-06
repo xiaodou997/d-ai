@@ -151,6 +151,7 @@ func buildAIDeps(d Deps) aitransport.AIDeps {
 		Health:               d.Health,
 		Weights:              d.Weights,
 		TokenVerifier:        d.JWT,
+		TokenRevocations:     d.Blacklist,
 		BanChecker:           d.BanChecker,
 		ProviderKeyMaster:    d.ProviderKeyMaster,
 		PriceBookSvc:         d.PriceBookSvc,

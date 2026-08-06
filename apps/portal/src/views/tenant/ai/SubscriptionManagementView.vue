@@ -9,7 +9,6 @@ import { computed, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Layers } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
-import { GuideHelpLink } from "@/platform/guide";
 import { DsTabs } from "@/shared/ui";
 
 import SubscriptionInstancesPanel from "@/features/ai/subscriptions/SubscriptionInstancesPanel.vue";
@@ -55,7 +54,6 @@ watch(activeTab, (tab) => {
       :breadcrumbs="[{ label: '智能服务' }, { label: '用户与订阅' }, { label: '订阅管理' }]"
       description="管理面向终端用户的套餐，并查看购买订单和订阅额度的实际生效情况。"
     >
-      <template #actions><GuideHelpLink to="/help/ai/subscription-plans" /></template>
 
       <!-- 面板 body 无内边距,Tab 页内容用 24px 容器承载;fill 模式下伸展撑满 -->
       <div class="subscription-body">

@@ -8,7 +8,6 @@
 import { computed, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { Coins, RefreshCw, Wallet } from "lucide-vue-next";
-import { GuideHelpLink } from "@/platform/guide";
 import { PortalPagePanel } from "@/platform";
 import { DsPagination } from "@/shared/ui";
 
@@ -144,7 +143,6 @@ watch(
       description="查看你的积分和余额，完成购买积分、余额管理与提现。"
     >
       <template #actions>
-        <GuideHelpLink to="/help/platform/account" />
         <el-button type="primary" :icon="Coins" @click="openPurchase">购买积分</el-button>
         <el-button :icon="RefreshCw" :loading="center.loading.balances" @click="center.refresh">刷新</el-button>
       </template>

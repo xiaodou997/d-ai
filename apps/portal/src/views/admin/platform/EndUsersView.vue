@@ -232,7 +232,7 @@ const formatTime = (ts?: number) => {
 }
 
 const goTenantDetail = (tenantId: string) => {
-  router.push(`/tenants/${tenantId}`)
+  router.push(`/admin/organization/tenants/${tenantId}`)
 }
 </script>
 

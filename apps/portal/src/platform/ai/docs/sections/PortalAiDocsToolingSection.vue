@@ -59,7 +59,7 @@ const toolingBaseUrlRules = computed(() => [
   {
     title: "Claude Code",
     value: props.baseUrl,
-    desc: "直接用公开 Base URL；如果地址里已经带 /ai，保持不变。"
+    desc: "直接使用公开 Base URL，Claude Code 会自行追加标准 Messages API 路径。"
   }
 ]);
 </script>
@@ -74,7 +74,7 @@ const toolingBaseUrlRules = computed(() => [
         </article>
         <article class="ai-docs-note">
           <strong class="ai-docs-note__head">Claude Code</strong>
-          <div class="ai-docs-note__body">走 Anthropic Messages API，Base URL 保持公开根地址，不要手动补 <span class="ai-docs-inline-code">/v1</span> 或删掉已有的 <span class="ai-docs-inline-code">/ai</span>。</div>
+          <div class="ai-docs-note__body">走 Anthropic Messages API，Base URL 保持公开根地址，不要手动补 <span class="ai-docs-inline-code">/v1</span>。</div>
         </article>
       </div>
       <div class="ai-docs-rule-grid">
@@ -124,7 +124,7 @@ const toolingBaseUrlRules = computed(() => [
           </tr>
           <tr>
             <td><code>404 / Not Found</code></td>
-            <td>把接口路径当成 Base URL，或者把公开地址里已有的 <code>/ai</code> 又重复拼了一层。</td>
+            <td>把 <code>/v1/messages</code> 或其他具体接口路径误写成了 Base URL。</td>
             <td>Codex CLI 和 Claude Code 都使用 <code>{{ baseUrl }}</code>；不要二次拼前缀。</td>
           </tr>
           <tr>

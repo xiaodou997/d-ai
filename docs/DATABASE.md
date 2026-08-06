@@ -25,12 +25,16 @@ make db-recreate
 
 `make db-recreate` 会删除 D-AI Compose 的 PostgreSQL 和 Redis 本地卷，只适用于开发环境。
 
-本地 Compose 会额外执行 `internal/db/dev_seed.sql`，创建开发管理员：
+本地 Compose 会额外执行 `internal/db/dev_seed.sql`。`make dev-seed` 可在已有本地数据卷上重复执行，初始化以下四类开发账号：
 
-- 用户名：`dai_admin`
-- 密码：`DaiAdmin123!`
+| userType | 用户名 | 密码 |
+|---|---|---|
+| 1 | `dai_admin` | `DaiAdmin123!` |
+| 2 | `dai_platform_admin` | `DaiAdmin123!` |
+| 3 | `dai_tenant` | `DaiAdmin123!` |
+| 4 | `dai_user` | `DaiAdmin123!` |
 
-这组凭据只用于本机开发，生产初始化不得执行 `dev_seed.sql`。
+这些凭据只用于本机开发。生产初始化不得挂载或执行 `dev_seed.sql`，应用进程也不会自动创建这些账号。
 
 ## 已有环境变更
 
