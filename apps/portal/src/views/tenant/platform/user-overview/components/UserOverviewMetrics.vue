@@ -53,7 +53,7 @@ const cards = computed<MetricCard[]>(() => {
       label: "AI 可见分组",
       value: props.aiAvailable ? formatNumber(props.groupSummary.accessible) : "—",
       meta: props.aiAvailable
-        ? `默认开放 ${formatNumber(props.groupSummary.defaultVisible)}，用户例外 ${formatNumber(props.groupSummary.customBindings)}`
+        ? `默认开放 ${formatNumber(props.groupSummary.defaultVisible)}，单独配置 ${formatNumber(props.groupSummary.customBindings)}`
         : "当前租户未开通智能服务"
     },
     {

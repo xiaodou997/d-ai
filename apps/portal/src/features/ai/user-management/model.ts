@@ -8,7 +8,7 @@ export interface UserGroupPolicyRow {
   availability_state: "default" | "custom" | "unavailable";
 }
 
-export interface UserAiPolicyTarget {
+export interface UserPolicyTarget {
   userId: string;
   username: string;
 }

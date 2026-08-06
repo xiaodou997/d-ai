@@ -10,6 +10,7 @@ import UsersView from "./UsersView.vue";
 const api = vi.hoisted(() => ({
   getUsers: vi.fn(),
   createEndUser: vi.fn(),
+  updateEndUser: vi.fn(),
   updateUserStatus: vi.fn(),
   deleteEndUser: vi.fn(),
   resetUserPassword: vi.fn(),
@@ -18,7 +19,8 @@ const api = vi.hoisted(() => ({
 const aiApi = vi.hoisted(() => ({
   listMyGroups: vi.fn(),
   listUserGroups: vi.fn(),
-  listUserLimitPolicies: vi.fn()
+  listUserLimitPolicies: vi.fn(),
+  upsertUserLimitPolicy: vi.fn()
 }));
 
 vi.mock("@/api/platformTenant", () => ({
@@ -34,6 +36,8 @@ const user = {
   tenantId: "tenant-1",
   username: "alice",
   email: "alice@example.com",
+  phone: "13800000000",
+  internalNote: "重点客户",
   status: 1,
   credits: 100,
   createdTime: 1_700_000_000_000
@@ -45,19 +49,23 @@ describe("tenant user management", () => {
     api.getUsers.mockResolvedValue({ items: [], total: 0 });
     api.updateUserStatus.mockReset();
     api.updateUserStatus.mockResolvedValue({ message: "ok" });
+    api.updateEndUser.mockReset();
+    api.updateEndUser.mockResolvedValue({ message: "ok" });
     aiApi.listMyGroups.mockReset();
     aiApi.listMyGroups.mockResolvedValue({ items: [] });
     aiApi.listUserGroups.mockReset();
     aiApi.listUserGroups.mockResolvedValue({ items: [] });
     aiApi.listUserLimitPolicies.mockReset();
     aiApi.listUserLimitPolicies.mockResolvedValue({ items: [] });
+    aiApi.upsertUserLimitPolicy.mockReset();
+    aiApi.upsertUserLimitPolicy.mockResolvedValue({});
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("opens the create-user dialog while the AI policy drawer is closed", async () => {
+  it("opens the create-user dialog", async () => {
     const wrapper = await mountUsers();
 
     await wrapper.get('[data-testid="create-user-button"]').trigger("click");
@@ -67,23 +75,33 @@ describe("tenant user management", () => {
     wrapper.unmount();
   });
 
-  it("opens AI policy as an action scoped to the selected user", async () => {
+  it("opens group policy as an action scoped to the selected user", async () => {
     api.getUsers.mockResolvedValue({ items: [user], total: 1 });
+    aiApi.listMyGroups.mockResolvedValue({
+      items: [{
+        id: "group-1",
+        name: "标准分组",
+        default_user_multiplier: 1,
+        user_default_visible: true
+      }]
+    });
     const wrapper = await mountUsers();
-    const policyButtons = wrapper.findAll("button").filter((button) => button.text() === "AI 策略");
+    const policyButtons = wrapper.findAll("button").filter((button) => button.text() === "分组策略");
 
     expect(policyButtons).toHaveLength(1);
     await policyButtons[0].trigger("click");
     await flushPromises();
 
-    expect(document.body.textContent).toContain("alice · user-1");
-    expect(document.body.textContent).toContain("策略仅作用于当前用户");
+    expect(document.body.textContent).toContain("分组策略 · alice");
+    expect(document.body.textContent).toContain("租户默认");
+    expect(document.body.textContent).toContain("单独配置");
+    expect(document.body.textContent).toContain("沿用租户默认");
     wrapper.unmount();
   });
 
   it("changes user status through the confirmed switch", async () => {
     api.getUsers.mockResolvedValue({ items: [{ ...user }], total: 1 });
-    vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm");
+    vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm" as any);
     const wrapper = await mountUsers();
 
     await wrapper.get('[aria-label="alice状态"]').trigger("click");

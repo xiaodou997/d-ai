@@ -4,12 +4,11 @@
        面板 body 承载四个 user-overview 区块。
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { UserRound } from "lucide-vue-next";
 
-import { UserAiPolicyDrawer } from "@/features/ai/user-management";
-import type { UserAiPolicyTarget } from "@/features/ai/user-management/model";
+import { UserEditDialog, UserGroupPolicyDialog } from "@/features/ai/user-management";
 import { PortalPagePanel } from "@/platform";
 
 import UserOverviewActivityGrid from "./user-overview/components/UserOverviewActivityGrid.vue";
@@ -27,37 +26,22 @@ const serviceAvailability = computed(() => ({
 }));
 
 const overview = useTenantUserOverview(userId, serviceAvailability);
-const aiPolicyDrawerOpen = ref(route.query.policy === "1");
-const aiPolicyUser = computed<UserAiPolicyTarget | null>(() => {
-  if (!userId.value) return null;
-  return {
-    userId: userId.value,
-    username: overview.user.value?.username ?? `用户 ${userId.value}`
-  };
-});
+const editDialogOpen = ref(false);
+const groupPolicyDialogOpen = ref(false);
 
 function goBack() {
   void router.push("/tenant/users/directory");
 }
 
-function openAiConfig() {
-  if (!userId.value || !serviceAvailability.value.ai) return;
-  aiPolicyDrawerOpen.value = true;
+function openEditUser() {
+  if (!overview.user.value) return;
+  editDialogOpen.value = true;
 }
 
-function closeAiPolicy() {
-  aiPolicyDrawerOpen.value = false;
-  if (route.query.policy !== "1") return;
-  const { policy: _policy, ...query } = route.query;
-  void router.replace({ query });
+function openGroupPolicy() {
+  if (!overview.user.value || !serviceAvailability.value.ai) return;
+  groupPolicyDialogOpen.value = true;
 }
-
-watch(
-  () => route.query.policy,
-  (policy) => {
-    if (policy === "1") aiPolicyDrawerOpen.value = true;
-  }
-);
 </script>
 
 <template>
@@ -82,7 +66,8 @@ watch(
           :warnings="overview.warnings.value"
           :ai-available="overview.serviceAvailability.value.ai"
           @back="goBack"
-          @open-ai-config="openAiConfig"
+          @edit-user="openEditUser"
+          @open-group-policy="openGroupPolicy"
           @refresh="overview.refresh"
         />
 
@@ -113,15 +98,22 @@ watch(
           :group-summary="overview.groupSummary.value"
           :risk-signals="overview.riskSignals.value"
           :ai-available="overview.serviceAvailability.value.ai"
-          @open-ai-config="openAiConfig"
+          @open-group-policy="openGroupPolicy"
         />
       </div>
     </PortalPagePanel>
 
-    <UserAiPolicyDrawer
-      :open="aiPolicyDrawerOpen"
-      :user="aiPolicyUser"
-      @close="closeAiPolicy"
+    <UserEditDialog
+      :open="editDialogOpen"
+      :user="overview.user.value"
+      @close="editDialogOpen = false"
+      @saved="overview.refresh"
+    />
+
+    <UserGroupPolicyDialog
+      :open="groupPolicyDialogOpen"
+      :user="overview.user.value"
+      @close="groupPolicyDialogOpen = false"
     />
   </div>
 </template>

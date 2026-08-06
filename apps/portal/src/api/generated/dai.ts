@@ -4685,7 +4685,8 @@ export interface paths {
         delete: operations["admin-delete-end-user"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** 更新终端用户资料（租户） */
+        patch: operations["admin-update-end-user"];
         trace?: never;
     };
     "/api/v1/users/{id}/reset-password": {
@@ -6031,6 +6032,7 @@ export interface components {
              */
             readonly $schema?: string;
             email?: string | null;
+            internalNote?: string;
             phone?: string | null;
             username: string;
         };
@@ -6695,6 +6697,7 @@ export interface components {
             /** Format: double */
             credits: number;
             email?: string;
+            internalNote?: string;
             /** Format: int64 */
             lastLoginTime?: number;
             nickname?: string;
@@ -9899,6 +9902,17 @@ export interface components {
              * @description 1 USD 对应积分数
              */
             credits_per_usd: number;
+        };
+        UpdateEndUserInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateEndUserInputBody.json
+             */
+            readonly $schema?: string;
+            email?: string | null;
+            internalNote?: string | null;
+            phone?: string | null;
         };
         UpdateInvitationInputBody: {
             /**
@@ -22706,6 +22720,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuccessOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-update-end-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEndUserInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
                 };
             };
             /** @description Error */

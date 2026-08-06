@@ -128,10 +128,19 @@ export const platformTenantApi = {
       baseUrl
     });
   },
-  createEndUser(body: { username: string; email?: string; phone?: string }) {
+  createEndUser(body: { username: string; email?: string; phone?: string; internalNote?: string }) {
     return platform()<CreateEndUserOutput>({
       method: "POST",
       path: "/api/v1/users",
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+  updateEndUser(userId: string, body: { email: string; phone: string; internalNote: string }) {
+    return platform()<{ message: string }>({
+      method: "PATCH",
+      path: `/api/v1/users/${encodeURIComponent(userId)}`,
       headers: apiHeaders,
       body,
       baseUrl

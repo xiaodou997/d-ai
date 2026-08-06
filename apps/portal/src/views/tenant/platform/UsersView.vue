@@ -1,8 +1,8 @@
 <!--
-  租户端终端用户列表:搜索 + 表格 + 分页 + 用户级 AI 策略抽屉 + 创建/充值弹窗。
+  租户端终端用户列表:搜索 + 表格 + 分页 + 用户编辑/分组策略/创建/充值弹窗。
   重构:迁移至 DsUI 一体面板(PortalPagePanel:图标徽章+面包屑标题+描述同行,
        筛选/表格/分页同卡),el-table → DsTable,状态改为确认式开关,空态 DsEmpty,
-       分页始终渲染;AI 策略在当前用户抽屉中配置,创建/充值弹窗仍为 element-plus。
+       分页始终渲染;用户资料与并发统一编辑,分组策略单独配置。
 -->
 <template>
   <div class="page-container users-page">
@@ -20,7 +20,7 @@
           <DsFilterField label="关键词">
             <el-input
               v-model="keyword"
-              placeholder="搜索用户名 / 邮箱 / 手机"
+              placeholder="搜索用户名 / 邮箱 / 手机 / 备注"
               clearable
               class="users-search"
               @keyup.enter="handleSearch"
@@ -66,9 +66,13 @@
         <template #cell-createdTime="{ row }">
           <span class="users-time">{{ formatTime(row.createdTime) }}</span>
         </template>
+        <template #cell-internalNote="{ row }">
+          <span class="users-note" :title="row.internalNote || ''">{{ row.internalNote || '—' }}</span>
+        </template>
         <template #cell-actions="{ row }">
           <el-button type="primary" link @click="openOverview(row)">详情</el-button>
-          <el-button type="primary" link @click="openAiPolicy(row)">AI 策略</el-button>
+          <el-button type="primary" link @click="openEditUser(row)">编辑</el-button>
+          <el-button type="primary" link @click="openGroupPolicy(row)">分组策略</el-button>
           <el-button type="primary" link @click="openRecharge(row)">充值</el-button>
           <el-button type="warning" link @click="handleResetPassword(row)">重置密码</el-button>
           <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
@@ -86,10 +90,17 @@
       </template>
     </PortalPagePanel>
 
-    <UserAiPolicyDrawer
-      :open="aiPolicyDrawerOpen"
-      :user="aiPolicyTarget"
-      @close="closeAiPolicy"
+    <UserEditDialog
+      :open="editDialogOpen"
+      :user="editTarget"
+      @close="editDialogOpen = false"
+      @saved="fetchUsers"
+    />
+
+    <UserGroupPolicyDialog
+      :open="groupPolicyDialogOpen"
+      :user="groupPolicyTarget"
+      @close="groupPolicyDialogOpen = false"
     />
 
     <!-- 创建用户弹窗 -->
@@ -110,6 +121,16 @@
         </el-form-item>
         <el-form-item label="手机号" prop="phone">
           <el-input v-model="createForm.phone" placeholder="请输入手机号（可选）" />
+        </el-form-item>
+        <el-form-item label="内部备注" prop="internalNote">
+          <el-input
+            v-model="createForm.internalNote"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            placeholder="仅租户内部可见（可选）"
+          />
         </el-form-item>
         <el-alert
           title="默认密码为 123456，创建后请通知终端用户登录后自行修改。"
@@ -147,7 +168,7 @@ import { Users } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import RechargeDialog from "@/components/RechargeDialog.vue";
 import type { RechargeFormPayload } from "@/components/recharge";
-import { UserAiPolicyDrawer } from "@/features/ai/user-management";
+import { UserEditDialog, UserGroupPolicyDialog } from "@/features/ai/user-management";
 import {
   DsEmpty,
   DsFilterBar,
@@ -164,9 +185,10 @@ const columns: DsTableColumn[] = [
   { key: "userId", title: "用户 ID", width: 110, mono: true },
   { key: "username", title: "用户名", width: 130 },
   { key: "email", title: "邮箱" },
+  { key: "internalNote", title: "内部备注" },
   { key: "status", title: "状态", width: 90 },
   { key: "createdTime", title: "注册时间", width: 170 },
-  { key: "actions", title: "操作", width: 310 }
+  { key: "actions", title: "操作", width: 360 }
 ];
 
 const router = useRouter();
@@ -177,13 +199,15 @@ const total = ref(0);
 const loading = ref(false);
 const userList = ref<EndUserItem[]>([]);
 const statusUpdatingIds = ref<Set<string>>(new Set());
-const aiPolicyDrawerOpen = ref(false);
-const aiPolicyTarget = ref<EndUserItem | null>(null);
+const editDialogOpen = ref(false);
+const editTarget = ref<EndUserItem | null>(null);
+const groupPolicyDialogOpen = ref(false);
+const groupPolicyTarget = ref<EndUserItem | null>(null);
 
 const showCreateDialog = ref(false);
 const createLoading = ref(false);
 const createFormRef = ref<FormInstance>();
-const createForm = reactive({ username: "", email: "", phone: "" });
+const createForm = reactive({ username: "", email: "", phone: "", internalNote: "" });
 const createRules: FormRules = {
   username: [{ required: true, message: "请输入用户名", trigger: "blur" }]
 };
@@ -232,6 +256,7 @@ function openCreateDialog() {
   createForm.username = "";
   createForm.email = "";
   createForm.phone = "";
+  createForm.internalNote = "";
   showCreateDialog.value = true;
 }
 
@@ -239,6 +264,7 @@ function resetCreateForm() {
   createForm.username = "";
   createForm.email = "";
   createForm.phone = "";
+  createForm.internalNote = "";
   createFormRef.value?.clearValidate();
 }
 
@@ -250,7 +276,8 @@ async function submitCreateUser() {
     const data = await platformTenantApi.createEndUser({
       username: createForm.username.trim(),
       email: createForm.email?.trim() || undefined,
-      phone: createForm.phone?.trim() || undefined
+      phone: createForm.phone?.trim() || undefined,
+      internalNote: createForm.internalNote.trim() || undefined
     });
     ElMessage.success(`用户创建成功，默认密码 ${data?.defaultPassword || "123456"}`);
     showCreateDialog.value = false;
@@ -326,13 +353,14 @@ function openOverview(row: EndUserItem) {
   void router.push(`/tenant/users/directory/${encodeURIComponent(row.userId)}`);
 }
 
-function openAiPolicy(row: EndUserItem) {
-  aiPolicyTarget.value = row;
-  aiPolicyDrawerOpen.value = true;
+function openEditUser(row: EndUserItem) {
+  editTarget.value = row;
+  editDialogOpen.value = true;
 }
 
-function closeAiPolicy() {
-  aiPolicyDrawerOpen.value = false;
+function openGroupPolicy(row: EndUserItem) {
+  groupPolicyTarget.value = row;
+  groupPolicyDialogOpen.value = true;
 }
 
 async function handleResetPassword(row: EndUserItem) {
@@ -409,6 +437,15 @@ onMounted(() => {
 .users-time {
   font-size: 12px;
   color: var(--ds-faint);
+}
+
+.users-note {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--ds-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 </style>

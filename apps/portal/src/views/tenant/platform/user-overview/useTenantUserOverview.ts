@@ -213,7 +213,7 @@ export function useTenantUserOverview(
     if (userGroupsResult.status === "fulfilled") {
       userGroups.value = userGroupsResult.value?.items ?? [];
     } else if (services.ai) {
-      issues.push("AI 用户例外配置加载失败。");
+      issues.push("用户分组策略加载失败。");
     }
 
     if (aiPolicyResult.status === "fulfilled") {

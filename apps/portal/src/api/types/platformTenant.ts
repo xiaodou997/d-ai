@@ -88,6 +88,7 @@ export interface EndUserItem {
   tenantName?: string;
   email?: string;
   phone?: string;
+  internalNote?: string;
   nickname?: string;
   avatar?: string;
   status: number; // 1=active, 2=disabled

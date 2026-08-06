@@ -65,6 +65,7 @@ CREATE TABLE iam_users (
     password_hash TEXT NOT NULL,
     email TEXT,
     phone TEXT,
+    internal_note TEXT NOT NULL DEFAULT '',
     nickname TEXT,
     avatar TEXT,
     frozen_credits BIGINT NOT NULL DEFAULT 0 CHECK (frozen_credits >= 0),
@@ -2162,6 +2163,6 @@ CREATE TABLE dai_schema_metadata (
     initialized_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 6);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 7);
 
 COMMIT;

@@ -60,7 +60,7 @@ describe("unified portal route contract", () => {
     expect(flatRoutes.find((route) => route.name === "platform-tenant-policy")?.path).toBe("/admin/organization/tenants/:id/policy");
     expect(flatRoutes.find((route) => route.name === "ai-group-detail")?.path).toBe("/tenant/ai/models/groups/:groupId");
     expect(flatRoutes.find((route) => route.name === "ai-usage-detail")?.path).toBe("/admin/ai/usage/:requestId");
-    expect(flatRoutes.find((route) => route.name === "ai-user-management")?.path).toBe("/tenant/users/policy/:userId?");
+    expect(flatRoutes.find((route) => route.name === "tenant-user-detail")?.path).toBe("/tenant/users/directory/:userId");
   });
 
   it("generates one route tree from every registered module", () => {

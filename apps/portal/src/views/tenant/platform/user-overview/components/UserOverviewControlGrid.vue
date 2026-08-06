@@ -24,7 +24,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: "open-ai-config"): void;
+  (e: "open-group-policy"): void;
 }>()
 
 function toneClass(tone: UserOverviewRiskSignal["tone"]) {
@@ -32,7 +32,7 @@ function toneClass(tone: UserOverviewRiskSignal["tone"]) {
 }
 
 function sourceLabel(source: UserOverviewAccessibleGroup["source"]) {
-  return source === "custom" ? "用户例外" : "默认开放";
+  return source === "custom" ? "单独配置" : "默认开放";
 }
 </script>
 
@@ -44,7 +44,7 @@ function sourceLabel(source: UserOverviewAccessibleGroup["source"]) {
           <h2 class="control-title">AI 配置摘要</h2>
           <p class="control-desc">这里聚合当前用户能看到的 AI 分组，以及用户级专属限流策略。</p>
         </div>
-        <el-button v-if="aiAvailable" link type="primary" @click="emit('open-ai-config')">配置策略</el-button>
+        <el-button v-if="aiAvailable" link type="primary" @click="emit('open-group-policy')">分组策略</el-button>
       </header>
 
       <template v-if="aiAvailable">
@@ -58,7 +58,7 @@ function sourceLabel(source: UserOverviewAccessibleGroup["source"]) {
             <strong class="mini-stat-value">{{ formatNumber(groupSummary.defaultVisible) }}</strong>
           </div>
           <div class="mini-stat">
-            <span class="mini-stat-label">用户例外</span>
+            <span class="mini-stat-label">单独配置</span>
             <strong class="mini-stat-value">{{ formatNumber(groupSummary.customBindings) }}</strong>
           </div>
         </div>

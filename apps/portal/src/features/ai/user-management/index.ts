@@ -1,1 +1,2 @@
-export { default as UserAiPolicyDrawer } from "./UserAiPolicyDrawer.vue";
+export { default as UserEditDialog } from "./UserEditDialog.vue";
+export { default as UserGroupPolicyDialog } from "./UserGroupPolicyDialog.vue";

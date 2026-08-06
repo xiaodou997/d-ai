@@ -26,6 +26,7 @@ type endUserItem struct {
 	TenantName    string  `json:"tenantName,omitempty"`
 	Email         string  `json:"email,omitempty"`
 	Phone         string  `json:"phone,omitempty"`
+	InternalNote  string  `json:"internalNote,omitempty"`
 	Nickname      string  `json:"nickname,omitempty"`
 	Avatar        string  `json:"avatar,omitempty"`
 	Status        int     `json:"status"`
@@ -50,9 +51,19 @@ type endUserListOutput struct {
 
 type createEndUserInput struct {
 	Body struct {
-		Username string  `json:"username"`
-		Email    *string `json:"email" required:"false"`
-		Phone    *string `json:"phone" required:"false"`
+		Username     string  `json:"username"`
+		Email        *string `json:"email" required:"false"`
+		Phone        *string `json:"phone" required:"false"`
+		InternalNote string  `json:"internalNote,omitempty" maxLength:"500"`
+	}
+}
+
+type updateEndUserInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		Email        *string `json:"email" required:"false" maxLength:"254"`
+		Phone        *string `json:"phone" required:"false" maxLength:"32"`
+		InternalNote *string `json:"internalNote" required:"false" maxLength:"500"`
 	}
 }
 
@@ -76,6 +87,8 @@ func registerAdminEndUsers(api huma.API, d Deps) {
 		Summary: "终端用户列表", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.listEndUsers)
 	huma.Register(api, huma.Operation{OperationID: "admin-create-end-user", Method: http.MethodPost, Path: "/api/v1/users",
 		Summary: "创建终端用户（租户）", Tags: []string{"admin-end-users"}, Middlewares: tenantOnly, DefaultStatus: http.StatusCreated}, h.createEndUser)
+	huma.Register(api, huma.Operation{OperationID: "admin-update-end-user", Method: http.MethodPatch, Path: "/api/v1/users/{id}",
+		Summary: "更新终端用户资料（租户）", Tags: []string{"admin-end-users"}, Middlewares: tenantOnly}, h.updateEndUser)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-end-user-status", Method: http.MethodPatch, Path: "/api/v1/users/{id}/status",
 		Summary: "启用/停用终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.updateEndUserStatus)
 	huma.Register(api, huma.Operation{OperationID: "admin-reset-end-user-password", Method: http.MethodPost, Path: "/api/v1/users/{id}/reset-password",
@@ -123,10 +136,10 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		idx++
 	}
 	if in.Keyword != "" {
-		where += fmt.Sprintf(" AND (eu.username LIKE $%d OR eu.email LIKE $%d)", idx, idx+1)
+		where += fmt.Sprintf(" AND (eu.username LIKE $%d OR eu.email LIKE $%d OR eu.phone LIKE $%d OR eu.internal_note LIKE $%d)", idx, idx, idx, idx)
 		p := "%" + in.Keyword + "%"
-		args = append(args, p, p)
-		idx += 2
+		args = append(args, p)
+		idx++
 	}
 	// V1 终端用户独立搜索条件：租户名 / 用户名 / 状态
 	if in.TenantName != "" {
@@ -158,7 +171,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 	offset := (in.Page - 1) * size
 	qargs := append(append([]any{}, args...), size, offset)
 	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
-		SELECT eu.user_id, eu.tenant_id, eu.username, eu.email, eu.phone, eu.nickname, eu.avatar,
+		SELECT eu.user_id, eu.tenant_id, eu.username, eu.email, eu.phone, eu.internal_note, eu.nickname, eu.avatar,
 		       eu.status, eu.last_login_at, eu.created_at,
 		       COALESCE(t.tenant_name, '') AS tenant_name,
 		       COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages
@@ -177,10 +190,11 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		var it endUserItem
 		var creditsMicro int64
 		var email, phone, nickname, avatar, tenantName *string
+		var internalNote string
 		var status string
 		var lastLogin *time.Time
 		var createdAt time.Time
-		if err := rows.Scan(&it.UserID, &it.TenantID, &it.Username, &email, &phone, &nickname, &avatar,
+		if err := rows.Scan(&it.UserID, &it.TenantID, &it.Username, &email, &phone, &internalNote, &nickname, &avatar,
 			&status, &lastLogin, &createdAt, &tenantName, &creditsMicro); err != nil {
 			continue
 		}
@@ -196,6 +210,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		if phone != nil {
 			it.Phone = *phone
 		}
+		it.InternalNote = internalNote
 		if nickname != nil {
 			it.Nickname = *nickname
 		}
@@ -234,9 +249,9 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	userID := "U_" + strings.ToUpper(uuid.NewString()[:24])
 	now := time.Now().UTC()
 	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_users (user_id, tenant_id, username, password_hash, email, phone, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $7)
-	`, userID, claims.TenantID, username, string(hash), in.Body.Email, in.Body.Phone, now); err != nil {
+		INSERT INTO iam_users (user_id, tenant_id, username, password_hash, email, phone, internal_note, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $8)
+	`, userID, claims.TenantID, username, string(hash), in.Body.Email, in.Body.Phone, strings.TrimSpace(in.Body.InternalNote), now); err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
@@ -248,6 +263,48 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	out.Body.Username = username
 	out.Body.DefaultPassword = "123456"
 	return out, nil
+}
+
+func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInput) (*messageOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil || claims.TenantID == "" {
+		return nil, httpx.ErrForbidden.WithDetail("需要租户用户身份")
+	}
+	if err := h.checkUserBelongsToTenant(ctx, in.ID, claims.TenantID); err != nil {
+		return nil, err
+	}
+
+	emailSet, email := normalizedOptionalText(in.Body.Email)
+	phoneSet, phone := normalizedOptionalText(in.Body.Phone)
+	noteSet, internalNote := normalizedOptionalText(in.Body.InternalNote)
+	if !emailSet && !phoneSet && !noteSet {
+		return nil, httpx.ErrBadRequest.WithDetail("至少提供一个需要更新的字段")
+	}
+
+	result, err := h.pool.Exec(ctx, `
+		UPDATE iam_users
+		SET email = CASE WHEN $1 THEN NULLIF($2, '') ELSE email END,
+		    phone = CASE WHEN $3 THEN NULLIF($4, '') ELSE phone END,
+		    internal_note = CASE WHEN $5 THEN $6 ELSE internal_note END,
+		    updated_at = $7
+		WHERE user_id = $8 AND tenant_id = $9 AND status <> 'deleted'
+	`, emailSet, email, phoneSet, phone, noteSet, internalNote, time.Now().UTC(), in.ID, claims.TenantID)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if result.RowsAffected() == 0 {
+		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
+	}
+	out := &messageOutput{}
+	out.Body.Message = "用户资料已更新"
+	return out, nil
+}
+
+func normalizedOptionalText(value *string) (bool, string) {
+	if value == nil {
+		return false, ""
+	}
+	return true, strings.TrimSpace(*value)
 }
 
 func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathInput) (*messageOutput, error) {

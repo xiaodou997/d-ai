@@ -22,7 +22,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "back"): void;
-  (e: "open-ai-config"): void;
+  (e: "edit-user"): void;
+  (e: "open-group-policy"): void;
   (e: "refresh"): void;
 }>()
 
@@ -39,6 +40,8 @@ const statusTone = computed<"neutral" | "positive" | "danger">(() => {
 const detailItems = computed(() => [
   { label: "用户 ID", value: props.user?.userId || props.userId },
   { label: "邮箱", value: props.user?.email || "—" },
+  { label: "手机号", value: props.user?.phone || "—" },
+  { label: "内部备注", value: props.user?.internalNote || "—" },
   { label: "注册时间", value: formatDateTime(props.user?.createdTime) },
   { label: "上次登录", value: formatDateTime(props.user?.lastLoginTime) },
   { label: "最近活跃", value: formatDateTime(props.lastActivityTime) },
@@ -62,7 +65,8 @@ const detailItems = computed(() => [
 
       <div class="hero-actions">
         <el-button plain @click="emit('back')">返回列表</el-button>
-        <el-button plain :disabled="!aiAvailable" @click="emit('open-ai-config')">AI 策略</el-button>
+        <el-button plain :disabled="!user" @click="emit('edit-user')">编辑用户</el-button>
+        <el-button plain :disabled="!user || !aiAvailable" @click="emit('open-group-policy')">分组策略</el-button>
         <el-button type="primary" @click="emit('refresh')">刷新数据</el-button>
       </div>
     </div>

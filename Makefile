@@ -57,7 +57,12 @@ db-migrate: deps-up ## 将本地数据库迁移到当前 schema 版本（保留�
 		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_remove_auth_service_scopes.sql; \
 		version=6; \
 	fi; \
-	if [ "$$version" != "6" ]; then \
+	if [ "$$version" = "6" ]; then \
+		echo "Migrating database schema 6 -> 7..."; \
+		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_add_user_internal_note.sql; \
+		version=7; \
+	fi; \
+	if [ "$$version" != "7" ]; then \
 		echo "ERROR: unsupported database schema version $$version"; \
 		exit 1; \
 	fi

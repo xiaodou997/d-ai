@@ -291,8 +291,7 @@ export const portalModules: PortalModule[] = [
     navTabs: true,
     tabs: [
       { id: "directory", label: "用户管理", path: "directory", component: () => import("@/views/tenant/platform/UsersView.vue") },
-      { id: "user-detail", label: "用户详情", path: "directory/:userId", component: () => import("@/views/tenant/platform/UserDetailView.vue"), name: "tenant-user-detail", nav: false, activeTabId: "directory" },
-      { id: "policy", label: "AI 策略", path: "policy/:userId?", component: () => import("@/views/tenant/ai/UserManagementView.vue"), name: "ai-user-management", nav: false, activeTabId: "directory" }
+      { id: "user-detail", label: "用户详情", path: "directory/:userId", component: () => import("@/views/tenant/platform/UserDetailView.vue"), name: "tenant-user-detail", nav: false, activeTabId: "directory" }
     ]
   },
   {
