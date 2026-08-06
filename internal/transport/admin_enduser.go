@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
-	"xiaodou/dai/libs/go/httpx"
 	billingdomain "xiaodou/dai/internal/billing"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 // ---- DTO ----
@@ -162,7 +162,8 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		       eu.status, eu.last_login_at, eu.created_at,
 		       COALESCE(t.tenant_name, '') AS tenant_name,
 		       COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages
-		                 WHERE package_type = 'user' AND user_id = eu.user_id AND status = 'available'), 0) AS credits
+		                 WHERE package_type = 'user' AND user_id = eu.user_id AND status = 'available'), 0)
+		         - COALESCE(eu.current_overdraft, 0) AS credits
 		%s
 		%s ORDER BY eu.created_at DESC LIMIT $%d OFFSET $%d
 	`, from, where, idx, idx+1), qargs...)

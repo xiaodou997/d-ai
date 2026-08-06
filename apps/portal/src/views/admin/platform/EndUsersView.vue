@@ -1,9 +1,9 @@
 <!--
   终端用户 — 1:1 搬运自 v1/platform/platform-admin/src/views/User/UserList.vue。
-  保留搜索条件和账号启停，债务状态仅供查看。
+  保留搜索条件和账号启停，积分余额包含未结透支。
   仅适配：axios api → v4 强类型 client（platformAdminApi，列表字段 items）；跳转租户详情走新路由。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       筛选/表格/分页同卡）;数据接入 useListPage,请求参数与筛选语义保持不变,抽屉仍为 element-plus。
+       筛选/表格/分页同卡）;数据接入 useListPage,请求参数与筛选语义保持不变。
 -->
 <template>
   <div class="endusers-page">
@@ -38,6 +38,7 @@
               <el-option label="正常" :value="1" />
               <el-option label="禁用" :value="2" />
               <el-option label="锁定" :value="3" />
+              <el-option label="级联停用" :value="4" />
             </el-select>
           </DsFilterField>
 
@@ -68,28 +69,32 @@
           </button>
         </template>
         <template #cell-status="{ row }">
-          <DsTag :tone="statusTone(row.status)">
-            {{ row.statusDisplay }}
-          </DsTag>
+          <div class="endusers-status-control">
+            <el-tooltip :content="statusSwitchTip(row.status)" placement="top">
+              <el-switch
+                :model-value="row.status === 1"
+                :loading="isStatusUpdating(row.userId)"
+                :disabled="!isStatusControllable(row.status) || isStatusUpdating(row.userId)"
+                :aria-label="`${row.username}状态`"
+                inline-prompt
+                active-text="启"
+                inactive-text="停"
+                @change="handleStatusChange(row, Boolean($event))"
+              />
+            </el-tooltip>
+            <span v-if="!isStatusControllable(row.status)" class="endusers-status-note">{{ row.statusDisplay }}</span>
+          </div>
         </template>
         <template #cell-credits="{ row }">
-          <span class="endusers-num endusers-credits">{{ row.credits?.toLocaleString() }} 积分</span>
+          <span class="endusers-num endusers-credits" :class="{ 'endusers-credits--negative': Number(row.credits || 0) < 0 }">
+            {{ Number(row.credits || 0).toLocaleString() }} 积分
+          </span>
         </template>
         <template #cell-lastLoginTime="{ row }">
           <span class="endusers-time">{{ formatTime(row.lastLoginTime) }}</span>
         </template>
         <template #cell-createdTime="{ row }">
           <span class="endusers-time">{{ formatTime(row.createdTime) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <el-button
-            link
-            :type="row.status === 1 ? 'warning' : 'success'"
-            @click="handleToggleStatus(row)"
-          >
-            {{ row.status === 1 ? '禁用' : '启用' }}
-          </el-button>
-          <el-button link type="primary" @click="openDebt(row)">债务</el-button>
         </template>
       </DsTable>
 
@@ -104,18 +109,6 @@
       </template>
     </PortalPagePanel>
 
-    <el-drawer
-	  v-model="debtDrawerVisible"
-	  :title="`未结债务 — ${debtTarget.username || debtTarget.userId}`"
-      size="720px"
-      :destroy-on-close="true"
-    >
-	  <DebtStatusPanel
-		v-if="debtTarget.userId"
-		owner-type="user"
-		:account-id="debtTarget.userId"
-      />
-    </el-drawer>
   </div>
 </template>
 
@@ -131,11 +124,9 @@ import {
   DsFilterField,
   DsPagination,
   DsTable,
-  DsTag,
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
-import DebtStatusPanel from '@/components/DebtStatusPanel.vue'
 
 const router = useRouter()
 
@@ -144,11 +135,10 @@ const columns: DsTableColumn[] = [
   { key: 'username', title: '用户名' },
   { key: 'tenantName', title: '归属租户' },
   { key: 'email', title: '邮箱' },
-  { key: 'status', title: '状态' },
-  { key: 'credits', title: '账户积分', align: 'right' },
+  { key: 'status', title: '状态', width: 130 },
+  { key: 'credits', title: '积分余额', align: 'right' },
   { key: 'lastLoginTime', title: '最后登录' },
-  { key: 'createdTime', title: '注册时间' },
-  { key: 'actions', title: '操作', width: 160 }
+  { key: 'createdTime', title: '注册时间' }
 ]
 
 const {
@@ -189,17 +179,28 @@ const {
   }
 })
 
-const debtDrawerVisible = ref(false)
-const debtTarget = ref<{ userId: string; username: string }>({ userId: '', username: '' })
-const openDebt = (row: any) => {
-  debtTarget.value = { userId: row.userId, username: row.username }
-  debtDrawerVisible.value = true
+const statusUpdatingIds = ref<Set<string>>(new Set())
+const isStatusUpdating = (userId: string) => statusUpdatingIds.value.has(userId)
+const isStatusControllable = (status: number) => status === 1 || status === 2
+const statusSwitchTip = (status: number) => {
+  if (status === 3) return '账号已锁定，不能手动切换状态'
+  if (status === 4) return '账号随所属租户停用，不能单独启用'
+  return status === 1 ? '点击禁用用户' : '点击启用用户'
 }
 
-const handleToggleStatus = async (row: any) => {
-  const targetStatus = row.status === 1 ? 2 : 1
-  const actionText = targetStatus === 1 ? '启用' : '禁用'
+const setStatusUpdating = (userId: string, updating: boolean) => {
+  const next = new Set(statusUpdatingIds.value)
+  if (updating) next.add(userId)
+  else next.delete(userId)
+  statusUpdatingIds.value = next
+}
 
+const handleStatusChange = async (row: any, enabled: boolean) => {
+  if (!isStatusControllable(row.status) || isStatusUpdating(row.userId) || enabled === (row.status === 1)) return
+
+  const actionText = enabled ? '启用' : '禁用'
+
+  setStatusUpdating(row.userId, true)
   try {
     await ElMessageBox.confirm(`确定要${actionText}该用户吗？`, '状态变更确认', {
       confirmButtonText: `立即${actionText}`,
@@ -208,17 +209,18 @@ const handleToggleStatus = async (row: any) => {
       roundButton: true
     })
 
-    await platformAdminApi.updateEndUserStatus(row.userId, targetStatus === 2 ? 'disabled' : 'active')
+    await platformAdminApi.updateEndUserStatus(row.userId, enabled ? 'active' : 'disabled')
 
+    row.status = enabled ? 1 : 2
+    row.statusDisplay = enabled ? '正常' : '禁用'
     ElMessage.success(`${actionText}成功`)
-    refresh()
+    void refresh()
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error(`${actionText}失败`)
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(`${actionText}失败`)
+  } finally {
+    setStatusUpdating(row.userId, false)
   }
 }
-
-const statusTone = (status: number): 'positive' | 'neutral' | 'danger' | 'warning' =>
-  (({ 1: 'positive', 2: 'neutral', 3: 'danger', 4: 'warning' } as const)[status] ?? 'neutral')
 
 const getStatusDisplay = (status: number) => {
   const map: Record<number, string> = { 1: '正常', 2: '禁用', 3: '锁定', 4: '级联停用' }
@@ -279,6 +281,21 @@ const goTenantDetail = (tenantId: string) => {
 .endusers-credits {
   font-weight: 700;
   color: var(--ds-ink-soft);
+}
+
+.endusers-credits--negative {
+  color: var(--ds-danger);
+}
+
+.endusers-status-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.endusers-status-note {
+  color: var(--ds-muted);
+  font-size: 12px;
 }
 
 .endusers-time {
