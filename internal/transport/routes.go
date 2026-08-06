@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -39,13 +38,9 @@ import (
 	"xiaodou/dai/libs/go/banstate"
 )
 
-// Version 是 D-AI 对外版本号。
-const Version = "0.1.0"
-
 // Deps 汇集统一 transport 层注册端点所需的领域依赖。
 type Deps struct {
 	// 基础设施
-	Service       string
 	Version       string
 	Pool          *pgxpool.Pool
 	Redis         *redis.Client
@@ -67,7 +62,6 @@ type Deps struct {
 	// AI 域
 	Queries            *aidb.Queries
 	BillingCoordinator *billingledger.Coordinator
-	JWKSValidator      JWKSValidator
 	BanChecker         *banstate.Checker
 	Security           config.SecurityConfig
 	Audit              config.AuditConfig
@@ -76,7 +70,7 @@ type Deps struct {
 	Image              config.ImageConfig
 	Pricing            config.PricingConfig
 
-	// AI 服务
+	// AI 域
 	PriceBookSvc         *billingcontrol.Service
 	CommercialSvc        *commercial.Service
 	GroupTransferSvc     *commercial.GroupTransferService
@@ -96,24 +90,6 @@ type Deps struct {
 	RiskControlChecker   *riskcontrol.Checker
 }
 
-// JWKSValidator 是 JWT 验证接口（进程内实现，不再走 HTTP）
-type JWKSValidator interface {
-	ValidateToken(ctx context.Context, token string) (*auth.Claims, error)
-}
-
-// InProcessJWKSValidator 进程内 JWKS 验证器——直接读 jwtSvc 公钥，不走 HTTP
-type InProcessJWKSValidator struct {
-	jwt *auth.JWTService
-}
-
-func NewInProcessJWKSValidator(jwt *auth.JWTService) *InProcessJWKSValidator {
-	return &InProcessJWKSValidator{jwt: jwt}
-}
-
-func (v *InProcessJWKSValidator) ValidateToken(ctx context.Context, token string) (*auth.Claims, error) {
-	return v.jwt.ParseToken(token)
-}
-
 // Register 在 Huma API 上注册全部端点。
 func Register(api huma.API, d Deps) {
 	registerMeta(api, d)
@@ -121,15 +97,17 @@ func Register(api huma.API, d Deps) {
 }
 
 func registerMeta(api huma.API, d Deps) {
-	server.Health(api, d.Service, d.Version)
+	server.Health(api, "dai", d.Version)
 	registerInfo(api, d.Version)
 	registerJWKS(api, d.JWT)
 }
 
 func registerPublicPlane(api huma.API, d Deps) {
-	// OAuth2 受保护端点（用户 JWT + 黑名单）
+	registerAuthPublic(api, d)
+
+	// Portal 账号端点（用户 JWT + 黑名单）
 	usrAuth := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist)}
-	registerOAuth2Protected(api, d, usrAuth)
+	registerAuthProtected(api, d, usrAuth)
 
 	// 管理资源端点（/api/v1，用户 JWT + 类型守卫）
 	registerAdminTenants(api, d)
@@ -154,18 +132,15 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerAITransport(api, d)
 }
 
-// registerAITransport 将 AI transport 注册到统一 Huma API 上。
-// 目前传入零值 AIDeps（端点结构注册但不执行 handler），
-// 后续随 AI 服务装配补全逐步填充真实依赖。
+// registerAITransport 将 AI 域端点注册到统一 Huma API 上。
 func registerAITransport(api huma.API, d Deps) {
+	identity := newAIIdentityAdapter(d.Pool, d.UserService)
 	aiDeps := aitransport.AIDeps{
-		Service:              "dai",
-		Version:              Version,
 		Postgres:             d.Pool,
 		Redis:                d.Redis,
 		Queries:              d.Queries,
 		Logger:               d.Logger,
-		JWKSValidator:        d.JWKSValidator,
+		TokenVerifier:        d.JWT,
 		BanChecker:           d.BanChecker,
 		ProviderKeyMaster:    d.Security.ProviderKeyMaster,
 		PriceBookSvc:         d.PriceBookSvc,
@@ -184,6 +159,10 @@ func registerAITransport(api huma.API, d Deps) {
 		RiskControlEventSvc:  d.RiskControlEventSvc,
 		RiskControlChecker:   d.RiskControlChecker,
 	}
+	if identity != nil {
+		aiDeps.IdentityProvider = identity
+		aiDeps.TenantEndUsers = identity
+	}
 	aitransport.RegisterAI(api, aiDeps)
 }
 
@@ -193,9 +172,6 @@ func RegisterRaw(mux *chi.Mux, d Deps) {
 }
 
 func RegisterPublicRaw(mux *chi.Mux, d Deps) {
-	h := newAuthHandlers(d)
-	mux.Post("/api/oauth2/token", h.token)
-
 	// 微信支付回调（无认证，验签即鉴权）
 	notifyHandler := newPaymentNotifyHandlers(d)
 	mux.Post("/api/v1/payments/wechat/notify", notifyHandler.wechatNotify)

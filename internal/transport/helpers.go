@@ -3,24 +3,14 @@ package transport
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
-
-	chimw "github.com/go-chi/chi/v5/middleware"
-
-	"xiaodou/dai/libs/go/httpx"
 )
 
-// writeJSON 写出标准 application/json 响应（用于 chi 原生 handler，如 OAuth2 token）。
+// writeJSON 写出 chi 原生回调端点的标准 JSON 响应。
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-// writeProblemRaw 在 chi 原生 handler 中写出统一 problem+json 错误，并关联 request_id。
-func writeProblemRaw(w http.ResponseWriter, r *http.Request, ae *httpx.AppError) {
-	httpx.WriteProblem(w, ae.Problem(chimw.GetReqID(r.Context())))
 }
 
 // userTypeDisplayName 返回用户类型的中文展示名。
@@ -40,8 +30,6 @@ func userTypeDisplayName(userType int) string {
 }
 
 func nowUTC() time.Time { return time.Now().UTC() }
-
-func joinScopes(scopes []string) string { return strings.Join(scopes, " ") }
 
 type successOutput struct {
 	Body struct {

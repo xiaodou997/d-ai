@@ -21,7 +21,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/oauth2/password": {
+    "/api/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -29,16 +29,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 修改密码 */
-        put: operations["oauth2-change-password"];
-        post?: never;
+        put?: never;
+        /** 账号密码登录 */
+        post: operations["auth-login"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/oauth2/revoke": {
+    "/api/auth/logout": {
         parameters: {
             query?: never;
             header?: never;
@@ -48,14 +48,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** 登出（撤销当前 Token） */
-        post: operations["oauth2-revoke"];
+        post: operations["auth-logout"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/oauth2/userinfo": {
+    "/api/auth/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -63,9 +63,43 @@ export interface paths {
             cookie?: never;
         };
         /** 当前用户信息 */
-        get: operations["oauth2-userinfo"];
+        get: operations["auth-current-user"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 修改密码 */
+        put: operations["auth-change-password"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 刷新登录凭证 */
+        post: operations["auth-refresh"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5652,7 +5686,6 @@ export interface components {
             principalType: string;
             reasonCode?: string;
             reasonMessage?: string;
-            scopes: string[] | null;
             userId?: string;
         };
         AuditLogsOutputBody: {
@@ -5665,6 +5698,18 @@ export interface components {
             items: components["schemas"]["AuditLogDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        AuthTokenResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AuthTokenResponse.json
+             */
+            readonly $schema?: string;
+            accessToken: string;
+            /** Format: int64 */
+            expiresIn: number;
+            refreshToken?: string;
         };
         BalanceResponse: {
             /**
@@ -7493,6 +7538,16 @@ export interface components {
             /** Format: int64 */
             up_to_input_tokens: number | null;
         };
+        LoginInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/LoginInputBody.json
+             */
+            readonly $schema?: string;
+            password: string;
+            username: string;
+        };
         ManualConfirmInputBody: {
             /**
              * Format: uri
@@ -8218,6 +8273,15 @@ export interface components {
             tenantName: string;
             userId: string;
             username: string;
+        };
+        RefreshInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RefreshInputBody.json
+             */
+            readonly $schema?: string;
+            refreshToken: string;
         };
         RefundInputBody: {
             /**
@@ -11565,7 +11629,98 @@ export interface operations {
             };
         };
     };
-    "oauth2-change-password": {
+    "auth-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokenResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-current-user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserInfoOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-change-password": {
         parameters: {
             query?: never;
             header?: never;
@@ -11598,14 +11753,18 @@ export interface operations {
             };
         };
     };
-    "oauth2-revoke": {
+    "auth-refresh": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -11613,36 +11772,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "oauth2-userinfo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserInfoOutputBody"];
+                    "application/json": components["schemas"]["AuthTokenResponse"];
                 };
             };
             /** @description Error */

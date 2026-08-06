@@ -110,12 +110,6 @@ var (
 	ErrUnauthorized       = &BizError{Code: 5006, Message: "未授权访问"} // 原编号 1001
 	ErrForbidden          = &BizError{Code: 5007, Message: "禁止访问"}  // 原编号 1002
 
-	// 服务认证错误 (6xxx)
-	ErrMissingServiceHeaders = &BizError{Code: 6001, Message: "缺少服务认证头"}
-	ErrInvalidSignature      = &BizError{Code: 6002, Message: "签名验证失败"}
-	ErrInvalidClientID       = &BizError{Code: 6003, Message: "无效的ClientID"}
-	ErrDuplicateNonce        = &BizError{Code: 6004, Message: "重复的请求"}
-
 	// 在线支付/现金账户错误 (7xxx)
 	ErrPaymentDisabled         = &BizError{Code: 7001, Message: "微信支付未启用"}
 	ErrPaymentAmountOutOfRange = &BizError{Code: 7002, Message: "充值金额超出允许范围"}

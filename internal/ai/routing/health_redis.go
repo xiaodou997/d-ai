@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	healthKeyPrefix = "uni_ai_api:health:target:"
-	healthIndexKey  = "uni_ai_api:health:targets"
+	healthKeyPrefix = "dai:health:target:"
+	healthIndexKey  = "dai:health:targets"
 	healthStateTTL  = 7 * 24 * time.Hour
 	healthRedisWait = 500 * time.Millisecond
 )

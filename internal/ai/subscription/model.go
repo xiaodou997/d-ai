@@ -11,8 +11,6 @@ import (
 	"context"
 	"errors"
 	"time"
-
-	"xiaodou/dai/internal/ai/platform"
 )
 
 // 计费来源常量（与 ai_usage_logs.billing_source / pipeline.Request 对齐）。
@@ -46,7 +44,7 @@ var (
 	ErrQueueFull     = errors.New("subscription: subscription queue is full")
 	// ErrPlanAlreadyQueued：待激活队列（pending 订阅 + 在途订单）里已有同一套餐；active 同套餐不拦（预购续期）。
 	ErrPlanAlreadyQueued = errors.New("subscription: plan already queued")
-	// ErrInsufficientBalance：购买时用户积分不足（由 platform.ErrInsufficientBalance 映射）。
+	// ErrInsufficientBalance：购买时用户积分不足。
 	ErrInsufficientBalance = errors.New("subscription: insufficient balance")
 	// ErrOrderProcessing：扣款处于未知态，订单停在 deducting，交由 janitor 补偿。
 	ErrOrderProcessing     = errors.New("subscription: order still processing")
@@ -250,9 +248,22 @@ type PurchaseReservation struct {
 	Replayed bool
 }
 
+type DebitRequest struct {
+	IdempotencyKey string
+	TenantID       string
+	UserID         string
+	Description    string
+	TenantMicro    int64
+	UserMicro      int64
+}
+
+type DebitReceipt struct {
+	AuthorizationID string
+}
+
 // Purchaser 是订阅购买需要的计费窄接口（strict：不足额整单失败，不许透支）。
 type Purchaser interface {
-	DebitStrict(ctx context.Context, req platform.StrictDebitRequest) (*platform.StrictDebitResponse, error)
+	DebitStrict(ctx context.Context, req DebitRequest) (*DebitReceipt, error)
 }
 
 // Repo 是订阅领域的持久化接口，由 adapters/postgres 实现。

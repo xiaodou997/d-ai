@@ -201,7 +201,7 @@ func main() {
 	banChecker := banstate.NewChecker(redisClient)
 
 	// AI 计费通过进程内端口直接调用统一计费域。
-	leasePort := billingledger.NewInProcessLeasePort(creditLeaseSvc, "dai")
+	leasePort := billingledger.NewBillingLeaseAdapter(creditLeaseSvc, "dai")
 	billingCoordinator := billingledger.New(
 		pool,
 		leasePort,
@@ -220,9 +220,6 @@ func main() {
 		appLogger,
 	)
 	go billingCoordinator.Run(ctx)
-
-	// JWKS 验证改为进程内直接读 jwtSvc 公钥
-	jwksValidator := transport.NewInProcessJWKSValidator(jwtSvc)
 
 	// ── AI 领域服务（管理端 + 工作端）──
 
@@ -284,7 +281,7 @@ func main() {
 	go auditWorker.Start(ctx)
 
 	// Subscription
-	purchaser := subscription.NewInProcessPurchaser(deductionSvc, "dai")
+	purchaser := subscription.NewBillingPurchaser(deductionSvc, "dai")
 	subsSvc := subscription.NewService(aiadapters.NewSubscriptionRepo(q, pool), purchaser, appLogger)
 
 	// Workspace
@@ -471,7 +468,7 @@ func main() {
 		Logger:         appLogger,
 		Queries:        q,
 		Security:       cfg.Security,
-		JWKSValidator:  jwksValidator,
+		TokenVerifier:  jwtSvc,
 		BanChecker:     banChecker,
 		HTTPClient:     &http.Client{Timeout: 0},
 		OAuthCreds:     oauthCreds,
@@ -496,7 +493,6 @@ func main() {
 	// ──────────────────────────────────────────────────────
 
 	deps := transport.Deps{
-		Service:       "dai",
 		Version:       version,
 		Pool:          pool,
 		Redis:         redisClient,
@@ -515,7 +511,6 @@ func main() {
 
 		Queries:            q,
 		BillingCoordinator: billingCoordinator,
-		JWKSValidator:      jwksValidator,
 		BanChecker:         banChecker,
 		Security:           cfg.Security,
 		Audit:              cfg.Audit,
@@ -524,7 +519,7 @@ func main() {
 		Image:              cfg.Image,
 		Pricing:            cfg.Pricing,
 
-		// AI 服务
+		// AI 域
 		PriceBookSvc:         priceBookSvc,
 		CommercialSvc:        commercialSvc,
 		GroupTransferSvc:     groupTransferSvc,

@@ -38,16 +38,14 @@ type messageOutput struct {
 	}
 }
 
-// registerOAuth2Protected 注册 /api/oauth2 下需用户 JWT 的端点（userinfo/revoke/
-// password）。登录与刷新统一通过 token 端点完成。
-func registerOAuth2Protected(api huma.API, d Deps, mw huma.Middlewares) {
-	// OIDC UserInfo
+// registerAuthProtected 注册统一 Portal 的登录后账号端点。
+func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 	huma.Register(api, huma.Operation{
-		OperationID: "oauth2-userinfo",
+		OperationID: "auth-current-user",
 		Method:      http.MethodGet,
-		Path:        "/api/oauth2/userinfo",
+		Path:        "/api/auth/me",
 		Summary:     "当前用户信息",
-		Tags:        []string{"oauth2"},
+		Tags:        []string{"auth"},
 		Middlewares: mw,
 	}, func(ctx context.Context, _ *struct{}) (*userInfoOutput, error) {
 		claims := userClaimsFromCtx(ctx)
@@ -69,13 +67,12 @@ func registerOAuth2Protected(api huma.API, d Deps, mw huma.Middlewares) {
 		return out, nil
 	})
 
-	// 撤销当前 Access Token（加入黑名单）
 	huma.Register(api, huma.Operation{
-		OperationID: "oauth2-revoke",
+		OperationID: "auth-logout",
 		Method:      http.MethodPost,
-		Path:        "/api/oauth2/revoke",
+		Path:        "/api/auth/logout",
 		Summary:     "登出（撤销当前 Token）",
-		Tags:        []string{"oauth2"},
+		Tags:        []string{"auth"},
 		Middlewares: mw,
 	}, func(ctx context.Context, _ *struct{}) (*successOutput, error) {
 		claims := userClaimsFromCtx(ctx)
@@ -90,13 +87,12 @@ func registerOAuth2Protected(api huma.API, d Deps, mw huma.Middlewares) {
 		return okSuccess(), nil
 	})
 
-	// 修改密码
 	huma.Register(api, huma.Operation{
-		OperationID: "oauth2-change-password",
+		OperationID: "auth-change-password",
 		Method:      http.MethodPut,
-		Path:        "/api/oauth2/password",
+		Path:        "/api/auth/password",
 		Summary:     "修改密码",
-		Tags:        []string{"oauth2"},
+		Tags:        []string{"auth"},
 		Middlewares: mw,
 	}, func(ctx context.Context, in *changePasswordInput) (*messageOutput, error) {
 		claims := userClaimsFromCtx(ctx)

@@ -37,7 +37,7 @@ export const platformAdminApi = {
   changePassword(body: { oldPassword: string; newPassword: string }) {
     return request()<{ message: string }>({
       method: "PUT",
-      path: "/api/oauth2/password",
+      path: "/api/auth/password",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl

@@ -36,28 +36,28 @@ var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000
 func NewGateway() *Gateway {
 	return &Gateway{
 		requestsTotal: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "ai_gateway_requests_total",
+			Name: "dai_ai_requests_total",
 			Help: "Total number of AI requests processed, by model, status, and capability.",
 		}, []string{"model", "capability", "status", "provider"}),
 
 		requestDuration: promauto.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "ai_gateway_request_duration_ms",
+			Name:    "dai_ai_request_duration_ms",
 			Help:    "End-to-end request latency in milliseconds.",
 			Buckets: buckets,
 		}, []string{"model", "capability", "provider"}),
 
 		tokenUsage: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "ai_gateway_tokens_total",
+			Name: "dai_ai_tokens_total",
 			Help: "Token counts by model, provider, and token type.",
 		}, []string{"model", "provider", "token_type"}),
 
 		pipelineErrors: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "ai_gateway_pipeline_errors_total",
+			Name: "dai_ai_pipeline_errors_total",
 			Help: "Pipeline step errors by step name and error code.",
 		}, []string{"step", "code"}),
 
 		circuitBreaker: promauto.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "ai_gateway_circuit_breaker_open",
+			Name: "dai_ai_circuit_breaker_open",
 			Help: "1 if the circuit breaker is open for a deployment, 0 otherwise.",
 		}, []string{"deployment_id"}),
 		billingAdmissionFailures: promauto.NewCounterVec(prometheus.CounterOpts{
@@ -178,15 +178,15 @@ func (g *Gateway) SetCircuitBreakerOpen(deploymentID string, open bool) {
 // HTTPMiddleware wraps an http.Handler with basic request instrumentation.
 func HTTPMiddleware(next http.Handler) http.Handler {
 	inFlight := promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ai_gateway_http_requests_in_flight",
+		Name: "dai_http_requests_in_flight",
 		Help: "Current number of in-flight HTTP requests.",
 	})
 	total := promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ai_gateway_http_requests_total",
+		Name: "dai_http_requests_total",
 		Help: "Total HTTP requests by method, path pattern, and status.",
 	}, []string{"method", "status"})
 	duration := promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ai_gateway_http_request_duration_ms",
+		Name:    "dai_http_request_duration_ms",
 		Help:    "HTTP request latency in milliseconds.",
 		Buckets: buckets,
 	}, []string{"method", "status"})

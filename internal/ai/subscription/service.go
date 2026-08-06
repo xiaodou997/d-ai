@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/platform"
 )
 
 const defaultMaxQueue = 2
@@ -216,7 +215,7 @@ func (s *Service) Purchase(ctx context.Context, p PurchaseParams) (*Order, *Subs
 		return nil, nil, err
 	}
 
-	resp, err := s.purchaser.DebitStrict(ctx, platform.StrictDebitRequest{
+	resp, err := s.purchaser.DebitStrict(ctx, DebitRequest{
 		IdempotencyKey: "ai-sub-" + order.OrderNo,
 		TenantID:       p.TenantID,
 		UserID:         p.UserID,
@@ -224,7 +223,7 @@ func (s *Service) Purchase(ctx context.Context, p PurchaseParams) (*Order, *Subs
 		UserMicro:      priceMicro,
 	})
 	if err != nil {
-		if errors.Is(err, platform.ErrInsufficientBalance) {
+		if errors.Is(err, ErrInsufficientBalance) {
 			if _, ferr := s.repo.MarkOrderFailed(ctx, order.ID, "insufficient_balance"); ferr != nil {
 				s.logger.Warn("mark order failed after insufficient balance", zap.String("order", order.OrderNo), zap.Error(ferr))
 			}

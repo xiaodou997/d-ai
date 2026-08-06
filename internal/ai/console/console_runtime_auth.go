@@ -41,7 +41,7 @@ func bannedMessage(ctx context.Context, bc BanChecker, tenantID, userID string) 
 }
 
 func (s *Console) consoleRuntimeSubject(w http.ResponseWriter, r *http.Request) (*coreidentity.Subject, bool) {
-	if s.jwksValidator == nil {
+	if s.tokenVerifier == nil {
 		gateway.WriteRuntimeErrorByProtocol(w, domain.ProtocolOpenAIChat, http.StatusUnauthorized,
 			"Authentication is not configured.", "invalid_token")
 		return nil, false
@@ -54,7 +54,7 @@ func (s *Console) consoleRuntimeSubject(w http.ResponseWriter, r *http.Request) 
 		return nil, false
 	}
 
-	claims, err := s.jwksValidator.ValidateToken(r.Context(), token)
+	claims, err := s.tokenVerifier.ParseToken(token)
 	if err != nil {
 		s.logger.Warn("runtime token validation failed",
 			consoleRequestLogFields(r, zap.Error(err))...,

@@ -16,7 +16,7 @@ type ctxKey int
 const userClaimsCtxKey ctxKey = iota
 
 // userAuth 是 Huma 中间件：校验用户 JWT 并做黑名单/强制
-// 登出检查，通过则把完整 Claims 注入上下文。供 /api/oauth2 受保护端点使用。
+// 登出检查，通过则把完整 Claims 注入上下文。
 func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistService) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		token, ok := bearerToken(ctx.Header("Authorization"))

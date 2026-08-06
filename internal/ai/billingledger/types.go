@@ -6,14 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-
-	"xiaodou/dai/internal/ai/platform"
 )
 
 const (
@@ -31,10 +28,67 @@ var (
 )
 
 type LeasePort interface {
-	AcquireCreditLease(context.Context, platform.AcquireCreditLeaseRequest) (*platform.CreditLeaseResponse, error)
-	RenewCreditLease(context.Context, string, platform.RenewCreditLeaseRequest) (*platform.CreditLeaseResponse, error)
-	SettleCreditLease(context.Context, string, platform.SettleCreditLeaseRequest) (*platform.CreditLeaseResponse, error)
-	GetCreditLease(context.Context, string) (*platform.CreditLeaseResponse, error)
+	AcquireCreditLease(context.Context, AcquireLease) (*CreditLease, error)
+	RenewCreditLease(context.Context, string, RenewLease) (*CreditLease, error)
+	SettleCreditLease(context.Context, string, SettleLease) (*CreditLease, error)
+	GetCreditLease(context.Context, string) (*CreditLease, error)
+}
+
+type AccountState string
+
+const (
+	AccountStateOK        AccountState = "OK"
+	AccountStateOverdraft AccountState = "OVERDRAFT"
+	AccountStateExhausted AccountState = "EXHAUSTED"
+)
+
+type AcquireLease struct {
+	ClientWindowID       string
+	TenantID             string
+	UserID               string
+	Description          string
+	RequestedTenantMicro int64
+	RequestedUserMicro   int64
+	TTLSeconds           int64
+	GraceSeconds         int64
+}
+
+type RenewLease struct {
+	Version      int64
+	TTLSeconds   int64
+	GraceSeconds int64
+}
+
+// SettleLease is also the durable settlement outbox payload.
+type SettleLease struct {
+	SettlementID      string `json:"settlement_id"`
+	ActualTenantMicro int64  `json:"actual_tenant_micro,omitempty"`
+	ActualUserMicro   int64  `json:"actual_user_micro,omitempty"`
+}
+
+type CreditLease struct {
+	LeaseID              string
+	ClientWindowID       string
+	TenantID             string
+	UserID               string
+	GrantedTenantMicro   int64
+	GrantedUserMicro     int64
+	EscrowState          string
+	SettlementState      string
+	Version              int64
+	ExpiresAt            time.Time
+	GraceUntil           time.Time
+	SettlementID         string
+	ActualTenantMicro    *int64
+	ActualUserMicro      *int64
+	SettledEventID       string
+	SettledAt            *time.Time
+	TenantDeductedMicro  int64
+	UserDeductedMicro    int64
+	TenantDebtAddedMicro int64
+	UserDebtAddedMicro   int64
+	AccountState         AccountState
+	AllowFurtherUsage    bool
 }
 
 type BillingSnapshot struct {
@@ -181,15 +235,6 @@ func classifyPortError(err error) error {
 	if errors.Is(err, ErrInsufficientBalance) || errors.Is(err, ErrAdmissionConflict) ||
 		errors.Is(err, ErrProtocolViolation) || errors.Is(err, ErrDependencyUnavailable) {
 		return err
-	}
-	var apiErr *platform.APIError
-	if errors.As(err, &apiErr) {
-		if apiErr.Status == http.StatusPaymentRequired {
-			return fmt.Errorf("%w: %w", ErrInsufficientBalance, err)
-		}
-		if apiErr.Status == http.StatusConflict {
-			return fmt.Errorf("%w: %w", ErrAdmissionConflict, err)
-		}
 	}
 	return fmt.Errorf("%w: %w", ErrDependencyUnavailable, err)
 }

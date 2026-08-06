@@ -14,7 +14,6 @@ import (
 
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/platform"
 	"xiaodou/dai/internal/ai/subscription"
 )
 
@@ -242,7 +241,7 @@ type fakePurchaser struct {
 	mu    sync.Mutex
 	calls int
 	fail  error
-	last  platform.StrictDebitRequest
+	last  subscription.DebitRequest
 }
 
 type blockingPurchaser struct {
@@ -250,13 +249,13 @@ type blockingPurchaser struct {
 	release chan struct{}
 }
 
-func (b *blockingPurchaser) DebitStrict(context.Context, platform.StrictDebitRequest) (*platform.StrictDebitResponse, error) {
+func (b *blockingPurchaser) DebitStrict(context.Context, subscription.DebitRequest) (*subscription.DebitReceipt, error) {
 	close(b.entered)
 	<-b.release
-	return &platform.StrictDebitResponse{AuthorizationID: "EV_blocking"}, nil
+	return &subscription.DebitReceipt{AuthorizationID: "EV_blocking"}, nil
 }
 
-func (f *fakePurchaser) DebitStrict(ctx context.Context, req platform.StrictDebitRequest) (*platform.StrictDebitResponse, error) {
+func (f *fakePurchaser) DebitStrict(ctx context.Context, req subscription.DebitRequest) (*subscription.DebitReceipt, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -264,7 +263,7 @@ func (f *fakePurchaser) DebitStrict(ctx context.Context, req platform.StrictDebi
 	if f.fail != nil {
 		return nil, f.fail
 	}
-	return &platform.StrictDebitResponse{AuthorizationID: "EV_" + req.IdempotencyKey}, nil
+	return &subscription.DebitReceipt{AuthorizationID: "EV_" + req.IdempotencyKey}, nil
 }
 
 // TestPlanGroupsValidationAndSnapshot：分组绑定校验（缺组/权重/不可见）+ 购买交集 + 快照。
@@ -428,7 +427,7 @@ func TestPurchaseQueueAndInsufficient(t *testing.T) {
 	}
 
 	// 余额不足：换个用户，purchaser 注入 ErrInsufficientBalance ⇒ ErrInsufficientBalance + 订单 failed
-	fp2 := &fakePurchaser{fail: platform.ErrInsufficientBalance}
+	fp2 := &fakePurchaser{fail: subscription.ErrInsufficientBalance}
 	svc2 := subscription.NewService(r, fp2, zap.NewNop())
 	pp2 := subscription.PurchaseParams{TenantID: tenantID, UserID: userID + "_poor", PlanID: planA.ID, IdempotencyKey: "poor-purchase"}
 	if _, _, err := svc2.Purchase(ctx, pp2); err != subscription.ErrInsufficientBalance {
@@ -617,7 +616,7 @@ func TestPlanInventoryPreventsOversellAndReleasesFailedReservation(t *testing.T)
 	buyerUser := userID + "_buyer_inventory"
 	seeUserGroup(t, r, ctx, tenantID, poorUser, groupID)
 	seeUserGroup(t, r, ctx, tenantID, buyerUser, groupID)
-	failingService := subscription.NewService(r, &fakePurchaser{fail: platform.ErrInsufficientBalance}, zap.NewNop())
+	failingService := subscription.NewService(r, &fakePurchaser{fail: subscription.ErrInsufficientBalance}, zap.NewNop())
 	if _, _, err := failingService.Purchase(ctx, subscription.PurchaseParams{
 		TenantID: tenantID, UserID: poorUser, PlanID: failedPlan.ID, IdempotencyKey: "inventory-failed",
 	}); !errors.Is(err, subscription.ErrInsufficientBalance) {

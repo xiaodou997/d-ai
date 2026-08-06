@@ -22,15 +22,15 @@ import (
 	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/imageassets"
-	"xiaodou/dai/internal/ai/platform"
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/config"
 )
 
-// JWKSValidator validates a D-AI JWT and returns its claims.
-type JWKSValidator interface {
-	ValidateToken(ctx context.Context, tokenStr string) (*platform.Claims, error)
+// TokenVerifier validates a D-AI JWT and returns its claims.
+type TokenVerifier interface {
+	ParseToken(token string) (*auth.Claims, error)
 }
 
 // BanChecker reports whether a user or tenant has been banned (real-time revocation).
@@ -51,7 +51,7 @@ type Deps struct {
 	Logger         *zap.Logger
 	Queries        *dbgen.Queries
 	Security       config.SecurityConfig
-	JWKSValidator  JWKSValidator
+	TokenVerifier  TokenVerifier
 	BanChecker     BanChecker
 	HTTPClient     *http.Client
 	OAuthCreds     *pgadapter.OAuthCredentialStore
@@ -73,7 +73,7 @@ type Console struct {
 	logger          *zap.Logger
 	queries         *dbgen.Queries
 	security        config.SecurityConfig
-	jwksValidator   JWKSValidator
+	tokenVerifier   TokenVerifier
 	banChecker      BanChecker
 	httpClient      *http.Client
 	oauthCreds      *pgadapter.OAuthCredentialStore
@@ -99,7 +99,7 @@ func New(deps Deps) *Console {
 		logger:          deps.Logger,
 		queries:         deps.Queries,
 		security:        deps.Security,
-		jwksValidator:   deps.JWKSValidator,
+		tokenVerifier:   deps.TokenVerifier,
 		banChecker:      deps.BanChecker,
 		httpClient:      deps.HTTPClient,
 		oauthCreds:      deps.OAuthCreds,

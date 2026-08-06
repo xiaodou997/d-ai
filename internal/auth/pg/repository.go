@@ -2,13 +2,41 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"regexp"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type AuditEvent struct {
+	EventType     string
+	PrincipalType string
+	UserID        string
+	JTI           string
+	RequestID     string
+	Decision      string
+	ReasonCode    string
+	ReasonMessage string
+	Metadata      map[string]any
+}
+
+func (r *AuthRepository) RecordAuditEvent(ctx context.Context, event AuditEvent) error {
+	metadata, err := json.Marshal(event.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal auth audit metadata: %w", err)
+	}
+	_, err = r.pool.Exec(ctx, `
+		INSERT INTO auth_audit_logs (
+			event_type, principal_type, user_id, jti, request_id,
+			decision, reason_code, reason_message, metadata
+		) VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''),
+		          $6, NULLIF($7, ''), NULLIF($8, ''), $9::jsonb)
+	`, event.EventType, event.PrincipalType, event.UserID, event.JTI, event.RequestID,
+		event.Decision, event.ReasonCode, event.ReasonMessage, string(metadata))
+	return err
+}
 
 type AuthRepository struct {
 	pool *pgxpool.Pool
@@ -16,34 +44,6 @@ type AuthRepository struct {
 
 func NewAuthRepository(pool *pgxpool.Pool) *AuthRepository {
 	return &AuthRepository{pool: pool}
-}
-
-type SystemUserForLogin struct {
-	UserID       string
-	Username     string
-	PasswordHash string
-	UserType     int64
-	Status       string
-	Email        *string
-}
-
-type TenantUserForLogin struct {
-	UserID       string
-	TenantID     string
-	Username     string
-	PasswordHash string
-	Status       string
-	Email        *string
-}
-
-type EndUserForLogin struct {
-	UserID        string
-	TenantID      string
-	Username      string
-	PasswordHash  string
-	Status        string
-	FrozenCredits int64
-	Email         *string
 }
 
 // PortalUserForLogin is the account record resolved by the unified Portal.
@@ -58,15 +58,6 @@ type PortalUserForLogin struct {
 	Status       string
 }
 
-func (r *AuthRepository) GetSystemUserForLogin(ctx context.Context, username string) (SystemUserForLogin, error) {
-	var u SystemUserForLogin
-	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, username, password_hash, user_type, status, email
-		FROM iam_admins WHERE username = $1
-	`, username).Scan(&u.UserID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status, &u.Email)
-	return u, err
-}
-
 func (r *AuthRepository) UpdateSystemUserLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE iam_admins SET last_login_at = $1 WHERE user_id = $2
@@ -74,29 +65,11 @@ func (r *AuthRepository) UpdateSystemUserLoginTime(ctx context.Context, userID s
 	return err
 }
 
-func (r *AuthRepository) GetTenantUserForLogin(ctx context.Context, username string) (TenantUserForLogin, error) {
-	var u TenantUserForLogin
-	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, tenant_id, username, password_hash, status, email
-		FROM iam_tenant_users WHERE username = $1
-	`, username).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.Status, &u.Email)
-	return u, err
-}
-
 func (r *AuthRepository) UpdateTenantUserLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE iam_tenant_users SET last_login_at = $1 WHERE user_id = $2
 	`, loginTime, userID)
 	return err
-}
-
-func (r *AuthRepository) GetEndUserForLogin(ctx context.Context, username string) (EndUserForLogin, error) {
-	var u EndUserForLogin
-	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, tenant_id, username, password_hash, status, frozen_credits, email
-		FROM iam_users WHERE username = $1
-	`, username).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.Status, &u.FrozenCredits, &u.Email)
-	return u, err
 }
 
 func (r *AuthRepository) GetPortalUserForLogin(ctx context.Context, username string) (PortalUserForLogin, error) {
@@ -157,18 +130,4 @@ func (r *AuthRepository) CheckTenantActive(ctx context.Context, tenantID string)
 		return false, err
 	}
 	return status == "active", nil
-}
-
-var serviceScopePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
-
-func ValidateServiceScopeFormat(scopes []string) error {
-	for _, scope := range scopes {
-		if scope == "" {
-			return fmt.Errorf("scope must not be empty")
-		}
-		if !serviceScopePattern.MatchString(scope) {
-			return fmt.Errorf("invalid scope format: %s", scope)
-		}
-	}
-	return nil
 }

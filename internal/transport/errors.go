@@ -39,15 +39,15 @@ func statusForBizCode(code int) int {
 		return http.StatusNotFound
 	case 2004, 2006, 2007, 2009, 2010, 2011, 2012, 7005: // 余额不足 / 透支
 		return http.StatusPaymentRequired
-	case 2008, 5005, 5007, 6003, 7001: // 租户停用 / 账户禁用 / 禁止访问 / 无效 ClientID / 支付未启用
+	case 2008, 5005, 5007, 7001: // 租户停用 / 账户禁用 / 禁止访问 / 支付未启用
 		return http.StatusForbidden
-	case 2002, 2003, 2005, 3002, 3003, 3004, 3005, 3008, 3009, 3010, 3012, 3013, 3014, 4002, 4003, 4004, 6004, 7007: // 状态冲突 / 重复
+	case 2002, 2003, 2005, 3002, 3003, 3004, 3005, 3008, 3009, 3010, 3012, 3013, 3014, 4002, 4003, 4004, 7007: // 状态冲突 / 重复
 		return http.StatusConflict
 	case domain.CodeInternalError:
 		return http.StatusInternalServerError
 	}
 	switch {
-	case code >= 5000 && code < 7000: // 其余认证/服务认证错误
+	case code >= 5000 && code < 6000: // 其余认证错误
 		return http.StatusUnauthorized
 	case code >= 1000 && code < 5000: // 其余业务校验类
 		return http.StatusBadRequest

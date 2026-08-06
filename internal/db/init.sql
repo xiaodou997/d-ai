@@ -119,7 +119,6 @@ CREATE TABLE auth_audit_logs (
     event_type TEXT NOT NULL,
     principal_type TEXT NOT NULL CHECK (principal_type IN ('user', 'admin')),
     user_id TEXT,
-    scopes TEXT[] NOT NULL DEFAULT '{}',
     jti TEXT,
     request_id TEXT,
     decision TEXT NOT NULL CHECK (decision IN ('success', 'deny', 'error')),
@@ -2163,6 +2162,6 @@ CREATE TABLE dai_schema_metadata (
     initialized_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 5);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 6);
 
 COMMIT;

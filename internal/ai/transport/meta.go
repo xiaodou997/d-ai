@@ -31,12 +31,7 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// Version is the public AI API version exposed in OpenAPI and meta endpoints.
-const Version = "1.0.0"
-
 type AIDeps struct {
-	Service           string
-	Version           string
 	Postgres          *pgxpool.Pool
 	Redis             *redis.Client
 	Queries           *dbgen.Queries
@@ -53,7 +48,7 @@ type AIDeps struct {
 	// nil 时 identity enrichment 返回空结果。
 	IdentityProvider IdentityProvider
 
-	JWKSValidator  HumaJWKSValidator
+	TokenVerifier  TokenVerifier
 	BanChecker     HumaBanChecker
 	TenantEndUsers TenantEndUserVerifier
 
@@ -68,8 +63,6 @@ type AIDeps struct {
 	APIKeySvc         *identitycontrol.Service
 	WorkspaceSvc      *workspacesvc.Service
 	Subscriptions     *subscription.Service // AI 订阅制套餐（nil 时禁用）
-	ServiceIdentity   interface{ Ready() (bool, error) }
-
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。
 	RiskControlConfigSvc *riskcontrol.ConfigService
 	RiskControlLogSvc    *riskcontrol.LogService
@@ -78,12 +71,6 @@ type AIDeps struct {
 }
 
 func RegisterAI(api huma.API, d AIDeps) {
-	if d.Service == "" {
-		d.Service = "dai"
-	}
-	if d.Version == "" {
-		d.Version = Version
-	}
 	pricingRead := huma.NewGroup(api)
 	pricingRead.UseMiddleware(platformOrTenantUserAuth(api, d))
 	registerPricingRead(pricingRead, d)

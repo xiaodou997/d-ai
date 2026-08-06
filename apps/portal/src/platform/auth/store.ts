@@ -8,14 +8,14 @@ export interface AuthStoreOptions {
   storagePrefix: string;
   expectedUserTypes: number[];
   login?: (username: string, password: string) => Promise<{
-    access_token: string;
-    refresh_token?: string;
-    expires_in: number;
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number;
   }>;
   refreshToken: (refreshToken: string) => Promise<{
-    access_token: string;
-    refresh_token?: string;
-    expires_in: number;
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number;
   }>;
   logout: () => Promise<unknown>;
   logoutRedirectUrl?: string | (() => string | null);
@@ -37,9 +37,9 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     const sessionValidatedAt = ref(0);
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let refreshInFlight: Promise<{
-      access_token: string;
-      refresh_token?: string;
-      expires_in: number;
+      accessToken: string;
+      refreshToken?: string;
+      expiresIn: number;
     }> | null = null;
     let sessionValidationInFlight: Promise<UserInfoResponse> | null = null;
 
@@ -135,9 +135,9 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
         throw new Error("password login is not configured");
       }
       const token = await options.login(username, password);
-      accessToken.value = token.access_token;
-      refreshTokenValue.value = token.refresh_token || "";
-      expiresIn.value = token.expires_in;
+      accessToken.value = token.accessToken;
+      refreshTokenValue.value = token.refreshToken || "";
+      expiresIn.value = token.expiresIn;
       persist();
       try {
         await fetchUserInfo();
@@ -160,11 +160,11 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       refreshInFlight = options
         .refreshToken(refreshTokenValue.value)
         .then((token) => {
-          accessToken.value = token.access_token;
-          if (token.refresh_token) {
-            refreshTokenValue.value = token.refresh_token;
+          accessToken.value = token.accessToken;
+          if (token.refreshToken) {
+            refreshTokenValue.value = token.refreshToken;
           }
-          expiresIn.value = token.expires_in;
+          expiresIn.value = token.expiresIn;
           persist();
           startAutoRefresh();
           return token;

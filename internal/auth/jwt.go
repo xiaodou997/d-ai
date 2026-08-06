@@ -28,7 +28,6 @@ type Claims struct {
 	TenantID        string `json:"tenant_id,omitempty"`
 	UserType        int    `json:"user_type,omitempty"`
 	UserTypeDisplay string `json:"user_type_display,omitempty"`
-	Scope           string `json:"scope,omitempty"`
 	jwt.RegisteredClaims
 }
 

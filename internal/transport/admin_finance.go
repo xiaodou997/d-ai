@@ -83,15 +83,14 @@ type debtStatusOutput struct {
 }
 
 type auditLogItem struct {
-	ID            int64    `json:"id"`
-	EventType     string   `json:"eventType"`
-	PrincipalType string   `json:"principalType"`
-	UserID        string   `json:"userId,omitempty"`
-	Scopes        []string `json:"scopes"`
-	Decision      string   `json:"decision"`
-	ReasonCode    string   `json:"reasonCode,omitempty"`
-	ReasonMessage string   `json:"reasonMessage,omitempty"`
-	CreatedAt     int64    `json:"createdAt"`
+	ID            int64  `json:"id"`
+	EventType     string `json:"eventType"`
+	PrincipalType string `json:"principalType"`
+	UserID        string `json:"userId,omitempty"`
+	Decision      string `json:"decision"`
+	ReasonCode    string `json:"reasonCode,omitempty"`
+	ReasonMessage string `json:"reasonMessage,omitempty"`
+	CreatedAt     int64  `json:"createdAt"`
 }
 
 type auditLogsInput struct {
@@ -349,7 +348,7 @@ func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (
 	offset := (in.Page - 1) * size
 	qargs := append(append([]any{}, args...), size, offset)
 	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
-		SELECT id, event_type, principal_type, user_id, scopes,
+		SELECT id, event_type, principal_type, user_id,
 		       decision, reason_code, reason_message, created_at
 		FROM auth_audit_logs %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d
 	`, where, idx, idx+1), qargs...)
@@ -363,7 +362,7 @@ func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (
 		var it auditLogItem
 		var userID, reasonCode, reasonMsg *string
 		var createdAt time.Time
-		if err := rows.Scan(&it.ID, &it.EventType, &it.PrincipalType, &userID, &it.Scopes,
+		if err := rows.Scan(&it.ID, &it.EventType, &it.PrincipalType, &userID,
 			&it.Decision, &reasonCode, &reasonMsg, &createdAt); err != nil {
 			continue
 		}

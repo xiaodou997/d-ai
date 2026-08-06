@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	stickyKeyPrefix = "uni_ai_api:conv"
+	stickyKeyPrefix = "dai:conversation"
 	stickyTTL       = 24 * time.Hour
 )
 

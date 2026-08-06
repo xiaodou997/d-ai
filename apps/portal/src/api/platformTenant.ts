@@ -28,7 +28,7 @@ export const platformTenantApi = {
   changePassword(body: { oldPassword: string; newPassword: string }) {
     return platform()<{ message: string }>({
       method: "PUT",
-      path: "/api/oauth2/password",
+      path: "/api/auth/password",
       headers: apiHeaders,
       body,
       baseUrl

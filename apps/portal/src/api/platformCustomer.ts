@@ -1,6 +1,6 @@
 // Platform 用户（终端用户 type=4）自助业务 API —— 1:1 还原 v1 platform-customer src/api/account.js 调用，
 // 仅 API 层适配 v4 huma 扁平端点（无 {code,data} 信封，列表={items,total,page,size}）。
-// v1 路径 /platform/v1/account/* → v4 /api/v1/account/*；/platform/oauth2/password → /api/oauth2/password。
+// 用户端统一使用 D-AI 的 /api/v1 业务端点和 /api/auth 账号端点。
 // 终端用户分支由后端按 claims.UserType==4 自动锁定本人范围，前端无需传 userId。
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import type {
@@ -67,7 +67,7 @@ export const platformCustomerApi = {
   changePassword(body: { oldPassword: string; newPassword: string }) {
     return platform()<{ message: string }>({
       method: "PUT",
-      path: "/api/oauth2/password",
+      path: "/api/auth/password",
       headers: apiHeaders,
       body,
       baseUrl

@@ -15,7 +15,6 @@ export interface AuditLogItem {
   principalType: string;
   decision: string;
   userId?: string;
-  scopes?: string[];
   createdAt: number;
   reasonCode?: string;
   reasonMessage?: string;

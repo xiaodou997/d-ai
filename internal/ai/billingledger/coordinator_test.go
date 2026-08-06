@@ -3,20 +3,18 @@ package billingledger
 import (
 	"context"
 	"errors"
-	"net/http"
 	"sync"
 	"testing"
 	"time"
 
-	"xiaodou/dai/internal/ai/platform"
 	"xiaodou/dai/internal/ai/testsupport"
 )
 
 type memoryLeasePort struct {
 	mu              sync.Mutex
 	now             func() time.Time
-	byWindow        map[string]*platform.CreditLeaseResponse
-	byID            map[string]*platform.CreditLeaseResponse
+	byWindow        map[string]*CreditLease
+	byID            map[string]*CreditLease
 	acquireCalls    int
 	renewCalls      int
 	settleCalls     int
@@ -27,12 +25,12 @@ type memoryLeasePort struct {
 
 func newMemoryLeasePort(now func() time.Time) *memoryLeasePort {
 	return &memoryLeasePort{
-		now: now, byWindow: map[string]*platform.CreditLeaseResponse{},
-		byID: map[string]*platform.CreditLeaseResponse{},
+		now: now, byWindow: map[string]*CreditLease{},
+		byID: map[string]*CreditLease{},
 	}
 }
 
-func (p *memoryLeasePort) AcquireCreditLease(_ context.Context, req platform.AcquireCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
+func (p *memoryLeasePort) AcquireCreditLease(_ context.Context, req AcquireLease) (*CreditLease, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.acquireCalls++
@@ -40,7 +38,7 @@ func (p *memoryLeasePort) AcquireCreditLease(_ context.Context, req platform.Acq
 		return cloneLease(existing), nil
 	}
 	now := p.now()
-	res := &platform.CreditLeaseResponse{
+	res := &CreditLease{
 		LeaseID: "CL_" + req.ClientWindowID, ClientWindowID: req.ClientWindowID,
 		TenantID: req.TenantID, UserID: req.UserID,
 		GrantedTenantMicro: req.RequestedTenantMicro,
@@ -48,7 +46,7 @@ func (p *memoryLeasePort) AcquireCreditLease(_ context.Context, req platform.Acq
 		EscrowState:        "active", SettlementState: "unsettled", Version: 1,
 		ExpiresAt:    now.Add(time.Duration(req.TTLSeconds) * time.Second),
 		GraceUntil:   now.Add(time.Duration(req.TTLSeconds+req.GraceSeconds) * time.Second),
-		AccountState: platform.AccountStateOK, AllowFurtherUsage: true,
+		AccountState: AccountStateOK, AllowFurtherUsage: true,
 	}
 	p.byWindow[req.ClientWindowID] = res
 	p.byID[res.LeaseID] = res
@@ -59,16 +57,16 @@ func (p *memoryLeasePort) AcquireCreditLease(_ context.Context, req platform.Acq
 	return cloneLease(res), nil
 }
 
-func (p *memoryLeasePort) RenewCreditLease(_ context.Context, leaseID string, req platform.RenewCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
+func (p *memoryLeasePort) RenewCreditLease(_ context.Context, leaseID string, req RenewLease) (*CreditLease, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.renewCalls++
 	res := p.byID[leaseID]
 	if res == nil {
-		return nil, &platform.APIError{Status: http.StatusNotFound}
+		return nil, ErrProtocolViolation
 	}
 	if res.Version != req.Version || res.SettlementState == "settled" {
-		return nil, &platform.APIError{Status: http.StatusConflict}
+		return nil, ErrAdmissionConflict
 	}
 	res.Version++
 	res.EscrowState = "active"
@@ -81,19 +79,19 @@ func (p *memoryLeasePort) RenewCreditLease(_ context.Context, leaseID string, re
 	return cloneLease(res), nil
 }
 
-func (p *memoryLeasePort) SettleCreditLease(_ context.Context, leaseID string, req platform.SettleCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
+func (p *memoryLeasePort) SettleCreditLease(_ context.Context, leaseID string, req SettleLease) (*CreditLease, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.settleCalls++
 	res := p.byID[leaseID]
 	if res == nil {
-		return nil, &platform.APIError{Status: http.StatusNotFound}
+		return nil, ErrProtocolViolation
 	}
 	if res.SettlementState == "settled" {
 		if res.SettlementID != req.SettlementID || res.ActualTenantMicro == nil ||
 			res.ActualUserMicro == nil || *res.ActualTenantMicro != req.ActualTenantMicro ||
 			*res.ActualUserMicro != req.ActualUserMicro {
-			return nil, &platform.APIError{Status: http.StatusConflict}
+			return nil, ErrAdmissionConflict
 		}
 		return cloneLease(res), nil
 	}
@@ -115,12 +113,12 @@ func (p *memoryLeasePort) SettleCreditLease(_ context.Context, leaseID string, r
 	return cloneLease(res), nil
 }
 
-func (p *memoryLeasePort) GetCreditLease(_ context.Context, leaseID string) (*platform.CreditLeaseResponse, error) {
+func (p *memoryLeasePort) GetCreditLease(_ context.Context, leaseID string) (*CreditLease, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	res := p.byID[leaseID]
 	if res == nil {
-		return nil, &platform.APIError{Status: http.StatusNotFound}
+		return nil, ErrProtocolViolation
 	}
 	return cloneLease(res), nil
 }
@@ -211,7 +209,7 @@ func TestRenewFailureDrainsOnlyAtHardBoundaryOrTerminalResponse(t *testing.T) {
 	if shouldDrainAfterRenewFailure(errors.New("temporary network failure"), safe, now, 30*time.Second) {
 		t.Fatal("transient renewal failure drained a lease with safe headroom")
 	}
-	terminal := &platform.APIError{Status: http.StatusConflict}
+	terminal := ErrAdmissionConflict
 	if !shouldDrainAfterRenewFailure(terminal, safe, now, 30*time.Second) {
 		t.Fatal("terminal renewal conflict did not drain")
 	}
@@ -404,7 +402,7 @@ func TestOpeningWindowRecoversRemoteGraceAndReleasedStates(t *testing.T) {
 	if _, err := coordinator.Admit(ctx, graceIntent); !errors.Is(err, ErrDependencyUnavailable) {
 		t.Fatalf("lost grace acquire response error = %v", err)
 	}
-	var graceRemote *platform.CreditLeaseResponse
+	var graceRemote *CreditLease
 	for _, lease := range port.byWindow {
 		if lease.TenantID == graceIntent.TenantID {
 			graceRemote = lease
@@ -434,7 +432,7 @@ func TestOpeningWindowRecoversRemoteGraceAndReleasedStates(t *testing.T) {
 	if _, err := coordinator.Admit(ctx, releasedIntent); !errors.Is(err, ErrDependencyUnavailable) {
 		t.Fatalf("lost released acquire response error = %v", err)
 	}
-	var releasedRemote *platform.CreditLeaseResponse
+	var releasedRemote *CreditLease
 	for _, lease := range port.byWindow {
 		if lease.TenantID == releasedIntent.TenantID {
 			releasedRemote = lease
@@ -522,7 +520,7 @@ func TestOutboxAttemptFenceRejectsStaleWorkerAndInvalidReceipt(t *testing.T) {
 	actualTenant := current.ActualTenantMicro
 	actualUser := current.ActualUserMicro
 	settledAt := now
-	receipt := &platform.CreditLeaseResponse{
+	receipt := &CreditLease{
 		LeaseID: current.LeaseID, EscrowState: "released", SettlementState: "settled",
 		Version: 2, SettlementID: current.SettlementID,
 		ActualTenantMicro: &actualTenant, ActualUserMicro: &actualUser,
@@ -567,7 +565,7 @@ func completeBillingRequest(t *testing.T, ctx context.Context, coordinator *Coor
 	}
 }
 
-func cloneLease(src *platform.CreditLeaseResponse) *platform.CreditLeaseResponse {
+func cloneLease(src *CreditLease) *CreditLease {
 	if src == nil {
 		return nil
 	}

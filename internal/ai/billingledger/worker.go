@@ -10,8 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
-
-	"xiaodou/dai/internal/ai/platform"
 )
 
 type outboxItem struct {
@@ -222,19 +220,7 @@ func shouldDrainAfterRenewFailure(err error, win *window, now time.Time, headroo
 	if win == nil || win.ExpiresAt == nil || !win.ExpiresAt.After(now.Add(headroom)) {
 		return true
 	}
-	if errors.Is(err, ErrProtocolViolation) {
-		return true
-	}
-	var apiErr *platform.APIError
-	if !errors.As(err, &apiErr) {
-		return false
-	}
-	switch apiErr.Status {
-	case 404, 409, 410, 422:
-		return true
-	default:
-		return false
-	}
+	return errors.Is(err, ErrProtocolViolation) || errors.Is(err, ErrAdmissionConflict)
 }
 
 func (c *Coordinator) rotateWindows(ctx context.Context) error {
@@ -335,7 +321,7 @@ func (c *Coordinator) createSettlementBatch(ctx context.Context, windowID string
 	}
 	batchID := uuid.New()
 	settlementID := "bs_" + batchID.String()
-	payload, err := json.Marshal(platform.SettleCreditLeaseRequest{
+	payload, err := json.Marshal(SettleLease{
 		SettlementID:      settlementID,
 		ActualTenantMicro: win.AccruedTenantMicro,
 		ActualUserMicro:   win.AccruedUserMicro,
@@ -427,14 +413,13 @@ func (c *Coordinator) claimOutbox(ctx context.Context) (*outboxItem, error) {
 
 func (c *Coordinator) dispatchOutbox(ctx context.Context, item *outboxItem) {
 	reconciled := false
-	res, err := c.port.SettleCreditLease(ctx, item.LeaseID, platform.SettleCreditLeaseRequest{
+	res, err := c.port.SettleCreditLease(ctx, item.LeaseID, SettleLease{
 		SettlementID:      item.SettlementID,
 		ActualTenantMicro: item.ActualTenantMicro,
 		ActualUserMicro:   item.ActualUserMicro,
 	})
 	if err != nil {
-		var apiErr *platform.APIError
-		if errors.As(err, &apiErr) && apiErr.Status == 409 {
+		if errors.Is(err, ErrAdmissionConflict) {
 			if current, getErr := c.port.GetCreditLease(ctx, item.LeaseID); getErr == nil &&
 				current.SettlementState == "settled" && current.SettlementID == item.SettlementID &&
 				current.ActualTenantMicro != nil && *current.ActualTenantMicro == item.ActualTenantMicro &&
@@ -446,7 +431,7 @@ func (c *Coordinator) dispatchOutbox(ctx context.Context, item *outboxItem) {
 		}
 	}
 	if err != nil {
-		c.observeSettlement("remote_error")
+		c.observeSettlement("billing_error")
 		if retryErr := c.retryOutbox(context.WithoutCancel(ctx), item, err); retryErr != nil &&
 			!errors.Is(retryErr, errOutboxClaimLost) {
 			c.logger.Error("schedule billing settlement retry failed",
@@ -512,7 +497,7 @@ func (c *Coordinator) observeSnapshot(ctx context.Context) error {
 	return nil
 }
 
-func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *platform.CreditLeaseResponse) error {
+func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *CreditLease) error {
 	if err := validateSettlementReceipt(item, res); err != nil {
 		return err
 	}
@@ -577,7 +562,7 @@ func (c *Coordinator) deliverOutbox(ctx context.Context, item *outboxItem, res *
 	return tx.Commit(ctx)
 }
 
-func validateSettlementReceipt(item *outboxItem, res *platform.CreditLeaseResponse) error {
+func validateSettlementReceipt(item *outboxItem, res *CreditLease) error {
 	if item == nil || res == nil ||
 		res.LeaseID != item.LeaseID ||
 		res.EscrowState != "released" ||

@@ -2,8 +2,10 @@ package transport
 
 import (
 	"context"
-	"net/http"
+	"strings"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
@@ -12,15 +14,17 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-type oauth2TokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int64  `json:"expires_in"`
-	Scope        string `json:"scope,omitempty"`
+type authTokenResponse struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken,omitempty"`
+	ExpiresIn    int64  `json:"expiresIn"`
 }
 
-// authHandlers serves the unified Portal's password and refresh token grants.
+type authTokenOutput struct {
+	Body authTokenResponse
+}
+
+// authHandlers handles unified Portal credentials and session refresh.
 type authHandlers struct {
 	repo *authpg.AuthRepository
 	jwt  *auth.JWTService
@@ -35,18 +39,16 @@ func newAuthHandlers(d Deps) *authHandlers {
 	}
 }
 
-func (h *authHandlers) token(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		writeProblemRaw(w, r, httpx.ErrBadRequest.WithDetail("invalid form body"))
-		return
+type loginInput struct {
+	Body struct {
+		Username string `json:"username" minLength:"1"`
+		Password string `json:"password" minLength:"1"`
 	}
-	switch r.PostFormValue("grant_type") {
-	case "password":
-		h.passwordGrant(w, r)
-	case "refresh_token":
-		h.refreshGrant(w, r)
-	default:
-		writeProblemRaw(w, r, httpx.ErrBadRequest.WithDetail("unsupported grant_type"))
+}
+
+type refreshInput struct {
+	Body struct {
+		RefreshToken string `json:"refreshToken" minLength:"1"`
 	}
 }
 
@@ -94,54 +96,113 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 	}, nil
 }
 
-func (h *authHandlers) passwordGrant(w http.ResponseWriter, r *http.Request) {
-	p, appErr := h.authenticateUser(r.Context(), r.PostFormValue("username"), r.PostFormValue("password"))
+func registerAuthPublic(api huma.API, d Deps) {
+	h := newAuthHandlers(d)
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-login",
+		Method:      "POST",
+		Path:        "/api/auth/login",
+		Summary:     "账号密码登录",
+		Tags:        []string{"auth"},
+	}, h.login)
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-refresh",
+		Method:      "POST",
+		Path:        "/api/auth/refresh",
+		Summary:     "刷新登录凭证",
+		Tags:        []string{"auth"},
+	}, h.refresh)
+}
+
+func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authTokenOutput, error) {
+	username := strings.TrimSpace(input.Body.Username)
+	p, appErr := h.authenticateUser(ctx, username, input.Body.Password)
 	if appErr != nil {
-		writeProblemRaw(w, r, appErr)
-		return
+		h.audit(ctx, authpg.AuditEvent{
+			EventType: "user_login", PrincipalType: "user", Decision: "deny",
+			ReasonCode: appErr.Code, ReasonMessage: appErr.Detail,
+			Metadata: map[string]any{"username": username},
+		})
+		return nil, appErr
 	}
 	pair, err := h.jwt.GenerateTokenPair(p.UserID, p.Username, p.TenantID, p.UserType, p.UserTypeDisplay)
 	if err != nil {
 		h.log.Error("generate token pair failed", principalLogFields(p.UserID, p.TenantID, zap.Error(err))...)
-		writeProblemRaw(w, r, httpx.ErrInternal.WithCause(err))
-		return
+		h.audit(ctx, authpg.AuditEvent{
+			EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID,
+			Decision: "error", ReasonCode: "token_generation_failed", ReasonMessage: "生成登录凭证失败",
+		})
+		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	h.log.Info("user logged in", principalLogFields(p.UserID, p.TenantID)...)
-	writeJSON(w, http.StatusOK, oauth2TokenResponse{
-		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
-		TokenType: "Bearer", ExpiresIn: pair.ExpiresIn,
+	h.audit(ctx, authpg.AuditEvent{
+		EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID,
+		Decision: "success", Metadata: map[string]any{"username": p.Username, "userType": p.UserType},
 	})
+	h.log.Info("user logged in", principalLogFields(p.UserID, p.TenantID)...)
+	return &authTokenOutput{Body: authTokenResponse{
+		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn,
+	}}, nil
 }
 
-func (h *authHandlers) refreshGrant(w http.ResponseWriter, r *http.Request) {
-	refreshToken := r.PostFormValue("refresh_token")
+func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authTokenOutput, error) {
+	refreshToken := strings.TrimSpace(input.Body.RefreshToken)
 	if refreshToken == "" {
-		writeProblemRaw(w, r, httpx.ErrBadRequest.WithDetail("Missing refresh_token"))
-		return
+		return nil, httpx.ErrBadRequest.WithDetail("缺少 refreshToken")
 	}
 	claims, err := h.jwt.ParseToken(refreshToken)
 	if err != nil || claims.PrincipalType != "user" || claims.TokenUse != "refresh" {
-		writeProblemRaw(w, r, httpx.ErrUnauthorized.WithDetail("Refresh Token 无效或已过期"))
-		return
+		h.audit(ctx, authpg.AuditEvent{
+			EventType: "token_refresh", PrincipalType: "user", Decision: "deny",
+			ReasonCode: "invalid_refresh_token", ReasonMessage: "Refresh Token 无效或已过期",
+		})
+		return nil, httpx.ErrUnauthorized.WithDetail("Refresh Token 无效或已过期")
+	}
+	auditBase := authpg.AuditEvent{
+		EventType: "token_refresh", PrincipalType: principalType(claims.UserType),
+		UserID: claims.UserID, JTI: claims.ID,
 	}
 	if claims.UserType >= 3 {
-		active, err := h.repo.CheckTenantActive(r.Context(), claims.TenantID)
+		active, err := h.repo.CheckTenantActive(ctx, claims.TenantID)
 		if err != nil {
-			writeProblemRaw(w, r, httpx.ErrInternal.WithCause(err))
-			return
+			auditBase.Decision = "error"
+			auditBase.ReasonCode = "tenant_lookup_failed"
+			auditBase.ReasonMessage = "租户状态检查失败"
+			h.audit(ctx, auditBase)
+			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		if !active {
-			writeProblemRaw(w, r, httpx.ErrForbidden.WithDetail("租户已被停用或暂停，请重新登录"))
-			return
+			auditBase.Decision = "deny"
+			auditBase.ReasonCode = "tenant_inactive"
+			auditBase.ReasonMessage = "租户已被停用或暂停"
+			h.audit(ctx, auditBase)
+			return nil, httpx.ErrForbidden.WithDetail("租户已被停用或暂停，请重新登录")
 		}
 	}
 	pair, err := h.jwt.RefreshTokenPair(refreshToken, true)
 	if err != nil {
-		writeProblemRaw(w, r, httpx.ErrUnauthorized.WithDetail("Refresh Token 无效或已过期"))
-		return
+		auditBase.Decision = "deny"
+		auditBase.ReasonCode = "refresh_rejected"
+		auditBase.ReasonMessage = "Refresh Token 无效或已过期"
+		h.audit(ctx, auditBase)
+		return nil, httpx.ErrUnauthorized.WithDetail("Refresh Token 无效或已过期")
 	}
-	writeJSON(w, http.StatusOK, oauth2TokenResponse{
-		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
-		TokenType: "Bearer", ExpiresIn: pair.ExpiresIn,
-	})
+	auditBase.Decision = "success"
+	h.audit(ctx, auditBase)
+	return &authTokenOutput{Body: authTokenResponse{
+		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn,
+	}}, nil
+}
+
+func principalType(userType int) string {
+	if userType <= 2 {
+		return "admin"
+	}
+	return "user"
+}
+
+func (h *authHandlers) audit(ctx context.Context, event authpg.AuditEvent) {
+	event.RequestID = middleware.GetReqID(ctx)
+	if err := h.repo.RecordAuditEvent(ctx, event); err != nil {
+		h.log.Warn("record auth audit event failed", zap.String("event_type", event.EventType), zap.Error(err))
+	}
 }

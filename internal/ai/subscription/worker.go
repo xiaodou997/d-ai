@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/platform"
 )
 
 // janitor 参数（沿用 ledger.Worker 的 ticker 模式；过期 UPDATE 幂等、卡单重放靠计费
@@ -70,7 +69,7 @@ func (s *Service) reconcileOrder(ctx context.Context, order *Order) {
 		return
 	}
 	// 同一幂等键重放：已扣则返回同 event 不重扣，未扣则重试。
-	resp, err := s.purchaser.DebitStrict(ctx, platform.StrictDebitRequest{
+	resp, err := s.purchaser.DebitStrict(ctx, DebitRequest{
 		IdempotencyKey: "ai-sub-" + order.OrderNo,
 		TenantID:       order.TenantID,
 		UserID:         order.UserID,
@@ -78,7 +77,7 @@ func (s *Service) reconcileOrder(ctx context.Context, order *Order) {
 		UserMicro:      priceMicro,
 	})
 	if err != nil {
-		if errors.Is(err, platform.ErrInsufficientBalance) {
+		if errors.Is(err, ErrInsufficientBalance) {
 			if _, ferr := s.repo.MarkOrderFailed(ctx, order.ID, "insufficient_balance"); ferr != nil {
 				s.logger.Warn("janitor: mark stuck order failed",
 					zap.String("order", order.OrderNo), zap.Error(ferr))

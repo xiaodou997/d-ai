@@ -7,11 +7,11 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/internal/ai/platform"
+	"xiaodou/dai/internal/auth"
 )
 
-type HumaJWKSValidator interface {
-	ValidateToken(ctx context.Context, tokenStr string) (*platform.Claims, error)
+type TokenVerifier interface {
+	ParseToken(token string) (*auth.Claims, error)
 }
 
 type HumaBanChecker interface {
@@ -43,7 +43,7 @@ func endUserAuth(api huma.API, d AIDeps) func(huma.Context, func(huma.Context)) 
 
 func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessage string) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		if d.JWKSValidator == nil {
+		if d.TokenVerifier == nil {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "authentication is not configured")
 			return
 		}
@@ -54,7 +54,7 @@ func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessag
 			return
 		}
 
-		claims, err := d.JWKSValidator.ValidateToken(ctx.Context(), token)
+		claims, err := d.TokenVerifier.ParseToken(token)
 		if err != nil || claims == nil || claims.PrincipalType != "user" || claims.TokenUse != "access" {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid bearer token")
 			return
@@ -100,8 +100,8 @@ func bannedMessage(ctx context.Context, bc HumaBanChecker, tenantID, userID stri
 	return 0, "", false
 }
 
-func claimsFromContext(ctx context.Context) *platform.Claims {
-	claims, _ := ctx.Value(authClaimsContextKey{}).(*platform.Claims)
+func claimsFromContext(ctx context.Context) *auth.Claims {
+	claims, _ := ctx.Value(authClaimsContextKey{}).(*auth.Claims)
 	return claims
 }
 

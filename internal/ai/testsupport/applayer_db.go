@@ -25,8 +25,8 @@ type AppLayerFixture struct {
 }
 
 var defaultDSNs = []string{
-	"postgres://postgres:postgres@127.0.0.1:15442/ai_gateway?sslmode=disable",
-	"postgres://postgres:postgres@127.0.0.1:5432/uni_ai_api_test?sslmode=disable",
+	"postgres://postgres:postgres@127.0.0.1:15432/dai_test?sslmode=disable",
+	"postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable",
 }
 
 func OpenAppLayerTestPool(ctx context.Context) (*pgxpool.Pool, AppLayerFixture, func(context.Context) error, error) {

@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	cacheKeyPrefix = "uni-ai:apikey:v1:"
-	cacheIDPrefix  = "uni-ai:apikey-id:v1:"
+	cacheKeyPrefix = "dai:apikey:v1:"
+	cacheIDPrefix  = "dai:apikey-id:v1:"
 	cacheTTL       = 60 * time.Second
 )
 

@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -39,13 +38,11 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	Addr              string   `mapstructure:"addr"` // e.g. ":13000"
-	Port              int      `mapstructure:"port"`
-	ReadTimeout       int      `mapstructure:"read_timeout"`  // 秒
-	WriteTimeout      int      `mapstructure:"write_timeout"` // 秒
-	IdleTimeout       int      `mapstructure:"idle_timeout"`  // 秒
-	TrustedProxyCIDRs []string `mapstructure:"trusted_proxy_cidrs"`
-	InternalCIDRs     []string `mapstructure:"internal_cidrs"`
+	Addr         string `mapstructure:"addr"` // e.g. ":19641"
+	Port         int    `mapstructure:"port"`
+	ReadTimeout  int    `mapstructure:"read_timeout"`  // 秒
+	WriteTimeout int    `mapstructure:"write_timeout"` // 秒
+	IdleTimeout  int    `mapstructure:"idle_timeout"`  // 秒
 }
 
 type DatabaseConfig struct {
@@ -160,13 +157,11 @@ func Load() (*Config, error) {
 
 	// 默认值 —— 通用
 	v.SetDefault("app.env", "development")
-	v.SetDefault("server.addr", ":13000")
-	v.SetDefault("server.port", 13000)
+	v.SetDefault("server.addr", ":19641")
+	v.SetDefault("server.port", 19641)
 	v.SetDefault("server.read_timeout", 30)
 	v.SetDefault("server.write_timeout", 0) // AI 网关需要长写超时
 	v.SetDefault("server.idle_timeout", 60)
-	v.SetDefault("server.trusted_proxy_cidrs", []string{})
-	v.SetDefault("server.internal_cidrs", []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7"})
 
 	// 默认值 —— 数据库（统一用 URL，兼容 DSN）
 	v.SetDefault("database.url", "postgres://postgres:postgres@localhost:5432/dai?sslmode=disable")
@@ -195,7 +190,7 @@ func Load() (*Config, error) {
 	v.SetDefault("portal.base_url", "")
 
 	// 默认值 —— Legal
-	v.SetDefault("legal.base_url", "http://localhost:13000/legal")
+	v.SetDefault("legal.base_url", "http://localhost:19641/legal")
 	v.SetDefault("legal.terms_version", "2026-07-19")
 	v.SetDefault("legal.privacy_version", "2026-07-19")
 
@@ -222,7 +217,7 @@ func Load() (*Config, error) {
 	v.SetDefault("billing.dispatch_lease", "30s")
 	v.SetDefault("billing.pick_limit", 32)
 
-	// 默认值 —— AI 服务
+	// 默认值 —— AI 域
 	v.SetDefault("pricing.litellm_url", "")
 	v.SetDefault("audit.store_image_blobs", false)
 	v.SetDefault("image_assets.storage_dir", "images")
@@ -242,7 +237,7 @@ func Load() (*Config, error) {
 	v.SetDefault("file_store.storage_dir", "files")
 	v.SetDefault("file_store.asset_ttl", "24h")
 	v.SetDefault("file_store.url_ttl", "24h")
-	v.SetDefault("file_store.public_base_url", "http://127.0.0.1:13000")
+	v.SetDefault("file_store.public_base_url", "http://127.0.0.1:19641")
 	v.SetDefault("file_store.max_bytes", 32<<20)
 
 	// 配置文件
@@ -388,12 +383,6 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DAI_PORTAL_BASE_URL"); v != "" {
 		cfg.Portal.BaseURL = v
 	}
-	if v := os.Getenv("DAI_SERVER_TRUSTED_PROXY_CIDRS"); v != "" {
-		cfg.Server.TrustedProxyCIDRs = normalizeStringList(nil, v)
-	}
-	if v := os.Getenv("DAI_SERVER_INTERNAL_CIDRS"); v != "" {
-		cfg.Server.InternalCIDRs = normalizeStringList(nil, v)
-	}
 }
 
 // ─── Validation ────────────────────────────────────────
@@ -434,15 +423,6 @@ func validate(cfg *Config) error {
 			return fmt.Errorf("legal.base_url must be an absolute URL")
 		}
 		cfg.Legal.BaseURL = strings.TrimRight(baseURL, "/")
-	}
-
-	// CIDR 校验
-	for _, group := range [][]string{cfg.Server.TrustedProxyCIDRs, cfg.Server.InternalCIDRs} {
-		for _, value := range group {
-			if _, err := netip.ParsePrefix(value); err != nil {
-				return fmt.Errorf("invalid CIDR %q", value)
-			}
-		}
 	}
 
 	// Billing 校验
@@ -489,24 +469,4 @@ func (c *DatabaseConfig) DSNString() string {
 		return c.URL
 	}
 	return c.DSN
-}
-
-func normalizeStringList(values []string, raw string) []string {
-	if len(values) == 0 && raw != "" {
-		values = strings.Split(raw, ",")
-	}
-	normalized := make([]string, 0, len(values))
-	seen := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-		normalized = append(normalized, trimmed)
-	}
-	return normalized
 }

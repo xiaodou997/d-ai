@@ -16,15 +16,15 @@ import (
 )
 
 const contractPath = "contracts/openapi.yaml"
+const contractVersion = "dev"
 
 func main() {
 	_, api := server.New(server.Options{
 		Title:   "D-AI",
-		Version: transport.Version,
+		Version: contractVersion,
 	})
 	transport.Register(api, transport.Deps{
-		Service: "dai",
-		Version: transport.Version,
+		Version: contractVersion,
 	})
 	// Runtime gateway endpoints are native chi routes, so their schemas are
 	// added explicitly to the same Huma document.

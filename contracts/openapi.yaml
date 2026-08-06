@@ -1544,19 +1544,12 @@ components:
           type: string
         reasonMessage:
           type: string
-        scopes:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
         userId:
           type: string
       required:
         - id
         - eventType
         - principalType
-        - scopes
         - decision
         - createdAt
       type: object
@@ -1582,6 +1575,27 @@ components:
       required:
         - items
         - total
+      type: object
+    AuthTokenResponse:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/AuthTokenResponse.json
+          format: uri
+          readOnly: true
+          type: string
+        accessToken:
+          type: string
+        expiresIn:
+          format: int64
+          type: integer
+        refreshToken:
+          type: string
+      required:
+        - accessToken
+        - expiresIn
       type: object
     BalanceResponse:
       additionalProperties: false
@@ -5078,6 +5092,26 @@ components:
         - cache_write_per_1m_usd
         - cache_read_per_1m_usd
       type: object
+    LoginInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/LoginInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        password:
+          minLength: 1
+          type: string
+        username:
+          minLength: 1
+          type: string
+      required:
+        - username
+        - password
+      type: object
     ManualConfirmInputBody:
       additionalProperties: false
       properties:
@@ -6365,6 +6399,22 @@ components:
         - username
         - tenantName
         - createdTime
+      type: object
+    RefreshInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RefreshInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        refreshToken:
+          minLength: 1
+          type: string
+      required:
+        - refreshToken
       type: object
     RefundInputBody:
       additionalProperties: false
@@ -12002,7 +12052,7 @@ components:
       type: http
 info:
   title: D-AI
-  version: 0.1.0
+  version: dev
 openapi: 3.1.0
 paths:
   /.well-known/jwks.json:
@@ -12023,10 +12073,73 @@ paths:
           description: Error
       summary: JWKS 公钥集
       tags:
-        - oauth2
-  /api/oauth2/password:
+        - auth
+  /api/auth/login:
+    post:
+      operationId: auth-login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 账号密码登录
+      tags:
+        - auth
+  /api/auth/logout:
+    post:
+      operationId: auth-logout
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 登出（撤销当前 Token）
+      tags:
+        - auth
+  /api/auth/me:
+    get:
+      operationId: auth-current-user
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfoOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 当前用户信息
+      tags:
+        - auth
+  /api/auth/password:
     put:
-      operationId: oauth2-change-password
+      operationId: auth-change-password
       requestBody:
         content:
           application/json:
@@ -12048,16 +12161,22 @@ paths:
           description: Error
       summary: 修改密码
       tags:
-        - oauth2
-  /api/oauth2/revoke:
+        - auth
+  /api/auth/refresh:
     post:
-      operationId: oauth2-revoke
+      operationId: auth-refresh
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshInputBody"
+        required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessOutputBody"
+                $ref: "#/components/schemas/AuthTokenResponse"
           description: OK
         default:
           content:
@@ -12065,28 +12184,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 登出（撤销当前 Token）
+      summary: 刷新登录凭证
       tags:
-        - oauth2
-  /api/oauth2/userinfo:
-    get:
-      operationId: oauth2-userinfo
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserInfoOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 当前用户信息
-      tags:
-        - oauth2
+        - auth
   /api/v1/account/balance:
     get:
       operationId: account-balance
@@ -22392,7 +22492,7 @@ paths:
           description: Error
       summary: JWKS 公钥集
       tags:
-        - oauth2
+        - auth
   /v1/run:
     post:
       description: 使用 rk_ 应用密钥调用预先绑定好的应用；密钥绑定的应用类型（对话/文生图/图生图）决定请求体形状与响应形式，调用方无需选择路径。图生图额外支持 multipart/form-data 上传参考图。生图张数由应用设置默认值与可覆盖上限；支持 stream=true 返回 text/event-stream，但只返回最终完成图，不支持 partial_images 预览图。

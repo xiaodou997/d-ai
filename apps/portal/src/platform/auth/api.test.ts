@@ -10,10 +10,9 @@ describe("unified Portal password login", () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       new Response(
         JSON.stringify({
-          access_token: "access-token",
-          refresh_token: "refresh-token",
-          token_type: "Bearer",
-          expires_in: 3600
+          accessToken: "access-token",
+          refreshToken: "refresh-token",
+          expiresIn: 3600
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
@@ -28,12 +27,31 @@ describe("unified Portal password login", () => {
 
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     const headers = new Headers(init?.headers);
-    const body = init?.body as URLSearchParams;
-    expect(url).toBe("/api/oauth2/token");
+    const body = JSON.parse(String(init?.body));
+    expect(url).toBe("/api/auth/login");
+    expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("X-Client-Type")).toBeNull();
     expect(headers.get("X-Client-Id")).toBeNull();
-    expect(body.get("grant_type")).toBe("password");
-    expect(body.get("username")).toBe("alice");
-    expect(body.get("password")).toBe("secret");
+    expect(body).toEqual({ username: "alice", password: "secret" });
+  });
+
+  it("uses the direct refresh endpoint without an OAuth grant type", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ accessToken: "next", expiresIn: 3600 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = createPortalAuthApi({
+      request: vi.fn() as unknown as RequestAdapter,
+      baseUrl: ""
+    });
+
+    await api.refreshToken("refresh-token");
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("/api/auth/refresh");
+    expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-token" });
   });
 });

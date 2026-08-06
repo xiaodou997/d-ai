@@ -2,24 +2,25 @@ package billingledger
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"xiaodou/dai/internal/ai/platform"
 	billingsvc "xiaodou/dai/internal/billing/service"
+	"xiaodou/dai/internal/domain"
 )
 
-// InProcessLeasePort 直接连接 AI 计费协调器与统一计费域。
-type InProcessLeasePort struct {
+// BillingLeaseAdapter connects the AI usage coordinator to the billing domain.
+type BillingLeaseAdapter struct {
 	leases   *billingsvc.CreditLeaseService
 	clientID string
 }
 
-func NewInProcessLeasePort(leases *billingsvc.CreditLeaseService, clientID string) *InProcessLeasePort {
-	return &InProcessLeasePort{leases: leases, clientID: clientID}
+func NewBillingLeaseAdapter(leases *billingsvc.CreditLeaseService, clientID string) *BillingLeaseAdapter {
+	return &BillingLeaseAdapter{leases: leases, clientID: clientID}
 }
 
-func (p *InProcessLeasePort) AcquireCreditLease(ctx context.Context, req platform.AcquireCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
+func (p *BillingLeaseAdapter) AcquireCreditLease(ctx context.Context, req AcquireLease) (*CreditLease, error) {
 	lease, err := p.leases.Acquire(ctx, billingsvc.AcquireLeaseParams{
 		ClientID:             p.clientID,
 		ClientWindowID:       req.ClientWindowID,
@@ -37,7 +38,7 @@ func (p *InProcessLeasePort) AcquireCreditLease(ctx context.Context, req platfor
 	return leaseToResponse(lease), nil
 }
 
-func (p *InProcessLeasePort) RenewCreditLease(ctx context.Context, leaseID string, req platform.RenewCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
+func (p *BillingLeaseAdapter) RenewCreditLease(ctx context.Context, leaseID string, req RenewLease) (*CreditLease, error) {
 	lease, err := p.leases.Renew(ctx, billingsvc.RenewLeaseParams{
 		LeaseID:  leaseID,
 		ClientID: p.clientID,
@@ -51,7 +52,7 @@ func (p *InProcessLeasePort) RenewCreditLease(ctx context.Context, leaseID strin
 	return leaseToResponse(lease), nil
 }
 
-func (p *InProcessLeasePort) SettleCreditLease(ctx context.Context, leaseID string, req platform.SettleCreditLeaseRequest) (*platform.CreditLeaseResponse, error) {
+func (p *BillingLeaseAdapter) SettleCreditLease(ctx context.Context, leaseID string, req SettleLease) (*CreditLease, error) {
 	lease, err := p.leases.Settle(ctx, billingsvc.SettleLeaseParams{
 		LeaseID:           leaseID,
 		ClientID:          p.clientID,
@@ -65,7 +66,7 @@ func (p *InProcessLeasePort) SettleCreditLease(ctx context.Context, leaseID stri
 	return leaseToResponse(lease), nil
 }
 
-func (p *InProcessLeasePort) GetCreditLease(ctx context.Context, leaseID string) (*platform.CreditLeaseResponse, error) {
+func (p *BillingLeaseAdapter) GetCreditLease(ctx context.Context, leaseID string) (*CreditLease, error) {
 	lease, err := p.leases.Get(ctx, leaseID, p.clientID)
 	if err != nil {
 		return nil, mapServiceError(err)
@@ -75,11 +76,11 @@ func (p *InProcessLeasePort) GetCreditLease(ctx context.Context, leaseID string)
 
 // ─── 映射 ─────────────────────────────────────────────
 
-func leaseToResponse(l *billingsvc.CreditLease) *platform.CreditLeaseResponse {
+func leaseToResponse(l *billingsvc.CreditLease) *CreditLease {
 	if l == nil {
 		return nil
 	}
-	resp := &platform.CreditLeaseResponse{
+	resp := &CreditLease{
 		LeaseID:              l.LeaseID,
 		ClientWindowID:       l.ClientWindowID,
 		TenantID:             l.TenantID,
@@ -100,7 +101,7 @@ func leaseToResponse(l *billingsvc.CreditLease) *platform.CreditLeaseResponse {
 		UserDeductedMicro:    l.UserDeducted,
 		TenantDebtAddedMicro: l.TenantDebtAdded,
 		UserDebtAddedMicro:   l.UserDebtAdded,
-		AccountState:         platform.AccountState(l.AccountState),
+		AccountState:         AccountState(l.AccountState),
 		AllowFurtherUsage:    l.AllowFurtherUsage,
 	}
 	return resp
@@ -112,28 +113,25 @@ func mapServiceError(err error) error {
 	if err == nil {
 		return nil
 	}
-	msg := err.Error()
 	switch {
-	case contains(msg, "insufficient") || contains(msg, "overdraft"):
-		return fmt.Errorf("%w: %s", ErrInsufficientBalance, msg)
-	case contains(msg, "conflict") || contains(msg, "version"):
-		return fmt.Errorf("%w: %s", ErrAdmissionConflict, msg)
-	case contains(msg, "not found"):
-		return fmt.Errorf("%w: %s", ErrProtocolViolation, msg)
+	case errors.Is(err, domain.ErrInsufficientBalance),
+		errors.Is(err, domain.ErrTenantInsufficientBalance),
+		errors.Is(err, domain.ErrUserInsufficientBalance),
+		errors.Is(err, domain.ErrTenantInOverdraft),
+		errors.Is(err, domain.ErrUserInOverdraft),
+		errors.Is(err, domain.ErrTenantOverdraftExceeded),
+		errors.Is(err, domain.ErrUserOverdraftExceeded):
+		return fmt.Errorf("%w: %w", ErrInsufficientBalance, err)
+	case errors.Is(err, domain.ErrCreditLeaseVersion),
+		errors.Is(err, domain.ErrCreditLeaseSettlement):
+		return fmt.Errorf("%w: %w", ErrAdmissionConflict, err)
+	case errors.Is(err, domain.ErrCreditLeaseNotFound),
+		errors.Is(err, domain.ErrCreditLeaseNotRenewable),
+		errors.Is(err, domain.ErrForbidden),
+		errors.Is(err, domain.ErrBadRequest),
+		errors.Is(err, domain.ErrInvalidAmount):
+		return fmt.Errorf("%w: %w", ErrProtocolViolation, err)
 	default:
-		return fmt.Errorf("%w: %s", ErrDependencyUnavailable, msg)
+		return fmt.Errorf("%w: %w", ErrDependencyUnavailable, err)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || indexOf(s, substr) >= 0)
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
