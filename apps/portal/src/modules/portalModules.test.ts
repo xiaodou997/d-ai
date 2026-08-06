@@ -17,7 +17,7 @@ describe("portal module registry", () => {
     expect(leavesFor(1)).toHaveLength(13);
     expect(leavesFor(2)).toHaveLength(12);
     expect(leavesFor(3)).toHaveLength(14);
-    expect(leavesFor(4)).toHaveLength(8);
+    expect(leavesFor(4)).toHaveLength(9);
   });
 
   it("builds task-oriented workspaces instead of legacy page entries", () => {
@@ -41,7 +41,8 @@ describe("portal module registry", () => {
       "AI 对话",
       "AI 生图",
       "任务记录",
-      "模型与套餐",
+      "模型定价",
+      "订阅套餐",
       "使用记录",
       "开发中心",
       "账户中心"
@@ -118,6 +119,36 @@ describe("portal module registry", () => {
     const userWorkspace = portalModules.find((module) => module.id === "tenant-user-workspace");
     expect(userWorkspace?.tabs?.filter((tab) => tab.nav !== false).map((tab) => tab.label)).toEqual([
       "用户管理"
+    ]);
+  });
+
+  it("exposes model pricing and subscriptions as separate customer menus", () => {
+    const serviceMenus = buildPortalNav(4, "/customer/services/subscription")
+      .find((item) => item.id === "customer-services")
+      ?.children;
+
+    expect(serviceMenus).toMatchObject([
+      {
+        id: "customer-service-workspace-models",
+        label: "模型定价",
+        to: "/customer/services/models",
+        icon: "layers",
+        active: false
+      },
+      {
+        id: "customer-service-workspace-subscription",
+        label: "订阅套餐",
+        to: "/customer/services/subscription",
+        icon: "calendar-clock",
+        active: true
+      },
+      {
+        id: "customer-usage",
+        label: "使用记录",
+        to: "/customer/usage",
+        icon: "scroll-text",
+        active: false
+      }
     ]);
   });
 

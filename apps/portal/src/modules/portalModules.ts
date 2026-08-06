@@ -464,9 +464,10 @@ export const portalModules: PortalModule[] = [
     capability: "customer.services",
     navGroup: customerServices,
     order: 10,
+    navTabs: true,
     tabs: [
-      { id: "models", label: "模型定价", path: "models", component: () => import("@/views/customer/ai/GroupsView.vue") },
-      { id: "subscription", label: "订阅套餐", path: "subscription", component: () => import("@/views/customer/ai/SubscriptionView.vue") }
+      { id: "models", label: "模型定价", icon: "layers", path: "models", component: () => import("@/views/customer/ai/GroupsView.vue") },
+      { id: "subscription", label: "订阅套餐", icon: "calendar-clock", path: "subscription", component: () => import("@/views/customer/ai/SubscriptionView.vue") }
     ]
   },
   {
