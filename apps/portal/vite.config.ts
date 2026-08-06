@@ -28,6 +28,10 @@ export default defineConfig({
       "/internal": {
         target: devProxyTarget,
         changeOrigin: true
+      },
+      "/runtime": {
+        target: devProxyTarget,
+        changeOrigin: true
       }
     }
   },

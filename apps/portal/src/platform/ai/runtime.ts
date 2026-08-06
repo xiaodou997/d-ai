@@ -1,6 +1,7 @@
 import type { PortalChatStreamInput } from "./chat/types";
 import { appendPortalQuery } from "./utils";
 import type { RequestRecoveryResult } from "../http";
+import { joinUrl } from "@/api";
 
 export interface CreatePortalRuntimeTransportOptions {
   baseUrl: () => string;
@@ -38,7 +39,7 @@ export function createPortalRuntimeTransport(options: CreatePortalRuntimeTranspo
     query?: Record<string, string | number | undefined>
   ): Promise<T> {
     const response = await executeWithRecovery(() =>
-      fetch(`${options.baseUrl()}${appendPortalQuery(path, query)}`, {
+      fetch(joinUrl(options.baseUrl(), appendPortalQuery(path, query)), {
         method,
         headers: runtimeHeaders(body !== undefined ? { "Content-Type": "application/json" } : {}),
         body: body !== undefined ? JSON.stringify(body) : undefined
@@ -52,7 +53,7 @@ export function createPortalRuntimeTransport(options: CreatePortalRuntimeTranspo
 
   async function formRequest<T>(method: string, path: string, body: FormData): Promise<T> {
     const response = await executeWithRecovery(() =>
-      fetch(`${options.baseUrl()}${path}`, {
+      fetch(joinUrl(options.baseUrl(), path), {
         method,
         headers: runtimeHeaders(),
         body
@@ -67,7 +68,10 @@ export function createPortalRuntimeTransport(options: CreatePortalRuntimeTranspo
   async function streamChatMessage(opts: PortalChatStreamInput): Promise<void> {
     const response = await executeWithRecovery(() =>
       fetch(
-        `${options.baseUrl()}${runtimeBasePath}/chat/sessions/${encodeURIComponent(opts.sessionId)}/messages:stream`,
+        joinUrl(
+          options.baseUrl(),
+          `${runtimeBasePath}/chat/sessions/${encodeURIComponent(opts.sessionId)}/messages:stream`
+        ),
         {
           method: "POST",
           headers: runtimeHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
