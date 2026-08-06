@@ -15,10 +15,10 @@ describe("PortalWorkspaceLayout navigation", () => {
     expect(wrapper.find(".portal-workspace-layout__tabs").exists()).toBe(false);
   });
 
-  it("keeps tabs for regular multi-view workspaces", async () => {
+  it("hides duplicate tabs when admin organization views are separate sidebar menus", async () => {
     const wrapper = await mountWorkspace("admin-organization-workspace");
 
-    expect(wrapper.find(".portal-workspace-layout__tabs").exists()).toBe(true);
+    expect(wrapper.find(".portal-workspace-layout__tabs").exists()).toBe(false);
   });
 });
 

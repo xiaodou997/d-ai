@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(11);
-    expect(leavesFor(2)).toHaveLength(10);
+    expect(leavesFor(1)).toHaveLength(12);
+    expect(leavesFor(2)).toHaveLength(11);
     expect(leavesFor(3)).toHaveLength(13);
     expect(leavesFor(4)).toHaveLength(8);
   });
@@ -25,7 +25,8 @@ describe("portal module registry", () => {
       "经营",
       "AI 运营",
       "运行监控",
-      "租户与用户",
+      "租户管理",
+      "终端用户",
       "管理员与身份",
       "账户与交易",
       "结算与支付",
@@ -89,6 +90,38 @@ describe("portal module registry", () => {
     expect(leavesFor(4, "/customer/workbench/chat").filter((item) => item.active).map((item) => item.id)).toEqual([
       "customer-chat"
     ]);
+  });
+
+  it("exposes tenants and end users as separate admin menus", () => {
+    const organizationMenus = buildPortalNav(1, "/admin/organization/users")
+      .find((item) => item.id === "admin-organization")
+      ?.children;
+
+    expect(organizationMenus).toMatchObject([
+      {
+        id: "admin-organization-workspace-tenants",
+        label: "租户管理",
+        to: "/admin/organization/tenants",
+        icon: "building-2",
+        active: false
+      },
+      {
+        id: "admin-organization-workspace-users",
+        label: "终端用户",
+        to: "/admin/organization/users",
+        icon: "users",
+        active: true
+      },
+      {
+        id: "admin-identity-workspace",
+        label: "管理员与身份"
+      }
+    ]);
+
+    const tenantDetailMenus = buildPortalNav(1, "/admin/organization/tenants/tenant-1")
+      .find((item) => item.id === "admin-organization")
+      ?.children;
+    expect(tenantDetailMenus?.find((item) => item.id === "admin-organization-workspace-tenants")?.active).toBe(true);
   });
 
   it("uses capabilities as the role access source", () => {

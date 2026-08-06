@@ -135,10 +135,11 @@ export const portalModules: PortalModule[] = [
     capability: "admin.organization",
     navGroup: adminOrganization,
     order: 10,
+    navTabs: true,
     tabs: [
-      { id: "tenants", label: "租户管理", path: "tenants", component: () => import("@/views/admin/platform/TenantsView.vue") },
+      { id: "tenants", label: "租户管理", icon: "building-2", path: "tenants", component: () => import("@/views/admin/platform/TenantsView.vue") },
       { id: "tenant-detail", label: "租户详情", path: "tenants/:id", component: () => import("@/views/admin/platform/TenantDetailView.vue"), name: "platform-tenant-detail", nav: false, activeTabId: "tenants" },
-      { id: "users", label: "终端用户", path: "users", component: () => import("@/views/admin/platform/EndUsersView.vue") }
+      { id: "users", label: "终端用户", icon: "users", path: "users", component: () => import("@/views/admin/platform/EndUsersView.vue") }
     ]
   },
   {

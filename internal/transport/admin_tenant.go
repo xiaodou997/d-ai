@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -240,13 +241,13 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 	var (
 		tenantID, tenantName, status string
 		contactPerson, contactEmail  *string
-		createdTime                  int64
+		createdAt                    time.Time
 	)
 	err := h.pool.QueryRow(ctx, `
 		SELECT tenant_id, tenant_name, contact_person, contact_email, status,
-		       EXTRACT(EPOCH FROM created_at)*1000
+		       created_at
 		FROM iam_tenants WHERE tenant_id = $1
-	`, in.ID).Scan(&tenantID, &tenantName, &contactPerson, &contactEmail, &status, &createdTime)
+	`, in.ID).Scan(&tenantID, &tenantName, &contactPerson, &contactEmail, &status, &createdAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
@@ -260,7 +261,7 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 	out.Body.TenantName = tenantName
 	out.Body.Status = statusInt
 	out.Body.StatusDisplay = tenantStatusText(statusInt)
-	out.Body.CreatedTime = createdTime
+	out.Body.CreatedTime = createdAt.UnixMilli()
 	if contactPerson != nil {
 		out.Body.ContactPerson = *contactPerson
 	}
