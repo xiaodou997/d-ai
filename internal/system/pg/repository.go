@@ -62,7 +62,7 @@ func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo 
 		  COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages WHERE package_type = 'tenant' AND status = 'available'), 0)::bigint,
 		  COALESCE((SELECT SUM(paid_amount) FROM bill_recharge_orders WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
 		  COALESCE((SELECT SUM(credit_amount) FROM bill_recharge_orders WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
-		  (SELECT COUNT(*) FROM iam_users WHERE ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz))::bigint,
+			  (SELECT COUNT(*) FROM iam_accounts WHERE user_type = 4 AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz))::bigint,
 		  COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages WHERE package_type = 'user' AND status = 'available'), 0)::bigint
 	`, timeFrom, timeTo).Scan(
 		&row.TenantRechargeAmount, &tenantRechargeMicro,

@@ -7,15 +7,34 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"xiaodou/dai/internal/ai/core/catalog"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
+	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
 )
+
+type runExecutorStub struct {
+	input  coreruntime.ExecutionInput
+	result coreruntime.Result
+	err    error
+}
+
+func (s *runExecutorStub) Execute(_ context.Context, in coreruntime.ExecutionInput) (coreruntime.Result, error) {
+	s.input = in
+	if s.err != nil {
+		return s.result, s.err
+	}
+	if in.Envelope.ResponseWriter != nil {
+		in.Envelope.ResponseWriter.WriteHeader(http.StatusCreated)
+	}
+	return coreruntime.Result{StatusCode: http.StatusCreated, CreatedAt: time.Now()}, nil
+}
 
 func TestHandleRuntimeUsesRuntimeEngine(t *testing.T) {
 	executor := &runExecutorStub{}

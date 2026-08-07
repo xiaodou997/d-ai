@@ -38,6 +38,11 @@ func IsTenantNameTaken(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_tenants_tenant_name"
 }
 
+func IsTenantReferenced(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23503"
+}
+
 func (r *PortalBrandingRepository) Get(ctx context.Context, tenantID string) (*PortalBranding, error) {
 	branding := &PortalBranding{TenantID: tenantID}
 	err := r.pool.QueryRow(ctx, `

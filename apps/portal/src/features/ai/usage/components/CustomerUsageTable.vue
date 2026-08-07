@@ -32,7 +32,7 @@ defineEmits<{
 
 const columns: DsTableColumn[] = [
   { key: "created_at", title: "时间", width: 150 },
-  { key: "target", title: "模型 / 应用", width: 190 },
+  { key: "target", title: "模型", width: 190 },
   { key: "group", title: "分组", width: 160 },
   { key: "status", title: "状态", width: 90 },
   { key: "source", title: "来源", width: 100 },
@@ -45,7 +45,7 @@ const columns: DsTableColumn[] = [
 ];
 
 function targetLabel(row: CustomerUsageLog) {
-  return row.model_code || (row.app_name ? `应用 · ${row.app_name}` : "-");
+  return row.model_code || "-";
 }
 
 function groupLabel(row: CustomerUsageLog) {

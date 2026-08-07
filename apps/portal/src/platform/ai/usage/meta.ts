@@ -11,17 +11,13 @@ export const requestStatusMeta: Record<string, UsageTagMeta> = {
 export const requestSourceMeta: Record<string, UsageTagMeta> = {
   api_key: { label: "API", tone: "neutral" },
   web_chat: { label: "网页对话", tone: "positive" },
-  web_image: { label: "网页生图", tone: "warning" },
-  app_preview: { label: "应用试运行", tone: "info" },
-  run_key: { label: "运行密钥", tone: "accent" }
+  web_image: { label: "网页生图", tone: "warning" }
 };
 
 export const requestSourceOptions = [
   { label: "API", value: "api_key" },
   { label: "网页对话", value: "web_chat" },
-  { label: "网页生图", value: "web_image" },
-  { label: "应用试运行", value: "app_preview" },
-  { label: "运行密钥", value: "run_key" }
+  { label: "网页生图", value: "web_image" }
 ];
 
 export const billableUnitMeta: Record<string, UsageTagMeta> = {

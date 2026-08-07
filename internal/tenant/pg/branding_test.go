@@ -16,3 +16,12 @@ func TestIsTenantNameTaken(t *testing.T) {
 		t.Fatal("expected unrelated error to be ignored")
 	}
 }
+
+func TestIsTenantReferenced(t *testing.T) {
+	if !IsTenantReferenced(&pgconn.PgError{Code: "23503"}) {
+		t.Fatal("expected foreign-key violation to mean tenant is referenced")
+	}
+	if IsTenantReferenced(&pgconn.PgError{Code: "23505"}) {
+		t.Fatal("did not expect unique violation to mean tenant is referenced")
+	}
+}

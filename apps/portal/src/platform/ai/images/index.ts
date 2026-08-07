@@ -6,3 +6,4 @@ export * from "./types";
 export * from "./usePortalImageTaskQueue";
 export * from "./usePortalImageReferences";
 export { portalImageWorkspaceIconProps } from "../view-presets";
+export * from "./contract";

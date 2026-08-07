@@ -148,7 +148,6 @@ func (s *Console) registerRuntimeRoutes(r chi.Router) {
 	// speaks the runtime protocol and shares the pipeline with chat/image serving.
 	r.Use(s.recoverer)
 	r.Post("/chat/sessions/{sessionID}/messages:stream", s.handleConsoleChatStream)
-	r.Post("/app-previews/{agentID}", s.handleConsoleAppPreview)
 	r.Get("/tasks", s.handlePortalTaskList)
 	r.Get("/tasks/{taskID}", s.handlePortalTaskGet)
 	r.Post("/tasks/{taskID}/cancel", s.handlePortalTaskCancel)

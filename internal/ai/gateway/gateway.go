@@ -21,10 +21,6 @@ import (
 	"xiaodou/dai/internal/ai/serving"
 )
 
-type runRuntimeInvokeExpander interface {
-	ExpandByKeyHash(ctx context.Context, keyHash string, req coreruntime.Request) (coreruntime.InvokeExpansion, error)
-}
-
 // BanChecker reports whether a user or tenant is currently banned/disabled in
 // the identity domain. Implemented by *banstate.Checker (direct Redis key read; see
 // libs/go/banstate).
@@ -35,33 +31,29 @@ type BanChecker interface {
 
 // Deps are the runtime-plane dependencies assembled in cmd/server.
 type Deps struct {
-	Logger                *zap.Logger
-	Postgres              *pgxpool.Pool
-	Pipeline              *serving.Pipeline
-	Queries               *dbgen.Queries
-	APIKeyCache           *apikey.Cache // optional; nil disables the key cache
-	BanChecker            BanChecker    // optional; nil disables ban enforcement
-	RuntimeInvokeExpander runRuntimeInvokeExpander
-	RuntimeEngine         coreruntime.Engine
-	AsyncTasks            *asynctask.Engine
-	TaskAdmission         *serving.AdmissionGate
-	TaskInvokeExpander    taskRuntimeInvokeExpander
+	Logger        *zap.Logger
+	Postgres      *pgxpool.Pool
+	Pipeline      *serving.Pipeline
+	Queries       *dbgen.Queries
+	APIKeyCache   *apikey.Cache // optional; nil disables the key cache
+	BanChecker    BanChecker    // optional; nil disables ban enforcement
+	RuntimeEngine coreruntime.Engine
+	AsyncTasks    *asynctask.Engine
+	TaskAdmission *serving.AdmissionGate
 }
 
 // Gateway serves the runtime API. Steps are stateless and shared across
 // requests through the serving pipeline.
 type Gateway struct {
-	logger                *zap.Logger
-	postgres              *pgxpool.Pool
-	queries               *dbgen.Queries
-	pipeline              *serving.Pipeline
-	apiKeyCache           *apikey.Cache
-	banChecker            BanChecker
-	runtimeInvokeExpander runRuntimeInvokeExpander
-	runtimeEngine         coreruntime.Engine
-	asyncTasks            *asynctask.Engine
-	taskAdmission         *serving.AdmissionGate
-	taskInvokeExpander    taskRuntimeInvokeExpander
+	logger        *zap.Logger
+	postgres      *pgxpool.Pool
+	queries       *dbgen.Queries
+	pipeline      *serving.Pipeline
+	apiKeyCache   *apikey.Cache
+	banChecker    BanChecker
+	runtimeEngine coreruntime.Engine
+	asyncTasks    *asynctask.Engine
+	taskAdmission *serving.AdmissionGate
 }
 
 func New(deps Deps) *Gateway {
@@ -69,17 +61,15 @@ func New(deps Deps) *Gateway {
 		panic("gateway: logger is required")
 	}
 	return &Gateway{
-		logger:                deps.Logger,
-		postgres:              deps.Postgres,
-		queries:               deps.Queries,
-		pipeline:              deps.Pipeline,
-		apiKeyCache:           deps.APIKeyCache,
-		banChecker:            deps.BanChecker,
-		runtimeInvokeExpander: deps.RuntimeInvokeExpander,
-		runtimeEngine:         deps.RuntimeEngine,
-		asyncTasks:            deps.AsyncTasks,
-		taskAdmission:         deps.TaskAdmission,
-		taskInvokeExpander:    deps.TaskInvokeExpander,
+		logger:        deps.Logger,
+		postgres:      deps.Postgres,
+		queries:       deps.Queries,
+		pipeline:      deps.Pipeline,
+		apiKeyCache:   deps.APIKeyCache,
+		banChecker:    deps.BanChecker,
+		runtimeEngine: deps.RuntimeEngine,
+		asyncTasks:    deps.AsyncTasks,
+		taskAdmission: deps.TaskAdmission,
 	}
 }
 
@@ -87,7 +77,6 @@ func New(deps Deps) *Gateway {
 // accepts OpenAI Bearer and Anthropic x-api-key authentication on every route.
 func (s *Gateway) Routes(r chi.Router) {
 	r.Route("/v1", func(r chi.Router) {
-		r.Post("/run", s.handleRunRuntime)
 		r.Post("/tasks", s.handleCreateTask)
 		r.Get("/tasks", s.handleListTasks)
 		r.Get("/tasks/{taskID}", s.handleGetTask)

@@ -1,6 +1,6 @@
 export type PortalTaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 export type PortalTaskType = "images.generation" | "images.edit" | "chat.completions";
-export type PortalTaskSource = "portal" | "api_key" | "app_key";
+export type PortalTaskSource = "portal" | "api_key";
 export type PortalTaskOwnerScope = "tenant" | "user";
 
 export interface PortalTaskOwner {

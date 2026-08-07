@@ -26,7 +26,7 @@ type AsyncTaskPoolOptions struct {
 // stable CHECK constraints and partial indexes that a hand-copy tends to omit.
 //
 // Returns an error when no database is reachable; callers skip rather than fail,
-// matching the existing app-layer harness.
+// matching the other database-backed test harnesses.
 func OpenAsyncTaskTestPool(ctx context.Context, opts AsyncTaskPoolOptions) (*pgxpool.Pool, func(context.Context) error, error) {
 	if opts.MaxConns <= 0 {
 		opts.MaxConns = 8
@@ -38,7 +38,7 @@ func OpenAsyncTaskTestPool(ctx context.Context, opts AsyncTaskPoolOptions) (*pgx
 	}
 
 	dsns := []string{}
-	if dsn := os.Getenv("AI_APP_LAYER_TEST_DATABASE_URL"); dsn != "" {
+	if dsn := os.Getenv("DAI_TEST_DATABASE_URL"); dsn != "" {
 		dsns = append(dsns, dsn)
 	}
 	dsns = append(dsns, defaultDSNs...)
@@ -55,6 +55,11 @@ func OpenAsyncTaskTestPool(ctx context.Context, opts AsyncTaskPoolOptions) (*pgx
 		lastErr = fmt.Errorf("no database url configured")
 	}
 	return nil, nil, lastErr
+}
+
+var defaultDSNs = []string{
+	"postgres://postgres:postgres@127.0.0.1:15432/dai_test?sslmode=disable",
+	"postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable",
 }
 
 func openAsyncTaskWithDSN(ctx context.Context, dsn, schemaSQL string, opts AsyncTaskPoolOptions) (*pgxpool.Pool, func(context.Context) error, error) {

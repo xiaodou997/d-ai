@@ -70,7 +70,7 @@ func (r *BillingRepository) GetTenantFrozenCredits(ctx context.Context, tenantID
 
 func (r *BillingRepository) GetEndUserFrozenCredits(ctx context.Context, userID string) (int64, error) {
 	var v int64
-	err := r.pool.QueryRow(ctx, `SELECT COALESCE(frozen_credits, 0) FROM iam_users WHERE user_id = $1`, userID).Scan(&v)
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE(frozen_credits, 0) FROM iam_accounts WHERE user_id = $1 AND user_type = 4`, userID).Scan(&v)
 	return v, err
 }
 
@@ -87,14 +87,14 @@ func (r *BillingRepository) GetTenantOverdraftInfo(ctx context.Context, tenantID
 func (r *BillingRepository) GetEndUserOverdraftInfo(ctx context.Context, userID string) (limit, current int64, err error) {
 	err = r.pool.QueryRow(ctx, `
 		SELECT COALESCE(overdraft_limit, 0), COALESCE(current_overdraft, 0)
-		FROM iam_users WHERE user_id = $1
+		FROM iam_accounts WHERE user_id = $1 AND user_type = 4
 	`, userID).Scan(&limit, &current)
 	return limit, current, err
 }
 
 func (r *BillingRepository) GetEndUserTenant(ctx context.Context, userID string) (string, error) {
 	var tenantID string
-	err := r.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_users WHERE user_id = $1`, userID).Scan(&tenantID)
+	err := r.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_accounts WHERE user_id = $1 AND user_type = 4`, userID).Scan(&tenantID)
 	return tenantID, err
 }
 

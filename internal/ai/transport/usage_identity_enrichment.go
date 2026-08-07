@@ -142,19 +142,6 @@ func buildIdentityIncludedForSubOrders(ctx context.Context, d AIDeps, orders []s
 	return buildIdentityIncluded(ctx, d, userIDs, tenantIDs)
 }
 
-func buildIdentityIncludedForRunKeys(ctx context.Context, d AIDeps, rows []runKeyDTO) IdentityIncludedDTO {
-	userIDs := make([]string, 0, len(rows))
-	tenantIDs := make([]string, 0, len(rows)*2)
-	seenUsers := make(map[string]struct{}, len(rows))
-	seenTenants := make(map[string]struct{}, len(rows)*2)
-	for _, row := range rows {
-		userIDs = appendUniqueID(userIDs, seenUsers, row.UserID)
-		tenantIDs = appendUniqueID(tenantIDs, seenTenants, row.TenantID)
-		tenantIDs = appendUniqueID(tenantIDs, seenTenants, row.AppOwnerTenantID)
-	}
-	return buildIdentityIncluded(ctx, d, userIDs, tenantIDs)
-}
-
 func buildIdentityIncluded(ctx context.Context, d AIDeps, userIDs []string, tenantIDs []string) IdentityIncludedDTO {
 	if d.IdentityProvider == nil {
 		return emptyIdentityIncluded()

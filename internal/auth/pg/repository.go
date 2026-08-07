@@ -47,8 +47,6 @@ func NewAuthRepository(pool *pgxpool.Pool) *AuthRepository {
 }
 
 // PortalUserForLogin is the account record resolved by the unified Portal.
-// The query intentionally searches all account tables so the browser never
-// needs to guess a client type before credentials are known.
 type PortalUserForLogin struct {
 	UserID       string
 	TenantID     string
@@ -58,62 +56,21 @@ type PortalUserForLogin struct {
 	Status       string
 }
 
-func (r *AuthRepository) UpdateSystemUserLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
+func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
 	_, err := r.pool.Exec(ctx, `
-		UPDATE iam_admins SET last_login_at = $1 WHERE user_id = $2
-	`, loginTime, userID)
-	return err
-}
-
-func (r *AuthRepository) UpdateTenantUserLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE iam_tenant_users SET last_login_at = $1 WHERE user_id = $2
+		UPDATE iam_accounts SET last_login_at = $1 WHERE user_id = $2
 	`, loginTime, userID)
 	return err
 }
 
 func (r *AuthRepository) GetPortalUserForLogin(ctx context.Context, username string) (PortalUserForLogin, error) {
 	var u PortalUserForLogin
-	rows, err := r.pool.Query(ctx, `
-		SELECT user_id, '', username, password_hash, user_type, status, 1 AS source_order
-		FROM iam_admins
-		WHERE username = $1
-		UNION ALL
-		SELECT user_id, tenant_id, username, password_hash, 3, status, 2 AS source_order
-		FROM iam_tenant_users
-		WHERE username = $1
-		UNION ALL
-		SELECT user_id, tenant_id, username, password_hash, 4, status, 3 AS source_order
-		FROM iam_users
-		WHERE username = $1
-		ORDER BY source_order
-		LIMIT 2
-	`, username)
-	if err != nil {
-		return u, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return u, err
-		}
-		return u, pgx.ErrNoRows
-	}
-	if err := rows.Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status, new(int)); err != nil {
-		return u, err
-	}
-	if rows.Next() {
-		return PortalUserForLogin{}, fmt.Errorf("username is ambiguous across account types")
-	}
-	return u, rows.Err()
-}
-
-func (r *AuthRepository) UpdateEndUserLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE iam_users SET last_login_at = $1 WHERE user_id = $2
-	`, loginTime, userID)
-	return err
+	err := r.pool.QueryRow(ctx, `
+		SELECT user_id, COALESCE(tenant_id, ''), username, password_hash, user_type, status
+		FROM iam_accounts
+		WHERE lower(username) = lower(btrim($1))
+	`, username).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status)
+	return u, err
 }
 
 // CheckTenantActive 检查租户是否处于 active 状态

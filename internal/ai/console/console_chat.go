@@ -17,8 +17,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
-	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
-	"xiaodou/dai/internal/ai/application"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/gateway"
@@ -46,21 +44,17 @@ type consoleChatModelDTO struct {
 }
 
 type consoleChatSessionDTO struct {
-	ID                string            `json:"id"`
-	Title             string            `json:"title"`
-	TargetType        string            `json:"target_type"`
-	AgentID           string            `json:"agent_id,omitempty"`
-	AgentName         string            `json:"agent_name,omitempty"`
-	Variables         map[string]string `json:"variables,omitempty"`
-	ModelCode         string            `json:"model_code"`
-	GroupID           string            `json:"group_id,omitempty"`
-	GroupName         string            `json:"group_name,omitempty"`
-	BillingGroupLabel string            `json:"billing_group_label,omitempty"`
-	ProviderAPIFormat string            `json:"provider_api_format"`
-	SelectedRouteID   string            `json:"selected_route_id"`
-	Status            string            `json:"status"`
-	CreatedAt         int64             `json:"created_at"`
-	UpdatedAt         int64             `json:"updated_at"`
+	ID                string `json:"id"`
+	Title             string `json:"title"`
+	ModelCode         string `json:"model_code"`
+	GroupID           string `json:"group_id,omitempty"`
+	GroupName         string `json:"group_name,omitempty"`
+	BillingGroupLabel string `json:"billing_group_label,omitempty"`
+	ProviderAPIFormat string `json:"provider_api_format"`
+	SelectedRouteID   string `json:"selected_route_id"`
+	Status            string `json:"status"`
+	CreatedAt         int64  `json:"created_at"`
+	UpdatedAt         int64  `json:"updated_at"`
 }
 
 type consoleChatMessageDTO struct {
@@ -79,15 +73,6 @@ type consoleChatSessionDetailDTO struct {
 	Messages []consoleChatMessageDTO `json:"messages"`
 }
 
-// consoleChatAgentDTO 是使用侧脱敏视图:不暴露模型、分组、提示词等底层实现。
-type consoleChatAgentDTO struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Description    string   `json:"description"`
-	PublisherLabel string   `json:"publisher_label"`
-	Variables      []string `json:"variables"`
-}
-
 type createConsoleChatSessionRequest struct {
 	ModelCode string `json:"model_code"`
 	GroupID   string `json:"group_id"`
@@ -104,43 +89,9 @@ type streamConsoleChatRequest struct {
 	Messages  []consoleChatMessage `json:"messages"`
 }
 
-type appPreviewRequest struct {
-	Input          string            `json:"input"`
-	N              int               `json:"n"`
-	Variables      map[string]string `json:"variables"`
-	Attachments    []runAttachment   `json:"attachments"`
-	Images         []string          `json:"images"`
-	ResponseFormat string            `json:"response_format"`
-}
-
-type appPreviewResponse struct {
-	Type      string           `json:"type"`
-	Text      string           `json:"text,omitempty"`
-	Images    []map[string]any `json:"images,omitempty"`
-	Usage     map[string]any   `json:"usage,omitempty"`
-	RequestID string           `json:"request_id,omitempty"`
-}
-
 type consoleChatModelRow struct {
 	ModelCode      string
 	CapabilityType string
-}
-
-type consoleChatAgentRuntime struct {
-	OwnerType      string
-	OwnerTenantID  string
-	OwnerUserID    string
-	ID             string
-	Name           string
-	Description    string
-	AgentType      string
-	GroupID        string
-	ModelCode      string
-	TemplateText   string
-	Variables      []string
-	PromptStrategy application.PromptStrategy
-	PromptBindings []application.RuntimePromptBinding
-	DefaultOptions map[string]any
 }
 
 type captureResponseWriter struct {
@@ -287,13 +238,6 @@ func (p *consoleChatStreamPersistence) close(routeID string) {
 	}
 }
 
-type runAttachment struct {
-	Type     string `json:"type"`
-	URL      string `json:"url"`
-	Name     string `json:"name,omitempty"`
-	MIMEType string `json:"mime_type,omitempty"`
-}
-
 func (s *Console) handleConsoleChatModels(w http.ResponseWriter, r *http.Request) {
 	subject, ok := s.consoleRuntimeSubject(w, r)
 	if !ok {
@@ -320,22 +264,6 @@ func (s *Console) handleConsoleChatModels(w http.ResponseWriter, r *http.Request
 		out = append(out, workspaceChatModelToConsoleDTO(model))
 	}
 	writeOK(w, out)
-}
-
-func (s *Console) handleConsoleChatAgents(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	agents, err := s.consoleVisibleChatAgents(r, subject)
-	if err != nil {
-		s.logger.Error("runtime chat agents: list visible agents failed",
-			consoleSubjectLogFields(r, subject, zap.Error(err))...,
-		)
-		writeDBErr(w, err)
-		return
-	}
-	writeOK(w, agents)
 }
 
 func (s *Console) handleConsoleChatListSessions(w http.ResponseWriter, r *http.Request) {
@@ -493,7 +421,7 @@ func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request
 	}
 	_, _ = s.postgres.Exec(r.Context(), `
 		UPDATE ai_workspace_threads
-		SET target_model_code = CASE WHEN target_kind = 'model' THEN $2 ELSE target_model_code END,
+		SET target_model_code = $2,
 		    selected_surface = $3,
 		    title = CASE WHEN title = '新对话' AND $4 <> '' THEN left($4, 80) ELSE title END,
 		    updated_at = now()
@@ -594,37 +522,6 @@ func (s *Console) consoleGrantedChatModelByCode(r *http.Request, subject *coreid
 	return consoleChatModelRow{}, pgx.ErrNoRows
 }
 
-func (s *Console) consoleVisibleChatAgents(r *http.Request, subject *coreidentity.Subject) ([]consoleChatAgentDTO, error) {
-	rows, err := pgadapter.NewApplicationAppRepo(s.postgres).ListVisibleAgents(r.Context(), consoleAppViewer(subject), []string{consoleAgentTypeChat})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]consoleChatAgentDTO, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, appAgentRecordToConsoleChatAgentDTO(row))
-	}
-	return out, nil
-}
-
-func (s *Console) consoleVisibleChatAgentByID(r *http.Request, subject *coreidentity.Subject, agentID string) (consoleChatAgentRuntime, error) {
-	row, err := pgadapter.NewApplicationAppRepo(s.postgres).GetVisibleAgentByID(r.Context(), consoleAppViewer(subject), agentID, []string{consoleAgentTypeChat})
-	if err != nil {
-		return consoleChatAgentRuntime{}, err
-	}
-	return appAgentRecordToConsoleChatAgentRuntime(row), nil
-}
-
-func (s *Console) populateConsoleChatSessionAgentName(r *http.Request, subject *coreidentity.Subject, dto *consoleChatSessionDTO) {
-	if dto == nil || strings.TrimSpace(dto.AgentID) == "" {
-		return
-	}
-	agent, err := s.consoleVisibleChatAgentByID(r, subject, dto.AgentID)
-	if err != nil {
-		return
-	}
-	dto.AgentName = agent.Name
-}
-
 func (s *Console) queryConsoleChatModels(r *http.Request, query string, args ...any) ([]consoleChatModelRow, error) {
 	rows, err := s.postgres.Query(r.Context(), query, args...)
 	if err != nil {
@@ -662,29 +559,6 @@ func (s *Console) availableConsoleChatProtocols(r *http.Request, subject *coreid
 
 func (s *Console) consoleAccessibleChatGroups(r *http.Request, subject *coreidentity.Subject) ([]string, error) {
 	return s.grantChecker.AccessibleGroupIDsForSubject(r.Context(), subject)
-}
-
-// consoleSubjectForApp 构造应用调用的运行时身份:强制应用绑定的分组
-// (跳过调用者分组可见性)并携带应用快照供使用日志记录。
-func consoleSubjectForApp(subject *coreidentity.Subject, agent consoleChatAgentRuntime) *coreidentity.Subject {
-	if subject == nil {
-		return nil
-	}
-	out := *subject
-	out.ForcedGroupID = strings.TrimSpace(agent.GroupID)
-	out.AppID = agent.ID
-	out.AppName = agent.Name
-	out.AppOwnerType = agent.OwnerType
-	out.AppOwnerTenantID = agent.OwnerTenantID
-	out.AppOwnerUserID = agent.OwnerUserID
-	return &out
-}
-
-func consoleAppViewer(subject *coreidentity.Subject) pgadapter.AppViewer {
-	if subject == nil {
-		return pgadapter.AppViewer{}
-	}
-	return pgadapter.AppViewer{TenantID: subject.TenantID, UserID: subject.UserID}
 }
 
 func consoleSubjectForSession(subject *coreidentity.Subject, groupID string) *coreidentity.Subject {
@@ -966,20 +840,9 @@ func (s *Console) listConsoleChatMessages(r *http.Request, subject *coreidentity
 }
 
 func workspaceChatSessionToConsoleDTO(session workspace.ChatSession) consoleChatSessionDTO {
-	// 应用会话对使用侧脱敏:不回传底层模型与分组信息。
-	if session.TargetType == "app" {
-		session.ModelCode = ""
-		session.GroupID = ""
-		session.GroupName = ""
-		session.BillingGroupLabel = ""
-	}
 	return consoleChatSessionDTO{
 		ID:                session.ID,
 		Title:             session.Title,
-		TargetType:        session.TargetType,
-		AgentID:           session.AgentID,
-		AgentName:         session.AgentName,
-		Variables:         session.Variables,
 		ModelCode:         session.ModelCode,
 		GroupID:           session.GroupID,
 		GroupName:         session.GroupName,

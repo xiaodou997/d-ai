@@ -17,8 +17,8 @@ describe("useCustomerUsage", () => {
     const records = Array.from({ length: 25 }, (_, index) => customerRow(
       `request-${index + 1}`,
       index === 14
-        ? { request_status: "failed", app_name: "Beta App", error_message: "quota exceeded" }
-        : { request_status: "success", app_name: "Alpha App" }
+        ? { request_status: "failed", model_code: "beta-model", error_message: "quota exceeded" }
+        : { request_status: "success", model_code: "alpha-model" }
     ));
     const api = fakeApi();
     api.listRecords.mockResolvedValue(customerResponse(records));

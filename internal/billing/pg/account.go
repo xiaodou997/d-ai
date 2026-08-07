@@ -141,7 +141,7 @@ func (r *AccountRepository) GetUserBalance(userID string, detail bool) (*Balance
 	var frozen, debt int64
 	if err := r.pool.QueryRow(ctx, `
 		SELECT COALESCE(frozen_credits, 0), COALESCE(current_overdraft, 0)
-		FROM iam_users WHERE user_id = $1
+		FROM iam_accounts WHERE user_id = $1 AND user_type = 4
 	`, userID).Scan(&frozen, &debt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, domain.ErrAccountNotFound
@@ -241,7 +241,7 @@ func (r *AccountRepository) ListTransactions(p ListTransactionsParams) ([]EventR
 	base := `
 		FROM bill_events dt
 		LEFT JOIN iam_tenants t ON t.tenant_id = dt.tenant_id
-		LEFT JOIN iam_users eu ON eu.user_id = dt.user_id
+		LEFT JOIN iam_accounts eu ON eu.user_id = dt.user_id AND eu.user_type = 4
 		WHERE dt.event_type = 'charge'`
 
 	var args []any
@@ -367,7 +367,7 @@ func (r *AccountRepository) ListRechargeRecords(
 
 	base := `
 		FROM bill_recharge_orders r
-		LEFT JOIN iam_users eu ON eu.user_id = r.user_id
+		LEFT JOIN iam_accounts eu ON eu.user_id = r.user_id AND eu.user_type = 4
 		LEFT JOIN iam_tenants t ON t.tenant_id = r.tenant_id
 		WHERE 1=1`
 
@@ -460,7 +460,7 @@ func (r *AccountRepository) GetAccountStats(tenantID string) (*AccountStatsResul
 	var userDeductionMicro int64
 	err := r.pool.QueryRow(ctx, `
 			SELECT
-			  (SELECT COUNT(*) FROM iam_users WHERE tenant_id = $1)::bigint,
+			  (SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4)::bigint,
 			  (SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1)::bigint,
 			  COALESCE((SELECT SUM(user_credits) FROM bill_events WHERE tenant_id = $1 AND status = 'succeeded' AND event_type = 'charge'), 0)::bigint
 		`, tenantID).Scan(&result.EndUserCount, &result.InviteCodeCount, &userDeductionMicro)

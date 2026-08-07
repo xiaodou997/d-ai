@@ -427,7 +427,6 @@ func main() {
 	)
 
 	// Runtime engine + gateway
-	runtimeInvokeExpander := coreruntime.NewInvokeExpander(aiadapters.NewApplicationRuntimeRepo(pool))
 	runtimeEngine := gateway.NewRuntimeEngine(pipeline)
 	taskAdmission := serving.NewAdmissionGate(
 		quotaCheckStep, subscriptionGateStep, routeCandidatesStep, billingGuardStep,
@@ -446,7 +445,7 @@ func main() {
 	}, asynctask.Deps{
 		Pool:         pool,
 		Logger:       appLogger,
-		Subjects:     gateway.NewTaskSubjectResolver(q, runtimeInvokeExpander),
+		Subjects:     gateway.NewTaskSubjectResolver(q),
 		RedactDetail: serving.RedactInternalErrorDetail,
 	})
 	if asynctaskErr != nil {
@@ -454,17 +453,15 @@ func main() {
 	}
 
 	var runtimeGateway = gateway.New(gateway.Deps{
-		Logger:                appLogger,
-		Postgres:              pool,
-		Pipeline:              pipeline,
-		Queries:               q,
-		APIKeyCache:           apiKeyCache,
-		BanChecker:            banChecker,
-		RuntimeInvokeExpander: runtimeInvokeExpander,
-		RuntimeEngine:         runtimeEngine,
-		AsyncTasks:            asyncTasks,
-		TaskAdmission:         taskAdmission,
-		TaskInvokeExpander:    runtimeInvokeExpander,
+		Logger:        appLogger,
+		Postgres:      pool,
+		Pipeline:      pipeline,
+		Queries:       q,
+		APIKeyCache:   apiKeyCache,
+		BanChecker:    banChecker,
+		RuntimeEngine: runtimeEngine,
+		AsyncTasks:    asyncTasks,
+		TaskAdmission: taskAdmission,
 	})
 	runtimeGateway.RegisterTaskHandlers(asyncTasks)
 

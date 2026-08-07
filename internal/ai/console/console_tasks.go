@@ -210,15 +210,14 @@ func portalTaskRegistryTypes(wireType string) ([]string, error) {
 	case "":
 		return []string{
 			consoleImageGenerationTaskType, consoleImageEditTaskType,
-			"api.images.generation", "api.images.edit", "app.images.generation", "app.images.edit",
-			"api.chat.completions", "app.chat.completions",
+			"api.images.generation", "api.images.edit", "api.chat.completions",
 		}, nil
 	case "images.generation":
-		return []string{consoleImageGenerationTaskType, "api.images.generation", "app.images.generation"}, nil
+		return []string{consoleImageGenerationTaskType, "api.images.generation"}, nil
 	case "images.edit":
-		return []string{consoleImageEditTaskType, "api.images.edit", "app.images.edit"}, nil
+		return []string{consoleImageEditTaskType, "api.images.edit"}, nil
 	case "chat.completions":
-		return []string{"api.chat.completions", "app.chat.completions"}, nil
+		return []string{"api.chat.completions"}, nil
 	default:
 		return nil, asynctask.Errorf(http.StatusBadRequest, "unsupported_task_type", "task type is not supported")
 	}
@@ -226,11 +225,11 @@ func portalTaskRegistryTypes(wireType string) ([]string, error) {
 
 func portalTaskWireType(registryType string) (string, bool) {
 	switch registryType {
-	case consoleImageGenerationTaskType, "api.images.generation", "app.images.generation":
+	case consoleImageGenerationTaskType, "api.images.generation":
 		return "images.generation", true
-	case consoleImageEditTaskType, "api.images.edit", "app.images.edit":
+	case consoleImageEditTaskType, "api.images.edit":
 		return "images.edit", true
-	case "api.chat.completions", "app.chat.completions":
+	case "api.chat.completions":
 		return "chat.completions", true
 	default:
 		return "", false
@@ -279,14 +278,10 @@ func portalCanManageTask(viewer coreidentity.Subject, view asynctask.TaskView) b
 }
 
 func portalTaskSource(registryType string) string {
-	switch {
-	case strings.HasPrefix(registryType, "console."):
+	if strings.HasPrefix(registryType, "console.") {
 		return "portal"
-	case strings.HasPrefix(registryType, "app."):
-		return "app_key"
-	default:
-		return "api_key"
 	}
+	return "api_key"
 }
 
 func portalTaskResultSummary(raw json.RawMessage) *portalTaskResultSummaryDTO {

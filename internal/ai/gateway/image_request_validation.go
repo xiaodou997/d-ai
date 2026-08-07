@@ -8,6 +8,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strconv"
 	"strings"
 
@@ -273,7 +274,7 @@ func rewriteOpenAIImageMultipart(body []byte, contentType string) ([]byte, strin
 			_ = part.Close()
 			continue
 		}
-		header := cloneRunMIMEHeader(part.Header)
+		header := cloneMIMEHeader(part.Header)
 		dst, err := writer.CreatePart(header)
 		if err != nil {
 			_ = part.Close()
@@ -317,90 +318,6 @@ func imageCountFromAny(value any) (int, bool) {
 	}
 }
 
-func decodeRunImageGenerationRequestBody(body []byte) (runImageGenerationRequest, error) {
-	if err := rejectAppRunPromptJSON(body); err != nil {
-		return runImageGenerationRequest{}, err
-	}
-	body, _, err := normalizeOpenAIImageRequest(body, "application/json")
-	if err != nil {
-		return runImageGenerationRequest{}, err
-	}
-	var req runImageGenerationRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		return runImageGenerationRequest{}, err
-	}
-	req.Input = strings.TrimSpace(req.Input)
-	return req, nil
-}
-
-func decodeAppRunImageEditRequestBody(body []byte, contentType string) (imageedit.Request, map[string]string, error) {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		return imageedit.Request{}, nil, &serving.APIError{
-			Status: http.StatusBadRequest, Code: "invalid_request_error", Message: "a valid Content-Type is required",
-		}
-	}
-
-	var input string
-	var variables map[string]string
-	switch mediaType {
-	case imageedit.TransportJSON:
-		if err := rejectAppRunPromptJSON(body); err != nil {
-			return imageedit.Request{}, nil, err
-		}
-		var metadata struct {
-			Input     string            `json:"input"`
-			Variables map[string]string `json:"variables"`
-		}
-		if err := json.Unmarshal(body, &metadata); err != nil {
-			return imageedit.Request{}, nil, err
-		}
-		input = strings.TrimSpace(metadata.Input)
-		variables = metadata.Variables
-	case imageedit.TransportMultipart:
-		fields, err := formats.MultipartScalarFields(body, contentType, 1<<20)
-		if err != nil {
-			return imageedit.Request{}, nil, err
-		}
-		if _, exists := fields["prompt"]; exists {
-			return imageedit.Request{}, nil, appRunPromptFieldError()
-		}
-		input = strings.TrimSpace(fields["input"])
-		variables = decodeStringMap(fields["variables"])
-	default:
-		return imageedit.Request{}, nil, &serving.APIError{
-			Status: http.StatusBadRequest, Code: "invalid_request_error", Message: "application/json or multipart/form-data is required",
-		}
-	}
-	if input == "" {
-		return imageedit.Request{}, nil, errRunInputRequired
-	}
-	req, err := decodeRunImageEditRequestBody(body, contentType)
-	if err != nil {
-		return imageedit.Request{}, nil, err
-	}
-	req.Prompt = input
-	return req, variables, nil
-}
-
-func rejectAppRunPromptJSON(body []byte) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
-		return nil
-	}
-	if _, exists := fields["prompt"]; exists {
-		return appRunPromptFieldError()
-	}
-	return nil
-}
-
-func appRunPromptFieldError() error {
-	return &serving.APIError{
-		Status: http.StatusBadRequest, Code: "invalid_request_error",
-		Message: "prompt is not supported for app runs; use input",
-	}
-}
-
 func decodeRunImageEditRequestBody(body []byte, contentType string) (imageedit.Request, error) {
 	if err := validateOpenAIImageInputLimits(body, contentType); err != nil {
 		return imageedit.Request{}, err
@@ -414,6 +331,14 @@ func decodeRunImageEditRequestBody(body []byte, contentType string) (imageedit.R
 		}
 	}
 	return req, nil
+}
+
+func cloneMIMEHeader(h textproto.MIMEHeader) textproto.MIMEHeader {
+	out := make(textproto.MIMEHeader, len(h))
+	for key, values := range h {
+		out[key] = append([]string(nil), values...)
+	}
+	return out
 }
 
 func unsupportedOpenAIImageOptionError(message string) error {

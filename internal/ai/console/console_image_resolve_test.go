@@ -30,10 +30,9 @@ func TestDecodeConsoleImageMultipartSubmissionPersistsSelfContainedEdit(t *testi
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	fields := map[string]string{
-		"model":     "gpt-image-1",
-		"group_id":  "group-1",
-		"prompt":    "retouch",
-		"variables": `{"tone":"warm"}`,
+		"model":    "gpt-image-1",
+		"group_id": "group-1",
+		"prompt":   "retouch",
 	}
 	for name, value := range fields {
 		if err := writer.WriteField(name, value); err != nil {
@@ -65,9 +64,6 @@ func TestDecodeConsoleImageMultipartSubmissionPersistsSelfContainedEdit(t *testi
 	}
 	if input.Operation != "edit" || input.Model != "gpt-image-1" || input.GroupID != "group-1" {
 		t.Fatalf("persisted routing input = %+v", input)
-	}
-	if input.Variables["tone"] != "warm" {
-		t.Fatalf("persisted variables = %#v", input.Variables)
 	}
 	request, err := imageedit.Decode(input.EditRequest, imageedit.TransportJSON)
 	if err != nil {

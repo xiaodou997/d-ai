@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"xiaodou/dai/internal/auth"
 	billingdomain "xiaodou/dai/internal/billing"
 	util "xiaodou/dai/internal/domain"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
@@ -182,6 +183,16 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 	if count > 0 {
 		return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 	}
+	initUsername := auth.NormalizeUsername(in.Body.InitUsername)
+	if strings.HasPrefix(initUsername, "u_") {
+		return nil, httpx.ErrBadRequest.WithDetail("租户用户名不能使用终端用户前缀 u_")
+	}
+	if initUsername != "" {
+		_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, initUsername).Scan(&count)
+		if count > 0 {
+			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
+		}
+	}
 
 	tenantID := "T_" + strings.ToUpper(util.GenerateRandomString(6))
 	now := billingdomain.NowUTC()
@@ -207,20 +218,20 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 
 	out := &createTenantOutput{}
 	out.Body.TenantID = tenantID
-	if in.Body.InitUsername != "" {
+	if initUsername != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		initUserID := "TU_" + uuid.New().String()[:24]
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO iam_tenant_users (user_id, tenant_id, username, password_hash, email, status, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, 'active', $6, $6)
-		`, initUserID, tenantID, in.Body.InitUsername, string(hash), in.Body.InitEmail, now); err != nil {
+				INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, user_type, status, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, 3, 'active', $6, $6)
+			`, initUserID, tenantID, initUsername, string(hash), in.Body.InitEmail, now); err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		out.Body.InitUserID = initUserID
-		out.Body.InitUsername = in.Body.InitUsername
+		out.Body.InitUsername = initUsername
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -309,6 +320,9 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
 	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = $1`, in.ID)
 	if err != nil {
+		if tenantpg.IsTenantReferenced(err) {
+			return nil, httpx.ErrConflict.WithDetail("租户仍有关联账号或业务数据，不能删除")
+		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	if deleted.RowsAffected() == 0 {
@@ -329,8 +343,7 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 		// 停用：级联停用组织用户、终端用户、冻结租户积分包
 		stmts := []string{
 			`UPDATE iam_tenants SET status = 'disabled', updated_at = $1 WHERE tenant_id = $2`,
-			`UPDATE iam_tenant_users SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND status = 'active'`,
-			`UPDATE iam_users SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND status = 'active'`,
+			`UPDATE iam_accounts SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'active'`,
 			`UPDATE bill_credit_packages SET status = 'expired', updated_at = $1 WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'available'`,
 		}
 		for _, s := range stmts {
@@ -346,38 +359,36 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 	// UnbanTenant alone only clears the tenant-level key, not these.
 	var restoredUserIDs []string
 	if in.Body.Status != "disabled" {
-		// 启用：级联恢复
-		stmts := []string{
-			`UPDATE iam_tenants SET status = 'active', updated_at = $1 WHERE tenant_id = $2`,
-			`UPDATE iam_tenant_users SET status = 'active', updated_at = $1 WHERE tenant_id = $2 AND status = 'inherited_disabled'`,
-			`UPDATE iam_users SET status = 'active', updated_at = $1 WHERE tenant_id = $2 AND status = 'inherited_disabled'`,
-			`UPDATE bill_credit_packages SET status = 'available', updated_at = $1 WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'expired'`,
+		// 启用：级联恢复，并收集需要清除用户级封禁的账号。
+		if _, err := tx.Exec(ctx, `UPDATE iam_tenants SET status = 'active', updated_at = $1 WHERE tenant_id = $2`, now, in.ID); err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
 		}
-		for i, s := range stmts {
-			if i == 1 || i == 2 {
-				rows, err := tx.Query(ctx, s+" RETURNING user_id", now, in.ID)
-				if err != nil {
-					return nil, httpx.ErrInternal.WithCause(err)
-				}
-				err = func() error {
-					defer rows.Close()
-					for rows.Next() {
-						var id string
-						if err := rows.Scan(&id); err != nil {
-							return err
-						}
-						restoredUserIDs = append(restoredUserIDs, id)
-					}
-					return rows.Err()
-				}()
-				if err != nil {
-					return nil, httpx.ErrInternal.WithCause(err)
-				}
-				continue
-			}
-			if _, err := tx.Exec(ctx, s, now, in.ID); err != nil {
+		rows, err := tx.Query(ctx, `
+			UPDATE iam_accounts SET status = 'active', updated_at = $1
+			WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'inherited_disabled'
+			RETURNING user_id
+		`, now, in.ID)
+		if err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
 				return nil, httpx.ErrInternal.WithCause(err)
 			}
+			restoredUserIDs = append(restoredUserIDs, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		rows.Close()
+		if _, err := tx.Exec(ctx, `
+			UPDATE bill_credit_packages SET status = 'available', updated_at = $1
+			WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'expired'
+		`, now, in.ID); err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

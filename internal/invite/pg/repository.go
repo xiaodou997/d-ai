@@ -227,7 +227,7 @@ func (r *InviteRepository) Delete(id int64) error {
 func (r *InviteRepository) CheckEndUserUsernameExists(username string) (bool, error) {
 	ctx := context.Background()
 	var count int64
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_users WHERE username = $1`, username).Scan(&count)
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -246,8 +246,8 @@ func (r *InviteRepository) RegisterEndUser(ctx context.Context, input EndUserReg
 
 	now := time.Now().UTC()
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO iam_users (user_id, tenant_id, username, password_hash, email, phone, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $7)
+			INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, phone, user_type, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, 4, 'active', $7, $7)
 	`, input.UserID, input.TenantID, input.Username, input.PasswordHash, input.Email, input.Phone, now); err != nil {
 		return fmt.Errorf("create end user: %w", err)
 	}

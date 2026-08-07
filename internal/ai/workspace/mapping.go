@@ -6,20 +6,6 @@ import (
 	"xiaodou/dai/internal/ai/core/surface"
 )
 
-func SessionTypeFromTargetKind(kind ThreadTargetKind) string {
-	if kind == ThreadTargetApp {
-		return "app"
-	}
-	return "model"
-}
-
-func TargetKindFromSessionType(targetType string) ThreadTargetKind {
-	if strings.TrimSpace(targetType) == "app" {
-		return ThreadTargetApp
-	}
-	return ThreadTargetModel
-}
-
 func SurfaceFromProtocol(protocol string) surface.ID {
 	switch strings.TrimSpace(protocol) {
 	case "openai_chat":

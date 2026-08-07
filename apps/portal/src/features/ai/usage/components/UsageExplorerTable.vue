@@ -65,7 +65,7 @@ function statusToneClass(status?: number | null) {
 }
 
 function requestProfileTitle(row: AdminUsageRow) {
-  return row.app_name || row.billing_group_label_snapshot || row.auth_method;
+  return row.billing_group_label_snapshot || row.auth_method;
 }
 
 function requestProfileResolution(row: AdminUsageRow) {

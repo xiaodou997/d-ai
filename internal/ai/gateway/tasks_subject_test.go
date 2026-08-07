@@ -4,32 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"xiaodou/dai/internal/ai/application"
 	"xiaodou/dai/internal/ai/asynctask"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
-	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/testsupport"
 )
-
-type taskInvokeExpanderStub struct {
-	expansion coreruntime.InvokeExpansion
-	err       error
-	scope     coreidentity.Scope
-	tenantID  string
-	userID    string
-	keyID     string
-}
-
-func (s *taskInvokeExpanderStub) ExpandByKeyID(
-	_ context.Context,
-	scope coreidentity.Scope,
-	tenantID, userID, keyID string,
-	_ coreruntime.Request,
-) (coreruntime.InvokeExpansion, error) {
-	s.scope, s.tenantID, s.userID, s.keyID = scope, tenantID, userID, keyID
-	return s.expansion, s.err
-}
 
 func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 	ctx := context.Background()
@@ -97,41 +76,5 @@ func TestTaskSubjectResolverReloadsAPIKeyAuthorization(t *testing.T) {
 	}
 	if _, err := resolver.Resolve(ctx, ref); err == nil {
 		t.Fatal("disabled API key still resolved for queued work")
-	}
-}
-
-func TestTaskSubjectResolverReloadsAppKeyAuthorization(t *testing.T) {
-	expander := &taskInvokeExpanderStub{expansion: coreruntime.InvokeExpansion{
-		Subject: coreidentity.Subject{
-			AuthMethod: coreidentity.AuthMethodInvokeKey, Scope: coreidentity.ScopeUser,
-			TenantID: "tenant-a", UserID: "user-a", InvokeKeyID: "invoke-1",
-			ForcedGroupID: "group-image", AppID: "app-image",
-		},
-		InvokeKey: application.InvokeKey{ID: "invoke-1", Status: application.StatusActive},
-		App: &application.RuntimeApp{App: application.App{
-			ID: "app-image", AppType: application.AppTypeImageGenerationAgent,
-			Status: application.StatusActive,
-		}},
-	}}
-	resolver := NewTaskSubjectResolver(nil, expander)
-	ref := asynctask.SubjectRef{
-		AuthMethod: coreidentity.AuthMethodInvokeKey,
-		TenantID:   "tenant-a", UserID: "user-a", InvokeKeyID: "invoke-1",
-	}
-
-	subject, err := resolver.Resolve(context.Background(), ref)
-	if err != nil {
-		t.Fatalf("Resolve active app key: %v", err)
-	}
-	if expander.scope != coreidentity.ScopeUser || expander.keyID != "invoke-1" {
-		t.Fatalf("ID lookup = scope %q id %q", expander.scope, expander.keyID)
-	}
-	if subject.InvokeKeyID != "invoke-1" || subject.AppID != "app-image" || subject.ForcedGroupID != "group-image" {
-		t.Fatalf("resolved app subject = %+v", subject)
-	}
-
-	expander.expansion.InvokeKey.Status = application.StatusDisabled
-	if _, err := resolver.Resolve(context.Background(), ref); err == nil {
-		t.Fatal("disabled app key still resolved for queued work")
 	}
 }

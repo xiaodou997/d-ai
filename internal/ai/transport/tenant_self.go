@@ -441,7 +441,7 @@ func registerTenantSelfUsage(api huma.API, d AIDeps) {
 		out.Body.Stats = usageStatsToDTO(page.Stats)
 		out.Body.Records = make([]tenantUsageLogDTO, 0, len(page.Records))
 		for _, record := range page.Records {
-			out.Body.Records = append(out.Body.Records, tenantUsageLogToDTO(record, tenantID))
+			out.Body.Records = append(out.Body.Records, tenantUsageLogToDTO(record))
 		}
 		return out, nil
 	})

@@ -10,8 +10,8 @@ import (
 )
 
 // BanReconciler periodically re-syncs the Redis ban keys (dai:banned:user:*,
-// dai:banned:tenant:*) against Postgres ground truth (iam_users,
-// iam_tenant_users, iam_tenants). Redis is treated as the fast-path source of
+// dai:banned:tenant:*) against Postgres ground truth (iam_accounts and
+// iam_tenants). Redis is treated as the fast-path source of
 // truth for BanUser/BanTenant/UnbanUser/UnbanTenant, but it has no built-in
 // recovery from data loss (Redis restart without AOF, a wrong snapshot
 // restore, an accidental FLUSHALL, a missed write during a network blip).
@@ -153,30 +153,22 @@ func (r *BanReconciler) reconcileSet(ctx context.Context, prefix string, truth, 
 
 func (r *BanReconciler) trueBannedUsers(ctx context.Context) (map[string]struct{}, error) {
 	out := make(map[string]struct{})
-	for _, q := range []string{
-		`SELECT user_id FROM iam_users WHERE status IN ('disabled', 'inherited_disabled', 'deleted')`,
-		`SELECT user_id FROM iam_tenant_users WHERE status IN ('disabled', 'inherited_disabled')`,
-	} {
-		rows, err := r.pool.Query(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		err = func() error {
-			defer rows.Close()
-			for rows.Next() {
-				var id string
-				if err := rows.Scan(&id); err != nil {
-					return err
-				}
-				out[id] = struct{}{}
-			}
-			return rows.Err()
-		}()
-		if err != nil {
-			return nil, err
-		}
+	rows, err := r.pool.Query(ctx, `
+		SELECT user_id FROM iam_accounts
+		WHERE status IN ('disabled', 'inherited_disabled', 'deleted')
+	`)
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = struct{}{}
+	}
+	return out, rows.Err()
 }
 
 func (r *BanReconciler) trueBannedTenants(ctx context.Context) (map[string]struct{}, error) {

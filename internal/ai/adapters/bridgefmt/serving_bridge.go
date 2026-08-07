@@ -23,7 +23,6 @@ const (
 	outboundUserAgentMaxBytes = 512
 	serviceVersion            = "1.0.0"
 	webOutboundUserAgent      = "doustack-web/" + serviceVersion
-	appOutboundUserAgent      = "doustack-app/" + serviceVersion
 )
 
 var _ serving.ProtocolBridge = (*Runtime)(nil)
@@ -364,9 +363,6 @@ func bridgeOutboundUserAgent(req *serving.Request) string {
 	if isWebRuntimeSubject(req.RuntimeSubject()) {
 		return webOutboundUserAgent
 	}
-	if isAppRuntimeSubject(req.RuntimeSubject()) {
-		return appOutboundUserAgent
-	}
 	ua := strings.TrimSpace(req.Envelope.R.Header.Get("User-Agent"))
 	if len(ua) > outboundUserAgentMaxBytes {
 		return ua[:outboundUserAgentMaxBytes]
@@ -384,13 +380,6 @@ func isWebRuntimeSubject(subject *coreidentity.Subject) bool {
 	default:
 		return false
 	}
-}
-
-func isAppRuntimeSubject(subject *coreidentity.Subject) bool {
-	if subject == nil {
-		return false
-	}
-	return subject.RequestSource == coreidentity.RequestSourceAppPreview
 }
 
 func imageBridgeRequest(req *serving.Request) bool {

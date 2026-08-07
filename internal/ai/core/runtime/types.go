@@ -29,11 +29,8 @@ type Request struct {
 	ClientSurface   surface.ID
 	RequestedModel  string
 	ResolvedModelID string
-	AppID           string
 	GroupID         string
 	ForcedGroupID   string
-	InvokeKeyID     string
-	Variables       map[string]string
 	Body            []byte
 	Stream          bool
 	ServiceTier     string

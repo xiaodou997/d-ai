@@ -72,9 +72,8 @@ func TestWorkspaceGroupSelectionSnapshotMatchesCanonicalSchema(t *testing.T) {
 
 // openWorkspaceRepoTestPool binds the workspace tests to the canonical schema
 // loaded from db/init.sql. Hand-copied TEMP tables previously stood in for the
-// real ones and silently drifted from them: the copy omitted target_kind, so
-// DeleteChatSession's real WHERE clause could not even parse and the test only
-// ever reported a column error instead of exercising ownership scoping.
+// real ones and silently drifted from them, so repository tests could pass while
+// production queries no longer matched the canonical schema.
 func openWorkspaceRepoTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 	ctx := context.Background()
@@ -94,9 +93,9 @@ func TestWorkspaceRepoDeleteChatSessionPhysicallyDeletesOwnedMessages(t *testing
 		otherSessionID = "22222222-2222-2222-2222-222222222222"
 	)
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_workspace_threads (id, owner_scope, tenant_id, user_id, target_kind, target_model_code) VALUES
-			($1::uuid, 'user', 'tenant-1', 'user-1', 'model', 'gpt-4o-mini'),
-			($2::uuid, 'user', 'tenant-1', 'user-2', 'model', 'gpt-4o-mini')
+		INSERT INTO ai_workspace_threads (id, owner_scope, tenant_id, user_id, target_model_code) VALUES
+			($1::uuid, 'user', 'tenant-1', 'user-1', 'gpt-4o-mini'),
+			($2::uuid, 'user', 'tenant-1', 'user-2', 'gpt-4o-mini')
 	`, ownedSessionID, otherSessionID); err != nil {
 		t.Fatalf("seed workspace threads: %v", err)
 	}

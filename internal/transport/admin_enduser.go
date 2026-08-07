@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"xiaodou/dai/internal/auth"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -103,7 +104,10 @@ func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, ca
 		return nil
 	}
 	var tenantID string
-	err := h.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_users WHERE user_id = $1 AND status <> 'deleted'`, userID).Scan(&tenantID)
+	err := h.pool.QueryRow(ctx, `
+		SELECT tenant_id FROM iam_accounts
+		WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'
+	`, userID).Scan(&tenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return httpx.ErrNotFound.WithDetail("用户不存在")
 	}
@@ -127,7 +131,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		tenantID = claims.TenantID
 	}
 
-	where := "WHERE eu.status <> 'deleted'"
+	where := "WHERE eu.user_type = 4 AND eu.status <> 'deleted'"
 	args := []any{}
 	idx := 1
 	if tenantID != "" {
@@ -159,7 +163,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 	}
 
 	// COUNT 与数据查询统一带上 iam_tenants 连接，使 tenant_name 过滤可用。
-	from := "FROM iam_users eu LEFT JOIN iam_tenants t ON eu.tenant_id = t.tenant_id"
+	from := "FROM iam_accounts eu LEFT JOIN iam_tenants t ON eu.tenant_id = t.tenant_id"
 
 	var total int64
 	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) "+from+" "+where, args...).Scan(&total)
@@ -231,12 +235,12 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	if claims == nil || claims.TenantID == "" {
 		return nil, httpx.ErrForbidden.WithDetail("需要租户用户身份")
 	}
-	username := strings.TrimSpace(in.Body.Username)
-	if username == "" {
+	if auth.NormalizeUsername(in.Body.Username) == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
+	username := auth.NormalizeEndUsername(in.Body.Username)
 	var exists int
-	if err := h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_users WHERE username = $1`, username).Scan(&exists); err != nil {
+	if err := h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&exists); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	if exists > 0 {
@@ -249,8 +253,8 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	userID := "U_" + strings.ToUpper(uuid.NewString()[:24])
 	now := time.Now().UTC()
 	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_users (user_id, tenant_id, username, password_hash, email, phone, internal_note, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $8)
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, phone, internal_note, user_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 4, 'active', $8, $8)
 	`, userID, claims.TenantID, username, string(hash), in.Body.Email, in.Body.Phone, strings.TrimSpace(in.Body.InternalNote), now); err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
@@ -282,12 +286,12 @@ func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInpu
 	}
 
 	result, err := h.pool.Exec(ctx, `
-		UPDATE iam_users
+		UPDATE iam_accounts
 		SET email = CASE WHEN $1 THEN NULLIF($2, '') ELSE email END,
 		    phone = CASE WHEN $3 THEN NULLIF($4, '') ELSE phone END,
 		    internal_note = CASE WHEN $5 THEN $6 ELSE internal_note END,
 		    updated_at = $7
-		WHERE user_id = $8 AND tenant_id = $9 AND status <> 'deleted'
+		WHERE user_id = $8 AND tenant_id = $9 AND user_type = 4 AND status <> 'deleted'
 	`, emailSet, email, phoneSet, phone, noteSet, internalNote, time.Now().UTC(), in.ID, claims.TenantID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -320,7 +324,7 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 		return nil, err
 	}
 	now := time.Now().UTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_users SET status = $1, updated_at = $2 WHERE user_id = $3`, in.Body.Status, now, in.ID)
+	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET status = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 4`, in.Body.Status, now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -356,7 +360,7 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	now := time.Now().UTC()
-	if _, err := h.pool.Exec(ctx, `UPDATE iam_users SET password_hash = $1, updated_at = $2 WHERE user_id = $3`, string(hash), now, in.ID); err != nil {
+	if _, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 4`, string(hash), now, in.ID); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &messageOutput{}
@@ -393,8 +397,8 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	var overdraft int64
 	err = tx.QueryRow(ctx, `
 		SELECT status, current_overdraft
-		FROM iam_users
-		WHERE user_id = $1
+		FROM iam_accounts
+		WHERE user_id = $1 AND user_type = 4
 		FOR UPDATE
 	`, in.ID).Scan(&status, &overdraft)
 	if errors.Is(err, pgx.ErrNoRows) || status == "deleted" {
@@ -428,9 +432,9 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 		return nil, httpx.ErrUnavailable.WithCause(err)
 	}
 	result, err := tx.Exec(ctx, `
-		UPDATE iam_users
+		UPDATE iam_accounts
 		SET status = 'deleted', updated_at = $1
-		WHERE user_id = $2 AND status <> 'deleted'
+		WHERE user_id = $2 AND user_type = 4 AND status <> 'deleted'
 	`, now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)

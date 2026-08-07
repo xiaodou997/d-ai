@@ -61,8 +61,8 @@ func (a *aiIdentityAdapter) CheckTenantEndUser(ctx context.Context, tenantID, us
 	var exists bool
 	if err := a.pool.QueryRow(ctx, `
 		SELECT EXISTS (
-			SELECT 1 FROM iam_users
-			WHERE tenant_id = $1 AND user_id = $2 AND status <> 'deleted'
+				SELECT 1 FROM iam_accounts
+				WHERE tenant_id = $1 AND user_id = $2 AND user_type = 4 AND status <> 'deleted'
 		)
 	`, tenantID, userID).Scan(&exists); err != nil {
 		return err

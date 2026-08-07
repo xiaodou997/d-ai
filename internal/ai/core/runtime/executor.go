@@ -24,8 +24,8 @@ type ExecutionInput struct {
 	Envelope ExecutionEnvelope
 }
 
-// Engine is the single runtime execution seam used by HTTP, run keys, console
-// calls and asynchronous replay.
+// Engine is the single runtime execution seam used by HTTP, console calls and
+// asynchronous replay.
 type Engine interface {
 	Execute(ctx context.Context, in ExecutionInput) (Result, error)
 }

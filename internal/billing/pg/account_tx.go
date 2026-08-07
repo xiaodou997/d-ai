@@ -45,7 +45,7 @@ func GetTenantAvailableBalance(ctx context.Context, tx pgx.Tx, tenantID string, 
 // 返回: available 可用积分, frozen 冻结积分
 func GetUserAvailableBalance(ctx context.Context, tx pgx.Tx, userID string, now time.Time) (available, frozen int64, err error) {
 	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(frozen_credits, 0) FROM iam_users WHERE user_id = $1 FOR UPDATE
+		SELECT COALESCE(frozen_credits, 0) FROM iam_accounts WHERE user_id = $1 AND user_type = 4 FOR UPDATE
 	`, userID).Scan(&frozen)
 	if err != nil {
 		return 0, 0, fmt.Errorf("查询用户冻结积分失败: %w", err)
@@ -92,9 +92,9 @@ func AddTenantFrozen(ctx context.Context, tx pgx.Tx, tenantID string, amount int
 // AddUserFrozen 增加用户冻结积分（事务内）
 func AddUserFrozen(ctx context.Context, tx pgx.Tx, userID string, amount int64) error {
 	result, err := tx.Exec(ctx, `
-		UPDATE iam_users
+		UPDATE iam_accounts
 		SET frozen_credits = frozen_credits + $1
-		WHERE user_id = $2
+		WHERE user_id = $2 AND user_type = 4
 	`, amount, userID)
 	if err != nil {
 		return fmt.Errorf("增加用户冻结积分失败: %w", err)
@@ -124,9 +124,9 @@ func ReduceTenantFrozen(ctx context.Context, tx pgx.Tx, tenantID string, amount 
 // ReduceUserFrozen 减少用户冻结积分（事务内）
 func ReduceUserFrozen(ctx context.Context, tx pgx.Tx, userID string, amount int64) error {
 	result, err := tx.Exec(ctx, `
-		UPDATE iam_users
+		UPDATE iam_accounts
 		SET frozen_credits = frozen_credits - $1, updated_at = now()
-		WHERE user_id = $2 AND frozen_credits >= $1
+		WHERE user_id = $2 AND user_type = 4 AND frozen_credits >= $1
 	`, amount, userID)
 	if err != nil {
 		return fmt.Errorf("减少用户冻结积分失败: %w", err)
@@ -242,7 +242,7 @@ func GetTenantOverdraft(ctx context.Context, tx pgx.Tx, tenantID string) (limit,
 func GetUserOverdraft(ctx context.Context, tx pgx.Tx, userID string) (limit, current int64, err error) {
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(overdraft_limit, 0), COALESCE(current_overdraft, 0)
-		FROM iam_users WHERE user_id = $1 FOR UPDATE
+		FROM iam_accounts WHERE user_id = $1 AND user_type = 4 FOR UPDATE
 	`, userID).Scan(&limit, &current)
 	if err != nil {
 		return 0, 0, fmt.Errorf("查询用户透支额度失败: %w", err)
@@ -275,9 +275,9 @@ func IncreaseUserOverdraft(ctx context.Context, tx pgx.Tx, userID string, amount
 		return nil
 	}
 	result, err := tx.Exec(ctx, `
-		UPDATE iam_users
+		UPDATE iam_accounts
 		SET current_overdraft = current_overdraft + $1, updated_at = now()
-		WHERE user_id = $2
+		WHERE user_id = $2 AND user_type = 4
 	`, amount, userID)
 	if err != nil {
 		return fmt.Errorf("增加用户透支额度失败: %w", err)
@@ -327,8 +327,8 @@ func DecreaseUserOverdraft(ctx context.Context, tx pgx.Tx, userID string, amount
 	}
 	var before int64
 	if err := tx.QueryRow(ctx, `
-		SELECT COALESCE(current_overdraft, 0) FROM iam_users
-		WHERE user_id = $1 FOR UPDATE
+		SELECT COALESCE(current_overdraft, 0) FROM iam_accounts
+		WHERE user_id = $1 AND user_type = 4 FOR UPDATE
 	`, userID).Scan(&before); err != nil {
 		return 0, fmt.Errorf("查询用户透支额度失败: %w", err)
 	}
@@ -340,9 +340,9 @@ func DecreaseUserOverdraft(ctx context.Context, tx pgx.Tx, userID string, amount
 		return 0, nil
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE iam_users
+		UPDATE iam_accounts
 		SET current_overdraft = current_overdraft - $1, updated_at = now()
-		WHERE user_id = $2
+		WHERE user_id = $2 AND user_type = 4
 	`, deducted, userID); err != nil {
 		return 0, fmt.Errorf("抵扣用户透支额度失败: %w", err)
 	}

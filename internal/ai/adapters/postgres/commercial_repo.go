@@ -221,9 +221,8 @@ func (r *CommercialRepo) DeleteGroup(ctx context.Context, scope commercial.Tenan
 		SELECT
 			(SELECT COUNT(*) FROM ai_user_groups WHERE group_id = $1),
 			(SELECT COUNT(*) FROM ai_api_keys WHERE group_id = $1),
-			(SELECT COUNT(DISTINCT plan_id) FROM ai_sub_plan_groups WHERE group_id = $1),
-			(SELECT COUNT(*) FROM ai_apps WHERE group_id = $1)
-	`, gid).Scan(&deps.UserBindings, &deps.APIKeyBindings, &deps.SubscriptionPlans, &deps.Applications); err != nil {
+			(SELECT COUNT(DISTINCT plan_id) FROM ai_sub_plan_groups WHERE group_id = $1)
+	`, gid).Scan(&deps.UserBindings, &deps.APIKeyBindings, &deps.SubscriptionPlans); err != nil {
 		return err
 	}
 	if deps.Total() > 0 {

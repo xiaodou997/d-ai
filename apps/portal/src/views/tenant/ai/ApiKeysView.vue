@@ -80,7 +80,7 @@ const confirmRotate = () =>
     :api="apiKeyApi"
     title="租户模型 API 密钥"
     description="用于租户自用或匿名调用场景，每个密钥绑定一个分组，并独立管理额度和限流"
-    eyebrow="智能服务 / 应用与密钥"
+    eyebrow="智能服务 / 开发接入 / API 密钥"
     :public-base-url="publicBaseUrl"
     v-bind="portalApiKeyWorkspaceIconProps"
     :status-options="statusOptions"

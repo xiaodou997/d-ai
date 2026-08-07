@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"xiaodou/dai/internal/auth"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -162,12 +164,12 @@ func (h *adminHandlers) listSystemAdmins(ctx context.Context, in *listSystemAdmi
 		idx += 2
 	}
 	var total int64
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_admins WHERE "+where, params...).Scan(&total)
+	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_accounts WHERE "+where, params...).Scan(&total)
 
 	offset := (in.Page - 1) * in.Size
 	qp := append(append([]any{}, params...), in.Size, offset)
 	rows, err := h.pool.Query(ctx,
-		fmt.Sprintf("SELECT user_id, username, email, status, created_at FROM iam_admins WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, idx, idx+1),
+		fmt.Sprintf("SELECT user_id, username, email, status, created_at FROM iam_accounts WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, idx, idx+1),
 		qp...)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -191,8 +193,15 @@ func (h *adminHandlers) listSystemAdmins(ctx context.Context, in *listSystemAdmi
 }
 
 func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemAdminInput) (*createUserOutput, error) {
+	username := auth.NormalizeUsername(in.Body.Username)
+	if username == "" {
+		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
+	}
+	if strings.HasPrefix(username, "u_") {
+		return nil, httpx.ErrBadRequest.WithDetail("管理员用户名不能使用终端用户前缀 u_")
+	}
 	var count int
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_admins WHERE username = $1", in.Body.Username).Scan(&count)
+	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)", username).Scan(&count)
 	if count > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 	}
@@ -207,21 +216,21 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 	userID := "SA_" + uuid.New().String()[:24]
 	now := billingdomain.NowUTC()
 	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_admins (user_id, username, password_hash, email, user_type, status, created_at, updated_at)
+		INSERT INTO iam_accounts (user_id, username, password_hash, email, user_type, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, 2, 'active', $5, $5)
-	`, userID, in.Body.Username, string(hash), in.Body.Email, now); err != nil {
+	`, userID, username, string(hash), in.Body.Email, now); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createUserOutput{}
 	out.Body.UserID = userID
-	out.Body.Username = in.Body.Username
+	out.Body.Username = username
 	out.Body.DefaultPassword = pass == "123456"
 	return out, nil
 }
 
 func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemAdminInput) (*successOutput, error) {
 	var userType int32
-	if err := h.pool.QueryRow(ctx, "SELECT user_type FROM iam_admins WHERE user_id = $1", in.ID).Scan(&userType); err != nil {
+	if err := h.pool.QueryRow(ctx, "SELECT user_type FROM iam_accounts WHERE user_id = $1 AND user_type IN (1, 2)", in.ID).Scan(&userType); err != nil {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	if userType != 2 {
@@ -238,10 +247,10 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 		if hash, err = bcrypt.GenerateFromPassword([]byte(in.Body.Password), bcrypt.DefaultCost); err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
-		_, err = h.pool.Exec(ctx, "UPDATE iam_admins SET email = $1, status = $2, password_hash = $3, updated_at = $4 WHERE user_id = $5",
+		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, updated_at = $4 WHERE user_id = $5 AND user_type = 2",
 			in.Body.Email, status, string(hash), now, in.ID)
 	} else {
-		_, err = h.pool.Exec(ctx, "UPDATE iam_admins SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4",
+		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 2",
 			in.Body.Email, status, now, in.ID)
 	}
 	if err != nil {
@@ -252,13 +261,13 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 
 func (h *adminHandlers) deleteSystemAdmin(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
 	var userType int32
-	if err := h.pool.QueryRow(ctx, "SELECT user_type FROM iam_admins WHERE user_id = $1", in.ID).Scan(&userType); err != nil {
+	if err := h.pool.QueryRow(ctx, "SELECT user_type FROM iam_accounts WHERE user_id = $1 AND user_type IN (1, 2)", in.ID).Scan(&userType); err != nil {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	if userType != 2 {
 		return nil, httpx.ErrForbidden.WithDetail("不允许删除超级管理员")
 	}
-	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_admins WHERE user_id = $1 AND user_type = 2`, in.ID)
+	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_accounts WHERE user_id = $1 AND user_type = 2`, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -274,14 +283,14 @@ func (h *adminHandlers) listTenantUsers(ctx context.Context, in *listTenantUsers
 	}
 	var total int64
 	offset := (in.Page - 1) * in.Size
-	countSQL := `SELECT COUNT(*) FROM iam_tenant_users WHERE tenant_id = $1`
-	querySQL := `SELECT user_id, username, email, status, created_at FROM iam_tenant_users WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+	countSQL := `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3`
+	querySQL := `SELECT user_id, username, email, status, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 	countArgs := []any{in.TenantID}
 	queryArgs := []any{in.TenantID, in.Size, offset}
 	if in.Keyword != "" {
 		kw := "%" + in.Keyword + "%"
-		countSQL = `SELECT COUNT(*) FROM iam_tenant_users WHERE tenant_id = $1 AND (username ILIKE $2 OR email ILIKE $2)`
-		querySQL = `SELECT user_id, username, email, status, created_at FROM iam_tenant_users WHERE tenant_id = $1 AND (username ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`
+		countSQL = `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2)`
+		querySQL = `SELECT user_id, username, email, status, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`
 		countArgs = []any{in.TenantID, kw}
 		queryArgs = []any{in.TenantID, kw, in.Size, offset}
 	}
@@ -303,13 +312,20 @@ func (h *adminHandlers) listTenantUsers(ctx context.Context, in *listTenantUsers
 }
 
 func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUserInput) (*createUserOutput, error) {
+	username := auth.NormalizeUsername(in.Body.Username)
+	if strings.HasPrefix(username, "u_") {
+		return nil, httpx.ErrBadRequest.WithDetail("租户用户名不能使用终端用户前缀 u_")
+	}
+	if username == "" {
+		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
+	}
 	var tenantExists int
 	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_tenants WHERE tenant_id = $1", in.Body.TenantID).Scan(&tenantExists)
 	if tenantExists == 0 {
 		return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
 	}
 	var exists int
-	_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_tenant_users WHERE username = $1`, in.Body.Username).Scan(&exists)
+	_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&exists)
 	if exists > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 	}
@@ -320,21 +336,21 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 	userID := "TU_" + uuid.New().String()[:24]
 	now := billingdomain.NowUTC()
 	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_tenant_users (user_id, tenant_id, username, password_hash, email, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 'active', $6, $6)
-	`, userID, in.Body.TenantID, in.Body.Username, string(hash), in.Body.Email, now); err != nil {
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, user_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 3, 'active', $6, $6)
+	`, userID, in.Body.TenantID, username, string(hash), in.Body.Email, now); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createUserOutput{}
 	out.Body.UserID = userID
-	out.Body.Username = in.Body.Username
+	out.Body.Username = username
 	out.Body.DefaultPassword = true
 	return out, nil
 }
 
 func (h *adminHandlers) updateTenantUserStatus(ctx context.Context, in *statusPathInput) (*successOutput, error) {
 	now := billingdomain.NowUTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_tenant_users SET status = $1, updated_at = $2 WHERE user_id = $3`, in.Body.Status, now, in.ID)
+	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET status = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 3`, in.Body.Status, now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -364,10 +380,10 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 		if hash, err = bcrypt.GenerateFromPassword([]byte(in.Body.Password), bcrypt.DefaultCost); err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
-		_, err = h.pool.Exec(ctx, "UPDATE iam_tenant_users SET email = $1, status = $2, password_hash = $3, updated_at = $4 WHERE user_id = $5",
+		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, updated_at = $4 WHERE user_id = $5 AND user_type = 3",
 			in.Body.Email, status, string(hash), now, in.ID)
 	} else {
-		_, err = h.pool.Exec(ctx, "UPDATE iam_tenant_users SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4",
+		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 3",
 			in.Body.Email, status, now, in.ID)
 	}
 	if err != nil {
@@ -390,7 +406,7 @@ func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantI
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	now := billingdomain.NowUTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_tenant_users SET password_hash = $1, updated_at = $2 WHERE user_id = $3`, string(hash), now, in.ID)
+	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 3`, string(hash), now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}

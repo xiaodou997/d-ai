@@ -626,8 +626,8 @@ func validateLeaseSubject(ctx context.Context, tx pgx.Tx, tenantID, userID strin
 		var exists bool
 		if err := tx.QueryRow(ctx, `
 			SELECT EXISTS(
-				SELECT 1 FROM iam_users
-				WHERE user_id=$1 AND tenant_id=$2 AND status='active'
+				SELECT 1 FROM iam_accounts
+				WHERE user_id=$1 AND tenant_id=$2 AND user_type=4 AND status='active'
 			)
 		`, userID, tenantID).Scan(&exists); err != nil || !exists {
 			return shared.ErrAccountNotFound
@@ -668,7 +668,7 @@ func currentTenantDebt(ctx context.Context, tx pgx.Tx, tenantID string) (int64, 
 
 func currentUserDebt(ctx context.Context, tx pgx.Tx, userID string) (int64, error) {
 	var debt int64
-	err := tx.QueryRow(ctx, `SELECT COALESCE(current_overdraft, 0) FROM iam_users WHERE user_id=$1 FOR UPDATE`, userID).Scan(&debt)
+	err := tx.QueryRow(ctx, `SELECT COALESCE(current_overdraft, 0) FROM iam_accounts WHERE user_id=$1 AND user_type=4 FOR UPDATE`, userID).Scan(&debt)
 	return debt, err
 }
 

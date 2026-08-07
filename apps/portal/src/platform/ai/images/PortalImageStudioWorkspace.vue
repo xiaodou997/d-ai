@@ -7,7 +7,7 @@ import {
   PORTAL_DEFAULT_IMAGE_ASPECT_RATIO,
   PORTAL_IMAGE_ASPECT_RATIOS,
   PORTAL_IMAGE_RESOLUTIONS
-} from "../apps/contract";
+} from "./contract";
 import { formatMultiplier } from "../utils";
 
 import PortalImageReferenceTray from "./PortalImageReferenceTray.vue";

@@ -596,7 +596,7 @@ func normalizeLimitPolicyWrite(in LimitPolicyWrite) (LimitPolicyWrite, error) {
 	in.ModelID = strings.TrimSpace(in.ModelID)
 	in.CreatedBy = strings.TrimSpace(in.CreatedBy)
 	switch in.ScopeType {
-	case LimitScopePlatform, LimitScopeTenant, LimitScopeUser, LimitScopeAPIKey, LimitScopeInvokeKey:
+	case LimitScopePlatform, LimitScopeTenant, LimitScopeUser, LimitScopeAPIKey:
 	default:
 		return LimitPolicyWrite{}, newValidationError("scope_type", "unsupported scope_type")
 	}
@@ -631,7 +631,7 @@ func normalizeLimitPolicyWrite(in LimitPolicyWrite) (LimitPolicyWrite, error) {
 func normalizeLimitPolicyFilter(filter LimitPolicyFilter) (LimitPolicyFilter, error) {
 	if filter.ScopeType != "" {
 		switch filter.ScopeType {
-		case LimitScopePlatform, LimitScopeTenant, LimitScopeUser, LimitScopeAPIKey, LimitScopeInvokeKey:
+		case LimitScopePlatform, LimitScopeTenant, LimitScopeUser, LimitScopeAPIKey:
 		default:
 			return LimitPolicyFilter{}, newValidationError("scope_type", "unsupported scope_type")
 		}

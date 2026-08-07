@@ -521,7 +521,7 @@ func registerUserSelfUsage(api huma.API, d AIDeps) {
 		out := &userUsageLogsOutput{}
 		out.Body.Items = make([]userUsageLogDTO, 0, len(rows))
 		for _, row := range rows {
-			out.Body.Items = append(out.Body.Items, userUsageLogToDTO(row, userID))
+			out.Body.Items = append(out.Body.Items, userUsageLogToDTO(row))
 		}
 		out.Body.Total = len(out.Body.Items)
 		return out, nil

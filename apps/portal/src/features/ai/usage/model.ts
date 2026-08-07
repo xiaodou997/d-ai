@@ -258,7 +258,6 @@ export function filterCustomerUsageRows(rows: CustomerUsageLog[], filters: Custo
       row.request_id,
       row.trace_id,
       row.model_code,
-      row.app_name,
       row.group_name_snapshot,
       row.billing_group_label_snapshot,
       row.error_code,

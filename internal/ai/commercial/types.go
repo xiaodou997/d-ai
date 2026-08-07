@@ -198,11 +198,10 @@ type DispatchResolution struct {
 type LimitScope string
 
 const (
-	LimitScopePlatform  LimitScope = "platform"
-	LimitScopeTenant    LimitScope = "tenant"
-	LimitScopeUser      LimitScope = "user"
-	LimitScopeAPIKey    LimitScope = "api_key"
-	LimitScopeInvokeKey LimitScope = "invoke_key"
+	LimitScopePlatform LimitScope = "platform"
+	LimitScopeTenant   LimitScope = "tenant"
+	LimitScopeUser     LimitScope = "user"
+	LimitScopeAPIKey   LimitScope = "api_key"
 )
 
 // LimitPolicy is the runtime-facing commercial throttling policy.

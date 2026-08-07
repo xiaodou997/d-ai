@@ -4,16 +4,11 @@ import {
   ChatDotRound,
   CopyDocument,
   Delete,
-  Download,
   Edit,
-  EditPen,
-  Opportunity,
   Plus,
   Promotion,
   Refresh,
-  RefreshRight,
-  Setting,
-  Upload
+  Setting
 } from "@element-plus/icons-vue";
 
 export const portalApiKeyWorkspaceIconProps = {
@@ -22,14 +17,6 @@ export const portalApiKeyWorkspaceIconProps = {
   editIcon: Edit,
   deleteIcon: Delete,
   copyIcon: CopyDocument
-};
-
-export const portalAppKeyWorkspaceIconProps = {
-  refreshIcon: Refresh,
-  createIcon: Plus,
-  copyIcon: CopyDocument,
-  editIcon: EditPen,
-  deleteIcon: Delete
 };
 
 export const portalChatWorkspaceIconProps = {
@@ -43,17 +30,7 @@ export const portalChatWorkspaceIconProps = {
   collapseClosedIcon: ArrowDown,
   settingsIcon: Setting,
   modelNoteIcon: ChatDotRound,
-  agentNoteIcon: Opportunity,
   emptyIcon: ChatDotRound
-};
-
-export const portalAppManagementIconProps = {
-  refreshIcon: RefreshRight,
-  createIcon: Plus,
-  editIcon: EditPen,
-  deleteIcon: Delete,
-  importIcon: Upload,
-  exportIcon: Download
 };
 
 export const portalImageWorkspaceIconProps = {

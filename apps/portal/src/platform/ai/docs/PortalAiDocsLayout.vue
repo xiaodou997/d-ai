@@ -20,11 +20,6 @@ const sectionLinks = computed(() =>
   }))
 );
 
-function keyBadge(keyType: PortalAiDocsSection["keyType"]) {
-  if (keyType === "rk") return "rk_";
-  if (keyType === "sk") return "sk_";
-  return "sk_ / rk_";
-}
 </script>
 
 <template>
@@ -38,10 +33,10 @@ function keyBadge(keyType: PortalAiDocsSection["keyType"]) {
         </div>
         <div class="ai-docs-header__badges">
           <span class="ai-docs-header__badge ai-docs-header__badge--scope">{{ scopeLabel }}</span>
-          <span class="ai-docs-header__badge ai-docs-header__badge--key">{{ keyBadge(currentSection.keyType) }}</span>
+          <span class="ai-docs-header__badge ai-docs-header__badge--key">sk_</span>
         </div>
       </div>
-      <nav class="ai-docs-tabs">
+      <nav v-if="sectionLinks.length > 1" class="ai-docs-tabs">
         <RouterLink
           v-for="section in sectionLinks"
           :key="section.key"
@@ -297,11 +292,6 @@ function keyBadge(keyType: PortalAiDocsSection["keyType"]) {
 :deep(.ai-docs-badge--image) {
   background: var(--ds-warning-soft);
   color: var(--ds-warning);
-}
-
-:deep(.ai-docs-badge--runkey) {
-  background: color-mix(in srgb, var(--ds-accent) 12%, var(--ds-panel));
-  color: var(--ds-accent-hover);
 }
 
 :deep(.ai-docs-badge--accent) {

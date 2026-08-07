@@ -7,35 +7,19 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"xiaodou/dai/internal/ai/application"
 	"xiaodou/dai/internal/ai/asynctask"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
-	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 )
 
 type taskSubjectResolver struct {
-	queries        *dbgen.Queries
-	invokeExpander taskRuntimeInvokeExpander
-}
-
-type taskRuntimeInvokeExpander interface {
-	ExpandByKeyID(
-		context.Context,
-		coreidentity.Scope,
-		string, string, string,
-		coreruntime.Request,
-	) (coreruntime.InvokeExpansion, error)
+	queries *dbgen.Queries
 }
 
 // NewTaskSubjectResolver builds the credential resolver used by async workers.
 // It stores no credential snapshot: every attempt reloads the current key.
-func NewTaskSubjectResolver(queries *dbgen.Queries, invokeExpander ...taskRuntimeInvokeExpander) asynctask.SubjectResolver {
-	var appExpander taskRuntimeInvokeExpander
-	if len(invokeExpander) > 0 {
-		appExpander = invokeExpander[0]
-	}
-	return &taskSubjectResolver{queries: queries, invokeExpander: appExpander}
+func NewTaskSubjectResolver(queries *dbgen.Queries) asynctask.SubjectResolver {
+	return &taskSubjectResolver{queries: queries}
 }
 
 func (r *taskSubjectResolver) Resolve(ctx context.Context, ref asynctask.SubjectRef) (coreidentity.Subject, error) {
@@ -78,43 +62,9 @@ func (r *taskSubjectResolver) Resolve(ctx context.Context, ref asynctask.Subject
 			TenantID:      ref.TenantID,
 			UserID:        ref.UserID,
 		}, nil
-	case coreidentity.AuthMethodInvokeKey:
-		if r == nil || r.invokeExpander == nil {
-			return coreidentity.Subject{}, fmt.Errorf("app key task subject resolver is not configured")
-		}
-		scope := coreidentity.ScopeTenant
-		if ref.UserID != "" {
-			scope = coreidentity.ScopeUser
-		}
-		expansion, err := r.invokeExpander.ExpandByKeyID(
-			ctx, scope, ref.TenantID, ref.UserID, ref.InvokeKeyID, coreruntime.Request{},
-		)
-		if err != nil {
-			return coreidentity.Subject{}, fmt.Errorf("load app key: %w", err)
-		}
-		if err := validateTaskInvokeExpansion(expansion); err != nil {
-			return coreidentity.Subject{}, err
-		}
-		return expansion.Subject, nil
 	default:
 		return coreidentity.Subject{}, fmt.Errorf("unsupported async task auth method %q", ref.AuthMethod)
 	}
-}
-
-func validateTaskInvokeExpansion(expansion coreruntime.InvokeExpansion) error {
-	if expansion.InvokeKey.Status != application.StatusActive {
-		return fmt.Errorf("app key is not active")
-	}
-	if expansion.InvokeKey.ExpiresAt != nil && !time.Now().Before(*expansion.InvokeKey.ExpiresAt) {
-		return fmt.Errorf("app key is expired")
-	}
-	if expansion.App == nil {
-		return fmt.Errorf("app key has no bound application")
-	}
-	if expansion.App.App.Status != application.StatusActive {
-		return fmt.Errorf("bound application is not active")
-	}
-	return nil
 }
 
 type runtimeAPIKeyRecord struct {

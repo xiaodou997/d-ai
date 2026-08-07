@@ -7,21 +7,6 @@
 BEGIN;
 
 -- Identity and tenant management
-CREATE TABLE iam_admins (
-    id BIGSERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL UNIQUE,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    email TEXT,
-    user_type INTEGER NOT NULL CHECK (user_type IN (1, 2)),
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-    last_login_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_iam_admins_status ON iam_admins (status);
-
 CREATE TABLE iam_tenants (
     id BIGSERIAL PRIMARY KEY,
     tenant_id TEXT NOT NULL UNIQUE,
@@ -39,48 +24,45 @@ CREATE TABLE iam_tenants (
 CREATE INDEX idx_iam_tenants_status ON iam_tenants (status);
 CREATE INDEX idx_iam_tenants_has_overdraft ON iam_tenants (tenant_id) WHERE current_overdraft > 0;
 
-CREATE TABLE iam_tenant_users (
+CREATE TABLE iam_accounts (
     id BIGSERIAL PRIMARY KEY,
     user_id TEXT NOT NULL UNIQUE,
-    tenant_id TEXT NOT NULL,
-    username TEXT NOT NULL UNIQUE,
+    tenant_id TEXT REFERENCES iam_tenants (tenant_id),
+    username TEXT NOT NULL CHECK (username <> '' AND username = btrim(username)),
     password_hash TEXT NOT NULL,
     email TEXT,
     phone TEXT,
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'inherited_disabled')),
-    last_login_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (tenant_id, username)
-);
-
-CREATE INDEX idx_iam_tenant_users_tenant ON iam_tenant_users (tenant_id);
-CREATE INDEX idx_iam_tenant_users_status ON iam_tenant_users (status);
-
-CREATE TABLE iam_users (
-    id BIGSERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL UNIQUE,
-    tenant_id TEXT NOT NULL,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
+    user_type INTEGER NOT NULL CHECK (user_type IN (1, 2, 3, 4)),
     internal_note TEXT NOT NULL DEFAULT '',
     nickname TEXT,
     avatar TEXT,
     frozen_credits BIGINT NOT NULL DEFAULT 0 CHECK (frozen_credits >= 0),
     overdraft_limit BIGINT NOT NULL DEFAULT 0 CHECK (overdraft_limit >= 0),
     current_overdraft BIGINT NOT NULL DEFAULT 0 CHECK (current_overdraft >= 0),
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'locked', 'inherited_disabled', 'deleted')),
+    status TEXT NOT NULL DEFAULT 'active',
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (tenant_id, username)
+    CONSTRAINT iam_accounts_tenant_pairing_check CHECK (
+        (user_type IN (1, 2) AND tenant_id IS NULL)
+        OR (user_type IN (3, 4) AND tenant_id IS NOT NULL)
+    ),
+    CONSTRAINT iam_accounts_username_namespace_check CHECK (
+        (user_type = 4 AND char_length(username) > 2 AND username LIKE 'u\_%' ESCAPE '\')
+        OR (user_type <> 4 AND username NOT LIKE 'u\_%' ESCAPE '\')
+    ),
+    CONSTRAINT iam_accounts_status_check CHECK (
+        (user_type IN (1, 2) AND status IN ('active', 'disabled'))
+        OR (user_type = 3 AND status IN ('active', 'disabled', 'inherited_disabled'))
+        OR (user_type = 4 AND status IN ('active', 'disabled', 'locked', 'inherited_disabled', 'deleted'))
+    )
 );
 
-CREATE INDEX idx_iam_users_tenant ON iam_users (tenant_id);
-CREATE INDEX idx_iam_users_status ON iam_users (status);
-CREATE INDEX idx_iam_users_has_overdraft ON iam_users (user_id) WHERE current_overdraft > 0;
+CREATE UNIQUE INDEX ux_iam_accounts_username_normalized ON iam_accounts (lower(username));
+CREATE INDEX idx_iam_accounts_tenant_type ON iam_accounts (tenant_id, user_type);
+CREATE INDEX idx_iam_accounts_type_status ON iam_accounts (user_type, status);
+CREATE INDEX idx_iam_accounts_has_overdraft ON iam_accounts (user_id)
+    WHERE user_type = 4 AND current_overdraft > 0;
 
 CREATE TABLE iam_invitation_codes (
     id BIGSERIAL PRIMARY KEY,
@@ -1001,24 +983,17 @@ CREATE INDEX idx_ledger_credit_leases_account
     owner_scope        TEXT        NOT NULL CHECK (owner_scope IN ('tenant', 'user')),
     tenant_id          TEXT        NOT NULL,
     user_id            TEXT        NOT NULL DEFAULT '',
-    target_kind        TEXT        NOT NULL CHECK (target_kind IN ('model', 'app')),
     target_model_code  TEXT        NOT NULL DEFAULT '',
     selected_group_id  UUID,
     selected_group_name_snapshot TEXT NOT NULL DEFAULT '',
     selected_effective_user_multiplier_snapshot NUMERIC(10,4),
-    app_id             UUID,
     title              TEXT        NOT NULL DEFAULT '新对话',
-    variables_json     JSONB       NOT NULL DEFAULT '{}',
     selected_surface   TEXT,
     selected_route_id  UUID,
     status             TEXT        NOT NULL DEFAULT 'active',
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (
-      (target_kind = 'model' AND target_model_code <> '' AND app_id IS NULL)
-      OR
-      (target_kind = 'app' AND app_id IS NOT NULL)
-    )
+    CHECK (target_model_code <> '')
   );
 
   CREATE INDEX IF NOT EXISTS idx_ai_workspace_threads_owner
@@ -1068,13 +1043,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     effective_user_multiplier_snapshot NUMERIC(10,4),
     billing_group_label_snapshot TEXT NOT NULL DEFAULT '',
     model_code             TEXT        NOT NULL,
-    -- 应用调用快照：app_id 非空表示本次请求经由智能应用发起；
-    -- 使用记录对非应用所有者展示 app_name_snapshot 并隐去模型/分组细节。
-    app_id                 UUID,
-    app_name_snapshot      TEXT        NOT NULL DEFAULT '',
-    app_owner_type_snapshot TEXT       NOT NULL DEFAULT '',
-    app_owner_tenant_id_snapshot TEXT  NOT NULL DEFAULT '',
-    app_owner_user_id_snapshot TEXT    NOT NULL DEFAULT '',
     requested_model        TEXT        NOT NULL DEFAULT '',
     matched_dispatch_rule_id UUID,
     matched_dispatch_rule_summary TEXT,
@@ -1188,7 +1156,6 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_group_time        ON ai_usage_logs (group_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_model_time        ON ai_usage_logs (model_code, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_source_time       ON ai_usage_logs (request_source, created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_app_time          ON ai_usage_logs (app_id, created_at DESC) WHERE app_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_subscription      ON ai_usage_logs (subscription_id, created_at DESC) WHERE subscription_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_billing_event   ON ai_usage_logs (billing_event_id);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_route             ON ai_usage_logs (group_target_id);
@@ -1249,155 +1216,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     ON ai_usage_rollups_hourly (tenant_id, bucket_start DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_rollups_hourly_tenant_user_time
     ON ai_usage_rollups_hourly (tenant_id, user_id, bucket_start DESC);
-
-  -- ============================================================================
-  -- AI App Layer: Prompts / Internal Revisions
-  -- 管理接口只暴露当前提示词，不提供用户侧版本管理。内部修订不可变，
-  -- 用于审计和异步任务快照；应用运行时始终读取 current_version。
-  -- ============================================================================
-  CREATE TABLE IF NOT EXISTS ai_app_prompts (
-    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_type        TEXT        NOT NULL CHECK (owner_type IN ('tenant', 'user')),
-    owner_tenant_id   TEXT        NOT NULL DEFAULT '',
-    owner_user_id     TEXT        NOT NULL DEFAULT '',
-    name              TEXT        NOT NULL,
-    description       TEXT        NOT NULL DEFAULT '',
-    status            TEXT        NOT NULL DEFAULT 'active',
-    current_version   INTEGER     NOT NULL DEFAULT 1 CHECK (current_version > 0),
-    created_by        TEXT,
-    updated_by        TEXT,
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ai_app_prompts_name_unique UNIQUE (owner_type, owner_tenant_id, owner_user_id, name),
-    CONSTRAINT ai_app_prompts_owner_scope_ck
-      CHECK (
-        (owner_type = 'tenant' AND owner_tenant_id <> '' AND owner_user_id = '')
-        OR (owner_type = 'user' AND owner_tenant_id <> '' AND owner_user_id <> '')
-      )
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_ai_app_prompts_status_time
-    ON ai_app_prompts (owner_type, owner_tenant_id, owner_user_id, status, updated_at DESC);
-
-  CREATE TABLE IF NOT EXISTS ai_app_prompt_versions (
-    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    prompt_id         UUID        NOT NULL,
-    version           INTEGER     NOT NULL CHECK (version > 0),
-    template_text     TEXT        NOT NULL,
-    variables         JSONB       NOT NULL DEFAULT '[]',
-    notes             TEXT        NOT NULL DEFAULT '',
-    created_by        TEXT,
-    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ai_app_prompt_versions_unique UNIQUE (prompt_id, version)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_ai_app_prompt_versions_prompt_time
-    ON ai_app_prompt_versions (prompt_id, version DESC);
-
-  -- ============================================================================
-  -- AI App Layer: Apps / Prompt Bindings
-  -- capability 决定模型调用形态；prompt_strategy 决定 input 的提示词解析方式。
-  -- 应用只绑定逻辑提示词，运行时始终读取当前修订并为单次调用冻结快照。
-  -- 归属两级：tenant / user；租户向本租户用户开放走 ai_app_publications，
-  -- 应用自身不再携带 visibility。
-  -- ============================================================================
-  CREATE TABLE IF NOT EXISTS ai_apps (
-    id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_type         TEXT        NOT NULL CHECK (owner_type IN ('tenant', 'user')),
-    owner_tenant_id    TEXT        NOT NULL DEFAULT '',
-    owner_user_id      TEXT        NOT NULL DEFAULT '',
-    name               TEXT        NOT NULL,
-    description        TEXT        NOT NULL DEFAULT '',
-    status             TEXT        NOT NULL DEFAULT 'active',
-    capability         TEXT        NOT NULL,
-    prompt_strategy    TEXT        NOT NULL,
-    group_id           UUID,
-    model_code         TEXT        NOT NULL,
-    default_options    JSONB       NOT NULL DEFAULT '{}',
-    created_by         TEXT,
-    updated_by         TEXT,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ai_apps_name_unique UNIQUE (owner_type, owner_tenant_id, owner_user_id, name),
-    CONSTRAINT ai_apps_owner_scope_ck
-      CHECK (
-        (owner_type = 'tenant' AND owner_tenant_id <> '' AND owner_user_id = '')
-        OR (owner_type = 'user' AND owner_tenant_id <> '' AND owner_user_id <> '')
-      )
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_ai_apps_group
-    ON ai_apps (group_id, status);
-
-  CREATE INDEX IF NOT EXISTS idx_ai_apps_status_time
-    ON ai_apps (owner_type, owner_tenant_id, owner_user_id, status, updated_at DESC);
-
-  CREATE TABLE IF NOT EXISTS ai_app_prompt_bindings (
-    app_id          UUID        NOT NULL,
-    prompt_id       UUID        NOT NULL,
-    binding_role    TEXT        NOT NULL CHECK (binding_role IN ('primary', 'fragment')),
-    display_order   INTEGER     NOT NULL DEFAULT 0 CHECK (display_order >= 0),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (app_id, prompt_id)
-  );
-
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_app_prompt_bindings_primary
-    ON ai_app_prompt_bindings (app_id)
-    WHERE binding_role = 'primary';
-  CREATE INDEX IF NOT EXISTS idx_ai_app_prompt_bindings_prompt
-    ON ai_app_prompt_bindings (prompt_id, app_id);
-
-  -- ============================================================================
-  -- AI App Layer: Publications（租户向本租户用户发布应用）
-  -- ============================================================================
-  CREATE TABLE IF NOT EXISTS ai_app_publications (
-    id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    app_id              UUID        NOT NULL,
-    publisher_scope     TEXT        NOT NULL DEFAULT 'tenant',
-    publisher_tenant_id TEXT        NOT NULL,
-    audience            TEXT        NOT NULL DEFAULT 'tenant_users',
-    status              TEXT        NOT NULL DEFAULT 'active',
-    created_by          TEXT,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (app_id, publisher_scope, publisher_tenant_id),
-    CONSTRAINT ai_app_publications_scope_ck
-      CHECK (
-        publisher_tenant_id <> ''
-      )
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_ai_app_publications_app
-    ON ai_app_publications (app_id, status);
-  CREATE INDEX IF NOT EXISTS idx_ai_app_publications_publisher
-    ON ai_app_publications (publisher_scope, publisher_tenant_id, status);
-
-  -- ============================================================================
-  -- AI App Layer: App Keys
-  -- 最小权限密钥：每把密钥只能调用其绑定的那一个已发布应用，不支持直绑裸模型
-  -- （直接调模型请使用 API Key）。归属严格落在 tenant / user，自身不存计费逻辑；
-  -- 运行时展开后复用现有链路。key_ciphertext 与 ai_api_keys 一致，使用同一套
-  -- AES-GCM 工具加解密，支持多次查看明文与轮换。
-  -- ============================================================================
-  CREATE TABLE IF NOT EXISTS ai_app_keys (
-    id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    owner_type         TEXT        NOT NULL CHECK (owner_type IN ('tenant', 'user')),
-    tenant_id          TEXT        NOT NULL,
-    user_id            TEXT        NOT NULL DEFAULT '',
-    name               TEXT        NOT NULL,
-    key_hash           TEXT        NOT NULL UNIQUE,
-    key_ciphertext     TEXT        NOT NULL,
-    last_four          TEXT        NOT NULL,
-    status             TEXT        NOT NULL DEFAULT 'active',
-    app_id             UUID        NOT NULL,
-    expires_at         TIMESTAMPTZ,
-    created_by         TEXT,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_ai_app_keys_owner_time
-    ON ai_app_keys (owner_type, tenant_id, user_id, updated_at DESC);
 
   -- ============================================================================
   -- AI Runtime Limit Policies (限流策略，按主体生效：tenant/user/api_key)
@@ -1467,7 +1285,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     -- 改动的分组授权，对排队中的任务同样生效。
     -- auth_method 逐字存 identity.AuthMethod 枚举值，不另造同义词。
     auth_method        TEXT        NOT NULL DEFAULT 'jwt',
-    invoke_key_id      UUID,
     -- 租约：持有者定期续期，过期才允许被别的实例接管。
     worker_id          TEXT,
     lease_expires_at   TIMESTAMPTZ,
@@ -2163,6 +1980,6 @@ CREATE TABLE dai_schema_metadata (
     initialized_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 7);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 9);
 
 COMMIT;

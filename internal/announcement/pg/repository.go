@@ -466,21 +466,15 @@ type rowQuerier interface {
 func countAudience(ctx context.Context, tx rowQuerier, id string) (int64, error) {
 	var count int64
 	err := tx.QueryRow(ctx, `
-		SELECT COUNT(*) FROM (
-			SELECT a.user_id FROM iam_admins a
-			WHERE a.status='active' AND EXISTS (
-				SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=$1 AND aa.audience_kind='admin' AND aa.scope_type='all')
-			UNION ALL
-			SELECT u.user_id FROM iam_tenant_users u
-			WHERE u.status='active' AND EXISTS (
-				SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=$1 AND aa.audience_kind='tenant_user'
-				AND (aa.scope_type='all' OR aa.tenant_id=u.tenant_id))
-			UNION ALL
-			SELECT u.user_id FROM iam_users u
-			WHERE u.status='active' AND EXISTS (
-				SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=$1 AND aa.audience_kind='end_user'
-				AND (aa.scope_type='all' OR aa.tenant_id=u.tenant_id))
-		) recipients
+		SELECT COUNT(*) FROM iam_accounts u
+		WHERE u.status = 'active' AND EXISTS (
+			SELECT 1 FROM ann_audiences aa
+			WHERE aa.announcement_id = $1 AND (
+				(u.user_type IN (1, 2) AND aa.audience_kind = 'admin' AND aa.scope_type = 'all')
+				OR (u.user_type = 3 AND aa.audience_kind = 'tenant_user' AND (aa.scope_type = 'all' OR aa.tenant_id = u.tenant_id))
+				OR (u.user_type = 4 AND aa.audience_kind = 'end_user' AND (aa.scope_type = 'all' OR aa.tenant_id = u.tenant_id))
+			)
+		)
 	`, id).Scan(&count)
 	return count, err
 }
@@ -557,23 +551,16 @@ const inboxSelect = `SELECT a.announcement_id, a.publisher_type, COALESCE(a.publ
 	r.read_at`
 
 const recipientCTE = `WITH recipients AS (
-	SELECT a.user_type, a.user_id, ''::text AS tenant_id, a.username, COALESCE(a.email, '') AS email
-	FROM iam_admins a
-	WHERE a.status='active' AND EXISTS (
-		SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=$1
-		AND aa.audience_kind='admin' AND aa.scope_type='all')
-	UNION ALL
-	SELECT 3, u.user_id, u.tenant_id, u.username, COALESCE(u.email, '')
-	FROM iam_tenant_users u
-	WHERE u.status='active' AND EXISTS (
-		SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=$1
-		AND aa.audience_kind='tenant_user' AND (aa.scope_type='all' OR aa.tenant_id=u.tenant_id))
-	UNION ALL
-	SELECT 4, u.user_id, u.tenant_id, u.username, COALESCE(u.email, '')
-	FROM iam_users u
-	WHERE u.status='active' AND EXISTS (
-		SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=$1
-		AND aa.audience_kind='end_user' AND (aa.scope_type='all' OR aa.tenant_id=u.tenant_id))
+	SELECT u.user_type, u.user_id, COALESCE(u.tenant_id, ''), u.username, COALESCE(u.email, '')
+	FROM iam_accounts u
+	WHERE u.status = 'active' AND EXISTS (
+		SELECT 1 FROM ann_audiences aa
+		WHERE aa.announcement_id = $1 AND (
+			(u.user_type IN (1, 2) AND aa.audience_kind = 'admin' AND aa.scope_type = 'all')
+			OR (u.user_type = 3 AND aa.audience_kind = 'tenant_user' AND (aa.scope_type = 'all' OR aa.tenant_id = u.tenant_id))
+			OR (u.user_type = 4 AND aa.audience_kind = 'end_user' AND (aa.scope_type = 'all' OR aa.tenant_id = u.tenant_id))
+		)
+	)
 )`
 
 type scanner interface {

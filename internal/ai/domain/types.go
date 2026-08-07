@@ -111,11 +111,9 @@ const (
 type RequestSource string
 
 const (
-	RequestSourceAPIKey     RequestSource = "api_key"
-	RequestSourceWebChat    RequestSource = "web_chat"
-	RequestSourceWebImage   RequestSource = "web_image"
-	RequestSourceAppPreview RequestSource = "app_preview"
-	RequestSourceRunKey     RequestSource = "run_key"
+	RequestSourceAPIKey   RequestSource = "api_key"
+	RequestSourceWebChat  RequestSource = "web_chat"
+	RequestSourceWebImage RequestSource = "web_image"
 )
 
 const (
@@ -139,7 +137,6 @@ type JWTClaims struct {
 	Username string
 	UserType int // 1=platform, 2=admin, other=tenant user
 	TenantID string
-	AppKey   string
 }
 
 func (c JWTClaims) IsPlatformAdmin() bool { return c.UserType == 1 || c.UserType == 2 }

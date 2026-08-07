@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"xiaodou/dai/internal/auth"
 	shared "xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/invite/pg"
 
@@ -265,11 +266,11 @@ func normalizeInvitationCodeChecked(code string) (string, error) {
 }
 
 func normalizeUsername(username string) (string, error) {
-	normalized := strings.TrimSpace(username)
+	normalized := auth.NormalizeUsername(username)
 	if normalized == "" {
 		return "", ErrInvalidUsername
 	}
-	return normalized, nil
+	return auth.NormalizeEndUsername(normalized), nil
 }
 
 func normalizeOptionalString(value *string) *string {

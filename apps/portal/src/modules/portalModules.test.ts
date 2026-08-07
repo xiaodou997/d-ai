@@ -44,7 +44,7 @@ describe("portal module registry", () => {
       "模型定价",
       "订阅套餐",
       "使用记录",
-      "开发中心",
+      "API 密钥",
       "账户中心"
     ]);
   });
@@ -150,6 +150,16 @@ describe("portal module registry", () => {
         active: false
       }
     ]);
+  });
+
+  it("keeps tenant and customer developer centers focused on API access", () => {
+    for (const moduleId of ["tenant-developer", "customer-developer"]) {
+      const developerModule = portalModules.find((module) => module.id === moduleId);
+      expect(developerModule?.tabs?.map(({ id, label, path }) => ({ id, label, path }))).toEqual([
+        { id: "keys", label: "API 密钥", path: "keys" },
+        { id: "tooling", label: "工具接入指南", path: "tooling" }
+      ]);
+    }
   });
 
   it("exposes tenants and end users as separate admin menus", () => {

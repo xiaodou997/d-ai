@@ -2,7 +2,6 @@ package transport
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -99,15 +98,10 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if claims == nil {
 			return nil, httpx.ErrUnauthorized
 		}
-		table, err := userTable(claims.UserType)
-		if err != nil {
-			return nil, err
-		}
-
 		var hash string
-		if qerr := d.Pool.QueryRow(ctx,
-			fmt.Sprintf("SELECT password_hash FROM %s WHERE user_id = $1", table), claims.UserID,
-		).Scan(&hash); qerr != nil {
+		if qerr := d.Pool.QueryRow(ctx, `
+				SELECT password_hash FROM iam_accounts WHERE user_id = $1 AND user_type = $2
+			`, claims.UserID, claims.UserType).Scan(&hash); qerr != nil {
 			return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
 		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Body.OldPassword)) != nil {
@@ -117,9 +111,10 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if herr != nil {
 			return nil, httpx.ErrInternal.WithCause(herr)
 		}
-		if _, uerr := d.Pool.Exec(ctx,
-			fmt.Sprintf("UPDATE %s SET password_hash = $1, updated_at = $2 WHERE user_id = $3", table),
-			string(newHash), time.Now().UTC(), claims.UserID,
+		if _, uerr := d.Pool.Exec(ctx, `
+				UPDATE iam_accounts SET password_hash = $1, updated_at = $2
+				WHERE user_id = $3 AND user_type = $4
+			`, string(newHash), time.Now().UTC(), claims.UserID, claims.UserType,
 		); uerr != nil {
 			return nil, httpx.ErrInternal.WithCause(uerr)
 		}
@@ -166,47 +161,23 @@ func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (
 }
 
 func queryCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
-	switch claims.UserType {
-	case 1, 2:
-		return queryCurrentAdminSnapshot(ctx, d, claims)
-	case 3:
-		return queryCurrentTenantUserSnapshot(ctx, d, claims)
-	case 4:
-		return queryCurrentEndUserSnapshot(ctx, d, claims)
-	default:
+	if claims.UserType < 1 || claims.UserType > 4 {
 		return currentUserSnapshot{}, httpx.ErrBadRequest.WithDetail("无效的用户类型")
 	}
-}
-
-func queryCurrentAdminSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
 	var snapshot currentUserSnapshot
 	err := d.Pool.QueryRow(ctx, `
-		SELECT user_id, username, user_type, status
-		FROM iam_admins
-		WHERE user_id = $1
-	`, claims.UserID).Scan(&snapshot.userID, &snapshot.username, &snapshot.userType, &snapshot.status)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return currentUserSnapshot{}, httpx.ErrNotFound.WithDetail("用户不存在")
-		}
-		return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
-	}
-	return snapshot, nil
-}
-
-func queryCurrentTenantUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
-	var snapshot currentUserSnapshot
-	err := d.Pool.QueryRow(ctx, `
-		SELECT u.user_id, u.username, u.tenant_id, u.status, COALESCE(t.tenant_name, '')
-		FROM iam_tenant_users u
+		SELECT u.user_id, u.username, u.user_type, COALESCE(u.tenant_id, ''),
+		       COALESCE(t.tenant_name, ''), u.status
+		FROM iam_accounts u
 		LEFT JOIN iam_tenants t ON t.tenant_id = u.tenant_id
-		WHERE u.user_id = $1
-	`, claims.UserID).Scan(
+		WHERE u.user_id = $1 AND u.user_type = $2
+	`, claims.UserID, claims.UserType).Scan(
 		&snapshot.userID,
 		&snapshot.username,
+		&snapshot.userType,
 		&snapshot.tenantID,
-		&snapshot.status,
 		&snapshot.tenantName,
+		&snapshot.status,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -214,50 +185,8 @@ func queryCurrentTenantUserSnapshot(ctx context.Context, d Deps, claims *auth.Cl
 		}
 		return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
 	}
-	snapshot.userType = 3
 	if claims.TenantID != "" && snapshot.tenantID != "" && claims.TenantID != snapshot.tenantID {
 		return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("账户信息已变更，请重新登录")
 	}
 	return snapshot, nil
-}
-
-func queryCurrentEndUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
-	var snapshot currentUserSnapshot
-	err := d.Pool.QueryRow(ctx, `
-		SELECT u.user_id, u.username, u.tenant_id, u.status, COALESCE(t.tenant_name, '')
-		FROM iam_users u
-		LEFT JOIN iam_tenants t ON t.tenant_id = u.tenant_id
-		WHERE u.user_id = $1
-	`, claims.UserID).Scan(
-		&snapshot.userID,
-		&snapshot.username,
-		&snapshot.tenantID,
-		&snapshot.status,
-		&snapshot.tenantName,
-	)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return currentUserSnapshot{}, httpx.ErrNotFound.WithDetail("用户不存在")
-		}
-		return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
-	}
-	snapshot.userType = 4
-	if claims.TenantID != "" && snapshot.tenantID != "" && claims.TenantID != snapshot.tenantID {
-		return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("账户信息已变更，请重新登录")
-	}
-	return snapshot, nil
-}
-
-// userTable 按用户类型返回承载凭证的表名。
-func userTable(userType int) (string, error) {
-	switch userType {
-	case 1, 2:
-		return "iam_admins", nil
-	case 3:
-		return "iam_tenant_users", nil
-	case 4:
-		return "iam_users", nil
-	default:
-		return "", httpx.ErrBadRequest.WithDetail("无效的用户类型")
-	}
 }

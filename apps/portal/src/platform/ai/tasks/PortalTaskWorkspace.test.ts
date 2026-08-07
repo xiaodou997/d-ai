@@ -10,7 +10,7 @@ function task(overrides: Partial<PortalTaskRecord> = {}): PortalTaskRecord {
   return {
     id: "task-1",
     type: "images.generation",
-    source: "app_key",
+    source: "api_key",
     status: "running",
     model: "image-model",
     owner: { scope: "tenant" },

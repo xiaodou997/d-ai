@@ -16,7 +16,7 @@ const emit = defineEmits<{ close: [] }>();
 const drawerOpen = computed({ get: () => props.open, set: (value) => { if (!value) emit("close"); } });
 
 function targetLabel(row: CustomerUsageLog) {
-  return row.model_code || (row.app_name ? `应用 · ${row.app_name}` : "-");
+  return row.model_code || "-";
 }
 function groupLabel(row: CustomerUsageLog) {
   return row.billing_group_label_snapshot || row.group_name_snapshot || row.group_id || "-";
@@ -39,7 +39,7 @@ function serviceTierLabel(row: CustomerUsageLog) {
           <dt>Request ID</dt><dd class="mono">{{ row.request_id }}</dd>
           <dt>Trace ID</dt><dd class="mono">{{ row.trace_id || "-" }}</dd>
           <dt>时间</dt><dd>{{ row.created_at ? new Date(row.created_at).toLocaleString("zh-CN", { hour12: false }) : "-" }}</dd>
-          <dt>模型 / 应用</dt><dd>{{ targetLabel(row) }}</dd>
+          <dt>模型</dt><dd>{{ targetLabel(row) }}</dd>
           <dt>分组</dt><dd>{{ groupLabel(row) }}</dd>
           <dt>请求倍率</dt><dd class="mono">{{ multiplierLabel(row.effective_user_multiplier_snapshot) }}</dd>
           <dt>服务档位</dt><dd>{{ serviceTierLabel(row) }}</dd>

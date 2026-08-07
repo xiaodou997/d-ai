@@ -19,7 +19,7 @@ func TestListGroupTargetDetailsAvailability(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{})
 	if err != nil {
-		t.Skipf("set AI_APP_LAYER_TEST_DATABASE_URL to run group target availability DB tests: %v", err)
+		t.Skipf("set DAI_TEST_DATABASE_URL to run group target availability DB tests: %v", err)
 	}
 	t.Cleanup(func() { _ = cleanup(ctx) })
 

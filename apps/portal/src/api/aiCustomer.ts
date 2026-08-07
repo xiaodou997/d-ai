@@ -13,11 +13,6 @@ import {
   formatCredits,
   formatWholeCredits
 } from "@/platform/ai/usage";
-import {
-  type PortalAppPreviewRequest,
-  type PortalAppPreviewResponse,
-  type PortalAppTemplateRecord
-} from "@/platform/ai/apps";
 import { type PortalImageTaskCreateResponse } from "@/platform/ai/images";
 import type {
   PortalTaskPage,
@@ -34,23 +29,11 @@ import type {
   AiApiKeyWriteRequest,
   AiGroupEffectivePricesOutput,
   AiVisibleGroupsOutput,
-  AiAppKey,
-  AiAppKeyCreatedOutput,
-  AiAppKeyRevealOutput,
-  AiAppKeysOutput,
-  AiAppKeyWriteRequest,
   AiSubPlan,
   AiSubscription,
   AiSubOrder,
   AiSubPurchaseResult,
   AiSubPage,
-  AiVisibleAgentsOutput,
-  UserAppDTO,
-  UserAppsOutputBody,
-  UserAppWriteRequest,
-  UserAppPromptDetailDTO,
-  UserAppPromptsOutputBody,
-  UserAppPromptWriteRequest,
   ChatModel,
   ConsoleImageGenerateRequest,
   ConsoleImageJob,
@@ -278,156 +261,10 @@ export const aiCustomerApi = {
       baseUrl: baseUrl(),
       signal
     });
-  },
-  listVisibleAgents() {
-    return request()<AiVisibleAgentsOutput>({
-      method: "GET",
-      path: "/api/v1/users/me/app-agents",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  listUserAppPrompts() {
-    return request()<UserAppPromptsOutputBody>({
-      method: "GET",
-      path: "/api/v1/users/me/app-layer/prompts",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  getUserAppPrompt(promptId: string) {
-    return request()<UserAppPromptDetailDTO>({
-      method: "GET",
-      path: `/api/v1/users/me/app-layer/prompts/${encodeURIComponent(promptId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  createUserAppPrompt(body: Required<Pick<UserAppPromptWriteRequest, "name" | "template_text">> & UserAppPromptWriteRequest) {
-    return request()<UserAppPromptDetailDTO>({
-      method: "POST",
-      path: "/api/v1/users/me/app-layer/prompts",
-      body,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  updateUserAppPrompt(promptId: string, body: UserAppPromptWriteRequest) {
-    return request()<UserAppPromptDetailDTO>({
-      method: "PATCH",
-      path: `/api/v1/users/me/app-layer/prompts/${encodeURIComponent(promptId)}`,
-      body,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  deleteUserAppPrompt(promptId: string) {
-    return request()<{ deleted: boolean }>({
-      method: "DELETE",
-      path: `/api/v1/users/me/app-layer/prompts/${encodeURIComponent(promptId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  listUserApps() {
-    return request()<UserAppsOutputBody>({
-      method: "GET",
-      path: "/api/v1/users/me/app-layer/agents",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-	listUserAppTemplates() {
-		return request()<{ items: PortalAppTemplateRecord[] }>({
-			method: "GET",
-			path: "/api/v1/users/me/app-layer/templates",
-			headers: headers(),
-			baseUrl: baseUrl()
-		});
-	},
-	createUserApp(body: Required<Pick<UserAppWriteRequest, "name" | "group_id" | "model_code">> & UserAppWriteRequest) {
-    return request()<UserAppDTO>({
-      method: "POST",
-      path: "/api/v1/users/me/app-layer/agents",
-      body,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  updateUserApp(agentId: string, body: UserAppWriteRequest) {
-    return request()<UserAppDTO>({
-      method: "PATCH",
-      path: `/api/v1/users/me/app-layer/agents/${encodeURIComponent(agentId)}`,
-      body,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  deleteUserApp(agentId: string) {
-    return request()<{ deleted: boolean }>({
-      method: "DELETE",
-      path: `/api/v1/users/me/app-layer/agents/${encodeURIComponent(agentId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  previewUserApp(agentId: string, body: PortalAppPreviewRequest) {
-    return runtimeTransport.request<PortalAppPreviewResponse>("POST", `${runtimeBasePath}/app-previews/${encodeURIComponent(agentId)}`, body);
-  },
-  listRunKeys() {
-    return request()<AiAppKeysOutput>({
-      method: "GET",
-      path: "/api/v1/users/me/app-keys",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  createRunKey(body: AiAppKeyWriteRequest) {
-    return request()<AiAppKeyCreatedOutput>({
-      method: "POST",
-      path: "/api/v1/users/me/app-keys",
-      body,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  updateRunKey(runKeyId: string, body: Partial<AiAppKeyWriteRequest>) {
-    return request()<AiAppKey>({
-      method: "PATCH",
-      path: `/api/v1/users/me/app-keys/${encodeURIComponent(runKeyId)}`,
-      body,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  deleteRunKey(runKeyId: string) {
-    return request()<{ deleted: boolean }>({
-      method: "DELETE",
-      path: `/api/v1/users/me/app-keys/${encodeURIComponent(runKeyId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  revealRunKey(runKeyId: string) {
-    return request()<AiAppKeyRevealOutput>({
-      method: "POST",
-      path: `/api/v1/users/me/app-keys/${encodeURIComponent(runKeyId)}/reveal`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  rotateRunKey(runKeyId: string) {
-    return request()<AiAppKeyCreatedOutput>({
-      method: "POST",
-      path: `/api/v1/users/me/app-keys/${encodeURIComponent(runKeyId)}/rotate`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
   }
 };
 
-// ==================== 应用运行层执行端点（信封 + SSE） ====================
-// 读侧列表/详情已逐步切到 workspace self API；这里只保留模型/智能体发现与真正执行链路。
+// ==================== 网页工作台执行端点（信封 + SSE） ====================
 
 export const runtimeChatApi = {
   async listModels() {

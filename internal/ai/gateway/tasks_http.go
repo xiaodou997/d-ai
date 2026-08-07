@@ -14,8 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"xiaodou/dai/internal/ai/appkey"
-	"xiaodou/dai/internal/ai/application"
 	"xiaodou/dai/internal/ai/asynctask"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
@@ -33,7 +31,6 @@ type decodedTaskSubmission struct {
 
 type taskCaller struct {
 	Subject coreidentity.Subject
-	AppType application.AppType
 }
 
 func (s *Gateway) handleCreateTask(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +47,7 @@ func (s *Gateway) handleCreateTaskAuthorized(w http.ResponseWriter, r *http.Requ
 		s.writeTaskHTTPError(w, err)
 		return
 	}
-	taskType, err := resolveTaskType(caller.Subject.AuthMethod, decoded.wireType, caller.AppType)
+	taskType, err := resolveTaskType(decoded.wireType)
 	if err != nil {
 		s.writeTaskHTTPError(w, err)
 		return
@@ -183,26 +180,6 @@ func (s *Gateway) withTaskAuth(
 	r *http.Request,
 	next func(http.ResponseWriter, *http.Request, taskCaller),
 ) {
-	if _, err := appkey.ExtractBearer(r.Header.Get("Authorization")); err == nil {
-		if s.runtimeInvokeExpander == nil {
-			writeOpenAIError(w, http.StatusServiceUnavailable, "App key authentication is not configured.", "service_unavailable", "service_unavailable")
-			return
-		}
-		expansion, err := s.expandRunRuntimeInvocation(r)
-		if err != nil {
-			writeRunRuntimeResolvedError(w, err)
-			return
-		}
-		if s.rejectIfBanned(w, r.Context(), expansion.Subject.TenantID, expansion.Subject.UserID) {
-			return
-		}
-		var appType application.AppType
-		if expansion.App != nil {
-			appType = expansion.App.App.AppType
-		}
-		next(w, r, taskCaller{Subject: expansion.Subject, AppType: appType})
-		return
-	}
 	s.runtimeAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth, ok := runtimeAuthFromContext(r.Context())
 		if !ok {

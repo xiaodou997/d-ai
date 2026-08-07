@@ -9,7 +9,6 @@
 // 复用既有 types/tenant.ts 里已定义的 AI key 形状。
 
 import type { IdentityIncluded } from "@/platform/ai/identity";
-import type { PortalAppRuntimeConfig } from "@/platform/ai/apps";
 import type { components } from "@/api/ai";
 
 export type { TenantAiApiKey, TenantAiApiKeysOutputBody } from "./tenant";
@@ -107,7 +106,6 @@ export interface TenantAiGroupDependencyCounts {
 	user_bindings: number;
 	api_key_bindings: number;
 	subscription_plans: number;
-	applications: number;
 }
 
 // ==================== 价格表 ====================
@@ -453,140 +451,6 @@ export interface ConsoleImageGenerateRequest {
   output_format?: string;
   output_compression?: number;
   user?: string;
-}
-
-export interface TenantAiVisibleAgent {
-  id: string;
-  name: string;
-  description: string;
-	capability: "chat" | "image_generation" | "image_edit";
-	prompt_strategy: "none" | "caller_variables" | "bound_prompt_exact";
-  publisher_label?: string;
-	variables: string[];
-	prompt_names: string[];
-}
-
-export interface TenantAiVisibleAppsOutputBody {
-  items: TenantAiVisibleAgent[];
-  total: number;
-}
-
-// 应用密钥：每把密钥只能绑定一个已发布应用（最小权限），不支持直绑裸模型。
-export interface TenantAiAppKey {
-  id: string;
-  owner_type: string;
-  tenant_id: string;
-  user_id?: string;
-  name: string;
-  last_four: string;
-  status: "active" | "disabled";
-  agent_id: string;
-  agent_name?: string;
-  agent_owner_type?: "tenant" | "user";
-  agent_owner_tenant_id?: string;
-  expires_at?: number;
-  created_by?: string;
-  created_at?: number;
-  updated_at?: number;
-}
-
-export interface TenantAiAppKeysOutputBody {
-  items: TenantAiAppKey[];
-  total: number;
-}
-
-export interface TenantAiAppKeyWriteRequest {
-  name: string;
-  status?: "active" | "disabled";
-  agent_id: string;
-  expires_at?: number | null;
-}
-
-export interface TenantAiAppKeyCreatedOutputBody {
-  plaintext_key: string;
-  key: TenantAiAppKey;
-}
-
-export interface TenantAiAppKeyRevealOutputBody {
-  plaintext_key: string;
-}
-
-export interface TenantAppPromptDTO {
-  owner_type: "tenant";
-  owner_tenant_id?: string;
-  id: string;
-  name: string;
-  description: string;
-  status: "active" | "disabled";
-	template_text: string;
-	variables: string[];
-  created_by?: string;
-  updated_by?: string;
-  created_at?: number;
-  updated_at?: number;
-}
-
-export interface TenantAppPromptDetailDTO {
-	prompt: TenantAppPromptDTO;
-}
-
-export interface TenantAppPromptsOutputBody {
-  items: TenantAppPromptDTO[];
-  total: number;
-}
-
-export interface TenantAppPromptWriteRequest {
-  name?: string;
-  description?: string;
-  status?: "active" | "disabled";
-  template_text?: string;
-}
-
-export interface TenantAppPromptBindingDTO {
-	prompt_id: string;
-	prompt_name: string;
-	variables: string[];
-	binding_role: "primary" | "fragment";
-	display_order: number;
-}
-
-export interface TenantAppDTO {
-  owner_type: "tenant";
-  owner_tenant_id?: string;
-  owner_user_id?: string;
-  id: string;
-  name: string;
-  description: string;
-	status: "active" | "disabled";
-	capability: "chat" | "image_generation" | "image_edit";
-	prompt_strategy: "none" | "caller_variables" | "bound_prompt_exact";
-	prompt_bindings: TenantAppPromptBindingDTO[];
-  published_by_tenant?: boolean;
-  group_id: string;
-  model_code: string;
-  runtime_config: PortalAppRuntimeConfig;
-  created_by?: string;
-  updated_by?: string;
-  created_at?: number;
-  updated_at?: number;
-}
-
-export interface TenantAppsOutputBody {
-  items: TenantAppDTO[];
-  total: number;
-}
-
-export interface TenantAppWriteRequest {
-	template_id?: "standard_chat" | "keyword_selector" | "dynamic_prompt_composition" | "text_to_image" | "image_to_image";
-  name?: string;
-  description?: string;
-  status?: "active" | "disabled";
-	capability?: "chat" | "image_generation" | "image_edit";
-	prompt_strategy?: "none" | "caller_variables" | "bound_prompt_exact";
-	prompt_ids?: string[];
-  group_id?: string;
-  model_code?: string;
-  runtime_config?: PortalAppRuntimeConfig;
 }
 
 // ==================== AI 订阅制套餐（docs/ai-subscription-design.md §7.2） ====================

@@ -48,7 +48,7 @@ const columns = computed<DsTableColumn[]>(() => [
 ]);
 
 function targetLabel(row: TenantUsageRow) {
-  return row.model_code || (row.app_name ? `应用 · ${row.app_name}` : "-");
+  return row.model_code || "-";
 }
 
 function groupLabel(row: TenantUsageRow) {

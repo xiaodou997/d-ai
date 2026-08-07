@@ -43,8 +43,7 @@ export function groupDependencyCounts(error: unknown): TenantAiGroupDependencyCo
   return {
     user_bindings: Number(value.user_bindings || 0),
     api_key_bindings: Number(value.api_key_bindings || 0),
-    subscription_plans: Number(value.subscription_plans || 0),
-    applications: Number(value.applications || 0)
+    subscription_plans: Number(value.subscription_plans || 0)
   };
 }
 
@@ -54,8 +53,7 @@ export async function showGroupDependencies(error: unknown) {
   const rows = [
     ["用户分组绑定", counts.user_bindings],
     ["API 密钥绑定", counts.api_key_bindings],
-    ["订阅套餐", counts.subscription_plans],
-    ["智能应用", counts.applications]
+    ["订阅套餐", counts.subscription_plans]
   ].filter(([, count]) => Number(count) > 0);
   await ElMessageBox.alert(
     h("div", rows.map(([label, count]) => h("div", { class: "dependency-row" }, [

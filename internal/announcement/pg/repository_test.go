@@ -22,8 +22,8 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	tenantA := "ann_tenant_a_" + suffix
 	tenantB := "ann_tenant_b_" + suffix
-	userA := "ann_user_a_" + suffix
-	userB := "ann_user_b_" + suffix
+	userA := "u_ann_user_a_" + suffix
+	userB := "u_ann_user_b_" + suffix
 
 	mustExec := func(query string, args ...any) {
 		t.Helper()
@@ -32,12 +32,12 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 		}
 	}
 	mustExec(`INSERT INTO iam_tenants (tenant_id, tenant_name) VALUES ($1, $2), ($3, $4)`, tenantA, tenantA, tenantB, tenantB)
-	mustExec(`INSERT INTO iam_users (user_id, tenant_id, username, password_hash) VALUES ($1, $2, $3, 'x'), ($4, $5, $6, 'x')`,
+	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type) VALUES ($1, $2, $3, 'x', 4), ($4, $5, $6, 'x', 4)`,
 		userA, tenantA, userA, userB, tenantB, userB)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM ann_audit_events WHERE actor_user_id = $1`, "SA_"+suffix)
 		_, _ = pool.Exec(ctx, `DELETE FROM ann_announcements WHERE created_by = $1`, "SA_"+suffix)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE user_id IN ($1, $2)`, userA, userB)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE user_id IN ($1, $2)`, userA, userB)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id IN ($1, $2)`, tenantA, tenantB)
 	})
 

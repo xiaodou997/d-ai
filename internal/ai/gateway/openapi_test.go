@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"net/http"
 	"strings"
 	"testing"
 
@@ -10,101 +9,16 @@ import (
 	"xiaodou/dai/libs/go/server"
 )
 
-func TestRegisterOpenAPIAddsRunRuntimeSpec(t *testing.T) {
+func TestRegisterOpenAPIRemovesRunRuntimeSpec(t *testing.T) {
 	_, api := server.New(server.Options{Title: "D-AI", Version: "test"})
 
 	RegisterOpenAPI(api)
 
 	doc := api.OpenAPI()
-	if doc.Components == nil || doc.Components.SecuritySchemes == nil {
-		t.Fatalf("security schemes not initialized")
-	}
-	scheme := doc.Components.SecuritySchemes["bearerAuth"]
-	if scheme == nil {
-		t.Fatalf("bearerAuth scheme not registered")
-	}
-	if scheme.Type != "http" || scheme.Scheme != "bearer" {
-		t.Fatalf("unexpected bearerAuth scheme: %+v", scheme)
-	}
-	path := doc.Paths["/v1/run"]
-	if path == nil || path.Post == nil {
-		t.Fatalf("/v1/run POST not registered")
-	}
-	op := path.Post
-	if op.OperationID != "ai-run-runtime" {
-		t.Fatalf("operation id = %q, want ai-run-runtime", op.OperationID)
-	}
-	if len(op.Security) != 1 || op.Security[0]["bearerAuth"] == nil {
-		t.Fatalf("operation security missing bearerAuth")
-	}
-	if op.Method != http.MethodPost {
-		t.Fatalf("method = %q, want %q", op.Method, http.MethodPost)
-	}
-
-	// /v1/run/images/* no longer exist: chat/image_generation/image_edit are
-	// unified onto the single /v1/run operation above, disambiguated by the
-	// app key's bound app type rather than the URL path.
-	if doc.Paths["/v1/run/images/generations"] != nil {
-		t.Fatalf("/v1/run/images/generations should no longer be registered")
-	}
-	if doc.Paths["/v1/run/images/edits"] != nil {
-		t.Fatalf("/v1/run/images/edits should no longer be registered")
-	}
-
-	if op.RequestBody == nil || op.RequestBody.Content["application/json"] == nil {
-		t.Fatalf("request body schema missing")
-	}
-	jsonBody := op.RequestBody.Content["application/json"]
-	if len(jsonBody.Examples) < 4 {
-		t.Fatalf("request body examples missing, got %d", len(jsonBody.Examples))
-	}
-	if len(jsonBody.Schema.OneOf) != 3 {
-		t.Fatalf("request body schema should oneOf chat/image-generation/image-edit, got %d variants", len(jsonBody.Schema.OneOf))
-	}
-	if op.RequestBody.Content["multipart/form-data"] == nil {
-		t.Fatalf("multipart/form-data content missing for image edit uploads")
-	}
-
-	imageEditJSONSchema := doc.Components.Schemas.SchemaFromRef(jsonBody.Schema.OneOf[2].Ref)
-	if imageEditJSONSchema == nil || imageEditJSONSchema.Properties["images"] == nil {
-		t.Fatalf("image edit json schema missing multi-reference images field")
-	}
-	assertSchemaProperties(t, imageEditJSONSchema, "input", "variables", "n", "images", "mask", "stream", "response_format")
-	imageSources := imageEditJSONSchema.Properties["images"]
-	if imageSources.Items == nil || imageSources.Items.Properties["image_url"] == nil {
-		t.Fatalf("image edit images items must expose image_url")
-	}
-	assertSchemaProperties(t, imageSources.Items, "image_url")
-
-	imageGenSchema := doc.Components.Schemas.SchemaFromRef(jsonBody.Schema.OneOf[1].Ref)
-	if imageGenSchema == nil {
-		t.Fatalf("image generation schema missing")
-	}
-	assertSchemaProperties(t, imageGenSchema, "input", "variables", "n", "stream", "size", "response_format", "background", "output_format")
-
-	imageEditMultipartSchema := doc.Components.Schemas.SchemaFromRef(op.RequestBody.Content["multipart/form-data"].Schema.Ref)
-	if imageEditMultipartSchema == nil || imageEditMultipartSchema.Properties["image[]"] == nil {
-		t.Fatalf("image edit multipart schema missing repeated image[] field")
-	}
-	assertSchemaProperties(t, imageEditMultipartSchema, "input", "variables", "n", "image[]", "mask", "stream", "response_format")
-
-	if got := op.Responses["200"].Content["text/event-stream"].Schema.Type; got != huma.TypeString {
-		t.Fatalf("stream schema type = %q, want %q", got, huma.TypeString)
-	}
-	if len(op.Responses["200"].Content["application/json"].Schema.OneOf) != 2 {
-		t.Fatalf("200 response schema should oneOf chat/image responses")
-	}
-	if _, ok := op.Responses["503"]; !ok {
-		t.Fatalf("503 response missing")
-	}
-	if op.Responses["400"].Content["application/json"].Examples["partial-images-unsupported"] == nil {
-		t.Fatalf("400 examples missing partial-images-unsupported")
-	}
-	if op.Responses["401"].Content["application/json"].Examples["expired-key"] == nil {
-		t.Fatalf("401 examples missing expired-key")
-	}
-	if op.Responses["429"].Content["application/json"].Examples["rate-limit"] == nil {
-		t.Fatalf("429 examples missing rate-limit")
+	for _, path := range []string{"/v1/run", "/v1/run/images/generations", "/v1/run/images/edits"} {
+		if doc.Paths[path] != nil {
+			t.Fatalf("retired application runtime path %s is still registered", path)
+		}
 	}
 }
 

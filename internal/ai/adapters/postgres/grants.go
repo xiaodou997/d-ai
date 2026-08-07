@@ -28,8 +28,7 @@ func (c *GroupAccessReader) AccessibleGroupIDsForSubject(ctx context.Context, su
 	if subject == nil {
 		return nil, fmt.Errorf("no runtime subject")
 	}
-	// 0. 应用调用固定分组。租户身份可直接使用本租户活跃分组；用户身份
-	//    仍按公开/专属授权复核，撤销关系后立即失去访问权。
+	// 0. Explicit group selection still respects tenant ownership and user grants.
 	if subject.ForcedGroupID != "" {
 		if subject.UserID != "" {
 			return c.queryStringList(ctx, `

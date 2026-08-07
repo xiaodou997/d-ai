@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"xiaodou/dai/internal/ai/application"
 	"xiaodou/dai/internal/ai/billingcontrol"
 	corebilling "xiaodou/dai/internal/ai/core/billing"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -565,7 +564,7 @@ func settlementUsage(req *serving.Request) domain.TokenUsage {
 // lookupImageUSD classifies OpenAI Image 2 sizes into fixed price tiers.
 // Unrecognised sizes use the explicit default price.
 func lookupImageUSD(prices []domain.ResolutionUSDPrice, defaultPrice float64, size string) float64 {
-	tier, ok := application.ClassifyOpenAIImagePriceTier(size)
+	tier, ok := corebilling.ClassifyOpenAIImagePriceTier(size)
 	if !ok {
 		return defaultPrice
 	}

@@ -60,7 +60,6 @@ const aiStats = reactive({
   groupCount: 0,
   modelCount: 0,
   apiKeyCount: 0,
-  runKeyCount: 0,
   totalCost: 0,
   totalRequests: 0,
   successRequests: 0,
@@ -86,19 +85,15 @@ const formatMetricNumber = (value?: number | null) => Number(value ?? 0).toLocal
 const requestSourceLabel = (value?: string | null) =>
   ({
     api_key: "API",
-    run_key: "Run Key",
     web_chat: "网页对话",
-    web_image: "网页生图",
-    app_preview: "应用试运行"
+    web_image: "网页生图"
   } as Record<string, string>)[value || ""] || value || "未知来源";
 
 // 图表分类色不再硬编码 hex,只记录 DsUI token,渲染时对主题子树内元素解析(components/chartTokens.ts)
 const sourceDefinitions = [
   { key: "api_key", label: "API", colorToken: "--ds-info" },
-  { key: "run_key", label: "Run Key", colorToken: "--ds-accent" },
   { key: "web_chat", label: "网页对话", colorToken: "--ds-positive" },
-  { key: "web_image", label: "网页生图", colorToken: "--ds-warning" },
-  { key: "app_preview", label: "应用试运行", colorToken: "--ds-danger" }
+  { key: "web_image", label: "网页生图", colorToken: "--ds-warning" }
 ] as const;
 
 const userMap = computed(() => {
@@ -129,13 +124,6 @@ const accessMetrics = computed(() => [
     label: "API 密钥数",
     value: formatMetricNumber(aiStats.apiKeyCount),
     hint: "租户侧已创建的 API 密钥",
-    loading: aiLoading.value
-  },
-  {
-    key: "run-key-count",
-    label: "应用运行密钥数",
-    value: formatMetricNumber(aiStats.runKeyCount),
-    hint: "应用运行层独立入口",
     loading: aiLoading.value
   }
 ]);
@@ -287,18 +275,16 @@ const buildUsageRange = (range: WorkbenchRangeOption) => {
 const fetchAccessOverview = async () => {
   aiLoading.value = true;
   try {
-    const [groupsRes, modelsRes, keysRes, runKeysRes, sessionsRes, jobsRes] = await Promise.all([
+    const [groupsRes, modelsRes, keysRes, sessionsRes, jobsRes] = await Promise.all([
       aiTenantApi.listMyGroups().catch(() => ({ items: [], total: 0 })),
       aiTenantApi.listAvailableModels().catch(() => ({ items: [], total: 0 })),
       aiTenantApi.listApiKeys().catch(() => ({ items: [], total: 0 })),
-      aiTenantApi.listRunKeys().catch(() => ({ items: [], total: 0 })),
       aiTenantApi.listWorkspaceChatSessions({ limit: 6 }).catch(() => ({ items: [], total: 0 })),
       aiTenantApi.listWorkspaceImageJobs({ limit: 6 }).catch(() => ({ items: [], total: 0 }))
     ]);
     aiStats.groupCount = groupsRes.total || groupsRes.items?.length || 0;
     aiStats.modelCount = modelsRes.items?.length || 0;
     aiStats.apiKeyCount = keysRes.items?.length || 0;
-    aiStats.runKeyCount = runKeysRes.total || runKeysRes.items?.length || 0;
     workspaceSessions.value = sessionsRes.items || [];
     workspaceJobs.value = jobsRes.items || [];
   } catch (e) {
@@ -434,7 +420,7 @@ onMounted(() => {
           @update:model-value="handleRangeChange"
         />
         <el-button @click="router.push('/tenant/ai/models/prices')">价格表</el-button>
-        <el-button @click="router.push('/tenant/developer/keys?tab=application')">应用密钥</el-button>
+        <el-button @click="router.push('/tenant/developer/keys')">API 密钥</el-button>
         <el-button type="primary" :loading="loading" @click="fetchData">
           <template #icon><el-icon><Refresh /></el-icon></template>
           刷新工作台

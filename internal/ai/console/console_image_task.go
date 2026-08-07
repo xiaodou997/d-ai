@@ -17,7 +17,6 @@ import (
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/formats"
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/imageassets"
 	"xiaodou/dai/internal/ai/imageedit"
@@ -206,10 +205,6 @@ func (s *Console) handleConsoleImageCreateTask(w http.ResponseWriter, r *http.Re
 		writeConsoleImageTaskErr(w, err)
 		return
 	}
-	if err := rejectConsoleImageApplicationInput(body, r.Header.Get("Content-Type")); err != nil {
-		writeConsoleImageTaskErr(w, err)
-		return
-	}
 	created, err := s.asyncTasks.Submit(r.Context(), asynctask.SubmitRequest{
 		Subject:     *subject,
 		Type:        taskType,
@@ -221,39 +216,6 @@ func (s *Console) handleConsoleImageCreateTask(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeOK(w, consoleImageTaskCreateResponse{TaskID: created.ID, Status: string(domain.TaskPending)})
-}
-
-// Online image experience is intentionally model-only. Application preview
-// keeps its own trusted resolver and does not pass through this HTTP handler.
-func rejectConsoleImageApplicationInput(body []byte, contentType string) error {
-	mediaType, _, _ := mime.ParseMediaType(contentType)
-	if mediaType == imageedit.TransportMultipart {
-		fields, err := formats.MultipartScalarFields(body, contentType, 1<<20)
-		if err != nil {
-			return domain.NewValidationError("request", err.Error())
-		}
-		if strings.TrimSpace(fields["agent_id"]) != "" {
-			return domain.NewValidationError("agent_id", "application mode is not supported by the online experience")
-		}
-		if strings.TrimSpace(fields["variables"]) != "" && strings.TrimSpace(fields["variables"]) != "{}" {
-			return domain.NewValidationError("variables", "application variables are not supported by the online experience")
-		}
-		return nil
-	}
-	var payload struct {
-		AgentID   string            `json:"agent_id"`
-		Variables map[string]string `json:"variables"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil
-	}
-	if strings.TrimSpace(payload.AgentID) != "" {
-		return domain.NewValidationError("agent_id", "application mode is not supported by the online experience")
-	}
-	if len(payload.Variables) > 0 {
-		return domain.NewValidationError("variables", "application variables are not supported by the online experience")
-	}
-	return nil
 }
 
 func consoleImageSubmissionTaskType(body []byte, contentType string) (string, error) {
@@ -379,20 +341,7 @@ func (s *Console) getConsoleImageTaskView(ctx context.Context, subject coreident
 	if view.Type != consoleImageGenerationTaskType && view.Type != consoleImageEditTaskType {
 		return asynctask.TaskView{}, asynctask.ErrNotFound
 	}
-	if consoleImageTaskUsesApplication(view.Input) {
-		return asynctask.TaskView{}, asynctask.ErrNotFound
-	}
 	return view, nil
-}
-
-func consoleImageTaskUsesApplication(raw []byte) bool {
-	var payload struct {
-		AgentID string `json:"agent_id"`
-	}
-	if json.Unmarshal(raw, &payload) != nil {
-		return false
-	}
-	return strings.TrimSpace(payload.AgentID) != ""
 }
 
 func consoleImageTaskDTOFromView(view asynctask.TaskView) consoleImageTaskDTO {
@@ -472,10 +421,8 @@ type consoleImageTaskInputPayload struct {
 	Operation         string               `json:"operation"`
 	Model             string               `json:"model"`
 	GroupID           string               `json:"group_id"`
-	AgentID           string               `json:"agent_id"`
 	Prompt            string               `json:"prompt"`
 	N                 int                  `json:"n"`
-	Variables         map[string]string    `json:"variables"`
 	Images            []consoleImageSource `json:"images"`
 	Mask              *consoleImageSource  `json:"mask"`
 	Size              string               `json:"size"`
@@ -494,17 +441,14 @@ func fillConsoleImageJobInput(dto *consoleImageJobDTO, raw []byte) {
 		return
 	}
 	var payload struct {
-		Operation      string            `json:"operation"`
-		AgentID        string            `json:"agent_id"`
-		AgentName      string            `json:"agent_name"`
-		GroupID        string            `json:"group_id"`
-		Prompt         string            `json:"prompt"`
-		N              int               `json:"n"`
-		Variables      map[string]string `json:"variables"`
-		Size           string            `json:"size"`
-		Quality        string            `json:"quality"`
-		Style          string            `json:"style"`
-		ResponseFormat string            `json:"response_format"`
+		Operation      string `json:"operation"`
+		GroupID        string `json:"group_id"`
+		Prompt         string `json:"prompt"`
+		N              int    `json:"n"`
+		Size           string `json:"size"`
+		Quality        string `json:"quality"`
+		Style          string `json:"style"`
+		ResponseFormat string `json:"response_format"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return
@@ -512,25 +456,13 @@ func fillConsoleImageJobInput(dto *consoleImageJobDTO, raw []byte) {
 	if payload.Operation != "" {
 		dto.Operation = payload.Operation
 	}
-	dto.AgentID = payload.AgentID
-	dto.AgentName = payload.AgentName
 	dto.GroupID = strings.TrimSpace(payload.GroupID)
 	dto.RetryPrompt = strings.TrimSpace(payload.Prompt)
-	if len(payload.Variables) > 0 {
-		dto.Variables = payload.Variables
-	}
 	dto.Prompt = strings.TrimSpace(payload.Prompt)
 	if payload.N > 0 {
 		dto.RequestedOutputCount = payload.N
 	} else {
 		dto.RequestedOutputCount = domain.DefaultImageOutputCount
-	}
-	if dto.AgentName != "" {
-		if dto.Prompt != "" {
-			dto.Prompt = dto.AgentName + " · " + dto.Prompt
-		} else {
-			dto.Prompt = dto.AgentName
-		}
 	}
 	dto.Size = payload.Size
 	dto.Quality = payload.Quality

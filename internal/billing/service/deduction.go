@@ -173,7 +173,7 @@ func (s *DeductionService) Freeze(params FreezeParams) (*FreezeResult, error) {
 	if params.UserID != "" {
 		var count int
 		err := s.pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM iam_users WHERE user_id = $1 AND tenant_id = $2 AND status = 'active'
+			SELECT COUNT(*) FROM iam_accounts WHERE user_id = $1 AND tenant_id = $2 AND user_type = 4 AND status = 'active'
 		`, params.UserID, params.TenantID).Scan(&count)
 		if err != nil || count == 0 {
 			return nil, fmt.Errorf("user %q does not belong to tenant %q", params.UserID, params.TenantID)
@@ -689,7 +689,7 @@ func (s *DeductionService) Consume(params ConsumeParams) (*ConsumeResult, error)
 	if params.UserID != "" {
 		var count int
 		if err := s.pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM iam_users WHERE user_id = $1 AND tenant_id = $2 AND status = 'active'
+			SELECT COUNT(*) FROM iam_accounts WHERE user_id = $1 AND tenant_id = $2 AND user_type = 4 AND status = 'active'
 		`, params.UserID, params.TenantID).Scan(&count); err != nil || count == 0 {
 			return nil, fmt.Errorf("user %q does not belong to tenant %q", params.UserID, params.TenantID)
 		}

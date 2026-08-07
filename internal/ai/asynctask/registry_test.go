@@ -48,10 +48,10 @@ func TestRegistryTypesAreSorted(t *testing.T) {
 	r := newRegistry()
 	r.register("console.images.edit", stubHandler{}, Options{})
 	r.register("api.images.generation", stubHandler{}, Options{})
-	r.register("app.images.edit", stubHandler{}, Options{})
+	r.register("worker.images.edit", stubHandler{}, Options{})
 
 	got := r.types()
-	want := []string{"api.images.generation", "app.images.edit", "console.images.edit"}
+	want := []string{"api.images.generation", "console.images.edit", "worker.images.edit"}
 	if len(got) != len(want) {
 		t.Fatalf("types() = %v, want %v", got, want)
 	}
@@ -110,11 +110,6 @@ func TestIdempotencyScopeIsolatesCredentials(t *testing.T) {
 	b := idempotencyScope(SubjectRef{TenantID: "t1", APIKeyID: "key-b"})
 	if a == b {
 		t.Fatalf("two API keys in one tenant share a scope: %q", a)
-	}
-
-	invoke := idempotencyScope(SubjectRef{TenantID: "t1", InvokeKeyID: "invk-1"})
-	if invoke == a {
-		t.Fatal("an app key and an API key share a scope")
 	}
 
 	user := idempotencyScope(SubjectRef{TenantID: "t1", UserID: "u1"})

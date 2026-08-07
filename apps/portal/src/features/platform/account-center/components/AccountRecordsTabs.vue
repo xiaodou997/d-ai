@@ -2,7 +2,7 @@
   租户端账户中心 — 账户记录 Tab 工作区(积分记录/余额明细/提现记录)。
   重构:迁移至新设计系统,el-tabs → DsTabs、el-table → DsTable(:frame="false"),
        el-tag → DsTag(success 映射为 positive tone);
-  二次重构:与密钥/应用管理页对齐 —— Tab 条与说明行各自带 24px 容器,表格通栏并撑满
+  二次重构:与统一工作台页面对齐 —— Tab 条与说明行各自带 24px 容器,表格通栏并撑满
        剩余高度内部滚动,分页不再跟在表格后面,改由外层面板的 #pagination 脚沉底。
 -->
 <script setup lang="ts">

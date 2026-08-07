@@ -10,7 +10,7 @@ import (
 func TestConsoleImageEditTaskInputPersistsCanonicalRequestForRecovery(t *testing.T) {
 	editRequest := imageedit.Request{
 		Model:  "gpt-image-1",
-		Prompt: "private rendered app prompt",
+		Prompt: "private rendered prompt",
 		Images: []imageedit.Source{{URL: "data:image/png;base64,aW1hZ2UtYnl0ZXM="}},
 		Mask:   &imageedit.Source{URL: "data:image/png;base64,bWFzay1ieXRlcw=="},
 	}

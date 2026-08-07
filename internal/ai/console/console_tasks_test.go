@@ -15,8 +15,8 @@ func TestPortalTaskDTOEnforcesTenantReadOnlyUserTasks(t *testing.T) {
 	now := time.Now()
 	viewer := coreidentity.Subject{Scope: coreidentity.ScopeTenant, TenantID: "tenant-a"}
 	view := asynctask.TaskView{
-		ID: "task-user", Type: "app.images.generation", Status: domain.TaskRunning,
-		Subject:   asynctask.SubjectRef{TenantID: "tenant-a", UserID: "user-a", InvokeKeyID: "invoke-key"},
+		ID: "task-user", Type: "api.images.generation", Status: domain.TaskRunning,
+		Subject:   asynctask.SubjectRef{TenantID: "tenant-a", UserID: "user-a", APIKeyID: "api-key"},
 		Output:    json.RawMessage(`{"data":[{"url":"https://example.com/one.png"}]}`),
 		CreatedAt: now,
 	}
@@ -67,7 +67,7 @@ func TestDecodePortalTaskListFilter(t *testing.T) {
 	if filter.Status != domain.TaskFailed || filter.OwnerScope != coreidentity.ScopeUser || filter.OwnerUserID != "user-a" || filter.Limit != 50 {
 		t.Fatalf("filter = %+v", filter)
 	}
-	if len(filter.Types) != 3 {
-		t.Fatalf("types = %v, want console/api/app image generation", filter.Types)
+	if len(filter.Types) != 2 {
+		t.Fatalf("types = %v, want console/api image generation", filter.Types)
 	}
 }

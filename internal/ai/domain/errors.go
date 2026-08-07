@@ -77,11 +77,10 @@ type GroupDependencyCounts struct {
 	UserBindings      int `json:"user_bindings"`
 	APIKeyBindings    int `json:"api_key_bindings"`
 	SubscriptionPlans int `json:"subscription_plans"`
-	Applications      int `json:"applications"`
 }
 
 func (c GroupDependencyCounts) Total() int {
-	return c.UserBindings + c.APIKeyBindings + c.SubscriptionPlans + c.Applications
+	return c.UserBindings + c.APIKeyBindings + c.SubscriptionPlans
 }
 
 // GroupInUseError reports the business references that must be removed before

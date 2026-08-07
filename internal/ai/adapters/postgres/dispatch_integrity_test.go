@@ -181,8 +181,7 @@ func TestPriceAndGroupWritesProtectActiveRules(t *testing.T) {
 func TestCommercialRepoDeleteGroupReportsBusinessReferencesAndCascadesConfiguration(t *testing.T) {
 	pool, ctx := openGroupTransferTestPool(t)
 	if _, err := pool.Exec(ctx, `
-		ALTER TABLE ai_sub_plan_groups ADD COLUMN plan_id UUID NOT NULL DEFAULT gen_random_uuid();
-		CREATE TEMP TABLE ai_apps (group_id UUID)
+		ALTER TABLE ai_sub_plan_groups ADD COLUMN plan_id UUID NOT NULL DEFAULT gen_random_uuid()
 	`); err != nil {
 		t.Fatalf("seed group delete fixtures: %v", err)
 	}
@@ -200,7 +199,6 @@ func TestCommercialRepoDeleteGroupReportsBusinessReferencesAndCascadesConfigurat
 		{`INSERT INTO ai_user_groups (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},
 		{`INSERT INTO ai_api_keys (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},
 		{`INSERT INTO ai_sub_plan_groups (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},
-		{`INSERT INTO ai_apps (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},
 	}
 	for _, seed := range seeds {
 		if _, err := pool.Exec(ctx, seed.query, seed.args...); err != nil {
@@ -213,11 +211,11 @@ func TestCommercialRepoDeleteGroupReportsBusinessReferencesAndCascadesConfigurat
 	if !errors.As(err, &inUse) {
 		t.Fatalf("DeleteGroup(referenced) error = %v, want group in use", err)
 	}
-	if inUse.Dependencies != (domain.GroupDependencyCounts{UserBindings: 1, APIKeyBindings: 1, SubscriptionPlans: 1, Applications: 1}) {
+	if inUse.Dependencies != (domain.GroupDependencyCounts{UserBindings: 1, APIKeyBindings: 1, SubscriptionPlans: 1}) {
 		t.Fatalf("DeleteGroup dependencies = %+v", inUse.Dependencies)
 	}
 	if _, err := pool.Exec(ctx, `
-		DELETE FROM ai_user_groups; DELETE FROM ai_api_keys; DELETE FROM ai_sub_plan_groups; DELETE FROM ai_apps;
+		DELETE FROM ai_user_groups; DELETE FROM ai_api_keys; DELETE FROM ai_sub_plan_groups;
 	`); err != nil {
 		t.Fatalf("clear business references: %v", err)
 	}

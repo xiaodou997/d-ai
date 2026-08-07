@@ -8,10 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
-	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/workspace"
@@ -32,13 +30,10 @@ type consoleImageModelDTO struct {
 type consoleImageJobDTO struct {
 	ID                   string                     `json:"id"`
 	Operation            string                     `json:"operation"`
-	AgentID              string                     `json:"-"`
-	AgentName            string                     `json:"-"`
 	GroupID              string                     `json:"group_id,omitempty"`
 	ModelCode            string                     `json:"model_code"`
 	Prompt               string                     `json:"prompt"`
 	RetryPrompt          string                     `json:"retry_prompt,omitempty"`
-	Variables            map[string]string          `json:"-"`
 	Status               string                     `json:"status"`
 	StoragePolicy        string                     `json:"storage_policy"`
 	RawImageRetained     bool                       `json:"raw_image_retained"`
@@ -56,19 +51,6 @@ type consoleImageJobDTO struct {
 	ErrorMessage         string                     `json:"error_message,omitempty"`
 	CreatedAt            int64                      `json:"created_at"`
 	CompletedAt          *int64                     `json:"completed_at,omitempty"`
-}
-
-// consoleImageAgentDTO 是使用侧脱敏视图:不暴露模型、分组、提示词等底层实现。
-type consoleImageAgentDTO struct {
-	ID                       string   `json:"id"`
-	Name                     string   `json:"name"`
-	Description              string   `json:"description"`
-	AgentType                string   `json:"agent_type"`
-	PublisherLabel           string   `json:"publisher_label"`
-	Variables                []string `json:"variables"`
-	DefaultOutputCount       int      `json:"default_output_count"`
-	MaxOutputCount           int      `json:"max_output_count"`
-	AllowOutputCountOverride bool     `json:"allow_output_count_override"`
 }
 
 type consoleImageModelRow struct {
@@ -112,22 +94,6 @@ func (s *Console) handleConsoleImageModels(w http.ResponseWriter, r *http.Reques
 	writeOK(w, out)
 }
 
-func (s *Console) handleConsoleImageAgents(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	agents, err := s.consoleVisibleImageAgents(r, subject)
-	if err != nil {
-		s.logger.Error("runtime image agents: list visible agents failed",
-			consoleSubjectLogFields(r, subject, zap.Error(err))...,
-		)
-		writeDBErr(w, err)
-		return
-	}
-	writeOK(w, agents)
-}
-
 func (s *Console) handleConsoleImageListJobs(w http.ResponseWriter, r *http.Request) {
 	subject, ok := s.consoleRuntimeSubject(w, r)
 	if !ok {
@@ -161,7 +127,7 @@ func writeConsoleImagePrepareErr(w http.ResponseWriter, err error) {
 	}
 	switch {
 	case errors.Is(err, domain.ErrForbidden):
-		writeErr(w, http.StatusForbidden, BizErrForbidden, "model or agent is not authorized")
+		writeErr(w, http.StatusForbidden, BizErrForbidden, "model is not authorized")
 	case errors.Is(err, domain.ErrNotFound):
 		writeErr(w, http.StatusNotFound, BizErrNotFound, "not found")
 	default:
@@ -256,73 +222,14 @@ func (s *Console) consoleGrantedImageModels(r *http.Request, subject *coreidenti
 	return filtered, nil
 }
 
-func (s *Console) consoleVisibleImageAgents(r *http.Request, subject *coreidentity.Subject) ([]consoleImageAgentDTO, error) {
-	items, err := pgadapter.NewApplicationAppRepo(s.postgres).ListVisibleAgents(r.Context(), consoleAppViewer(subject), []string{consoleAgentTypeImageGeneration, consoleAgentTypeImageEdit})
-	if err != nil {
-		return nil, err
-	}
-	grantedModels, err := s.consoleGrantedImageModels(r, subject)
-	if err != nil {
-		return nil, err
-	}
-	allowed := make(map[string]consoleImageModelRow, len(grantedModels))
-	for _, model := range grantedModels {
-		allowed[consoleImageModelAccessKey(model.GroupID, model.ModelCode)] = model
-	}
-	out := make([]consoleImageAgentDTO, 0, len(items))
-	for _, item := range items {
-		model, ok := allowed[consoleImageModelAccessKey(item.GroupID, item.ModelCode)]
-		if !ok {
-			continue
-		}
-		dto := appAgentRecordToConsoleImageAgentDTO(item)
-		limit := model.MaxOutputCount
-		if item.Capability == consoleAgentTypeImageEdit {
-			limit = model.EditMaxOutputCount
-		}
-		if dto.DefaultOutputCount > limit {
-			continue
-		}
-		if dto.MaxOutputCount > limit {
-			dto.MaxOutputCount = limit
-		}
-		out = append(out, dto)
-	}
-	return out, nil
-}
-
-func consoleImageModelAccessKey(groupID, modelCode string) string {
-	return strings.TrimSpace(groupID) + "::" + strings.TrimSpace(modelCode)
-}
-
 func consoleImageBillingGroupLabel(groupName string, multiplier float64) string {
 	return fmt.Sprintf("%s · %.4gx", groupName, multiplier)
-}
-
-func (s *Console) consoleVisibleImageAgentByID(r *http.Request, subject *coreidentity.Subject, agentID string) (consoleChatAgentRuntime, error) {
-	items, err := s.consoleVisibleImageAgents(r, subject)
-	if err != nil {
-		return consoleChatAgentRuntime{}, err
-	}
-	for _, item := range items {
-		if item.ID != agentID {
-			continue
-		}
-		record, err := pgadapter.NewApplicationAppRepo(s.postgres).GetVisibleAgentByID(r.Context(), consoleAppViewer(subject), agentID, []string{consoleAgentTypeImageGeneration, consoleAgentTypeImageEdit})
-		if err != nil {
-			return consoleChatAgentRuntime{}, err
-		}
-		return appAgentRecordToConsoleChatAgentRuntime(record), nil
-	}
-	return consoleChatAgentRuntime{}, pgx.ErrNoRows
 }
 
 func workspaceImageJobToConsoleDTO(job workspace.ImageJob) consoleImageJobDTO {
 	dto := consoleImageJobDTO{
 		ID:                   job.ID,
 		Operation:            job.Operation,
-		AgentID:              job.AgentID,
-		AgentName:            job.AgentName,
 		ModelCode:            job.ModelCode,
 		Prompt:               job.Prompt,
 		Status:               job.Status,

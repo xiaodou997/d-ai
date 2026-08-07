@@ -73,7 +73,7 @@ func (s *SubscriptionGateStep) Execute(ctx context.Context, req *Request) error 
 
 	// 覆盖判定通过后再校验路由约束前提；任一命中则保持 payg（按量放行）：
 	//   a) 存量无快照订阅（GroupQuotaDebitMultipliers 为空）——二期前售出、不参与硬路由约束；
-	//   b) 显式指定套餐外分组（run key selected_group / 应用 ForcedGroupID）——视为主动离开套餐；
+	//   b) 显式指定套餐外分组（ForcedGroupID）——视为主动离开套餐；
 	//   c) key 绑定分组不在套餐集内——直接按量。
 	weights := decision.GroupQuotaDebitMultipliers
 	if len(weights) == 0 {

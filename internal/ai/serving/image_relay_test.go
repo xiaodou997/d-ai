@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 )
 
@@ -132,43 +131,5 @@ func TestImageRelayErrorBodyPrecommit(t *testing.T) {
 	}
 	if req.HTTPStatus != 0 {
 		t.Fatalf("HTTPStatus must stay 0 (uncommitted), got %d", req.HTTPStatus)
-	}
-}
-
-func TestImageRelayStripsRevisedPromptForInvokeKeySyncClient(t *testing.T) {
-	w := httptest.NewRecorder()
-	dc := genTestDC()
-	defer dc.stop()
-	req := imageRelayReq(false)
-	req.Subject = &coreidentity.Subject{AuthMethod: coreidentity.AuthMethodInvokeKey}
-
-	err := newExecuteStepForTests().executeImageRelay(dc, req, jsonResp(`{"data":[{"b64_json":"aGk=","revised_prompt":"hidden prompt"}]}`), w, time.Now())
-	if err != nil {
-		t.Fatalf("executeImageRelay err = %v", err)
-	}
-	if strings.Contains(w.Body.String(), "revised_prompt") {
-		t.Fatalf("sync client body leaked revised_prompt: %q", w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "b64_json") {
-		t.Fatalf("sync client body lost image data: %q", w.Body.String())
-	}
-}
-
-func TestImageRelayStripsRevisedPromptForInvokeKeyStreamClient(t *testing.T) {
-	w := httptest.NewRecorder()
-	dc := genTestDC()
-	defer dc.stop()
-	req := imageRelayReq(true)
-	req.Subject = &coreidentity.Subject{AuthMethod: coreidentity.AuthMethodInvokeKey}
-
-	err := newExecuteStepForTests().executeImageRelay(dc, req, jsonResp(`{"data":[{"b64_json":"aGk=","revised_prompt":"hidden prompt"}]}`), w, time.Now())
-	if err != nil {
-		t.Fatalf("executeImageRelay err = %v", err)
-	}
-	if strings.Contains(w.Body.String(), "revised_prompt") {
-		t.Fatalf("stream client body leaked revised_prompt: %q", w.Body.String())
-	}
-	if !strings.HasPrefix(w.Body.String(), "data: ") {
-		t.Fatalf("stream client body is not SSE: %q", w.Body.String())
 	}
 }

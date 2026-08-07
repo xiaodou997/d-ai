@@ -119,7 +119,7 @@ const toolingBaseUrlRules = computed(() => [
         <tbody>
           <tr>
             <td><code>401 Unauthorized</code></td>
-            <td>密钥无效、未生效，或者把 <code>rk_</code> 当成 <code>sk_</code> 用了。</td>
+            <td>API 密钥无效、未生效，或者配置内容不完整。</td>
             <td>重新确认使用 API 密钥，并检查环境变量是否被工具进程读取。</td>
           </tr>
           <tr>

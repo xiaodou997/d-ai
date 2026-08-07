@@ -75,7 +75,7 @@ const confirmRotate = () =>
     :api="apiKeyApi"
     title="我的模型 API 密钥"
     description="从“我的分组”里选择一个有权使用的分组，统一配置个人 API 密钥的额度和独立限流"
-    eyebrow="Personal API Access"
+    eyebrow="智能服务 / 开发接入 / API 密钥"
     :public-base-url="publicBaseUrl"
     v-bind="portalApiKeyWorkspaceIconProps"
     :status-options="statusOptions"

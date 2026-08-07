@@ -541,13 +541,8 @@ SELECT
   public_response_model,
   usage_estimated,
   token_usage_source,
-  billing_source,
-  app_id,
-  app_name_snapshot,
-  COALESCE(NULLIF(app_owner_type_snapshot, ''), (SELECT a.owner_type FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_type,
-  COALESCE(NULLIF(app_owner_tenant_id_snapshot, ''), (SELECT a.owner_tenant_id FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_tenant_id,
-  COALESCE(NULLIF(app_owner_user_id_snapshot, ''), (SELECT a.owner_user_id FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_user_id,
-  created_at
+	  billing_source,
+	  created_at
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id')::text)
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
@@ -641,13 +636,8 @@ SELECT
   upstream_model_mapping_applied,
   public_response_model,
   usage_estimated,
-  token_usage_source,
-  app_id,
-  app_name_snapshot,
-  COALESCE(NULLIF(app_owner_type_snapshot, ''), (SELECT a.owner_type FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_type,
-  COALESCE(NULLIF(app_owner_tenant_id_snapshot, ''), (SELECT a.owner_tenant_id FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_tenant_id,
-  COALESCE(NULLIF(app_owner_user_id_snapshot, ''), (SELECT a.owner_user_id FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_user_id,
-  created_at
+	  token_usage_source,
+	  created_at
 FROM ai_usage_logs
 WHERE request_id = $1;
 
@@ -1098,14 +1088,9 @@ SELECT
   http_status,
   latency_ms,
   first_token_latency_ms,
-  error_code,
-  error_message,
-  app_id,
-  app_name_snapshot,
-  COALESCE(NULLIF(app_owner_type_snapshot, ''), (SELECT a.owner_type FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_type,
-  COALESCE(NULLIF(app_owner_tenant_id_snapshot, ''), (SELECT a.owner_tenant_id FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_tenant_id,
-  COALESCE(NULLIF(app_owner_user_id_snapshot, ''), (SELECT a.owner_user_id FROM ai_apps a WHERE a.id = ai_usage_logs.app_id), '')::text AS app_owner_user_id,
-  created_at
+	  error_code,
+	  error_message,
+	  created_at
 FROM ai_usage_logs
 WHERE tenant_id = $1
   AND user_id = $2

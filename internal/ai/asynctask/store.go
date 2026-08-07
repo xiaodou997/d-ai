@@ -107,19 +107,18 @@ type claimedTask struct {
 
 // taskRow is a task as the query API and expiry sweep see it.
 type taskRow struct {
-	ID          string
-	Type        string
-	Status      domain.TaskStatus
-	ModelCode   string
-	AuthMethod  identity.AuthMethod
-	TenantID    string
-	UserID      string
-	APIKeyID    string
-	InvokeKeyID string
-	Input       json.RawMessage
-	Output      json.RawMessage
-	Metadata    json.RawMessage
-	WebhookURL  string
+	ID         string
+	Type       string
+	Status     domain.TaskStatus
+	ModelCode  string
+	AuthMethod identity.AuthMethod
+	TenantID   string
+	UserID     string
+	APIKeyID   string
+	Input      json.RawMessage
+	Output     json.RawMessage
+	Metadata   json.RawMessage
+	WebhookURL string
 
 	IdempotencyKey string
 	RequestID      string

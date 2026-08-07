@@ -48,14 +48,14 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
 
 	mustExec(`INSERT INTO iam_tenants (tenant_id, tenant_name, status, overdraft_limit, current_overdraft)
 	          VALUES ($1, 'sub-test', 'active', 1000000, 0)`, tenantID)
-	mustExec(`INSERT INTO iam_users (user_id, tenant_id, username, password_hash, overdraft_limit, current_overdraft)
-	          VALUES ($1, $2, $3, 'x', 1000000, 0)`, userID, tenantID, "user-"+suffix)
+	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, overdraft_limit, current_overdraft)
+	          VALUES ($1, $2, $3, 'x', 4, 1000000, 0)`, userID, tenantID, "u_user-"+suffix)
 	// 用户积分包仅 50 积分
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 50, 50, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
@@ -75,7 +75,7 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 		t.Fatalf("expected ErrInsufficientBalance, got %v", err)
 	}
 	assertInt64(t, pool, ctx, `SELECT remaining_credits FROM bill_credit_packages WHERE tenant_id=$1`, tenantID, 50) // 未扣
-	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_users WHERE user_id=$1`, userID, 0)                 // 未透支
+	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 0)              // 未透支
 	assertInt64(t, pool, ctx, `SELECT count(*) FROM bill_events WHERE idempotency_key=$1`, "strict-"+suffix, 0)      // 未记账
 
 	// ---- 2) 不足额 + 允许透支（settle 老路径）⇒ 照常成交，扣 50 + 透支 50 ----
@@ -94,7 +94,7 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 		t.Fatalf("expected deducted=50 overdraft=50, got deducted=%d overdraft=%d", res2.UserDeducted, res2.UserOverdraftAdd)
 	}
 	assertInt64(t, pool, ctx, `SELECT remaining_credits FROM bill_credit_packages WHERE tenant_id=$1`, tenantID, 0)
-	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_users WHERE user_id=$1`, userID, 50)
+	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 50)
 
 	// ---- 3) 同幂等键重放 ⇒ 返回同一 event，不重复扣减 ----
 	res3, err := svc.Consume(ConsumeParams{
@@ -112,7 +112,7 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 		t.Fatalf("replay should return same event: %s != %s", res3.EventID, res2.EventID)
 	}
 	// 透支不因重放而翻倍
-	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_users WHERE user_id=$1`, userID, 50)
+	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 50)
 	assertInt64(t, pool, ctx, `SELECT count(*) FROM bill_events WHERE idempotency_key=$1`, "lax-"+suffix, 1)
 }
 

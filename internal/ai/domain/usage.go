@@ -25,11 +25,6 @@ type UsageLog struct {
 	EffectiveUserMultiplierSnapshot    float64
 	BillingGroupLabelSnapshot          string
 	ModelCode                          string
-	AppID                              string
-	AppName                            string
-	AppOwnerType                       string
-	AppOwnerTenantID                   string
-	AppOwnerUserID                     string
 	RequestedModel                     string
 	MatchedDispatchRuleID              string
 	MatchedDispatchRuleSummary         string

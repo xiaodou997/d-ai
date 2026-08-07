@@ -6,9 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"xiaodou/dai/internal/ai/application"
 	"xiaodou/dai/internal/ai/asynctask"
-	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 )
 
@@ -59,26 +57,17 @@ type taskListResponse struct {
 
 func taskCreateResponseFromView(view asynctask.TaskView, wireType string) taskCreateResponse {
 	return taskCreateResponse{
-		ID:             view.ID,
-		Object:         "task",
-		Type:           wireType,
-		Status:         string(view.Status),
-		Model:          view.ModelCode,
-		IdempotencyKey: view.IdempotencyKey,
-		Metadata:       view.Metadata,
-		WebhookURL:     view.WebhookURL,
-		CreatedAt:      view.CreatedAt.Unix(),
+		ID: view.ID, Object: "task", Type: wireType, Status: string(view.Status),
+		Model: view.ModelCode, IdempotencyKey: view.IdempotencyKey,
+		Metadata: view.Metadata, WebhookURL: view.WebhookURL, CreatedAt: view.CreatedAt.Unix(),
 	}
 }
 
 func taskGetResponseFromView(view asynctask.TaskView, wireType string) taskGetResponse {
 	response := taskGetResponse{
 		taskCreateResponse: taskCreateResponseFromView(view, wireType),
-		Result:             view.Output,
-		RequestID:          view.RequestID,
-		Attempt:            view.Attempt,
-		StartedAt:          unixTimePointer(view.StartedAt),
-		CompletedAt:        unixTimePointer(view.CompletedAt),
+		Result:             view.Output, RequestID: view.RequestID, Attempt: view.Attempt,
+		StartedAt: unixTimePointer(view.StartedAt), CompletedAt: unixTimePointer(view.CompletedAt),
 	}
 	if view.ErrorCode != "" || view.ErrorMessage != "" {
 		response.Error = &taskErrorResponse{Code: view.ErrorCode, Message: view.ErrorMessage}
@@ -104,54 +93,21 @@ const (
 
 	apiImageGenerationTaskType = "api." + imageGenerationWireTaskType
 	apiImageEditTaskType       = "api." + imageEditWireTaskType
-	appImageGenerationTaskType = "app." + imageGenerationWireTaskType
-	appImageEditTaskType       = "app." + imageEditWireTaskType
 	apiChatCompletionTaskType  = "api." + chatCompletionWireTaskType
-	appChatCompletionTaskType  = "app." + chatCompletionWireTaskType
 )
 
-// resolveTaskType maps the client-visible capability name to the durable
-// registry key. The surface comes from authentication, never from client input.
-// appType is reserved for the app-key inference added in P4.
-func resolveTaskType(authMethod coreidentity.AuthMethod, wireType string, appType application.AppType) (string, error) {
-	wireType = strings.TrimSpace(wireType)
-	switch authMethod {
-	case coreidentity.AuthMethodAPIKey:
-		if wireType == "" {
-			return "", asynctask.Errorf(http.StatusBadRequest, "task_type_required", "task type is required")
-		}
-		switch wireType {
-		case imageGenerationWireTaskType:
-			return apiImageGenerationTaskType, nil
-		case imageEditWireTaskType:
-			return apiImageEditTaskType, nil
-		case chatCompletionWireTaskType:
-			return apiChatCompletionTaskType, nil
-		default:
-			return "", asynctask.Errorf(http.StatusBadRequest, "unsupported_task_type",
-				"task type %q is not supported", wireType)
-		}
-	case coreidentity.AuthMethodInvokeKey:
-		var expectedWireType, registryType string
-		switch appType {
-		case application.AppTypeImageGenerationAgent:
-			expectedWireType, registryType = imageGenerationWireTaskType, appImageGenerationTaskType
-		case application.AppTypeImageEditAgent:
-			expectedWireType, registryType = imageEditWireTaskType, appImageEditTaskType
-		case application.AppTypeChatAgent:
-			expectedWireType, registryType = chatCompletionWireTaskType, appChatCompletionTaskType
-		default:
-			return "", asynctask.Errorf(http.StatusBadRequest, "unsupported_task_type",
-				"the bound application does not support async tasks")
-		}
-		if wireType != "" && wireType != expectedWireType {
-			return "", asynctask.Errorf(http.StatusBadRequest, "task_type_mismatch",
-				"task type %q does not match the bound application", wireType)
-		}
-		return registryType, nil
+func resolveTaskType(wireType string) (string, error) {
+	switch strings.TrimSpace(wireType) {
+	case imageGenerationWireTaskType:
+		return apiImageGenerationTaskType, nil
+	case imageEditWireTaskType:
+		return apiImageEditTaskType, nil
+	case chatCompletionWireTaskType:
+		return apiChatCompletionTaskType, nil
+	case "":
+		return "", asynctask.Errorf(http.StatusBadRequest, "task_type_required", "task type is required")
 	default:
-		return "", asynctask.Errorf(http.StatusBadRequest, "unsupported_task_auth_method",
-			"this authentication method cannot submit tasks")
+		return "", asynctask.Errorf(http.StatusBadRequest, "unsupported_task_type", "task type %q is not supported", wireType)
 	}
 }
 
@@ -161,11 +117,7 @@ func wireTaskType(registryType string) (string, bool) {
 		return imageGenerationWireTaskType, true
 	case apiImageEditTaskType:
 		return imageEditWireTaskType, true
-	case appImageGenerationTaskType:
-		return imageGenerationWireTaskType, true
-	case appImageEditTaskType:
-		return imageEditWireTaskType, true
-	case apiChatCompletionTaskType, appChatCompletionTaskType:
+	case apiChatCompletionTaskType:
 		return chatCompletionWireTaskType, true
 	default:
 		return "", false
@@ -175,19 +127,14 @@ func wireTaskType(registryType string) (string, bool) {
 func publicTaskRegistryTypes(wireType string) ([]string, error) {
 	switch strings.TrimSpace(wireType) {
 	case "":
-		return []string{
-			apiImageGenerationTaskType, apiImageEditTaskType,
-			appImageGenerationTaskType, appImageEditTaskType,
-			apiChatCompletionTaskType, appChatCompletionTaskType,
-		}, nil
+		return []string{apiImageGenerationTaskType, apiImageEditTaskType, apiChatCompletionTaskType}, nil
 	case imageGenerationWireTaskType:
-		return []string{apiImageGenerationTaskType, appImageGenerationTaskType}, nil
+		return []string{apiImageGenerationTaskType}, nil
 	case imageEditWireTaskType:
-		return []string{apiImageEditTaskType, appImageEditTaskType}, nil
+		return []string{apiImageEditTaskType}, nil
 	case chatCompletionWireTaskType:
-		return []string{apiChatCompletionTaskType, appChatCompletionTaskType}, nil
+		return []string{apiChatCompletionTaskType}, nil
 	default:
-		return nil, asynctask.Errorf(http.StatusBadRequest, "unsupported_task_type",
-			"task type %q is not supported", wireType)
+		return nil, asynctask.Errorf(http.StatusBadRequest, "unsupported_task_type", "task type %q is not supported", wireType)
 	}
 }

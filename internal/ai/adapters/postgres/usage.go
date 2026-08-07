@@ -398,11 +398,6 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		ProtocolConversionEnabled:          protocolConversionEnabled,
 		UpstreamModelMappingApplied:        upstreamModelMappingApplied,
 		PublicResponseModel:                nullableText(req.PublicModel()),
-		AppID:                              mustParseUUID(subject.AppID),
-		AppNameSnapshot:                    subject.AppName,
-		AppOwnerTypeSnapshot:               subject.AppOwnerType,
-		AppOwnerTenantIDSnapshot:           subject.AppOwnerTenantID,
-		AppOwnerUserIDSnapshot:             subject.AppOwnerUserID,
 		// 计费来源快照：SubscriptionGateStep 在管线里判定后写入 req。空串
 		// 兜底为 payg，防未经 gate 的路径违反 CHECK IN ('payg','subscription')。
 		BillingSource:  usageBillingSource(req.BillingSource),

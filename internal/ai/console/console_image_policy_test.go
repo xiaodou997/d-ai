@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 )
 
@@ -18,7 +17,7 @@ func TestConsoleImageGenerationIgnoresQualityAndStyle(t *testing.T) {
 	}`), &req); err != nil {
 		t.Fatalf("unmarshal request: %v", err)
 	}
-	body, err := buildConsoleImageBody(req, req.ModelCode, req.Prompt, nil)
+	body, err := buildConsoleImageBody(req, req.ModelCode, req.Prompt)
 	if err != nil {
 		t.Fatalf("buildConsoleImageBody: %v", err)
 	}
@@ -75,24 +74,6 @@ func TestApplyConsoleImagePolicyUsesURLForConsoleClient(t *testing.T) {
 	}
 }
 
-func TestConsoleImageEditAppAllowsOnlyPerCallInputs(t *testing.T) {
-	stream := true
-	req := consoleImageGenerateRequest{
-		AgentID:        "app-1",
-		Prompt:         "retouch",
-		Images:         []consoleImageSource{{ImageURL: "https://example.com/reference.png"}},
-		ResponseFormat: domain.ImageResponseFormatURL,
-		Stream:         &stream,
-	}
-	if consoleImageEditOverridesApp(req) {
-		t.Fatal("prompt, images, response_format and stream must remain caller-controlled")
-	}
-	req.Size = "1536x1024"
-	if !consoleImageEditOverridesApp(req) {
-		t.Fatal("size must be locked by the app")
-	}
-}
-
 func TestDecodeConsoleImageEditRequestUsesOfficialJSONSchema(t *testing.T) {
 	stream := true
 	decoded, err := decodeConsoleImageEditRequest(consoleImageGenerateRequest{
@@ -113,32 +94,5 @@ func TestDecodeConsoleImageEditRequestUsesOfficialJSONSchema(t *testing.T) {
 	}
 	if !decoded.Stream || decoded.ResponseFormat != domain.ImageResponseFormatURL {
 		t.Fatalf("request options = %+v", decoded)
-	}
-}
-
-func TestConsoleImageSubjectPreservesAppIdentity(t *testing.T) {
-	agent := &consoleChatAgentRuntime{
-		ID:            "app-1",
-		Name:          "Image Editor",
-		OwnerType:     "tenant",
-		OwnerTenantID: "publisher-tenant",
-		OwnerUserID:   "publisher-user",
-	}
-
-	subject := consoleImageSubjectFromAgent(&coreidentity.Subject{
-		TenantID: "caller-tenant",
-		UserID:   "caller-user",
-	}, "app-group", agent)
-	if subject == nil {
-		t.Fatal("runtime subject is nil")
-	}
-	if subject.ForcedGroupID != "app-group" {
-		t.Fatalf("forced group = %q, want app-group", subject.ForcedGroupID)
-	}
-	if subject.AppID != "app-1" || subject.AppName != "Image Editor" {
-		t.Fatalf("app identity = %q/%q", subject.AppID, subject.AppName)
-	}
-	if subject.AppOwnerType != "tenant" || subject.AppOwnerTenantID != "publisher-tenant" || subject.AppOwnerUserID != "publisher-user" {
-		t.Fatalf("app owner identity = %q/%q/%q", subject.AppOwnerType, subject.AppOwnerTenantID, subject.AppOwnerUserID)
 	}
 }

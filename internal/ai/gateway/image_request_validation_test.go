@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"xiaodou/dai/internal/ai/formats"
-	"xiaodou/dai/internal/ai/imageedit"
 	"xiaodou/dai/internal/ai/serving"
 )
 
@@ -60,47 +59,6 @@ func TestNormalizeOpenAIImageRequestRejectsMultipartPartialImages(t *testing.T) 
 		t.Fatalf("expected APIError, got %T", err)
 	}
 	if apiErr.Message != openAIImagePartialImagesUnsupportedMessage {
-		t.Fatalf("message = %q", apiErr.Message)
-	}
-}
-
-func TestDecodeRunImageGenerationRequestBodyRejectsPartialImages(t *testing.T) {
-	_, err := decodeRunImageGenerationRequestBody(
-		[]byte(`{"input":"poster","partial_images":1}`),
-	)
-	if err == nil {
-		t.Fatal("expected partial_images to be rejected")
-	}
-	var apiErr *serving.APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T", err)
-	}
-	if apiErr.Message != openAIImagePartialImagesUnsupportedMessage {
-		t.Fatalf("message = %q", apiErr.Message)
-	}
-}
-
-func TestDecodeRunImageGenerationRequestBodyRejectsPromptField(t *testing.T) {
-	_, err := decodeRunImageGenerationRequestBody([]byte(`{"input":"poster","prompt":"legacy"}`))
-	var apiErr *serving.APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T", err)
-	}
-	if apiErr.Message != "prompt is not supported for app runs; use input" {
-		t.Fatalf("message = %q", apiErr.Message)
-	}
-}
-
-func TestDecodeAppRunImageEditRequestBodyRejectsPromptField(t *testing.T) {
-	_, _, err := decodeAppRunImageEditRequestBody(
-		[]byte(`{"input":"retouch","prompt":"legacy","images":[{"image_url":"https://example.com/ref.png"}]}`),
-		imageedit.TransportJSON,
-	)
-	var apiErr *serving.APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected APIError, got %T", err)
-	}
-	if apiErr.Message != "prompt is not supported for app runs; use input" {
 		t.Fatalf("message = %q", apiErr.Message)
 	}
 }

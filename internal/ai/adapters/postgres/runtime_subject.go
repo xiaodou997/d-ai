@@ -24,14 +24,10 @@ func runtimeSubjectRequestSource(subject *coreidentity.Subject) domain.RequestSo
 	switch subject.RequestSource {
 	case coreidentity.RequestSourceAPIKey:
 		return domain.RequestSourceAPIKey
-	case coreidentity.RequestSourceInvokeKey:
-		return domain.RequestSourceRunKey
 	case coreidentity.RequestSourceWebImage:
 		return domain.RequestSourceWebImage
 	case coreidentity.RequestSourceWebChat:
 		return domain.RequestSourceWebChat
-	case coreidentity.RequestSourceAppPreview:
-		return domain.RequestSourceAppPreview
 	default:
 		return domain.RequestSourceAPIKey
 	}
@@ -45,8 +41,6 @@ func runtimeSubjectAuthMethod(subject *coreidentity.Subject) domain.RuntimeAuthM
 	case coreidentity.AuthMethodAPIKey:
 		return domain.AuthMethodAPIKey
 	case coreidentity.AuthMethodJWT:
-		return domain.AuthMethodJWT
-	case coreidentity.AuthMethodInvokeKey:
 		return domain.AuthMethodJWT
 	default:
 		return domain.AuthMethodJWT

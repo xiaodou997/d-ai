@@ -22,7 +22,7 @@ func mustExecRiskControl(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 
 // setupRiskControlSchema creates the risk-control tables inside the
 // disposable test schema (search_path already points at it via the pool
-// returned by testsupport.OpenAppLayerTestPool). Mirrors db/init.sql's
+// returned by testsupport.OpenAsyncTaskTestPool). Mirrors db/init.sql's
 // definitions closely enough to exercise real pgtype round-tripping.
 func setupRiskControlSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
@@ -79,7 +79,7 @@ func setupRiskControlSchema(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 func TestRiskControlRepo_SettingRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	pool, _, cleanup, err := testsupport.OpenAppLayerTestPool(ctx)
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{})
 	if err != nil {
 		t.Skipf("open risk control test pool: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestRiskControlRepo_SettingRoundTrip(t *testing.T) {
 func TestRiskControlRepo_LogInsertListCountFilter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	pool, _, cleanup, err := testsupport.OpenAppLayerTestPool(ctx)
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{})
 	if err != nil {
 		t.Skipf("open risk control test pool: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestRiskControlRepo_LogInsertListCountFilter(t *testing.T) {
 func TestRiskControlRepo_EventInsertListResolve(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	pool, _, cleanup, err := testsupport.OpenAppLayerTestPool(ctx)
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{})
 	if err != nil {
 		t.Skipf("open risk control test pool: %v", err)
 	}

@@ -61,7 +61,7 @@ func (r *UserRepository) GetByUserID(userID string) (*User, error) {
 	var createdAt time.Time
 	err := r.pool.QueryRow(context.Background(), `
 		SELECT user_id, tenant_id, username, email, nickname, avatar, status, created_at
-		FROM iam_users WHERE user_id = $1
+		FROM iam_accounts WHERE user_id = $1 AND user_type = 4
 	`, userID).Scan(&u.UserID, &u.TenantID, &u.Username, &u.Email, &u.Nickname, &u.Avatar, &status, &createdAt)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (r *UserRepository) GetByUserIDs(userIDs []string) ([]*User, error) {
 
 	rows, err := r.pool.Query(context.Background(), `
 		SELECT user_id, tenant_id, username, email, nickname, avatar, status, created_at
-		FROM iam_users WHERE user_id = ANY($1)
+		FROM iam_accounts WHERE user_id = ANY($1) AND user_type = 4
 	`, userIDs)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func (r *UserRepository) Update(userID string, data map[string]any) error {
 		return nil
 	}
 
-	sql := "UPDATE iam_users SET "
+	sql := "UPDATE iam_accounts SET "
 	args := []any{}
 	i := 1
 	for key, value := range data {
@@ -118,7 +118,7 @@ func (r *UserRepository) Update(userID string, data map[string]any) error {
 		args = append(args, value)
 		i++
 	}
-	sql += fmt.Sprintf(" WHERE user_id = $%d", i)
+	sql += fmt.Sprintf(" WHERE user_id = $%d AND user_type = 4", i)
 	args = append(args, userID)
 
 	_, err := r.pool.Exec(context.Background(), sql, args...)

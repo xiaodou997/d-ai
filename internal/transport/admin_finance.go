@@ -180,7 +180,7 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 			return nil, httpx.ErrBadRequest.WithDetail("用户充值时 userId 必填")
 		}
 		var userTenantID string
-		if err := h.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_users WHERE user_id = $1 AND status <> 'deleted'`, in.Body.UserID).Scan(&userTenantID); err != nil || userTenantID == "" {
+		if err := h.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_accounts WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'`, in.Body.UserID).Scan(&userTenantID); err != nil || userTenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
 		}
 		if userType == 3 && loginTenantID != "" && loginTenantID != userTenantID {
@@ -207,8 +207,8 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 	if userID != "" {
 		var active bool
 		if err := tx.QueryRow(ctx, `
-			SELECT true FROM iam_users
-			WHERE user_id = $1 AND tenant_id = $2 AND status = 'active'
+			SELECT true FROM iam_accounts
+			WHERE user_id = $1 AND tenant_id = $2 AND user_type = 4 AND status = 'active'
 			FOR UPDATE
 		`, userID, tenantID).Scan(&active); err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或已删除")
@@ -306,7 +306,7 @@ func (h *adminHandlers) getDebt(ctx context.Context, in *debtStatusInput) (*debt
 	if in.OwnerType == "tenant" {
 		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_tenants WHERE tenant_id = $1`, in.AccountID).Scan(&debt)
 	} else {
-		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_users WHERE user_id = $1`, in.AccountID).Scan(&debt)
+		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_accounts WHERE user_id = $1 AND user_type = 4`, in.AccountID).Scan(&debt)
 	}
 	if err != nil {
 		return nil, httpx.ErrBadRequest.WithDetail("账户不存在")

@@ -68,7 +68,11 @@ describe("unified portal route contract", () => {
     for (const module of portalModules) {
       expect(routePaths, module.id).toContain(module.path);
     }
-    expect(routePaths).toContain("/tenant/developer/docs/:section?");
-    expect(routePaths).toContain("/customer/developer/docs/:section?");
+    expect(routePaths).toContain("/tenant/developer/tooling");
+    expect(routePaths).toContain("/customer/developer/tooling");
+    expect(routePaths).not.toContain("/tenant/developer/apps");
+    expect(routePaths).not.toContain("/tenant/developer/prompts");
+    expect(routePaths).not.toContain("/customer/developer/apps");
+    expect(routePaths).not.toContain("/customer/developer/prompts");
   });
 });

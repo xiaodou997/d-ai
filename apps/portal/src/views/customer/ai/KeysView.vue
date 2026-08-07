@@ -1,37 +1,15 @@
 <script setup lang="ts">
-// 密钥管理(用户端):模型 API 密钥 + 应用运行密钥两个页签,实际渲染在
-// app-core 的 PortalKeyManagementWorkspace(DsUI 一体面板),此处只做页签与路由 query 同步。
-import { computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
-
-import { PortalKeyManagementWorkspace, type PortalKeyManagementTab } from "@/platform/ai/keys";
+// 用户 API 密钥页：应用密钥能力不再向用户开发中心开放。
+import { PortalKeyManagementWorkspace } from "@/platform/ai/keys";
 
 import ApiKeysView from "./ApiKeysView.vue";
-import AppKeysView from "./AppKeysView.vue";
-
-const route = useRoute();
-const router = useRouter();
-
-const activeTab = computed<PortalKeyManagementTab>({
-  get: () => (route.query.tab === "application" ? "application" : "api"),
-  set: (tab) => {
-    void router.replace({
-      query: {
-        ...route.query,
-        tab: tab === "application" ? "application" : undefined
-      }
-    });
-  }
-});
 </script>
 
 <template>
   <PortalKeyManagementWorkspace
-    v-model:active-tab="activeTab"
+    title="API 密钥"
     eyebrow="智能服务 / 开发接入"
-    :show-application-keys="true"
   >
     <template #api><ApiKeysView embedded /></template>
-    <template #application><AppKeysView embedded /></template>
   </PortalKeyManagementWorkspace>
 </template>

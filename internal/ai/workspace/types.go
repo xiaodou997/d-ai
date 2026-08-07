@@ -15,24 +15,14 @@ const (
 	ThreadStatusDeleted  ThreadStatus = "deleted"
 )
 
-type ThreadTargetKind string
-
-const (
-	ThreadTargetModel ThreadTargetKind = "model"
-	ThreadTargetApp   ThreadTargetKind = "app"
-)
-
 // Thread represents one workspace conversation or image task thread.
 type Thread struct {
 	ID              string
 	OwnerScope      identity.Scope
 	TenantID        string
 	UserID          string
-	TargetKind      ThreadTargetKind
 	TargetModelCode string
-	AppID           string
 	Title           string
-	Variables       map[string]string
 	SelectedSurface surface.ID
 	Status          ThreadStatus
 	CreatedAt       time.Time

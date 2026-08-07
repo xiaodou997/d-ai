@@ -105,8 +105,8 @@ func (r *TenantRepo) GetByTenantAndUsername(ctx context.Context, tenantID, usern
 	var lastLoginAt *time.Time
 	err := r.pool.QueryRow(ctx, `
 		SELECT user_id, tenant_id, username, password_hash, email, phone, status, last_login_at
-		FROM iam_tenant_users
-		WHERE tenant_id = $1 AND username = $2
+			FROM iam_accounts
+			WHERE tenant_id = $1 AND username = $2 AND user_type = 3
 	`, tenantID, username).Scan(
 		&u.UserID, &u.TenantID, &u.Username, &passwordHash,
 		&u.Email, &u.Phone, &status, &lastLoginAt,
@@ -131,8 +131,8 @@ func (r *TenantRepo) GetByUserID(ctx context.Context, userID string) (*TenantUse
 	// email/phone 可空，COALESCE 为空串以适配非指针 string 字段（直接 Scan NULL 会失败）
 	err := r.pool.QueryRow(ctx, `
 		SELECT user_id, tenant_id, username, COALESCE(email, ''), COALESCE(phone, ''), status, last_login_at, created_at
-		FROM iam_tenant_users
-		WHERE user_id = $1
+			FROM iam_accounts
+			WHERE user_id = $1 AND user_type = 3
 	`, userID).Scan(
 		&u.UserID, &u.TenantID, &u.Username,
 		&u.Email, &u.Phone, &status, &lastLoginAt, &createdAt,
@@ -152,7 +152,7 @@ func (r *TenantRepo) GetByUserID(ctx context.Context, userID string) (*TenantUse
 // UpdateLastLogin 更新最后登录时间
 func (r *TenantRepo) UpdateLastLogin(ctx context.Context, userID string, t int64) error {
 	_, err := r.pool.Exec(ctx, `
-		UPDATE iam_tenant_users SET last_login_at = $1 WHERE user_id = $2
+			UPDATE iam_accounts SET last_login_at = $1 WHERE user_id = $2 AND user_type = 3
 	`, time.UnixMilli(t).UTC(), userID)
 	return err
 }
@@ -160,7 +160,7 @@ func (r *TenantRepo) UpdateLastLogin(ctx context.Context, userID string, t int64
 // ListEndUsers 分页查询本租户的终端用户
 func (r *TenantRepo) ListEndUsers(ctx context.Context, tenantID, keyword string, page, size int) ([]EndUserItem, int64, error) {
 	var total int64
-	baseWhere := "WHERE tenant_id = $1 AND status <> 'deleted'"
+	baseWhere := "WHERE tenant_id = $1 AND user_type = 4 AND status <> 'deleted'"
 	args := []any{tenantID}
 	argIdx := 2
 
@@ -171,7 +171,7 @@ func (r *TenantRepo) ListEndUsers(ctx context.Context, tenantID, keyword string,
 		argIdx += 2
 	}
 
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM iam_users %s", baseWhere)
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM iam_accounts %s", baseWhere)
 	err := r.pool.QueryRow(ctx, countSQL, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
@@ -181,7 +181,7 @@ func (r *TenantRepo) ListEndUsers(ctx context.Context, tenantID, keyword string,
 	queryArgs := append(args, size, offset)
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT user_id, username, email, phone, nickname, status, created_at
-		FROM iam_users %s
+			FROM iam_accounts %s
 		ORDER BY created_at DESC LIMIT $%d OFFSET $%d
 	`, baseWhere, argIdx, argIdx+1), queryArgs...)
 	if err != nil {
@@ -324,7 +324,7 @@ func (r *TenantRepo) DeleteInvitationCode(ctx context.Context, id int64, tenantI
 func (r *TenantRepo) GetStats(ctx context.Context, tenantID string) (*TenantStats, error) {
 	stats := &TenantStats{}
 	var deductionMicro int64
-	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_users WHERE tenant_id = $1 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount)
+	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount)
 	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&stats.InviteCodeCount)
 	r.pool.QueryRow(ctx, `SELECT COALESCE(SUM(user_credits), 0) FROM bill_events WHERE tenant_id = $1 AND status = 'succeeded' AND event_type = 'charge'`, tenantID).Scan(&deductionMicro)
 	stats.UserDeductionCredits = billing.MicroToCredits(deductionMicro)
@@ -348,7 +348,7 @@ func (r *TenantRepo) ListTransactions(ctx context.Context, tenantID string, page
 		       COALESCE(t.tenant_name, '') AS tenant_name
 		FROM bill_events dt
 		LEFT JOIN iam_tenants t ON t.tenant_id = dt.tenant_id
-		LEFT JOIN iam_users eu ON eu.user_id = dt.user_id
+			LEFT JOIN iam_accounts eu ON eu.user_id = dt.user_id AND eu.user_type = 4
 		WHERE dt.tenant_id = $1 AND dt.event_type = 'charge'
 		ORDER BY dt.created_at DESC LIMIT $2 OFFSET $3
 	`, tenantID, size, offset)
@@ -459,7 +459,7 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 	stats := &TenantOverviewStats{}
 	var userTotalMicro, userDeductionMicro int64
 
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_users WHERE tenant_id = $1 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount); err != nil {
 		return nil, err
 	}
 	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&stats.InviteCodeCount); err != nil {
@@ -539,7 +539,7 @@ func (r *TenantRepo) GetUserConsumptionRanking(ctx context.Context, tenantID str
 			COUNT(*) AS transaction_count,
 			SUM(SUM(COALESCE(e.user_credits, 0))) OVER () AS total_credits
 		FROM bill_events e
-		LEFT JOIN iam_users u ON u.user_id = e.user_id
+			LEFT JOIN iam_accounts u ON u.user_id = e.user_id AND u.user_type = 4
 		WHERE e.tenant_id = $1
 		  AND e.status = 'succeeded'
 		  AND e.event_type = 'charge'

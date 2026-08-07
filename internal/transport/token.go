@@ -78,14 +78,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 		}
 	}
 
-	switch {
-	case u.UserType <= 2:
-		_ = h.repo.UpdateSystemUserLoginTime(ctx, u.UserID, nowUTC())
-	case u.UserType == 3:
-		_ = h.repo.UpdateTenantUserLoginTime(ctx, u.UserID, nowUTC())
-	case u.UserType == 4:
-		_ = h.repo.UpdateEndUserLoginTime(ctx, u.UserID, nowUTC())
-	}
+	_ = h.repo.UpdateLoginTime(ctx, u.UserID, nowUTC())
 
 	return loginPrincipal{
 		UserID:          u.UserID,

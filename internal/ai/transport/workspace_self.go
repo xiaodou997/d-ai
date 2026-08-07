@@ -293,7 +293,7 @@ func buildTenantWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOv
 		out.Body.Summary = summary
 		out.Body.UsageLogs = make([]tenantUsageLogDTO, 0, len(logs))
 		for _, log := range logs {
-			out.Body.UsageLogs = append(out.Body.UsageLogs, tenantUsageLogToDTO(log, owner.TenantID))
+			out.Body.UsageLogs = append(out.Body.UsageLogs, tenantUsageLogToDTO(log))
 		}
 		out.Body.ChatSessions = make([]workspaceChatSessionDTO, 0, len(sessions))
 		for _, session := range sessions {

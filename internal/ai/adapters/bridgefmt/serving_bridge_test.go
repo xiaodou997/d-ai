@@ -97,32 +97,6 @@ func TestBuildUpstreamRequestUsesWebUserAgentForWebRuntimeSubject(t *testing.T) 
 	}
 }
 
-func TestBuildUpstreamRequestUsesAppUserAgentForAppPreview(t *testing.T) {
-	runtime := NewRuntime()
-	httpReq := httptest.NewRequest("POST", "/v1/chat/completions", nil)
-	httpReq.Header.Set("User-Agent", "Mozilla/5.0")
-	req := &serving.Request{
-		ClientPath: "/v1/chat/completions",
-		Subject: &coreidentity.Subject{
-			RequestSource: coreidentity.RequestSourceAppPreview,
-		},
-		Candidate: &domain.RouteCandidate{
-			BaseURL:          "https://api.openai.com",
-			Protocol:         domain.ProtocolOpenAIChat,
-			APIKeyCiphertext: "sk-abc",
-		},
-		Envelope: &serving.RequestEnvelope{R: httpReq},
-	}
-
-	upReq, err := runtime.BuildUpstreamRequest(req, corebridge.PreparedRequest{Body: []byte(`{"model":"gpt-5"}`)})
-	if err != nil {
-		t.Fatalf("BuildUpstreamRequest err = %v", err)
-	}
-	if got := upReq.Headers["user-agent"]; got != appOutboundUserAgent {
-		t.Fatalf("user-agent = %q, want %q", got, appOutboundUserAgent)
-	}
-}
-
 func TestPrepareRequestConvertsOpenAIImageEditJSONToMultipart(t *testing.T) {
 	runtime := NewRuntime()
 	body := []byte(`{"model":"public-image","prompt":"touch up","images":[{"image_url":"data:image/png;base64,` + bridgeTestImagePNGBase64 + `"}],"stream":true,"response_format":"url"}`)

@@ -1,4 +1,4 @@
-import { normalizeImageAspectRatio } from "../apps/contract";
+import { normalizeImageAspectRatio } from "./contract";
 
 const imageTierPixels: Record<string, number> = {
   "1k": 1024 * 1024,

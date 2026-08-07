@@ -11,8 +11,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
-	"xiaodou/dai/internal/ai/application"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/formats"
@@ -96,9 +94,7 @@ func decodeConsoleImageMultipartSubmission(body []byte, contentType string) (con
 		Operation:      "edit",
 		ModelCode:      strings.TrimSpace(fields["model"]),
 		GroupID:        strings.TrimSpace(fields["group_id"]),
-		AgentID:        strings.TrimSpace(fields["agent_id"]),
 		Prompt:         strings.TrimSpace(fields["prompt"]),
-		Variables:      decodeJSONStringMap(fields["variables"]),
 		Size:           strings.TrimSpace(fields["size"]),
 		ResponseFormat: strings.TrimSpace(fields["response_format"]),
 		Background:     strings.TrimSpace(fields["background"]),
@@ -126,12 +122,12 @@ func consoleImageInputFromRequest(operation string, req consoleImageGenerateRequ
 				return consoleImageTaskInputPayload{}, domain.NewValidationError("request", err.Error())
 			}
 		}
-		raw, err = buildConsoleImageEditTaskInput(req, nil, editRequest.Mask != nil, editRequest)
+		raw, err = buildConsoleImageEditTaskInput(req, editRequest.Mask != nil, editRequest)
 		if err != nil {
 			return consoleImageTaskInputPayload{}, domain.NewValidationError("request", err.Error())
 		}
 	} else {
-		raw = buildConsoleImageTaskInput("generation", req, nil, false, false)
+		raw = buildConsoleImageTaskInput("generation", req, false, false)
 	}
 	var input consoleImageTaskInputPayload
 	if err := json.Unmarshal(raw, &input); err != nil {
@@ -198,72 +194,20 @@ func (s *Console) resolveConsoleImage(
 	req.Operation = operation
 	req.ModelCode = strings.TrimSpace(req.ModelCode)
 	req.GroupID = strings.TrimSpace(req.GroupID)
-	req.AgentID = strings.TrimSpace(req.AgentID)
 	req.Prompt = strings.TrimSpace(req.Prompt)
-	if req.AgentID == "" && req.ModelCode == "" {
-		return consoleImageResolution{}, domain.NewValidationError("model", "model or agent_id is required")
+	if req.ModelCode == "" {
+		return consoleImageResolution{}, domain.NewValidationError("model", "model is required")
 	}
-	if req.Prompt == "" && req.AgentID == "" {
+	if req.Prompt == "" {
 		return consoleImageResolution{}, domain.NewValidationError("prompt", "prompt is required")
 	}
 
 	modelCode := req.ModelCode
 	groupID := req.GroupID
-	finalPrompt := req.Prompt
-	hideRevisedPrompt := false
-	agentDefaults := map[string]any(nil)
-	var agent *consoleChatAgentRuntime
-	if req.AgentID != "" {
-		record, err := pgadapter.NewApplicationAppRepo(s.postgres).GetVisibleAgentByID(
-			ctx,
-			consoleAppViewer(subject),
-			req.AgentID,
-			[]string{consoleAgentTypeImageGeneration, consoleAgentTypeImageEdit},
-		)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return consoleImageResolution{}, domain.ErrForbidden
-			}
-			return consoleImageResolution{}, err
-		}
-		found := appAgentRecordToConsoleChatAgentRuntime(record)
-		wantAgentType := consoleAgentTypeImageGeneration
-		if operation == "edit" {
-			wantAgentType = consoleAgentTypeImageEdit
-		}
-		if found.AgentType != wantAgentType {
-			return consoleImageResolution{}, domain.NewValidationError("agent_id", "agent does not support image "+operation)
-		}
-		if strings.TrimSpace(found.GroupID) == "" {
-			return consoleImageResolution{}, domain.NewValidationError("agent_id", "app's bound group has been deleted, please reassign a group")
-		}
-		agent = &found
-		modelCode = found.ModelCode
-		groupID = found.GroupID
-		resolved, err := resolveConsoleAppPrompt(found, req.Prompt, req.Variables)
-		if err != nil {
-			return consoleImageResolution{}, domain.NewValidationError("input", err.Error())
-		}
-		finalPrompt = resolved.CombinedText()
-		hideRevisedPrompt = true
-		agentDefaults = found.DefaultOptions
-		cfg := application.ParseRuntimeConfig(application.AppTypeImageGenerationAgent, agentDefaults).Image
-		count, ok := cfg.ResolveOutputCount(req.N)
-		if !ok {
-			return consoleImageResolution{}, domain.NewValidationError("n", "requested output count is not allowed by this app")
-		}
-		req.N = count
-	}
-	if strings.TrimSpace(finalPrompt) == "" {
-		return consoleImageResolution{}, domain.NewValidationError("prompt", "prompt is required")
-	}
-	if operation == "edit" && agent != nil && consoleImageEditOverridesApp(req) {
-		return consoleImageResolution{}, domain.NewValidationError("request", "runtime options cannot be overridden for this app")
-	}
 
 	req.ModelCode = modelCode
 	req.GroupID = groupID
-	runtimeSubject := consoleImageSubjectFromAgent(subject, groupID, agent)
+	runtimeSubject := consoleSubjectForSession(subject, groupID)
 	if err := s.ensureConsoleImageModelGranted(ctx, runtimeSubject, modelCode); err != nil {
 		return consoleImageResolution{}, err
 	}
@@ -280,11 +224,11 @@ func (s *Console) resolveConsoleImage(
 		clientPath  string
 	)
 	if operation == "generation" {
-		body, err = buildConsoleImageBody(req, modelCode, finalPrompt, agentDefaults)
+		body, err = buildConsoleImageBody(req, modelCode, req.Prompt)
 		if err != nil {
 			return consoleImageResolution{}, domain.NewValidationError("request", err.Error())
 		}
-		inputRaw = buildConsoleImageTaskInput(operation, req, agent, false, false)
+		inputRaw = buildConsoleImageTaskInput(operation, req, false, false)
 		clientPath = "/v1/images/generations"
 	} else {
 		editRequest, err := decodePersistedConsoleImageEditRequestFromPayload(input)
@@ -292,20 +236,15 @@ func (s *Console) resolveConsoleImage(
 			return consoleImageResolution{}, domain.NewValidationError("request", err.Error())
 		}
 		editRequest.Model = modelCode
-		editRequest.Prompt = finalPrompt
+		editRequest.Prompt = req.Prompt
 		editRequest.ResponseFormat = req.ResponseFormat
 		editRequest.Stream = consoleImageRequestStreamEnabled(req)
 		editRequest.N = req.N
-		if agent != nil {
-			if size, ok := imageDefaultString(agentDefaults, "size"); ok {
-				editRequest.Size = size
-			}
-		}
 		body, err = imageedit.CanonicalJSON(editRequest)
 		if err != nil {
 			return consoleImageResolution{}, domain.NewValidationError("request", err.Error())
 		}
-		inputRaw, err = buildConsoleImageEditTaskInput(req, agent, editRequest.Mask != nil, editRequest)
+		inputRaw, err = buildConsoleImageEditTaskInput(req, editRequest.Mask != nil, editRequest)
 		if err != nil {
 			return consoleImageResolution{}, domain.NewValidationError("request", err.Error())
 		}
@@ -318,14 +257,13 @@ func (s *Console) resolveConsoleImage(
 		Input:     json.RawMessage(inputRaw),
 		ModelCode: modelCode,
 		Replay: gateway.ReplayInput{
-			Subject:           replaySubject,
-			Capability:        domain.CapabilityImage,
-			Protocol:          domain.ProtocolOpenAIImages,
-			ClientPath:        clientPath,
-			Body:              body,
-			ContentType:       contentType,
-			StreamExpected:    consoleImageRequestStreamEnabled(req),
-			HideRevisedPrompt: hideRevisedPrompt,
+			Subject:        replaySubject,
+			Capability:     domain.CapabilityImage,
+			Protocol:       domain.ProtocolOpenAIImages,
+			ClientPath:     clientPath,
+			Body:           body,
+			ContentType:    contentType,
+			StreamExpected: consoleImageRequestStreamEnabled(req),
 		},
 	}, nil
 }
@@ -345,10 +283,8 @@ type consoleImageGenerateRequest struct {
 	Operation         string               `json:"operation,omitempty"`
 	ModelCode         string               `json:"model"`
 	GroupID           string               `json:"group_id,omitempty"`
-	AgentID           string               `json:"agent_id,omitempty"`
 	Prompt            string               `json:"prompt"`
 	N                 int                  `json:"n,omitempty"`
-	Variables         map[string]string    `json:"variables,omitempty"`
 	Images            []consoleImageSource `json:"images,omitempty"`
 	Mask              *consoleImageSource  `json:"mask,omitempty"`
 	Size              string               `json:"size,omitempty"`
@@ -472,10 +408,8 @@ func consoleImageRequestFromTaskInput(input consoleImageTaskInputPayload, fallba
 		Operation:         strings.TrimSpace(input.Operation),
 		ModelCode:         strings.TrimSpace(input.Model),
 		GroupID:           strings.TrimSpace(input.GroupID),
-		AgentID:           strings.TrimSpace(input.AgentID),
 		Prompt:            strings.TrimSpace(input.Prompt),
 		N:                 input.N,
-		Variables:         input.Variables,
 		Images:            input.Images,
 		Mask:              input.Mask,
 		Size:              strings.TrimSpace(input.Size),
@@ -547,9 +481,8 @@ func (s *Console) ensureConsoleImageModelGranted(ctx context.Context, subject *c
 	return nil
 }
 
-func buildConsoleImageBody(req consoleImageGenerateRequest, modelCode, prompt string, defaults map[string]any) ([]byte, error) {
+func buildConsoleImageBody(req consoleImageGenerateRequest, modelCode, prompt string) ([]byte, error) {
 	body := map[string]any{}
-	mergeImageDefaultOptions(body, defaults)
 	body["model"] = modelCode
 	body["prompt"] = prompt
 	if req.N > domain.DefaultImageOutputCount {
@@ -605,26 +538,7 @@ func decodeConsoleImageEditRequest(req consoleImageGenerateRequest) (imageedit.R
 	return imageedit.Decode(body, imageedit.TransportJSON)
 }
 
-func consoleImageEditOverridesApp(req consoleImageGenerateRequest) bool {
-	return strings.TrimSpace(req.ModelCode) != "" || strings.TrimSpace(req.GroupID) != "" ||
-		strings.TrimSpace(req.Size) != "" ||
-		strings.TrimSpace(req.Background) != "" || strings.TrimSpace(req.InputFidelity) != "" ||
-		strings.TrimSpace(req.Moderation) != "" || strings.TrimSpace(req.OutputFormat) != "" ||
-		req.OutputCompression != nil || strings.TrimSpace(req.User) != ""
-}
-
-func decodeJSONStringMap(raw string) map[string]string {
-	if strings.TrimSpace(raw) == "" {
-		return map[string]string{}
-	}
-	out := map[string]string{}
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return map[string]string{}
-	}
-	return out
-}
-
-func buildConsoleImageTaskInput(operation string, req consoleImageGenerateRequest, agent *consoleChatAgentRuntime, hasSourceImage, hasMask bool) []byte {
+func buildConsoleImageTaskInput(operation string, req consoleImageGenerateRequest, hasSourceImage, hasMask bool) []byte {
 	payload := map[string]any{
 		"operation":          operation,
 		"model":              strings.TrimSpace(req.ModelCode),
@@ -648,23 +562,12 @@ func buildConsoleImageTaskInput(operation string, req consoleImageGenerateReques
 	if req.Mask != nil {
 		payload["mask"] = req.Mask
 	}
-	if len(req.Variables) > 0 {
-		payload["variables"] = req.Variables
-	}
-	if agent != nil {
-		payload["agent_id"] = agent.ID
-		payload["agent_name"] = agent.Name
-		payload["agent_type"] = agent.AgentType
-		// 应用任务对使用侧脱敏:不落底层模型与分组快照。
-		payload["model"] = ""
-		payload["group_id"] = ""
-	}
 	raw, _ := json.Marshal(payload)
 	return raw
 }
 
-func buildConsoleImageEditTaskInput(req consoleImageGenerateRequest, agent *consoleChatAgentRuntime, hasMask bool, editRequest imageedit.Request) ([]byte, error) {
-	raw := buildConsoleImageTaskInput("edit", req, agent, true, hasMask)
+func buildConsoleImageEditTaskInput(req consoleImageGenerateRequest, hasMask bool, editRequest imageedit.Request) ([]byte, error) {
+	raw := buildConsoleImageTaskInput("edit", req, true, hasMask)
 	var payload map[string]any
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil, fmt.Errorf("decode image task input: %w", err)
@@ -706,29 +609,4 @@ func effectiveConsoleImageResponseFormat(value string) string {
 		return domain.ImageResponseFormatURL
 	}
 	return value
-}
-
-// mergeImageDefaultOptions applies a bound app's fixed configuration. An image
-// app fixes only its resolution (mapped to the upstream "size"); everything else
-// is model-decided or a caller request parameter. defaults is nil for
-// direct-model sessions, which are left untouched.
-func mergeImageDefaultOptions(target map[string]any, defaults map[string]any) {
-	if len(defaults) == 0 {
-		return
-	}
-	if cfg := application.ParseRuntimeConfig(application.AppTypeImageGenerationAgent, defaults).Image; cfg != nil {
-		target["size"] = cfg.Resolution
-	}
-}
-
-// imageDefaultString returns the app-fixed value for an option key. Only "size"
-// is fixed by an image app.
-func imageDefaultString(defaults map[string]any, key string) (string, bool) {
-	if key != "size" || len(defaults) == 0 {
-		return "", false
-	}
-	if cfg := application.ParseRuntimeConfig(application.AppTypeImageGenerationAgent, defaults).Image; cfg != nil {
-		return cfg.Resolution, true
-	}
-	return "", false
 }

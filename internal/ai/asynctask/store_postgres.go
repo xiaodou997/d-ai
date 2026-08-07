@@ -38,15 +38,15 @@ func (s *postgresStore) insert(ctx context.Context, rec insertRecord) (string, b
 	// without one never conflict.
 	err := s.pool.QueryRow(ctx, `
 			INSERT INTO ai_async_tasks (
-			  task_type, auth_method, tenant_id, user_id, api_key_id, invoke_key_id,
+			  task_type, auth_method, tenant_id, user_id, api_key_id,
 			  model_code, input_payload, metadata, webhook_url,
 			  idempotency_key, idempotency_scope, idempotency_fingerprint,
 			  max_attempts, status, available_at, expires_at
 			) VALUES (
-			  $1, $2, $3, NULLIF($4,''), NULLIF($5,'')::uuid, NULLIF($6,'')::uuid,
-			  $7, $8, $9, NULLIF($10,''),
-			  NULLIF($11,''), NULLIF($12,''), $13,
-			  $14, 'pending', now(), $15
+			  $1, $2, $3, NULLIF($4,''), NULLIF($5,'')::uuid,
+			  $6, $7, $8, NULLIF($9,''),
+			  NULLIF($10,''), NULLIF($11,''), $12,
+			  $13, 'pending', now(), $14
 		)
 		ON CONFLICT (idempotency_scope, idempotency_key)
 		  WHERE idempotency_key IS NOT NULL
@@ -54,7 +54,7 @@ func (s *postgresStore) insert(ctx context.Context, rec insertRecord) (string, b
 		RETURNING id::text
 	`,
 		rec.Type, string(rec.SubjectRef.AuthMethod), rec.SubjectRef.TenantID,
-		rec.SubjectRef.UserID, rec.SubjectRef.APIKeyID, rec.SubjectRef.InvokeKeyID,
+		rec.SubjectRef.UserID, rec.SubjectRef.APIKeyID,
 		rec.ModelCode, []byte(rec.Input), nullableJSON(rec.Metadata), rec.WebhookURL,
 		rec.IdempotencyKey, rec.IdempotencyScope, rec.IdempotencyFingerprint,
 		rec.MaxAttempts, expiresAt,
@@ -152,8 +152,7 @@ FROM candidate c
 WHERE t.id = c.id AND t.status = 'pending'
 RETURNING t.id::text, t.task_type, t.auth_method, t.tenant_id,
           COALESCE(t.user_id, ''), COALESCE(t.api_key_id::text, ''),
-          COALESCE(t.invoke_key_id::text, ''), t.model_code,
-          t.input_payload, t.attempt_count, COALESCE(t.request_id, '')
+          t.model_code, t.input_payload, t.attempt_count, COALESCE(t.request_id, '')
 `
 
 func (s *postgresStore) claim(ctx context.Context, types []string, cap int, workerID string, lease time.Duration) (claimedTask, bool, error) {
@@ -166,7 +165,7 @@ func (s *postgresStore) claim(ctx context.Context, types []string, cap int, work
 	)
 	err := s.pool.QueryRow(ctx, claimSQL, types, cap, workerID, lease.Seconds()).Scan(
 		&t.ID, &t.Type, &authMethod, &t.SubjectRef.TenantID,
-		&t.SubjectRef.UserID, &t.SubjectRef.APIKeyID, &t.SubjectRef.InvokeKeyID,
+		&t.SubjectRef.UserID, &t.SubjectRef.APIKeyID,
 		&t.ModelCode, &t.Input, &t.Attempt, &t.RequestID,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -348,7 +347,7 @@ func (s *postgresStore) releaseWorker(ctx context.Context, workerID string) (int
 
 const taskSelectColumns = `
 	id::text, task_type, status, model_code, auth_method, tenant_id,
-	COALESCE(user_id, ''), COALESCE(api_key_id::text, ''), COALESCE(invoke_key_id::text, ''),
+	COALESCE(user_id, ''), COALESCE(api_key_id::text, ''),
 	input_payload, result_payload, metadata, COALESCE(webhook_url, ''),
 	COALESCE(idempotency_key, ''), COALESCE(request_id, ''), attempt_count, caller_charge,
 	COALESCE(error_code, ''), COALESCE(error_message, ''),
@@ -362,7 +361,7 @@ func scanTaskRow(row pgx.Row) (taskRow, error) {
 	)
 	err := row.Scan(
 		&t.ID, &t.Type, &status, &t.ModelCode, &t.AuthMethod, &t.TenantID,
-		&t.UserID, &t.APIKeyID, &t.InvokeKeyID,
+		&t.UserID, &t.APIKeyID,
 		&t.Input, &t.Output, &t.Metadata, &t.WebhookURL,
 		&t.IdempotencyKey, &t.RequestID, &t.Attempt, &t.CallerCharge,
 		&t.ErrorCode, &t.ErrorMessage,

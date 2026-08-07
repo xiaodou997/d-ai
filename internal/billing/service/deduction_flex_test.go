@@ -44,14 +44,14 @@ func TestConfirmAllowOverdraftOverflow(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
 
 	mustExec(`INSERT INTO iam_tenants (tenant_id, tenant_name, status, overdraft_limit, current_overdraft, frozen_credits)
 	          VALUES ($1, 'flex-test', 'active', 20, 0, 0)`, tenantID)
-	mustExec(`INSERT INTO iam_users (user_id, tenant_id, username, password_hash, overdraft_limit, current_overdraft, frozen_credits)
-	          VALUES ($1, $2, $3, 'x', 20, 0, 0)`, userID, tenantID, "user-"+suffix)
+	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, overdraft_limit, current_overdraft, frozen_credits)
+	          VALUES ($1, $2, $3, 'x', 4, 20, 0, 0)`, userID, tenantID, "u_user-"+suffix)
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 10, 10, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
 
@@ -90,9 +90,9 @@ func TestConfirmAllowOverdraftOverflow(t *testing.T) {
 	if res.AccountState != accountStateExhausted || res.AllowFurtherUsage {
 		t.Fatalf("expected exhausted=false/blocked result, got %+v", res)
 	}
-	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_users WHERE user_id=$1`, userID, 25)
+	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 25)
 	assertInt64(t, pool, ctx, `SELECT remaining_credits FROM bill_credit_packages WHERE user_id=$1`, userID, 2)
-	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 2)
+	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 2)
 	if _, err := svc.Freeze(FreezeParams{
 		IdempotencyKey: "blocked-" + suffix,
 		TenantID:       tenantID,
@@ -105,7 +105,7 @@ func TestConfirmAllowOverdraftOverflow(t *testing.T) {
 	if _, err := svc.Cancel(CancelParams{EventID: protected.EventID}); err != nil {
 		t.Fatalf("cancel protected authorization: %v", err)
 	}
-	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 0)
+	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 0)
 }
 
 // TestFreezeAllowOverdraftSoftReserve 验证 flex Freeze 在未 exhausted 时允许 soft reservation。
@@ -136,14 +136,14 @@ func TestFreezeAllowOverdraftSoftReserve(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
 
 	mustExec(`INSERT INTO iam_tenants (tenant_id, tenant_name, status, overdraft_limit, current_overdraft, frozen_credits)
 	          VALUES ($1, 'soft-test', 'active', 20, 0, 0)`, tenantID)
-	mustExec(`INSERT INTO iam_users (user_id, tenant_id, username, password_hash, overdraft_limit, current_overdraft, frozen_credits)
-	          VALUES ($1, $2, $3, 'x', 20, 0, 0)`, userID, tenantID, "user-"+suffix)
+	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, overdraft_limit, current_overdraft, frozen_credits)
+	          VALUES ($1, $2, $3, 'x', 4, 20, 0, 0)`, userID, tenantID, "u_user-"+suffix)
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 3, 3, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
 
@@ -161,7 +161,7 @@ func TestFreezeAllowOverdraftSoftReserve(t *testing.T) {
 	if res.EventID == "" || res.FrozenUser != 3 {
 		t.Fatalf("expected partial grant of 3, got %+v", res)
 	}
-	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 3)
+	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 3)
 }
 
 func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
@@ -193,14 +193,14 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
 
 	mustExec(`INSERT INTO iam_tenants (tenant_id, tenant_name, status, current_overdraft, frozen_credits)
 	          VALUES ($1, 'owner-test', 'active', 0, 0)`, tenantID)
-	mustExec(`INSERT INTO iam_users (user_id, tenant_id, username, password_hash, current_overdraft, frozen_credits)
-	          VALUES ($1, $2, $3, 'x', 0, 0)`, userID, tenantID, "user-"+suffix)
+	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, current_overdraft, frozen_credits)
+	          VALUES ($1, $2, $3, 'x', 4, 0, 0)`, userID, tenantID, "u_user-"+suffix)
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 10, 10, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
 	svc := NewDeductionService(pool, nil, zap.NewNop())
@@ -225,12 +225,12 @@ func TestAuthorizationCanOnlyBeSettledByOwningClient(t *testing.T) {
 	}); !errors.Is(err, shared.ErrForbidden) {
 		t.Fatalf("cross-client cancel error = %v, want ErrForbidden", err)
 	}
-	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 5)
+	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 5)
 
 	if _, err := svc.Cancel(CancelParams{EventID: freeze.EventID, ClientID: ownerClientID}); err != nil {
 		t.Fatalf("owning client cancel should succeed: %v", err)
 	}
-	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 0)
+	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 0)
 }
 
 func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
@@ -261,14 +261,14 @@ func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE tenant_id=$1`, tenantID)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
 
 	mustExec(`INSERT INTO iam_tenants (tenant_id, tenant_name, status, current_overdraft, frozen_credits)
 	          VALUES ($1, 'settlement-race-test', 'active', 0, 0)`, tenantID)
-	mustExec(`INSERT INTO iam_users (user_id, tenant_id, username, password_hash, current_overdraft, frozen_credits)
-	          VALUES ($1, $2, $3, 'x', 0, 0)`, userID, tenantID, "user-"+suffix)
+	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, current_overdraft, frozen_credits)
+	          VALUES ($1, $2, $3, 'x', 4, 0, 0)`, userID, tenantID, "u_user-"+suffix)
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 100, 100, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
 	svc := NewDeductionService(pool, nil, zap.NewNop())
@@ -289,7 +289,7 @@ func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin blocker: %v", err)
 	}
-	if _, err := blocker.Exec(ctx, `SELECT user_id FROM iam_users WHERE user_id=$1 FOR UPDATE`, userID); err != nil {
+	if _, err := blocker.Exec(ctx, `SELECT user_id FROM iam_accounts WHERE user_id=$1 FOR UPDATE`, userID); err != nil {
 		_ = blocker.Rollback(ctx)
 		t.Fatalf("lock user account: %v", err)
 	}
@@ -341,5 +341,5 @@ func TestConfirmAndCancelSerializeOnAuthorization(t *testing.T) {
 	default:
 		t.Fatalf("terminal event status = %q", status)
 	}
-	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 0)
+	assertInt64(t, pool, ctx, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 0)
 }

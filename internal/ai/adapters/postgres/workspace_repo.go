@@ -35,14 +35,7 @@ func (r *WorkspaceRepo) ListChatSessions(ctx context.Context, owner workspace.Ow
 	rows, err := r.pool.Query(ctx, `
 		SELECT t.id::text,
 		       t.title,
-		       t.target_kind,
-		       COALESCE(t.app_id::text, ''),
-		       COALESCE(a.name, ''),
-		       t.variables_json,
-		       CASE
-		         WHEN t.target_kind = 'model' THEN t.target_model_code
-		         ELSE COALESCE(a.model_code, '')
-		       END AS model_code,
+		       t.target_model_code,
 		       COALESCE(t.selected_group_id::text, ''),
 		       COALESCE(t.selected_group_name_snapshot, ''),
 		       COALESCE(t.selected_effective_user_multiplier_snapshot::float8, 0),
@@ -53,11 +46,9 @@ func (r *WorkspaceRepo) ListChatSessions(ctx context.Context, owner workspace.Ow
 		       t.created_at,
 		       t.updated_at
 		FROM ai_workspace_threads t
-		LEFT JOIN ai_apps a ON a.id = t.app_id
 		WHERE t.tenant_id = $1
 		  AND t.owner_scope = $2
 		  AND t.user_id = $3
-		  AND t.target_kind = 'model'
 		  AND t.status <> 'deleted'
 		ORDER BY t.updated_at DESC
 		LIMIT $4
@@ -82,14 +73,7 @@ func (r *WorkspaceRepo) GetChatSession(ctx context.Context, owner workspace.Owne
 	row := r.pool.QueryRow(ctx, `
 		SELECT t.id::text,
 		       t.title,
-		       t.target_kind,
-		       COALESCE(t.app_id::text, ''),
-		       COALESCE(a.name, ''),
-		       t.variables_json,
-		       CASE
-		         WHEN t.target_kind = 'model' THEN t.target_model_code
-		         ELSE COALESCE(a.model_code, '')
-		       END AS model_code,
+		       t.target_model_code,
 		       COALESCE(t.selected_group_id::text, ''),
 		       COALESCE(t.selected_group_name_snapshot, ''),
 		       COALESCE(t.selected_effective_user_multiplier_snapshot::float8, 0),
@@ -100,12 +84,10 @@ func (r *WorkspaceRepo) GetChatSession(ctx context.Context, owner workspace.Owne
 		       t.created_at,
 		       t.updated_at
 		FROM ai_workspace_threads t
-		LEFT JOIN ai_apps a ON a.id = t.app_id
 		WHERE t.id = $1
 		  AND t.tenant_id = $2
 		  AND t.owner_scope = $3
 		  AND t.user_id = $4
-		  AND t.target_kind = 'model'
 		  AND t.status <> 'deleted'
 	`, sessionID, owner.TenantID, ownerTypeFromScope(owner.Scope), ownerUserID(owner))
 	item, err := scanWorkspaceChatSession(row.Scan)
@@ -135,7 +117,6 @@ func (r *WorkspaceRepo) ListChatMessages(ctx context.Context, owner workspace.Ow
 		  AND t.tenant_id = $2
 		  AND t.owner_scope = $3
 		  AND t.user_id = $4
-		  AND t.target_kind = 'model'
 		  AND t.status <> 'deleted'
 		ORDER BY m.created_at ASC
 	`, sessionID, owner.TenantID, ownerTypeFromScope(owner.Scope), ownerUserID(owner))
@@ -170,7 +151,6 @@ func (r *WorkspaceRepo) ListImageJobs(ctx context.Context, owner workspace.Owner
 		FROM ai_async_tasks
 		WHERE task_type IN ('console.images.generation', 'console.images.edit')
 		  AND tenant_id = $1
-		  AND COALESCE(input_payload->>'agent_id', '') = ''
 		  AND (expires_at IS NULL OR expires_at > now())`
 	args := []any{owner.TenantID}
 	if owner.Scope == identity.ScopeUser {
@@ -215,12 +195,12 @@ func (r *WorkspaceRepo) CreateChatSession(ctx context.Context, owner workspace.O
 	}
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO ai_workspace_threads (
-		  owner_scope, tenant_id, user_id, target_kind, target_model_code, selected_group_id,
-		  selected_group_name_snapshot, selected_effective_user_multiplier_snapshot, app_id, title, variables_json, status
+		  owner_scope, tenant_id, user_id, target_model_code, selected_group_id,
+		  selected_group_name_snapshot, selected_effective_user_multiplier_snapshot, title, status
 		)
-		VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, $7, $8::numeric, NULLIF($9, '')::uuid, $10, $11::jsonb, 'active')
+		VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7::numeric, $8, 'active')
 		RETURNING id::text
-	`, string(owner.Scope), owner.TenantID, ownerUserID(owner), string(workspace.ThreadTargetModel), targetModelCode, groupID, groupName, effectiveUserMultiplier, "", input.Title, []byte(`{}`))
+	`, string(owner.Scope), owner.TenantID, ownerUserID(owner), targetModelCode, groupID, groupName, effectiveUserMultiplier, input.Title)
 	var sessionID string
 	if err := row.Scan(&sessionID); err != nil {
 		return "", err
@@ -250,7 +230,6 @@ func (r *WorkspaceRepo) DeleteChatSession(ctx context.Context, owner workspace.O
 	tag, err := tx.Exec(ctx, `
 		DELETE FROM ai_workspace_threads
 		WHERE id = $1 AND tenant_id = $2 AND owner_scope = $3 AND user_id = $4
-		  AND target_kind = 'model'
 	`, sessionID, owner.TenantID, string(owner.Scope), ownerUserID(owner))
 	if err != nil {
 		return err
@@ -288,7 +267,6 @@ func (r *WorkspaceRepo) CreateChatMessage(ctx context.Context, owner workspace.O
 		  AND t.tenant_id = $2
 		  AND t.owner_scope = $3
 		  AND t.user_id = $4
-		  AND t.target_kind = 'model'
 		  AND t.status <> 'deleted'
 		RETURNING id::text`,
 		sessionID, owner.TenantID, string(owner.Scope), ownerUserID(owner), string(input.Role), input.Content, surfaceValue, routeRaw, errorRaw,
@@ -312,7 +290,6 @@ func (r *WorkspaceRepo) UpdateChatMessageContent(ctx context.Context, owner work
 		  AND t.tenant_id = $3
 		  AND t.owner_scope = $4
 		  AND t.user_id = $5
-		  AND t.target_kind = 'model'
 		  AND t.status <> 'deleted'`,
 		messageID, content, owner.TenantID, string(owner.Scope), ownerUserID(owner))
 	if err != nil {
@@ -370,7 +347,6 @@ func (r *WorkspaceRepo) UpdateChatSessionRoute(ctx context.Context, owner worksp
 		  AND tenant_id = $4
 		  AND owner_scope = $5
 		  AND user_id = $6
-		  AND target_kind = 'model'
 		  AND status <> 'deleted'`,
 		sessionID, string(clientSurface), route, owner.TenantID, string(owner.Scope), ownerUserID(owner))
 	if err != nil {
@@ -409,17 +385,11 @@ func (r *WorkspaceRepo) getWorkspaceGroupSelectionSnapshot(ctx context.Context, 
 func scanWorkspaceChatSession(scan func(dest ...any) error) (workspace.ChatSession, error) {
 	var (
 		item               workspace.ChatSession
-		varsRaw            []byte
-		targetKind         string
 		selectedSurfaceRaw string
 	)
 	if err := scan(
 		&item.ID,
 		&item.Title,
-		&targetKind,
-		&item.AgentID,
-		&item.AgentName,
-		&varsRaw,
 		&item.ModelCode,
 		&item.GroupID,
 		&item.GroupName,
@@ -433,8 +403,6 @@ func scanWorkspaceChatSession(scan func(dest ...any) error) (workspace.ChatSessi
 	); err != nil {
 		return workspace.ChatSession{}, err
 	}
-	item.Variables = decodeWorkspaceStringMap(varsRaw)
-	item.TargetType = workspace.SessionTypeFromTargetKind(workspace.ThreadTargetKind(targetKind))
 	item.SelectedProtocol = workspace.ProtocolFromSurface(surface.ID(selectedSurfaceRaw))
 	return item, nil
 }
@@ -522,25 +490,6 @@ func limitParamIndex(args []any) string {
 	return fmt.Sprintf("%d", len(args)+1)
 }
 
-func decodeWorkspaceStringMap(raw []byte) map[string]string {
-	if len(raw) == 0 {
-		return map[string]string{}
-	}
-	var out map[string]string
-	if err := json.Unmarshal(raw, &out); err != nil || out == nil {
-		return map[string]string{}
-	}
-	norm := make(map[string]string, len(out))
-	for key, value := range out {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		norm[key] = strings.TrimSpace(value)
-	}
-	return norm
-}
-
 func decodeWorkspaceJSONObject(raw []byte) map[string]any {
 	if len(raw) == 0 {
 		return map[string]any{}
@@ -579,8 +528,6 @@ func fillWorkspaceImageJobInput(item *workspace.ImageJob, raw []byte) {
 	}
 	var payload struct {
 		Operation      string `json:"operation"`
-		AgentID        string `json:"agent_id"`
-		AgentName      string `json:"agent_name"`
 		Prompt         string `json:"prompt"`
 		N              int    `json:"n"`
 		Size           string `json:"size"`
@@ -594,20 +541,11 @@ func fillWorkspaceImageJobInput(item *workspace.ImageJob, raw []byte) {
 	if payload.Operation != "" {
 		item.Operation = payload.Operation
 	}
-	item.AgentID = payload.AgentID
-	item.AgentName = payload.AgentName
 	item.Prompt = strings.TrimSpace(payload.Prompt)
 	if payload.N > 0 {
 		item.RequestedOutputCount = payload.N
 	} else {
 		item.RequestedOutputCount = domain.DefaultImageOutputCount
-	}
-	if item.AgentName != "" {
-		if item.Prompt != "" {
-			item.Prompt = item.AgentName + " · " + item.Prompt
-		} else {
-			item.Prompt = item.AgentName
-		}
 	}
 	item.Size = payload.Size
 	item.Quality = payload.Quality

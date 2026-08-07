@@ -2252,217 +2252,6 @@ export interface paths {
         patch: operations["ai-update-tenant-self-api-key-status"];
         trace?: never;
     };
-    "/api/v1/tenants/me/app-agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户可见应用列表 */
-        get: operations["ai-list-visible-public-apps-tenant"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户应用密钥列表 */
-        get: operations["ai-list-app-keys-tenant"];
-        put?: never;
-        /** 创建租户应用密钥 */
-        post: operations["ai-create-app-key-tenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-keys/{runKeyID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** 删除租户应用密钥 */
-        delete: operations["ai-delete-app-key-tenant"];
-        options?: never;
-        head?: never;
-        /** 更新租户应用密钥 */
-        patch: operations["ai-update-app-key-tenant"];
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-keys/{runKeyID}/reveal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 查看租户应用密钥明文
-         * @description 解密返回该应用密钥的完整明文，可反复调用查看/复制。
-         */
-        post: operations["ai-reveal-app-key-tenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-keys/{runKeyID}/rotate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 轮换租户应用密钥
-         * @description 生成一把新密钥并立即使旧密钥失效，应用绑定与其它元数据保持不变。
-         */
-        post: operations["ai-rotate-app-key-tenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-layer/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户应用列表 */
-        get: operations["-api-v1-tenants-me-app-layer-agents-list"];
-        put?: never;
-        /** 创建租户应用 */
-        post: operations["-api-v1-tenants-me-app-layer-agents-create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-layer/agents/{agentID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户应用详情 */
-        get: operations["-api-v1-tenants-me-app-layer-agents-get"];
-        put?: never;
-        post?: never;
-        /** 删除租户应用 */
-        delete: operations["-api-v1-tenants-me-app-layer-agents-delete"];
-        options?: never;
-        head?: never;
-        /** 更新租户应用 */
-        patch: operations["-api-v1-tenants-me-app-layer-agents-update"];
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-layer/agents/{agentID}/publication": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 发布应用给本租户终端用户 */
-        put: operations["tenant-app-agents-publish"];
-        post?: never;
-        /** 撤回本租户的应用发布 */
-        delete: operations["tenant-app-agents-unpublish"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-layer/prompts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 租户提示词列表
-         * @description 应用层提示词资产列表，返回当前内容与变量摘要。
-         */
-        get: operations["-api-v1-tenants-me-app-layer-prompts-list"];
-        put?: never;
-        /** 创建租户提示词 */
-        post: operations["-api-v1-tenants-me-app-layer-prompts-create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-layer/prompts/{promptID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户提示词详情 */
-        get: operations["-api-v1-tenants-me-app-layer-prompts-get"];
-        put?: never;
-        post?: never;
-        /** 删除租户提示词 */
-        delete: operations["-api-v1-tenants-me-app-layer-prompts-delete"];
-        options?: never;
-        head?: never;
-        /**
-         * 更新租户提示词
-         * @description 更新提示词后，所有绑定该提示词的应用会在后续调用中使用新内容。
-         */
-        patch: operations["-api-v1-tenants-me-app-layer-prompts-update"];
-        trace?: never;
-    };
-    "/api/v1/tenants/me/app-layer/templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 应用创建模板
-         * @description 返回代码内置的固定应用创建逻辑，不读取或管理数据库模板。
-         */
-        get: operations["-api-v1-tenants-me-app-layer-templates-list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tenants/me/available-models": {
         parameters: {
             query?: never;
@@ -3478,26 +3267,6 @@ export interface paths {
         patch: operations["ai-update-tenant-api-key-status"];
         trace?: never;
     };
-    "/api/v1/tenants/{tenantID}/app-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 租户应用密钥列表
-         * @description 平台查询视图：返回指定租户拥有的应用密钥列表。仅返回 last_four，不返回明文 key/hash/ciphertext。
-         */
-        get: operations["ai-list-tenant-app-keys"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tenants/{tenantID}/upstream-access": {
         parameters: {
             query?: never;
@@ -3622,26 +3391,6 @@ export interface paths {
         head?: never;
         /** 更新用户 API key 状态 */
         patch: operations["ai-update-user-api-key-status"];
-        trace?: never;
-    };
-    "/api/v1/tenants/{tenantID}/users/{userID}/app-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 用户应用密钥列表
-         * @description 平台查询视图：返回指定租户下指定用户拥有的应用密钥列表。仅返回 last_four，不返回明文 key/hash/ciphertext。
-         */
-        get: operations["ai-list-user-app-keys"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/upstream-accounts": {
@@ -4235,199 +3984,6 @@ export interface paths {
         patch: operations["ai-update-user-self-api-key-status"];
         trace?: never;
     };
-    "/api/v1/users/me/app-agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 终端用户可见应用列表 */
-        get: operations["ai-list-visible-public-apps-user"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/users/me/app-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 终端用户应用密钥列表 */
-        get: operations["ai-list-app-keys-user"];
-        put?: never;
-        /** 创建终端用户应用密钥 */
-        post: operations["ai-create-app-key-user"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/users/me/app-keys/{runKeyID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** 删除终端用户应用密钥 */
-        delete: operations["ai-delete-app-key-user"];
-        options?: never;
-        head?: never;
-        /** 更新终端用户应用密钥 */
-        patch: operations["ai-update-app-key-user"];
-        trace?: never;
-    };
-    "/api/v1/users/me/app-keys/{runKeyID}/reveal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 查看终端用户应用密钥明文
-         * @description 解密返回该应用密钥的完整明文，可反复调用查看/复制。
-         */
-        post: operations["ai-reveal-app-key-user"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/users/me/app-keys/{runKeyID}/rotate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 轮换终端用户应用密钥
-         * @description 生成一把新密钥并立即使旧密钥失效，应用绑定与其它元数据保持不变。
-         */
-        post: operations["ai-rotate-app-key-user"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/users/me/app-layer/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 用户应用列表 */
-        get: operations["-api-v1-users-me-app-layer-agents-list"];
-        put?: never;
-        /** 创建用户应用 */
-        post: operations["-api-v1-users-me-app-layer-agents-create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/users/me/app-layer/agents/{agentID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 用户应用详情 */
-        get: operations["-api-v1-users-me-app-layer-agents-get"];
-        put?: never;
-        post?: never;
-        /** 删除用户应用 */
-        delete: operations["-api-v1-users-me-app-layer-agents-delete"];
-        options?: never;
-        head?: never;
-        /** 更新用户应用 */
-        patch: operations["-api-v1-users-me-app-layer-agents-update"];
-        trace?: never;
-    };
-    "/api/v1/users/me/app-layer/prompts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 用户提示词列表
-         * @description 应用层提示词资产列表，返回当前内容与变量摘要。
-         */
-        get: operations["-api-v1-users-me-app-layer-prompts-list"];
-        put?: never;
-        /** 创建用户提示词 */
-        post: operations["-api-v1-users-me-app-layer-prompts-create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/users/me/app-layer/prompts/{promptID}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 用户提示词详情 */
-        get: operations["-api-v1-users-me-app-layer-prompts-get"];
-        put?: never;
-        post?: never;
-        /** 删除用户提示词 */
-        delete: operations["-api-v1-users-me-app-layer-prompts-delete"];
-        options?: never;
-        head?: never;
-        /**
-         * 更新用户提示词
-         * @description 更新提示词后，所有绑定该提示词的应用会在后续调用中使用新内容。
-         */
-        patch: operations["-api-v1-users-me-app-layer-prompts-update"];
-        trace?: never;
-    };
-    "/api/v1/users/me/app-layer/templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 应用创建模板
-         * @description 返回代码内置的固定应用创建逻辑，不读取或管理数据库模板。
-         */
-        get: operations["-api-v1-users-me-app-layer-templates-list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/users/me/groups": {
         parameters: {
             query?: never;
@@ -4760,26 +4316,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/run": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * 应用密钥统一运行入口
-         * @description 使用 rk_ 应用密钥调用预先绑定好的应用；密钥绑定的应用类型（对话/文生图/图生图）决定请求体形状与响应形式，调用方无需选择路径。图生图额外支持 multipart/form-data 上传参考图。生图张数由应用设置默认值与可覆盖上限；支持 stream=true 返回 text/event-stream，但只返回最终完成图，不支持 partial_images 预览图。
-         */
-        post: operations["ai-run-runtime"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/tasks": {
         parameters: {
             query?: never;
@@ -4787,15 +4323,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * 列出异步任务
-         * @description 按创建时间倒序列出当前 tenant + user 可见的 API/app 任务。starting_after 传上一页最后一个任务 ID，内部游标为 (created_at,id)。
-         */
+        /** 列出异步任务 */
         get: operations["ai-list-tasks"];
         put?: never;
         /**
          * 创建异步任务
-         * @description 使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。
+         * @description 使用 API key 创建图片生成、图片编辑或聊天完成任务。type 为必填字段；chat.completions 强制 stream=false，只保存最终响应。相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event 和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。
          */
         post: operations["ai-create-task"];
         delete?: never;
@@ -4811,10 +4344,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * 查询异步任务
-         * @description 按任务 ID 查询当前状态与终态结果。可见范围为 tenant + user，不按具体 API key 限制，因此轮换密钥不会使任务失联。
-         */
+        /** 查询异步任务 */
         get: operations["ai-get-task"];
         put?: never;
         post?: never;
@@ -4833,10 +4363,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * 取消异步任务
-         * @description 取消 pending 或 running 任务。跨实例运行的任务会在下一次租约心跳时停止；终态任务返回 409。
-         */
+        /** 取消异步任务 */
         post: operations["ai-cancel-task"];
         delete?: never;
         options?: never;
@@ -5186,45 +4713,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        AppDTO: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppDTO.json
-             */
-            readonly $schema?: string;
-            capability: string;
-            /** Format: int64 */
-            created_at?: number;
-            created_by?: string;
-            description: string;
-            group_id: string;
-            id: string;
-            model_code: string;
-            name: string;
-            owner_tenant_id?: string;
-            owner_type: string;
-            owner_user_id?: string;
-            prompt_bindings: components["schemas"]["AppPromptBindingDTO"][] | null;
-            prompt_strategy: string;
-            published_by_tenant: boolean;
-            runtime_config: {
-                [key: string]: unknown;
-            };
-            status: string;
-            /** Format: int64 */
-            updated_at?: number;
-            updated_by?: string;
-        };
-        AppDeleteOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppDeleteOutputBody.json
-             */
-            readonly $schema?: string;
-            deleted: boolean;
-        };
         AppError: {
             /**
              * Format: uri
@@ -5242,153 +4730,6 @@ export interface components {
             status: number;
             title: string;
         };
-        AppPromptBindingDTO: {
-            binding_role: string;
-            /** Format: int64 */
-            display_order: number;
-            prompt_id: string;
-            prompt_name: string;
-            variables: string[] | null;
-        };
-        AppPromptCreateInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppPromptCreateInputBody.json
-             */
-            readonly $schema?: string;
-            description: string;
-            name: string;
-            status: string;
-            template_text: string;
-        };
-        AppPromptDTO: {
-            /** Format: int64 */
-            created_at?: number;
-            created_by?: string;
-            description: string;
-            id: string;
-            name: string;
-            owner_tenant_id?: string;
-            owner_type: string;
-            owner_user_id?: string;
-            status: string;
-            template_text: string;
-            /** Format: int64 */
-            updated_at?: number;
-            updated_by?: string;
-            variables: string[] | null;
-        };
-        AppPromptDeleteOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppPromptDeleteOutputBody.json
-             */
-            readonly $schema?: string;
-            deleted: boolean;
-        };
-        AppPromptDetailDTO: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppPromptDetailDTO.json
-             */
-            readonly $schema?: string;
-            prompt: components["schemas"]["AppPromptDTO"];
-        };
-        AppPromptUpdateInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppPromptUpdateInputBody.json
-             */
-            readonly $schema?: string;
-            description?: string;
-            name?: string;
-            status?: string;
-            template_text?: string;
-        };
-        AppPromptsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppPromptsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["AppPromptDTO"][] | null;
-            /** Format: int64 */
-            total: number;
-        };
-        AppPublicationOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppPublicationOutputBody.json
-             */
-            readonly $schema?: string;
-            published: boolean;
-        };
-        AppTemplateDTO: {
-            allowed_capabilities: string[] | null;
-            default_capability: string;
-            description: string;
-            id: string;
-            /** Format: int64 */
-            max_prompt_bindings: number;
-            /** Format: int64 */
-            min_prompt_bindings: number;
-            name: string;
-            prompt_strategy: string;
-        };
-        AppTemplatesOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppTemplatesOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["AppTemplateDTO"][] | null;
-        };
-        AppUpdateInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppUpdateInputBody.json
-             */
-            readonly $schema?: string;
-            capability?: string;
-            description?: string;
-            group_id?: string;
-            model_code?: string;
-            name?: string;
-            prompt_ids?: string[];
-            prompt_strategy?: string;
-            runtime_config?: {
-                [key: string]: unknown;
-            };
-            status?: string;
-        };
-        AppWriteRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppWriteRequest.json
-             */
-            readonly $schema?: string;
-            capability: string;
-            description: string;
-            group_id: string;
-            model_code: string;
-            name: string;
-            prompt_ids: string[] | null;
-            prompt_strategy: string;
-            runtime_config: {
-                [key: string]: unknown;
-            };
-            status: string;
-            template_id: string;
-        };
         ApplyWithdrawalInputBody: {
             /**
              * Format: uri
@@ -5403,29 +4744,14 @@ export interface components {
             bankName: string;
             note?: string;
         };
-        AppsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/AppsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["AppDTO"][] | null;
-            /** Format: int64 */
-            total: number;
-        };
-        /** @description 与 POST /v1/chat/completions 请求体同构；stream 即使传 true 也会被规范化为 false。 */
+        /** @description 与 POST /v1/chat/completions 请求体同构；stream 固定为 false。 */
         AsyncTaskChatCompletionInput: {
-            /** @description OpenAI Chat Completions messages */
             messages: {
                 [key: string]: unknown;
             }[];
             /** @description 模型代码 */
             model: string;
-            /**
-             * @description 异步任务固定为 false
-             * @default false
-             */
+            /** @default false */
             stream: boolean;
         } & {
             [key: string]: unknown;
@@ -5444,17 +4770,17 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
-             * @description 任务能力类型；API key 必填，app key 可省略并由绑定应用推断
+             * @description 任务能力类型
              * @enum {string}
              */
-            type?: "images.generation" | "images.edit" | "chat.completions";
+            type: "images.generation" | "images.edit" | "chat.completions";
             /**
              * Format: uri
              * @description 可选终态通知地址；必须是解析到公网地址的绝对 HTTPS URL
              */
             webhook_url?: string;
         };
-        /** @description 异步图生图 multipart 信封。type、metadata 和 webhook_url 是普通标量字段，其余字段与 POST /v1/images/edits 相同。 */
+        /** @description 异步图生图 multipart 信封；其余字段与 POST /v1/images/edits 相同。 */
         AsyncTaskCreateMultipartRequest: {
             /**
              * Format: uri
@@ -5463,17 +4789,14 @@ export interface components {
              */
             readonly $schema?: string;
             background?: string;
-            /**
-             * Format: binary
-             * @description 参考图文件；多图时重复提交该字段
-             */
+            /** Format: binary */
             "image[]": string;
             input_fidelity?: string;
             /** Format: binary */
             mask?: string;
             /** @description JSON 对象字符串 */
             metadata?: string;
-            model?: string;
+            model: string;
             n?: number;
             output_compression?: number;
             output_format?: string;
@@ -5483,12 +4806,9 @@ export interface components {
             /** @default false */
             stream: boolean;
             /** @enum {string} */
-            type?: "images.edit";
+            type: "images.edit";
             user?: string;
-            /**
-             * Format: uri
-             * @description 可选终态 HTTPS 通知地址
-             */
+            /** Format: uri */
             webhook_url?: string;
         };
         AsyncTaskCreateResponse: {
@@ -5569,7 +4889,7 @@ export interface components {
             /** Format: uri */
             webhook_url?: string;
         };
-        /** @description 图生图 JSON 请求；也可改用 multipart/form-data 直接上传 image[] 文件。 */
+        /** @description 图生图 JSON 请求；也可使用 multipart/form-data 上传 image[] 文件。 */
         AsyncTaskImageEditInput: {
             background?: string;
             images: {
@@ -5577,18 +4897,14 @@ export interface components {
                 image_url: string;
             }[];
             input_fidelity?: string;
-            /** @description 图片来源对象；当前只映射 image_url。 */
             mask?: {
                 /** @description HTTP(S) URL 或 data:image/...;base64,... */
                 image_url: string;
             };
-            /** @description 模型代码 */
             model: string;
-            /** @description 输出图片张数；还需满足上游模型绑定上限 */
             n?: number;
             output_compression?: number;
             output_format?: string;
-            /** @description 编辑提示词 */
             prompt?: string;
             /** @enum {string} */
             response_format?: "b64_json" | "url";
@@ -5601,10 +4917,7 @@ export interface components {
             background?: string;
             /** @description 模型代码 */
             model: string;
-            /**
-             * Format: int64
-             * @description 输出图片张数；还需满足上游模型绑定上限
-             */
+            /** Format: int64 */
             n?: number;
             /** Format: int64 */
             output_compression?: number;
@@ -5618,8 +4931,8 @@ export interface components {
             stream: boolean;
             user?: string;
         };
-        /** @description API key 输入与对应同步 API 同构；app key 输入与 POST /v1/run 的绑定应用请求同构。chat.completions 总是强制 stream=false，只产出最终响应。 */
-        AsyncTaskInput: components["schemas"]["AsyncTaskImageGenerationInput"] | components["schemas"]["AsyncTaskImageEditInput"] | components["schemas"]["RunRuntimeImageGenerationRequest"] | components["schemas"]["RunRuntimeImageEditJSONRequest"] | components["schemas"]["AsyncTaskChatCompletionInput"] | components["schemas"]["RunRuntimeRequest"];
+        /** @description 输入与对应同步 API 同构；chat.completions 强制 stream=false。 */
+        AsyncTaskInput: components["schemas"]["AsyncTaskImageGenerationInput"] | components["schemas"]["AsyncTaskImageEditInput"] | components["schemas"]["AsyncTaskChatCompletionInput"];
         AsyncTaskListResponse: {
             /**
              * Format: uri
@@ -5635,7 +4948,7 @@ export interface components {
         AsyncTaskUsage: {
             /**
              * Format: double
-             * @description 任务调用方的已结算消耗积分；失败或取消前已产生可计费用量时可大于 0
+             * @description 任务调用方的已结算消耗积分
              */
             cost_credits: number;
         };
@@ -5898,16 +5211,6 @@ export interface components {
         ComponentStatus: {
             error?: string;
             status: string;
-        };
-        ConsumerAppDTO: {
-            capability: string;
-            description: string;
-            id: string;
-            name: string;
-            prompt_names: string[] | null;
-            prompt_strategy: string;
-            publisher_label: string;
-            variables: string[] | null;
         };
         ConsumptionTrendOutputBody: {
             /**
@@ -8586,234 +7889,19 @@ export interface components {
             /** @description 评分权重 */
             weights: components["schemas"]["ScoreWeightsDTO"];
         };
-        RunKeyCreatedOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunKeyCreatedOutputBody.json
-             */
-            readonly $schema?: string;
-            key: components["schemas"]["RunKeyDTO"];
-            plaintext_key: string;
-        };
-        RunKeyDTO: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunKeyDTO.json
-             */
-            readonly $schema?: string;
-            agent_id: string;
-            agent_name?: string;
-            agent_owner_tenant_id?: string;
-            agent_owner_type?: string;
-            /** Format: int64 */
-            created_at?: number;
-            created_by?: string;
-            /** Format: int64 */
-            expires_at?: number;
-            id: string;
-            last_four: string;
-            name: string;
-            owner_type: string;
-            status: string;
-            tenant_id: string;
-            /** Format: int64 */
-            updated_at?: number;
-            user_id?: string;
-        };
-        RunKeyDeleteOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunKeyDeleteOutputBody.json
-             */
-            readonly $schema?: string;
-            deleted: boolean;
-        };
-        RunKeyRevealOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunKeyRevealOutputBody.json
-             */
-            readonly $schema?: string;
-            plaintext_key: string;
-        };
-        RunKeyWriteRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunKeyWriteRequest.json
-             */
-            readonly $schema?: string;
-            agent_id: string;
-            /** Format: int64 */
-            expires_at?: number;
-            name: string;
-            status?: string;
-        };
-        RunKeysOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunKeysOutputBody.json
-             */
-            readonly $schema?: string;
-            included: components["schemas"]["IdentityIncludedDTO"];
-            items: components["schemas"]["RunKeyDTO"][] | null;
-            /** Format: int64 */
-            total: number;
-        };
-        RunRuntimeAttachment: {
-            /** @description MIME 类型，可选 */
-            mime_type?: string;
-            /** @description 文件名，可选 */
-            name?: string;
-            /**
-             * @description 附件类型：image 或 file
-             * @enum {string}
-             */
-            type?: "image" | "file";
-            /** @description HTTPS 直连 URL 或平台认可的签名 URL */
-            url: string;
-        };
-        /** @description 统一应用输出：type=chat、text、usage、request_id。 */
-        RunRuntimeChatResponse: {
-            [key: string]: unknown;
-        };
-        RunRuntimeError: {
-            /** @description 稳定错误码，例如 invalid_request_error、invalid_api_key、rate_limit_exceeded、service_unavailable */
+        RuntimeAPIError: {
             code: string;
-            /** @description 面向调用方的错误信息 */
             message: string;
-            /** @description OpenAI 风格错误类型 */
             type: string;
         };
-        RunRuntimeErrorResponse: {
+        RuntimeAPIErrorResponse: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunRuntimeErrorResponse.json
+             * @example https://example.com/schemas/RuntimeAPIErrorResponse.json
              */
             readonly $schema?: string;
-            /** @description 错误详情 */
-            error: components["schemas"]["RunRuntimeError"];
-        };
-        /** @description 应用密钥图生图 JSON 请求。图片来源使用 images[].image_url；image_url 可为 HTTP(S) URL 或 base64 data URL。未列出的 JSON 属性不参与请求映射。 */
-        RunRuntimeImageEditJSONRequest: {
-            /** @description 参考图数组；每项只包含 image_url。 */
-            images: {
-                /** @description HTTP(S) URL 或 data:image/...;base64,... */
-                image_url: string;
-            }[];
-            /** @description 本次图生图输入；动态提示词应用可在这里使用 {{提示词名称}} */
-            input: string;
-            /** @description 图片来源对象；当前只映射 image_url。 */
-            mask?: {
-                /** @description HTTP(S) URL 或 data:image/...;base64,... */
-                image_url: string;
-            };
-            /** @description 可选；输出图片张数。省略时使用应用默认值，是否可覆盖及上限由应用配置决定 */
-            n?: number;
-            /** @description 可选；控制平台返回 b64_json 或 url，不发送给 GPT Image 上游 */
-            response_format?: string;
-            /**
-             * @description true 时返回 text/event-stream；仅流式返回最终完成图，不暴露 partial_images 预览事件
-             * @default false
-             */
-            stream: boolean;
-            /** @description 可选；用于替换应用提示词中的 {{变量名}} 占位符 */
-            variables?: {
-                [key: string]: string;
-            };
-        };
-        /** @description 应用密钥图生图 multipart 请求。使用一个或多个重复的 image[] 文件字段；可选 mask 文件。不接受 URL 文本字段或其它文件字段别名。 */
-        RunRuntimeImageEditMultipartRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RunRuntimeImageEditMultipartRequest.json
-             */
-            readonly $schema?: string;
-            /**
-             * Format: binary
-             * @description 参考图文件；多图时重复提交该字段。
-             */
-            "image[]": string;
-            /** @description 本次图生图输入；动态提示词应用可在这里使用 {{提示词名称}} */
-            input: string;
-            /**
-             * Format: binary
-             * @description 可选；上传蒙版文件
-             */
-            mask?: string;
-            /** @description 可选；输出图片张数。省略时使用应用默认值，是否可覆盖及上限由应用配置决定 */
-            n?: number;
-            /** @description 可选；控制平台返回 b64_json 或 url，不发送给 GPT Image 上游 */
-            response_format?: string;
-            /**
-             * @description true 时返回 text/event-stream；仅流式返回最终完成图，不暴露 partial_images 预览事件
-             * @default false
-             */
-            stream: boolean;
-            /** @description 可选；JSON 字符串，用于替换应用提示词中的 {{变量名}} 占位符 */
-            variables?: string;
-        };
-        RunRuntimeImageGenerationRequest: {
-            /** @description 可选；背景配置 */
-            background?: string;
-            /** @description 本次文生图输入；分辨率等运行设置由应用固定 */
-            input: string;
-            /**
-             * Format: int64
-             * @description 可选；输出图片张数。省略时使用应用默认值，是否可覆盖及上限由应用配置决定
-             */
-            n?: number;
-            /** @description 可选；输出格式 */
-            output_format?: string;
-            /** @description 可选；b64_json 或 url */
-            response_format?: string;
-            /** @description 可选；图片尺寸，例如 1024x1024 */
-            size?: string;
-            /**
-             * @description true 时返回 text/event-stream；仅流式返回最终完成图，不暴露 partial_images 预览事件
-             * @default false
-             */
-            stream: boolean;
-            /** @description 可选；用于替换应用提示词中的 {{变量名}} 占位符 */
-            variables?: {
-                [key: string]: string;
-            };
-        };
-        /** @description 统一应用输出：type=image、images[]、usage、request_id。请求 url 且上游返回内联图片时，url 为平台默认有效 24 小时的 capability URL，并附 asset_ref 与 expires_at；上游已有 HTTP URL 时原样透传。 */
-        RunRuntimeImageResponse: {
-            [key: string]: unknown;
-        };
-        RunRuntimeRequest: {
-            /** @description 可选；图片或文件直连 URL 数组，仅应用允许附件时可用 */
-            attachments?: components["schemas"]["RunRuntimeAttachment"][] | null;
-            /** @description 本次用户输入文本 */
-            input: string;
-            /**
-             * Format: int64
-             * @description 应用锁定该参数；一旦传值会返回 400，不会被采纳
-             */
-            max_tokens?: number;
-            /**
-             * @description true 时返回 text/event-stream，false 时返回 JSON
-             * @default false
-             */
-            stream: boolean;
-            /**
-             * Format: double
-             * @description 应用锁定该参数；一旦传值会返回 400，不会被采纳
-             */
-            temperature?: number;
-            /** @description 可选；用于替换应用提示词中的 {{变量名}} 占位符 */
-            variables?: {
-                [key: string]: string;
-            };
+            error: components["schemas"]["RuntimeAPIError"];
         };
         RuntimeLimitPoliciesOutputBody: {
             /**
@@ -9442,19 +8530,6 @@ export interface components {
             /** Format: double */
             tenant_multiplier_override?: number;
         };
-        TenantRunKeyUpdateInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/TenantRunKeyUpdateInputBody.json
-             */
-            readonly $schema?: string;
-            agent_id?: string;
-            /** Format: int64 */
-            expires_at?: number;
-            name?: string;
-            status?: string;
-        };
         TenantSettings: {
             /**
              * Format: uri
@@ -9530,10 +8605,6 @@ export interface components {
             total: number;
         };
         TenantUsageLogDTO: {
-            /** @description 经由的智能应用 ID */
-            app_id?: string;
-            /** @description 经由的智能应用名称快照 */
-            app_name?: string;
             /** @description 请求时分组展示标签快照 */
             billing_group_label_snapshot?: string;
             /** @description 计费来源：payg=按量 / subscription=订阅内 */
@@ -9601,7 +8672,7 @@ export interface components {
              * @description 请求延迟，毫秒
              */
             latency_ms?: number;
-            /** @description 模型编码(应用调用且非本人应用时脱敏为空) */
+            /** @description 模型编码 */
             model_code: string;
             /**
              * Format: int32
@@ -10411,10 +9482,6 @@ export interface components {
              * @description API key 配额积分
              */
             api_key_quota_credits: number;
-            /** @description 经由的智能应用 ID */
-            app_id?: string;
-            /** @description 经由的智能应用名称快照 */
-            app_name?: string;
             /**
              * Format: int32
              * @description 路由尝试次数（含重试）
@@ -11165,10 +10232,6 @@ export interface components {
             username: string;
         };
         UserUsageLogDTO: {
-            /** @description 经由的智能应用 ID */
-            app_id?: string;
-            /** @description 经由的智能应用名称快照 */
-            app_name?: string;
             /** @description 计费单位类型 */
             billable_unit_type: string;
             /**
@@ -11230,7 +10293,7 @@ export interface components {
              * @description 请求延迟，毫秒
              */
             latency_ms?: number;
-            /** @description 模型编码(应用调用且非本人应用时脱敏为空) */
+            /** @description 模型编码 */
             model_code: string;
             /**
              * Format: int32
@@ -11367,17 +10430,6 @@ export interface components {
             image_jobs: components["schemas"]["WorkspaceImageJobDTO"][] | null;
             summary: components["schemas"]["WorkspaceUsageSummaryDTO"];
             usage_logs: components["schemas"]["UserUsageLogDTO"][] | null;
-        };
-        VisibleAppsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/VisibleAppsOutputBody.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["ConsumerAppDTO"][] | null;
-            /** Format: int64 */
-            total: number;
         };
         WechatConfigOutputBody: {
             /**
@@ -16803,634 +15855,6 @@ export interface operations {
             };
         };
     };
-    "ai-list-visible-public-apps-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VisibleAppsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-list-app-keys-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeysOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-create-app-key-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunKeyWriteRequest"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyCreatedOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-delete-app-key-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyDeleteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-update-app-key-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantRunKeyUpdateInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-reveal-app-key-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyRevealOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-rotate-app-key-tenant": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyCreatedOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-agents-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-agents-create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppWriteRequest"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-agents-get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-agents-delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDeleteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-agents-update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppUpdateInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-app-agents-publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPublicationOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-app-agents-unpublish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPublicationOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-prompts-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-prompts-create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppPromptCreateInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-prompts-get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                promptID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-prompts-delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                promptID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDeleteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-prompts-update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                promptID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppPromptUpdateInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-tenants-me-app-layer-templates-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppTemplatesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "ai-list-tenant-self-available-models": {
         parameters: {
             query?: never;
@@ -19994,38 +18418,6 @@ export interface operations {
             };
         };
     };
-    "ai-list-tenant-app-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 租户 ID */
-                tenantID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeysOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "ai-list-tenant-upstream-access": {
         parameters: {
             query?: never;
@@ -20341,40 +18733,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiKeyDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-list-user-app-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 租户 ID */
-                tenantID: string;
-                /** @description 用户 ID */
-                userID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeysOutputBody"];
                 };
             };
             /** @description Error */
@@ -21650,572 +20008,6 @@ export interface operations {
             };
         };
     };
-    "ai-list-visible-public-apps-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VisibleAppsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-list-app-keys-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeysOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-create-app-key-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunKeyWriteRequest"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyCreatedOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-delete-app-key-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyDeleteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-update-app-key-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantRunKeyUpdateInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-reveal-app-key-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyRevealOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-rotate-app-key-user": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                runKeyID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunKeyCreatedOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-agents-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-agents-create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppWriteRequest"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-agents-get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-agents-delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDeleteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-agents-update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agentID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppUpdateInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-prompts-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-prompts-create": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppPromptCreateInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-prompts-get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                promptID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-prompts-delete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                promptID: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDeleteOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-prompts-update": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                promptID: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppPromptUpdateInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppPromptDetailDTO"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "-api-v1-users-me-app-layer-templates-list": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppTemplatesOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "ai-list-user-self-groups": {
         parameters: {
             query?: never;
@@ -22892,97 +20684,12 @@ export interface operations {
             };
         };
     };
-    "ai-run-runtime": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunRuntimeRequest"] | components["schemas"]["RunRuntimeImageGenerationRequest"] | components["schemas"]["RunRuntimeImageEditJSONRequest"];
-                "multipart/form-data": components["schemas"]["RunRuntimeImageEditMultipartRequest"];
-            };
-        };
-        responses: {
-            /** @description 非流式时返回该应用类型对应的响应体（对话为 Chat Completions 风格 JSON，图片为 Images 风格 JSON，仅含最终完成图）；流式时返回 SSE。 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeChatResponse"] | components["schemas"]["RunRuntimeImageResponse"];
-                    /** @example data: {"id":"chatcmpl-run-example","choices":[{"delta":{"content":"你好"}}]} */
-                    "text/event-stream": string;
-                };
-            };
-            /** @description 请求体错误、输入缺失、应用目标无效或请求了应用不支持的预览图 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
-                };
-            };
-            /** @description 应用密钥缺失、格式错误、禁用或已过期 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
-                };
-            };
-            /** @description 绑定应用不存在 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
-                };
-            };
-            /** @description 命中既有限流策略 */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
-                };
-            };
-            /** @description 上游调用失败 */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
-                };
-            };
-            /** @description 运行面依赖未配置或暂时不可用 */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
-                };
-            };
-        };
-    };
     "ai-list-tasks": {
         parameters: {
             query?: {
-                /** @description 可选状态过滤 */
                 status?: "pending" | "running" | "completed" | "failed" | "cancelled";
-                /** @description 可选 wire type 过滤 */
                 type?: "images.generation" | "images.edit" | "chat.completions";
-                /** @description 页大小，默认 20，范围 1..100 */
                 limit?: number;
-                /** @description 上一页最后一个任务 UUID */
                 starting_after?: string;
             };
             header?: never;
@@ -23006,16 +20713,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
-            /** @description API key/app key 无效、禁用或过期 */
+            /** @description API key 无效、禁用或过期 */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description 任务服务暂不可用 */
@@ -23024,7 +20731,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
         };
@@ -23033,7 +20740,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description 可选幂等键；作用域按当前 API key 或 app key 隔离，生命周期与任务一致。 */
+                /** @description 可选幂等键；作用域按当前 API key 隔离。 */
                 "Idempotency-Key"?: string;
             };
             path?: never;
@@ -23041,26 +20748,12 @@ export interface operations {
         };
         requestBody: {
             content: {
-                /**
-                 * @example {
-                 *       "input": {
-                 *         "model": "gpt-image-1",
-                 *         "prompt": "Draw a lighthouse at dusk",
-                 *         "size": "1024x1024"
-                 *       },
-                 *       "metadata": {
-                 *         "order_id": "A-1"
-                 *       },
-                 *       "type": "images.generation",
-                 *       "webhook_url": "https://caller.example.com/hooks/ai"
-                 *     }
-                 */
                 "application/json": components["schemas"]["AsyncTaskCreateJSONRequest"];
                 "multipart/form-data": components["schemas"]["AsyncTaskCreateMultipartRequest"];
             };
         };
         responses: {
-            /** @description 任务已持久化并进入 pending 状态；幂等重试也返回同一任务。 */
+            /** @description 任务已持久化并进入 pending 状态。 */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -23075,7 +20768,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description API key 无效、禁用或过期 */
@@ -23084,7 +20777,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description 额度、余额或订阅准入失败 */
@@ -23093,7 +20786,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description 模型、分组或服务访问未授权 */
@@ -23102,7 +20795,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description Idempotency-Key 已用于不同执行输入 */
@@ -23111,25 +20804,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
-            /** @description 租户 pending + running 任务达到上限 */
+            /** @description 租户任务达到并发上限 */
             429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
-            /** @description 任务服务或准入依赖暂不可用 */
+            /** @description 任务服务暂不可用 */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
         };
@@ -23139,14 +20832,13 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 服务端生成的任务 UUID */
                 taskID: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 任务当前状态；终态时包含 result 或 error，以及实际 usage。 */
+            /** @description 任务当前状态及终态结果。 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -23161,16 +20853,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
-            /** @description 任务不存在、已过期或对当前调用方不可见 */
+            /** @description 任务不存在或不可见 */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description 任务服务暂不可用 */
@@ -23179,7 +20871,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
         };
@@ -23189,7 +20881,6 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description 服务端生成的任务 UUID */
                 taskID: string;
             };
             cookie?: never;
@@ -23205,31 +20896,31 @@ export interface operations {
                     "application/json": components["schemas"]["AsyncTaskGetResponse"];
                 };
             };
-            /** @description API key/app key 无效、禁用或过期 */
+            /** @description API key 无效、禁用或过期 */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
-            /** @description 任务不存在、已过期或对当前调用方不可见 */
+            /** @description 任务不存在或不可见 */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
-            /** @description 任务已处于终态，不能取消 */
+            /** @description 任务已处于终态 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
             /** @description 任务服务暂不可用 */
@@ -23238,7 +20929,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunRuntimeErrorResponse"];
+                    "application/json": components["schemas"]["RuntimeAPIErrorResponse"];
                 };
             };
         };

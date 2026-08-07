@@ -173,7 +173,7 @@ onBeforeUnmount(clearCopiedState);
 
     <template #footer>
       <div class="api-key-usage-dialog__footer">
-        <a href="docs/tooling" target="_blank" class="api-key-usage-dialog__docs">查看完整 API 文档</a>
+        <a href="tooling" target="_blank" rel="noopener" class="api-key-usage-dialog__docs">查看工具接入指南</a>
         <el-button @click="emit('close')">关闭</el-button>
       </div>
     </template>

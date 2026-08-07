@@ -164,8 +164,6 @@ func idempotencyScope(ref SubjectRef) string {
 	switch {
 	case ref.APIKeyID != "":
 		return "key:" + ref.APIKeyID
-	case ref.InvokeKeyID != "":
-		return "invk:" + ref.InvokeKeyID
 	default:
 		return "user:" + ref.TenantID + ":" + ref.UserID
 	}

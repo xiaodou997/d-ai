@@ -44,9 +44,7 @@ type ReplayInput struct {
 	Body        []byte
 	ContentType string
 
-	// Header carries extra headers the synthesized request should have. It
-	// exists for callers that are proxying a live client (app preview forwards
-	// the inbound headers); a queued task has no inbound request and passes nil.
+	// Header carries extra headers the synthesized request should have.
 	// ContentType and RequestID are applied after these and win.
 	Header http.Header
 
@@ -58,10 +56,6 @@ type ReplayInput struct {
 	// StreamExpected tells the aggregator to fold an SSE response back into a
 	// single JSON body. A replayed call has no client to stream to.
 	StreamExpected bool
-
-	// HideRevisedPrompt drops the upstream's prompt rewrite from the response,
-	// matching what apps and the console already do.
-	HideRevisedPrompt bool
 }
 
 // ReplayResult is the buffered outcome of a replayed call.
@@ -140,9 +134,6 @@ func (s *Gateway) Replay(ctx context.Context, in ReplayInput) ReplayResult {
 		} else if ok {
 			body = aggregated
 			buffered.Header().Set("Content-Type", "application/json")
-		}
-		if in.HideRevisedPrompt {
-			body = StripImageResponseRevisedPrompt(body)
 		}
 	}
 	return ReplayResult{

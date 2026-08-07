@@ -68,8 +68,7 @@ func (r *GroupRepo) CountGroupReferences(ctx context.Context, id string) (int, e
 			(SELECT COUNT(*) FROM ai_group_model_dispatch_rules WHERE group_id = $1) +
 			(SELECT COUNT(*) FROM ai_user_groups WHERE group_id = $1) +
 			(SELECT COUNT(*) FROM ai_api_keys WHERE group_id = $1) +
-			(SELECT COUNT(*) FROM ai_sub_plan_groups WHERE group_id = $1) +
-			(SELECT COUNT(*) FROM ai_apps WHERE group_id = $1)
+			(SELECT COUNT(*) FROM ai_sub_plan_groups WHERE group_id = $1)
 	`, uid)
 }
 

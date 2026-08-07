@@ -17,7 +17,6 @@ import (
 	"xiaodou/dai/internal/ai/audit"
 	"xiaodou/dai/internal/ai/clientruntime"
 	corebridge "xiaodou/dai/internal/ai/core/bridge"
-	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/egress"
 	"xiaodou/dai/internal/ai/formats"
@@ -2191,7 +2190,6 @@ func publicEgressPolicy(req *Request, cand *domain.RouteCandidate) egress.Policy
 		EndpointBaseURL:    cand.BaseURL,
 		Aliases:            aliases,
 		AllowVersionSuffix: true,
-		HideRevisedPrompt:  req.Subject != nil && req.Subject.AuthMethod == coreidentity.AuthMethodInvokeKey,
 	}
 }
 

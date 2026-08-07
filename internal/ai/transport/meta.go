@@ -90,7 +90,6 @@ func RegisterAI(api huma.API, d AIDeps) {
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)
-	registerRunKeys(management, d)
 	registerOAuthPools(management, d)
 	registerSystem(management, d)
 	registerPricingWrite(management, d)
@@ -105,18 +104,12 @@ func RegisterAI(api huma.API, d AIDeps) {
 	registerTenantSelfAPIKeys(tenant, d)
 	registerTenantSelf(tenant, d)
 	registerTenantSelfWorkspace(tenant, d)
-	registerTenantSelfAppPrompts(tenant, d)
-	registerTenantSelfAppAgents(tenant, d)
-	registerTenantSelfRunKeys(tenant, d)
 	registerTenantSelfSubscriptions(tenant, d)
 
 	userSelf := huma.NewGroup(api)
 	userSelf.UseMiddleware(endUserAuth(api, d))
 	registerUserSelf(userSelf, d)
 	registerUserSelfWorkspace(userSelf, d)
-	registerUserSelfAppPrompts(userSelf, d)
-	registerUserSelfAppAgents(userSelf, d)
-	registerUserSelfRunKeys(userSelf, d)
 	registerUserSelfSubscriptions(userSelf, d)
 }
 

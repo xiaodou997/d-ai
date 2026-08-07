@@ -75,8 +75,6 @@ type usageLogDTO struct {
 	EffectiveUserMultiplierSnapshot    float64  `json:"effective_user_multiplier_snapshot,omitempty" doc:"请求时最终倍率快照"`
 	BillingGroupLabelSnapshot          string   `json:"billing_group_label_snapshot,omitempty" doc:"请求时分组展示标签快照"`
 	ModelCode                          string   `json:"model_code" doc:"模型编码"`
-	AppID                              string   `json:"app_id,omitempty" doc:"经由的智能应用 ID"`
-	AppName                            string   `json:"app_name,omitempty" doc:"经由的智能应用名称快照"`
 	RequestedModel                     *string  `json:"requested_model,omitempty" doc:"客户端请求模型名"`
 	MatchedDispatchRuleID              *string  `json:"matched_dispatch_rule_id,omitempty" doc:"命中的分组调度规则 ID"`
 	MatchedDispatchRuleSummary         *string  `json:"matched_dispatch_rule_summary,omitempty" doc:"命中的分组调度规则摘要"`
@@ -216,9 +214,7 @@ type tenantUsageLogDTO struct {
 	GroupDefaultUserMultiplierSnapshot float64 `json:"group_default_user_multiplier_snapshot,omitempty" doc:"请求时分组用户默认倍率"`
 	EffectiveUserMultiplierSnapshot    float64 `json:"effective_user_multiplier_snapshot,omitempty" doc:"请求时最终倍率快照"`
 	BillingGroupLabelSnapshot          string  `json:"billing_group_label_snapshot,omitempty" doc:"请求时分组展示标签快照"`
-	ModelCode                          string  `json:"model_code" doc:"模型编码(应用调用且非本人应用时脱敏为空)"`
-	AppID                              string  `json:"app_id,omitempty" doc:"经由的智能应用 ID"`
-	AppName                            string  `json:"app_name,omitempty" doc:"经由的智能应用名称快照"`
+	ModelCode                          string  `json:"model_code" doc:"模型编码"`
 	CapabilityType                     string  `json:"capability_type" doc:"能力类型"`
 	Stream                             bool    `json:"stream" doc:"是否流式请求"`
 	PromptTokens                       int32   `json:"prompt_tokens" doc:"输入 token 数"`
@@ -264,9 +260,7 @@ type userUsageLogDTO struct {
 	GroupNameSnapshot               string  `json:"group_name_snapshot,omitempty" doc:"请求时分组名称快照"`
 	EffectiveUserMultiplierSnapshot float64 `json:"effective_user_multiplier_snapshot,omitempty" doc:"请求时最终倍率快照"`
 	BillingGroupLabelSnapshot       string  `json:"billing_group_label_snapshot,omitempty" doc:"请求时分组展示标签快照"`
-	ModelCode                       string  `json:"model_code" doc:"模型编码(应用调用且非本人应用时脱敏为空)"`
-	AppID                           string  `json:"app_id,omitempty" doc:"经由的智能应用 ID"`
-	AppName                         string  `json:"app_name,omitempty" doc:"经由的智能应用名称快照"`
+	ModelCode                       string  `json:"model_code" doc:"模型编码"`
 	Stream                          bool    `json:"stream" doc:"是否流式请求"`
 	PromptTokens                    int32   `json:"prompt_tokens" doc:"输入 token 数"`
 	CompletionTokens                int32   `json:"completion_tokens" doc:"输出 token 数"`
@@ -745,8 +739,6 @@ func usageLogToDTO(log domain.UsageLog) usageLogDTO {
 		EffectiveUserMultiplierSnapshot:    log.EffectiveUserMultiplierSnapshot,
 		BillingGroupLabelSnapshot:          log.BillingGroupLabelSnapshot,
 		ModelCode:                          log.ModelCode,
-		AppID:                              log.AppID,
-		AppName:                            log.AppName,
 		RequestedModel:                     stringPtrOrNil(log.RequestedModel),
 		MatchedDispatchRuleID:              stringPtrOrNil(log.MatchedDispatchRuleID),
 		MatchedDispatchRuleSummary:         stringPtrOrNil(log.MatchedDispatchRuleSummary),
@@ -882,15 +874,7 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 	}
 }
 
-// tenantUsageLogToDTO hides routing details for any application not owned by the
-// viewing tenant, including user-owned applications.
-func tenantUsageLogToDTO(log domain.UsageLog, viewerTenantID string) tenantUsageLogDTO {
-	if log.AppID != "" && !(log.AppOwnerType == "tenant" && log.AppOwnerTenantID == viewerTenantID) {
-		log.ModelCode = ""
-		log.GroupID = ""
-		log.GroupNameSnapshot = ""
-		log.BillingGroupLabelSnapshot = ""
-	}
+func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 	return tenantUsageLogDTO{
 		ID:                                 log.ID,
 		RequestID:                          log.RequestID,
@@ -904,8 +888,6 @@ func tenantUsageLogToDTO(log domain.UsageLog, viewerTenantID string) tenantUsage
 		EffectiveUserMultiplierSnapshot:    log.EffectiveUserMultiplierSnapshot,
 		BillingGroupLabelSnapshot:          log.BillingGroupLabelSnapshot,
 		ModelCode:                          log.ModelCode,
-		AppID:                              log.AppID,
-		AppName:                            log.AppName,
 		CapabilityType:                     log.CapabilityType,
 		Stream:                             log.Stream,
 		PromptTokens:                       log.PromptTokens,
@@ -933,16 +915,7 @@ func tenantUsageLogToDTO(log domain.UsageLog, viewerTenantID string) tenantUsage
 	}
 }
 
-// userUsageLogToDTO:应用调用产生的行,若应用非本用户自建,
-// 隐去底层模型与分组信息,仅保留应用名与费用。
-func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow, viewerUserID string) userUsageLogDTO {
-	appID := uuidToString(row.AppID)
-	if appID != "" && !(row.AppOwnerType == "user" && row.AppOwnerUserID == viewerUserID) {
-		row.ModelCode = ""
-		row.GroupID = pgtype.UUID{}
-		row.GroupNameSnapshot = ""
-		row.BillingGroupLabelSnapshot = ""
-	}
+func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow) userUsageLogDTO {
 	return userUsageLogDTO{
 		ID:                              uuidToString(row.ID),
 		RequestID:                       row.RequestID,
@@ -955,8 +928,6 @@ func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow, viewerUserID stri
 		EffectiveUserMultiplierSnapshot: transportNumericToFloat(row.EffectiveUserMultiplierSnapshot),
 		BillingGroupLabelSnapshot:       row.BillingGroupLabelSnapshot,
 		ModelCode:                       row.ModelCode,
-		AppID:                           appID,
-		AppName:                         row.AppNameSnapshot,
 		Stream:                          row.Stream,
 		PromptTokens:                    row.PromptTokens,
 		CompletionTokens:                row.CompletionTokens,

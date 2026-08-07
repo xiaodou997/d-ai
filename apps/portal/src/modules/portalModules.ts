@@ -341,17 +341,15 @@ export const portalModules: PortalModule[] = [
   },
   {
     id: "tenant-developer",
-    label: "开发中心",
+    label: "API 密钥",
     path: "/tenant/developer",
     icon: "key-round",
     capability: "tenant.developer",
     navGroup: tenantAi,
     order: 40,
     tabs: [
-      { id: "keys", label: "应用与密钥", path: "keys", component: () => import("@/views/tenant/ai/KeysView.vue") },
-      { id: "apps", label: "应用", path: "apps", component: () => import("@/views/tenant/ai/apps/AgentsView.vue") },
-      { id: "prompts", label: "提示词", path: "prompts", component: () => import("@/views/tenant/ai/apps/PromptsView.vue") },
-      { id: "docs", label: "接入文档", path: "docs/:section?", component: () => import("@/views/AiDocsView.vue"), props: (route) => ({ section: route.params.section || "overview" }) }
+      { id: "keys", label: "API 密钥", path: "keys", component: () => import("@/views/tenant/ai/KeysView.vue") },
+      { id: "tooling", label: "工具接入指南", path: "tooling", component: () => import("@/views/AiDocsView.vue"), props: { section: "tooling" } }
     ]
   },
   {
@@ -482,17 +480,15 @@ export const portalModules: PortalModule[] = [
   },
   {
     id: "customer-developer",
-    label: "开发中心",
+    label: "API 密钥",
     path: "/customer/developer",
     icon: "key-round",
     capability: "customer.developer",
     navGroup: customerAccount,
     order: 10,
     tabs: [
-      { id: "keys", label: "应用与密钥", path: "keys", component: () => import("@/views/customer/ai/KeysView.vue") },
-      { id: "apps", label: "应用", path: "apps", component: () => import("@/views/customer/ai/apps/AgentsView.vue") },
-      { id: "prompts", label: "提示词", path: "prompts", component: () => import("@/views/customer/ai/apps/PromptsView.vue") },
-      { id: "docs", label: "接入文档", path: "docs/:section?", component: () => import("@/views/AiDocsView.vue"), props: (route) => ({ section: route.params.section || "overview" }) }
+      { id: "keys", label: "API 密钥", path: "keys", component: () => import("@/views/customer/ai/KeysView.vue") },
+      { id: "tooling", label: "工具接入指南", path: "tooling", component: () => import("@/views/AiDocsView.vue"), props: { section: "tooling" } }
     ]
   },
   {

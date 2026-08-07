@@ -110,7 +110,7 @@ const last7DayKeys = () => {
 const modelDistribution = computed(() => {
   const grouped = new Map<string, number>();
   for (const row of usageLogs.value) {
-    const modelCode = row.model_code || (row.app_name ? `应用 · ${row.app_name}` : "unknown");
+    const modelCode = row.model_code || "unknown";
     const cost = Number(row.user_charged_credits) || 0;
     grouped.set(modelCode, (grouped.get(modelCode) || 0) + cost);
   }
@@ -523,7 +523,7 @@ function isAbortError(error: unknown) {
         empty-title="暂无调用记录"
       >
         <template #cell-model="{ row }">
-          {{ row.model_code || (row.app_name ? `应用 · ${row.app_name}` : "-") }}
+          {{ row.model_code || "-" }}
         </template>
         <template #cell-cost="{ row }">
           <UsageCostCell :credits="row.user_charged_credits" />

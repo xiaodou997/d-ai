@@ -40,7 +40,7 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM ledger_credit_leases WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id=$1`, tenantID)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM iam_users WHERE user_id=$1`, userID)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE user_id=$1`, userID)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id=$1`, tenantID)
 	})
 	mustLeaseExec(t, ctx, pool, `
@@ -48,9 +48,9 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		VALUES ($1, $2, 'active', 0, 0)
 	`, tenantID, tenantID)
 	mustLeaseExec(t, ctx, pool, `
-		INSERT INTO iam_users (user_id, tenant_id, username, password_hash, status, frozen_credits, current_overdraft)
-		VALUES ($1, $2, $3, 'x', 'active', 0, 0)
-	`, userID, tenantID, userID)
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status, frozen_credits, current_overdraft)
+		VALUES ($1, $2, $3, 'x', 4, 'active', 0, 0)
+	`, userID, tenantID, "u_"+userID)
 	mustLeaseExec(t, ctx, pool, `
 		INSERT INTO bill_credit_packages (
 		  package_id, package_type, tenant_id, user_id,
@@ -72,7 +72,7 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		t.Fatalf("acquire account state = %s allow=%v, want exhausted/false",
 			lease.AccountState, lease.AllowFurtherUsage)
 	}
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 100)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 100)
 
 	now = now.Add(31 * time.Second)
 	if released, err := service.ReapExpired(ctx, 10); err != nil || released != 0 {
@@ -82,13 +82,13 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 	if err != nil || inGrace.EscrowState != LeaseEscrowGrace {
 		t.Fatalf("lease in grace = %#v, %v", inGrace, err)
 	}
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 100)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 100)
 
 	now = now.Add(60 * time.Second)
 	if released, err := service.ReapExpired(ctx, 10); err != nil || released != 1 {
 		t.Fatalf("release expired escrow: released=%d err=%v", released, err)
 	}
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 0)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 0)
 
 	secondLease, err := service.Acquire(ctx, AcquireLeaseParams{
 		ClientID: clientID, ClientWindowID: "window-second-" + suffix,
@@ -98,7 +98,7 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire second lease: %v", err)
 	}
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 1)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 1)
 
 	deduction := NewDeductionService(pool, nil, zap.NewNop())
 	if _, err := deduction.Consume(ConsumeParams{
@@ -111,7 +111,7 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		t.Fatalf("strict debit with protected escrow error = %v, want insufficient balance", err)
 	}
 	assertLeaseAccountInt(t, ctx, pool, `SELECT remaining_credits FROM bill_credit_packages WHERE package_id=$1`, packageID, 100)
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 1)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 1)
 
 	settled, err := service.Settle(ctx, SettleLeaseParams{
 		LeaseID: lease.LeaseID, ClientID: clientID, SettlementID: "settlement-" + suffix,
@@ -125,8 +125,8 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		t.Fatalf("unexpected settlement receipt: %#v", settled)
 	}
 	assertLeaseAccountInt(t, ctx, pool, `SELECT remaining_credits FROM bill_credit_packages WHERE package_id=$1`, packageID, 1)
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 1)
-	assertLeaseAccountInt(t, ctx, pool, `SELECT current_overdraft FROM iam_users WHERE user_id=$1`, userID, 21)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 1)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 21)
 
 	replayed, err := service.Settle(ctx, SettleLeaseParams{
 		LeaseID: lease.LeaseID, ClientID: clientID, SettlementID: "settlement-" + suffix,
@@ -159,8 +159,8 @@ func TestCreditLeaseCanSettleIdempotentlyAfterEscrowRelease(t *testing.T) {
 		t.Fatalf("second settlement consumed reserved credit incorrectly: %#v", secondSettled)
 	}
 	assertLeaseAccountInt(t, ctx, pool, `SELECT remaining_credits FROM bill_credit_packages WHERE package_id=$1`, packageID, 0)
-	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_users WHERE user_id=$1`, userID, 0)
-	assertLeaseAccountInt(t, ctx, pool, `SELECT current_overdraft FROM iam_users WHERE user_id=$1`, userID, 21)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT frozen_credits FROM iam_accounts WHERE user_id=$1`, userID, 0)
+	assertLeaseAccountInt(t, ctx, pool, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 21)
 	assertLeaseAccountInt(t, ctx, pool, `SELECT count(*) FROM bill_events WHERE idempotency_key=$1`, "credit-lease:settlement-"+suffix, 1)
 }
 

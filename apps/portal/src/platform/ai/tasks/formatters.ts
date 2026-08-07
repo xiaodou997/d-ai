@@ -49,8 +49,7 @@ export function portalTaskTypeLabel(type: PortalTaskType): string {
 export function portalTaskSourceLabel(source: PortalTaskSource): string {
   return {
     portal: "门户",
-    api_key: "API Key",
-    app_key: "应用编号"
+    api_key: "API Key"
   }[source];
 }
 

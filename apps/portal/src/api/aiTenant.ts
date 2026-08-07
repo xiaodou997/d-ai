@@ -13,11 +13,6 @@ import {
   formatCredits,
   formatWholeCredits
 } from "@/platform/ai/usage";
-import {
-  type PortalAppPreviewRequest,
-  type PortalAppPreviewResponse,
-  type PortalAppTemplateRecord
-} from "@/platform/ai/apps";
 import { type PortalImageTaskCreateResponse } from "@/platform/ai/images";
 import type {
   PortalTaskPage,
@@ -31,18 +26,6 @@ import type {
   ConsoleImageGenerateRequest,
   ConsoleImageJob,
   ConsoleImageModel,
-  TenantAiAppKey,
-  TenantAiAppKeyCreatedOutputBody,
-  TenantAiAppKeyRevealOutputBody,
-  TenantAiAppKeysOutputBody,
-  TenantAiAppKeyWriteRequest,
-  TenantAppDTO,
-  TenantAppsOutputBody,
-  TenantAppWriteRequest,
-  TenantAppPromptDetailDTO,
-  TenantAppPromptsOutputBody,
-  TenantAppPromptWriteRequest,
-  TenantAiVisibleAppsOutputBody,
   ChatSession,
   ChatSessionDetail,
   TenantAiApiKey,
@@ -655,173 +638,10 @@ export const aiTenantApi = {
       query: { limit: 50, ...params },
       baseUrl: baseUrl()
     });
-  },
-  listVisibleAgents() {
-    return request()<TenantAiVisibleAppsOutputBody>({
-      method: "GET",
-      path: "/api/v1/tenants/me/app-agents",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  listTenantAppPrompts() {
-    return request()<TenantAppPromptsOutputBody>({
-      method: "GET",
-      path: "/api/v1/tenants/me/app-layer/prompts",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  getTenantAppPrompt(promptId: string) {
-    return request()<TenantAppPromptDetailDTO>({
-      method: "GET",
-      path: `/api/v1/tenants/me/app-layer/prompts/${encodeURIComponent(promptId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  createTenantAppPrompt(body: Required<Pick<TenantAppPromptWriteRequest, "name" | "template_text">> & TenantAppPromptWriteRequest) {
-    return request()<TenantAppPromptDetailDTO>({
-      method: "POST",
-      path: "/api/v1/tenants/me/app-layer/prompts",
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-  updateTenantAppPrompt(promptId: string, body: TenantAppPromptWriteRequest) {
-    return request()<TenantAppPromptDetailDTO>({
-      method: "PATCH",
-      path: `/api/v1/tenants/me/app-layer/prompts/${encodeURIComponent(promptId)}`,
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-  deleteTenantAppPrompt(promptId: string) {
-    return request()<TenantAiDeleteOutputBody>({
-      method: "DELETE",
-      path: `/api/v1/tenants/me/app-layer/prompts/${encodeURIComponent(promptId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  listTenantApps() {
-    return request()<TenantAppsOutputBody>({
-      method: "GET",
-      path: "/api/v1/tenants/me/app-layer/agents",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-	listTenantAppTemplates() {
-		return request()<{ items: PortalAppTemplateRecord[] }>({
-			method: "GET",
-			path: "/api/v1/tenants/me/app-layer/templates",
-			headers: headers(),
-			baseUrl: baseUrl()
-		});
-	},
-  getTenantApp(agentId: string) {
-    return request()<TenantAppDTO>({
-      method: "GET",
-      path: `/api/v1/tenants/me/app-layer/agents/${encodeURIComponent(agentId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-	createTenantApp(body: Required<Pick<TenantAppWriteRequest, "name" | "group_id" | "model_code">> & TenantAppWriteRequest) {
-    return request()<TenantAppDTO>({
-      method: "POST",
-      path: "/api/v1/tenants/me/app-layer/agents",
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-  updateTenantApp(agentId: string, body: TenantAppWriteRequest) {
-    return request()<TenantAppDTO>({
-      method: "PATCH",
-      path: `/api/v1/tenants/me/app-layer/agents/${encodeURIComponent(agentId)}`,
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-  deleteTenantApp(agentId: string) {
-    return request()<TenantAiDeleteOutputBody>({
-      method: "DELETE",
-      path: `/api/v1/tenants/me/app-layer/agents/${encodeURIComponent(agentId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  setTenantAppPublication(agentId: string, published: boolean) {
-    return request()<{ published: boolean }>({
-      method: published ? "PUT" : "DELETE",
-      path: `/api/v1/tenants/me/app-layer/agents/${encodeURIComponent(agentId)}/publication`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  previewTenantApp(agentId: string, body: PortalAppPreviewRequest) {
-    return runtimeTransport.request<PortalAppPreviewResponse>("POST", `${runtimeBasePath}/app-previews/${encodeURIComponent(agentId)}`, body);
-  },
-  listRunKeys() {
-    return request()<TenantAiAppKeysOutputBody>({
-      method: "GET",
-      path: "/api/v1/tenants/me/app-keys",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  createRunKey(body: TenantAiAppKeyWriteRequest) {
-    return request()<TenantAiAppKeyCreatedOutputBody>({
-      method: "POST",
-      path: "/api/v1/tenants/me/app-keys",
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-  updateRunKey(runKeyId: string, body: Partial<TenantAiAppKeyWriteRequest>) {
-    return request()<TenantAiAppKey>({
-      method: "PATCH",
-      path: `/api/v1/tenants/me/app-keys/${encodeURIComponent(runKeyId)}`,
-      headers: headers(),
-      body,
-      baseUrl: baseUrl()
-    });
-  },
-  deleteRunKey(runKeyId: string) {
-    return request()<TenantAiDeleteOutputBody>({
-      method: "DELETE",
-      path: `/api/v1/tenants/me/app-keys/${encodeURIComponent(runKeyId)}`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  revealRunKey(runKeyId: string) {
-    return request()<TenantAiAppKeyRevealOutputBody>({
-      method: "POST",
-      path: `/api/v1/tenants/me/app-keys/${encodeURIComponent(runKeyId)}/reveal`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-  rotateRunKey(runKeyId: string) {
-    return request()<TenantAiAppKeyCreatedOutputBody>({
-      method: "POST",
-      path: `/api/v1/tenants/me/app-keys/${encodeURIComponent(runKeyId)}/rotate`,
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
   }
 };
 
-// ==================== 应用运行层执行端点（信封 + SSE） ====================
-//
-// 读侧列表/详情已逐步切到 workspace self API；这里只保留模型/智能体发现与真正执行链路。
+// ==================== 网页工作台执行端点（信封 + SSE） ====================
 
 export const runtimeChatApi = {
   listModels() {

@@ -563,88 +563,6 @@ components:
         - items
         - total
       type: object
-    AppDTO:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppDTO.json
-          format: uri
-          readOnly: true
-          type: string
-        capability:
-          type: string
-        created_at:
-          format: int64
-          type: integer
-        created_by:
-          type: string
-        description:
-          type: string
-        group_id:
-          type: string
-        id:
-          type: string
-        model_code:
-          type: string
-        name:
-          type: string
-        owner_tenant_id:
-          type: string
-        owner_type:
-          type: string
-        owner_user_id:
-          type: string
-        prompt_bindings:
-          items:
-            $ref: "#/components/schemas/AppPromptBindingDTO"
-          type:
-            - array
-            - "null"
-        prompt_strategy:
-          type: string
-        published_by_tenant:
-          type: boolean
-        runtime_config:
-          additionalProperties: {}
-          type: object
-        status:
-          type: string
-        updated_at:
-          format: int64
-          type: integer
-        updated_by:
-          type: string
-      required:
-        - owner_type
-        - id
-        - name
-        - description
-        - status
-        - capability
-        - prompt_strategy
-        - prompt_bindings
-        - group_id
-        - model_code
-        - runtime_config
-        - published_by_tenant
-      type: object
-    AppDeleteOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppDeleteOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        deleted:
-          type: boolean
-      required:
-        - deleted
-      type: object
     AppError:
       additionalProperties: false
       properties:
@@ -677,319 +595,6 @@ components:
         - status
         - title
       type: object
-    AppPromptBindingDTO:
-      additionalProperties: false
-      properties:
-        binding_role:
-          type: string
-        display_order:
-          format: int64
-          type: integer
-        prompt_id:
-          type: string
-        prompt_name:
-          type: string
-        variables:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-      required:
-        - prompt_id
-        - prompt_name
-        - variables
-        - binding_role
-        - display_order
-      type: object
-    AppPromptCreateInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppPromptCreateInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        description:
-          type: string
-        name:
-          type: string
-        status:
-          type: string
-        template_text:
-          type: string
-      required:
-        - name
-        - description
-        - status
-        - template_text
-      type: object
-    AppPromptDTO:
-      additionalProperties: false
-      properties:
-        created_at:
-          format: int64
-          type: integer
-        created_by:
-          type: string
-        description:
-          type: string
-        id:
-          type: string
-        name:
-          type: string
-        owner_tenant_id:
-          type: string
-        owner_type:
-          type: string
-        owner_user_id:
-          type: string
-        status:
-          type: string
-        template_text:
-          type: string
-        updated_at:
-          format: int64
-          type: integer
-        updated_by:
-          type: string
-        variables:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-      required:
-        - owner_type
-        - id
-        - name
-        - description
-        - status
-        - template_text
-        - variables
-      type: object
-    AppPromptDeleteOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppPromptDeleteOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        deleted:
-          type: boolean
-      required:
-        - deleted
-      type: object
-    AppPromptDetailDTO:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppPromptDetailDTO.json
-          format: uri
-          readOnly: true
-          type: string
-        prompt:
-          $ref: "#/components/schemas/AppPromptDTO"
-      required:
-        - prompt
-      type: object
-    AppPromptUpdateInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppPromptUpdateInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        description:
-          type: string
-        name:
-          type: string
-        status:
-          type: string
-        template_text:
-          type: string
-      type: object
-    AppPromptsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppPromptsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        items:
-          items:
-            $ref: "#/components/schemas/AppPromptDTO"
-          type:
-            - array
-            - "null"
-        total:
-          format: int64
-          type: integer
-      required:
-        - items
-        - total
-      type: object
-    AppPublicationOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppPublicationOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        published:
-          type: boolean
-      required:
-        - published
-      type: object
-    AppTemplateDTO:
-      additionalProperties: false
-      properties:
-        allowed_capabilities:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-        default_capability:
-          type: string
-        description:
-          type: string
-        id:
-          type: string
-        max_prompt_bindings:
-          format: int64
-          type: integer
-        min_prompt_bindings:
-          format: int64
-          type: integer
-        name:
-          type: string
-        prompt_strategy:
-          type: string
-      required:
-        - id
-        - name
-        - description
-        - default_capability
-        - allowed_capabilities
-        - prompt_strategy
-        - min_prompt_bindings
-        - max_prompt_bindings
-      type: object
-    AppTemplatesOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppTemplatesOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        items:
-          items:
-            $ref: "#/components/schemas/AppTemplateDTO"
-          type:
-            - array
-            - "null"
-      required:
-        - items
-      type: object
-    AppUpdateInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppUpdateInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        capability:
-          type: string
-        description:
-          type: string
-        group_id:
-          type: string
-        model_code:
-          type: string
-        name:
-          type: string
-        prompt_ids:
-          items:
-            type: string
-          type: array
-        prompt_strategy:
-          type: string
-        runtime_config:
-          additionalProperties: {}
-          type: object
-        status:
-          type: string
-      type: object
-    AppWriteRequest:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppWriteRequest.json
-          format: uri
-          readOnly: true
-          type: string
-        capability:
-          type: string
-        description:
-          type: string
-        group_id:
-          type: string
-        model_code:
-          type: string
-        name:
-          type: string
-        prompt_ids:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-        prompt_strategy:
-          type: string
-        runtime_config:
-          additionalProperties: {}
-          type: object
-        status:
-          type: string
-        template_id:
-          type: string
-      required:
-        - template_id
-        - name
-        - description
-        - status
-        - capability
-        - prompt_strategy
-        - prompt_ids
-        - group_id
-        - model_code
-        - runtime_config
-      type: object
     ApplyWithdrawalInputBody:
       additionalProperties: false
       properties:
@@ -1018,35 +623,11 @@ components:
         - bankName
         - accountNo
       type: object
-    AppsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/AppsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        items:
-          items:
-            $ref: "#/components/schemas/AppDTO"
-          type:
-            - array
-            - "null"
-        total:
-          format: int64
-          type: integer
-      required:
-        - items
-        - total
-      type: object
     AsyncTaskChatCompletionInput:
       additionalProperties: true
-      description: 与 POST /v1/chat/completions 请求体同构；stream 即使传 true 也会被规范化为 false。
+      description: 与 POST /v1/chat/completions 请求体同构；stream 固定为 false。
       properties:
         messages:
-          description: OpenAI Chat Completions messages
           items:
             additionalProperties: true
             type: object
@@ -1056,7 +637,6 @@ components:
           type: string
         stream:
           default: false
-          description: 异步任务固定为 false
           type: boolean
       required:
         - model
@@ -1080,7 +660,7 @@ components:
           description: 调用方业务元数据；不参与执行与幂等指纹，创建和查询响应会原样回显
           type: object
         type:
-          description: 任务能力类型；API key 必填，app key 可省略并由绑定应用推断
+          description: 任务能力类型
           enum:
             - images.generation
             - images.edit
@@ -1091,11 +671,12 @@ components:
           format: uri
           type: string
       required:
+        - type
         - input
       type: object
     AsyncTaskCreateMultipartRequest:
       additionalProperties: false
-      description: 异步图生图 multipart 信封。type、metadata 和 webhook_url 是普通标量字段，其余字段与 POST /v1/images/edits 相同。
+      description: 异步图生图 multipart 信封；其余字段与 POST /v1/images/edits 相同。
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
@@ -1108,7 +689,6 @@ components:
           type: string
         image[]:
           contentMediaType: application/octet-stream
-          description: 参考图文件；多图时重复提交该字段
           format: binary
           type: string
         input_fidelity:
@@ -1146,10 +726,11 @@ components:
         user:
           type: string
         webhook_url:
-          description: 可选终态 HTTPS 通知地址
           format: uri
           type: string
       required:
+        - type
+        - model
         - image[]
       type: object
     AsyncTaskCreateResponse:
@@ -1306,13 +887,12 @@ components:
       type: object
     AsyncTaskImageEditInput:
       additionalProperties: false
-      description: 图生图 JSON 请求；也可改用 multipart/form-data 直接上传 image[] 文件。
+      description: 图生图 JSON 请求；也可使用 multipart/form-data 上传 image[] 文件。
       properties:
         background:
           type: string
         images:
           items:
-            description: 图片来源对象；当前只映射 image_url。
             properties:
               image_url:
                 description: HTTP(S) URL 或 data:image/...;base64,...
@@ -1326,7 +906,6 @@ components:
         input_fidelity:
           type: string
         mask:
-          description: 图片来源对象；当前只映射 image_url。
           properties:
             image_url:
               description: HTTP(S) URL 或 data:image/...;base64,...
@@ -1335,10 +914,8 @@ components:
             - image_url
           type: object
         model:
-          description: 模型代码
           type: string
         "n":
-          description: 输出图片张数；还需满足上游模型绑定上限
           maximum: 10
           minimum: 1
           type: integer
@@ -1347,7 +924,6 @@ components:
         output_format:
           type: string
         prompt:
-          description: 编辑提示词
           type: string
         response_format:
           enum:
@@ -1374,7 +950,6 @@ components:
           description: 模型代码
           type: string
         "n":
-          description: 输出图片张数；还需满足上游模型绑定上限
           format: int64
           maximum: 10
           minimum: 1
@@ -1405,14 +980,11 @@ components:
       type: object
     AsyncTaskInput:
       additionalProperties: false
-      description: API key 输入与对应同步 API 同构；app key 输入与 POST /v1/run 的绑定应用请求同构。chat.completions 总是强制 stream=false，只产出最终响应。
+      description: 输入与对应同步 API 同构；chat.completions 强制 stream=false。
       oneOf:
         - $ref: "#/components/schemas/AsyncTaskImageGenerationInput"
         - $ref: "#/components/schemas/AsyncTaskImageEditInput"
-        - $ref: "#/components/schemas/RunRuntimeImageGenerationRequest"
-        - $ref: "#/components/schemas/RunRuntimeImageEditJSONRequest"
         - $ref: "#/components/schemas/AsyncTaskChatCompletionInput"
-        - $ref: "#/components/schemas/RunRuntimeRequest"
       type: object
     AsyncTaskListResponse:
       additionalProperties: false
@@ -1445,7 +1017,7 @@ components:
       additionalProperties: false
       properties:
         cost_credits:
-          description: 任务调用方的已结算消耗积分；失败或取消前已产生可计费用量时可大于 0
+          description: 任务调用方的已结算消耗积分
           format: double
           type: number
       required:
@@ -1970,43 +1542,6 @@ components:
           type: string
       required:
         - status
-      type: object
-    ConsumerAppDTO:
-      additionalProperties: false
-      properties:
-        capability:
-          type: string
-        description:
-          type: string
-        id:
-          type: string
-        name:
-          type: string
-        prompt_names:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-        prompt_strategy:
-          type: string
-        publisher_label:
-          type: string
-        variables:
-          items:
-            type: string
-          type:
-            - array
-            - "null"
-      required:
-        - id
-        - name
-        - description
-        - capability
-        - prompt_strategy
-        - publisher_label
-        - variables
-        - prompt_names
       type: object
     ConsumptionTrendOutputBody:
       additionalProperties: false
@@ -6979,379 +6514,34 @@ components:
         - scope
         - weights
       type: object
-    RunKeyCreatedOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunKeyCreatedOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        key:
-          $ref: "#/components/schemas/RunKeyDTO"
-        plaintext_key:
-          type: string
-      required:
-        - plaintext_key
-        - key
-      type: object
-    RunKeyDTO:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunKeyDTO.json
-          format: uri
-          readOnly: true
-          type: string
-        agent_id:
-          type: string
-        agent_name:
-          type: string
-        agent_owner_tenant_id:
-          type: string
-        agent_owner_type:
-          type: string
-        created_at:
-          format: int64
-          type: integer
-        created_by:
-          type: string
-        expires_at:
-          format: int64
-          type: integer
-        id:
-          type: string
-        last_four:
-          type: string
-        name:
-          type: string
-        owner_type:
-          type: string
-        status:
-          type: string
-        tenant_id:
-          type: string
-        updated_at:
-          format: int64
-          type: integer
-        user_id:
-          type: string
-      required:
-        - id
-        - owner_type
-        - tenant_id
-        - name
-        - last_four
-        - status
-        - agent_id
-      type: object
-    RunKeyDeleteOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunKeyDeleteOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        deleted:
-          type: boolean
-      required:
-        - deleted
-      type: object
-    RunKeyRevealOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunKeyRevealOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        plaintext_key:
-          type: string
-      required:
-        - plaintext_key
-      type: object
-    RunKeyWriteRequest:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunKeyWriteRequest.json
-          format: uri
-          readOnly: true
-          type: string
-        agent_id:
-          type: string
-        expires_at:
-          format: int64
-          type: integer
-        name:
-          type: string
-        status:
-          type: string
-      required:
-        - name
-        - agent_id
-      type: object
-    RunKeysOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunKeysOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        included:
-          $ref: "#/components/schemas/IdentityIncludedDTO"
-        items:
-          items:
-            $ref: "#/components/schemas/RunKeyDTO"
-          type:
-            - array
-            - "null"
-        total:
-          format: int64
-          type: integer
-      required:
-        - items
-        - total
-        - included
-      type: object
-    RunRuntimeAttachment:
-      additionalProperties: false
-      properties:
-        mime_type:
-          description: MIME 类型，可选
-          type: string
-        name:
-          description: 文件名，可选
-          type: string
-        type:
-          description: 附件类型：image 或 file
-          enum:
-            - image
-            - file
-          type: string
-        url:
-          description: HTTPS 直连 URL 或平台认可的签名 URL
-          type: string
-      required:
-        - url
-      type: object
-    RunRuntimeChatResponse:
-      additionalProperties: true
-      description: 统一应用输出：type=chat、text、usage、request_id。
-      type: object
-    RunRuntimeError:
+    RuntimeAPIError:
       additionalProperties: false
       properties:
         code:
-          description: 稳定错误码，例如 invalid_request_error、invalid_api_key、rate_limit_exceeded、service_unavailable
           type: string
         message:
-          description: 面向调用方的错误信息
           type: string
         type:
-          description: OpenAI 风格错误类型
           type: string
       required:
         - code
         - message
         - type
       type: object
-    RunRuntimeErrorResponse:
+    RuntimeAPIErrorResponse:
       additionalProperties: false
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/RunRuntimeErrorResponse.json
+            - https://example.com/schemas/RuntimeAPIErrorResponse.json
           format: uri
           readOnly: true
           type: string
         error:
-          $ref: "#/components/schemas/RunRuntimeError"
-          description: 错误详情
+          $ref: "#/components/schemas/RuntimeAPIError"
       required:
         - error
-      type: object
-    RunRuntimeImageEditJSONRequest:
-      additionalProperties: false
-      description: 应用密钥图生图 JSON 请求。图片来源使用 images[].image_url；image_url 可为 HTTP(S) URL 或 base64 data URL。未列出的 JSON 属性不参与请求映射。
-      properties:
-        images:
-          description: 参考图数组；每项只包含 image_url。
-          items:
-            description: 图片来源对象；当前只映射 image_url。
-            properties:
-              image_url:
-                description: HTTP(S) URL 或 data:image/...;base64,...
-                type: string
-            required:
-              - image_url
-            type: object
-          maxItems: 16
-          minItems: 1
-          type: array
-        input:
-          description: 本次图生图输入；动态提示词应用可在这里使用 {{提示词名称}}
-          type: string
-        mask:
-          description: 图片来源对象；当前只映射 image_url。
-          properties:
-            image_url:
-              description: HTTP(S) URL 或 data:image/...;base64,...
-              type: string
-          required:
-            - image_url
-          type: object
-        "n":
-          description: 可选；输出图片张数。省略时使用应用默认值，是否可覆盖及上限由应用配置决定
-          maximum: 10
-          minimum: 1
-          type: integer
-        response_format:
-          description: 可选；控制平台返回 b64_json 或 url，不发送给 GPT Image 上游
-          type: string
-        stream:
-          default: false
-          description: true 时返回 text/event-stream；仅流式返回最终完成图，不暴露 partial_images 预览事件
-          type: boolean
-        variables:
-          additionalProperties:
-            type: string
-          description: 可选；用于替换应用提示词中的 {{变量名}} 占位符
-          type: object
-      required:
-        - input
-        - images
-      type: object
-    RunRuntimeImageEditMultipartRequest:
-      additionalProperties: false
-      description: 应用密钥图生图 multipart 请求。使用一个或多个重复的 image[] 文件字段；可选 mask 文件。不接受 URL 文本字段或其它文件字段别名。
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RunRuntimeImageEditMultipartRequest.json
-          format: uri
-          readOnly: true
-          type: string
-        image[]:
-          contentMediaType: application/octet-stream
-          description: 参考图文件；多图时重复提交该字段。
-          format: binary
-          type: string
-        input:
-          description: 本次图生图输入；动态提示词应用可在这里使用 {{提示词名称}}
-          type: string
-        mask:
-          contentMediaType: application/octet-stream
-          description: 可选；上传蒙版文件
-          format: binary
-          type: string
-        "n":
-          description: 可选；输出图片张数。省略时使用应用默认值，是否可覆盖及上限由应用配置决定
-          maximum: 10
-          minimum: 1
-          type: integer
-        response_format:
-          description: 可选；控制平台返回 b64_json 或 url，不发送给 GPT Image 上游
-          type: string
-        stream:
-          default: false
-          description: true 时返回 text/event-stream；仅流式返回最终完成图，不暴露 partial_images 预览事件
-          type: boolean
-        variables:
-          description: 可选；JSON 字符串，用于替换应用提示词中的 {{变量名}} 占位符
-          type: string
-      required:
-        - input
-        - image[]
-      type: object
-    RunRuntimeImageGenerationRequest:
-      additionalProperties: false
-      properties:
-        background:
-          description: 可选；背景配置
-          type: string
-        input:
-          description: 本次文生图输入；分辨率等运行设置由应用固定
-          type: string
-        "n":
-          description: 可选；输出图片张数。省略时使用应用默认值，是否可覆盖及上限由应用配置决定
-          format: int64
-          maximum: 10
-          minimum: 1
-          type: integer
-        output_format:
-          description: 可选；输出格式
-          type: string
-        response_format:
-          description: 可选；b64_json 或 url
-          type: string
-        size:
-          description: 可选；图片尺寸，例如 1024x1024
-          type: string
-        stream:
-          default: false
-          description: true 时返回 text/event-stream；仅流式返回最终完成图，不暴露 partial_images 预览事件
-          type: boolean
-        variables:
-          additionalProperties:
-            type: string
-          description: 可选；用于替换应用提示词中的 {{变量名}} 占位符
-          type: object
-      required:
-        - input
-      type: object
-    RunRuntimeImageResponse:
-      additionalProperties: true
-      description: 统一应用输出：type=image、images[]、usage、request_id。请求 url 且上游返回内联图片时，url 为平台默认有效 24 小时的 capability URL，并附 asset_ref 与 expires_at；上游已有 HTTP URL 时原样透传。
-      type: object
-    RunRuntimeRequest:
-      additionalProperties: false
-      properties:
-        attachments:
-          description: 可选；图片或文件直连 URL 数组，仅应用允许附件时可用
-          items:
-            $ref: "#/components/schemas/RunRuntimeAttachment"
-          type:
-            - array
-            - "null"
-        input:
-          description: 本次用户输入文本
-          type: string
-        max_tokens:
-          description: 应用锁定该参数；一旦传值会返回 400，不会被采纳
-          format: int64
-          type: integer
-        stream:
-          default: false
-          description: true 时返回 text/event-stream，false 时返回 JSON
-          type: boolean
-        temperature:
-          description: 应用锁定该参数；一旦传值会返回 400，不会被采纳
-          format: double
-          type: number
-        variables:
-          additionalProperties:
-            type: string
-          description: 可选；用于替换应用提示词中的 {{变量名}} 占位符
-          type: object
-      required:
-        - input
       type: object
     RuntimeLimitPoliciesOutputBody:
       additionalProperties: false
@@ -8486,26 +7676,6 @@ components:
         - resource_kind
         - resource_id
       type: object
-    TenantRunKeyUpdateInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/TenantRunKeyUpdateInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        agent_id:
-          type: string
-        expires_at:
-          format: int64
-          type: integer
-        name:
-          type: string
-        status:
-          type: string
-      type: object
     TenantSettings:
       additionalProperties: false
       properties:
@@ -8685,12 +7855,6 @@ components:
     TenantUsageLogDTO:
       additionalProperties: false
       properties:
-        app_id:
-          description: 经由的智能应用 ID
-          type: string
-        app_name:
-          description: 经由的智能应用名称快照
-          type: string
         billing_group_label_snapshot:
           description: 请求时分组展示标签快照
           type: string
@@ -8761,7 +7925,7 @@ components:
           format: int32
           type: integer
         model_code:
-          description: 模型编码(应用调用且非本人应用时脱敏为空)
+          description: 模型编码
           type: string
         prompt_tokens:
           description: 输入 token 数
@@ -10194,12 +9358,6 @@ components:
           description: API key 配额积分
           format: double
           type: number
-        app_id:
-          description: 经由的智能应用 ID
-          type: string
-        app_name:
-          description: 经由的智能应用名称快照
-          type: string
         attempts_count:
           description: 路由尝试次数（含重试）
           format: int32
@@ -11270,12 +10428,6 @@ components:
     UserUsageLogDTO:
       additionalProperties: false
       properties:
-        app_id:
-          description: 经由的智能应用 ID
-          type: string
-        app_name:
-          description: 经由的智能应用名称快照
-          type: string
         billable_unit_type:
           description: 计费单位类型
           type: string
@@ -11337,7 +10489,7 @@ components:
           format: int32
           type: integer
         model_code:
-          description: 模型编码(应用调用且非本人应用时脱敏为空)
+          description: 模型编码
           type: string
         prompt_tokens:
           description: 输入 token 数
@@ -11561,29 +10713,6 @@ components:
         - usage_logs
         - chat_sessions
         - image_jobs
-      type: object
-    VisibleAppsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/VisibleAppsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        items:
-          items:
-            $ref: "#/components/schemas/ConsumerAppDTO"
-          type:
-            - array
-            - "null"
-        total:
-          format: int64
-          type: integer
-      required:
-        - items
-        - total
       type: object
     WechatConfigOutputBody:
       additionalProperties: false
@@ -12071,14 +11200,9 @@ components:
         - avg_latency_ms
       type: object
   securitySchemes:
-    bearerAuth:
-      bearerFormat: 应用密钥
-      description: "使用 Authorization: Bearer rk_xxx 调用 /v1/run；密钥绑定的应用类型决定请求体形状与响应形式。"
-      scheme: bearer
-      type: http
     taskBearerAuth:
-      bearerFormat: API key or app key
-      description: "使用 Authorization: Bearer sk-ai-xxx 或 Bearer rk_xxx 调用异步任务 API。"
+      bearerFormat: API key
+      description: "使用 Authorization: Bearer sk-ai-xxx 调用异步任务 API。"
       scheme: bearer
       type: http
 info:
@@ -16930,490 +16054,6 @@ paths:
       summary: 更新租户自助 API key 状态
       tags:
         - api-keys
-  /api/v1/tenants/me/app-agents:
-    get:
-      operationId: ai-list-visible-public-apps-tenant
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VisibleAppsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户可见应用列表
-      tags:
-        - app-agents
-  /api/v1/tenants/me/app-keys:
-    get:
-      operationId: ai-list-app-keys-tenant
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeysOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户应用密钥列表
-      tags:
-        - app-keys
-    post:
-      operationId: ai-create-app-key-tenant
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RunKeyWriteRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyCreatedOutputBody"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 创建租户应用密钥
-      tags:
-        - app-keys
-  /api/v1/tenants/me/app-keys/{runKeyID}:
-    delete:
-      operationId: ai-delete-app-key-tenant
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyDeleteOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 删除租户应用密钥
-      tags:
-        - app-keys
-    patch:
-      operationId: ai-update-app-key-tenant
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TenantRunKeyUpdateInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 更新租户应用密钥
-      tags:
-        - app-keys
-  /api/v1/tenants/me/app-keys/{runKeyID}/reveal:
-    post:
-      description: 解密返回该应用密钥的完整明文，可反复调用查看/复制。
-      operationId: ai-reveal-app-key-tenant
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyRevealOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 查看租户应用密钥明文
-      tags:
-        - app-keys
-  /api/v1/tenants/me/app-keys/{runKeyID}/rotate:
-    post:
-      description: 生成一把新密钥并立即使旧密钥失效，应用绑定与其它元数据保持不变。
-      operationId: ai-rotate-app-key-tenant
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyCreatedOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 轮换租户应用密钥
-      tags:
-        - app-keys
-  /api/v1/tenants/me/app-layer/agents:
-    get:
-      operationId: -api-v1-tenants-me-app-layer-agents-list
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户应用列表
-      tags:
-        - tenant-app-agents
-    post:
-      operationId: -api-v1-tenants-me-app-layer-agents-create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppWriteRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDTO"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 创建租户应用
-      tags:
-        - tenant-app-agents
-  /api/v1/tenants/me/app-layer/agents/{agentID}:
-    delete:
-      operationId: -api-v1-tenants-me-app-layer-agents-delete
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDeleteOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 删除租户应用
-      tags:
-        - tenant-app-agents
-    get:
-      operationId: -api-v1-tenants-me-app-layer-agents-get
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户应用详情
-      tags:
-        - tenant-app-agents
-    patch:
-      operationId: -api-v1-tenants-me-app-layer-agents-update
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppUpdateInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 更新租户应用
-      tags:
-        - tenant-app-agents
-  /api/v1/tenants/me/app-layer/agents/{agentID}/publication:
-    delete:
-      operationId: tenant-app-agents-unpublish
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPublicationOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 撤回本租户的应用发布
-      tags:
-        - tenant-app-agents
-    put:
-      operationId: tenant-app-agents-publish
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPublicationOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 发布应用给本租户终端用户
-      tags:
-        - tenant-app-agents
-  /api/v1/tenants/me/app-layer/prompts:
-    get:
-      description: 应用层提示词资产列表，返回当前内容与变量摘要。
-      operationId: -api-v1-tenants-me-app-layer-prompts-list
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户提示词列表
-      tags:
-        - tenant-app-prompts
-    post:
-      operationId: -api-v1-tenants-me-app-layer-prompts-create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppPromptCreateInputBody"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDetailDTO"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 创建租户提示词
-      tags:
-        - tenant-app-prompts
-  /api/v1/tenants/me/app-layer/prompts/{promptID}:
-    delete:
-      operationId: -api-v1-tenants-me-app-layer-prompts-delete
-      parameters:
-        - in: path
-          name: promptID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDeleteOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 删除租户提示词
-      tags:
-        - tenant-app-prompts
-    get:
-      operationId: -api-v1-tenants-me-app-layer-prompts-get
-      parameters:
-        - in: path
-          name: promptID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDetailDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户提示词详情
-      tags:
-        - tenant-app-prompts
-    patch:
-      description: 更新提示词后，所有绑定该提示词的应用会在后续调用中使用新内容。
-      operationId: -api-v1-tenants-me-app-layer-prompts-update
-      parameters:
-        - in: path
-          name: promptID
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppPromptUpdateInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDetailDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 更新租户提示词
-      tags:
-        - tenant-app-prompts
-  /api/v1/tenants/me/app-layer/templates:
-    get:
-      description: 返回代码内置的固定应用创建逻辑，不读取或管理数据库模板。
-      operationId: -api-v1-tenants-me-app-layer-templates-list
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppTemplatesOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 应用创建模板
-      tags:
-        - tenant-app-agents
   /api/v1/tenants/me/available-models:
     get:
       operationId: ai-list-tenant-self-available-models
@@ -19804,34 +18444,6 @@ paths:
       summary: 更新租户 API key 状态
       tags:
         - api-keys
-  /api/v1/tenants/{tenantID}/app-keys:
-    get:
-      description: 平台查询视图：返回指定租户拥有的应用密钥列表。仅返回 last_four，不返回明文 key/hash/ciphertext。
-      operationId: ai-list-tenant-app-keys
-      parameters:
-        - description: 租户 ID
-          in: path
-          name: tenantID
-          required: true
-          schema:
-            description: 租户 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeysOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户应用密钥列表
-      tags:
-        - app-keys
   /api/v1/tenants/{tenantID}/upstream-access:
     get:
       description: 列出平台上游资源及指定租户的访问状态，不返回地址、密钥或凭据。
@@ -20187,41 +18799,6 @@ paths:
       summary: 更新用户 API key 状态
       tags:
         - api-keys
-  /api/v1/tenants/{tenantID}/users/{userID}/app-keys:
-    get:
-      description: 平台查询视图：返回指定租户下指定用户拥有的应用密钥列表。仅返回 last_four，不返回明文 key/hash/ciphertext。
-      operationId: ai-list-user-app-keys
-      parameters:
-        - description: 租户 ID
-          in: path
-          name: tenantID
-          required: true
-          schema:
-            description: 租户 ID
-            type: string
-        - description: 用户 ID
-          in: path
-          name: userID
-          required: true
-          schema:
-            description: 用户 ID
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeysOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用户应用密钥列表
-      tags:
-        - app-keys
   /api/v1/upstream-accounts:
     get:
       operationId: ai-list-upstream-accounts
@@ -21520,441 +20097,6 @@ paths:
       summary: 更新终端用户自助 API key 状态
       tags:
         - api-keys
-  /api/v1/users/me/app-agents:
-    get:
-      operationId: ai-list-visible-public-apps-user
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VisibleAppsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 终端用户可见应用列表
-      tags:
-        - app-agents
-  /api/v1/users/me/app-keys:
-    get:
-      operationId: ai-list-app-keys-user
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeysOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 终端用户应用密钥列表
-      tags:
-        - app-keys
-    post:
-      operationId: ai-create-app-key-user
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RunKeyWriteRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyCreatedOutputBody"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 创建终端用户应用密钥
-      tags:
-        - app-keys
-  /api/v1/users/me/app-keys/{runKeyID}:
-    delete:
-      operationId: ai-delete-app-key-user
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyDeleteOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 删除终端用户应用密钥
-      tags:
-        - app-keys
-    patch:
-      operationId: ai-update-app-key-user
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TenantRunKeyUpdateInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 更新终端用户应用密钥
-      tags:
-        - app-keys
-  /api/v1/users/me/app-keys/{runKeyID}/reveal:
-    post:
-      description: 解密返回该应用密钥的完整明文，可反复调用查看/复制。
-      operationId: ai-reveal-app-key-user
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyRevealOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 查看终端用户应用密钥明文
-      tags:
-        - app-keys
-  /api/v1/users/me/app-keys/{runKeyID}/rotate:
-    post:
-      description: 生成一把新密钥并立即使旧密钥失效，应用绑定与其它元数据保持不变。
-      operationId: ai-rotate-app-key-user
-      parameters:
-        - in: path
-          name: runKeyID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RunKeyCreatedOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 轮换终端用户应用密钥
-      tags:
-        - app-keys
-  /api/v1/users/me/app-layer/agents:
-    get:
-      operationId: -api-v1-users-me-app-layer-agents-list
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用户应用列表
-      tags:
-        - user-app-agents
-    post:
-      operationId: -api-v1-users-me-app-layer-agents-create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppWriteRequest"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDTO"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 创建用户应用
-      tags:
-        - user-app-agents
-  /api/v1/users/me/app-layer/agents/{agentID}:
-    delete:
-      operationId: -api-v1-users-me-app-layer-agents-delete
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDeleteOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 删除用户应用
-      tags:
-        - user-app-agents
-    get:
-      operationId: -api-v1-users-me-app-layer-agents-get
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用户应用详情
-      tags:
-        - user-app-agents
-    patch:
-      operationId: -api-v1-users-me-app-layer-agents-update
-      parameters:
-        - in: path
-          name: agentID
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppUpdateInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 更新用户应用
-      tags:
-        - user-app-agents
-  /api/v1/users/me/app-layer/prompts:
-    get:
-      description: 应用层提示词资产列表，返回当前内容与变量摘要。
-      operationId: -api-v1-users-me-app-layer-prompts-list
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用户提示词列表
-      tags:
-        - user-app-prompts
-    post:
-      operationId: -api-v1-users-me-app-layer-prompts-create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppPromptCreateInputBody"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDetailDTO"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 创建用户提示词
-      tags:
-        - user-app-prompts
-  /api/v1/users/me/app-layer/prompts/{promptID}:
-    delete:
-      operationId: -api-v1-users-me-app-layer-prompts-delete
-      parameters:
-        - in: path
-          name: promptID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDeleteOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 删除用户提示词
-      tags:
-        - user-app-prompts
-    get:
-      operationId: -api-v1-users-me-app-layer-prompts-get
-      parameters:
-        - in: path
-          name: promptID
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDetailDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用户提示词详情
-      tags:
-        - user-app-prompts
-    patch:
-      description: 更新提示词后，所有绑定该提示词的应用会在后续调用中使用新内容。
-      operationId: -api-v1-users-me-app-layer-prompts-update
-      parameters:
-        - in: path
-          name: promptID
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AppPromptUpdateInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppPromptDetailDTO"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 更新用户提示词
-      tags:
-        - user-app-prompts
-  /api/v1/users/me/app-layer/templates:
-    get:
-      description: 返回代码内置的固定应用创建逻辑，不读取或管理数据库模板。
-      operationId: -api-v1-users-me-app-layer-templates-list
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AppTemplatesOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 应用创建模板
-      tags:
-        - user-app-agents
   /api/v1/users/me/groups:
     get:
       description: 按当前用户 token 返回该用户可见的分组及生效售价倍率。
@@ -22554,221 +20696,11 @@ paths:
       summary: JWKS 公钥集
       tags:
         - auth
-  /v1/run:
-    post:
-      description: 使用 rk_ 应用密钥调用预先绑定好的应用；密钥绑定的应用类型（对话/文生图/图生图）决定请求体形状与响应形式，调用方无需选择路径。图生图额外支持 multipart/form-data 上传参考图。生图张数由应用设置默认值与可覆盖上限；支持 stream=true 返回 text/event-stream，但只返回最终完成图，不支持 partial_images 预览图。
-      operationId: ai-run-runtime
-      requestBody:
-        content:
-          application/json:
-            examples:
-              bound-chat-app:
-                summary: 调用绑定对话应用的应用密钥并传入模板变量
-                value:
-                  input: 请帮我生成一段面向租户公告的说明
-                  stream: true
-                  variables:
-                    tenant_name: Demo Tenant
-              bound-dynamic-chat-app:
-                summary: 按已绑定提示词名称动态组合输入
-                value:
-                  input: 客户想了解交付周期，请结合 {{客户背景}}，遵循 {{售前规范}}，参考 {{产品资料}}。
-              bound-image-edit-app-multi-reference:
-                summary: 调用绑定图生图应用的应用密钥（多张参考图）
-                value:
-                  images:
-                    - image_url: https://example.com/layout.png
-                    - image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA
-                  input: Use the first image composition and the second image color palette.
-                  stream: true
-              bound-image-edit-app-single-reference:
-                summary: 调用绑定图生图应用的应用密钥（单张远程参考图）
-                value:
-                  images:
-                    - image_url: https://example.com/reference.png
-                  input: Retouch the lighting and keep the composition.
-                  response_format: b64_json
-                  stream: false
-              bound-image-generation-app:
-                summary: 调用绑定文生图应用的应用密钥
-                value:
-                  input: 增加一点现代品牌视觉感
-                  stream: true
-                  variables:
-                    brand_name: Demo Tenant
-            schema:
-              description: 按密钥绑定的应用类型解析请求；对话、文生图和图生图统一使用 input。
-              oneOf:
-                - $ref: "#/components/schemas/RunRuntimeRequest"
-                - $ref: "#/components/schemas/RunRuntimeImageGenerationRequest"
-                - $ref: "#/components/schemas/RunRuntimeImageEditJSONRequest"
-          multipart/form-data:
-            schema:
-              $ref: "#/components/schemas/RunRuntimeImageEditMultipartRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              examples:
-                chat-completion:
-                  summary: 非流式对话响应
-                  value:
-                    choices:
-                      - finish_reason: stop
-                        index: 0
-                        message:
-                          content: 这段需求的核心是统一运行入口，并把提示词逻辑下沉到服务端。
-                          role: assistant
-                    created: 1761200000
-                    id: chatcmpl-run-example
-                    model: gpt-5.4
-                    object: chat.completion
-                    usage:
-                      completion_tokens: 24
-                      prompt_tokens: 42
-                      total_tokens: 66
-                image-response:
-                  summary: 非流式图片响应
-                  value:
-                    created: 1761200000
-                    data:
-                      - url: https://example.com/final.png
-              schema:
-                oneOf:
-                  - $ref: "#/components/schemas/RunRuntimeChatResponse"
-                  - $ref: "#/components/schemas/RunRuntimeImageResponse"
-            text/event-stream:
-              example: |+
-                data: {"id":"chatcmpl-run-example","choices":[{"delta":{"content":"你好"}}]}
-
-              schema:
-                type: string
-          description: 非流式时返回该应用类型对应的响应体（对话为 Chat Completions 风格 JSON，图片为 Images 风格 JSON，仅含最终完成图）；流式时返回 SSE。
-        "400":
-          content:
-            application/json:
-              examples:
-                invalid-body:
-                  summary: 请求体不合法
-                  value:
-                    error:
-                      code: invalid_request_error
-                      message: Invalid request body.
-                      type: invalid_request_error
-                missing-input:
-                  summary: 缺少 input
-                  value:
-                    error:
-                      code: invalid_request_error
-                      message: input is required.
-                      type: invalid_request_error
-                partial-images-unsupported:
-                  summary: 不支持预览图
-                  value:
-                    error:
-                      code: invalid_request_error
-                      message: partial_images is not supported; only the final completed image is returned.
-                      type: invalid_request_error
-              schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 请求体错误、输入缺失、应用目标无效或请求了应用不支持的预览图
-        "401":
-          content:
-            application/json:
-              examples:
-                disabled-key:
-                  summary: 应用密钥已停用
-                  value:
-                    error:
-                      code: invalid_api_key
-                      message: Run key disabled.
-                      type: invalid_api_key
-                expired-key:
-                  summary: 应用密钥已过期
-                  value:
-                    error:
-                      code: invalid_api_key
-                      message: Run key expired.
-                      type: invalid_api_key
-                invalid-key:
-                  summary: 应用密钥无效
-                  value:
-                    error:
-                      code: invalid_api_key
-                      message: Invalid run key.
-                      type: invalid_api_key
-              schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 应用密钥缺失、格式错误、禁用或已过期
-        "404":
-          content:
-            application/json:
-              examples:
-                missing-agent:
-                  summary: 绑定应用不存在
-                  value:
-                    error:
-                      code: invalid_request_error
-                      message: no rows in result set
-                      type: invalid_request_error
-              schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 绑定应用不存在
-        "429":
-          content:
-            application/json:
-              examples:
-                rate-limit:
-                  summary: 触发限流
-                  value:
-                    error:
-                      code: rate_limit_exceeded
-                      message: Rate limit exceeded.
-                      type: rate_limit_exceeded
-              schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 命中既有限流策略
-        "502":
-          content:
-            application/json:
-              examples:
-                upstream-failed:
-                  summary: 上游请求失败
-                  value:
-                    error:
-                      code: upstream_error
-                      message: Upstream request failed.
-                      type: server_error
-              schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 上游调用失败
-        "503":
-          content:
-            application/json:
-              examples:
-                service-unavailable:
-                  summary: 运行时未就绪
-                  value:
-                    error:
-                      code: service_unavailable
-                      message: Run runtime is not configured.
-                      type: service_unavailable
-              schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 运行面依赖未配置或暂时不可用
-      security:
-        - bearerAuth: []
-      summary: 应用密钥统一运行入口
-      tags:
-        - runtime
   /v1/tasks:
     get:
-      description: 按创建时间倒序列出当前 tenant + user 可见的 API/app 任务。starting_after 传上一页最后一个任务 ID，内部游标为 (created_at,id)。
       operationId: ai-list-tasks
       parameters:
-        - description: 可选状态过滤
-          in: query
+        - in: query
           name: status
           schema:
             enum:
@@ -22778,8 +20710,7 @@ paths:
               - failed
               - cancelled
             type: string
-        - description: 可选 wire type 过滤
-          in: query
+        - in: query
           name: type
           schema:
             enum:
@@ -22787,16 +20718,14 @@ paths:
               - images.edit
               - chat.completions
             type: string
-        - description: 页大小，默认 20，范围 1..100
-          in: query
+        - in: query
           name: limit
           schema:
             default: 20
             maximum: 100
             minimum: 1
             type: integer
-        - description: 上一页最后一个任务 UUID
-          in: query
+        - in: query
           name: starting_after
           schema:
             format: uuid
@@ -22812,19 +20741,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 过滤条件或游标不合法
         "401":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: API key/app key 无效、禁用或过期
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: API key 无效、禁用或过期
         "503":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 任务服务暂不可用
       security:
         - taskBearerAuth: []
@@ -22833,10 +20762,10 @@ paths:
         - runtime
         - tasks
     post:
-      description: 使用 API key 或 app key 创建图片生成、图片编辑或聊天完成任务。API key 必须传 type；app key 可省略，由绑定应用类型推断，显式 type 仅作一致性断言。chat.completions 强制 stream=false，只保存最终响应。任务 ID 由服务端生成；相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event（task.completed/task.failed/task.cancelled）和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。首次立即投递，失败后按 10s、1m、5m、30m、2h 重试；2xx 成功，410 立即终止，单次超时 10s，禁止重定向。接收方应按 task_id + event 幂等处理，以容忍发送成功后进程崩溃造成的重复投递。
+      description: 使用 API key 创建图片生成、图片编辑或聊天完成任务。type 为必填字段；chat.completions 强制 stream=false，只保存最终响应。相同凭据复用 Idempotency-Key 且执行输入相同时返回原任务，不同输入返回 409。metadata 不参与幂等指纹并原样回显。可选 webhook_url 仅接受公网 HTTPS。任务进入终态时发送最小通知，body 只含 source=D-AI、event 和 task_id；完整状态、结果及错误必须通过 GET /v1/tasks/{id} 获取。
       operationId: ai-create-task
       parameters:
-        - description: 可选幂等键；作用域按当前 API key 或 app key 隔离，生命周期与任务一致。
+        - description: 可选幂等键；作用域按当前 API key 隔离。
           in: header
           name: Idempotency-Key
           schema:
@@ -22844,15 +20773,6 @@ paths:
       requestBody:
         content:
           application/json:
-            example:
-              input:
-                model: gpt-image-1
-                prompt: Draw a lighthouse at dusk
-                size: 1024x1024
-              metadata:
-                order_id: A-1
-              type: images.generation
-              webhook_url: https://caller.example.com/hooks/ai
             schema:
               $ref: "#/components/schemas/AsyncTaskCreateJSONRequest"
           multipart/form-data:
@@ -22865,49 +20785,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AsyncTaskCreateResponse"
-          description: 任务已持久化并进入 pending 状态；幂等重试也返回同一任务。
+          description: 任务已持久化并进入 pending 状态。
         "400":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 信封、任务类型或执行输入不合法
         "401":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: API key 无效、禁用或过期
         "402":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 额度、余额或订阅准入失败
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 模型、分组或服务访问未授权
         "409":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: Idempotency-Key 已用于不同执行输入
         "429":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 租户 pending + running 任务达到上限
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: 租户任务达到并发上限
         "503":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 任务服务或准入依赖暂不可用
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: 任务服务暂不可用
       security:
         - taskBearerAuth: []
       summary: 创建异步任务
@@ -22916,11 +20836,9 @@ paths:
         - tasks
   /v1/tasks/{taskID}:
     get:
-      description: 按任务 ID 查询当前状态与终态结果。可见范围为 tenant + user，不按具体 API key 限制，因此轮换密钥不会使任务失联。
       operationId: ai-get-task
       parameters:
-        - description: 服务端生成的任务 UUID
-          in: path
+        - in: path
           name: taskID
           required: true
           schema:
@@ -22932,24 +20850,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AsyncTaskGetResponse"
-          description: 任务当前状态；终态时包含 result 或 error，以及实际 usage。
+          description: 任务当前状态及终态结果。
         "401":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: API key 无效、禁用或过期
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 任务不存在、已过期或对当前调用方不可见
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: 任务不存在或不可见
         "503":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 任务服务暂不可用
       security:
         - taskBearerAuth: []
@@ -22959,11 +20877,9 @@ paths:
         - tasks
   /v1/tasks/{taskID}/cancel:
     post:
-      description: 取消 pending 或 running 任务。跨实例运行的任务会在下一次租约心跳时停止；终态任务返回 409。
       operationId: ai-cancel-task
       parameters:
-        - description: 服务端生成的任务 UUID
-          in: path
+        - in: path
           name: taskID
           required: true
           schema:
@@ -22980,25 +20896,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: API key/app key 无效、禁用或过期
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: API key 无效、禁用或过期
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 任务不存在、已过期或对当前调用方不可见
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: 任务不存在或不可见
         "409":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
-          description: 任务已处于终态，不能取消
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
+          description: 任务已处于终态
         "503":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RunRuntimeErrorResponse"
+                $ref: "#/components/schemas/RuntimeAPIErrorResponse"
           description: 任务服务暂不可用
       security:
         - taskBearerAuth: []

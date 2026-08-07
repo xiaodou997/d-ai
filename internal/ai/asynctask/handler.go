@@ -69,8 +69,7 @@ type Expirer interface {
 // Submission is an inbound request as the handler sees it: the transport has
 // already unwrapped the envelope and authenticated the caller.
 type Submission struct {
-	// Subject is the authenticated caller, from whichever of the three auth
-	// paths served the request (API key, app key, or console JWT).
+	// Subject is the authenticated caller from an API key or console JWT.
 	Subject identity.Subject
 
 	// Type is the resolved registry key, e.g. "api.images.generation".

@@ -15,10 +15,6 @@ type Owner struct {
 type ChatSession struct {
 	ID                      string
 	Title                   string
-	TargetType              string
-	AgentID                 string
-	AgentName               string
-	Variables               map[string]string
 	ModelCode               string
 	GroupID                 string
 	GroupName               string
@@ -45,8 +41,6 @@ type ChatMessage struct {
 type ImageJob struct {
 	ID                   string
 	Operation            string
-	AgentID              string
-	AgentName            string
 	ModelCode            string
 	Prompt               string
 	Status               string
