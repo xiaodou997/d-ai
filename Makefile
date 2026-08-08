@@ -4,15 +4,16 @@ BINARY   := dai
 VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BUILD_DIR := release
 FRONTEND_DIST := cmd/server/frontend_dist
+DB_RELEASE_DIR := $(BUILD_DIR)/sql
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version db-migrate dev-seed db-recreate build build-server frontend embed clean test test-frontend typecheck openapi generate-api ensure-api help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server database-artifacts frontend embed clean test test-frontend typecheck openapi generate-api ensure-api help
 
 # ---- 本地开发 ----
 
 dev: dev-setup ## 准备依赖并启动后端
 	go run ./cmd/server
 
-dev-setup: dev-seed ## 初始化本地配置、依赖、数据库版本和开发账号
+dev-setup: dev-seed ## 初始化本地配置、依赖、数据库和开发账号
 	@test -f config.yaml || cp config.example.yaml config.yaml
 
 dev-frontend: ## 启动前端 dev server
@@ -30,54 +31,7 @@ deps-logs: ## 查看本地依赖日志
 db-version: ## 查看当前数据库 schema 版本
 	docker compose exec -T postgres psql -U postgres -d dai -c "SELECT version, initialized_at FROM dai_schema_metadata WHERE singleton = TRUE"
 
-db-migrate: deps-up ## 将本地数据库迁移到当前 schema 版本（保留数据）
-	@version=$$(docker compose exec -T postgres psql -U postgres -d dai -Atc "SELECT version FROM dai_schema_metadata WHERE singleton = TRUE"); \
-	if [ "$$version" = "1" ]; then \
-		echo "Migrating database schema 1 -> 2..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260805_unified_portal_auth.sql; \
-		version=2; \
-	fi; \
-	if [ "$$version" = "2" ]; then \
-		echo "Migrating database schema 2 -> 3..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_remove_service_governance.sql; \
-		version=3; \
-	fi; \
-	if [ "$$version" = "3" ]; then \
-		echo "Migrating database schema 3 -> 4..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_unify_billing_event_names.sql; \
-		version=4; \
-	fi; \
-	if [ "$$version" = "4" ]; then \
-		echo "Migrating database schema 4 -> 5..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_remove_portal_client_identity.sql; \
-		version=5; \
-	fi; \
-	if [ "$$version" = "5" ]; then \
-		echo "Migrating database schema 5 -> 6..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_remove_auth_service_scopes.sql; \
-		version=6; \
-	fi; \
-	if [ "$$version" = "6" ]; then \
-		echo "Migrating database schema 6 -> 7..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260806_add_user_internal_note.sql; \
-		version=7; \
-	fi; \
-	if [ "$$version" = "7" ]; then \
-		echo "Migrating database schema 7 -> 8..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260807_unify_accounts.sql; \
-		version=8; \
-	fi; \
-	if [ "$$version" = "8" ]; then \
-		echo "Migrating database schema 8 -> 9..."; \
-		docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/changes/20260807_remove_ai_app_layer.sql; \
-		version=9; \
-	fi; \
-	if [ "$$version" != "9" ]; then \
-		echo "ERROR: unsupported database schema version $$version"; \
-		exit 1; \
-	fi
-
-dev-seed: db-migrate ## 幂等初始化本地 userType 1/2/3/4 测试账号
+dev-seed: deps-up ## 幂等初始化本地 userType 1/2/3/4 测试账号
 	docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d dai < internal/db/dev_seed.sql
 
 db-recreate: ## 删除本地数据卷并用 init.sql 重建（会清空本地数据）
@@ -86,17 +40,23 @@ db-recreate: ## 删除本地数据卷并用 init.sql 重建（会清空本地数
 
 # ---- 构建 ----
 
-build: frontend embed ## 构建单二进制（前端 embed）
+build: frontend embed database-artifacts ## 构建单二进制和数据库 SQL 发布附件
 	@echo "Building $(BINARY) v$(VERSION)..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)"
 
-build-server: ## 只构建后端（不含前端）
+build-server: database-artifacts ## 只构建后端和数据库 SQL 发布附件（不含前端）
 	@echo "Building server-only..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)"
+
+database-artifacts: ## 将初始化和人工升级 SQL 复制到发布目录
+	rm -rf $(DB_RELEASE_DIR)
+	mkdir -p $(DB_RELEASE_DIR)
+	cp internal/db/init.sql $(DB_RELEASE_DIR)/init.sql
+	cp -R internal/db/changes $(DB_RELEASE_DIR)/
 
 frontend: ## 构建前端
 	bun install

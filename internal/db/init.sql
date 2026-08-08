@@ -1,10 +1,24 @@
 -- D-AI canonical database schema
 --
--- Apply only to an empty PostgreSQL database. The application never executes this
+-- Apply only to an empty PostgreSQL schema. The application never executes this
 -- file and never upgrades the schema automatically. Maintain this file as the full
--- desired state, and place reviewed manual changes under internal/db/changes/.
+-- desired state, and place post-release manual changes under internal/db/changes/.
 
 BEGIN;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_class AS c
+        JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname = current_schema()
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+    ) THEN
+        RAISE EXCEPTION 'D-AI canonical schema initialization requires an empty schema';
+    END IF;
+END
+$$;
 
 -- Identity and tenant management
 CREATE TABLE iam_tenants (
@@ -1977,9 +1991,10 @@ INSERT INTO pay_wechat_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 CREATE TABLE dai_schema_metadata (
     singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
     version INTEGER NOT NULL CHECK (version > 0),
-    initialized_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    initialized_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 9);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 1);
 
 COMMIT;

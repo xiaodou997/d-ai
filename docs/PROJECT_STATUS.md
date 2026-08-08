@@ -1,6 +1,6 @@
 # D-AI 项目状态与实施清单
 
-更新日期：2026-08-05
+更新日期：2026-08-08
 
 ## 当前结论
 
@@ -9,9 +9,9 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 ## 已完成
 
 - 身份、权限、计费和 AI 能力运行在同一个 Go 进程、PostgreSQL 数据库和二进制入口中。
-- 数据库使用 `internal/db/init.sql` 唯一完整基线；应用只校验 `dai_schema_metadata.version`，`make dev` 负责本地开发库升级。
-- Goose 迁移目录、依赖和启动路径已删除；已有环境的人工变更放在 `internal/db/changes/`。
-- `make dev` 负责本地配置、PostgreSQL、Redis、数据库迁移和后端启动。
+- 数据库使用 `internal/db/init.sql` 首发前 schema v1 完整基线；应用只校验 `dai_schema_metadata.version`。
+- 当前未引入迁移框架；首次发布后才在 `internal/db/changes/` 增加人工升级 SQL。
+- `make dev` 负责本地配置、PostgreSQL、Redis、空库初始化和后端启动，不升级已有数据库。
 - Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。
 - API facade、领域类型、请求适配器、鉴权、shell、DsUI 和 billing 能力均在 `apps/portal/src` 内通过清晰目录边界组织。
 - 旧服务注册、服务准入、服务令牌、跨服务 HTTP API 与 SSO 会话流程均已删除。
@@ -29,7 +29,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 | Portal 平台层 | `apps/portal/src/platform` | 环境、鉴权、路由、shell 和公共工作区 |
 | Portal 设计系统 | `apps/portal/src/shared/ui` | token、DsUI 组件和布局 |
 | Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
-| 数据库 | `internal/db/init.sql`, `internal/db/changes` | 新库基线和人工变更 |
+| 数据库 | `internal/db/init.sql`, `internal/db/changes` | schema v1 新库基线和首次发布后的人工变更 |
 
 ## 当前剩余任务
 
@@ -59,8 +59,8 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 | `bun run test` | 55 个测试文件、191 个测试通过 |
 | `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
 | `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
-| `make dev`、后端 health/ready/info | 已验证，详见数据库与本地运行记录 |
-| Go 后端单元/集成测试 | 基础轮次已通过；本轮 Go 注释/测试数据清理后需再跑一次全量确认 |
+| `make dev`、后端 health/ready/info | 旧本地数据卷需先 `make db-recreate` 后验证 |
+| `go test ./...` | 通过 |
 
 ## 后续顺序
 
