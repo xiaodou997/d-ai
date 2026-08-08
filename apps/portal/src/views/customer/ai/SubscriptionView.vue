@@ -18,10 +18,6 @@ import { Crown } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import { DsEmpty, DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
 import { formatMultiplier } from "@/platform/ai/utils";
-import {
-  formatCredits,
-  formatWholeCredits
-} from "@/platform/ai/usage";
 
 import { aiCustomerApi } from "@/api/aiCustomer";
 import { platformCustomerApi } from "@/api/platformCustomer";
@@ -72,9 +68,7 @@ const plans = shallowRef<AiSubPlan[]>([]);
 const current = shallowRef<AiSubscription | null>(null);
 const subscriptions = shallowRef<AiSubscription[]>([]);
 const orders = shallowRef<AiSubOrder[]>([]);
-const availableCredits = shallowRef(0);
-const DEFAULT_CREDITS_PER_USD = 100;
-const creditsPerUSD = shallowRef(DEFAULT_CREDITS_PER_USD);
+const availableUsd = shallowRef(0);
 
 const loadingShop = shallowRef(false);
 const loadingMine = shallowRef(false);
@@ -90,36 +84,16 @@ const PURCHASE_ATTEMPT_KEY_PREFIX = "doustack:customer:ai-subscription-purchase:
 const now = shallowRef(Date.now());
 let ticker: ReturnType<typeof setInterval> | null = null;
 
-const MICRO_PER_CREDIT = 10000;
-function creditsFromMicro(v: number | null | undefined): number {
-  if (v == null) return 0;
-  return v / MICRO_PER_CREDIT;
-}
-
 function usdLabel(v: number): string {
-  return `$${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function creditsToUSD(credits: number): number {
-  const rate = creditsPerUSD.value > 0 ? creditsPerUSD.value : DEFAULT_CREDITS_PER_USD;
-  return credits / rate;
+  return `$${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 function microUSD(v: number | null | undefined): string {
   if (v == null) return "不限";
-  return usdLabel(creditsToUSD(creditsFromMicro(v)));
+  return usdLabel(v / 1_000_000);
 }
 
-function microCredits(v: number | null | undefined): string {
-  if (v == null) return "不限";
-  return `${formatCredits(creditsFromMicro(v))} 积分`;
-}
-
-function creditsUSD(credits: number | null | undefined): string {
-  return usdLabel(creditsToUSD(Number(credits || 0)));
-}
-
-const insufficient = computed(() => (buyPlan.value ? availableCredits.value < buyPlan.value.price_credits : false));
+const insufficient = computed(() => (buyPlan.value ? availableUsd.value * 1_000_000 < buyPlan.value.price_micro_usd : false));
 const purchaseBlocked = computed(
   () => buyPlan.value?.sold_out === true || buyPlan.value?.purchase_eligibility?.allowed === false
 );
@@ -159,13 +133,13 @@ function fmtTime(value?: string | null): string {
 
 // 窗口进度：返回百分比（used/limit），limit 为空返回 null（不限，不画进度）。
 function windowPercent(w: AiSubWindow): number | null {
-  if (w.limit_micro == null || w.limit_micro <= 0) return null;
-  const pct = (w.used_micro / w.limit_micro) * 100;
+  if (w.limit_micro_usd == null || w.limit_micro_usd <= 0) return null;
+  const pct = (w.used_micro_usd / w.limit_micro_usd) * 100;
   return Math.min(100, Math.max(0, Math.round(pct)));
 }
 function totalPercent(sub: AiSubscription): number {
-  if (!sub.total_limit_micro) return 0;
-  return Math.min(100, Math.max(0, Math.round((sub.total_used_micro / sub.total_limit_micro) * 100)));
+  if (!sub.total_limit_micro_usd) return 0;
+  return Math.min(100, Math.max(0, Math.round((sub.total_used_micro_usd / sub.total_limit_micro_usd) * 100)));
 }
 function progressColor(pct: number | null): string {
   if (pct == null) return "var(--ds-accent)";
@@ -179,24 +153,6 @@ function usageTone(pct: number | null): string {
   if (pct >= 95) return "danger";
   if (pct >= 80) return "warning";
   return "normal";
-}
-
-async function loadCreditsPerUSDFromGroups(groups: Array<{ id: string }> | undefined) {
-  const groupID = groups?.[0]?.id;
-  if (!groupID) return;
-  try {
-    const res = await aiCustomerApi.getMyGroupEffectivePrices(groupID);
-    if (res?.credits_per_usd > 0) {
-      creditsPerUSD.value = res.credits_per_usd;
-    }
-  } catch {
-    creditsPerUSD.value = DEFAULT_CREDITS_PER_USD;
-  }
-}
-
-function firstPlanGroup(plansList: AiSubPlan[], cur: AiSubscription | null): Array<{ id: string }> | undefined {
-  if (cur?.groups?.length) return cur.groups;
-  return plansList.find((p) => p.groups?.length)?.groups;
 }
 
 // 倒计时文案：reset_at 距 now 的剩余时长。
@@ -224,8 +180,7 @@ async function loadShop() {
     ]);
     plans.value = planRes?.items ?? [];
     current.value = cur ?? null;
-    if (bal) availableCredits.value = bal.availableCredits ?? 0;
-    await loadCreditsPerUSDFromGroups(firstPlanGroup(plans.value, current.value));
+    if (bal) availableUsd.value = bal.availableUsd ?? 0;
   } finally {
     loadingShop.value = false;
   }
@@ -242,7 +197,6 @@ async function loadMine() {
     current.value = cur ?? null;
     subscriptions.value = subRes?.items ?? [];
     orders.value = orderRes?.items ?? [];
-    await loadCreditsPerUSDFromGroups(firstPlanGroup([], current.value) ?? subscriptions.value.find((s) => s.groups?.length)?.groups);
   } finally {
     loadingMine.value = false;
   }
@@ -272,7 +226,7 @@ function openBuy(plan: AiSubPlan) {
   void platformCustomerApi
     .getBalance(false)
     .then((bal) => {
-      if (bal) availableCredits.value = bal.availableCredits ?? 0;
+      if (bal) availableUsd.value = bal.availableUsd ?? 0;
     })
     .catch(() => undefined);
 }
@@ -347,7 +301,7 @@ async function confirmBuy() {
     };
     if (e?.code === "insufficient_balance") {
       clearPurchaseAttemptKey(plan.id);
-      purchaseHint.value = "积分不足，无法购买。请先充值后再试。";
+      purchaseHint.value = "USD 余额不足，无法购买。请先充值后再试。";
     } else if (
       e?.code &&
       policyBlockCodes.has(e.code as AiSubPurchaseBlockReason)
@@ -392,7 +346,7 @@ onBeforeUnmount(() => {
     <PortalPagePanel
       :icon="Crown"
       :breadcrumbs="[{ label: '智能服务' }, { label: '我的服务' }, { label: '订阅套餐' }]"
-      description="用积分购买固定时长的 AI 额度套餐，订阅期内的用量优先扣套餐额度，额度用尽自动回落按量计费。"
+      description="使用 USD 余额购买固定时长的 AI 额度套餐，订阅期内的用量优先扣套餐额度，额度用尽自动回落按量计费。"
     >
       <template #actions>
         <el-button :icon="Refresh" :loading="loadingShop || loadingMine" @click="refresh">刷新</el-button>
@@ -413,8 +367,8 @@ onBeforeUnmount(() => {
               <header class="plan-card__head">
                 <h3 class="plan-card__name">{{ plan.name }}</h3>
                 <div class="plan-card__price">
-                  <strong>{{ formatWholeCredits(plan.price_credits) }}</strong>
-                  <span>积分</span>
+                  <strong>{{ microUSD(plan.price_micro_usd) }}</strong>
+                  <span>USD</span>
                 </div>
               </header>
               <p v-if="plan.description" class="plan-card__desc">{{ plan.description }}</p>
@@ -428,18 +382,18 @@ onBeforeUnmount(() => {
                 </li>
                 <li class="plan-card__quota-row">
                   <span>总额度</span>
-                  <b class="money-value">{{ microCredits(plan.total_limit_micro) }}</b>
-                  <small>{{ microUSD(plan.total_limit_micro) }}</small>
+                  <b class="money-value">{{ microUSD(plan.total_limit_micro_usd) }}</b>
+                  <small>{{ microUSD(plan.total_limit_micro_usd) }}</small>
                 </li>
                 <li class="plan-card__quota-row">
                   <span>5 小时窗口</span>
-                  <b class="money-value">{{ microCredits(plan.window_5h_limit_micro) }}</b>
-                  <small>{{ microUSD(plan.window_5h_limit_micro) }}</small>
+                  <b class="money-value">{{ microUSD(plan.window_5h_limit_micro_usd) }}</b>
+                  <small>{{ microUSD(plan.window_5h_limit_micro_usd) }}</small>
                 </li>
                 <li class="plan-card__quota-row">
                   <span>7 天窗口</span>
-                  <b class="money-value">{{ microCredits(plan.window_7d_limit_micro) }}</b>
-                  <small>{{ microUSD(plan.window_7d_limit_micro) }}</small>
+                  <b class="money-value">{{ microUSD(plan.window_7d_limit_micro_usd) }}</b>
+                  <small>{{ microUSD(plan.window_7d_limit_micro_usd) }}</small>
                 </li>
               </ul>
               <div v-if="plan.groups && plan.groups.length" class="plan-card__groups">
@@ -495,12 +449,12 @@ onBeforeUnmount(() => {
                     <b>{{ totalPercent(current) }}% used</b>
                   </header>
                   <div class="usage-card__money">
-                    <strong>{{ microCredits(current.total_used_micro) }}</strong>
-                    <span>/ {{ microCredits(current.total_limit_micro) }}</span>
+                    <strong>{{ microUSD(current.total_used_micro_usd) }}</strong>
+                    <span>/ {{ microUSD(current.total_limit_micro_usd) }}</span>
                   </div>
                   <div class="usage-card__sub">
-                    {{ microUSD(current.total_used_micro) }} / {{ microUSD(current.total_limit_micro) }}
-                    <em>剩余 {{ microCredits(current.total_remaining_micro) }}</em>
+                    {{ microUSD(current.total_used_micro_usd) }} / {{ microUSD(current.total_limit_micro_usd) }}
+                    <em>剩余 {{ microUSD(current.total_remaining_micro_usd) }}</em>
                   </div>
                   <el-progress :percentage="totalPercent(current)" :color="progressColor(totalPercent(current))" :stroke-width="9" />
                 </section>
@@ -518,13 +472,13 @@ onBeforeUnmount(() => {
                     <b v-if="windowPercent(current.window_5h) != null">{{ windowPercent(current.window_5h) }}% used</b>
                     <b v-else>不限</b>
                   </header>
-                  <template v-if="current.window_5h.limit_micro != null">
+                  <template v-if="current.window_5h.limit_micro_usd != null">
                     <div class="usage-card__money">
-                      <strong>{{ microCredits(current.window_5h.used_micro) }}</strong>
-                      <span>/ {{ microCredits(current.window_5h.limit_micro) }}</span>
+                      <strong>{{ microUSD(current.window_5h.used_micro_usd) }}</strong>
+                      <span>/ {{ microUSD(current.window_5h.limit_micro_usd) }}</span>
                     </div>
                     <div class="usage-card__sub">
-                      {{ microUSD(current.window_5h.used_micro) }} / {{ microUSD(current.window_5h.limit_micro) }}
+                      {{ microUSD(current.window_5h.used_micro_usd) }} / {{ microUSD(current.window_5h.limit_micro_usd) }}
                       <em v-if="current.window_5h.reset_at">重置：{{ fmtTime(current.window_5h.reset_at) }}</em>
                     </div>
                     <el-progress
@@ -549,13 +503,13 @@ onBeforeUnmount(() => {
                     <b v-if="windowPercent(current.window_7d) != null">{{ windowPercent(current.window_7d) }}% used</b>
                     <b v-else>不限</b>
                   </header>
-                  <template v-if="current.window_7d.limit_micro != null">
+                  <template v-if="current.window_7d.limit_micro_usd != null">
                     <div class="usage-card__money">
-                      <strong>{{ microCredits(current.window_7d.used_micro) }}</strong>
-                      <span>/ {{ microCredits(current.window_7d.limit_micro) }}</span>
+                      <strong>{{ microUSD(current.window_7d.used_micro_usd) }}</strong>
+                      <span>/ {{ microUSD(current.window_7d.limit_micro_usd) }}</span>
                     </div>
                     <div class="usage-card__sub">
-                      {{ microUSD(current.window_7d.used_micro) }} / {{ microUSD(current.window_7d.limit_micro) }}
+                      {{ microUSD(current.window_7d.used_micro_usd) }} / {{ microUSD(current.window_7d.limit_micro_usd) }}
                       <em v-if="current.window_7d.reset_at">重置：{{ fmtTime(current.window_7d.reset_at) }}</em>
                     </div>
                     <el-progress
@@ -589,8 +543,8 @@ onBeforeUnmount(() => {
               :loading="loadingMine"
             >
               <template #cell-quota="{ row }">
-                <span class="table-money">{{ microCredits(row.total_limit_micro) }}</span>
-                <small class="table-sub">{{ microUSD(row.total_limit_micro) }}</small>
+                <span class="table-money">{{ microUSD(row.total_limit_micro_usd) }}</span>
+                <small class="table-sub">{{ microUSD(row.total_limit_micro_usd) }}</small>
               </template>
               <template #cell-duration="{ row }">{{ row.duration_days }} 天</template>
               <template #cell-created_at="{ row }">{{ fmtTime(row.created_at) }}</template>
@@ -611,7 +565,7 @@ onBeforeUnmount(() => {
               :loading="loadingMine"
               empty-title="暂无订单"
             >
-              <template #cell-price="{ row }">{{ formatWholeCredits(row.price_credits) }} 积分</template>
+              <template #cell-price="{ row }">{{ microUSD(row.price_micro_usd) }}</template>
               <template #cell-status="{ row }">
                 <DsTag :tone="orderStatusTone(row.status)">
                   {{ orderStatusLabel(row.status) }}
@@ -655,11 +609,11 @@ onBeforeUnmount(() => {
           <div v-if="buyPlan.sale_limit != null" class="buy-summary__row">
             <span>剩余数量</span><b :class="{ 'is-sold-out': buyPlan.sold_out }">{{ buyPlan.sold_out ? "已售罄" : `${buyPlan.available_count ?? 0} 份` }}</b>
           </div>
-          <div class="buy-summary__row"><span>总额度</span><b>{{ microCredits(buyPlan.total_limit_micro) }} · {{ microUSD(buyPlan.total_limit_micro) }}</b></div>
+          <div class="buy-summary__row"><span>总额度</span><b>{{ microUSD(buyPlan.total_limit_micro_usd) }}</b></div>
           <div class="buy-summary__row buy-summary__price">
-            <span>需支付</span><b>{{ formatWholeCredits(buyPlan.price_credits) }} 积分 <small>{{ creditsUSD(buyPlan.price_credits) }}</small></b>
+            <span>需支付</span><b>{{ microUSD(buyPlan.price_micro_usd) }}</b>
           </div>
-          <div class="buy-summary__row"><span>当前可用</span><b>{{ formatCredits(availableCredits) }} 积分</b></div>
+          <div class="buy-summary__row"><span>当前可用</span><b>{{ usdLabel(availableUsd) }}</b></div>
           <div v-if="buyPlan.groups && buyPlan.groups.length" class="buy-summary__row buy-summary__groups">
             <span>覆盖分组</span>
             <div class="buy-summary__groups-tags">
@@ -676,7 +630,7 @@ onBeforeUnmount(() => {
         </el-alert>
 
         <el-alert v-if="insufficient" type="error" :closable="false" show-icon class="buy-alert">
-          积分不足，无法购买该套餐。
+          USD 余额不足，无法购买该套餐。
         </el-alert>
         <p v-if="purchaseHint" class="buy-hint">{{ purchaseHint }}</p>
       </template>

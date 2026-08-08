@@ -1,6 +1,6 @@
 export interface RechargeFormPayload {
-  paidAmount: number;
-  creditAmount: number;
+  paidAmountMinor: number;
+  amountMicroUsd: number;
   note?: string;
   expireTime: number | null;
 }

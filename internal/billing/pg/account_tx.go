@@ -9,18 +9,18 @@ import (
 	"xiaodou/dai/internal/billing"
 )
 
-// GetTenantAvailableBalance 查询租户可用余额（事务内）
-// 返回: available 可用积分, frozen 冻结积分
-func GetTenantAvailableBalance(ctx context.Context, tx pgx.Tx, tenantID string, now time.Time) (available, frozen int64, err error) {
-	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(frozen_credits, 0) FROM iam_tenants WHERE tenant_id = $1 FOR UPDATE
-	`, tenantID).Scan(&frozen)
-	if err != nil {
-		return 0, 0, fmt.Errorf("查询租户冻结积分失败: %w", err)
+// GetTenantBalanceForUpdate returns the full live tenant balance and locks the
+// tenant plus its balance lots. Direct charges and admin withdrawals do not
+// participate in the legacy frozen amount.
+func GetTenantBalanceForUpdate(ctx context.Context, tx pgx.Tx, tenantID string, now time.Time) (int64, error) {
+	var lockedTenant string
+	if err := tx.QueryRow(ctx, `
+		SELECT tenant_id FROM iam_tenants WHERE tenant_id = $1 FOR UPDATE
+	`, tenantID).Scan(&lockedTenant); err != nil {
+		return 0, fmt.Errorf("租户账户不存在: %s", tenantID)
 	}
-
-	var remaining int64
-	err = tx.QueryRow(ctx, `
+	var balance int64
+	if err := tx.QueryRow(ctx, `
 		SELECT COALESCE(SUM(remaining_credits), 0)
 		FROM (
 			SELECT remaining_credits
@@ -28,117 +28,15 @@ func GetTenantAvailableBalance(ctx context.Context, tx pgx.Tx, tenantID string, 
 			WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available'
 			  AND (expires_at IS NULL OR expires_at > $2)
 			FOR UPDATE
-		) sub
-	`, tenantID, now).Scan(&remaining)
-	if err != nil {
-		return 0, 0, fmt.Errorf("查询租户剩余积分失败: %w", err)
+		) lots
+	`, tenantID, now).Scan(&balance); err != nil {
+		return 0, fmt.Errorf("查询租户余额失败: %w", err)
 	}
-
-	available = remaining - frozen
-	if available < 0 {
-		available = 0
-	}
-	return available, frozen, nil
+	return balance, nil
 }
 
-// GetUserAvailableBalance 查询用户可用余额（事务内）
-// 返回: available 可用积分, frozen 冻结积分
-func GetUserAvailableBalance(ctx context.Context, tx pgx.Tx, userID string, now time.Time) (available, frozen int64, err error) {
-	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(frozen_credits, 0) FROM iam_accounts WHERE user_id = $1 AND user_type = 4 FOR UPDATE
-	`, userID).Scan(&frozen)
-	if err != nil {
-		return 0, 0, fmt.Errorf("查询用户冻结积分失败: %w", err)
-	}
-
-	var remaining int64
-	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(SUM(remaining_credits), 0)
-		FROM (
-			SELECT remaining_credits
-			FROM bill_credit_packages
-			WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
-			  AND (expires_at IS NULL OR expires_at > $2)
-			FOR UPDATE
-		) sub
-	`, userID, now).Scan(&remaining)
-	if err != nil {
-		return 0, 0, fmt.Errorf("查询用户剩余积分失败: %w", err)
-	}
-
-	available = remaining - frozen
-	if available < 0 {
-		available = 0
-	}
-	return available, frozen, nil
-}
-
-// AddTenantFrozen 增加租户冻结积分（事务内）
-func AddTenantFrozen(ctx context.Context, tx pgx.Tx, tenantID string, amount int64) error {
-	result, err := tx.Exec(ctx, `
-		UPDATE iam_tenants
-		SET frozen_credits = frozen_credits + $1
-		WHERE tenant_id = $2
-	`, amount, tenantID)
-	if err != nil {
-		return fmt.Errorf("增加租户冻结积分失败: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("租户账户不存在: %s", tenantID)
-	}
-	return nil
-}
-
-// AddUserFrozen 增加用户冻结积分（事务内）
-func AddUserFrozen(ctx context.Context, tx pgx.Tx, userID string, amount int64) error {
-	result, err := tx.Exec(ctx, `
-		UPDATE iam_accounts
-		SET frozen_credits = frozen_credits + $1
-		WHERE user_id = $2 AND user_type = 4
-	`, amount, userID)
-	if err != nil {
-		return fmt.Errorf("增加用户冻结积分失败: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("用户账户不存在: %s", userID)
-	}
-	return nil
-}
-
-// ReduceTenantFrozen 减少租户冻结积分（事务内）
-func ReduceTenantFrozen(ctx context.Context, tx pgx.Tx, tenantID string, amount int64) error {
-	result, err := tx.Exec(ctx, `
-		UPDATE iam_tenants
-		SET frozen_credits = frozen_credits - $1, updated_at = now()
-		WHERE tenant_id = $2 AND frozen_credits >= $1
-	`, amount, tenantID)
-	if err != nil {
-		return fmt.Errorf("减少租户冻结积分失败: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("租户账户不存在或冻结积分不足: %s", tenantID)
-	}
-	return nil
-}
-
-// ReduceUserFrozen 减少用户冻结积分（事务内）
-func ReduceUserFrozen(ctx context.Context, tx pgx.Tx, userID string, amount int64) error {
-	result, err := tx.Exec(ctx, `
-		UPDATE iam_accounts
-		SET frozen_credits = frozen_credits - $1, updated_at = now()
-		WHERE user_id = $2 AND user_type = 4 AND frozen_credits >= $1
-	`, amount, userID)
-	if err != nil {
-		return fmt.Errorf("减少用户冻结积分失败: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("用户账户不存在或冻结积分不足: %s", userID)
-	}
-	return nil
-}
-
-// DeductFIFO FIFO 扣减积分（事务内）
-// 按过期时间升序消耗，永久积分（expires_at IS NULL）排最后
+// DeductFIFO FIFO 扣减额度包（事务内）
+// 按过期时间升序消耗，永久余额（expires_at IS NULL）排最后
 func DeductFIFO(ctx context.Context, tx pgx.Tx, packageType string, tenantID, userID string, amount int64, now time.Time) error {
 	remaining := amount
 
@@ -173,7 +71,7 @@ func DeductFIFO(ctx context.Context, tx pgx.Tx, packageType string, tenantID, us
 		`, packageType, userID, now)
 	}
 	if err != nil {
-		return fmt.Errorf("查询积分包失败: %w", err)
+		return fmt.Errorf("查询额度包失败: %w", err)
 	}
 
 	// 先把所有行读进内存再关闭游标，避免在 rows 未关闭时复用同一连接执行 UPDATE
@@ -187,13 +85,13 @@ func DeductFIFO(ctx context.Context, tx pgx.Tx, packageType string, tenantID, us
 		var r pkgRow
 		if err := rows.Scan(&r.id, &r.remaining); err != nil {
 			rows.Close()
-			return fmt.Errorf("扫描积分包失败: %w", err)
+			return fmt.Errorf("扫描额度包失败: %w", err)
 		}
 		packages = append(packages, r)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("读取积分包失败: %w", err)
+		return fmt.Errorf("读取额度包失败: %w", err)
 	}
 
 	for _, pkg := range packages {
@@ -210,16 +108,30 @@ func DeductFIFO(ctx context.Context, tx pgx.Tx, packageType string, tenantID, us
 			WHERE package_id = $2
 		`, deduct, pkg.id)
 		if err != nil {
-			return fmt.Errorf("扣减积分包失败: %w", err)
+			return fmt.Errorf("扣减额度包失败: %w", err)
 		}
 		remaining -= deduct
 	}
 
 	if remaining > 0 {
-		return fmt.Errorf("积分不足，缺少 %d 积分", remaining)
+		return fmt.Errorf("USD 余额不足，缺少 %d micro-USD", remaining)
 	}
 
 	return nil
+}
+
+// DeductFIFOPartial deducts as much as is currently available from the
+// account's quota packages and returns the uncovered amount. It deliberately
+// ignores the legacy frozen_credits column: direct charges do not create or
+// consume reservations.
+func DeductFIFOPartial(
+	ctx context.Context,
+	tx pgx.Tx,
+	packageType, tenantID, userID string,
+	amount int64,
+	now time.Time,
+) (shortfall int64, err error) {
+	return deductFIFOPartial(ctx, tx, packageType, tenantID, userID, amount, now)
 }
 
 // ============================================================================
@@ -349,61 +261,8 @@ func DecreaseUserOverdraft(ctx context.Context, tx pgx.Tx, userID string, amount
 	return deducted, nil
 }
 
-// DeductFIFOPartialPreservingFrozen deducts only credits available to this
-// operation. ownedFrozen may be non-zero only when this transaction owns that
-// amount of the account's current frozen balance, such as a pending
-// authorization capture. Other frozen credits are never consumed.
-func DeductFIFOPartialPreservingFrozen(
-	ctx context.Context,
-	tx pgx.Tx,
-	packageType, tenantID, userID string,
-	amount, ownedFrozen int64,
-	now time.Time,
-) (shortfall int64, err error) {
-	if amount <= 0 {
-		return 0, nil
-	}
-	if ownedFrozen < 0 {
-		return 0, fmt.Errorf("owned frozen credits cannot be negative")
-	}
-
-	var available, frozen int64
-	switch packageType {
-	case billing.PackageTypeTenant:
-		available, frozen, err = GetTenantAvailableBalance(ctx, tx, tenantID, now)
-	case billing.PackageTypeUser:
-		available, frozen, err = GetUserAvailableBalance(ctx, tx, userID, now)
-	default:
-		return 0, fmt.Errorf("unsupported package type %q", packageType)
-	}
-	if err != nil {
-		return 0, err
-	}
-	if ownedFrozen > frozen {
-		return 0, fmt.Errorf("owned frozen credits %d exceed account frozen credits %d", ownedFrozen, frozen)
-	}
-
-	deductible := amount
-	if deductible > available && deductible-available > ownedFrozen {
-		deductible = available + ownedFrozen
-	}
-	shortfall = amount - deductible
-	if deductible == 0 {
-		return shortfall, nil
-	}
-	unexpectedShortfall, err := deductFIFOPartial(
-		ctx, tx, packageType, tenantID, userID, deductible, now)
-	if err != nil {
-		return 0, err
-	}
-	if unexpectedShortfall != 0 {
-		return 0, fmt.Errorf("protected FIFO deduction lost %d locked credits", unexpectedShortfall)
-	}
-	return shortfall, nil
-}
-
 // deductFIFOPartial performs the raw package deduction after the caller has
-// reserved the account/package rows and capped the amount around frozen funds.
+// reserved the account/package rows.
 func deductFIFOPartial(ctx context.Context, tx pgx.Tx, packageType string, tenantID, userID string, amount int64, now time.Time) (shortfall int64, err error) {
 	if amount <= 0 {
 		return 0, nil
@@ -438,7 +297,7 @@ func deductFIFOPartial(ctx context.Context, tx pgx.Tx, packageType string, tenan
 		`, packageType, userID, now)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("查询积分包失败: %w", err)
+		return 0, fmt.Errorf("查询额度包失败: %w", err)
 	}
 
 	type pkgRow struct {
@@ -450,13 +309,13 @@ func deductFIFOPartial(ctx context.Context, tx pgx.Tx, packageType string, tenan
 		var r pkgRow
 		if err := rows.Scan(&r.id, &r.remaining); err != nil {
 			rows.Close()
-			return 0, fmt.Errorf("扫描积分包失败: %w", err)
+			return 0, fmt.Errorf("扫描额度包失败: %w", err)
 		}
 		packages = append(packages, r)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("读取积分包失败: %w", err)
+		return 0, fmt.Errorf("读取额度包失败: %w", err)
 	}
 
 	remaining := amount
@@ -473,7 +332,7 @@ func deductFIFOPartial(ctx context.Context, tx pgx.Tx, packageType string, tenan
 			SET remaining_credits = remaining_credits - $1, updated_at = now()
 			WHERE package_id = $2
 		`, deduct, pkg.id); err != nil {
-			return 0, fmt.Errorf("扣减积分包失败: %w", err)
+			return 0, fmt.Errorf("扣减额度包失败: %w", err)
 		}
 		remaining -= deduct
 	}
@@ -481,9 +340,9 @@ func deductFIFOPartial(ctx context.Context, tx pgx.Tx, packageType string, tenan
 	return remaining, nil
 }
 
-// RevokeCreditPackage 撤销积分包（事务内）
-// fullRevoke=true → status='revoked'（积分未被消耗，完整撤销）
-// fullRevoke=false → status='depleted'（积分已部分消耗，剩余撤销）
+// RevokeCreditPackage 撤销额度包（事务内）。名称保留兼容历史调用方。
+// fullRevoke=true → status='revoked'（余额未被消耗，完整撤销）
+// fullRevoke=false → status='depleted'（余额已部分消耗，剩余撤销）
 func RevokeCreditPackage(ctx context.Context, tx pgx.Tx, packageID string, fullRevoke bool) error {
 	newStatus := billing.PackageStatusDepleted
 	if fullRevoke {
@@ -495,16 +354,16 @@ func RevokeCreditPackage(ctx context.Context, tx pgx.Tx, packageID string, fullR
 		WHERE package_id = $2
 	`, newStatus, packageID)
 	if err != nil {
-		return fmt.Errorf("撤销积分包失败: %w", err)
+		return fmt.Errorf("撤销额度包失败: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("积分包不存在: %s", packageID)
+		return fmt.Errorf("额度包不存在: %s", packageID)
 	}
 	return nil
 }
 
-// CreateRefundPackage 退款时新建积分包（事务内）
-// 退款积分包永久有效（expires_at=NULL），不关联充值订单
+// CreateRefundPackage 退款时新建额度包（事务内）。名称保留兼容历史调用方。
+// 退款额度包永久有效（expires_at=NULL），不关联充值订单
 func CreateRefundPackage(ctx context.Context, tx pgx.Tx, packageID, packageType, tenantID, userID string, credits int64, now time.Time) error {
 	var userIDVal any
 	if userID != "" {
@@ -518,7 +377,7 @@ func CreateRefundPackage(ctx context.Context, tx pgx.Tx, packageID, packageType,
 		VALUES ($1, $2, $3, $4, $5, $6, NULL, 'available', 'REFUND', NULL, 0, $7, $7)
 	`, packageID, packageType, tenantID, userIDVal, credits, credits, now)
 	if err != nil {
-		return fmt.Errorf("创建退款积分包失败: %w", err)
+		return fmt.Errorf("创建退款额度包失败: %w", err)
 	}
 	return nil
 }

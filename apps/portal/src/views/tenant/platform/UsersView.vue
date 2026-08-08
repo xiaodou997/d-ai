@@ -151,7 +151,7 @@
       target-type-label="用户"
       :target-name="rechargeTarget?.username || ''"
       :target-identity="rechargeTargetIdentity"
-      :target-credits="rechargeTarget?.credits ?? 0"
+      :target-balance-usd="rechargeTarget?.balanceUsd ?? 0"
       :submitting="rechargeLoading"
       @submit="submitRecharge"
     />
@@ -402,7 +402,7 @@ async function submitRecharge(payload: RechargeFormPayload) {
       userId: rechargeTarget.value.userId,
       ...payload
     });
-    ElMessage.success(`已成功为「${rechargeTarget.value.username}」充值 ${payload.creditAmount.toLocaleString()} 积分`);
+    ElMessage.success(`已成功为「${rechargeTarget.value.username}」充值 $${(payload.amountMicroUsd / 1_000_000).toLocaleString()}`);
     showRechargeDialog.value = false;
     fetchUsers();
   } catch (e: any) {

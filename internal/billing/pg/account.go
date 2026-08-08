@@ -21,27 +21,27 @@ func NewAccountRepository(pool *pgxpool.Pool) *AccountRepository {
 
 // BalanceResponse 账户余额响应
 type BalanceResponse struct {
-	TotalCredits         float64                `json:"totalCredits"`
-	UsedCredits          float64                `json:"usedCredits"`
-	RemainingCredits     float64                `json:"remainingCredits"`
-	FrozenCredits        float64                `json:"frozenCredits"`
-	AvailableCredits     float64                `json:"availableCredits"`
-	PermanentCredits     float64                `json:"permanentCredits"`
-	TimedCredits         float64                `json:"timedCredits"`
-	OutstandingDebtMicro int64                  `json:"outstandingDebtMicro"`
-	ServiceState         string                 `json:"serviceState"`
-	Packages             []AccountCreditPackage `json:"packages,omitempty"`
+	Currency                string              `json:"currency"`
+	TotalUSD                float64             `json:"totalUsd"`
+	UsedUSD                 float64             `json:"usedUsd"`
+	RemainingUSD            float64             `json:"remainingUsd"`
+	AvailableUSD            float64             `json:"availableUsd"`
+	PermanentUSD            float64             `json:"permanentUsd"`
+	TimedUSD                float64             `json:"timedUsd"`
+	OutstandingDebtMicroUSD int64               `json:"outstandingDebtMicroUsd"`
+	ServiceState            string              `json:"serviceState"`
+	BalanceLots             []AccountBalanceLot `json:"balanceLots,omitempty"`
 }
 
-type AccountCreditPackage struct {
-	PackageID        string     `json:"packageId"`
-	TotalCredits     float64    `json:"totalCredits"`
-	RemainingCredits float64    `json:"remainingCredits"`
-	ExpiresAt        *time.Time `json:"expiresAt,omitempty"`
-	Source           string     `json:"source"`
+type AccountBalanceLot struct {
+	BalanceLotID string     `json:"balanceLotId"`
+	TotalUSD     float64    `json:"totalUsd"`
+	RemainingUSD float64    `json:"remainingUsd"`
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+	Source       string     `json:"source"`
 }
 
-func (r *AccountRepository) listCreditPackages(ctx context.Context, packageType string, tenantID, userID *string, now time.Time) ([]AccountCreditPackage, error) {
+func (r *AccountRepository) listBalanceLots(ctx context.Context, packageType string, tenantID, userID *string, now time.Time) ([]AccountBalanceLot, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT package_id, total_credits, remaining_credits, expires_at, source
 		FROM bill_credit_packages
@@ -58,16 +58,16 @@ func (r *AccountRepository) listCreditPackages(ctx context.Context, packageType 
 	}
 	defer rows.Close()
 
-	var list []AccountCreditPackage
+	var list []AccountBalanceLot
 	for rows.Next() {
-		var p AccountCreditPackage
+		var lot AccountBalanceLot
 		var totalMicro, remainingMicro int64
-		if err := rows.Scan(&p.PackageID, &totalMicro, &remainingMicro, &p.ExpiresAt, &p.Source); err != nil {
+		if err := rows.Scan(&lot.BalanceLotID, &totalMicro, &remainingMicro, &lot.ExpiresAt, &lot.Source); err != nil {
 			return nil, err
 		}
-		p.TotalCredits = billing.MicroToCredits(totalMicro)
-		p.RemainingCredits = billing.MicroToCredits(remainingMicro)
-		list = append(list, p)
+		lot.TotalUSD = billing.MicroToUSD(totalMicro)
+		lot.RemainingUSD = billing.MicroToUSD(remainingMicro)
+		list = append(list, lot)
 	}
 	return list, rows.Err()
 }
@@ -76,58 +76,58 @@ func (r *AccountRepository) GetTenantBalance(tenantID string, detail bool) (*Bal
 	ctx := context.Background()
 	now := billing.NowUTC()
 
-	var frozen, debt int64
+	var debt int64
 	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(frozen_credits, 0), COALESCE(current_overdraft, 0)
+		SELECT COALESCE(current_overdraft, 0)
 		FROM iam_tenants WHERE tenant_id = $1
-	`, tenantID).Scan(&frozen, &debt); err != nil {
+	`, tenantID).Scan(&debt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, domain.ErrAccountNotFound
 		}
-		return nil, fmt.Errorf("查询租户冻结积分失败: %w", err)
+		return nil, fmt.Errorf("查询租户账户失败: %w", err)
 	}
 
-	var remainingCredits int64
+	var remainingMicroUSD int64
 	if err := r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(remaining_credits), 0)
 		FROM bill_credit_packages
 		WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available'
 		  AND (expires_at IS NULL OR expires_at > $2)
-	`, tenantID, now).Scan(&remainingCredits); err != nil {
-		return nil, fmt.Errorf("查询租户剩余积分失败: %w", err)
+	`, tenantID, now).Scan(&remainingMicroUSD); err != nil {
+		return nil, fmt.Errorf("查询租户剩余余额失败: %w", err)
 	}
 
-	var totalCredits int64
+	var totalMicroUSD int64
 	r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(total_credits), 0)
 		FROM bill_credit_packages
 		WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available'
 		  AND (expires_at IS NULL OR expires_at > $2)
-	`, tenantID, now).Scan(&totalCredits)
+	`, tenantID, now).Scan(&totalMicroUSD)
 
-	var permanentCredits int64
+	var permanentMicroUSD int64
 	r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(remaining_credits), 0)
 		FROM bill_credit_packages
 		WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available' AND expires_at IS NULL
-	`, tenantID).Scan(&permanentCredits)
+	`, tenantID).Scan(&permanentMicroUSD)
 
 	resp := &BalanceResponse{
-		TotalCredits:         billing.MicroToCredits(totalCredits),
-		UsedCredits:          billing.MicroToCredits(totalCredits - remainingCredits),
-		RemainingCredits:     billing.MicroToCredits(remainingCredits),
-		FrozenCredits:        billing.MicroToCredits(frozen),
-		AvailableCredits:     billing.MicroToCredits(remainingCredits - frozen),
-		PermanentCredits:     billing.MicroToCredits(permanentCredits),
-		TimedCredits:         billing.MicroToCredits(remainingCredits - permanentCredits),
-		OutstandingDebtMicro: debt,
-		ServiceState:         accountServiceState(debt),
+		Currency:                "USD",
+		TotalUSD:                billing.MicroToUSD(totalMicroUSD),
+		UsedUSD:                 billing.MicroToUSD(totalMicroUSD - remainingMicroUSD),
+		RemainingUSD:            billing.MicroToUSD(remainingMicroUSD),
+		AvailableUSD:            billing.MicroToUSD(remainingMicroUSD),
+		PermanentUSD:            billing.MicroToUSD(permanentMicroUSD),
+		TimedUSD:                billing.MicroToUSD(remainingMicroUSD - permanentMicroUSD),
+		OutstandingDebtMicroUSD: debt,
+		ServiceState:            accountServiceState(debt),
 	}
 
 	if detail {
-		pkgs, err := r.listCreditPackages(ctx, billing.PackageTypeTenant, &tenantID, nil, now)
+		lots, err := r.listBalanceLots(ctx, billing.PackageTypeTenant, &tenantID, nil, now)
 		if err == nil {
-			resp.Packages = pkgs
+			resp.BalanceLots = lots
 		}
 	}
 
@@ -138,58 +138,58 @@ func (r *AccountRepository) GetUserBalance(userID string, detail bool) (*Balance
 	ctx := context.Background()
 	now := billing.NowUTC()
 
-	var frozen, debt int64
+	var debt int64
 	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(frozen_credits, 0), COALESCE(current_overdraft, 0)
+		SELECT COALESCE(current_overdraft, 0)
 		FROM iam_accounts WHERE user_id = $1 AND user_type = 4
-	`, userID).Scan(&frozen, &debt); err != nil {
+	`, userID).Scan(&debt); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, domain.ErrAccountNotFound
 		}
-		return nil, fmt.Errorf("查询用户冻结积分失败: %w", err)
+		return nil, fmt.Errorf("查询用户账户失败: %w", err)
 	}
 
-	var remainingCredits int64
+	var remainingMicroUSD int64
 	if err := r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(remaining_credits), 0)
 		FROM bill_credit_packages
 		WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
 		  AND (expires_at IS NULL OR expires_at > $2)
-	`, userID, now).Scan(&remainingCredits); err != nil {
-		return nil, fmt.Errorf("查询用户剩余积分失败: %w", err)
+	`, userID, now).Scan(&remainingMicroUSD); err != nil {
+		return nil, fmt.Errorf("查询用户剩余余额失败: %w", err)
 	}
 
-	var totalCredits int64
+	var totalMicroUSD int64
 	r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(total_credits), 0)
 		FROM bill_credit_packages
 		WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
 		  AND (expires_at IS NULL OR expires_at > $2)
-	`, userID, now).Scan(&totalCredits)
+	`, userID, now).Scan(&totalMicroUSD)
 
-	var permanentCredits int64
+	var permanentMicroUSD int64
 	r.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(remaining_credits), 0)
 		FROM bill_credit_packages
 		WHERE package_type = 'user' AND user_id = $1 AND status = 'available' AND expires_at IS NULL
-	`, userID).Scan(&permanentCredits)
+	`, userID).Scan(&permanentMicroUSD)
 
 	resp := &BalanceResponse{
-		TotalCredits:         billing.MicroToCredits(totalCredits),
-		UsedCredits:          billing.MicroToCredits(totalCredits - remainingCredits),
-		RemainingCredits:     billing.MicroToCredits(remainingCredits),
-		FrozenCredits:        billing.MicroToCredits(frozen),
-		AvailableCredits:     billing.MicroToCredits(remainingCredits - frozen),
-		PermanentCredits:     billing.MicroToCredits(permanentCredits),
-		TimedCredits:         billing.MicroToCredits(remainingCredits - permanentCredits),
-		OutstandingDebtMicro: debt,
-		ServiceState:         accountServiceState(debt),
+		Currency:                "USD",
+		TotalUSD:                billing.MicroToUSD(totalMicroUSD),
+		UsedUSD:                 billing.MicroToUSD(totalMicroUSD - remainingMicroUSD),
+		RemainingUSD:            billing.MicroToUSD(remainingMicroUSD),
+		AvailableUSD:            billing.MicroToUSD(remainingMicroUSD),
+		PermanentUSD:            billing.MicroToUSD(permanentMicroUSD),
+		TimedUSD:                billing.MicroToUSD(remainingMicroUSD - permanentMicroUSD),
+		OutstandingDebtMicroUSD: debt,
+		ServiceState:            accountServiceState(debt),
 	}
 
 	if detail {
-		pkgs, err := r.listCreditPackages(ctx, billing.PackageTypeUser, nil, &userID, now)
+		lots, err := r.listBalanceLots(ctx, billing.PackageTypeUser, nil, &userID, now)
 		if err == nil {
-			resp.Packages = pkgs
+			resp.BalanceLots = lots
 		}
 	}
 
@@ -205,20 +205,20 @@ func accountServiceState(debt int64) string {
 
 // EventRow 消费流水行
 type EventRow struct {
-	EventID       string  `json:"eventId"`
-	UserID        string  `json:"userId"`
-	Description   string  `json:"description"`
-	TenantCredits float64 `json:"tenantCredits"`
-	UserCredits   float64 `json:"userCredits"`
-	Status        string  `json:"status"`
-	TerminalNote  string  `json:"terminalNote"`
-	Metadata      string  `json:"metadata"`
-	CreatedTime   *int64  `json:"createdTime"`
-	FinishedTime  *int64  `json:"finishedTime,omitempty"`
-	Username      string  `json:"username"`
-	TenantName    string  `json:"tenantName"`
-	ClientID      string  `json:"clientId"`
-	AppName       string  `json:"appName"`
+	EventID         string  `json:"eventId"`
+	UserID          string  `json:"userId"`
+	Description     string  `json:"description"`
+	TenantAmountUSD float64 `json:"tenantAmountUsd"`
+	UserAmountUSD   float64 `json:"userAmountUsd"`
+	Status          string  `json:"status"`
+	TerminalNote    string  `json:"terminalNote"`
+	Metadata        string  `json:"metadata"`
+	CreatedTime     *int64  `json:"createdTime"`
+	FinishedTime    *int64  `json:"finishedTime,omitempty"`
+	Username        string  `json:"username"`
+	TenantName      string  `json:"tenantName"`
+	ClientID        string  `json:"clientId"`
+	AppName         string  `json:"appName"`
 }
 
 // ListTransactionsParams 消费流水查询参数
@@ -327,8 +327,8 @@ func (r *AccountRepository) ListTransactions(p ListTransactionsParams) ([]EventR
 			return nil, 0, fmt.Errorf("扫描消费流水失败: %w", err)
 		}
 		row.CreatedTime = unixMilliPtr(createdAt)
-		row.TenantCredits = billing.MicroToCredits(tenantMicro)
-		row.UserCredits = billing.MicroToCredits(userMicro)
+		row.TenantAmountUSD = billing.MicroToUSD(tenantMicro)
+		row.UserAmountUSD = billing.MicroToUSD(userMicro)
 		if finishedAt != nil {
 			row.FinishedTime = unixMilliPtr(*finishedAt)
 		}
@@ -340,16 +340,16 @@ func (r *AccountRepository) ListTransactions(p ListTransactionsParams) ([]EventR
 
 // RechargeRecordRow 充值记录行
 type RechargeRecordRow struct {
-	OrderID      string  `json:"orderId"`
-	OrderType    string  `json:"orderType"`
-	PaidAmount   int64   `json:"paidAmount"`
-	CreditAmount float64 `json:"creditAmount"`
-	Status       string  `json:"status"`
-	Note         string  `json:"note"`
-	UserID       string  `json:"userId"`
-	Username     string  `json:"username"`
-	TenantName   string  `json:"tenantName"`
-	CreatedTime  *int64  `json:"createdTime"`
+	OrderID         string  `json:"orderId"`
+	OrderType       string  `json:"orderType"`
+	PaidAmountMinor int64   `json:"paidAmountMinor"`
+	AmountUSD       float64 `json:"amountUsd"`
+	Status          string  `json:"status"`
+	Note            string  `json:"note"`
+	UserID          string  `json:"userId"`
+	Username        string  `json:"username"`
+	TenantName      string  `json:"tenantName"`
+	CreatedTime     *int64  `json:"createdTime"`
 }
 
 func (r *AccountRepository) ListRechargeRecords(
@@ -434,12 +434,12 @@ func (r *AccountRepository) ListRechargeRecords(
 		var creditMicro int64
 		var createdAt time.Time
 		if err := rows.Scan(
-			&row.OrderID, &row.OrderType, &row.PaidAmount, &creditMicro, &row.Status,
+			&row.OrderID, &row.OrderType, &row.PaidAmountMinor, &creditMicro, &row.Status,
 			&row.Note, &row.UserID, &row.Username, &row.TenantName, &createdAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("扫描充值记录失败: %w", err)
 		}
-		row.CreditAmount = billing.MicroToCredits(creditMicro)
+		row.AmountUSD = billing.MicroToUSD(creditMicro)
 		row.CreatedTime = unixMilliPtr(createdAt)
 		list = append(list, row)
 	}
@@ -449,9 +449,9 @@ func (r *AccountRepository) ListRechargeRecords(
 
 // AccountStatsResult 账户统计结果
 type AccountStatsResult struct {
-	EndUserCount         int64   `json:"endUserCount"`
-	InviteCodeCount      int64   `json:"inviteCodeCount"`
-	UserDeductionCredits float64 `json:"userDeductionCredits"`
+	EndUserCount     int64   `json:"endUserCount"`
+	InviteCodeCount  int64   `json:"inviteCodeCount"`
+	UserDeductionUSD float64 `json:"userDeductionUsd"`
 }
 
 func (r *AccountRepository) GetAccountStats(tenantID string) (*AccountStatsResult, error) {
@@ -467,7 +467,7 @@ func (r *AccountRepository) GetAccountStats(tenantID string) (*AccountStatsResul
 	if err != nil {
 		return nil, fmt.Errorf("查询账户统计失败: %w", err)
 	}
-	result.UserDeductionCredits = billing.MicroToCredits(userDeductionMicro)
+	result.UserDeductionUSD = billing.MicroToUSD(userDeductionMicro)
 	return &result, nil
 }
 

@@ -20,7 +20,7 @@ export interface UsageSummaryTotals {
 
 export interface UsageDistributionItem {
   name: string;
-  credits: number;
+  amountUSD: number;
   requests: number;
   units?: number;
   percent: number;
@@ -31,12 +31,17 @@ export interface UsageCostSecondaryItem {
   value: string;
 }
 
-export function formatCredits(value: number | string | null | undefined): string {
+export function formatNumber(value: number | string | null | undefined): string {
   const numeric = Number(value) || 0;
   return numeric.toLocaleString("zh-CN", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 4
   });
+}
+
+export function formatUSD(value: number | string | null | undefined): string {
+  const numeric = Number(value) || 0;
+  return `$${numeric.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 export function formatPercent(value: number, digits = 1): string {
@@ -81,11 +86,11 @@ export function modelRouteLabel(row: Pick<UsageLogDTO, "requested_model" | "mode
   return requested === resolved ? requested : `${requested} → ${resolved}`;
 }
 
-export function costSecondary(row: Pick<UsageLogDTO, "tenant_payable_credits" | "api_key_quota_credits" | "catalog_base_credits">): UsageCostSecondaryItem[] {
+export function costSecondary(row: Pick<UsageLogDTO, "tenant_payable_usd" | "api_key_quota_usd" | "catalog_base_usd">): UsageCostSecondaryItem[] {
   const items: UsageCostSecondaryItem[] = [
-    { label: "租户结算应收", value: formatCredits(row.tenant_payable_credits) },
-    { label: "Key", value: formatCredits(row.api_key_quota_credits) },
-    { label: "上游参考成本", value: formatCredits(row.catalog_base_credits) }
+    { label: "租户结算应收", value: formatUSD(row.tenant_payable_usd) },
+    { label: "Key", value: formatUSD(row.api_key_quota_usd) },
+    { label: "上游参考成本", value: formatUSD(row.catalog_base_usd) }
   ];
   return items.filter((item) => item.value !== "0");
 }
@@ -130,10 +135,10 @@ export function buildSummaryTotals(summaryRows: UsageSummaryRowDTO[]): UsageSumm
       acc.promptTokens += Number(row.total_prompt_tokens) || 0;
       acc.completionTokens += Number(row.total_completion_tokens) || 0;
       acc.totalTokens += Number(row.total_tokens) || 0;
-      acc.catalogBase += Number(row.total_catalog_base_credits) || 0;
-      acc.tenantPayable += Number(row.total_tenant_payable_credits) || 0;
-      acc.userCharged += Number(row.total_user_charged_credits) || 0;
-      acc.quotaCost += Number(row.total_quota_credits) || 0;
+      acc.catalogBase += Number(row.total_catalog_base_usd) || 0;
+      acc.tenantPayable += Number(row.total_tenant_payable_usd) || 0;
+      acc.userCharged += Number(row.total_user_charged_usd) || 0;
+      acc.quotaCost += Number(row.total_quota_usd) || 0;
       return acc;
     },
     {
@@ -150,23 +155,23 @@ export function buildSummaryTotals(summaryRows: UsageSummaryRowDTO[]): UsageSumm
 }
 
 export function buildModelDistribution(summaryRows: UsageSummaryRowDTO[], totalUserCost: number): UsageDistributionItem[] {
-  const sorted = [...summaryRows].sort((a, b) => Number(b.total_user_charged_credits || 0) - Number(a.total_user_charged_credits || 0));
+  const sorted = [...summaryRows].sort((a, b) => Number(b.total_user_charged_usd || 0) - Number(a.total_user_charged_usd || 0));
   const top = sorted.slice(0, 6);
   const rest = sorted.slice(6);
   const items = top.map((row) => ({
     name: row.model_code,
-    credits: Number(row.total_user_charged_credits) || 0,
+    amountUSD: Number(row.total_user_charged_usd) || 0,
     requests: Number(row.request_count) || 0,
-    percent: totalUserCost ? ((Number(row.total_user_charged_credits) || 0) * 100) / totalUserCost : 0
+    percent: totalUserCost ? ((Number(row.total_user_charged_usd) || 0) * 100) / totalUserCost : 0
   }));
 
   if (rest.length) {
     items.push({
       name: `其他 ${rest.length} 个`,
-      credits: rest.reduce((sum, row) => sum + (Number(row.total_user_charged_credits) || 0), 0),
+      amountUSD: rest.reduce((sum, row) => sum + (Number(row.total_user_charged_usd) || 0), 0),
       requests: rest.reduce((sum, row) => sum + (Number(row.request_count) || 0), 0),
       percent: totalUserCost
-        ? (rest.reduce((sum, row) => sum + (Number(row.total_user_charged_credits) || 0), 0) * 100) / totalUserCost
+        ? (rest.reduce((sum, row) => sum + (Number(row.total_user_charged_usd) || 0), 0) * 100) / totalUserCost
         : 0
     });
   }
@@ -176,13 +181,13 @@ export function buildModelDistribution(summaryRows: UsageSummaryRowDTO[], totalU
 
 export function buildUnitDistribution(unitRows: UsageUnitSummaryRowDTO[], totalUserCost: number): UsageDistributionItem[] {
   return [...unitRows]
-    .sort((a, b) => Number(b.total_user_charged_credits || 0) - Number(a.total_user_charged_credits || 0))
+    .sort((a, b) => Number(b.total_user_charged_usd || 0) - Number(a.total_user_charged_usd || 0))
     .map((row) => ({
       name: unitLabel(row.billable_unit_type),
-      credits: Number(row.total_user_charged_credits) || 0,
+      amountUSD: Number(row.total_user_charged_usd) || 0,
       units: Number(row.total_billable_units) || 0,
       requests: Number(row.request_count) || 0,
-      percent: totalUserCost ? ((Number(row.total_user_charged_credits) || 0) * 100) / totalUserCost : 0
+      percent: totalUserCost ? ((Number(row.total_user_charged_usd) || 0) * 100) / totalUserCost : 0
     }));
 }
 

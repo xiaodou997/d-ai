@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import { Coins, WalletCards } from "lucide-vue-next";
+import { BadgeDollarSign, Gift } from "lucide-vue-next";
 import { PortalQrPayDialog, type QrPayPollResult } from "@/platform";
 
-import type { TenantCashAccount, TenantTopupConfig, TenantTopupOrderCreated, TopupPackage } from "@/api/types/tenant";
-import { formatCents, formatCredits, type PurchaseMethod } from "../model";
+import type { TenantTopupConfig, TenantTopupOrderCreated, TopupPackage } from "@/api/types/tenant";
+import { formatMicroUSD, MICRO_USD_PER_USD } from "../model";
 
 const props = defineProps<{
   visible: boolean;
-  method: PurchaseMethod;
-  cash: TenantCashAccount;
   config: TenantTopupConfig | null;
   configLoading: boolean;
   submitting: boolean;
@@ -20,160 +18,108 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  "update:method": [value: PurchaseMethod];
-  balancePurchase: [amountYuan: number];
-  wechatPurchase: [body: { amount?: number; packageId?: string }];
+  topup: [body: { amountMicroUsd?: number; packageId?: string }];
   qrClose: [];
   qrSuccess: [result: QrPayPollResult];
 }>();
 
-const balanceAmountYuan = shallowRef<number | null>(null);
-const customAmountYuan = shallowRef<number | null>(null);
+const customAmountUsd = shallowRef<number | null>(null);
 const selectedPackage = shallowRef<TopupPackage | null>(null);
 
 const enabledPackages = computed(() => (props.config?.packages ?? []).filter((item) => item.enabled));
-const balancePreviewCredits = computed(() => Math.floor(Number(balanceAmountYuan.value ?? 0) * props.cash.creditsPerCny));
-const balanceAmountFen = computed(() => Math.round(Number(balanceAmountYuan.value ?? 0) * 100));
-const balanceInsufficient = computed(() => balanceAmountFen.value > props.cash.available);
-const canBuyWithBalance = computed(() => balanceAmountFen.value > 0 && !balanceInsufficient.value);
 const customPreview = computed(() => {
-  if (!props.config || !customAmountYuan.value) return { gross: 0, fee: 0, net: 0, amountFen: 0 };
-  const amountFen = Math.round(customAmountYuan.value * 100);
-  const gross = Math.floor(customAmountYuan.value * props.config.exchangeRate);
-  const fee = Math.ceil((gross * props.config.feeRateBp) / 10000);
-  return { gross, fee, net: Math.max(0, gross - fee), amountFen };
+  const gross = Math.round(Number(customAmountUsd.value ?? 0) * MICRO_USD_PER_USD);
+  const fee = props.config ? Math.ceil((gross * props.config.feeRateBp) / 10_000) : 0;
+  return { gross, fee, credited: Math.max(0, gross - fee) };
 });
-const canBuyCustom = computed(() => Boolean(
+const canSubmitCustom = computed(() => Boolean(
   props.config
-  && customPreview.value.amountFen >= props.config.min
-  && customPreview.value.amountFen <= props.config.max
-  && customPreview.value.net > 0
+  && customPreview.value.gross >= props.config.minMicroUsd
+  && customPreview.value.gross <= props.config.maxMicroUsd
+  && customPreview.value.credited > 0
 ));
 
 function choosePackage(pkg: TopupPackage) {
   selectedPackage.value = pkg;
-  customAmountYuan.value = null;
+  customAmountUsd.value = null;
 }
 
 function selectCustom() {
   selectedPackage.value = null;
 }
 
-function useAllBalance() {
-  balanceAmountYuan.value = Number((props.cash.available / 100).toFixed(2));
-}
-
-function submitPackage() {
-  if (!selectedPackage.value) return;
-  emit("wechatPurchase", { packageId: selectedPackage.value.id });
+function submit() {
+  if (selectedPackage.value) emit("topup", { packageId: selectedPackage.value.id });
+  else if (canSubmitCustom.value) emit("topup", { amountMicroUsd: customPreview.value.gross });
 }
 
 watch(
   () => props.visible,
   (visible) => {
     if (!visible) return;
-    balanceAmountYuan.value = null;
-    customAmountYuan.value = null;
+    customAmountUsd.value = null;
     selectedPackage.value = null;
   }
 );
 </script>
 
 <template>
-  <el-drawer :model-value="visible" title="购买积分" size="min(560px, 100vw)" append-to-body destroy-on-close @close="emit('close')">
-    <div class="purchase-drawer">
-      <div class="purchase-method" role="group" aria-label="支付方式">
-        <el-radio-group :model-value="method" @update:model-value="emit('update:method', $event as PurchaseMethod)">
-          <el-radio-button value="balance" :disabled="cash.available <= 0">
-            <WalletCards :size="15" />余额支付
-          </el-radio-button>
-          <el-radio-button value="wechat">微信支付</el-radio-button>
-        </el-radio-group>
-      </div>
+  <el-drawer :model-value="visible" title="充值 USD 额度" size="min(560px, 100vw)" append-to-body destroy-on-close @close="emit('close')">
+    <div class="topup-drawer">
+      <div v-if="configLoading" class="topup-loading" v-loading="true" />
+      <el-empty v-else-if="!config?.enabled" description="在线充值暂未开放" />
+      <template v-else-if="config">
+        <div class="topup-summary">
+          <BadgeDollarSign :size="20" />
+          <div><strong>USD 额度充值</strong><span>订单将分别记录支付、手续费、赠送和到账金额</span></div>
+          <em v-if="config.feeRateBp">自定义充值手续费 {{ (config.feeRateBp / 100).toFixed(2) }}%</em>
+        </div>
 
-      <section v-if="method === 'balance'" class="purchase-section">
-        <div class="purchase-summary">
-          <span>可用余额</span>
-          <strong>¥{{ formatCents(cash.available) }}</strong>
-          <em>余额购买不收手续费，1 元可购买 {{ cash.creditsPerCny }} 积分</em>
+        <div v-if="enabledPackages.length" class="package-options" aria-label="额度包">
+          <button
+            v-for="pkg in enabledPackages"
+            :key="pkg.id"
+            type="button"
+            :class="['package-option', { 'package-option--active': selectedPackage?.id === pkg.id }]"
+            @click="choosePackage(pkg)"
+          >
+            <span v-if="pkg.badge" class="package-option__badge">{{ pkg.badge }}</span>
+            <strong>{{ formatMicroUSD(pkg.paymentAmountMicroUsd) }}</strong>
+            <span>{{ pkg.name }}</span>
+            <em v-if="pkg.giftAmountMicroUsd > 0"><Gift :size="13" />赠送 {{ formatMicroUSD(pkg.giftAmountMicroUsd) }}</em>
+            <small>到账 {{ formatMicroUSD(pkg.paymentAmountMicroUsd + pkg.giftAmountMicroUsd) }}</small>
+          </button>
         </div>
 
         <label class="amount-field">
-          <span>购买金额</span>
-          <el-input-number v-model="balanceAmountYuan" :min="0" :precision="2" :controls="false" placeholder="输入金额" class="amount-field__input" />
-          <button type="button" class="amount-field__all" @click="useAllBalance">全部余额</button>
+          <span>自定义充值金额（USD）</span>
+          <el-input-number
+            v-model="customAmountUsd"
+            :min="config.minMicroUsd / MICRO_USD_PER_USD"
+            :max="config.maxMicroUsd / MICRO_USD_PER_USD"
+            :precision="6"
+            :controls="false"
+            placeholder="输入 USD 金额"
+            class="amount-field__input"
+            @focus="selectCustom"
+          />
         </label>
 
-        <div class="purchase-preview" :class="{ 'purchase-preview--error': balanceInsufficient }">
-          <Coins :size="18" />
-          <span v-if="balanceInsufficient">可用余额不足</span>
-          <span v-else>预计到账 <b>{{ formatCredits(balancePreviewCredits) }}</b> 积分</span>
+        <div v-if="selectedPackage" class="topup-preview">
+          <span>支付 <b>{{ formatMicroUSD(selectedPackage.paymentAmountMicroUsd) }}</b></span>
+          <span>赠送 <b>{{ formatMicroUSD(selectedPackage.giftAmountMicroUsd) }}</b></span>
+          <strong>到账 {{ formatMicroUSD(selectedPackage.paymentAmountMicroUsd + selectedPackage.giftAmountMicroUsd) }}</strong>
+        </div>
+        <div v-else class="topup-preview">
+          <span>充值金额 <b>{{ formatMicroUSD(customPreview.gross) }}</b></span>
+          <span>手续费 <b>{{ formatMicroUSD(customPreview.fee) }}</b></span>
+          <strong>到账 {{ formatMicroUSD(customPreview.credited) }}</strong>
         </div>
 
-        <el-button type="primary" size="large" :loading="submitting" :disabled="!canBuyWithBalance" @click="emit('balancePurchase', Number(balanceAmountYuan))">
-          确认购买
+        <el-button type="primary" size="large" :loading="submitting" :disabled="selectedPackage ? false : !canSubmitCustom" @click="submit">
+          去支付
         </el-button>
-      </section>
-
-      <section v-else class="purchase-section">
-        <div v-if="configLoading" class="purchase-loading" v-loading="true" />
-        <el-empty v-else-if="!config?.enabled" description="微信支付暂未开放，可使用账户余额购买积分" />
-        <template v-else-if="config">
-          <div class="purchase-summary">
-            <span>微信支付</span>
-            <strong>1 元 = {{ config.exchangeRate }} 积分</strong>
-            <em>自定义金额手续费 {{ (config.feeRateBp / 100).toFixed(2) }}%</em>
-          </div>
-
-          <div v-if="enabledPackages.length" class="package-options" aria-label="积分套餐">
-            <button
-              v-for="pkg in enabledPackages"
-              :key="pkg.id"
-              type="button"
-              :class="['package-option', { 'package-option--active': selectedPackage?.id === pkg.id }]"
-              @click="choosePackage(pkg)"
-            >
-              <span v-if="pkg.badge" class="package-option__badge">{{ pkg.badge }}</span>
-              <strong>¥{{ formatCents(pkg.amount) }}</strong>
-              <span>{{ pkg.name }}</span>
-              <em>{{ formatCredits(pkg.credits) }} 积分</em>
-            </button>
-          </div>
-
-          <label class="amount-field amount-field--custom">
-            <span>自定义金额</span>
-            <el-input-number
-              v-model="customAmountYuan"
-              :min="config.min / 100"
-              :max="config.max / 100"
-              :precision="2"
-              :controls="false"
-              placeholder="输入金额"
-              class="amount-field__input"
-              @focus="selectCustom"
-            />
-          </label>
-
-          <div v-if="selectedPackage" class="purchase-preview">
-            <Coins :size="18" />套餐到账 <b>{{ formatCredits(selectedPackage.credits) }}</b> 积分
-          </div>
-          <div v-else class="purchase-preview">
-            <Coins :size="18" />
-            <span>预计到账 <b>{{ formatCredits(customPreview.net) }}</b> 积分</span>
-            <small v-if="customPreview.fee">已扣除 {{ formatCredits(customPreview.fee) }} 积分手续费</small>
-          </div>
-
-          <el-button
-            type="primary"
-            size="large"
-            :loading="submitting"
-            :disabled="selectedPackage ? false : !canBuyCustom"
-            @click="selectedPackage ? submitPackage() : emit('wechatPurchase', { amount: customPreview.amountFen })"
-          >
-            去支付
-          </el-button>
-        </template>
-      </section>
+      </template>
     </div>
   </el-drawer>
 
@@ -182,8 +128,8 @@ watch(
     :visible="qrVisible"
     :order-id="activeOrder.orderId"
     :code-url="activeOrder.codeUrl"
-    :amount="activeOrder.amount"
-    :credit-amount="activeOrder.creditAmount"
+    :payment-amount-minor="activeOrder.paymentAmountMinor"
+    :credited-amount-micro-usd="activeOrder.creditedAmountMicroUsd"
     :expires-at="activeOrder.expiresAt"
     :poll="poll"
     @close="emit('qrClose')"
@@ -192,181 +138,25 @@ watch(
 </template>
 
 <style scoped>
-.purchase-drawer,
-.purchase-section {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.purchase-method :deep(.el-radio-group) {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.purchase-method :deep(.el-radio-button__inner) {
-  display: flex;
-  width: 100%;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.purchase-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 12px;
-  border: 1px solid var(--ds-line);
-  border-radius: 8px;
-  padding: 14px 16px;
-  background: var(--ds-panel-muted);
-}
-
-.purchase-summary span,
-.purchase-summary em {
-  color: var(--ds-muted);
-  font-size: 12px;
-  font-style: normal;
-}
-
-.purchase-summary strong {
-  color: var(--ds-ink);
-  font-size: 16px;
-}
-
-.purchase-summary em {
-  grid-column: 1 / -1;
-}
-
-.amount-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.amount-field > span {
-  grid-column: 1 / -1;
-  color: var(--ds-ink-soft);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.amount-field__input {
-  width: 100%;
-}
-
-.amount-field__all {
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: var(--ds-accent-hover);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.amount-field--custom {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.purchase-preview {
-  display: flex;
-  min-height: 46px;
-  align-items: center;
-  gap: 7px;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: var(--ds-accent-soft);
-  color: var(--ds-accent-hover);
-  font-size: 13px;
-}
-
-.purchase-preview small {
-  margin-left: auto;
-  color: var(--ds-muted);
-  font-size: 11px;
-}
-
-.purchase-preview--error {
-  background: var(--ds-danger-soft);
-  color: var(--ds-danger);
-}
-
-.package-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.package-option {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 112px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 3px;
-  border: 1px solid var(--ds-line);
-  border-radius: 8px;
-  padding: 14px;
-  background: var(--ds-panel);
-  color: var(--ds-ink-soft);
-  cursor: pointer;
-  text-align: left;
-}
-
-.package-option--active {
-  border-color: var(--ds-accent);
-  box-shadow: 0 0 0 2px var(--ds-accent-soft);
-}
-
-.package-option strong {
-  color: var(--ds-ink);
-  font-size: 20px;
-}
-
-.package-option span,
-.package-option em {
-  font-size: 12px;
-  font-style: normal;
-}
-
-.package-option em {
-  color: var(--ds-accent-hover);
-  font-weight: 700;
-}
-
-.package-option__badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  color: var(--ds-positive) !important;
-  font-size: 10px !important;
-  font-weight: 700;
-}
-
-.purchase-loading {
-  min-height: 220px;
-}
-
-@media (max-width: 520px) {
-  .package-options {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .purchase-preview {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .purchase-preview small {
-    width: 100%;
-    margin-left: 25px;
-  }
-}
+.topup-drawer { display:flex; flex-direction:column; gap:18px; }
+.topup-loading { min-height:180px; }
+.topup-summary { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:6px 10px; border:1px solid var(--ds-line); border-radius:8px; padding:14px 16px; background:var(--ds-panel-muted); color:var(--ds-accent); }
+.topup-summary > div { display:flex; flex-direction:column; gap:2px; }
+.topup-summary strong { color:var(--ds-ink); font-size:14px; }
+.topup-summary span, .topup-summary em { color:var(--ds-muted); font-size:12px; font-style:normal; }
+.topup-summary em { grid-column:2; }
+.package-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.package-option { position:relative; display:flex; min-height:126px; flex-direction:column; align-items:flex-start; gap:5px; overflow:hidden; border:1px solid var(--ds-line); border-radius:8px; padding:14px; background:var(--ds-panel); color:var(--ds-ink); cursor:pointer; text-align:left; }
+.package-option:hover, .package-option--active { border-color:var(--ds-accent); box-shadow:0 0 0 1px var(--ds-accent); }
+.package-option strong { font-size:20px; font-variant-numeric:tabular-nums; }
+.package-option span, .package-option small { color:var(--ds-muted); font-size:12px; }
+.package-option em { display:flex; align-items:center; gap:4px; color:var(--ds-positive); font-size:12px; font-style:normal; }
+.package-option__badge { position:absolute; top:0; right:0; padding:3px 7px; border-bottom-left-radius:6px; background:var(--ds-accent-soft); color:var(--ds-accent) !important; }
+.amount-field { display:flex; flex-direction:column; gap:7px; color:var(--ds-ink-soft); font-size:12px; font-weight:700; }
+.amount-field__input { width:100%; }
+.topup-preview { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; border:1px solid var(--ds-line); border-radius:8px; padding:12px 14px; background:var(--ds-panel-muted); color:var(--ds-muted); font-size:12px; }
+.topup-preview span { display:flex; justify-content:space-between; gap:8px; }
+.topup-preview b { color:var(--ds-ink); }
+.topup-preview strong { grid-column:1/-1; border-top:1px solid var(--ds-line); padding-top:8px; color:var(--ds-positive); font-size:15px; }
+@media (max-width:520px) { .package-options { grid-template-columns:1fr; } }
 </style>

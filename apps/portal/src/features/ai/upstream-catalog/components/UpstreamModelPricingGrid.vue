@@ -7,11 +7,10 @@ import { buildPricingCards } from "../presentation";
 
 const props = defineProps<{
   resource: TenantAiUpstreamResource | null;
-  creditsPerUsd: number;
   loading: boolean;
 }>();
 
-const cards = computed(() => buildPricingCards(props.resource, props.creditsPerUsd));
+const cards = computed(() => buildPricingCards(props.resource));
 const panelDescription = computed(() => {
   if (!props.resource) return "选择上游资源后查看对应模型价格";
   if (!props.resource.price_book_name) return "当前资源尚未绑定结算价格表";
@@ -29,9 +28,6 @@ const panelDescription = computed(() => {
     </template>
     <template #actions>
       <span class="model-count">{{ cards.length }} 个模型</span>
-      <span v-if="props.creditsPerUsd" class="rate-chip">
-        汇率 1 USD = {{ props.creditsPerUsd }} 积分
-      </span>
     </template>
 
     <div v-loading="props.loading" class="pricing-surface">
@@ -57,7 +53,6 @@ const panelDescription = computed(() => {
                   <span class="metric-row__label">{{ line.label }}</span>
                   <span class="metric-row__value-block">
                     <strong class="metric-row__value" :class="`metric-row__value--${line.tone}`">{{ line.usd }}</strong>
-                    <span v-if="line.credits" class="metric-row__credits">{{ line.credits }}</span>
                   </span>
                 </div>
               </div>

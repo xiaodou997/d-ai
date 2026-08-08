@@ -16,7 +16,7 @@ import { DsTable, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRow } from "../model";
 import {
-  formatCredits,
+  formatUSD,
   formatTimestamp,
   modelRouteLabel,
   resolveFirstResponseByteMs,
@@ -141,15 +141,15 @@ function subjectMeta(row: AdminUsageRow) {
 
       <template #cell-cost="{ row }">
         <div class="stack-cell stack-cell--right stack-cell--compact">
-          <span v-if="Number(row.tenant_payable_credits)" class="cost-line cost-line--tenant" title="平台向租户结算">
+          <span v-if="Number(row.tenant_payable_usd)" class="cost-line cost-line--tenant" title="平台向租户结算">
             <el-icon class="cost-line__icon"><Wallet /></el-icon>
-            <span class="mono">{{ formatCredits(row.tenant_payable_credits) }}</span>
+            <span class="mono">{{ formatUSD(row.tenant_payable_usd) }}</span>
           </span>
-          <span v-if="Number(row.user_charged_credits)" class="cost-line cost-line--user" title="用户实际扣款">
+          <span v-if="Number(row.user_charged_usd)" class="cost-line cost-line--user" title="用户实际扣款">
             <el-icon class="cost-line__icon"><UserFilled /></el-icon>
-            <span class="mono">{{ formatCredits(row.user_charged_credits) }}</span>
+            <span class="mono">{{ formatUSD(row.user_charged_usd) }}</span>
           </span>
-          <span v-if="!Number(row.tenant_payable_credits) && !Number(row.user_charged_credits)" class="stack-cell__sub">—</span>
+          <span v-if="!Number(row.tenant_payable_usd) && !Number(row.user_charged_usd)" class="stack-cell__sub">—</span>
         </div>
       </template>
 

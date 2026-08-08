@@ -37,19 +37,19 @@
       <div class="dashboard-body">
     <!-- ① 平台 → 租户 -->
     <PortalContentCard
-      title="平台 → 租户（平台积分体系）"
+      title="平台 → 租户（USD）"
       :description="`充值类数据为${periodLabel}汇总，余额为当前实时值`"
     >
       <PortalMetricGrid>
         <DsMetricCard
           label="租户充值金额"
-          :value="`¥ ${fmtYuan(stats.tenantRechargeAmount)}`"
+          :value="fmtMinorUSD(stats.tenantRechargePaidMinor)"
           :hint="`${periodLabel}平台向租户实收`"
         />
         <DsMetricCard
-          label="租户充值积分"
-          :value="`${fmtNum(stats.tenantRechargeCredits)} 积分`"
-          :hint="`${periodLabel}向租户发放`"
+          label="租户到账金额"
+          :value="fmtUSD(stats.tenantRechargeAmountUsd)"
+          :hint="`${periodLabel}向租户入账`"
         />
         <DsMetricCard
           label="活跃租户数"
@@ -57,8 +57,8 @@
           hint="当前状态正常的租户"
         />
         <DsMetricCard
-          label="租户积分余额"
-          :value="`${fmtNum(stats.tenantTotalCredits)} 积分`"
+          label="租户 USD 余额"
+          :value="fmtUSD(stats.tenantTotalBalanceUsd)"
           hint="所有租户当前余额合计"
         />
       </PortalMetricGrid>
@@ -66,19 +66,19 @@
 
     <!-- ② 租户 → 用户 -->
     <PortalContentCard
-      title="租户 → 用户（用户积分体系）"
+      title="租户 → 用户（USD）"
       :description="`充值类数据为${periodLabel}汇总，余额为当前实时值`"
     >
       <PortalMetricGrid>
         <DsMetricCard
           label="用户充值金额"
-          :value="`¥ ${fmtYuan(stats.userRechargeAmount)}`"
+          :value="fmtMinorUSD(stats.userRechargePaidMinor)"
           :hint="`${periodLabel}租户向用户实收`"
         />
         <DsMetricCard
-          label="用户充值积分"
-          :value="`${fmtNum(stats.userRechargeCredits)} 积分`"
-          :hint="`${periodLabel}向用户发放`"
+          label="用户到账金额"
+          :value="fmtUSD(stats.userRechargeAmountUsd)"
+          :hint="`${periodLabel}向用户入账`"
         />
         <DsMetricCard
           label="新增终端用户"
@@ -86,8 +86,8 @@
           :hint="`${periodLabel}注册用户数`"
         />
         <DsMetricCard
-          label="用户积分余额"
-          :value="`${fmtNum(stats.userTotalCredits)} 积分`"
+          label="用户 USD 余额"
+          :value="fmtUSD(stats.userTotalBalanceUsd)"
           hint="所有用户当前余额合计"
         />
       </PortalMetricGrid>
@@ -114,9 +114,7 @@
 
       <AlertList
         class="dash-alerts"
-        :timeout-pre-auths="alerts.timeoutPreAuths"
         :failed-transactions="alerts.failedTransactions"
-        @refresh="fetchAlerts"
       />
     </div>
 
@@ -134,7 +132,7 @@
               <span>{{ item.clientName || item.clientId || '—' }}</span>
             </div>
             <div class="dash-resource__val">
-              <p class="dash-resource__credits">{{ fmtNum(item.credits) }} <span class="dash-resource__unit">积分</span></p>
+              <p class="dash-resource__credits">${{ fmtNum(item.amountUsd) }} <span class="dash-resource__unit">USD</span></p>
               <p class="dash-resource__pct">{{ item.percentage }}%</p>
             </div>
           </div>
@@ -177,18 +175,18 @@ const trendLoading = ref(false)
 const resourceLoading = ref(false)
 
 const stats = reactive({
-  tenantRechargeAmount: 0,
-  tenantRechargeCredits: 0,
+  currency: 'USD',
+  tenantRechargePaidMinor: 0,
+  tenantRechargeAmountUsd: 0,
   activeTenants: 0,
-  tenantTotalCredits: 0,
-  userRechargeAmount: 0,
-  userRechargeCredits: 0,
+  tenantTotalBalanceUsd: 0,
+  userRechargePaidMinor: 0,
+  userRechargeAmountUsd: 0,
   newUsers: 0,
-  userTotalCredits: 0
+  userTotalBalanceUsd: 0
 })
 
-const alerts = reactive<{ timeoutPreAuths: any[]; failedTransactions: any[] }>({
-  timeoutPreAuths: [],
+const alerts = reactive<{ failedTransactions: any[] }>({
   failedTransactions: []
 })
 
@@ -203,8 +201,8 @@ const selectedRange = computed(() => getWorkbenchRangeOption(selectedRangeId.val
 const rangeWindow = computed(() => buildWorkbenchRangeWindow(selectedRange.value))
 const periodLabel = computed(() => selectedRange.value.label)
 
-const fmtYuan = (cents?: number) =>
-  ((cents || 0) / 100).toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+const fmtUSD = (value?: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+const fmtMinorUSD = (value?: number) => fmtUSD(Number(value || 0) / 100)
 const fmtNum = (n?: number) => (n || 0).toLocaleString()
 
 // echarts 绘制在 canvas 上无法直接消费 CSS 变量，挂载时把 --ds-* token 解析成具体色值
@@ -253,10 +251,8 @@ const fetchStats = async () => {
 const fetchAlerts = async () => {
   try {
     const data = await platformAdminApi.getDashboardAlerts()
-    alerts.timeoutPreAuths = Array.isArray(data?.timeoutPreAuths) ? data.timeoutPreAuths : []
     alerts.failedTransactions = Array.isArray(data?.failedTransactions) ? data.failedTransactions : []
   } catch {
-    alerts.timeoutPreAuths = []
     alerts.failedTransactions = []
   }
 }

@@ -41,14 +41,15 @@ func NewSystemRepository(pool *pgxpool.Pool) *SystemRepository {
 }
 
 type GlobalStatsRow struct {
-	TenantRechargeAmount  int64   `json:"tenantRechargeAmount"`
-	TenantRechargeCredits float64 `json:"tenantRechargeCredits"`
-	ActiveTenants         int64   `json:"activeTenants"`
-	TenantTotalCredits    float64 `json:"tenantTotalCredits"`
-	UserRechargeAmount    int64   `json:"userRechargeAmount"`
-	UserRechargeCredits   float64 `json:"userRechargeCredits"`
-	NewUsers              int64   `json:"newUsers"`
-	UserTotalCredits      float64 `json:"userTotalCredits"`
+	Currency                string  `json:"currency"`
+	TenantRechargePaidMinor int64   `json:"tenantRechargePaidMinor"`
+	TenantRechargeAmountUSD float64 `json:"tenantRechargeAmountUsd"`
+	ActiveTenants           int64   `json:"activeTenants"`
+	TenantTotalBalanceUSD   float64 `json:"tenantTotalBalanceUsd"`
+	UserRechargePaidMinor   int64   `json:"userRechargePaidMinor"`
+	UserRechargeAmountUSD   float64 `json:"userRechargeAmountUsd"`
+	NewUsers                int64   `json:"newUsers"`
+	UserTotalBalanceUSD     float64 `json:"userTotalBalanceUsd"`
 }
 
 func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo *time.Time) (GlobalStatsRow, error) {
@@ -56,8 +57,8 @@ func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo 
 	var tenantRechargeMicro, tenantTotalMicro, userRechargeMicro, userTotalMicro int64
 	err := r.pool.QueryRow(ctx, `
 		SELECT
-		  COALESCE((SELECT SUM(paid_amount) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup', 'cash_purchase') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
-		  COALESCE((SELECT SUM(credit_amount) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup', 'cash_purchase') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
+		  COALESCE((SELECT SUM(paid_amount) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
+		  COALESCE((SELECT SUM(credit_amount) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
 		  (SELECT COUNT(*) FROM iam_tenants WHERE status = 'active')::bigint,
 		  COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages WHERE package_type = 'tenant' AND status = 'available'), 0)::bigint,
 		  COALESCE((SELECT SUM(paid_amount) FROM bill_recharge_orders WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
@@ -65,15 +66,16 @@ func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo 
 			  (SELECT COUNT(*) FROM iam_accounts WHERE user_type = 4 AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz))::bigint,
 		  COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages WHERE package_type = 'user' AND status = 'available'), 0)::bigint
 	`, timeFrom, timeTo).Scan(
-		&row.TenantRechargeAmount, &tenantRechargeMicro,
+		&row.TenantRechargePaidMinor, &tenantRechargeMicro,
 		&row.ActiveTenants, &tenantTotalMicro,
-		&row.UserRechargeAmount, &userRechargeMicro,
+		&row.UserRechargePaidMinor, &userRechargeMicro,
 		&row.NewUsers, &userTotalMicro,
 	)
-	row.TenantRechargeCredits = billing.MicroToCredits(tenantRechargeMicro)
-	row.TenantTotalCredits = billing.MicroToCredits(tenantTotalMicro)
-	row.UserRechargeCredits = billing.MicroToCredits(userRechargeMicro)
-	row.UserTotalCredits = billing.MicroToCredits(userTotalMicro)
+	row.Currency = "USD"
+	row.TenantRechargeAmountUSD = billing.MicroToUSD(tenantRechargeMicro)
+	row.TenantTotalBalanceUSD = billing.MicroToUSD(tenantTotalMicro)
+	row.UserRechargeAmountUSD = billing.MicroToUSD(userRechargeMicro)
+	row.UserTotalBalanceUSD = billing.MicroToUSD(userTotalMicro)
 	return row, err
 }
 
@@ -115,7 +117,7 @@ func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params GetCo
 		if err := rows.Scan(&r.Day, &totalMicro); err != nil {
 			return nil, err
 		}
-		r.Total = billing.MicroToCredits(totalMicro)
+		r.Total = billing.MicroToUSD(totalMicro)
 		list = append(list, r)
 	}
 	return list, rows.Err()
@@ -157,7 +159,7 @@ func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params Get
 		if err := rows.Scan(&row.ClientID, &row.ClientName, &totalMicro); err != nil {
 			return nil, err
 		}
-		row.Total = billing.MicroToCredits(totalMicro)
+		row.Total = billing.MicroToUSD(totalMicro)
 		list = append(list, row)
 	}
 	return list, rows.Err()

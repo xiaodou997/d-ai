@@ -18,8 +18,8 @@ use([BarChart, GridComponent, TooltipComponent, CanvasRenderer]);
 interface UserInsightItem {
   key: string;
   userLabel: string;
-  totalCredits: number;
-  creditsText: string;
+  totalAmountUSD: number;
+  amountText: string;
   requestCount: number;
   successRateText: string;
   lastActiveText: string;
@@ -33,7 +33,7 @@ const props = defineProps<{
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: EChartsType | null = null;
 
-const activeItems = computed(() => props.items.filter((item) => item.totalCredits > 0));
+const activeItems = computed(() => props.items.filter((item) => item.totalAmountUSD > 0));
 
 const truncateLabel = (value: string) => (value.length > 10 ? `${value.slice(0, 10)}…` : value);
 
@@ -77,7 +77,7 @@ const renderChart = () => {
       formatter: (params: Array<{ name: string; value: number; dataIndex: number }>) => {
         const param = params[0];
         const item = chartRows[param.dataIndex];
-        return `${item.userLabel}<br/>${item.creditsText} · ${item.requestCount.toLocaleString("zh-CN")} 次请求 · ${item.successRateText} 成功率`;
+        return `${item.userLabel}<br/>${item.amountText} · ${item.requestCount.toLocaleString("zh-CN")} 次请求 · ${item.successRateText} 成功率`;
       }
     },
     xAxis: {
@@ -98,7 +98,7 @@ const renderChart = () => {
     series: [
       {
         type: "bar",
-        data: chartRows.map((item) => item.totalCredits),
+        data: chartRows.map((item) => item.totalAmountUSD),
         barWidth: 16,
         showBackground: true,
         backgroundStyle: {
@@ -161,7 +161,7 @@ onUnmounted(() => {
             <p class="user-insight__meta">{{ item.requestCount.toLocaleString("zh-CN") }} 次请求 · {{ item.successRateText }} 成功率</p>
           </div>
           <div class="user-insight__value">
-            <strong>{{ item.creditsText }}</strong>
+            <strong>{{ item.amountText }}</strong>
             <span>{{ item.lastActiveText }}</span>
           </div>
         </article>

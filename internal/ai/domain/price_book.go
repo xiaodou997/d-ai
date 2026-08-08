@@ -14,16 +14,9 @@ import (
 // 音频为 USD/字符、USD/分钟；图片/视频档位为 USD（每图 / 每秒）。
 //
 // 控制面暂以 float64 承载这些字段；计费引擎会先通过十进制文本恢复为精确
-// 有理数，最终每个计费侧只做一次 round-half-up 到 int64 微积分。浮点值只用于
+// 有理数，最终每个计费侧只做一次 round-half-up 到 int64 micro-USD。浮点值只用于
 // DTO 兼容和展示，不直接参与最终取整。
 // ============================================================================
-
-// SettingCreditsPerUSD 是 ai_settings 中 USD→积分汇率的 key。
-const SettingCreditsPerUSD = "credits_per_usd"
-
-// DefaultCreditsPerUSD 是汇率缺省值（1 USD = 100 积分），与 init.sql 种子一致。
-// 仅当读取 ai_settings.credits_per_usd 失败时作为兜底；正常运行以 DB 值为准。
-const DefaultCreditsPerUSD = 100.0
 
 type PriceBookOwnerType string
 
@@ -75,7 +68,7 @@ type PriceBookEntry struct {
 }
 
 // TenantSellBinding 是平台→租户售价绑定（一租户一倍率，覆盖该价格表所有模型）。
-// 租户售价(积分/token) = entry × SellMultiplier × credits_per_usd。
+// 租户售价(USD/token) = entry × SellMultiplier。
 type TenantSellBinding struct {
 	ID             string
 	TenantID       string
@@ -98,31 +91,29 @@ type UserSellBinding struct {
 	UpdatedAt              time.Time
 }
 
-// ResolutionCreditPriceF is a per-resolution price in (fractional) credits, used
-// for read-only effective-price display (image per image / video per second).
-type ResolutionCreditPriceF struct {
+// ResolutionUSDPriceF is a per-resolution USD price used for display.
+type ResolutionUSDPriceF struct {
 	Resolution string  `json:"resolution"`
 	Price      float64 `json:"price"`
 }
 
-// EffectiveModelPrice is a read-only, scope-resolved per-model price in credits,
-// for tenant/user self-service display. Token/char fields are per 1M.
+// EffectiveModelPrice is a read-only scope-resolved USD price.
 type EffectiveModelPrice struct {
-	ModelCode                 string
-	CapabilityType            string
-	TokenPriceTiers           []EffectiveTokenPriceTier
-	ImageDefaultPriceCredits  float64
-	VideoDefaultPriceCredits  float64
-	ImagePrices               []ResolutionCreditPriceF
-	VideoPrices               []ResolutionCreditPriceF
-	AudioTTSPer1MCharsCredits float64
-	AudioSTTPerMinuteCredits  float64
+	ModelCode             string
+	CapabilityType        string
+	TokenPriceTiers       []EffectiveTokenPriceTier
+	ImageDefaultPriceUSD  float64
+	VideoDefaultPriceUSD  float64
+	ImagePrices           []ResolutionUSDPriceF
+	VideoPrices           []ResolutionUSDPriceF
+	AudioTTSPer1MCharsUSD float64
+	AudioSTTPerMinuteUSD  float64
 }
 
 type EffectiveTokenPriceTier struct {
-	UpToInputTokens        *int    `json:"up_to_input_tokens"`
-	InputPer1MCredits      float64 `json:"input_per_1m_credits"`
-	OutputPer1MCredits     float64 `json:"output_per_1m_credits"`
-	CacheWritePer1MCredits float64 `json:"cache_write_per_1m_credits"`
-	CacheReadPer1MCredits  float64 `json:"cache_read_per_1m_credits"`
+	UpToInputTokens    *int    `json:"up_to_input_tokens"`
+	InputPer1MUSD      float64 `json:"input_per_1m_usd"`
+	OutputPer1MUSD     float64 `json:"output_per_1m_usd"`
+	CacheWritePer1MUSD float64 `json:"cache_write_per_1m_usd"`
+	CacheReadPer1MUSD  float64 `json:"cache_read_per_1m_usd"`
 }

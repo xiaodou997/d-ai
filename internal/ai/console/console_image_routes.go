@@ -42,7 +42,7 @@ type consoleImageJobDTO struct {
 	Style                string                     `json:"style,omitempty"`
 	ResponseFormat       string                     `json:"response_format,omitempty"`
 	RequestedOutputCount int                        `json:"requested_output_count"`
-	CallerChargeCredits  float64                    `json:"caller_charge_credits"`
+	CallerChargeUSD      float64                    `json:"caller_charge_usd"`
 	ImageCount           int                        `json:"image_count"`
 	InlineCount          int                        `json:"inline_count"`
 	URLCount             int                        `json:"url_count"`
@@ -240,7 +240,7 @@ func workspaceImageJobToConsoleDTO(job workspace.ImageJob) consoleImageJobDTO {
 		Style:                job.Style,
 		ResponseFormat:       job.ResponseFormat,
 		RequestedOutputCount: job.RequestedOutputCount,
-		CallerChargeCredits:  domain.MicroToCreditsFloat(job.CallerChargeMicro),
+		CallerChargeUSD:      domain.MicroToUSD(job.CallerChargeMicro),
 		ImageCount:           job.ImageCount,
 		InlineCount:          job.InlineCount,
 		URLCount:             job.URLCount,

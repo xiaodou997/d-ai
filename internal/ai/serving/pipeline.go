@@ -6,8 +6,8 @@
 //
 //	AuthN → AuthZ → QuotaCheck → RouteSelect → RateLimit → Execute
 //
-// 请求结束时 finalizer 将使用记录、配额和 V3 请求入账原子完成，再由异步
-// settlement worker 聚合到统一计费域，不做每请求同步扣款。
+// 请求结束时 finalizer 将使用记录、配额、订阅扣减和统一额度账户的直接扣费
+// 原子完成；若事务暂时失败，再进入恢复队列重试。
 package serving
 
 import (
@@ -90,7 +90,7 @@ type Request struct {
 	UsedCandidates map[string]bool // route_id → already attempted
 
 	// The currently-selected (or last-attempted) candidate. ExecuteStep sets
-	// this on every attempt and downstream steps (billing confirmation, UsageLog,
+	// this on every attempt and downstream steps (usage billing, UsageLog,
 	// observability) read it as "the route that actually served this request".
 	Candidate *domain.RouteCandidate
 
@@ -138,9 +138,6 @@ type Request struct {
 	// intersection ⇒ falls back to payg); financial completion debits
 	// RetailBaseMicro × the immutable plan weight.
 	SubscriptionGroupQuotaDebitMultipliers map[string]float64
-	BillingWindowID                        string
-	BillingLeaseID                         string
-	BillingAdmissionActive                 bool
 	FinancialCompletionFailed              bool
 
 	// RateLimitLease holds configured concurrency slots acquired before Execute.

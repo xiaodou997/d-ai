@@ -12,12 +12,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/ai/billingledger"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
+	billingsvc "xiaodou/dai/internal/billing/service"
 )
 
 const usageClientUserAgentMaxLen = 512
@@ -28,17 +28,17 @@ const (
 )
 
 // UsageLogger implements serving.UsageLogger.
-// It creates the usage log row, upserts the hourly rollup, confirms quota, and
-// computes billing amounts via the unified Price Book model (PriceBookBiller):
+// It creates the usage log row, upserts the hourly rollup, directly charges the
+// account, and computes billing amounts via the unified Price Book model (PriceBookBiller):
 // platform (tenant) price, cascaded user price, and the API-key quota debit.
 type UsageLogger struct {
-	pool               *pgxpool.Pool
-	q                  *dbgen.Queries
-	biller             usageBiller
-	billingCoordinator *billingledger.Coordinator
-	recoveryRedis      *redis.Client
-	apiKeyInvalidator  apiKeyCacheInvalidator
-	logger             *zap.Logger
+	pool              *pgxpool.Pool
+	q                 *dbgen.Queries
+	biller            usageBiller
+	deduction         *billingsvc.DeductionService
+	recoveryRedis     *redis.Client
+	apiKeyInvalidator apiKeyCacheInvalidator
+	logger            *zap.Logger
 }
 
 type apiKeyCacheInvalidator interface {
@@ -50,11 +50,22 @@ type usageBiller interface {
 }
 
 func NewUsageLogger(pool *pgxpool.Pool, biller usageBiller) *UsageLogger {
-	return &UsageLogger{pool: pool, q: dbgen.New(pool), biller: biller, logger: zap.NewNop()}
+	return &UsageLogger{
+		pool:      pool,
+		q:         dbgen.New(pool),
+		biller:    biller,
+		deduction: billingsvc.NewDeductionService(pool, zap.NewNop()),
+		logger:    zap.NewNop(),
+	}
 }
 
-func (l *UsageLogger) WithBillingCoordinator(coordinator *billingledger.Coordinator) *UsageLogger {
-	l.billingCoordinator = coordinator
+// WithDeductionService injects the shared in-process direct-charge service.
+// The default created by NewUsageLogger keeps standalone recovery/tests safe;
+// production wires the same service used by the rest of the application.
+func (l *UsageLogger) WithDeductionService(deduction *billingsvc.DeductionService) *UsageLogger {
+	if deduction != nil {
+		l.deduction = deduction
+	}
 	return l
 }
 
@@ -73,7 +84,7 @@ func (l *UsageLogger) WithAPIKeyCacheInvalidator(invalidator apiKeyCacheInvalida
 
 // Log records a usage entry regardless of request success/failure.
 // BillingResult is calculated here, then usage, API-key quota, subscription
-// quota, and the V3 request completion are committed in one transaction.
+// quota, and the direct balance charge are committed in one transaction.
 func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 	subject := req.RuntimeSubject()
 	if subject == nil || req.Candidate == nil {
@@ -168,10 +179,6 @@ func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing
 
 func (l *UsageLogger) afterCompletion(req *serving.Request, billing domain.BillingResult, accrued bool) {
 	l.invalidateAPIKeyCache(req.RuntimeSubject())
-	if accrued && l.billingCoordinator != nil {
-		l.billingCoordinator.Trigger()
-	}
-
 }
 
 // reconcileAsyncTaskCharge makes the usage completion authoritative for a
@@ -207,7 +214,7 @@ func (l *UsageLogger) invalidateAPIKeyCache(subject *coreidentity.Subject) {
 
 // accrueFinancials runs in the same transaction as the unique usage insert.
 // The usage row is therefore the idempotency anchor for quota, subscription,
-// and billing ledger accrual.
+// and direct balance charging.
 func (l *UsageLogger) accrueFinancials(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -247,22 +254,31 @@ func (l *UsageLogger) accrueFinancials(
 		}
 		userMicro = 0
 	}
-	if !req.BillingAdmissionActive {
-		if tenantMicro > 0 || userMicro > 0 {
-			return false, fmt.Errorf("complete billing ledger: positive PAYG usage has no durable admission")
-		}
+	if tenantMicro == 0 && userMicro == 0 {
 		return false, nil
 	}
-	if l.billingCoordinator == nil {
-		return false, fmt.Errorf("complete billing ledger: coordinator is unavailable")
+	if l.deduction == nil {
+		return false, errors.New("complete direct billing: deduction service is unavailable")
 	}
-	if err := l.billingCoordinator.Complete(ctx, tx, billingledger.Completion{
-		RequestID:       req.RequestID,
-		ExpectedLeaseID: req.BillingLeaseID,
-		TenantMicro:     tenantMicro,
-		UserMicro:       userMicro,
-	}); err != nil {
-		return false, fmt.Errorf("complete billing ledger: %w", err)
+	result, err := l.deduction.ConsumeTx(ctx, tx, billingsvc.ConsumeParams{
+		IdempotencyKey: "ai-usage:" + req.RequestID,
+		ClientID:       "dai-ai",
+		TenantID:       subject.TenantID,
+		UserID:         subject.UserID,
+		Description:    "AI 请求额度扣费",
+		TenantAmount:   tenantMicro,
+		UserAmount:     userMicro,
+		AllowOverdraft: true,
+	})
+	if err != nil {
+		return false, fmt.Errorf("complete direct billing: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE ai_usage_logs
+		SET billing_event_id = $1, billing_status = $2
+		WHERE request_id = $3
+	`, result.EventID, string(domain.BillingConfirmed), req.RequestID); err != nil {
+		return false, fmt.Errorf("link direct billing event to usage: %w", err)
 	}
 	return true, nil
 }
@@ -374,7 +390,7 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		ApiKeyQuotaCost:                    billing.APIKeyQuotaCostMicro,
 		ServiceTier:                        string(billing.ServiceTier),
 		BillingBreakdown:                   billing.BillingBreakdownJSON,
-		BillingEventID:                     nullableText(req.BillingLeaseID),
+		BillingEventID:                     pgtype.Text{},
 		BillingStatus:                      billingStatus(req),
 		RequestStatus:                      string(req.RequestStatus),
 		HttpStatus:                         nullableInt4(req.HTTPStatus),
@@ -497,12 +513,9 @@ func resolution(req *serving.Request) string {
 	return req.TokenUsage.VideoResolution
 }
 
-// billingStatus returns the appropriate billing_status value for the usage log.
-// V3 credit-lease settlement is asynchronous after this durable completion:
-//   - cost == 0          → free          （无成本，不入账本）
-//   - cost  > 0          → pending_settle（已入账本，等结算 worker）
-//
-// settled 状态由 settlement outbox worker 在事务里回填。
+// billingStatus returns the status written with the usage record. Direct
+// charging is in the same transaction, so a positive amount is confirmed
+// before the usage row becomes visible.
 // usageBillingSource coalesces an empty gate decision to "payg" so the usage
 // log never violates the billing_source CHECK constraint.
 func usageBillingSource(src string) string {
@@ -516,5 +529,5 @@ func billingStatus(req *serving.Request) string {
 	if req.BillingResult.TenantPayableMicro == 0 && req.BillingResult.UserChargedMicro == 0 {
 		return string(domain.BillingFree)
 	}
-	return string(domain.BillingPendingSettle)
+	return string(domain.BillingConfirmed)
 }

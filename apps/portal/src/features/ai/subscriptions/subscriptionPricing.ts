@@ -1,4 +1,3 @@
-export const MICRO_PER_CREDIT = 10_000;
 const MULTIPLIER_SCALE = 10_000n;
 
 export interface SubscriptionPricingGroup {

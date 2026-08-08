@@ -25,9 +25,9 @@ const EMPTY_AI_USAGE_STATS: TenantUsageStats = {
   success_count: 0,
   failed_count: 0,
   total_tokens: 0,
-  total_catalog_base_credits: 0,
-  total_tenant_payable_credits: 0,
-  total_user_charged_credits: 0,
+  total_catalog_base_usd: 0,
+  total_tenant_payable_usd: 0,
+  total_user_charged_usd: 0,
   avg_latency_ms: 0,
   avg_request_total_ms: 0,
   avg_first_response_byte_ms: 0

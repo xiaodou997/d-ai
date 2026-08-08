@@ -7,15 +7,15 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/libs/go/httpx"
 	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
 	paymentpg "xiaodou/dai/internal/payment/pg"
 	paymentsvc "xiaodou/dai/internal/payment/service"
+	"xiaodou/dai/libs/go/httpx"
 )
 
-// paymentHandlers 承载用户自助端点：终端用户(type=4)在线充值个人积分、租户管理员(type=3)
-// 在线充值租户积分。scene 由 userType 决定，不接受调用方指定。
+// paymentHandlers 承载用户和租户的 USD 在线充值端点。scene 由 userType 决定，
+// 不接受调用方指定。
 type paymentHandlers struct {
 	svc *paymentsvc.PaymentService
 }
@@ -52,33 +52,37 @@ func sceneAndScopeFromClaims(ctx context.Context) (scene, tenantID, userID strin
 type topupConfigOutput struct {
 	Body struct {
 		Enabled      bool                   `json:"enabled"`
-		ExchangeRate int64                  `json:"exchangeRate"`
+		Currency     string                 `json:"currency"`
 		FeeRateBp    int                    `json:"feeRateBp"`
-		Min          int64                  `json:"min"`
-		Max          int64                  `json:"max"`
+		MinMicroUSD  int64                  `json:"minMicroUsd"`
+		MaxMicroUSD  int64                  `json:"maxMicroUsd"`
+		ValidityDays *int32                 `json:"validityDays,omitempty"`
 		Packages     []payment.TopupPackage `json:"packages"`
 	}
 }
 
 type createTopupOrderInput struct {
 	Body struct {
-		Amount    int64  `json:"amount" required:"false" doc:"自定义充值金额，单位分"`
-		PackageID string `json:"packageId" required:"false" doc:"快捷充值套餐 ID"`
+		AmountMicroUSD int64  `json:"amountMicroUsd" required:"false" doc:"自定义充值金额，单位 micro-USD；必须可精确换算为美分"`
+	PackageID      string `json:"packageId" required:"false" doc:"快捷额度包 ID"`
 	}
 }
 
 type topupOrderOutput struct {
 	Body struct {
-		OrderID      string `json:"orderId"`
-		CodeURL      string `json:"codeUrl"`
-		Amount       int64  `json:"amount"`
-		CreditAmount int64  `json:"creditAmount"`
-		GrossCredits int64  `json:"grossCredits"`
-		FeeCredits   int64  `json:"feeCredits"`
-		TopupMode    string `json:"topupMode"`
-		PackageName  string `json:"packageName,omitempty"`
-		Status       string `json:"status"`
-		ExpiresAt    int64  `json:"expiresAt"`
+		OrderID                string `json:"orderId"`
+		CodeURL                string `json:"codeUrl"`
+		PaymentCurrency        string `json:"paymentCurrency"`
+		PaymentAmountMinor     int64  `json:"paymentAmountMinor"`
+		GrossAmountMicroUSD    int64  `json:"grossAmountMicroUsd"`
+		FeeAmountMicroUSD      int64  `json:"feeAmountMicroUsd"`
+		GiftAmountMicroUSD     int64  `json:"giftAmountMicroUsd"`
+		CreditedAmountMicroUSD int64  `json:"creditedAmountMicroUsd"`
+		TopupMode              string `json:"topupMode"`
+		PackageName            string `json:"packageName,omitempty"`
+		Status                 string `json:"status"`
+		ExpiresAt              int64  `json:"expiresAt"`
+		BalanceExpiresAt       *int64 `json:"balanceExpiresAt,omitempty"`
 	}
 }
 
@@ -88,16 +92,19 @@ type getTopupOrderInput struct {
 
 type topupOrderStatusOutput struct {
 	Body struct {
-		OrderID       string `json:"orderId"`
-		Status        string `json:"status"`
-		Amount        int64  `json:"amount"`
-		CreditAmount  int64  `json:"creditAmount"`
-		GrossCredits  int64  `json:"grossCredits"`
-		FeeCredits    int64  `json:"feeCredits"`
-		TopupMode     string `json:"topupMode"`
-		PackageName   string `json:"packageName,omitempty"`
-		TransactionID string `json:"transactionId,omitempty"`
-		PaidAt        *int64 `json:"paidAt,omitempty"`
+		OrderID                string `json:"orderId"`
+		Status                 string `json:"status"`
+		PaymentCurrency        string `json:"paymentCurrency"`
+		PaymentAmountMinor     int64  `json:"paymentAmountMinor"`
+		GrossAmountMicroUSD    int64  `json:"grossAmountMicroUsd"`
+		FeeAmountMicroUSD      int64  `json:"feeAmountMicroUsd"`
+		GiftAmountMicroUSD     int64  `json:"giftAmountMicroUsd"`
+		CreditedAmountMicroUSD int64  `json:"creditedAmountMicroUsd"`
+		TopupMode              string `json:"topupMode"`
+		PackageName            string `json:"packageName,omitempty"`
+		TransactionID          string `json:"transactionId,omitempty"`
+		PaidAt                 *int64 `json:"paidAt,omitempty"`
+		BalanceExpiresAt       *int64 `json:"balanceExpiresAt,omitempty"`
 	}
 }
 
@@ -108,18 +115,21 @@ type listTopupOrdersInput struct {
 }
 
 type topupOrderItem struct {
-	OrderID       string `json:"orderId"`
-	Scene         string `json:"scene"`
-	Status        string `json:"status"`
-	Amount        int64  `json:"amount"`
-	CreditAmount  int64  `json:"creditAmount"`
-	GrossCredits  int64  `json:"grossCredits"`
-	FeeCredits    int64  `json:"feeCredits"`
-	TopupMode     string `json:"topupMode"`
-	PackageName   string `json:"packageName,omitempty"`
-	TransactionID string `json:"transactionId,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
-	PaidAt        *int64 `json:"paidAt,omitempty"`
+	OrderID                string `json:"orderId"`
+	Scene                  string `json:"scene"`
+	Status                 string `json:"status"`
+	PaymentCurrency        string `json:"paymentCurrency"`
+	PaymentAmountMinor     int64  `json:"paymentAmountMinor"`
+	GrossAmountMicroUSD    int64  `json:"grossAmountMicroUsd"`
+	FeeAmountMicroUSD      int64  `json:"feeAmountMicroUsd"`
+	GiftAmountMicroUSD     int64  `json:"giftAmountMicroUsd"`
+	CreditedAmountMicroUSD int64  `json:"creditedAmountMicroUsd"`
+	TopupMode              string `json:"topupMode"`
+	PackageName            string `json:"packageName,omitempty"`
+	TransactionID          string `json:"transactionId,omitempty"`
+	CreatedAt              int64  `json:"createdAt"`
+	PaidAt                 *int64 `json:"paidAt,omitempty"`
+	BalanceExpiresAt       *int64 `json:"balanceExpiresAt,omitempty"`
 }
 
 type listTopupOrdersOutput struct {
@@ -128,9 +138,13 @@ type listTopupOrdersOutput struct {
 
 func orderToItem(o *payment.Order) topupOrderItem {
 	return topupOrderItem{
-		OrderID: o.OrderID, Scene: o.Scene, Status: o.Status, Amount: o.Amount, CreditAmount: o.CreditAmount,
-		GrossCredits: o.GrossCreditAmount, FeeCredits: o.FeeCreditAmount, TopupMode: o.TopupMode, PackageName: o.PackageName,
-		TransactionID: o.TransactionID, CreatedAt: millisFromTime(o.CreatedAt), PaidAt: millisFromTimePtr(o.PaidAt),
+		OrderID: o.OrderID, Scene: o.Scene, Status: o.Status,
+		PaymentCurrency: o.PaymentCurrency, PaymentAmountMinor: o.PaymentAmountMinor,
+		GrossAmountMicroUSD: o.GrossAmountMicroUSD, FeeAmountMicroUSD: o.FeeAmountMicroUSD,
+		GiftAmountMicroUSD: o.GiftAmountMicroUSD, CreditedAmountMicroUSD: o.CreditedAmountMicroUSD,
+		TopupMode: o.TopupMode, PackageName: o.PackageName, TransactionID: o.TransactionID,
+		CreatedAt: millisFromTime(o.CreatedAt), PaidAt: millisFromTimePtr(o.PaidAt),
+		BalanceExpiresAt: millisFromTimePtr(o.BalanceExpiresAt),
 	}
 }
 
@@ -140,7 +154,7 @@ func registerPayment(api huma.API, d Deps) {
 	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3, 4)}
 
 	huma.Register(api, huma.Operation{OperationID: "payment-topup-config", Method: http.MethodGet, Path: "/api/v1/payments/topup-config",
-		Summary: "在线充值配置（汇率/限额）", Tags: []string{"payment"}, Middlewares: authed}, h.topupConfig)
+		Summary: "USD 在线充值配置", Tags: []string{"payment"}, Middlewares: authed}, h.topupConfig)
 	huma.Register(api, huma.Operation{OperationID: "payment-create-topup-order", Method: http.MethodPost, Path: "/api/v1/payments/topup-orders",
 		Summary: "发起在线充值（微信 Native 扫码）", Tags: []string{"payment"}, Middlewares: authed, DefaultStatus: http.StatusCreated}, h.createOrder)
 	huma.Register(api, huma.Operation{OperationID: "payment-get-topup-order", Method: http.MethodGet, Path: "/api/v1/payments/topup-orders/{orderId}",
@@ -160,10 +174,11 @@ func (h *paymentHandlers) topupConfig(ctx context.Context, _ *struct{}) (*topupC
 	}
 	out := &topupConfigOutput{}
 	out.Body.Enabled = view.Enabled
-	out.Body.ExchangeRate = view.ExchangeRate
+	out.Body.Currency = view.Currency
 	out.Body.FeeRateBp = view.FeeRateBp
-	out.Body.Min = view.Min
-	out.Body.Max = view.Max
+	out.Body.MinMicroUSD = view.MinMicroUSD
+	out.Body.MaxMicroUSD = view.MaxMicroUSD
+	out.Body.ValidityDays = view.ValidityDays
 	out.Body.Packages = view.Packages
 	return out, nil
 }
@@ -174,7 +189,7 @@ func (h *paymentHandlers) createOrder(ctx context.Context, in *createTopupOrderI
 		return nil, httpx.ErrForbidden
 	}
 	order, err := h.svc.CreateTopupOrder(ctx, paymentsvc.CreateTopupOrderParams{
-		Scene: scene, TenantID: tenantID, UserID: userID, AmountFen: in.Body.Amount, PackageID: in.Body.PackageID,
+		Scene: scene, TenantID: tenantID, UserID: userID, AmountMicroUSD: in.Body.AmountMicroUSD, PackageID: in.Body.PackageID,
 	})
 	if err != nil {
 		return nil, toProblem(err)
@@ -182,14 +197,17 @@ func (h *paymentHandlers) createOrder(ctx context.Context, in *createTopupOrderI
 	out := &topupOrderOutput{}
 	out.Body.OrderID = order.OrderID
 	out.Body.CodeURL = order.CodeURL
-	out.Body.Amount = order.Amount
-	out.Body.CreditAmount = order.CreditAmount
-	out.Body.GrossCredits = order.GrossCreditAmount
-	out.Body.FeeCredits = order.FeeCreditAmount
+	out.Body.PaymentCurrency = order.PaymentCurrency
+	out.Body.PaymentAmountMinor = order.PaymentAmountMinor
+	out.Body.GrossAmountMicroUSD = order.GrossAmountMicroUSD
+	out.Body.FeeAmountMicroUSD = order.FeeAmountMicroUSD
+	out.Body.GiftAmountMicroUSD = order.GiftAmountMicroUSD
+	out.Body.CreditedAmountMicroUSD = order.CreditedAmountMicroUSD
 	out.Body.TopupMode = order.TopupMode
 	out.Body.PackageName = order.PackageName
 	out.Body.Status = order.Status
 	out.Body.ExpiresAt = millisFromTime(order.ExpiresAt)
+	out.Body.BalanceExpiresAt = millisFromTimePtr(order.BalanceExpiresAt)
 	return out, nil
 }
 
@@ -208,14 +226,17 @@ func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) 
 	out := &topupOrderStatusOutput{}
 	out.Body.OrderID = order.OrderID
 	out.Body.Status = order.Status
-	out.Body.Amount = order.Amount
-	out.Body.CreditAmount = order.CreditAmount
-	out.Body.GrossCredits = order.GrossCreditAmount
-	out.Body.FeeCredits = order.FeeCreditAmount
+	out.Body.PaymentCurrency = order.PaymentCurrency
+	out.Body.PaymentAmountMinor = order.PaymentAmountMinor
+	out.Body.GrossAmountMicroUSD = order.GrossAmountMicroUSD
+	out.Body.FeeAmountMicroUSD = order.FeeAmountMicroUSD
+	out.Body.GiftAmountMicroUSD = order.GiftAmountMicroUSD
+	out.Body.CreditedAmountMicroUSD = order.CreditedAmountMicroUSD
 	out.Body.TopupMode = order.TopupMode
 	out.Body.PackageName = order.PackageName
 	out.Body.TransactionID = order.TransactionID
 	out.Body.PaidAt = millisFromTimePtr(order.PaidAt)
+	out.Body.BalanceExpiresAt = millisFromTimePtr(order.BalanceExpiresAt)
 	return out, nil
 }
 

@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sync"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,10 +18,6 @@ import (
 	"xiaodou/dai/internal/ai/subscription"
 )
 
-// rateCacheTTL bounds how long a fetched credits_per_usd value is reused before
-// re-reading ai_settings.
-const rateCacheTTL = 30 * time.Second
-
 // PriceBookBiller resolves two independent ledgers from the same price-book
 // format. Tenant charge uses the winning upstream resource's book and
 // multiplier. User retail uses the tenant group's book and effective user
@@ -32,10 +26,6 @@ type PriceBookBiller struct {
 	svc  *billingcontrol.Service
 	q    *dbgen.Queries
 	pool *pgxpool.Pool
-
-	mu      sync.RWMutex
-	rate    float64
-	rateExp time.Time
 }
 
 func NewPriceBookBiller(svc *billingcontrol.Service, q *dbgen.Queries, pool *pgxpool.Pool) *PriceBookBiller {
@@ -88,8 +78,8 @@ func (b *PriceBookBiller) EnsureSellable(ctx context.Context, tenantID, modelCod
 	return nil
 }
 
-// PrepareBilling resolves price books, exchange rate, and all multiplier
-// overrides for one candidate before upstream execution.
+// PrepareBilling resolves price books and all multiplier overrides for one
+// candidate before upstream execution.
 func (b *PriceBookBiller) PrepareBilling(ctx context.Context, req *serving.Request, cand *domain.RouteCandidate) (domain.BillingSnapshot, error) {
 	subject := req.RuntimeSubject()
 	if subject == nil || subject.TenantID == "" || cand == nil {
@@ -97,10 +87,6 @@ func (b *PriceBookBiller) PrepareBilling(ctx context.Context, req *serving.Reque
 	}
 	if cand.RetailPriceBookID == "" || cand.AccountPriceBookID == "" || cand.ModelCode == "" {
 		return domain.BillingSnapshot{}, domain.ErrNotFound
-	}
-	rate, err := b.creditsPerUSDStrict(ctx)
-	if err != nil {
-		return domain.BillingSnapshot{}, fmt.Errorf("load credits per USD: %w", err)
 	}
 	retailEntry, err := b.svc.GetEntry(ctx, cand.RetailPriceBookID, cand.ModelCode, string(cand.CapabilityType))
 	if err != nil {
@@ -128,7 +114,6 @@ func (b *PriceBookBiller) PrepareBilling(ctx context.Context, req *serving.Reque
 		groupName = cand.GroupID
 	}
 	snapshot := domain.BillingSnapshot{
-		CreditsPerUSD:              rate,
 		RetailEntry:                retailEntry,
 		AccountEntry:               accountEntry,
 		GroupName:                  groupName,
@@ -187,11 +172,10 @@ func (b *PriceBookBiller) Calculate(_ context.Context, req *serving.Request) (do
 	if err != nil {
 		return domain.BillingResult{}, fmt.Errorf("select account price tier: %w", err)
 	}
-	accountBaseLine := costLineFromBreakdown(accountBreakdown, 1, snapshot.CreditsPerUSD)
+	accountBaseLine := costLineFromBreakdown(accountBreakdown, 1)
 	tenantChargeLine := costLineFromBreakdown(
 		accountBreakdown,
 		req.Candidate.TenantMultiplier,
-		snapshot.CreditsPerUSD,
 	)
 	result.CatalogBaseMicro = accountBaseLine.CostMicro
 	result.TenantPayableMicro = tenantChargeLine.CostMicro
@@ -199,10 +183,10 @@ func (b *PriceBookBiller) Calculate(_ context.Context, req *serving.Request) (do
 	if err != nil {
 		return domain.BillingResult{}, fmt.Errorf("select retail price tier: %w", err)
 	}
-	result.RetailBaseMicro = costLineFromBreakdown(retailBreakdown, 1, snapshot.CreditsPerUSD).CostMicro
+	result.RetailBaseMicro = costLineFromBreakdown(retailBreakdown, 1).CostMicro
 	var userLine *billingCostLine
 	if runtimeSubjectOwnerType(req.RuntimeSubject()) == domain.OwnerUser {
-		line := costLineFromBreakdown(retailBreakdown, snapshot.EffectiveUserMultiplier, snapshot.CreditsPerUSD)
+		line := costLineFromBreakdown(retailBreakdown, snapshot.EffectiveUserMultiplier)
 		result.UserPayableMicro = line.CostMicro
 		result.UserChargedMicro = line.CostMicro
 		if req.BillingSource == subscription.BillingSourceSubscription {
@@ -216,29 +200,6 @@ func (b *PriceBookBiller) Calculate(_ context.Context, req *serving.Request) (do
 	result.BillingGroupLabel = fmt.Sprintf("%s · %.4gx", result.GroupNameSnapshot, result.EffectiveUserMultiplier)
 	result.BillingBreakdownJSON = marshalBillingBreakdown(result, accountBaseLine, tenantChargeLine, userLine)
 	return result, nil
-}
-
-func (b *PriceBookBiller) creditsPerUSDStrict(ctx context.Context) (float64, error) {
-	b.mu.RLock()
-	if time.Now().Before(b.rateExp) && b.rate > 0 {
-		rate := b.rate
-		b.mu.RUnlock()
-		return rate, nil
-	}
-	b.mu.RUnlock()
-
-	rate, err := b.svc.GetCreditsPerUSD(ctx)
-	if err != nil {
-		return 0, err
-	}
-	if rate <= 0 {
-		return 0, errors.New("credits per USD must be positive")
-	}
-	b.mu.Lock()
-	b.rate = rate
-	b.rateExp = time.Now().Add(rateCacheTTL)
-	b.mu.Unlock()
-	return rate, nil
 }
 
 func floatPtr(value float64) *float64 { return &value }
@@ -294,9 +255,9 @@ type billingBreakdownSnapshot struct {
 	PriceLines       priceLineBreakdown `json:"price_lines,omitempty"`
 }
 
-// pricedMicro converts one usage + price-book entry into micro-credits for one
+// pricedMicro converts one usage + price-book entry into micro-USD for one
 // billing side and performs one final round-half-up operation.
-func pricedMicro(u domain.TokenUsage, e domain.PriceBookEntry, multiplier, creditsPerUSD float64) int64 {
+func pricedMicro(u domain.TokenUsage, e domain.PriceBookEntry, multiplier float64) int64 {
 	breakdown, err := priceBreakdown(u, e)
 	if err != nil {
 		return 0
@@ -304,7 +265,6 @@ func pricedMicro(u domain.TokenUsage, e domain.PriceBookEntry, multiplier, credi
 	return costLineFromBreakdown(
 		breakdown,
 		multiplier,
-		creditsPerUSD,
 	).CostMicro
 }
 
@@ -424,7 +384,7 @@ func priceBreakdownForCapability(u domain.TokenUsage, e domain.PriceBookEntry, c
 	}
 }
 
-func costLineFromBreakdown(b priceLineBreakdown, appliedMultiplier, creditsPerUSD float64) billingCostLine {
+func costLineFromBreakdown(b priceLineBreakdown, appliedMultiplier float64) billingCostLine {
 	if appliedMultiplier < 0 {
 		appliedMultiplier = 1
 	}
@@ -434,8 +394,7 @@ func costLineFromBreakdown(b priceLineBreakdown, appliedMultiplier, creditsPerUS
 	}
 	microExact := new(big.Rat).Set(totalExact)
 	microExact.Mul(microExact, domain.DecimalRat(appliedMultiplier))
-	microExact.Mul(microExact, domain.DecimalRat(creditsPerUSD))
-	microExact.Mul(microExact, new(big.Rat).SetInt64(domain.MicroCreditsPerCredit))
+	microExact.Mul(microExact, new(big.Rat).SetInt64(domain.MicroUSDPerUSD))
 	chargeUSD := b.TotalUSD * appliedMultiplier
 	return billingCostLine{
 		RawUSD:              b.TotalUSD,

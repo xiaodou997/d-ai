@@ -14,7 +14,7 @@ import { DsPagination, DsTag } from "@/shared/ui";
 import PortalPagePanel from "../../page/PortalPagePanel.vue";
 
 import {
-  formatPortalTaskCredits,
+  formatPortalTaskUSD,
   formatPortalTaskDuration,
   formatPortalTaskTime,
   portalTaskSourceLabel,
@@ -203,7 +203,7 @@ function formattedResult(task?: PortalTaskRecord): string {
             <el-descriptions-item label="开始时间">{{ formatPortalTaskTime(selectedTask.started_at) }}</el-descriptions-item>
             <el-descriptions-item label="完成时间">{{ formatPortalTaskTime(selectedTask.completed_at) }}</el-descriptions-item>
             <el-descriptions-item label="执行耗时">{{ formatPortalTaskDuration(selectedTask) }}</el-descriptions-item>
-            <el-descriptions-item label="消耗积分">{{ formatPortalTaskCredits(selectedTask.usage?.cost_credits) }}</el-descriptions-item>
+            <el-descriptions-item label="消费金额">{{ formatPortalTaskUSD(selectedTask.usage?.cost_usd) }}</el-descriptions-item>
           </el-descriptions>
 
           <el-alert

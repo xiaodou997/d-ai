@@ -16,8 +16,8 @@
       <template v-else-if="balance">
         <section class="account-drawer__hero" :class="{ 'is-debt': hasDebt }">
           <div>
-            <p>净积分余额</p>
-            <strong>{{ formatCredits(netCredits) }}<small>积分</small></strong>
+            <p>净 USD 余额</p>
+            <strong>{{ formatUSD(netBalance) }}</strong>
           </div>
           <DsTag :tone="hasDebt ? 'danger' : 'positive'">
             {{ hasDebt ? '存在未结透支' : '账户正常' }}
@@ -25,38 +25,37 @@
         </section>
 
         <dl class="account-drawer__metrics">
-          <div><dt>可用积分</dt><dd>{{ formatCredits(balance.availableCredits) }}</dd></div>
-          <div><dt>冻结积分</dt><dd>{{ formatCredits(balance.frozenCredits) }}</dd></div>
-          <div><dt>永久积分</dt><dd>{{ formatCredits(balance.permanentCredits) }}</dd></div>
-          <div><dt>限时积分</dt><dd>{{ formatCredits(balance.timedCredits) }}</dd></div>
-          <div><dt>剩余积分</dt><dd>{{ formatCredits(balance.remainingCredits) }}</dd></div>
-          <div><dt>累计消耗</dt><dd>{{ formatCredits(balance.usedCredits) }}</dd></div>
+          <div><dt>可用余额</dt><dd>{{ formatUSD(balance.availableUsd) }}</dd></div>
+          <div><dt>长期有效</dt><dd>{{ formatUSD(balance.permanentUsd) }}</dd></div>
+          <div><dt>限时余额</dt><dd>{{ formatUSD(balance.timedUsd) }}</dd></div>
+          <div><dt>剩余余额</dt><dd>{{ formatUSD(balance.remainingUsd) }}</dd></div>
+          <div><dt>累计消耗</dt><dd>{{ formatUSD(balance.usedUsd) }}</dd></div>
         </dl>
 
         <div v-if="hasDebt" class="account-drawer__debt">
           <span>未结透支</span>
-          <strong>-{{ formatMicroCredits(balance.outstandingDebtMicro) }} 积分</strong>
-          <p>后续充值会优先抵扣该透支，结清后剩余积分才会进入积分包。</p>
+          <strong>-{{ formatMicroUSD(balance.outstandingDebtMicroUsd) }}</strong>
+          <p>后续充值会优先抵扣该透支，结清后的剩余金额进入额度包。</p>
         </div>
 
         <section class="account-drawer__packages">
           <div class="account-drawer__section-head">
             <div>
-              <h3>有效积分包</h3>
-              <p>按到期时间排序，消费时优先扣减更早到期的积分。</p>
+              <h3>有效额度包</h3>
+              <p>按到期时间排序，扣费时优先扣减更早到期的额度。</p>
             </div>
             <el-button :icon="RefreshRight" circle text aria-label="刷新账户" @click="fetchBalance" />
           </div>
           <DsTable
             :frame="false"
             :columns="packageColumns"
-            :rows="balance.packages || []"
-            row-key="packageId"
-            empty-title="暂无有效积分包"
+            :rows="balance.balanceLots || []"
+            row-key="balanceLotId"
+            empty-title="暂无有效额度包"
           >
             <template #cell-balance="{ row }">
               <span class="account-drawer__package-balance">
-                {{ formatCredits(row.remainingCredits) }} / {{ formatCredits(row.totalCredits) }}
+                {{ formatUSD(row.remainingUsd) }} / {{ formatUSD(row.totalUsd) }}
               </span>
             </template>
             <template #cell-expiresAt="{ row }">
@@ -77,7 +76,6 @@ import { computed, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { platformAdminApi } from '@/api/platformAdmin'
 import type { AccountBalanceOutput } from '@/api/types/admin'
-import { formatMicroCredits, MICRO_CREDITS_PER_CREDIT } from '@/platform/ai/usage'
 import { DsDrawer, DsEmpty, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 
 const props = defineProps<{
@@ -94,24 +92,25 @@ const balance = ref<AccountBalanceOutput | null>(null)
 let requestVersion = 0
 
 const accountTypeLabel = computed(() => props.accountType === 1 ? '租户' : '用户')
-const debtCredits = computed(() => (balance.value?.outstandingDebtMicro || 0) / MICRO_CREDITS_PER_CREDIT)
-const netCredits = computed(() => (balance.value?.availableCredits || 0) - debtCredits.value)
-const hasDebt = computed(() => debtCredits.value > 0)
+const debtUsd = computed(() => (balance.value?.outstandingDebtMicroUsd || 0) / 1_000_000)
+const netBalance = computed(() => (balance.value?.availableUsd || 0) - debtUsd.value)
+const hasDebt = computed(() => debtUsd.value > 0)
 
 const packageColumns: DsTableColumn[] = [
-  { key: 'packageId', title: '积分包 ID', mono: true },
+  { key: 'balanceLotId', title: '额度包 ID', mono: true },
   { key: 'balance', title: '剩余 / 总量', align: 'right', width: 150 },
   { key: 'expiresAt', title: '有效期', width: 170 },
   { key: 'source', title: '来源', width: 110 }
 ]
 
-const formatCredits = (value?: number | null) => Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+const formatUSD = (value?: number | null) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+const formatMicroUSD = (value?: number | null) => formatUSD(Number(value || 0) / 1_000_000)
 const formatTime = (value: string | number) => new Date(value).toLocaleString('zh-CN', { hour12: false })
 const sourceLabel = (source: string) => ({
   ADMIN_RECHARGE: '平台充值',
   TENANT_RECHARGE: '租户充值',
   ONLINE_TOPUP: '在线充值',
-  CASH_PURCHASE: '余额购买',
+  USER_TOPUP_INCOME: '用户充值收入',
   REFUND: '退款返还'
 } as Record<string, string>)[source] || source || '其他'
 

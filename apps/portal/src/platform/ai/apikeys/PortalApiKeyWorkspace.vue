@@ -36,8 +36,6 @@ const props = defineProps<{
   deleteIcon?: unknown;
   copyIcon?: unknown;
   statusOptions: Array<{ label: string; value: string }>;
-  formatCredits: (value: number | null | undefined) => string;
-  formatWholeCredits: (value: number | null | undefined) => string;
   notifySuccess?: (message: string) => void;
   notifyError?: (message: string) => void;
   notifyWarning?: (message: string) => void;
@@ -76,6 +74,7 @@ const groups = shallowRef<PortalApiKeyGroupRecord[]>([]);
 const dialogVisible = shallowRef(false);
 const editingKeyId = shallowRef("");
 const saving = shallowRef(false);
+const formatMicroUSD = (value: number | null | undefined) => `$${(Number(value ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 const generatedKey = shallowRef("");
 const showKeyDialog = shallowRef(false);
 const revealingKeyId = shallowRef("");
@@ -398,12 +397,12 @@ if (tabActions) {
         </template>
         <template #cell-quota="{ row }">
           {{
-            row.quota_limit_credits !== null && row.quota_limit_credits !== undefined
-              ? formatWholeCredits(row.quota_limit_credits) + " 积分"
+            row.quota_limit_micro_usd !== null && row.quota_limit_micro_usd !== undefined
+              ? formatMicroUSD(row.quota_limit_micro_usd)
               : "无限制"
           }}
         </template>
-        <template #cell-used="{ row }">{{ formatCredits(row.quota_used_credits) }} 积分</template>
+        <template #cell-used="{ row }">{{ formatMicroUSD(row.quota_used_micro_usd) }}</template>
         <template #cell-group="{ row }">
           <span v-if="row.group_id" class="group-tag">
             <span class="group-tag__name">{{ groupName(row.group_id) }}</span>

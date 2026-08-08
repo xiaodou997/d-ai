@@ -1,6 +1,6 @@
 <!--
   终端用户 — 1:1 搬运自 v1/platform/platform-admin/src/views/User/UserList.vue。
-  保留搜索条件和账号启停，积分余额包含未结透支。
+  保留搜索条件和账号启停，USD 余额包含未结透支。
   仅适配：axios api → v4 强类型 client（platformAdminApi，列表字段 items）；跳转租户详情走新路由。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        筛选/表格/分页同卡）;数据接入 useListPage,请求参数与筛选语义保持不变。
@@ -85,9 +85,9 @@
             <span v-if="!isStatusControllable(row.status)" class="endusers-status-note">{{ row.statusDisplay }}</span>
           </div>
         </template>
-        <template #cell-credits="{ row }">
-          <span class="endusers-num endusers-credits" :class="{ 'endusers-credits--negative': Number(row.credits || 0) < 0 }">
-            {{ Number(row.credits || 0).toLocaleString() }} 积分
+        <template #cell-balance="{ row }">
+          <span class="endusers-num endusers-credits" :class="{ 'endusers-credits--negative': Number(row.balanceUsd || 0) < 0 }">
+            ${{ Number(row.balanceUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
           </span>
         </template>
         <template #cell-lastLoginTime="{ row }">
@@ -148,7 +148,7 @@ const columns: DsTableColumn[] = [
   { key: 'tenantName', title: '归属租户' },
   { key: 'email', title: '邮箱' },
   { key: 'status', title: '状态', width: 130 },
-  { key: 'credits', title: '积分余额', align: 'right' },
+  { key: 'balance', title: 'USD 余额', align: 'right' },
   { key: 'lastLoginTime', title: '最后登录' },
   { key: 'createdTime', title: '注册时间' },
   { key: 'actions', title: '操作', width: 80 }

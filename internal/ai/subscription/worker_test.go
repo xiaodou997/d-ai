@@ -45,7 +45,7 @@ func TestReconcileOrderUsesImmutableOrderSnapshotWithoutPlanLookup(t *testing.T)
 		UserID:                             "user-snapshot",
 		PlanID:                             "plan-may-now-be-edited-or-missing",
 		PlanNameSnapshot:                   "Snapshot plan",
-		PriceCredits:                       123,
+		PriceMicroUSD:                      123,
 		DurationDaysSnapshot:               30,
 		TotalLimitMicroSnapshot:            1_000_000,
 		GroupQuotaDebitMultipliersSnapshot: map[string]float64{"group-snapshot": 1.25},
@@ -59,7 +59,7 @@ func TestReconcileOrderUsesImmutableOrderSnapshotWithoutPlanLookup(t *testing.T)
 	if repo.finalizedOrder != order || repo.finalizeEvent != "auth-snapshot" {
 		t.Fatalf("finalize did not receive original order snapshot: order=%p event=%q", repo.finalizedOrder, repo.finalizeEvent)
 	}
-	if purchaser.request.IdempotencyKey != "ai-sub-SUB_snapshot" || purchaser.request.UserMicro != 1_230_000 {
+	if purchaser.request.IdempotencyKey != "ai-sub-SUB_snapshot" || purchaser.request.UserMicro != 123 {
 		t.Fatalf("unexpected debit replay: %+v", purchaser.request)
 	}
 }

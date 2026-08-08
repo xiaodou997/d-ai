@@ -1,7 +1,11 @@
 // Package domain contains pure business types with no external dependencies.
 package domain
 
-import "time"
+import (
+	"time"
+
+	"xiaodou/dai/internal/money"
+)
 
 // CapabilityType represents what an AI model can do.
 type CapabilityType string
@@ -416,33 +420,24 @@ func (u TokenUsage) TotalTokens() int {
 	return u.PromptTokens + u.CompletionTokens
 }
 
-// MicroCreditsPerCredit is the precision unit for internal billing math.
-// 1 积分 (credit, == 1 分人民币) = 10000 micro-credits.
-//
-// All in-memory price and amount fields in this package use micro-credit units
-// to avoid the "300 tokens of a cheap model rounds to 0 (or 1) credit" loss
-// that integer credit math suffered from. The billing domain accepts the same
-// microcredit unit directly; conversion is only needed for human-facing
-// display and the integer-priced subscription catalog.
-const MicroCreditsPerCredit int64 = 10000
+// MicroUSDPerUSD is the single precision unit used by pricing, balances,
+// reservations, settlements and quotas. All persisted billing amounts are
+// signed or unsigned int64 micro-USD; float64 is display-only.
+const MicroUSDPerUSD int64 = money.MicrosPerUSD
 
-// MaxWholeCredits is the largest whole-credit amount that can be represented
-// after conversion to the internal micro-credit unit.
-const MaxWholeCredits int64 = (1<<63 - 1) / MicroCreditsPerCredit
+// MaxWholeUSD is the largest whole-dollar amount that can be represented
+// after conversion to micro-USD.
+const MaxWholeUSD int64 = money.MaxWholeUSD
 
-// MicroToCreditsFloat returns the micro amount as fractional credits, suitable
-// for human-facing display (e.g. "0.03 积分").
-func MicroToCreditsFloat(micro int64) float64 {
-	return float64(micro) / float64(MicroCreditsPerCredit)
+// MicroToUSD returns a micro-USD amount as dollars for human-facing display.
+func MicroToUSD(micro int64) float64 {
+	return money.MicrosToUSD(micro)
 }
 
-// CreditsToMicro converts integer credits into micro-credits without allowing
-// malformed catalog values to wrap into a negative debit.
-func CreditsToMicro(credits int64) (int64, bool) {
-	if credits < 0 || credits > MaxWholeCredits {
-		return 0, false
-	}
-	return credits * MicroCreditsPerCredit, true
+// WholeUSDToMicro converts whole dollars into micro-USD without overflow.
+func WholeUSDToMicro(usd int64) (int64, bool) {
+	micro, err := money.WholeUSDToMicros(usd)
+	return micro, err == nil
 }
 
 // BillingResult uses microcredit precision end to end, including lease
@@ -469,7 +464,6 @@ type BillingResult struct {
 // candidate. It is resolved before the first upstream byte is sent; completion
 // applies actual usage without reading control-plane tables again.
 type BillingSnapshot struct {
-	CreditsPerUSD              float64
 	RetailEntry                PriceBookEntry
 	AccountEntry               PriceBookEntry
 	GroupName                  string

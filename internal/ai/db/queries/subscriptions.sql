@@ -35,7 +35,7 @@ RETURNING total_used_micro;
 
 -- name: CreatePlan :one
 INSERT INTO ai_sub_plans (
-  tenant_id, name, description, price_credits, duration_days,
+  tenant_id, name, description, price_micro_usd, duration_days,
   total_limit_micro, window_5h_limit_micro, window_7d_limit_micro,
   status, sort_order, sale_limit, created_by
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
@@ -103,7 +103,7 @@ ORDER BY version DESC;
 -- 租户改套餐。改动只影响新购（已售有快照）。
 -- name: UpdatePlanByTenant :execrows
 UPDATE ai_sub_plans SET
-  name=$3, description=$4, price_credits=$5, duration_days=$6,
+  name=$3, description=$4, price_micro_usd=$5, duration_days=$6,
   total_limit_micro=$7, window_5h_limit_micro=$8, window_7d_limit_micro=$9,
   sort_order=$10, sale_limit=$11, updated_at=now()
 WHERE id=$1 AND tenant_id=$2;
@@ -180,7 +180,7 @@ WHERE pg.plan_id = $1
 
 -- name: CreateOrder :one
 INSERT INTO ai_sub_orders (
-  order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits,
+  order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd,
   duration_days_snapshot, total_limit_micro_snapshot,
   window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot,
   group_quota_debit_multipliers_snapshot,

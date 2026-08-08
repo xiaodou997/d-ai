@@ -31,7 +31,7 @@ D-AI 在一个进程中提供身份、权限、计费和 AI 能力，Portal 按 
 ├── internal/
 │   ├── config/                 # 统一配置
 │   ├── auth/                   # JWT / 黑名单 / 会话
-│   ├── billing/                # 积分账本 / 租约 / 冻结确认
+│   ├── billing/                # USD 额度账本 / 直接扣费 / 透支管理
 │   ├── user/                   # 用户管理
 │   ├── tenant/                 # 租户管理
 │   ├── invite/                 # 邀请码

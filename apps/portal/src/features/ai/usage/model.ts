@@ -185,9 +185,9 @@ export const EMPTY_TENANT_USAGE_STATS: TenantUsageStats = {
   success_count: 0,
   failed_count: 0,
   total_tokens: 0,
-  total_catalog_base_credits: 0,
-  total_tenant_payable_credits: 0,
-  total_user_charged_credits: 0,
+  total_catalog_base_usd: 0,
+  total_tenant_payable_usd: 0,
+  total_user_charged_usd: 0,
   avg_latency_ms: 0,
   avg_request_total_ms: 0,
   avg_first_response_byte_ms: 0
@@ -245,7 +245,7 @@ export interface CustomerUsageStats {
   successRequests: number;
   failedRequests: number;
   totalTokens: number;
-  totalCredits: number;
+  totalAmountUSD: number;
   avgLatency: number;
 }
 
@@ -274,7 +274,7 @@ export function summarizeCustomerUsage(rows: CustomerUsageLog[]): CustomerUsageS
     successRequests,
     failedRequests: rows.length - successRequests,
     totalTokens: rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0),
-    totalCredits: rows.reduce((sum, row) => sum + Number(row.user_charged_credits || 0), 0),
+    totalAmountUSD: rows.reduce((sum, row) => sum + Number(row.user_charged_usd || 0), 0),
     avgLatency: latencyRows.length
       ? latencyRows.reduce((sum, row) => sum + Number(row.latency_ms || 0), 0) / latencyRows.length
       : 0

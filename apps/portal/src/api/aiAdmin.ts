@@ -8,7 +8,6 @@ import type {
   UpstreamAccountImportOutputBody,
   UpstreamAccountImportPreviewOutputBody,
   UpstreamAccountImportRequest,
-  CreditsPerUSDOutputBody,
   PriceBookDTO,
   PriceBookEntriesOutputBody,
   PriceBookEntryDTO,
@@ -287,25 +286,6 @@ export const aiAdminApi = {
       method: "POST",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/sync-common`,
       headers: apiHeaders,
-      baseUrl: apiBaseUrl
-    });
-  },
-
-  // ---- 全局汇率 ----
-  getCreditsPerUSD() {
-    return request()<CreditsPerUSDOutputBody>({
-      method: "GET",
-      path: "/api/v1/pricing/credits-per-usd",
-      headers: apiHeaders,
-      baseUrl: apiBaseUrl
-    });
-  },
-  setCreditsPerUSD(creditsPerUsd: number) {
-    return request()<CreditsPerUSDOutputBody>({
-      method: "PUT",
-      path: "/api/v1/pricing/credits-per-usd",
-      headers: apiHeaders,
-      body: { credits_per_usd: creditsPerUsd },
       baseUrl: apiBaseUrl
     });
   },

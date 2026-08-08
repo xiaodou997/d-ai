@@ -175,8 +175,8 @@ export const platformTenantApi = {
   // ===== 充值 / 撤销 =====
   rechargeUser(body: {
     userId: string;
-    paidAmount?: number;
-    creditAmount: number;
+    paidAmountMinor?: number;
+    amountMicroUsd: number;
     note?: string;
     expireTime?: number | null;
   }) {

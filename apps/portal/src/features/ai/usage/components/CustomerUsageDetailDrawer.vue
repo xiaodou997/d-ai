@@ -2,9 +2,9 @@
 import { computed } from "vue";
 import {
   UsageTag,
-  formatCredits,
   formatMs,
   formatTokenCount,
+  formatUSD,
   requestSourceLabel
 } from "@/platform/ai/usage";
 import { formatMultiplier } from "@/platform/ai/utils";
@@ -71,7 +71,7 @@ function serviceTierLabel(row: CustomerUsageLog) {
         <dl>
           <dt>计费单位</dt><dd>{{ row.billable_unit_type || "-" }}</dd>
           <dt>计费数量</dt><dd class="mono">{{ row.billable_units.toLocaleString("zh-CN") }}</dd>
-          <dt>实际扣款积分</dt><dd class="mono accent">{{ formatCredits(row.user_charged_credits) }}</dd>
+          <dt>实际扣款</dt><dd class="mono accent">{{ formatUSD(row.user_charged_usd) }}</dd>
           <dt>总延迟</dt><dd class="mono">{{ formatMs(row.latency_ms) }}</dd>
           <dt>首 Token 延迟</dt><dd class="mono">{{ formatMs(row.first_token_latency_ms) }}</dd>
         </dl>

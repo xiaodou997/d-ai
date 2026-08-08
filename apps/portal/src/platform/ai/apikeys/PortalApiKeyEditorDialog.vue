@@ -29,7 +29,7 @@ const emit = defineEmits<{
 
 const form = reactive({
   name: "",
-  quota_limit_credits: null as number | null,
+  quota_limit_usd: null as number | null,
   group_id: "",
   status: "active",
   limit_status: "disabled" as "active" | "disabled",
@@ -56,7 +56,7 @@ watch(
   ([visible]) => {
     if (!visible) return;
     form.name = props.apiKey?.name || "";
-    form.quota_limit_credits = props.apiKey?.quota_limit_credits ?? null;
+    form.quota_limit_usd = props.apiKey?.quota_limit_micro_usd == null ? null : props.apiKey.quota_limit_micro_usd / 1_000_000;
     form.group_id = props.apiKey?.group_id || "";
     form.status = props.apiKey?.status || "active";
     form.limit_status = (props.apiKey?.limit_policy?.status as "active" | "disabled") || "disabled";
@@ -69,7 +69,7 @@ function handleSubmit() {
   emit("submit", {
     name: form.name.trim(),
     group_id: form.group_id,
-    quota_limit_credits: form.quota_limit_credits === undefined ? null : form.quota_limit_credits,
+    quota_limit_micro_usd: form.quota_limit_usd == null ? null : Math.round(form.quota_limit_usd * 1_000_000),
     status: form.status,
     limit_policy: {
       concurrency_limit: form.concurrency_limit === undefined ? null : form.concurrency_limit,
@@ -107,15 +107,15 @@ function groupMultiplierLabel(group: PortalApiKeyGroupRecord) {
 
         <el-form-item label="配额限制">
           <el-input-number
-            v-model="form.quota_limit_credits"
+            v-model="form.quota_limit_usd"
             :min="0"
-            :precision="0"
-            :step="1"
+            :precision="6"
+            :step="0.01"
             :controls="false"
             placeholder="不填则无限制"
             class="w-full"
           />
-          <p class="field-hint">积分上限，超过后将无法使用</p>
+          <p class="field-hint">USD 消费上限，精确到 0.000001 USD，超过后将无法使用</p>
         </el-form-item>
       </section>
 

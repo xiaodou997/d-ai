@@ -63,16 +63,17 @@
           {{ topupModeText(row) }}
         </template>
         <template #cell-amount="{ row }">
-          <span class="orders-num">¥{{ (row.amount / 100).toFixed(2) }}</span>
+          <span class="orders-num">${{ (row.paymentAmountMinor / 100).toFixed(2) }}</span>
         </template>
-        <template #cell-grossCredits="{ row }">
-          <span class="orders-num">{{ (row.grossCredits || row.creditAmount || 0).toLocaleString() }}</span>
+        <template #cell-grossAmount="{ row }">
+          <span class="orders-num">{{ formatMicroUSD(row.grossAmountMicroUsd) }}</span>
         </template>
-        <template #cell-feeCredits="{ row }">
-          <span class="orders-num">{{ (row.feeCredits || 0).toLocaleString() }}</span>
+        <template #cell-feeAmount="{ row }">
+          <span class="orders-num">{{ formatMicroUSD(row.feeAmountMicroUsd) }}</span>
         </template>
-        <template #cell-creditAmount="{ row }">
-          <span class="orders-num">+{{ (row.creditAmount || 0).toLocaleString() }}</span>
+        <template #cell-giftAmount="{ row }"><span class="orders-num">{{ formatMicroUSD(row.giftAmountMicroUsd) }}</span></template>
+        <template #cell-creditedAmount="{ row }">
+          <span class="orders-num">+{{ formatMicroUSD(row.creditedAmountMicroUsd) }}</span>
         </template>
         <template #cell-status="{ row }">
           <DsTag :tone="statusTone(row.status)">{{ statusText(row.status) }}</DsTag>
@@ -123,10 +124,11 @@ const columns: DsTableColumn[] = [
   { key: "orderId", title: "订单号", width: 200, mono: true },
   { key: "scene", title: "充值对象", width: 110 },
   { key: "topupMode", title: "充值方式", width: 150 },
-  { key: "amount", title: "金额（元）", width: 120, align: "right" },
-  { key: "grossCredits", title: "原本积分", width: 120, align: "right" },
-  { key: "feeCredits", title: "扣除积分", width: 120, align: "right" },
-  { key: "creditAmount", title: "到账积分", width: 120, align: "right" },
+  { key: "amount", title: "支付金额", width: 120, align: "right" },
+  { key: "grossAmount", title: "充值金额", width: 130, align: "right" },
+  { key: "feeAmount", title: "手续费", width: 120, align: "right" },
+  { key: "giftAmount", title: "赠送", width: 120, align: "right" },
+  { key: "creditedAmount", title: "到账", width: 130, align: "right" },
   { key: "status", title: "状态", width: 120 },
   { key: "transactionId", title: "微信交易号", width: 180, mono: true },
   { key: "createdAt", title: "创建时间", width: 180 },
@@ -169,6 +171,7 @@ function formatTime(ts?: number | null) {
   if (!ts) return "—";
   return new Date(ts).toLocaleString("zh-CN");
 }
+function formatMicroUSD(value: number) { return `$${(Number(value ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 
 type StatusTone = "positive" | "warning" | "danger" | "info" | "neutral";
 

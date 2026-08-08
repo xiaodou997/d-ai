@@ -5,10 +5,11 @@ import type {
   ConsumptionTrendOutput,
   DashboardAlertsOutput,
   GlobalStatsRow,
-  PageCashAccountItem,
-  PageCashLedgerItem,
+  PageTenantBalanceItem,
+  PageBalanceLedgerItem,
   PagePaymentOrderItem,
   PageWithdrawalItem,
+  WithdrawalItem,
   PaymentGlobalSettings,
   PaymentOrderItem,
   ResourceStatItem,
@@ -269,8 +270,8 @@ export const platformAdminApi = {
     packageType: number;
     tenantId?: string;
     userId?: string;
-    paidAmount?: number;
-    creditAmount: number;
+    paidAmountMinor?: number;
+    amountMicroUsd: number;
     note?: string;
     paymentRef?: string;
     expireTime?: number | null;
@@ -287,11 +288,11 @@ export const platformAdminApi = {
     return request()<{
       status: string;
       orderId: string;
-      packageId: string;
-      reversedCredits: number;
-      originalCredits: number;
-      lostCredits: number;
-      packageStatus: string;
+      balanceLotId: string;
+      reversedAmountUsd: number;
+      originalAmountUsd: number;
+      lostAmountUsd: number;
+      balanceLotStatus: string;
     }>({
       method: "POST",
       path: `/api/v1/recharges/${encodeURIComponent(orderId)}/reverse`,
@@ -326,33 +327,6 @@ export const platformAdminApi = {
     return request()<{ status: string }>({
       method: "POST",
       path: "/api/v1/refunds",
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  manualConfirmEvent(eventId: string, body: { actualTenantCredits: number; actualUserCredits: number; note: string }) {
-    return request()<{ eventId: string }>({
-      method: "POST",
-      path: `/api/v1/billing/events/${encodeURIComponent(eventId)}/confirm`,
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  adminDismissEvent(eventId: string, body: { note: string }) {
-    return request()<{ eventId: string }>({
-      method: "POST",
-      path: `/api/v1/billing/events/${encodeURIComponent(eventId)}/dismiss`,
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  batchConfirmEvents(body: { eventIds: string[]; note: string }) {
-    return request()<BatchOpResult>({
-      method: "POST",
-      path: "/api/v1/billing/events/batch-confirm",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
@@ -449,15 +423,6 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  cancelPreAuth(eventId: string) {
-    return request()<{ status: string }>({
-      method: "POST",
-      path: `/api/v1/billing/events/${encodeURIComponent(eventId)}/cancel`,
-      headers: apiHeaders,
-      baseUrl: apiBaseUrl
-    });
-  },
-
   // ==================== 微信支付在线充值（管理端） ====================
 
   getPaymentSettings() {
@@ -511,19 +476,19 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  listCashAccounts(params: { page?: number; size?: number } = {}) {
-    return request()<PageCashAccountItem>({
+  listTenantBalances(params: { page?: number; size?: number } = {}) {
+    return request()<PageTenantBalanceItem>({
       method: "GET",
-      path: "/api/v1/admin/cash-accounts",
+      path: "/api/v1/admin/tenant-balances",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
     });
   },
-  listCashLedger(params: { tenantId: string; txnType?: string; page?: number; size?: number }) {
-    return request()<PageCashLedgerItem>({
+  listBalanceLedger(params: { tenantId: string; txnType?: string; page?: number; size?: number }) {
+    return request()<PageBalanceLedgerItem>({
       method: "GET",
-      path: "/api/v1/admin/cash-ledger",
+      path: "/api/v1/admin/balance-ledger",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
@@ -538,19 +503,18 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  reviewWithdrawal(id: string, body: { approve: boolean; note?: string }) {
-    return request()<{ message: string }>({
+  createWithdrawal(body: {
+    tenantId: string;
+    amountMicroUsd: number;
+    accountName?: string;
+    bankName?: string;
+    accountNo?: string;
+    note?: string;
+    paymentRef?: string;
+  }) {
+    return request()<WithdrawalItem>({
       method: "POST",
-      path: `/api/v1/admin/withdrawals/${encodeURIComponent(id)}/review`,
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  settleWithdrawal(id: string, body: { paymentRef: string }) {
-    return request()<{ message: string }>({
-      method: "POST",
-      path: `/api/v1/admin/withdrawals/${encodeURIComponent(id)}/settle`,
+      path: "/api/v1/admin/withdrawals",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl

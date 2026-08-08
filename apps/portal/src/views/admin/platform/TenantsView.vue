@@ -87,9 +87,9 @@
             />
           </el-tooltip>
         </template>
-        <template #cell-credits="{ row }">
+        <template #cell-balance="{ row }">
           <span class="tenants-num tenants-credits" :class="{ 'tenants-credits--danger': row.status === 3 }">
-            {{ (row.credits || 0).toLocaleString() }} 积分
+            ${{ (row.balanceUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
           </span>
         </template>
         <template #cell-userCount="{ row }">
@@ -136,7 +136,7 @@
       target-type-label="租户"
       :target-name="rechargeTarget?.tenantName || ''"
       :target-identity="rechargeTarget ? `租户 ID ${rechargeTarget.tenantId}` : ''"
-      :target-credits="rechargeTarget?.credits ?? 0"
+      :target-balance-usd="rechargeTarget?.balanceUsd ?? 0"
       :submitting="rechargeSubmitting"
       @submit="submitTenantRecharge"
     />
@@ -215,7 +215,7 @@ const columns: DsTableColumn[] = [
   { key: 'contactPerson', title: '联系人' },
   { key: 'contactEmail', title: '联系邮箱' },
   { key: 'status', title: '状态', width: 100 },
-  { key: 'credits', title: '平台积分', align: 'right' },
+  { key: 'balance', title: 'USD 余额', align: 'right' },
   { key: 'userCount', title: '用户数', align: 'center' },
   { key: 'createdTime', title: '入驻时间' },
   { key: 'actions', title: '操作', width: 260 }
@@ -323,7 +323,7 @@ const submitTenantRecharge = async (payload: RechargeFormPayload) => {
       tenantId: rechargeTarget.value.tenantId,
       ...payload
     })
-    ElMessage.success(`已成功为租户「${rechargeTarget.value.tenantName}」充值 ${payload.creditAmount.toLocaleString()} 积分`)
+    ElMessage.success(`已成功为租户「${rechargeTarget.value.tenantName}」充值 $${(payload.amountMicroUsd / 1_000_000).toLocaleString()}`)
     rechargeDialogVisible.value = false
     void refresh()
   } catch (error: any) {

@@ -6,22 +6,22 @@ import (
 	"xiaodou/dai/internal/domain"
 )
 
-// PackageType 积分包类型
+// PackageType identifies the owner of a persisted USD balance lot.
 const (
 	PackageTypeTenant = "tenant"
 	PackageTypeUser   = "user"
 )
 
-// PackageSource 积分包来源
+// PackageSource identifies how a USD balance lot was funded.
 const (
-	PackageSourceAdminRecharge  = "ADMIN_RECHARGE"
-	PackageSourceTenantRecharge = "TENANT_RECHARGE"
-	PackageSourceRefund         = "REFUND"
-	PackageSourceOnlineTopup    = "ONLINE_TOPUP"
-	PackageSourceCashPurchase   = "CASH_PURCHASE"
+	PackageSourceAdminRecharge   = "ADMIN_RECHARGE"
+	PackageSourceTenantRecharge  = "TENANT_RECHARGE"
+	PackageSourceRefund          = "REFUND"
+	PackageSourceOnlineTopup     = "ONLINE_TOPUP"
+	PackageSourceUserTopupIncome = "USER_TOPUP_INCOME"
 )
 
-// PackageStatus 积分包状态
+// PackageStatus is the lifecycle of a USD balance lot.
 const (
 	PackageStatusAvailable = "available"
 	PackageStatusExpired   = "expired"
@@ -50,14 +50,14 @@ const (
 	OrderTypeTenantToUser      = "tenant_to_user"
 	OrderTypeOnlineUserTopup   = "online_user_topup"   // 用户在线充值（微信支付）
 	OrderTypeOnlineTenantTopup = "online_tenant_topup" // 租户在线充值（微信支付）
-	OrderTypeCashPurchase      = "cash_purchase"       // 租户现金余额购积分（内部划转）
+	OrderTypeUserTopupIncome   = "user_topup_income"   // 终端用户充值产生的租户 USD 收入
 )
 
 // OnlineOrderTypes 在线充值相关的 order_type（不可撤销、需纳入统计口径）。
-var OnlineOrderTypes = []string{OrderTypeOnlineUserTopup, OrderTypeOnlineTenantTopup, OrderTypeCashPurchase}
+var OnlineOrderTypes = []string{OrderTypeOnlineUserTopup, OrderTypeOnlineTenantTopup, OrderTypeUserTopupIncome}
 
 // TenantRechargeOrderTypes 归入"租户充值"统计口径的 order_type。
-var TenantRechargeOrderTypes = []string{OrderTypePlatformToTenant, OrderTypeOnlineTenantTopup, OrderTypeCashPurchase}
+var TenantRechargeOrderTypes = []string{OrderTypePlatformToTenant, OrderTypeOnlineTenantTopup, OrderTypeUserTopupIncome}
 
 // UserRechargeOrderTypes 归入"用户充值"统计口径的 order_type。
 var UserRechargeOrderTypes = []string{OrderTypeTenantToUser, OrderTypeOnlineUserTopup}
@@ -79,8 +79,8 @@ type BillingEvent struct {
 	Description    string
 	EventType      string  // charge / refund
 	RefundOf       *string // refund 时指向原始 EventID
-	TenantCredits  *int64  // 租户积分（pending 阶段为冻结额，succeeded 后为实际扣减额）
-	UserCredits    *int64  // 用户积分（同上）
+	TenantCredits  *int64  // legacy DB mapping; value is tenant micro-USD
+	UserCredits    *int64  // legacy DB mapping; value is user micro-USD
 	Status         string  // pending / succeeded / cancelled / released / refunded
 	Metadata       string
 	TerminalNote   string

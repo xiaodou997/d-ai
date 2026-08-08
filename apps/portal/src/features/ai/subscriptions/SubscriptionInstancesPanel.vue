@@ -6,14 +6,13 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from "vue";
 import { Refresh, Search } from "@element-plus/icons-vue";
-import { formatCredits } from "@/platform/ai/usage";
 import { EMPTY_IDENTITY_INCLUDED, normalizeIdentityIncluded, PortalIdentityCell, resolveIdentityUserLabel, resolveIdentityUserMeta, type IdentityIncluded } from "@/platform/ai/identity";
 import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import { aiTenantApi } from "@/api/aiTenant";
 import type { TenantSubscription } from "@/api/types/aiTenant";
 
-const MICRO_PER_CREDIT = 10_000;
+const MICRO_USD = 1_000_000;
 const userId = shallowRef("");
 const statusFilter = shallowRef("");
 const subscriptions = shallowRef<TenantSubscription[]>([]);
@@ -41,7 +40,7 @@ function statusTone(status: string): "positive" | "warning" | "neutral" {
   const map: Record<string, "positive" | "warning" | "neutral"> = { active: "positive", pending: "warning", expired: "neutral", cancelled: "neutral" };
   return map[status] ?? "neutral";
 }
-function micro(value?: number | null) { return value == null ? "不限" : `${formatCredits(value / MICRO_PER_CREDIT)} 积分`; }
+function micro(value?: number | null) { return value == null ? "不限" : `$${(value / MICRO_USD).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 function fmtTime(value?: string | null) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-"; }
 
 async function fetchSubscriptions() {
@@ -92,7 +91,7 @@ onMounted(() => void fetchSubscriptions());
       <template #cell-status="{ row }">
         <DsTag :tone="statusTone(row.status)">{{ statusLabel(row.status) }}</DsTag>
       </template>
-      <template #cell-quota="{ row }">{{ micro(row.total_used_micro) }} / {{ micro(row.total_limit_micro) }}</template>
+      <template #cell-quota="{ row }">{{ micro(row.total_used_micro_usd) }} / {{ micro(row.total_limit_micro_usd) }}</template>
       <template #cell-activated_at="{ row }">{{ fmtTime(row.activated_at) }}</template>
       <template #cell-expires_at="{ row }">{{ fmtTime(row.expires_at) }}</template>
     </DsTable>

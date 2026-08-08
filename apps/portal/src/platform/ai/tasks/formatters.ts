@@ -68,9 +68,9 @@ export function formatPortalTaskDuration(task: PortalTaskRecord): string {
   return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
 }
 
-export function formatPortalTaskCredits(value?: number): string {
+export function formatPortalTaskUSD(value?: number): string {
   if (value === undefined || value === null) return "-";
-  return Number.isInteger(value) ? String(value) : value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 export function shortPortalTaskID(value: string): string {

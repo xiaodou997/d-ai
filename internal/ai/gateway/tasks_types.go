@@ -35,7 +35,7 @@ type taskErrorResponse struct {
 }
 
 type taskUsageResponse struct {
-	CostCredits float64 `json:"cost_credits"`
+	CostUSD float64 `json:"cost_usd"`
 }
 
 type taskGetResponse struct {
@@ -73,7 +73,7 @@ func taskGetResponseFromView(view asynctask.TaskView, wireType string) taskGetRe
 		response.Error = &taskErrorResponse{Code: view.ErrorCode, Message: view.ErrorMessage}
 	}
 	if view.Status == domain.TaskCompleted || view.Status == domain.TaskFailed || view.Status == domain.TaskCancelled {
-		response.Usage = &taskUsageResponse{CostCredits: domain.MicroToCreditsFloat(view.CallerCharge)}
+		response.Usage = &taskUsageResponse{CostUSD: domain.MicroToUSD(view.CallerCharge)}
 	}
 	return response
 }

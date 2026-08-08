@@ -10,7 +10,7 @@ import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
 
 import { PortalMetricGrid, PortalPagePanel } from "@/platform";
-import { formatCredits, formatMs, formatTokenCount } from "@/platform/ai/usage";
+import { formatMs, formatTokenCount, formatUSD } from "@/platform/ai/usage";
 
 import { customerUsageApi } from "./api";
 import CustomerUsageDetailDrawer from "./components/CustomerUsageDetailDrawer.vue";
@@ -69,7 +69,7 @@ const {
           <article class="usage-metric"><span>请求数</span><strong>{{ stats.totalRequests.toLocaleString("zh-CN") }}</strong><small>{{ stats.successRequests }} 成功 / {{ stats.failedRequests }} 异常</small></article>
           <article class="usage-metric"><span>成功率</span><strong :class="successRate === '-' || parseFloat(successRate) >= 95 ? 'is-good' : 'is-warn'">{{ successRate }}</strong><small>基于当前列表</small></article>
           <article class="usage-metric"><span>Token</span><strong>{{ formatTokenCount(stats.totalTokens) }}</strong><small>输入、输出和缓存合计</small></article>
-          <article class="usage-metric"><span>消耗积分</span><strong class="is-accent">{{ formatCredits(stats.totalCredits) }}</strong><small>均延 {{ formatMs(Math.round(stats.avgLatency)) }}</small></article>
+          <article class="usage-metric"><span>消费金额</span><strong class="is-accent">{{ formatUSD(stats.totalAmountUSD) }}</strong><small>均延 {{ formatMs(Math.round(stats.avgLatency)) }}</small></article>
         </PortalMetricGrid>
       </div>
 

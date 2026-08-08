@@ -27,10 +27,10 @@ function model(modelCode: string, capabilityType = "chat"): TenantAiGroupEffecti
     model_code: modelCode,
     capability_type: capabilityType,
     token_price_tiers: [],
-    image_default_price_credits: 0,
-    video_default_price_credits: 0,
-    audio_tts_per_1m_chars_credits: 0,
-    audio_stt_per_minute_credits: 0
+    image_default_price_usd: 0,
+    video_default_price_usd: 0,
+    audio_tts_per_1m_chars_usd: 0,
+    audio_stt_per_minute_usd: 0
   };
 }
 
@@ -39,7 +39,6 @@ function response(items: TenantAiGroupEffectivePrice[]): TenantAiGroupEffectiveP
     group_id: "group-1",
     retail_price_book_id: "book-1",
     effective_user_multiplier: 1,
-    credits_per_usd: 100,
     items,
     total: items.length
   };

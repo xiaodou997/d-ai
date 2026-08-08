@@ -5,8 +5,7 @@ package transport
 // subscriptions_self.go (endUserAuth) and subscriptions_tenant.go
 // (tenantUserAuth). See docs/ai-subscription-design.md §7.
 //
-// 额度单位一律为微积分（micro，1 积分 = 10000 微积分），API 直接透出 *_micro，前端
-// 除以 10000 展示为积分（写入无精度损失）；价格为整数积分。
+// 价格和额度统一使用 micro-USD，API 字段显式使用 *_micro_usd。
 
 import (
 	"context"
@@ -42,7 +41,7 @@ func mapSubscriptionError(err error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, subscription.ErrInsufficientBalance):
-		return errInsufficientBalance.WithDetail("用户积分不足，无法购买该套餐").WithCause(err)
+		return errInsufficientBalance.WithDetail("用户 USD 余额不足，无法购买该套餐").WithCause(err)
 	case errors.Is(err, subscription.ErrQueueFull):
 		return httpx.ErrConflict.WithDetail("订阅排队已满（最多 1 个生效 + 2 个排队）").WithCause(err)
 	case errors.Is(err, subscription.ErrPlanAlreadyQueued):
@@ -67,18 +66,18 @@ func mapSubscriptionError(err error) error {
 		return httpx.ErrValidation.
 			WithDetail("售价或额度超出支持范围").
 			WithFields(
-				httpx.FieldError{Field: "price_credits", Message: "must be between 1 and 922337203685477"},
-				httpx.FieldError{Field: "total_limit_micro", Message: "must be greater than 0"},
-				httpx.FieldError{Field: "window_5h_limit_micro", Message: "must be positive and no greater than total_limit_micro"},
-				httpx.FieldError{Field: "window_7d_limit_micro", Message: "must be positive and no greater than total_limit_micro"},
+				httpx.FieldError{Field: "price_usd", Message: "must be between 1 and 922337203685477"},
+				httpx.FieldError{Field: "total_limit_micro_usd", Message: "must be greater than 0"},
+				httpx.FieldError{Field: "window_5h_limit_micro_usd", Message: "must be positive and no greater than total_limit_micro_usd"},
+				httpx.FieldError{Field: "window_7d_limit_micro_usd", Message: "must be positive and no greater than total_limit_micro_usd"},
 			).
 			WithCause(err)
 	case errors.Is(err, subscription.ErrPlanWindow7dInvalid):
 		return httpx.ErrValidation.
 			WithDetail("7 天窗口额度仅适用于 7 天及以上套餐").
 			WithFields(
-				httpx.FieldError{Field: "duration_days", Message: "must be at least 7 when window_7d_limit_micro is set"},
-				httpx.FieldError{Field: "window_7d_limit_micro", Message: "only valid when duration_days >= 7"},
+				httpx.FieldError{Field: "duration_days", Message: "must be at least 7 when window_7d_limit_micro_usd is set"},
+				httpx.FieldError{Field: "window_7d_limit_micro_usd", Message: "only valid when duration_days >= 7"},
 			).
 			WithCause(err)
 	case errors.Is(err, subscription.ErrPlanNeedsGroups):
@@ -223,11 +222,11 @@ type subPlanDTO struct {
 	TenantID           string               `json:"tenant_id"`
 	Name               string               `json:"name"`
 	Description        string               `json:"description"`
-	PriceCredits       int64                `json:"price_credits"`
+	PriceMicroUSD      int64                `json:"price_micro_usd"`
 	DurationDays       int32                `json:"duration_days"`
-	TotalLimitMicro    int64                `json:"total_limit_micro"`
-	Window5hLimitMicro *int64               `json:"window_5h_limit_micro,omitempty"`
-	Window7dLimitMicro *int64               `json:"window_7d_limit_micro,omitempty"`
+	TotalLimitMicro    int64                `json:"total_limit_micro_usd"`
+	Window5hLimitMicro *int64               `json:"window_5h_limit_micro_usd,omitempty"`
+	Window7dLimitMicro *int64               `json:"window_7d_limit_micro_usd,omitempty"`
 	Status             string               `json:"status"`
 	SortOrder          int32                `json:"sort_order"`
 	SaleLimit          *int32               `json:"sale_limit,omitempty"`
@@ -251,7 +250,7 @@ func subPlanToDTO(p subscription.Plan) subPlanDTO {
 		TenantID:           p.TenantID,
 		Name:               p.Name,
 		Description:        p.Description,
-		PriceCredits:       p.PriceCredits,
+		PriceMicroUSD:      p.PriceMicroUSD,
 		DurationDays:       p.DurationDays,
 		TotalLimitMicro:    p.TotalLimitMicro,
 		Window5hLimitMicro: p.Window5hLimitMicro,
@@ -275,11 +274,11 @@ type subPublicPlanDTO struct {
 	ID                  string                     `json:"id"`
 	Name                string                     `json:"name"`
 	Description         string                     `json:"description"`
-	PriceCredits        int64                      `json:"price_credits"`
+	PriceMicroUSD       int64                      `json:"price_micro_usd"`
 	DurationDays        int32                      `json:"duration_days"`
-	TotalLimitMicro     int64                      `json:"total_limit_micro"`
-	Window5hLimitMicro  *int64                     `json:"window_5h_limit_micro,omitempty"`
-	Window7dLimitMicro  *int64                     `json:"window_7d_limit_micro,omitempty"`
+	TotalLimitMicro     int64                      `json:"total_limit_micro_usd"`
+	Window5hLimitMicro  *int64                     `json:"window_5h_limit_micro_usd,omitempty"`
+	Window7dLimitMicro  *int64                     `json:"window_7d_limit_micro_usd,omitempty"`
 	SaleLimit           *int32                     `json:"sale_limit,omitempty"`
 	SoldCount           int32                      `json:"sold_count"`
 	AvailableCount      *int32                     `json:"available_count,omitempty"`
@@ -293,7 +292,7 @@ func subPlanToPublicDTO(p subscription.Plan) subPublicPlanDTO {
 	private := subPlanToDTO(p)
 	return subPublicPlanDTO{
 		ID: p.ID, Name: p.Name, Description: p.Description,
-		PriceCredits: p.PriceCredits, DurationDays: p.DurationDays,
+		PriceMicroUSD: p.PriceMicroUSD, DurationDays: p.DurationDays,
 		TotalLimitMicro: p.TotalLimitMicro, Window5hLimitMicro: p.Window5hLimitMicro,
 		Window7dLimitMicro: p.Window7dLimitMicro, Groups: private.Groups,
 		SaleLimit: p.SaleLimit, SoldCount: p.SoldCount,
@@ -321,10 +320,10 @@ func planSoldOut(p subscription.Plan) bool {
 
 // subWindowDTO 单个时间窗的展示态（后端用服务器时间算好余量与重置时刻，避免前端时钟误差）。
 type subWindowDTO struct {
-	LimitMicro     *int64     `json:"limit_micro,omitempty"`     // nil = 该窗口不限
-	UsedMicro      int64      `json:"used_micro"`                // 当前窗口已用（翻转后展示 0）
-	RemainingMicro *int64     `json:"remaining_micro,omitempty"` // nil = 不限
-	ResetAt        *time.Time `json:"reset_at,omitempty"`        // 当前窗口重置时刻；未开窗/不限为空
+	LimitMicro     *int64     `json:"limit_micro_usd,omitempty"`     // nil = 该窗口不限
+	UsedMicro      int64      `json:"used_micro_usd"`                // 当前窗口已用（翻转后展示 0）
+	RemainingMicro *int64     `json:"remaining_micro_usd,omitempty"` // nil = 不限
+	ResetAt        *time.Time `json:"reset_at,omitempty"`            // 当前窗口重置时刻；未开窗/不限为空
 }
 
 // computeWindow 用服务器时间算某窗口的展示态，与 service.windowHasRemaining 同源逻辑。
@@ -363,9 +362,9 @@ type subscriptionDTO struct {
 	Status          string           `json:"status"`
 	ActivatedAt     *time.Time       `json:"activated_at,omitempty"`
 	ExpiresAt       *time.Time       `json:"expires_at,omitempty"`
-	TotalLimitMicro int64            `json:"total_limit_micro"`
-	TotalUsedMicro  int64            `json:"total_used_micro"`
-	TotalRemaining  int64            `json:"total_remaining_micro"`
+	TotalLimitMicro int64            `json:"total_limit_micro_usd"`
+	TotalUsedMicro  int64            `json:"total_used_micro_usd"`
+	TotalRemaining  int64            `json:"total_remaining_micro_usd"`
 	Window5h        subWindowDTO     `json:"window_5h"`
 	Window7d        subWindowDTO     `json:"window_7d"`
 	Groups          []subSubGroupDTO `json:"groups"`
@@ -444,7 +443,7 @@ type subOrderDTO struct {
 	UserID                string               `json:"user_id"`
 	PlanID                string               `json:"plan_id"`
 	PlanName              string               `json:"plan_name"`
-	PriceCredits          int64                `json:"price_credits"`
+	PriceMicroUSD         int64                `json:"price_micro_usd"`
 	Status                string               `json:"status"`
 	BillingEventID        string               `json:"billing_event_id,omitempty"`
 	SubscriptionID        string               `json:"subscription_id,omitempty"`
@@ -464,7 +463,7 @@ func subOrderToDTO(o subscription.Order) subOrderDTO {
 		UserID:                o.UserID,
 		PlanID:                o.PlanID,
 		PlanName:              o.PlanNameSnapshot,
-		PriceCredits:          o.PriceCredits,
+		PriceMicroUSD:         o.PriceMicroUSD,
 		Status:                o.Status,
 		BillingEventID:        o.BillingEventID,
 		SubscriptionID:        o.SubscriptionID,

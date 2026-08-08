@@ -1,4 +1,4 @@
-<!-- 单条退款弹窗：全额退回该交易扣除的积分，不可撤销 -->
+<!-- 单条退款弹窗：全额退回该交易扣除的 USD 金额，不可撤销 -->
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -42,7 +42,7 @@ const submit = async () => {
 <template>
   <el-dialog v-model="visible" title="确认退款" width="480" :close-on-click-modal="false" :append-to-body="true">
     <div class="space-y-4">
-      <TransactionAlert tone="danger">⚠ 此操作将全额退回该交易扣除的积分，不可撤销。</TransactionAlert>
+      <TransactionAlert tone="danger">此操作将全额退回该交易扣除的 USD 金额，不可撤销。</TransactionAlert>
       <EventSummary :row="row" />
       <el-form :model="form" label-position="top">
         <el-form-item label="退款原因" required>

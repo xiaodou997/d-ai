@@ -1,5 +1,5 @@
 <!--
-  数据大盘指标区:可用余额/到账金额/用户消费/活跃用户四张指标卡 + 可用积分条。
+  数据大盘指标区:可用余额/到账金额/用户消费/活跃用户四张指标卡 + 可用余额条。
   颜色全部走 var(--ds-*) token;指标卡复用 TenantWorkbenchMetricCard(图标+色调语义,
   超出 DsMetricCard 的 label/value/hint 能力,故不换),数据与 props 不变。
 -->
@@ -14,11 +14,9 @@ import {
 } from "lucide-vue-next";
 
 import TenantWorkbenchMetricCard from "@/components/workbench/TenantWorkbenchMetricCard.vue";
-import type { TenantCashAccount } from "@/api/types/tenant";
 import type { AccountBalance, TenantAnalyticsOverview } from "@/api/types/platformTenant";
 
 const props = defineProps<{
-  cashAccount: TenantCashAccount;
   serviceBalance: AccountBalance;
   overview: TenantAnalyticsOverview;
   rangeLabel: string;
@@ -33,7 +31,7 @@ const emit = defineEmits<{
 
 const currencyFormatter = new Intl.NumberFormat("zh-CN", {
   style: "currency",
-  currency: "CNY",
+  currency: "USD",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 });
@@ -44,24 +42,24 @@ const metrics = computed(() => [
   {
     key: "cash-balance",
     label: "可用余额",
-    value: formatCents(props.cashAccount.available),
-    hint: `用户充值到账，提现中 ${formatCents(props.cashAccount.frozen)}`,
+    value: formatUSD(props.serviceBalance.availableUsd),
+    hint: "统一额度账户，支持透支",
     icon: WalletCards,
     tone: "emerald" as const
   },
   {
     key: "settlement-income",
     label: `${props.rangeLabel}到账金额`,
-    value: formatCents(props.overview.settlementIncomeCents),
+    value: formatMicroUSD(props.overview.settlementIncomeMicroUsd),
     hint: "用户在线充值扣除手续费后的实际入账",
     icon: BadgeDollarSign,
     tone: "blue" as const
   },
   {
     key: "user-consumption",
-    label: `${props.rangeLabel}用户消费积分`,
-    value: numberFormatter.format(props.overview.userDeductionCredits ?? 0),
-    hint: "按成功消费记录汇总，不等同于现金收入",
+    label: `${props.rangeLabel}用户消费`,
+    value: formatUSD(props.overview.userDeductionUsd),
+    hint: "按成功 AI 请求使用记录汇总",
     icon: ShoppingBag,
     tone: "amber" as const
   },
@@ -76,12 +74,11 @@ const metrics = computed(() => [
 ]);
 
 const serviceBalanceValue = computed(() =>
-  props.serviceBalanceLoading ? "—" : numberFormatter.format(props.serviceBalance.availableCredits ?? 0)
+  props.serviceBalanceLoading ? "—" : formatUSD(props.serviceBalance.availableUsd)
 );
 
-function formatCents(cents: number) {
-  return currencyFormatter.format(Number(cents ?? 0) / 100);
-}
+function formatUSD(amount: number) { return currencyFormatter.format(Number(amount ?? 0)); }
+function formatMicroUSD(amount: number) { return formatUSD(Number(amount ?? 0) / 1_000_000); }
 </script>
 
 <template>
@@ -114,12 +111,12 @@ function formatCents(cents: number) {
         <Landmark :size="18" :stroke-width="1.9" />
       </div>
       <div class="service-balance__copy">
-        <span class="service-balance__label">可用积分</span>
-        <span class="service-balance__hint">使用平台服务时会扣除</span>
+        <span class="service-balance__label">可用 USD 余额</span>
+        <span class="service-balance__hint">服务消费与管理员提现扣减共用</span>
       </div>
-      <strong class="service-balance__value">{{ serviceBalanceValue }} 积分</strong>
+      <strong class="service-balance__value">{{ serviceBalanceValue }}</strong>
       <button class="service-balance__action" type="button" @click="emit('topUpServiceBalance')">
-        购买积分
+        充值
       </button>
     </div>
   </section>

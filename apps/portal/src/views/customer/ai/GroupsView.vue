@@ -43,7 +43,7 @@ const openApiKeys = () => {
     :api="pricingApi"
     :icon="Layers"
     :breadcrumbs="[{ label: '智能服务' }, { label: '我的服务' }, { label: '模型定价' }]"
-    description="按分组查看当前可用模型及实际会扣除的积分价格。"
+    description="按分组查看当前可用模型及实际 USD 计费价格。"
     :capability-options="capabilityOptions"
     :notify-error="notifyError"
     v-bind="portalVisibleGroupsWorkspaceIconProps"

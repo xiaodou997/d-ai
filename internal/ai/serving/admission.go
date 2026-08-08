@@ -28,9 +28,6 @@ import (
 // Deliberately excluded:
 //
 //   - AuthNStep: the caller is already authenticated; the subject is the input.
-//   - BillingAdmissionStep: the execution pipeline takes a durable credit-lease
-//     admission. A task that
-//     may sit in the queue for minutes must not hold one across the wait.
 //   - RateLimitStep: rate limits belong to the moment of execution, not the
 //     moment of submission, and it holds a concurrency lease.
 //   - ExecuteStep: it would do the work.

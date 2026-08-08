@@ -10,8 +10,8 @@ export interface AiApiKey {
   group_id: string;
   last_four?: string | null;
   name: string;
-  quota_limit_credits?: number | null;
-  quota_used_credits: number;
+  quota_limit_micro_usd?: number | null;
+  quota_used_micro_usd: number;
   status: string; // active | disabled
   expires_at?: number | null; // Unix 毫秒
   last_used_at?: number | null;
@@ -29,7 +29,7 @@ export interface AiApiKeysOutput {
 export interface AiApiKeyWriteRequest {
   name: string;
   group_id: string;
-  quota_limit_credits?: number | null;
+  quota_limit_micro_usd?: number | null;
   status?: string;
   expires_at?: number | null;
   limit_policy?: AiLimitPolicyWriteRequest | null;
@@ -61,26 +61,25 @@ export interface AiGroupEffectivePrice {
   model_code: string;
   capability_type: string;
   token_price_tiers: AiEffectiveTokenPriceTier[];
-  image_default_price_credits: number;
-  video_default_price_credits: number;
+  image_default_price_usd: number;
+  video_default_price_usd: number;
   image_prices?: Array<{ resolution: string; price: number }>;
   video_prices?: Array<{ resolution: string; price: number }>;
-  audio_tts_per_1m_chars_credits: number;
-  audio_stt_per_minute_credits: number;
+  audio_tts_per_1m_chars_usd: number;
+  audio_stt_per_minute_usd: number;
 }
 
 export interface AiEffectiveTokenPriceTier {
   up_to_input_tokens: number | null;
-  input_per_1m_credits: number;
-  output_per_1m_credits: number;
-  cache_write_per_1m_credits: number;
-  cache_read_per_1m_credits: number;
+  input_per_1m_usd: number;
+  output_per_1m_usd: number;
+  cache_write_per_1m_usd: number;
+  cache_read_per_1m_usd: number;
 }
 
 export interface AiGroupEffectivePricesOutput {
   group_id: string;
   effective_user_multiplier: number;
-  credits_per_usd: number;
   items: AiGroupEffectivePrice[];
   total: number;
 }
@@ -108,7 +107,7 @@ export interface AiLimitPolicyWriteRequest {
 }
 
 // ==================== AI 订阅制套餐（docs/ai-subscription-design.md §7.1） ====================
-// 额度一律为微积分（micro，1 积分 = 10000 微积分），前端用 formatCredits 除以 10000 展示。
+// 额度统一为 micro-USD（1 USD = 1,000,000 micro-USD）。
 
 // 套餐/订阅覆盖的分组（额度消耗 = 命中分组基准价 × 套餐扣额倍率）。
 export interface AiSubGroup {
@@ -160,11 +159,11 @@ export interface AiSubPlan {
   id: string;
   name: string;
   description: string;
-  price_credits: number;
+  price_micro_usd: number;
   duration_days: number;
-  total_limit_micro: number;
-  window_5h_limit_micro?: number | null;
-  window_7d_limit_micro?: number | null;
+  total_limit_micro_usd: number;
+  window_5h_limit_micro_usd?: number | null;
+  window_7d_limit_micro_usd?: number | null;
   sale_limit?: number | null;
   sold_count: number;
   available_count?: number | null;
@@ -175,9 +174,9 @@ export interface AiSubPlan {
 }
 
 export interface AiSubWindow {
-  limit_micro?: number | null; // null = 该窗口不限
-  used_micro: number;
-  remaining_micro?: number | null;
+  limit_micro_usd?: number | null; // null = 该窗口不限
+  used_micro_usd: number;
+  remaining_micro_usd?: number | null;
   reset_at?: string | null; // 当前窗口重置时刻（RFC3339），后端按服务器时间算好
 }
 
@@ -192,9 +191,9 @@ export interface AiSubscription {
   status: string; // pending / active / expired / cancelled
   activated_at?: string | null;
   expires_at?: string | null;
-  total_limit_micro: number;
-  total_used_micro: number;
-  total_remaining_micro: number;
+  total_limit_micro_usd: number;
+  total_used_micro_usd: number;
+  total_remaining_micro_usd: number;
   window_5h: AiSubWindow;
   window_7d: AiSubWindow;
   groups: AiSubGroup[];
@@ -209,7 +208,7 @@ export interface AiSubOrder {
   user_id: string;
   plan_id: string;
   plan_name: string;
-  price_credits: number;
+  price_micro_usd: number;
   status: string; // created / deducting / paid / failed
   billing_event_id?: string;
   subscription_id?: string;
@@ -307,7 +306,7 @@ export interface ConsoleImageJob {
   style?: string;
   response_format?: string;
   requested_output_count?: number;
-  caller_charge_credits: number;
+  caller_charge_usd: number;
   image_count: number;
   inline_count: number;
   url_count: number;

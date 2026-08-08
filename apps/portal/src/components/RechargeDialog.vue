@@ -16,17 +16,17 @@
         <strong>{{ targetName }}</strong>
         <span class="recharge-target__identity">{{ targetIdentity }}</span>
       </div>
-      <div v-if="targetCredits != null" class="recharge-target__balance">
-        <span>当前积分</span>
-        <strong>{{ targetCredits.toLocaleString() }}</strong>
+      <div v-if="targetBalanceUsd != null" class="recharge-target__balance">
+        <span>当前 USD 余额</span>
+        <strong>${{ targetBalanceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</strong>
       </div>
     </div>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <div class="recharge-fields">
-        <el-form-item label="实付金额（元）" prop="paidAmountYuan">
+        <el-form-item label="实付金额（USD）" prop="paidAmountUsd">
           <el-input-number
-            v-model="form.paidAmountYuan"
+            v-model="form.paidAmountUsd"
             :min="0"
             :precision="2"
             :step="100"
@@ -36,29 +36,29 @@
           />
           <div class="recharge-quick-list">
             <button v-for="amount in [100, 500, 1000]" :key="amount" type="button" class="recharge-quick" @click="pickAmount(amount)">
-              ¥{{ amount }}
+              ${{ amount }}
             </button>
           </div>
-          <p class="recharge-hint">输入金额后按 1 元 = 100 积分自动换算</p>
+          <p class="recharge-hint">支付渠道金额按 USD cents 保存</p>
         </el-form-item>
 
-        <el-form-item label="到账积分" prop="creditAmount">
+        <el-form-item label="到账金额（USD）" prop="amountUsd">
           <el-input-number
-            v-model="form.creditAmount"
-            :min="1"
-            :precision="0"
-            :step="1000"
+            v-model="form.amountUsd"
+            :min="0.000001"
+            :precision="6"
+            :step="1"
             :controls="false"
             class="recharge-field"
-            @change="isCreditAutoCalc = false"
+            @change="isAmountAutoCalc = false"
           />
           <div class="recharge-quick-list">
-            <button v-for="amount in [10000, 50000, 100000]" :key="amount" type="button" class="recharge-quick" @click="pickCredits(amount)">
-              +{{ amount.toLocaleString() }}
+            <button v-for="amount in [100, 500, 1000]" :key="amount" type="button" class="recharge-quick" @click="pickCreditedAmount(amount)">
+              +${{ amount.toLocaleString() }}
             </button>
           </div>
-          <p class="recharge-hint" :class="{ 'recharge-hint--accent': isCreditAutoCalc && (form.paidAmountYuan ?? 0) > 0 }">
-            {{ isCreditAutoCalc && (form.paidAmountYuan ?? 0) > 0 ? '已自动换算，可手动修改' : '可独立设置到账积分' }}
+          <p class="recharge-hint" :class="{ 'recharge-hint--accent': isAmountAutoCalc && (form.paidAmountUsd ?? 0) > 0 }">
+            {{ isAmountAutoCalc && (form.paidAmountUsd ?? 0) > 0 ? '默认与实付金额相同，可单独增加赠送金额' : '可独立设置到账金额' }}
           </p>
         </el-form-item>
       </div>
@@ -78,7 +78,7 @@
           </button>
           <button type="button" class="recharge-quick" @click="form.expireTime = null">永久有效</button>
         </div>
-        <p class="recharge-hint">按北京时间填写；留空则永久有效，限时积分到期后自动失效。</p>
+        <p class="recharge-hint">按北京时间填写；留空则长期有效，到期后余额自动失效。</p>
       </el-form-item>
 
       <el-form-item label="备注" prop="reason">
@@ -86,11 +86,11 @@
           v-model="form.reason"
           type="textarea"
           :rows="3"
-          :placeholder="isZeroAmount ? '实付金额为 0，请详细说明免费充值原因（必填）' : '充值备注（可选）'"
+          :placeholder="isZeroAmount ? '实付金额为 $0，请详细说明赠送原因（必填）' : '充值备注（可选）'"
           maxlength="500"
           show-word-limit
         />
-        <p v-if="isZeroAmount" class="recharge-hint recharge-hint--danger">实付金额为 ¥0 时，备注至少填写 5 个字符</p>
+        <p v-if="isZeroAmount" class="recharge-hint recharge-hint--danger">实付金额为 $0 时，备注至少填写 5 个字符</p>
       </el-form-item>
     </el-form>
 
@@ -112,11 +112,11 @@ withDefaults(defineProps<{
   targetTypeLabel: string
   targetName: string
   targetIdentity: string
-  targetCredits?: number | null
+  targetBalanceUsd?: number | null
   submitting?: boolean
 }>(), {
   title: '账户充值',
-  targetCredits: null,
+  targetBalanceUsd: null,
   submitting: false
 })
 
@@ -126,18 +126,18 @@ const emit = defineEmits<{
 }>()
 
 const formRef = ref<FormInstance>()
-const isCreditAutoCalc = ref(true)
+const isAmountAutoCalc = ref(true)
 const form = reactive({
-  paidAmountYuan: null as number | null,
-  creditAmount: null as number | null,
+  paidAmountUsd: null as number | null,
+  amountUsd: null as number | null,
   expireTime: null as string | null,
   reason: ''
 })
 
-const isZeroAmount = computed(() => form.paidAmountYuan === 0)
+const isZeroAmount = computed(() => form.paidAmountUsd === 0)
 const rules = computed<FormRules>(() => ({
-  paidAmountYuan: [{ required: true, type: 'number', min: 0, message: '请填写实付金额（元）', trigger: ['blur', 'change'] }],
-  creditAmount: [{ required: true, type: 'number', min: 1, message: '到账积分至少为 1', trigger: ['blur', 'change'] }],
+  paidAmountUsd: [{ required: true, type: 'number', min: 0, message: '请填写实付金额（USD）', trigger: ['blur', 'change'] }],
+  amountUsd: [{ required: true, type: 'number', min: 0.000001, message: '到账金额至少为 $0.000001', trigger: ['blur', 'change'] }],
   reason: isZeroAmount.value
     ? [
         { required: true, message: '实付金额为 0 时备注必填', trigger: ['blur', 'change'] },
@@ -171,28 +171,28 @@ const parseUtc8DateTime = (value: string) => {
   return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour) - 8, Number(minute), Number(second))
 }
 
-const clearValidation = async (fields: Array<'paidAmountYuan' | 'creditAmount' | 'reason'>) => {
+const clearValidation = async (fields: Array<'paidAmountUsd' | 'amountUsd' | 'reason'>) => {
   await nextTick()
   formRef.value?.clearValidate(fields)
 }
 
 const handlePaidAmountChange = (value: number | undefined) => {
-  isCreditAutoCalc.value = true
-  if (value != null && value >= 0) form.creditAmount = Math.round(value * 100)
+  isAmountAutoCalc.value = true
+  if (value != null && value >= 0) form.amountUsd = value
   if (value !== 0) void clearValidation(['reason'])
 }
 
 const pickAmount = (amount: number) => {
-  form.paidAmountYuan = amount
-  form.creditAmount = amount * 100
-  isCreditAutoCalc.value = true
-  void clearValidation(['paidAmountYuan', 'creditAmount', 'reason'])
+  form.paidAmountUsd = amount
+  form.amountUsd = amount
+  isAmountAutoCalc.value = true
+  void clearValidation(['paidAmountUsd', 'amountUsd', 'reason'])
 }
 
-const pickCredits = (amount: number) => {
-  form.creditAmount = amount
-  isCreditAutoCalc.value = false
-  void clearValidation(['creditAmount'])
+const pickCreditedAmount = (amount: number) => {
+  form.amountUsd = amount
+  isAmountAutoCalc.value = false
+  void clearValidation(['amountUsd'])
 }
 
 const setExpireDays = (days: number) => {
@@ -205,8 +205,8 @@ const submit = async () => {
 
   if (isZeroAmount.value) {
     try {
-      await ElMessageBox.confirm('实付金额为 ¥0，确认执行免费充值？', '金额为零确认', {
-        confirmButtonText: '确认免费充值',
+      await ElMessageBox.confirm('实付金额为 $0，确认执行赠送入账？', '金额为零确认', {
+        confirmButtonText: '确认赠送',
         cancelButtonText: '取消',
         roundButton: true,
         type: 'warning'
@@ -217,19 +217,19 @@ const submit = async () => {
   }
 
   emit('submit', {
-    paidAmount: Math.round((form.paidAmountYuan ?? 0) * 100),
-    creditAmount: form.creditAmount ?? 0,
+    paidAmountMinor: Math.round((form.paidAmountUsd ?? 0) * 100),
+    amountMicroUsd: Math.round((form.amountUsd ?? 0) * 1_000_000),
     note: form.reason || undefined,
     expireTime: form.expireTime ? parseUtc8DateTime(form.expireTime) : null
   })
 }
 
 const resetForm = () => {
-  form.paidAmountYuan = null
-  form.creditAmount = null
+  form.paidAmountUsd = null
+  form.amountUsd = null
   form.expireTime = null
   form.reason = ''
-  isCreditAutoCalc.value = true
+  isAmountAutoCalc.value = true
   formRef.value?.clearValidate()
 }
 </script>

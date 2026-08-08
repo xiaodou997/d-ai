@@ -96,7 +96,6 @@ type userGroupEffectivePricesOutput struct {
 	Body struct {
 		GroupID                 string                         `json:"group_id"`
 		EffectiveUserMultiplier float64                        `json:"effective_user_multiplier"`
-		CreditsPerUSD           float64                        `json:"credits_per_usd"`
 		Items                   []tenantGroupEffectivePriceDTO `json:"items"`
 		Total                   int                            `json:"total"`
 	}
@@ -147,7 +146,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		Method:      http.MethodGet,
 		Path:        "/api/v1/users/me/groups/{groupID}/effective-prices",
 		Summary:     "终端用户自助分组生效售价",
-		Description: "返回当前用户在某可见分组下可使用的模型及其生效积分单价（售价表 USD 单价 × 终端用户生效倍率 × 积分汇率）。",
+		Description: "返回当前用户在某可见分组下可使用的模型及其生效 USD 单价（售价表 USD 单价 × 终端用户生效倍率）。",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, in *tenantSelfGroupIDInput) (*userGroupEffectivePricesOutput, error) {
 		if d.CommercialSvc == nil || d.PriceBookSvc == nil {
@@ -174,33 +173,27 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 			return nil, httpx.ErrNotFound.WithDetail("group is not visible to this user")
 		}
 
-		rate, err := d.PriceBookSvc.GetCreditsPerUSD(ctx)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-
 		out := &userGroupEffectivePricesOutput{}
 		out.Body.GroupID = matched.Group.ID
 		out.Body.EffectiveUserMultiplier = matched.EffectiveUserMultiplier
-		out.Body.CreditsPerUSD = rate
 		out.Body.Items = make([]tenantGroupEffectivePriceDTO, 0)
 
 		entries, err := listRoutedGroupPriceEntries(ctx, d, matched.Group.ID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		factor := matched.EffectiveUserMultiplier * rate
+		factor := matched.EffectiveUserMultiplier
 		for _, e := range entries {
 			out.Body.Items = append(out.Body.Items, tenantGroupEffectivePriceDTO{
-				ModelCode:                 e.ModelCode,
-				CapabilityType:            e.CapabilityType,
-				TokenPriceTiers:           effectiveTokenPriceTiers(e.TokenPriceTiers, factor),
-				ImageDefaultPriceCredits:  e.ImageDefaultPrice * factor,
-				VideoDefaultPriceCredits:  e.VideoDefaultPrice * factor,
-				ImagePrices:               resolutionCreditPrices(e.ImagePrices, factor),
-				VideoPrices:               resolutionCreditPrices(e.VideoPrices, factor),
-				AudioTTSPer1MCharsCredits: e.AudioTTSPerChar * pricebookPerMillion * factor,
-				AudioSTTPerMinuteCredits:  e.AudioSTTPerMinute * factor,
+				ModelCode:             e.ModelCode,
+				CapabilityType:        e.CapabilityType,
+				TokenPriceTiers:       effectiveTokenPriceTiers(e.TokenPriceTiers, factor),
+				ImageDefaultPriceUSD:  e.ImageDefaultPrice * factor,
+				VideoDefaultPriceUSD:  e.VideoDefaultPrice * factor,
+				ImagePrices:           resolutionUSDPrices(e.ImagePrices, factor),
+				VideoPrices:           resolutionUSDPrices(e.VideoPrices, factor),
+				AudioTTSPer1MCharsUSD: e.AudioTTSPerChar * pricebookPerMillion * factor,
+				AudioSTTPerMinuteUSD:  e.AudioSTTPerMinute * factor,
 			})
 		}
 		out.Body.Total = len(out.Body.Items)

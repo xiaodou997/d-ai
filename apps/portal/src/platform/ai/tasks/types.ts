@@ -25,7 +25,7 @@ export interface PortalTaskRecord {
   request_id?: string;
   attempt: number;
   error?: { code: string; message: string };
-  usage?: { cost_credits: number };
+  usage?: { cost_usd: number };
   result_available: boolean;
   result_summary?: { image_count?: number; choice_count?: number };
   result?: unknown;

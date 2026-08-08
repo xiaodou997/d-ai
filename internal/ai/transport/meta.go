@@ -72,10 +72,6 @@ type AIDeps struct {
 }
 
 func RegisterAI(api huma.API, d AIDeps) {
-	pricingRead := huma.NewGroup(api)
-	pricingRead.UseMiddleware(platformOrTenantUserAuth(api, d))
-	registerPricingRead(pricingRead, d)
-
 	management := huma.NewGroup(api)
 	management.UseMiddleware(platformUserAuth(api, d))
 	registerPriceBooks(management, d)
@@ -92,8 +88,6 @@ func RegisterAI(api huma.API, d AIDeps) {
 	registerAPIKeys(management, d)
 	registerOAuthPools(management, d)
 	registerSystem(management, d)
-	registerPricingWrite(management, d)
-
 	tenant := huma.NewGroup(api)
 	tenant.UseMiddleware(tenantUserAuth(api, d))
 	registerGroups(tenant, d)

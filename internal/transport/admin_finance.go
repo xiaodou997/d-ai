@@ -17,28 +17,29 @@ import (
 
 type rechargeInput struct {
 	Body struct {
-		PackageType  int    `json:"packageType" doc:"1=租户充值 2=用户充值"`
-		UserID       string `json:"userId" required:"false"`
-		TenantID     string `json:"tenantId" required:"false"`
-		PaidAmount   int64  `json:"paidAmount" required:"false"`
-		CreditAmount int64  `json:"creditAmount" doc:"充值积分数"`
-		Note         string `json:"note" required:"false"`
-		PaymentRef   string `json:"paymentRef" required:"false"`
-		ExpireTime   *int64 `json:"expireTime" required:"false"`
+		PackageType     int    `json:"packageType" doc:"1=租户充值 2=用户充值"`
+		UserID          string `json:"userId" required:"false"`
+		TenantID        string `json:"tenantId" required:"false"`
+		PaidAmountMinor int64  `json:"paidAmountMinor" required:"false" doc:"支付渠道最小单位金额"`
+		AmountMicroUSD  int64  `json:"amountMicroUsd" minimum:"1" doc:"到账金额，单位 micro-USD"`
+		Note            string `json:"note" required:"false"`
+		PaymentRef      string `json:"paymentRef" required:"false"`
+		ExpireTime      *int64 `json:"expireTime" required:"false"`
 	}
 }
 
 type rechargeOutput struct {
 	Body struct {
-		OrderID          string  `json:"orderId"`
-		PackageID        string  `json:"packageId"`
-		TenantID         string  `json:"tenantId"`
-		UserID           string  `json:"userId"`
-		CreditAmount     int64   `json:"creditAmount"`
-		PaidAmount       int64   `json:"paidAmount"`
-		ClearedOverdraft float64 `json:"clearedOverdraft"`
-		PackageCredits   float64 `json:"packageCredits"`
-		OrderTime        int64   `json:"orderTime"`
+		OrderID         string  `json:"orderId"`
+		BalanceLotID    string  `json:"balanceLotId"`
+		TenantID        string  `json:"tenantId"`
+		UserID          string  `json:"userId"`
+		Currency        string  `json:"currency"`
+		AmountMicroUSD  int64   `json:"amountMicroUsd"`
+		PaidAmountMinor int64   `json:"paidAmountMinor"`
+		ClearedDebtUSD  float64 `json:"clearedDebtUsd"`
+		BalanceLotUSD   float64 `json:"balanceLotUsd"`
+		OrderTime       int64   `json:"orderTime"`
 	}
 }
 
@@ -51,13 +52,13 @@ type reverseRechargeInput struct {
 
 type reverseRechargeOutput struct {
 	Body struct {
-		Status          string  `json:"status"`
-		OrderID         string  `json:"orderId"`
-		PackageID       string  `json:"packageId"`
-		ReversedCredits float64 `json:"reversedCredits"`
-		OriginalCredits float64 `json:"originalCredits"`
-		LostCredits     float64 `json:"lostCredits"`
-		PackageStatus   string  `json:"packageStatus"`
+		Status            string  `json:"status"`
+		OrderID           string  `json:"orderId"`
+		BalanceLotID      string  `json:"balanceLotId"`
+		ReversedAmountUSD float64 `json:"reversedAmountUsd"`
+		OriginalAmountUSD float64 `json:"originalAmountUsd"`
+		LostAmountUSD     float64 `json:"lostAmountUsd"`
+		BalanceLotStatus  string  `json:"balanceLotStatus"`
 	}
 }
 
@@ -75,10 +76,10 @@ type debtStatusInput struct {
 
 type debtStatusOutput struct {
 	Body struct {
-		OwnerType            string `json:"owner_type"`
-		AccountID            string `json:"account_id"`
-		OutstandingDebtMicro int64  `json:"outstanding_debt_micro"`
-		ServiceState         string `json:"service_state" enum:"active,blocked_debt"`
+		OwnerType               string `json:"owner_type"`
+		AccountID               string `json:"account_id"`
+		OutstandingDebtMicroUSD int64  `json:"outstanding_debt_micro_usd"`
+		ServiceState            string `json:"service_state" enum:"active,blocked_debt"`
 	}
 }
 
@@ -194,9 +195,8 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 	if orderType == billingdomain.OrderTypeTenantToUser {
 		pkgSource = billingdomain.PackageSourceTenantRecharge
 	}
-	creditMicro, err := billingdomain.CreditsToMicro(in.Body.CreditAmount)
-	if err != nil {
-		return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+	if in.Body.AmountMicroUSD <= 0 {
+		return nil, httpx.ErrBadRequest.WithDetail("amountMicroUsd must be positive")
 	}
 
 	tx, err := h.pool.Begin(ctx)
@@ -215,17 +215,11 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		}
 	}
 
-	grant, err := billingsvc.GrantCredits(ctx, tx, billingsvc.GrantParams{
-		OrderType:         orderType,
-		TenantID:          tenantID,
-		UserID:            userID,
-		CreditAmountMicro: creditMicro,
-		PaidAmount:        in.Body.PaidAmount,
-		PaymentRef:        in.Body.PaymentRef,
-		Note:              in.Body.Note,
-		OperatorID:        claims.UserID,
-		Source:            pkgSource,
-		ExpiresAt:         expiresAt,
+	grant, err := billingsvc.GrantBalance(ctx, tx, billingsvc.GrantParams{
+		OrderType: orderType, TenantID: tenantID, UserID: userID,
+		AmountMicroUSD: in.Body.AmountMicroUSD, PaidAmount: in.Body.PaidAmountMinor,
+		PaymentRef: in.Body.PaymentRef, Note: in.Body.Note, OperatorID: claims.UserID,
+		Source: pkgSource, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -237,13 +231,14 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 
 	out := &rechargeOutput{}
 	out.Body.OrderID = grant.OrderID
-	out.Body.PackageID = grant.PackageID
+	out.Body.BalanceLotID = grant.BalanceLotID
 	out.Body.TenantID = tenantID
 	out.Body.UserID = userID
-	out.Body.CreditAmount = in.Body.CreditAmount
-	out.Body.PaidAmount = in.Body.PaidAmount
-	out.Body.ClearedOverdraft = billingdomain.MicroToCredits(grant.ClearedDebtMicro)
-	out.Body.PackageCredits = billingdomain.MicroToCredits(grant.PackageMicro)
+	out.Body.Currency = "USD"
+	out.Body.AmountMicroUSD = in.Body.AmountMicroUSD
+	out.Body.PaidAmountMinor = in.Body.PaidAmountMinor
+	out.Body.ClearedDebtUSD = billingdomain.MicroToUSD(grant.ClearedDebtMicroUSD)
+	out.Body.BalanceLotUSD = billingdomain.MicroToUSD(grant.LotAmountMicroUSD)
 	out.Body.OrderTime = millisFromTime(grant.OrderTime)
 	return out, nil
 }
@@ -275,11 +270,11 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 		out.Body.Status = "PARTIAL_REVERSAL"
 	}
 	out.Body.OrderID = result.OrderID
-	out.Body.PackageID = result.PackageID
-	out.Body.ReversedCredits = billingdomain.MicroToCredits(result.ReversedCredits)
-	out.Body.OriginalCredits = billingdomain.MicroToCredits(result.OriginalCredits)
-	out.Body.LostCredits = billingdomain.MicroToCredits(result.LostCredits)
-	out.Body.PackageStatus = result.PackageStatus
+	out.Body.BalanceLotID = result.PackageID
+	out.Body.ReversedAmountUSD = billingdomain.MicroToUSD(result.ReversedCredits)
+	out.Body.OriginalAmountUSD = billingdomain.MicroToUSD(result.OriginalCredits)
+	out.Body.LostAmountUSD = billingdomain.MicroToUSD(result.LostCredits)
+	out.Body.BalanceLotStatus = result.PackageStatus
 	return out, nil
 }
 
@@ -314,7 +309,7 @@ func (h *adminHandlers) getDebt(ctx context.Context, in *debtStatusInput) (*debt
 	out := &debtStatusOutput{}
 	out.Body.OwnerType = in.OwnerType
 	out.Body.AccountID = in.AccountID
-	out.Body.OutstandingDebtMicro = debt
+	out.Body.OutstandingDebtMicroUSD = debt
 	out.Body.ServiceState = "active"
 	if debt > 0 {
 		out.Body.ServiceState = "blocked_debt"

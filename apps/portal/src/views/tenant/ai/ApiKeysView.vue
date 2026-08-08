@@ -19,7 +19,7 @@ import {
   type PortalApiKeyWriteInput
 } from "@/platform/ai/apikeys";
 
-import { aiTenantApi, formatCredits, formatWholeCredits, statusOptions } from "@/api/aiTenant";
+import { aiTenantApi, statusOptions } from "@/api/aiTenant";
 import { portalEnv } from "@/env";
 import type { TenantAiApiKey, TenantAiApiKeyWriteRequest } from "@/api/types/aiTenant";
 
@@ -31,7 +31,7 @@ function normalizeWrite(payload: PortalApiKeyWriteInput): TenantAiApiKeyWriteReq
   return {
     name: payload.name,
     group_id: payload.group_id,
-    quota_limit_credits: payload.quota_limit_credits ?? null,
+    quota_limit_micro_usd: payload.quota_limit_micro_usd ?? null,
     status: payload.status,
     expires_at: payload.expires_at ?? null,
     limit_policy: payload.limit_policy
@@ -84,8 +84,6 @@ const confirmRotate = () =>
     :public-base-url="publicBaseUrl"
     v-bind="portalApiKeyWorkspaceIconProps"
     :status-options="statusOptions"
-    :format-credits="formatCredits"
-    :format-whole-credits="formatWholeCredits"
     :notify-success="notifySuccess"
     :notify-error="notifyError"
     :notify-warning="notifyWarning"

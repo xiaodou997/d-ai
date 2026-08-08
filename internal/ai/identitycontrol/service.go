@@ -7,14 +7,8 @@ import (
 
 	keys "xiaodou/dai/internal/ai/apikey"
 	"xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/credits"
 	"xiaodou/dai/internal/ai/domain"
 )
-
-// maxCreditsPerField caps any single credit-denominated field, mirroring the
-// previous handler-layer validation (1,000,000 credits ≈ ¥10,000), guarding
-// against entering micro-credits where whole credits are expected.
-const maxCreditsPerField int64 = 1_000_000
 
 // Service implements API key management business logic.
 type Service struct {
@@ -39,34 +33,31 @@ type Created struct {
 	PlaintextKey string
 }
 
-// CreateInput is the decoded create request. QuotaLimitCredits is in whole
-// display credits (the API contract unit); the service converts to micro.
-// ExpiresAt is already parsed by the handler at the decode boundary (nil = no
-// expiry).
+// CreateInput uses micro-USD directly. ExpiresAt is parsed at the HTTP boundary.
 type CreateInput struct {
-	OwnerScope        identity.Scope
-	TenantID          string
-	UserID            string // required for user keys, empty for tenant keys
-	GroupID           string
-	Name              string
-	QuotaLimitCredits *int64
-	AllowedModelIDs   []string
-	Status            string
-	ExpiresAt         *time.Time
-	CreatedBy         string
+	OwnerScope         identity.Scope
+	TenantID           string
+	UserID             string // required for user keys, empty for tenant keys
+	GroupID            string
+	Name               string
+	QuotaLimitMicroUSD *int64
+	AllowedModelIDs    []string
+	Status             string
+	ExpiresAt          *time.Time
+	CreatedBy          string
 }
 
 // UpdateInput is the decoded update request. ExpiresAt is already parsed by the
 // handler at the decode boundary (nil = no expiry).
 type UpdateInput struct {
-	ID                string
-	TenantID          string
-	GroupID           string
-	Name              string
-	QuotaLimitCredits *int64
-	AllowedModelIDs   []string
-	Status            string
-	ExpiresAt         *time.Time
+	ID                 string
+	TenantID           string
+	GroupID            string
+	Name               string
+	QuotaLimitMicroUSD *int64
+	AllowedModelIDs    []string
+	Status             string
+	ExpiresAt          *time.Time
 }
 
 // Create validates input, mints a key and persists it.
@@ -77,7 +68,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 	if strings.TrimSpace(in.GroupID) == "" {
 		return Created{}, domain.NewValidationError("group_id", "group_id is required")
 	}
-	if err := validateOptionalCredits("quota_limit_credits", in.QuotaLimitCredits); err != nil {
+	if err := validateOptionalAmount("quota_limit_micro_usd", in.QuotaLimitMicroUSD); err != nil {
 		return Created{}, err
 	}
 	status, err := normalizeAPIKeyStatus(in.Status, true)
@@ -104,7 +95,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 		KeyCiphertext:   ciphertext,
 		LastFour:        keys.LastFour(plaintext),
 		Name:            in.Name,
-		QuotaLimitMicro: creditsToMicroPtr(in.QuotaLimitCredits),
+		QuotaLimitMicro: cloneInt64Ptr(in.QuotaLimitMicroUSD),
 		AllowedModelIDs: append([]string(nil), in.AllowedModelIDs...),
 		Status:          status,
 		ExpiresAt:       in.ExpiresAt,
@@ -134,7 +125,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (identity.APIKey, 
 	if strings.TrimSpace(in.GroupID) == "" {
 		return identity.APIKey{}, domain.NewValidationError("group_id", "group_id is required")
 	}
-	if err := validateOptionalCredits("quota_limit_credits", in.QuotaLimitCredits); err != nil {
+	if err := validateOptionalAmount("quota_limit_micro_usd", in.QuotaLimitMicroUSD); err != nil {
 		return identity.APIKey{}, err
 	}
 	status, err := normalizeAPIKeyStatus(in.Status, true)
@@ -146,7 +137,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (identity.APIKey, 
 		TenantID:        in.TenantID,
 		GroupID:         strings.TrimSpace(in.GroupID),
 		Name:            in.Name,
-		QuotaLimitMicro: creditsToMicroPtr(in.QuotaLimitCredits),
+		QuotaLimitMicro: cloneInt64Ptr(in.QuotaLimitMicroUSD),
 		AllowedModelIDs: append([]string(nil), in.AllowedModelIDs...),
 		Status:          status,
 		ExpiresAt:       in.ExpiresAt,
@@ -230,25 +221,22 @@ func (s *Service) invalidate(ctx context.Context, keyHash string) {
 	_ = s.cache.Del(ctx, keyHash)
 }
 
-func validateOptionalCredits(field string, v *int64) error {
+func validateOptionalAmount(field string, v *int64) error {
 	if v == nil {
 		return nil
 	}
 	if *v < 0 {
-		return domain.NewValidationError(field, field+" must be a non-negative credit value")
-	}
-	if *v > maxCreditsPerField {
-		return domain.NewValidationError(field, field+" exceeds maximum allowed value")
+		return domain.NewValidationError(field, field+" must be a non-negative micro-USD amount")
 	}
 	return nil
 }
 
-func creditsToMicroPtr(v *int64) *int64 {
+func cloneInt64Ptr(v *int64) *int64 {
 	if v == nil {
 		return nil
 	}
-	micro := credits.WholeCreditsToMicro(*v)
-	return &micro
+	value := *v
+	return &value
 }
 
 func normalizeAPIKeyStatus(status string, allowDefault bool) (string, error) {

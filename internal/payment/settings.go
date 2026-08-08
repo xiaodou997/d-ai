@@ -16,46 +16,47 @@ const (
 	TopupModeCustom  = "custom"
 	TopupModePackage = "package"
 
-	TopupMinAmountFen = int64(1000)
-	TopupMaxAmountFen = int64(1000000)
-	MaxTopupPackages  = 12
-	MaxCreditsPerCNY  = int64(1000000)
-	MaxPackageCredits = int64(10000000000)
+	TopupMinAmountMicroUSD   = int64(10_000_000)
+	TopupMaxAmountMicroUSD   = int64(10_000_000_000)
+	MaxTopupPackages         = 12
+	MaxPackageAmountMicroUSD = int64(10_000_000_000_000)
 )
 
-// TopupPackage 是展示给用户点击的快捷充值包。amount 单位为分，credits 是固定到账积分。
+// TopupPackage is an immutable-at-order-time USD offer. PaymentAmountMicroUSD
+// is the charged principal and GiftAmountMicroUSD is an explicit promotion.
 type TopupPackage struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Amount    int64  `json:"amount"`
-	Credits   int64  `json:"credits"`
-	Badge     string `json:"badge,omitempty"`
-	Enabled   bool   `json:"enabled"`
-	SortOrder int    `json:"sortOrder"`
+	ID                    string `json:"id"`
+	Name                  string `json:"name"`
+	PaymentAmountMicroUSD int64  `json:"paymentAmountMicroUsd"`
+	GiftAmountMicroUSD    int64  `json:"giftAmountMicroUsd"`
+	ValidityDays          *int32 `json:"validityDays,omitempty"`
+	Badge                 string `json:"badge,omitempty"`
+	Enabled               bool   `json:"enabled"`
+	SortOrder             int    `json:"sortOrder"`
 }
 
 // GlobalSettings 是平台统一支付设置：租户自己充值、提现规则、默认快捷套餐。
 type GlobalSettings struct {
-	CreditsPerCNY          int64          `json:"creditsPerCny"`
-	TenantCustomTopupFeeBp int            `json:"tenantCustomTopupFeeBp"`
-	TenantWithdrawFeeBp    int            `json:"tenantWithdrawFeeBp"`
-	TenantTopupPackages    []TopupPackage `json:"tenantTopupPackages"`
+	TenantCustomTopupFeeBp   int            `json:"tenantCustomTopupFeeBp"`
+	TenantWithdrawFeeBp      int            `json:"tenantWithdrawFeeBp"`
+	TenantCustomValidityDays *int32         `json:"tenantCustomValidityDays,omitempty"`
+	TenantTopupPackages      []TopupPackage `json:"tenantTopupPackages"`
 }
 
 // TenantSettings 是租户配置给终端用户看的充值规则。
 type TenantSettings struct {
-	UserCreditsPerCNY    int64          `json:"userCreditsPerCny"`
-	UserCustomTopupFeeBp int            `json:"userCustomTopupFeeBp"`
-	UserTopupPackages    []TopupPackage `json:"userTopupPackages"`
+	UserCustomTopupFeeBp   int            `json:"userCustomTopupFeeBp"`
+	UserCustomValidityDays *int32         `json:"userCustomValidityDays,omitempty"`
+	UserTopupPackages      []TopupPackage `json:"userTopupPackages"`
 }
 
 // TopupParams 是下单时使用的充值规则快照。
 type TopupParams struct {
-	CreditsPerCNY int64
-	FeeRateBp     int
-	Packages      []TopupPackage
-	Min           int64
-	Max           int64
+	FeeRateBp    int
+	ValidityDays *int32
+	Packages     []TopupPackage
+	MinMicroUSD  int64
+	MaxMicroUSD  int64
 }
 
 type SettingsStore struct {
@@ -68,16 +69,15 @@ func NewSettingsStore(pool *pgxpool.Pool) *SettingsStore {
 
 func DefaultTopupPackages() []TopupPackage {
 	return []TopupPackage{
-		{ID: "p10", Name: "10 元体验包", Amount: 1000, Credits: 1000, Enabled: true, SortOrder: 10},
-		{ID: "p20", Name: "20 元基础包", Amount: 2000, Credits: 2000, Enabled: true, SortOrder: 20},
-		{ID: "p50", Name: "50 元常用包", Amount: 5000, Credits: 5000, Enabled: true, SortOrder: 30},
-		{ID: "p100", Name: "100 元进阶包", Amount: 10000, Credits: 10000, Enabled: true, SortOrder: 40},
+		{ID: "p10", Name: "$10 体验包", PaymentAmountMicroUSD: 10_000_000, Enabled: true, SortOrder: 10},
+		{ID: "p20", Name: "$20 基础包", PaymentAmountMicroUSD: 20_000_000, Enabled: true, SortOrder: 20},
+		{ID: "p50", Name: "$50 常用包", PaymentAmountMicroUSD: 50_000_000, Enabled: true, SortOrder: 30},
+		{ID: "p100", Name: "$100 进阶包", PaymentAmountMicroUSD: 100_000_000, Enabled: true, SortOrder: 40},
 	}
 }
 
 func DefaultGlobalSettings() *GlobalSettings {
 	return &GlobalSettings{
-		CreditsPerCNY:          100,
 		TenantCustomTopupFeeBp: 160,
 		TenantWithdrawFeeBp:    160,
 		TenantTopupPackages:    DefaultTopupPackages(),
@@ -89,9 +89,9 @@ func DefaultTenantSettings(g *GlobalSettings) *TenantSettings {
 		g = DefaultGlobalSettings()
 	}
 	return &TenantSettings{
-		UserCreditsPerCNY:    g.CreditsPerCNY,
-		UserCustomTopupFeeBp: g.TenantCustomTopupFeeBp,
-		UserTopupPackages:    clonePackages(g.TenantTopupPackages),
+		UserCustomTopupFeeBp:   g.TenantCustomTopupFeeBp,
+		UserCustomValidityDays: g.TenantCustomValidityDays,
+		UserTopupPackages:      clonePackages(g.TenantTopupPackages),
 	}
 }
 
@@ -165,21 +165,21 @@ func (s *SettingsStore) SaveTenantSettings(ctx context.Context, tenantID string,
 
 func ResolveTenantTopup(g *GlobalSettings) TopupParams {
 	return TopupParams{
-		CreditsPerCNY: g.CreditsPerCNY,
-		FeeRateBp:     g.TenantCustomTopupFeeBp,
-		Packages:      clonePackages(g.TenantTopupPackages),
-		Min:           TopupMinAmountFen,
-		Max:           TopupMaxAmountFen,
+		FeeRateBp:    g.TenantCustomTopupFeeBp,
+		ValidityDays: g.TenantCustomValidityDays,
+		Packages:     clonePackages(g.TenantTopupPackages),
+		MinMicroUSD:  TopupMinAmountMicroUSD,
+		MaxMicroUSD:  TopupMaxAmountMicroUSD,
 	}
 }
 
 func ResolveUserTopup(ts *TenantSettings) TopupParams {
 	return TopupParams{
-		CreditsPerCNY: ts.UserCreditsPerCNY,
-		FeeRateBp:     ts.UserCustomTopupFeeBp,
-		Packages:      clonePackages(ts.UserTopupPackages),
-		Min:           TopupMinAmountFen,
-		Max:           TopupMaxAmountFen,
+		FeeRateBp:    ts.UserCustomTopupFeeBp,
+		ValidityDays: ts.UserCustomValidityDays,
+		Packages:     clonePackages(ts.UserTopupPackages),
+		MinMicroUSD:  TopupMinAmountMicroUSD,
+		MaxMicroUSD:  TopupMaxAmountMicroUSD,
 	}
 }
 
@@ -213,7 +213,7 @@ func normalizePackages(in []TopupPackage) []TopupPackage {
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].SortOrder == out[j].SortOrder {
-			return out[i].Amount < out[j].Amount
+			return out[i].PaymentAmountMicroUSD < out[j].PaymentAmountMicroUSD
 		}
 		return out[i].SortOrder < out[j].SortOrder
 	})
@@ -227,21 +227,21 @@ func clonePackages(in []TopupPackage) []TopupPackage {
 }
 
 func validateGlobalSettings(g *GlobalSettings) error {
-	if g.CreditsPerCNY <= 0 || g.CreditsPerCNY > MaxCreditsPerCNY {
-		return fmt.Errorf("1 元兑换积分必须在 1~%d 之间", MaxCreditsPerCNY)
-	}
 	if g.TenantCustomTopupFeeBp < 0 || g.TenantCustomTopupFeeBp > 10000 || g.TenantWithdrawFeeBp < 0 || g.TenantWithdrawFeeBp > 10000 {
 		return fmt.Errorf("手续费必须在 0%%~100%% 之间")
+	}
+	if !validValidityDays(g.TenantCustomValidityDays) {
+		return fmt.Errorf("自定义充值有效期必须为正整数天")
 	}
 	return validatePackages(g.TenantTopupPackages)
 }
 
 func validateTenantSettings(ts *TenantSettings) error {
-	if ts.UserCreditsPerCNY <= 0 || ts.UserCreditsPerCNY > MaxCreditsPerCNY {
-		return fmt.Errorf("1 元兑换积分必须在 1~%d 之间", MaxCreditsPerCNY)
-	}
 	if ts.UserCustomTopupFeeBp < 0 || ts.UserCustomTopupFeeBp > 10000 {
 		return fmt.Errorf("手续费必须在 0%%~100%% 之间")
+	}
+	if !validValidityDays(ts.UserCustomValidityDays) {
+		return fmt.Errorf("自定义充值有效期必须为正整数天")
 	}
 	return validatePackages(ts.UserTopupPackages)
 }
@@ -262,12 +262,19 @@ func validatePackages(packages []TopupPackage) error {
 		if p.Name == "" {
 			return fmt.Errorf("套餐名称不能为空")
 		}
-		if p.Amount < TopupMinAmountFen || p.Amount > TopupMaxAmountFen {
-			return fmt.Errorf("套餐金额必须在 10~10000 元之间")
+		if p.PaymentAmountMicroUSD < TopupMinAmountMicroUSD || p.PaymentAmountMicroUSD > TopupMaxAmountMicroUSD {
+			return fmt.Errorf("套餐支付金额必须在 $10~$10000 之间")
 		}
-		if p.Credits <= 0 || p.Credits > MaxPackageCredits {
-			return fmt.Errorf("套餐到账积分必须在 1~%d 之间", MaxPackageCredits)
+		if p.PaymentAmountMicroUSD > MaxPackageAmountMicroUSD-p.GiftAmountMicroUSD || p.GiftAmountMicroUSD < 0 {
+			return fmt.Errorf("套餐到账金额超出支持范围")
+		}
+		if !validValidityDays(p.ValidityDays) {
+			return fmt.Errorf("套餐有效期必须为正整数天")
 		}
 	}
 	return nil
+}
+
+func validValidityDays(days *int32) bool {
+	return days == nil || (*days > 0 && *days <= 36500)
 }

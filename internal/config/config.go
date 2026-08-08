@@ -22,8 +22,6 @@ type Config struct {
 	Portal     PortalConfig    `mapstructure:"portal"`
 	Legal      LegalConfig     `mapstructure:"legal"`
 	Log        LogConfig       `mapstructure:"log"`
-	Scheduler  SchedulerConfig `mapstructure:"scheduler"`
-	Billing    BillingConfig   `mapstructure:"billing"`
 	Pricing    PricingConfig   `mapstructure:"pricing"`
 	Image      ImageConfig     `mapstructure:"image_assets"`
 	AsyncTasks AsyncTaskConfig `mapstructure:"async_tasks"`
@@ -81,25 +79,6 @@ type LegalConfig struct {
 	BaseURL        string `mapstructure:"base_url"`
 	TermsVersion   string `mapstructure:"terms_version"`
 	PrivacyVersion string `mapstructure:"privacy_version"`
-}
-
-type SchedulerConfig struct {
-	PreAuthTimeoutMinutes int `mapstructure:"pre_auth_timeout_minutes"`
-}
-
-// ─── AI 原有配置 ───────────────────────────────────────
-
-type BillingConfig struct {
-	RequestedTenantMicro int64         `mapstructure:"requested_tenant_micro"`
-	RequestedUserMicro   int64         `mapstructure:"requested_user_micro"`
-	LeaseTTL             time.Duration `mapstructure:"lease_ttl"`
-	LeaseGrace           time.Duration `mapstructure:"lease_grace"`
-	WindowMaxAge         time.Duration `mapstructure:"window_max_age"`
-	RenewLead            time.Duration `mapstructure:"renew_lead"`
-	AdmissionHeadroom    time.Duration `mapstructure:"admission_headroom"`
-	WorkerInterval       time.Duration `mapstructure:"worker_interval"`
-	DispatchLease        time.Duration `mapstructure:"dispatch_lease"`
-	PickLimit            int           `mapstructure:"pick_limit"`
 }
 
 type PricingConfig struct {
@@ -202,21 +181,6 @@ func Load() (*Config, error) {
 	v.SetDefault("log.max_age", 30)
 	v.SetDefault("log.redact", []string{})
 
-	// 默认值 —— Scheduler
-	v.SetDefault("scheduler.pre_auth_timeout_minutes", 30)
-
-	// 默认值 —— Billing
-	v.SetDefault("billing.requested_tenant_micro", 300_000)
-	v.SetDefault("billing.requested_user_micro", 300_000)
-	v.SetDefault("billing.lease_ttl", "5m")
-	v.SetDefault("billing.lease_grace", "15m")
-	v.SetDefault("billing.window_max_age", "3m")
-	v.SetDefault("billing.renew_lead", "90s")
-	v.SetDefault("billing.admission_headroom", "30s")
-	v.SetDefault("billing.worker_interval", "5s")
-	v.SetDefault("billing.dispatch_lease", "30s")
-	v.SetDefault("billing.pick_limit", 32)
-
 	// 默认值 —— AI 域
 	v.SetDefault("pricing.litellm_url", "")
 	v.SetDefault("audit.store_image_blobs", false)
@@ -301,19 +265,6 @@ func bindEnvs(v *viper.Viper) {
 		"DAI_LOG_LEVEL":  "log.level",
 		"DAI_LOG_FILE":   "log.file",
 		"DAI_LOG_REDACT": "log.redact",
-		// Scheduler
-		"DAI_SCHEDULER_PRE_AUTH_TIMEOUT": "scheduler.pre_auth_timeout_minutes",
-		// Billing
-		"DAI_BILLING_REQUESTED_TENANT_MICRO": "billing.requested_tenant_micro",
-		"DAI_BILLING_REQUESTED_USER_MICRO":   "billing.requested_user_micro",
-		"DAI_BILLING_LEASE_TTL":              "billing.lease_ttl",
-		"DAI_BILLING_LEASE_GRACE":            "billing.lease_grace",
-		"DAI_BILLING_WINDOW_MAX_AGE":         "billing.window_max_age",
-		"DAI_BILLING_RENEW_LEAD":             "billing.renew_lead",
-		"DAI_BILLING_ADMISSION_HEADROOM":     "billing.admission_headroom",
-		"DAI_BILLING_WORKER_INTERVAL":        "billing.worker_interval",
-		"DAI_BILLING_DISPATCH_LEASE":         "billing.dispatch_lease",
-		"DAI_BILLING_PICK_LIMIT":             "billing.pick_limit",
 		// AI
 		"DAI_PRICING_LITELLM_URL":          "pricing.litellm_url",
 		"DAI_AUDIT_STORE_IMAGE_BLOBS":      "audit.store_image_blobs",
@@ -425,39 +376,6 @@ func validate(cfg *Config) error {
 		cfg.Legal.BaseURL = strings.TrimRight(baseURL, "/")
 	}
 
-	// Billing 校验
-	if err := validateBilling(cfg.Billing); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func validateBilling(cfg BillingConfig) error {
-	if cfg.RequestedTenantMicro <= 0 || cfg.RequestedUserMicro <= 0 {
-		return fmt.Errorf("billing requested credit amounts must be positive")
-	}
-	if cfg.LeaseTTL < 30*time.Second || cfg.LeaseTTL > 30*time.Minute {
-		return fmt.Errorf("billing.lease_ttl must be between 30s and 30m")
-	}
-	if cfg.LeaseGrace < time.Minute || cfg.LeaseGrace < cfg.LeaseTTL {
-		return fmt.Errorf("billing.lease_grace must be at least 1m and billing.lease_ttl")
-	}
-	if cfg.LeaseGrace > 24*time.Hour {
-		return fmt.Errorf("billing.lease_grace must not exceed 24h")
-	}
-	if cfg.AdmissionHeadroom <= 0 || cfg.RenewLead <= 0 || cfg.WorkerInterval <= 0 {
-		return fmt.Errorf("billing admission, renewal, and worker durations must be positive")
-	}
-	if cfg.AdmissionHeadroom >= cfg.RenewLead || cfg.RenewLead >= cfg.LeaseTTL {
-		return fmt.Errorf("billing timing must satisfy admission_headroom < renew_lead < lease_ttl")
-	}
-	if cfg.WorkerInterval > cfg.AdmissionHeadroom {
-		return fmt.Errorf("billing.worker_interval must not exceed billing.admission_headroom")
-	}
-	if cfg.WindowMaxAge <= 0 || cfg.DispatchLease <= 0 || cfg.PickLimit <= 0 {
-		return fmt.Errorf("billing window, dispatch, and batch settings must be positive")
-	}
 	return nil
 }
 

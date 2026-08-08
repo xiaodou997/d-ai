@@ -352,7 +352,7 @@ func consoleImageTaskDTOFromView(view asynctask.TaskView) consoleImageTaskDTO {
 	dto.Status = string(view.Status)
 	dto.StoragePolicy = "auto"
 	dto.RawImageRetained = false
-	dto.CallerChargeCredits = domain.MicroToCreditsFloat(view.CallerCharge)
+	dto.CallerChargeUSD = domain.MicroToUSD(view.CallerCharge)
 	dto.ErrorMessage = view.ErrorMessage
 	dto.CreatedAt = view.CreatedAt.UnixMilli()
 	if view.CompletedAt != nil {

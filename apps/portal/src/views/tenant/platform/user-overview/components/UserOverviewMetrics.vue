@@ -29,9 +29,9 @@ const cards = computed<MetricCard[]>(() => {
   const activeRisks = props.riskSignals.filter((item) => item.tone === "warning" || item.tone === "danger");
   return [
     {
-      key: "credits",
-      label: "当前积分",
-      value: formatNumber(props.user?.credits ?? 0),
+      key: "balance",
+      label: "当前 USD 余额",
+      value: `$${Number(props.user?.balanceUsd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`,
       meta: props.user?.status === 1 ? "账户可用余额" : "账号停用中"
     },
     {
@@ -45,7 +45,7 @@ const cards = computed<MetricCard[]>(() => {
       label: "AI 请求",
       value: props.aiAvailable ? formatNumber(props.aiUsageStats.total_requests) : "—",
       meta: props.aiAvailable
-        ? `${props.activityWindowLabel}，失败 ${formatNumber(props.aiUsageStats.failed_count)}，消耗 ${formatNumber(props.aiUsageStats.total_user_charged_credits)} 积分`
+        ? `${props.activityWindowLabel}，失败 ${formatNumber(props.aiUsageStats.failed_count)}，消耗 $${Number(props.aiUsageStats.total_user_charged_usd ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })}`
         : "当前租户未开通智能服务"
     },
     {

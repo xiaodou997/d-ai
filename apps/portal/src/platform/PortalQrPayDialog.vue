@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 
 export interface QrPayPollResult {
   status: "created" | "paying" | "paid" | "closed" | "expired";
-  creditAmount?: number;
+  creditedAmountMicroUsd?: number;
   transactionId?: string;
 }
 
@@ -12,8 +12,8 @@ const props = defineProps<{
   visible: boolean;
   orderId: string;
   codeUrl: string;
-  amount: number; // 分
-  creditAmount: number;
+  paymentAmountMinor: number;
+  creditedAmountMicroUsd: number;
   expiresAt: number; // epoch ms
   poll: () => Promise<QrPayPollResult>;
 }>();
@@ -48,7 +48,11 @@ function formatCountdown(seconds: number) {
 }
 
 const countdownLabel = computed(() => formatCountdown(Math.max(0, remainingSeconds.value)));
-const amountYuan = computed(() => (props.amount / 100).toFixed(2));
+const paidAmount = computed(() => (props.paymentAmountMinor / 100).toFixed(2));
+const creditedAmount = computed(() => (props.creditedAmountMicroUsd / 1_000_000).toLocaleString("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6
+}));
 
 async function drawQrCode() {
   await nextTick();
@@ -119,8 +123,8 @@ function handleClose() {
   <el-dialog :model-value="visible" title="微信扫码支付" width="380px" append-to-body @close="handleClose">
     <div class="qr-pay-body">
       <div class="qr-pay-amount">
-        <span class="qr-pay-amount-yuan">¥{{ amountYuan }}</span>
-        <span class="qr-pay-amount-credit">到账 {{ creditAmount }} 积分</span>
+        <span class="qr-pay-amount-value">${{ paidAmount }}</span>
+        <span class="qr-pay-amount-detail">到账 ${{ creditedAmount }}</span>
       </div>
 
       <div class="qr-pay-canvas-wrap">
@@ -164,13 +168,13 @@ function handleClose() {
   gap: 4px;
 }
 
-.qr-pay-amount-yuan {
+.qr-pay-amount-value {
   font-size: 28px;
   font-weight: 700;
   color: var(--ds-ink);
 }
 
-.qr-pay-amount-credit {
+.qr-pay-amount-detail {
   font-size: 13px;
   color: var(--ds-muted);
 }

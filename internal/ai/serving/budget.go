@@ -90,3 +90,15 @@ func (b RetryBudget) BackoffFor(attempt int) time.Duration {
 	}
 	return delay
 }
+
+// RequestLeaseTTL bounds the lifetime of a Redis concurrency slot. It follows
+// the request retry deadline and keeps a small recovery grace period so a
+// crashed request does not hold the slot forever. This is unrelated to the
+// removed billing authorization flow.
+func RequestLeaseTTL(req *Request) time.Duration {
+	ttl := defaultRetryMaxElapsed(req)
+	if ttl < time.Minute {
+		ttl = time.Minute
+	}
+	return ttl + 2*time.Minute
+}

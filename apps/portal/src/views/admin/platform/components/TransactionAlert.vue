@@ -27,7 +27,7 @@ defineProps<{
   margin: 0;
 }
 
-/* 汇总行（如租户/用户积分合计） */
+/* 汇总行（如租户/用户金额合计） */
 .tx-alert :deep(.tx-alert__row) {
   display: flex;
   gap: 24px;

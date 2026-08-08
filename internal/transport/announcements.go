@@ -9,8 +9,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/libs/go/httpx"
 	"xiaodou/dai/internal/announcement"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 type announcementHandlers struct {

@@ -1,25 +1,25 @@
 components:
   schemas:
-    AccountCreditPackage:
+    AccountBalanceLot:
       additionalProperties: false
       properties:
+        balanceLotId:
+          type: string
         expiresAt:
           format: date-time
           type: string
-        packageId:
-          type: string
-        remainingCredits:
+        remainingUsd:
           format: double
           type: number
         source:
           type: string
-        totalCredits:
+        totalUsd:
           format: double
           type: number
       required:
-        - packageId
-        - totalCredits
-        - remainingCredits
+        - balanceLotId
+        - totalUsd
+        - remainingUsd
         - source
       type: object
     AccountDTO:
@@ -114,13 +114,13 @@ components:
         inviteCodeCount:
           format: int64
           type: integer
-        userDeductionCredits:
+        userDeductionUsd:
           format: double
           type: number
       required:
         - endUserCount
         - inviteCodeCount
-        - userDeductionCredits
+        - userDeductionUsd
       type: object
     AccountStatusRequest:
       additionalProperties: false
@@ -430,14 +430,14 @@ components:
             - tenant
             - user
           type: string
-        quota_limit_credits:
-          description: 额度上限，积分；为空表示无限制
+        quota_limit_micro_usd:
+          description: 额度上限，单位 micro-USD；为空表示无限制
           format: int64
           type: integer
-        quota_used_credits:
-          description: 已使用额度，积分
-          format: double
-          type: number
+        quota_used_micro_usd:
+          description: 已使用额度，单位 micro-USD
+          format: int64
+          type: integer
         status:
           description: 状态
           enum:
@@ -460,7 +460,7 @@ components:
         - tenant_id
         - group_id
         - name
-        - quota_used_credits
+        - quota_used_micro_usd
         - status
       type: object
     ApiKeyRevealOutputBody:
@@ -524,10 +524,9 @@ components:
         name:
           description: 名称
           type: string
-        quota_limit_credits:
-          description: 额度上限，积分；为空表示无限制
+        quota_limit_micro_usd:
+          description: 额度上限，单位 micro-USD；为空表示无限制
           format: int64
-          maximum: 1000000
           minimum: 0
           type: integer
         status:
@@ -594,34 +593,6 @@ components:
       required:
         - status
         - title
-      type: object
-    ApplyWithdrawalInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ApplyWithdrawalInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        accountName:
-          type: string
-        accountNo:
-          type: string
-        amount:
-          format: int64
-          minimum: 1
-          type: integer
-        bankName:
-          type: string
-        note:
-          type: string
-      required:
-        - amount
-        - accountName
-        - bankName
-        - accountNo
       type: object
     AsyncTaskChatCompletionInput:
       additionalProperties: true
@@ -1016,12 +987,12 @@ components:
     AsyncTaskUsage:
       additionalProperties: false
       properties:
-        cost_credits:
-          description: 任务调用方的已结算消耗积分
+        cost_usd:
+          description: 任务调用方的已结算消耗USD 金额
           format: double
           type: number
       required:
-        - cost_credits
+        - cost_usd
       type: object
     AudienceRuleOutput:
       additionalProperties: false
@@ -1179,72 +1150,47 @@ components:
           format: uri
           readOnly: true
           type: string
-        availableCredits:
+        availableUsd:
           format: double
           type: number
-        frozenCredits:
-          format: double
-          type: number
-        outstandingDebtMicro:
-          format: int64
-          type: integer
-        packages:
+        balanceLots:
           items:
-            $ref: "#/components/schemas/AccountCreditPackage"
+            $ref: "#/components/schemas/AccountBalanceLot"
           type:
             - array
             - "null"
-        permanentCredits:
+        currency:
+          type: string
+        outstandingDebtMicroUsd:
+          format: int64
+          type: integer
+        permanentUsd:
           format: double
           type: number
-        remainingCredits:
+        remainingUsd:
           format: double
           type: number
         serviceState:
           type: string
-        timedCredits:
+        timedUsd:
           format: double
           type: number
-        totalCredits:
+        totalUsd:
           format: double
           type: number
-        usedCredits:
+        usedUsd:
           format: double
           type: number
       required:
-        - totalCredits
-        - usedCredits
-        - remainingCredits
-        - frozenCredits
-        - availableCredits
-        - permanentCredits
-        - timedCredits
-        - outstandingDebtMicro
+        - currency
+        - totalUsd
+        - usedUsd
+        - remainingUsd
+        - availableUsd
+        - permanentUsd
+        - timedUsd
+        - outstandingDebtMicroUsd
         - serviceState
-      type: object
-    BatchConfirmInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BatchConfirmInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        eventIds:
-          items:
-            type: string
-          maxItems: 100
-          minItems: 1
-          type:
-            - array
-            - "null"
-        note:
-          type: string
-      required:
-        - eventIds
-        - note
       type: object
     BatchDeleteUpstreamModelBindingsOutputBody:
       additionalProperties: false
@@ -1322,17 +1268,17 @@ components:
         successCount:
           format: int64
           type: integer
-        totalTenantCredits:
+        totalTenantUsd:
           format: double
           type: number
-        totalUserCredits:
+        totalUserUsd:
           format: double
           type: number
       required:
         - succeeded
         - failed
-        - totalTenantCredits
-        - totalUserCredits
+        - totalTenantUsd
+        - totalUserUsd
         - successCount
         - failCount
       type: object
@@ -1360,79 +1306,22 @@ components:
         - eventIds
         - reason
       type: object
-    BuyCreditsInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BuyCreditsInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        amount:
-          description: 用现金余额购买租户积分，单位分
-          format: int64
-          minimum: 1
-          type: integer
-      required:
-        - amount
-      type: object
-    BuyCreditsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BuyCreditsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        creditOrderId:
-          type: string
-        credits:
-          format: double
-          type: number
-      required:
-        - creditOrderId
-        - credits
-      type: object
-    CancelPreAuthInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CancelPreAuthInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        note:
-          type: string
-      required:
-        - note
-      type: object
     CashAccountItem:
       additionalProperties: false
       properties:
-        available:
+        balanceMicroUsd:
           format: int64
           type: integer
-        balance:
-          format: int64
-          type: integer
-        frozen:
-          format: int64
-          type: integer
+        currency:
+          type: string
         tenantId:
           type: string
         tenantName:
           type: string
       required:
         - tenantId
-        - balance
-        - frozen
-        - available
+        - currency
+        - balanceMicroUsd
       type: object
     CashAccountOutputBody:
       additionalProperties: false
@@ -1444,40 +1333,29 @@ components:
           format: uri
           readOnly: true
           type: string
-        available:
+        balanceMicroUsd:
           format: int64
           type: integer
-        balance:
-          format: int64
-          type: integer
-        creditsPerCny:
-          format: int64
-          type: integer
-        frozen:
-          format: int64
-          type: integer
-        withdrawFeeBp:
-          format: int64
-          type: integer
+        currency:
+          type: string
       required:
-        - balance
-        - frozen
-        - available
-        - creditsPerCny
-        - withdrawFeeBp
+        - currency
+        - balanceMicroUsd
       type: object
     CashLedgerItem:
       additionalProperties: false
       properties:
-        amount:
+        amountMicroUsd:
           format: int64
           type: integer
-        balanceAfter:
+        balanceAfterMicroUsd:
           format: int64
           type: integer
         createdAt:
           format: int64
           type: integer
+        currency:
+          type: string
         note:
           type: string
         refId:
@@ -1491,8 +1369,9 @@ components:
       required:
         - txnId
         - txnType
-        - amount
-        - balanceAfter
+        - currency
+        - amountMicroUsd
+        - balanceAfterMicroUsd
         - createdAt
       type: object
     ChangePasswordInputBody:
@@ -1518,19 +1397,19 @@ components:
     ClientConsumptionItem:
       additionalProperties: false
       properties:
+        amountUsd:
+          format: double
+          type: number
         clientId:
           type: string
         clientName:
           type: string
-        credits:
-          format: double
-          type: number
         percentage:
           type: string
       required:
         - clientId
         - clientName
-        - credits
+        - amountUsd
         - percentage
       type: object
     ComponentStatus:
@@ -1559,11 +1438,11 @@ components:
           type:
             - array
             - "null"
-        totalCredits:
+        totalUsd:
           format: double
           type: number
       required:
-        - totalCredits
+        - totalUsd
         - dataPoints
       type: object
     ControlPageSubOrderDTO:
@@ -1969,12 +1848,12 @@ components:
           format: uri
           readOnly: true
           type: string
-        amount:
-          description: 自定义充值金额，单位分
+        amountMicroUsd:
+          description: 自定义充值金额，单位 micro-USD；必须可精确换算为美分
           format: int64
           type: integer
         packageId:
-          description: 快捷充值套餐 ID
+          description: 快捷额度包 ID
           type: string
       type: object
     CreateUserOutputBody:
@@ -1997,6 +1876,36 @@ components:
         - userId
         - username
         - defaultPassword
+      type: object
+    CreateWithdrawalInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/CreateWithdrawalInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        accountName:
+          type: string
+        accountNo:
+          type: string
+        amountMicroUsd:
+          format: int64
+          minimum: 1
+          type: integer
+        bankName:
+          type: string
+        note:
+          type: string
+        paymentRef:
+          type: string
+        tenantId:
+          type: string
+      required:
+        - tenantId
+        - amountMicroUsd
       type: object
     CredentialPoolDTO:
       additionalProperties: false
@@ -2139,23 +2048,6 @@ components:
         - items
         - total
       type: object
-    CreditsPerUSDOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/CreditsPerUSDOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        credits_per_usd:
-          description: 1 USD 对应积分数
-          format: double
-          type: number
-      required:
-        - credits_per_usd
-      type: object
     CustomerPortalBrandOutputBody:
       additionalProperties: false
       properties:
@@ -2211,7 +2103,7 @@ components:
           description: 平均总耗时，毫秒
           format: int64
           type: integer
-        catalog_base_credits:
+        catalog_base_usd:
           format: double
           type: number
         completion_tokens:
@@ -2233,24 +2125,24 @@ components:
           description: 请求数
           format: int64
           type: integer
-        retail_base_credits:
+        retail_base_usd:
           format: double
           type: number
         success_count:
           description: 成功请求数
           format: int64
           type: integer
-        tenant_payable_credits:
+        tenant_payable_usd:
           format: double
           type: number
         total_tokens:
           description: 总 token 数
           format: int64
           type: integer
-        user_charged_credits:
+        user_charged_usd:
           format: double
           type: number
-        user_payable_credits:
+        user_payable_usd:
           format: double
           type: number
       required:
@@ -2261,11 +2153,11 @@ components:
         - total_tokens
         - prompt_tokens
         - completion_tokens
-        - catalog_base_credits
-        - tenant_payable_credits
-        - retail_base_credits
-        - user_payable_credits
-        - user_charged_credits
+        - catalog_base_usd
+        - tenant_payable_usd
+        - retail_base_usd
+        - user_payable_usd
+        - user_charged_usd
         - avg_latency_ms
         - avg_request_total_ms
         - avg_first_response_byte_ms
@@ -2286,14 +2178,7 @@ components:
           type:
             - array
             - "null"
-        timeoutPreAuths:
-          items:
-            $ref: "#/components/schemas/PreAuthAlert"
-          type:
-            - array
-            - "null"
       required:
-        - timeoutPreAuths
         - failedTransactions
       type: object
     DashboardRecentErrorDTO:
@@ -2405,8 +2290,8 @@ components:
           description: 成功请求数
           format: int64
           type: integer
-        total_catalog_base_credits:
-          description: 上游参考成本积分
+        total_catalog_base_usd:
+          description: 上游参考成本USD 金额
           format: double
           type: number
         total_completion_tokens:
@@ -2421,24 +2306,24 @@ components:
           description: 请求总数
           format: int64
           type: integer
-        total_retail_base_credits:
-          description: 零售价格表原价积分
+        total_retail_base_usd:
+          description: 零售价格表原价USD 金额
           format: double
           type: number
-        total_tenant_payable_credits:
-          description: 平台向租户结算的积分
+        total_tenant_payable_usd:
+          description: 平台向租户结算的USD 金额
           format: double
           type: number
         total_tokens:
           description: 总 token 数
           format: int64
           type: integer
-        total_user_charged_credits:
-          description: 用户实际扣款积分
+        total_user_charged_usd:
+          description: 用户实际扣款USD 金额
           format: double
           type: number
-        total_user_payable_credits:
-          description: 用户零售应收积分
+        total_user_payable_usd:
+          description: 用户零售应收USD 金额
           format: double
           type: number
       required:
@@ -2448,11 +2333,11 @@ components:
         - total_tokens
         - total_prompt_tokens
         - total_completion_tokens
-        - total_catalog_base_credits
-        - total_tenant_payable_credits
-        - total_retail_base_credits
-        - total_user_payable_credits
-        - total_user_charged_credits
+        - total_catalog_base_usd
+        - total_tenant_payable_usd
+        - total_retail_base_usd
+        - total_user_payable_usd
+        - total_user_charged_usd
         - avg_latency_ms
         - avg_request_total_ms
         - avg_first_response_byte_ms
@@ -2467,8 +2352,8 @@ components:
           description: 请求数
           format: int64
           type: integer
-        total_tenant_payable_credits:
-          description: 租户扣费积分
+        total_tenant_payable_usd:
+          description: 租户扣费USD 金额
           format: double
           type: number
         total_tokens:
@@ -2479,7 +2364,7 @@ components:
         - model_code
         - request_count
         - total_tokens
-        - total_tenant_payable_credits
+        - total_tenant_payable_usd
       type: object
     DashboardTopModelsOutputBody:
       additionalProperties: false
@@ -2514,8 +2399,8 @@ components:
         tenant_id:
           description: 租户 ID
           type: string
-        total_tenant_payable_credits:
-          description: 租户扣费积分
+        total_tenant_payable_usd:
+          description: 租户扣费USD 金额
           format: double
           type: number
         total_tokens:
@@ -2526,7 +2411,7 @@ components:
         - tenant_id
         - request_count
         - total_tokens
-        - total_tenant_payable_credits
+        - total_tenant_payable_usd
       type: object
     DashboardTopTenantsOutputBody:
       additionalProperties: false
@@ -2566,7 +2451,7 @@ components:
           type: string
         account_id:
           type: string
-        outstanding_debt_micro:
+        outstanding_debt_micro_usd:
           format: int64
           type: integer
         owner_type:
@@ -2579,7 +2464,7 @@ components:
       required:
         - owner_type
         - account_id
-        - outstanding_debt_micro
+        - outstanding_debt_micro_usd
         - service_state
       type: object
     DeleteAPIKeyOutputBody:
@@ -2734,21 +2619,6 @@ components:
         - api_format
         - exists
       type: object
-    DismissEventInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/DismissEventInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        note:
-          type: string
-      required:
-        - note
-      type: object
     DispatchModelDTO:
       additionalProperties: false
       properties:
@@ -2790,16 +2660,16 @@ components:
     EffectiveTokenPriceTierDTO:
       additionalProperties: false
       properties:
-        cache_read_per_1m_credits:
+        cache_read_per_1m_usd:
           format: double
           type: number
-        cache_write_per_1m_credits:
+        cache_write_per_1m_usd:
           format: double
           type: number
-        input_per_1m_credits:
+        input_per_1m_usd:
           format: double
           type: number
-        output_per_1m_credits:
+        output_per_1m_usd:
           format: double
           type: number
         up_to_input_tokens:
@@ -2809,22 +2679,22 @@ components:
             - "null"
       required:
         - up_to_input_tokens
-        - input_per_1m_credits
-        - output_per_1m_credits
-        - cache_write_per_1m_credits
-        - cache_read_per_1m_credits
+        - input_per_1m_usd
+        - output_per_1m_usd
+        - cache_write_per_1m_usd
+        - cache_read_per_1m_usd
       type: object
     EndUserItem:
       additionalProperties: false
       properties:
         avatar:
           type: string
+        balanceUsd:
+          format: double
+          type: number
         createdTime:
           format: int64
           type: integer
-        credits:
-          format: double
-          type: number
         email:
           type: string
         internalNote:
@@ -2852,7 +2722,7 @@ components:
         - tenantId
         - username
         - status
-        - credits
+        - balanceUsd
         - createdTime
       type: object
     EventRow:
@@ -2878,14 +2748,14 @@ components:
           type: string
         status:
           type: string
-        tenantCredits:
+        tenantAmountUsd:
           format: double
           type: number
         tenantName:
           type: string
         terminalNote:
           type: string
-        userCredits:
+        userAmountUsd:
           format: double
           type: number
         userId:
@@ -2896,8 +2766,8 @@ components:
         - eventId
         - userId
         - description
-        - tenantCredits
-        - userCredits
+        - tenantAmountUsd
+        - userAmountUsd
         - status
         - terminalNote
         - metadata
@@ -2906,40 +2776,6 @@ components:
         - tenantName
         - clientId
         - appName
-      type: object
-    EventStatusOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/EventStatusOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        accountState:
-          type: string
-        allowFurtherUsage:
-          type: boolean
-        eventId:
-          type: string
-        status:
-          type: string
-        tenantDeducted:
-          format: int64
-          type: integer
-        tenantOverdraftAdd:
-          format: int64
-          type: integer
-        userDeducted:
-          format: int64
-          type: integer
-        userOverdraftAdd:
-          format: int64
-          type: integer
-      required:
-        - eventId
-        - status
       type: object
     FailedTxAlert:
       additionalProperties: false
@@ -3003,11 +2839,11 @@ components:
           format: uri
           readOnly: true
           type: string
-        creditsPerCny:
-          format: int64
-          type: integer
         tenantCustomTopupFeeBp:
           format: int64
+          type: integer
+        tenantCustomValidityDays:
+          format: int32
           type: integer
         tenantTopupPackages:
           items:
@@ -3019,7 +2855,6 @@ components:
           format: int64
           type: integer
       required:
-        - creditsPerCny
         - tenantCustomTopupFeeBp
         - tenantWithdrawFeeBp
         - tenantTopupPackages
@@ -3037,36 +2872,39 @@ components:
         activeTenants:
           format: int64
           type: integer
+        currency:
+          type: string
         newUsers:
           format: int64
           type: integer
-        tenantRechargeAmount:
+        tenantRechargeAmountUsd:
+          format: double
+          type: number
+        tenantRechargePaidMinor:
           format: int64
           type: integer
-        tenantRechargeCredits:
+        tenantTotalBalanceUsd:
           format: double
           type: number
-        tenantTotalCredits:
+        userRechargeAmountUsd:
           format: double
           type: number
-        userRechargeAmount:
+        userRechargePaidMinor:
           format: int64
           type: integer
-        userRechargeCredits:
-          format: double
-          type: number
-        userTotalCredits:
+        userTotalBalanceUsd:
           format: double
           type: number
       required:
-        - tenantRechargeAmount
-        - tenantRechargeCredits
+        - currency
+        - tenantRechargePaidMinor
+        - tenantRechargeAmountUsd
         - activeTenants
-        - tenantTotalCredits
-        - userRechargeAmount
-        - userRechargeCredits
+        - tenantTotalBalanceUsd
+        - userRechargePaidMinor
+        - userRechargeAmountUsd
         - newUsers
-        - userTotalCredits
+        - userTotalBalanceUsd
       type: object
     GroupClientSurfacePolicyDTO:
       additionalProperties: false
@@ -4652,27 +4490,6 @@ components:
         - username
         - password
       type: object
-    ManualConfirmInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ManualConfirmInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        actualTenantCredits:
-          format: int64
-          type: integer
-        actualUserCredits:
-          format: int64
-          type: integer
-        note:
-          type: string
-      required:
-        - note
-      type: object
     MeOutputBody:
       additionalProperties: false
       properties:
@@ -5501,24 +5318,6 @@ components:
         - items
         - total
       type: object
-    PreAuthAlert:
-      additionalProperties: false
-      properties:
-        createdTime:
-          format: int64
-          type: integer
-        eventId:
-          type: string
-        tenantId:
-          type: string
-        userId:
-          type: string
-      required:
-        - eventId
-        - tenantId
-        - userId
-        - createdTime
-      type: object
     PriceBookDTO:
       additionalProperties: false
       properties:
@@ -5828,9 +5627,10 @@ components:
           format: uri
           readOnly: true
           type: string
-        creditAmount:
-          description: 充值积分数
+        amountMicroUsd:
+          description: 到账金额，单位 micro-USD
           format: int64
+          minimum: 1
           type: integer
         expireTime:
           format: int64
@@ -5843,7 +5643,8 @@ components:
           description: 1=租户充值 2=用户充值
           format: int64
           type: integer
-        paidAmount:
+        paidAmountMinor:
+          description: 支付渠道最小单位金额
           format: int64
           type: integer
         paymentRef:
@@ -5854,7 +5655,7 @@ components:
           type: string
       required:
         - packageType
-        - creditAmount
+        - amountMicroUsd
       type: object
     RechargeOutputBody:
       additionalProperties: false
@@ -5866,23 +5667,25 @@ components:
           format: uri
           readOnly: true
           type: string
-        clearedOverdraft:
-          format: double
-          type: number
-        creditAmount:
+        amountMicroUsd:
           format: int64
           type: integer
+        balanceLotId:
+          type: string
+        balanceLotUsd:
+          format: double
+          type: number
+        clearedDebtUsd:
+          format: double
+          type: number
+        currency:
+          type: string
         orderId:
           type: string
         orderTime:
           format: int64
           type: integer
-        packageCredits:
-          format: double
-          type: number
-        packageId:
-          type: string
-        paidAmount:
+        paidAmountMinor:
           format: int64
           type: integer
         tenantId:
@@ -5891,33 +5694,34 @@ components:
           type: string
       required:
         - orderId
-        - packageId
+        - balanceLotId
         - tenantId
         - userId
-        - creditAmount
-        - paidAmount
-        - clearedOverdraft
-        - packageCredits
+        - currency
+        - amountMicroUsd
+        - paidAmountMinor
+        - clearedDebtUsd
+        - balanceLotUsd
         - orderTime
       type: object
     RechargeRecordRow:
       additionalProperties: false
       properties:
+        amountUsd:
+          format: double
+          type: number
         createdTime:
           format: int64
           type:
             - integer
             - "null"
-        creditAmount:
-          format: double
-          type: number
         note:
           type: string
         orderId:
           type: string
         orderType:
           type: string
-        paidAmount:
+        paidAmountMinor:
           format: int64
           type: integer
         status:
@@ -5931,8 +5735,8 @@ components:
       required:
         - orderId
         - orderType
-        - paidAmount
-        - creditAmount
+        - paidAmountMinor
+        - amountUsd
         - status
         - note
         - userId
@@ -6064,19 +5868,19 @@ components:
     ResourceStatItem:
       additionalProperties: false
       properties:
+        amountUsd:
+          format: double
+          type: number
         clientId:
           type: string
         clientName:
           type: string
-        credits:
-          format: double
-          type: number
         percentage:
           type: string
       required:
         - clientName
         - clientId
-        - credits
+        - amountUsd
         - percentage
       type: object
     ResourceStatsOutputBody:
@@ -6123,19 +5927,19 @@ components:
           format: uri
           readOnly: true
           type: string
-        lostCredits:
+        balanceLotId:
+          type: string
+        balanceLotStatus:
+          type: string
+        lostAmountUsd:
           format: double
           type: number
         orderId:
           type: string
-        originalCredits:
+        originalAmountUsd:
           format: double
           type: number
-        packageId:
-          type: string
-        packageStatus:
-          type: string
-        reversedCredits:
+        reversedAmountUsd:
           format: double
           type: number
         status:
@@ -6143,28 +5947,11 @@ components:
       required:
         - status
         - orderId
-        - packageId
-        - reversedCredits
-        - originalCredits
-        - lostCredits
-        - packageStatus
-      type: object
-    ReviewWithdrawalInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ReviewWithdrawalInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        approve:
-          type: boolean
-        note:
-          type: string
-      required:
-        - approve
+        - balanceLotId
+        - reversedAmountUsd
+        - originalAmountUsd
+        - lostAmountUsd
+        - balanceLotStatus
       type: object
     RiskControlConfigDTO:
       additionalProperties: false
@@ -6672,21 +6459,6 @@ components:
         - load
         - health
       type: object
-    SettleWithdrawalInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/SettleWithdrawalInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        paymentRef:
-          type: string
-      required:
-        - paymentRef
-      type: object
     StatusPathInputBody:
       additionalProperties: false
       properties:
@@ -6733,7 +6505,7 @@ components:
           type: string
         plan_name:
           type: string
-        price_credits:
+        price_micro_usd:
           format: int64
           type: integer
         purchase_policy:
@@ -6759,7 +6531,7 @@ components:
         - user_id
         - plan_id
         - plan_name
-        - price_credits
+        - price_micro_usd
         - status
         - purchase_policy_version
         - purchase_policy
@@ -6797,7 +6569,7 @@ components:
           type: string
         name:
           type: string
-        price_credits:
+        price_micro_usd:
           format: int64
           type: integer
         purchase_policy:
@@ -6820,16 +6592,16 @@ components:
           type: string
         tenant_id:
           type: string
-        total_limit_micro:
+        total_limit_micro_usd:
           format: int64
           type: integer
         updated_at:
           format: date-time
           type: string
-        window_5h_limit_micro:
+        window_5h_limit_micro_usd:
           format: int64
           type: integer
-        window_7d_limit_micro:
+        window_7d_limit_micro_usd:
           format: int64
           type: integer
       required:
@@ -6837,9 +6609,9 @@ components:
         - tenant_id
         - name
         - description
-        - price_credits
+        - price_micro_usd
         - duration_days
-        - total_limit_micro
+        - total_limit_micro_usd
         - status
         - sort_order
         - sold_count
@@ -6908,10 +6680,9 @@ components:
         name:
           description: 套餐名称（同租户内唯一）
           type: string
-        price_credits:
-          description: 售价（整数积分）
+        price_micro_usd:
+          description: 售价，单位 micro-USD
           format: int64
-          maximum: 922337203685477
           minimum: 1
           type: integer
         purchase_policy:
@@ -6926,24 +6697,24 @@ components:
           description: 排序权重
           format: int32
           type: integer
-        total_limit_micro:
-          description: 套餐总额度（微积分）
+        total_limit_micro_usd:
+          description: 套餐总额度，单位 micro-USD
           format: int64
           minimum: 1
           type: integer
-        window_5h_limit_micro:
-          description: 5 小时窗口额度（微积分）；空=不限
+        window_5h_limit_micro_usd:
+          description: 5 小时窗口额度，单位 micro-USD；空=不限
           format: int64
           type: integer
-        window_7d_limit_micro:
-          description: 7 天窗口额度（微积分）；空=不限，仅 ≥7 天套餐有意义
+        window_7d_limit_micro_usd:
+          description: 7 天窗口额度，单位 micro-USD；空=不限，仅 ≥7 天套餐有意义
           format: int64
           type: integer
       required:
         - name
-        - price_credits
+        - price_micro_usd
         - duration_days
-        - total_limit_micro
+        - total_limit_micro_usd
         - groups
       type: object
     SubPublicPlanDTO:
@@ -6967,7 +6738,7 @@ components:
           type: string
         name:
           type: string
-        price_credits:
+        price_micro_usd:
           format: int64
           type: integer
         purchase_eligibility:
@@ -6982,22 +6753,22 @@ components:
           type: integer
         sold_out:
           type: boolean
-        total_limit_micro:
+        total_limit_micro_usd:
           format: int64
           type: integer
-        window_5h_limit_micro:
+        window_5h_limit_micro_usd:
           format: int64
           type: integer
-        window_7d_limit_micro:
+        window_7d_limit_micro_usd:
           format: int64
           type: integer
       required:
         - id
         - name
         - description
-        - price_credits
+        - price_micro_usd
         - duration_days
-        - total_limit_micro
+        - total_limit_micro_usd
         - sold_count
         - sold_out
         - groups
@@ -7253,20 +7024,20 @@ components:
     SubWindowDTO:
       additionalProperties: false
       properties:
-        limit_micro:
+        limit_micro_usd:
           format: int64
           type: integer
-        remaining_micro:
+        remaining_micro_usd:
           format: int64
           type: integer
         reset_at:
           format: date-time
           type: string
-        used_micro:
+        used_micro_usd:
           format: int64
           type: integer
       required:
-        - used_micro
+        - used_micro_usd
       type: object
     SubscriptionDTO:
       additionalProperties: false
@@ -7308,13 +7079,13 @@ components:
           type: string
         tenant_id:
           type: string
-        total_limit_micro:
+        total_limit_micro_usd:
           format: int64
           type: integer
-        total_remaining_micro:
+        total_remaining_micro_usd:
           format: int64
           type: integer
-        total_used_micro:
+        total_used_micro_usd:
           format: int64
           type: integer
         updated_at:
@@ -7335,9 +7106,9 @@ components:
         - plan_name
         - duration_days
         - status
-        - total_limit_micro
-        - total_used_micro
-        - total_remaining_micro
+        - total_limit_micro_usd
+        - total_used_micro_usd
+        - total_remaining_micro_usd
         - window_5h
         - window_7d
         - groups
@@ -7467,25 +7238,25 @@ components:
     TenantGroupEffectivePriceDTO:
       additionalProperties: false
       properties:
-        audio_stt_per_minute_credits:
-          description: 语音识别每分钟的生效售价（积分）
+        audio_stt_per_minute_usd:
+          description: 语音识别每分钟的生效售价（USD）
           format: double
           type: number
-        audio_tts_per_1m_chars_credits:
-          description: 语音合成每 100 万字符的生效售价（积分）
+        audio_tts_per_1m_chars_usd:
+          description: 语音合成每 100 万字符的生效售价（USD）
           format: double
           type: number
         capability_type:
           description: 能力类型
           type: string
-        image_default_price_credits:
-          description: 图片默认生效售价（积分/张）
+        image_default_price_usd:
+          description: 图片默认生效售价（USD/张）
           format: double
           type: number
         image_prices:
-          description: 图片尺寸档位覆盖生效售价（积分/张）
+          description: 图片尺寸档位覆盖生效售价（USD/张）
           items:
-            $ref: "#/components/schemas/TenantResolutionCreditPriceDTO"
+            $ref: "#/components/schemas/TenantResolutionUSDPriceDTO"
           type:
             - array
             - "null"
@@ -7493,20 +7264,20 @@ components:
           description: 模型编码
           type: string
         token_price_tiers:
-          description: 逐上下文档位的生效积分价格
+          description: 逐上下文档位的生效 USD 价格
           items:
             $ref: "#/components/schemas/EffectiveTokenPriceTierDTO"
           type:
             - array
             - "null"
-        video_default_price_credits:
-          description: 视频默认生效售价（积分/秒）
+        video_default_price_usd:
+          description: 视频默认生效售价（USD/秒）
           format: double
           type: number
         video_prices:
-          description: 视频规格覆盖生效售价（积分/秒）
+          description: 视频规格覆盖生效售价（USD/秒）
           items:
-            $ref: "#/components/schemas/TenantResolutionCreditPriceDTO"
+            $ref: "#/components/schemas/TenantResolutionUSDPriceDTO"
           type:
             - array
             - "null"
@@ -7514,10 +7285,10 @@ components:
         - model_code
         - capability_type
         - token_price_tiers
-        - image_default_price_credits
-        - video_default_price_credits
-        - audio_tts_per_1m_chars_credits
-        - audio_stt_per_minute_credits
+        - image_default_price_usd
+        - video_default_price_usd
+        - audio_tts_per_1m_chars_usd
+        - audio_stt_per_minute_usd
       type: object
     TenantGroupEffectivePricesOutputBody:
       additionalProperties: false
@@ -7529,9 +7300,6 @@ components:
           format: uri
           readOnly: true
           type: string
-        credits_per_usd:
-          format: double
-          type: number
         effective_user_multiplier:
           format: double
           type: number
@@ -7552,13 +7320,15 @@ components:
         - group_id
         - retail_price_book_id
         - effective_user_multiplier
-        - credits_per_usd
         - items
         - total
       type: object
     TenantListItem:
       additionalProperties: false
       properties:
+        balanceUsd:
+          format: double
+          type: number
         contactEmail:
           type: string
         contactPerson:
@@ -7566,9 +7336,6 @@ components:
         createdTime:
           format: int64
           type: integer
-        credits:
-          format: double
-          type: number
         status:
           format: int64
           type: integer
@@ -7589,7 +7356,7 @@ components:
         - status
         - statusDisplay
         - createdTime
-        - credits
+        - balanceUsd
         - userCount
       type: object
     TenantOverviewStats:
@@ -7611,26 +7378,26 @@ components:
         inviteCodeCount:
           format: int64
           type: integer
-        settlementIncomeCents:
+        settlementIncomeMicroUsd:
           format: int64
           type: integer
         userConsumptionCount:
           format: int64
           type: integer
-        userDeductionCredits:
+        userDeductionUsd:
           format: double
           type: number
-        userTotalCredits:
+        userTotalBalanceUsd:
           format: double
           type: number
       required:
         - endUserCount
         - inviteCodeCount
-        - userDeductionCredits
-        - userTotalCredits
+        - userDeductionUsd
+        - userTotalBalanceUsd
         - activeUserCount
         - userConsumptionCount
-        - settlementIncomeCents
+        - settlementIncomeMicroUsd
       type: object
     TenantPriceBookCloneRequest:
       additionalProperties: false
@@ -7645,11 +7412,11 @@ components:
         name:
           type: string
       type: object
-    TenantResolutionCreditPriceDTO:
+    TenantResolutionUSDPriceDTO:
       additionalProperties: false
       properties:
         price:
-          description: 该规格的生效售价（积分）
+          description: 该规格的生效售价（USD）
           format: double
           type: number
         resolution:
@@ -7686,11 +7453,11 @@ components:
           format: uri
           readOnly: true
           type: string
-        userCreditsPerCny:
-          format: int64
-          type: integer
         userCustomTopupFeeBp:
           format: int64
+          type: integer
+        userCustomValidityDays:
+          format: int32
           type: integer
         userTopupPackages:
           items:
@@ -7699,7 +7466,6 @@ components:
             - array
             - "null"
       required:
-        - userCreditsPerCny
         - userCustomTopupFeeBp
         - userTopupPackages
       type: object
@@ -7947,8 +7713,8 @@ components:
         request_status:
           description: 请求状态
           type: string
-        retail_base_credits:
-          description: 分组零售价格表原价积分
+        retail_base_usd:
+          description: 分组零售价格表原价USD 金额
           format: double
           type: number
         service_tier:
@@ -7960,23 +7726,23 @@ components:
         tenant_id:
           description: 租户 ID
           type: string
-        tenant_payable_credits:
-          description: 租户应付平台的结算积分
+        tenant_payable_usd:
+          description: 租户应付平台的结算USD 金额
           format: double
           type: number
         total_tokens:
           description: 总 token 数
           format: int32
           type: integer
-        user_charged_credits:
-          description: 用户实际扣款积分
+        user_charged_usd:
+          description: 用户实际扣款USD 金额
           format: double
           type: number
         user_id:
           description: 用户 ID
           type: string
-        user_payable_credits:
-          description: 用户零售应收积分
+        user_payable_usd:
+          description: 用户零售应收USD 金额
           format: double
           type: number
       required:
@@ -7993,10 +7759,10 @@ components:
         - cache_read_tokens
         - reasoning_tokens
         - total_tokens
-        - tenant_payable_credits
-        - retail_base_credits
-        - user_payable_credits
-        - user_charged_credits
+        - tenant_payable_usd
+        - retail_base_usd
+        - user_payable_usd
+        - user_charged_usd
         - service_tier
         - billing_status
         - billing_status_label
@@ -8158,18 +7924,17 @@ components:
           format: uri
           readOnly: true
           type: string
+        currency:
+          type: string
         enabled:
           type: boolean
-        exchangeRate:
-          format: int64
-          type: integer
         feeRateBp:
           format: int64
           type: integer
-        max:
+        maxMicroUsd:
           format: int64
           type: integer
-        min:
+        minMicroUsd:
           format: int64
           type: integer
         packages:
@@ -8178,30 +7943,36 @@ components:
           type:
             - array
             - "null"
+        validityDays:
+          format: int32
+          type: integer
       required:
         - enabled
-        - exchangeRate
+        - currency
         - feeRateBp
-        - min
-        - max
+        - minMicroUsd
+        - maxMicroUsd
         - packages
       type: object
     TopupOrderItem:
       additionalProperties: false
       properties:
-        amount:
+        balanceExpiresAt:
           format: int64
           type: integer
         createdAt:
           format: int64
           type: integer
-        creditAmount:
+        creditedAmountMicroUsd:
           format: int64
           type: integer
-        feeCredits:
+        feeAmountMicroUsd:
           format: int64
           type: integer
-        grossCredits:
+        giftAmountMicroUsd:
+          format: int64
+          type: integer
+        grossAmountMicroUsd:
           format: int64
           type: integer
         orderId:
@@ -8211,6 +7982,11 @@ components:
         paidAt:
           format: int64
           type: integer
+        paymentAmountMinor:
+          format: int64
+          type: integer
+        paymentCurrency:
+          type: string
         scene:
           type: string
         status:
@@ -8223,10 +7999,12 @@ components:
         - orderId
         - scene
         - status
-        - amount
-        - creditAmount
-        - grossCredits
-        - feeCredits
+        - paymentCurrency
+        - paymentAmountMinor
+        - grossAmountMicroUsd
+        - feeAmountMicroUsd
+        - giftAmountMicroUsd
+        - creditedAmountMicroUsd
         - topupMode
         - createdAt
       type: object
@@ -8240,26 +8018,34 @@ components:
           format: uri
           readOnly: true
           type: string
-        amount:
+        balanceExpiresAt:
           format: int64
           type: integer
         codeUrl:
           type: string
-        creditAmount:
+        creditedAmountMicroUsd:
           format: int64
           type: integer
         expiresAt:
           format: int64
           type: integer
-        feeCredits:
+        feeAmountMicroUsd:
           format: int64
           type: integer
-        grossCredits:
+        giftAmountMicroUsd:
+          format: int64
+          type: integer
+        grossAmountMicroUsd:
           format: int64
           type: integer
         orderId:
           type: string
         packageName:
+          type: string
+        paymentAmountMinor:
+          format: int64
+          type: integer
+        paymentCurrency:
           type: string
         status:
           type: string
@@ -8268,10 +8054,12 @@ components:
       required:
         - orderId
         - codeUrl
-        - amount
-        - creditAmount
-        - grossCredits
-        - feeCredits
+        - paymentCurrency
+        - paymentAmountMinor
+        - grossAmountMicroUsd
+        - feeAmountMicroUsd
+        - giftAmountMicroUsd
+        - creditedAmountMicroUsd
         - topupMode
         - status
         - expiresAt
@@ -8286,16 +8074,19 @@ components:
           format: uri
           readOnly: true
           type: string
-        amount:
+        balanceExpiresAt:
           format: int64
           type: integer
-        creditAmount:
+        creditedAmountMicroUsd:
           format: int64
           type: integer
-        feeCredits:
+        feeAmountMicroUsd:
           format: int64
           type: integer
-        grossCredits:
+        giftAmountMicroUsd:
+          format: int64
+          type: integer
+        grossAmountMicroUsd:
           format: int64
           type: integer
         orderId:
@@ -8305,6 +8096,11 @@ components:
         paidAt:
           format: int64
           type: integer
+        paymentAmountMinor:
+          format: int64
+          type: integer
+        paymentCurrency:
+          type: string
         status:
           type: string
         topupMode:
@@ -8314,51 +8110,56 @@ components:
       required:
         - orderId
         - status
-        - amount
-        - creditAmount
-        - grossCredits
-        - feeCredits
+        - paymentCurrency
+        - paymentAmountMinor
+        - grossAmountMicroUsd
+        - feeAmountMicroUsd
+        - giftAmountMicroUsd
+        - creditedAmountMicroUsd
         - topupMode
       type: object
     TopupPackage:
       additionalProperties: false
       properties:
-        amount:
-          format: int64
-          type: integer
         badge:
           type: string
-        credits:
-          format: int64
-          type: integer
         enabled:
           type: boolean
+        giftAmountMicroUsd:
+          format: int64
+          type: integer
         id:
           type: string
         name:
           type: string
+        paymentAmountMicroUsd:
+          format: int64
+          type: integer
         sortOrder:
           format: int64
+          type: integer
+        validityDays:
+          format: int32
           type: integer
       required:
         - id
         - name
-        - amount
-        - credits
+        - paymentAmountMicroUsd
+        - giftAmountMicroUsd
         - enabled
         - sortOrder
       type: object
     TrendPoint:
       additionalProperties: false
       properties:
-        credits:
+        amountUsd:
           format: double
           type: number
         timeLabel:
           type: string
       required:
         - timeLabel
-        - credits
+        - amountUsd
       type: object
     UpdateAccountRequest:
       additionalProperties: false
@@ -8431,25 +8232,6 @@ components:
           type: string
       required:
         - status
-      type: object
-    UpdateCreditsPerUSDRequest:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/UpdateCreditsPerUSDRequest.json
-          format: uri
-          readOnly: true
-          type: string
-        credits_per_usd:
-          description: 1 USD 对应积分数
-          format: double
-          maximum: 1000000
-          minimum: 0.0001
-          type: number
-      required:
-        - credits_per_usd
       type: object
     UpdateEndUserInputBody:
       additionalProperties: false
@@ -9354,8 +9136,8 @@ components:
         api_key_id:
           description: API key ID
           type: string
-        api_key_quota_credits:
-          description: API key 配额积分
+        api_key_quota_usd:
+          description: API key 配额USD 金额
           format: double
           type: number
         attempts_count:
@@ -9392,7 +9174,7 @@ components:
         capability_type:
           description: 能力类型
           type: string
-        catalog_base_credits:
+        catalog_base_usd:
           description: 按命中上游资源价格表计算的参考成本
           format: double
           type: number
@@ -9531,7 +9313,7 @@ components:
           description: 首个响应字节之后到请求结束的耗时，毫秒
           format: int32
           type: integer
-        retail_base_credits:
+        retail_base_usd:
           description: 分组零售价格表原价
           format: double
           type: number
@@ -9544,7 +9326,7 @@ components:
         tenant_id:
           description: 租户 ID
           type: string
-        tenant_payable_credits:
+        tenant_payable_usd:
           description: 平台向租户应收：上游参考成本乘租户结算倍率
           format: double
           type: number
@@ -9571,7 +9353,7 @@ components:
         usage_estimated:
           description: 是否估算用量
           type: boolean
-        user_charged_credits:
+        user_charged_usd:
           description: 用户实际扣款；订阅覆盖时为零
           format: double
           type: number
@@ -9582,7 +9364,7 @@ components:
           description: 请求时用户侧覆盖倍率快照
           format: double
           type: number
-        user_payable_credits:
+        user_payable_usd:
           description: 用户零售应收：零售原价乘有效用户倍率
           format: double
           type: number
@@ -9605,12 +9387,12 @@ components:
         - attempts_count
         - billable_unit_type
         - billable_units
-        - catalog_base_credits
-        - tenant_payable_credits
-        - retail_base_credits
-        - user_payable_credits
-        - user_charged_credits
-        - api_key_quota_credits
+        - catalog_base_usd
+        - tenant_payable_usd
+        - retail_base_usd
+        - user_payable_usd
+        - user_charged_usd
+        - api_key_quota_usd
         - service_tier
         - billing_status
         - request_status
@@ -9834,24 +9616,24 @@ components:
           description: 成功请求数
           format: int64
           type: integer
-        total_catalog_base_credits:
-          description: 目录基准价积分（倍率1，谁都不付这个数）
+        total_catalog_base_usd:
+          description: 目录基准价USD 金额（倍率1，谁都不付这个数）
           format: double
           type: number
         total_requests:
           description: 请求总数
           format: int64
           type: integer
-        total_tenant_payable_credits:
-          description: 平台向租户应收积分
+        total_tenant_payable_usd:
+          description: 平台向租户应收USD 金额
           format: double
           type: number
         total_tokens:
           description: 总 token 数
           format: int64
           type: integer
-        total_user_charged_credits:
-          description: 用户实际扣款积分；租户自有 key 与订阅覆盖流量为 0
+        total_user_charged_usd:
+          description: 用户实际扣款USD 金额；租户自有 key 与订阅覆盖流量为 0
           format: double
           type: number
       required:
@@ -9859,9 +9641,9 @@ components:
         - success_count
         - failed_count
         - total_tokens
-        - total_catalog_base_credits
-        - total_tenant_payable_credits
-        - total_user_charged_credits
+        - total_catalog_base_usd
+        - total_tenant_payable_usd
+        - total_user_charged_usd
         - avg_latency_ms
         - avg_request_total_ms
         - avg_first_response_byte_ms
@@ -9899,8 +9681,8 @@ components:
           description: 请求数
           format: int64
           type: integer
-        total_catalog_base_credits:
-          description: 目录基准价积分（倍率1，谁都不付这个数）
+        total_catalog_base_usd:
+          description: 目录基准价USD 金额（倍率1，谁都不付这个数）
           format: double
           type: number
         total_completion_tokens:
@@ -9911,28 +9693,28 @@ components:
           description: 输入 token 数
           format: int64
           type: integer
-        total_quota_credits:
-          description: API key 配额积分
+        total_quota_usd:
+          description: API key 配额USD 金额
           format: double
           type: number
-        total_retail_base_credits:
-          description: 零售价格表原价积分
+        total_retail_base_usd:
+          description: 零售价格表原价USD 金额
           format: double
           type: number
-        total_tenant_payable_credits:
-          description: 平台向租户应收积分
+        total_tenant_payable_usd:
+          description: 平台向租户应收USD 金额
           format: double
           type: number
         total_tokens:
           description: 总 token 数
           format: int64
           type: integer
-        total_user_charged_credits:
-          description: 用户实际扣款积分
+        total_user_charged_usd:
+          description: 用户实际扣款USD 金额
           format: double
           type: number
-        total_user_payable_credits:
-          description: 用户零售应收积分
+        total_user_payable_usd:
+          description: 用户零售应收USD 金额
           format: double
           type: number
       required:
@@ -9941,12 +9723,12 @@ components:
         - total_prompt_tokens
         - total_completion_tokens
         - total_tokens
-        - total_catalog_base_credits
-        - total_tenant_payable_credits
-        - total_retail_base_credits
-        - total_user_payable_credits
-        - total_user_charged_credits
-        - total_quota_credits
+        - total_catalog_base_usd
+        - total_tenant_payable_usd
+        - total_retail_base_usd
+        - total_user_payable_usd
+        - total_user_charged_usd
+        - total_quota_usd
       type: object
     UsageUnitSummaryOutputBody:
       additionalProperties: false
@@ -9985,30 +9767,30 @@ components:
           description: 总计费单位数
           format: int64
           type: integer
-        total_catalog_base_credits:
+        total_catalog_base_usd:
           format: double
           type: number
-        total_retail_base_credits:
+        total_retail_base_usd:
           format: double
           type: number
-        total_tenant_payable_credits:
+        total_tenant_payable_usd:
           format: double
           type: number
-        total_user_charged_credits:
+        total_user_charged_usd:
           format: double
           type: number
-        total_user_payable_credits:
+        total_user_payable_usd:
           format: double
           type: number
       required:
         - billable_unit_type
         - request_count
         - total_billable_units
-        - total_catalog_base_credits
-        - total_tenant_payable_credits
-        - total_retail_base_credits
-        - total_user_payable_credits
-        - total_user_charged_credits
+        - total_catalog_base_usd
+        - total_tenant_payable_usd
+        - total_retail_base_usd
+        - total_user_payable_usd
+        - total_user_charged_usd
       type: object
     UsageUpstreamSummaryOutputBody:
       additionalProperties: false
@@ -10036,7 +9818,7 @@ components:
     UsageUpstreamSummaryRowDTO:
       additionalProperties: false
       properties:
-        catalog_base_credits:
+        catalog_base_usd:
           description: 按上游资源价格表计算的参考费用
           format: double
           type: number
@@ -10068,7 +9850,7 @@ components:
         target_name:
           description: 上游账号或凭证池名称；资源已删除时为空，此时用 provider_code 或 ID 兜底展示
           type: string
-        tenant_payable_credits:
+        tenant_payable_usd:
           description: 平台向租户结算的应收金额
           format: double
           type: number
@@ -10101,8 +9883,8 @@ components:
         - total_tokens
         - token_units
         - image_units
-        - catalog_base_credits
-        - tenant_payable_credits
+        - catalog_base_usd
+        - tenant_payable_usd
       type: object
     UsageUserRankingOutputBody:
       additionalProperties: false
@@ -10156,8 +9938,8 @@ components:
           description: 总 token 数
           format: int64
           type: integer
-        total_user_charged_credits:
-          description: 用户实际扣款积分
+        total_user_charged_usd:
+          description: 用户实际扣款USD 金额
           format: double
           type: number
         user_id:
@@ -10170,7 +9952,7 @@ components:
         - success_count
         - failed_count
         - total_tokens
-        - total_user_charged_credits
+        - total_user_charged_usd
       type: object
     UserAvailableModelDTO:
       additionalProperties: false
@@ -10293,7 +10075,7 @@ components:
     UserConsumptionItem:
       additionalProperties: false
       properties:
-        credits:
+        amountUsd:
           format: double
           type: number
         percentage:
@@ -10308,7 +10090,7 @@ components:
       required:
         - userId
         - username
-        - credits
+        - amountUsd
         - transactionCount
         - percentage
       type: object
@@ -10335,9 +10117,6 @@ components:
           format: uri
           readOnly: true
           type: string
-        credits_per_usd:
-          format: double
-          type: number
         effective_user_multiplier:
           format: double
           type: number
@@ -10355,7 +10134,6 @@ components:
       required:
         - group_id
         - effective_user_multiplier
-        - credits_per_usd
         - items
         - total
       type: object
@@ -10527,8 +10305,8 @@ components:
         trace_id:
           description: Trace ID
           type: string
-        user_charged_credits:
-          description: 用户实际扣款积分
+        user_charged_usd:
+          description: 用户实际扣款USD 金额
           format: double
           type: number
         user_id:
@@ -10549,7 +10327,7 @@ components:
         - total_tokens
         - billable_unit_type
         - billable_units
-        - user_charged_credits
+        - user_charged_usd
         - service_tier
         - billing_source
         - request_status
@@ -10615,8 +10393,8 @@ components:
           description: 总 token 数
           format: int64
           type: integer
-        total_user_charged_credits:
-          description: 用户实际扣款积分
+        total_user_charged_usd:
+          description: 用户实际扣款USD 金额
           format: double
           type: number
       required:
@@ -10626,7 +10404,7 @@ components:
         - total_tokens
         - total_prompt_tokens
         - total_completion_tokens
-        - total_user_charged_credits
+        - total_user_charged_usd
         - avg_latency_ms
       type: object
     UserVisibleGroupDTO:
@@ -10777,7 +10555,7 @@ components:
           type: string
         accountNo:
           type: string
-        amount:
+        amountMicroUsd:
           format: int64
           type: integer
         applyNote:
@@ -10787,10 +10565,17 @@ components:
         createdAt:
           format: int64
           type: integer
-        feeAmount:
+        currency:
+          type: string
+        feeAmountMicroUsd:
           format: int64
           type: integer
-        payoutAmount:
+        paidAt:
+          format: int64
+          type: integer
+        paymentRef:
+          type: string
+        payoutAmountMicroUsd:
           format: int64
           type: integer
         reviewNote:
@@ -10801,9 +10586,10 @@ components:
           type: string
       required:
         - withdrawalId
-        - amount
-        - feeAmount
-        - payoutAmount
+        - currency
+        - amountMicroUsd
+        - feeAmountMicroUsd
+        - payoutAmountMicroUsd
         - accountName
         - bankName
         - accountNo
@@ -11073,7 +10859,7 @@ components:
           type:
             - array
             - "null"
-        caller_charge_credits:
+        caller_charge_usd:
           format: double
           type: number
         completed_at:
@@ -11133,7 +10919,7 @@ components:
         - storage_policy
         - raw_image_retained
         - requested_output_count
-        - caller_charge_credits
+        - caller_charge_usd
         - image_count
         - inline_count
         - url_count
@@ -11186,7 +10972,7 @@ components:
         total_tokens:
           format: int64
           type: integer
-        total_user_charged_credits:
+        total_user_charged_usd:
           format: double
           type: number
       required:
@@ -11196,7 +10982,7 @@ components:
         - total_tokens
         - total_prompt_tokens
         - total_completion_tokens
-        - total_user_charged_credits
+        - total_user_charged_usd
         - avg_latency_ms
       type: object
   securitySchemes:
@@ -11551,7 +11337,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 消费流水
+      summary: 额度明细（含服务扣款审计）
       tags:
         - account
   /api/v1/admin/announcements:
@@ -11826,43 +11612,9 @@ paths:
       summary: 公告已读统计
       tags:
         - admin-announcements
-  /api/v1/admin/cash-accounts:
+  /api/v1/admin/balance-ledger:
     get:
-      operationId: admin-list-cash-accounts
-      parameters:
-        - explode: false
-          in: query
-          name: page
-          schema:
-            default: 1
-            format: int64
-            type: integer
-        - explode: false
-          in: query
-          name: size
-          schema:
-            default: 20
-            format: int64
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageCashAccountItem"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户现金账户总览
-      tags:
-        - admin-payment
-  /api/v1/admin/cash-ledger:
-    get:
-      operationId: admin-list-cash-ledger
+      operationId: admin-list-balance-ledger
       parameters:
         - explode: false
           in: query
@@ -11901,7 +11653,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 任意租户现金流水
+      summary: 任意租户余额流水
       tags:
         - admin-payment
   /api/v1/admin/debts/{owner_type}/{id}:
@@ -12054,6 +11806,40 @@ paths:
       summary: 更新平台充值与提现规则
       tags:
         - admin-payment
+  /api/v1/admin/tenant-balances:
+    get:
+      operationId: admin-list-tenant-balances
+      parameters:
+        - explode: false
+          in: query
+          name: page
+          schema:
+            default: 1
+            format: int64
+            type: integer
+        - explode: false
+          in: query
+          name: size
+          schema:
+            default: 20
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageCashAccountItem"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 租户 USD 余额总览
+      tags:
+        - admin-payment
   /api/v1/admin/wechat-config:
     get:
       operationId: admin-get-wechat-config
@@ -12133,69 +11919,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 提现申请列表
+      summary: 提现记录列表
       tags:
         - admin-payment
-  /api/v1/admin/withdrawals/{id}/review:
     post:
-      operationId: admin-review-withdrawal
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
+      operationId: admin-create-withdrawal
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ReviewWithdrawalInputBody"
+              $ref: "#/components/schemas/CreateWithdrawalInputBody"
         required: true
       responses:
-        "200":
+        "201":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MessageOutputBody"
-          description: OK
+                $ref: "#/components/schemas/WithdrawalItem"
+          description: Created
         default:
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 审核提现申请
-      tags:
-        - admin-payment
-  /api/v1/admin/withdrawals/{id}/settle:
-    post:
-      operationId: admin-settle-withdrawal
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SettleWithdrawalInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 线下打款核销提现
+      summary: 创建提现记录并直接扣减租户额度
       tags:
         - admin-payment
   /api/v1/analytics/consumption-trend:
@@ -12525,31 +12273,6 @@ paths:
       summary: 认证审计日志
       tags:
         - admin-finance
-  /api/v1/billing/events/batch-confirm:
-    post:
-      operationId: admin-batch-confirm-events
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchConfirmInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BatchOpOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 批量手动确认
-      tags:
-        - admin-billing-events
   /api/v1/billing/events/batch-refund:
     post:
       operationId: admin-batch-refund-events
@@ -12573,98 +12296,6 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 批量退款
-      tags:
-        - admin-billing-events
-  /api/v1/billing/events/{id}/cancel:
-    post:
-      operationId: admin-cancel-preauth
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CancelPreAuthInputBody"
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 取消卡住的预授权
-      tags:
-        - admin-dashboard
-  /api/v1/billing/events/{id}/confirm:
-    post:
-      operationId: admin-manual-confirm-event
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ManualConfirmInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 手动确认已释放事件
-      tags:
-        - admin-billing-events
-  /api/v1/billing/events/{id}/dismiss:
-    post:
-      operationId: admin-dismiss-event
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DismissEventInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EventStatusOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 免除收费
       tags:
         - admin-billing-events
   /api/v1/credential-pools:
@@ -13244,7 +12875,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: Dashboard 告警（超时预授权 / 异常释放）
+      summary: Dashboard 告警（异常扣费）
       tags:
         - admin-dashboard
   /api/v1/dashboard/recent-errors:
@@ -13826,7 +13457,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 在线充值配置（汇率/限额）
+      summary: USD 在线充值配置
       tags:
         - payment
   /api/v1/payments/topup-orders:
@@ -14252,49 +13883,6 @@ paths:
       summary: 同步常用模型价格
       tags:
         - price-books
-  /api/v1/pricing/credits-per-usd:
-    get:
-      operationId: ai-get-credits-per-usd
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreditsPerUSDOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: USD 到积分汇率
-      tags:
-        - pricing
-    put:
-      operationId: ai-set-credits-per-usd
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateCreditsPerUSDRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreditsPerUSDOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 设置 USD 到积分汇率
-      tags:
-        - pricing
   /api/v1/public/invitations/{code}:
     get:
       operationId: public-get-invitation
@@ -15054,6 +14642,64 @@ paths:
       summary: 启用/停用租户用户
       tags:
         - admin-tenant-users
+  /api/v1/tenant/balance:
+    get:
+      operationId: tenant-balance
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashAccountOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 租户 USD 额度余额
+      tags:
+        - tenant-balance
+  /api/v1/tenant/balance-ledger:
+    get:
+      operationId: tenant-balance-ledger
+      parameters:
+        - explode: false
+          in: query
+          name: txnType
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: page
+          schema:
+            default: 1
+            format: int64
+            type: integer
+        - explode: false
+          in: query
+          name: size
+          schema:
+            default: 20
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageCashLedgerItem"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 额度明细流水
+      tags:
+        - tenant-balance
   /api/v1/tenant/branding:
     get:
       operationId: tenant-get-branding
@@ -15140,89 +14786,6 @@ paths:
       summary: 上传用户门户小图标
       tags:
         - tenant-branding
-  /api/v1/tenant/cash-account:
-    get:
-      operationId: tenant-cash-account
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CashAccountOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 租户现金账户余额
-      tags:
-        - tenant-cash
-  /api/v1/tenant/cash-ledger:
-    get:
-      operationId: tenant-cash-ledger
-      parameters:
-        - explode: false
-          in: query
-          name: txnType
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: page
-          schema:
-            default: 1
-            format: int64
-            type: integer
-        - explode: false
-          in: query
-          name: size
-          schema:
-            default: 20
-            format: int64
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageCashLedgerItem"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 现金流水
-      tags:
-        - tenant-cash
-  /api/v1/tenant/cash/buy-credits:
-    post:
-      operationId: tenant-cash-buy-credits
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BuyCreditsInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BuyCreditsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 用现金余额购买租户积分
-      tags:
-        - tenant-cash
   /api/v1/tenant/payment-settings:
     get:
       operationId: tenant-get-payment-settings
@@ -15264,94 +14827,6 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 更新用户充值设置
-      tags:
-        - tenant-cash
-  /api/v1/tenant/withdrawals:
-    get:
-      operationId: tenant-list-withdrawals
-      parameters:
-        - explode: false
-          in: query
-          name: status
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: page
-          schema:
-            default: 1
-            format: int64
-            type: integer
-        - explode: false
-          in: query
-          name: size
-          schema:
-            default: 20
-            format: int64
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageWithdrawalItem"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 提现记录
-      tags:
-        - tenant-cash
-    post:
-      operationId: tenant-apply-withdrawal
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApplyWithdrawalInputBody"
-        required: true
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WithdrawalItem"
-          description: Created
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 申请提现
-      tags:
-        - tenant-cash
-  /api/v1/tenant/withdrawals/{id}/cancel:
-    post:
-      operationId: tenant-cancel-withdrawal
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 取消提现申请（仅 pending 可取消）
       tags:
         - tenant-cash
   /api/v1/tenants:
@@ -16670,7 +16145,7 @@ paths:
         - groups
   /api/v1/tenants/me/groups/{groupID}/effective-prices:
     get:
-      description: 返回零售价格表 USD 单价乘分组默认用户倍率和积分汇率后的价格。
+      description: 返回零售价格表 USD 单价乘分组默认用户倍率后的 USD 价格。
       operationId: ai-list-tenant-self-group-effective-prices
       parameters:
         - description: 分组 ID
@@ -19396,7 +18871,7 @@ paths:
         - usage
   /api/v1/usage-ranking/users:
     get:
-      description: 按用户计费积分降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。
+      description: 按用户计费USD 金额降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。
       operationId: ai-list-usage-user-ranking
       parameters:
         - description: 租户 ID；为空表示全部租户
@@ -20119,7 +19594,7 @@ paths:
         - groups
   /api/v1/users/me/groups/{groupID}/effective-prices:
     get:
-      description: 返回当前用户在某可见分组下可使用的模型及其生效积分单价（售价表 USD 单价 × 终端用户生效倍率 × 积分汇率）。
+      description: 返回当前用户在某可见分组下可使用的模型及其生效 USD 单价（售价表 USD 单价 × 终端用户生效倍率）。
       operationId: ai-list-user-self-group-effective-prices
       parameters:
         - description: 分组 ID
@@ -20184,7 +19659,7 @@ paths:
       tags:
         - subscriptions
     post:
-      description: 用本人积分购买套餐（不可退款）。201=已开通；202=扣款处理中请轮询订单；402=余额不足；409=排队已满或该套餐已在待激活队列。
+      description: 用本人 USD 余额购买套餐（不可退款）。201=已开通；202=扣款处理中请轮询订单；402=余额不足；409=排队已满或该套餐已在待激活队列。
       operationId: ai-create-user-self-subscription-order
       parameters:
         - description: 客户端购买幂等键；同一购买重试必须复用
@@ -20245,7 +19720,7 @@ paths:
         - subscriptions
   /api/v1/users/me/subscription-plans:
     get:
-      description: 返回当前用户所属租户已上架（on_sale）的订阅套餐。额度单位为微积分，前端除以 10000 展示为积分。
+      description: 返回当前用户所属租户已上架（on_sale）的订阅套餐。价格和额度单位为 micro-USD。
       operationId: ai-list-user-self-subscription-plans
       parameters:
         - description: 返回条数；默认 20，最大 200

@@ -11,7 +11,7 @@ import {
   UsageLatencyCell,
   UsageTag,
   UsageTokenCell,
-  formatCredits,
+  formatUSD,
   formatUsageTimestamp
 } from "@/platform/ai/usage";
 import { DsPagination, DsTable, type DsTableColumn } from "@/shared/ui";
@@ -42,7 +42,7 @@ const columns = computed<DsTableColumn[]>(() => [
   { key: "status", title: "状态", width: 90 },
   { key: "source", title: "来源", width: 100 },
   { key: "token", title: "Token", width: 150, align: "right" },
-  { key: "cost", title: "积分", width: 130, align: "right" },
+  { key: "cost", title: "费用（USD）", width: 130, align: "right" },
   { key: "latency", title: "延迟", width: 110, align: "right" },
   { key: "actions", title: "操作", width: 70 }
 ]);
@@ -107,10 +107,10 @@ function groupLabel(row: TenantUsageRow) {
 
       <template #cell-cost="{ row }">
         <UsageCostCell
-          :credits="row.user_charged_credits"
+          :amount-u-s-d="row.user_charged_usd"
           :secondary="[
-            { label: '租户成本', value: formatCredits(row.tenant_payable_credits) },
-            { label: '零售应收', value: formatCredits(row.user_payable_credits) }
+            { label: '租户成本', value: formatUSD(row.tenant_payable_usd) },
+            { label: '零售应收', value: formatUSD(row.user_payable_usd) }
           ]"
         />
       </template>

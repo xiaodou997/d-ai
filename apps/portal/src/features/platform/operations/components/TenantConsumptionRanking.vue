@@ -1,5 +1,5 @@
 <!--
-  数据大盘「用户消费贡献榜」面板:按成功消费积分排序的横向条形榜。
+  数据大盘「用户消费贡献榜」面板:按成功消费金额排序的横向条形榜。
   颜色全部走 var(--ds-*) token(含骨架渐变,与 DsTable .ds-table__skeleton 同组 token);
   数据与 props 不变。
 -->
@@ -20,11 +20,11 @@ const emit = defineEmits<{
 }>();
 
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
-const maxCredits = computed(() => Math.max(...props.items.map((item) => item.credits), 0));
+const maxAmount = computed(() => Math.max(...props.items.map((item) => item.amountUsd), 0));
 
 function barWidth(item: UserConsumptionItem) {
-  if (maxCredits.value <= 0) return "0%";
-  return `${Math.max((item.credits / maxCredits.value) * 100, 4)}%`;
+  if (maxAmount.value <= 0) return "0%";
+  return `${Math.max((item.amountUsd / maxAmount.value) * 100, 4)}%`;
 }
 </script>
 
@@ -35,7 +35,7 @@ function barWidth(item: UserConsumptionItem) {
         <span class="ranking-panel__icon" aria-hidden="true"><Trophy :size="19" /></span>
         <div>
           <h2 id="consumption-ranking-title" class="ranking-panel__title">用户消费贡献榜</h2>
-          <p class="ranking-panel__desc">{{ rangeLabel }}按成功消费积分排序</p>
+          <p class="ranking-panel__desc">{{ rangeLabel }}按成功消费金额排序</p>
         </div>
       </div>
       <button class="ranking-panel__action" type="button" @click="emit('openDetails')">查看消费明细</button>
@@ -61,7 +61,7 @@ function barWidth(item: UserConsumptionItem) {
           <span class="ranking-row__bar-fill" :style="{ width: barWidth(item) }"></span>
         </div>
         <div class="ranking-row__result">
-          <strong>{{ numberFormatter.format(item.credits) }}</strong>
+          <strong>${{ numberFormatter.format(item.amountUsd) }}</strong>
           <span>{{ item.percentage || "0.0" }}%</span>
         </div>
       </li>

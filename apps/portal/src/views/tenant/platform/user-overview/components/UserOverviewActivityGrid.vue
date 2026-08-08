@@ -2,7 +2,7 @@
 import { DsEmpty, DsTag } from "@/shared/ui";
 import type { TenantUsageLog } from "@/features/ai/usage";
 import type { RechargeRecordItem } from "@/api/types/platformTenant";
-import { formatCurrencyYuanFromCent, formatNumber, formatShortDateTime } from "../formatters";
+import { formatNumber, formatShortDateTime } from "../formatters";
 
 type DsTagTone = "neutral" | "accent" | "positive" | "warning" | "danger" | "info";
 
@@ -46,7 +46,7 @@ function aiStatusTone(status: string): DsTagTone {
               <DsTag :tone="rechargeStatusTone(record.status)">{{ record.status === "reversed" ? "已撤销" : "有效" }}</DsTag>
             </div>
             <p class="activity-item-meta">
-              实付 {{ formatCurrencyYuanFromCent(record.paidAmount) }} · 到账 {{ formatNumber(record.creditAmount) }} 积分
+              实付 ${{ (record.paidAmountMinor / 100).toFixed(2) }} · 到账 ${{ record.amountUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
             </p>
           </div>
           <span class="activity-item-time">{{ formatShortDateTime(record.createdTime) }}</span>
@@ -70,7 +70,7 @@ function aiStatusTone(status: string): DsTagTone {
               <strong class="activity-item-title">{{ log.model_code }}</strong>
               <div class="activity-tag-row">
                 <DsTag :tone="aiStatusTone(log.request_status)">{{ log.request_status }}</DsTag>
-                <DsTag>{{ formatNumber(log.user_charged_credits) }} 积分</DsTag>
+                <DsTag>${{ Number(log.user_charged_usd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</DsTag>
               </div>
             </div>
             <p class="activity-item-meta">

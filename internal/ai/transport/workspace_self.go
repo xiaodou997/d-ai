@@ -8,8 +8,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/credits"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/moneyfmt"
 	"xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -39,14 +39,14 @@ type workspaceChatSessionCreateInput struct {
 }
 
 type workspaceUsageSummaryDTO struct {
-	RequestCount            int64   `json:"request_count"`
-	SuccessRequests         int64   `json:"success_requests"`
-	FailedRequests          int64   `json:"failed_requests"`
-	TotalTokens             int64   `json:"total_tokens"`
-	TotalPromptTokens       int64   `json:"total_prompt_tokens"`
-	TotalCompletionTokens   int64   `json:"total_completion_tokens"`
-	TotalUserChargedCredits float64 `json:"total_user_charged_credits"`
-	AvgLatencyMs            float64 `json:"avg_latency_ms"`
+	RequestCount          int64   `json:"request_count"`
+	SuccessRequests       int64   `json:"success_requests"`
+	FailedRequests        int64   `json:"failed_requests"`
+	TotalTokens           int64   `json:"total_tokens"`
+	TotalPromptTokens     int64   `json:"total_prompt_tokens"`
+	TotalCompletionTokens int64   `json:"total_completion_tokens"`
+	TotalUserChargedUSD   float64 `json:"total_user_charged_usd"`
+	AvgLatencyMs          float64 `json:"avg_latency_ms"`
 }
 
 type workspaceChatSessionDTO struct {
@@ -101,7 +101,7 @@ type workspaceImageJobDTO struct {
 	Style                string                   `json:"style,omitempty"`
 	ResponseFormat       string                   `json:"response_format,omitempty"`
 	RequestedOutputCount int                      `json:"requested_output_count"`
-	CallerChargeCredits  float64                  `json:"caller_charge_credits"`
+	CallerChargeUSD      float64                  `json:"caller_charge_usd"`
 	ImageCount           int                      `json:"image_count"`
 	InlineCount          int                      `json:"inline_count"`
 	URLCount             int                      `json:"url_count"`
@@ -532,27 +532,27 @@ func workspaceLogsAndSummary(ctx context.Context, d AIDeps, owner workspace.Owne
 
 func workspaceSummaryFromUser(summary domain.UserUsageSummary) workspaceUsageSummaryDTO {
 	return workspaceUsageSummaryDTO{
-		RequestCount:            summary.RequestCount,
-		SuccessRequests:         summary.SuccessRequests,
-		FailedRequests:          summary.FailedRequests,
-		TotalTokens:             summary.TotalTokens,
-		TotalPromptTokens:       summary.TotalPromptTokens,
-		TotalCompletionTokens:   summary.TotalCompletionTokens,
-		TotalUserChargedCredits: credits.MicroToCredits(summary.TotalUserChargedMicro),
-		AvgLatencyMs:            summary.AvgLatencyMs,
+		RequestCount:          summary.RequestCount,
+		SuccessRequests:       summary.SuccessRequests,
+		FailedRequests:        summary.FailedRequests,
+		TotalTokens:           summary.TotalTokens,
+		TotalPromptTokens:     summary.TotalPromptTokens,
+		TotalCompletionTokens: summary.TotalCompletionTokens,
+		TotalUserChargedUSD:   moneyfmt.MicroToUSD(summary.TotalUserChargedMicro),
+		AvgLatencyMs:          summary.AvgLatencyMs,
 	}
 }
 
 func workspaceSummaryFromDashboard(summary domain.DashboardSummary) workspaceUsageSummaryDTO {
 	return workspaceUsageSummaryDTO{
-		RequestCount:            summary.TotalRequests,
-		SuccessRequests:         summary.SuccessfulRequests,
-		FailedRequests:          summary.FailedRequests,
-		TotalTokens:             summary.TotalTokens,
-		TotalPromptTokens:       summary.TotalPromptTokens,
-		TotalCompletionTokens:   summary.TotalCompletionTokens,
-		TotalUserChargedCredits: credits.MicroToCredits(summary.TotalUserChargedMicro),
-		AvgLatencyMs:            summary.AvgLatencyMs,
+		RequestCount:          summary.TotalRequests,
+		SuccessRequests:       summary.SuccessfulRequests,
+		FailedRequests:        summary.FailedRequests,
+		TotalTokens:           summary.TotalTokens,
+		TotalPromptTokens:     summary.TotalPromptTokens,
+		TotalCompletionTokens: summary.TotalCompletionTokens,
+		TotalUserChargedUSD:   moneyfmt.MicroToUSD(summary.TotalUserChargedMicro),
+		AvgLatencyMs:          summary.AvgLatencyMs,
 	}
 }
 
@@ -635,7 +635,7 @@ func workspaceImageJobToDTO(job workspace.ImageJob) workspaceImageJobDTO {
 		Style:                job.Style,
 		ResponseFormat:       job.ResponseFormat,
 		RequestedOutputCount: job.RequestedOutputCount,
-		CallerChargeCredits:  credits.MicroToCredits(job.CallerChargeMicro),
+		CallerChargeUSD:      moneyfmt.MicroToUSD(job.CallerChargeMicro),
 		ImageCount:           job.ImageCount,
 		InlineCount:          job.InlineCount,
 		URLCount:             job.URLCount,
@@ -705,7 +705,7 @@ func userUsageLogFromDomain(log domain.UsageLog) userUsageLogDTO {
 		TotalTokens:                     log.TotalTokens,
 		BillableUnitType:                log.BillableUnitType,
 		BillableUnits:                   log.BillableUnits,
-		UserChargedCredits:              credits.MicroToCredits(log.UserChargedMicro),
+		UserChargedUSD:                  moneyfmt.MicroToUSD(log.UserChargedMicro),
 		ServiceTier:                     log.ServiceTier,
 		RequestStatus:                   log.RequestStatus,
 		HTTPStatus:                      log.HTTPStatus,

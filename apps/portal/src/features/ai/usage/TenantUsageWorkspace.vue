@@ -12,7 +12,7 @@ import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { ScrollText } from "lucide-vue-next";
 import { PortalMetricGrid, PortalPagePanel } from "@/platform";
-import { formatCredits } from "@/platform/ai/usage";
+import { formatNumber, formatUSD } from "@/platform/ai/usage";
 
 import { tenantUsageApi } from "./api";
 import TenantUsageDetailDrawer from "./components/TenantUsageDetailDrawer.vue";
@@ -47,11 +47,11 @@ const metrics = computed(() => [
     hint: `${stats.value.success_count.toLocaleString()} 成功 / ${stats.value.failed_count.toLocaleString()} 失败`
   },
   { label: "成功率", value: successRate.value, hint: "当前过滤范围" },
-  { label: "总 Token", value: formatCredits(stats.value.total_tokens), hint: "当前过滤范围" },
-  { label: "平台应收", value: formatCredits(stats.value.total_tenant_payable_credits), hint: "本租户应付平台" },
+  { label: "总 Token", value: formatNumber(stats.value.total_tokens), hint: "当前过滤范围" },
+  { label: "平台应收", value: formatUSD(stats.value.total_tenant_payable_usd), hint: "本租户应付平台" },
   {
     label: "用户扣款",
-    value: formatCredits(stats.value.total_user_charged_credits),
+    value: formatUSD(stats.value.total_user_charged_usd),
     hint: `终端用户消费 · 均延 ${Math.round(stats.value.avg_latency_ms)} ms`
   }
 ]);

@@ -28,7 +28,6 @@ import (
 	"xiaodou/dai/internal/ai/asynctask"
 	"xiaodou/dai/internal/ai/audit"
 	"xiaodou/dai/internal/ai/billingcontrol"
-	billingledger "xiaodou/dai/internal/ai/billingledger"
 	"xiaodou/dai/internal/ai/blobstore"
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/clientruntime"
@@ -60,9 +59,7 @@ import (
 	announcementpkg "xiaodou/dai/internal/announcement"
 	announcementpg "xiaodou/dai/internal/announcement/pg"
 	"xiaodou/dai/internal/auth"
-	billingpg "xiaodou/dai/internal/billing/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
-	"xiaodou/dai/internal/cache"
 	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
 	daidb "xiaodou/dai/internal/db"
@@ -168,13 +165,7 @@ func main() {
 	}
 
 	// Billing services — 进程内直接调用的核心
-	billingRepo := billingpg.NewBillingRepository(pool)
-	redisCache, cacheErr := cache.NewRedisService(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB, appLogger)
-	if cacheErr != nil {
-		appLogger.Fatal("redis cache service init failed", zap.Error(cacheErr))
-	}
-	deductionSvc := billingsvc.NewDeductionService(pool, redisCache, appLogger)
-	creditLeaseSvc := billingsvc.NewCreditLeaseService(pool, appLogger)
+	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 
 	// User / Invite / Payment / Announcement
 	userRepo := userpg.NewUserRepository(pool)
@@ -190,8 +181,7 @@ func main() {
 	defer banReconciler.Stop()
 
 	// Scheduler
-	sched := scheduler.NewScheduler(pool, jwtSvc, paymentSvc, appLogger, cfg.Scheduler.PreAuthTimeoutMinutes)
-	sched.WithCreditLeaseReaper(creditLeaseSvc)
+	sched := scheduler.NewScheduler(pool, jwtSvc, paymentSvc, appLogger)
 	sched.Start()
 	defer sched.Stop()
 
@@ -201,27 +191,6 @@ func main() {
 
 	q := aidb.New(pool)
 	banChecker := banstate.NewChecker(redisClient)
-
-	// AI 计费通过进程内端口直接调用统一计费域。
-	leasePort := billingledger.NewBillingLeaseAdapter(creditLeaseSvc, "dai")
-	billingCoordinator := billingledger.New(
-		pool,
-		leasePort,
-		billingledger.Config{
-			RequestedTenantMicro: cfg.Billing.RequestedTenantMicro,
-			RequestedUserMicro:   cfg.Billing.RequestedUserMicro,
-			LeaseTTL:             cfg.Billing.LeaseTTL,
-			LeaseGrace:           cfg.Billing.LeaseGrace,
-			WindowMaxAge:         cfg.Billing.WindowMaxAge,
-			RenewLead:            cfg.Billing.RenewLead,
-			AdmissionHeadroom:    cfg.Billing.AdmissionHeadroom,
-			WorkerInterval:       cfg.Billing.WorkerInterval,
-			DispatchLease:        cfg.Billing.DispatchLease,
-			PickLimit:            cfg.Billing.PickLimit,
-		},
-		appLogger,
-	)
-	go billingCoordinator.Run(ctx)
 
 	// ── AI 领域服务（管理端 + 工作端）──
 
@@ -363,7 +332,7 @@ func main() {
 	// Price book biller + usage logger
 	priceBookBiller := aiadapters.NewPriceBookBiller(priceBookSvc, q, pool)
 	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).
-		WithBillingCoordinator(billingCoordinator).
+		WithDeductionService(deductionSvc).
 		WithRecoveryQueue(redisClient, appLogger)
 	go usageLogger.RunRecovery(ctx)
 
@@ -378,9 +347,6 @@ func main() {
 	subscriptionGateStep := &serving.SubscriptionGateStep{Subs: subsPort(subsSvc), Logger: appLogger}
 	billingGuardStep := &serving.BillingGuardStep{Resolver: priceBookBiller}
 	routeCandidatesStep := &serving.RouteCandidatesStep{Selector: runtimeRouteSelector, Sticky: stickyStore}
-	billingAdmissionStep := &serving.BillingAdmissionStep{
-		Coordinator: billingCoordinator, Logger: appLogger, Metrics: metricsGW,
-	}
 	rateLimitStep := &serving.RateLimitStep{Limiter: rateLimiter}
 
 	// Upstream HTTP transport + client runtime
@@ -417,7 +383,6 @@ func main() {
 		subscriptionGateStep,
 		routeCandidatesStep,
 		billingGuardStep,
-		billingAdmissionStep,
 		rateLimitStep,
 		executeStep,
 	).WithFinalizers(
@@ -508,8 +473,6 @@ func main() {
 		Legal:         cfg.Legal,
 		UserService:   userSvc,
 		Deduction:     deductionSvc,
-		CreditLeases:  creditLeaseSvc,
-		BillingRepo:   billingRepo,
 		Invite:        inviteSvc,
 		Payment:       paymentSvc,
 		Announcements: announcementSvc,

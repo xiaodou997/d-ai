@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	dbgen "xiaodou/dai/internal/ai/db/gen"
-	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/subscription"
 )
 
@@ -84,7 +83,7 @@ func mkPlan(t *testing.T, r *SubscriptionRepo, ctx context.Context, tenantID str
 	t.Helper()
 	gid := seedGroup(t, r, ctx, tenantID)
 	p, err := r.CreatePlan(ctx, subscription.CreatePlanParams{
-		TenantID: tenantID, Name: "plan-" + fmt.Sprint(time.Now().UnixNano()), PriceCredits: 200,
+		TenantID: tenantID, Name: "plan-" + fmt.Sprint(time.Now().UnixNano()), PriceMicroUSD: 200,
 		DurationDays: dur, TotalLimitMicro: total, Window5hLimitMicro: w5h, Window7dLimitMicro: w7d,
 		Groups: []subscription.PlanGroup{{GroupID: gid, QuotaDebitMultiplier: 1}},
 	})
@@ -273,7 +272,7 @@ func TestPlanGroupsValidationAndSnapshot(t *testing.T) {
 
 	base := subscription.CreatePlanParams{
 		TenantID: tenantID, Name: "p-" + fmt.Sprint(time.Now().UnixNano()),
-		PriceCredits: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
+		PriceMicroUSD: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
 	}
 
 	// 1) 无分组 ⇒ ErrPlanNeedsGroups
@@ -390,10 +389,7 @@ func TestPurchaseQueueAndInsufficient(t *testing.T) {
 	if err != nil || s1 == nil || s1.Status != subscription.SubActive {
 		t.Fatalf("purchase#1 should be active: s=%v err=%v", s1, err)
 	}
-	wantPriceMicro, ok := domain.CreditsToMicro(planA.PriceCredits)
-	if !ok {
-		t.Fatalf("test plan price is not representable: %d", planA.PriceCredits)
-	}
+	wantPriceMicro := planA.PriceMicroUSD
 	if fp.last.UserMicro != wantPriceMicro {
 		t.Fatalf("subscription debit = %d micro, want %d", fp.last.UserMicro, wantPriceMicro)
 	}
@@ -551,7 +547,7 @@ func TestPlanInventoryPreventsOversellAndReleasesFailedReservation(t *testing.T)
 	service := subscription.NewService(r, &fakePurchaser{}, zap.NewNop())
 	plan, err := service.CreatePlan(ctx, subscription.CreatePlanParams{
 		TenantID: tenantID, Name: "inventory-" + fmt.Sprint(time.Now().UnixNano()),
-		PriceCredits: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
+		PriceMicroUSD: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
 		SaleLimit: &saleLimit,
 		Groups:    []subscription.PlanGroup{{GroupID: groupID, QuotaDebitMultiplier: 1}},
 	})
@@ -602,7 +598,7 @@ func TestPlanInventoryPreventsOversellAndReleasesFailedReservation(t *testing.T)
 
 	failedPlan, err := service.CreatePlan(ctx, subscription.CreatePlanParams{
 		TenantID: tenantID, Name: "inventory-release-" + fmt.Sprint(time.Now().UnixNano()),
-		PriceCredits: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
+		PriceMicroUSD: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
 		SaleLimit: &saleLimit,
 		Groups:    []subscription.PlanGroup{{GroupID: groupID, QuotaDebitMultiplier: 1}},
 	})
@@ -680,7 +676,7 @@ func TestPurchasePolicyRollingHistoryAndRevisions(t *testing.T) {
 	}
 	plan, err := svc.CreatePlan(ctx, subscription.CreatePlanParams{
 		TenantID: tenantID, Name: "limited-" + fmt.Sprint(time.Now().UnixNano()),
-		PriceCredits: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
+		PriceMicroUSD: 100, DurationDays: 30, TotalLimitMicro: 1_000_000,
 		Groups:         []subscription.PlanGroup{{GroupID: groupID, QuotaDebitMultiplier: 1}},
 		PurchasePolicy: policy, CreatedBy: "creator",
 	})
@@ -690,7 +686,7 @@ func TestPurchasePolicyRollingHistoryAndRevisions(t *testing.T) {
 
 	update := subscription.UpdatePlanParams{
 		ID: plan.ID, TenantID: tenantID, Name: plan.Name, Description: plan.Description,
-		PriceCredits: plan.PriceCredits, DurationDays: plan.DurationDays,
+		PriceMicroUSD: plan.PriceMicroUSD, DurationDays: plan.DurationDays,
 		TotalLimitMicro: plan.TotalLimitMicro, Groups: plan.Groups,
 		PurchasePolicy: &policy, UpdatedBy: "editor",
 	}

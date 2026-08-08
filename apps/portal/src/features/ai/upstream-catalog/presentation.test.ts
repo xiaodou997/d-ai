@@ -49,7 +49,7 @@ function upstream(price?: TenantAiPriceBookEntry): TenantAiUpstreamResource {
 
 describe("upstream pricing presentation", () => {
   it("applies the upstream account multiplier to displayed prices", () => {
-    const [card] = buildPricingCards(upstream(tokenPrice()), 100);
+    const [card] = buildPricingCards(upstream(tokenPrice()));
 
     expect(card.sections[0].title).toBe("输入上下文 无上限");
     expect(card.sections[0].lines.map((line) => line.usd)).toEqual([
@@ -57,12 +57,6 @@ describe("upstream pricing presentation", () => {
       "$16.00/1M",
       "$3.20/1M",
       "$0.80/1M"
-    ]);
-    expect(card.sections[0].lines.map((line) => line.credits)).toEqual([
-      "800 积分",
-      "1,600 积分",
-      "320 积分",
-      "80 积分"
     ]);
   });
 

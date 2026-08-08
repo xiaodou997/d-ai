@@ -415,7 +415,7 @@ type AiSubAvailableOnSalePlan struct {
 	TenantID           string             `json:"tenant_id"`
 	Name               string             `json:"name"`
 	Description        string             `json:"description"`
-	PriceCredits       int64              `json:"price_credits"`
+	PriceMicroUsd      int64              `json:"price_micro_usd"`
 	DurationDays       int32              `json:"duration_days"`
 	TotalLimitMicro    int64              `json:"total_limit_micro"`
 	Window5hLimitMicro pgtype.Int8        `json:"window_5h_limit_micro"`
@@ -437,7 +437,7 @@ type AiSubOrder struct {
 	UserID                             string             `json:"user_id"`
 	PlanID                             pgtype.UUID        `json:"plan_id"`
 	PlanNameSnapshot                   string             `json:"plan_name_snapshot"`
-	PriceCredits                       int64              `json:"price_credits"`
+	PriceMicroUsd                      int64              `json:"price_micro_usd"`
 	DurationDaysSnapshot               int32              `json:"duration_days_snapshot"`
 	TotalLimitMicroSnapshot            int64              `json:"total_limit_micro_snapshot"`
 	Window5hLimitMicroSnapshot         pgtype.Int8        `json:"window_5h_limit_micro_snapshot"`
@@ -460,7 +460,7 @@ type AiSubPlan struct {
 	TenantID           string             `json:"tenant_id"`
 	Name               string             `json:"name"`
 	Description        string             `json:"description"`
-	PriceCredits       int64              `json:"price_credits"`
+	PriceMicroUsd      int64              `json:"price_micro_usd"`
 	DurationDays       int32              `json:"duration_days"`
 	TotalLimitMicro    int64              `json:"total_limit_micro"`
 	Window5hLimitMicro pgtype.Int8        `json:"window_5h_limit_micro"`
@@ -889,6 +889,7 @@ type DaiSchemaMetadatum struct {
 	Singleton     bool               `json:"singleton"`
 	Version       int32              `json:"version"`
 	InitializedAt pgtype.Timestamptz `json:"initialized_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type FileAccessLink struct {
@@ -1006,59 +1007,53 @@ type LedgerCreditLease struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
-type PayCashAccount struct {
-	TenantID  string             `json:"tenant_id"`
-	Balance   int64              `json:"balance"`
-	Frozen    int64              `json:"frozen"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
 type PayCashLedger struct {
-	ID             int64              `json:"id"`
-	TxnID          string             `json:"txn_id"`
-	TenantID       string             `json:"tenant_id"`
-	TxnType        string             `json:"txn_type"`
-	Amount         int64              `json:"amount"`
-	BalanceAfter   int64              `json:"balance_after"`
-	RefType        pgtype.Text        `json:"ref_type"`
-	RefID          pgtype.Text        `json:"ref_id"`
-	OperatorID     pgtype.Text        `json:"operator_id"`
-	Note           pgtype.Text        `json:"note"`
-	IdempotencyKey pgtype.Text        `json:"idempotency_key"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ID                   int64              `json:"id"`
+	TxnID                string             `json:"txn_id"`
+	TenantID             string             `json:"tenant_id"`
+	TxnType              string             `json:"txn_type"`
+	AmountMicroUsd       int64              `json:"amount_micro_usd"`
+	BalanceAfterMicroUsd int64              `json:"balance_after_micro_usd"`
+	RefType              pgtype.Text        `json:"ref_type"`
+	RefID                pgtype.Text        `json:"ref_id"`
+	OperatorID           pgtype.Text        `json:"operator_id"`
+	Note                 pgtype.Text        `json:"note"`
+	IdempotencyKey       pgtype.Text        `json:"idempotency_key"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 }
 
 type PayOrder struct {
-	ID                int64              `json:"id"`
-	OrderID           string             `json:"order_id"`
-	OutTradeNo        string             `json:"out_trade_no"`
-	Scene             string             `json:"scene"`
-	TenantID          string             `json:"tenant_id"`
-	UserID            pgtype.Text        `json:"user_id"`
-	TopupMode         string             `json:"topup_mode"`
-	PackageID         pgtype.Text        `json:"package_id"`
-	PackageName       pgtype.Text        `json:"package_name"`
-	PackageBadge      pgtype.Text        `json:"package_badge"`
-	Amount            int64              `json:"amount"`
-	ExchangeRate      int64              `json:"exchange_rate"`
-	GrossCreditAmount int64              `json:"gross_credit_amount"`
-	FeeCreditAmount   int64              `json:"fee_credit_amount"`
-	CreditAmount      int64              `json:"credit_amount"`
-	FeeRateBp         int32              `json:"fee_rate_bp"`
-	FeeAmount         int64              `json:"fee_amount"`
-	NetAmount         int64              `json:"net_amount"`
-	Channel           string             `json:"channel"`
-	CodeUrl           pgtype.Text        `json:"code_url"`
-	TransactionID     pgtype.Text        `json:"transaction_id"`
-	Status            string             `json:"status"`
-	PaidAt            pgtype.Timestamptz `json:"paid_at"`
-	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
-	CreditOrderID     pgtype.Text        `json:"credit_order_id"`
-	FailNote          pgtype.Text        `json:"fail_note"`
-	NotifyRaw         []byte             `json:"notify_raw"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ID                     int64              `json:"id"`
+	OrderID                string             `json:"order_id"`
+	OutTradeNo             string             `json:"out_trade_no"`
+	Scene                  string             `json:"scene"`
+	TenantID               string             `json:"tenant_id"`
+	UserID                 pgtype.Text        `json:"user_id"`
+	TopupMode              string             `json:"topup_mode"`
+	PackageID              pgtype.Text        `json:"package_id"`
+	PackageName            pgtype.Text        `json:"package_name"`
+	PackageBadge           pgtype.Text        `json:"package_badge"`
+	PaymentCurrency        string             `json:"payment_currency"`
+	PaymentAmountMinor     int64              `json:"payment_amount_minor"`
+	LedgerCurrency         string             `json:"ledger_currency"`
+	GrossAmountMicroUsd    int64              `json:"gross_amount_micro_usd"`
+	FeeAmountMicroUsd      int64              `json:"fee_amount_micro_usd"`
+	GiftAmountMicroUsd     int64              `json:"gift_amount_micro_usd"`
+	CreditedAmountMicroUsd int64              `json:"credited_amount_micro_usd"`
+	FeeRateBp              int32              `json:"fee_rate_bp"`
+	TenantIncomeMicroUsd   int64              `json:"tenant_income_micro_usd"`
+	BalanceExpiresAt       pgtype.Timestamptz `json:"balance_expires_at"`
+	Channel                string             `json:"channel"`
+	CodeUrl                pgtype.Text        `json:"code_url"`
+	TransactionID          pgtype.Text        `json:"transaction_id"`
+	Status                 string             `json:"status"`
+	PaidAt                 pgtype.Timestamptz `json:"paid_at"`
+	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
+	BalanceOrderID         pgtype.Text        `json:"balance_order_id"`
+	FailNote               pgtype.Text        `json:"fail_note"`
+	NotifyRaw              []byte             `json:"notify_raw"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
 type PayTenantSetting struct {
@@ -1087,26 +1082,26 @@ type PayWechatConfig struct {
 }
 
 type PayWithdrawal struct {
-	ID           int64              `json:"id"`
-	WithdrawalID string             `json:"withdrawal_id"`
-	TenantID     string             `json:"tenant_id"`
-	Amount       int64              `json:"amount"`
-	FeeAmount    int64              `json:"fee_amount"`
-	PayoutAmount int64              `json:"payout_amount"`
-	AccountName  string             `json:"account_name"`
-	BankName     string             `json:"bank_name"`
-	AccountNo    string             `json:"account_no"`
-	ApplyNote    pgtype.Text        `json:"apply_note"`
-	Status       string             `json:"status"`
-	AppliedBy    string             `json:"applied_by"`
-	ReviewedBy   pgtype.Text        `json:"reviewed_by"`
-	ReviewedAt   pgtype.Timestamptz `json:"reviewed_at"`
-	ReviewNote   pgtype.Text        `json:"review_note"`
-	PaidBy       pgtype.Text        `json:"paid_by"`
-	PaidAt       pgtype.Timestamptz `json:"paid_at"`
-	PaymentRef   pgtype.Text        `json:"payment_ref"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                   int64              `json:"id"`
+	WithdrawalID         string             `json:"withdrawal_id"`
+	TenantID             string             `json:"tenant_id"`
+	AmountMicroUsd       int64              `json:"amount_micro_usd"`
+	FeeAmountMicroUsd    int64              `json:"fee_amount_micro_usd"`
+	PayoutAmountMicroUsd int64              `json:"payout_amount_micro_usd"`
+	AccountName          string             `json:"account_name"`
+	BankName             string             `json:"bank_name"`
+	AccountNo            string             `json:"account_no"`
+	ApplyNote            pgtype.Text        `json:"apply_note"`
+	Status               string             `json:"status"`
+	AppliedBy            string             `json:"applied_by"`
+	ReviewedBy           pgtype.Text        `json:"reviewed_by"`
+	ReviewedAt           pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewNote           pgtype.Text        `json:"review_note"`
+	PaidBy               pgtype.Text        `json:"paid_by"`
+	PaidAt               pgtype.Timestamptz `json:"paid_at"`
+	PaymentRef           pgtype.Text        `json:"payment_ref"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type SysSetting struct {

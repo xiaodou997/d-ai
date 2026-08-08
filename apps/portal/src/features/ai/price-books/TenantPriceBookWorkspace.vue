@@ -1,7 +1,7 @@
 <!--
   价格表 — 查看平台公共价格表（只读），维护租户私有价格表的模型 USD 售价（token 分档 / 图片 / 视频 / 音频）。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       汇率卡/价格表列表/条目表收进同卡 body 的 24px 容器）;条目表 el-table → DsTable
+       价格表列表/条目表收进同卡 body 的 24px 容器）;条目表 el-table → DsTable
        （expandable 展开 token 分档）,el-tag → DsTag,空态 → DsEmpty;价格色值改用 --ds-* token,
        无硬编码 hex;业务逻辑与请求参数保持不变（平台表只读、私有表可写/复制）。
        ⚠ 条目接口无服务端分页,故不加 DsPagination。弹窗/表单仍为 element-plus。
@@ -25,9 +25,6 @@ import {
   type PriceBookEntryRecord,
   type TokenPriceTier
 } from "./pricingTypes";
-
-const DEFAULT_CREDITS_PER_USD = 100;
-const creditsPerUsd = shallowRef(DEFAULT_CREDITS_PER_USD);
 
 const books = shallowRef<TenantAiPriceBook[]>([]);
 const booksLoading = shallowRef(false);
@@ -57,15 +54,6 @@ const imageTierLabel = (value: string) => ({ "1k": "1K", "2k": "2K", "4k": "4K" 
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
-}
-
-async function loadRate() {
-  try {
-    const response = await aiTenantApi.getCreditsPerUSD();
-    creditsPerUsd.value = response?.credits_per_usd ?? DEFAULT_CREDITS_PER_USD;
-  } catch {
-    creditsPerUsd.value = DEFAULT_CREDITS_PER_USD;
-  }
 }
 
 async function loadEntries() {
@@ -359,7 +347,6 @@ async function removeEntry(row: PriceBookEntryRecord) {
 }
 
 onMounted(() => {
-  void loadRate();
   void loadBooks();
 });
 </script>
@@ -372,21 +359,8 @@ onMounted(() => {
       :breadcrumbs="[{ label: '智能服务' }, { label: '模型与定价' }, { label: '价格表' }]"
       description="平台公共价格表只读共享，可复制为租户私有价格表后自行维护条目。"
     >
-      <!-- 主从布局:body 无内边距,用 24px 容器承载汇率卡 + 价格表/条目两栏 -->
+      <!-- 主从布局:body 无内边距,用 24px 容器承载价格表/条目两栏 -->
       <div class="pricing-body">
-        <!-- USD → credit rate（租户只读,由平台管理员统一维护） -->
-        <PortalContentCard class="rate-card">
-          <div class="rate-row">
-            <div class="rate-copy">
-              <p class="rate-title">USD → 积分 汇率</p>
-              <p class="rate-desc">对外计费时把价格表的 USD 售价换算成积分。汇率由平台管理员统一维护。</p>
-            </div>
-            <div class="rate-controls">
-              <span class="rate-value">1 USD = {{ creditsPerUsd }} 积分</span>
-            </div>
-          </div>
-        </PortalContentCard>
-
         <div class="pricing-main">
           <!-- book list -->
           <PortalContentCard title="价格表" body-padding="none" class="book-list-card">
@@ -573,7 +547,7 @@ onMounted(() => {
   flex-direction: column;
 }
 
-/* 主从布局:PortalPagePanel body 无内边距,用 24px 容器排布汇率卡与两栏;fill 模式下随面板撑满视口 */
+/* 主从布局:PortalPagePanel body 无内边距,用 24px 容器排布两栏;fill 模式下随面板撑满视口 */
 .pricing-body {
   display: flex;
   flex-direction: column;

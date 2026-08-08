@@ -6,7 +6,7 @@ withDefaults(
   }>(),
   {
     row: null,
-    label: '积分'
+    label: '金额（USD）'
   }
 )
 
@@ -27,11 +27,11 @@ const STATUS_MAP: Record<string, string> = {
     </div>
     <div class="event-summary__row">
       <span class="event-summary__key">租户{{ label }}</span>
-      <span class="event-summary__val event-summary__val--tenant">{{ (row.tenantCredits || 0).toLocaleString() }}</span>
+      <span class="event-summary__val event-summary__val--tenant">${{ (row.tenantAmountUsd || 0).toLocaleString('en-US', { maximumFractionDigits: 6 }) }}</span>
     </div>
     <div class="event-summary__row">
       <span class="event-summary__key">用户{{ label }}</span>
-      <span class="event-summary__val event-summary__val--user">{{ (row.userCredits || 0).toLocaleString() }}</span>
+      <span class="event-summary__val event-summary__val--user">${{ (row.userAmountUsd || 0).toLocaleString('en-US', { maximumFractionDigits: 6 }) }}</span>
     </div>
     <div class="event-summary__row">
       <span class="event-summary__key">当前状态</span>

@@ -40,7 +40,7 @@ func pgTimestamptz(t time.Time) pgtype.Timestamptz {
 // RiskControlRepo implements riskcontrol.SettingRepository,
 // riskcontrol.LogRepository and riskcontrol.EventRepository on top of sqlc.
 // Config reads/writes reuse the generic ai_settings GetSetting/UpsertSetting
-// queries (same ones price_book.go's credits_per_usd cache uses).
+// queries used by the pricing control plane.
 type RiskControlRepo struct {
 	q *dbgen.Queries
 }

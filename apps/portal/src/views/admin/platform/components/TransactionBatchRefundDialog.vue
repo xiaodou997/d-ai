@@ -14,8 +14,8 @@ const loading = ref(false)
 const rows = ref<any[]>([])
 const form = reactive({ reason: '' })
 
-const tenantTotal = computed(() => rows.value.reduce((sum, r) => sum + (r.tenantCredits || 0), 0))
-const userTotal = computed(() => rows.value.reduce((sum, r) => sum + (r.userCredits || 0), 0))
+const tenantTotal = computed(() => rows.value.reduce((sum, r) => sum + (r.tenantAmountUsd || 0), 0))
+const userTotal = computed(() => rows.value.reduce((sum, r) => sum + (r.userAmountUsd || 0), 0))
 
 const open = (targets: any[]) => {
   rows.value = targets
@@ -49,8 +49,8 @@ const submit = async () => {
       <TransactionAlert tone="danger">
         <p>⚠ 将对以下 {{ rows.length }} 条记录执行全额退款，不可撤销。</p>
         <div class="tx-alert__row">
-          <span>租户积分合计：<b>{{ tenantTotal.toLocaleString() }}</b></span>
-          <span>用户积分合计：<b>{{ userTotal.toLocaleString() }}</b></span>
+          <span>租户金额合计：<b>${{ tenantTotal.toLocaleString('en-US', { maximumFractionDigits: 6 }) }}</b></span>
+          <span>用户金额合计：<b>${{ userTotal.toLocaleString('en-US', { maximumFractionDigits: 6 }) }}</b></span>
         </div>
       </TransactionAlert>
       <el-form :model="form" label-position="top">

@@ -3,8 +3,7 @@ package domain
 import "time"
 
 // DashboardSummary is the headline panel of the analytics dashboard. Cost
-// fields are micro-credits (suffix Micro); the HTTP layer converts to display
-// credits.
+// fields are micro-USD (suffix Micro); the HTTP layer converts to display USD.
 type DashboardSummary struct {
 	TotalRequests           int64
 	SuccessfulRequests      int64

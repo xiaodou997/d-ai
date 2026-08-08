@@ -11,7 +11,7 @@ import { GridComponent, TooltipComponent } from "echarts/components";
 import { init, use, type EChartsType, graphic } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 
-import { formatCredits } from "@/api/aiTenant";
+import { formatUSD } from "@/api/aiTenant";
 import type { TenantAiDashboardTopModel } from "@/api/types/aiTenant";
 import { resolveDsColor } from "./chartTokens";
 
@@ -26,9 +26,9 @@ const props = defineProps<{
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: EChartsType | null = null;
 
-const activeItems = computed(() => props.items.filter((item) => item.total_tenant_payable_credits > 0).slice(0, 8));
-const totalCreditsText = computed(() =>
-  formatCredits(activeItems.value.reduce((sum, item) => sum + Number(item.total_tenant_payable_credits || 0), 0))
+const activeItems = computed(() => props.items.filter((item) => item.total_tenant_payable_usd > 0).slice(0, 8));
+const totalAmountText = computed(() =>
+  formatUSD(activeItems.value.reduce((sum, item) => sum + Number(item.total_tenant_payable_usd || 0), 0))
 );
 
 const truncateLabel = (value: string) => (value.length > 12 ? `${value.slice(0, 12)}…` : value);
@@ -72,7 +72,7 @@ const renderChart = () => {
       axisPointer: { type: "none" },
       formatter: (params: Array<{ dataIndex: number }>) => {
         const item = chartRows[params[0].dataIndex];
-        return `${item.model_code}<br/>${formatCredits(item.total_tenant_payable_credits)} · ${item.request_count.toLocaleString("zh-CN")} 次请求 · ${item.total_tokens.toLocaleString("zh-CN")} Token`;
+        return `${item.model_code}<br/>${formatUSD(item.total_tenant_payable_usd)} · ${item.request_count.toLocaleString("zh-CN")} 次请求 · ${item.total_tokens.toLocaleString("zh-CN")} Token`;
       }
     },
     xAxis: {
@@ -93,7 +93,7 @@ const renderChart = () => {
     series: [
       {
         type: "bar",
-        data: chartRows.map((item) => item.total_tenant_payable_credits),
+        data: chartRows.map((item) => item.total_tenant_payable_usd),
         barWidth: 16,
         showBackground: true,
         backgroundStyle: {
@@ -137,7 +137,7 @@ onUnmounted(() => {
         <h3 class="model-insight__title">模型消耗分布</h3>
         <p class="model-insight__desc">沿用 sub2api 思路，把 {{ props.rangeLabel }}高消耗模型作为首页第一图表。</p>
       </div>
-      <span class="model-insight__summary">Top 模型合计 {{ totalCreditsText }}</span>
+      <span class="model-insight__summary">Top 模型合计 {{ totalAmountText }}</span>
     </div>
 
     <div v-if="loading" class="model-insight__loading">
@@ -158,7 +158,7 @@ onUnmounted(() => {
             </p>
           </div>
           <div class="model-insight__value">
-            <strong>{{ formatCredits(item.total_tenant_payable_credits) }}</strong>
+            <strong>{{ formatUSD(item.total_tenant_payable_usd) }}</strong>
           </div>
         </article>
       </div>

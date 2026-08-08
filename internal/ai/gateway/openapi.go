@@ -36,7 +36,7 @@ type AsyncTaskError struct {
 }
 
 type AsyncTaskUsage struct {
-	CostCredits float64 `json:"cost_credits" doc:"任务调用方的已结算消耗积分"`
+	CostUSD float64 `json:"cost_usd" doc:"任务调用方的已结算消耗USD 金额"`
 }
 
 type AsyncTaskGetResponse struct {

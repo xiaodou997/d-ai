@@ -2,9 +2,9 @@
 import { computed } from "vue";
 import {
   UsageTag,
-  formatCredits,
   formatMs,
   formatTokenCount,
+  formatUSD,
   requestSourceLabel
 } from "@/platform/ai/usage";
 import { formatMultiplier } from "@/platform/ai/utils";
@@ -73,10 +73,10 @@ function multiplierLabel(value?: number | null) {
       <section class="detail-section">
         <h3>费用与性能</h3>
         <dl>
-          <dt>租户结算扣费</dt><dd class="mono">{{ formatCredits(row.tenant_payable_credits) }}</dd>
-          <dt>零售价格表原价</dt><dd class="mono">{{ formatCredits(row.retail_base_credits) }}</dd>
-          <dt>用户零售应收</dt><dd class="mono">{{ formatCredits(row.user_payable_credits) }}</dd>
-          <dt>用户实际扣款</dt><dd class="mono accent">{{ formatCredits(row.user_charged_credits) }}</dd>
+          <dt>租户结算扣费</dt><dd class="mono">{{ formatUSD(row.tenant_payable_usd) }}</dd>
+          <dt>零售价格表原价</dt><dd class="mono">{{ formatUSD(row.retail_base_usd) }}</dd>
+          <dt>用户零售应收</dt><dd class="mono">{{ formatUSD(row.user_payable_usd) }}</dd>
+          <dt>用户实际扣款</dt><dd class="mono accent">{{ formatUSD(row.user_charged_usd) }}</dd>
           <dt>计费状态</dt><dd>{{ row.billing_status_label || row.billing_status }}</dd>
           <dt>总延迟</dt><dd class="mono">{{ formatMs(row.latency_ms) }}</dd>
           <dt>首 Token 延迟</dt><dd class="mono">{{ formatMs(row.first_token_latency_ms) }}</dd>

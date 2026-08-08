@@ -9,7 +9,7 @@ import {
   type PortalImageApi
 } from "@/platform/ai/images";
 
-import { formatCredits, runtimeImageApi } from "@/api/aiCustomer";
+import { formatUSD, runtimeImageApi } from "@/api/aiCustomer";
 import { apiBaseUrl } from "@/api/request";
 
 const imageApi: PortalImageApi = {
@@ -25,7 +25,7 @@ const imageApi: PortalImageApi = {
 <template>
   <PortalImageStudioWorkspace
     :api="imageApi"
-    :format-credits="formatCredits"
+    :format-u-s-d="formatUSD"
     usage-message="消耗会计入个人用量"
     :asset-base-url="apiBaseUrl"
     v-bind="portalImageWorkspaceIconProps"

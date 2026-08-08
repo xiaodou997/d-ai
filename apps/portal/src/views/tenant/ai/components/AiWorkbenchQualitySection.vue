@@ -15,8 +15,8 @@ import type { TenantAiDashboardRecentError } from "@/api/types/aiTenant";
 interface UserInsightItem {
   key: string;
   userLabel: string;
-  totalCredits: number;
-  creditsText: string;
+  totalAmountUSD: number;
+  amountText: string;
   requestCount: number;
   successRateText: string;
   lastActiveText: string;

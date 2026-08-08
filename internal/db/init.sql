@@ -128,14 +128,14 @@ CREATE TABLE auth_audit_logs (
 CREATE INDEX idx_auth_audit_logs_event_time ON auth_audit_logs (event_type, created_at DESC);
 
 -- Billing and payment
--- Ledger amounts use microcredits (1 credit = 10,000 microcredits). Legacy
--- column names are retained because the application contract uses them.
+-- All billing ledger amounts use micro-USD ($1 = 1,000,000 micro-USD). Legacy
+-- credit-shaped column names are retained at the storage boundary only.
 CREATE TABLE bill_recharge_orders (
     id BIGSERIAL PRIMARY KEY,
     order_id TEXT NOT NULL UNIQUE,
     order_type TEXT NOT NULL CONSTRAINT bill_recharge_orders_order_type_check
         CHECK (order_type IN ('platform_to_tenant', 'tenant_to_user',
-                              'online_user_topup', 'online_tenant_topup', 'cash_purchase')),
+                              'online_user_topup', 'online_tenant_topup', 'user_topup_income')),
     tenant_id TEXT NOT NULL,
     user_id TEXT,
     credit_amount BIGINT NOT NULL CHECK (credit_amount > 0),
@@ -150,7 +150,7 @@ CREATE TABLE bill_recharge_orders (
     reversal_reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT bill_recharge_orders_user_id_pairing_check CHECK (
-        (order_type IN ('platform_to_tenant', 'online_tenant_topup', 'cash_purchase') AND user_id IS NULL)
+        (order_type IN ('platform_to_tenant', 'online_tenant_topup', 'user_topup_income') AND user_id IS NULL)
         OR (order_type IN ('tenant_to_user', 'online_user_topup') AND user_id IS NOT NULL)
     )
 );
@@ -170,7 +170,7 @@ CREATE TABLE bill_credit_packages (
     expires_at TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'expired', 'depleted', 'revoked')),
     source TEXT NOT NULL CONSTRAINT bill_credit_packages_source_check
-        CHECK (source IN ('ADMIN_RECHARGE', 'TENANT_RECHARGE', 'REFUND', 'ONLINE_TOPUP', 'CASH_PURCHASE')),
+        CHECK (source IN ('ADMIN_RECHARGE', 'TENANT_RECHARGE', 'REFUND', 'ONLINE_TOPUP', 'USER_TOPUP_INCOME')),
     recharge_order_id TEXT,
     version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -243,21 +243,23 @@ CREATE TABLE pay_orders (
     package_id TEXT,
     package_name TEXT,
     package_badge TEXT,
-    amount BIGINT NOT NULL CHECK (amount > 0),
-    exchange_rate BIGINT NOT NULL CHECK (exchange_rate > 0),
-    gross_credit_amount BIGINT NOT NULL DEFAULT 0 CHECK (gross_credit_amount >= 0),
-    fee_credit_amount BIGINT NOT NULL DEFAULT 0 CHECK (fee_credit_amount >= 0),
-    credit_amount BIGINT NOT NULL CHECK (credit_amount > 0),
+    payment_currency TEXT NOT NULL DEFAULT 'USD' CHECK (payment_currency = 'USD'),
+    payment_amount_minor BIGINT NOT NULL CHECK (payment_amount_minor > 0),
+    ledger_currency TEXT NOT NULL DEFAULT 'USD' CHECK (ledger_currency = 'USD'),
+    gross_amount_micro_usd BIGINT NOT NULL CHECK (gross_amount_micro_usd > 0),
+    fee_amount_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (fee_amount_micro_usd >= 0),
+    gift_amount_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (gift_amount_micro_usd >= 0),
+    credited_amount_micro_usd BIGINT NOT NULL CHECK (credited_amount_micro_usd > 0),
     fee_rate_bp INTEGER NOT NULL DEFAULT 0,
-    fee_amount BIGINT NOT NULL DEFAULT 0,
-    net_amount BIGINT NOT NULL DEFAULT 0,
+    tenant_income_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (tenant_income_micro_usd >= 0),
+    balance_expires_at TIMESTAMPTZ,
     channel TEXT NOT NULL DEFAULT 'wechat_native',
     code_url TEXT,
     transaction_id TEXT,
     status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'paying', 'paid', 'closed', 'expired')),
     paid_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL,
-    credit_order_id TEXT,
+    balance_order_id TEXT,
     fail_note TEXT,
     notify_raw JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -273,21 +275,13 @@ CREATE INDEX idx_pay_orders_sweep ON pay_orders (status, expires_at) WHERE statu
 CREATE INDEX idx_pay_orders_tenant ON pay_orders (tenant_id, created_at DESC);
 CREATE INDEX idx_pay_orders_user ON pay_orders (user_id, created_at DESC) WHERE user_id IS NOT NULL;
 
-CREATE TABLE pay_cash_accounts (
-    tenant_id TEXT PRIMARY KEY,
-    balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),
-    frozen BIGINT NOT NULL DEFAULT 0 CHECK (frozen >= 0 AND frozen <= balance),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 CREATE TABLE pay_cash_ledger (
     id BIGSERIAL PRIMARY KEY,
     txn_id TEXT NOT NULL UNIQUE,
     tenant_id TEXT NOT NULL,
-    txn_type TEXT NOT NULL CHECK (txn_type IN ('topup_income', 'buy_credits', 'withdraw', 'adjust')),
-    amount BIGINT NOT NULL,
-    balance_after BIGINT NOT NULL,
+    txn_type TEXT NOT NULL CHECK (txn_type IN ('topup_income', 'consumption', 'withdraw', 'adjust')),
+    amount_micro_usd BIGINT NOT NULL,
+    balance_after_micro_usd BIGINT NOT NULL,
     ref_type TEXT,
     ref_id TEXT,
     operator_id TEXT,
@@ -302,9 +296,9 @@ CREATE TABLE pay_withdrawals (
     id BIGSERIAL PRIMARY KEY,
     withdrawal_id TEXT NOT NULL UNIQUE,
     tenant_id TEXT NOT NULL,
-    amount BIGINT NOT NULL CHECK (amount > 0),
-    fee_amount BIGINT NOT NULL DEFAULT 0 CHECK (fee_amount >= 0),
-    payout_amount BIGINT NOT NULL DEFAULT 0 CHECK (payout_amount >= 0),
+    amount_micro_usd BIGINT NOT NULL CHECK (amount_micro_usd > 0),
+    fee_amount_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (fee_amount_micro_usd >= 0),
+    payout_amount_micro_usd BIGINT NOT NULL DEFAULT 0 CHECK (payout_amount_micro_usd >= 0),
     account_name TEXT NOT NULL,
     bank_name TEXT NOT NULL,
     account_no TEXT NOT NULL,
@@ -645,15 +639,12 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_price_book_entries_book  ON ai_price_book_entries (price_book_id);
   CREATE INDEX IF NOT EXISTS idx_ai_price_book_entries_model ON ai_price_book_entries (price_book_id, model_code, capability_type);
 
-  -- 全局设置：key-value。当前用途：USD→积分汇率 credits_per_usd（默认 100，可动态调）。
+  -- 全局 AI 设置：key-value。计费币种固定为 USD。
   CREATE TABLE IF NOT EXISTS ai_settings (
     key        TEXT        PRIMARY KEY,
     value      JSONB       NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
-
-  INSERT INTO ai_settings (key, value) VALUES ('credits_per_usd', '100'::jsonb)
-    ON CONFLICT (key) DO NOTHING;
 
   CREATE TABLE IF NOT EXISTS ai_api_keys (
     id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -665,7 +656,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     key_ciphertext TEXT        NOT NULL,
     last_four      CHAR(4),
     name           TEXT        NOT NULL,
-    -- quota_* 列单位：微积分 (micro-credits)。NULL = 无上限。
+    -- quota_* 列单位：micro-USD。NULL = 无上限。
     -- quota_used 由 ai_usage_logs.api_key_quota_cost 累加。
     quota_limit    BIGINT,
     quota_used     BIGINT      NOT NULL DEFAULT 0,
@@ -705,7 +696,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     -- 刻意用并发而非 RPM：LLM 请求时长跨数量级（短问答 800ms / 生图 30s / 长流式 3min），
     -- 每分钟请求数与上游真实资源占用不成正比，而并发数直接对应上游占用、长短请求自适应。
     concurrency_limit  INTEGER     CHECK (concurrency_limit IS NULL OR concurrency_limit > 0),
-    -- 租户结算绑定：租户扣费 = entry(price_book, 对外模型)[USD] × tenant_multiplier × credits_per_usd。
+    -- 租户结算绑定：租户扣费 = entry(price_book, 对外模型)[USD] × tenant_multiplier。
     price_book_id      UUID,
     tenant_multiplier NUMERIC(10,4) CHECK (tenant_multiplier IS NULL OR tenant_multiplier >= 0),
     -- 平台向该上游实付的折扣倍率（如中转站「官方价 7 折」= 0.7）。目录价共用 price_book_id，
@@ -1080,8 +1071,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     total_tokens           INTEGER     NOT NULL DEFAULT 0,
     billable_unit_type     TEXT        NOT NULL DEFAULT 'token',
     billable_units         BIGINT      NOT NULL DEFAULT 0,
-    -- 自 2026-05 起，以下金额列单位均为「微积分」(micro-credits)。
-    -- 1 积分 = 10000 微积分 = 1 分人民币。报表展示时除以 10000 即得小数积分。
+    -- 以下金额列单位均为 micro-USD；1 USD = 1,000,000 micro-USD。
     --
     -- 金额列一律以「付款方」为前缀，`_payable` = 该方应往上游一层支付。链条自下而上：
     --   用户 ──付──▶ 租户 ──付──▶ 平台
@@ -1791,10 +1781,9 @@ CREATE INDEX idx_ledger_credit_leases_account
   -- ============================================================================
   -- AI 订阅制套餐（Subscription Plans）—— docs/ai-subscription-design.md
   --   二期重构：docs/ai-subscription-group-refactor.md
-  -- 终端用户用积分购买「固定时长 + 三层加权额度」套餐；订阅期内 AI 用量优先从
+  -- 终端用户用 USD 余额购买「固定时长 + 三层加权额度」套餐；订阅期内 AI 用量优先从
   -- 套餐额度扣减，任一额度触顶回落按量，窗口重置后自动回订阅。
-  -- 额度单位为微积分（基准价微积分 × 命中分组套餐扣额倍率；BaseCostMicro = 售价表基准价
-  -- × credits_per_usd × 10000，用户倍率不参与）；价格单位为整数积分。
+  -- 价格和额度单位统一为 micro-USD（零售基准价 × 命中分组套餐扣额倍率，用户倍率不参与）。
   -- 套餐必须绑定 ≥1 个分组（ai_sub_plan_groups），订阅覆盖期硬限制路由到套餐分组交集。
   -- ============================================================================
 
@@ -1804,7 +1793,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     tenant_id             TEXT        NOT NULL,
     name                  TEXT        NOT NULL,
     description           TEXT        NOT NULL DEFAULT '',
-    price_credits         BIGINT      NOT NULL CHECK (price_credits > 0),
+    price_micro_usd       BIGINT      NOT NULL CHECK (price_micro_usd > 0),
     duration_days         INTEGER     NOT NULL CHECK (duration_days > 0),
     total_limit_micro     BIGINT      NOT NULL CHECK (total_limit_micro > 0),
     window_5h_limit_micro BIGINT      CHECK (window_5h_limit_micro IS NULL OR window_5h_limit_micro > 0),
@@ -1863,7 +1852,7 @@ CREATE INDEX idx_ledger_credit_leases_account
     user_id            TEXT        NOT NULL,
     plan_id            UUID        NOT NULL,
     plan_name_snapshot TEXT        NOT NULL,
-    price_credits      BIGINT      NOT NULL CHECK (price_credits > 0),  -- 快照：下单价
+    price_micro_usd    BIGINT      NOT NULL CHECK (price_micro_usd > 0),  -- 快照：下单价
     -- 完整权益快照：下单成功后套餐编辑/下架不改变待补偿订单最终开通的权益
     duration_days_snapshot          INTEGER     NOT NULL CHECK (duration_days_snapshot > 0),
     total_limit_micro_snapshot      BIGINT      NOT NULL CHECK (total_limit_micro_snapshot > 0),
@@ -1971,14 +1960,13 @@ INSERT INTO sys_settings (key, value)
 VALUES (
     'payment',
     '{
-        "creditsPerCny": 100,
         "tenantCustomTopupFeeBp": 160,
         "tenantWithdrawFeeBp": 160,
         "tenantTopupPackages": [
-            {"id": "p10", "name": "10 元体验包", "amount": 1000, "credits": 1000, "enabled": true, "sortOrder": 10},
-            {"id": "p20", "name": "20 元基础包", "amount": 2000, "credits": 2000, "enabled": true, "sortOrder": 20},
-            {"id": "p50", "name": "50 元常用包", "amount": 5000, "credits": 5000, "enabled": true, "sortOrder": 30},
-            {"id": "p100", "name": "100 元进阶包", "amount": 10000, "credits": 10000, "enabled": true, "sortOrder": 40}
+            {"id": "p10", "name": "$10 体验包", "paymentAmountMicroUsd": 10000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 10},
+            {"id": "p20", "name": "$20 基础包", "paymentAmountMicroUsd": 20000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 20},
+            {"id": "p50", "name": "$50 常用包", "paymentAmountMicroUsd": 50000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 30},
+            {"id": "p100", "name": "$100 进阶包", "paymentAmountMicroUsd": 100000000, "giftAmountMicroUsd": 0, "enabled": true, "sortOrder": 40}
         ]
     }'::jsonb
 )

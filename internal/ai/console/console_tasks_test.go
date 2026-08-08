@@ -53,7 +53,7 @@ func TestPortalTaskDTOAllowsOwnerToManageTerminalTask(t *testing.T) {
 	if dto.Result == nil || dto.ResultSummary == nil || dto.ResultSummary.ChoiceCount != 1 {
 		t.Fatalf("result = %s summary=%+v", dto.Result, dto.ResultSummary)
 	}
-	if dto.Usage == nil || dto.Usage.CostCredits != 1.5 {
+	if dto.Usage == nil || dto.Usage.CostUSD != 0.015 {
 		t.Fatalf("usage = %+v", dto.Usage)
 	}
 }

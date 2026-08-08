@@ -1,5 +1,5 @@
 <!--
-  用户排行面板:按用户计费积分降序,点击整行回到使用记录并锁定该用户。
+  用户排行面板:按用户计费金额降序,点击整行回到使用记录并锁定该用户。
   排行接口按 limit 返回 Top N、无分页参数,故不渲染分页器。
   DsTable 暂无行点击能力,行点击通过容器事件委托实现。
 -->
@@ -9,8 +9,9 @@ import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRankingRow, UsageFilterChip } from "../model";
 import {
-  formatCredits,
-  formatTimestamp
+  formatNumber,
+  formatTimestamp,
+  formatUSD
 } from "../format";
 
 const props = defineProps<{
@@ -131,11 +132,11 @@ function handleTableClick(event: MouseEvent) {
         </template>
 
         <template #cell-total_tokens="{ row }">
-          {{ formatCredits(row.total_tokens) }}
+          {{ formatNumber(row.total_tokens) }}
         </template>
 
         <template #cell-charged="{ row }">
-          <span class="ranking-cost">{{ formatCredits(row.total_user_charged_credits) }}</span>
+          <span class="ranking-cost">{{ formatUSD(row.total_user_charged_usd) }}</span>
         </template>
 
         <template #cell-outcome="{ row }">

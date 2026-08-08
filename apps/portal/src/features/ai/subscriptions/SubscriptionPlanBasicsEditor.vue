@@ -14,11 +14,11 @@ const props = defineProps<{
 const name = defineModel<string>("name", { required: true });
 const description = defineModel<string>("description", { required: true });
 const durationDays = defineModel<number>("durationDays", { required: true });
-const priceCredits = defineModel<number>("priceCredits", { required: true });
+const priceUsd = defineModel<number>("priceUsd", { required: true });
 const saleLimit = defineModel<number | null>("saleLimit", { required: true });
-const totalLimitCredits = defineModel<number>("totalLimitCredits", { required: true });
-const window5hLimitCredits = defineModel<number | null>("window5hLimitCredits", { required: true });
-const window7dLimitCredits = defineModel<number | null>("window7dLimitCredits", { required: true });
+const totalLimitUsd = defineModel<number>("totalLimitUsd", { required: true });
+const window5hLimitUsd = defineModel<number | null>("window5hLimitUsd", { required: true });
+const window7dLimitUsd = defineModel<number | null>("window7dLimitUsd", { required: true });
 
 const expandedQuotaSettings = shallowRef<string[]>([]);
 const committedCount = computed(() => props.soldCount + props.reservedCount);
@@ -61,12 +61,12 @@ const saleMode = computed({
         <span>限量套餐售完后会自动显示售罄，无需手动下架</span>
       </div>
       <div class="field-grid">
-        <el-form-item label="售价（积分）" prop="price_credits">
+        <el-form-item label="售价（USD）" prop="price_usd">
           <el-input-number
-            v-model="priceCredits"
-            :min="1"
-            :step="1"
-            :precision="0"
+            v-model="priceUsd"
+            :min="0.000001"
+            :step="0.01"
+            :precision="6"
             :controls="false"
           />
           <small>{{ priceHint }}</small>
@@ -107,14 +107,14 @@ const saleMode = computed({
     <section class="form-section">
       <div class="section-heading">
         <strong>套餐额度</strong>
-        <span>用户在有效期内最多可使用的总积分额度</span>
+        <span>用户在有效期内最多可使用的 USD 额度</span>
       </div>
-      <el-form-item label="总额度（积分）" prop="total_limit_credits">
+      <el-form-item label="总额度（USD）" prop="total_limit_usd">
         <el-input-number
-          v-model="totalLimitCredits"
-          :min="0.0001"
-          :step="100"
-          :precision="4"
+          v-model="totalLimitUsd"
+          :min="0.000001"
+          :step="1"
+          :precision="6"
           :controls="false"
         />
         <small>{{ totalHint }}</small>
@@ -125,10 +125,10 @@ const saleMode = computed({
           <div class="field-grid">
             <el-form-item label="任意连续 5 小时内的额度">
               <el-input-number
-                v-model="window5hLimitCredits"
-                :min="1"
+                v-model="window5hLimitUsd"
+                :min="0.000001"
                 :step="1"
-                :precision="0"
+                :precision="6"
                 :controls="false"
                 clearable
               />
@@ -136,11 +136,11 @@ const saleMode = computed({
             </el-form-item>
             <el-form-item label="任意连续 7 天内的额度">
               <el-input-number
-                v-model="window7dLimitCredits"
+                v-model="window7dLimitUsd"
                 :disabled="!supports7d"
-                :min="1"
+                :min="0.000001"
                 :step="1"
-                :precision="0"
+                :precision="6"
                 :controls="false"
                 clearable
               />

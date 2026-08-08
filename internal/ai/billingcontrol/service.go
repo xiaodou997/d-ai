@@ -2,8 +2,6 @@ package billingcontrol
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -14,9 +12,8 @@ import (
 
 const maxPricePerToken = 1.0
 const maxMultiplier = 10000.0
-const maxCreditsPerUSD = 1_000_000.0
 
-// Service implements price book + sell binding + global rate business logic.
+// Service implements price book and sell binding business logic.
 type Service struct {
 	repo      Repository
 	llmSource *liteLLMPriceSource
@@ -218,32 +215,6 @@ func (s *Service) requireOwner(ctx context.Context, id string, ownerType domain.
 		return domain.ErrNotFound
 	}
 	return nil
-}
-
-func (s *Service) GetCreditsPerUSD(ctx context.Context) (float64, error) {
-	raw, err := s.repo.GetSetting(ctx, domain.SettingCreditsPerUSD)
-	if errors.Is(err, domain.ErrNotFound) {
-		return domain.DefaultCreditsPerUSD, nil
-	}
-	if err != nil {
-		return 0, err
-	}
-	var v float64
-	if err := json.Unmarshal(raw, &v); err != nil || v <= 0 {
-		return domain.DefaultCreditsPerUSD, nil
-	}
-	return v, nil
-}
-
-func (s *Service) SetCreditsPerUSD(ctx context.Context, v float64) error {
-	if v <= 0 || math.IsInf(v, 0) || math.IsNaN(v) {
-		return domain.NewValidationError("credits_per_usd", "must be a positive number")
-	}
-	if v > maxCreditsPerUSD {
-		return domain.NewValidationError("credits_per_usd", "exceeds maximum allowed value")
-	}
-	raw, _ := json.Marshal(v)
-	return s.repo.UpsertSetting(ctx, domain.SettingCreditsPerUSD, raw)
 }
 
 var validCapabilities = map[string]struct{}{

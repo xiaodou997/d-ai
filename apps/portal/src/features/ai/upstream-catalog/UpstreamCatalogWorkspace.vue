@@ -19,7 +19,6 @@ import UpstreamModelPricingGrid from "./components/UpstreamModelPricingGrid.vue"
 const loading = shallowRef(false);
 const resources = shallowRef<TenantAiUpstreamResource[]>([]);
 const selectedResourceId = shallowRef("");
-const creditsPerUSD = shallowRef(0);
 
 const selectedResource = computed(
   () => resources.value.find((resource) => resource.id === selectedResourceId.value) ?? null
@@ -32,12 +31,8 @@ function selectResource(resourceId: string) {
 async function loadResources() {
   loading.value = true;
   try {
-    const [response, rateResponse] = await Promise.all([
-      aiTenantApi.listUpstreamResources(),
-      aiTenantApi.getCreditsPerUSD().catch(() => null)
-    ]);
+    const response = await aiTenantApi.listUpstreamResources();
     resources.value = response.items ?? [];
-    creditsPerUSD.value = rateResponse?.credits_per_usd ?? 0;
 
     if (!resources.value.some((resource) => resource.id === selectedResourceId.value)) {
       selectedResourceId.value = resources.value[0]?.id ?? "";
@@ -76,7 +71,6 @@ onMounted(loadResources);
           />
           <UpstreamModelPricingGrid
             :resource="selectedResource"
-            :credits-per-usd="creditsPerUSD"
             :loading="loading"
           />
         </div>

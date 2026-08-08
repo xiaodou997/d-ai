@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
-	"xiaodou/dai/internal/ai/domain"
 )
 
 // janitor 参数（沿用 ledger.Worker 的 ticker 模式；过期 UPDATE 幂等、卡单重放靠计费
@@ -60,8 +58,8 @@ func (s *Service) sweepOnce(ctx context.Context) {
 
 // reconcileOrder 补偿单个卡单：向前推进到 paid，绝不反向退款。
 func (s *Service) reconcileOrder(ctx context.Context, order *Order) {
-	priceMicro, ok := domain.CreditsToMicro(order.PriceCredits)
-	if !ok {
+	priceMicro := order.PriceMicroUSD
+	if priceMicro <= 0 {
 		if _, ferr := s.repo.MarkOrderFailed(ctx, order.ID, "invalid_price"); ferr != nil {
 			s.logger.Warn("janitor: mark invalid-price order failed",
 				zap.String("order", order.OrderNo), zap.Error(ferr))

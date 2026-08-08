@@ -143,13 +143,13 @@ func (q *Queries) CountUserAccessiblePlanGroups(ctx context.Context, arg CountUs
 const createOrder = `-- name: CreateOrder :one
 
 INSERT INTO ai_sub_orders (
-  order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits,
+  order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd,
   duration_days_snapshot, total_limit_micro_snapshot,
   window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot,
   group_quota_debit_multipliers_snapshot,
   purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'created')
-RETURNING id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at
+RETURNING id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at
 `
 
 type CreateOrderParams struct {
@@ -158,7 +158,7 @@ type CreateOrderParams struct {
 	UserID                             string      `json:"user_id"`
 	PlanID                             pgtype.UUID `json:"plan_id"`
 	PlanNameSnapshot                   string      `json:"plan_name_snapshot"`
-	PriceCredits                       int64       `json:"price_credits"`
+	PriceMicroUsd                      int64       `json:"price_micro_usd"`
 	DurationDaysSnapshot               int32       `json:"duration_days_snapshot"`
 	TotalLimitMicroSnapshot            int64       `json:"total_limit_micro_snapshot"`
 	Window5hLimitMicroSnapshot         pgtype.Int8 `json:"window_5h_limit_micro_snapshot"`
@@ -179,7 +179,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (AiSub
 		arg.UserID,
 		arg.PlanID,
 		arg.PlanNameSnapshot,
-		arg.PriceCredits,
+		arg.PriceMicroUsd,
 		arg.DurationDaysSnapshot,
 		arg.TotalLimitMicroSnapshot,
 		arg.Window5hLimitMicroSnapshot,
@@ -197,7 +197,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (AiSub
 		&i.UserID,
 		&i.PlanID,
 		&i.PlanNameSnapshot,
-		&i.PriceCredits,
+		&i.PriceMicroUsd,
 		&i.DurationDaysSnapshot,
 		&i.TotalLimitMicroSnapshot,
 		&i.Window5hLimitMicroSnapshot,
@@ -220,18 +220,18 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (AiSub
 const createPlan = `-- name: CreatePlan :one
 
 INSERT INTO ai_sub_plans (
-  tenant_id, name, description, price_credits, duration_days,
+  tenant_id, name, description, price_micro_usd, duration_days,
   total_limit_micro, window_5h_limit_micro, window_7d_limit_micro,
   status, sort_order, sale_limit, created_by
 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-RETURNING id, tenant_id, name, description, price_credits, duration_days, total_limit_micro, window_5h_limit_micro, window_7d_limit_micro, status, sort_order, sale_limit, sold_count, reserved_count, created_by, created_at, updated_at
+RETURNING id, tenant_id, name, description, price_micro_usd, duration_days, total_limit_micro, window_5h_limit_micro, window_7d_limit_micro, status, sort_order, sale_limit, sold_count, reserved_count, created_by, created_at, updated_at
 `
 
 type CreatePlanParams struct {
 	TenantID           string      `json:"tenant_id"`
 	Name               string      `json:"name"`
 	Description        string      `json:"description"`
-	PriceCredits       int64       `json:"price_credits"`
+	PriceMicroUsd      int64       `json:"price_micro_usd"`
 	DurationDays       int32       `json:"duration_days"`
 	TotalLimitMicro    int64       `json:"total_limit_micro"`
 	Window5hLimitMicro pgtype.Int8 `json:"window_5h_limit_micro"`
@@ -250,7 +250,7 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (AiSubPl
 		arg.TenantID,
 		arg.Name,
 		arg.Description,
-		arg.PriceCredits,
+		arg.PriceMicroUsd,
 		arg.DurationDays,
 		arg.TotalLimitMicro,
 		arg.Window5hLimitMicro,
@@ -266,7 +266,7 @@ func (q *Queries) CreatePlan(ctx context.Context, arg CreatePlanParams) (AiSubPl
 		&i.TenantID,
 		&i.Name,
 		&i.Description,
-		&i.PriceCredits,
+		&i.PriceMicroUsd,
 		&i.DurationDays,
 		&i.TotalLimitMicro,
 		&i.Window5hLimitMicro,
@@ -547,7 +547,7 @@ func (q *Queries) GetLiveSubsForUser(ctx context.Context, arg GetLiveSubsForUser
 }
 
 const getOrderByID = `-- name: GetOrderByID :one
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE id = $1
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE id = $1
 `
 
 func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (AiSubOrder, error) {
@@ -560,7 +560,7 @@ func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (AiSubOrder,
 		&i.UserID,
 		&i.PlanID,
 		&i.PlanNameSnapshot,
-		&i.PriceCredits,
+		&i.PriceMicroUsd,
 		&i.DurationDaysSnapshot,
 		&i.TotalLimitMicroSnapshot,
 		&i.Window5hLimitMicroSnapshot,
@@ -581,7 +581,7 @@ func (q *Queries) GetOrderByID(ctx context.Context, id pgtype.UUID) (AiSubOrder,
 }
 
 const getOrderByOrderNo = `-- name: GetOrderByOrderNo :one
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE order_no = $1
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders WHERE order_no = $1
 `
 
 func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (AiSubOrder, error) {
@@ -594,7 +594,7 @@ func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (AiSubO
 		&i.UserID,
 		&i.PlanID,
 		&i.PlanNameSnapshot,
-		&i.PriceCredits,
+		&i.PriceMicroUsd,
 		&i.DurationDaysSnapshot,
 		&i.TotalLimitMicroSnapshot,
 		&i.Window5hLimitMicroSnapshot,
@@ -615,7 +615,7 @@ func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (AiSubO
 }
 
 const getPlan = `-- name: GetPlan :one
-SELECT id, tenant_id, name, description, price_credits, duration_days, total_limit_micro, window_5h_limit_micro, window_7d_limit_micro, status, sort_order, sale_limit, sold_count, reserved_count, created_by, created_at, updated_at FROM ai_sub_plans WHERE id = $1
+SELECT id, tenant_id, name, description, price_micro_usd, duration_days, total_limit_micro, window_5h_limit_micro, window_7d_limit_micro, status, sort_order, sale_limit, sold_count, reserved_count, created_by, created_at, updated_at FROM ai_sub_plans WHERE id = $1
 `
 
 func (q *Queries) GetPlan(ctx context.Context, id pgtype.UUID) (AiSubPlan, error) {
@@ -626,7 +626,7 @@ func (q *Queries) GetPlan(ctx context.Context, id pgtype.UUID) (AiSubPlan, error
 		&i.TenantID,
 		&i.Name,
 		&i.Description,
-		&i.PriceCredits,
+		&i.PriceMicroUsd,
 		&i.DurationDays,
 		&i.TotalLimitMicro,
 		&i.Window5hLimitMicro,
@@ -746,7 +746,7 @@ func (q *Queries) InsertPlanPurchasePolicyRevision(ctx context.Context, arg Inse
 }
 
 const listAvailableOnSalePlansPage = `-- name: ListAvailableOnSalePlansPage :many
-SELECT p.id, p.tenant_id, p.name, p.description, p.price_credits, p.duration_days, p.total_limit_micro, p.window_5h_limit_micro, p.window_7d_limit_micro, p.status, p.sort_order, p.sale_limit, p.sold_count, p.reserved_count, p.created_by, p.created_at, p.updated_at
+SELECT p.id, p.tenant_id, p.name, p.description, p.price_micro_usd, p.duration_days, p.total_limit_micro, p.window_5h_limit_micro, p.window_7d_limit_micro, p.status, p.sort_order, p.sale_limit, p.sold_count, p.reserved_count, p.created_by, p.created_at, p.updated_at
 FROM ai_sub_plans p
 JOIN ai_sub_available_on_sale_plans available ON available.id = p.id
 WHERE p.tenant_id = $1
@@ -775,7 +775,7 @@ func (q *Queries) ListAvailableOnSalePlansPage(ctx context.Context, arg ListAvai
 			&i.TenantID,
 			&i.Name,
 			&i.Description,
-			&i.PriceCredits,
+			&i.PriceMicroUsd,
 			&i.DurationDays,
 			&i.TotalLimitMicro,
 			&i.Window5hLimitMicro,
@@ -830,7 +830,7 @@ func (q *Queries) ListGroupNames(ctx context.Context, dollar_1 []pgtype.UUID) ([
 }
 
 const listOrdersPage = `-- name: ListOrdersPage :many
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR user_id = $2)
   AND ($3::text IS NULL OR status = $3)
@@ -868,7 +868,7 @@ func (q *Queries) ListOrdersPage(ctx context.Context, arg ListOrdersPageParams) 
 			&i.UserID,
 			&i.PlanID,
 			&i.PlanNameSnapshot,
-			&i.PriceCredits,
+			&i.PriceMicroUsd,
 			&i.DurationDaysSnapshot,
 			&i.TotalLimitMicroSnapshot,
 			&i.Window5hLimitMicroSnapshot,
@@ -1014,7 +1014,7 @@ func (q *Queries) ListPlanPurchasePolicyRevisions(ctx context.Context, planID pg
 
 const listPlansPage = `-- name: ListPlansPage :many
 
-SELECT id, tenant_id, name, description, price_credits, duration_days, total_limit_micro, window_5h_limit_micro, window_7d_limit_micro, status, sort_order, sale_limit, sold_count, reserved_count, created_by, created_at, updated_at FROM ai_sub_plans
+SELECT id, tenant_id, name, description, price_micro_usd, duration_days, total_limit_micro, window_5h_limit_micro, window_7d_limit_micro, status, sort_order, sale_limit, sold_count, reserved_count, created_by, created_at, updated_at FROM ai_sub_plans
 WHERE ($1::text IS NULL OR tenant_id = $1)
   AND ($2::text IS NULL OR status = $2)
 ORDER BY sort_order ASC, created_at DESC
@@ -1050,7 +1050,7 @@ func (q *Queries) ListPlansPage(ctx context.Context, arg ListPlansPageParams) ([
 			&i.TenantID,
 			&i.Name,
 			&i.Description,
-			&i.PriceCredits,
+			&i.PriceMicroUsd,
 			&i.DurationDays,
 			&i.TotalLimitMicro,
 			&i.Window5hLimitMicro,
@@ -1075,7 +1075,7 @@ func (q *Queries) ListPlansPage(ctx context.Context, arg ListPlansPageParams) ([
 }
 
 const listReconcileOrders = `-- name: ListReconcileOrders :many
-SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_credits, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
+SELECT id, order_no, tenant_id, user_id, plan_id, plan_name_snapshot, price_micro_usd, duration_days_snapshot, total_limit_micro_snapshot, window_5h_limit_micro_snapshot, window_7d_limit_micro_snapshot, group_quota_debit_multipliers_snapshot, purchase_policy_version, purchase_policy_snapshot, inventory_reserved, status, billing_event_id, subscription_id, fail_reason, paid_at, created_at, updated_at FROM ai_sub_orders
 WHERE status IN ('created','deducting') AND updated_at < $1
 ORDER BY updated_at ASC
 LIMIT $2
@@ -1103,7 +1103,7 @@ func (q *Queries) ListReconcileOrders(ctx context.Context, arg ListReconcileOrde
 			&i.UserID,
 			&i.PlanID,
 			&i.PlanNameSnapshot,
-			&i.PriceCredits,
+			&i.PriceMicroUsd,
 			&i.DurationDaysSnapshot,
 			&i.TotalLimitMicroSnapshot,
 			&i.Window5hLimitMicroSnapshot,
@@ -1409,7 +1409,7 @@ func (q *Queries) SetPlanStatusByTenant(ctx context.Context, arg SetPlanStatusBy
 
 const updatePlanByTenant = `-- name: UpdatePlanByTenant :execrows
 UPDATE ai_sub_plans SET
-  name=$3, description=$4, price_credits=$5, duration_days=$6,
+  name=$3, description=$4, price_micro_usd=$5, duration_days=$6,
   total_limit_micro=$7, window_5h_limit_micro=$8, window_7d_limit_micro=$9,
   sort_order=$10, sale_limit=$11, updated_at=now()
 WHERE id=$1 AND tenant_id=$2
@@ -1420,7 +1420,7 @@ type UpdatePlanByTenantParams struct {
 	TenantID           string      `json:"tenant_id"`
 	Name               string      `json:"name"`
 	Description        string      `json:"description"`
-	PriceCredits       int64       `json:"price_credits"`
+	PriceMicroUsd      int64       `json:"price_micro_usd"`
 	DurationDays       int32       `json:"duration_days"`
 	TotalLimitMicro    int64       `json:"total_limit_micro"`
 	Window5hLimitMicro pgtype.Int8 `json:"window_5h_limit_micro"`
@@ -1436,7 +1436,7 @@ func (q *Queries) UpdatePlanByTenant(ctx context.Context, arg UpdatePlanByTenant
 		arg.TenantID,
 		arg.Name,
 		arg.Description,
-		arg.PriceCredits,
+		arg.PriceMicroUsd,
 		arg.DurationDays,
 		arg.TotalLimitMicro,
 		arg.Window5hLimitMicro,

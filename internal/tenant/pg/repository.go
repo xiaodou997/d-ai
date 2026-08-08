@@ -52,7 +52,7 @@ type TenantRow struct {
 	ContactEmail  *string `json:"contactEmail"`
 	Status        *string `json:"status"`
 	CreatedTime   *int64  `json:"createdTime"`
-	Credits       float64 `json:"credits"`
+	BalanceUSD    float64 `json:"balanceUsd"`
 	UserCount     int64   `json:"userCount"`
 }
 
@@ -113,7 +113,7 @@ func (r *TenantRepository) List(ctx context.Context, params ListTenantsParams) (
 		}
 		createdMillis := createdAt.UnixMilli()
 		row.CreatedTime = &createdMillis
-		row.Credits = billing.MicroToCredits(creditsMicro)
+		row.BalanceUSD = billing.MicroToUSD(creditsMicro)
 		result.Records = append(result.Records, row)
 	}
 	return result, rows.Err()

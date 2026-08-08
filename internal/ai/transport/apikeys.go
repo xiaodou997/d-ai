@@ -10,7 +10,6 @@ import (
 
 	"xiaodou/dai/internal/ai/commercial"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/credits"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/libs/go/httpx"
@@ -85,32 +84,32 @@ type deleteUserAPIKeyInput struct {
 }
 
 type apiKeyDTO struct {
-	ID                string                 `json:"id" doc:"API key ID"`
-	OwnerType         string                 `json:"owner_type" enum:"tenant,user" doc:"归属主体类型"`
-	TenantID          string                 `json:"tenant_id" doc:"租户 ID"`
-	UserID            *string                `json:"user_id,omitempty" doc:"用户 ID；租户 key 为空"`
-	GroupID           string                 `json:"group_id" doc:"密钥唯一绑定的分组 ID"`
-	LastFour          *string                `json:"last_four,omitempty" doc:"API key 后四位，仅用于展示"`
-	Name              string                 `json:"name" doc:"名称"`
-	QuotaLimitCredits *int64                 `json:"quota_limit_credits,omitempty" doc:"额度上限，积分；为空表示无限制"`
-	QuotaUsedCredits  float64                `json:"quota_used_credits" doc:"已使用额度，积分"`
-	Status            string                 `json:"status" enum:"active,disabled" doc:"状态"`
-	ExpiresAt         *int64                 `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒"`
-	LastUsedAt        *int64                 `json:"last_used_at,omitempty" doc:"最后使用时间，Unix 毫秒"`
-	LimitPolicy       *runtimeLimitPolicyDTO `json:"limit_policy,omitempty" doc:"API key 独立限流策略"`
-	CreatedBy         *string                `json:"created_by,omitempty" doc:"创建人"`
-	CreatedAt         *int64                 `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
-	UpdatedAt         *int64                 `json:"updated_at,omitempty" doc:"更新时间，Unix 毫秒"`
+	ID                 string                 `json:"id" doc:"API key ID"`
+	OwnerType          string                 `json:"owner_type" enum:"tenant,user" doc:"归属主体类型"`
+	TenantID           string                 `json:"tenant_id" doc:"租户 ID"`
+	UserID             *string                `json:"user_id,omitempty" doc:"用户 ID；租户 key 为空"`
+	GroupID            string                 `json:"group_id" doc:"密钥唯一绑定的分组 ID"`
+	LastFour           *string                `json:"last_four,omitempty" doc:"API key 后四位，仅用于展示"`
+	Name               string                 `json:"name" doc:"名称"`
+	QuotaLimitMicroUSD *int64                 `json:"quota_limit_micro_usd,omitempty" doc:"额度上限，单位 micro-USD；为空表示无限制"`
+	QuotaUsedMicroUSD  int64                  `json:"quota_used_micro_usd" doc:"已使用额度，单位 micro-USD"`
+	Status             string                 `json:"status" enum:"active,disabled" doc:"状态"`
+	ExpiresAt          *int64                 `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒"`
+	LastUsedAt         *int64                 `json:"last_used_at,omitempty" doc:"最后使用时间，Unix 毫秒"`
+	LimitPolicy        *runtimeLimitPolicyDTO `json:"limit_policy,omitempty" doc:"API key 独立限流策略"`
+	CreatedBy          *string                `json:"created_by,omitempty" doc:"创建人"`
+	CreatedAt          *int64                 `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
+	UpdatedAt          *int64                 `json:"updated_at,omitempty" doc:"更新时间，Unix 毫秒"`
 }
 
 type apiKeyWriteRequest struct {
-	Name              string                         `json:"name" doc:"名称"`
-	GroupID           string                         `json:"group_id" doc:"密钥唯一绑定的分组 ID"`
-	QuotaLimitCredits *int64                         `json:"quota_limit_credits,omitempty" minimum:"0" maximum:"1000000" doc:"额度上限，积分；为空表示无限制"`
-	Status            string                         `json:"status,omitempty" enum:"active,disabled" doc:"状态；为空默认 active"`
-	ExpiresAt         *int64                         `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒；为空表示不过期"`
-	LimitPolicy       *scopedLimitPolicyWriteRequest `json:"limit_policy,omitempty" doc:"API key 独立限流策略"`
-	CreatedBy         string                         `json:"created_by,omitempty" doc:"创建人；仅创建时使用"`
+	Name               string                         `json:"name" doc:"名称"`
+	GroupID            string                         `json:"group_id" doc:"密钥唯一绑定的分组 ID"`
+	QuotaLimitMicroUSD *int64                         `json:"quota_limit_micro_usd,omitempty" minimum:"0" doc:"额度上限，单位 micro-USD；为空表示无限制"`
+	Status             string                         `json:"status,omitempty" enum:"active,disabled" doc:"状态；为空默认 active"`
+	ExpiresAt          *int64                         `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒；为空表示不过期"`
+	LimitPolicy        *scopedLimitPolicyWriteRequest `json:"limit_policy,omitempty" doc:"API key 独立限流策略"`
+	CreatedBy          string                         `json:"created_by,omitempty" doc:"创建人；仅创建时使用"`
 }
 
 type apiKeyStatusRequest struct {
@@ -590,14 +589,14 @@ func tenantAPIKeyCreateInput(tenantID string, req apiKeyWriteRequest) (identityc
 		return identitycontrol.CreateInput{}, err
 	}
 	return identitycontrol.CreateInput{
-		OwnerScope:        coreidentity.ScopeTenant,
-		TenantID:          tenantID,
-		GroupID:           strings.TrimSpace(req.GroupID),
-		Name:              strings.TrimSpace(req.Name),
-		QuotaLimitCredits: req.QuotaLimitCredits,
-		Status:            status,
-		ExpiresAt:         expiresAt,
-		CreatedBy:         strings.TrimSpace(req.CreatedBy),
+		OwnerScope:         coreidentity.ScopeTenant,
+		TenantID:           tenantID,
+		GroupID:            strings.TrimSpace(req.GroupID),
+		Name:               strings.TrimSpace(req.Name),
+		QuotaLimitMicroUSD: req.QuotaLimitMicroUSD,
+		Status:             status,
+		ExpiresAt:          expiresAt,
+		CreatedBy:          strings.TrimSpace(req.CreatedBy),
 	}, nil
 }
 
@@ -624,13 +623,13 @@ func apiKeyUpdateInput(tenantID, apiKeyID string, req apiKeyWriteRequest) (ident
 		return identitycontrol.UpdateInput{}, err
 	}
 	return identitycontrol.UpdateInput{
-		ID:                apiKeyID,
-		TenantID:          tenantID,
-		GroupID:           strings.TrimSpace(req.GroupID),
-		Name:              strings.TrimSpace(req.Name),
-		QuotaLimitCredits: req.QuotaLimitCredits,
-		Status:            status,
-		ExpiresAt:         expiresAt,
+		ID:                 apiKeyID,
+		TenantID:           tenantID,
+		GroupID:            strings.TrimSpace(req.GroupID),
+		Name:               strings.TrimSpace(req.Name),
+		QuotaLimitMicroUSD: req.QuotaLimitMicroUSD,
+		Status:             status,
+		ExpiresAt:          expiresAt,
 	}, nil
 }
 
@@ -641,12 +640,9 @@ func validateAPIKeyWriteRequest(req apiKeyWriteRequest) error {
 	if strings.TrimSpace(req.GroupID) == "" {
 		return domain.NewValidationError("group_id", "group_id is required")
 	}
-	if req.QuotaLimitCredits != nil {
-		if *req.QuotaLimitCredits < 0 {
-			return domain.NewValidationError("quota_limit_credits", "quota_limit_credits must be a non-negative credit value")
-		}
-		if *req.QuotaLimitCredits > 1_000_000 {
-			return domain.NewValidationError("quota_limit_credits", "quota_limit_credits exceeds maximum allowed value")
+	if req.QuotaLimitMicroUSD != nil {
+		if *req.QuotaLimitMicroUSD < 0 {
+			return domain.NewValidationError("quota_limit_micro_usd", "quota_limit_micro_usd must be non-negative")
 		}
 	}
 	return nil
@@ -747,22 +743,22 @@ func apiKeyToDTO(key coreidentity.APIKey, limit *commercial.LimitPolicy) apiKeyD
 		limitDTO = &dto
 	}
 	return apiKeyDTO{
-		ID:                key.ID,
-		OwnerType:         apiKeyOwnerType(key.OwnerScope),
-		TenantID:          key.TenantID,
-		UserID:            stringPtrOrNil(key.UserID),
-		GroupID:           key.GroupID,
-		LastFour:          stringPtrOrNil(key.LastFour),
-		Name:              key.Name,
-		QuotaLimitCredits: microPtrToWholeCreditsPtr(key.QuotaLimitMicro),
-		QuotaUsedCredits:  credits.MicroToCredits(key.QuotaUsedMicro),
-		Status:            key.Status,
-		ExpiresAt:         timePtrToMillis(key.ExpiresAt),
-		LastUsedAt:        timePtrToMillis(key.LastUsedAt),
-		LimitPolicy:       limitDTO,
-		CreatedBy:         stringPtrOrNil(key.CreatedBy),
-		CreatedAt:         timeToMillisPtr(key.CreatedAt),
-		UpdatedAt:         timeToMillisPtr(key.UpdatedAt),
+		ID:                 key.ID,
+		OwnerType:          apiKeyOwnerType(key.OwnerScope),
+		TenantID:           key.TenantID,
+		UserID:             stringPtrOrNil(key.UserID),
+		GroupID:            key.GroupID,
+		LastFour:           stringPtrOrNil(key.LastFour),
+		Name:               key.Name,
+		QuotaLimitMicroUSD: cloneOptionalInt64(key.QuotaLimitMicro),
+		QuotaUsedMicroUSD:  key.QuotaUsedMicro,
+		Status:             key.Status,
+		ExpiresAt:          timePtrToMillis(key.ExpiresAt),
+		LastUsedAt:         timePtrToMillis(key.LastUsedAt),
+		LimitPolicy:        limitDTO,
+		CreatedBy:          stringPtrOrNil(key.CreatedBy),
+		CreatedAt:          timeToMillisPtr(key.CreatedAt),
+		UpdatedAt:          timeToMillisPtr(key.UpdatedAt),
 	}
 }
 
@@ -848,11 +844,11 @@ func apiKeyOwnerType(scope coreidentity.Scope) string {
 	}
 }
 
-func microPtrToWholeCreditsPtr(micro *int64) *int64 {
-	if micro == nil {
+func cloneOptionalInt64(value *int64) *int64 {
+	if value == nil {
 		return nil
 	}
-	v := credits.MicroToWholeCredits(*micro)
+	v := *value
 	return &v
 }
 

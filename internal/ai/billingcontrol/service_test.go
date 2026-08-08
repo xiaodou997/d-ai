@@ -339,15 +339,6 @@ func TestValidateEntryRejectsNonCanonicalImagePriceTier(t *testing.T) {
 	}
 }
 
-func TestSetCreditsPerUSDRejectsOversizedRate(t *testing.T) {
-	svc := New(&repositoryStub{}, nil)
-	err := svc.SetCreditsPerUSD(context.Background(), maxCreditsPerUSD+1)
-	var validationErr *domain.ValidationError
-	if !errors.As(err, &validationErr) || validationErr.Field != "credits_per_usd" {
-		t.Fatalf("validation error = %#v", err)
-	}
-}
-
 func TestImportFromLiteLLMSkipsImageModels(t *testing.T) {
 	repo := &repositoryStub{priceBookExists: true}
 	svc := New(repo, fetcherStub{

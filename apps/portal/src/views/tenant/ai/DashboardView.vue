@@ -27,7 +27,7 @@ import {
   type WorkbenchRangeId,
   type WorkbenchRangeOption
 } from "@/components/workbench/workbenchRanges";
-import { aiTenantApi, formatCredits } from "@/api/aiTenant";
+import { aiTenantApi, formatUSD } from "@/api/aiTenant";
 import { listTenantUsageRecords, type TenantUsageLog } from "@/features/ai/usage";
 import { tenantApi } from "@/api/tenant";
 import type {
@@ -132,8 +132,8 @@ const signalMetrics = computed(() => [
   {
     key: "total-cost",
     label: "平台结算扣费",
-    value: formatCredits(aiStats.totalCost),
-    hint: `${selectedRangeLabel.value}租户成本积分`,
+    value: formatUSD(aiStats.totalCost),
+    hint: `${selectedRangeLabel.value}租户结算金额`,
     loading: signalLoading.value
   },
   {
@@ -170,7 +170,7 @@ const usageInsightSummary = computed(() => {
 const sourceInsights = computed(() => {
   const buckets = new Map<
     string,
-    { key: string; label: string; colorToken: string; requestCount: number; successCount: number; totalCredits: number; totalTokens: number }
+    { key: string; label: string; colorToken: string; requestCount: number; successCount: number; totalAmountUSD: number; totalTokens: number }
   >(
     sourceDefinitions.map((item) => [
       item.key,
@@ -180,7 +180,7 @@ const sourceInsights = computed(() => {
         colorToken: item.colorToken,
         requestCount: 0,
         successCount: 0,
-        totalCredits: 0,
+        totalAmountUSD: 0,
         totalTokens: 0
       }
     ])
@@ -195,7 +195,7 @@ const sourceInsights = computed(() => {
         colorToken: "--ds-faint",
         requestCount: 0,
         successCount: 0,
-        totalCredits: 0,
+        totalAmountUSD: 0,
         totalTokens: 0
       });
     }
@@ -203,7 +203,7 @@ const sourceInsights = computed(() => {
     if (!bucket) continue;
     bucket.requestCount += 1;
     if (row.request_status === "success") bucket.successCount += 1;
-    bucket.totalCredits += Number(row.user_charged_credits || 0);
+    bucket.totalAmountUSD += Number(row.user_charged_usd || 0);
     bucket.totalTokens += Number(row.total_tokens || 0);
   }
 
@@ -214,7 +214,7 @@ const sourceInsights = computed(() => {
       ...bucket,
       shareText: sampleTotal ? `${((bucket.requestCount / sampleTotal) * 100).toFixed(0)}%` : "0%",
       successRateText: `${successRateValue.toFixed(0)}%`,
-      creditsText: formatCredits(bucket.totalCredits),
+      amountText: formatUSD(bucket.totalAmountUSD),
       tokensText: formatMetricNumber(bucket.totalTokens)
     };
   });
@@ -228,7 +228,7 @@ const topUserInsights = computed(() => {
       userLabel: string;
       requestCount: number;
       successCount: number;
-      totalCredits: number;
+      totalAmountUSD: number;
       lastActive: number;
     }
   >();
@@ -243,22 +243,22 @@ const topUserInsights = computed(() => {
       userLabel: fallbackLabel,
       requestCount: 0,
       successCount: 0,
-      totalCredits: 0,
+      totalAmountUSD: 0,
       lastActive: 0
     };
     bucket.requestCount += 1;
     if (row.request_status === "success") bucket.successCount += 1;
-    bucket.totalCredits += Number(row.user_charged_credits || 0);
+    bucket.totalAmountUSD += Number(row.user_charged_usd || 0);
     bucket.lastActive = Math.max(bucket.lastActive, Number(row.created_at || 0));
     buckets.set(key, bucket);
   }
 
   return Array.from(buckets.values())
-    .sort((a, b) => b.totalCredits - a.totalCredits || b.requestCount - a.requestCount || b.lastActive - a.lastActive)
+    .sort((a, b) => b.totalAmountUSD - a.totalAmountUSD || b.requestCount - a.requestCount || b.lastActive - a.lastActive)
     .slice(0, 6)
     .map((bucket) => ({
       ...bucket,
-      creditsText: formatCredits(bucket.totalCredits),
+      amountText: formatUSD(bucket.totalAmountUSD),
       successRateText: bucket.requestCount ? `${((bucket.successCount / bucket.requestCount) * 100).toFixed(0)}%` : "0%",
       lastActiveText: formatTime(bucket.lastActive)
     }));
@@ -325,7 +325,7 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
             success_count: 0,
             failed_count: 0,
             total_tokens: 0,
-            total_user_charged_credits: 0,
+            total_user_charged_usd: 0,
             avg_latency_ms: 0
           },
           records: []
@@ -334,7 +334,7 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
 
     if (requestEpoch !== latestRangeRequestEpoch) return;
 
-    aiStats.totalCost = Number(summaryRes?.total_tenant_payable_credits ?? 0);
+    aiStats.totalCost = Number(summaryRes?.total_tenant_payable_usd ?? 0);
     aiStats.totalRequests = Number(summaryRes?.total_requests ?? usageRes.stats?.total_requests ?? 0);
     aiStats.successRequests = Number(summaryRes?.successful_requests ?? usageRes.stats?.success_count ?? 0);
     aiStats.avgLatency = Number(summaryRes?.avg_latency_ms ?? usageRes.stats?.avg_latency_ms ?? 0);

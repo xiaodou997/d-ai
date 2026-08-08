@@ -10,14 +10,21 @@ import (
 	"xiaodou/dai/internal/payment"
 )
 
-// InsertWithdrawalTx 事务内写入提现申请（pending 状态）。与冻结现金余额必须同一事务，
-// 因此只提供 tx 版本，不提供 pool 版本。
+// InsertWithdrawalTx 事务内写入提现记录。旧调用方若不指定状态仍写入
+// pending；新的管理员直扣调用方指定 paid，并在同一事务写入打款信息。
 func InsertWithdrawalTx(ctx context.Context, tx pgx.Tx, w *payment.Withdrawal) error {
+	status := w.Status
+	if status == "" {
+		status = payment.WithdrawalStatusPending
+	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO pay_withdrawals
-		(withdrawal_id, tenant_id, amount, fee_amount, payout_amount, account_name, bank_name, account_no, apply_note, status, applied_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
-	`, w.WithdrawalID, w.TenantID, w.Amount, w.FeeAmount, w.PayoutAmount, w.AccountName, w.BankName, w.AccountNo, w.ApplyNote, payment.WithdrawalStatusPending, w.AppliedBy)
+		(withdrawal_id, tenant_id, amount_micro_usd, fee_amount_micro_usd, payout_amount_micro_usd,
+		 account_name, bank_name, account_no, apply_note, status, applied_by, paid_by, paid_at, payment_ref, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+		        NULLIF($12, ''), CASE WHEN $10 = 'paid' THEN now() ELSE NULL END, NULLIF($13, ''), now(), now())
+	`, w.WithdrawalID, w.TenantID, w.AmountMicroUSD, w.FeeAmountMicroUSD, w.PayoutAmountMicroUSD,
+		w.AccountName, w.BankName, w.AccountNo, w.ApplyNote, status, w.AppliedBy, w.PaidBy, w.PaymentRef)
 	if err != nil {
 		return fmt.Errorf("创建提现申请失败: %w", err)
 	}
@@ -25,14 +32,14 @@ func InsertWithdrawalTx(ctx context.Context, tx pgx.Tx, w *payment.Withdrawal) e
 }
 
 const withdrawalColumns = `
-	id, withdrawal_id, tenant_id, amount, fee_amount, payout_amount, account_name, bank_name, account_no,
+	id, withdrawal_id, tenant_id, amount_micro_usd, fee_amount_micro_usd, payout_amount_micro_usd, account_name, bank_name, account_no,
 	COALESCE(apply_note,''), status, applied_by, COALESCE(reviewed_by,''), reviewed_at, COALESCE(review_note,''),
 	COALESCE(paid_by,''), paid_at, COALESCE(payment_ref,''), created_at, updated_at`
 
 func scanWithdrawal(row pgx.Row) (*payment.Withdrawal, error) {
 	var w payment.Withdrawal
 	if err := row.Scan(
-		&w.ID, &w.WithdrawalID, &w.TenantID, &w.Amount, &w.FeeAmount, &w.PayoutAmount, &w.AccountName, &w.BankName, &w.AccountNo,
+		&w.ID, &w.WithdrawalID, &w.TenantID, &w.AmountMicroUSD, &w.FeeAmountMicroUSD, &w.PayoutAmountMicroUSD, &w.AccountName, &w.BankName, &w.AccountNo,
 		&w.ApplyNote, &w.Status, &w.AppliedBy, &w.ReviewedBy, &w.ReviewedAt, &w.ReviewNote,
 		&w.PaidBy, &w.PaidAt, &w.PaymentRef, &w.CreatedAt, &w.UpdatedAt,
 	); err != nil {
@@ -45,58 +52,6 @@ func scanWithdrawal(row pgx.Row) (*payment.Withdrawal, error) {
 func GetWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID string) (*payment.Withdrawal, error) {
 	row := pool.QueryRow(ctx, `SELECT `+withdrawalColumns+` FROM pay_withdrawals WHERE withdrawal_id = $1`, withdrawalID)
 	return scanWithdrawal(row)
-}
-
-// GetWithdrawalForUpdateTx 事务内查询并加行锁——审核/核销/取消前必须先拿到锁，防并发双审。
-func GetWithdrawalForUpdateTx(ctx context.Context, tx pgx.Tx, withdrawalID string) (*payment.Withdrawal, error) {
-	row := tx.QueryRow(ctx, `SELECT `+withdrawalColumns+` FROM pay_withdrawals WHERE withdrawal_id = $1 FOR UPDATE`, withdrawalID)
-	return scanWithdrawal(row)
-}
-
-// UpdateWithdrawalReviewTx 审核（approved/rejected），要求调用方已在同一事务内 FOR UPDATE 锁住该行
-// 并自行校验前态；这里只做 CAS 兜底 + 落库。
-func UpdateWithdrawalReviewTx(ctx context.Context, tx pgx.Tx, withdrawalID, toStatus, reviewerID, note string) error {
-	tag, err := tx.Exec(ctx, `
-		UPDATE pay_withdrawals SET status = $1, reviewed_by = $2, reviewed_at = now(), review_note = $3, updated_at = now()
-		WHERE withdrawal_id = $4 AND status = $5
-	`, toStatus, reviewerID, note, withdrawalID, payment.WithdrawalStatusPending)
-	if err != nil {
-		return fmt.Errorf("审核提现失败: %w", err)
-	}
-	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("提现申请状态已变化")
-	}
-	return nil
-}
-
-// UpdateWithdrawalSettleTx 线下打款核销（approved -> paid）。
-func UpdateWithdrawalSettleTx(ctx context.Context, tx pgx.Tx, withdrawalID, paidBy, paymentRef string) error {
-	tag, err := tx.Exec(ctx, `
-		UPDATE pay_withdrawals SET status = $1, paid_by = $2, paid_at = now(), payment_ref = $3, updated_at = now()
-		WHERE withdrawal_id = $4 AND status = $5
-	`, payment.WithdrawalStatusPaid, paidBy, paymentRef, withdrawalID, payment.WithdrawalStatusApproved)
-	if err != nil {
-		return fmt.Errorf("核销提现失败: %w", err)
-	}
-	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("提现申请状态已变化")
-	}
-	return nil
-}
-
-// UpdateWithdrawalCancelTx 申请人自取消（pending -> cancelled）。
-func UpdateWithdrawalCancelTx(ctx context.Context, tx pgx.Tx, withdrawalID string) error {
-	tag, err := tx.Exec(ctx, `
-		UPDATE pay_withdrawals SET status = $1, updated_at = now()
-		WHERE withdrawal_id = $2 AND status = $3
-	`, payment.WithdrawalStatusCancelled, withdrawalID, payment.WithdrawalStatusPending)
-	if err != nil {
-		return fmt.Errorf("取消提现失败: %w", err)
-	}
-	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("提现申请状态已变化")
-	}
-	return nil
 }
 
 // ListWithdrawals 分页查询（管理端可按 status 筛选，租户端固定 tenantID）。

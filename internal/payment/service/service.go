@@ -1,6 +1,5 @@
-// Package service 编排 payment 域的业务逻辑：下单、回调核销、sweep 兜底、余额购积分、
-// 提现全流程。依赖 internal/payment（类型+配置存储）、internal/payment/pg（仓储）、
-// internal/payment/wechat（支付网关）与 internal/billing/service（复用 GrantCredits）。
+// Package service orchestrates USD top-ups, settlement, unified tenant
+// balances and withdrawals.
 package service
 
 import (
@@ -20,6 +19,7 @@ import (
 	billingdomain "xiaodou/dai/internal/billing"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/domain"
+	"xiaodou/dai/internal/money"
 	"xiaodou/dai/internal/payment"
 	paymentpg "xiaodou/dai/internal/payment/pg"
 	"xiaodou/dai/internal/payment/wechat"
@@ -47,14 +47,15 @@ func New(pool *pgxpool.Pool, gateway wechat.Gateway, cfgStore *wechat.ConfigStor
 // ==================== 下单 ====================
 
 type CreateTopupOrderParams struct {
-	Scene     string // payment.SceneUserTopup / SceneTenantTopup
-	TenantID  string
-	UserID    string
-	AmountFen int64
-	PackageID string
+	Scene          string // payment.SceneUserTopup / SceneTenantTopup
+	TenantID       string
+	UserID         string
+	AmountMicroUSD int64
+	PackageID      string
 }
 
-// CreateTopupOrder 对应设计文档 §4.2：校验限额 -> 快照汇率/费率 -> 建单 -> 微信 Prepay。
+// CreateTopupOrder validates a USD offer, snapshots fees/expiry and creates a
+// payment order. The gateway amount is USD cents, derived without FX.
 func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrderParams) (*payment.Order, error) {
 	cfg, err := s.cfgStore.Load(ctx)
 	if err != nil {
@@ -64,10 +65,10 @@ func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrde
 		return nil, domain.ErrPaymentDisabled
 	}
 	p.PackageID = strings.TrimSpace(p.PackageID)
-	if p.AmountFen < 0 {
+	if p.AmountMicroUSD < 0 {
 		return nil, domain.ErrInvalidAmount
 	}
-	if p.PackageID == "" && p.AmountFen <= 0 {
+	if p.PackageID == "" && p.AmountMicroUSD <= 0 {
 		return nil, domain.ErrInvalidAmount
 	}
 
@@ -87,20 +88,25 @@ func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrde
 		params = payment.ResolveTenantTopup(global)
 	}
 
-	calc, err := calculateTopupSnapshot(params, p.AmountFen, p.PackageID)
+	calc, err := calculateTopupSnapshot(params, p.AmountMicroUSD, p.PackageID)
 	if err != nil {
 		return nil, err
 	}
-	if calc.CreditAmount <= 0 {
+	if calc.CreditedAmountMicroUSD <= 0 {
 		return nil, domain.ErrPaymentAmountOutOfRange
 	}
-	netAmount := int64(0)
+	tenantIncomeMicroUSD := int64(0)
 	if p.Scene == payment.SceneUserTopup {
-		netAmount = calc.AmountFen
+		tenantIncomeMicroUSD = calc.PaymentAmountMicroUSD
 	}
 
 	now := billingdomain.NowUTC()
 	expiresAt := now.Add(cfg.OrderTTL)
+	var balanceExpiresAt *time.Time
+	if calc.ValidityDays != nil {
+		v := now.Add(time.Duration(*calc.ValidityDays) * 24 * time.Hour)
+		balanceExpiresAt = &v
+	}
 	outTradeNo, err := generateOutTradeNo()
 	if err != nil {
 		return nil, fmt.Errorf("生成商户单号失败: %w", err)
@@ -109,16 +115,17 @@ func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrde
 	order := &payment.Order{
 		OrderID: "PAY_" + uuid.New().String()[:24], OutTradeNo: outTradeNo, Scene: p.Scene, TenantID: p.TenantID, UserID: p.UserID,
 		TopupMode: calc.Mode, PackageID: calc.PackageID, PackageName: calc.PackageName, PackageBadge: calc.PackageBadge,
-		Amount: calc.AmountFen, ExchangeRate: params.CreditsPerCNY, GrossCreditAmount: calc.GrossCredits,
-		FeeRateBp: calc.FeeRateBp, FeeCreditAmount: calc.FeeCredits, CreditAmount: calc.CreditAmount,
-		FeeAmount: 0, NetAmount: netAmount,
-		Channel: "wechat_native", Status: payment.OrderStatusCreated, ExpiresAt: expiresAt,
+		PaymentCurrency: money.CurrencyUSD, PaymentAmountMinor: calc.PaymentAmountMinor, LedgerCurrency: money.CurrencyUSD,
+		GrossAmountMicroUSD: calc.GrossAmountMicroUSD, FeeRateBp: calc.FeeRateBp,
+		FeeAmountMicroUSD: calc.FeeAmountMicroUSD, GiftAmountMicroUSD: calc.GiftAmountMicroUSD,
+		CreditedAmountMicroUSD: calc.CreditedAmountMicroUSD, TenantIncomeMicroUSD: tenantIncomeMicroUSD,
+		BalanceExpiresAt: balanceExpiresAt, Channel: "wechat_native", Status: payment.OrderStatusCreated, ExpiresAt: expiresAt,
 	}
 	if err := paymentpg.InsertOrder(ctx, s.pool, order); err != nil {
 		return nil, err
 	}
 
-	codeURL, err := s.gateway.Prepay(ctx, outTradeNo, calc.AmountFen, expiresAt, topupDescription(p.Scene))
+	codeURL, err := s.gateway.Prepay(ctx, outTradeNo, calc.PaymentAmountMinor, expiresAt, topupDescription(p.Scene))
 	if err != nil {
 		_ = paymentpg.MarkOrderFailed(ctx, s.pool, order.OrderID, err.Error())
 		return nil, fmt.Errorf("微信下单失败: %w", err)
@@ -188,7 +195,7 @@ func (s *PaymentService) Settle(ctx context.Context, outTradeNo string, txn *wec
 	}
 
 	// 金额/身份三验，不符绝不入账——回 nil（HTTP 200）止损防重试风暴，人工经 sync 端点处置
-	if txn.AmountTotal != order.Amount ||
+	if txn.AmountTotal != order.PaymentAmountMinor ||
 		(cfg.MchID != "" && txn.Mchid != "" && txn.Mchid != cfg.MchID) ||
 		(cfg.AppID != "" && txn.Appid != "" && txn.Appid != cfg.AppID) {
 		failNote := fmt.Sprintf("金额/商户号/AppID 校验不符: amount=%d mchid=%s appid=%s", txn.AmountTotal, txn.Mchid, txn.Appid)
@@ -207,37 +214,38 @@ func (s *PaymentService) Settle(ctx context.Context, outTradeNo string, txn *wec
 	if order.Scene == payment.SceneUserTopup {
 		orderType = billingdomain.OrderTypeOnlineUserTopup
 	}
-	creditMicro, err := billingdomain.CreditsToMicro(order.CreditAmount)
-	if err != nil {
-		return err
-	}
-	grant, err := billingsvc.GrantCredits(ctx, tx, billingsvc.GrantParams{
+	grant, err := billingsvc.GrantBalance(ctx, tx, billingsvc.GrantParams{
 		OrderType: orderType, TenantID: order.TenantID, UserID: order.UserID,
-		CreditAmountMicro: creditMicro, PaidAmount: order.Amount,
-		PaymentRef: txn.TransactionID, OperatorID: "system:wechatpay", Source: source,
+		AmountMicroUSD: order.CreditedAmountMicroUSD, PaidAmount: order.PaymentAmountMinor,
+		PaymentRef: txn.TransactionID, OperatorID: "system:wechatpay", Source: source, ExpiresAt: order.BalanceExpiresAt,
 	})
 	if err != nil {
 		return err
 	}
 
-	if order.Scene == payment.SceneUserTopup && order.NetAmount > 0 {
+	if order.Scene == payment.SceneUserTopup && order.TenantIncomeMicroUSD > 0 {
 		idemKey := "wxpay:" + outTradeNo
 		exists, err := paymentpg.ExistsCashLedgerIdempotencyKey(ctx, tx, idemKey)
 		if err != nil {
 			return err
 		}
 		if !exists {
-			if _, err := paymentpg.GetOrCreateCashAccountForUpdate(ctx, tx, order.TenantID); err != nil {
+			incomeGrant, err := billingsvc.GrantBalance(ctx, tx, billingsvc.GrantParams{
+				OrderType: billingdomain.OrderTypeUserTopupIncome, TenantID: order.TenantID,
+				AmountMicroUSD: order.TenantIncomeMicroUSD, PaidAmount: order.PaymentAmountMinor,
+				PaymentRef: txn.TransactionID, OperatorID: "system:wechatpay", Source: billingdomain.PackageSourceUserTopupIncome,
+			})
+			if err != nil {
 				return err
 			}
-			balanceAfter, err := paymentpg.AddCashBalanceTx(ctx, tx, order.TenantID, order.NetAmount)
+			balanceAfter, err := paymentpg.TenantBalanceAfterTx(ctx, tx, order.TenantID)
 			if err != nil {
 				return err
 			}
 			entry := &payment.CashLedgerEntry{
 				TxnID: "CSH_" + uuid.New().String()[:24], TenantID: order.TenantID,
-				TxnType: payment.CashTxnTopupIncome, Amount: order.NetAmount, BalanceAfter: balanceAfter,
-				RefType: "pay_order", RefID: order.OrderID, OperatorID: "system:wechatpay",
+				TxnType: payment.CashTxnTopupIncome, AmountMicroUSD: order.TenantIncomeMicroUSD, BalanceAfterMicroUSD: balanceAfter,
+				RefType: "recharge_order", RefID: incomeGrant.OrderID, OperatorID: "system:wechatpay",
 			}
 			if err := paymentpg.InsertCashLedgerTx(ctx, tx, entry, idemKey); err != nil {
 				return err
@@ -263,7 +271,7 @@ func (s *PaymentService) SyncOrder(ctx context.Context, orderID string) (*paymen
 		return nil, err
 	}
 	if cfg.Mock {
-		s.gateway.SimulateSuccess(order.OutTradeNo, order.Amount)
+		s.gateway.SimulateSuccess(order.OutTradeNo, order.PaymentAmountMinor)
 	}
 	result, err := s.gateway.Query(ctx, order.OutTradeNo)
 	if err != nil {
@@ -346,15 +354,45 @@ func (s *PaymentService) sweepInFlightOrder(ctx context.Context, o *payment.Orde
 	}
 }
 
-// ==================== 现金余额购积分（§4.4，内部划转不走微信） ====================
+// ==================== 提现 ====================
 
-func (s *PaymentService) BuyCredits(ctx context.Context, tenantID string, amountFen int64, operatorID string) (*billingsvc.GrantResult, error) {
-	if amountFen <= 0 {
+// CreateWithdrawalParams describes an administrator-created withdrawal. The
+// operation is deliberately one stage: it deducts the tenant balance, writes
+// the cash ledger entry, and records the withdrawal as paid in one transaction.
+type CreateWithdrawalParams struct {
+	TenantID       string
+	AmountMicroUSD int64
+	AccountName    string
+	BankName       string
+	AccountNo      string
+	Note           string
+	OperatorID     string
+	PaymentRef     string
+}
+
+func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawalParams) (*payment.Withdrawal, error) {
+	p.TenantID = strings.TrimSpace(p.TenantID)
+	p.AccountName = strings.TrimSpace(p.AccountName)
+	p.BankName = strings.TrimSpace(p.BankName)
+	p.AccountNo = strings.TrimSpace(p.AccountNo)
+	p.Note = strings.TrimSpace(p.Note)
+	p.OperatorID = strings.TrimSpace(p.OperatorID)
+	p.PaymentRef = strings.TrimSpace(p.PaymentRef)
+	if p.TenantID == "" || p.AmountMicroUSD <= 0 {
 		return nil, domain.ErrInvalidAmount
 	}
+
 	global, err := s.settings.LoadGlobal(ctx)
 	if err != nil {
 		return nil, err
+	}
+	feeAmount, err := money.ApplyBasisPointsCeil(p.AmountMicroUSD, global.TenantWithdrawFeeBp)
+	if err != nil {
+		return nil, domain.ErrInvalidAmount
+	}
+	payoutAmount := p.AmountMicroUSD - feeAmount
+	if payoutAmount < 0 {
+		payoutAmount = 0
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -363,100 +401,47 @@ func (s *PaymentService) BuyCredits(ctx context.Context, tenantID string, amount
 	}
 	defer tx.Rollback(ctx)
 
-	account, err := paymentpg.GetOrCreateCashAccountForUpdate(ctx, tx, tenantID)
+	account, err := paymentpg.GetBalanceAccountForUpdate(ctx, tx, p.TenantID)
 	if err != nil {
 		return nil, err
 	}
-	if account.Available() < amountFen {
+	var currentOverdraft int64
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(current_overdraft, 0)
+		FROM iam_tenants WHERE tenant_id = $1
+	`, p.TenantID).Scan(&currentOverdraft); err != nil {
+		return nil, err
+	}
+	// A tenant may run AI into an overdraft, but the administrator must not pay
+	// cash out while the tenant still owes that amount.
+	if currentOverdraft > 0 || account.BalanceMicroUSD < p.AmountMicroUSD {
+		return nil, domain.ErrCashInsufficientBalance
+	}
+	if err := paymentpg.DeductTenantBalanceTx(ctx, tx, p.TenantID, p.AmountMicroUSD); err != nil {
 		return nil, domain.ErrCashInsufficientBalance
 	}
 
-	credits, err := creditsFromAmount(amountFen, global.CreditsPerCNY)
-	if err != nil {
+	w := &payment.Withdrawal{
+		WithdrawalID: "WDR_" + uuid.New().String()[:24], TenantID: p.TenantID,
+		AmountMicroUSD: p.AmountMicroUSD, FeeAmountMicroUSD: feeAmount, PayoutAmountMicroUSD: payoutAmount,
+		AccountName: p.AccountName, BankName: p.BankName, AccountNo: p.AccountNo,
+		ApplyNote: p.Note, AppliedBy: p.OperatorID, PaidBy: p.OperatorID, PaymentRef: p.PaymentRef,
+		Status: payment.WithdrawalStatusPaid,
+	}
+	if err := paymentpg.InsertWithdrawalTx(ctx, tx, w); err != nil {
 		return nil, err
 	}
-
-	creditMicro, err := billingdomain.CreditsToMicro(credits)
-	if err != nil {
-		return nil, err
-	}
-	grant, err := billingsvc.GrantCredits(ctx, tx, billingsvc.GrantParams{
-		OrderType: billingdomain.OrderTypeCashPurchase, TenantID: tenantID,
-		CreditAmountMicro: creditMicro, PaidAmount: amountFen, PaymentRef: "cash",
-		OperatorID: operatorID, Source: billingdomain.PackageSourceCashPurchase,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	balanceAfter, err := paymentpg.AddCashBalanceTx(ctx, tx, tenantID, -amountFen)
+	balanceAfter, err := paymentpg.TenantBalanceAfterTx(ctx, tx, p.TenantID)
 	if err != nil {
 		return nil, err
 	}
 	entry := &payment.CashLedgerEntry{
-		TxnID: "CSH_" + uuid.New().String()[:24], TenantID: tenantID,
-		TxnType: payment.CashTxnBuyCredits, Amount: -amountFen, BalanceAfter: balanceAfter,
-		RefType: "recharge_order", RefID: grant.OrderID, OperatorID: operatorID,
+		TxnID: "CSH_" + uuid.New().String()[:24], TenantID: p.TenantID,
+		TxnType: payment.CashTxnWithdraw, AmountMicroUSD: -p.AmountMicroUSD,
+		BalanceAfterMicroUSD: balanceAfter, RefType: "withdrawal", RefID: w.WithdrawalID,
+		OperatorID: p.OperatorID, Note: p.Note,
 	}
-	if err := paymentpg.InsertCashLedgerTx(ctx, tx, entry, ""); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return grant, nil
-}
-
-// ==================== 提现 ====================
-
-type ApplyWithdrawalParams struct {
-	TenantID    string
-	Amount      int64
-	AccountName string
-	BankName    string
-	AccountNo   string
-	Note        string
-	AppliedBy   string
-}
-
-func (s *PaymentService) ApplyWithdrawal(ctx context.Context, p ApplyWithdrawalParams) (*payment.Withdrawal, error) {
-	if p.Amount <= 0 {
-		return nil, domain.ErrInvalidAmount
-	}
-	global, err := s.settings.LoadGlobal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	feeAmount := ceilDiv(p.Amount*int64(global.TenantWithdrawFeeBp), 10000)
-	payoutAmount := p.Amount - feeAmount
-	if payoutAmount < 0 {
-		payoutAmount = 0
-	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	account, err := paymentpg.GetOrCreateCashAccountForUpdate(ctx, tx, p.TenantID)
-	if err != nil {
-		return nil, err
-	}
-	if account.Available() < p.Amount {
-		return nil, domain.ErrCashInsufficientBalance
-	}
-	if err := paymentpg.AddCashFrozenTx(ctx, tx, p.TenantID, p.Amount); err != nil {
-		return nil, err
-	}
-
-	w := &payment.Withdrawal{
-		WithdrawalID: "WDR_" + uuid.New().String()[:24], TenantID: p.TenantID, Amount: p.Amount,
-		FeeAmount: feeAmount, PayoutAmount: payoutAmount,
-		AccountName: p.AccountName, BankName: p.BankName, AccountNo: p.AccountNo,
-		ApplyNote: p.Note, AppliedBy: p.AppliedBy, Status: payment.WithdrawalStatusPending,
-	}
-	if err := paymentpg.InsertWithdrawalTx(ctx, tx, w); err != nil {
+	if err := paymentpg.InsertCashLedgerTx(ctx, tx, entry, "withdrawal:"+w.WithdrawalID); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -465,107 +450,8 @@ func (s *PaymentService) ApplyWithdrawal(ctx context.Context, p ApplyWithdrawalP
 	return w, nil
 }
 
-func (s *PaymentService) ReviewWithdrawal(ctx context.Context, withdrawalID string, approve bool, reviewerID, note string) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	w, err := paymentpg.GetWithdrawalForUpdateTx(ctx, tx, withdrawalID)
-	if err != nil {
-		return domain.ErrWithdrawalNotFound
-	}
-	if w.Status != payment.WithdrawalStatusPending {
-		return domain.ErrWithdrawalInvalidState
-	}
-
-	toStatus := payment.WithdrawalStatusApproved
-	if !approve {
-		toStatus = payment.WithdrawalStatusRejected
-	}
-	if err := paymentpg.UpdateWithdrawalReviewTx(ctx, tx, withdrawalID, toStatus, reviewerID, note); err != nil {
-		return domain.ErrWithdrawalInvalidState
-	}
-	if !approve {
-		// 驳回：解冻，不写流水（余额未变）
-		if err := paymentpg.AddCashFrozenTx(ctx, tx, w.TenantID, -w.Amount); err != nil {
-			return err
-		}
-	}
-	return tx.Commit(ctx)
-}
-
-func (s *PaymentService) SettleWithdrawal(ctx context.Context, withdrawalID, paidBy, paymentRef string) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	w, err := paymentpg.GetWithdrawalForUpdateTx(ctx, tx, withdrawalID)
-	if err != nil {
-		return domain.ErrWithdrawalNotFound
-	}
-	if w.Status != payment.WithdrawalStatusApproved {
-		return domain.ErrWithdrawalInvalidState
-	}
-	if err := paymentpg.UpdateWithdrawalSettleTx(ctx, tx, withdrawalID, paidBy, paymentRef); err != nil {
-		return domain.ErrWithdrawalInvalidState
-	}
-
-	// 先减冻结、再减余额：pay_cash_accounts 的 CHECK(frozen<=balance) 是逐语句立即校验（非
-	// deferred），若先减 balance，则当同一租户还有其他在途冻结提现时，中间态会先出现
-	// frozen(未变)>balance(已减)而触发约束违规——必须先减 frozen 收窄冻结区间，两条语句
-	// 才都能维持 frozen<=balance 不变式。
-	if err := paymentpg.AddCashFrozenTx(ctx, tx, w.TenantID, -w.Amount); err != nil {
-		return err
-	}
-	balanceAfter, err := paymentpg.AddCashBalanceTx(ctx, tx, w.TenantID, -w.Amount)
-	if err != nil {
-		return err
-	}
-	entry := &payment.CashLedgerEntry{
-		TxnID: "CSH_" + uuid.New().String()[:24], TenantID: w.TenantID,
-		TxnType: payment.CashTxnWithdraw, Amount: -w.Amount, BalanceAfter: balanceAfter,
-		RefType: "withdrawal", RefID: withdrawalID, OperatorID: paidBy,
-	}
-	if err := paymentpg.InsertCashLedgerTx(ctx, tx, entry, ""); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func (s *PaymentService) CancelWithdrawal(ctx context.Context, withdrawalID, requesterTenantID string) error {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	w, err := paymentpg.GetWithdrawalForUpdateTx(ctx, tx, withdrawalID)
-	if err != nil {
-		return domain.ErrWithdrawalNotFound
-	}
-	if w.TenantID != requesterTenantID {
-		return domain.ErrWithdrawalNotFound
-	}
-	if w.Status != payment.WithdrawalStatusPending {
-		return domain.ErrWithdrawalInvalidState
-	}
-	if err := paymentpg.UpdateWithdrawalCancelTx(ctx, tx, withdrawalID); err != nil {
-		return domain.ErrWithdrawalInvalidState
-	}
-	if err := paymentpg.AddCashFrozenTx(ctx, tx, w.TenantID, -w.Amount); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-// ==================== 只读查询透传（现金账户/流水/提现列表） ====================
-
-func (s *PaymentService) GetCashAccount(ctx context.Context, tenantID string) (*payment.CashAccount, error) {
-	return paymentpg.GetCashAccount(ctx, s.pool, tenantID)
+func (s *PaymentService) GetBalanceAccount(ctx context.Context, tenantID string) (*payment.BalanceAccount, error) {
+	return paymentpg.GetBalanceAccount(ctx, s.pool, tenantID)
 }
 
 func (s *PaymentService) ListCashLedger(ctx context.Context, tenantID, txnType string, page, size int) ([]*payment.CashLedgerEntry, int64, error) {
@@ -630,10 +516,11 @@ func (s *PaymentService) UpdateWechatConfig(ctx context.Context, in wechat.Updat
 
 // TopupConfigView 是给用户/租户端展示的下单前信息（不暴露费率）。
 type TopupConfigView struct {
-	ExchangeRate int64
+	Currency     string
 	FeeRateBp    int
-	Min          int64
-	Max          int64
+	MinMicroUSD  int64
+	MaxMicroUSD  int64
+	ValidityDays *int32
 	Enabled      bool
 	Packages     []payment.TopupPackage
 }
@@ -658,78 +545,75 @@ func (s *PaymentService) GetTopupConfigView(ctx context.Context, scene, tenantID
 		params = payment.ResolveTenantTopup(global)
 	}
 	return &TopupConfigView{
-		ExchangeRate: params.CreditsPerCNY,
-		FeeRateBp:    params.FeeRateBp,
-		Min:          params.Min,
-		Max:          params.Max,
-		Enabled:      cfg.Enabled,
-		Packages:     enabledTopupPackages(params.Packages),
+		Currency: money.CurrencyUSD, FeeRateBp: params.FeeRateBp,
+		MinMicroUSD: params.MinMicroUSD, MaxMicroUSD: params.MaxMicroUSD,
+		ValidityDays: params.ValidityDays, Enabled: cfg.Enabled,
+		Packages: enabledTopupPackages(params.Packages),
 	}, nil
 }
 
 // ==================== helpers ====================
 
 type topupSnapshot struct {
-	Mode         string
-	PackageID    string
-	PackageName  string
-	PackageBadge string
-	AmountFen    int64
-	GrossCredits int64
-	FeeRateBp    int
-	FeeCredits   int64
-	CreditAmount int64
+	Mode                   string
+	PackageID              string
+	PackageName            string
+	PackageBadge           string
+	PaymentAmountMicroUSD  int64
+	PaymentAmountMinor     int64
+	GrossAmountMicroUSD    int64
+	FeeRateBp              int
+	FeeAmountMicroUSD      int64
+	GiftAmountMicroUSD     int64
+	CreditedAmountMicroUSD int64
+	ValidityDays           *int32
 }
 
-func calculateTopupSnapshot(params payment.TopupParams, amountFen int64, packageID string) (topupSnapshot, error) {
+func calculateTopupSnapshot(params payment.TopupParams, amountMicroUSD int64, packageID string) (topupSnapshot, error) {
 	packageID = strings.TrimSpace(packageID)
 	if packageID != "" {
 		for _, p := range params.Packages {
 			if p.ID == packageID && p.Enabled {
-				if amountFen > 0 && amountFen != p.Amount {
+				if amountMicroUSD > 0 && amountMicroUSD != p.PaymentAmountMicroUSD {
 					return topupSnapshot{}, domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "充值套餐金额与实付金额不一致")
 				}
+				paymentMinor, err := paymentMinorFromMicroUSD(p.PaymentAmountMicroUSD)
+				if err != nil {
+					return topupSnapshot{}, err
+				}
 				return topupSnapshot{
-					Mode:         payment.TopupModePackage,
-					PackageID:    p.ID,
-					PackageName:  p.Name,
-					PackageBadge: p.Badge,
-					AmountFen:    p.Amount,
-					GrossCredits: p.Credits,
-					FeeRateBp:    0,
-					FeeCredits:   0,
-					CreditAmount: p.Credits,
+					Mode: payment.TopupModePackage, PackageID: p.ID, PackageName: p.Name, PackageBadge: p.Badge,
+					PaymentAmountMicroUSD: p.PaymentAmountMicroUSD, PaymentAmountMinor: paymentMinor,
+					GrossAmountMicroUSD: p.PaymentAmountMicroUSD, GiftAmountMicroUSD: p.GiftAmountMicroUSD,
+					CreditedAmountMicroUSD: p.PaymentAmountMicroUSD + p.GiftAmountMicroUSD, ValidityDays: p.ValidityDays,
 				}, nil
 			}
 		}
 		return topupSnapshot{}, domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "充值套餐不存在或已停用")
 	}
-	if amountFen < payment.TopupMinAmountFen || amountFen > payment.TopupMaxAmountFen {
+	if amountMicroUSD < params.MinMicroUSD || amountMicroUSD > params.MaxMicroUSD {
 		return topupSnapshot{}, domain.ErrPaymentAmountOutOfRange
 	}
-	grossCredits, err := creditsFromAmount(amountFen, params.CreditsPerCNY)
+	paymentMinor, err := paymentMinorFromMicroUSD(amountMicroUSD)
 	if err != nil {
 		return topupSnapshot{}, err
 	}
-	feeCredits := ceilDiv(grossCredits*int64(params.FeeRateBp), 10000)
-	creditAmount := grossCredits - feeCredits
-	if creditAmount <= 0 {
+	feeMicroUSD, err := money.ApplyBasisPointsCeil(amountMicroUSD, params.FeeRateBp)
+	if err != nil {
+		return topupSnapshot{}, domain.ErrInvalidAmount
+	}
+	creditedMicroUSD := amountMicroUSD - feeMicroUSD
+	if creditedMicroUSD <= 0 {
 		return topupSnapshot{}, domain.ErrPaymentAmountOutOfRange
 	}
 	return topupSnapshot{
-		Mode:         payment.TopupModeCustom,
-		AmountFen:    amountFen,
-		GrossCredits: grossCredits,
-		FeeRateBp:    params.FeeRateBp,
-		FeeCredits:   feeCredits,
-		CreditAmount: creditAmount,
+		Mode: payment.TopupModeCustom, PaymentAmountMicroUSD: amountMicroUSD, PaymentAmountMinor: paymentMinor,
+		GrossAmountMicroUSD: amountMicroUSD, FeeRateBp: params.FeeRateBp,
+		FeeAmountMicroUSD: feeMicroUSD, CreditedAmountMicroUSD: creditedMicroUSD, ValidityDays: params.ValidityDays,
 	}, nil
 }
 
 func validateGlobalSettings(g *payment.GlobalSettings) error {
-	if g.CreditsPerCNY <= 0 || g.CreditsPerCNY > payment.MaxCreditsPerCNY {
-		return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, fmt.Sprintf("1 元兑换积分必须在 1~%d 之间", payment.MaxCreditsPerCNY))
-	}
 	if g.TenantCustomTopupFeeBp < 0 || g.TenantCustomTopupFeeBp > 10000 || g.TenantWithdrawFeeBp < 0 || g.TenantWithdrawFeeBp > 10000 {
 		return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "手续费必须在 0%~100% 之间")
 	}
@@ -737,9 +621,6 @@ func validateGlobalSettings(g *payment.GlobalSettings) error {
 }
 
 func validateTenantSettings(ts *payment.TenantSettings) error {
-	if ts.UserCreditsPerCNY <= 0 || ts.UserCreditsPerCNY > payment.MaxCreditsPerCNY {
-		return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, fmt.Sprintf("1 元兑换积分必须在 1~%d 之间", payment.MaxCreditsPerCNY))
-	}
 	if ts.UserCustomTopupFeeBp < 0 || ts.UserCustomTopupFeeBp > 10000 {
 		return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "手续费必须在 0%~100% 之间")
 	}
@@ -763,11 +644,11 @@ func validatePackages(packages []payment.TopupPackage) error {
 		if strings.TrimSpace(p.Name) == "" {
 			return domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, "套餐名称不能为空")
 		}
-		if p.Amount < payment.TopupMinAmountFen || p.Amount > payment.TopupMaxAmountFen {
-			return domain.NewErrorWithDetail(domain.ErrPaymentAmountOutOfRange.Code, domain.ErrPaymentAmountOutOfRange.Message, "套餐金额必须在 10~10000 元之间")
+		if p.PaymentAmountMicroUSD < payment.TopupMinAmountMicroUSD || p.PaymentAmountMicroUSD > payment.TopupMaxAmountMicroUSD {
+			return domain.NewErrorWithDetail(domain.ErrPaymentAmountOutOfRange.Code, domain.ErrPaymentAmountOutOfRange.Message, "套餐金额必须在 $10~$10000 之间")
 		}
-		if p.Credits <= 0 || p.Credits > payment.MaxPackageCredits {
-			return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, fmt.Sprintf("套餐到账积分必须在 1~%d 之间", payment.MaxPackageCredits))
+		if p.GiftAmountMicroUSD < 0 || p.PaymentAmountMicroUSD > payment.MaxPackageAmountMicroUSD-p.GiftAmountMicroUSD {
+			return domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "套餐到账金额超出支持范围")
 		}
 	}
 	return nil
@@ -783,26 +664,12 @@ func enabledTopupPackages(packages []payment.TopupPackage) []payment.TopupPackag
 	return out
 }
 
-func creditsFromAmount(amountFen, creditsPerCNY int64) (int64, error) {
-	if amountFen <= 0 || creditsPerCNY <= 0 || creditsPerCNY > payment.MaxCreditsPerCNY {
-		return 0, domain.ErrInvalidAmount
+func paymentMinorFromMicroUSD(amount int64) (int64, error) {
+	const microPerCent = money.MicrosPerUSD / 100
+	if amount <= 0 || amount%microPerCent != 0 {
+		return 0, domain.NewErrorWithDetail(domain.ErrInvalidAmount.Code, domain.ErrInvalidAmount.Message, "支付金额最多保留两位小数")
 	}
-	const maxInt64 = int64(1<<63 - 1)
-	if amountFen > maxInt64/creditsPerCNY {
-		return 0, domain.ErrInvalidAmount
-	}
-	credits := amountFen * creditsPerCNY / 100
-	if credits <= 0 {
-		return 0, domain.ErrInvalidAmount
-	}
-	return credits, nil
-}
-
-func ceilDiv(a, b int64) int64 {
-	if a <= 0 {
-		return 0
-	}
-	return (a + b - 1) / b
+	return amount / microPerCent, nil
 }
 
 const outTradeNoAlnum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"

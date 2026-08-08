@@ -3,49 +3,51 @@
 
 // ===== 统计 / 概览 =====
 export interface TenantAnalyticsOverview {
-  endUserCount: number;
-  inviteCodeCount: number;
-  userDeductionCredits: number;
-  userTotalCredits: number;
-  activeUserCount: number;
-  userConsumptionCount: number;
-  settlementIncomeCents: number;
+	endUserCount: number;
+	inviteCodeCount: number;
+	userDeductionUsd: number;
+	userTotalBalanceUsd: number;
+	activeUserCount: number;
+	userConsumptionCount: number;
+	settlementIncomeMicroUsd: number;
 }
 
 // 按应用消耗分布（饼图）。v4 字段为 clientId/clientName（非 v1 的 appKey/appName）。
 export interface ClientConsumptionItem {
   clientId: string;
   clientName: string;
-  credits: number;
+	amountUsd: number;
   percentage: string;
 }
 
 export interface UserConsumptionItem {
   userId: string;
   username: string;
-  credits: number;
+	amountUsd: number;
   transactionCount: number;
   percentage: string;
 }
 
-// ===== 账户余额 / 积分包 =====
-export interface CreditPackage {
-  packageId: string;
-  totalCredits: number;
-  remainingCredits: number;
+// ===== USD 额度账户 / 额度包 =====
+export interface BalanceLot {
+	balanceLotId: string;
+	totalUsd: number;
+	remainingUsd: number;
   expiresAt?: string | null;
   source: string;
 }
 
 export interface AccountBalance {
-  totalCredits: number;
-  usedCredits: number;
-  remainingCredits: number;
-  frozenCredits: number;
-  availableCredits: number;
-  permanentCredits: number;
-  timedCredits: number;
-  packages?: CreditPackage[];
+	currency: string;
+	totalUsd: number;
+	usedUsd: number;
+	remainingUsd: number;
+	availableUsd: number;
+	permanentUsd: number;
+	timedUsd: number;
+	outstandingDebtMicroUsd: number;
+	serviceState: string;
+	balanceLots?: BalanceLot[];
 }
 
 // ===== 交易流水 =====
@@ -53,8 +55,8 @@ export interface AccountTransactionItem {
   eventId: string;
   userId: string;
   description: string;
-  tenantCredits: number;
-  userCredits: number;
+	tenantAmountUsd: number;
+	userAmountUsd: number;
   status: string;
   terminalNote: string;
   metadata: string;
@@ -70,8 +72,8 @@ export interface AccountTransactionItem {
 export interface RechargeRecordItem {
   orderId: string;
   orderType: string;
-  paidAmount: number;
-  creditAmount: number;
+	paidAmountMinor: number;
+	amountUsd: number;
   status: string;
   note: string;
   userId: string;
@@ -92,7 +94,7 @@ export interface EndUserItem {
   nickname?: string;
   avatar?: string;
   status: number; // 1=active, 2=disabled
-  credits: number;
+	balanceUsd: number;
   lastLoginTime?: number | null;
   createdTime: number;
 }
@@ -131,25 +133,26 @@ export interface CreateInviteCodeOutput {
 
 // ===== 充值 / 撤销 =====
 export interface RechargeOutput {
-  orderId: string;
-  packageId: string;
-  tenantId: string;
-  userId: string;
-  creditAmount: number;
-  paidAmount: number;
-  clearedOverdraft: number;
-  packageCredits: number;
+	orderId: string;
+	balanceLotId: string;
+	tenantId: string;
+	userId: string;
+	currency: string;
+	amountMicroUsd: number;
+	paidAmountMinor: number;
+	clearedDebtUsd: number;
+	balanceLotUsd: number;
   orderTime: number;
 }
 
 export interface ReverseRechargeOutput {
   status: string;
   orderId: string;
-  packageId: string;
-  reversedCredits: number;
-  originalCredits: number;
-  lostCredits: number;
-  packageStatus: string;
+	balanceLotId: string;
+	reversedAmountUsd: number;
+	originalAmountUsd: number;
+	lostAmountUsd: number;
+	balanceLotStatus: string;
 }
 
 // ===== 通用分页 =====

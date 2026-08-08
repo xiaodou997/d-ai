@@ -34,8 +34,9 @@ import {
   buildSummaryTotals,
   buildTokenTrendSeries,
   buildUnitDistribution,
-  formatCredits,
+  formatNumber,
   formatPercent,
+  formatUSD,
   resolveRequestTotalMs
 } from "../format";
 
@@ -44,9 +45,9 @@ const EMPTY_STATS: UsageStatsDTO = {
   success_count: 0,
   failed_count: 0,
   total_tokens: 0,
-  total_catalog_base_credits: 0,
-  total_tenant_payable_credits: 0,
-  total_user_charged_credits: 0,
+  total_catalog_base_usd: 0,
+  total_tenant_payable_usd: 0,
+  total_user_charged_usd: 0,
   avg_latency_ms: 0,
   avg_request_total_ms: 0,
   avg_first_response_byte_ms: 0
@@ -158,29 +159,29 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
     if (!pagination.total) return "当前窗口内没有命中的请求记录。可以调整时间窗口或放宽筛选条件。";
     const modelText = topModel.value ? `主力模型是 ${topModel.value.name}` : "暂无稳定主力模型";
     const sourceText = topSource.value ? `当前页最常见来源是 ${topSource.value.key}` : "当前页来源分布尚不明显";
-    return `${periodLabel.value} 内共命中 ${formatCredits(pagination.total)} 条请求，成功率 ${formatPercent(successRate.value)}，${modelText}，${sourceText}。`;
+    return `${periodLabel.value} 内共命中 ${formatNumber(pagination.total)} 条请求，成功率 ${formatPercent(successRate.value)}，${modelText}，${sourceText}。`;
   });
 
   const explorerHighlights = computed<UsageHighlight[]>(() => [
     { label: "观察窗口", value: periodLabel.value, hint: selectedRange.value.caption },
-    { label: "失败请求", value: formatCredits(logStats.value.failed_count), hint: `失败率 ${formatPercent(failureRate.value)}` },
+    { label: "失败请求", value: formatNumber(logStats.value.failed_count), hint: `失败率 ${formatPercent(failureRate.value)}` },
     {
       label: "主力模型",
       value: topModel.value?.name || "—",
-      hint: topModel.value ? `${formatPercent(topModel.value.percent)} · ${formatCredits(topModel.value.requests)} 次` : "当前没有稳定主力模型"
+      hint: topModel.value ? `${formatPercent(topModel.value.percent)} · ${formatNumber(topModel.value.requests)} 次` : "当前没有稳定主力模型"
     },
     {
       label: "主计费单位",
       value: topUnit.value?.name || "—",
-      hint: topUnit.value ? `${formatCredits(topUnit.value.units || 0)} 计费量 · ${formatCredits(topUnit.value.credits)} 积分` : "当前没有计费结构数据"
+      hint: topUnit.value ? `${formatNumber(topUnit.value.units || 0)} 计费量 · ${formatUSD(topUnit.value.amountUSD)}` : "当前没有计费结构数据"
     }
   ]);
 
   const explorerMetrics = computed<UsageMetric[]>(() => [
-    { label: "命中请求", value: formatCredits(totalRequests.value), hint: `分页总数 ${formatCredits(pagination.total)}` },
-    { label: "成功率", value: formatPercent(successRate.value), hint: `失败 ${formatCredits(logStats.value.failed_count)}` },
-    { label: "用户实际扣款", value: formatCredits(summaryTotals.value.userCharged), hint: `Key 配额 ${formatCredits(summaryTotals.value.quotaCost)}` },
-    { label: "Token 总量", value: formatCredits(summaryTotals.value.totalTokens), hint: `输入 ${formatCredits(summaryTotals.value.promptTokens)} · 输出 ${formatCredits(summaryTotals.value.completionTokens)}` },
+    { label: "命中请求", value: formatNumber(totalRequests.value), hint: `分页总数 ${formatNumber(pagination.total)}` },
+    { label: "成功率", value: formatPercent(successRate.value), hint: `失败 ${formatNumber(logStats.value.failed_count)}` },
+    { label: "用户实际扣款", value: formatUSD(summaryTotals.value.userCharged), hint: `Key 配额 ${formatUSD(summaryTotals.value.quotaCost)}` },
+    { label: "Token 总量", value: formatNumber(summaryTotals.value.totalTokens), hint: `输入 ${formatNumber(summaryTotals.value.promptTokens)} · 输出 ${formatNumber(summaryTotals.value.completionTokens)}` },
     {
       label: "平均总耗时",
       value: `${Math.round(Number(logStats.value.avg_request_total_ms) || 0)} ms`,
@@ -189,12 +190,12 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   ]);
 
   const analyticsMetrics = computed<UsageMetric[]>(() => [
-    { label: "请求总量", value: formatCredits(totalRequests.value), hint: `成功 ${formatCredits(logStats.value.success_count)} · 失败 ${formatCredits(logStats.value.failed_count)}` },
-    { label: "用户实际扣款", value: formatCredits(summaryTotals.value.userCharged), hint: "租户零售视角" },
-    { label: "租户结算应收", value: formatCredits(summaryTotals.value.tenantPayable), hint: `目录基准价 ${formatCredits(summaryTotals.value.catalogBase)}` },
-    { label: "Key 配额", value: formatCredits(summaryTotals.value.quotaCost), hint: "可用于识别 key 消耗结构" },
+    { label: "请求总量", value: formatNumber(totalRequests.value), hint: `成功 ${formatNumber(logStats.value.success_count)} · 失败 ${formatNumber(logStats.value.failed_count)}` },
+    { label: "用户实际扣款", value: formatUSD(summaryTotals.value.userCharged), hint: "租户零售视角" },
+    { label: "租户结算应收", value: formatUSD(summaryTotals.value.tenantPayable), hint: `目录基准价 ${formatUSD(summaryTotals.value.catalogBase)}` },
+    { label: "Key 配额", value: formatUSD(summaryTotals.value.quotaCost), hint: "可用于识别 key 消耗结构" },
     { label: "平均总耗时", value: `${Math.round(Number(logStats.value.avg_request_total_ms) || 0)} ms`, hint: `平均首响 ${Math.round(Number(logStats.value.avg_first_response_byte_ms) || 0)} ms` },
-    { label: "主来源", value: topSource.value?.key || "—", hint: topSource.value ? `当前页 ${formatCredits(topSource.value.count)} 次` : "当前页暂无来源样本" }
+    { label: "主来源", value: topSource.value?.key || "—", hint: topSource.value ? `当前页 ${formatNumber(topSource.value.count)} 次` : "当前页暂无来源样本" }
   ]);
 
   const activeIndex = computed(() => activeLog.value ? logs.value.findIndex((row) => row.request_id === activeLog.value?.request_id) : -1);

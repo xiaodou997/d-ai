@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/libs/go/httpx"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingpg "xiaodou/dai/internal/billing/pg"
 	"xiaodou/dai/internal/domain"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 // accountHandlers 承载 /api/v1/account 账户自助端点（任意已登录用户；按 userType
@@ -87,7 +87,7 @@ func registerAccount(api huma.API, d Deps) {
 	huma.Register(api, huma.Operation{OperationID: "account-balance", Method: http.MethodGet, Path: "/api/v1/account/balance",
 		Summary: "账户余额", Tags: []string{"account"}, Middlewares: authed}, h.balance)
 	huma.Register(api, huma.Operation{OperationID: "account-transactions", Method: http.MethodGet, Path: "/api/v1/account/transactions",
-		Summary: "消费流水", Tags: []string{"account"}, Middlewares: authed}, h.transactions)
+		Summary: "额度明细（含服务扣款审计）", Tags: []string{"account"}, Middlewares: authed}, h.transactions)
 	huma.Register(api, huma.Operation{OperationID: "account-recharge-records", Method: http.MethodGet, Path: "/api/v1/account/recharge-records",
 		Summary: "充值记录", Tags: []string{"account"}, Middlewares: authed}, h.rechargeRecords)
 	huma.Register(api, huma.Operation{OperationID: "account-stats", Method: http.MethodGet, Path: "/api/v1/account/stats",
@@ -155,10 +155,11 @@ func (h *accountHandlers) transactions(ctx context.Context, in *accountTxInput) 
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	// 终端用户隐藏租户积分，只展示用户积分
+	// 终端用户只查看自己的扣费金额。
 	if claims.UserType == 4 {
 		for i := range list {
-			list[i].TenantCredits = list[i].UserCredits
+			list[i].TenantAmountUSD = list[i].UserAmountUSD
+			list[i].UserAmountUSD = 0
 		}
 	}
 	return &accountTxOutput{Body: httpx.NewPage(list, total, p.Page, p.Size)}, nil

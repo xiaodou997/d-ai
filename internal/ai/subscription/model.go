@@ -1,9 +1,8 @@
 // Package subscription 实现 AI 订阅制套餐领域层：套餐定义、订阅实例、购买订单、
 // 热路径额度判定与记账、后台卫生 janitor。方案见 docs/ai-subscription-design.md。
 //
-// 额度单位为微积分（基准价微积分 × 命中分组套餐扣额倍率；RetailBaseMicro = 售价表基准价
-// × credits_per_usd × 10000，用户倍率不参与套餐计量）；
-// 价格单位为整数积分；购买时乘 10000 转为微积分。套餐必须绑定 ≥1 个分组，订阅覆盖期
+// 价格与额度单位统一为 micro-USD。套餐额度按零售基准价 × 命中分组套餐扣额倍率计量，
+// 用户倍率不参与套餐计量。套餐必须绑定 ≥1 个分组，订阅覆盖期
 // 硬限制路由到套餐分组交集。二期重构见 docs/ai-subscription-group-refactor.md。
 package subscription
 
@@ -44,7 +43,7 @@ var (
 	ErrQueueFull     = errors.New("subscription: subscription queue is full")
 	// ErrPlanAlreadyQueued：待激活队列（pending 订阅 + 在途订单）里已有同一套餐；active 同套餐不拦（预购续期）。
 	ErrPlanAlreadyQueued = errors.New("subscription: plan already queued")
-	// ErrInsufficientBalance：购买时用户积分不足。
+	// ErrInsufficientBalance：购买时用户 USD 余额不足。
 	ErrInsufficientBalance = errors.New("subscription: insufficient balance")
 	// ErrOrderProcessing：扣款处于未知态，订单停在 deducting，交由 janitor 补偿。
 	ErrOrderProcessing     = errors.New("subscription: order still processing")
@@ -54,7 +53,7 @@ var (
 	ErrSubNotFound         = errors.New("subscription: subscription not found")
 	ErrInvalidDuration     = errors.New("subscription: duration_days must be 1/3/7/30")
 	// ErrPlanQuotaInvalid：套餐售价或总额度超出支持范围。
-	ErrPlanQuotaInvalid = errors.New("subscription: price_credits or total_limit_micro is outside the supported range")
+	ErrPlanQuotaInvalid = errors.New("subscription: price_micro_usd or total_limit_micro_usd is outside the supported range")
 	// ErrPlanWindow7dInvalid：7 天窗口额度仅适用于 ≥7 天套餐。
 	ErrPlanWindow7dInvalid = errors.New("subscription: window_7d_limit only valid for duration >= 7")
 	// ErrPlanNeedsGroups：套餐未绑定任何分组（创建/编辑/上架都要求 ≥1 个）。
@@ -85,7 +84,7 @@ type Plan struct {
 	TenantID           string
 	Name               string
 	Description        string
-	PriceCredits       int64
+	PriceMicroUSD      int64
 	DurationDays       int32
 	TotalLimitMicro    int64
 	Window5hLimitMicro *int64
@@ -115,7 +114,7 @@ type Order struct {
 	UserID                             string
 	PlanID                             string
 	PlanNameSnapshot                   string
-	PriceCredits                       int64
+	PriceMicroUSD                      int64
 	DurationDaysSnapshot               int32
 	TotalLimitMicroSnapshot            int64
 	Window5hLimitMicroSnapshot         *int64
@@ -174,7 +173,7 @@ type CreatePlanParams struct {
 	TenantID           string
 	Name               string
 	Description        string
-	PriceCredits       int64
+	PriceMicroUSD      int64
 	DurationDays       int32
 	TotalLimitMicro    int64
 	Window5hLimitMicro *int64
@@ -192,7 +191,7 @@ type UpdatePlanParams struct {
 	TenantID           string
 	Name               string
 	Description        string
-	PriceCredits       int64
+	PriceMicroUSD      int64
 	DurationDays       int32
 	TotalLimitMicro    int64
 	Window5hLimitMicro *int64

@@ -1,6 +1,5 @@
 import { computed, onMounted, shallowRef } from "vue";
 
-import { tenantApi } from "@/api/tenant";
 import { platformTenantApi } from "@/api/platformTenant";
 import {
   DEFAULT_WORKBENCH_RANGE_ID,
@@ -10,7 +9,6 @@ import {
   type WorkbenchRangeId,
   type WorkbenchRangeOption
 } from "@/components/workbench/workbenchRanges";
-import type { TenantCashAccount } from "@/api/types/tenant";
 import type {
   AccountBalance,
   AccountTransactionItem,
@@ -21,29 +19,17 @@ import type {
 const emptyOverview = (): TenantAnalyticsOverview => ({
   endUserCount: 0,
   inviteCodeCount: 0,
-  userDeductionCredits: 0,
-  userTotalCredits: 0,
+  userDeductionUsd: 0,
+  userTotalBalanceUsd: 0,
   activeUserCount: 0,
   userConsumptionCount: 0,
-  settlementIncomeCents: 0
-});
-
-const emptyCashAccount = (): TenantCashAccount => ({
-  balance: 0,
-  frozen: 0,
-  available: 0,
-  creditsPerCny: 100,
-  withdrawFeeBp: 0
+  settlementIncomeMicroUsd: 0
 });
 
 const emptyServiceBalance = (): AccountBalance => ({
-  totalCredits: 0,
-  usedCredits: 0,
-  remainingCredits: 0,
-  frozenCredits: 0,
-  availableCredits: 0,
-  permanentCredits: 0,
-  timedCredits: 0
+  currency: "USD", totalUsd: 0, usedUsd: 0, remainingUsd: 0,
+  availableUsd: 0, permanentUsd: 0, timedUsd: 0, outstandingDebtMicroUsd: 0,
+  serviceState: "active", balanceLots: []
 });
 
 function rangeParams(range: WorkbenchRangeOption) {
@@ -53,7 +39,6 @@ function rangeParams(range: WorkbenchRangeOption) {
 
 export function useTenantOperationsDashboard() {
   const selectedRangeId = shallowRef<WorkbenchRangeId>(DEFAULT_WORKBENCH_RANGE_ID);
-  const cashAccount = shallowRef<TenantCashAccount>(emptyCashAccount());
   const serviceBalance = shallowRef<AccountBalance>(emptyServiceBalance());
   const overview = shallowRef<TenantAnalyticsOverview>(emptyOverview());
   const consumptionRanking = shallowRef<UserConsumptionItem[]>([]);
@@ -74,19 +59,14 @@ export function useTenantOperationsDashboard() {
   async function fetchAccountSnapshots() {
     summaryLoading.value = true;
     serviceBalanceLoading.value = true;
-    const [cashResult, balanceResult] = await Promise.allSettled([
-      tenantApi.getCashAccount(),
-      platformTenantApi.getAccountBalance(false)
-    ]);
-    if (cashResult.status === "fulfilled") {
-      cashAccount.value = cashResult.value;
-    } else {
-      console.error("获取账户余额失败:", cashResult.reason);
-    }
+    const balanceResult = await platformTenantApi.getAccountBalance(false).then(
+      (value) => ({ status: "fulfilled" as const, value }),
+      (reason) => ({ status: "rejected" as const, reason })
+    );
     if (balanceResult.status === "fulfilled") {
       serviceBalance.value = balanceResult.value;
     } else {
-      console.error("获取积分失败:", balanceResult.reason);
+      console.error("获取 USD 余额失败:", balanceResult.reason);
     }
     serviceBalanceLoading.value = false;
   }
@@ -159,7 +139,6 @@ export function useTenantOperationsDashboard() {
   return {
     selectedRangeId: computed(() => selectedRangeId.value),
     selectedRangeLabel,
-    cashAccount: computed(() => cashAccount.value),
     serviceBalance: computed(() => serviceBalance.value),
     overview: computed(() => overview.value),
     consumptionRanking: computed(() => consumptionRanking.value),

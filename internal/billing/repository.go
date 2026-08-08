@@ -8,7 +8,5 @@ type EventRepository interface {
 	FindByUserID(userID string, limit int) ([]*BillingEvent, error)
 	CountToday() (int64, error)
 	CountTodaySuccess() (int64, error)
-	CountActivePreAuth() (int64, error)
-	FindStuckPreAuth(timeoutMinutes int) ([]*BillingEvent, error)
 	FindReleasedInHours(hours, limit int) ([]*BillingEvent, error)
 }

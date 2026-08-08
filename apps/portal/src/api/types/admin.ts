@@ -1,14 +1,3 @@
-export interface GlobalStatsRow {
-  activeTenants: number;
-  newUsers: number;
-  tenantRechargeAmount: number;
-  tenantRechargeCredits: number;
-  tenantTotalCredits: number;
-  userRechargeAmount: number;
-  userRechargeCredits: number;
-  userTotalCredits: number;
-}
-
 export interface AuditLogItem {
   id: number;
   eventType: string;
@@ -51,7 +40,6 @@ export interface DashboardAlertItem {
 }
 
 export interface DashboardAlertsOutputBody {
-  timeoutPreAuths: DashboardAlertItem[];
   failedTransactions: DashboardAlertItem[];
 }
 
@@ -62,11 +50,11 @@ export interface DashboardSummaryDTO {
   total_tokens: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
-  total_catalog_base_credits: number;
-  total_tenant_payable_credits: number;
-  total_retail_base_credits: number;
-  total_user_payable_credits: number;
-  total_user_charged_credits: number;
+  total_catalog_base_usd: number;
+  total_tenant_payable_usd: number;
+  total_retail_base_usd: number;
+  total_user_payable_usd: number;
+  total_user_charged_usd: number;
   avg_latency_ms: number;
   avg_request_total_ms: number;
   avg_first_response_byte_ms: number;
@@ -79,25 +67,25 @@ export interface TenantListItem {
   contactEmail?: string;
   status: number;
   statusDisplay?: string;
-  credits?: number;
+  balanceUsd?: number;
   userCount?: number;
   createdTime?: number;
 }
 
 export interface AccountBalanceOutput {
-  totalCredits: number;
-  usedCredits: number;
-  remainingCredits: number;
-  frozenCredits: number;
-  availableCredits: number;
-  permanentCredits: number;
-	timedCredits: number;
-	outstandingDebtMicro: number;
+  currency: string;
+  totalUsd: number;
+  usedUsd: number;
+  remainingUsd: number;
+  availableUsd: number;
+  permanentUsd: number;
+	timedUsd: number;
+	outstandingDebtMicroUsd: number;
 	serviceState: "active" | "blocked_debt";
-	packages?: Array<{
-		packageId: string;
-		totalCredits: number;
-		remainingCredits: number;
+	balanceLots?: Array<{
+		balanceLotId: string;
+		totalUsd: number;
+		remainingUsd: number;
 		expiresAt?: string | null;
 		source: string;
 	}>;
@@ -119,7 +107,7 @@ export interface EndUserItem {
   email?: string;
   phone?: string;
   status: number;
-  credits?: number;
+  balanceUsd?: number;
   createdTime?: number;
   lastLoginTime?: number;
 }
@@ -135,7 +123,7 @@ export interface DashboardTopModelDTO {
   model_code: string;
   request_count: number;
   total_tokens: number;
-  total_tenant_payable_credits: number;
+  total_tenant_payable_usd: number;
 }
 
 export interface DashboardTopModelsOutputBody {
@@ -227,10 +215,6 @@ export interface PriceBookEntryWriteRequest {
   video_prices?: ResolutionUSDPriceDTO[];
   audio_tts_per_1m_chars_usd?: number;
   audio_stt_per_minute_usd?: number;
-}
-
-export interface CreditsPerUSDOutputBody {
-  credits_per_usd: number;
 }
 
 // ---- 上游账号（ai_upstream_accounts；原 provider + endpoint 合并为顶级实体）----
@@ -350,8 +334,8 @@ export interface UpstreamAccountImportOutputBody {
 export interface RechargeRecordItem {
   orderId: string;
   orderType: string;
-  paidAmount: number;
-  creditAmount: number;
+  paidAmountMinor: number;
+  amountUsd: number;
   status: string;
   note: string;
   userId: string;
@@ -362,13 +346,14 @@ export interface RechargeRecordItem {
 
 export interface RechargeOutputBody {
   orderId: string;
-  packageId: string;
+  balanceLotId: string;
   tenantId: string;
   userId: string;
-  creditAmount: number;
-  paidAmount: number;
-  clearedOverdraft: number;
-  packageCredits: number;
+  currency: string;
+  amountMicroUsd: number;
+  paidAmountMinor: number;
+  clearedDebtUsd: number;
+  balanceLotUsd: number;
   orderTime: number;
 }
 
@@ -376,8 +361,8 @@ export interface TransactionItem {
   eventId: string;
   userId: string;
   description: string;
-  tenantCredits: number;
-  userCredits: number;
+  tenantAmountUsd: number;
+  userAmountUsd: number;
   status: string;
   terminalNote: string;
   metadata: string;
@@ -405,7 +390,7 @@ export interface PageTransactionItem {
 export interface DebtStatusOutputBody {
   owner_type: "tenant" | "user";
   account_id: string;
-  outstanding_debt_micro: number;
+  outstanding_debt_micro_usd: number;
   service_state: "active" | "blocked_debt";
 }
 
@@ -431,34 +416,29 @@ export interface TenantDetailOutput {
 
 // ---- 控制概览（数据分析）----
 export interface GlobalStatsRow {
-  tenantRechargeAmount: number;
-  tenantRechargeCredits: number;
+  currency: string;
+  tenantRechargePaidMinor: number;
+  tenantRechargeAmountUsd: number;
   activeTenants: number;
-  tenantTotalCredits: number;
-  userRechargeAmount: number;
-  userRechargeCredits: number;
+  tenantTotalBalanceUsd: number;
+  userRechargePaidMinor: number;
+  userRechargeAmountUsd: number;
   newUsers: number;
-  userTotalCredits: number;
+  userTotalBalanceUsd: number;
 }
 export interface TrendPoint {
   timeLabel: string;
-  credits: number;
+  amountUsd: number;
 }
 export interface ConsumptionTrendOutput {
-  totalCredits: number;
+  totalUsd: number;
   dataPoints: TrendPoint[];
 }
 export interface ResourceStatItem {
   clientName: string;
   clientId: string;
-  credits: number;
+  amountUsd: number;
   percentage: string;
-}
-export interface PreAuthAlert {
-  eventId: string;
-  tenantId: string;
-  userId: string;
-  createdTime: number;
 }
 export interface FailedTxAlert {
   eventId: string;
@@ -467,11 +447,10 @@ export interface FailedTxAlert {
   createdTime: number;
 }
 export interface DashboardAlertsOutput {
-  timeoutPreAuths: PreAuthAlert[];
   failedTransactions: FailedTxAlert[];
 }
 
-// ---- 批量计费事件操作结果（batch-confirm / batch-refund）----
+// ---- 批量计费事件操作结果（batch-refund）----
 export interface BatchOpError {
   eventId: string;
   reason: string;
@@ -479,8 +458,8 @@ export interface BatchOpError {
 export interface BatchOpResult {
   succeeded: string[];
   failed: BatchOpError[];
-  totalTenantCredits: number;
-  totalUserCredits: number;
+  totalTenantUsd: number;
+  totalUserUsd: number;
   successCount: number;
   failCount: number;
 }
@@ -498,17 +477,18 @@ export interface JwtKeyItem {
 // ==================== 微信支付在线充值（管理端） ====================
 
 export interface PaymentGlobalSettings {
-  creditsPerCny: number;
   tenantCustomTopupFeeBp: number;
   tenantWithdrawFeeBp: number;
+  tenantCustomValidityDays?: number | null;
   tenantTopupPackages: TopupPackage[];
 }
 
 export interface TopupPackage {
   id: string;
   name: string;
-  amount: number;
-  credits: number;
+  paymentAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  validityDays?: number | null;
   badge?: string;
   enabled: boolean;
   sortOrder: number;
@@ -548,15 +528,18 @@ export interface PaymentOrderItem {
   orderId: string;
   scene: "user_topup" | "tenant_topup";
   status: string;
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
+  paymentCurrency: string;
+  paymentAmountMinor: number;
+  grossAmountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  creditedAmountMicroUsd: number;
   topupMode: "custom" | "package";
   packageName?: string;
   transactionId?: string;
   createdAt: number;
   paidAt?: number | null;
+  balanceExpiresAt?: number | null;
 }
 
 export interface PagePaymentOrderItem {
@@ -566,34 +549,34 @@ export interface PagePaymentOrderItem {
   size: number;
 }
 
-export interface CashAccountItem {
+export interface TenantBalanceItem {
   tenantId: string;
   tenantName?: string;
-  balance: number;
-  frozen: number;
-  available: number;
+  currency: string;
+  balanceMicroUsd: number;
 }
 
-export interface PageCashAccountItem {
-  items: CashAccountItem[];
+export interface PageTenantBalanceItem {
+  items: TenantBalanceItem[];
   total: number;
   page: number;
   size: number;
 }
 
-export interface CashLedgerItem {
+export interface BalanceLedgerItem {
   txnId: string;
   txnType: string;
-  amount: number;
-  balanceAfter: number;
+  currency: string;
+  amountMicroUsd: number;
+  balanceAfterMicroUsd: number;
   refType?: string;
   refId?: string;
   note?: string;
   createdAt: number;
 }
 
-export interface PageCashLedgerItem {
-  items: CashLedgerItem[];
+export interface PageBalanceLedgerItem {
+  items: BalanceLedgerItem[];
   total: number;
   page: number;
   size: number;
@@ -601,15 +584,18 @@ export interface PageCashLedgerItem {
 
 export interface WithdrawalItem {
   withdrawalId: string;
-  amount: number;
-  feeAmount: number;
-  payoutAmount: number;
+  currency: string;
+  amountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  payoutAmountMicroUsd: number;
   accountName: string;
   bankName: string;
   accountNo: string;
   status: string;
   applyNote?: string;
   reviewNote?: string;
+  paymentRef?: string;
+  paidAt?: number | null;
   createdAt: number;
 }
 

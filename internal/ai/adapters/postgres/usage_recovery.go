@@ -12,17 +12,19 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/ai/billingledger"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
+	billingsvc "xiaodou/dai/internal/billing/service"
 )
 
 const (
-	usageRecoveryStream           = billingledger.UsageRecoveryStream
-	usageRecoveryQuarantineStream = billingledger.UsageRecoveryQuarantineStream
+	// Durable usage-completion envelopes are kept on a dedicated stream so a
+	// transient database outage does not lose the usage record or its charge.
+	usageRecoveryStream           = "dai:usage:completion:v2"
+	usageRecoveryQuarantineStream = "dai:usage:completion:v2:quarantine"
 )
 
 var ErrUsageCompletionQueued = errors.New("usage completion queued for recovery")
@@ -30,8 +32,6 @@ var ErrUsageCompletionQueued = errors.New("usage completion queued for recovery"
 type usageRecoveryPayload struct {
 	Version                int                                 `json:"version"`
 	RequestID              string                              `json:"request_id"`
-	LeaseID                string                              `json:"lease_id,omitempty"`
-	BillingAdmissionActive bool                                `json:"billing_admission_active"`
 	Usage                  dbgen.CreateUsageLogParams          `json:"usage"`
 	Rollup                 dbgen.UpsertUsageRollupHourlyParams `json:"rollup"`
 	HasAPIKey              bool                                `json:"has_api_key"`
@@ -52,18 +52,16 @@ func buildUsageRecoveryPayload(req *serving.Request, billing domain.BillingResul
 		return usageRecoveryPayload{}, errors.New("usage recovery subject is required")
 	}
 	payload := usageRecoveryPayload{
-		Version:                2,
-		RequestID:              req.RequestID,
-		LeaseID:                req.BillingLeaseID,
-		BillingAdmissionActive: req.BillingAdmissionActive,
-		Usage:                  buildUsageLogParams(req, billing),
-		Rollup:                 buildUsageRollupParams(req, billing),
-		OwnerType:              string(runtimeSubjectOwnerType(subject)),
-		TenantID:               subject.TenantID,
-		UserID:                 subject.UserID,
-		TenantMicro:            billing.TenantPayableMicro,
-		UserMicro:              billing.UserChargedMicro,
-		APIKeyQuotaMicro:       billing.APIKeyQuotaCostMicro,
+		Version:          2,
+		RequestID:        req.RequestID,
+		Usage:            buildUsageLogParams(req, billing),
+		Rollup:           buildUsageRollupParams(req, billing),
+		OwnerType:        string(runtimeSubjectOwnerType(subject)),
+		TenantID:         subject.TenantID,
+		UserID:           subject.UserID,
+		TenantMicro:      billing.TenantPayableMicro,
+		UserMicro:        billing.UserChargedMicro,
+		APIKeyQuotaMicro: billing.APIKeyQuotaCostMicro,
 	}
 	if subject.AuthMethod == coreidentity.AuthMethodAPIKey && subject.APIKeyID != "" {
 		payload.HasAPIKey = true
@@ -165,7 +163,7 @@ func (l *UsageLogger) RunRecovery(ctx context.Context) {
 						zap.String("stream_id", message.ID), zap.Int("version", payload.Version), zap.Error(err))
 					continue
 				}
-				completed, accrued, err := l.completeRecoveryPayload(ctx, payload)
+				completed, _, err := l.completeRecoveryPayload(ctx, payload)
 				if err != nil {
 					hadFailure = true
 					l.logger.Warn("usage recovery replay failed", zap.String("request_id", payload.RequestID), zap.Error(err))
@@ -175,9 +173,6 @@ func (l *UsageLogger) RunRecovery(ctx context.Context) {
 					if l.apiKeyInvalidator != nil && payload.HasAPIKey {
 						_ = l.apiKeyInvalidator.DelByID(ctx, recoveryUUIDString(payload.APIKeyID))
 					}
-				}
-				if accrued && l.billingCoordinator != nil {
-					l.billingCoordinator.Trigger()
 				}
 				_ = l.recoveryRedis.XDel(ctx, usageRecoveryStream, message.ID).Err()
 			}
@@ -238,21 +233,31 @@ func (l *UsageLogger) completeRecoveryPayload(ctx context.Context, payload usage
 			return false, false, fmt.Errorf("recover subscription debit: %w", err)
 		}
 	}
-	accrued := payload.BillingAdmissionActive
-	if payload.BillingAdmissionActive {
-		if l.billingCoordinator == nil {
-			return false, false, errors.New("recover billing ledger: coordinator unavailable")
+	accrued := payload.TenantMicro > 0 || payload.UserMicro > 0
+	if accrued {
+		if l.deduction == nil {
+			return false, false, errors.New("recover direct billing: deduction service unavailable")
 		}
-		if err := l.billingCoordinator.Complete(ctx, tx, billingledger.Completion{
-			RequestID:       payload.RequestID,
-			ExpectedLeaseID: payload.LeaseID,
-			TenantMicro:     payload.TenantMicro,
-			UserMicro:       payload.UserMicro,
-		}); err != nil {
-			return false, false, fmt.Errorf("recover billing ledger: %w", err)
+		result, err := l.deduction.ConsumeTx(ctx, tx, billingsvc.ConsumeParams{
+			IdempotencyKey: "ai-usage:" + payload.RequestID,
+			ClientID:       "dai-ai",
+			TenantID:       payload.TenantID,
+			UserID:         payload.UserID,
+			Description:    "AI 请求额度扣费（恢复）",
+			TenantAmount:   payload.TenantMicro,
+			UserAmount:     payload.UserMicro,
+			AllowOverdraft: true,
+		})
+		if err != nil {
+			return false, false, fmt.Errorf("recover direct billing: %w", err)
 		}
-	} else if payload.TenantMicro > 0 || payload.UserMicro > 0 {
-		return false, false, errors.New("recover billing ledger: positive usage has no durable admission")
+		if _, err := tx.Exec(ctx, `
+			UPDATE ai_usage_logs
+			SET billing_event_id = $1, billing_status = $2
+			WHERE request_id = $3
+		`, result.EventID, string(domain.BillingConfirmed), payload.RequestID); err != nil {
+			return false, false, fmt.Errorf("link recovered billing event to usage: %w", err)
+		}
 	}
 	if err := q.UpsertUsageRollupHourly(ctx, payload.Rollup); err != nil {
 		return false, false, fmt.Errorf("recover usage rollup: %w", err)

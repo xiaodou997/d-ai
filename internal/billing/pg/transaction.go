@@ -138,42 +138,8 @@ func (r *EventRepository) CountTodaySuccess() (int64, error) {
 	return count, err
 }
 
-// CountActivePreAuth 统计活跃预授权数
-func (r *EventRepository) CountActivePreAuth() (int64, error) {
-	ctx := context.Background()
-	var count int64
-	err := r.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM bill_events WHERE status = 'pending'
-	`).Scan(&count)
-	return count, err
-}
-
-// FindStuckPreAuth 查找超过 timeoutMinutes 分钟仍为 pending 的预授权（调度器应已处理但未处理的）
-func (r *EventRepository) FindStuckPreAuth(timeoutMinutes int) ([]*billing.BillingEvent, error) {
-	ctx := context.Background()
-	threshold := billing.NowUTC().Add(-time.Duration(timeoutMinutes) * time.Minute)
-	rows, err := r.pool.Query(ctx, eventSelectCols+`
-		WHERE status = 'pending' AND created_at < $1
-		ORDER BY created_at ASC LIMIT 100
-	`, threshold)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var events []*billing.BillingEvent
-	for rows.Next() {
-		e, err := scanEvent(rows)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, e)
-	}
-	return events, nil
-}
-
-// FindReleasedInHours 查找最近N小时内被调度器超时释放的事件（服务已消耗但积分漏扣的真实漏单）
-// cancelled = 业务请求失败→正常取消，不计入漏单
+// FindReleasedInHours 查找历史上被旧计费流程释放的事件，供管理员审计。
+// 新的直接扣费流程不会再生成 released 事件。
 func (r *EventRepository) FindReleasedInHours(hours, limit int) ([]*billing.BillingEvent, error) {
 	ctx := context.Background()
 	cutoff := billing.NowUTC().Add(-time.Duration(hours) * time.Hour)

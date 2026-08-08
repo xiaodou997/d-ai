@@ -124,7 +124,7 @@ function customerRow(requestId: string, overrides: Partial<CustomerUsageLog> = {
     total_tokens: 15,
     billable_unit_type: "token",
     billable_units: 15,
-    user_charged_credits: 1,
+    user_charged_usd: 1,
     request_status: "success",
     ...overrides
   } as unknown as CustomerUsageLog;

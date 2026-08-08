@@ -11,35 +11,36 @@ import (
 	"xiaodou/dai/internal/billing/pg"
 )
 
-// GrantParams 记账入参：写充值订单 + 清欠 + 视剩余量发积分包。
+// GrantParams records a USD balance grant, clears debt, and creates one
+// expiring or permanent balance lot for the remainder.
 // 由外部事务传入 tx，内部不 Begin/Commit —— 调用方（admin recharge handler /
-// 微信支付 Settle / 现金购积分）各自决定事务边界。
+// 微信支付 Settle）各自决定事务边界。
 type GrantParams struct {
-	OrderType         string // billing.OrderType*
-	TenantID          string
-	UserID            string // 为空表示租户充值
-	CreditAmountMicro int64
-	PaidAmount        int64
-	PaymentRef        string
-	Note              string
-	OperatorID        string
-	Source            string // billing.PackageSource*
-	ExpiresAt         *time.Time
+	OrderType      string // billing.OrderType*
+	TenantID       string
+	UserID         string // 为空表示租户充值
+	AmountMicroUSD int64
+	PaidAmount     int64
+	PaymentRef     string
+	Note           string
+	OperatorID     string
+	Source         string // billing.PackageSource*
+	ExpiresAt      *time.Time
 }
 
 // GrantResult 记账结果。
 type GrantResult struct {
-	OrderID          string
-	PackageID        string // 为空表示全部抵扣透支，未产生新积分包
-	ClearedDebtMicro int64
-	PackageMicro     int64
-	OrderTime        time.Time
+	OrderID             string
+	BalanceLotID        string // empty when the entire grant cleared debt
+	ClearedDebtMicroUSD int64
+	LotAmountMicroUSD   int64
+	OrderTime           time.Time
 }
 
-// GrantCredits 在外部事务内写充值订单，先抵扣对应主体的透支额度，剩余部分发新积分包。
+// GrantBalance 在外部事务内写充值订单，先抵扣对应主体的透支额度，剩余部分发新额度包。
 // 抽自原 admin_finance.go 的 recharge handler 裸 SQL，行为不变；现由 admin 手动充值、
-// 微信支付回调核销、现金购积分三处复用。
-func GrantCredits(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, error) {
+// 微信支付回调核销复用。
+func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, error) {
 	now := billing.NowUTC()
 	orderID := "ORD_" + uuid.New().String()[:24]
 	packageID := "PKG_" + uuid.New().String()[:24]
@@ -60,13 +61,13 @@ func GrantCredits(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 		(order_id, order_type, tenant_id, user_id, credit_amount, paid_amount,
 		 payment_ref, expires_at, operator_id, note, status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11)
-	`, orderID, p.OrderType, p.TenantID, userIDVal, p.CreditAmountMicro, p.PaidAmount,
+	`, orderID, p.OrderType, p.TenantID, userIDVal, p.AmountMicroUSD, p.PaidAmount,
 		paymentRefVal, p.ExpiresAt, p.OperatorID, noteVal, now); err != nil {
 		return nil, err
 	}
 
-	// 自动清欠：优先抵扣对应主体的 current_overdraft，剩余进新积分包
-	remaining := p.CreditAmountMicro
+	// 自动清欠：优先抵扣对应主体的 current_overdraft，剩余进入新额度包。
+	remaining := p.AmountMicroUSD
 	var clearedOverdraft int64
 	var pkgType string
 	if p.UserID == "" {
@@ -100,10 +101,10 @@ func GrantCredits(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 	}
 
 	return &GrantResult{
-		OrderID:          orderID,
-		PackageID:        createdPackageID,
-		ClearedDebtMicro: clearedOverdraft,
-		PackageMicro:     remaining,
-		OrderTime:        now,
+		OrderID:             orderID,
+		BalanceLotID:        createdPackageID,
+		ClearedDebtMicroUSD: clearedOverdraft,
+		LotAmountMicroUSD:   remaining,
+		OrderTime:           now,
 	}, nil
 }

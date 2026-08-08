@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCredits, formatMultiplier } from "./utils";
+import { formatMultiplier, formatNumber } from "./utils";
 
-describe("formatCredits", () => {
+describe("formatNumber", () => {
   it("preserves four-decimal microcredit precision", () => {
-    expect(formatCredits(0.0802)).toBe("0.0802");
-    expect(formatCredits(0.0962)).toBe("0.0962");
-    expect(formatCredits(0.0121)).toBe("0.0121");
-    expect(formatCredits(0.0152)).toBe("0.0152");
+    expect(formatNumber(0.0802)).toBe("0.0802");
+    expect(formatNumber(0.0962)).toBe("0.0962");
+    expect(formatNumber(0.0121)).toBe("0.0121");
+    expect(formatNumber(0.0152)).toBe("0.0152");
   });
 });
 

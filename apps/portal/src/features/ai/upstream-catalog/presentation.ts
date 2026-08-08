@@ -13,7 +13,6 @@ export type ProtocolTagTone = "neutral" | "positive" | "warning" | "info";
 export interface PricingLine {
   label: string;
   usd: string;
-  credits: string;
   tone: PriceTone;
 }
 
@@ -77,10 +76,9 @@ export function resourceProtocolLabels(resource: TenantAiUpstreamResource) {
   return [...new Set(resource.models.map((model) => protocolLabel(model.api_format)))];
 }
 
-export function buildPricingCards(resource: TenantAiUpstreamResource | null, creditsPerUSD = 0): UpstreamPricingCard[] {
+export function buildPricingCards(resource: TenantAiUpstreamResource | null): UpstreamPricingCard[] {
   if (!resource) return [];
   const multiplier = normalizedMultiplier(resource.tenant_multiplier);
-  const rate = normalizedRate(creditsPerUSD);
 
   return resource.models.flatMap((model) => {
     if (model.availability !== "available" || !model.price) return [];
@@ -89,14 +87,9 @@ export function buildPricingCards(resource: TenantAiUpstreamResource | null, cre
       modelCode: model.model_code,
       capabilityLabel: capabilityLabels[model.capability_type] ?? model.capability_type,
       theme: capabilityTheme(model.capability_type),
-      sections: priceSections(model.price, multiplier, rate)
+      sections: priceSections(model.price, multiplier)
     }];
   });
-}
-
-function normalizedRate(value: number) {
-  const rate = Number(value);
-  return Number.isFinite(rate) && rate > 0 ? rate : 0;
 }
 
 function normalizedMultiplier(value: number) {
@@ -111,35 +104,35 @@ function capabilityTheme(capability: string): CapabilityTheme {
   return "token";
 }
 
-function priceSections(price: TenantAiPriceBookEntry, multiplier: number, creditsPerUSD: number): PricingSection[] {
+function priceSections(price: TenantAiPriceBookEntry, multiplier: number): PricingSection[] {
   if (["chat", "embedding", "rerank"].includes(price.capability_type)) {
-    return tokenSections(price.token_price_tiers ?? [], multiplier, creditsPerUSD);
+    return tokenSections(price.token_price_tiers ?? [], multiplier);
   }
 
   if (price.capability_type === "image") {
-    return mediaSections(price.image_default_price_usd, price.image_prices ?? [], multiplier, creditsPerUSD, "/张");
+    return mediaSections(price.image_default_price_usd, price.image_prices ?? [], multiplier, "/张");
   }
 
   if (price.capability_type === "video") {
-    return mediaSections(price.video_default_price_usd, price.video_prices ?? [], multiplier, creditsPerUSD, "/秒");
+    return mediaSections(price.video_default_price_usd, price.video_prices ?? [], multiplier, "/秒");
   }
 
   if (price.capability_type === "audio_tts") {
-    return [singlePriceSection("语音合成", "合成", price.audio_tts_per_1m_chars_usd, multiplier, creditsPerUSD, "/1M字符")];
+    return [singlePriceSection("语音合成", "合成", price.audio_tts_per_1m_chars_usd, multiplier, "/1M字符")];
   }
 
-  return [singlePriceSection("语音识别", "识别", price.audio_stt_per_minute_usd, multiplier, creditsPerUSD, "/分钟")];
+  return [singlePriceSection("语音识别", "识别", price.audio_stt_per_minute_usd, multiplier, "/分钟")];
 }
 
-function tokenSections(tiers: TenantAiTokenPriceTierUSD[], multiplier: number, creditsPerUSD: number): PricingSection[] {
+function tokenSections(tiers: TenantAiTokenPriceTierUSD[], multiplier: number): PricingSection[] {
   return tiers.map((tier, index) => ({
     key: `token-${index}`,
     title: contextTierLabel(tier, tiers.length),
     lines: [
-      priceLine("输入", tier.input_per_1m_usd, multiplier, creditsPerUSD, "/1M", "input"),
-      priceLine("输出", tier.output_per_1m_usd, multiplier, creditsPerUSD, "/1M", "output"),
-      priceLine("缓存写入", tier.cache_write_per_1m_usd, multiplier, creditsPerUSD, "/1M", "cache"),
-      priceLine("缓存读取", tier.cache_read_per_1m_usd, multiplier, creditsPerUSD, "/1M", "cache")
+      priceLine("输入", tier.input_per_1m_usd, multiplier, "/1M", "input"),
+      priceLine("输出", tier.output_per_1m_usd, multiplier, "/1M", "output"),
+      priceLine("缓存写入", tier.cache_write_per_1m_usd, multiplier, "/1M", "cache"),
+      priceLine("缓存读取", tier.cache_read_per_1m_usd, multiplier, "/1M", "cache")
     ]
   }));
 }
@@ -153,15 +146,14 @@ function mediaSections(
   defaultPrice: number,
   overrides: Array<{ resolution: string; price: number }>,
   multiplier: number,
-  creditsPerUSD: number,
   unit: string
 ): PricingSection[] {
-  const sections: PricingSection[] = [singlePriceSection("默认价格", "默认", defaultPrice, multiplier, creditsPerUSD, unit)];
+  const sections: PricingSection[] = [singlePriceSection("默认价格", "默认", defaultPrice, multiplier, unit)];
   if (overrides.length) {
     sections.push({
       key: "overrides",
       title: "规格价格",
-      lines: overrides.map((item) => priceLine(item.resolution, item.price, multiplier, creditsPerUSD, unit, "resolution"))
+      lines: overrides.map((item) => priceLine(item.resolution, item.price, multiplier, unit, "resolution"))
     });
   }
   return sections;
@@ -172,13 +164,12 @@ function singlePriceSection(
   label: string,
   price: number,
   multiplier: number,
-  creditsPerUSD: number,
   unit: string
 ): PricingSection {
   return {
     key: "default",
     title,
-    lines: [priceLine(label, price, multiplier, creditsPerUSD, unit, title.startsWith("语音") ? "audio" : "default")]
+    lines: [priceLine(label, price, multiplier, unit, title.startsWith("语音") ? "audio" : "default")]
   };
 }
 
@@ -186,7 +177,6 @@ function priceLine(
   label: string,
   price: number,
   multiplier: number,
-  creditsPerUSD: number,
   unit: string,
   tone: PriceTone
 ): PricingLine {
@@ -194,7 +184,6 @@ function priceLine(
   return {
     label,
     usd: `${formatUSD(effectiveUSD)}${unit}`,
-    credits: creditsPerUSD > 0 ? `${formatNumber(effectiveUSD * creditsPerUSD)} 积分` : "",
     tone
   };
 }

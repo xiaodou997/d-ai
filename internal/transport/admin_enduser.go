@@ -31,7 +31,7 @@ type endUserItem struct {
 	Nickname      string  `json:"nickname,omitempty"`
 	Avatar        string  `json:"avatar,omitempty"`
 	Status        int     `json:"status"`
-	Credits       float64 `json:"credits"`
+	BalanceUSD    float64 `json:"balanceUsd"`
 	LastLoginTime *int64  `json:"lastLoginTime,omitempty"`
 	CreatedTime   int64   `json:"createdTime"`
 }
@@ -202,7 +202,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 			&status, &lastLogin, &createdAt, &tenantName, &creditsMicro); err != nil {
 			continue
 		}
-		it.Credits = billingdomain.MicroToCredits(creditsMicro)
+		it.BalanceUSD = billingdomain.MicroToUSD(creditsMicro)
 		it.Status = adminUserStatusToInt(status)
 		it.CreatedTime = millisFromTime(createdAt)
 		if tenantName != nil {
@@ -411,7 +411,7 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 		return nil, httpx.ErrConflict.WithDetail("用户仍有未结清透支，不能删除")
 	}
 
-	var availableCredits int64
+	var availableMicroUSD int64
 	if err := tx.QueryRow(ctx, `
 		SELECT COALESCE(SUM(remaining_credits), 0)
 		FROM (
@@ -420,11 +420,11 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 			WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
 			FOR UPDATE
 		) packages
-	`, in.ID).Scan(&availableCredits); err != nil {
+	`, in.ID).Scan(&availableMicroUSD); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if availableCredits > 0 {
-		return nil, httpx.ErrConflict.WithDetail("用户仍有可用积分，不能删除")
+	if availableMicroUSD > 0 {
+		return nil, httpx.ErrConflict.WithDetail("用户仍有可用 USD 余额，不能删除")
 	}
 
 	now := time.Now().UTC()

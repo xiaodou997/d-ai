@@ -89,11 +89,7 @@ var (
 	ErrRechargeNotFound         = &BizError{Code: 3007, Message: "充值记录不存在"}
 	ErrRechargeNotReversible    = &BizError{Code: 3008, Message: "该充值不可撤销"}
 	ErrRechargeAlreadyReversed  = &BizError{Code: 3009, Message: "充值已撤销"}
-	ErrRechargeCreditsExhausted = &BizError{Code: 3010, Message: "充值积分已全部消耗，无法撤销"}
-	ErrCreditLeaseNotFound      = &BizError{Code: 3011, Message: "额度租约不存在"}
-	ErrCreditLeaseVersion       = &BizError{Code: 3012, Message: "额度租约版本已变化"}
-	ErrCreditLeaseSettlement    = &BizError{Code: 3013, Message: "额度租约结算冲突"}
-	ErrCreditLeaseNotRenewable  = &BizError{Code: 3014, Message: "额度租约不可续期"}
+	ErrRechargeCreditsExhausted = &BizError{Code: 3010, Message: "充值余额已全部消耗，无法撤销"}
 
 	// 资源包错误 (4xxx)
 	ErrPackageNotFound  = &BizError{Code: 4001, Message: "资源包不存在"}
@@ -110,7 +106,7 @@ var (
 	ErrUnauthorized       = &BizError{Code: 5006, Message: "未授权访问"} // 原编号 1001
 	ErrForbidden          = &BizError{Code: 5007, Message: "禁止访问"}  // 原编号 1002
 
-	// 在线支付/现金账户错误 (7xxx)
+	// 在线支付/账户余额错误 (7xxx)
 	ErrPaymentDisabled         = &BizError{Code: 7001, Message: "微信支付未启用"}
 	ErrPaymentAmountOutOfRange = &BizError{Code: 7002, Message: "充值金额超出允许范围"}
 	ErrPaymentOrderNotFound    = &BizError{Code: 7003, Message: "支付订单不存在"}

@@ -18,7 +18,7 @@ const props = defineProps<{
 
 const columns: DsTableColumn[] = [
   { key: "username", title: "用户" },
-  { key: "userCredits", title: "用户消费积分", align: "right", width: 120 },
+  { key: "userAmount", title: "用户消费（USD）", align: "right", width: 140 },
   { key: "appName", title: "消费场景" },
   { key: "createdTime", title: "时间", width: 110 }
 ];
@@ -50,7 +50,7 @@ function formatTime(timestamp?: number | null) {
         <span class="recent-panel__icon" aria-hidden="true"><ReceiptText :size="19" /></span>
         <div>
           <h2 id="recent-consumption-title" class="recent-panel__title">近期用户消费</h2>
-          <p class="recent-panel__desc">{{ rangeLabel }}最近成功消费记录</p>
+          <p class="recent-panel__desc">{{ rangeLabel }}最近成功 AI 请求</p>
         </div>
       </div>
       <button class="recent-panel__action" type="button" @click="emit('openDetails')">查看全部</button>
@@ -68,8 +68,8 @@ function formatTime(timestamp?: number | null) {
         <template #cell-username="{ row }">
           <strong class="recent-panel__user">{{ row.username || "未知用户" }}</strong>
         </template>
-        <template #cell-userCredits="{ row }">
-          <strong class="recent-panel__credits">{{ numberFormatter.format(row.userCredits ?? 0) }}</strong>
+        <template #cell-userAmount="{ row }">
+          <strong class="recent-panel__credits">${{ numberFormatter.format(row.userAmountUsd ?? 0) }}</strong>
         </template>
         <template #cell-appName="{ row }">{{ row.appName || row.description || "—" }}</template>
         <template #cell-createdTime="{ row }">{{ formatTime(row.createdTime) }}</template>

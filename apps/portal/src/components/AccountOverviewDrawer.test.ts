@@ -11,16 +11,16 @@ vi.mock('@/api/platformAdmin', () => ({
 }))
 
 const balanceResponse = {
-  totalCredits: 200,
-  usedCredits: 80,
-  remainingCredits: 120,
-  frozenCredits: 20,
-  availableCredits: 100,
-  permanentCredits: 70,
-  timedCredits: 50,
-  outstandingDebtMicro: 250_000,
+  currency: 'USD',
+  totalUsd: 200,
+  usedUsd: 80,
+  remainingUsd: 120,
+  availableUsd: 120,
+  permanentUsd: 70,
+  timedUsd: 50,
+  outstandingDebtMicroUsd: 25_000_000,
   serviceState: 'blocked_debt' as const,
-  packages: []
+  balanceLots: []
 }
 
 const passthroughStub = { template: '<div><slot /><slot name="action" /></div>' }
@@ -57,8 +57,8 @@ describe('AccountOverviewDrawer', () => {
       accountId: 'USER_1',
       detail: true
     })
-    expect(wrapper.text()).toContain('75积分')
+    expect(wrapper.text()).toContain('$95.00')
     expect(wrapper.text()).toContain('未结透支')
-    expect(wrapper.text()).toContain('-25 积分')
+    expect(wrapper.text()).toContain('-$25.00')
   })
 })

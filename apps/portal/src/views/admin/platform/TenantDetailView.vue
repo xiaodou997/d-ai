@@ -136,8 +136,8 @@
           :loading="transactionsLoading"
           empty-title="暂无财务流水"
         >
-          <template #cell-credits="{ row }">
-            <span class="td-num">{{ ((row.tenantCredits || 0) + (row.userCredits || 0)).toLocaleString() }} 积分</span>
+          <template #cell-amount="{ row }">
+            <span class="td-num">${{ ((row.tenantAmountUsd || 0) + (row.userAmountUsd || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
           </template>
           <template #cell-status="{ row }">
             <DsTag :tone="txStatusInfo(row.status).tone">{{ txStatusInfo(row.status).label }}</DsTag>
@@ -164,7 +164,7 @@
       target-type-label="租户"
       :target-name="tenantInfo?.tenantName || ''"
       :target-identity="`租户 ID ${tenantId}`"
-      :target-credits="credits"
+      :target-balance-usd="credits"
       :submitting="rechargeSubmitting"
       @submit="submitTenantRecharge"
     />
@@ -229,7 +229,7 @@ const rechargeSubmitting = ref(false)
 
 // 页头副标题集中展示关键信息
 const headerDescription = computed(
-  () => `租户 ID：${tenantId} · 平台积分：${credits.value.toLocaleString()} 积分`
+  () => `租户 ID：${tenantId} · USD 余额：$${credits.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 )
 
 const orgUserColumns: DsTableColumn[] = [
@@ -251,7 +251,7 @@ const userColumns: DsTableColumn[] = [
 
 const txColumns: DsTableColumn[] = [
   { key: 'eventId', title: '交易流水', mono: true },
-  { key: 'credits', title: '积分', align: 'right', width: 140 },
+  { key: 'amount', title: '金额（USD）', align: 'right', width: 150 },
   { key: 'status', title: '状态', width: 120 },
   { key: 'createdTime', title: '时间', width: 170 }
 ]
@@ -330,7 +330,7 @@ const submitTenantRecharge = async (payload: RechargeFormPayload) => {
   rechargeSubmitting.value = true
   try {
     await platformAdminApi.createRecharge({ packageType: 1, tenantId, ...payload })
-    ElMessage.success(`已成功充值 ${payload.creditAmount.toLocaleString()} 积分`)
+    ElMessage.success(`已成功充值 $${(payload.amountMicroUsd / 1_000_000).toLocaleString()}`)
     rechargeDialogVisible.value = false
     void fetchBalance()
   } catch (error: any) {
@@ -355,7 +355,7 @@ const fetchTenantInfo = async () => {
 const fetchBalance = async () => {
   try {
     const res = await platformAdminApi.getAccountBalance({ accountType: 1, accountId: tenantId })
-    credits.value = res.availableCredits
+    credits.value = res.availableUsd
   } catch {
     credits.value = 0
   }
@@ -513,7 +513,7 @@ onMounted(() => {
   color: var(--ds-faint);
 }
 
-/* 积分数字：等宽数字 + 加粗 */
+/* USD 金额：等宽数字 + 加粗 */
 .td-num {
   font-variant-numeric: tabular-nums;
   font-weight: 700;

@@ -32,7 +32,7 @@ type portalTaskErrorDTO struct {
 }
 
 type portalTaskUsageDTO struct {
-	CostCredits float64 `json:"cost_credits"`
+	CostUSD float64 `json:"cost_usd"`
 }
 
 type portalTaskResultSummaryDTO struct {
@@ -259,7 +259,7 @@ func portalTaskDTOFromView(view asynctask.TaskView, viewer coreidentity.Subject,
 		dto.Error = &portalTaskErrorDTO{Code: view.ErrorCode, Message: view.ErrorMessage}
 	}
 	if terminal {
-		dto.Usage = &portalTaskUsageDTO{CostCredits: domain.MicroToCreditsFloat(view.CallerCharge)}
+		dto.Usage = &portalTaskUsageDTO{CostUSD: domain.MicroToUSD(view.CallerCharge)}
 	}
 	if includeResult && manageable && hasJSONValue(view.Output) {
 		dto.Result = view.Output

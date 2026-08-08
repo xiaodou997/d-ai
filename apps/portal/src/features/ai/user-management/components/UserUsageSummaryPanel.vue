@@ -1,11 +1,11 @@
 <!--
-  使用统计面板 — 按模型聚合并展示单个终端用户的请求数、Token 与消费积分。
+  使用统计面板 — 按模型聚合并展示单个终端用户的请求数、Token 与消费金额。
   重构:el-table → DsTable(:frame="false",mono/右对齐列),统计卡与请求逻辑保持不变。
 -->
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { formatCredits, formatTokenCount } from "@/platform/ai/usage";
+import { formatTokenCount, formatUSD } from "@/platform/ai/usage";
 import { DsTable, type DsTableColumn } from "@/shared/ui";
 
 import { listTenantUsageSummary } from "../../usage/api";
@@ -13,14 +13,14 @@ import type { TenantUsageSummaryRow } from "../../usage/model";
 import type { TenantEndUserItem } from "@/api/types/tenant";
 import type { UserUsageFilters } from "../model";
 
-// DsTable 列:model_code 为标识符用 mono;请求/Token/积分列右对齐走 #cell-* 格式化
+// DsTable 列:model_code 为标识符用 mono;请求/Token/金额列右对齐走 #cell-* 格式化
 const columns: DsTableColumn[] = [
   { key: "model_code", title: "模型", mono: true },
   { key: "request_count", title: "请求数", width: 120, align: "right" },
   { key: "prompt_tokens", title: "输入 Token", width: 140, align: "right" },
   { key: "completion_tokens", title: "输出 Token", width: 140, align: "right" },
   { key: "total_tokens", title: "总 Token", width: 140, align: "right" },
-  { key: "credits", title: "用户消费积分", width: 150, align: "right" }
+  { key: "amount_usd", title: "用户消费（USD）", width: 150, align: "right" }
 ];
 
 const props = defineProps<{
@@ -39,9 +39,9 @@ const totals = computed(() => rows.value.reduce(
   (acc, row) => ({
     requests: acc.requests + Number(row.request_count || 0),
     tokens: acc.tokens + Number(row.total_tokens || 0),
-    credits: acc.credits + Number(row.total_user_charged_credits || 0)
+    amountUSD: acc.amountUSD + Number(row.total_user_charged_usd || 0)
   }),
-  { requests: 0, tokens: 0, credits: 0 }
+  { requests: 0, tokens: 0, amountUSD: 0 }
 ));
 
 function clear() {
@@ -107,7 +107,7 @@ function isAbortError(error: unknown) {
       <div class="stat-card"><span>模型数</span><strong>{{ rows.length }}</strong><small>当前过滤范围</small></div>
       <div class="stat-card"><span>请求数</span><strong>{{ totals.requests.toLocaleString() }}</strong><small>当前过滤范围</small></div>
       <div class="stat-card"><span>总 Token</span><strong>{{ formatTokenCount(totals.tokens) }}</strong><small>当前过滤范围</small></div>
-      <div class="stat-card"><span>消费积分</span><strong class="accent">{{ formatCredits(totals.credits) }}</strong><small>按模型聚合</small></div>
+      <div class="stat-card"><span>消费金额</span><strong class="accent">{{ formatUSD(totals.amountUSD) }}</strong><small>按模型聚合</small></div>
     </div>
 
     <DsTable
@@ -124,7 +124,7 @@ function isAbortError(error: unknown) {
       <template #cell-prompt_tokens="{ row }">{{ formatTokenCount(row.total_prompt_tokens) }}</template>
       <template #cell-completion_tokens="{ row }">{{ formatTokenCount(row.total_completion_tokens) }}</template>
       <template #cell-total_tokens="{ row }">{{ formatTokenCount(row.total_tokens) }}</template>
-      <template #cell-credits="{ row }"><strong class="accent">{{ formatCredits(row.total_user_charged_credits) }}</strong></template>
+      <template #cell-amount_usd="{ row }"><strong class="accent">{{ formatUSD(row.total_user_charged_usd) }}</strong></template>
     </DsTable>
   </section>
 </template>

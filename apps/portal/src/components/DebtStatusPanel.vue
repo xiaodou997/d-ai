@@ -3,8 +3,8 @@
     <div class="debt-status__main" :class="{ 'is-blocked': blocked }">
       <div>
         <p class="debt-status__label">未结债务</p>
-        <p class="debt-status__value">{{ formatMicroCredits(status?.outstanding_debt_micro ?? 0) }}</p>
-        <p class="debt-status__unit">积分</p>
+        <p class="debt-status__value">{{ formatMicroUSD(status?.outstanding_debt_micro_usd ?? 0) }}</p>
+        <p class="debt-status__unit">USD</p>
       </div>
       <el-tag :type="blocked ? 'danger' : 'success'" effect="light">
         {{ blocked ? '服务已停止' : '服务正常' }}
@@ -22,7 +22,6 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { formatMicroCredits } from "@/platform/ai/usage";
 import { platformAdminApi } from "../api/platformAdmin";
 import type { DebtStatusOutputBody } from "@/api/types/admin";
 
@@ -34,6 +33,7 @@ const props = defineProps<{
 const loading = ref(false);
 const status = ref<DebtStatusOutputBody | null>(null);
 const blocked = computed(() => status.value?.service_state === "blocked_debt");
+const formatMicroUSD = (value: number) => `$${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 
 async function fetchStatus() {
   if (!props.accountId) return;

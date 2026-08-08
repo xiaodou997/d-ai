@@ -56,11 +56,10 @@
           <span v-else class="recharge-records-placeholder">—</span>
         </template>
         <template #cell-paidAmount="{ row }">
-          <span class="recharge-records-num recharge-records-amount">¥ {{ (row.paidAmount / 100).toFixed(2) }}</span>
+          <span class="recharge-records-num recharge-records-amount">${{ (row.paidAmountMinor / 100).toFixed(2) }}</span>
         </template>
-        <template #cell-creditAmount="{ row }">
-          <span class="recharge-records-num recharge-records-credits">+{{ (row.creditAmount || 0).toLocaleString() }}</span>
-          <span class="recharge-records-credits-unit">积分</span>
+        <template #cell-amount="{ row }">
+          <span class="recharge-records-num recharge-records-credits">+${{ (row.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
         </template>
         <template #cell-orderType="{ row }">
           <DsTag :tone="row.orderType === 'platform_to_tenant' ? 'accent' : 'positive'">
@@ -101,11 +100,11 @@
     <el-dialog v-model="reverseDialogVisible" title="确认撤销充值" width="480" :close-on-click-modal="false" :append-to-body="true">
       <div class="space-y-4">
         <div class="recharge-reverse-alert">
-          <p class="recharge-reverse-alert__text">⚠ 此操作将回收该充值对应的积分包剩余积分，请确认操作无误。</p>
+          <p class="recharge-reverse-alert__text">此操作将回收该充值对应额度包的剩余金额，请确认操作无误。</p>
         </div>
         <div v-if="reverseRow" class="space-y-2 text-sm">
           <div class="flex justify-between"><span class="text-slate-500">充值单号</span><span class="font-mono">{{ reverseRow.orderId }}</span></div>
-          <div class="flex justify-between"><span class="text-slate-500">到账积分</span><span class="font-bold">{{ (reverseRow.creditAmount || 0).toLocaleString() }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-500">到账金额</span><span class="font-bold">${{ (reverseRow.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span></div>
           <div class="flex justify-between"><span class="text-slate-500">当前状态</span><span>{{ statusLabel(reverseRow.status) }}</span></div>
         </div>
         <el-form :model="reverseForm" label-position="top">
@@ -142,8 +141,8 @@ const columns: DsTableColumn[] = [
   { key: 'orderId', title: '充值单号', width: 200, mono: true },
   { key: 'tenantName', title: '租户名称' },
   { key: 'username', title: '用户名' },
-  { key: 'paidAmount', title: '实付金额（元）', align: 'right' },
-  { key: 'creditAmount', title: '到账积分', align: 'right' },
+  { key: 'paidAmount', title: '实付金额（USD）', align: 'right' },
+  { key: 'amount', title: '到账金额（USD）', align: 'right' },
   { key: 'orderType', title: '类型', align: 'center' },
   { key: 'status', title: '状态', align: 'center' },
   { key: 'note', title: '备注' },
@@ -208,7 +207,7 @@ const confirmReverse = async () => {
     reverseDialogVisible.value = false
     if (result.status === 'PARTIAL_REVERSAL') {
       ElMessage.warning({
-        message: `部分撤销成功：回收 ${result.reversedCredits} 积分，已消耗 ${result.lostCredits} 积分无法回收`,
+        message: `部分撤销成功：回收 $${result.reversedAmountUsd.toLocaleString()}，已消耗 $${result.lostAmountUsd.toLocaleString()} 无法回收`,
         duration: 5000
       })
     } else {

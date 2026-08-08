@@ -1,13 +1,10 @@
-// Platform 用户（终端用户 type=4）自助业务页类型 —— 字段名以统一后端 Huma DTO 真实返回为准（camelCase）。
-// 对照 internal/billing/pg/{account.go,billing_repo.go} 的 DTO。
+// Platform customer self-service contracts. All money is USD; exact ledger
+// values use int64 micro-USD and display values use decimal USD.
 
-// ===== 账户余额 / 积分包 =====
-// 后端 CreditPackage：expiresAt 为 RFC3339 时间字符串（*time.Time），无 status 字段，
-// 状态由前端按 expiresAt/remainingCredits 派生（与 v1 一致）。
-export interface CreditPackage {
-  packageId: string;
-  totalCredits: number;
-  remainingCredits: number;
+export interface BalanceLot {
+  balanceLotId: string;
+  totalUsd: number;
+  remainingUsd: number;
   expiresAt?: string | null;
   source: string;
 }
@@ -18,34 +15,28 @@ export interface CustomerPortalBrand {
 }
 
 export interface AccountBalance {
-  totalCredits: number;
-  usedCredits: number;
-  remainingCredits: number;
-  frozenCredits: number;
-  availableCredits: number;
-  permanentCredits: number;
-  timedCredits: number;
-  packages?: CreditPackage[];
+  currency: "USD" | string;
+  totalUsd: number;
+  usedUsd: number;
+  remainingUsd: number;
+  availableUsd: number;
+  permanentUsd: number;
+  timedUsd: number;
+  outstandingDebtMicroUsd: number;
+  serviceState: string;
+  balanceLots?: BalanceLot[];
 }
 
-// 视图层派生后的积分包（附带 status：1=可用 2=已过期 3=已耗尽）。
-export interface PackageView {
-  packageId: string;
-  totalCredits: number;
-  remainingCredits: number;
-  expiresAt?: string | null;
-  source: string;
+export interface BalanceLotView extends BalanceLot {
   status: number;
 }
 
-// ===== 积分流水 =====
-// 终端用户侧：后端将 tenantCredits 复写为 userCredits，仅展示 userCredits。
 export interface AccountTransactionItem {
   eventId: string;
   userId: string;
   description: string;
-  tenantCredits: number;
-  userCredits: number;
+  tenantAmountUsd: number;
+  userAmountUsd: number;
   status: string;
   terminalNote: string;
   metadata: string;
@@ -57,12 +48,11 @@ export interface AccountTransactionItem {
   appName: string;
 }
 
-// ===== 充值记录 =====
 export interface RechargeRecordItem {
   orderId: string;
   orderType: string;
-  paidAmount: number;
-  creditAmount: number;
+  paidAmountMinor: number;
+  amountUsd: number;
   status: string;
   note: string;
   userId: string;
@@ -71,7 +61,6 @@ export interface RechargeRecordItem {
   createdTime?: number | null;
 }
 
-// ===== 通用分页 =====
 export interface Page<T> {
   items: T[];
   total: number;
@@ -79,21 +68,22 @@ export interface Page<T> {
   size: number;
 }
 
-// ===== 在线充值（微信支付） =====
 export interface TopupConfig {
   enabled: boolean;
-  exchangeRate: number;
+  currency: "USD" | string;
   feeRateBp: number;
-  min: number;
-  max: number;
+  minMicroUsd: number;
+  maxMicroUsd: number;
+  validityDays?: number | null;
   packages: TopupPackage[];
 }
 
 export interface TopupPackage {
   id: string;
   name: string;
-  amount: number;
-  credits: number;
+  paymentAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  validityDays?: number | null;
   badge?: string;
   enabled: boolean;
   sortOrder: number;
@@ -102,40 +92,27 @@ export interface TopupPackage {
 export interface TopupOrderCreated {
   orderId: string;
   codeUrl: string;
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
+  paymentCurrency: string;
+  paymentAmountMinor: number;
+  grossAmountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  creditedAmountMicroUsd: number;
   topupMode: "custom" | "package";
   packageName?: string;
   status: string;
   expiresAt: number;
+  balanceExpiresAt?: number | null;
 }
 
-export interface TopupOrderStatus {
-  orderId: string;
+export interface TopupOrderStatus extends Omit<TopupOrderCreated, "codeUrl" | "expiresAt"> {
   status: "created" | "paying" | "paid" | "closed" | "expired";
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
-  topupMode: "custom" | "package";
-  packageName?: string;
   transactionId?: string;
   paidAt?: number | null;
 }
 
-export interface TopupOrderItem {
+export interface TopupOrderItem extends Omit<TopupOrderStatus, "orderId"> {
   orderId: string;
   scene?: "user_topup" | "tenant_topup";
-  status: string;
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
-  topupMode: "custom" | "package";
-  packageName?: string;
-  transactionId?: string;
   createdAt: number;
-  paidAt?: number | null;
 }

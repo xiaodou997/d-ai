@@ -11,7 +11,7 @@
         </div>
       </div>
       <el-tag :type="alertCount > 0 ? 'danger' : 'success'" effect="plain" class="border-none bg-slate-50 text-xs font-bold rounded-lg px-3">
-        {{ alertCount }} 项待审
+        {{ alertCount }} 项待处理
       </el-tag>
     </div>
 
@@ -45,42 +45,19 @@
         </div>
       </div>
 
-      <!-- 超时预授权 -->
-      <div v-for="item in timeoutPreAuths" :key="item.eventId" class="group p-4 bg-white hover:bg-primary-50/30 border border-slate-100 rounded-2xl transition-all relative overflow-hidden">
-        <div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-500"></div>
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center">
-            <span class="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center mr-3 text-primary-500">
-              <el-icon><Clock /></el-icon>
-            </span>
-            <span class="text-sm font-bold text-slate-700 truncate">授权超时: {{ item.eventId }}</span>
-          </div>
-        </div>
-        <div class="flex justify-between items-center text-[11px]">
-          <p class="text-slate-400 font-medium italic">于 {{ formatDateTime(item.createdTime) }} 创建</p>
-          <el-button size="small" type="danger" plain :loading="cancellingId === item.eventId" @click="handleCancel(item.eventId)">手动取消</el-button>
-        </div>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { ElMessage } from 'element-plus'
-import { WarningFilled, Clock, CircleCloseFilled, CircleCheck } from '@element-plus/icons-vue'
-import { platformAdminApi } from '../api/platformAdmin'
+import { computed } from 'vue'
+import { WarningFilled, CircleCloseFilled, CircleCheck } from '@element-plus/icons-vue'
 
 const props = defineProps<{
-  timeoutPreAuths: any[]
   failedTransactions: any[]
 }>()
 
-const emit = defineEmits<{ (e: 'refresh'): void }>()
-
-const cancellingId = ref('')
-
-const alertCount = computed(() => props.timeoutPreAuths.length + props.failedTransactions.length)
+const alertCount = computed(() => props.failedTransactions.length)
 
 const formatDateTime = (ts?: number) => {
   if (!ts) return '-'
@@ -88,18 +65,6 @@ const formatDateTime = (ts?: number) => {
   return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-const handleCancel = async (eventId: string) => {
-  cancellingId.value = eventId
-  try {
-    await platformAdminApi.cancelPreAuth(eventId)
-    ElMessage.success('已手动取消预授权，积分冻结已释放')
-    emit('refresh')
-  } catch (e: any) {
-    ElMessage.error(e?.message || '取消失败')
-  } finally {
-    cancellingId.value = ''
-  }
-}
 </script>
 
 <style scoped>

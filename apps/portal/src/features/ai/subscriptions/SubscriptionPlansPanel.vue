@@ -9,7 +9,6 @@
 import { computed, onMounted, shallowRef } from "vue";
 import { ArrowDown, ArrowUp, Check, Close, Plus, Rank, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { formatCredits, formatWholeCredits } from "@/platform/ai/usage";
 import { formatMultiplier } from "@/platform/ai/utils";
 import { DsEmpty, DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
@@ -20,8 +19,7 @@ import SubscriptionPurchasePolicyHistoryDrawer from "./SubscriptionPurchasePolic
 import { subscriptionPurchasePolicyLabel } from "./subscriptionPurchasePolicy";
 import { estimateSubscriptionPaygValue, type SubscriptionPricingGroup } from "./subscriptionPricing";
 
-const MICRO_PER_CREDIT = 10_000;
-const DEFAULT_CREDITS_PER_USD = 100;
+const MICRO_USD = 1_000_000;
 
 const loading = shallowRef(false);
 const plans = shallowRef<TenantSubPlan[]>([]);
@@ -30,7 +28,6 @@ const statusFilter = shallowRef("");
 const page = shallowRef(1);
 const pageSize = shallowRef(20);
 const visibleGroups = shallowRef<TenantAiVisibleGroup[]>([]);
-const creditsPerUsd = shallowRef(DEFAULT_CREDITS_PER_USD);
 const dialogVisible = shallowRef(false);
 const editingPlan = shallowRef<TenantSubPlan | null>(null);
 const historyPlan = shallowRef<TenantSubPlan | null>(null);
@@ -85,13 +82,7 @@ function statusTone(status: string): "neutral" | "positive" | "warning" {
   return map[status] ?? "neutral";
 }
 
-function creditsLabel(micro?: number | null) {
-  return micro == null ? "无额外限制" : `${formatCredits(micro / MICRO_PER_CREDIT)} 积分`;
-}
-
-function yuanHintFromCredits(credits: number) {
-  return `按积分汇率约 ¥${(credits / creditsPerUsd.value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+function usdLabel(micro?: number | null) { return micro == null ? "无额外限制" : `$${(micro / MICRO_USD).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 
 function paygValueHint(plan: TenantSubPlan) {
   const groups: SubscriptionPricingGroup[] = [];
@@ -104,11 +95,9 @@ function paygValueHint(plan: TenantSubPlan) {
       quotaDebitMultiplier: binding.quota_debit_multiplier
     });
   }
-  const valueMicro = estimateSubscriptionPaygValue(plan.total_limit_micro, groups);
+  const valueMicro = estimateSubscriptionPaygValue(plan.total_limit_micro_usd, groups);
   if (valueMicro == null) return "选择可售分组后显示按量价值";
-  const valueCredits = valueMicro / MICRO_PER_CREDIT;
-  const yuan = valueCredits / creditsPerUsd.value;
-  return `最低按量价值 ${valueCredits.toLocaleString("zh-CN", { maximumFractionDigits: 4 })} 积分（约 ¥${yuan.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}）`;
+  return `最低按量价值 ${usdLabel(valueMicro)}`;
 }
 
 function inventoryLabel(plan: TenantSubPlan) {
@@ -136,10 +125,6 @@ async function fetchGroups() {
   try {
     const result = await aiTenantApi.listMyGroups();
     visibleGroups.value = (result?.items ?? []).filter((group) => group.status === "active");
-    const firstGroupId = visibleGroups.value[0]?.id;
-    if (!firstGroupId) return;
-    const pricing = await aiTenantApi.getMyGroupEffectivePrices(firstGroupId);
-    if (pricing?.credits_per_usd > 0) creditsPerUsd.value = pricing.credits_per_usd;
   } catch {
     visibleGroups.value = [];
   }
@@ -297,13 +282,13 @@ onMounted(() => {
       </template>
       <template #cell-price="{ row }">
         <div class="value-stack">
-          <strong>{{ formatWholeCredits(row.price_credits) }} 积分</strong>
-          <span>{{ yuanHintFromCredits(row.price_credits) }}</span>
+          <strong>{{ usdLabel(row.price_micro_usd) }}</strong>
+          <span>直接从 USD 余额扣款</span>
         </div>
       </template>
       <template #cell-quota="{ row }">
         <div class="value-stack">
-          <strong>{{ creditsLabel(row.total_limit_micro) }}</strong>
+          <strong>{{ usdLabel(row.total_limit_micro_usd) }}</strong>
           <span>{{ paygValueHint(row) }}</span>
         </div>
       </template>
@@ -313,8 +298,8 @@ onMounted(() => {
       </template>
       <template #cell-windows="{ row }">
         <div class="window-values">
-          <span>5h {{ creditsLabel(row.window_5h_limit_micro) }}</span>
-          <span>7d {{ creditsLabel(row.window_7d_limit_micro) }}</span>
+          <span>5h {{ usdLabel(row.window_5h_limit_micro_usd) }}</span>
+          <span>7d {{ usdLabel(row.window_7d_limit_micro_usd) }}</span>
         </div>
       </template>
       <template #cell-policy="{ row }">
@@ -348,7 +333,7 @@ onMounted(() => {
       />
     </div>
 
-    <SubscriptionPlanDialog v-model="dialogVisible" :plan="editingPlan" :groups="visibleGroups" :credits-per-usd="creditsPerUsd" @saved="fetchPlans" />
+    <SubscriptionPlanDialog v-model="dialogVisible" :plan="editingPlan" :groups="visibleGroups" @saved="fetchPlans" />
     <SubscriptionPurchasePolicyHistoryDrawer v-model="historyVisible" :plan="historyPlan" />
   </div>
 </template>

@@ -1,5 +1,5 @@
 <!--
-  提现审核 — 租户现金余额提现申请审核 + 线下打款核销。
+  提现记录 — 管理员按租户创建提现记录并直接扣减额度。
   重构：迁移至新设计系统一体面板（PortalPagePanel：图标徽章+面包屑标题+描述同行，
        筛选/表格/分页同卡）；数据接入 useListPage，请求参数与筛选语义保持不变，弹窗仍为 element-plus。
 -->
@@ -7,8 +7,8 @@
   <div class="withdrawals-page">
     <PortalPagePanel
       :icon="Banknote"
-      :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '提现审核' }]"
-      description="审核租户现金余额提现申请，线下打款后回填凭证号核销。"
+      :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '提现记录' }]"
+      description="租户联系管理员后，由管理员创建提现记录；创建时原子扣减租户额度。"
     >
       <template #filters>
         <DsFilterBar>
@@ -23,6 +23,9 @@
           </DsFilterField>
 
           <template #actions>
+            <el-button type="primary" @click="openCreate">
+              创建提现记录
+            </el-button>
             <el-button type="primary" @click="search">
               <Search class="withdrawals-button-icon" />
               筛选
@@ -44,23 +47,19 @@
         empty-title="暂无数据"
       >
         <template #cell-amount="{ row }">
-          <span class="withdrawals-num">¥{{ (row.amount / 100).toFixed(2) }}</span>
+          <span class="withdrawals-num">{{ formatMicroUSD(row.amountMicroUsd) }}</span>
         </template>
         <template #cell-feeAmount="{ row }">
-          <span class="withdrawals-num">¥{{ (row.feeAmount / 100).toFixed(2) }}</span>
+          <span class="withdrawals-num">{{ formatMicroUSD(row.feeAmountMicroUsd) }}</span>
         </template>
         <template #cell-payoutAmount="{ row }">
-          <span class="withdrawals-num withdrawals-payout">¥{{ (row.payoutAmount / 100).toFixed(2) }}</span>
+          <span class="withdrawals-num withdrawals-payout">{{ formatMicroUSD(row.payoutAmountMicroUsd) }}</span>
         </template>
         <template #cell-status="{ row }">
           <DsTag :tone="statusTone(row.status)">{{ statusText(row.status) }}</DsTag>
         </template>
         <template #cell-createdAt="{ row }">
           <span class="withdrawals-time">{{ formatTime(row.createdAt) }}</span>
-        </template>
-        <template #cell-actions="{ row }">
-          <el-button v-if="row.status === 'pending'" link type="primary" @click="openReview(row)">审核</el-button>
-          <el-button v-if="row.status === 'approved'" link type="success" @click="openSettle(row)">核销</el-button>
         </template>
       </DsTable>
 
@@ -75,48 +74,35 @@
       </template>
     </PortalPagePanel>
 
-    <el-dialog v-model="reviewVisible" title="审核提现申请" width="420px" append-to-body>
-      <div v-if="activeRow" class="review-summary">
-        <div class="review-row"><span>申请金额</span><strong>¥{{ (activeRow.amount / 100).toFixed(2) }}</strong></div>
-        <div class="review-row"><span>手续费</span><strong>¥{{ (activeRow.feeAmount / 100).toFixed(2) }}</strong></div>
-        <div class="review-row"><span>应打款</span><strong>¥{{ (activeRow.payoutAmount / 100).toFixed(2) }}</strong></div>
-        <div class="review-row"><span>收款户名</span><span>{{ activeRow.accountName }}</span></div>
-        <div class="review-row"><span>开户行</span><span>{{ activeRow.bankName }}</span></div>
-        <div class="review-row"><span>账号</span><span>{{ activeRow.accountNo }}</span></div>
-      </div>
-      <el-form label-position="top">
-        <el-form-item label="审核意见">
-          <el-input v-model="reviewNote" type="textarea" :rows="2" placeholder="选填" />
+    <el-dialog v-model="createVisible" title="创建提现记录" width="520px" append-to-body>
+      <el-alert type="warning" :closable="false" show-icon title="提交后立即扣减租户额度，不再经过租户申请、审核或冻结流程。" />
+      <el-form label-position="top" class="create-form">
+        <el-form-item label="租户" required>
+          <el-select v-model="createForm.tenantId" filterable placeholder="选择租户" class="create-form__full">
+            <el-option v-for="tenant in tenantOptions" :key="tenant.tenantId" :label="`${tenant.tenantName || '未命名租户'} · ${tenant.tenantId}`" :value="tenant.tenantId" />
+          </el-select>
         </el-form-item>
+        <el-form-item label="扣减金额（USD）" required>
+          <el-input-number v-model="createForm.amountUsd" :min="0" :precision="6" :controls="false" class="create-form__full" />
+        </el-form-item>
+        <div class="create-form__grid">
+          <el-form-item label="收款户名"><el-input v-model="createForm.accountName" /></el-form-item>
+          <el-form-item label="开户行"><el-input v-model="createForm.bankName" /></el-form-item>
+        </div>
+        <el-form-item label="收款账号"><el-input v-model="createForm.accountNo" /></el-form-item>
+        <el-form-item label="打款凭证号"><el-input v-model="createForm.paymentRef" placeholder="选填，可填写银行流水号" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="createForm.note" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button type="danger" plain :loading="reviewSubmitting" @click="submitReview(false)">驳回</el-button>
-        <el-button type="primary" :loading="reviewSubmitting" @click="submitReview(true)">通过</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="settleVisible" title="线下打款核销" width="420px" append-to-body>
-      <div v-if="activeRow" class="review-summary">
-        <div class="review-row"><span>应打款</span><strong>¥{{ (activeRow.payoutAmount / 100).toFixed(2) }}</strong></div>
-        <div class="review-row"><span>收款户名</span><span>{{ activeRow.accountName }}</span></div>
-        <div class="review-row"><span>开户行</span><span>{{ activeRow.bankName }}</span></div>
-        <div class="review-row"><span>账号</span><span>{{ activeRow.accountNo }}</span></div>
-      </div>
-      <el-form label-position="top">
-        <el-form-item label="打款凭证号" required>
-          <el-input v-model="paymentRef" placeholder="银行流水号/凭证编号" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="settleVisible = false">取消</el-button>
-        <el-button type="primary" :loading="settleSubmitting" @click="submitSettle">确认已打款</el-button>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createSubmitting" @click="submitCreate">确认创建并扣减</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { RefreshRight, Search } from "@element-plus/icons-vue";
 import { Banknote } from "lucide-vue-next";
@@ -133,16 +119,15 @@ import { platformAdminApi } from "@/api/platformAdmin";
 import type { WithdrawalItem } from "@/api/types/admin";
 
 const columns: DsTableColumn[] = [
-  { key: "withdrawalId", title: "申请单号", width: 200, mono: true },
-  { key: "amount", title: "金额（元）", width: 120, align: "right" },
-  { key: "feeAmount", title: "手续费（元）", width: 120, align: "right" },
-  { key: "payoutAmount", title: "应打款（元）", width: 130, align: "right" },
+  { key: "withdrawalId", title: "记录单号", width: 200, mono: true },
+  { key: "amount", title: "扣减金额（USD）", width: 150, align: "right" },
+  { key: "feeAmount", title: "手续费（USD）", width: 130, align: "right" },
+  { key: "payoutAmount", title: "应付金额（USD）", width: 140, align: "right" },
   { key: "accountName", title: "收款户名", width: 120 },
   { key: "bankName", title: "开户行", width: 140 },
   { key: "accountNo", title: "账号", width: 180, mono: true },
   { key: "status", title: "状态", width: 130 },
-  { key: "createdAt", title: "申请时间", width: 180 },
-  { key: "actions", title: "操作", width: 160 }
+  { key: "createdAt", title: "创建时间", width: 180 }
 ];
 
 const {
@@ -175,17 +160,17 @@ const {
   }
 });
 
-const reviewVisible = ref(false);
-const reviewSubmitting = ref(false);
-const reviewNote = ref("");
-const settleVisible = ref(false);
-const settleSubmitting = ref(false);
-const paymentRef = ref("");
-const activeRow = ref<WithdrawalItem | null>(null);
+const createVisible = ref(false);
+const createSubmitting = ref(false);
+const tenantOptions = ref<Array<{ tenantId: string; tenantName?: string }>>([]);
+const createForm = reactive({ tenantId: "", amountUsd: null as number | null, accountName: "", bankName: "", accountNo: "", note: "", paymentRef: "" });
 
 function formatTime(ts?: number | null) {
   if (!ts) return "—";
   return new Date(ts).toLocaleString("zh-CN");
+}
+function formatMicroUSD(value: number) {
+  return `$${(Number(value ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 type DsTagTone = "neutral" | "accent" | "positive" | "warning" | "danger" | "info";
@@ -205,58 +190,56 @@ function statusText(s: string) {
   const map: Record<string, string> = {
     pending: "待审核",
     approved: "已通过，待打款",
-    paid: "已打款",
+    paid: "已记录（已扣减）",
     rejected: "已驳回",
     cancelled: "已取消"
   };
   return map[s] || s;
 }
 
-function openReview(row: WithdrawalItem) {
-  activeRow.value = row;
-  reviewNote.value = "";
-  reviewVisible.value = true;
-}
-
-async function submitReview(approve: boolean) {
-  if (!activeRow.value) return;
-  reviewSubmitting.value = true;
+async function openCreate() {
+  createForm.tenantId = "";
+  createForm.amountUsd = null;
+  createForm.accountName = "";
+  createForm.bankName = "";
+  createForm.accountNo = "";
+  createForm.note = "";
+  createForm.paymentRef = "";
   try {
-    await platformAdminApi.reviewWithdrawal(activeRow.value.withdrawalId, { approve, note: reviewNote.value || undefined });
-    ElMessage.success(approve ? "已通过" : "已驳回");
-    reviewVisible.value = false;
-    refresh();
+    const res = await platformAdminApi.listTenants({ page: 1, size: 100, status: 1 });
+    tenantOptions.value = res.items || [];
+    createVisible.value = true;
   } catch (err) {
     const e = err as { detail?: string; message?: string };
-    ElMessage.error(e?.detail || e?.message || "操作失败");
-  } finally {
-    reviewSubmitting.value = false;
+    ElMessage.error(e?.detail || e?.message || "租户列表加载失败");
   }
 }
 
-function openSettle(row: WithdrawalItem) {
-  activeRow.value = row;
-  paymentRef.value = "";
-  settleVisible.value = true;
-}
-
-async function submitSettle() {
-  if (!activeRow.value) return;
-  if (!paymentRef.value.trim()) {
-    ElMessage.warning("请输入打款凭证号");
+async function submitCreate() {
+  const amountMicroUsd = Math.round(Number(createForm.amountUsd ?? 0) * 1_000_000);
+  if (!createForm.tenantId || amountMicroUsd <= 0) {
+    ElMessage.warning("请选择租户并填写大于 0 的扣减金额");
     return;
   }
-  settleSubmitting.value = true;
+  createSubmitting.value = true;
   try {
-    await platformAdminApi.settleWithdrawal(activeRow.value.withdrawalId, { paymentRef: paymentRef.value.trim() });
-    ElMessage.success("已核销");
-    settleVisible.value = false;
+    await platformAdminApi.createWithdrawal({
+      tenantId: createForm.tenantId,
+      amountMicroUsd,
+      accountName: createForm.accountName.trim() || undefined,
+      bankName: createForm.bankName.trim() || undefined,
+      accountNo: createForm.accountNo.trim() || undefined,
+      note: createForm.note.trim() || undefined,
+      paymentRef: createForm.paymentRef.trim() || undefined
+    });
+    ElMessage.success("提现记录已创建，租户额度已扣减");
+    createVisible.value = false;
     refresh();
   } catch (err) {
     const e = err as { detail?: string; message?: string };
-    ElMessage.error(e?.detail || e?.message || "核销失败");
+    ElMessage.error(e?.detail || e?.message || "创建提现记录失败");
   } finally {
-    settleSubmitting.value = false;
+    createSubmitting.value = false;
   }
 }
 </script>
@@ -292,24 +275,8 @@ async function submitSettle() {
   color: var(--ds-faint);
 }
 
-.review-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 14px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--ds-panel-muted);
-  font-size: 13px;
-}
-
-.review-row {
-  display: flex;
-  justify-content: space-between;
-  color: var(--ds-muted);
-}
-
-.review-row strong {
-  color: var(--ds-ink);
-}
+.create-form { margin-top: 18px; }
+.create-form__full { width: 100%; }
+.create-form__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .create-form__grid { grid-template-columns: 1fr; gap: 0; } }
 </style>

@@ -2,7 +2,7 @@
   充值记录 — 查看历史充值明细。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        el-table → DsTable(:frame="false",单号 mono、
-       金额/积分右对齐),el-tag → DsTag;DsPagination 始终渲染(去掉 total>0 才显示)。
+       支付/到账金额右对齐),el-tag → DsTag;DsPagination 始终渲染(去掉 total>0 才显示)。
        业务逻辑与请求参数保持不变。
 -->
 <template>
@@ -21,10 +21,10 @@
         :loading="loading"
       >
         <template #cell-paidAmount="{ row }">
-          <span class="recharge-amount">¥ {{ ((row.paidAmount || 0) / 100).toFixed(2) }}</span>
+          <span class="recharge-amount">${{ ((row.paidAmountMinor || 0) / 100).toFixed(2) }}</span>
         </template>
-        <template #cell-creditAmount="{ row }">
-          <span class="recharge-credits">+{{ (row.creditAmount || 0).toLocaleString() }}</span>
+        <template #cell-amount="{ row }">
+          <span class="recharge-credits">+${{ (row.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
         </template>
         <template #cell-status="{ row }">
           <DsTag :tone="rechargeStatusTone(row.status)">
@@ -59,8 +59,8 @@ import type { RechargeRecordItem } from "@/api/types/platformCustomer";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "充值单号", width: 200, mono: true },
-  { key: "paidAmount", title: "实付金额（元）", width: 150, align: "right" },
-  { key: "creditAmount", title: "到账积分", width: 160, align: "right" },
+  { key: "paidAmount", title: "实付金额（USD）", width: 150, align: "right" },
+  { key: "amount", title: "到账金额（USD）", width: 160, align: "right" },
   { key: "status", title: "状态", width: 110 },
   { key: "note", title: "备注" },
   { key: "createdTime", title: "充值时间", width: 180 }

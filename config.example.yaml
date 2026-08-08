@@ -39,18 +39,3 @@ legal:
 
 log:
   level: debug
-
-scheduler:
-  pre_auth_timeout_minutes: 30
-
-billing:
-  requested_tenant_micro: 300000
-  requested_user_micro: 300000
-  lease_ttl: 5m
-  lease_grace: 15m
-  window_max_age: 3m
-  renew_lead: 90s
-  admission_headroom: 30s
-  worker_interval: 5s
-  dispatch_lease: 30s
-  pick_limit: 32

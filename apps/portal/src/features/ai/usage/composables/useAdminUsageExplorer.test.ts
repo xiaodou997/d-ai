@@ -107,8 +107,8 @@ describe("useAdminUsageExplorer", () => {
         total_tokens: 150,
         token_units: 150,
         image_units: 3,
-        catalog_base_credits: 1,
-        tenant_payable_credits: 2
+        catalog_base_usd: 1,
+        tenant_payable_usd: 2
       }],
       total: 1
     });
@@ -179,9 +179,9 @@ function usageResponse(requestId: string): UsageLogsResponse {
       success_count: 1,
       failed_count: 0,
       total_tokens: 1,
-      total_catalog_base_credits: 1,
-      total_tenant_payable_credits: 1,
-      total_user_charged_credits: 1,
+      total_catalog_base_usd: 1,
+      total_tenant_payable_usd: 1,
+      total_user_charged_usd: 1,
       avg_latency_ms: 1,
       avg_request_total_ms: 1,
       avg_first_response_byte_ms: 1

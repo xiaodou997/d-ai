@@ -10,24 +10,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"xiaodou/dai/internal/ai/billingledger"
 	"xiaodou/dai/internal/ai/serving"
 )
 
 // Gateway holds all Prometheus metrics for the AI serving pipeline.
 type Gateway struct {
-	requestsTotal            *prometheus.CounterVec
-	requestDuration          *prometheus.HistogramVec
-	tokenUsage               *prometheus.CounterVec
-	pipelineErrors           *prometheus.CounterVec
-	circuitBreaker           *prometheus.GaugeVec
-	billingAdmissionFailures *prometheus.CounterVec
-	billingLeaseOperations   *prometheus.CounterVec
-	billingSettlements       *prometheus.CounterVec
-	billingWindows           *prometheus.GaugeVec
-	billingOutboxPending     prometheus.Gauge
-	billingOutboxOldest      prometheus.Gauge
-	billingReconciliations   prometheus.Gauge
+	requestsTotal   *prometheus.CounterVec
+	requestDuration *prometheus.HistogramVec
+	tokenUsage      *prometheus.CounterVec
+	pipelineErrors  *prometheus.CounterVec
+	circuitBreaker  *prometheus.GaugeVec
 }
 
 var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000}
@@ -60,58 +52,7 @@ func NewGateway() *Gateway {
 			Name: "dai_ai_circuit_breaker_open",
 			Help: "1 if the circuit breaker is open for a deployment, 0 otherwise.",
 		}, []string{"deployment_id"}),
-		billingAdmissionFailures: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "ai_billing_admission_failures_total",
-			Help: "Billing admissions rejected before any upstream attempt.",
-		}, []string{"reason"}),
-		billingLeaseOperations: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "ai_billing_lease_operations_total",
-			Help: "Credit lease acquire and renew outcomes.",
-		}, []string{"operation", "result"}),
-		billingSettlements: promauto.NewCounterVec(prometheus.CounterOpts{
-			Name: "ai_billing_settlement_dispatch_total",
-			Help: "Durable settlement outbox dispatch outcomes.",
-		}, []string{"result"}),
-		billingWindows: promauto.NewGaugeVec(prometheus.GaugeOpts{
-			Name: "ai_billing_windows",
-			Help: "Current durable billing windows by state.",
-		}, []string{"state"}),
-		billingOutboxPending: promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "ai_billing_outbox_pending",
-			Help: "Settlement outbox records pending delivery.",
-		}),
-		billingOutboxOldest: promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "ai_billing_outbox_oldest_age_seconds",
-			Help: "Age in seconds of the oldest undelivered settlement.",
-		}),
-		billingReconciliations: promauto.NewGauge(prometheus.GaugeOpts{
-			Name: "ai_billing_reconciling_admissions",
-			Help: "Request admissions awaiting operator reconciliation.",
-		}),
 	}
-}
-
-func (g *Gateway) BillingAdmissionFailure(reason string) {
-	g.billingAdmissionFailures.WithLabelValues(reason).Inc()
-}
-
-func (g *Gateway) BillingLeaseOperation(operation, result string) {
-	g.billingLeaseOperations.WithLabelValues(operation, result).Inc()
-}
-
-func (g *Gateway) BillingSettlementDispatch(result string) {
-	g.billingSettlements.WithLabelValues(result).Inc()
-}
-
-func (g *Gateway) SetBillingSnapshot(snapshot billingledger.BillingSnapshot) {
-	g.billingWindows.WithLabelValues("opening").Set(float64(snapshot.OpeningWindows))
-	g.billingWindows.WithLabelValues("active").Set(float64(snapshot.ActiveWindows))
-	g.billingWindows.WithLabelValues("draining").Set(float64(snapshot.DrainingWindows))
-	g.billingWindows.WithLabelValues("reconciling").Set(float64(snapshot.ReconcilingWindows))
-	g.billingWindows.WithLabelValues("settlement_pending").Set(float64(snapshot.SettlementPending))
-	g.billingOutboxPending.Set(float64(snapshot.PendingOutbox))
-	g.billingOutboxOldest.Set(snapshot.OldestOutboxAgeSeconds)
-	g.billingReconciliations.Set(float64(snapshot.ReconcilingAdmissions))
 }
 
 // Handler returns the Prometheus HTTP handler for /metrics.

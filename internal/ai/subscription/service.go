@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
-	"xiaodou/dai/internal/ai/domain"
 )
 
 const defaultMaxQueue = 2
@@ -207,8 +205,8 @@ func (s *Service) Purchase(ctx context.Context, p PurchaseParams) (*Order, *Subs
 			return order, nil, ErrOrderProcessing
 		}
 	}
-	priceMicro, ok := domain.CreditsToMicro(order.PriceCredits)
-	if !ok {
+	priceMicro := order.PriceMicroUSD
+	if priceMicro <= 0 {
 		return nil, nil, ErrPlanQuotaInvalid
 	}
 	if _, err := s.repo.MarkOrderDeducting(ctx, order.ID); err != nil {
@@ -314,7 +312,7 @@ func (s *Service) CreatePlan(ctx context.Context, p CreatePlanParams) (*Plan, er
 	if err := ValidatePurchasePolicy(p.PurchasePolicy); err != nil {
 		return nil, err
 	}
-	if err := validatePlanShape(p.DurationDays, p.PriceCredits, p.TotalLimitMicro, p.Window5hLimitMicro, p.Window7dLimitMicro); err != nil {
+	if err := validatePlanShape(p.DurationDays, p.PriceMicroUSD, p.TotalLimitMicro, p.Window5hLimitMicro, p.Window7dLimitMicro); err != nil {
 		return nil, err
 	}
 	if p.SaleLimit != nil && *p.SaleLimit < 1 {
@@ -341,7 +339,7 @@ func (s *Service) UpdatePlan(ctx context.Context, p UpdatePlanParams) (bool, err
 		}
 		p.PurchasePolicy = &policy
 	}
-	if err := validatePlanShape(p.DurationDays, p.PriceCredits, p.TotalLimitMicro, p.Window5hLimitMicro, p.Window7dLimitMicro); err != nil {
+	if err := validatePlanShape(p.DurationDays, p.PriceMicroUSD, p.TotalLimitMicro, p.Window5hLimitMicro, p.Window7dLimitMicro); err != nil {
 		return false, err
 	}
 	if p.SaleLimit != nil && *p.SaleLimit < 1 {
@@ -471,7 +469,7 @@ func validatePlanShape(durationDays int32, price, totalLimit int64, w5h, w7d *in
 	default:
 		return ErrInvalidDuration
 	}
-	if price <= 0 || price > domain.MaxWholeCredits || totalLimit <= 0 {
+	if price <= 0 || totalLimit <= 0 {
 		return ErrPlanQuotaInvalid
 	}
 	if (w5h != nil && (*w5h <= 0 || *w5h > totalLimit)) || (w7d != nil && (*w7d <= 0 || *w7d > totalLimit)) {

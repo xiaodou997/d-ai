@@ -4,13 +4,13 @@ import "testing"
 
 func TestNormalizePackagesDoesNotRepairInvalidPaymentConfig(t *testing.T) {
 	packages := normalizePackages([]TopupPackage{
-		{ID: " ", Name: " ", Amount: 1, Credits: 0, Enabled: true},
+		{ID: " ", Name: " ", PaymentAmountMicroUSD: 1, GiftAmountMicroUSD: -1, Enabled: true},
 	})
 
 	if len(packages) != 1 {
 		t.Fatalf("unexpected package count: %d", len(packages))
 	}
-	if packages[0].ID != "" || packages[0].Name != "" || packages[0].Amount != 1 || packages[0].Credits != 0 {
+	if packages[0].ID != "" || packages[0].Name != "" || packages[0].PaymentAmountMicroUSD != 1 || packages[0].GiftAmountMicroUSD != -1 {
 		t.Fatalf("normalizePackages repaired invalid config: %+v", packages[0])
 	}
 	if err := validatePackages(packages); err == nil {
@@ -20,14 +20,14 @@ func TestNormalizePackagesDoesNotRepairInvalidPaymentConfig(t *testing.T) {
 
 func TestValidateSettingsRejectsOutOfRangeValues(t *testing.T) {
 	global := DefaultGlobalSettings()
-	global.CreditsPerCNY = MaxCreditsPerCNY + 1
+	global.TenantCustomTopupFeeBp = 10_001
 	if err := validateGlobalSettings(global); err == nil {
-		t.Fatal("expected invalid global credits per CNY to be rejected")
+		t.Fatal("expected invalid fee rate to be rejected")
 	}
 
 	tenant := DefaultTenantSettings(DefaultGlobalSettings())
-	tenant.UserTopupPackages[0].Credits = MaxPackageCredits + 1
+	tenant.UserTopupPackages[0].GiftAmountMicroUSD = MaxPackageAmountMicroUSD
 	if err := validateTenantSettings(tenant); err == nil {
-		t.Fatal("expected invalid package credits to be rejected")
+		t.Fatal("expected overflowing package amount to be rejected")
 	}
 }

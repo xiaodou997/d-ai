@@ -29,7 +29,7 @@ type tenantListItem struct {
 	Status        int     `json:"status"`
 	StatusDisplay string  `json:"statusDisplay"`
 	CreatedTime   int64   `json:"createdTime"`
-	Credits       float64 `json:"credits"`
+	BalanceUSD    float64 `json:"balanceUsd"`
 	UserCount     int64   `json:"userCount"`
 }
 
@@ -156,7 +156,7 @@ func (h *adminHandlers) listTenants(ctx context.Context, in *tenantListInput) (*
 		item := tenantListItem{
 			TenantID: row.TenantID, TenantName: row.TenantName,
 			Status: status, StatusDisplay: tenantStatusText(status),
-			Credits: row.Credits, UserCount: row.UserCount,
+			BalanceUSD: row.BalanceUSD, UserCount: row.UserCount,
 		}
 		if row.ContactPerson != nil {
 			item.ContactPerson = *row.ContactPerson
@@ -340,7 +340,7 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 	defer tx.Rollback(ctx)
 
 	if in.Body.Status == "disabled" {
-		// 停用：级联停用组织用户、终端用户、冻结租户积分包
+		// 停用：级联停用组织用户、终端用户，并停用租户额度包。
 		stmts := []string{
 			`UPDATE iam_tenants SET status = 'disabled', updated_at = $1 WHERE tenant_id = $2`,
 			`UPDATE iam_accounts SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'active'`,

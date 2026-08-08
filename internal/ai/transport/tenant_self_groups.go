@@ -36,28 +36,28 @@ type tenantSelfGroupIDInput struct {
 }
 
 type tenantGroupEffectivePriceDTO struct {
-	ModelCode                 string                           `json:"model_code" doc:"模型编码"`
-	CapabilityType            string                           `json:"capability_type" doc:"能力类型"`
-	TokenPriceTiers           []effectiveTokenPriceTierDTO     `json:"token_price_tiers" doc:"逐上下文档位的生效积分价格"`
-	ImageDefaultPriceCredits  float64                          `json:"image_default_price_credits" doc:"图片默认生效售价（积分/张）"`
-	VideoDefaultPriceCredits  float64                          `json:"video_default_price_credits" doc:"视频默认生效售价（积分/秒）"`
-	ImagePrices               []tenantResolutionCreditPriceDTO `json:"image_prices,omitempty" doc:"图片尺寸档位覆盖生效售价（积分/张）"`
-	VideoPrices               []tenantResolutionCreditPriceDTO `json:"video_prices,omitempty" doc:"视频规格覆盖生效售价（积分/秒）"`
-	AudioTTSPer1MCharsCredits float64                          `json:"audio_tts_per_1m_chars_credits" doc:"语音合成每 100 万字符的生效售价（积分）"`
-	AudioSTTPerMinuteCredits  float64                          `json:"audio_stt_per_minute_credits" doc:"语音识别每分钟的生效售价（积分）"`
+	ModelCode             string                        `json:"model_code" doc:"模型编码"`
+	CapabilityType        string                        `json:"capability_type" doc:"能力类型"`
+	TokenPriceTiers       []effectiveTokenPriceTierDTO  `json:"token_price_tiers" doc:"逐上下文档位的生效 USD 价格"`
+	ImageDefaultPriceUSD  float64                       `json:"image_default_price_usd" doc:"图片默认生效售价（USD/张）"`
+	VideoDefaultPriceUSD  float64                       `json:"video_default_price_usd" doc:"视频默认生效售价（USD/秒）"`
+	ImagePrices           []tenantResolutionUSDPriceDTO `json:"image_prices,omitempty" doc:"图片尺寸档位覆盖生效售价（USD/张）"`
+	VideoPrices           []tenantResolutionUSDPriceDTO `json:"video_prices,omitempty" doc:"视频规格覆盖生效售价（USD/秒）"`
+	AudioTTSPer1MCharsUSD float64                       `json:"audio_tts_per_1m_chars_usd" doc:"语音合成每 100 万字符的生效售价（USD）"`
+	AudioSTTPerMinuteUSD  float64                       `json:"audio_stt_per_minute_usd" doc:"语音识别每分钟的生效售价（USD）"`
 }
 
 type effectiveTokenPriceTierDTO struct {
-	UpToInputTokens        *int    `json:"up_to_input_tokens"`
-	InputPer1MCredits      float64 `json:"input_per_1m_credits"`
-	OutputPer1MCredits     float64 `json:"output_per_1m_credits"`
-	CacheWritePer1MCredits float64 `json:"cache_write_per_1m_credits"`
-	CacheReadPer1MCredits  float64 `json:"cache_read_per_1m_credits"`
+	UpToInputTokens    *int    `json:"up_to_input_tokens"`
+	InputPer1MUSD      float64 `json:"input_per_1m_usd"`
+	OutputPer1MUSD     float64 `json:"output_per_1m_usd"`
+	CacheWritePer1MUSD float64 `json:"cache_write_per_1m_usd"`
+	CacheReadPer1MUSD  float64 `json:"cache_read_per_1m_usd"`
 }
 
-type tenantResolutionCreditPriceDTO struct {
+type tenantResolutionUSDPriceDTO struct {
 	Resolution string  `json:"resolution" doc:"分辨率/规格"`
-	Price      float64 `json:"price" doc:"该规格的生效售价（积分）"`
+	Price      float64 `json:"price" doc:"该规格的生效售价（USD）"`
 }
 
 type tenantGroupEffectivePricesOutput struct {
@@ -65,7 +65,6 @@ type tenantGroupEffectivePricesOutput struct {
 		GroupID                 string                         `json:"group_id"`
 		RetailPriceBookID       string                         `json:"retail_price_book_id"`
 		EffectiveUserMultiplier float64                        `json:"effective_user_multiplier"`
-		CreditsPerUSD           float64                        `json:"credits_per_usd"`
 		Items                   []tenantGroupEffectivePriceDTO `json:"items"`
 		Total                   int                            `json:"total"`
 	}
@@ -181,23 +180,23 @@ func effectiveTokenPriceTiers(tiers []domain.TokenPriceTier, factor float64) []e
 	out := make([]effectiveTokenPriceTierDTO, 0, len(tiers))
 	for _, tier := range tiers {
 		out = append(out, effectiveTokenPriceTierDTO{
-			UpToInputTokens:        tier.UpToInputTokens,
-			InputPer1MCredits:      tier.InputPerToken * pricebookPerMillion * factor,
-			OutputPer1MCredits:     tier.OutputPerToken * pricebookPerMillion * factor,
-			CacheWritePer1MCredits: tier.CacheWritePerToken * pricebookPerMillion * factor,
-			CacheReadPer1MCredits:  tier.CacheReadPerToken * pricebookPerMillion * factor,
+			UpToInputTokens:    tier.UpToInputTokens,
+			InputPer1MUSD:      tier.InputPerToken * pricebookPerMillion * factor,
+			OutputPer1MUSD:     tier.OutputPerToken * pricebookPerMillion * factor,
+			CacheWritePer1MUSD: tier.CacheWritePerToken * pricebookPerMillion * factor,
+			CacheReadPer1MUSD:  tier.CacheReadPerToken * pricebookPerMillion * factor,
 		})
 	}
 	return out
 }
 
-func resolutionCreditPrices(prices []domain.ResolutionUSDPrice, factor float64) []tenantResolutionCreditPriceDTO {
+func resolutionUSDPrices(prices []domain.ResolutionUSDPrice, factor float64) []tenantResolutionUSDPriceDTO {
 	if len(prices) == 0 {
 		return nil
 	}
-	out := make([]tenantResolutionCreditPriceDTO, 0, len(prices))
+	out := make([]tenantResolutionUSDPriceDTO, 0, len(prices))
 	for _, price := range prices {
-		out = append(out, tenantResolutionCreditPriceDTO{
+		out = append(out, tenantResolutionUSDPriceDTO{
 			Resolution: price.Resolution,
 			Price:      price.Price * factor,
 		})

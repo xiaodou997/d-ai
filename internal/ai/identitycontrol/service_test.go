@@ -75,7 +75,7 @@ func TestCreate_EmptyNameIsValidationError(t *testing.T) {
 func TestCreate_NegativeCreditsIsValidationError(t *testing.T) {
 	neg := int64(-1)
 	svc := New(&mockRepo{}, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
-	_, err := svc.Create(context.Background(), CreateInput{TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitCredits: &neg})
+	_, err := svc.Create(context.Background(), CreateInput{TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitMicroUSD: &neg})
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("want ErrValidation, got %v", err)
 	}
@@ -86,7 +86,7 @@ func TestCreate_DefaultsStatusAndConvertsCredits(t *testing.T) {
 	svc := New(repo, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
 	limit := int64(5)
 	out, err := svc.Create(context.Background(), CreateInput{
-		OwnerScope: identity.ScopeTenant, TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitCredits: &limit,
+		OwnerScope: identity.ScopeTenant, TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitMicroUSD: &limit,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -97,8 +97,8 @@ func TestCreate_DefaultsStatusAndConvertsCredits(t *testing.T) {
 	if repo.createParams.GroupID != "g1" {
 		t.Fatalf("group id = %q, want g1", repo.createParams.GroupID)
 	}
-	if repo.createParams.QuotaLimitMicro == nil || *repo.createParams.QuotaLimitMicro != 5*domain.MicroCreditsPerCredit {
-		t.Fatalf("credits->micro conversion wrong: %v", repo.createParams.QuotaLimitMicro)
+	if repo.createParams.QuotaLimitMicro == nil || *repo.createParams.QuotaLimitMicro != 5 {
+		t.Fatalf("micro-USD passthrough conversion wrong: %v", repo.createParams.QuotaLimitMicro)
 	}
 	if !strings.HasPrefix(out.PlaintextKey, "sk-ai-") {
 		t.Fatalf("plaintext key missing prefix: %q", out.PlaintextKey)
@@ -108,15 +108,6 @@ func TestCreate_DefaultsStatusAndConvertsCredits(t *testing.T) {
 	}
 	if repo.createParams.KeyCiphertext == "" {
 		t.Fatalf("key ciphertext not populated")
-	}
-}
-
-func TestCreate_ExceedsMaxCreditsIsValidationError(t *testing.T) {
-	over := int64(maxCreditsPerField + 1)
-	svc := New(&mockRepo{}, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
-	_, err := svc.Create(context.Background(), CreateInput{TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitCredits: &over})
-	if !errors.Is(err, domain.ErrValidation) {
-		t.Fatalf("want ErrValidation, got %v", err)
 	}
 }
 
@@ -140,11 +131,11 @@ func TestUpdate_ConvertsCredits(t *testing.T) {
 	repo := &mockRepo{}
 	svc := New(repo, nil, func(v string) (string, error) { return "enc:" + v, nil }, func(v string) (string, error) { return v, nil })
 	limit := int64(3)
-	if _, err := svc.Update(context.Background(), UpdateInput{ID: "k1", TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitCredits: &limit}); err != nil {
+	if _, err := svc.Update(context.Background(), UpdateInput{ID: "k1", TenantID: "t1", GroupID: "g1", Name: "k", QuotaLimitMicroUSD: &limit}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if repo.updateParams.QuotaLimitMicro == nil || *repo.updateParams.QuotaLimitMicro != 3*domain.MicroCreditsPerCredit {
-		t.Fatalf("credits->micro conversion wrong: %v", repo.updateParams.QuotaLimitMicro)
+	if repo.updateParams.QuotaLimitMicro == nil || *repo.updateParams.QuotaLimitMicro != 3 {
+		t.Fatalf("micro-USD passthrough conversion wrong: %v", repo.updateParams.QuotaLimitMicro)
 	}
 }
 

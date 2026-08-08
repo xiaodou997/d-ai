@@ -56,11 +56,11 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 	          VALUES ($1, 'sub-test', 'active', 1000000, 0)`, tenantID)
 	mustExec(`INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, overdraft_limit, current_overdraft)
 	          VALUES ($1, $2, $3, 'x', 4, 1000000, 0)`, userID, tenantID, "u_user-"+suffix)
-	// 用户积分包仅 50 积分
+	// 用户额度包仅 50 micro-USD 额度
 	mustExec(`INSERT INTO bill_credit_packages (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
 	          VALUES ($1, 'user', $2, $3, 50, 50, 'ADMIN_RECHARGE', 'available')`, "pkg-"+suffix, tenantID, userID)
 
-	svc := NewDeductionService(pool, nil, zap.NewNop())
+	svc := NewDeductionService(pool, zap.NewNop())
 
 	// ---- 1) 不足额 + DisallowOverdraft ⇒ 整单失败，不透支不记账 ----
 	_, err = svc.Consume(ConsumeParams{

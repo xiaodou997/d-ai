@@ -30,7 +30,7 @@ export const platformCustomerApi = {
       baseUrl
     });
   },
-  // 我的余额（含积分包明细）
+  // 我的 USD 余额（含有效期批次明细）
   getBalance(detail = true) {
     return platform()<AccountBalance>({
       method: "GET",
@@ -41,7 +41,7 @@ export const platformCustomerApi = {
     });
   },
 
-  // 我的积分流水（分页）
+  // 我的余额流水（分页）
   getTransactions(params: { page?: number; size?: number }) {
     return platform()<Page<AccountTransactionItem>>({
       method: "GET",
@@ -74,7 +74,7 @@ export const platformCustomerApi = {
     });
   },
 
-  // 在线充值配置（汇率/限额，不含费率）
+  // USD 在线充值配置
   getTopupConfig() {
     return platform()<TopupConfig>({
       method: "GET",
@@ -85,7 +85,7 @@ export const platformCustomerApi = {
   },
 
   // 发起在线充值（微信 Native 扫码）
-  createTopupOrder(body: { amount?: number; packageId?: string }) {
+  createTopupOrder(body: { amountMicroUsd?: number; packageId?: string }) {
     return platform()<TopupOrderCreated>({
       method: "POST",
       path: "/api/v1/payments/topup-orders",

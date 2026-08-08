@@ -3,8 +3,7 @@ package domain
 import "time"
 
 // APIKey is the management-domain representation of an API key. Quota fields
-// are micro-credits (the internal precision unit, see MicroCreditsPerCredit);
-// the HTTP layer converts to/from display credits.
+// are micro-USD; the HTTP layer converts them to/from display USD.
 type APIKey struct {
 	ID              string
 	OwnerType       OwnerType

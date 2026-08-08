@@ -9,9 +9,9 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"xiaodou/dai/internal/ai/credits"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/moneyfmt"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -44,16 +44,16 @@ type dailyTrendInput struct {
 }
 
 type usageStatsDTO struct {
-	TotalRequests             int64   `json:"total_requests" doc:"请求总数"`
-	SuccessCount              int64   `json:"success_count" doc:"成功请求数"`
-	FailedCount               int64   `json:"failed_count" doc:"失败请求数"`
-	TotalTokens               int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalCatalogBaseCredits   float64 `json:"total_catalog_base_credits" doc:"目录基准价积分（倍率1，谁都不付这个数）"`
-	TotalTenantPayableCredits float64 `json:"total_tenant_payable_credits" doc:"平台向租户应收积分"`
-	TotalUserChargedCredits   float64 `json:"total_user_charged_credits" doc:"用户实际扣款积分；租户自有 key 与订阅覆盖流量为 0"`
-	AvgLatencyMs              float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
-	AvgRequestTotalMs         float64 `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
-	AvgFirstResponseByteMs    float64 `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
+	TotalRequests          int64   `json:"total_requests" doc:"请求总数"`
+	SuccessCount           int64   `json:"success_count" doc:"成功请求数"`
+	FailedCount            int64   `json:"failed_count" doc:"失败请求数"`
+	TotalTokens            int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalCatalogBaseUSD    float64 `json:"total_catalog_base_usd" doc:"目录基准价USD 金额（倍率1，谁都不付这个数）"`
+	TotalTenantPayableUSD  float64 `json:"total_tenant_payable_usd" doc:"平台向租户应收USD 金额"`
+	TotalUserChargedUSD    float64 `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额；租户自有 key 与订阅覆盖流量为 0"`
+	AvgLatencyMs           float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
+	AvgRequestTotalMs      float64 `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
+	AvgFirstResponseByteMs float64 `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
 }
 
 type usageLogDTO struct {
@@ -98,12 +98,12 @@ type usageLogDTO struct {
 	BillableUnitType                   string   `json:"billable_unit_type" doc:"计费单位类型"`
 	BillableUnits                      int64    `json:"billable_units" doc:"计费单位数"`
 	Resolution                         *string  `json:"resolution,omitempty" doc:"图片/视频规格，例如 1024x1024 / 720p"`
-	CatalogBaseCredits                 float64  `json:"catalog_base_credits" doc:"按命中上游资源价格表计算的参考成本"`
-	TenantPayableCredits               float64  `json:"tenant_payable_credits" doc:"平台向租户应收：上游参考成本乘租户结算倍率"`
-	RetailBaseCredits                  float64  `json:"retail_base_credits" doc:"分组零售价格表原价"`
-	UserPayableCredits                 float64  `json:"user_payable_credits" doc:"用户零售应收：零售原价乘有效用户倍率"`
-	UserChargedCredits                 float64  `json:"user_charged_credits" doc:"用户实际扣款；订阅覆盖时为零"`
-	APIKeyQuotaCredits                 float64  `json:"api_key_quota_credits" doc:"API key 配额积分"`
+	CatalogBaseUSD                     float64  `json:"catalog_base_usd" doc:"按命中上游资源价格表计算的参考成本"`
+	TenantPayableUSD                   float64  `json:"tenant_payable_usd" doc:"平台向租户应收：上游参考成本乘租户结算倍率"`
+	RetailBaseUSD                      float64  `json:"retail_base_usd" doc:"分组零售价格表原价"`
+	UserPayableUSD                     float64  `json:"user_payable_usd" doc:"用户零售应收：零售原价乘有效用户倍率"`
+	UserChargedUSD                     float64  `json:"user_charged_usd" doc:"用户实际扣款；订阅覆盖时为零"`
+	APIKeyQuotaUSD                     float64  `json:"api_key_quota_usd" doc:"API key 配额USD 金额"`
 	ServiceTier                        string   `json:"service_tier" doc:"服务档位：standard/fast"`
 	BillingStatus                      string   `json:"billing_status" doc:"计费状态"`
 	RequestStatus                      string   `json:"request_status" doc:"请求状态"`
@@ -224,10 +224,10 @@ type tenantUsageLogDTO struct {
 	ReasoningTokens                    int32   `json:"reasoning_tokens" doc:"推理 token 数"`
 	ReasoningEffort                    *string `json:"reasoning_effort,omitempty" doc:"客户端请求推理强度（归一化：low/medium/high/xhigh/max）"`
 	TotalTokens                        int32   `json:"total_tokens" doc:"总 token 数"`
-	TenantPayableCredits               float64 `json:"tenant_payable_credits" doc:"租户应付平台的结算积分"`
-	RetailBaseCredits                  float64 `json:"retail_base_credits" doc:"分组零售价格表原价积分"`
-	UserPayableCredits                 float64 `json:"user_payable_credits" doc:"用户零售应收积分"`
-	UserChargedCredits                 float64 `json:"user_charged_credits" doc:"用户实际扣款积分"`
+	TenantPayableUSD                   float64 `json:"tenant_payable_usd" doc:"租户应付平台的结算USD 金额"`
+	RetailBaseUSD                      float64 `json:"retail_base_usd" doc:"分组零售价格表原价USD 金额"`
+	UserPayableUSD                     float64 `json:"user_payable_usd" doc:"用户零售应收USD 金额"`
+	UserChargedUSD                     float64 `json:"user_charged_usd" doc:"用户实际扣款USD 金额"`
 	ServiceTier                        string  `json:"service_tier" doc:"服务档位：standard/fast"`
 	BillingStatus                      string  `json:"billing_status" doc:"计费状态"`
 	BillingStatusLabel                 string  `json:"billing_status_label" doc:"计费状态展示名"`
@@ -271,7 +271,7 @@ type userUsageLogDTO struct {
 	TotalTokens                     int32   `json:"total_tokens" doc:"总 token 数"`
 	BillableUnitType                string  `json:"billable_unit_type" doc:"计费单位类型"`
 	BillableUnits                   int64   `json:"billable_units" doc:"计费单位数"`
-	UserChargedCredits              float64 `json:"user_charged_credits" doc:"用户实际扣款积分"`
+	UserChargedUSD                  float64 `json:"user_charged_usd" doc:"用户实际扣款USD 金额"`
 	ServiceTier                     string  `json:"service_tier" doc:"服务档位：standard/fast"`
 	BillingSource                   string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
 	RequestStatus                   string  `json:"request_status" doc:"请求状态"`
@@ -291,14 +291,14 @@ type userUsageLogsOutput struct {
 }
 
 type userUsageSummaryDTO struct {
-	RequestCount            int64   `json:"request_count" doc:"请求数"`
-	SuccessRequests         int64   `json:"success_requests" doc:"成功请求数"`
-	FailedRequests          int64   `json:"failed_requests" doc:"失败请求数"`
-	TotalTokens             int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalPromptTokens       int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
-	TotalCompletionTokens   int64   `json:"total_completion_tokens" doc:"输出 token 数"`
-	TotalUserChargedCredits float64 `json:"total_user_charged_credits" doc:"用户实际扣款积分"`
-	AvgLatencyMs            float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
+	RequestCount          int64   `json:"request_count" doc:"请求数"`
+	SuccessRequests       int64   `json:"success_requests" doc:"成功请求数"`
+	FailedRequests        int64   `json:"failed_requests" doc:"失败请求数"`
+	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalPromptTokens     int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
+	TotalCompletionTokens int64   `json:"total_completion_tokens" doc:"输出 token 数"`
+	TotalUserChargedUSD   float64 `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额"`
+	AvgLatencyMs          float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
 }
 
 type userUsageSummaryOutput struct {
@@ -306,17 +306,17 @@ type userUsageSummaryOutput struct {
 }
 
 type usageSummaryRowDTO struct {
-	ModelCode                 string  `json:"model_code" doc:"模型编码"`
-	RequestCount              int64   `json:"request_count" doc:"请求数"`
-	TotalPromptTokens         int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
-	TotalCompletionTokens     int64   `json:"total_completion_tokens" doc:"输出 token 数"`
-	TotalTokens               int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalCatalogBaseCredits   float64 `json:"total_catalog_base_credits" doc:"目录基准价积分（倍率1，谁都不付这个数）"`
-	TotalTenantPayableCredits float64 `json:"total_tenant_payable_credits" doc:"平台向租户应收积分"`
-	TotalRetailBaseCredits    float64 `json:"total_retail_base_credits" doc:"零售价格表原价积分"`
-	TotalUserPayableCredits   float64 `json:"total_user_payable_credits" doc:"用户零售应收积分"`
-	TotalUserChargedCredits   float64 `json:"total_user_charged_credits" doc:"用户实际扣款积分"`
-	TotalQuotaCredits         float64 `json:"total_quota_credits" doc:"API key 配额积分"`
+	ModelCode             string  `json:"model_code" doc:"模型编码"`
+	RequestCount          int64   `json:"request_count" doc:"请求数"`
+	TotalPromptTokens     int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
+	TotalCompletionTokens int64   `json:"total_completion_tokens" doc:"输出 token 数"`
+	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalCatalogBaseUSD   float64 `json:"total_catalog_base_usd" doc:"目录基准价USD 金额（倍率1，谁都不付这个数）"`
+	TotalTenantPayableUSD float64 `json:"total_tenant_payable_usd" doc:"平台向租户应收USD 金额"`
+	TotalRetailBaseUSD    float64 `json:"total_retail_base_usd" doc:"零售价格表原价USD 金额"`
+	TotalUserPayableUSD   float64 `json:"total_user_payable_usd" doc:"用户零售应收USD 金额"`
+	TotalUserChargedUSD   float64 `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额"`
+	TotalQuotaUSD         float64 `json:"total_quota_usd" doc:"API key 配额USD 金额"`
 }
 
 type usageSummaryOutput struct {
@@ -327,14 +327,14 @@ type usageSummaryOutput struct {
 }
 
 type usageUnitSummaryRowDTO struct {
-	BillableUnitType          string  `json:"billable_unit_type" doc:"计费单位类型"`
-	RequestCount              int64   `json:"request_count" doc:"请求数"`
-	TotalBillableUnits        int64   `json:"total_billable_units" doc:"总计费单位数"`
-	TotalCatalogBaseCredits   float64 `json:"total_catalog_base_credits"`
-	TotalTenantPayableCredits float64 `json:"total_tenant_payable_credits"`
-	TotalRetailBaseCredits    float64 `json:"total_retail_base_credits"`
-	TotalUserPayableCredits   float64 `json:"total_user_payable_credits"`
-	TotalUserChargedCredits   float64 `json:"total_user_charged_credits"`
+	BillableUnitType      string  `json:"billable_unit_type" doc:"计费单位类型"`
+	RequestCount          int64   `json:"request_count" doc:"请求数"`
+	TotalBillableUnits    int64   `json:"total_billable_units" doc:"总计费单位数"`
+	TotalCatalogBaseUSD   float64 `json:"total_catalog_base_usd"`
+	TotalTenantPayableUSD float64 `json:"total_tenant_payable_usd"`
+	TotalRetailBaseUSD    float64 `json:"total_retail_base_usd"`
+	TotalUserPayableUSD   float64 `json:"total_user_payable_usd"`
+	TotalUserChargedUSD   float64 `json:"total_user_charged_usd"`
 }
 
 type usageUnitSummaryOutput struct {
@@ -357,8 +357,8 @@ type usageUpstreamSummaryRowDTO struct {
 	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
 	TokenUnits            int64   `json:"token_units" doc:"按 token 计费的计费单位合计"`
 	ImageUnits            int64   `json:"image_units" doc:"生成图片张数合计"`
-	CatalogBaseCredits    float64 `json:"catalog_base_credits" doc:"按上游资源价格表计算的参考费用"`
-	TenantPayableCredits  float64 `json:"tenant_payable_credits" doc:"平台向租户结算的应收金额"`
+	CatalogBaseUSD        float64 `json:"catalog_base_usd" doc:"按上游资源价格表计算的参考费用"`
+	TenantPayableUSD      float64 `json:"tenant_payable_usd" doc:"平台向租户结算的应收金额"`
 }
 
 type usageUpstreamSummaryOutput struct {
@@ -380,14 +380,14 @@ type usageUserRankingInput struct {
 }
 
 type usageUserRankingRowDTO struct {
-	TenantID                string  `json:"tenant_id" doc:"租户 ID"`
-	UserID                  string  `json:"user_id" doc:"用户 ID"`
-	RequestCount            int64   `json:"request_count" doc:"请求数"`
-	SuccessCount            int64   `json:"success_count" doc:"成功请求数"`
-	FailedCount             int64   `json:"failed_count" doc:"失败请求数"`
-	TotalTokens             int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalUserChargedCredits float64 `json:"total_user_charged_credits" doc:"用户实际扣款积分"`
-	LastRequestedAt         *int64  `json:"last_requested_at,omitempty" doc:"最近请求时间，Unix 毫秒"`
+	TenantID            string  `json:"tenant_id" doc:"租户 ID"`
+	UserID              string  `json:"user_id" doc:"用户 ID"`
+	RequestCount        int64   `json:"request_count" doc:"请求数"`
+	SuccessCount        int64   `json:"success_count" doc:"成功请求数"`
+	FailedCount         int64   `json:"failed_count" doc:"失败请求数"`
+	TotalTokens         int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalUserChargedUSD float64 `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额"`
+	LastRequestedAt     *int64  `json:"last_requested_at,omitempty" doc:"最近请求时间，Unix 毫秒"`
 }
 
 type usageUserRankingOutput struct {
@@ -406,11 +406,11 @@ type dailyTrendRowDTO struct {
 	TotalTokens            int64   `json:"total_tokens" doc:"总 token 数"`
 	PromptTokens           int64   `json:"prompt_tokens" doc:"输入 token 数"`
 	CompletionTokens       int64   `json:"completion_tokens" doc:"输出 token 数"`
-	CatalogBaseCredits     float64 `json:"catalog_base_credits"`
-	TenantPayableCredits   float64 `json:"tenant_payable_credits"`
-	RetailBaseCredits      float64 `json:"retail_base_credits"`
-	UserPayableCredits     float64 `json:"user_payable_credits"`
-	UserChargedCredits     float64 `json:"user_charged_credits"`
+	CatalogBaseUSD         float64 `json:"catalog_base_usd"`
+	TenantPayableUSD       float64 `json:"tenant_payable_usd"`
+	RetailBaseUSD          float64 `json:"retail_base_usd"`
+	UserPayableUSD         float64 `json:"user_payable_usd"`
+	UserChargedUSD         float64 `json:"user_charged_usd"`
 	AvgLatencyMs           int64   `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
 	AvgRequestTotalMs      int64   `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
 	AvgFirstResponseByteMs int64   `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
@@ -594,7 +594,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		Method:      http.MethodGet,
 		Path:        "/api/v1/usage-ranking/users",
 		Summary:     "用量用户排行",
-		Description: "按用户计费积分降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。",
+		Description: "按用户计费USD 金额降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageUserRankingInput) (*usageUserRankingOutput, error) {
 		if d.UsageSvc == nil {
@@ -706,16 +706,16 @@ func parseOptionalRFC3339(value string, field string) (*time.Time, error) {
 
 func usageStatsToDTO(stats domain.UsageStats) usageStatsDTO {
 	return usageStatsDTO{
-		TotalRequests:             stats.TotalRequests,
-		SuccessCount:              stats.SuccessCount,
-		FailedCount:               stats.FailedCount,
-		TotalTokens:               stats.TotalTokens,
-		TotalCatalogBaseCredits:   credits.MicroToCredits(stats.TotalCatalogBaseMicro),
-		TotalTenantPayableCredits: credits.MicroToCredits(stats.TotalTenantPayableMicro),
-		TotalUserChargedCredits:   credits.MicroToCredits(stats.TotalUserChargedMicro),
-		AvgLatencyMs:              stats.AvgLatencyMs,
-		AvgRequestTotalMs:         stats.AvgRequestTotalMs,
-		AvgFirstResponseByteMs:    stats.AvgFirstResponseByteMs,
+		TotalRequests:          stats.TotalRequests,
+		SuccessCount:           stats.SuccessCount,
+		FailedCount:            stats.FailedCount,
+		TotalTokens:            stats.TotalTokens,
+		TotalCatalogBaseUSD:    moneyfmt.MicroToUSD(stats.TotalCatalogBaseMicro),
+		TotalTenantPayableUSD:  moneyfmt.MicroToUSD(stats.TotalTenantPayableMicro),
+		TotalUserChargedUSD:    moneyfmt.MicroToUSD(stats.TotalUserChargedMicro),
+		AvgLatencyMs:           stats.AvgLatencyMs,
+		AvgRequestTotalMs:      stats.AvgRequestTotalMs,
+		AvgFirstResponseByteMs: stats.AvgFirstResponseByteMs,
 	}
 }
 
@@ -762,12 +762,12 @@ func usageLogToDTO(log domain.UsageLog) usageLogDTO {
 		BillableUnitType:                   log.BillableUnitType,
 		BillableUnits:                      log.BillableUnits,
 		Resolution:                         stringPtrOrNil(log.Resolution),
-		CatalogBaseCredits:                 credits.MicroToCredits(log.CatalogBaseMicro),
-		TenantPayableCredits:               credits.MicroToCredits(log.TenantPayableMicro),
-		RetailBaseCredits:                  credits.MicroToCredits(log.RetailBaseMicro),
-		UserPayableCredits:                 credits.MicroToCredits(log.UserPayableMicro),
-		UserChargedCredits:                 credits.MicroToCredits(log.UserChargedMicro),
-		APIKeyQuotaCredits:                 credits.MicroToCredits(log.APIKeyQuotaCostMicro),
+		CatalogBaseUSD:                     moneyfmt.MicroToUSD(log.CatalogBaseMicro),
+		TenantPayableUSD:                   moneyfmt.MicroToUSD(log.TenantPayableMicro),
+		RetailBaseUSD:                      moneyfmt.MicroToUSD(log.RetailBaseMicro),
+		UserPayableUSD:                     moneyfmt.MicroToUSD(log.UserPayableMicro),
+		UserChargedUSD:                     moneyfmt.MicroToUSD(log.UserChargedMicro),
+		APIKeyQuotaUSD:                     moneyfmt.MicroToUSD(log.APIKeyQuotaCostMicro),
 		ServiceTier:                        log.ServiceTier,
 		BillingStatus:                      log.BillingStatus,
 		RequestStatus:                      log.RequestStatus,
@@ -897,10 +897,10 @@ func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 		ReasoningTokens:                    log.ReasoningTokens,
 		ReasoningEffort:                    stringPtrOrNil(log.ReasoningEffort),
 		TotalTokens:                        log.TotalTokens,
-		TenantPayableCredits:               credits.MicroToCredits(log.TenantPayableMicro),
-		RetailBaseCredits:                  credits.MicroToCredits(log.RetailBaseMicro),
-		UserPayableCredits:                 credits.MicroToCredits(log.UserPayableMicro),
-		UserChargedCredits:                 credits.MicroToCredits(log.UserChargedMicro),
+		TenantPayableUSD:                   moneyfmt.MicroToUSD(log.TenantPayableMicro),
+		RetailBaseUSD:                      moneyfmt.MicroToUSD(log.RetailBaseMicro),
+		UserPayableUSD:                     moneyfmt.MicroToUSD(log.UserPayableMicro),
+		UserChargedUSD:                     moneyfmt.MicroToUSD(log.UserChargedMicro),
 		ServiceTier:                        log.ServiceTier,
 		BillingStatus:                      log.BillingStatus,
 		BillingStatusLabel:                 billingStatusLabel(log.BillingStatus),
@@ -938,7 +938,7 @@ func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow) userUsageLogDTO {
 		TotalTokens:                     row.TotalTokens,
 		BillableUnitType:                row.BillableUnitType,
 		BillableUnits:                   row.BillableUnits,
-		UserChargedCredits:              credits.MicroToCredits(row.UserCharged),
+		UserChargedUSD:                  moneyfmt.MicroToUSD(row.UserCharged),
 		ServiceTier:                     row.ServiceTier,
 		BillingSource:                   billingSourceOrDefault(row.BillingSource),
 		RequestStatus:                   row.RequestStatus,
@@ -953,14 +953,14 @@ func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow) userUsageLogDTO {
 
 func userUsageSummaryToDTO(summary domain.UserUsageSummary) userUsageSummaryDTO {
 	return userUsageSummaryDTO{
-		RequestCount:            summary.RequestCount,
-		SuccessRequests:         summary.SuccessRequests,
-		FailedRequests:          summary.FailedRequests,
-		TotalTokens:             summary.TotalTokens,
-		TotalPromptTokens:       summary.TotalPromptTokens,
-		TotalCompletionTokens:   summary.TotalCompletionTokens,
-		TotalUserChargedCredits: credits.MicroToCredits(summary.TotalUserChargedMicro),
-		AvgLatencyMs:            summary.AvgLatencyMs,
+		RequestCount:          summary.RequestCount,
+		SuccessRequests:       summary.SuccessRequests,
+		FailedRequests:        summary.FailedRequests,
+		TotalTokens:           summary.TotalTokens,
+		TotalPromptTokens:     summary.TotalPromptTokens,
+		TotalCompletionTokens: summary.TotalCompletionTokens,
+		TotalUserChargedUSD:   moneyfmt.MicroToUSD(summary.TotalUserChargedMicro),
+		AvgLatencyMs:          summary.AvgLatencyMs,
 	}
 }
 
@@ -1008,11 +1008,11 @@ func dailyTrendRowToDTO(row domain.DailyTrendRow) dailyTrendRowDTO {
 		TotalTokens:            row.TotalTokens,
 		PromptTokens:           row.PromptTokens,
 		CompletionTokens:       row.CompletionTokens,
-		CatalogBaseCredits:     credits.MicroToCredits(row.CatalogBaseMicro),
-		TenantPayableCredits:   credits.MicroToCredits(row.TenantPayableMicro),
-		RetailBaseCredits:      credits.MicroToCredits(row.RetailBaseMicro),
-		UserPayableCredits:     credits.MicroToCredits(row.UserPayableMicro),
-		UserChargedCredits:     credits.MicroToCredits(row.UserChargedMicro),
+		CatalogBaseUSD:         moneyfmt.MicroToUSD(row.CatalogBaseMicro),
+		TenantPayableUSD:       moneyfmt.MicroToUSD(row.TenantPayableMicro),
+		RetailBaseUSD:          moneyfmt.MicroToUSD(row.RetailBaseMicro),
+		UserPayableUSD:         moneyfmt.MicroToUSD(row.UserPayableMicro),
+		UserChargedUSD:         moneyfmt.MicroToUSD(row.UserChargedMicro),
 		AvgLatencyMs:           row.AvgLatencyMs,
 		AvgRequestTotalMs:      row.AvgRequestTotalMs,
 		AvgFirstResponseByteMs: row.AvgFirstResponseByteMs,
@@ -1021,43 +1021,43 @@ func dailyTrendRowToDTO(row domain.DailyTrendRow) dailyTrendRowDTO {
 
 func usageSummaryRowToDTO(row domain.UsageSummaryRow) usageSummaryRowDTO {
 	return usageSummaryRowDTO{
-		ModelCode:                 row.ModelCode,
-		RequestCount:              row.RequestCount,
-		TotalPromptTokens:         row.TotalPromptTokens,
-		TotalCompletionTokens:     row.TotalCompletionTokens,
-		TotalTokens:               row.TotalTokens,
-		TotalCatalogBaseCredits:   credits.MicroToCredits(row.TotalCatalogBaseMicro),
-		TotalTenantPayableCredits: credits.MicroToCredits(row.TotalTenantPayableMicro),
-		TotalRetailBaseCredits:    credits.MicroToCredits(row.TotalRetailBaseMicro),
-		TotalUserPayableCredits:   credits.MicroToCredits(row.TotalUserPayableMicro),
-		TotalUserChargedCredits:   credits.MicroToCredits(row.TotalUserChargedMicro),
-		TotalQuotaCredits:         credits.MicroToCredits(row.TotalQuotaCostMicro),
+		ModelCode:             row.ModelCode,
+		RequestCount:          row.RequestCount,
+		TotalPromptTokens:     row.TotalPromptTokens,
+		TotalCompletionTokens: row.TotalCompletionTokens,
+		TotalTokens:           row.TotalTokens,
+		TotalCatalogBaseUSD:   moneyfmt.MicroToUSD(row.TotalCatalogBaseMicro),
+		TotalTenantPayableUSD: moneyfmt.MicroToUSD(row.TotalTenantPayableMicro),
+		TotalRetailBaseUSD:    moneyfmt.MicroToUSD(row.TotalRetailBaseMicro),
+		TotalUserPayableUSD:   moneyfmt.MicroToUSD(row.TotalUserPayableMicro),
+		TotalUserChargedUSD:   moneyfmt.MicroToUSD(row.TotalUserChargedMicro),
+		TotalQuotaUSD:         moneyfmt.MicroToUSD(row.TotalQuotaCostMicro),
 	}
 }
 
 func usageUserRankingRowToDTO(row domain.UsageUserRankingRow) usageUserRankingRowDTO {
 	return usageUserRankingRowDTO{
-		TenantID:                row.TenantID,
-		UserID:                  row.UserID,
-		RequestCount:            row.RequestCount,
-		SuccessCount:            row.SuccessCount,
-		FailedCount:             row.FailedCount,
-		TotalTokens:             row.TotalTokens,
-		TotalUserChargedCredits: credits.MicroToCredits(row.TotalUserChargedMicro),
-		LastRequestedAt:         timeToMillisPtr(row.LastRequestedAt),
+		TenantID:            row.TenantID,
+		UserID:              row.UserID,
+		RequestCount:        row.RequestCount,
+		SuccessCount:        row.SuccessCount,
+		FailedCount:         row.FailedCount,
+		TotalTokens:         row.TotalTokens,
+		TotalUserChargedUSD: moneyfmt.MicroToUSD(row.TotalUserChargedMicro),
+		LastRequestedAt:     timeToMillisPtr(row.LastRequestedAt),
 	}
 }
 
 func usageUnitSummaryRowToDTO(row domain.UsageUnitSummaryRow) usageUnitSummaryRowDTO {
 	return usageUnitSummaryRowDTO{
-		BillableUnitType:          row.BillableUnitType,
-		RequestCount:              row.RequestCount,
-		TotalBillableUnits:        row.TotalBillableUnits,
-		TotalCatalogBaseCredits:   credits.MicroToCredits(row.TotalCatalogBaseMicro),
-		TotalTenantPayableCredits: credits.MicroToCredits(row.TotalTenantPayableMicro),
-		TotalRetailBaseCredits:    credits.MicroToCredits(row.TotalRetailBaseMicro),
-		TotalUserPayableCredits:   credits.MicroToCredits(row.TotalUserPayableMicro),
-		TotalUserChargedCredits:   credits.MicroToCredits(row.TotalUserChargedMicro),
+		BillableUnitType:      row.BillableUnitType,
+		RequestCount:          row.RequestCount,
+		TotalBillableUnits:    row.TotalBillableUnits,
+		TotalCatalogBaseUSD:   moneyfmt.MicroToUSD(row.TotalCatalogBaseMicro),
+		TotalTenantPayableUSD: moneyfmt.MicroToUSD(row.TotalTenantPayableMicro),
+		TotalRetailBaseUSD:    moneyfmt.MicroToUSD(row.TotalRetailBaseMicro),
+		TotalUserPayableUSD:   moneyfmt.MicroToUSD(row.TotalUserPayableMicro),
+		TotalUserChargedUSD:   moneyfmt.MicroToUSD(row.TotalUserChargedMicro),
 	}
 }
 
@@ -1075,7 +1075,7 @@ func usageUpstreamSummaryRowToDTO(row domain.UsageUpstreamSummaryRow) usageUpstr
 		TotalTokens:           row.TotalTokens,
 		TokenUnits:            row.TokenUnits,
 		ImageUnits:            row.ImageUnits,
-		CatalogBaseCredits:    credits.MicroToCredits(row.CatalogBaseMicro),
-		TenantPayableCredits:  credits.MicroToCredits(row.TenantPayableMicro),
+		CatalogBaseUSD:        moneyfmt.MicroToUSD(row.CatalogBaseMicro),
+		TenantPayableUSD:      moneyfmt.MicroToUSD(row.TenantPayableMicro),
 	}
 }

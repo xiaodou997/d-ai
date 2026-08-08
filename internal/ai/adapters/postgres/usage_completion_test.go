@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"xiaodou/dai/internal/ai/billingledger"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
@@ -49,8 +48,10 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 		requestIDs := []string{requestID, rollbackRequestID, failedSubRequestID}
 		_, _ = pool.Exec(ctx, `DELETE FROM ai_usage_rollups_hourly WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM ai_usage_logs WHERE request_id = ANY($1::text[])`, requestIDs)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_billing_request_admissions WHERE request_id = ANY($1::text[])`, requestIDs)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_billing_windows WHERE tenant_id = ANY($1::text[])`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id = ANY($1::text[])`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id = ANY($1::text[])`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id = ANY($1::text[])`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 	})
 
 	billing := domain.BillingResult{
@@ -68,11 +69,26 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 		GroupDefaultUserMultiplier: 1,
 		EffectiveUserMultiplier:    1,
 	}
-	coordinator := billingledger.New(pool, nil, billingledger.Config{}, nil)
-	logger := NewUsageLogger(pool, fixedUsageBiller{result: billing}).WithBillingCoordinator(coordinator)
+	logger := NewUsageLogger(pool, fixedUsageBiller{result: billing})
+	seedDirectBillingAccounts(t, ctx, pool, tenantID, userID, "usage")
+	seedDirectBillingAccounts(t, ctx, pool, rollbackTenantID, rollbackUserID, "rollback")
+	seedDirectBillingAccounts(t, ctx, pool, failedSubTenantID, failedSubUserID, "failed-sub")
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO bill_credit_packages
+		  (package_id, package_type, tenant_id, total_credits, remaining_credits, source, status)
+		VALUES ($1, 'tenant', $2, 700, 700, 'ADMIN_RECHARGE', 'available')
+	`, "pkg-tenant-"+suffix, tenantID); err != nil {
+		t.Fatalf("seed tenant quota package: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO bill_credit_packages
+		  (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
+		VALUES ($1, 'user', $2, $3, 900, 900, 'ADMIN_RECHARGE', 'available')
+	`, "pkg-user-"+suffix, tenantID, userID); err != nil {
+		t.Fatalf("seed user quota package: %v", err)
+	}
 
 	req := usageCompletionRequest(requestID, tenantID, userID)
-	seedBillingAdmission(t, ctx, pool, req)
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_async_tasks (
 		  task_type, tenant_id, user_id, model_code, input_payload, status, request_id
@@ -107,7 +123,6 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 	waitForUsageRollup(t, ctx, pool, tenantID)
 
 	rollbackReq := usageCompletionRequest(rollbackRequestID, rollbackTenantID, rollbackUserID)
-	seedBillingAdmission(t, ctx, pool, rollbackReq)
 	rollbackReq.Subject.AuthMethod = coreidentity.AuthMethodAPIKey
 	rollbackReq.Subject.RequestSource = coreidentity.RequestSourceAPIKey
 	rollbackReq.Subject.APIKeyID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
@@ -126,9 +141,8 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 	failedSubBilling.APIKeyQuotaCostMicro = 0
 	failedSubBilling.RetailBaseMicro = 0
 	failedSubBilling.BillableUnits = 0
-	failedSubLogger := NewUsageLogger(pool, fixedUsageBiller{result: failedSubBilling}).WithBillingCoordinator(coordinator)
+	failedSubLogger := NewUsageLogger(pool, fixedUsageBiller{result: failedSubBilling})
 	failedSubReq := usageCompletionRequest(failedSubRequestID, failedSubTenantID, failedSubUserID)
-	seedBillingAdmission(t, ctx, pool, failedSubReq)
 	failedSubReq.TokenUsage = domain.TokenUsage{}
 	failedSubReq.BillingSource = subscription.BillingSourceSubscription
 	failedSubReq.SubscriptionID = "33333333-3333-3333-3333-333333333333"
@@ -162,10 +176,7 @@ func TestPreUpstreamBillingFailureDoesNotAttributeOrChargePlannedRoute(t *testin
 	req.RequestStatus = domain.RequestFailed
 	req.HTTPStatus = 503
 	req.ErrorCode = "billing_dependency_unavailable"
-	req.FailedStep = "billing_admission"
-	req.BillingWindowID = ""
-	req.BillingLeaseID = ""
-	req.BillingAdmissionActive = false
+	req.FailedStep = "billing_guard"
 	if err := NewUsageLogger(pool, fixedUsageBiller{result: billing}).Log(ctx, req); err != nil {
 		t.Fatalf("log pre-upstream failure: %v", err)
 	}
@@ -223,42 +234,28 @@ func usageCompletionRequest(requestID, tenantID, userID string) *serving.Request
 			PromptTokens:     10,
 			CompletionTokens: 20,
 		},
-		Attempts:               []serving.AttemptRecord{{RouteID: "11111111-1111-1111-1111-111111111111"}},
-		BillingSource:          subscription.BillingSourcePayg,
-		BillingWindowID:        "bw_" + requestID,
-		BillingLeaseID:         "CL_" + requestID,
-		BillingAdmissionActive: true,
-		RequestStatus:          domain.RequestSuccess,
-		HTTPStatus:             200,
-		RequestID:              requestID,
-		StartedAt:              time.Now().Add(-time.Second),
+		Attempts:      []serving.AttemptRecord{{RouteID: "11111111-1111-1111-1111-111111111111"}},
+		BillingSource: subscription.BillingSourcePayg,
+		RequestStatus: domain.RequestSuccess,
+		HTTPStatus:    200,
+		RequestID:     requestID,
+		StartedAt:     time.Now().Add(-time.Second),
 	}
 }
 
-func seedBillingAdmission(t *testing.T, ctx context.Context, pool *pgxpool.Pool, req *serving.Request) {
+func seedDirectBillingAccounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID, userID, label string) {
 	t.Helper()
-	now := time.Now()
-	subject := req.RuntimeSubject()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_billing_windows (
-		  window_id, owner_type, tenant_id, user_id, want_tenant, want_user,
-		  lease_id, lease_version, requested_tenant_micro, requested_user_micro,
-		  granted_tenant_micro, granted_user_micro, state, expires_at, grace_until,
-		  max_age_at, opened_at, created_at, updated_at
-		) VALUES (
-		  $1, 'user', $2, $3, true, true, $4, 1, 10000, 10000,
-		  10000, 10000, 'active', $5, $6, $7, $8, $8, $8
-		)
-	`, req.BillingWindowID, subject.TenantID, subject.UserID, req.BillingLeaseID,
-		now.Add(5*time.Minute), now.Add(20*time.Minute), now.Add(3*time.Minute), now); err != nil {
-		t.Fatalf("seed billing window: %v", err)
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status, current_overdraft)
+		VALUES ($1, $2, 'active', 0)
+	`, tenantID, "usage-test-"+label); err != nil {
+		t.Fatalf("seed tenant account: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_billing_request_admissions (
-		  request_id, window_id, lease_id, status, request_expires_at, created_at, updated_at
-		) VALUES ($1,$2,$3,'active',$4,$5,$5)
-	`, req.RequestID, req.BillingWindowID, req.BillingLeaseID, now.Add(10*time.Minute), now); err != nil {
-		t.Fatalf("seed billing admission: %v", err)
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status, current_overdraft)
+		VALUES ($1, $2, $3, 'x', 4, 'active', 0)
+	`, userID, tenantID, "u_"+label+"-"+tenantID[len(tenantID)-8:]); err != nil {
+		t.Fatalf("seed user account: %v", err)
 	}
 }
 
@@ -277,18 +274,49 @@ func assertUsageCompletionState(
 	if logs != wantLogs {
 		t.Fatalf("usage logs = %d, want %d", logs, wantLogs)
 	}
-	var tenantMicro, userMicro int64
+	var eventID *string
+	var billingStatus string
 	err := pool.QueryRow(ctx, `
-		SELECT COALESCE(w.accrued_tenant_micro, 0), COALESCE(w.accrued_user_micro, 0)
-		FROM ai_billing_request_admissions a
-		JOIN ai_billing_windows w ON w.window_id=a.window_id
-		WHERE a.request_id=$1 AND w.tenant_id=$2 AND w.user_id=$3
-	`, requestID, tenantID, userID).Scan(&tenantMicro, &userMicro)
+		SELECT billing_event_id, billing_status
+		FROM ai_usage_logs WHERE request_id = $1
+	`, requestID).Scan(&eventID, &billingStatus)
 	if err != nil {
-		t.Fatalf("read local ledger: %v", err)
+		if wantLogs == 0 {
+			return
+		}
+		t.Fatalf("read usage billing state: %v", err)
 	}
-	if tenantMicro != wantTenantMicro || userMicro != wantUserMicro {
-		t.Fatalf("local ledger = (%d,%d), want (%d,%d)", tenantMicro, userMicro, wantTenantMicro, wantUserMicro)
+	if wantTenantMicro == 0 && wantUserMicro == 0 {
+		if eventID != nil || billingStatus != "free" {
+			t.Fatalf("zero-amount usage billing = event:%v status:%s", eventID, billingStatus)
+		}
+		return
+	}
+	if eventID == nil || billingStatus != "confirmed" {
+		t.Fatalf("direct charge link = event:%v status:%s", eventID, billingStatus)
+	}
+	var eventTenant, eventUser string
+	var tenantMicro, userMicro *int64
+	var eventStatus, eventType string
+	err = pool.QueryRow(ctx, `
+		SELECT tenant_id, COALESCE(user_id, ''), tenant_credits, user_credits, status, event_type
+		FROM bill_events WHERE event_id = $1
+	`, *eventID).Scan(&eventTenant, &eventUser, &tenantMicro, &userMicro, &eventStatus, &eventType)
+	if err != nil {
+		t.Fatalf("read direct charge event: %v", err)
+	}
+	gotTenant, gotUser := int64(0), int64(0)
+	if tenantMicro != nil {
+		gotTenant = *tenantMicro
+	}
+	if userMicro != nil {
+		gotUser = *userMicro
+	}
+	if eventTenant != tenantID || eventUser != userID || gotTenant != wantTenantMicro || gotUser != wantUserMicro ||
+		eventStatus != "succeeded" || eventType != "charge" {
+		t.Fatalf("direct charge event = tenant:%s user:%s amounts:(%d,%d) status:%s type:%s, want tenant:%s user:%s amounts:(%d,%d) succeeded charge",
+			eventTenant, eventUser, gotTenant, gotUser, eventStatus, eventType,
+			tenantID, userID, wantTenantMicro, wantUserMicro)
 	}
 }
 

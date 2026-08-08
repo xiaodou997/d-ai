@@ -2,8 +2,6 @@ package subscription
 
 import (
 	"testing"
-
-	"xiaodou/dai/internal/ai/domain"
 )
 
 func TestValidatePlanShape(t *testing.T) {
@@ -35,13 +33,6 @@ func TestValidatePlanShape(t *testing.T) {
 			name:         "non-positive quota",
 			durationDays: 7,
 			price:        0,
-			totalLimit:   1_000,
-			wantErr:      ErrPlanQuotaInvalid,
-		},
-		{
-			name:         "price overflows micro credits",
-			durationDays: 7,
-			price:        domain.MaxWholeCredits + 1,
 			totalLimit:   1_000,
 			wantErr:      ErrPlanQuotaInvalid,
 		},

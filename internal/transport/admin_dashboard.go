@@ -9,19 +9,11 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	billingdomain "xiaodou/dai/internal/billing"
-	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
 	"xiaodou/dai/libs/go/httpx"
 )
 
 // ---- DTO ----
-
-type preAuthAlert struct {
-	EventID     string `json:"eventId"`
-	TenantID    string `json:"tenantId"`
-	UserID      string `json:"userId"`
-	CreatedTime int64  `json:"createdTime"`
-}
 
 type failedTxAlert struct {
 	EventID      string `json:"eventId"`
@@ -32,15 +24,7 @@ type failedTxAlert struct {
 
 type dashboardAlertsOutput struct {
 	Body struct {
-		TimeoutPreAuths    []preAuthAlert  `json:"timeoutPreAuths"`
 		FailedTransactions []failedTxAlert `json:"failedTransactions"`
-	}
-}
-
-type cancelPreAuthInput struct {
-	ID   string `path:"id"`
-	Body *struct {
-		Note string `json:"note"`
 	}
 }
 
@@ -53,20 +37,20 @@ type trendInput struct {
 
 type trendPoint struct {
 	TimeLabel string  `json:"timeLabel"`
-	Credits   float64 `json:"credits"`
+	AmountUSD float64 `json:"amountUsd"`
 }
 
 type consumptionTrendOutput struct {
 	Body struct {
-		TotalCredits float64      `json:"totalCredits"`
-		DataPoints   []trendPoint `json:"dataPoints"`
+		TotalUSD   float64      `json:"totalUsd"`
+		DataPoints []trendPoint `json:"dataPoints"`
 	}
 }
 
 type resourceStatItem struct {
 	ClientName string  `json:"clientName"`
 	ClientID   string  `json:"clientId"`
-	Credits    float64 `json:"credits"`
+	AmountUSD  float64 `json:"amountUsd"`
 	Percentage string  `json:"percentage"`
 }
 
@@ -91,16 +75,14 @@ type globalStatsOutput struct {
 	Body systempg.GlobalStatsRow
 }
 
-// registerAdminDashboard 注册 dashboard / 分析 / 预授权取消 / 租户应用授权查询端点。
+// registerAdminDashboard 注册 dashboard 与分析端点。
 func registerAdminDashboard(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-dashboard-alerts", Method: http.MethodGet, Path: "/api/v1/dashboard/alerts",
-		Summary: "Dashboard 告警（超时预授权 / 异常释放）", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.dashboardAlerts)
-	huma.Register(api, huma.Operation{OperationID: "admin-cancel-preauth", Method: http.MethodPost, Path: "/api/v1/billing/events/{id}/cancel",
-		Summary: "取消卡住的预授权", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.cancelPreAuth)
+		Summary: "Dashboard 告警（异常扣费）", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.dashboardAlerts)
 	huma.Register(api, huma.Operation{OperationID: "admin-consumption-trend", Method: http.MethodGet, Path: "/api/v1/analytics/consumption-trend",
 		Summary: "消费趋势", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.consumptionTrend)
 	huma.Register(api, huma.Operation{OperationID: "admin-resource-statistics", Method: http.MethodGet, Path: "/api/v1/analytics/resource-statistics",
@@ -111,43 +93,14 @@ func registerAdminDashboard(api huma.API, d Deps) {
 
 func (h *adminHandlers) dashboardAlerts(ctx context.Context, _ *struct{}) (*dashboardAlertsOutput, error) {
 	out := &dashboardAlertsOutput{}
-	out.Body.TimeoutPreAuths = []preAuthAlert{}
 	out.Body.FailedTransactions = []failedTxAlert{}
 
-	stuck, _ := h.txRepo.FindStuckPreAuth(30)
-	for _, tx := range stuck {
-		out.Body.TimeoutPreAuths = append(out.Body.TimeoutPreAuths, preAuthAlert{
-			EventID: tx.EventID, TenantID: tx.TenantID, UserID: tx.UserID, CreatedTime: tx.CreatedAt.UnixMilli(),
-		})
-	}
 	released, _ := h.txRepo.FindReleasedInHours(24, 20)
 	for _, tx := range released {
 		out.Body.FailedTransactions = append(out.Body.FailedTransactions, failedTxAlert{
 			EventID: tx.EventID, TerminalNote: tx.TerminalNote, Status: tx.Status, CreatedTime: tx.CreatedAt.UnixMilli(),
 		})
 	}
-	return out, nil
-}
-
-func (h *adminHandlers) cancelPreAuth(ctx context.Context, in *cancelPreAuthInput) (*eventStatusOutput, error) {
-	claims := userClaimsFromCtx(ctx)
-	if claims == nil {
-		return nil, httpx.ErrUnauthorized
-	}
-	if _, err := h.deduction.Cancel(billingsvc.CancelParams{EventID: in.ID}); err != nil {
-		return nil, toProblem(err)
-	}
-	note := ""
-	if in.Body != nil {
-		note = in.Body.Note
-	}
-	_ = h.deduction.AppendOp(ctx, in.ID, map[string]any{
-		"action": "admin_cancelled", "operator_id": claims.UserID, "note": note,
-		"at": billingdomain.NowUTC().UnixMilli(),
-	})
-	out := &eventStatusOutput{}
-	out.Body.EventID = in.ID
-	out.Body.Status = "cancelled"
 	return out, nil
 }
 
@@ -174,8 +127,8 @@ func (h *adminHandlers) consumptionTrend(ctx context.Context, in *trendInput) (*
 	out := &consumptionTrendOutput{}
 	out.Body.DataPoints = make([]trendPoint, 0, len(rows))
 	for _, row := range rows {
-		out.Body.TotalCredits += row.Total
-		out.Body.DataPoints = append(out.Body.DataPoints, trendPoint{TimeLabel: row.Day.Format("2006-01-02"), Credits: row.Total})
+		out.Body.TotalUSD += row.Total
+		out.Body.DataPoints = append(out.Body.DataPoints, trendPoint{TimeLabel: row.Day.Format("2006-01-02"), AmountUSD: row.Total})
 	}
 	return out, nil
 }
@@ -194,23 +147,23 @@ func (h *adminHandlers) resourceStatistics(ctx context.Context, in *resourceStat
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	var totalCredits float64
+	var totalUSD float64
 	for _, row := range rows {
-		totalCredits += float64(row.Total)
+		totalUSD += row.Total
 	}
 	out := &resourceStatsOutput{}
 	out.Body.Resources = make([]resourceStatItem, 0, len(rows))
 	for _, row := range rows {
 		pct := 0.0
-		if totalCredits > 0 {
-			pct = float64(row.Total) / totalCredits * 100
+		if totalUSD > 0 {
+			pct = row.Total / totalUSD * 100
 		}
 		name := row.ClientName
 		if name == "" {
 			name = "未知系统"
 		}
 		out.Body.Resources = append(out.Body.Resources, resourceStatItem{
-			ClientName: name, ClientID: row.ClientID, Credits: row.Total, Percentage: fmt.Sprintf("%.1f", pct),
+			ClientName: name, ClientID: row.ClientID, AmountUSD: row.Total, Percentage: fmt.Sprintf("%.1f", pct),
 		})
 	}
 	return out, nil

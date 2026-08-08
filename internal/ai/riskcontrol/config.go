@@ -10,7 +10,7 @@ import (
 )
 
 // configCacheTTL bounds how long a fetched RiskControlConfig is reused
-// before re-reading ai_settings. Mirrors the credits_per_usd cache in
+// before re-reading ai_settings. Mirrors other short-lived settings caches in
 // pricebook_billing.go, shorter because admins expect config edits (e.g.
 // flipping the kill switch) to take effect quickly.
 const configCacheTTL = 15 * time.Second

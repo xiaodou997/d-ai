@@ -52,39 +52,39 @@ type InviteCodeItem struct {
 
 // TenantStats 租户统计数据
 type TenantStats struct {
-	EndUserCount         int64   `json:"endUserCount"`
-	InviteCodeCount      int64   `json:"inviteCodeCount"`
-	UserDeductionCredits float64 `json:"userDeductionCredits"`
+	EndUserCount     int64   `json:"endUserCount"`
+	InviteCodeCount  int64   `json:"inviteCodeCount"`
+	UserDeductionUSD float64 `json:"userDeductionUsd"`
 }
 
 // EventItem 消费流水条目
 type EventItem struct {
-	ID            int64   `json:"id"`
-	EventID       string  `json:"eventId"`
-	TenantID      string  `json:"tenantId"`
-	UserID        string  `json:"userId,omitempty"`
-	ClientID      string  `json:"clientId,omitempty"`
-	Description   string  `json:"description"`
-	TenantCredits float64 `json:"tenantCredits,omitempty"`
-	UserCredits   float64 `json:"userCredits,omitempty"`
-	Username      string  `json:"username,omitempty"`
-	TenantName    string  `json:"tenantName,omitempty"`
-	Status        int     `json:"status"`
-	CreatedTime   int64   `json:"createdTime"`
+	ID              int64   `json:"id"`
+	EventID         string  `json:"eventId"`
+	TenantID        string  `json:"tenantId"`
+	UserID          string  `json:"userId,omitempty"`
+	ClientID        string  `json:"clientId,omitempty"`
+	Description     string  `json:"description"`
+	TenantAmountUSD float64 `json:"tenantAmountUsd,omitempty"`
+	UserAmountUSD   float64 `json:"userAmountUsd,omitempty"`
+	Username        string  `json:"username,omitempty"`
+	TenantName      string  `json:"tenantName,omitempty"`
+	Status          int     `json:"status"`
+	CreatedTime     int64   `json:"createdTime"`
 }
 
 // RechargeItem 充值记录条目
 type RechargeItem struct {
-	ID           int64   `json:"id"`
-	OrderID      string  `json:"orderId"`
-	OrderType    string  `json:"orderType"`
-	TenantID     string  `json:"tenantId"`
-	UserID       string  `json:"userId"`
-	PaidAmount   int64   `json:"paidAmount"`
-	CreditAmount float64 `json:"creditAmount"`
-	Status       string  `json:"status"`
-	Note         string  `json:"note"`
-	CreatedTime  int64   `json:"createdTime"`
+	ID              int64   `json:"id"`
+	OrderID         string  `json:"orderId"`
+	OrderType       string  `json:"orderType"`
+	TenantID        string  `json:"tenantId"`
+	UserID          string  `json:"userId"`
+	PaidAmountMinor int64   `json:"paidAmountMinor"`
+	AmountUSD       float64 `json:"amountUsd"`
+	Status          string  `json:"status"`
+	Note            string  `json:"note"`
+	CreatedTime     int64   `json:"createdTime"`
 }
 
 // TenantRepo 租户数据访问层
@@ -327,7 +327,7 @@ func (r *TenantRepo) GetStats(ctx context.Context, tenantID string) (*TenantStat
 	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount)
 	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&stats.InviteCodeCount)
 	r.pool.QueryRow(ctx, `SELECT COALESCE(SUM(user_credits), 0) FROM bill_events WHERE tenant_id = $1 AND status = 'succeeded' AND event_type = 'charge'`, tenantID).Scan(&deductionMicro)
-	stats.UserDeductionCredits = billing.MicroToCredits(deductionMicro)
+	stats.UserDeductionUSD = billing.MicroToUSD(deductionMicro)
 	return stats, nil
 }
 
@@ -372,8 +372,8 @@ func (r *TenantRepo) ListTransactions(ctx context.Context, tenantID string, page
 			continue
 		}
 		item.Status = txStatusToInt(status)
-		item.TenantCredits = billing.MicroToCredits(tenantMicro)
-		item.UserCredits = billing.MicroToCredits(userMicro)
+		item.TenantAmountUSD = billing.MicroToUSD(tenantMicro)
+		item.UserAmountUSD = billing.MicroToUSD(userMicro)
 		item.CreatedTime = createdAt.UnixMilli()
 		list = append(list, item)
 	}
@@ -384,10 +384,10 @@ func (r *TenantRepo) ListTransactions(ctx context.Context, tenantID string, page
 }
 
 // ListRechargeRecords 查询充值记录（分页）—— 租户只查看本租户收到的充值
-// （platform_to_tenant 管理员手动充值 + online_tenant_topup 微信在线充值 + cash_purchase 现金购积分）
+// （platform_to_tenant 管理员手动充值 + online_tenant_topup 微信在线充值）
 func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, page, size int) ([]RechargeItem, int64, error) {
 	var total int64
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup', 'cash_purchase') AND tenant_id = $1`, tenantID).Scan(&total)
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND tenant_id = $1`, tenantID).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -396,7 +396,7 @@ func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, p
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, order_id, order_type, tenant_id, COALESCE(user_id,''), paid_amount, credit_amount, status, COALESCE(note,''), created_at
 		FROM bill_recharge_orders
-		WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup', 'cash_purchase') AND tenant_id = $1
+		WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND tenant_id = $1
 		ORDER BY created_at DESC LIMIT $2 OFFSET $3
 	`, tenantID, size, offset)
 	if err != nil {
@@ -411,12 +411,12 @@ func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, p
 		var createdAt time.Time
 		if err := rows.Scan(
 			&item.ID, &item.OrderID, &item.OrderType, &item.TenantID, &item.UserID,
-			&item.PaidAmount, &creditMicro, &item.Status, &item.Note, &createdAt,
+			&item.PaidAmountMinor, &creditMicro, &item.Status, &item.Note, &createdAt,
 		); err != nil {
 			continue
 		}
 		item.CreatedTime = createdAt.UnixMilli()
-		item.CreditAmount = billing.MicroToCredits(creditMicro)
+		item.AmountUSD = billing.MicroToUSD(creditMicro)
 		list = append(list, item)
 	}
 	if list == nil {
@@ -425,22 +425,22 @@ func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, p
 	return list, total, rows.Err()
 }
 
-// TenantOverviewStats 扩展的租户统计数据（含用户积分和活跃用户）
+// TenantOverviewStats 扩展的租户统计数据（含用户 USD 余额和活跃用户）
 type TenantOverviewStats struct {
-	EndUserCount          int64   `json:"endUserCount"`
-	InviteCodeCount       int64   `json:"inviteCodeCount"`
-	UserDeductionCredits  float64 `json:"userDeductionCredits"`
-	UserTotalCredits      float64 `json:"userTotalCredits"`
-	ActiveUserCount       int64   `json:"activeUserCount"`
-	UserConsumptionCount  int64   `json:"userConsumptionCount"`
-	SettlementIncomeCents int64   `json:"settlementIncomeCents"`
+	EndUserCount             int64   `json:"endUserCount"`
+	InviteCodeCount          int64   `json:"inviteCodeCount"`
+	UserDeductionUSD         float64 `json:"userDeductionUsd"`
+	UserTotalBalanceUSD      float64 `json:"userTotalBalanceUsd"`
+	ActiveUserCount          int64   `json:"activeUserCount"`
+	UserConsumptionCount     int64   `json:"userConsumptionCount"`
+	SettlementIncomeMicroUSD int64   `json:"settlementIncomeMicroUsd"`
 }
 
 // ClientConsumptionItem APP 消耗统计条目
 type ClientConsumptionItem struct {
 	ClientID   string  `json:"clientId"`
 	ClientName string  `json:"clientName"`
-	Credits    float64 `json:"credits"`
+	AmountUSD  float64 `json:"amountUsd"`
 	Percentage string  `json:"percentage"`
 }
 
@@ -448,7 +448,7 @@ type ClientConsumptionItem struct {
 type UserConsumptionItem struct {
 	UserID           string  `json:"userId"`
 	Username         string  `json:"username"`
-	Credits          float64 `json:"credits"`
+	AmountUSD        float64 `json:"amountUsd"`
 	TransactionCount int64   `json:"transactionCount"`
 	Percentage       string  `json:"percentage"`
 }
@@ -502,9 +502,9 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 	}
 
 	incomeQuery := `
-		SELECT COALESCE(SUM(amount), 0)
+		SELECT COALESCE(SUM(amount_micro_usd), 0)
 		FROM pay_cash_ledger
-		WHERE tenant_id = $1 AND txn_type = 'topup_income' AND amount > 0
+		WHERE tenant_id = $1 AND txn_type = 'topup_income' AND amount_micro_usd > 0
 	`
 	incomeArgs := []any{tenantID}
 	incomeArgIdx := 2
@@ -517,16 +517,16 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 		incomeQuery += fmt.Sprintf(" AND created_at < $%d", incomeArgIdx)
 		incomeArgs = append(incomeArgs, *timeTo)
 	}
-	if err := r.pool.QueryRow(ctx, incomeQuery, incomeArgs...).Scan(&stats.SettlementIncomeCents); err != nil {
+	if err := r.pool.QueryRow(ctx, incomeQuery, incomeArgs...).Scan(&stats.SettlementIncomeMicroUSD); err != nil {
 		return nil, err
 	}
-	stats.UserTotalCredits = billing.MicroToCredits(userTotalMicro)
-	stats.UserDeductionCredits = billing.MicroToCredits(userDeductionMicro)
+	stats.UserTotalBalanceUSD = billing.MicroToUSD(userTotalMicro)
+	stats.UserDeductionUSD = billing.MicroToUSD(userDeductionMicro)
 
 	return stats, nil
 }
 
-// GetUserConsumptionRanking 返回消费积分最高的终端用户。
+// GetUserConsumptionRanking 返回 USD 消费最高的终端用户。
 func (r *TenantRepo) GetUserConsumptionRanking(ctx context.Context, tenantID string, timeFrom, timeTo *time.Time, limit int) ([]UserConsumptionItem, error) {
 	if limit < 1 || limit > 20 {
 		limit = 10
@@ -578,7 +578,7 @@ func (r *TenantRepo) GetUserConsumptionRanking(ctx context.Context, tenantID str
 		if err := rows.Scan(&item.UserID, &item.Username, &creditsMicro, &item.TransactionCount, &totalCreditsMicro); err != nil {
 			return nil, err
 		}
-		item.Credits = billing.MicroToCredits(creditsMicro)
+		item.AmountUSD = billing.MicroToUSD(creditsMicro)
 		if totalCreditsMicro > 0 {
 			item.Percentage = fmt.Sprintf("%.1f", float64(creditsMicro)*100/float64(totalCreditsMicro))
 		}
@@ -630,14 +630,14 @@ func (r *TenantRepo) GetClientConsumption(ctx context.Context, tenantID string, 
 		if err := rows.Scan(&item.ClientID, &item.ClientName, &creditsMicro); err != nil {
 			continue
 		}
-		item.Credits = billing.MicroToCredits(creditsMicro)
-		totalCredits += item.Credits
+		item.AmountUSD = billing.MicroToUSD(creditsMicro)
+		totalCredits += item.AmountUSD
 		list = append(list, item)
 	}
 
 	if totalCredits > 0 {
 		for i := range list {
-			percentage := list[i].Credits * 100 / totalCredits
+			percentage := list[i].AmountUSD * 100 / totalCredits
 			list[i].Percentage = fmt.Sprintf("%.1f", percentage)
 		}
 	}

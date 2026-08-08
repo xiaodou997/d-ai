@@ -53,7 +53,6 @@ const dashboard = useTenantOperationsDashboard();
       <!-- 面板 body 无内边距,24px 容器承载指标区与双栏面板(fill 模式下随之伸展) -->
       <div class="operations-workbench__body">
         <TenantBusinessMetrics
-          :cash-account="dashboard.cashAccount.value"
           :service-balance="dashboard.serviceBalance.value"
           :overview="dashboard.overview.value"
           :range-label="dashboard.selectedRangeLabel.value"

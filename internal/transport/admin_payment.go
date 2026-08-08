@@ -6,13 +6,14 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/libs/go/httpx"
 	"xiaodou/dai/internal/payment"
 	paymentpg "xiaodou/dai/internal/payment/pg"
+	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/internal/payment/wechat"
+	"xiaodou/dai/libs/go/httpx"
 )
 
-// adminPaymentHandlers 承载管理端支付配置/订单/提现/现金总览端点（type 1,2）。
+// adminPaymentHandlers 承载管理端支付配置、订单、提现和统一余额总览端点（type 1,2）。
 type adminPaymentHandlers struct {
 	*paymentHandlers
 }
@@ -91,11 +92,10 @@ type cashAccountsInput struct {
 }
 
 type cashAccountItem struct {
-	TenantID   string `json:"tenantId"`
-	TenantName string `json:"tenantName,omitempty"`
-	Balance    int64  `json:"balance"`
-	Frozen     int64  `json:"frozen"`
-	Available  int64  `json:"available"`
+	TenantID        string `json:"tenantId"`
+	TenantName      string `json:"tenantName,omitempty"`
+	Currency        string `json:"currency"`
+	BalanceMicroUSD int64  `json:"balanceMicroUsd"`
 }
 
 type cashAccountsOutput struct {
@@ -119,18 +119,46 @@ type adminWithdrawalsOutput struct {
 	Body httpx.Page[withdrawalItem]
 }
 
-type reviewWithdrawalInput struct {
-	WithdrawalID string `path:"id"`
-	Body         struct {
-		Approve bool   `json:"approve"`
-		Note    string `json:"note" required:"false"`
+type createWithdrawalInput struct {
+	Body struct {
+		TenantID       string `json:"tenantId"`
+		AmountMicroUSD int64  `json:"amountMicroUsd" minimum:"1"`
+		AccountName    string `json:"accountName" required:"false"`
+		BankName       string `json:"bankName" required:"false"`
+		AccountNo      string `json:"accountNo" required:"false"`
+		Note           string `json:"note" required:"false"`
+		PaymentRef     string `json:"paymentRef" required:"false"`
 	}
 }
 
-type settleWithdrawalInput struct {
-	WithdrawalID string `path:"id"`
-	Body         struct {
-		PaymentRef string `json:"paymentRef"`
+type withdrawalItem struct {
+	WithdrawalID         string `json:"withdrawalId"`
+	Currency             string `json:"currency"`
+	AmountMicroUSD       int64  `json:"amountMicroUsd"`
+	FeeAmountMicroUSD    int64  `json:"feeAmountMicroUsd"`
+	PayoutAmountMicroUSD int64  `json:"payoutAmountMicroUsd"`
+	AccountName          string `json:"accountName"`
+	BankName             string `json:"bankName"`
+	AccountNo            string `json:"accountNo"`
+	Status               string `json:"status"`
+	ApplyNote            string `json:"applyNote,omitempty"`
+	ReviewNote           string `json:"reviewNote,omitempty"`
+	PaymentRef           string `json:"paymentRef,omitempty"`
+	PaidAt               *int64 `json:"paidAt,omitempty"`
+	CreatedAt            int64  `json:"createdAt"`
+}
+
+type withdrawalOutput struct {
+	Body withdrawalItem
+}
+
+func withdrawalToItem(w *payment.Withdrawal) withdrawalItem {
+	return withdrawalItem{
+		WithdrawalID: w.WithdrawalID, Currency: "USD", AmountMicroUSD: w.AmountMicroUSD,
+		FeeAmountMicroUSD: w.FeeAmountMicroUSD, PayoutAmountMicroUSD: w.PayoutAmountMicroUSD, AccountName: w.AccountName,
+		BankName: w.BankName, AccountNo: w.AccountNo, Status: w.Status,
+		ApplyNote: w.ApplyNote, ReviewNote: w.ReviewNote, PaymentRef: w.PaymentRef,
+		PaidAt: millisFromTimePtr(w.PaidAt), CreatedAt: millisFromTime(w.CreatedAt),
 	}
 }
 
@@ -155,17 +183,15 @@ func registerAdminPayment(api huma.API, d Deps) {
 	huma.Register(api, huma.Operation{OperationID: "admin-sync-payment-order", Method: http.MethodPost, Path: "/api/v1/admin/payment-orders/{orderId}/sync",
 		Summary: "手动查单同步（mock 模式下即仿真支付成功）", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.syncOrder)
 
-	huma.Register(api, huma.Operation{OperationID: "admin-list-cash-accounts", Method: http.MethodGet, Path: "/api/v1/admin/cash-accounts",
-		Summary: "租户现金账户总览", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashAccounts)
-	huma.Register(api, huma.Operation{OperationID: "admin-list-cash-ledger", Method: http.MethodGet, Path: "/api/v1/admin/cash-ledger",
-		Summary: "任意租户现金流水", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashLedger)
+	huma.Register(api, huma.Operation{OperationID: "admin-list-tenant-balances", Method: http.MethodGet, Path: "/api/v1/admin/tenant-balances",
+		Summary: "租户 USD 余额总览", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashAccounts)
+	huma.Register(api, huma.Operation{OperationID: "admin-list-balance-ledger", Method: http.MethodGet, Path: "/api/v1/admin/balance-ledger",
+		Summary: "任意租户余额流水", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashLedger)
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-withdrawals", Method: http.MethodGet, Path: "/api/v1/admin/withdrawals",
-		Summary: "提现申请列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listWithdrawals)
-	huma.Register(api, huma.Operation{OperationID: "admin-review-withdrawal", Method: http.MethodPost, Path: "/api/v1/admin/withdrawals/{id}/review",
-		Summary: "审核提现申请", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.reviewWithdrawal)
-	huma.Register(api, huma.Operation{OperationID: "admin-settle-withdrawal", Method: http.MethodPost, Path: "/api/v1/admin/withdrawals/{id}/settle",
-		Summary: "线下打款核销提现", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.settleWithdrawal)
+		Summary: "提现记录列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listWithdrawals)
+	huma.Register(api, huma.Operation{OperationID: "admin-create-withdrawal", Method: http.MethodPost, Path: "/api/v1/admin/withdrawals",
+		Summary: "创建提现记录并直接扣减租户额度", Tags: []string{"admin-payment"}, Middlewares: sysUser, DefaultStatus: http.StatusCreated}, h.createWithdrawal)
 }
 
 func (h *adminPaymentHandlers) getGlobalSettings(ctx context.Context, _ *struct{}) (*globalPaymentSettingsOutput, error) {
@@ -249,10 +275,15 @@ func (h *adminPaymentHandlers) syncOrder(ctx context.Context, in *syncOrderInput
 	out := &topupOrderStatusOutput{}
 	out.Body.OrderID = order.OrderID
 	out.Body.Status = order.Status
-	out.Body.Amount = order.Amount
-	out.Body.CreditAmount = order.CreditAmount
+	out.Body.PaymentCurrency = order.PaymentCurrency
+	out.Body.PaymentAmountMinor = order.PaymentAmountMinor
+	out.Body.GrossAmountMicroUSD = order.GrossAmountMicroUSD
+	out.Body.FeeAmountMicroUSD = order.FeeAmountMicroUSD
+	out.Body.GiftAmountMicroUSD = order.GiftAmountMicroUSD
+	out.Body.CreditedAmountMicroUSD = order.CreditedAmountMicroUSD
 	out.Body.TransactionID = order.TransactionID
 	out.Body.PaidAt = millisFromTimePtr(order.PaidAt)
+	out.Body.BalanceExpiresAt = millisFromTimePtr(order.BalanceExpiresAt)
 	return out, nil
 }
 
@@ -264,7 +295,8 @@ func (h *adminPaymentHandlers) listCashAccounts(ctx context.Context, in *cashAcc
 	items := make([]cashAccountItem, 0, len(list))
 	for _, a := range list {
 		items = append(items, cashAccountItem{
-			TenantID: a.TenantID, TenantName: a.TenantName, Balance: a.Balance, Frozen: a.Frozen, Available: a.Available(),
+			TenantID: a.TenantID, TenantName: a.TenantName, Currency: "USD",
+			BalanceMicroUSD: a.BalanceMicroUSD,
 		})
 	}
 	page, size := normalizePage(in.Page, in.Size)
@@ -279,7 +311,8 @@ func (h *adminPaymentHandlers) listCashLedger(ctx context.Context, in *adminCash
 	items := make([]cashLedgerItem, 0, len(list))
 	for _, e := range list {
 		items = append(items, cashLedgerItem{
-			TxnID: e.TxnID, TxnType: e.TxnType, Amount: e.Amount, BalanceAfter: e.BalanceAfter,
+			TxnID: e.TxnID, TxnType: e.TxnType, Currency: "USD",
+			AmountMicroUSD: e.AmountMicroUSD, BalanceAfterMicroUSD: e.BalanceAfterMicroUSD,
 			RefType: e.RefType, RefID: e.RefID, Note: e.Note, CreatedAt: millisFromTime(e.CreatedAt),
 		})
 	}
@@ -300,28 +333,18 @@ func (h *adminPaymentHandlers) listWithdrawals(ctx context.Context, in *adminWit
 	return &adminWithdrawalsOutput{Body: httpx.NewPage(items, total, page, size)}, nil
 }
 
-func (h *adminPaymentHandlers) reviewWithdrawal(ctx context.Context, in *reviewWithdrawalInput) (*messageOutput, error) {
+func (h *adminPaymentHandlers) createWithdrawal(ctx context.Context, in *createWithdrawalInput) (*withdrawalOutput, error) {
 	claims := userClaimsFromCtx(ctx)
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.svc.ReviewWithdrawal(ctx, in.WithdrawalID, in.Body.Approve, claims.UserID, in.Body.Note); err != nil {
+	w, err := h.svc.CreateWithdrawal(ctx, paymentsvc.CreateWithdrawalParams{
+		TenantID: in.Body.TenantID, AmountMicroUSD: in.Body.AmountMicroUSD,
+		AccountName: in.Body.AccountName, BankName: in.Body.BankName, AccountNo: in.Body.AccountNo,
+		Note: in.Body.Note, OperatorID: claims.UserID, PaymentRef: in.Body.PaymentRef,
+	})
+	if err != nil {
 		return nil, toProblem(err)
 	}
-	out := &messageOutput{}
-	out.Body.Message = "已处理"
-	return out, nil
-}
-
-func (h *adminPaymentHandlers) settleWithdrawal(ctx context.Context, in *settleWithdrawalInput) (*messageOutput, error) {
-	claims := userClaimsFromCtx(ctx)
-	if claims == nil {
-		return nil, httpx.ErrUnauthorized
-	}
-	if err := h.svc.SettleWithdrawal(ctx, in.WithdrawalID, claims.UserID, in.Body.PaymentRef); err != nil {
-		return nil, toProblem(err)
-	}
-	out := &messageOutput{}
-	out.Body.Message = "已核销"
-	return out, nil
+	return &withdrawalOutput{Body: withdrawalToItem(w)}, nil
 }

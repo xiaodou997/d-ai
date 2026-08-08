@@ -17,9 +17,9 @@ const props = withDefaults(
     modelValue: () => [],
     mode: 'image',
     presets: () => [],
-    priceKey: 'price_credits',
-    precision: 0,
-    step: 1
+    priceKey: 'price_usd',
+    precision: 6,
+    step: 0.000001
   }
 )
 const emit = defineEmits<{ (e: 'update:modelValue', value: any[]): void }>()

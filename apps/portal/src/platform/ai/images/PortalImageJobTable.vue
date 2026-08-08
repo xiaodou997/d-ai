@@ -10,7 +10,7 @@ import type { PortalImageJobRecord } from "./types";
 
 const props = defineProps<{
   jobs: PortalImageJobRecord[];
-  formatCredits: (value: number | null | undefined) => string;
+  formatUSD: (value: number | null | undefined) => string;
 }>();
 
 const columns: DsTableColumn[] = [
@@ -21,7 +21,7 @@ const columns: DsTableColumn[] = [
   { key: "status", title: "状态", width: 100 },
   { key: "archive", title: "归档", width: 100 },
   { key: "result", title: "结果摘要", width: 150 },
-  { key: "credits", title: "消耗", width: 110, align: "right" },
+  { key: "amount_usd", title: "消费（USD）", width: 120, align: "right" },
   { key: "time", title: "时间", width: 180 }
 ];
 
@@ -72,7 +72,7 @@ function resultSummary(job: PortalImageJobRecord) {
       <template #cell-result="{ row }">
         <span>{{ resultSummary(row) }}</span>
       </template>
-      <template #cell-credits="{ row }">{{ props.formatCredits(row.caller_charge_credits) }}</template>
+      <template #cell-amount_usd="{ row }">{{ props.formatUSD(row.caller_charge_usd) }}</template>
       <template #cell-time="{ row }">
         <span class="image-job-table__time">{{ formatTimestamp(row.created_at) }}</span>
       </template>

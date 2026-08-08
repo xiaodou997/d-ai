@@ -28,7 +28,7 @@ describe("PortalImageStudioWorkspace", () => {
       status: "running",
       storage_policy: "temporary",
       raw_image_retained: false,
-      caller_charge_credits: 0,
+      caller_charge_usd: 0,
       image_count: 0,
       inline_count: 0,
       url_count: 0,
@@ -46,7 +46,7 @@ describe("PortalImageStudioWorkspace", () => {
     const wrapper = shallowMount(PortalImageStudioWorkspace, {
       props: {
         api,
-        formatCredits: (value) => String(value ?? 0),
+      formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
         usageMessage: "usage",
         pollIntervalMs: 1_234
       },
@@ -72,7 +72,7 @@ describe("PortalImageStudioWorkspace", () => {
       status: "completed",
       storage_policy: "temporary",
       raw_image_retained: true,
-      caller_charge_credits: 5,
+      caller_charge_usd: 5,
       image_count: 1,
       inline_count: 0,
       url_count: 0,
@@ -91,7 +91,7 @@ describe("PortalImageStudioWorkspace", () => {
     const wrapper = shallowMount(PortalImageStudioWorkspace, {
       props: {
         api,
-        formatCredits: (value) => String(value ?? 0),
+      formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
         usageMessage: "usage",
         confirmDelete
       },
@@ -123,7 +123,7 @@ describe("PortalImageStudioWorkspace", () => {
       status: "pending",
       storage_policy: "temporary",
       raw_image_retained: false,
-      caller_charge_credits: 0,
+      caller_charge_usd: 0,
       image_count: 0,
       inline_count: 0,
       url_count: 0,
@@ -142,7 +142,7 @@ describe("PortalImageStudioWorkspace", () => {
     const wrapper = shallowMount(PortalImageStudioWorkspace, {
       props: {
         api,
-        formatCredits: (value) => String(value ?? 0),
+      formatUSD: (value: number | null | undefined) => `$${value ?? 0}`,
         usageMessage: "usage"
       },
       global: {

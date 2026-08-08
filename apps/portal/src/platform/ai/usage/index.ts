@@ -6,4 +6,4 @@ export { default as UsageTimingCell } from "./UsageTimingCell.vue";
 export * from "./meta";
 export * from "./format";
 export type * from "./types";
-export { formatCredits, formatWholeCredits, formatMicroCredits, MICRO_CREDITS_PER_CREDIT } from "../utils";
+export { formatNumber, formatUSD, formatMicroUSD, MICRO_USD_PER_USD } from "../utils";

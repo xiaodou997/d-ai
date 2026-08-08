@@ -1,5 +1,5 @@
 <!--
-  支付配置 — 微信收款 / 租户充值与提现 两个分区通过 DsTabs 切换。
+  支付配置 — 微信收款 / 租户充值与管理员提现规则 两个分区通过 DsTabs 切换。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行）,
        两大配置块改为同卡 Tab 切换(与租户详情页同模式);颜色全部使用 var(--ds-*) token;
        表单仍为 element-plus，业务逻辑与请求参数完全不变。
@@ -16,14 +16,15 @@ import type { PaymentGlobalSettings, TopupPackage, WechatConfig } from "@/api/ty
 const activeTab = ref("wechat");
 const tabs = [
   { key: "wechat", label: "微信收款" },
-  { key: "rules", label: "租户充值与提现" }
+  { key: "rules", label: "租户充值与提现规则" }
 ];
 
 interface PackageForm {
   id: string;
   name: string;
-  amountYuan: number;
-  credits: number;
+  paymentAmountUsd: number;
+  giftAmountUsd: number;
+  validityDays: number | null;
   badge: string;
   enabled: boolean;
   sortOrder: number;
@@ -50,18 +51,19 @@ const wechatForm = reactive({
 const settingsLoading = ref(false);
 const settingsSubmitting = ref(false);
 const ruleForm = reactive({
-  creditsPerCny: 100,
   topupFeePercent: 1.6,
   withdrawFeePercent: 1.6,
+  customValidityDays: null as number | null,
   packages: [] as PackageForm[]
 });
 
 const customPreview = computed(() => {
   const amount = 100;
-  const gross = amount * ruleForm.creditsPerCny;
+  const gross = amount * 1_000_000;
   const fee = Math.ceil((gross * percentToBp(ruleForm.topupFeePercent)) / 10000);
-  return { amount, gross, fee, net: Math.max(0, gross - fee) };
+  return { amount, gross: formatMicroUSD(gross), fee: formatMicroUSD(fee), net: formatMicroUSD(Math.max(0, gross - fee)) };
 });
+function formatMicroUSD(value: number) { return `$${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 
 function percentToBp(value: number) {
   return Math.round(Number(value || 0) * 100);
@@ -75,8 +77,9 @@ function packageToForm(item: TopupPackage): PackageForm {
   return {
     id: item.id,
     name: item.name,
-    amountYuan: Number((item.amount / 100).toFixed(2)),
-    credits: item.credits,
+    paymentAmountUsd: item.paymentAmountMicroUsd / 1_000_000,
+    giftAmountUsd: item.giftAmountMicroUsd / 1_000_000,
+    validityDays: item.validityDays ?? null,
     badge: item.badge || "",
     enabled: item.enabled,
     sortOrder: item.sortOrder
@@ -86,9 +89,10 @@ function packageToForm(item: TopupPackage): PackageForm {
 function formToPackage(item: PackageForm): TopupPackage {
   return {
     id: item.id.trim() || `p${Date.now()}`,
-    name: item.name.trim() || `${item.amountYuan} 元充值包`,
-    amount: Math.round(Number(item.amountYuan || 0) * 100),
-    credits: Math.round(Number(item.credits || 0)),
+    name: item.name.trim() || `${item.paymentAmountUsd} USD 额度包`,
+    paymentAmountMicroUsd: Math.round(Number(item.paymentAmountUsd || 0) * 1_000_000),
+    giftAmountMicroUsd: Math.round(Number(item.giftAmountUsd || 0) * 1_000_000),
+    validityDays: item.validityDays || null,
     badge: item.badge.trim() || undefined,
     enabled: item.enabled,
     sortOrder: Number(item.sortOrder || 0)
@@ -99,9 +103,10 @@ function addPackage() {
   const next = ruleForm.packages.length + 1;
   ruleForm.packages.push({
     id: `p${Date.now()}`,
-    name: `${next * 10} 元充值包`,
-    amountYuan: next * 10,
-    credits: next * 1000,
+    name: `${next * 10} USD 额度包`,
+    paymentAmountUsd: next * 10,
+    giftAmountUsd: 0,
+    validityDays: null,
     badge: "",
     enabled: true,
     sortOrder: next * 10
@@ -167,9 +172,9 @@ async function fetchPaymentSettings() {
   settingsLoading.value = true;
   try {
     const settings = await platformAdminApi.getPaymentSettings();
-    ruleForm.creditsPerCny = settings.creditsPerCny;
     ruleForm.topupFeePercent = bpToPercent(settings.tenantCustomTopupFeeBp);
     ruleForm.withdrawFeePercent = bpToPercent(settings.tenantWithdrawFeeBp);
+    ruleForm.customValidityDays = settings.tenantCustomValidityDays ?? null;
     ruleForm.packages = (settings.tenantTopupPackages || []).map(packageToForm);
   } catch (e) {
     console.error("获取支付设置失败:", e);
@@ -182,9 +187,9 @@ async function submitPaymentSettings() {
   settingsSubmitting.value = true;
   try {
     const body: PaymentGlobalSettings = {
-      creditsPerCny: Math.round(Number(ruleForm.creditsPerCny || 0)),
       tenantCustomTopupFeeBp: percentToBp(ruleForm.topupFeePercent),
       tenantWithdrawFeeBp: percentToBp(ruleForm.withdrawFeePercent),
+      tenantCustomValidityDays: ruleForm.customValidityDays || null,
       tenantTopupPackages: ruleForm.packages.map(formToPackage)
     };
     await platformAdminApi.updatePaymentSettings(body);
@@ -209,7 +214,7 @@ onMounted(() => {
     <PortalPagePanel
       :icon="CreditCard"
       :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '支付配置' }]"
-      description="用业务语言配置收款、充值到账和提现到账。这里的设置主要给租户充值使用，租户可单独配置终端用户充值。"
+      description="用业务语言配置收款、额度到账和管理员提现规则。这里的设置主要给租户充值使用，租户可单独配置终端用户充值。"
     >
       <div class="settings-body">
         <div class="settings-tabs">
@@ -307,21 +312,18 @@ onMounted(() => {
         </el-form>
         </div>
 
-        <!-- 租户充值与提现 -->
+        <!-- 租户充值与管理员提现规则 -->
         <div v-show="activeTab === 'rules'" class="settings-pane">
           <header class="settings-pane__head">
-            <p class="settings-pane__desc">快捷套餐固定到账；自定义充值和提现按手续费折算。租户可单独配置终端用户充值。</p>
+            <p class="settings-pane__desc">额度包固定到账；自定义充值和管理员提现按手续费折算。租户可单独配置终端用户充值。</p>
           </header>
         <el-form v-loading="settingsLoading" :model="ruleForm" label-position="top" class="settings-form">
           <section class="settings-section">
             <div class="section-heading">
-              <h4>兑换与手续费</h4>
-              <p>自定义充值金额固定限制为 10~10000 元；提现时申请金额冻结，实际打款 = 申请金额 - 手续费。</p>
+              <h4>手续费与有效期</h4>
+              <p>所有金额均为 USD；自定义充值按支付金额扣除手续费后入账。</p>
             </div>
             <div class="form-grid form-grid--3">
-              <el-form-item label="1 元到账多少积分">
-                <el-input-number v-model="ruleForm.creditsPerCny" :min="1" :controls="false" class="w-full" />
-              </el-form-item>
               <el-form-item label="充值手续费">
                 <el-input-number v-model="ruleForm.topupFeePercent" :min="0" :max="100" :precision="2" :step="0.1" :controls="false" class="w-full">
                   <template #suffix>%</template>
@@ -332,23 +334,26 @@ onMounted(() => {
                   <template #suffix>%</template>
                 </el-input-number>
               </el-form-item>
+              <el-form-item label="自定义充值有效期（天）">
+                <el-input-number v-model="ruleForm.customValidityDays" :min="1" :controls="false" clearable class="w-full" placeholder="留空为长期有效" />
+              </el-form-item>
             </div>
             <div class="preview-row">
               <div class="preview-strip">
                 <span class="preview-strip__tag">充值举例</span>
-                自定义充值 ¥{{ customPreview.amount }}，原本可得 {{ customPreview.gross }} 积分，扣除手续费 {{ customPreview.fee }} 积分，实际到账 {{ customPreview.net }} 积分。
+                自定义充值 ${{ customPreview.amount }}，充值金额 {{ customPreview.gross }}，手续费 {{ customPreview.fee }}，实际到账 {{ customPreview.net }}。
               </div>
               <div class="preview-strip">
                 <span class="preview-strip__tag">提现举例</span>
-                申请提现 ¥100.00，手续费 {{ ruleForm.withdrawFeePercent }}%，预计实际打款 ¥{{ (100 - (100 * ruleForm.withdrawFeePercent) / 100).toFixed(2) }}。
+                管理员创建 $100.00 提现记录，手续费 {{ ruleForm.withdrawFeePercent }}%，预计实际打款 ${{ (100 - (100 * ruleForm.withdrawFeePercent) / 100).toFixed(2) }}。
               </div>
             </div>
           </section>
 
           <section class="settings-section">
             <div class="section-heading">
-              <h4>快捷充值套餐</h4>
-              <p>套餐适合做活动，比如“10 元到账 1200 积分”。套餐到账积分固定，不再扣手续费。卡片上半部分即租户看到的样子。</p>
+              <h4>快捷额度包</h4>
+              <p>额度包可配置支付金额、赠送金额和有效期；额度包金额不再扣自定义充值手续费。</p>
             </div>
 
             <div class="package-grid">
@@ -360,9 +365,9 @@ onMounted(() => {
                 <div class="package-preview">
                   <span v-if="pkg.badge" class="package-preview__badge">{{ pkg.badge }}</span>
                   <span v-if="!pkg.enabled" class="package-preview__hidden">已隐藏</span>
-                  <strong>¥{{ Number(pkg.amountYuan || 0).toFixed(2) }}</strong>
-                  <em>{{ pkg.name || "未命名套餐" }}</em>
-                  <span class="package-preview__credits">到账 {{ Number(pkg.credits || 0).toLocaleString() }} 积分</span>
+                  <strong>${{ Number(pkg.paymentAmountUsd || 0).toFixed(2) }}</strong>
+                  <em>{{ pkg.name || "未命名额度包" }}</em>
+                  <span class="package-preview__credits">到账 ${{ (Number(pkg.paymentAmountUsd || 0) + Number(pkg.giftAmountUsd || 0)).toFixed(6) }}</span>
                 </div>
                 <div class="package-fields">
                   <label class="package-field">
@@ -370,13 +375,14 @@ onMounted(() => {
                     <el-input v-model="pkg.name" placeholder="10 元体验包" />
                   </label>
                   <label class="package-field">
-                    <span>金额（元）</span>
-                    <el-input-number v-model="pkg.amountYuan" :min="10" :max="10000" :precision="2" :controls="false" class="w-full" />
+                    <span>支付金额（USD）</span>
+                    <el-input-number v-model="pkg.paymentAmountUsd" :min="0.000001" :max="10000" :precision="6" :controls="false" class="w-full" />
                   </label>
                   <label class="package-field">
-                    <span>到账积分</span>
-                    <el-input-number v-model="pkg.credits" :min="1" :controls="false" class="w-full" />
+                    <span>赠送金额（USD）</span>
+                    <el-input-number v-model="pkg.giftAmountUsd" :min="0" :precision="6" :controls="false" class="w-full" />
                   </label>
+                  <label class="package-field"><span>有效期（天）</span><el-input-number v-model="pkg.validityDays" :min="1" :controls="false" clearable class="w-full" placeholder="长期有效" /></label>
                   <div class="package-field-row">
                     <label class="package-field">
                       <span>角标</span>
@@ -396,7 +402,7 @@ onMounted(() => {
 
               <button type="button" class="package-add" @click="addPackage">
                 <span class="package-add__plus">＋</span>
-                添加套餐
+                添加额度包
               </button>
             </div>
           </section>

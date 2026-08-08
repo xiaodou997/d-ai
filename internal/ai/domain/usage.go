@@ -3,8 +3,8 @@ package domain
 import "time"
 
 // UsageLog is the management-domain view of a row in ai_usage_logs (the full
-// admin projection). Cost fields are micro-credits (suffix Micro); the HTTP
-// layer converts to display credits. Optional columns use Go zero values for
+// admin projection). Cost fields are micro-USD (suffix Micro); the HTTP
+// layer converts to display USD. Optional columns use Go zero values for
 // strings and *int32 for nullable ints.
 type UsageLog struct {
 	ID                                 string
@@ -126,7 +126,7 @@ type UsageStats struct {
 	AvgFirstResponseByteMs  float64
 }
 
-// UsageSummaryRow aggregates usage per model. Cost fields are micro-credits.
+// UsageSummaryRow aggregates usage per model. Cost fields are micro-USD.
 type UsageSummaryRow struct {
 	ModelCode               string
 	RequestCount            int64
@@ -204,7 +204,7 @@ type UserUsageSummary struct {
 }
 
 // DailyTrendRow is one day of aggregated usage.
-// Cost fields are micro-credits.
+// Cost fields are micro-USD.
 type DailyTrendRow struct {
 	Date                   string
 	RequestCount           int64

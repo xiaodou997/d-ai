@@ -39,14 +39,14 @@ func TestScaleInt64HalfUp(t *testing.T) {
 	}
 }
 
-func TestCreditsToMicroRejectsOverflow(t *testing.T) {
-	if got, ok := CreditsToMicro(MaxWholeCredits); !ok || got != MaxWholeCredits*MicroCreditsPerCredit {
+func TestWholeUSDToMicroRejectsOverflow(t *testing.T) {
+	if got, ok := WholeUSDToMicro(MaxWholeUSD); !ok || got != MaxWholeUSD*MicroUSDPerUSD {
 		t.Fatalf("max conversion = %d, %v", got, ok)
 	}
-	if _, ok := CreditsToMicro(MaxWholeCredits + 1); ok {
-		t.Fatal("overflowing whole-credit amount should be rejected")
+	if _, ok := WholeUSDToMicro(MaxWholeUSD + 1); ok {
+		t.Fatal("overflowing whole-USD amount should be rejected")
 	}
-	if _, ok := CreditsToMicro(-1); ok {
-		t.Fatal("negative whole-credit amount should be rejected")
+	if _, ok := WholeUSDToMicro(-1); ok {
+		t.Fatal("negative whole-USD amount should be rejected")
 	}
 }

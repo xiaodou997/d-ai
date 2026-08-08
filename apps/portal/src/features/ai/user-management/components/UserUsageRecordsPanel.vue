@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { formatCredits } from "@/platform/ai/usage";
+import { formatNumber, formatUSD } from "@/platform/ai/usage";
 
 import { listTenantUsageRecords } from "../../usage/api";
 import TenantUsageDetailDrawer from "../../usage/components/TenantUsageDetailDrawer.vue";
@@ -132,10 +132,10 @@ function isAbortError(error: unknown) {
         <span>成功率</span><strong>{{ successRate }}</strong><small>当前过滤范围</small>
       </div>
       <div class="stat-card">
-        <span>总 Token</span><strong>{{ formatCredits(stats.total_tokens) }}</strong><small>当前过滤范围</small>
+        <span>总 Token</span><strong>{{ formatNumber(stats.total_tokens) }}</strong><small>当前过滤范围</small>
       </div>
       <div class="stat-card">
-        <span>消费积分</span><strong class="accent">{{ formatCredits(stats.total_user_charged_credits) }}</strong><small>均延 {{ Math.round(stats.avg_latency_ms) }} ms</small>
+        <span>消费金额</span><strong class="accent">{{ formatUSD(stats.total_user_charged_usd) }}</strong><small>均延 {{ Math.round(stats.avg_latency_ms) }} ms</small>
       </div>
     </div>
 

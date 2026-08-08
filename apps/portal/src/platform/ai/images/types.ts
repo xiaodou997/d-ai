@@ -25,7 +25,7 @@ export interface PortalImageJobRecord {
   style?: string;
   response_format?: string;
   requested_output_count?: number;
-  caller_charge_credits: number;
+  caller_charge_usd: number;
   image_count: number;
   inline_count: number;
   url_count: number;

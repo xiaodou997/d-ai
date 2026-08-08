@@ -6,8 +6,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/libs/go/httpx"
 	"xiaodou/dai/internal/auth"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 type jwtKeysOutput struct {

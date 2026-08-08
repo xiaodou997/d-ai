@@ -1,8 +1,8 @@
-// 主流模型催化表：成本价（CNY/百万 token）+ 公开模型默认 token 配置
-// USD → CNY 按 1:7 折算；CNY 原生模型直接使用厂商挂牌价
+// 主流模型参考表：成本价（USD/百万 token）+ 公开模型默认 token 配置。
+// 历史数值保持不变，统一按 USD 解释。
 //
 // 字段说明：
-//   - input/output:    上游成本价，单位 CNY/M tokens
+//   - input/output:    上游成本价，单位 USD/M tokens
 //   - context:         上下文窗口 tokens（公开模型默认值）
 //   - defaultOutput:   默认最大输出 tokens
 //   - maxOutput:       硬性最大输出 tokens
@@ -51,11 +51,11 @@ export const MODEL_PRICING_CATALOG: any[] = [
   { matcher: /^gemini.*2\.0.*flash.*lite/i, label: 'Gemini 2.0 Flash-Lite', vendor: 'gemini', input: 0.525, output: 2.1, context: 1000000, defaultOutput: 8192, maxOutput: 8192 },
   { matcher: /^gemini.*2\.0.*flash/i, label: 'Gemini 2.0 Flash', vendor: 'gemini', input: 0.7, output: 2.8, context: 1000000, defaultOutput: 8192, maxOutput: 8192 },
 
-  // ===== Deepseek (CNY native) =====
+  // ===== Deepseek =====
   { matcher: /^deepseek.*reasoner|^deepseek.*r1/i, label: 'Deepseek R1', vendor: 'deepseek', input: 4.0, output: 16.0, context: 64000, defaultOutput: 8192, maxOutput: 64000 },
   { matcher: /^deepseek.*chat|^deepseek.*v3/i, label: 'Deepseek V3', vendor: 'deepseek', input: 2.0, output: 8.0, context: 64000, defaultOutput: 4096, maxOutput: 8192 },
 
-  // ===== Qwen (CNY native) =====
+  // ===== Qwen =====
   { matcher: /^qwen.*max/i, label: 'Qwen Max', vendor: 'qwen', input: 2.4, output: 9.6, context: 32000, defaultOutput: 8192, maxOutput: 8192 },
   { matcher: /^qwen.*plus/i, label: 'Qwen Plus', vendor: 'qwen', input: 0.8, output: 2.0, context: 131000, defaultOutput: 8192, maxOutput: 8192 },
   { matcher: /^qwen.*turbo/i, label: 'Qwen Turbo', vendor: 'qwen', input: 0.3, output: 0.6, context: 1000000, defaultOutput: 8192, maxOutput: 8192 },

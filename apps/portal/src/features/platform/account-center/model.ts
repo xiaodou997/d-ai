@@ -1,8 +1,6 @@
 import type { AccountBalance } from "@/api/types/platformTenant";
-import type { TenantCashAccount } from "@/api/types/tenant";
 
-export type AccountCenterTab = "points" | "balance" | "withdrawals";
-export type PurchaseMethod = "balance" | "wechat";
+export type AccountCenterTab = "recharges" | "ledger";
 
 export interface AccountCenterPage<T> {
   items: T[];
@@ -11,42 +9,26 @@ export interface AccountCenterPage<T> {
   size: number;
 }
 
+export const MICRO_USD_PER_USD = 1_000_000;
+
 export function emptyAccountBalance(): AccountBalance {
   return {
-    totalCredits: 0,
-    usedCredits: 0,
-    remainingCredits: 0,
-    frozenCredits: 0,
-    availableCredits: 0,
-    permanentCredits: 0,
-    timedCredits: 0,
-    packages: []
-  };
-}
-
-export function emptyCashAccount(): TenantCashAccount {
-  return {
-    balance: 0,
-    frozen: 0,
-    available: 0,
-    creditsPerCny: 100,
-    withdrawFeeBp: 160
+    currency: "USD", totalUsd: 0, usedUsd: 0, remainingUsd: 0,
+    availableUsd: 0, permanentUsd: 0, timedUsd: 0, outstandingDebtMicroUsd: 0,
+    serviceState: "active", balanceLots: []
   };
 }
 
 export function normalizeAccountTab(value: unknown): AccountCenterTab {
-  return value === "balance" || value === "withdrawals" ? value : "points";
+  return value === "recharges" ? value : "ledger";
 }
 
-export function formatCredits(value: number | null | undefined): string {
-  return Number(value ?? 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+export function formatUSD(value: number | null | undefined): string {
+  return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
-export function formatCents(value: number | null | undefined): string {
-  return (Number(value ?? 0) / 100).toLocaleString("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+export function formatMicroUSD(value: number | null | undefined): string {
+  return formatUSD(Number(value ?? 0) / MICRO_USD_PER_USD);
 }
 
 export function formatTime(value?: number | string | null): string {
@@ -54,46 +36,14 @@ export function formatTime(value?: number | string | null): string {
   return new Date(value).toLocaleString("zh-CN");
 }
 
-export function creditSourceText(orderType: string): string {
-  return {
-    platform_to_tenant: "平台发放",
-    online_tenant_topup: "微信购买",
-    cash_purchase: "余额购买"
-  }[orderType] ?? "积分到账";
+export function balanceSourceText(orderType: string): string {
+  return ({ platform_to_tenant: "平台发放", online_tenant_topup: "在线充值", user_topup_income: "用户充值收入" } as Record<string, string>)[orderType] ?? "余额入账";
 }
 
-export function creditStatusText(status: string): string {
+export function balanceStatusText(status: string): string {
   return status === "reversed" ? "已撤销" : status === "active" ? "已到账" : status || "—";
 }
 
-export function cashTransactionText(type: string): string {
-  return {
-    topup_income: "用户充值到账",
-    buy_credits: "购买积分",
-    withdraw: "提现",
-    adjust: "余额调整"
-  }[type] ?? type;
-}
-
-export function withdrawalStatusText(status: string): string {
-  return {
-    pending: "待审核",
-    approved: "审核通过，待打款",
-    paid: "已打款",
-    rejected: "已驳回",
-    cancelled: "已取消"
-  }[status] ?? status;
-}
-
-export function withdrawalStatusTone(status: string): "success" | "warning" | "danger" | "info" {
-  if (status === "paid") return "success";
-  if (status === "pending" || status === "approved") return "warning";
-  if (status === "rejected") return "danger";
-  return "info";
-}
-
-export function maskAccount(value: string): string {
-  if (!value) return "—";
-  if (value.length <= 4) return value;
-  return `${"*".repeat(Math.max(4, value.length - 4))}${value.slice(-4)}`;
+export function balanceTransactionText(type: string): string {
+  return ({ topup_income: "用户充值收入", consumption: "服务消费", withdraw: "提现", adjust: "余额调整" } as Record<string, string>)[type] ?? type;
 }

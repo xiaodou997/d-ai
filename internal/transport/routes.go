@@ -13,7 +13,6 @@ import (
 
 	announcementpkg "xiaodou/dai/internal/announcement"
 	"xiaodou/dai/internal/auth"
-	billingpg "xiaodou/dai/internal/billing/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/config"
 	invitepkg "xiaodou/dai/internal/invite"
@@ -54,8 +53,6 @@ type Deps struct {
 	Legal         config.LegalConfig
 	UserService   *userpkg.UserService
 	Deduction     *billingsvc.DeductionService
-	CreditLeases  *billingsvc.CreditLeaseService
-	BillingRepo   *billingpg.BillingRepository
 	Invite        *invitepkg.InviteService
 	Payment       *paymentsvc.PaymentService
 	Announcements *announcementpkg.Service

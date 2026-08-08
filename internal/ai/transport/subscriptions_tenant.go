@@ -60,11 +60,11 @@ func purchasePolicyUpdateFromInput(in *subPurchasePolicyInput) *subscription.Pur
 type subPlanWriteBody struct {
 	Name               string                  `json:"name" doc:"套餐名称（同租户内唯一）"`
 	Description        string                  `json:"description,omitempty" doc:"套餐说明"`
-	PriceCredits       int64                   `json:"price_credits" minimum:"1" maximum:"922337203685477" doc:"售价（整数积分）"`
+	PriceMicroUSD      int64                   `json:"price_micro_usd" minimum:"1" doc:"售价，单位 micro-USD"`
 	DurationDays       int32                   `json:"duration_days" doc:"有效期天数，只能是 1/3/7/30"`
-	TotalLimitMicro    int64                   `json:"total_limit_micro" minimum:"1" doc:"套餐总额度（微积分）"`
-	Window5hLimitMicro *int64                  `json:"window_5h_limit_micro,omitempty" doc:"5 小时窗口额度（微积分）；空=不限"`
-	Window7dLimitMicro *int64                  `json:"window_7d_limit_micro,omitempty" doc:"7 天窗口额度（微积分）；空=不限，仅 ≥7 天套餐有意义"`
+	TotalLimitMicro    int64                   `json:"total_limit_micro_usd" minimum:"1" doc:"套餐总额度，单位 micro-USD"`
+	Window5hLimitMicro *int64                  `json:"window_5h_limit_micro_usd,omitempty" doc:"5 小时窗口额度，单位 micro-USD；空=不限"`
+	Window7dLimitMicro *int64                  `json:"window_7d_limit_micro_usd,omitempty" doc:"7 天窗口额度，单位 micro-USD；空=不限，仅 ≥7 天套餐有意义"`
 	SortOrder          int32                   `json:"sort_order,omitempty" doc:"排序权重"`
 	SaleLimit          *int32                  `json:"sale_limit,omitempty" minimum:"1" doc:"套餐总销售份数；空=不限量"`
 	Groups             []subPlanGroupInput     `json:"groups" minItems:"1" doc:"绑定分组（必填 ≥1）；额度按命中分组的基准价 × 套餐扣额倍率计量"`
@@ -176,7 +176,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 			TenantID:           tenantID,
 			Name:               in.Body.Name,
 			Description:        in.Body.Description,
-			PriceCredits:       in.Body.PriceCredits,
+			PriceMicroUSD:      in.Body.PriceMicroUSD,
 			DurationDays:       in.Body.DurationDays,
 			TotalLimitMicro:    in.Body.TotalLimitMicro,
 			Window5hLimitMicro: in.Body.Window5hLimitMicro,
@@ -290,7 +290,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 			TenantID:           tenantID,
 			Name:               in.Body.Name,
 			Description:        in.Body.Description,
-			PriceCredits:       in.Body.PriceCredits,
+			PriceMicroUSD:      in.Body.PriceMicroUSD,
 			DurationDays:       in.Body.DurationDays,
 			TotalLimitMicro:    in.Body.TotalLimitMicro,
 			Window5hLimitMicro: in.Body.Window5hLimitMicro,

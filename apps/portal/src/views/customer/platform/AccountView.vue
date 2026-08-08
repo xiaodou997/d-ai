@@ -1,16 +1,16 @@
 <!--
-  我的积分账户 — 查看积分余额与积分包详情。
+  我的 USD 账户 — 查看额度与有效期额度包。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        刷新按钮收进 #actions);指标条 PortalMetricGrid → DsMetricCard,
-       el-tag → DsTag,空态 → DsEmpty;积分包卡片/进度条保留,业务逻辑与请求不变。
+       el-tag → DsTag,空态 → DsEmpty;额度包卡片/进度条保留,业务逻辑与请求不变。
 -->
 <template>
   <div class="page-container account-page">
     <PortalPagePanel
       fill
       :icon="Wallet"
-      :breadcrumbs="[{ label: '用户中心' }, { label: '积分账户' }, { label: '我的积分账户' }]"
-      description="查看我的积分余额和积分包详情"
+      :breadcrumbs="[{ label: '用户中心' }, { label: 'USD 账户' }, { label: '我的余额' }]"
+      description="查看统一 USD 额度和有效期额度包"
     >
       <template #actions>
         <el-button type="primary" :icon="Refresh" :loading="loading" @click="fetchData">立即刷新</el-button>
@@ -19,38 +19,38 @@
       <div class="account-body">
         <div class="account-metrics">
           <DsMetricCard
-            label="总积分"
-            :value="loading ? '—' : String(stats.totalCredits ?? 0)"
-            hint="所有积分包剩余总和"
+            label="额度余额"
+            :value="loading ? '—' : formatUSD(stats.remainingUsd)"
+            hint="所有额度包剩余总和"
           />
           <DsMetricCard
-            label="冻结积分"
-            :value="loading ? '—' : String(stats.frozenCredits ?? 0)"
-            hint="预授权冻结中"
+            label="可用额度"
+            :value="loading ? '—' : formatUSD(stats.availableUsd)"
+            hint="当前可直接使用的额度"
           />
           <DsMetricCard
-            label="可用积分"
-            :value="loading ? '—' : String(stats.availableCredits ?? 0)"
-            hint="总积分 - 冻结积分"
+            label="当前透支"
+            :value="loading ? '—' : formatUSD(stats.outstandingDebtUsd)"
+            hint="允许透支，后续充值优先清欠"
           />
         </div>
 
         <section class="account-packages">
           <header class="account-packages__head">
-            <h2 class="account-packages__title">我的积分包</h2>
-            <p class="account-packages__desc">共 {{ packages.length }} 个积分包</p>
+            <h2 class="account-packages__title">额度包有效期</h2>
+            <p class="account-packages__desc">共 {{ packages.length }} 个额度包</p>
           </header>
 
           <div v-if="pkgLoading" class="flex items-center justify-center py-16">
             <el-icon class="account-spinner animate-spin" :size="36"><Loading /></el-icon>
           </div>
 
-          <DsEmpty v-else-if="packages.length === 0" title="暂无积分包" description="充值或等待管理员发放后即可在此查看" />
+          <DsEmpty v-else-if="packages.length === 0" title="暂无额度包" description="充值或等待管理员发放后即可在此查看" />
 
           <div v-else class="package-grid">
             <div
               v-for="pkg in packages"
-              :key="pkg.packageId"
+              :key="pkg.balanceLotId"
               class="package-card"
               :class="{ 'package-card--active': pkg.status === 1 }"
             >
@@ -59,18 +59,18 @@
                   <DsTag :tone="pkg.status === 1 ? 'positive' : 'neutral'">
                     {{ pkg.status === 1 ? '可用' : pkg.status === 2 ? '已过期' : '已耗尽' }}
                   </DsTag>
-                  <span class="package-card__id">{{ pkg.packageId }}</span>
+                  <span class="package-card__id">{{ pkg.balanceLotId }}</span>
                 </div>
               </div>
 
               <div class="space-y-2">
                 <div class="flex items-center justify-between">
-                  <span class="package-card__label">剩余积分</span>
-                  <span class="package-card__value">{{ pkg.remainingCredits?.toLocaleString() ?? 0 }}</span>
+                  <span class="package-card__label">剩余额度</span>
+                  <span class="package-card__value">{{ formatUSD(pkg.remainingUsd) }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span class="package-card__label">总积分</span>
-                  <span class="package-card__value-sm">{{ pkg.totalCredits?.toLocaleString() ?? 0 }}</span>
+                  <span class="package-card__label">额度总量</span>
+                  <span class="package-card__value-sm">{{ formatUSD(pkg.totalUsd) }}</span>
                 </div>
                 <div class="flex items-center justify-between">
                   <span class="package-card__label">过期时间</span>
@@ -85,7 +85,7 @@
               <!-- 进度条 -->
               <div class="mt-3">
                 <el-progress
-                  :percentage="pkg.totalCredits > 0 ? Math.round((pkg.remainingCredits / pkg.totalCredits) * 100) : 0"
+                  :percentage="pkg.totalUsd > 0 ? Math.round((pkg.remainingUsd / pkg.totalUsd) * 100) : 0"
                   :stroke-width="6"
                   :show-text="false"
                   :color="pkg.status === 1 ? 'var(--ds-accent)' : 'var(--ds-faint)'"
@@ -106,18 +106,19 @@ import { Wallet } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import { DsEmpty, DsMetricCard, DsTag } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
-import type { PackageView } from "@/api/types/platformCustomer";
+import type { BalanceLotView } from "@/api/types/platformCustomer";
 
 const loading = ref(false);
 const pkgLoading = ref(false);
 
 const stats = reactive({
-  totalCredits: 0,
-  frozenCredits: 0,
-  availableCredits: 0
+  remainingUsd: 0,
+  availableUsd: 0,
+  outstandingDebtUsd: 0
 });
 
-const packages = ref<PackageView[]>([]);
+const packages = ref<BalanceLotView[]>([]);
+function formatUSD(value: number) { return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 
 function formatDate(ts?: string | number | null) {
   if (!ts) return "—";
@@ -130,19 +131,19 @@ async function fetchData() {
   try {
     const data = await platformCustomerApi.getBalance(true);
     if (data) {
-      stats.totalCredits = data.totalCredits ?? 0;
-      stats.frozenCredits = data.frozenCredits ?? 0;
-      stats.availableCredits = data.availableCredits ?? 0;
-      if (Array.isArray(data.packages)) {
-        packages.value = data.packages.map((pkg) => {
+      stats.remainingUsd = data.remainingUsd ?? 0;
+      stats.availableUsd = data.availableUsd ?? 0;
+      stats.outstandingDebtUsd = Number(data.outstandingDebtMicroUsd ?? 0) / 1_000_000;
+      if (Array.isArray(data.balanceLots)) {
+        packages.value = data.balanceLots.map((pkg) => {
           const expiredMs = pkg.expiresAt ? new Date(pkg.expiresAt).getTime() : 0;
           return {
-            packageId: pkg.packageId,
-            totalCredits: pkg.totalCredits,
-            remainingCredits: pkg.remainingCredits,
+            balanceLotId: pkg.balanceLotId,
+            totalUsd: pkg.totalUsd,
+            remainingUsd: pkg.remainingUsd,
             expiresAt: pkg.expiresAt,
             source: pkg.source || "充值",
-            status: expiredMs && expiredMs < Date.now() ? 2 : pkg.remainingCredits <= 0 ? 3 : 1
+            status: expiredMs && expiredMs < Date.now() ? 2 : pkg.remainingUsd <= 0 ? 3 : 1
           };
         });
       } else {
@@ -170,7 +171,7 @@ onMounted(() => {
   flex-direction: column;
 }
 
-/* PortalPagePanel body 无内边距,用 24px 容器排布指标卡与积分包分区;fill 模式下随面板撑满 */
+/* PortalPagePanel body 无内边距,用 24px 容器排布指标卡与额度包分区;fill 模式下随面板撑满 */
 .account-body {
   flex: 1;
   min-height: 0;

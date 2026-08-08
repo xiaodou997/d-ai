@@ -1,7 +1,7 @@
 const numberFormatter = new Intl.NumberFormat("zh-CN");
 const currencyFormatter = new Intl.NumberFormat("zh-CN", {
   style: "currency",
-  currency: "CNY",
+  currency: "USD",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 });
@@ -49,4 +49,3 @@ export function formatLatency(value?: number | null): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
   return `${Math.round(value)}ms`;
 }
-

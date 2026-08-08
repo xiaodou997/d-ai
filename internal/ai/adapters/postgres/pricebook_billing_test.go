@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"xiaodou/dai/internal/ai/billingcontrol"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
@@ -54,8 +53,6 @@ func mustPriceBreakdown(t *testing.T, usage domain.TokenUsage, entry domain.Pric
 func TestPrepareBillingUsesPublicModelCodeForBothLedgers(t *testing.T) {
 	svc := billingcontrol.New(&billingModelRepository{}, nil)
 	biller := NewPriceBookBiller(svc, nil, nil)
-	biller.rate = 7
-	biller.rateExp = time.Now().Add(time.Hour)
 	candidate := &domain.RouteCandidate{
 		RouteID:                    "route-1",
 		RequestedModel:             "claude-opus-4-1",
@@ -84,23 +81,22 @@ func TestPrepareBillingUsesPublicModelCodeForBothLedgers(t *testing.T) {
 }
 
 func TestSellMicro_TokensWithoutCache(t *testing.T) {
-	// 1000 prompt + 500 completion, no cache split, ×1, rate 7.
-	// usd = 1000*3e-6 + 500*6e-6 = 0.006 ; micro = 0.006*7*10000 = 420
+	// USD = 1000*3e-6 + 500*6e-6 = 0.006; micro-USD = 6000.
 	u := domain.TokenUsage{PromptTokens: 1000, CompletionTokens: 500}
-	got := pricedMicro(u, chatEntry(), 1, 7)
-	if got != 420 {
-		t.Fatalf("got %d, want 420", got)
+	got := pricedMicro(u, chatEntry(), 1)
+	if got != 6000 {
+		t.Fatalf("got %d, want 6000", got)
 	}
 }
 
 func TestSellMicro_AlwaysSplitsCacheTokens(t *testing.T) {
 	// Cache usage always follows the price-book cache rates.
 	// usd = 600*3e-6 + 400*3e-7 + 200*6e-6 = 0.00312
-	// micro = 0.00312*7*10000 = 218.4 -> 218
+	// micro-USD = 3120.
 	u := domain.TokenUsage{PromptTokens: 1000, CacheReadTokens: 400, CompletionTokens: 200, ReasoningTokens: 50}
-	got := pricedMicro(u, chatEntry(), 1, 7)
-	if got != 218 {
-		t.Fatalf("got %d, want 218", got)
+	got := pricedMicro(u, chatEntry(), 1)
+	if got != 3120 {
+		t.Fatalf("got %d, want 3120", got)
 	}
 }
 
@@ -120,8 +116,7 @@ func TestCalculateNormalizesOverlappingCacheUsageOnce(t *testing.T) {
 		Subject:    &coreidentity.Subject{Scope: coreidentity.ScopeTenant, TenantID: "tenant-cache"},
 		Candidate:  candidate,
 		TokenUsage: domain.TokenUsage{PromptTokens: 100, CompletionTokens: 10, CacheReadTokens: 80, CacheWriteTokens: 50},
-		BillingSnapshots: map[string]domain.BillingSnapshot{candidate.RouteID: {
-			CreditsPerUSD: 1, RetailEntry: chatEntry(), AccountEntry: chatEntry(),
+		BillingSnapshots: map[string]domain.BillingSnapshot{candidate.RouteID: {RetailEntry: chatEntry(), AccountEntry: chatEntry(),
 			GroupDefaultUserMultiplier: 1, EffectiveUserMultiplier: 1,
 		}},
 	}
@@ -136,15 +131,15 @@ func TestCalculateNormalizesOverlappingCacheUsageOnce(t *testing.T) {
 func TestSellMicro_ExplicitZeroCachePricesAreFree(t *testing.T) {
 	e := domain.PriceBookEntry{TokenPriceTiers: []domain.TokenPriceTier{{InputPerToken: 0.000003, OutputPerToken: 0.000006}}}
 	u := domain.TokenUsage{PromptTokens: 1000, CacheReadTokens: 400, CompletionTokens: 200, ReasoningTokens: 50}
-	if got := pricedMicro(u, e, 1, 7); got != 210 {
-		t.Fatalf("got %d, want 210", got)
+	if got := pricedMicro(u, e, 1); got != 3000 {
+		t.Fatalf("got %d, want 3000", got)
 	}
 }
 
 func TestSellMicro_Multiplier(t *testing.T) {
 	u := domain.TokenUsage{PromptTokens: 1000, CompletionTokens: 500}
-	full := pricedMicro(u, chatEntry(), 1, 7)
-	half := pricedMicro(u, chatEntry(), 0.5, 7)
+	full := pricedMicro(u, chatEntry(), 1)
+	half := pricedMicro(u, chatEntry(), 0.5)
 	if half != full/2 {
 		t.Fatalf("half=%d, want %d", half, full/2)
 	}
@@ -154,13 +149,11 @@ func TestCostLineAppliesOnlyCommercialMultiplier(t *testing.T) {
 	u := domain.TokenUsage{PromptTokens: 1000, CacheReadTokens: 400, CompletionTokens: 200, ReasoningTokens: 50}
 	breakdown := mustPriceBreakdown(t, u, chatEntry())
 
-	base := costLineFromBreakdown(breakdown, 1, 7)
-	doubled := costLineFromBreakdown(breakdown, 2, 7)
+	base := costLineFromBreakdown(breakdown, 1)
+	doubled := costLineFromBreakdown(breakdown, 2)
 
-	// Each billing side rounds once from its own exact amount: 218.4 -> 218,
-	// 436.8 -> 437. It must not multiply an already-rounded charge.
-	if base.CostMicro != 218 || doubled.CostMicro != 437 {
-		t.Fatalf("base/doubled=%d/%d, want 218/437", base.CostMicro, doubled.CostMicro)
+	if base.CostMicro != 3120 || doubled.CostMicro != 6240 {
+		t.Fatalf("base/doubled=%d/%d, want 3120/6240", base.CostMicro, doubled.CostMicro)
 	}
 	if doubled.ChargeUSDEquivalent != base.ChargeUSDEquivalent*2 {
 		t.Fatalf("charge usd=%f, want %f", doubled.ChargeUSDEquivalent, base.ChargeUSDEquivalent*2)
@@ -168,7 +161,7 @@ func TestCostLineAppliesOnlyCommercialMultiplier(t *testing.T) {
 }
 
 func TestMarshalBillingBreakdown_ServiceTier(t *testing.T) {
-	line := costLineFromBreakdown(mustPriceBreakdown(t, domain.TokenUsage{PromptTokens: 1000}, chatEntry()), 1, 7)
+	line := costLineFromBreakdown(mustPriceBreakdown(t, domain.TokenUsage{PromptTokens: 1000}, chatEntry()), 1)
 	raw := marshalBillingBreakdown(domain.BillingResult{
 		ServiceTier: domain.ServiceTierFast,
 	}, line, line, &line)
@@ -196,11 +189,11 @@ func TestBaseCostUsesMultiplierOne(t *testing.T) {
 	u := domain.TokenUsage{PromptTokens: 1000, CompletionTokens: 500}
 	breakdown := mustPriceBreakdown(t, u, chatEntry())
 
-	base := costLineFromBreakdown(breakdown, 1, 7).CostMicro
-	if base != 420 {
-		t.Fatalf("base=%d, want 420", base)
+	base := costLineFromBreakdown(breakdown, 1).CostMicro
+	if base != 6000 {
+		t.Fatalf("base=%d, want 6000", base)
 	}
-	charge := costLineFromBreakdown(breakdown, 3, 7).CostMicro
+	charge := costLineFromBreakdown(breakdown, 3).CostMicro
 	if charge != base*3 {
 		t.Fatalf("charge=%d, want base*3=%d", charge, base*3)
 	}
@@ -218,7 +211,6 @@ func TestCalculateUsesPreparedSnapshotWithoutRuntimeDependencies(t *testing.T) {
 		TokenUsage: domain.TokenUsage{PromptTokens: 1000, CompletionTokens: 500},
 		BillingSnapshots: map[string]domain.BillingSnapshot{
 			candidate.RouteID: {
-				CreditsPerUSD:              7,
 				RetailEntry:                chatEntry(),
 				AccountEntry:               chatEntry(),
 				GroupName:                  "standard",
@@ -235,11 +227,11 @@ func TestCalculateUsesPreparedSnapshotWithoutRuntimeDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("calculate prepared snapshot: %v", err)
 	}
-	if result.RetailBaseMicro != 420 || result.CatalogBaseMicro != 420 {
-		t.Fatalf("retail/upstream reference = %d/%d, want 420/420", result.RetailBaseMicro, result.CatalogBaseMicro)
+	if result.RetailBaseMicro != 6000 || result.CatalogBaseMicro != 6000 {
+		t.Fatalf("retail/upstream reference = %d/%d, want 6000/6000", result.RetailBaseMicro, result.CatalogBaseMicro)
 	}
-	if result.TenantPayableMicro != 210 || result.UserPayableMicro != 630 || result.UserChargedMicro != 630 || result.APIKeyQuotaCostMicro != 630 {
-		t.Fatalf("tenant/user/debit/quota = %d/%d/%d/%d, want 210/630/630/630",
+	if result.TenantPayableMicro != 3000 || result.UserPayableMicro != 9000 || result.UserChargedMicro != 9000 || result.APIKeyQuotaCostMicro != 9000 {
+		t.Fatalf("tenant/user/debit/quota = %d/%d/%d/%d, want 3000/9000/9000/9000",
 			result.TenantPayableMicro, result.UserPayableMicro, result.UserChargedMicro, result.APIKeyQuotaCostMicro)
 	}
 }
@@ -277,8 +269,7 @@ func TestCalculateSelectsAccountAndRetailTiersIndependently(t *testing.T) {
 		Subject:    &coreidentity.Subject{Scope: coreidentity.ScopeUser, TenantID: "tenant-1", UserID: "user-1"},
 		Candidate:  candidate,
 		TokenUsage: domain.TokenUsage{PromptTokens: 1500, CompletionTokens: 100},
-		BillingSnapshots: map[string]domain.BillingSnapshot{candidate.RouteID: {
-			CreditsPerUSD: 1, RetailEntry: retailEntry, AccountEntry: accountEntry,
+		BillingSnapshots: map[string]domain.BillingSnapshot{candidate.RouteID: {RetailEntry: retailEntry, AccountEntry: accountEntry,
 			GroupDefaultUserMultiplier: 1, EffectiveUserMultiplier: 1,
 			ServiceTier: domain.ServiceTierStandard,
 		}},
@@ -309,17 +300,17 @@ func TestSellMicro_Image(t *testing.T) {
 		{Resolution: "4k", Price: 0.08},
 	}}
 	u := domain.TokenUsage{ImageCount: 2, ImageResolution: "1536x1024"}
-	// usd = 0.04*2 = 0.08 ; micro = 0.08*7*10000 = 5600
-	if got := pricedMicro(u, e, 1, 7); got != 5600 {
-		t.Fatalf("got %d, want 5600", got)
+	// USD = 0.04*2 = 0.08; micro-USD = 80000.
+	if got := pricedMicro(u, e, 1); got != 80000 {
+		t.Fatalf("got %d, want 80000", got)
 	}
 	// unknown resolution → explicit default price (0.01)
 	u2 := domain.TokenUsage{ImageCount: 1, ImageResolution: "not-a-size"}
-	if got := pricedMicro(u2, e, 1, 7); got != 700 {
-		t.Fatalf("fallback got %d, want 700", got)
+	if got := pricedMicro(u2, e, 1); got != 10000 {
+		t.Fatalf("fallback got %d, want 10000", got)
 	}
-	if got := pricedMicro(domain.TokenUsage{ImageCount: 1, ImageResolution: "auto"}, e, 1, 7); got != 5600 {
-		t.Fatalf("auto got %d, want 5600", got)
+	if got := pricedMicro(domain.TokenUsage{ImageCount: 1, ImageResolution: "auto"}, e, 1); got != 80000 {
+		t.Fatalf("auto got %d, want 80000", got)
 	}
 }
 
@@ -351,16 +342,15 @@ func TestPriceBreakdownTerminalTierRecordsNullUpperBound(t *testing.T) {
 }
 
 func TestSellMicro_RoundsHalfUp(t *testing.T) {
-	// tiny usage below half a micro rounds to 0
+	// Three micro-USD is represented exactly.
 	e := domain.PriceBookEntry{TokenPriceTiers: []domain.TokenPriceTier{{InputPerToken: 0.000003}}}
 	u := domain.TokenUsage{PromptTokens: 1}
-	// usd=3e-6 ; micro=3e-6*7*10000=0.21 → floor 0
-	if got := pricedMicro(u, e, 1, 7); got != 0 {
-		t.Fatalf("got %d, want 0", got)
+	if got := pricedMicro(u, e, 1); got != 3 {
+		t.Fatalf("got %d, want 3", got)
 	}
-	// 1 token * $0.00005 * 1 credit/USD * 10000 = exactly 0.5 micro.
-	e.TokenPriceTiers[0].InputPerToken = 0.00005
-	if got := pricedMicro(u, e, 1, 1); got != 1 {
+	// Half a micro-USD rounds up.
+	e.TokenPriceTiers[0].InputPerToken = 0.0000005
+	if got := pricedMicro(u, e, 1); got != 1 {
 		t.Fatalf("half-up got %d, want 1", got)
 	}
 }

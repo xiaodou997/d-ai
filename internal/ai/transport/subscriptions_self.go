@@ -47,7 +47,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		Method:      http.MethodGet,
 		Path:        "/api/v1/users/me/subscription-plans",
 		Summary:     "终端用户自助在售订阅套餐列表",
-		Description: "返回当前用户所属租户已上架（on_sale）的订阅套餐。额度单位为微积分，前端除以 10000 展示为积分。",
+		Description: "返回当前用户所属租户已上架（on_sale）的订阅套餐。价格和额度单位为 micro-USD。",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subSelfListInput) (*subPublicPlanListOutput, error) {
 		if d.Subscriptions == nil {
@@ -78,7 +78,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		Method:        http.MethodPost,
 		Path:          "/api/v1/users/me/subscription-orders",
 		Summary:       "终端用户购买订阅套餐",
-		Description:   "用本人积分购买套餐（不可退款）。201=已开通；202=扣款处理中请轮询订单；402=余额不足；409=排队已满或该套餐已在待激活队列。",
+		Description:   "用本人 USD 余额购买套餐（不可退款）。201=已开通；202=扣款处理中请轮询订单；402=余额不足；409=排队已满或该套餐已在待激活队列。",
 		Tags:          []string{"subscriptions"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *subSelfCreateOrderInput) (*subPurchaseOutput, error) {

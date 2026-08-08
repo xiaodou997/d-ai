@@ -9,10 +9,7 @@ import {
   createPortalRuntimeTransport,
   portalStatusOptions
 } from "@/platform/ai/runtime";
-import {
-  formatCredits,
-  formatWholeCredits
-} from "@/platform/ai/usage";
+import { formatUSD } from "@/platform/ai/usage";
 import { type PortalImageTaskCreateResponse } from "@/platform/ai/images";
 import type {
   PortalTaskPage,
@@ -50,7 +47,7 @@ const headers = () => apiHeaders;
 const baseUrl = () => apiBaseUrl;
 const runtimeBasePath = "/runtime/v1";
 
-export { formatCredits, formatWholeCredits };
+export { formatUSD };
 
 const runtimeTransport = createPortalRuntimeTransport({
   baseUrl,

@@ -167,7 +167,7 @@ export const portalModules: PortalModule[] = [
     order: 10,
     tabs: [
       { id: "recharges", label: "充值记录", path: "recharges", component: () => import("@/views/admin/platform/RechargeRecordsView.vue") },
-      { id: "transactions", label: "积分明细", path: "transactions", component: () => import("@/views/admin/platform/TransactionsView.vue") },
+      { id: "transactions", label: "账务事件", path: "transactions", component: () => import("@/views/admin/platform/TransactionsView.vue") },
       { id: "orders", label: "支付订单", path: "orders", component: () => import("@/views/admin/platform/PaymentOrdersView.vue") }
     ]
   },
@@ -180,8 +180,8 @@ export const portalModules: PortalModule[] = [
     navGroup: adminFinance,
     order: 20,
     tabs: [
-      { id: "withdrawals", label: "提现审核", path: "withdrawals", component: () => import("@/views/admin/platform/WithdrawalsView.vue") },
-      { id: "cash", label: "现金账户", path: "cash", component: () => import("@/views/admin/platform/CashAccountsView.vue") },
+      { id: "withdrawals", label: "提现记录", path: "withdrawals", component: () => import("@/views/admin/platform/WithdrawalsView.vue") },
+      { id: "cash", label: "账户余额", path: "cash", component: () => import("@/views/admin/platform/CashAccountsView.vue") },
       { id: "payment", label: "支付配置", path: "payment", component: () => import("@/views/admin/platform/PaymentSettingsView.vue") }
     ]
   },
@@ -500,10 +500,10 @@ export const portalModules: PortalModule[] = [
     navGroup: customerAccount,
     order: 20,
     tabs: [
-      { id: "overview", label: "积分账户", path: "overview", component: () => import("@/views/customer/platform/AccountView.vue") },
-      { id: "topup", label: "充值积分", path: "topup", component: () => import("@/views/customer/platform/TopupView.vue") },
+      { id: "overview", label: "USD 账户", path: "overview", component: () => import("@/views/customer/platform/AccountView.vue") },
+      { id: "topup", label: "额度充值", path: "topup", component: () => import("@/views/customer/platform/TopupView.vue") },
       { id: "recharges", label: "充值记录", path: "recharges", component: () => import("@/views/customer/platform/RechargeView.vue") },
-      { id: "transactions", label: "积分明细", path: "transactions", component: () => import("@/views/customer/platform/TransactionsView.vue") }
+      { id: "transactions", label: "额度明细", path: "transactions", component: () => import("@/views/customer/platform/TransactionsView.vue") }
     ]
   },
   {

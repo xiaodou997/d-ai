@@ -22,11 +22,16 @@ export function appendPortalQuery(
   return search ? `${path}?${search}` : path;
 }
 
-// 实际消耗/统计结果允许最多 4 位小数。
-export function formatCredits(value: number | null | undefined): string {
+export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
   const n = Number(value) || 0;
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 });
+}
+
+export function formatUSD(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "-";
+  const n = Number(value) || 0;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 export function formatMultiplier(value: number | null | undefined): string {
@@ -36,16 +41,8 @@ export function formatMultiplier(value: number | null | undefined): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
-// 售价/配额配置统一显示为整数积分。
-export function formatWholeCredits(value: number | null | undefined): string {
+export const MICRO_USD_PER_USD = 1_000_000;
+export function formatMicroUSD(value: number | null | undefined): string {
   if (value === null || value === undefined) return "-";
-  const n = Number(value) || 0;
-  return Math.round(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-
-export const MICRO_CREDITS_PER_CREDIT = 10_000;
-
-export function formatMicroCredits(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "-";
-  return formatCredits(Number(value) / MICRO_CREDITS_PER_CREDIT);
+  return formatUSD(Number(value) / MICRO_USD_PER_USD);
 }

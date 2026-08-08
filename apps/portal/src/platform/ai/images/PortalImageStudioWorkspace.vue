@@ -20,7 +20,7 @@ import type { PortalImageReferenceMove } from "./usePortalImageReferences";
 const props = withDefaults(
   defineProps<{
     api: PortalImageApi;
-    formatCredits: (value: number | null | undefined) => string;
+    formatUSD: (value: number | null | undefined) => string;
     usageMessage: string;
     refreshIcon?: unknown;
     submitIcon?: unknown;
@@ -803,7 +803,7 @@ onMounted(async () => {
                 </span>
                 <span v-if="card.job.size" class="meta-tag meta-tag--size">{{ card.job.size }}</span>
                 <span v-if="card.job.status === 'completed'" class="cost-chip">
-                  <el-icon><Coin /></el-icon>{{ formatCredits(card.job.caller_charge_credits) }} 积分
+                  <el-icon><Coin /></el-icon>{{ formatUSD(card.job.caller_charge_usd) }}
                 </span>
                 <span class="task-time">{{ card.createdAtText }}</span>
               </div>

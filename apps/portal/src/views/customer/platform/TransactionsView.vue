@@ -1,8 +1,8 @@
 <!--
-  积分明细 — 查看积分扣费与充值流水。
+  额度明细 — 查看 USD 扣费与充值流水。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        el-table → DsTable(:frame="false",流水号 mono、
-       扣减积分右对齐),el-tag → DsTag;DsPagination 始终渲染(去掉 total>0 才显示)。
+       扣减金额右对齐),el-tag → DsTag;DsPagination 始终渲染(去掉 total>0 才显示)。
        业务逻辑与请求参数保持不变。
 -->
 <template>
@@ -10,8 +10,8 @@
     <PortalPagePanel
       fill
       :icon="ArrowLeftRight"
-      :breadcrumbs="[{ label: '用户中心' }, { label: '充值与明细' }, { label: '积分明细' }]"
-      description="查看我的积分扣费与充值明细"
+      :breadcrumbs="[{ label: '用户中心' }, { label: 'USD 账户' }, { label: '额度明细' }]"
+      description="查看我的 USD 余额扣费与退款明细"
     >
       <DsTable
         :frame="false"
@@ -20,8 +20,8 @@
         row-key="eventId"
         :loading="loading"
       >
-        <template #cell-userCredits="{ row }">
-          <span class="transactions-deduction">-{{ (row.userCredits || 0).toLocaleString() }}</span>
+        <template #cell-userAmount="{ row }">
+          <span class="transactions-deduction">-${{ (row.userAmountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
         </template>
         <template #cell-status="{ row }">
           <DsTag :tone="statusTone(row.status)">{{ statusText(row.status) }}</DsTag>
@@ -54,7 +54,7 @@ import type { AccountTransactionItem } from "@/api/types/platformCustomer";
 
 const columns: DsTableColumn[] = [
   { key: "eventId", title: "流水 ID", mono: true },
-  { key: "userCredits", title: "扣减积分", width: 140, align: "right" },
+  { key: "userAmount", title: "扣减金额（USD）", width: 160, align: "right" },
   { key: "description", title: "描述" },
   { key: "status", title: "状态", width: 100 },
   { key: "createdTime", title: "时间", width: 180 }

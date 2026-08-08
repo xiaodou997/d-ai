@@ -1,7 +1,7 @@
 <!--
-  价格表 — 维护各能力模型的 USD 售价（token 分档 / 图片 / 视频 / 音频）与 USD→积分汇率。
+  价格表 — 维护各能力模型的 USD 售价（token 分档 / 图片 / 视频 / 音频）。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       汇率卡/价格表列表/条目表收进同卡 body 的 24px 容器）;条目表 el-table → DsTable
+       价格表列表/条目表收进同卡 body 的 24px 容器）;条目表 el-table → DsTable
        （expandable 展开 token 分档）,el-tag → DsTag,空态 → DsEmpty;价格色值改用 --ds-* token,
        无硬编码 hex;业务逻辑与请求参数保持不变。
        ⚠ 条目接口无服务端分页,故不加 DsPagination。弹窗/表单仍为 element-plus。
@@ -35,40 +35,6 @@ const formatUsd2 = (value: any) => Number(value ?? 0).toFixed(2)
 const formatUsd = (value: any) => `$${formatUsd2(value)}`
 const formatTierLimit = (limit: number | null) => limit === null ? '无上限' : limit.toLocaleString('zh-CN')
 const imageTierLabel = (value: string) => ({ '1k': '1K', '2k': '2K', '4k': '4K' }[value] || value)
-
-// ── Rate (USD→credit) ─────────────────────────────────────────────────────
-const DEFAULT_CREDITS_PER_USD = 100
-const MAX_CREDITS_PER_USD = 1_000_000
-const creditsPerUsd = shallowRef(DEFAULT_CREDITS_PER_USD)
-const rateDraft = shallowRef(DEFAULT_CREDITS_PER_USD)
-const rateEditing = shallowRef(false)
-const rateSaving = shallowRef(false)
-
-async function loadRate() {
-  try {
-    const res: any = await aiAdminApi.getCreditsPerUSD()
-    creditsPerUsd.value = res?.credits_per_usd ?? DEFAULT_CREDITS_PER_USD
-    rateDraft.value = creditsPerUsd.value
-  } catch (e) { /* 默认值兜底 */ }
-}
-
-async function saveRate() {
-  if (!(rateDraft.value > 0) || rateDraft.value > MAX_CREDITS_PER_USD) {
-    ElMessage.warning(`汇率必须大于 0 且不超过 ${MAX_CREDITS_PER_USD.toLocaleString('zh-CN')}`)
-    return
-  }
-  rateSaving.value = true
-  try {
-    await aiAdminApi.setCreditsPerUSD(rateDraft.value)
-    creditsPerUsd.value = rateDraft.value
-    rateEditing.value = false
-    ElMessage.success('汇率已更新')
-  } catch (e: any) {
-    ElMessage.error(e?.message || '保存失败')
-  } finally {
-    rateSaving.value = false
-  }
-}
 
 // ── Price books ─────────────────────────────────────────────────────────────
 const books = shallowRef<PriceBookRecord[]>([])
@@ -442,10 +408,9 @@ async function handleImportFile(ev: Event) {
   }
 }
 
-// 注：平台→租户、租户→用户 的售价倍率绑定已迁移到「租户↔分组」页（按分组维度），本页只管价格表与汇率。
+// 注：平台→租户、租户→用户 的售价倍率绑定在「租户↔分组」页，本页只管理 USD 价格表。
 
 onMounted(() => {
-  loadRate()
   loadBooks()
 })
 </script>
@@ -456,33 +421,10 @@ onMounted(() => {
       fill
       :icon="Tags"
       :breadcrumbs="[{ label: '智能服务' }, { label: '网关配置' }, { label: '价格表' }]"
-      description="维护模型 USD 售价与 USD → 积分汇率。"
+      description="维护模型的 USD 售价，计费精度为 0.000001 USD。"
     >
-      <!-- 主从布局:body 无内边距,用 24px 容器承载汇率卡 + 价格表/条目两栏 -->
+      <!-- 主从布局:body 无内边距,用 24px 容器承载价格表/条目两栏 -->
       <div class="pricing-body">
-        <!-- USD → credit rate -->
-        <PortalContentCard class="rate-card">
-          <div class="rate-row">
-            <div class="rate-copy">
-              <p class="rate-title">USD → 积分 汇率</p>
-              <p class="rate-desc">对外计费时把价格表的 USD 售价换算成积分。仅作用于售价侧，上游成本仍以 USD 核算。</p>
-            </div>
-            <div class="rate-controls">
-              <template v-if="!rateEditing">
-                <span class="rate-value">1 USD = {{ creditsPerUsd }} 积分</span>
-                <el-button size="small" :icon="Edit" @click="rateEditing = true">修改</el-button>
-              </template>
-              <template v-else>
-                <span class="rate-hint-text">1 USD =</span>
-                <el-input-number v-model="rateDraft" :min="0.0001" :max="MAX_CREDITS_PER_USD" :step="1" :precision="4" :controls="false" size="small" style="width: 140px" />
-                <span class="rate-hint-text">积分</span>
-                <el-button size="small" type="primary" :loading="rateSaving" @click="saveRate">保存</el-button>
-                <el-button size="small" @click="rateEditing = false; rateDraft = creditsPerUsd">取消</el-button>
-              </template>
-            </div>
-          </div>
-        </PortalContentCard>
-
         <div class="pricing-main">
           <!-- book list -->
           <PortalContentCard title="价格表" body-padding="none" class="book-list-card">
@@ -667,7 +609,7 @@ onMounted(() => {
   flex-direction: column;
 }
 
-/* 主从布局:PortalPagePanel body 无内边距,用 24px 容器排布汇率卡与两栏;fill 模式下随面板撑满视口 */
+/* 主从布局:PortalPagePanel body 无内边距,用 24px 容器排布两栏;fill 模式下随面板撑满视口 */
 .pricing-body {
   display: flex;
   flex-direction: column;

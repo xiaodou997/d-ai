@@ -9,7 +9,7 @@ import { computed, onMounted, shallowRef, type Component } from "vue";
 
 import PortalContentCard from "../../page/PortalContentCard.vue";
 import PortalPagePanel, { type PortalPagePanelBreadcrumb } from "../../page/PortalPagePanel.vue";
-import { formatCredits, formatMultiplier as formatMultiplierValue } from "../utils";
+import { formatMultiplier as formatMultiplierValue } from "../utils";
 import type {
   PortalGroupEffectivePriceRecord,
   PortalGroupPricingApi,
@@ -40,8 +40,7 @@ type PriceLineTone = "input" | "output" | "default" | "resolution" | "cache" | "
 
 interface PricingDisplayLine {
   label: string;
-  usd: string; // 倍率后 USD 价（含单位），汇率不可用时为空串
-  credits: string; // 实际扣费积分
+  usd: string;
   tone: PriceLineTone;
 }
 
@@ -66,7 +65,6 @@ const errorMessage = shallowRef("");
 const groups = shallowRef<PortalVisibleGroupRecord[]>([]);
 const selectedGroup = shallowRef<PortalVisibleGroupRecord | null>(null);
 const prices = shallowRef<PortalGroupEffectivePriceRecord[]>([]);
-const creditsPerUSD = shallowRef(0);
 const priceRequestId = shallowRef(0);
 
 const showErrorBanner = computed(() => Boolean(errorMessage.value));
@@ -110,31 +108,27 @@ function formatUSD(value: number) {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
-// 单条价格：主显倍率后 USD 价（含单位），副显实际扣费积分。汇率不可用时 usd 留空、积分转主显。
 function pricePair(
-  creditsValue: number | null | undefined,
+  usdValue: number | null | undefined,
   unit: string,
   tone: PriceLineTone,
   label: string
 ): PricingDisplayLine {
-  const rate = creditsPerUSD.value;
-  const credits = Number(creditsValue) || 0;
-  const usd = rate > 0 ? `${formatUSD(credits / rate)}${unit}` : "";
-  return { label, usd, credits: `${formatCredits(creditsValue)} 积分`, tone };
+  return { label, usd: `${formatUSD(Number(usdValue) || 0)}${unit}`, tone };
 }
 
 function standardSection(row: PortalGroupEffectivePriceRecord): PricingDisplaySection {
   if (row.capability_type === "image") {
-    return { key: "standard", title: "默认价格", lines: [pricePair(row.image_default_price_credits, "/张", "default", "默认")] };
+    return { key: "standard", title: "默认价格", lines: [pricePair(row.image_default_price_usd, "/张", "default", "默认")] };
   }
   if (row.capability_type === "video") {
-    return { key: "standard", title: "默认价格", lines: [pricePair(row.video_default_price_credits, "/秒", "default", "默认")] };
+    return { key: "standard", title: "默认价格", lines: [pricePair(row.video_default_price_usd, "/秒", "default", "默认")] };
   }
   if (row.capability_type === "audio_tts") {
-    return { key: "standard", title: "合成价格", lines: [pricePair(row.audio_tts_per_1m_chars_credits, "/1M字符", "audio", "合成")] };
+    return { key: "standard", title: "合成价格", lines: [pricePair(row.audio_tts_per_1m_chars_usd, "/1M字符", "audio", "合成")] };
   }
   if (row.capability_type === "audio_stt") {
-    return { key: "standard", title: "识别价格", lines: [pricePair(row.audio_stt_per_minute_credits, "/分钟", "audio", "识别")] };
+    return { key: "standard", title: "识别价格", lines: [pricePair(row.audio_stt_per_minute_usd, "/分钟", "audio", "识别")] };
   }
   return { key: "standard", title: "Token 价格", lines: [] };
 }
@@ -156,12 +150,12 @@ function tokenSections(row: PortalGroupEffectivePriceRecord): PricingDisplaySect
   return (row.token_price_tiers || []).map((tier, index) => {
     const upper = tier.up_to_input_tokens == null ? "无上限" : `≤ ${tier.up_to_input_tokens.toLocaleString("zh-CN")}`;
     const lines = [
-      pricePair(tier.input_per_1m_credits, "/1M", "input", "输入"),
-      pricePair(tier.output_per_1m_credits, "/1M", "output", "输出")
+      pricePair(tier.input_per_1m_usd, "/1M", "input", "输入"),
+      pricePair(tier.output_per_1m_usd, "/1M", "output", "输出")
     ];
     lines.push(
-      pricePair(tier.cache_write_per_1m_credits, "/1M", "cache", "缓存写入"),
-      pricePair(tier.cache_read_per_1m_credits, "/1M", "cache", "缓存读取")
+      pricePair(tier.cache_write_per_1m_usd, "/1M", "cache", "缓存写入"),
+      pricePair(tier.cache_read_per_1m_usd, "/1M", "cache", "缓存读取")
     );
     return { key: `tier-${index}`, title: `输入上下文 ${upper}`, lines };
   });
@@ -194,11 +188,9 @@ async function loadPrices(groupId: string) {
     const res = await props.api.getGroupEffectivePrices(groupId);
     if (requestId !== priceRequestId.value) return;
     prices.value = res.items || [];
-    creditsPerUSD.value = res.credits_per_usd || 0;
   } catch (error) {
     if (requestId !== priceRequestId.value) return;
     prices.value = [];
-    creditsPerUSD.value = 0;
     errorMessage.value = (error as Error).message || "加载分组价格失败，请稍后重试。";
     props.notifyError?.(errorMessage.value);
   } finally {
@@ -222,7 +214,6 @@ async function loadGroups() {
     if (groups.value.length === 0) {
       selectedGroup.value = null;
       prices.value = [];
-      creditsPerUSD.value = 0;
       return;
     }
     const next = groups.value.find((group) => group.id === selectedGroup.value?.id) || groups.value[0];
@@ -231,7 +222,6 @@ async function loadGroups() {
     groups.value = [];
     selectedGroup.value = null;
     prices.value = [];
-    creditsPerUSD.value = 0;
     errorMessage.value = (error as Error).message || "加载分组失败，请稍后重试。";
     props.notifyError?.(errorMessage.value);
   } finally {
@@ -293,7 +283,6 @@ onMounted(loadGroups);
         </template>
         <template #actions>
           <span class="model-count">{{ modelCountLabel }}</span>
-          <span v-if="creditsPerUSD" class="rate-chip">汇率 1 USD = {{ creditsPerUSD }} 积分</span>
         </template>
 
         <div v-loading="pricesLoading" class="pricing-surface">
@@ -318,8 +307,7 @@ onMounted(loadGroups);
                     <div v-for="line in section.lines" :key="`${card.key}-${section.key}-${line.label}`" class="metric-row">
                       <span class="metric-row__label">{{ line.label }}</span>
                       <span class="metric-row__value-block">
-                        <strong v-if="line.usd" class="metric-row__usd" :class="`metric-row__usd--${line.tone}`">{{ line.usd }}</strong>
-                        <span class="metric-row__credits" :class="{ 'metric-row__credits--solo': !line.usd }">{{ line.credits }}</span>
+                        <strong class="metric-row__usd" :class="`metric-row__usd--${line.tone}`">{{ line.usd }}</strong>
                       </span>
                     </div>
                   </div>
@@ -697,7 +685,7 @@ onMounted(loadGroups);
   white-space: nowrap;
 }
 
-/* 汇率不可用时积分转主显 */
+/* 单一 USD 价格主显 */
 .metric-row__credits--solo {
   color: var(--ds-ink);
   font-size: 13px;

@@ -1,19 +1,19 @@
 <!--
   交易流水 — 1:1 搬运自 v1/platform/platform-admin/src/views/Finance/TransactionList.vue。
-  保留多条件筛选、批量确认/免除/退款、单条退款/确认/免除、行展开 ops 时间线、结果弹窗。
-  适配：account axios api → platformAdminApi（listTransactions/refund/manualConfirmEvent/adminDismissEvent/
-       batchConfirmEvents/batchRefundEvents）；res.records → res.items；错误读 err.message。
+  保留多条件筛选、退款、行展开 ops 时间线与结果弹窗。
+  适配：account axios api → platformAdminApi（listTransactions/refund/batchRefundEvents）；
+       res.records → res.items；错误读 err.message。
   重构：迁移至新设计系统一体面板（PortalPagePanel：图标徽章+面包屑标题+描述同行，
        筛选/表格/分页同卡）；数据接入 useListPage；DsTable 使用 selectable + expandable，
        v-model:selection 接选中行；6 个业务弹窗与结果弹窗抽至 ./components，主文件只保留页面编排；
-       请求参数与筛选语义保持不变，弹窗仍为 element-plus。
+       请求参数与筛选语义保持不变，退款弹窗仍为 element-plus。
 -->
 <template>
   <div class="transactions-page">
     <PortalPagePanel
       :icon="ArrowLeftRight"
       :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '交易流水' }]"
-      description="按租户、用户、状态与时间范围检索平台交易流水，支持单条与批量的确认、免除、退款。"
+      description="按租户、用户、状态与时间范围检索平台账务事件，支持单条与批量退款。"
     >
       <template #filters>
         <DsFilterBar>
@@ -59,17 +59,13 @@
           <div class="tx-batch-bar__info">
             <span class="tx-batch-bar__count">已选 {{ selection.length }} 条</span>
             <span class="tx-batch-bar__sum">
-              租户积分合计 <b>{{ selectedTenantTotal.toLocaleString() }}</b>
+              租户金额合计 <b>${{ selectedTenantTotal.toLocaleString('en-US', { maximumFractionDigits: 6 }) }}</b>
               &nbsp;·&nbsp;
-              用户积分合计 <b>{{ selectedUserTotal.toLocaleString() }}</b>
+              用户金额合计 <b>${{ selectedUserTotal.toLocaleString('en-US', { maximumFractionDigits: 6 }) }}</b>
             </span>
           </div>
           <div class="tx-batch-bar__actions">
-            <template v-if="selectionAction === 'released'">
-              <el-button type="primary" size="small" @click="openBatchConfirm">确认扣款（{{ selection.length }}条）</el-button>
-              <el-button type="warning" size="small" @click="openBatchDismiss">免除扣费（{{ selection.length }}条）</el-button>
-            </template>
-            <template v-else-if="selectionAction === 'succeeded'">
+            <template v-if="selectionAction === 'succeeded'">
               <el-button type="danger" size="small" @click="openBatchRefund">批量退款（{{ selection.length }}条）</el-button>
             </template>
             <template v-else>
@@ -102,12 +98,12 @@
           <span v-if="row.clientId" class="tx-client-chip">{{ row.clientId }}</span>
           <span v-else class="tx-dash">—</span>
         </template>
-        <template #cell-tenantCredits="{ row }">
-          <span v-if="row.tenantCredits" class="tx-num tx-num--tenant">{{ formatCredits(row.tenantCredits) }}</span>
+        <template #cell-tenantAmount="{ row }">
+          <span v-if="row.tenantAmountUsd" class="tx-num tx-num--tenant">{{ formatUSD(row.tenantAmountUsd) }}</span>
           <span v-else class="tx-dash">—</span>
         </template>
-        <template #cell-userCredits="{ row }">
-          <span v-if="row.userCredits" class="tx-num tx-num--user">{{ formatCredits(row.userCredits) }}</span>
+        <template #cell-userAmount="{ row }">
+          <span v-if="row.userAmountUsd" class="tx-num tx-num--user">{{ formatUSD(row.userAmountUsd) }}</span>
           <span v-else class="tx-dash">—</span>
         </template>
         <template #cell-status="{ row }">
@@ -118,8 +114,6 @@
         </template>
         <template #cell-actions="{ row }">
           <el-button v-if="row.status === 'succeeded'" link type="danger" class="font-bold" @click="openRefund(row)">退款</el-button>
-          <el-button v-if="row.status === 'released'" link type="primary" class="font-bold" @click="openConfirm(row)">确认扣款</el-button>
-          <el-button v-if="row.status === 'released'" link type="warning" class="font-bold" @click="openDismiss(row)">免除</el-button>
         </template>
       </DsTable>
 
@@ -134,12 +128,8 @@
       </template>
     </PortalPagePanel>
 
-    <!-- 弹窗均为 element-plus（过渡期），业务逻辑封装在子组件内 -->
+    <!-- 退款弹窗仍为 element-plus（过渡期），业务逻辑封装在子组件内 -->
     <TransactionRefundDialog ref="refundDialogRef" @success="refresh" />
-    <TransactionConfirmDialog ref="confirmDialogRef" @success="refresh" />
-    <TransactionDismissDialog ref="dismissDialogRef" @success="refresh" />
-    <TransactionBatchConfirmDialog ref="batchConfirmDialogRef" @done="handleBatchDone" />
-    <TransactionBatchDismissDialog ref="batchDismissDialogRef" @done="handleBatchDone" />
     <TransactionBatchRefundDialog ref="batchRefundDialogRef" @done="handleBatchDone" />
     <TransactionBatchResultDialog ref="resultDialogRef" />
   </div>
@@ -150,7 +140,6 @@ import { computed, ref } from 'vue'
 import { RefreshRight, Search } from '@element-plus/icons-vue'
 import { ArrowLeftRight } from 'lucide-vue-next'
 import { PortalPagePanel, useListPage } from '@/platform'
-import { formatCredits } from '@/platform/ai/utils'
 import {
   DsFilterBar,
   DsFilterField,
@@ -162,10 +151,6 @@ import {
 import { platformAdminApi } from '@/api/platformAdmin'
 import OpsTimeline from './components/TransactionOpsTimeline.vue'
 import TransactionRefundDialog from './components/TransactionRefundDialog.vue'
-import TransactionConfirmDialog from './components/TransactionConfirmDialog.vue'
-import TransactionDismissDialog from './components/TransactionDismissDialog.vue'
-import TransactionBatchConfirmDialog from './components/TransactionBatchConfirmDialog.vue'
-import TransactionBatchDismissDialog from './components/TransactionBatchDismissDialog.vue'
 import TransactionBatchRefundDialog from './components/TransactionBatchRefundDialog.vue'
 import TransactionBatchResultDialog from './components/TransactionBatchResultDialog.vue'
 
@@ -177,7 +162,7 @@ const STATUS_OPTIONS = [
   { value: 'refunded', label: '已退款' }
 ]
 
-// 状态语义沿用原 el-tag 配色：成功=positive、进行中=warning、已释放=danger、取消/已退款=info
+// 历史状态仍可查询；新扣费直接写入 succeeded，不再产生冻结/释放流程。
 const STATUS_TONE: Record<string, 'positive' | 'warning' | 'danger' | 'info' | 'neutral'> = {
   succeeded: 'positive',
   pending: 'warning',
@@ -198,8 +183,8 @@ const columns: DsTableColumn[] = [
   { key: 'username', title: '用户名' },
   { key: 'clientId', title: 'Client' },
   { key: 'description', title: '描述' },
-  { key: 'tenantCredits', title: '租户积分', align: 'right' },
-  { key: 'userCredits', title: '用户积分', align: 'right' },
+  { key: 'tenantAmount', title: '租户金额（USD）', align: 'right' },
+  { key: 'userAmount', title: '用户金额（USD）', align: 'right' },
   { key: 'status', title: '状态', width: 100 },
   { key: 'createdTime', title: '交易时间', width: 170 },
   { key: 'actions', title: '操作', width: 190 }
@@ -249,6 +234,7 @@ const {
 })
 
 const formatTime = (ts?: number) => (ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—')
+const formatUSD = (value?: number) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 
 // 多选 & 批量操作栏
 const selection = ref<any[]>([])
@@ -259,11 +245,11 @@ const selectionAction = computed(() => {
   const statuses = new Set(selection.value.map((r) => r.status))
   if (statuses.size > 1) return 'mixed'
   const s = [...statuses][0]
-  return s === 'released' || s === 'succeeded' ? s : 'other'
+  return s === 'succeeded' ? s : 'other'
 })
 
-const selectedTenantTotal = computed(() => selection.value.reduce((sum, r) => sum + (r.tenantCredits || 0), 0))
-const selectedUserTotal = computed(() => selection.value.reduce((sum, r) => sum + (r.userCredits || 0), 0))
+const selectedTenantTotal = computed(() => selection.value.reduce((sum, r) => sum + (r.tenantAmountUsd || 0), 0))
+const selectedUserTotal = computed(() => selection.value.reduce((sum, r) => sum + (r.userAmountUsd || 0), 0))
 
 const parseOps = (metadataStr?: string) => {
   try {
@@ -274,20 +260,12 @@ const parseOps = (metadataStr?: string) => {
   }
 }
 
-// 弹窗编排：子组件内部维护表单与提交，主文件只负责打开与收尾
+// 退款弹窗编排：子组件内部维护表单与提交，主文件只负责打开与收尾
 const refundDialogRef = ref<InstanceType<typeof TransactionRefundDialog>>()
-const confirmDialogRef = ref<InstanceType<typeof TransactionConfirmDialog>>()
-const dismissDialogRef = ref<InstanceType<typeof TransactionDismissDialog>>()
-const batchConfirmDialogRef = ref<InstanceType<typeof TransactionBatchConfirmDialog>>()
-const batchDismissDialogRef = ref<InstanceType<typeof TransactionBatchDismissDialog>>()
 const batchRefundDialogRef = ref<InstanceType<typeof TransactionBatchRefundDialog>>()
 const resultDialogRef = ref<InstanceType<typeof TransactionBatchResultDialog>>()
 
 const openRefund = (row: any) => refundDialogRef.value?.open(row)
-const openConfirm = (row: any) => confirmDialogRef.value?.open(row)
-const openDismiss = (row: any) => dismissDialogRef.value?.open(row)
-const openBatchConfirm = () => batchConfirmDialogRef.value?.open(selection.value)
-const openBatchDismiss = () => batchDismissDialogRef.value?.open(selection.value)
 const openBatchRefund = () => batchRefundDialogRef.value?.open(selection.value)
 
 // 批量操作收尾：清除选择 → 展示结果 → 刷新列表（顺序与原实现一致）

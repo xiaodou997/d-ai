@@ -9,7 +9,7 @@ import {
 
 import type { AdminUsageRow, DailyTrendRowDTO, UsageMetric } from "../model";
 import type { UsageDistributionItem } from "../format";
-import { formatCredits, formatPercent, formatTimestamp, resolveRequestTotalMs } from "../format";
+import { formatNumber, formatPercent, formatTimestamp, formatUSD, resolveRequestTotalMs } from "../format";
 import UsageTrendChart from "./UsageTrendChart.vue";
 
 interface TrendSeries {
@@ -49,7 +49,7 @@ const emit = defineEmits<{
     </section>
 
     <section class="usage-analytics__grid">
-      <PortalContentCard title="模型成本分布" description="按用户计费积分降序，识别谁在吃掉主要预算。">
+      <PortalContentCard title="模型成本分布" description="按用户计费金额降序，识别主要预算消耗。">
         <div class="usage-dist-list">
           <article v-for="item in modelDistribution" :key="item.name" class="usage-dist-row">
             <div class="usage-dist-row__head">
@@ -60,8 +60,8 @@ const emit = defineEmits<{
               <div class="usage-dist-row__fill" :style="{ width: `${item.percent}%` }"></div>
             </div>
             <div class="usage-dist-row__meta">
-              <span>{{ formatCredits(item.credits) }} 积分</span>
-              <span>{{ formatCredits(item.requests) }} 次</span>
+              <span>{{ formatUSD(item.amountUSD) }}</span>
+              <span>{{ formatNumber(item.requests) }} 次</span>
             </div>
           </article>
           <p v-if="!modelDistribution.length" class="usage-empty">暂无模型分布数据</p>
@@ -79,8 +79,8 @@ const emit = defineEmits<{
               <div class="usage-dist-row__fill usage-dist-row__fill--info" :style="{ width: `${item.percent}%` }"></div>
             </div>
             <div class="usage-dist-row__meta">
-              <span>{{ formatCredits(item.credits) }} 积分</span>
-              <span>{{ formatCredits(item.units || 0) }} 计费量</span>
+              <span>{{ formatUSD(item.amountUSD) }}</span>
+              <span>{{ formatNumber(item.units || 0) }} 计费量</span>
             </div>
           </article>
           <p v-if="!unitDistribution.length" class="usage-empty">暂无计费单位结构数据</p>

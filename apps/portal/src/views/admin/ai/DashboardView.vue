@@ -2,7 +2,7 @@
   数据大盘。
   保留 V1 的手绘 SVG polyline 趋势图（V1 此页本就不用 echarts）、指标卡、Top 模型/租户、最近错误、OAuth 池、每日明细。
   适配：aiGateway axios → aiAdminApi；list* 在 v4 返回 {items,total}，已取 .items；summary 直接是 DTO；
-       formatCredits/formatTimestamp 内联实现；基础设施徽标跳转改为真实路由 /ai-gateway/status；
+       formatNumber/formatTimestamp 内联实现；基础设施徽标跳转改为真实路由 /ai-gateway/status；
        去掉 animate-in/fade-in（未装该插件）。错误读 err.message。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        看板内容置于同卡 body 内 24px 容器排布）,el-table → DsTable,el-tag → DsTag;
@@ -37,11 +37,12 @@ import {
 
 const router = useRouter()
 
-// formatCredits 用于实际消耗/统计结果，保留最多 4 位小数。
-const formatCredits = (value: any) => {
+// 普通统计值保留最多 4 位小数。
+const formatNumber = (value: any) => {
   const n = Number(value) || 0
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
 }
+const formatUSD = (value: any) => `$${(Number(value) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 const formatTimestamp = (value: any) => {
   if (!value) return ''
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
@@ -63,11 +64,11 @@ const emptySummary = () => ({
   total_tokens: 0,
   total_prompt_tokens: 0,
   total_completion_tokens: 0,
-  total_catalog_base_credits: 0,
-  total_tenant_payable_credits: 0,
-  total_retail_base_credits: 0,
-  total_user_payable_credits: 0,
-  total_user_charged_credits: 0,
+  total_catalog_base_usd: 0,
+  total_tenant_payable_usd: 0,
+  total_retail_base_usd: 0,
+  total_user_payable_usd: 0,
+  total_user_charged_usd: 0,
   avg_latency_ms: 0,
   avg_request_total_ms: 0,
   avg_first_response_byte_ms: 0
@@ -164,8 +165,8 @@ const costSvg = computed(() => {
   const d = rows.value
   if (!d.length) return ''
   const c = chartColors.value
-  const mx = maxVal(d, (r) => r.tenant_payable_credits, (r) => r.catalog_base_credits)
-  return [polyline(d, (r) => r.tenant_payable_credits, c.accent, mx), polyline(d, (r) => r.catalog_base_credits, c.danger, mx), xLabels(d, c.faint)].join('')
+  const mx = maxVal(d, (r) => r.tenant_payable_usd, (r) => r.catalog_base_usd)
+  return [polyline(d, (r) => r.tenant_payable_usd, c.accent, mx), polyline(d, (r) => r.catalog_base_usd, c.danger, mx), xLabels(d, c.faint)].join('')
 })
 
 const volumeSvg = computed(() => {
@@ -277,7 +278,7 @@ const handleRangeChange = (rangeId: WorkbenchRangeId) => {
 const topModelColumns: DsTableColumn[] = [
   { key: 'model_code', title: '模型', mono: true },
   { key: 'request_count', title: '请求数', width: 100, align: 'right' },
-  { key: 'total_tenant_payable_credits', title: '业务计费', width: 110, align: 'right' },
+  { key: 'total_tenant_payable_usd', title: '业务计费', width: 110, align: 'right' },
   { key: 'total_tokens', title: 'Token', width: 110, align: 'right' }
 ]
 
@@ -285,7 +286,7 @@ const topTenantColumns: DsTableColumn[] = [
   { key: 'tenant', title: '租户' },
   { key: 'request_count', title: '请求数', width: 100, align: 'right' },
   { key: 'total_tokens', title: 'Token', width: 110, align: 'right' },
-  { key: 'total_tenant_payable_credits', title: '业务计费', width: 120, align: 'right' }
+  { key: 'total_tenant_payable_usd', title: '业务计费', width: 120, align: 'right' }
 ]
 
 const upstreamCostColumns: DsTableColumn[] = [
@@ -294,8 +295,8 @@ const upstreamCostColumns: DsTableColumn[] = [
   { key: 'target_id', title: '资源 ID', mono: true },
   { key: 'request_count', title: '请求数', width: 100, align: 'right' },
   { key: 'total_billable_units', title: '计费单位', width: 110, align: 'right' },
-  { key: 'catalog_base_credits', title: '上游参考成本', width: 140, align: 'right' },
-  { key: 'tenant_payable_credits', title: '租户结算应收', width: 140, align: 'right' }
+  { key: 'catalog_base_usd', title: '上游参考成本', width: 140, align: 'right' },
+  { key: 'tenant_payable_usd', title: '租户结算应收', width: 140, align: 'right' }
 ]
 
 const recentErrorColumns: DsTableColumn[] = [
@@ -328,8 +329,8 @@ const dailyColumns: DsTableColumn[] = [
   { key: 'total_tokens', title: 'Token', width: 110, align: 'right' },
   { key: 'prompt_tokens', title: '输入', width: 100, align: 'right' },
   { key: 'completion_tokens', title: '输出', width: 110, align: 'right' },
-  { key: 'tenant_payable_credits', title: '租户结算', width: 110, align: 'right' },
-  { key: 'catalog_base_credits', title: '上游参考成本', width: 120, align: 'right' },
+  { key: 'tenant_payable_usd', title: '租户结算', width: 110, align: 'right' },
+  { key: 'catalog_base_usd', title: '上游参考成本', width: 120, align: 'right' },
   { key: 'avg_request_total_ms', title: '均总耗时(ms)', width: 122, align: 'right' },
   { key: 'avg_first_response_byte_ms', title: '均首响(ms)', width: 116, align: 'right' }
 ]
@@ -375,33 +376,33 @@ onMounted(() => {
         <PortalMetricGrid v-loading="loading">
           <div class="metric">
             <span>请求数</span>
-            <strong>{{ formatCredits(summary.total_requests) }}</strong>
+            <strong>{{ formatNumber(summary.total_requests) }}</strong>
             <p>{{ periodLabel }}总调用</p>
           </div>
           <div class="metric">
             <span>成功率</span>
             <strong>{{ successRate }}</strong>
-            <p>{{ formatCredits(summary.successful_requests) }} 次成功</p>
+            <p>{{ formatNumber(summary.successful_requests) }} 次成功</p>
           </div>
           <div class="metric">
             <span>用户零售应收</span>
-            <strong>{{ formatCredits(summary.total_user_payable_credits) }}</strong>
+            <strong>{{ formatUSD(summary.total_user_payable_usd) }}</strong>
             <p>租户零售参考口径</p>
           </div>
           <div class="metric">
             <span>Token</span>
-            <strong>{{ formatCredits(summary.total_tokens) }}</strong>
+            <strong>{{ formatNumber(summary.total_tokens) }}</strong>
             <p>Chat / Responses / Embedding</p>
           </div>
           <div class="metric">
             <span>租户结算扣费</span>
-            <strong>{{ formatCredits(summary.total_tenant_payable_credits) }}</strong>
+            <strong>{{ formatUSD(summary.total_tenant_payable_usd) }}</strong>
             <p>平台营收口径</p>
           </div>
           <div class="metric">
             <span>平均总耗时</span>
             <strong>{{ formatMs(summary.avg_request_total_ms) }}</strong>
-            <p>平均首响 {{ formatMs(summary.avg_first_response_byte_ms) }} · 失败 {{ formatCredits(summary.failed_requests) }}</p>
+            <p>平均首响 {{ formatMs(summary.avg_first_response_byte_ms) }} · 失败 {{ formatNumber(summary.failed_requests) }}</p>
           </div>
         </PortalMetricGrid>
 
@@ -458,7 +459,7 @@ onMounted(() => {
 
           <!-- Top 模型 / 租户 -->
           <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <PortalContentCard title="Top 模型" description="按积分消耗和请求量排序">
+            <PortalContentCard title="Top 模型" description="按消费金额和请求量排序">
               <DsTable
                 :frame="false"
                 :columns="topModelColumns"
@@ -466,13 +467,13 @@ onMounted(() => {
                 row-key="model_code"
                 :loading="loading"
               >
-                <template #cell-request_count="{ row }">{{ formatCredits(row.request_count) }}</template>
-                <template #cell-total_tenant_payable_credits="{ row }">{{ formatCredits(row.total_tenant_payable_credits) }}</template>
-                <template #cell-total_tokens="{ row }">{{ formatCredits(row.total_tokens) }}</template>
+                <template #cell-request_count="{ row }">{{ formatNumber(row.request_count) }}</template>
+                <template #cell-total_tenant_payable_usd="{ row }">{{ formatUSD(row.total_tenant_payable_usd) }}</template>
+                <template #cell-total_tokens="{ row }">{{ formatNumber(row.total_tokens) }}</template>
               </DsTable>
             </PortalContentCard>
 
-            <PortalContentCard title="Top 租户" description="按积分消耗和请求量排序">
+            <PortalContentCard title="Top 租户" description="按消费金额和请求量排序">
               <DsTable
                 :frame="false"
                 :columns="topTenantColumns"
@@ -483,9 +484,9 @@ onMounted(() => {
                 <template #cell-tenant="{ row }">
                   <PortalIdentityCell :label="topTenantLabel(row.tenant_id)" :meta="topTenantMeta(row.tenant_id)" />
                 </template>
-                <template #cell-request_count="{ row }">{{ formatCredits(row.request_count) }}</template>
-                <template #cell-total_tokens="{ row }">{{ formatCredits(row.total_tokens) }}</template>
-                <template #cell-total_tenant_payable_credits="{ row }">{{ formatCredits(row.total_tenant_payable_credits) }}</template>
+                <template #cell-request_count="{ row }">{{ formatNumber(row.request_count) }}</template>
+                <template #cell-total_tokens="{ row }">{{ formatNumber(row.total_tokens) }}</template>
+                <template #cell-total_tenant_payable_usd="{ row }">{{ formatUSD(row.total_tenant_payable_usd) }}</template>
               </DsTable>
             </PortalContentCard>
           </section>
@@ -502,10 +503,10 @@ onMounted(() => {
               :loading="loading"
             >
               <template #cell-target_kind="{ row }">{{ row.target_kind === 'oauth_pool' ? '账号池' : '上游账号' }}</template>
-              <template #cell-request_count="{ row }">{{ formatCredits(row.request_count) }}</template>
-              <template #cell-total_billable_units="{ row }">{{ formatCredits(row.total_billable_units) }}</template>
-              <template #cell-catalog_base_credits="{ row }">{{ formatCredits(row.catalog_base_credits) }}</template>
-              <template #cell-tenant_payable_credits="{ row }">{{ formatCredits(row.tenant_payable_credits) }}</template>
+              <template #cell-request_count="{ row }">{{ formatNumber(row.request_count) }}</template>
+              <template #cell-total_billable_units="{ row }">{{ formatNumber(row.total_billable_units) }}</template>
+              <template #cell-catalog_base_usd="{ row }">{{ formatUSD(row.catalog_base_usd) }}</template>
+              <template #cell-tenant_payable_usd="{ row }">{{ formatUSD(row.tenant_payable_usd) }}</template>
             </DsTable>
           </PortalContentCard>
 
@@ -574,18 +575,18 @@ onMounted(() => {
               row-key="date"
               :loading="loading"
             >
-              <template #cell-request_count="{ row }">{{ formatCredits(row.request_count) }}</template>
-              <template #cell-success_count="{ row }">{{ formatCredits(row.success_count) }}</template>
+              <template #cell-request_count="{ row }">{{ formatNumber(row.request_count) }}</template>
+              <template #cell-success_count="{ row }">{{ formatNumber(row.success_count) }}</template>
               <template #cell-failed_count="{ row }">
-                <span :class="row.failed_count > 0 ? 'count-invalid' : ''">{{ formatCredits(row.failed_count) }}</span>
+                <span :class="row.failed_count > 0 ? 'count-invalid' : ''">{{ formatNumber(row.failed_count) }}</span>
               </template>
-              <template #cell-total_tokens="{ row }">{{ formatCredits(row.total_tokens) }}</template>
-              <template #cell-prompt_tokens="{ row }">{{ formatCredits(row.prompt_tokens) }}</template>
-              <template #cell-completion_tokens="{ row }">{{ formatCredits(row.completion_tokens) }}</template>
-              <template #cell-tenant_payable_credits="{ row }">{{ formatCredits(row.tenant_payable_credits) }}</template>
-              <template #cell-catalog_base_credits="{ row }">{{ formatCredits(row.catalog_base_credits) }}</template>
-              <template #cell-avg_request_total_ms="{ row }">{{ formatCredits(row.avg_request_total_ms) }}</template>
-              <template #cell-avg_first_response_byte_ms="{ row }">{{ formatCredits(row.avg_first_response_byte_ms) }}</template>
+              <template #cell-total_tokens="{ row }">{{ formatNumber(row.total_tokens) }}</template>
+              <template #cell-prompt_tokens="{ row }">{{ formatNumber(row.prompt_tokens) }}</template>
+              <template #cell-completion_tokens="{ row }">{{ formatNumber(row.completion_tokens) }}</template>
+              <template #cell-tenant_payable_usd="{ row }">{{ formatUSD(row.tenant_payable_usd) }}</template>
+              <template #cell-catalog_base_usd="{ row }">{{ formatUSD(row.catalog_base_usd) }}</template>
+              <template #cell-avg_request_total_ms="{ row }">{{ formatNumber(row.avg_request_total_ms) }}</template>
+              <template #cell-avg_first_response_byte_ms="{ row }">{{ formatNumber(row.avg_first_response_byte_ms) }}</template>
             </DsTable>
           </PortalContentCard>
         </div>

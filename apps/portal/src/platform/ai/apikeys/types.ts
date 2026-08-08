@@ -14,8 +14,8 @@ export interface PortalApiKeyRecord {
   group_id: string;
   last_four?: string | null;
   name: string;
-  quota_limit_credits?: number | null;
-  quota_used_credits: number;
+  quota_limit_micro_usd?: number | null;
+  quota_used_micro_usd: number;
   status: string;
   expires_at?: number | null;
   last_used_at?: number | null;
@@ -35,7 +35,7 @@ export interface PortalApiKeyGroupRecord {
 export interface PortalApiKeyWriteInput {
   name: string;
   group_id: string;
-  quota_limit_credits?: number | null;
+  quota_limit_micro_usd?: number | null;
   status?: string;
   expires_at?: number | null;
   limit_policy?: PortalApiKeyLimitPolicy | null;

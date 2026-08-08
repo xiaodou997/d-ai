@@ -16,14 +16,12 @@ import SubscriptionPurchasePolicyEditor from './SubscriptionPurchasePolicyEditor
 import { defaultSubscriptionPurchasePolicy } from './subscriptionPurchasePolicy'
 import {
   estimateSubscriptionPaygValue,
-  MICRO_PER_CREDIT,
   type SubscriptionPricingGroup
 } from './subscriptionPricing'
 
 const props = defineProps<{
   plan: TenantSubPlan | null
   groups: TenantAiVisibleGroup[]
-  creditsPerUsd: number
 }>()
 
 const emit = defineEmits<{
@@ -32,17 +30,18 @@ const emit = defineEmits<{
 
 const visible = defineModel<boolean>({ required: true })
 const formRef = useTemplateRef<FormInstance>('formRef')
-const DEFAULT_PLAN_PRICE_CREDITS = 100
+const MICRO_USD = 1_000_000
+const DEFAULT_PLAN_PRICE_USD = 1
 const activeSection = shallowRef('basics')
 
 const form = reactive({
   name: '',
   description: '',
-  price_credits: DEFAULT_PLAN_PRICE_CREDITS,
+  price_usd: DEFAULT_PLAN_PRICE_USD,
   duration_days: 7,
-  total_limit_credits: DEFAULT_PLAN_PRICE_CREDITS,
-  window_5h_limit_credits: null as number | null,
-  window_7d_limit_credits: null as number | null,
+  total_limit_usd: DEFAULT_PLAN_PRICE_USD,
+  window_5h_limit_usd: null as number | null,
+  window_7d_limit_usd: null as number | null,
   sale_limit: null as number | null,
   groups: [] as TenantSubPlanGroupInput[],
   purchase_policy: defaultSubscriptionPurchasePolicy(),
@@ -51,8 +50,8 @@ const form = reactive({
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入套餐名称', trigger: 'blur' }],
-  price_credits: [{ required: true, message: '请输入售价', trigger: 'blur' }],
-  total_limit_credits: [
+  price_usd: [{ required: true, message: '请输入售价', trigger: 'blur' }],
+  total_limit_usd: [
     { required: true, message: '请输入总额度', trigger: 'blur' }
   ]
 }
@@ -95,47 +94,39 @@ const pricingGroups = computed<SubscriptionPricingGroup[]>(() => {
   }))
 })
 
-function microToCredits(value?: number | null): number | null {
-  return value == null ? null : value / MICRO_PER_CREDIT
+function microToUSD(value?: number | null): number | null {
+  return value == null ? null : value / MICRO_USD
 }
 
-function creditsToMicro(value?: number | null): number | null {
-  return value == null ? null : Math.round(Number(value) * MICRO_PER_CREDIT)
+function usdToMicro(value?: number | null): number | null {
+  return value == null ? null : Math.round(Number(value) * MICRO_USD)
 }
 
-function yuanLabel(credits: number): string {
-  const rate = props.creditsPerUsd > 0 ? props.creditsPerUsd : 100
-  return `¥${(credits / rate).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
+function usdLabel(value: number): string { return `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}` }
 
-function priceYuanHint(credits: number): string {
-  return `按当前积分汇率约 ${yuanLabel(credits)}`
-}
-
-function paygValueHint(credits?: number | null): string {
-  if (credits == null) return '无额外限制'
+function paygValueHint(usd?: number | null): string {
+  if (usd == null) return '无额外限制'
   const valueMicro = estimateSubscriptionPaygValue(
-    creditsToMicro(credits) ?? 0,
+    usdToMicro(usd) ?? 0,
     pricingGroups.value
   )
   if (valueMicro == null) return '选择可售分组后显示按量购买价值'
-  const valueCredits = valueMicro / MICRO_PER_CREDIT
-  return `最低相当于按量购买 ${valueCredits.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 积分（约 ${yuanLabel(valueCredits)}）`
+  return `最低按量价值 ${usdLabel(valueMicro / MICRO_USD)}`
 }
 
 function resetForm() {
   const plan = props.plan
-  const defaultPriceCredits = plan?.price_credits ?? DEFAULT_PLAN_PRICE_CREDITS
+  const defaultPriceUsd = microToUSD(plan?.price_micro_usd) ?? DEFAULT_PLAN_PRICE_USD
   Object.assign(form, {
     name: plan?.name ?? '',
     description: plan?.description ?? '',
-    price_credits: defaultPriceCredits,
+    price_usd: defaultPriceUsd,
     duration_days: plan?.duration_days ?? 7,
-    total_limit_credits: plan
-      ? (microToCredits(plan.total_limit_micro) ?? defaultPriceCredits)
-      : defaultPriceCredits,
-    window_5h_limit_credits: microToCredits(plan?.window_5h_limit_micro),
-    window_7d_limit_credits: microToCredits(plan?.window_7d_limit_micro),
+    total_limit_usd: plan
+      ? (microToUSD(plan.total_limit_micro_usd) ?? defaultPriceUsd)
+      : defaultPriceUsd,
+    window_5h_limit_usd: microToUSD(plan?.window_5h_limit_micro_usd),
+    window_7d_limit_usd: microToUSD(plan?.window_7d_limit_micro_usd),
     sale_limit: plan?.sale_limit ?? null,
     groups: (plan?.groups ?? []).map((group) => ({
       group_id: group.id,
@@ -170,7 +161,7 @@ watch(visible, (isOpen) => {
 watch(
   () => form.duration_days,
   () => {
-    if (!supports7d.value) form.window_7d_limit_credits = null
+    if (!supports7d.value) form.window_7d_limit_usd = null
   }
 )
 
@@ -225,10 +216,10 @@ async function submit() {
     ElMessage.error(policyError)
     return
   }
-  const total = creditsToMicro(form.total_limit_credits) ?? 0
-  const window5h = creditsToMicro(form.window_5h_limit_credits)
+  const total = usdToMicro(form.total_limit_usd) ?? 0
+  const window5h = usdToMicro(form.window_5h_limit_usd)
   const window7d = supports7d.value
-    ? creditsToMicro(form.window_7d_limit_credits)
+    ? usdToMicro(form.window_7d_limit_usd)
     : null
   if (
     (window5h != null && window5h > total) ||
@@ -240,11 +231,11 @@ async function submit() {
   const body: TenantSubPlanWriteRequest = {
     name: form.name.trim(),
     description: form.description.trim(),
-    price_credits: Math.round(form.price_credits),
+    price_micro_usd: usdToMicro(form.price_usd) ?? 0,
     duration_days: form.duration_days,
-    total_limit_micro: total,
-    window_5h_limit_micro: window5h,
-    window_7d_limit_micro: window7d,
+    total_limit_micro_usd: total,
+    window_5h_limit_micro_usd: window5h,
+    window_7d_limit_micro_usd: window7d,
     sale_limit: form.sale_limit == null ? null : Math.round(form.sale_limit),
     groups: form.groups.map((group) => ({ ...group })),
     purchase_policy: {
@@ -291,18 +282,18 @@ async function submit() {
               v-model:name="form.name"
               v-model:description="form.description"
               v-model:duration-days="form.duration_days"
-              v-model:price-credits="form.price_credits"
+              v-model:price-usd="form.price_usd"
               v-model:sale-limit="form.sale_limit"
-              v-model:total-limit-credits="form.total_limit_credits"
-              v-model:window5h-limit-credits="form.window_5h_limit_credits"
-              v-model:window7d-limit-credits="form.window_7d_limit_credits"
+              v-model:total-limit-usd="form.total_limit_usd"
+              v-model:window5h-limit-usd="form.window_5h_limit_usd"
+              v-model:window7d-limit-usd="form.window_7d_limit_usd"
               :supports7d="supports7d"
               :sold-count="plan?.sold_count ?? 0"
               :reserved-count="plan?.reserved_count ?? 0"
-              :price-hint="priceYuanHint(form.price_credits)"
-              :total-hint="paygValueHint(form.total_limit_credits)"
-              :window5h-hint="paygValueHint(form.window_5h_limit_credits)"
-              :window7d-hint="paygValueHint(form.window_7d_limit_credits)"
+              :price-hint="`实际扣款 ${usdLabel(form.price_usd)}`"
+              :total-hint="paygValueHint(form.total_limit_usd)"
+              :window5h-hint="paygValueHint(form.window_5h_limit_usd)"
+              :window7d-hint="paygValueHint(form.window_7d_limit_usd)"
             />
           </div>
         </el-tab-pane>
@@ -342,7 +333,7 @@ async function submit() {
     <template #footer>
       <div class="dialog-footer">
         <span class="footer-summary">
-          {{ form.name || '未命名套餐' }} · {{ form.duration_days }} 天 · {{ form.price_credits }} 积分
+          {{ form.name || '未命名套餐' }} · {{ form.duration_days }} 天 · {{ usdLabel(form.price_usd) }}
         </span>
         <div>
           <el-button @click="visible = false">取消</el-button>

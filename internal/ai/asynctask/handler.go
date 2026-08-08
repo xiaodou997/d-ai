@@ -129,7 +129,7 @@ type Result struct {
 	Status domain.TaskStatus
 	// Output is written to result_payload.
 	Output json.RawMessage
-	// CallerCharge is the settled caller charge in micro-credits, copied from the
+	// CallerCharge is the settled caller charge in micro-USD, copied from the
 	// runtime settlement. Failed or cancelled work can still have a charge when
 	// the upstream produced billable usage before the terminal state.
 	CallerCharge int64

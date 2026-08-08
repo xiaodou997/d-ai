@@ -229,33 +229,32 @@ export interface TenantAiLimitPolicyWriteRequest {
   status?: "active" | "disabled";
 }
 
-// ==================== 分组生效售价（每模型积分单价） ====================
+// ==================== 分组生效售价（每模型 USD 单价） ====================
 
 export interface TenantAiGroupEffectivePrice {
   model_code: string;
   capability_type: string;
   token_price_tiers: TenantAiTokenPriceTier[];
-  image_default_price_credits: number;
-  video_default_price_credits: number;
+  image_default_price_usd: number;
+  video_default_price_usd: number;
   image_prices?: Array<{ resolution: string; price: number }>;
   video_prices?: Array<{ resolution: string; price: number }>;
-  audio_tts_per_1m_chars_credits: number;
-  audio_stt_per_minute_credits: number;
+  audio_tts_per_1m_chars_usd: number;
+  audio_stt_per_minute_usd: number;
 }
 
 export interface TenantAiTokenPriceTier {
   up_to_input_tokens: number | null;
-  input_per_1m_credits: number;
-  output_per_1m_credits: number;
-  cache_write_per_1m_credits: number;
-  cache_read_per_1m_credits: number;
+  input_per_1m_usd: number;
+  output_per_1m_usd: number;
+  cache_write_per_1m_usd: number;
+  cache_read_per_1m_usd: number;
 }
 
 export interface TenantAiGroupEffectivePricesOutputBody {
   group_id: string;
   retail_price_book_id: string;
   effective_user_multiplier: number;
-  credits_per_usd: number;
   items: TenantAiGroupEffectivePrice[];
   total: number;
 }
@@ -265,7 +264,7 @@ export interface TenantAiGroupEffectivePricesOutputBody {
 export interface TenantAiApiKeyWriteRequest {
   name: string;
   group_id: string;
-  quota_limit_credits?: number | null;
+  quota_limit_micro_usd?: number | null;
   status?: string;
   expires_at?: number | null;
   limit_policy?: TenantAiLimitPolicyWriteRequest | null;
@@ -293,11 +292,11 @@ export interface TenantAiDashboardSummary {
   total_tokens: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
-  total_catalog_base_credits: number;
-  total_tenant_payable_credits: number;
-  total_retail_base_credits: number;
-  total_user_payable_credits: number;
-  total_user_charged_credits: number;
+  total_catalog_base_usd: number;
+  total_tenant_payable_usd: number;
+  total_retail_base_usd: number;
+  total_user_payable_usd: number;
+  total_user_charged_usd: number;
   avg_latency_ms: number;
 }
 
@@ -305,7 +304,7 @@ export interface TenantAiDashboardTopModel {
   model_code: string;
   request_count: number;
   total_tokens: number;
-  total_tenant_payable_credits: number;
+  total_tenant_payable_usd: number;
 }
 
 export interface TenantAiDashboardTopModelsOutputBody {
@@ -408,7 +407,7 @@ export interface ConsoleImageJob {
   style?: string;
   response_format?: string;
   requested_output_count?: number;
-  caller_charge_credits: number;
+  caller_charge_usd: number;
   image_count: number;
   inline_count: number;
   url_count: number;
@@ -454,7 +453,7 @@ export interface ConsoleImageGenerateRequest {
 }
 
 // ==================== AI 订阅制套餐（docs/ai-subscription-design.md §7.2） ====================
-// 额度一律为微积分（micro，1 积分 = 10000 微积分），编辑表单以积分录入、写回 ×10000。
+// 售价与额度统一为 micro-USD（1 USD = 1,000,000 micro-USD）。
 
 // 套餐绑定的分组（额度消耗 = 基准价 × 套餐扣额倍率）。
 export interface TenantSubPlanGroup {
@@ -493,11 +492,11 @@ export interface TenantSubPlan {
   tenant_id: string;
   name: string;
   description: string;
-  price_credits: number;
+  price_micro_usd: number;
   duration_days: number;
-  total_limit_micro: number;
-  window_5h_limit_micro?: number | null;
-  window_7d_limit_micro?: number | null;
+  total_limit_micro_usd: number;
+  window_5h_limit_micro_usd?: number | null;
+  window_7d_limit_micro_usd?: number | null;
   status: "draft" | "on_sale" | "off_sale";
   sort_order: number;
   sale_limit?: number | null;
@@ -512,9 +511,9 @@ export interface TenantSubPlan {
 }
 
 export interface TenantSubWindow {
-  limit_micro?: number | null;
-  used_micro: number;
-  remaining_micro?: number | null;
+  limit_micro_usd?: number | null;
+  used_micro_usd: number;
+  remaining_micro_usd?: number | null;
   reset_at?: string | null;
 }
 
@@ -529,9 +528,9 @@ export interface TenantSubscription {
   status: string;
   activated_at?: string | null;
   expires_at?: string | null;
-  total_limit_micro: number;
-  total_used_micro: number;
-  total_remaining_micro: number;
+  total_limit_micro_usd: number;
+  total_used_micro_usd: number;
+  total_remaining_micro_usd: number;
   window_5h: TenantSubWindow;
   window_7d: TenantSubWindow;
   groups: TenantSubPlanGroup[];
@@ -546,7 +545,7 @@ export interface TenantSubOrder {
   user_id: string;
   plan_id: string;
   plan_name: string;
-  price_credits: number;
+  price_micro_usd: number;
   status: string;
   billing_event_id?: string;
   subscription_id?: string;
@@ -574,11 +573,11 @@ export interface TenantSubPlanGroupInput {
 export interface TenantSubPlanWriteRequest {
   name: string;
   description?: string;
-  price_credits: number;
+  price_micro_usd: number;
   duration_days: number;
-  total_limit_micro: number;
-  window_5h_limit_micro?: number | null;
-  window_7d_limit_micro?: number | null;
+  total_limit_micro_usd: number;
+  window_5h_limit_micro_usd?: number | null;
+  window_7d_limit_micro_usd?: number | null;
   sort_order?: number;
   sale_limit?: number | null;
   groups: TenantSubPlanGroupInput[];

@@ -164,7 +164,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 消费流水 */
+        /** 额度明细（含服务扣款审计） */
         get: operations["account-transactions"];
         put?: never;
         post?: never;
@@ -279,32 +279,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/cash-accounts": {
+    "/api/v1/admin/balance-ledger": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 租户现金账户总览 */
-        get: operations["admin-list-cash-accounts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/cash-ledger": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 任意租户现金流水 */
-        get: operations["admin-list-cash-ledger"];
+        /** 任意租户余额流水 */
+        get: operations["admin-list-balance-ledger"];
         put?: never;
         post?: never;
         delete?: never;
@@ -382,6 +365,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/tenant-balances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 租户 USD 余额总览 */
+        get: operations["admin-list-tenant-balances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/wechat-config": {
         parameters: {
             query?: never;
@@ -407,44 +407,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 提现申请列表 */
+        /** 提现记录列表 */
         get: operations["admin-list-withdrawals"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/withdrawals/{id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 审核提现申请 */
-        post: operations["admin-review-withdrawal"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/withdrawals/{id}/settle": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 线下打款核销提现 */
-        post: operations["admin-settle-withdrawal"];
+        /** 创建提现记录并直接扣减租户额度 */
+        post: operations["admin-create-withdrawal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -610,23 +577,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/billing/events/batch-confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 批量手动确认 */
-        post: operations["admin-batch-confirm-events"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/billing/events/batch-refund": {
         parameters: {
             query?: never;
@@ -638,57 +588,6 @@ export interface paths {
         put?: never;
         /** 批量退款 */
         post: operations["admin-batch-refund-events"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/events/{id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 取消卡住的预授权 */
-        post: operations["admin-cancel-preauth"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/events/{id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 手动确认已释放事件 */
-        post: operations["admin-manual-confirm-event"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/events/{id}/dismiss": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 免除收费 */
-        post: operations["admin-dismiss-event"];
         delete?: never;
         options?: never;
         head?: never;
@@ -960,7 +859,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Dashboard 告警（超时预授权 / 异常释放） */
+        /** Dashboard 告警（异常扣费） */
         get: operations["admin-dashboard-alerts"];
         put?: never;
         post?: never;
@@ -1236,7 +1135,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 在线充值配置（汇率/限额） */
+        /** USD 在线充值配置 */
         get: operations["payment-topup-config"];
         put?: never;
         post?: never;
@@ -1419,24 +1318,6 @@ export interface paths {
          * @description 从 LiteLLM 价格源同步内置常用模型白名单。手动编辑过的条目不会被覆盖。
          */
         post: operations["ai-sync-common-price-book-models"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/pricing/credits-per-usd": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** USD 到积分汇率 */
-        get: operations["ai-get-credits-per-usd"];
-        /** 设置 USD 到积分汇率 */
-        put: operations["ai-set-credits-per-usd"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1789,6 +1670,40 @@ export interface paths {
         patch: operations["admin-update-tenant-user-status"];
         trace?: never;
     };
+    "/api/v1/tenant/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 租户 USD 额度余额 */
+        get: operations["tenant-balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenant/balance-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 额度明细流水 */
+        get: operations["tenant-balance-ledger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenant/branding": {
         parameters: {
             query?: never;
@@ -1825,57 +1740,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tenant/cash-account": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户现金账户余额 */
-        get: operations["tenant-cash-account"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenant/cash-ledger": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 现金流水 */
-        get: operations["tenant-cash-ledger"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenant/cash/buy-credits": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 用现金余额购买租户积分 */
-        post: operations["tenant-cash-buy-credits"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tenant/payment-settings": {
         parameters: {
             query?: never;
@@ -1888,41 +1752,6 @@ export interface paths {
         /** 更新用户充值设置 */
         put: operations["tenant-update-payment-settings"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenant/withdrawals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 提现记录 */
-        get: operations["tenant-list-withdrawals"];
-        put?: never;
-        /** 申请提现 */
-        post: operations["tenant-apply-withdrawal"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenant/withdrawals/{id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 取消提现申请（仅 pending 可取消） */
-        post: operations["tenant-cancel-withdrawal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2540,7 +2369,7 @@ export interface paths {
         };
         /**
          * 分组默认用户价格
-         * @description 返回零售价格表 USD 单价乘分组默认用户倍率和积分汇率后的价格。
+         * @description 返回零售价格表 USD 单价乘分组默认用户倍率后的 USD 价格。
          */
         get: operations["ai-list-tenant-self-group-effective-prices"];
         put?: never;
@@ -3683,7 +3512,7 @@ export interface paths {
         };
         /**
          * 用量用户排行
-         * @description 按用户计费积分降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。
+         * @description 按用户计费USD 金额降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。
          */
         get: operations["ai-list-usage-user-ranking"];
         put?: never;
@@ -4013,7 +3842,7 @@ export interface paths {
         };
         /**
          * 终端用户自助分组生效售价
-         * @description 返回当前用户在某可见分组下可使用的模型及其生效积分单价（售价表 USD 单价 × 终端用户生效倍率 × 积分汇率）。
+         * @description 返回当前用户在某可见分组下可使用的模型及其生效 USD 单价（售价表 USD 单价 × 终端用户生效倍率）。
          */
         get: operations["ai-list-user-self-group-effective-prices"];
         put?: never;
@@ -4036,7 +3865,7 @@ export interface paths {
         put?: never;
         /**
          * 终端用户购买订阅套餐
-         * @description 用本人积分购买套餐（不可退款）。201=已开通；202=扣款处理中请轮询订单；402=余额不足；409=排队已满或该套餐已在待激活队列。
+         * @description 用本人 USD 余额购买套餐（不可退款）。201=已开通；202=扣款处理中请轮询订单；402=余额不足；409=排队已满或该套餐已在待激活队列。
          */
         post: operations["ai-create-user-self-subscription-order"];
         delete?: never;
@@ -4071,7 +3900,7 @@ export interface paths {
         };
         /**
          * 终端用户自助在售订阅套餐列表
-         * @description 返回当前用户所属租户已上架（on_sale）的订阅套餐。额度单位为微积分，前端除以 10000 展示为积分。
+         * @description 返回当前用户所属租户已上架（on_sale）的订阅套餐。价格和额度单位为 micro-USD。
          */
         get: operations["ai-list-user-self-subscription-plans"];
         put?: never;
@@ -4375,15 +4204,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AccountCreditPackage: {
+        AccountBalanceLot: {
+            balanceLotId: string;
             /** Format: date-time */
             expiresAt?: string;
-            packageId: string;
             /** Format: double */
-            remainingCredits: number;
+            remainingUsd: number;
             source: string;
             /** Format: double */
-            totalCredits: number;
+            totalUsd: number;
         };
         AccountDTO: {
             /**
@@ -4456,7 +4285,7 @@ export interface components {
             /** Format: int64 */
             inviteCodeCount: number;
             /** Format: double */
-            userDeductionCredits: number;
+            userDeductionUsd: number;
         };
         AccountStatusRequest: {
             /**
@@ -4625,14 +4454,14 @@ export interface components {
             owner_type: "tenant" | "user";
             /**
              * Format: int64
-             * @description 额度上限，积分；为空表示无限制
+             * @description 额度上限，单位 micro-USD；为空表示无限制
              */
-            quota_limit_credits?: number;
+            quota_limit_micro_usd?: number;
             /**
-             * Format: double
-             * @description 已使用额度，积分
+             * Format: int64
+             * @description 已使用额度，单位 micro-USD
              */
-            quota_used_credits: number;
+            quota_used_micro_usd: number;
             /**
              * @description 状态
              * @enum {string}
@@ -4693,9 +4522,9 @@ export interface components {
             name: string;
             /**
              * Format: int64
-             * @description 额度上限，积分；为空表示无限制
+             * @description 额度上限，单位 micro-USD；为空表示无限制
              */
-            quota_limit_credits?: number;
+            quota_limit_micro_usd?: number;
             /**
              * @description 状态；为空默认 active
              * @enum {string}
@@ -4729,20 +4558,6 @@ export interface components {
             /** Format: int64 */
             status: number;
             title: string;
-        };
-        ApplyWithdrawalInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ApplyWithdrawalInputBody.json
-             */
-            readonly $schema?: string;
-            accountName: string;
-            accountNo: string;
-            /** Format: int64 */
-            amount: number;
-            bankName: string;
-            note?: string;
         };
         /** @description 与 POST /v1/chat/completions 请求体同构；stream 固定为 false。 */
         AsyncTaskChatCompletionInput: {
@@ -4948,9 +4763,9 @@ export interface components {
         AsyncTaskUsage: {
             /**
              * Format: double
-             * @description 任务调用方的已结算消耗积分
+             * @description 任务调用方的已结算消耗USD 金额
              */
-            cost_credits: number;
+            cost_usd: number;
         };
         AudienceRuleOutput: {
             kind: string;
@@ -5033,33 +4848,22 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: double */
-            availableCredits: number;
-            /** Format: double */
-            frozenCredits: number;
+            availableUsd: number;
+            balanceLots?: components["schemas"]["AccountBalanceLot"][] | null;
+            currency: string;
             /** Format: int64 */
-            outstandingDebtMicro: number;
-            packages?: components["schemas"]["AccountCreditPackage"][] | null;
+            outstandingDebtMicroUsd: number;
             /** Format: double */
-            permanentCredits: number;
+            permanentUsd: number;
             /** Format: double */
-            remainingCredits: number;
+            remainingUsd: number;
             serviceState: string;
             /** Format: double */
-            timedCredits: number;
+            timedUsd: number;
             /** Format: double */
-            totalCredits: number;
+            totalUsd: number;
             /** Format: double */
-            usedCredits: number;
-        };
-        BatchConfirmInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchConfirmInputBody.json
-             */
-            readonly $schema?: string;
-            eventIds: string[] | null;
-            note: string;
+            usedUsd: number;
         };
         BatchDeleteUpstreamModelBindingsOutputBody: {
             /**
@@ -5102,9 +4906,9 @@ export interface components {
             /** Format: int64 */
             successCount: number;
             /** Format: double */
-            totalTenantCredits: number;
+            totalTenantUsd: number;
             /** Format: double */
-            totalUserCredits: number;
+            totalUserUsd: number;
         };
         BatchRefundInputBody: {
             /**
@@ -5116,46 +4920,10 @@ export interface components {
             eventIds: string[] | null;
             reason: string;
         };
-        BuyCreditsInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BuyCreditsInputBody.json
-             */
-            readonly $schema?: string;
-            /**
-             * Format: int64
-             * @description 用现金余额购买租户积分，单位分
-             */
-            amount: number;
-        };
-        BuyCreditsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BuyCreditsOutputBody.json
-             */
-            readonly $schema?: string;
-            creditOrderId: string;
-            /** Format: double */
-            credits: number;
-        };
-        CancelPreAuthInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CancelPreAuthInputBody.json
-             */
-            readonly $schema?: string;
-            note: string;
-        };
         CashAccountItem: {
             /** Format: int64 */
-            available: number;
-            /** Format: int64 */
-            balance: number;
-            /** Format: int64 */
-            frozen: number;
+            balanceMicroUsd: number;
+            currency: string;
             tenantId: string;
             tenantName?: string;
         };
@@ -5167,23 +4935,17 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: int64 */
-            available: number;
-            /** Format: int64 */
-            balance: number;
-            /** Format: int64 */
-            creditsPerCny: number;
-            /** Format: int64 */
-            frozen: number;
-            /** Format: int64 */
-            withdrawFeeBp: number;
+            balanceMicroUsd: number;
+            currency: string;
         };
         CashLedgerItem: {
             /** Format: int64 */
-            amount: number;
+            amountMicroUsd: number;
             /** Format: int64 */
-            balanceAfter: number;
+            balanceAfterMicroUsd: number;
             /** Format: int64 */
             createdAt: number;
+            currency: string;
             note?: string;
             refId?: string;
             refType?: string;
@@ -5202,10 +4964,10 @@ export interface components {
             oldPassword: string;
         };
         ClientConsumptionItem: {
+            /** Format: double */
+            amountUsd: number;
             clientId: string;
             clientName: string;
-            /** Format: double */
-            credits: number;
             percentage: string;
         };
         ComponentStatus: {
@@ -5221,7 +4983,7 @@ export interface components {
             readonly $schema?: string;
             dataPoints: components["schemas"]["TrendPoint"][] | null;
             /** Format: double */
-            totalCredits: number;
+            totalUsd: number;
         };
         ControlPageSubOrderDTO: {
             /**
@@ -5450,10 +5212,10 @@ export interface components {
             readonly $schema?: string;
             /**
              * Format: int64
-             * @description 自定义充值金额，单位分
+             * @description 自定义充值金额，单位 micro-USD；必须可精确换算为美分
              */
-            amount?: number;
-            /** @description 快捷充值套餐 ID */
+            amountMicroUsd?: number;
+            /** @description 快捷额度包 ID */
             packageId?: string;
         };
         CreateUserOutputBody: {
@@ -5466,6 +5228,22 @@ export interface components {
             defaultPassword: boolean;
             userId: string;
             username: string;
+        };
+        CreateWithdrawalInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/CreateWithdrawalInputBody.json
+             */
+            readonly $schema?: string;
+            accountName?: string;
+            accountNo?: string;
+            /** Format: int64 */
+            amountMicroUsd: number;
+            bankName?: string;
+            note?: string;
+            paymentRef?: string;
+            tenantId: string;
         };
         CredentialPoolDTO: {
             /**
@@ -5559,19 +5337,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        CreditsPerUSDOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/CreditsPerUSDOutputBody.json
-             */
-            readonly $schema?: string;
-            /**
-             * Format: double
-             * @description 1 USD 对应积分数
-             */
-            credits_per_usd: number;
-        };
         CustomerPortalBrandOutputBody: {
             /**
              * Format: uri
@@ -5610,7 +5375,7 @@ export interface components {
              */
             avg_request_total_ms: number;
             /** Format: double */
-            catalog_base_credits: number;
+            catalog_base_usd: number;
             /**
              * Format: int64
              * @description 输出 token 数
@@ -5634,23 +5399,23 @@ export interface components {
              */
             request_count: number;
             /** Format: double */
-            retail_base_credits: number;
+            retail_base_usd: number;
             /**
              * Format: int64
              * @description 成功请求数
              */
             success_count: number;
             /** Format: double */
-            tenant_payable_credits: number;
+            tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 总 token 数
              */
             total_tokens: number;
             /** Format: double */
-            user_charged_credits: number;
+            user_charged_usd: number;
             /** Format: double */
-            user_payable_credits: number;
+            user_payable_usd: number;
         };
         DashboardAlertsOutputBody: {
             /**
@@ -5660,7 +5425,6 @@ export interface components {
              */
             readonly $schema?: string;
             failedTransactions: components["schemas"]["FailedTxAlert"][] | null;
-            timeoutPreAuths: components["schemas"]["PreAuthAlert"][] | null;
         };
         DashboardRecentErrorDTO: {
             /** @description 客户端 API 格式 */
@@ -5745,9 +5509,9 @@ export interface components {
             successful_requests: number;
             /**
              * Format: double
-             * @description 上游参考成本积分
+             * @description 上游参考成本USD 金额
              */
-            total_catalog_base_credits: number;
+            total_catalog_base_usd: number;
             /**
              * Format: int64
              * @description 输出 token 数
@@ -5765,14 +5529,14 @@ export interface components {
             total_requests: number;
             /**
              * Format: double
-             * @description 零售价格表原价积分
+             * @description 零售价格表原价USD 金额
              */
-            total_retail_base_credits: number;
+            total_retail_base_usd: number;
             /**
              * Format: double
-             * @description 平台向租户结算的积分
+             * @description 平台向租户结算的USD 金额
              */
-            total_tenant_payable_credits: number;
+            total_tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 总 token 数
@@ -5780,14 +5544,14 @@ export interface components {
             total_tokens: number;
             /**
              * Format: double
-             * @description 用户实际扣款积分
+             * @description 用户实际扣款USD 金额
              */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
             /**
              * Format: double
-             * @description 用户零售应收积分
+             * @description 用户零售应收USD 金额
              */
-            total_user_payable_credits: number;
+            total_user_payable_usd: number;
         };
         DashboardTopModelDTO: {
             /** @description 模型编码 */
@@ -5799,9 +5563,9 @@ export interface components {
             request_count: number;
             /**
              * Format: double
-             * @description 租户扣费积分
+             * @description 租户扣费USD 金额
              */
-            total_tenant_payable_credits: number;
+            total_tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 总 token 数
@@ -5829,9 +5593,9 @@ export interface components {
             tenant_id: string;
             /**
              * Format: double
-             * @description 租户扣费积分
+             * @description 租户扣费USD 金额
              */
-            total_tenant_payable_credits: number;
+            total_tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 总 token 数
@@ -5859,7 +5623,7 @@ export interface components {
             readonly $schema?: string;
             account_id: string;
             /** Format: int64 */
-            outstanding_debt_micro: number;
+            outstanding_debt_micro_usd: number;
             owner_type: string;
             /** @enum {string} */
             service_state: "active" | "blocked_debt";
@@ -5955,15 +5719,6 @@ export interface components {
             /** @description 展示名 */
             name: string;
         };
-        DismissEventInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/DismissEventInputBody.json
-             */
-            readonly $schema?: string;
-            note: string;
-        };
         DispatchModelDTO: {
             /** Format: int64 */
             available_targets: number;
@@ -5983,22 +5738,22 @@ export interface components {
         };
         EffectiveTokenPriceTierDTO: {
             /** Format: double */
-            cache_read_per_1m_credits: number;
+            cache_read_per_1m_usd: number;
             /** Format: double */
-            cache_write_per_1m_credits: number;
+            cache_write_per_1m_usd: number;
             /** Format: double */
-            input_per_1m_credits: number;
+            input_per_1m_usd: number;
             /** Format: double */
-            output_per_1m_credits: number;
+            output_per_1m_usd: number;
             /** Format: int64 */
             up_to_input_tokens: number | null;
         };
         EndUserItem: {
             avatar?: string;
+            /** Format: double */
+            balanceUsd: number;
             /** Format: int64 */
             createdTime: number;
-            /** Format: double */
-            credits: number;
             email?: string;
             internalNote?: string;
             /** Format: int64 */
@@ -6024,33 +5779,13 @@ export interface components {
             metadata: string;
             status: string;
             /** Format: double */
-            tenantCredits: number;
+            tenantAmountUsd: number;
             tenantName: string;
             terminalNote: string;
             /** Format: double */
-            userCredits: number;
+            userAmountUsd: number;
             userId: string;
             username: string;
-        };
-        EventStatusOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/EventStatusOutputBody.json
-             */
-            readonly $schema?: string;
-            accountState?: string;
-            allowFurtherUsage?: boolean;
-            eventId: string;
-            status: string;
-            /** Format: int64 */
-            tenantDeducted?: number;
-            /** Format: int64 */
-            tenantOverdraftAdd?: number;
-            /** Format: int64 */
-            userDeducted?: number;
-            /** Format: int64 */
-            userOverdraftAdd?: number;
         };
         FailedTxAlert: {
             /** Format: int64 */
@@ -6082,9 +5817,9 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: int64 */
-            creditsPerCny: number;
-            /** Format: int64 */
             tenantCustomTopupFeeBp: number;
+            /** Format: int32 */
+            tenantCustomValidityDays?: number;
             tenantTopupPackages: components["schemas"]["TopupPackage"][] | null;
             /** Format: int64 */
             tenantWithdrawFeeBp: number;
@@ -6098,20 +5833,21 @@ export interface components {
             readonly $schema?: string;
             /** Format: int64 */
             activeTenants: number;
+            currency: string;
             /** Format: int64 */
             newUsers: number;
+            /** Format: double */
+            tenantRechargeAmountUsd: number;
             /** Format: int64 */
-            tenantRechargeAmount: number;
+            tenantRechargePaidMinor: number;
             /** Format: double */
-            tenantRechargeCredits: number;
+            tenantTotalBalanceUsd: number;
             /** Format: double */
-            tenantTotalCredits: number;
+            userRechargeAmountUsd: number;
             /** Format: int64 */
-            userRechargeAmount: number;
+            userRechargePaidMinor: number;
             /** Format: double */
-            userRechargeCredits: number;
-            /** Format: double */
-            userTotalCredits: number;
+            userTotalBalanceUsd: number;
         };
         GroupClientSurfacePolicyDTO: {
             /**
@@ -6854,19 +6590,6 @@ export interface components {
             password: string;
             username: string;
         };
-        ManualConfirmInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ManualConfirmInputBody.json
-             */
-            readonly $schema?: string;
-            /** Format: int64 */
-            actualTenantCredits?: number;
-            /** Format: int64 */
-            actualUserCredits?: number;
-            note: string;
-        };
         MeOutputBody: {
             /**
              * Format: uri
@@ -7349,13 +7072,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        PreAuthAlert: {
-            /** Format: int64 */
-            createdTime: number;
-            eventId: string;
-            tenantId: string;
-            userId: string;
-        };
         PriceBookDTO: {
             /**
              * Format: uri
@@ -7526,9 +7242,9 @@ export interface components {
             readonly $schema?: string;
             /**
              * Format: int64
-             * @description 充值积分数
+             * @description 到账金额，单位 micro-USD
              */
-            creditAmount: number;
+            amountMicroUsd: number;
             /** Format: int64 */
             expireTime?: number | null;
             note?: string;
@@ -7537,8 +7253,11 @@ export interface components {
              * @description 1=租户充值 2=用户充值
              */
             packageType: number;
-            /** Format: int64 */
-            paidAmount?: number;
+            /**
+             * Format: int64
+             * @description 支付渠道最小单位金额
+             */
+            paidAmountMinor?: number;
             paymentRef?: string;
             tenantId?: string;
             userId?: string;
@@ -7550,31 +7269,32 @@ export interface components {
              * @example https://example.com/schemas/RechargeOutputBody.json
              */
             readonly $schema?: string;
-            /** Format: double */
-            clearedOverdraft: number;
             /** Format: int64 */
-            creditAmount: number;
+            amountMicroUsd: number;
+            balanceLotId: string;
+            /** Format: double */
+            balanceLotUsd: number;
+            /** Format: double */
+            clearedDebtUsd: number;
+            currency: string;
             orderId: string;
             /** Format: int64 */
             orderTime: number;
-            /** Format: double */
-            packageCredits: number;
-            packageId: string;
             /** Format: int64 */
-            paidAmount: number;
+            paidAmountMinor: number;
             tenantId: string;
             userId: string;
         };
         RechargeRecordRow: {
+            /** Format: double */
+            amountUsd: number;
             /** Format: int64 */
             createdTime: number | null;
-            /** Format: double */
-            creditAmount: number;
             note: string;
             orderId: string;
             orderType: string;
             /** Format: int64 */
-            paidAmount: number;
+            paidAmountMinor: number;
             status: string;
             tenantName: string;
             userId: string;
@@ -7652,10 +7372,10 @@ export interface components {
             status: "acknowledged" | "resolved" | "dismissed";
         };
         ResourceStatItem: {
+            /** Format: double */
+            amountUsd: number;
             clientId: string;
             clientName: string;
-            /** Format: double */
-            credits: number;
             percentage: string;
         };
         ResourceStatsOutputBody: {
@@ -7683,26 +7403,16 @@ export interface components {
              * @example https://example.com/schemas/ReverseRechargeOutputBody.json
              */
             readonly $schema?: string;
+            balanceLotId: string;
+            balanceLotStatus: string;
             /** Format: double */
-            lostCredits: number;
+            lostAmountUsd: number;
             orderId: string;
             /** Format: double */
-            originalCredits: number;
-            packageId: string;
-            packageStatus: string;
+            originalAmountUsd: number;
             /** Format: double */
-            reversedCredits: number;
+            reversedAmountUsd: number;
             status: string;
-        };
-        ReviewWithdrawalInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ReviewWithdrawalInputBody.json
-             */
-            readonly $schema?: string;
-            approve: boolean;
-            note?: string;
         };
         RiskControlConfigDTO: {
             /**
@@ -8000,15 +7710,6 @@ export interface components {
              */
             load: number;
         };
-        SettleWithdrawalInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SettleWithdrawalInputBody.json
-             */
-            readonly $schema?: string;
-            paymentRef: string;
-        };
         StatusPathInputBody: {
             /**
              * Format: uri
@@ -8037,7 +7738,7 @@ export interface components {
             plan_id: string;
             plan_name: string;
             /** Format: int64 */
-            price_credits: number;
+            price_micro_usd: number;
             purchase_policy: components["schemas"]["SubPurchasePolicyDTO"];
             /** Format: int64 */
             purchase_policy_version: number;
@@ -8066,7 +7767,7 @@ export interface components {
             id: string;
             name: string;
             /** Format: int64 */
-            price_credits: number;
+            price_micro_usd: number;
             purchase_policy: components["schemas"]["SubPurchasePolicyDTO"];
             /** Format: int32 */
             reserved_count: number;
@@ -8080,13 +7781,13 @@ export interface components {
             status: string;
             tenant_id: string;
             /** Format: int64 */
-            total_limit_micro: number;
+            total_limit_micro_usd: number;
             /** Format: date-time */
             updated_at: string;
             /** Format: int64 */
-            window_5h_limit_micro?: number;
+            window_5h_limit_micro_usd?: number;
             /** Format: int64 */
-            window_7d_limit_micro?: number;
+            window_7d_limit_micro_usd?: number;
         };
         SubPlanGroupDTO: {
             id: string;
@@ -8123,9 +7824,9 @@ export interface components {
             name: string;
             /**
              * Format: int64
-             * @description 售价（整数积分）
+             * @description 售价，单位 micro-USD
              */
-            price_credits: number;
+            price_micro_usd: number;
             /** @description 每位用户的套餐购买限制；创建时省略=不限购且允许提前购买，更新时省略=保持现有政策 */
             purchase_policy?: components["schemas"]["SubPurchasePolicyInput"];
             /**
@@ -8140,19 +7841,19 @@ export interface components {
             sort_order?: number;
             /**
              * Format: int64
-             * @description 套餐总额度（微积分）
+             * @description 套餐总额度，单位 micro-USD
              */
-            total_limit_micro: number;
+            total_limit_micro_usd: number;
             /**
              * Format: int64
-             * @description 5 小时窗口额度（微积分）；空=不限
+             * @description 5 小时窗口额度，单位 micro-USD；空=不限
              */
-            window_5h_limit_micro?: number;
+            window_5h_limit_micro_usd?: number;
             /**
              * Format: int64
-             * @description 7 天窗口额度（微积分）；空=不限，仅 ≥7 天套餐有意义
+             * @description 7 天窗口额度，单位 micro-USD；空=不限，仅 ≥7 天套餐有意义
              */
-            window_7d_limit_micro?: number;
+            window_7d_limit_micro_usd?: number;
         };
         SubPublicPlanDTO: {
             /** Format: int32 */
@@ -8164,7 +7865,7 @@ export interface components {
             id: string;
             name: string;
             /** Format: int64 */
-            price_credits: number;
+            price_micro_usd: number;
             purchase_eligibility?: components["schemas"]["SubPurchaseEligibilityDTO"];
             purchase_policy: components["schemas"]["SubPurchasePolicyDTO"];
             /** Format: int32 */
@@ -8173,11 +7874,11 @@ export interface components {
             sold_count: number;
             sold_out: boolean;
             /** Format: int64 */
-            total_limit_micro: number;
+            total_limit_micro_usd: number;
             /** Format: int64 */
-            window_5h_limit_micro?: number;
+            window_5h_limit_micro_usd?: number;
             /** Format: int64 */
-            window_7d_limit_micro?: number;
+            window_7d_limit_micro_usd?: number;
         };
         SubPurchaseEligibilityDTO: {
             allowed: boolean;
@@ -8310,13 +8011,13 @@ export interface components {
         };
         SubWindowDTO: {
             /** Format: int64 */
-            limit_micro?: number;
+            limit_micro_usd?: number;
             /** Format: int64 */
-            remaining_micro?: number;
+            remaining_micro_usd?: number;
             /** Format: date-time */
             reset_at?: string;
             /** Format: int64 */
-            used_micro: number;
+            used_micro_usd: number;
         };
         SubscriptionDTO: {
             /**
@@ -8341,11 +8042,11 @@ export interface components {
             status: string;
             tenant_id: string;
             /** Format: int64 */
-            total_limit_micro: number;
+            total_limit_micro_usd: number;
             /** Format: int64 */
-            total_remaining_micro: number;
+            total_remaining_micro_usd: number;
             /** Format: int64 */
-            total_used_micro: number;
+            total_used_micro_usd: number;
             /** Format: date-time */
             updated_at: string;
             user_id: string;
@@ -8422,34 +8123,34 @@ export interface components {
         TenantGroupEffectivePriceDTO: {
             /**
              * Format: double
-             * @description 语音识别每分钟的生效售价（积分）
+             * @description 语音识别每分钟的生效售价（USD）
              */
-            audio_stt_per_minute_credits: number;
+            audio_stt_per_minute_usd: number;
             /**
              * Format: double
-             * @description 语音合成每 100 万字符的生效售价（积分）
+             * @description 语音合成每 100 万字符的生效售价（USD）
              */
-            audio_tts_per_1m_chars_credits: number;
+            audio_tts_per_1m_chars_usd: number;
             /** @description 能力类型 */
             capability_type: string;
             /**
              * Format: double
-             * @description 图片默认生效售价（积分/张）
+             * @description 图片默认生效售价（USD/张）
              */
-            image_default_price_credits: number;
-            /** @description 图片尺寸档位覆盖生效售价（积分/张） */
-            image_prices?: components["schemas"]["TenantResolutionCreditPriceDTO"][] | null;
+            image_default_price_usd: number;
+            /** @description 图片尺寸档位覆盖生效售价（USD/张） */
+            image_prices?: components["schemas"]["TenantResolutionUSDPriceDTO"][] | null;
             /** @description 模型编码 */
             model_code: string;
-            /** @description 逐上下文档位的生效积分价格 */
+            /** @description 逐上下文档位的生效 USD 价格 */
             token_price_tiers: components["schemas"]["EffectiveTokenPriceTierDTO"][] | null;
             /**
              * Format: double
-             * @description 视频默认生效售价（积分/秒）
+             * @description 视频默认生效售价（USD/秒）
              */
-            video_default_price_credits: number;
-            /** @description 视频规格覆盖生效售价（积分/秒） */
-            video_prices?: components["schemas"]["TenantResolutionCreditPriceDTO"][] | null;
+            video_default_price_usd: number;
+            /** @description 视频规格覆盖生效售价（USD/秒） */
+            video_prices?: components["schemas"]["TenantResolutionUSDPriceDTO"][] | null;
         };
         TenantGroupEffectivePricesOutputBody: {
             /**
@@ -8459,8 +8160,6 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: double */
-            credits_per_usd: number;
-            /** Format: double */
             effective_user_multiplier: number;
             group_id: string;
             items: components["schemas"]["TenantGroupEffectivePriceDTO"][] | null;
@@ -8469,12 +8168,12 @@ export interface components {
             total: number;
         };
         TenantListItem: {
+            /** Format: double */
+            balanceUsd: number;
             contactEmail: string;
             contactPerson: string;
             /** Format: int64 */
             createdTime: number;
-            /** Format: double */
-            credits: number;
             /** Format: int64 */
             status: number;
             statusDisplay: string;
@@ -8497,13 +8196,13 @@ export interface components {
             /** Format: int64 */
             inviteCodeCount: number;
             /** Format: int64 */
-            settlementIncomeCents: number;
+            settlementIncomeMicroUsd: number;
             /** Format: int64 */
             userConsumptionCount: number;
             /** Format: double */
-            userDeductionCredits: number;
+            userDeductionUsd: number;
             /** Format: double */
-            userTotalCredits: number;
+            userTotalBalanceUsd: number;
         };
         TenantPriceBookCloneRequest: {
             /**
@@ -8514,10 +8213,10 @@ export interface components {
             readonly $schema?: string;
             name?: string;
         };
-        TenantResolutionCreditPriceDTO: {
+        TenantResolutionUSDPriceDTO: {
             /**
              * Format: double
-             * @description 该规格的生效售价（积分）
+             * @description 该规格的生效售价（USD）
              */
             price: number;
             /** @description 分辨率/规格 */
@@ -8538,9 +8237,9 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: int64 */
-            userCreditsPerCny: number;
-            /** Format: int64 */
             userCustomTopupFeeBp: number;
+            /** Format: int32 */
+            userCustomValidityDays?: number;
             userTopupPackages: components["schemas"]["TopupPackage"][] | null;
         };
         TenantUpstreamAccessDTO: {
@@ -8694,9 +8393,9 @@ export interface components {
             request_status: string;
             /**
              * Format: double
-             * @description 分组零售价格表原价积分
+             * @description 分组零售价格表原价USD 金额
              */
-            retail_base_credits: number;
+            retail_base_usd: number;
             /** @description 服务档位：standard/fast */
             service_tier: string;
             /** @description 是否流式请求 */
@@ -8705,9 +8404,9 @@ export interface components {
             tenant_id: string;
             /**
              * Format: double
-             * @description 租户应付平台的结算积分
+             * @description 租户应付平台的结算USD 金额
              */
-            tenant_payable_credits: number;
+            tenant_payable_usd: number;
             /**
              * Format: int32
              * @description 总 token 数
@@ -8715,16 +8414,16 @@ export interface components {
             total_tokens: number;
             /**
              * Format: double
-             * @description 用户实际扣款积分
+             * @description 用户实际扣款USD 金额
              */
-            user_charged_credits: number;
+            user_charged_usd: number;
             /** @description 用户 ID */
             user_id?: string;
             /**
              * Format: double
-             * @description 用户零售应收积分
+             * @description 用户零售应收USD 金额
              */
-            user_payable_credits: number;
+            user_payable_usd: number;
         };
         TenantUsageLogsOutputBody: {
             /**
@@ -8814,32 +8513,38 @@ export interface components {
              * @example https://example.com/schemas/TopupConfigOutputBody.json
              */
             readonly $schema?: string;
+            currency: string;
             enabled: boolean;
-            /** Format: int64 */
-            exchangeRate: number;
             /** Format: int64 */
             feeRateBp: number;
             /** Format: int64 */
-            max: number;
+            maxMicroUsd: number;
             /** Format: int64 */
-            min: number;
+            minMicroUsd: number;
             packages: components["schemas"]["TopupPackage"][] | null;
+            /** Format: int32 */
+            validityDays?: number;
         };
         TopupOrderItem: {
             /** Format: int64 */
-            amount: number;
+            balanceExpiresAt?: number;
             /** Format: int64 */
             createdAt: number;
             /** Format: int64 */
-            creditAmount: number;
+            creditedAmountMicroUsd: number;
             /** Format: int64 */
-            feeCredits: number;
+            feeAmountMicroUsd: number;
             /** Format: int64 */
-            grossCredits: number;
+            giftAmountMicroUsd: number;
+            /** Format: int64 */
+            grossAmountMicroUsd: number;
             orderId: string;
             packageName?: string;
             /** Format: int64 */
             paidAt?: number;
+            /** Format: int64 */
+            paymentAmountMinor: number;
+            paymentCurrency: string;
             scene: string;
             status: string;
             topupMode: string;
@@ -8853,18 +8558,23 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: int64 */
-            amount: number;
+            balanceExpiresAt?: number;
             codeUrl: string;
             /** Format: int64 */
-            creditAmount: number;
+            creditedAmountMicroUsd: number;
             /** Format: int64 */
             expiresAt: number;
             /** Format: int64 */
-            feeCredits: number;
+            feeAmountMicroUsd: number;
             /** Format: int64 */
-            grossCredits: number;
+            giftAmountMicroUsd: number;
+            /** Format: int64 */
+            grossAmountMicroUsd: number;
             orderId: string;
             packageName?: string;
+            /** Format: int64 */
+            paymentAmountMinor: number;
+            paymentCurrency: string;
             status: string;
             topupMode: string;
         };
@@ -8876,36 +8586,43 @@ export interface components {
              */
             readonly $schema?: string;
             /** Format: int64 */
-            amount: number;
+            balanceExpiresAt?: number;
             /** Format: int64 */
-            creditAmount: number;
+            creditedAmountMicroUsd: number;
             /** Format: int64 */
-            feeCredits: number;
+            feeAmountMicroUsd: number;
             /** Format: int64 */
-            grossCredits: number;
+            giftAmountMicroUsd: number;
+            /** Format: int64 */
+            grossAmountMicroUsd: number;
             orderId: string;
             packageName?: string;
             /** Format: int64 */
             paidAt?: number;
+            /** Format: int64 */
+            paymentAmountMinor: number;
+            paymentCurrency: string;
             status: string;
             topupMode: string;
             transactionId?: string;
         };
         TopupPackage: {
-            /** Format: int64 */
-            amount: number;
             badge?: string;
-            /** Format: int64 */
-            credits: number;
             enabled: boolean;
+            /** Format: int64 */
+            giftAmountMicroUsd: number;
             id: string;
             name: string;
             /** Format: int64 */
+            paymentAmountMicroUsd: number;
+            /** Format: int64 */
             sortOrder: number;
+            /** Format: int32 */
+            validityDays?: number;
         };
         TrendPoint: {
             /** Format: double */
-            credits: number;
+            amountUsd: number;
             timeLabel: string;
         };
         UpdateAccountRequest: {
@@ -8960,19 +8677,6 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "disabled";
-        };
-        UpdateCreditsPerUSDRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/UpdateCreditsPerUSDRequest.json
-             */
-            readonly $schema?: string;
-            /**
-             * Format: double
-             * @description 1 USD 对应积分数
-             */
-            credits_per_usd: number;
         };
         UpdateEndUserInputBody: {
             /**
@@ -9479,9 +9183,9 @@ export interface components {
             api_key_id?: string;
             /**
              * Format: double
-             * @description API key 配额积分
+             * @description API key 配额USD 金额
              */
-            api_key_quota_credits: number;
+            api_key_quota_usd: number;
             /**
              * Format: int32
              * @description 路由尝试次数（含重试）
@@ -9518,7 +9222,7 @@ export interface components {
              * Format: double
              * @description 按命中上游资源价格表计算的参考成本
              */
-            catalog_base_credits: number;
+            catalog_base_usd: number;
             /** @description 客户端 User-Agent 摘要 */
             client_user_agent?: string;
             /**
@@ -9648,7 +9352,7 @@ export interface components {
              * Format: double
              * @description 分组零售价格表原价
              */
-            retail_base_credits: number;
+            retail_base_usd: number;
             /** @description 服务档位：standard/fast */
             service_tier: string;
             /** @description 是否流式请求 */
@@ -9659,7 +9363,7 @@ export interface components {
              * Format: double
              * @description 平台向租户应收：上游参考成本乘租户结算倍率
              */
-            tenant_payable_credits: number;
+            tenant_payable_usd: number;
             /** @description token 用量来源：upstream=上游统计 / mixed=部分估算 / estimated=完全估算 */
             token_usage_source: string;
             /**
@@ -9684,7 +9388,7 @@ export interface components {
              * Format: double
              * @description 用户实际扣款；订阅覆盖时为零
              */
-            user_charged_credits: number;
+            user_charged_usd: number;
             /** @description 用户 ID */
             user_id?: string;
             /**
@@ -9696,7 +9400,7 @@ export interface components {
              * Format: double
              * @description 用户零售应收：零售原价乘有效用户倍率
              */
-            user_payable_credits: number;
+            user_payable_usd: number;
         };
         UsageLogDetailDTO: {
             /**
@@ -9834,9 +9538,9 @@ export interface components {
             success_count: number;
             /**
              * Format: double
-             * @description 目录基准价积分（倍率1，谁都不付这个数）
+             * @description 目录基准价USD 金额（倍率1，谁都不付这个数）
              */
-            total_catalog_base_credits: number;
+            total_catalog_base_usd: number;
             /**
              * Format: int64
              * @description 请求总数
@@ -9844,9 +9548,9 @@ export interface components {
             total_requests: number;
             /**
              * Format: double
-             * @description 平台向租户应收积分
+             * @description 平台向租户应收USD 金额
              */
-            total_tenant_payable_credits: number;
+            total_tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 总 token 数
@@ -9854,9 +9558,9 @@ export interface components {
             total_tokens: number;
             /**
              * Format: double
-             * @description 用户实际扣款积分；租户自有 key 与订阅覆盖流量为 0
+             * @description 用户实际扣款USD 金额；租户自有 key 与订阅覆盖流量为 0
              */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
         };
         UsageSummaryOutputBody: {
             /**
@@ -9879,9 +9583,9 @@ export interface components {
             request_count: number;
             /**
              * Format: double
-             * @description 目录基准价积分（倍率1，谁都不付这个数）
+             * @description 目录基准价USD 金额（倍率1，谁都不付这个数）
              */
-            total_catalog_base_credits: number;
+            total_catalog_base_usd: number;
             /**
              * Format: int64
              * @description 输出 token 数
@@ -9894,19 +9598,19 @@ export interface components {
             total_prompt_tokens: number;
             /**
              * Format: double
-             * @description API key 配额积分
+             * @description API key 配额USD 金额
              */
-            total_quota_credits: number;
+            total_quota_usd: number;
             /**
              * Format: double
-             * @description 零售价格表原价积分
+             * @description 零售价格表原价USD 金额
              */
-            total_retail_base_credits: number;
+            total_retail_base_usd: number;
             /**
              * Format: double
-             * @description 平台向租户应收积分
+             * @description 平台向租户应收USD 金额
              */
-            total_tenant_payable_credits: number;
+            total_tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 总 token 数
@@ -9914,14 +9618,14 @@ export interface components {
             total_tokens: number;
             /**
              * Format: double
-             * @description 用户实际扣款积分
+             * @description 用户实际扣款USD 金额
              */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
             /**
              * Format: double
-             * @description 用户零售应收积分
+             * @description 用户零售应收USD 金额
              */
-            total_user_payable_credits: number;
+            total_user_payable_usd: number;
         };
         UsageUnitSummaryOutputBody: {
             /**
@@ -9948,15 +9652,15 @@ export interface components {
              */
             total_billable_units: number;
             /** Format: double */
-            total_catalog_base_credits: number;
+            total_catalog_base_usd: number;
             /** Format: double */
-            total_retail_base_credits: number;
+            total_retail_base_usd: number;
             /** Format: double */
-            total_tenant_payable_credits: number;
+            total_tenant_payable_usd: number;
             /** Format: double */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
             /** Format: double */
-            total_user_payable_credits: number;
+            total_user_payable_usd: number;
         };
         UsageUpstreamSummaryOutputBody: {
             /**
@@ -9974,7 +9678,7 @@ export interface components {
              * Format: double
              * @description 按上游资源价格表计算的参考费用
              */
-            catalog_base_credits: number;
+            catalog_base_usd: number;
             /**
              * Format: int64
              * @description 失败请求数
@@ -10007,7 +9711,7 @@ export interface components {
              * Format: double
              * @description 平台向租户结算的应收金额
              */
-            tenant_payable_credits: number;
+            tenant_payable_usd: number;
             /**
              * Format: int64
              * @description 按 token 计费的计费单位合计
@@ -10071,9 +9775,9 @@ export interface components {
             total_tokens: number;
             /**
              * Format: double
-             * @description 用户实际扣款积分
+             * @description 用户实际扣款USD 金额
              */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
             /** @description 用户 ID */
             user_id: string;
         };
@@ -10164,7 +9868,7 @@ export interface components {
         };
         UserConsumptionItem: {
             /** Format: double */
-            credits: number;
+            amountUsd: number;
             percentage: string;
             /** Format: int64 */
             transactionCount: number;
@@ -10184,8 +9888,6 @@ export interface components {
              * @example https://example.com/schemas/UserGroupEffectivePricesOutputBody.json
              */
             readonly $schema?: string;
-            /** Format: double */
-            credits_per_usd: number;
             /** Format: double */
             effective_user_multiplier: number;
             group_id: string;
@@ -10328,9 +10030,9 @@ export interface components {
             trace_id?: string;
             /**
              * Format: double
-             * @description 用户实际扣款积分
+             * @description 用户实际扣款USD 金额
              */
-            user_charged_credits: number;
+            user_charged_usd: number;
             /** @description 用户 ID */
             user_id?: string;
         };
@@ -10389,9 +10091,9 @@ export interface components {
             total_tokens: number;
             /**
              * Format: double
-             * @description 用户实际扣款积分
+             * @description 用户实际扣款USD 金额
              */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
         };
         UserVisibleGroupDTO: {
             /** @description 分组描述 */
@@ -10462,15 +10164,19 @@ export interface components {
             accountName: string;
             accountNo: string;
             /** Format: int64 */
-            amount: number;
+            amountMicroUsd: number;
             applyNote?: string;
             bankName: string;
             /** Format: int64 */
             createdAt: number;
+            currency: string;
             /** Format: int64 */
-            feeAmount: number;
+            feeAmountMicroUsd: number;
             /** Format: int64 */
-            payoutAmount: number;
+            paidAt?: number;
+            paymentRef?: string;
+            /** Format: int64 */
+            payoutAmountMicroUsd: number;
             reviewNote?: string;
             status: string;
             withdrawalId: string;
@@ -10601,7 +10307,7 @@ export interface components {
         WorkspaceImageJobDTO: {
             assets?: components["schemas"]["WorkspaceImageAssetDTO"][] | null;
             /** Format: double */
-            caller_charge_credits: number;
+            caller_charge_usd: number;
             /** Format: int64 */
             completed_at?: number;
             /** Format: int64 */
@@ -10655,7 +10361,7 @@ export interface components {
             /** Format: int64 */
             total_tokens: number;
             /** Format: double */
-            total_user_charged_credits: number;
+            total_user_charged_usd: number;
         };
     };
     responses: never;
@@ -11289,39 +10995,7 @@ export interface operations {
             };
         };
     };
-    "admin-list-cash-accounts": {
-        parameters: {
-            query?: {
-                page?: number;
-                size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageCashAccountItem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-list-cash-ledger": {
+    "admin-list-balance-ledger": {
         parameters: {
             query?: {
                 tenantId?: string;
@@ -11515,6 +11189,38 @@ export interface operations {
             };
         };
     };
+    "admin-list-tenant-balances": {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageCashAccountItem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "admin-get-wechat-config": {
         parameters: {
             query?: never;
@@ -11610,63 +11316,26 @@ export interface operations {
             };
         };
     };
-    "admin-review-withdrawal": {
+    "admin-create-withdrawal": {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReviewWithdrawalInputBody"];
+                "application/json": components["schemas"]["CreateWithdrawalInputBody"];
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Created */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-settle-withdrawal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SettleWithdrawalInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageOutputBody"];
+                    "application/json": components["schemas"]["WithdrawalItem"];
                 };
             };
             /** @description Error */
@@ -11977,39 +11646,6 @@ export interface operations {
             };
         };
     };
-    "admin-batch-confirm-events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BatchConfirmInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchOpOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "admin-batch-refund-events": {
         parameters: {
             query?: never;
@@ -12030,111 +11666,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BatchOpOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-cancel-preauth": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["CancelPreAuthInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-manual-confirm-event": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ManualConfirmInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-dismiss-event": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DismissEventInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventStatusOutputBody"];
                 };
             };
             /** @description Error */
@@ -13856,68 +13387,6 @@ export interface operations {
             };
         };
     };
-    "ai-get-credits-per-usd": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditsPerUSDOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-set-credits-per-usd": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateCreditsPerUSDRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditsPerUSDOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "public-get-invitation": {
         parameters: {
             query?: never;
@@ -14726,6 +14195,68 @@ export interface operations {
             };
         };
     };
+    "tenant-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashAccountOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "tenant-balance-ledger": {
+        parameters: {
+            query?: {
+                txnType?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageCashLedgerItem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "tenant-get-branding": {
         parameters: {
             query?: never;
@@ -14850,101 +14381,6 @@ export interface operations {
             };
         };
     };
-    "tenant-cash-account": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CashAccountOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-cash-ledger": {
-        parameters: {
-            query?: {
-                txnType?: string;
-                page?: number;
-                size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageCashLedgerItem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-cash-buy-credits": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BuyCreditsInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BuyCreditsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "tenant-get-payment-settings": {
         parameters: {
             query?: never;
@@ -14994,103 +14430,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantSettings"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-list-withdrawals": {
-        parameters: {
-            query?: {
-                status?: string;
-                page?: number;
-                size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageWithdrawalItem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-apply-withdrawal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApplyWithdrawalInputBody"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WithdrawalItem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "tenant-cancel-withdrawal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageOutputBody"];
                 };
             };
             /** @description Error */

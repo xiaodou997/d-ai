@@ -7,8 +7,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"xiaodou/dai/internal/ai/credits"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/moneyfmt"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -44,20 +44,20 @@ type dashboardRecentErrorsInput struct {
 }
 
 type dashboardSummaryDTO struct {
-	TotalRequests             int64   `json:"total_requests" doc:"请求总数"`
-	SuccessfulRequests        int64   `json:"successful_requests" doc:"成功请求数"`
-	FailedRequests            int64   `json:"failed_requests" doc:"失败请求数"`
-	TotalTokens               int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalPromptTokens         int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
-	TotalCompletionTokens     int64   `json:"total_completion_tokens" doc:"输出 token 数"`
-	TotalCatalogBaseCredits   float64 `json:"total_catalog_base_credits" doc:"上游参考成本积分"`
-	TotalTenantPayableCredits float64 `json:"total_tenant_payable_credits" doc:"平台向租户结算的积分"`
-	TotalRetailBaseCredits    float64 `json:"total_retail_base_credits" doc:"零售价格表原价积分"`
-	TotalUserPayableCredits   float64 `json:"total_user_payable_credits" doc:"用户零售应收积分"`
-	TotalUserChargedCredits   float64 `json:"total_user_charged_credits" doc:"用户实际扣款积分"`
-	AvgLatencyMs              float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
-	AvgRequestTotalMs         float64 `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
-	AvgFirstResponseByteMs    float64 `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
+	TotalRequests          int64   `json:"total_requests" doc:"请求总数"`
+	SuccessfulRequests     int64   `json:"successful_requests" doc:"成功请求数"`
+	FailedRequests         int64   `json:"failed_requests" doc:"失败请求数"`
+	TotalTokens            int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalPromptTokens      int64   `json:"total_prompt_tokens" doc:"输入 token 数"`
+	TotalCompletionTokens  int64   `json:"total_completion_tokens" doc:"输出 token 数"`
+	TotalCatalogBaseUSD    float64 `json:"total_catalog_base_usd" doc:"上游参考成本USD 金额"`
+	TotalTenantPayableUSD  float64 `json:"total_tenant_payable_usd" doc:"平台向租户结算的USD 金额"`
+	TotalRetailBaseUSD     float64 `json:"total_retail_base_usd" doc:"零售价格表原价USD 金额"`
+	TotalUserPayableUSD    float64 `json:"total_user_payable_usd" doc:"用户零售应收USD 金额"`
+	TotalUserChargedUSD    float64 `json:"total_user_charged_usd" doc:"用户实际扣款USD 金额"`
+	AvgLatencyMs           float64 `json:"avg_latency_ms" doc:"平均延迟，毫秒"`
+	AvgRequestTotalMs      float64 `json:"avg_request_total_ms" doc:"平均总耗时，毫秒"`
+	AvgFirstResponseByteMs float64 `json:"avg_first_response_byte_ms" doc:"平均首个响应字节耗时，毫秒"`
 }
 
 type dashboardSummaryOutput struct {
@@ -65,10 +65,10 @@ type dashboardSummaryOutput struct {
 }
 
 type dashboardTopModelDTO struct {
-	ModelCode                 string  `json:"model_code" doc:"模型编码"`
-	RequestCount              int64   `json:"request_count" doc:"请求数"`
-	TotalTokens               int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalTenantPayableCredits float64 `json:"total_tenant_payable_credits" doc:"租户扣费积分"`
+	ModelCode             string  `json:"model_code" doc:"模型编码"`
+	RequestCount          int64   `json:"request_count" doc:"请求数"`
+	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalTenantPayableUSD float64 `json:"total_tenant_payable_usd" doc:"租户扣费USD 金额"`
 }
 
 type dashboardTopModelsOutput struct {
@@ -79,10 +79,10 @@ type dashboardTopModelsOutput struct {
 }
 
 type dashboardTopTenantDTO struct {
-	TenantID                  string  `json:"tenant_id" doc:"租户 ID"`
-	RequestCount              int64   `json:"request_count" doc:"请求数"`
-	TotalTokens               int64   `json:"total_tokens" doc:"总 token 数"`
-	TotalTenantPayableCredits float64 `json:"total_tenant_payable_credits" doc:"租户扣费积分"`
+	TenantID              string  `json:"tenant_id" doc:"租户 ID"`
+	RequestCount          int64   `json:"request_count" doc:"请求数"`
+	TotalTokens           int64   `json:"total_tokens" doc:"总 token 数"`
+	TotalTenantPayableUSD float64 `json:"total_tenant_payable_usd" doc:"租户扣费USD 金额"`
 }
 
 type dashboardTopTenantsOutput struct {
@@ -267,38 +267,38 @@ func dashboardLimitFromInput(limit int32) (int32, error) {
 
 func dashboardSummaryToDTO(s domain.DashboardSummary) dashboardSummaryDTO {
 	return dashboardSummaryDTO{
-		TotalRequests:             s.TotalRequests,
-		SuccessfulRequests:        s.SuccessfulRequests,
-		FailedRequests:            s.FailedRequests,
-		TotalTokens:               s.TotalTokens,
-		TotalPromptTokens:         s.TotalPromptTokens,
-		TotalCompletionTokens:     s.TotalCompletionTokens,
-		TotalCatalogBaseCredits:   credits.MicroToCredits(s.TotalCatalogBaseMicro),
-		TotalTenantPayableCredits: credits.MicroToCredits(s.TotalTenantPayableMicro),
-		TotalRetailBaseCredits:    credits.MicroToCredits(s.TotalRetailBaseMicro),
-		TotalUserPayableCredits:   credits.MicroToCredits(s.TotalUserPayableMicro),
-		TotalUserChargedCredits:   credits.MicroToCredits(s.TotalUserChargedMicro),
-		AvgLatencyMs:              s.AvgLatencyMs,
-		AvgRequestTotalMs:         s.AvgRequestTotalMs,
-		AvgFirstResponseByteMs:    s.AvgFirstResponseByteMs,
+		TotalRequests:          s.TotalRequests,
+		SuccessfulRequests:     s.SuccessfulRequests,
+		FailedRequests:         s.FailedRequests,
+		TotalTokens:            s.TotalTokens,
+		TotalPromptTokens:      s.TotalPromptTokens,
+		TotalCompletionTokens:  s.TotalCompletionTokens,
+		TotalCatalogBaseUSD:    moneyfmt.MicroToUSD(s.TotalCatalogBaseMicro),
+		TotalTenantPayableUSD:  moneyfmt.MicroToUSD(s.TotalTenantPayableMicro),
+		TotalRetailBaseUSD:     moneyfmt.MicroToUSD(s.TotalRetailBaseMicro),
+		TotalUserPayableUSD:    moneyfmt.MicroToUSD(s.TotalUserPayableMicro),
+		TotalUserChargedUSD:    moneyfmt.MicroToUSD(s.TotalUserChargedMicro),
+		AvgLatencyMs:           s.AvgLatencyMs,
+		AvgRequestTotalMs:      s.AvgRequestTotalMs,
+		AvgFirstResponseByteMs: s.AvgFirstResponseByteMs,
 	}
 }
 
 func dashboardTopModelToDTO(model domain.DashboardTopModel) dashboardTopModelDTO {
 	return dashboardTopModelDTO{
-		ModelCode:                 model.ModelCode,
-		RequestCount:              model.RequestCount,
-		TotalTokens:               model.TotalTokens,
-		TotalTenantPayableCredits: credits.MicroToCredits(model.TotalTenantPayableMicro),
+		ModelCode:             model.ModelCode,
+		RequestCount:          model.RequestCount,
+		TotalTokens:           model.TotalTokens,
+		TotalTenantPayableUSD: moneyfmt.MicroToUSD(model.TotalTenantPayableMicro),
 	}
 }
 
 func dashboardTopTenantToDTO(tenant domain.DashboardTopTenant) dashboardTopTenantDTO {
 	return dashboardTopTenantDTO{
-		TenantID:                  tenant.TenantID,
-		RequestCount:              tenant.RequestCount,
-		TotalTokens:               tenant.TotalTokens,
-		TotalTenantPayableCredits: credits.MicroToCredits(tenant.TotalTenantPayableMicro),
+		TenantID:              tenant.TenantID,
+		RequestCount:          tenant.RequestCount,
+		TotalTokens:           tenant.TotalTokens,
+		TotalTenantPayableUSD: moneyfmt.MicroToUSD(tenant.TotalTenantPayableMicro),
 	}
 }
 

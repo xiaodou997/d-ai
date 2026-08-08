@@ -10,7 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/ai/billingledger"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 )
 
@@ -19,7 +18,6 @@ func TestUsageRecoveryPayloadJSONRoundTrip(t *testing.T) {
 	payload := usageRecoveryPayload{
 		Version:   2,
 		RequestID: "request-1",
-		LeaseID:   "lease-1",
 		Usage: dbgen.CreateUsageLogParams{
 			RequestID:                          "request-1",
 			GroupDefaultUserMultiplierSnapshot: numeric,
@@ -56,8 +54,8 @@ func TestUsageRecoveryStreamDoesNotEvictPendingEntries(t *testing.T) {
 	if args.MaxLen != 0 || args.Approx {
 		t.Fatalf("recovery stream must not trim unresolved entries: %#v", args)
 	}
-	if args.Stream != billingledger.UsageRecoveryStream {
-		t.Fatalf("V3 payloads must use the isolated V3 recovery stream, got %q", args.Stream)
+	if args.Stream != usageRecoveryStream {
+		t.Fatalf("payloads must use the isolated usage recovery stream, got %q", args.Stream)
 	}
 }
 

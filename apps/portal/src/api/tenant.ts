@@ -2,16 +2,13 @@ import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import type {
   CreateTenantInvitationOutputBody,
   CreateTenantEndUserOutputBody,
-  PageTenantCashLedgerItem,
+  PageTenantBalanceLedgerItem,
   PageTenantEndUserItem,
   PageTenantInvitationItem,
   PageTenantRechargeRecordItem,
   PageTenantTopupOrderItem,
-  PageTenantTransactionItem,
-  PageTenantWithdrawal,
   TenantAiApiKeysOutputBody,
-  TenantBuyCreditsResult,
-  TenantCashAccount,
+  TenantBalanceAccount,
   TenantClientConsumptionItem,
   TenantOverviewStats,
   TenantPortalBranding,
@@ -19,8 +16,7 @@ import type {
   TenantPaymentSettings,
   TenantTopupConfig,
   TenantTopupOrderCreated,
-  TenantTopupOrderStatus,
-  TenantWithdrawal
+  TenantTopupOrderStatus
 } from "./types/tenant";
 
 function request() {
@@ -80,15 +76,6 @@ export const tenantApi = {
       baseUrl: apiBaseUrl
     });
   },
-  listTransactions(params: { page?: number; size?: number; username?: string; clientName?: string; status?: string }) {
-    return request()<PageTenantTransactionItem>({
-      method: "GET",
-      path: "/api/v1/account/transactions",
-      headers: apiHeaders,
-      query: params,
-      baseUrl: apiBaseUrl
-    });
-  },
   listRechargeRecords(params: { page?: number; size?: number; username?: string; rechargeType?: string }) {
     return request()<PageTenantRechargeRecordItem>({
       method: "GET",
@@ -98,7 +85,7 @@ export const tenantApi = {
       baseUrl: apiBaseUrl
     });
   },
-  createUserRecharge(body: { userId: string; paidAmount?: number; creditAmount: number; paymentRef?: string; note?: string }) {
+  createUserRecharge(body: { userId: string; paidAmountMinor?: number; amountMicroUsd: number; paymentRef?: string; note?: string }) {
     return request()<TenantRechargeOutputBody>({
       method: "POST",
       path: "/api/v1/recharges",
@@ -202,7 +189,7 @@ export const tenantApi = {
       baseUrl: apiBaseUrl
     });
   },
-  createTopupOrder(body: { amount?: number; packageId?: string }) {
+  createTopupOrder(body: { amountMicroUsd?: number; packageId?: string }) {
     return request()<TenantTopupOrderCreated>({
       method: "POST",
       path: "/api/v1/payments/topup-orders",
@@ -247,56 +234,21 @@ export const tenantApi = {
     });
   },
 
-  // ===== 现金账户 =====
-  getCashAccount() {
-    return request()<TenantCashAccount>({
+  // ===== 统一 USD 余额 =====
+  getBalanceAccount() {
+    return request()<TenantBalanceAccount>({
       method: "GET",
-      path: "/api/v1/tenant/cash-account",
+      path: "/api/v1/tenant/balance",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
     });
   },
-  listCashLedger(params: { txnType?: string; page?: number; size?: number } = {}) {
-    return request()<PageTenantCashLedgerItem>({
+  listBalanceLedger(params: { txnType?: string; page?: number; size?: number } = {}) {
+    return request()<PageTenantBalanceLedgerItem>({
       method: "GET",
-      path: "/api/v1/tenant/cash-ledger",
+      path: "/api/v1/tenant/balance-ledger",
       headers: apiHeaders,
       query: params,
-      baseUrl: apiBaseUrl
-    });
-  },
-  buyCredits(body: { amount: number }) {
-    return request()<TenantBuyCreditsResult>({
-      method: "POST",
-      path: "/api/v1/tenant/cash/buy-credits",
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  applyWithdrawal(body: { amount: number; accountName: string; bankName: string; accountNo: string; note?: string }) {
-    return request()<TenantWithdrawal>({
-      method: "POST",
-      path: "/api/v1/tenant/withdrawals",
-      headers: apiHeaders,
-      body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  listWithdrawals(params: { status?: string; page?: number; size?: number } = {}) {
-    return request()<PageTenantWithdrawal>({
-      method: "GET",
-      path: "/api/v1/tenant/withdrawals",
-      headers: apiHeaders,
-      query: params,
-      baseUrl: apiBaseUrl
-    });
-  },
-  cancelWithdrawal(id: string) {
-    return request()<{ message: string }>({
-      method: "POST",
-      path: `/api/v1/tenant/withdrawals/${encodeURIComponent(id)}/cancel`,
-      headers: apiHeaders,
       baseUrl: apiBaseUrl
     });
   }

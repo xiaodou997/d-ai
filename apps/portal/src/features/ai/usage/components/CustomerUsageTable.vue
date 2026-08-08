@@ -1,7 +1,7 @@
 <!--
   用户端使用记录明细表:DsTable 高密度摘要 + DsPagination。
   重构:el-table/el-table-column 迁移为 DsTable(columns + #cell-{key} 插槽,frame=false 嵌入面板),
-       请求 ID 列 mono,Token/积分/延迟列右对齐,空态走 DsTable empty;
+       请求 ID 列 mono,Token/费用/延迟列右对齐,空态走 DsTable empty;
        接口无分页(本地切片),DsPagination 始终渲染展示「共 N 条」。
        组件 props/emits 与"详情打开抽屉"交互不变。
 -->
@@ -38,7 +38,7 @@ const columns: DsTableColumn[] = [
   { key: "source", title: "来源", width: 100 },
   { key: "billing", title: "计费来源", width: 100 },
   { key: "token", title: "Token", width: 170, align: "right" },
-  { key: "credits", title: "积分", width: 110, align: "right" },
+  { key: "credits", title: "费用（USD）", width: 110, align: "right" },
   { key: "latency", title: "延迟", width: 120, align: "right" },
   { key: "request_id", title: "请求 ID", width: 190, mono: true },
   { key: "actions", title: "操作", width: 70 }
@@ -101,7 +101,7 @@ function billingSourceLabel(row: CustomerUsageLog) {
       </template>
 
       <template #cell-credits="{ row }">
-        <UsageCostCell :credits="row.user_charged_credits" />
+        <UsageCostCell :amount-u-s-d="row.user_charged_usd" />
       </template>
 
       <template #cell-latency="{ row }">

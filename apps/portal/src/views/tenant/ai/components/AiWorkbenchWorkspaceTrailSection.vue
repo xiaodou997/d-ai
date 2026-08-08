@@ -10,7 +10,7 @@ import { Loading } from "@element-plus/icons-vue";
 import { DsEmpty, DsTable, type DsTableColumn } from "@/shared/ui";
 
 import AiWorkbenchSection from "./AiWorkbenchSection.vue";
-import { formatCredits } from "@/api/aiTenant";
+import { formatUSD } from "@/api/aiTenant";
 import type { ChatSession, ConsoleImageJob } from "@/api/types/aiTenant";
 
 defineProps<{
@@ -78,7 +78,7 @@ const formatTime = (ts?: number | null) => {
           <el-icon class="wt-panel__spinner animate-spin" :size="32"><Loading /></el-icon>
         </div>
 
-        <PortalImageJobTable v-else :jobs="jobs" :format-credits="formatCredits" />
+        <PortalImageJobTable v-else :jobs="jobs" :format-u-s-d="formatUSD" />
       </div>
     </div>
   </AiWorkbenchSection>

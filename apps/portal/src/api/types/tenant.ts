@@ -1,15 +1,17 @@
 export interface TenantOverviewStats {
   endUserCount: number;
   inviteCodeCount: number;
-  userDeductionCredits: number;
-  userTotalCredits: number;
+  userDeductionUsd: number;
+  userTotalBalanceUsd: number;
   activeUserCount: number;
+  userConsumptionCount: number;
+  settlementIncomeMicroUsd: number;
 }
 
 export interface TenantClientConsumptionItem {
   clientId: string;
   clientName: string;
-  credits: number;
+  amountUsd: number;
   percentage: string;
 }
 
@@ -19,32 +21,12 @@ export interface TenantPortalBranding {
   faviconPath?: string;
 }
 
-export interface CreditPackage {
-  packageId: string;
-  remaining: number;
-  expireTime?: number | null;
-  source: string;
-}
-
-export interface BalanceResponse {
-  packageType: number;
-  accountId: string;
-  totalCredits: number;
-  frozenCredits: number;
-  availableCredits: number;
-  overdraftLimit: number;
-  currentOverdraft: number;
-  permanentCredits?: number;
-  timedCredits?: number;
-  packages?: CreditPackage[];
-}
-
 export interface TenantTransactionItem {
   eventId: string;
   userId: string;
   description: string;
-  tenantCredits: number;
-  userCredits: number;
+  tenantAmountUsd: number;
+  userAmountUsd: number;
   status: string;
   terminalNote: string;
   metadata: string;
@@ -65,8 +47,8 @@ export interface PageTenantTransactionItem {
 export interface TenantRechargeRecordItem {
   orderId: string;
   orderType: string;
-  paidAmount: number;
-  creditAmount: number;
+  paidAmountMinor: number;
+  amountUsd: number;
   status: string;
   note: string;
   userId: string;
@@ -84,13 +66,14 @@ export interface PageTenantRechargeRecordItem {
 
 export interface TenantRechargeOutputBody {
   orderId: string;
-  packageId: string;
+  balanceLotId: string;
   tenantId: string;
   userId: string;
-  creditAmount: number;
-  paidAmount: number;
-  clearedOverdraft: number;
-  packageCredits: number;
+  currency: string;
+  amountMicroUsd: number;
+  paidAmountMinor: number;
+  clearedDebtUsd: number;
+  balanceLotUsd: number;
   orderTime: number;
 }
 
@@ -104,7 +87,7 @@ export interface TenantEndUserItem {
   nickname?: string;
   avatar?: string;
   status: number;
-  credits?: number;
+  balanceUsd?: number;
   lastLoginTime?: number;
   createdTime?: number;
 }
@@ -160,8 +143,8 @@ export interface TenantAiApiKey {
   group_id: string;
   last_four?: string | null;
   name: string;
-  quota_limit_credits?: number | null;
-  quota_used_credits: number;
+  quota_limit_micro_usd?: number | null;
+  quota_used_micro_usd: number;
   status: string;
   expires_at?: number | null;
   last_used_at?: number | null;
@@ -185,68 +168,79 @@ export interface TenantAiApiKeysOutputBody {
 // ===== 在线充值（微信支付） =====
 export interface TenantTopupConfig {
   enabled: boolean;
-  exchangeRate: number;
+  currency: string;
   feeRateBp: number;
-  min: number;
-  max: number;
+  minMicroUsd: number;
+  maxMicroUsd: number;
+  validityDays?: number | null;
   packages: TopupPackage[];
 }
 
 export interface TopupPackage {
   id: string;
   name: string;
-  amount: number;
-  credits: number;
+  paymentAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  validityDays?: number | null;
   badge?: string;
   enabled: boolean;
   sortOrder: number;
 }
 
 export interface TenantPaymentSettings {
-  userCreditsPerCny: number;
   userCustomTopupFeeBp: number;
+  userCustomValidityDays?: number | null;
   userTopupPackages: TopupPackage[];
 }
 
 export interface TenantTopupOrderCreated {
   orderId: string;
   codeUrl: string;
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
+  paymentCurrency: string;
+  paymentAmountMinor: number;
+  grossAmountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  creditedAmountMicroUsd: number;
   topupMode: "custom" | "package";
   packageName?: string;
   status: string;
   expiresAt: number;
+  balanceExpiresAt?: number | null;
 }
 
 export interface TenantTopupOrderStatus {
   orderId: string;
   status: "created" | "paying" | "paid" | "closed" | "expired";
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
+  paymentCurrency: string;
+  paymentAmountMinor: number;
+  grossAmountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  creditedAmountMicroUsd: number;
   topupMode: "custom" | "package";
   packageName?: string;
   transactionId?: string;
   paidAt?: number | null;
+  balanceExpiresAt?: number | null;
 }
 
 export interface TenantTopupOrderItem {
   orderId: string;
   scene?: "user_topup" | "tenant_topup";
   status: string;
-  amount: number;
-  creditAmount: number;
-  grossCredits: number;
-  feeCredits: number;
+  paymentCurrency: string;
+  paymentAmountMinor: number;
+  grossAmountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  creditedAmountMicroUsd: number;
   topupMode: "custom" | "package";
   packageName?: string;
   transactionId?: string;
   createdAt: number;
   paidAt?: number | null;
+  balanceExpiresAt?: number | null;
 }
 
 export interface PageTenantTopupOrderItem {
@@ -256,54 +250,26 @@ export interface PageTenantTopupOrderItem {
   size: number;
 }
 
-// ===== 现金账户 =====
-export interface TenantCashAccount {
-  balance: number;
-  frozen: number;
-  available: number;
-  creditsPerCny: number;
-  withdrawFeeBp: number;
+// ===== 统一 USD 余额 =====
+export interface TenantBalanceAccount {
+  currency: string;
+  balanceMicroUsd: number;
 }
 
-export interface TenantCashLedgerItem {
+export interface TenantBalanceLedgerItem {
   txnId: string;
   txnType: string;
-  amount: number;
-  balanceAfter: number;
+  currency: string;
+  amountMicroUsd: number;
+  balanceAfterMicroUsd: number;
   refType?: string;
   refId?: string;
   note?: string;
   createdAt: number;
 }
 
-export interface PageTenantCashLedgerItem {
-  items: TenantCashLedgerItem[];
-  total: number;
-  page: number;
-  size: number;
-}
-
-export interface TenantBuyCreditsResult {
-  creditOrderId: string;
-  credits: number;
-}
-
-export interface TenantWithdrawal {
-  withdrawalId: string;
-  amount: number;
-  feeAmount: number;
-  payoutAmount: number;
-  accountName: string;
-  bankName: string;
-  accountNo: string;
-  status: string;
-  applyNote?: string;
-  reviewNote?: string;
-  createdAt: number;
-}
-
-export interface PageTenantWithdrawal {
-  items: TenantWithdrawal[];
+export interface PageTenantBalanceLedgerItem {
+  items: TenantBalanceLedgerItem[];
   total: number;
   page: number;
   size: number;

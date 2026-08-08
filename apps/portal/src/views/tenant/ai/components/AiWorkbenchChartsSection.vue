@@ -19,7 +19,7 @@ interface SourceInsightItem {
   requestCount: number;
   shareText: string;
   successRateText: string;
-  creditsText: string;
+  amountText: string;
   tokensText: string;
 }
 

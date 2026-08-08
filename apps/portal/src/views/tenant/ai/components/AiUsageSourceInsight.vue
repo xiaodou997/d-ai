@@ -22,7 +22,7 @@ interface SourceInsightItem {
   requestCount: number;
   shareText: string;
   successRateText: string;
-  creditsText: string;
+  amountText: string;
   tokensText: string;
 }
 
@@ -120,7 +120,7 @@ onUnmounted(() => {
     <div class="source-insight__header">
       <div>
         <h3 class="source-insight__title">来源分布</h3>
-        <p class="source-insight__desc">用环形图先看入口结构，再看每类入口的成功率和积分占比。</p>
+        <p class="source-insight__desc">用环形图先看入口结构，再看每类入口的成功率和费用占比。</p>
       </div>
       <span class="source-insight__summary">{{ summary }}</span>
     </div>
@@ -151,7 +151,7 @@ onUnmounted(() => {
           </div>
           <div class="source-insight__legend-values">
             <strong>{{ item.requestCount.toLocaleString("zh-CN") }}</strong>
-            <span>{{ item.creditsText }} / {{ item.tokensText }} Token</span>
+            <span>{{ item.amountText }} / {{ item.tokensText }} Token</span>
           </div>
         </article>
       </div>

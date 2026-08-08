@@ -30,7 +30,7 @@ import { init, use, type EChartsType } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useRouter } from "vue-router";
 
-import { aiCustomerApi, formatCredits } from "@/api/aiCustomer";
+import { aiCustomerApi } from "@/api/aiCustomer";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import {
   getCustomerUsageSummary,
@@ -54,7 +54,7 @@ const sessionColumns: DsTableColumn[] = [
 
 const logColumns: DsTableColumn[] = [
   { key: "model", title: "模型 / 应用" },
-  { key: "cost", title: "消耗积分", width: 110, align: "right" },
+  { key: "cost", title: "消费（USD）", width: 110, align: "right" },
   { key: "tokens", title: "Token" },
   { key: "effort", title: "推理强度", width: 92 },
   { key: "status", title: "状态", width: 90 },
@@ -82,10 +82,12 @@ const groupsError = shallowRef("");
 const requestSource = shallowRef("");
 
 const balanceInfo = reactive({
-  totalCredits: 0,
-  frozenCredits: 0,
-  availableCredits: 0
+  totalUsd: 0,
+  availableUsd: 0,
+  outstandingDebtUsd: 0
 });
+const formatUSD = (value: number | null | undefined) => `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+const formatNumber = (value: number) => Number(value ?? 0).toLocaleString("en-US");
 
 const chartModelRef = shallowRef<HTMLElement | null>(null);
 const chartTimelineRef = shallowRef<HTMLElement | null>(null);
@@ -111,7 +113,7 @@ const modelDistribution = computed(() => {
   const grouped = new Map<string, number>();
   for (const row of usageLogs.value) {
     const modelCode = row.model_code || "unknown";
-    const cost = Number(row.user_charged_credits) || 0;
+    const cost = Number(row.user_charged_usd) || 0;
     grouped.set(modelCode, (grouped.get(modelCode) || 0) + cost);
   }
   return Array.from(grouped.entries())
@@ -140,7 +142,7 @@ const groupByDay = (pick: (row: CustomerUsageLog) => number) => {
   return timelineDayKeys.value.map((dayKey) => grouped.get(dayKey) || 0);
 };
 
-const timelineValues = computed(() => groupByDay((row) => Number(row.user_charged_credits)));
+const timelineValues = computed(() => groupByDay((row) => Number(row.user_charged_usd)));
 const timelinePromptTokens = computed(() => groupByDay((row) => Number(row.prompt_tokens)));
 const timelineCompletionTokens = computed(() => groupByDay((row) => Number(row.completion_tokens)));
 
@@ -173,9 +175,9 @@ const fetchBalance = async () => {
   try {
     const data = await platformCustomerApi.getBalance(false);
     if (data) {
-      balanceInfo.totalCredits = data.totalCredits ?? 0;
-      balanceInfo.frozenCredits = data.frozenCredits ?? 0;
-      balanceInfo.availableCredits = data.availableCredits ?? 0;
+      balanceInfo.totalUsd = data.remainingUsd ?? 0;
+      balanceInfo.availableUsd = data.availableUsd ?? 0;
+      balanceInfo.outstandingDebtUsd = Number(data.outstandingDebtMicroUsd ?? 0) / 1_000_000;
     }
   } catch (e) {
     console.error("获取余额失败:", e);
@@ -260,7 +262,7 @@ const renderCharts = async () => {
     if (chartModel) chartModel.dispose();
     chartModel = init(chartModelRef.value);
     chartModel.setOption({
-      tooltip: { trigger: "item", formatter: "{b}: {c} 积分 ({d}%)" },
+      tooltip: { trigger: "item", formatter: "{b}: ${c} USD ({d}%)" },
       legend: { orient: "vertical", right: 10, top: "center" },
       series: [
         {
@@ -284,7 +286,7 @@ const renderCharts = async () => {
       tooltip: { trigger: "axis" },
       grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
       xAxis: { type: "category", boundaryGap: false, data: timelineLabels.value },
-      yAxis: { type: "value", name: "积分" },
+      yAxis: { type: "value", name: "USD" },
       series: [
         {
           name: "消耗",
@@ -449,12 +451,12 @@ function isAbortError(error: unknown) {
     <!-- Balance & Usage Stats -->
     <PortalMetricGrid
       :metrics="[
-        { label: '总积分', value: balanceInfo.totalCredits.toLocaleString() },
-        { label: '冻结积分', value: balanceInfo.frozenCredits.toLocaleString() },
-        { label: '可用积分', value: balanceInfo.availableCredits.toLocaleString() },
-        { label: '总消耗积分', value: formatCredits(summary?.total_user_charged_credits || 0) },
-        { label: '输入 Token', value: formatCredits(summary?.total_prompt_tokens || 0) },
-        { label: '输出 Token', value: formatCredits(summary?.total_completion_tokens || 0) },
+        { label: '额度余额', value: formatUSD(balanceInfo.totalUsd) },
+        { label: '可用额度', value: formatUSD(balanceInfo.availableUsd) },
+        { label: '当前透支', value: formatUSD(balanceInfo.outstandingDebtUsd) },
+        { label: '总消耗', value: formatUSD(summary?.total_user_charged_usd || 0) },
+        { label: '输入 Token', value: formatNumber(summary?.total_prompt_tokens || 0) },
+        { label: '输出 Token', value: formatNumber(summary?.total_completion_tokens || 0) },
         { label: '总请求次数', value: String(summary?.request_count || 0) }
       ]"
     />
@@ -505,7 +507,7 @@ function isAbortError(error: unknown) {
         <template #actions>
           <el-button link type="primary" @click="openImageWorkspace">查看全部</el-button>
         </template>
-        <PortalImageJobTable :jobs="recentJobRows" :format-credits="formatCredits" />
+        <PortalImageJobTable :jobs="recentJobRows" :format-u-s-d="formatUSD" />
       </PortalContentCard>
     </div>
 
@@ -526,7 +528,7 @@ function isAbortError(error: unknown) {
           {{ row.model_code || "-" }}
         </template>
         <template #cell-cost="{ row }">
-          <UsageCostCell :credits="row.user_charged_credits" />
+          <UsageCostCell :amount-u-s-d="row.user_charged_usd" />
         </template>
         <template #cell-tokens="{ row }">
           <UsageTokenCell

@@ -11,7 +11,7 @@ import { CircleClose, Delete, View } from "@element-plus/icons-vue";
 import { DsEmpty, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import {
-  formatPortalTaskCredits,
+  formatPortalTaskUSD,
   formatPortalTaskDuration,
   formatPortalTaskTime,
   portalTaskSourceLabel,
@@ -44,7 +44,7 @@ const columns = computed<DsTableColumn[]>(() => [
   { key: "model", title: "模型" },
   { key: "status", title: "状态", width: 100 },
   { key: "time", title: "时间", width: 170 },
-  { key: "credits", title: "消耗", width: 100, align: "right" as const },
+  { key: "amount_usd", title: "消费（USD）", width: 120, align: "right" as const },
   { key: "error", title: "错误", width: 180 },
   { key: "actions", title: "操作", width: 140 }
 ]);
@@ -80,7 +80,7 @@ const columns = computed<DsTableColumn[]>(() => [
       <div>{{ formatPortalTaskTime(row.created_at) }}</div>
       <span class="task-table__muted">{{ formatPortalTaskDuration(row) }}</span>
     </template>
-    <template #cell-credits="{ row }">{{ formatPortalTaskCredits(row.usage?.cost_credits) }}</template>
+    <template #cell-amount_usd="{ row }">{{ formatPortalTaskUSD(row.usage?.cost_usd) }}</template>
     <template #cell-error="{ row }">
       <span :class="row.error ? 'task-table__error' : 'task-table__muted'">
         {{ row.error?.message || "-" }}

@@ -6,7 +6,7 @@ export interface PortalVisibleGroupRecord {
   status?: string;
 }
 
-export interface PortalResolutionCreditPriceRecord {
+export interface PortalResolutionUSDPriceRecord {
   resolution: string;
   price: number;
 }
@@ -15,20 +15,20 @@ export interface PortalGroupEffectivePriceRecord {
   model_code: string;
   capability_type: string;
   token_price_tiers: PortalEffectiveTokenPriceTierRecord[];
-  image_default_price_credits: number;
-  video_default_price_credits: number;
-  image_prices?: PortalResolutionCreditPriceRecord[];
-  video_prices?: PortalResolutionCreditPriceRecord[];
-  audio_tts_per_1m_chars_credits: number;
-  audio_stt_per_minute_credits: number;
+  image_default_price_usd: number;
+  video_default_price_usd: number;
+  image_prices?: PortalResolutionUSDPriceRecord[];
+  video_prices?: PortalResolutionUSDPriceRecord[];
+  audio_tts_per_1m_chars_usd: number;
+  audio_stt_per_minute_usd: number;
 }
 
 export interface PortalEffectiveTokenPriceTierRecord {
   up_to_input_tokens: number | null;
-  input_per_1m_credits: number;
-  output_per_1m_credits: number;
-  cache_write_per_1m_credits: number;
-  cache_read_per_1m_credits: number;
+  input_per_1m_usd: number;
+  output_per_1m_usd: number;
+  cache_write_per_1m_usd: number;
+  cache_read_per_1m_usd: number;
 }
 
 export interface PortalVisibleGroupsApi<
@@ -45,7 +45,6 @@ export interface PortalGroupPricingApi<
   getGroupEffectivePrices: (groupId: string) => Promise<{
     group_id: string;
     effective_user_multiplier: number;
-    credits_per_usd: number;
     items: TPrice[];
     total?: number;
   }>;

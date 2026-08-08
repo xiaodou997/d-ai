@@ -30,7 +30,6 @@ export type {
   PriceBookEntriesOutputBody,
   PriceBookEntryWriteRequest,
   ResolutionUSDPriceDTO,
-  CreditsPerUSDOutputBody,
   DashboardTopModelDTO,
   DashboardTopModelsOutputBody,
   DashboardRecentErrorDTO,
@@ -87,11 +86,11 @@ export interface DashboardSummaryDTO {
   total_tokens: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
-  total_catalog_base_credits: number;
-  total_tenant_payable_credits: number;
-  total_retail_base_credits: number;
-  total_user_payable_credits: number;
-  total_user_charged_credits: number;
+  total_catalog_base_usd: number;
+  total_tenant_payable_usd: number;
+  total_retail_base_usd: number;
+  total_user_payable_usd: number;
+  total_user_charged_usd: number;
   avg_latency_ms: number;
   avg_request_total_ms: number;
   avg_first_response_byte_ms: number;
@@ -101,7 +100,7 @@ export interface DashboardTopTenantDTO {
   tenant_id: string;
   request_count: number;
   total_tokens: number;
-  total_tenant_payable_credits: number;
+  total_tenant_payable_usd: number;
 }
 
 export interface DashboardTopTenantsOutputBody {

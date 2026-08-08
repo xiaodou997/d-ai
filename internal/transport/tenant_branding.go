@@ -16,8 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"xiaodou/dai/libs/go/httpx"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	"xiaodou/dai/libs/go/httpx"
 )
 
 const (

@@ -9,10 +9,7 @@ import {
   createPortalRuntimeTransport,
   portalStatusOptions
 } from "@/platform/ai/runtime";
-import {
-  formatCredits,
-  formatWholeCredits
-} from "@/platform/ai/usage";
+import { formatUSD } from "@/platform/ai/usage";
 import { type PortalImageTaskCreateResponse } from "@/platform/ai/images";
 import type {
   PortalTaskPage,
@@ -78,7 +75,7 @@ const headers = () => apiHeaders;
 const baseUrl = () => apiBaseUrl;
 const runtimeBasePath = "/runtime/v1";
 
-export { formatCredits, formatWholeCredits };
+export { formatUSD };
 
 const runtimeTransport = createPortalRuntimeTransport({
   baseUrl,
@@ -113,16 +110,6 @@ export const capabilityOptions = [
 // ==================== AI 扁平端点 ====================
 
 export const aiTenantApi = {
-  // ---- 只读 USD→积分汇率 ----
-  getCreditsPerUSD() {
-    return request()<{ credits_per_usd: number }>({
-      method: "GET",
-      path: "/api/v1/pricing/credits-per-usd",
-      headers: headers(),
-      baseUrl: baseUrl()
-    });
-  },
-
   // ---- 可用模型（可见分组暴露的去重模型集合） ----
   listAvailableModels() {
     return request()<TenantAiAvailableModelsOutputBody>({
@@ -428,7 +415,7 @@ export const aiTenantApi = {
       method: "GET", path: "/api/v1/tenants/me/upstream-resources", headers: headers(), baseUrl: baseUrl()
     });
   },
-  // ---- 某可见分组对本租户的每模型生效积分单价 ----
+  // ---- 某可见分组对本租户的每模型生效 USD 单价 ----
   getMyGroupEffectivePrices(groupId: string) {
     return request()<TenantAiGroupEffectivePricesOutputBody>({
       method: "GET",

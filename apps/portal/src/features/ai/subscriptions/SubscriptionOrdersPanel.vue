@@ -7,7 +7,6 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from "vue";
 import { Refresh, Search } from "@element-plus/icons-vue";
-import { formatWholeCredits } from "@/platform/ai/usage";
 import { EMPTY_IDENTITY_INCLUDED, normalizeIdentityIncluded, PortalIdentityCell, resolveIdentityUserLabel, resolveIdentityUserMeta, type IdentityIncluded } from "@/platform/ai/identity";
 import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
@@ -43,6 +42,7 @@ function statusTone(status: string): "positive" | "warning" | "danger" | "neutra
   return map[status] ?? "neutral";
 }
 function fmtTime(value?: string | null) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-"; }
+function formatMicroUSD(value: number) { return `$${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 
 async function fetchOrders() {
   loading.value = true;
@@ -89,7 +89,7 @@ onMounted(() => void fetchOrders());
       <template #cell-user="{ row }">
         <PortalIdentityCell :label="resolveIdentityUserLabel(row.user_id, identityIncluded)" :meta="resolveIdentityUserMeta(row.user_id, identityIncluded)" />
       </template>
-      <template #cell-price="{ row }">{{ formatWholeCredits(row.price_credits) }} 积分</template>
+      <template #cell-price="{ row }">{{ formatMicroUSD(row.price_micro_usd) }}</template>
       <template #cell-status="{ row }">
         <DsTag :tone="statusTone(row.status)">{{ statusLabel(row.status) }}</DsTag>
       </template>
