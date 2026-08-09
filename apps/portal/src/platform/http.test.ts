@@ -9,12 +9,10 @@ afterEach(() => vi.unstubAllGlobals());
 const env: PortalEnv = {
   portal: "unified",
   apiBaseUrl: "http://dai.test",
-  publicBaseUrl: "http://dai.test",
   appVersion: "test",
   title: "test",
   theme: "customer",
   storagePrefix: "test",
-  legalBaseUrl: "/legal"
 };
 
 function authStore(): PortalAuthLike {

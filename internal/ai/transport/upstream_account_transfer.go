@@ -227,7 +227,7 @@ func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, 
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := secret.DecryptProviderKey(d.ProviderKeyMaster, secretRow.Ciphertext)
+		apiKey, err := secret.DecryptProviderKey(d.SecretMasterKey, secretRow.Ciphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("decrypt provider key failed for account " + id)
 		}

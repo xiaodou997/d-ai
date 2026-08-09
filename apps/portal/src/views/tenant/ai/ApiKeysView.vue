@@ -54,7 +54,7 @@ const apiKeyApi: PortalApiKeyApi<TenantAiApiKey> = {
   listGroups: () => aiTenantApi.listMyGroups()
 };
 
-const publicBaseUrl = resolvePortalPublicBaseUrl(portalEnv.publicBaseUrl);
+const publicBaseUrl = resolvePortalPublicBaseUrl(portalEnv.apiBaseUrl);
 
 const confirmDelete = createNamedConfirmDialog({
   title: "删除 API 密钥",

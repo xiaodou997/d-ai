@@ -50,7 +50,6 @@ type Deps struct {
 	Redis          *redis.Client
 	Logger         *zap.Logger
 	Queries        *dbgen.Queries
-	Security       config.SecurityConfig
 	TokenVerifier  TokenVerifier
 	BanChecker     BanChecker
 	HTTPClient     *http.Client
@@ -72,7 +71,6 @@ type Console struct {
 	redis           *redis.Client
 	logger          *zap.Logger
 	queries         *dbgen.Queries
-	security        config.SecurityConfig
 	tokenVerifier   TokenVerifier
 	banChecker      BanChecker
 	httpClient      *http.Client
@@ -98,7 +96,6 @@ func New(deps Deps) *Console {
 		redis:           deps.Redis,
 		logger:          deps.Logger,
 		queries:         deps.Queries,
-		security:        deps.Security,
 		tokenVerifier:   deps.TokenVerifier,
 		banChecker:      deps.BanChecker,
 		httpClient:      deps.HTTPClient,

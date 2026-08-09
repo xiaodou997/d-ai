@@ -41,11 +41,10 @@ import (
 // Deps 汇集统一 transport 层注册端点所需的领域依赖。
 type Deps struct {
 	// 基础设施
-	Version       string
-	Pool          *pgxpool.Pool
-	Redis         *redis.Client
-	Logger        *zap.Logger
-	PortalBaseURL string
+	Version string
+	Pool    *pgxpool.Pool
+	Redis   *redis.Client
+	Logger  *zap.Logger
 
 	// 平台身份与计费域
 	JWT           *auth.JWTService
@@ -58,15 +57,15 @@ type Deps struct {
 	Announcements *announcementpkg.Service
 
 	// AI 域
-	Queries           *aidb.Queries
-	OAuth             *pgadapter.OAuthCredentialStore
-	TokenRefresher    *tokenrefresh.Refresher
-	ClientCatalog     *clientcatalog.Service
-	ProviderKeyMaster string
-	AIHTTPClient      *http.Client
-	Health            routing.HealthTracker
-	Weights           *pgadapter.RouteWeightsStore
-	BanChecker        *banstate.Checker
+	Queries         *aidb.Queries
+	OAuth           *pgadapter.OAuthCredentialStore
+	TokenRefresher  *tokenrefresh.Refresher
+	ClientCatalog   *clientcatalog.Service
+	SecretMasterKey string
+	AIHTTPClient    *http.Client
+	Health          routing.HealthTracker
+	Weights         *pgadapter.RouteWeightsStore
+	BanChecker      *banstate.Checker
 
 	// AI 域
 	PriceBookSvc         *billingcontrol.Service
@@ -150,7 +149,7 @@ func buildAIDeps(d Deps) aitransport.AIDeps {
 		TokenVerifier:        d.JWT,
 		TokenRevocations:     d.Blacklist,
 		BanChecker:           d.BanChecker,
-		ProviderKeyMaster:    d.ProviderKeyMaster,
+		SecretMasterKey:      d.SecretMasterKey,
 		PriceBookSvc:         d.PriceBookSvc,
 		CommercialSvc:        d.CommercialSvc,
 		GroupTransferSvc:     d.GroupTransferSvc,

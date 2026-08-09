@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os/signal"
 	"path"
-	"strconv"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -71,6 +71,7 @@ import (
 	"xiaodou/dai/internal/transport"
 	userpkg "xiaodou/dai/internal/user"
 	userpg "xiaodou/dai/internal/user/pg"
+	"xiaodou/dai/internal/weborigin"
 
 	// ── 公共库 ──
 	"xiaodou/dai/libs/go/banstate"
@@ -210,7 +211,7 @@ func main() {
 
 	// Upstream accounts
 	accountSvc := upstreamcontrol.New(aiadapters.NewAccountRepo(q, pool), func(plaintext string) (string, error) {
-		return secret.EncryptProviderKey(cfg.Security.ProviderKeyMaster, plaintext)
+		return secret.EncryptProviderKey(cfg.Security.SecretMasterKey, plaintext)
 	})
 	upstreamAccessSvc := upstreamaccess.New(aiadapters.NewUpstreamAccessRepo(pool))
 
@@ -220,10 +221,10 @@ func main() {
 		aiadapters.NewAPIKeyRepo(q),
 		apiKeyCacheForSvc(apiKeyCache),
 		func(plaintext string) (string, error) {
-			return secret.EncryptProviderKey(cfg.Security.ProviderKeyMaster, plaintext)
+			return secret.EncryptProviderKey(cfg.Security.SecretMasterKey, plaintext)
 		},
 		func(ciphertext string) (string, error) {
-			return secret.DecryptProviderKey(cfg.Security.ProviderKeyMaster, ciphertext)
+			return secret.DecryptProviderKey(cfg.Security.SecretMasterKey, ciphertext)
 		},
 	)
 
@@ -233,12 +234,12 @@ func main() {
 	riskControlLogSvc := riskcontrol.NewLogService(riskControlRepo)
 	riskControlEventSvc := riskcontrol.NewEventService(riskControlRepo)
 	riskControlChecker := &riskcontrol.Checker{
-		Config:            riskControlConfigSvc,
-		Logs:              riskControlLogSvc,
-		Events:            riskControlEventSvc,
-		HTTPClient:        &http.Client{},
-		ProviderKeyMaster: cfg.Security.ProviderKeyMaster,
-		Logger:            appLogger,
+		Config:          riskControlConfigSvc,
+		Logs:            riskControlLogSvc,
+		Events:          riskControlEventSvc,
+		HTTPClient:      &http.Client{},
+		SecretMasterKey: cfg.Security.SecretMasterKey,
+		Logger:          appLogger,
 	}
 	riskControlWorker := riskcontrol.NewWorker(riskControlChecker, appLogger)
 	go riskControlWorker.Start(ctx, 0)
@@ -266,11 +267,10 @@ func main() {
 
 	// File store
 	fileStore, fsErr := filestore.New(pool, filestore.Config{
-		StorageDir:    cfg.Files.StorageDir,
-		AssetTTL:      cfg.Files.AssetTTL,
-		URLTTL:        cfg.Files.URLTTL,
-		PublicBaseURL: cfg.Files.PublicBaseURL,
-		MaxBytes:      cfg.Files.MaxBytes,
+		StorageDir: filepath.Join(cfg.Storage.DataDir, "files"),
+		AssetTTL:   cfg.Files.AssetTTL,
+		URLTTL:     cfg.Files.URLTTL,
+		MaxBytes:   cfg.Files.MaxBytes,
 	})
 	if fsErr != nil {
 		appLogger.Fatal("file store init failed", zap.Error(fsErr))
@@ -278,15 +278,14 @@ func main() {
 
 	// Image assets
 	imageAssetSvc := imageassets.New(imageassets.Config{
-		StorageDir:     cfg.Image.StorageDir,
-		Retention:      cfg.Image.Retention,
-		PublicBasePath: cfg.Image.PublicBasePath,
+		StorageDir: filepath.Join(cfg.Storage.DataDir, "images"),
+		Retention:  cfg.Image.Retention,
 	}, &http.Client{Timeout: 60 * time.Second})
 
 	// ── AI Serving Pipeline + Gateway Runtime ──
 
 	// OAuth credentials store + token refresher
-	oauthCreds := aiadapters.NewOAuthCredentialStore(pool, cfg.Security.ProviderKeyMaster)
+	oauthCreds := aiadapters.NewOAuthCredentialStore(pool, cfg.Security.SecretMasterKey)
 	refresher := tokenrefresh.New(oauthCreds, appLogger)
 	go refresher.Start(ctx)
 	appLogger.Info("oauth token refresher started")
@@ -319,7 +318,7 @@ func main() {
 
 	// Runtime binding resolver + planner
 	runtimeBinder := coreruntime.NewCachedBindingResolver(
-		aiadapters.NewRuntimeTargetBinder(q, pool, cfg.Security.ProviderKeyMaster).WithBridgeSupport(bridgeRuntime),
+		aiadapters.NewRuntimeTargetBinder(q, pool, cfg.Security.SecretMasterKey).WithBridgeSupport(bridgeRuntime),
 		coreruntime.BindingResolverOptions{
 			DisableCache: true,
 			Authorizer:   aiadapters.NewRuntimeBindingAuthorizer(pool),
@@ -436,7 +435,6 @@ func main() {
 		Redis:          redisClient,
 		Logger:         appLogger,
 		Queries:        q,
-		Security:       cfg.Security,
 		TokenVerifier:  jwtSvc,
 		BanChecker:     banChecker,
 		HTTPClient:     managementHTTPClient,
@@ -467,7 +465,6 @@ func main() {
 		Pool:          pool,
 		Redis:         redisClient,
 		Logger:        appLogger,
-		PortalBaseURL: cfg.Portal.BaseURL,
 		JWT:           jwtSvc,
 		Blacklist:     blacklist,
 		Legal:         cfg.Legal,
@@ -477,15 +474,15 @@ func main() {
 		Payment:       paymentSvc,
 		Announcements: announcementSvc,
 
-		Queries:           q,
-		OAuth:             oauthCreds,
-		TokenRefresher:    refresher,
-		ClientCatalog:     poolModelCatalog,
-		ProviderKeyMaster: cfg.Security.ProviderKeyMaster,
-		AIHTTPClient:      managementHTTPClient,
-		Health:            healthTracker,
-		Weights:           routeWeightsStore,
-		BanChecker:        banChecker,
+		Queries:         q,
+		OAuth:           oauthCreds,
+		TokenRefresher:  refresher,
+		ClientCatalog:   poolModelCatalog,
+		SecretMasterKey: cfg.Security.SecretMasterKey,
+		AIHTTPClient:    managementHTTPClient,
+		Health:          healthTracker,
+		Weights:         routeWeightsStore,
+		BanChecker:      banChecker,
 
 		// AI 域
 		PriceBookSvc:         priceBookSvc,
@@ -510,6 +507,7 @@ func main() {
 		Version: version,
 		Logger:  appLogger,
 	})
+	router.Use(weborigin.Middleware)
 
 	transport.Register(api, deps)
 	transport.RegisterRaw(router, deps)
@@ -554,9 +552,6 @@ func main() {
 	// ──────────────────────────────────────────────────────
 
 	addr := cfg.Server.Addr
-	if addr == "" {
-		addr = ":" + strconv.Itoa(cfg.Server.Port)
-	}
 
 	httpServer := &http.Server{
 		Addr:              addr,

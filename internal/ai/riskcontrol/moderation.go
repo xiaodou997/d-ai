@@ -55,12 +55,12 @@ type DetectResult struct {
 // outcome. It never mutates account/tenant status: crossing the violation
 // threshold only creates an ai_risk_events row for a human to act on.
 type Checker struct {
-	Config            *ConfigService
-	Logs              *LogService
-	Events            *EventService
-	HTTPClient        *http.Client
-	ProviderKeyMaster string
-	Logger            *zap.Logger
+	Config          *ConfigService
+	Logs            *LogService
+	Events          *EventService
+	HTTPClient      *http.Client
+	SecretMasterKey string
+	Logger          *zap.Logger
 
 	// Engine management: engine is rebuilt when config_revision changes.
 	engineMu  sync.RWMutex
@@ -386,7 +386,7 @@ type moderationAPIResponse struct {
 
 func (c *Checker) callModerationAPI(ctx context.Context, cfg domain.RiskControlConfig, text string) (map[string]float64, int32, error) {
 	start := time.Now()
-	apiKey, err := secret.DecryptProviderKey(c.ProviderKeyMaster, cfg.Provider.APIKeyCiphertext)
+	apiKey, err := secret.DecryptProviderKey(c.SecretMasterKey, cfg.Provider.APIKeyCiphertext)
 	if err != nil {
 		return nil, 0, fmt.Errorf("decrypt moderation api key: %w", err)
 	}

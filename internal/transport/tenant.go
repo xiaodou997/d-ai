@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	"xiaodou/dai/internal/weborigin"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -31,16 +32,14 @@ func generateInviteCode() string {
 
 // tenantSelfHandlers 承载 /api/v1 租户自助端点（仅租户用户 userType=3，限本租户）。
 type tenantSelfHandlers struct {
-	repo                  *tenantpg.TenantRepo
-	log                   *zap.Logger
-	customerPortalBaseURL string
+	repo *tenantpg.TenantRepo
+	log  *zap.Logger
 }
 
-func newTenantSelfHandlers(pool *pgxpool.Pool, log *zap.Logger, customerPortalBaseURL string) *tenantSelfHandlers {
+func newTenantSelfHandlers(pool *pgxpool.Pool, log *zap.Logger) *tenantSelfHandlers {
 	return &tenantSelfHandlers{
-		repo:                  tenantpg.NewTenantRepo(pool),
-		log:                   log,
-		customerPortalBaseURL: customerPortalBaseURL,
+		repo: tenantpg.NewTenantRepo(pool),
+		log:  log,
 	}
 }
 
@@ -129,7 +128,7 @@ type userConsumptionOutput struct {
 
 // registerTenantSelf 注册租户自助端点（requireUserType(3)）。
 func registerTenantSelf(api huma.API, d Deps) {
-	h := newTenantSelfHandlers(d.Pool, d.Logger, d.PortalBaseURL)
+	h := newTenantSelfHandlers(d.Pool, d.Logger)
 	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",
@@ -182,7 +181,7 @@ func (h *tenantSelfHandlers) listInvitations(ctx context.Context, in *listInvita
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	for i := range list {
-		list[i].RegistrationURL = invitationRegistrationURL(h.customerPortalBaseURL, list[i].Code)
+		list[i].RegistrationURL = invitationRegistrationURL(ctx, list[i].Code)
 	}
 	return &invitationsListOutput{Body: httpx.NewPage(list, total, page, size)}, nil
 }
@@ -209,7 +208,7 @@ func (h *tenantSelfHandlers) createInvitation(ctx context.Context, in *createInv
 	}
 	out := &createInvitationOutput{}
 	out.Body.Code = code
-	out.Body.RegistrationURL = invitationRegistrationURL(h.customerPortalBaseURL, code)
+	out.Body.RegistrationURL = invitationRegistrationURL(ctx, code)
 	out.Body.TenantID = claims.TenantID
 	out.Body.Description = in.Body.Description
 	out.Body.MaxUses = in.Body.MaxUses
@@ -304,9 +303,9 @@ func parseAnalyticsWindow(timeFromValue, timeToValue int64) (*time.Time, *time.T
 	return timeFrom, timeTo, nil
 }
 
-func invitationRegistrationURL(baseURL, code string) string {
-	if strings.TrimSpace(baseURL) == "" || strings.TrimSpace(code) == "" {
+func invitationRegistrationURL(ctx context.Context, code string) string {
+	if strings.TrimSpace(code) == "" {
 		return ""
 	}
-	return strings.TrimRight(baseURL, "/") + "/register/" + url.PathEscape(code)
+	return weborigin.Resolve(ctx, "/register/"+url.PathEscape(code))
 }

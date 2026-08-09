@@ -100,7 +100,7 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := secret.DecryptProviderKey(d.ProviderKeyMaster, account.ApiKeyCiphertext)
+		apiKey, err := secret.DecryptProviderKey(d.SecretMasterKey, account.ApiKeyCiphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("failed to decrypt api key")
 		}

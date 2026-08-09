@@ -1,11 +1,11 @@
 package transport
 
 import (
-	"strings"
+	"context"
 
-	"xiaodou/dai/internal/config"
+	"xiaodou/dai/internal/weborigin"
 )
 
-func legalDocumentURL(legal config.LegalConfig, document string) string {
-	return strings.TrimRight(legal.BaseURL, "/") + "/" + document
+func legalDocumentURL(ctx context.Context, document string) string {
+	return weborigin.Resolve(ctx, "/legal/"+document)
 }

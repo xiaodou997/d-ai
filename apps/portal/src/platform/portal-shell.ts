@@ -37,7 +37,6 @@ export interface PortalShellLayoutProps {
   nav: AppShellNavItem[];
   user: PortalShellUser;
   userMenu?: PortalShellUserMenuItem[];
-  legalBaseUrl: string;
 }
 
 export interface UsePortalShellScaffoldOptions {

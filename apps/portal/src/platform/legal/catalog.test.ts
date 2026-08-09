@@ -12,10 +12,8 @@ describe("legal catalog", () => {
     ]);
   });
 
-  it("builds canonical document URLs without double slashes", () => {
-    expect(
-      legalDocumentURL("https://legal.example.com/legal/", "privacy"),
-    ).toBe("https://legal.example.com/legal/privacy");
+  it("builds same-origin document URLs", () => {
+    expect(legalDocumentURL("privacy")).toBe("/legal/privacy");
   });
 
   it("rejects unknown document IDs", () => {

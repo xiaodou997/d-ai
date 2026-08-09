@@ -25,6 +25,7 @@ import (
 
 	"xiaodou/dai/internal/ai/imageassets"
 	"xiaodou/dai/internal/ai/imagepayload"
+	"xiaodou/dai/internal/weborigin"
 )
 
 const (
@@ -33,11 +34,10 @@ const (
 )
 
 type Config struct {
-	StorageDir    string
-	AssetTTL      time.Duration
-	URLTTL        time.Duration
-	PublicBaseURL string
-	MaxBytes      int64
+	StorageDir string
+	AssetTTL   time.Duration
+	URLTTL     time.Duration
+	MaxBytes   int64
 }
 
 type Asset struct {
@@ -76,12 +76,11 @@ type repository interface {
 }
 
 type Service struct {
-	repo          repository
-	storageDir    string
-	assetTTL      time.Duration
-	urlTTL        time.Duration
-	publicBaseURL string
-	maxBytes      int64
+	repo       repository
+	storageDir string
+	assetTTL   time.Duration
+	urlTTL     time.Duration
+	maxBytes   int64
 }
 
 func New(pool *pgxpool.Pool, cfg Config) (*Service, error) {
@@ -110,25 +109,16 @@ func newService(repo repository, cfg Config) (*Service, error) {
 	if urlTTL <= 0 {
 		urlTTL = 24 * time.Hour
 	}
-	publicBaseURL := strings.TrimRight(strings.TrimSpace(cfg.PublicBaseURL), "/")
-	if publicBaseURL == "" {
-		return nil, errors.New("filestore: public base URL is required")
-	}
-	parsed, err := url.Parse(publicBaseURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return nil, errors.New("filestore: public base URL must be absolute")
-	}
 	maxBytes := cfg.MaxBytes
 	if maxBytes <= 0 {
 		maxBytes = defaultMaxSize
 	}
 	return &Service{
-		repo:          repo,
-		storageDir:    storageDir,
-		assetTTL:      assetTTL,
-		urlTTL:        urlTTL,
-		publicBaseURL: publicBaseURL,
-		maxBytes:      maxBytes,
+		repo:       repo,
+		storageDir: storageDir,
+		assetTTL:   assetTTL,
+		urlTTL:     urlTTL,
+		maxBytes:   maxBytes,
 	}, nil
 }
 
@@ -223,7 +213,7 @@ func (s *Service) IssueURL(ctx context.Context, ref string) (Link, error) {
 		return Link{}, fmt.Errorf("filestore: create access link: %w", err)
 	}
 	return Link{
-		URL:       s.publicBaseURL + "/v1/files/content/" + url.PathEscape(token),
+		URL:       weborigin.Resolve(ctx, "/v1/files/content/"+url.PathEscape(token)),
 		ExpiresAt: expiresAt,
 	}, nil
 }

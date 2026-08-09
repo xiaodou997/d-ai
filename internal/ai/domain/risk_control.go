@@ -52,7 +52,7 @@ const (
 
 // RiskControlProviderConfig points at the OpenAI-moderation-protocol
 // endpoint used for API-based checks. APIKeyCiphertext is encrypted with
-// the same provider-key master as upstream account credentials.
+// the same secret master key as upstream account credentials.
 type RiskControlProviderConfig struct {
 	BaseURL          string `json:"base_url"`
 	Model            string `json:"model"`

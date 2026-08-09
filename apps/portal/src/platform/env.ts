@@ -5,9 +5,6 @@ export type PortalKind = "unified";
 export interface PortalBuildEnv {
   [key: string]: unknown;
   VITE_APP_VERSION?: string;
-  VITE_API_BASE_URL?: string;
-  VITE_PUBLIC_BASE_URL?: string;
-  VITE_LEGAL_BASE_URL?: string;
 }
 
 export interface PortalEnv {
@@ -17,8 +14,6 @@ export interface PortalEnv {
   theme: PortalThemeName;
   storagePrefix: string;
   apiBaseUrl: string;
-  publicBaseUrl: string;
-  legalBaseUrl: string;
 }
 
 export function createPortalEnv(input: PortalEnv): PortalEnv {
@@ -35,7 +30,6 @@ export interface StandardPortalEnvOptions {
 
 export function createStandardPortalEnv(options: StandardPortalEnvOptions): PortalEnv {
   const buildEnv = options.env;
-  const apiBaseUrl = buildEnv.VITE_API_BASE_URL?.trim() || "/";
 
   return createPortalEnv({
     portal: options.portal || "unified",
@@ -43,8 +37,6 @@ export function createStandardPortalEnv(options: StandardPortalEnvOptions): Port
     appVersion: buildEnv.VITE_APP_VERSION?.trim() || "0.0.1",
     theme: options.theme || "admin",
     storagePrefix: options.storagePrefix || "dai:portal",
-    apiBaseUrl,
-    publicBaseUrl: buildEnv.VITE_PUBLIC_BASE_URL?.trim() || apiBaseUrl,
-    legalBaseUrl: buildEnv.VITE_LEGAL_BASE_URL || "/legal"
+    apiBaseUrl: "/"
   });
 }

@@ -161,6 +161,6 @@ export function findLegalDocument(
   return legalDocuments.find((document) => document.id === id);
 }
 
-export function legalDocumentURL(baseUrl: string, id: LegalDocumentID): string {
-  return `${baseUrl.replace(/\/+$/, "")}/${id}`;
+export function legalDocumentURL(id: LegalDocumentID): string {
+  return `/legal/${id}`;
 }

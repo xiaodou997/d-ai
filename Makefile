@@ -6,7 +6,7 @@ BUILD_DIR := release
 FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server database-artifacts frontend embed clean test test-frontend typecheck openapi generate-api ensure-api help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts frontend embed clean test test-frontend typecheck openapi generate-api ensure-api help
 
 # ---- 本地开发 ----
 
@@ -51,6 +51,12 @@ build-server: database-artifacts ## 只构建后端和数据库 SQL 发布附件
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)"
+
+build-linux-amd64: frontend embed database-artifacts ## 构建生产 Docker 使用的 Linux amd64 二进制
+	@echo "Building $(BINARY) linux/amd64 v$(VERSION)..."
+	mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY)-linux-amd64 ./cmd/server
+	@echo "Done: $(BUILD_DIR)/$(BINARY)-linux-amd64"
 
 database-artifacts: ## 将初始化和人工升级 SQL 复制到发布目录
 	rm -rf $(DB_RELEASE_DIR)

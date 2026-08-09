@@ -7,9 +7,7 @@ app:
 
 server:
   addr: ':19641'
-  port: 19641
   read_timeout: 30
-  write_timeout: 0
   idle_timeout: 60
 
 database:
@@ -24,16 +22,13 @@ jwt:
   issuer: dai
 
 security:
-  # 微信支付等敏感配置的加密主密钥
+  # URM 与 AI 敏感配置的统一加密主密钥；生产环境填入原 URM 密钥
   secret_master_key: ''
-  # Provider API key 加密主密钥（≥32 字节随机串）
-  provider_key_master: '0c52fb81af673f1fae576eef73d36364'
 
-portal:
-  base_url: http://localhost:19641
+storage:
+  data_dir: data
 
 legal:
-  base_url: http://localhost:19641/legal
   terms_version: '2026-07-19'
   privacy_version: '2026-07-19'
 

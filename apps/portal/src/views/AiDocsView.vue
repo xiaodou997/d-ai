@@ -12,5 +12,5 @@ const scope = computed(() => (authStore.userType === 4 ? "user" : "tenant"));
 </script>
 
 <template>
-  <PortalAiDocsPage :base-url="portalEnv.publicBaseUrl" :scope="scope" :section="section" />
+  <PortalAiDocsPage :base-url="portalEnv.apiBaseUrl" :scope="scope" :section="section" />
 </template>

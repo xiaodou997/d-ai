@@ -21,20 +21,20 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	blacklist := &auth.BlacklistService{}
 
 	got := buildAIDeps(Deps{
-		OAuth:             oauth,
-		TokenRefresher:    refresher,
-		ClientCatalog:     catalog,
-		ProviderKeyMaster: "provider-key-master",
-		AIHTTPClient:      httpClient,
-		Health:            health,
-		Weights:           weights,
-		Blacklist:         blacklist,
+		OAuth:           oauth,
+		TokenRefresher:  refresher,
+		ClientCatalog:   catalog,
+		SecretMasterKey: "secret-master-key",
+		AIHTTPClient:    httpClient,
+		Health:          health,
+		Weights:         weights,
+		Blacklist:       blacklist,
 	})
 
 	if got.OAuth != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
-	if got.ProviderKeyMaster != "provider-key-master" || got.HTTPClient != httpClient {
+	if got.SecretMasterKey != "secret-master-key" || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
 	}
 	if got.Health != health || got.Weights != weights {

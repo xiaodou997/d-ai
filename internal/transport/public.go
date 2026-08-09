@@ -112,9 +112,9 @@ func (h *publicHandlers) getInvitation(ctx context.Context, in *publicInvitation
 	out.Body.Status = view.Status
 	out.Body.CanRegister = view.CanRegister
 	out.Body.Message = view.Message
-	out.Body.Legal.TermsURL = legalDocumentURL(h.legal, "terms")
+	out.Body.Legal.TermsURL = legalDocumentURL(ctx, "terms")
 	out.Body.Legal.TermsVersion = h.legal.TermsVersion
-	out.Body.Legal.PrivacyURL = legalDocumentURL(h.legal, "privacy")
+	out.Body.Legal.PrivacyURL = legalDocumentURL(ctx, "privacy")
 	out.Body.Legal.PrivacyVersion = h.legal.PrivacyVersion
 	return out, nil
 }

@@ -22,7 +22,7 @@ func EncryptProviderKey(master string, plaintext string) (string, error) {
 		return "", errors.New("provider key is required")
 	}
 	if master == "" {
-		return "", errors.New("provider key master is required")
+		return "", errors.New("secret master key is required")
 	}
 
 	key := sha256.Sum256([]byte(master))
@@ -55,7 +55,7 @@ func DecryptProviderKey(master string, ciphertext string) (string, error) {
 		return "", errors.New("unsupported provider key ciphertext format")
 	}
 	if master == "" {
-		return "", errors.New("provider key master is required")
+		return "", errors.New("secret master key is required")
 	}
 
 	parts := strings.Split(strings.TrimPrefix(ciphertext, aesGCMPrefix), ":")

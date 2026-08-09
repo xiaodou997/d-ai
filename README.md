@@ -96,6 +96,9 @@ make build
 
 # 仅后端（当前可用于验证 Go 编译）
 make build-server
+
+# 生成生产 Docker 使用的 Linux amd64 二进制
+make build-linux-amd64
 ```
 
 ## 文档

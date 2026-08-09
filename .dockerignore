@@ -1,0 +1,6 @@
+**
+!release/
+!release/dai-linux-amd64
+!deploy/
+!deploy/production/
+!deploy/production/Dockerfile

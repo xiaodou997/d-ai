@@ -234,7 +234,7 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		cfg, err := riskControlConfigFromWriteDTO(in.Body, current, d.ProviderKeyMaster)
+		cfg, err := riskControlConfigFromWriteDTO(in.Body, current, d.SecretMasterKey)
 		if err != nil {
 			return nil, err
 		}
@@ -424,7 +424,7 @@ func keywordConfigToDTO(kc domain.KeywordConfig) keywordConfigDTO {
 // riskControlConfigFromWriteDTO merges a write DTO onto the current stored
 // config. The API key ciphertext is preserved unless Provider.APIKey is
 // explicitly set (nil = keep, "" = clear, non-empty = re-encrypt).
-func riskControlConfigFromWriteDTO(in riskControlConfigWriteDTO, current domain.RiskControlConfig, providerKeyMaster string) (domain.RiskControlConfig, error) {
+func riskControlConfigFromWriteDTO(in riskControlConfigWriteDTO, current domain.RiskControlConfig, secretMasterKey string) (domain.RiskControlConfig, error) {
 	cfg := domain.RiskControlConfig{
 		Enabled: in.Enabled,
 		Mode:    in.Mode,
@@ -449,7 +449,7 @@ func riskControlConfigFromWriteDTO(in riskControlConfigWriteDTO, current domain.
 		if *in.Provider.APIKey == "" {
 			cfg.Provider.APIKeyCiphertext = ""
 		} else {
-			ciphertext, err := secret.EncryptProviderKey(providerKeyMaster, *in.Provider.APIKey)
+			ciphertext, err := secret.EncryptProviderKey(secretMasterKey, *in.Provider.APIKey)
 			if err != nil {
 				return domain.RiskControlConfig{}, httpx.ErrInternal.WithDetail("failed to encrypt moderation api key").WithCause(err)
 			}

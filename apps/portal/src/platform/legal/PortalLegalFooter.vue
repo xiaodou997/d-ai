@@ -7,17 +7,13 @@ import {
   legalDocuments,
 } from "./catalog";
 
-const props = defineProps<{
-  baseUrl: string;
-}>();
-
 const links = computed(() =>
   legalFooterDocumentIDs.map((id) => {
     const document = legalDocuments.find((item) => item.id === id)!;
     return {
       id,
       title: document.title,
-      href: legalDocumentURL(props.baseUrl, id),
+      href: legalDocumentURL(id),
     };
   }),
 );

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"xiaodou/dai/internal/ai/testsupport"
+	"xiaodou/dai/internal/weborigin"
 )
 
 func TestPostgresDeleteExpiredRemovesUnexpiredAssetLinks(t *testing.T) {
@@ -66,10 +67,9 @@ func TestPostgresDeleteExpiredRemovesUnexpiredAssetLinks(t *testing.T) {
 func TestPublishIssueURLAndServeContent(t *testing.T) {
 	repo := newMemoryRepository()
 	store, err := newService(repo, Config{
-		StorageDir:    t.TempDir(),
-		AssetTTL:      24 * time.Hour,
-		URLTTL:        2 * time.Hour,
-		PublicBaseURL: "https://api.example.test",
+		StorageDir: t.TempDir(),
+		AssetTTL:   24 * time.Hour,
+		URLTTL:     2 * time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("newService: %v", err)
@@ -85,7 +85,7 @@ func TestPublishIssueURLAndServeContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IssueURL: %v", err)
 	}
-	if !strings.HasPrefix(link.URL, "https://api.example.test/v1/files/content/") {
+	if !strings.HasPrefix(link.URL, "/v1/files/content/") {
 		t.Fatalf("link URL = %q", link.URL)
 	}
 
@@ -108,10 +108,27 @@ func TestPublishIssueURLAndServeContent(t *testing.T) {
 	}
 }
 
+func TestIssueURLUsesRequestOriginWhenAvailable(t *testing.T) {
+	store, err := newService(newMemoryRepository(), Config{StorageDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("newService: %v", err)
+	}
+	asset, err := store.PublishBytes(context.Background(), []byte("content"), "text/plain")
+	if err != nil {
+		t.Fatalf("PublishBytes: %v", err)
+	}
+	link, err := store.IssueURL(weborigin.WithOrigin(context.Background(), "https://uadmin.example.test"), asset.Ref)
+	if err != nil {
+		t.Fatalf("IssueURL: %v", err)
+	}
+	if !strings.HasPrefix(link.URL, "https://uadmin.example.test/v1/files/content/") {
+		t.Fatalf("link URL = %q", link.URL)
+	}
+}
+
 func TestNewServiceDefaultsAssetAndURLTTLTo24Hours(t *testing.T) {
 	store, err := newService(newMemoryRepository(), Config{
-		StorageDir:    t.TempDir(),
-		PublicBaseURL: "https://api.example.test",
+		StorageDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("newService: %v", err)
@@ -124,10 +141,9 @@ func TestNewServiceDefaultsAssetAndURLTTLTo24Hours(t *testing.T) {
 func TestNormalizeImageResponseKeepsUpstreamURLAndPublishesInlineData(t *testing.T) {
 	repo := newMemoryRepository()
 	store, err := newService(repo, Config{
-		StorageDir:    t.TempDir(),
-		AssetTTL:      time.Hour,
-		URLTTL:        2 * time.Hour,
-		PublicBaseURL: "https://api.example.test",
+		StorageDir: t.TempDir(),
+		AssetTTL:   time.Hour,
+		URLTTL:     2 * time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("newService: %v", err)
@@ -141,7 +157,7 @@ func TestNormalizeImageResponseKeepsUpstreamURLAndPublishesInlineData(t *testing
 	if !strings.Contains(text, "https://upstream.example.test/image.png") {
 		t.Fatalf("upstream URL was not preserved: %s", text)
 	}
-	if !strings.Contains(text, "https://api.example.test/v1/files/content/") {
+	if !strings.Contains(text, "/v1/files/content/") {
 		t.Fatalf("inline image was not published: %s", text)
 	}
 	if !strings.Contains(text, `"asset_ref":"media://`) {
@@ -152,10 +168,9 @@ func TestNormalizeImageResponseKeepsUpstreamURLAndPublishesInlineData(t *testing
 func TestCleanupExpiresAssetAndItsLinks(t *testing.T) {
 	repo := newMemoryRepository()
 	store, err := newService(repo, Config{
-		StorageDir:    t.TempDir(),
-		AssetTTL:      time.Nanosecond,
-		URLTTL:        time.Hour,
-		PublicBaseURL: "https://api.example.test",
+		StorageDir: t.TempDir(),
+		AssetTTL:   time.Nanosecond,
+		URLTTL:     time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("newService: %v", err)

@@ -32,17 +32,17 @@ import (
 )
 
 type AIDeps struct {
-	Postgres          *pgxpool.Pool
-	Redis             *redis.Client
-	Queries           *dbgen.Queries
-	OAuth             *pgadapter.OAuthCredentialStore
-	TokenRefresher    *tokenrefresh.Refresher
-	ClientCatalog     *clientcatalog.Service
-	ProviderKeyMaster string
-	HTTPClient        *http.Client
-	Logger            *zap.Logger
-	Health            routing.HealthTracker
-	Weights           *pgadapter.RouteWeightsStore
+	Postgres        *pgxpool.Pool
+	Redis           *redis.Client
+	Queries         *dbgen.Queries
+	OAuth           *pgadapter.OAuthCredentialStore
+	TokenRefresher  *tokenrefresh.Refresher
+	ClientCatalog   *clientcatalog.Service
+	SecretMasterKey string
+	HTTPClient      *http.Client
+	Logger          *zap.Logger
+	Health          routing.HealthTracker
+	Weights         *pgadapter.RouteWeightsStore
 
 	// IdentityProvider 在进程内获取用户和租户信息。
 	// nil 时 identity enrichment 返回空结果。

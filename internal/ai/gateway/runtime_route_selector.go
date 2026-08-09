@@ -163,7 +163,7 @@ func plannedCandidate(planned coreruntime.PlannedTarget, req coreruntime.Request
 // The client only ever sees "no available upstream route" — a deliberately
 // vague 503, since the reasons name internal groups, targets and credentials.
 // That leaves the server as the only place the actual cause can live, and until
-// this existed there was none: a mismatched provider key master silently
+// this existed there was none: a mismatched secret master key silently
 // dropped every candidate and produced no log line at all.
 func (s *RuntimeRouteSelector) logRouteFailure(req *serving.Request, subject *coreidentity.Subject, err error) {
 	fields := []zap.Field{

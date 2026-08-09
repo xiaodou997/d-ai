@@ -169,7 +169,7 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 // credential is simply missing both silently remove the target from routing,
 // and a bare "provider credential is unavailable" cannot tell an operator which
 // one happened — that ambiguity is exactly what makes a mismatched
-// AI_PROVIDER_KEY_MASTER present as an unexplained "no available route".
+// DAI_SECURITY_SECRET_MASTER_KEY present as an unexplained "no available route".
 //
 // The detail is the AES-GCM failure text; it carries no key material, and it
 // only ever reaches server logs and the admin dispatch preview, never a
