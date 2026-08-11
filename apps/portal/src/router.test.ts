@@ -8,6 +8,7 @@ interface FlatRoute {
   path: string;
   name?: string;
   allowedUserTypes?: number[];
+  public?: boolean;
 }
 
 function joinRoutePath(parent: string, child: string): string {
@@ -24,7 +25,8 @@ function flattenRoutes(records: readonly RouteRecordRaw[], parent = ""): FlatRou
       name: typeof record.name === "string" ? record.name : undefined,
       allowedUserTypes: Array.isArray(record.meta?.allowedUserTypes)
         ? (record.meta.allowedUserTypes as number[])
-        : undefined
+        : undefined,
+      public: record.meta?.public === true
     };
     return [current, ...flattenRoutes(record.children ?? [], path)];
   });
@@ -74,5 +76,10 @@ describe("unified portal route contract", () => {
     expect(routePaths).not.toContain("/tenant/developer/prompts");
     expect(routePaths).not.toContain("/customer/developer/apps");
     expect(routePaths).not.toContain("/customer/developer/prompts");
+  });
+
+  it("keeps invitation registration and legal documents public", () => {
+    expect(flatRoutes.find((route) => route.path === "/register/:code")?.public).toBe(true);
+    expect(flatRoutes.find((route) => route.path === "/legal/:document")?.public).toBe(true);
   });
 });

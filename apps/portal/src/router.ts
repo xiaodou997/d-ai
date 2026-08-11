@@ -7,6 +7,8 @@ import {
   defaultPortalPathForUserType,
   userHasPortalCapability
 } from "./modules/portalModules";
+import LegalCenterLayout from "./platform/legal/LegalCenterLayout.vue";
+import LegalDocumentView from "./platform/legal/LegalDocumentView.vue";
 import { useAuthStore } from "./stores/auth";
 
 const LayoutView = () => import("./views/LayoutView.vue");
@@ -26,6 +28,24 @@ export const routes: RouteRecordRaw[] = [
     ]
   },
   { path: "/login", component: () => import("./views/LoginView.vue"), meta: { public: true, title: "登录" } },
+  {
+    path: "/register/:code",
+    component: () => import("./views/RegisterView.vue"),
+    meta: { public: true, title: "邀请注册" }
+  },
+  {
+    path: "/legal",
+    component: LegalCenterLayout,
+    meta: { public: true, title: "法律中心" },
+    children: [
+      { path: "", redirect: "/legal/privacy" },
+      {
+        path: ":document",
+        component: LegalDocumentView,
+        meta: { public: true, title: "法律文件" }
+      }
+    ]
+  },
   { path: "/:pathMatch(.*)*", redirect: "/overview" }
 ];
 
