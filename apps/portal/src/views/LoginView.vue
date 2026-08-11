@@ -43,13 +43,13 @@ async function startLogin() {
 
       <form class="login-form" @submit.prevent="startLogin">
         <label class="login-field">
-          <span>用户名</span>
+          <span>用户名或邮箱</span>
           <input
             v-model.trim="username"
             name="username"
             type="text"
             autocomplete="username"
-            placeholder="请输入用户名"
+            placeholder="请输入用户名或邮箱"
             required
             autofocus
           />

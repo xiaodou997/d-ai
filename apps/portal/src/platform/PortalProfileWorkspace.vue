@@ -15,18 +15,38 @@ const props = withDefaults(
     fields: PortalProfileField[];
     changePassword: (payload: { oldPassword: string; newPassword: string }) => Promise<unknown>;
     afterPasswordChanged?: () => Promise<void> | void;
+    updateProfile?: (payload: { username?: string; email?: string }) => Promise<unknown>;
+    initialUsername?: string;
+    initialEmail?: string;
+    afterProfileChanged?: () => Promise<void> | void;
     title?: string;
     subtitle?: string;
   }>(),
   {
     title: "个人中心",
     subtitle: "查看个人信息、修改密码",
-    afterPasswordChanged: undefined
+    afterPasswordChanged: undefined,
+    updateProfile: undefined,
+    initialUsername: "",
+    initialEmail: "",
+    afterProfileChanged: undefined
   }
 );
 
 const loading = shallowRef(false);
+const profileLoading = shallowRef(false);
 const passwordFormRef = ref<FormInstance>();
+const profileFormRef = ref<FormInstance>();
+
+const profileForm = reactive({
+  username: props.initialUsername,
+  email: props.initialEmail
+});
+
+const profileRules: FormRules = {
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  email: [{ type: "email", message: "邮箱格式不正确", trigger: "blur" }]
+};
 
 const passwordForm = reactive({
   oldPassword: "",
@@ -83,6 +103,34 @@ async function handleChangePassword() {
     }
   });
 }
+
+async function handleUpdateProfile() {
+  if (!props.updateProfile || !profileFormRef.value) return;
+  await profileFormRef.value.validate(async (valid) => {
+    if (!valid) return;
+    const payload: { username?: string; email?: string } = {};
+    if (profileForm.username.trim() !== props.initialUsername) {
+      payload.username = profileForm.username.trim();
+    }
+    if (profileForm.email.trim() !== props.initialEmail) {
+      payload.email = profileForm.email.trim();
+    }
+    if (payload.username === undefined && payload.email === undefined) {
+      notifyError("用户名和邮箱均未变更");
+      return;
+    }
+    profileLoading.value = true;
+    try {
+      await props.updateProfile!(payload);
+      notifySuccess("资料已更新，请重新登录");
+      await props.afterProfileChanged?.();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "资料更新失败，请稍后重试");
+    } finally {
+      profileLoading.value = false;
+    }
+  });
+}
 </script>
 
 <template>
@@ -102,6 +150,21 @@ async function handleChangePassword() {
             <span :class="fieldClass(field)">{{ field.value || "—" }}</span>
           </el-descriptions-item>
         </el-descriptions>
+      </el-card>
+
+      <el-card v-if="updateProfile" shadow="never" class="mt-4">
+        <template #header><span class="card-title">修改用户名 / 邮箱</span></template>
+        <el-form ref="profileFormRef" :model="profileForm" :rules="profileRules" label-width="96px" class="max-w-md">
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="profileForm.username" placeholder="请输入用户名" maxlength="50" />
+          </el-form-item>
+          <el-form-item label="邮箱" prop="email">
+            <el-input v-model="profileForm.email" placeholder="请输入邮箱（可留空）" maxlength="100" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" :loading="profileLoading" @click="handleUpdateProfile">保存资料</el-button>
+          </el-form-item>
+        </el-form>
       </el-card>
 
       <el-card shadow="never" class="mt-4">

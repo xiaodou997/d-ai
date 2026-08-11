@@ -255,8 +255,8 @@ func TestRegisterUserReturnsRegisteredUser(t *testing.T) {
 			if input.TenantID != "T_1" {
 				t.Fatalf("expected tenantID T_1, got %q", input.TenantID)
 			}
-			if input.Username != "u_alice" {
-				t.Fatalf("expected username u_alice, got %q", input.Username)
+			if input.Username != "alice" {
+				t.Fatalf("expected username alice, got %q", input.Username)
 			}
 			if input.Email == nil || *input.Email != "user@example.com" {
 				t.Fatalf("expected email user@example.com, got %#v", input.Email)
@@ -278,7 +278,7 @@ func TestRegisterUserReturnsRegisteredUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterUser returned error: %v", err)
 	}
-	if user.TenantID != "T_1" || user.Username != "u_alice" || user.UserType != 4 || user.UserID == "" {
+	if user.TenantID != "T_1" || user.Username != "alice" || user.UserType != 4 || user.UserID == "" {
 		t.Fatalf("unexpected registered user: %#v", user)
 	}
 }

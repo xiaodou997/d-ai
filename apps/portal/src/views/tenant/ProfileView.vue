@@ -26,5 +26,8 @@ const handlePasswordChanged = async () => {
     :fields="profileFields"
     :change-password="platformTenantApi.changePassword"
     :after-password-changed="handlePasswordChanged"
+    :update-profile="platformTenantApi.updateProfile"
+    :initial-username="authStore.username || ''"
+    :after-profile-changed="handlePasswordChanged"
   />
 </template>

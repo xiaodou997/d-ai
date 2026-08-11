@@ -41,7 +41,7 @@ func newAuthHandlers(d Deps) *authHandlers {
 
 type loginInput struct {
 	Body struct {
-		Username string `json:"username" minLength:"1"`
+		Username string `json:"username" minLength:"1" doc:"用户名或邮箱"`
 		Password string `json:"password" minLength:"1"`
 	}
 }
@@ -63,7 +63,7 @@ type loginPrincipal struct {
 func (h *authHandlers) authenticateUser(ctx context.Context, username, password string) (loginPrincipal, *httpx.AppError) {
 	u, err := h.repo.GetPortalUserForLogin(ctx, username)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
-		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名或密码错误")
+		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
 	if u.Status != "active" {
 		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("账户已被禁用，请联系管理员")

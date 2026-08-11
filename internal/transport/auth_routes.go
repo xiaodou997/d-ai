@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -28,6 +29,13 @@ type changePasswordInput struct {
 	Body struct {
 		OldPassword string `json:"oldPassword"`
 		NewPassword string `json:"newPassword" minLength:"6" doc:"新密码至少 6 位"`
+	}
+}
+
+type updateProfileInput struct {
+	Body struct {
+		Username *string `json:"username" doc:"新用户名"`
+		Email    *string `json:"email" doc:"新邮箱，空字符串表示清除"`
 	}
 }
 
@@ -125,6 +133,92 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 
 		out := &messageOutput{}
 		out.Body.Message = "密码修改成功"
+		return out, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-update-profile",
+		Method:      http.MethodPut,
+		Path:        "/api/auth/profile",
+		Summary:     "修改用户名/邮箱（仅租户用户和终端用户）",
+		Tags:        []string{"auth"},
+		Middlewares: mw,
+	}, func(ctx context.Context, in *updateProfileInput) (*messageOutput, error) {
+		claims := userClaimsFromCtx(ctx)
+		if claims == nil {
+			return nil, httpx.ErrUnauthorized
+		}
+		if claims.UserType != 3 && claims.UserType != 4 {
+			return nil, httpx.ErrForbidden.WithDetail("仅租户用户和终端用户可修改用户名或邮箱")
+		}
+
+		usernameSet := in.Body.Username != nil
+		emailSet := in.Body.Email != nil
+		if !usernameSet && !emailSet {
+			return nil, httpx.ErrBadRequest.WithDetail("至少提供一个需要更新的字段")
+		}
+
+		username := ""
+		if usernameSet {
+			username = auth.NormalizeUsername(*in.Body.Username)
+			if username == "" {
+				return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
+			}
+			var count int
+			if err := d.Pool.QueryRow(ctx, `
+				SELECT COUNT(*) FROM iam_accounts
+				WHERE lower(username) = lower($1) AND user_id <> $2
+			`, username, claims.UserID).Scan(&count); err != nil {
+				return nil, httpx.ErrInternal.WithCause(err)
+			}
+			if count > 0 {
+				return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
+			}
+		}
+
+		email := ""
+		if emailSet {
+			email = strings.TrimSpace(*in.Body.Email)
+			if email != "" {
+				if !strings.Contains(email, "@") {
+					return nil, httpx.ErrBadRequest.WithDetail("邮箱格式不正确")
+				}
+				var count int
+				if err := d.Pool.QueryRow(ctx, `
+					SELECT COUNT(*) FROM iam_accounts
+					WHERE email IS NOT NULL AND lower(email) = lower($1) AND user_id <> $2
+				`, email, claims.UserID).Scan(&count); err != nil {
+					return nil, httpx.ErrInternal.WithCause(err)
+				}
+				if count > 0 {
+					return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+				}
+			}
+		}
+
+		if _, err := d.Pool.Exec(ctx, `
+			UPDATE iam_accounts
+			SET username = CASE WHEN $1 THEN $2 ELSE username END,
+			    email = CASE WHEN $3 THEN NULLIF($4, '') ELSE email END,
+			    updated_at = $5
+			WHERE user_id = $6 AND user_type = $7
+		`, usernameSet, username, emailSet, email, time.Now().UTC(), claims.UserID, claims.UserType); err != nil {
+			if authpg.IsUsernameTaken(err) {
+				return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
+			}
+			if authpg.IsEmailTaken(err) {
+				return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+			}
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+
+		// 用户名变更后旧 token 中的 claim 已过期，强制重新登录
+		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ID != "" {
+			_ = d.Blacklist.AddToBlacklist(claims.ID, 2*time.Hour)
+		}
+
+		out := &messageOutput{}
+		out.Body.Message = "资料已更新，请重新登录"
 		return out, nil
 	})
 }

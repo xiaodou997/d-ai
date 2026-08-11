@@ -61,10 +61,6 @@ CREATE TABLE iam_accounts (
         (user_type IN (1, 2) AND tenant_id IS NULL)
         OR (user_type IN (3, 4) AND tenant_id IS NOT NULL)
     ),
-    CONSTRAINT iam_accounts_username_namespace_check CHECK (
-        (user_type = 4 AND char_length(username) > 2 AND username LIKE 'u\_%' ESCAPE '\')
-        OR (user_type <> 4 AND username NOT LIKE 'u\_%' ESCAPE '\')
-    ),
     CONSTRAINT iam_accounts_status_check CHECK (
         (user_type IN (1, 2) AND status IN ('active', 'disabled'))
         OR (user_type = 3 AND status IN ('active', 'disabled', 'inherited_disabled'))
@@ -73,6 +69,8 @@ CREATE TABLE iam_accounts (
 );
 
 CREATE UNIQUE INDEX ux_iam_accounts_username_normalized ON iam_accounts (lower(username));
+CREATE UNIQUE INDEX ux_iam_accounts_email_normalized ON iam_accounts (lower(email))
+    WHERE email IS NOT NULL;
 CREATE INDEX idx_iam_accounts_tenant_type ON iam_accounts (tenant_id, user_type);
 CREATE INDEX idx_iam_accounts_type_status ON iam_accounts (user_type, status);
 CREATE INDEX idx_iam_accounts_has_overdraft ON iam_accounts (user_id)
@@ -1983,6 +1981,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 1);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 2);
 
 COMMIT;

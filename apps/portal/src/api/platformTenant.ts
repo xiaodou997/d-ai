@@ -35,6 +35,16 @@ export const platformTenantApi = {
     });
   },
 
+  updateProfile(body: { username?: string; email?: string }) {
+    return platform()<{ message: string }>({
+      method: "PUT",
+      path: "/api/auth/profile",
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+
   // ===== 统计 / 概览 =====
   getAnalyticsOverview(params: { timeFrom?: number; timeTo?: number } = {}) {
     return platform()<TenantAnalyticsOverview>({

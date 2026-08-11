@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -12,6 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
+	authpg "xiaodou/dai/internal/auth/pg"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -197,9 +197,6 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	if strings.HasPrefix(username, "u_") {
-		return nil, httpx.ErrBadRequest.WithDetail("管理员用户名不能使用终端用户前缀 u_")
-	}
 	var count int
 	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)", username).Scan(&count)
 	if count > 0 {
@@ -219,6 +216,12 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 		INSERT INTO iam_accounts (user_id, username, password_hash, email, user_type, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, 2, 'active', $5, $5)
 	`, userID, username, string(hash), in.Body.Email, now); err != nil {
+		if authpg.IsUsernameTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
+		}
+		if authpg.IsEmailTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createUserOutput{}
@@ -313,9 +316,6 @@ func (h *adminHandlers) listTenantUsers(ctx context.Context, in *listTenantUsers
 
 func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUserInput) (*createUserOutput, error) {
 	username := auth.NormalizeUsername(in.Body.Username)
-	if strings.HasPrefix(username, "u_") {
-		return nil, httpx.ErrBadRequest.WithDetail("租户用户名不能使用终端用户前缀 u_")
-	}
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
@@ -339,6 +339,12 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, user_type, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, 3, 'active', $6, $6)
 	`, userID, in.Body.TenantID, username, string(hash), in.Body.Email, now); err != nil {
+		if authpg.IsUsernameTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
+		}
+		if authpg.IsEmailTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createUserOutput{}

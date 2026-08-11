@@ -132,6 +132,8 @@ func (h *publicHandlers) registerInvitation(ctx context.Context, in *publicRegis
 		switch {
 		case errors.Is(err, invitepkg.ErrUsernameExists):
 			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
+		case errors.Is(err, invitepkg.ErrEmailExists):
+			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		case errors.Is(err, invitepkg.ErrInvalidUsername):
 			return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 		case errors.Is(err, invitepkg.ErrInvalidInvitationCodeFormat):

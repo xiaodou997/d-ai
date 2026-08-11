@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"xiaodou/dai/internal/auth"
+	authpg "xiaodou/dai/internal/auth/pg"
 	shared "xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/invite/pg"
 
@@ -72,6 +73,7 @@ var invitationCodePattern = regexp.MustCompile(`^[ABCDEFGHJKLMNPQRSTUVWXYZ234567
 var ErrInvalidInvitationCodeFormat = errors.New("invalid invitation code format")
 var ErrInvitationCodeUnavailable = errors.New("invitation code is invalid, expired, or exhausted")
 var ErrUsernameExists = errors.New("username already exists")
+var ErrEmailExists = errors.New("email already exists")
 var ErrInvalidUsername = errors.New("invalid username")
 var ErrLegalAcceptanceRequired = errors.New("current legal documents must be accepted")
 
@@ -237,6 +239,12 @@ func (s *InviteService) RegisterUser(ctx context.Context, code, username, passwo
 		if errors.Is(err, pg.ErrInvitationCodeUnavailable) {
 			return nil, ErrInvitationCodeUnavailable
 		}
+		if authpg.IsUsernameTaken(err) {
+			return nil, ErrUsernameExists
+		}
+		if authpg.IsEmailTaken(err) {
+			return nil, ErrEmailExists
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -270,7 +278,7 @@ func normalizeUsername(username string) (string, error) {
 	if normalized == "" {
 		return "", ErrInvalidUsername
 	}
-	return auth.NormalizeEndUsername(normalized), nil
+	return normalized, nil
 }
 
 func normalizeOptionalString(value *string) *string {

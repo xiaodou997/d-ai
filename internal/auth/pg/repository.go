@@ -3,12 +3,26 @@ package pg
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// IsUsernameTaken reports whether err is a unique violation on the normalized username index.
+func IsUsernameTaken(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_accounts_username_normalized"
+}
+
+// IsEmailTaken reports whether err is a unique violation on the normalized email index.
+func IsEmailTaken(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_accounts_email_normalized"
+}
 
 type AuditEvent struct {
 	EventType     string
@@ -63,13 +77,14 @@ func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, log
 	return err
 }
 
-func (r *AuthRepository) GetPortalUserForLogin(ctx context.Context, username string) (PortalUserForLogin, error) {
+func (r *AuthRepository) GetPortalUserForLogin(ctx context.Context, identifier string) (PortalUserForLogin, error) {
 	var u PortalUserForLogin
 	err := r.pool.QueryRow(ctx, `
 		SELECT user_id, COALESCE(tenant_id, ''), username, password_hash, user_type, status
 		FROM iam_accounts
 		WHERE lower(username) = lower(btrim($1))
-	`, username).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status)
+		   OR (email IS NOT NULL AND lower(email) = lower(btrim($1)))
+	`, identifier).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status)
 	return u, err
 }
 

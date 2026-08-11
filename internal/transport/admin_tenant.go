@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
+	authpg "xiaodou/dai/internal/auth/pg"
 	billingdomain "xiaodou/dai/internal/billing"
 	util "xiaodou/dai/internal/domain"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
@@ -184,9 +185,6 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 		return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 	}
 	initUsername := auth.NormalizeUsername(in.Body.InitUsername)
-	if strings.HasPrefix(initUsername, "u_") {
-		return nil, httpx.ErrBadRequest.WithDetail("租户用户名不能使用终端用户前缀 u_")
-	}
 	if initUsername != "" {
 		_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, initUsername).Scan(&count)
 		if count > 0 {
@@ -228,6 +226,12 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 				INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, user_type, status, created_at, updated_at)
 				VALUES ($1, $2, $3, $4, $5, 3, 'active', $6, $6)
 			`, initUserID, tenantID, initUsername, string(hash), in.Body.InitEmail, now); err != nil {
+			if authpg.IsUsernameTaken(err) {
+				return nil, httpx.ErrConflict.WithDetail("用户名已存在")
+			}
+			if authpg.IsEmailTaken(err) {
+				return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+			}
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		out.Body.InitUserID = initUserID

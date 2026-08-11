@@ -74,6 +74,16 @@ export const platformCustomerApi = {
     });
   },
 
+  updateProfile(body: { username?: string; email?: string }) {
+    return platform()<{ message: string }>({
+      method: "PUT",
+      path: "/api/auth/profile",
+      headers: apiHeaders,
+      body,
+      baseUrl
+    });
+  },
+
   // USD 在线充值配置
   getTopupConfig() {
     return platform()<TopupConfig>({

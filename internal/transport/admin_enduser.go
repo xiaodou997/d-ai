@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
+	authpg "xiaodou/dai/internal/auth/pg"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -235,10 +236,10 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	if claims == nil || claims.TenantID == "" {
 		return nil, httpx.ErrForbidden.WithDetail("需要租户用户身份")
 	}
-	if auth.NormalizeUsername(in.Body.Username) == "" {
+	username := auth.NormalizeUsername(in.Body.Username)
+	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	username := auth.NormalizeEndUsername(in.Body.Username)
 	var exists int
 	if err := h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&exists); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -256,8 +257,11 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, phone, internal_note, user_type, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, 4, 'active', $8, $8)
 	`, userID, claims.TenantID, username, string(hash), in.Body.Email, in.Body.Phone, strings.TrimSpace(in.Body.InternalNote), now); err != nil {
-		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
+		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
+		}
+		if authpg.IsEmailTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}

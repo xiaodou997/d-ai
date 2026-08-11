@@ -1,9 +1,9 @@
 <!--
-  个人资料 — 查看个人信息、修改密码。
+  个人资料 — 查看个人信息、修改用户名/邮箱、修改密码。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行),
-       不再使用 PortalProfileWorkspace(customer 变体含硬编码色值);基本信息/修改密码
-       两个分区收进同卡 body 的 24px 容器,色值全部改用 --ds-* token;密码表单仍为
-       element-plus,校验规则、接口调用与改密后退出登录的逻辑保持不变。
+       不再使用 PortalProfileWorkspace(customer 变体含硬编码色值);基本信息/修改资料/修改密码
+       三个分区收进同卡 body 的 24px 容器,色值全部改用 --ds-* token;表单仍为
+       element-plus,校验规则、接口调用与变更后退出登录的逻辑保持不变。
 -->
 <template>
   <div class="page-container profile-page">
@@ -11,7 +11,7 @@
       fill
       :icon="UserRound"
       :breadcrumbs="[{ label: '用户中心' }, { label: '账户设置' }, { label: '个人资料' }]"
-      description="查看个人信息、修改密码"
+      description="查看个人信息、修改用户名/邮箱、修改密码"
     >
       <div class="profile-body">
         <section class="profile-section">
@@ -22,6 +22,27 @@
               <span :class="fieldClass(field)">{{ field.value || "—" }}</span>
             </div>
           </div>
+        </section>
+
+        <section class="profile-section">
+          <h2 class="profile-section__title">修改用户名 / 邮箱</h2>
+          <el-form
+            ref="profileFormRef"
+            :model="profileForm"
+            :rules="profileRules"
+            label-width="100px"
+            class="max-w-md"
+          >
+            <el-form-item label="用户名" prop="username">
+              <el-input v-model="profileForm.username" placeholder="请输入用户名" maxlength="50" />
+            </el-form-item>
+            <el-form-item label="邮箱" prop="email">
+              <el-input v-model="profileForm.email" placeholder="请输入邮箱（可留空）" maxlength="100" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="profileLoading" @click="handleUpdateProfile">保存资料</el-button>
+            </el-form-item>
+          </el-form>
         </section>
 
         <section class="profile-section">
@@ -85,7 +106,19 @@ const profileFields = computed<ProfileField[]>(() => [
 ]);
 
 const loading = shallowRef(false);
+const profileLoading = shallowRef(false);
 const passwordFormRef = ref<FormInstance>();
+const profileFormRef = ref<FormInstance>();
+
+const profileForm = reactive({
+  username: authStore.username || "",
+  email: ""
+});
+
+const profileRules: FormRules = {
+  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  email: [{ type: "email", message: "邮箱格式不正确", trigger: "blur" }]
+};
 
 const passwordForm = reactive({
   oldPassword: "",
@@ -126,6 +159,34 @@ const handlePasswordChanged = async () => {
     window.location.reload();
   }
 };
+
+async function handleUpdateProfile() {
+  if (!profileFormRef.value) return;
+  await profileFormRef.value.validate(async (valid) => {
+    if (!valid) return;
+    const payload: { username?: string; email?: string } = {};
+    if (profileForm.username.trim() !== (authStore.username || "")) {
+      payload.username = profileForm.username.trim();
+    }
+    if (profileForm.email.trim() !== "") {
+      payload.email = profileForm.email.trim();
+    }
+    if (payload.username === undefined && payload.email === undefined) {
+      notifyError("用户名和邮箱均未变更");
+      return;
+    }
+    profileLoading.value = true;
+    try {
+      await platformCustomerApi.updateProfile(payload);
+      notifySuccess("资料已更新，请重新登录");
+      await handlePasswordChanged();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "资料更新失败，请稍后重试");
+    } finally {
+      profileLoading.value = false;
+    }
+  });
+}
 
 async function handleChangePassword() {
   if (!passwordFormRef.value) return;

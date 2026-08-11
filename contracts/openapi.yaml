@@ -4484,6 +4484,7 @@ components:
           minLength: 1
           type: string
         username:
+          description: 用户名或邮箱
           minLength: 1
           type: string
       required:
@@ -8316,6 +8317,30 @@ components:
           description: 状态：active 或 disabled
           type: string
       type: object
+    UpdateProfileInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/UpdateProfileInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        email:
+          description: 新邮箱，空字符串表示清除
+          type:
+            - string
+            - "null"
+        username:
+          description: 新用户名
+          type:
+            - string
+            - "null"
+      required:
+        - username
+        - email
+      type: object
     UpdateSystemAdminInputBody:
       additionalProperties: false
       properties:
@@ -11101,6 +11126,31 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 修改密码
+      tags:
+        - auth
+  /api/auth/profile:
+    put:
+      operationId: auth-update-profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 修改用户名/邮箱（仅租户用户和终端用户）
       tags:
         - auth
   /api/auth/refresh:
