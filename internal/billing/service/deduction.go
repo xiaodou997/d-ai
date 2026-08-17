@@ -69,8 +69,8 @@ func NewDeductionService(pool *pgxpool.Pool, logger *zap.Logger) *DeductionServi
 // 反向补偿——单 SQL 事务，原子。
 //
 //   - 直接按额度包 FIFO 扣减，不创建冻结或预扣状态
-//   - 允许透支时，额度不足的尾差直接转入 current_overdraft，扣费仍然成功
-//   - 严格扣费调用方可以拒绝已有透支；AI 完成态扣费明确允许透支
+//   - 已完成请求结算时，额度不足的尾差可转入 current_overdraft，扣费仍然成功
+//   - 严格扣费调用方拒绝已有欠费；AI 完成态只允许记录本次结算尾差
 type ConsumeParams struct {
 	IdempotencyKey string
 	ClientID       string
@@ -298,8 +298,7 @@ func validateConsumeParams(params ConsumeParams) error {
 
 // directEventState only evaluates the live quota lots and overdraft state. New
 // direct charges never create reservations, and historical holds must not
-// change the meaning of a new usage record. Overdraft is intentionally
-// considered usable by this path.
+// change the meaning of a new usage record.
 func directEventState(ctx context.Context, tx pgx.Tx, tenantID, userID string, includeTenant, includeUser bool) (string, bool, error) {
 	state := accountStateOK
 	for _, account := range []struct {
@@ -343,7 +342,7 @@ func directEventState(ctx context.Context, tx pgx.Tx, tenantID, userID string, i
 			state = accountStateExhausted
 		}
 	}
-	return state, true, nil
+	return state, state == accountStateOK, nil
 }
 
 // Refund 全额退款（仅平台管理员可操作）

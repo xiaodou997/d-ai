@@ -164,6 +164,7 @@ func TestAdmissionGateAcceptsRealPipelineSteps(t *testing.T) {
 	var (
 		_ GateStep = (*QuotaCheckStep)(nil)
 		_ GateStep = (*SubscriptionGateStep)(nil)
+		_ GateStep = (*BalanceGateStep)(nil)
 		_ GateStep = (*RouteCandidatesStep)(nil)
 		_ GateStep = (*BillingGuardStep)(nil)
 	)

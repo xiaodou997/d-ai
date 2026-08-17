@@ -344,6 +344,7 @@ func main() {
 	// Pipeline steps
 	quotaCheckStep := &serving.QuotaCheckStep{}
 	subscriptionGateStep := &serving.SubscriptionGateStep{Subs: subsPort(subsSvc), Logger: appLogger}
+	balanceGateStep := &serving.BalanceGateStep{Resolver: aiadapters.NewRuntimeBalanceResolver(pool)}
 	billingGuardStep := &serving.BillingGuardStep{Resolver: priceBookBiller}
 	routeCandidatesStep := &serving.RouteCandidatesStep{Selector: runtimeRouteSelector, Sticky: stickyStore}
 	rateLimitStep := &serving.RateLimitStep{Limiter: rateLimiter}
@@ -380,6 +381,7 @@ func main() {
 		contentModerationStep,
 		quotaCheckStep,
 		subscriptionGateStep,
+		balanceGateStep,
 		routeCandidatesStep,
 		billingGuardStep,
 		rateLimitStep,
@@ -393,7 +395,7 @@ func main() {
 	// Runtime engine + gateway
 	runtimeEngine := gateway.NewRuntimeEngine(pipeline)
 	taskAdmission := serving.NewAdmissionGate(
-		quotaCheckStep, subscriptionGateStep, routeCandidatesStep, billingGuardStep,
+		quotaCheckStep, subscriptionGateStep, balanceGateStep, routeCandidatesStep, billingGuardStep,
 	)
 	asyncTasks, asynctaskErr := asynctask.New(asynctask.Config{
 		Workers:              cfg.AsyncTasks.Workers,

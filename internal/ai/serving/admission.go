@@ -61,7 +61,7 @@ type AdmissionInput struct {
 // uses, so the two can never drift apart in configuration.
 //
 // Pass the steps in pipeline order: AuthZ, QuotaCheck, SubscriptionGate,
-// RouteCandidates, BillingGuard. Nil steps are skipped, which keeps callers
+// BalanceGate, RouteCandidates, BillingGuard. Nil steps are skipped, which keeps callers
 // that have not configured a collaborator (no subscriptions, say) working.
 func NewAdmissionGate(steps ...GateStep) *AdmissionGate {
 	live := make([]GateStep, 0, len(steps))

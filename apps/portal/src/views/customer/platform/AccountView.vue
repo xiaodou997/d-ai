@@ -31,7 +31,7 @@
           <DsMetricCard
             label="当前透支"
             :value="loading ? '—' : formatUSD(stats.outstandingDebtUsd)"
-            hint="允许透支，后续充值优先清欠"
+            hint="已完成请求的结算尾差，后续充值优先清欠"
           />
         </div>
 

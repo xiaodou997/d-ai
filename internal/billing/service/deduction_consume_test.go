@@ -15,7 +15,7 @@ import (
 
 // TestConsumeDisallowOverdraft 验证 DisallowOverdraft（订阅严格扣款）语义：
 //  1. 余额不足 + DisallowOverdraft ⇒ 整单失败 ErrInsufficientBalance，不转透支、不写流水；
-//  2. 余额不足 + 显式允许尾差透支 ⇒ 照常成交并记透支；
+//  2. 余额不足 + 显式允许结算尾差欠费 ⇒ 照常成交并记欠费；
 //  3. 同幂等键重放 ⇒ 返回同一 event，不重复扣减。
 //
 // 需要真实 Postgres：设置 DAI_TEST_DATABASE_URL 后运行，否则跳过。
@@ -78,12 +78,12 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 0)              // 未透支
 	assertInt64(t, pool, ctx, `SELECT count(*) FROM bill_events WHERE idempotency_key=$1`, "strict-"+suffix, 0)      // 未记账
 
-	// ---- 2) 不足额 + 允许透支（settle 老路径）⇒ 照常成交，扣 50 + 透支 50 ----
+	// ---- 2) 不足额 + 允许结算尾差欠费 ⇒ 照常成交，扣 50 + 欠费 50 ----
 	res2, err := svc.Consume(ConsumeParams{
 		IdempotencyKey: "lax-" + suffix,
 		TenantID:       tenantID,
 		UserID:         userID,
-		Description:    "按量聚合扣款(允许透支)",
+		Description:    "按量聚合扣款(允许结算尾差欠费)",
 		UserAmount:     100,
 		AllowOverdraft: true,
 	})
@@ -92,6 +92,10 @@ func TestConsumeDisallowOverdraft(t *testing.T) {
 	}
 	if res2.UserDeducted != 50 || res2.UserOverdraftAdd != 50 {
 		t.Fatalf("expected deducted=50 overdraft=50, got deducted=%d overdraft=%d", res2.UserDeducted, res2.UserOverdraftAdd)
+	}
+	if res2.AccountState != accountStateOverdraft || res2.AllowFurtherUsage {
+		t.Fatalf("overdraft result state=%q allowFurtherUsage=%t, want OVERDRAFT/false",
+			res2.AccountState, res2.AllowFurtherUsage)
 	}
 	assertInt64(t, pool, ctx, `SELECT remaining_credits FROM bill_credit_packages WHERE tenant_id=$1`, tenantID, 0)
 	assertInt64(t, pool, ctx, `SELECT current_overdraft FROM iam_accounts WHERE user_id=$1`, userID, 50)
