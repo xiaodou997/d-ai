@@ -24,6 +24,9 @@ describe("unified Portal login", () => {
     expect(wrapper.findAll('button[type="submit"]')).toHaveLength(1);
     expect(wrapper.findAll(".login-option")).toHaveLength(0);
     expect(wrapper.text()).not.toContain("选择登录入口");
+    expect(wrapper.text()).not.toContain("统一 AI 服务平台");
+    expect(wrapper.text()).not.toContain("使用账号登录，系统会根据你的身份和权限展示对应的工作区。");
+    expect(wrapper.find("#login-title").exists()).toBe(false);
   });
 
   it("authenticates with the entered credentials and opens the requested workspace", async () => {
