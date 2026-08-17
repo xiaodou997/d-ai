@@ -2,7 +2,6 @@ package formats
 
 import (
 	"encoding/json"
-	"strings"
 
 	"xiaodou/dai/internal/ai/domain"
 )
@@ -145,14 +144,12 @@ func extractOpenAIResponsesUsage(body []byte) domain.TokenUsage {
 	return env.Usage.toDomain()
 }
 
-func mergeOpenAIResponsesStreamUsage(prev domain.TokenUsage, data []byte, eventType string) (domain.TokenUsage, bool) {
+func mergeOpenAIResponsesStreamUsage(prev domain.TokenUsage, data []byte, _ string) (domain.TokenUsage, bool) {
 	// Responses streaming wraps the terminal response object inside
 	// {"type":"response.completed","response":{... ,"usage":{...}}}.
-	// Other event types may also carry usage; we accept any payload that has
-	// a "usage" or "response.usage" object.
-	if eventType != "" && !strings.HasPrefix(eventType, "response.") {
-		// Non-response events (e.g. ping) won't have usage.
-	}
+	// Other event types may also carry usage, so acceptance is keyed on the
+	// payload shape rather than on eventType: a payload carrying a "usage" or
+	// "response.usage" object is taken whatever event announced it.
 	var env struct {
 		Usage    *openaiResponsesUsage `json:"usage"`
 		Response *struct {
