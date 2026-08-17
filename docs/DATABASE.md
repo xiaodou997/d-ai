@@ -45,6 +45,28 @@ AI 运行时的扣费不直接改余额：请求结束时把扣费意图和 `ai_
 `FOR UPDATE SKIP LOCKED` 落账。用量记录存在就意味着这笔钱一定会被扣到，同时同一租户
 的并发请求不再因为账户行锁而串行结算。
 
+### 透支的边界
+
+结算是后付费的，所以准入拦得住「下一个请求」，拦不住「已经在跑的请求」。最坏透支是：
+
+```text
+最大透支 ≈ 单账户在途并发上限 × 单请求最高成本
+```
+
+因此 `runtime.default_in_flight_per_account`（默认 32，可用
+`DAI_RUNTIME_DEFAULT_IN_FLIGHT_PER_ACCOUNT` 覆盖）不是流量整形，而是**让这个乘积有限**。
+在 `ai_runtime_limit_policies` 里为某个 scope 显式配置了 `concurrency_limit` 时，
+该 scope 使用配置值而不再叠加默认值。设为 `0` 会关掉默认上限，透支随之重新变得无界。
+
+### 失败请求的计费口径
+
+- 已经调用到上游 → 按上游返回的 token 照常计费（成本已真实发生，平台不替用户垫）。
+- 完全没调用到上游（`attempts == 0`）→ 全额置零。
+- 图片/视频这类「交付物」计量在失败时置零，与 token 不同。
+
+这三条由 `internal/ai/adapters/postgres/pricebook_billing_test.go` 中的
+`TestFailedRequest*` / `TestUnattemptedRequestIsFree` 锁定。
+
 ## 本地使用
 
 ```bash

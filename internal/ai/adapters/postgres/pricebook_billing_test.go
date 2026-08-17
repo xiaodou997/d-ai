@@ -366,3 +366,71 @@ func TestBillableUnits(t *testing.T) {
 		t.Fatalf("video: got %d/%s", n, typ)
 	}
 }
+
+// 失败请求的计费口径（已确认的业务规则，改动前请先确认是有意为之）：
+//   - 已调用到上游 → 按上游返回的 token 照常计费，上游收了我们就收；
+//   - 完全没调用到上游（attempts == 0）→ 全额置零；
+//   - 图片/视频这类「交付物」计量在失败时置零，与 token 不同。
+//
+// 以下三个测试锁住这三条。
+//
+// A request that reached an upstream is billed for the tokens that upstream
+// reported, even when the request ultimately failed: the cost was really
+// incurred and the platform does not absorb it.
+func TestFailedRequestStillBillsUpstreamTokens(t *testing.T) {
+	req := &serving.Request{
+		RequestStatus: domain.RequestFailed,
+		TokenUsage:    domain.TokenUsage{PromptTokens: 100, CompletionTokens: 40},
+	}
+	usage := settlementUsage(req)
+	if usage.PromptTokens != 100 || usage.CompletionTokens != 40 {
+		t.Fatalf("failed request usage = %+v, want tokens preserved", usage)
+	}
+}
+
+// Delivered-asset units are different: an image that was never produced is not
+// a billable unit the way consumed tokens are.
+func TestFailedRequestDropsUndeliveredAssetUnits(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		capability domain.CapabilityType
+		usage      domain.TokenUsage
+		check      func(domain.TokenUsage) bool
+	}{
+		{
+			name: "image", capability: domain.CapabilityImage,
+			usage: domain.TokenUsage{ImageCount: 3},
+			check: func(u domain.TokenUsage) bool { return u.ImageCount == 0 },
+		},
+		{
+			name: "video", capability: domain.CapabilityVideo,
+			usage: domain.TokenUsage{VideoSeconds: 12},
+			check: func(u domain.TokenUsage) bool { return u.VideoSeconds == 0 },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &serving.Request{
+				RequestStatus:  domain.RequestFailed,
+				CapabilityType: tc.capability,
+				TokenUsage:     tc.usage,
+			}
+			if got := settlementUsage(req); !tc.check(got) {
+				t.Fatalf("failed %s request usage = %+v, want asset units zeroed", tc.name, got)
+			}
+		})
+	}
+}
+
+// Never reaching an upstream costs nothing at all.
+func TestUnattemptedRequestIsFree(t *testing.T) {
+	zeroed := unattemptedBilling(domain.BillingResult{
+		CatalogBaseMicro: 5, TenantPayableMicro: 7, RetailBaseMicro: 6,
+		UserPayableMicro: 9, UserChargedMicro: 9, APIKeyQuotaCostMicro: 11,
+		BillableUnits: 30,
+	})
+	if zeroed.TenantPayableMicro != 0 || zeroed.UserChargedMicro != 0 ||
+		zeroed.APIKeyQuotaCostMicro != 0 || zeroed.BillableUnits != 0 ||
+		zeroed.CatalogBaseMicro != 0 || zeroed.RetailBaseMicro != 0 || zeroed.UserPayableMicro != 0 {
+		t.Fatalf("unattempted billing = %+v, want all amounts zero", zeroed)
+	}
+}

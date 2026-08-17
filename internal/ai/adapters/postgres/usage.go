@@ -461,6 +461,14 @@ func buildUsageRollupParams(req *serving.Request, billing domain.BillingResult) 
 	}
 }
 
+// unattemptedBilling zeroes a request that never reached an upstream.
+//
+// This is the whole of the "don't charge for failures" rule, and it is
+// deliberately narrow: a request that DID reach an upstream is billed for
+// whatever that upstream reported, even when it ultimately failed. The cost was
+// really incurred on the way out, and the platform does not absorb it. Image and
+// video counts are still zeroed for a failed request (settlementUsage), because
+// an undelivered asset is not a billable unit the way consumed tokens are.
 func unattemptedBilling(source domain.BillingResult) domain.BillingResult {
 	source.CatalogBaseMicro = 0
 	source.TenantPayableMicro = 0

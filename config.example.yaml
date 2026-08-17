@@ -28,6 +28,13 @@ security:
 storage:
   data_dir: data
 
+runtime:
+  # 单账户（租户 / 终端用户）在途计费请求上限。结算是后付费的，准入只能拦下一个
+  # 请求，所以最坏透支 ≈ 这个值 × 单请求最高成本 —— 它的作用是让这个乘积有限。
+  # ai_runtime_limit_policies 里显式配置的 scope 用配置值，不叠加此默认值。
+  # 设为 0 关闭默认上限，透支随之重新变得无界。
+  default_in_flight_per_account: 32
+
 legal:
   terms_version: '2026-07-19'
   privacy_version: '2026-07-19'

@@ -26,6 +26,18 @@ type Config struct {
 	AsyncTasks AsyncTaskConfig `mapstructure:"async_tasks"`
 	Files      FileStoreConfig `mapstructure:"file_store"`
 	Audit      AuditConfig     `mapstructure:"audit"`
+	Runtime    RuntimeConfig   `mapstructure:"runtime"`
+}
+
+// RuntimeConfig holds admission limits that apply when no explicit per-scope
+// policy is configured.
+type RuntimeConfig struct {
+	// DefaultInFlightPerAccount caps concurrent billed requests for one tenant
+	// or one end user. It is what makes billing overshoot a finite number:
+	// settlement is post-paid, so an account can overdraw by at most this many
+	// requests' worth before admission refuses the next one. 0 removes the cap
+	// and with it the bound.
+	DefaultInFlightPerAccount int `mapstructure:"default_in_flight_per_account"`
 }
 
 // ─── 通用配置 ──────────────────────────────────────────
@@ -160,6 +172,8 @@ func Load() (*Config, error) {
 	v.SetDefault("pricing.litellm_url", "")
 	v.SetDefault("audit.store_image_blobs", false)
 	v.SetDefault("image_assets.retention", "24h")
+	v.SetDefault("runtime.default_in_flight_per_account", 32)
+
 	v.SetDefault("async_tasks.workers", 2)
 	v.SetDefault("async_tasks.poll_interval", "2s")
 	v.SetDefault("async_tasks.lease_ttl", "60s")
@@ -210,18 +224,19 @@ func Load() (*Config, error) {
 func bindEnvs(v *viper.Viper) {
 	envBindings := map[string]string{
 		// 通用
-		"DAI_APP_ENV":                "app.env",
-		"DAI_SERVER_ADDR":            "server.addr",
-		"DAI_DATABASE_URL":           "database.url",
-		"DAI_DATABASE_DSN":           "database.dsn",
-		"DAI_DB_MAX_CONNS":           "database.max_conns",
-		"DAI_DB_MIN_CONNS":           "database.min_conns",
-		"DAI_DB_MAX_CONN_LIFETIME":   "database.max_conn_lifetime",
-		"DAI_REDIS_ADDR":             "redis.addr",
-		"DAI_REDIS_PASSWORD":         "redis.password",
-		"DAI_REDIS_DB":               "redis.db",
-		"DAI_JWT_EXPIRATION":         "jwt.expiration",
-		"DAI_JWT_REFRESH_EXPIRATION": "jwt.refresh_expiration",
+		"DAI_APP_ENV":                               "app.env",
+		"DAI_SERVER_ADDR":                           "server.addr",
+		"DAI_DATABASE_URL":                          "database.url",
+		"DAI_DATABASE_DSN":                          "database.dsn",
+		"DAI_DB_MAX_CONNS":                          "database.max_conns",
+		"DAI_DB_MIN_CONNS":                          "database.min_conns",
+		"DAI_DB_MAX_CONN_LIFETIME":                  "database.max_conn_lifetime",
+		"DAI_RUNTIME_DEFAULT_IN_FLIGHT_PER_ACCOUNT": "runtime.default_in_flight_per_account",
+		"DAI_REDIS_ADDR":                            "redis.addr",
+		"DAI_REDIS_PASSWORD":                        "redis.password",
+		"DAI_REDIS_DB":                              "redis.db",
+		"DAI_JWT_EXPIRATION":                        "jwt.expiration",
+		"DAI_JWT_REFRESH_EXPIRATION":                "jwt.refresh_expiration",
 		// Security
 		"DAI_SECURITY_SECRET_MASTER_KEY": "security.secret_master_key",
 		// Legal

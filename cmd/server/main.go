@@ -304,7 +304,11 @@ func main() {
 	metricsGW := aimetrics.NewGateway()
 
 	// Rate limiters
-	rateLimiter := redisadapter.NewRateLimiter(redisClient, q)
+	// The default in-flight cap is what makes billing overshoot a finite number:
+	// settlement is post-paid, so an account overdraws by at most this many
+	// concurrent requests' worth before admission refuses the next one.
+	rateLimiter := redisadapter.NewRateLimiter(redisClient, q).
+		WithDefaultInFlight(cfg.Runtime.DefaultInFlightPerAccount)
 	upstreamConcurrencyLimiter := redisadapter.NewUpstreamConcurrencyLimiter(redisClient)
 
 	// Route stats + sticky store + scorer
