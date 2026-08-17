@@ -59,6 +59,7 @@ import (
 	announcementpkg "xiaodou/dai/internal/announcement"
 	announcementpg "xiaodou/dai/internal/announcement/pg"
 	"xiaodou/dai/internal/auth"
+	billingoutbox "xiaodou/dai/internal/billing/outbox"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
@@ -253,7 +254,7 @@ func main() {
 	go auditWorker.Start(ctx)
 
 	// Subscription
-	purchaser := subscription.NewBillingPurchaser(deductionSvc, "dai")
+	purchaser := subscription.NewBillingPurchaser(pool, "dai")
 	subsSvc := subscription.NewService(aiadapters.NewSubscriptionRepo(q, pool), purchaser, appLogger)
 
 	// Workspace
@@ -330,10 +331,11 @@ func main() {
 
 	// Price book biller + usage logger
 	priceBookBiller := aiadapters.NewPriceBookBiller(priceBookSvc, q, pool)
-	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).
-		WithDeductionService(deductionSvc).
-		WithRecoveryQueue(redisClient, appLogger)
-	go usageLogger.RunRecovery(ctx)
+	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).WithLogger(appLogger)
+
+	// Balance settlement. The runtime only enqueues charges; this consumer is
+	// what actually moves money, so it must be running for balances to advance.
+	go billingoutbox.NewConsumer(pool, appLogger).Run(ctx)
 
 	// API key cache (already created above, wire to usage logger)
 	usageLogger.WithAPIKeyCacheInvalidator(apiKeyCache)
@@ -509,7 +511,6 @@ func main() {
 		Version: version,
 		Logger:  appLogger,
 	})
-	router.Use(weborigin.Middleware)
 
 	transport.Register(api, deps)
 	transport.RegisterRaw(router, deps)
@@ -557,7 +558,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           router,
+		Handler:           weborigin.Middleware(router),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		WriteTimeout:      0,

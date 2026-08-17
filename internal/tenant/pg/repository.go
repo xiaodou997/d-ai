@@ -86,13 +86,12 @@ func (r *TenantRepository) List(ctx context.Context, params ListTenantsParams) (
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT t.tenant_id, t.tenant_name, t.contact_person, t.contact_email, t.status, t.created_at,
-		       COALESCE(SUM(cp.remaining_credits), 0)::bigint AS credits,
+		       COALESCE(b.balance_micro, 0)::bigint AS credits,
 		       (SELECT COUNT(*) FROM iam_accounts u WHERE u.tenant_id = t.tenant_id AND u.user_type = 4 AND u.status NOT IN ('locked', 'inherited_disabled', 'deleted'))::bigint AS user_count
 		FROM iam_tenants t
-		LEFT JOIN bill_credit_packages cp ON cp.package_type = 'tenant' AND cp.tenant_id = t.tenant_id AND cp.status = 'available'
+		LEFT JOIN bill_accounts b ON b.account_id = t.tenant_id
 		WHERE ($1::text IS NULL OR t.tenant_name LIKE $1::text OR t.contact_person LIKE $1::text OR t.contact_email LIKE $1::text)
 		  AND ($4::text IS NULL OR t.status = $4::text)
-		GROUP BY t.tenant_id, t.tenant_name, t.contact_person, t.contact_email, t.status, t.created_at
 		ORDER BY t.created_at DESC
 		LIMIT $3 OFFSET $2
 	`, keyword, params.Offset, params.Size, status)

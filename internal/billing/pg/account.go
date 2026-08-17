@@ -2,12 +2,13 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/ledger"
 	"xiaodou/dai/internal/domain"
 )
 
@@ -41,18 +42,16 @@ type AccountBalanceLot struct {
 	Source       string     `json:"source"`
 }
 
-func (r *AccountRepository) listBalanceLots(ctx context.Context, packageType string, tenantID, userID *string, now time.Time) ([]AccountBalanceLot, error) {
+func (r *AccountRepository) listBalanceLots(ctx context.Context, accountID string) ([]AccountBalanceLot, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT package_id, total_credits, remaining_credits, expires_at, source
-		FROM bill_credit_packages
-		WHERE package_type = $1
-		  AND ($2::text IS NULL OR tenant_id = $2::text)
-		  AND ($3::text IS NULL OR user_id = $3::text)
-		  AND status = 'available'
-		  AND remaining_credits > 0
-		  AND (expires_at IS NULL OR expires_at > $4)
+		SELECT lot_id, granted_micro, granted_micro - consumed_micro, expires_at, source
+		FROM bill_credit_lots
+		WHERE account_id = $1
+		  AND expired_at IS NULL
+		  AND revoked_at IS NULL
+		  AND consumed_micro < granted_micro
 		ORDER BY expires_at ASC NULLS LAST, created_at ASC
-	`, packageType, tenantID, userID, now)
+	`, accountID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,11 +60,11 @@ func (r *AccountRepository) listBalanceLots(ctx context.Context, packageType str
 	var list []AccountBalanceLot
 	for rows.Next() {
 		var lot AccountBalanceLot
-		var totalMicro, remainingMicro int64
-		if err := rows.Scan(&lot.BalanceLotID, &totalMicro, &remainingMicro, &lot.ExpiresAt, &lot.Source); err != nil {
+		var grantedMicro, remainingMicro int64
+		if err := rows.Scan(&lot.BalanceLotID, &grantedMicro, &remainingMicro, &lot.ExpiresAt, &lot.Source); err != nil {
 			return nil, err
 		}
-		lot.TotalUSD = billing.MicroToUSD(totalMicro)
+		lot.TotalUSD = billing.MicroToUSD(grantedMicro)
 		lot.RemainingUSD = billing.MicroToUSD(remainingMicro)
 		list = append(list, lot)
 	}
@@ -73,121 +72,60 @@ func (r *AccountRepository) listBalanceLots(ctx context.Context, packageType str
 }
 
 func (r *AccountRepository) GetTenantBalance(tenantID string, detail bool) (*BalanceResponse, error) {
-	ctx := context.Background()
-	now := billing.NowUTC()
-
-	var debt int64
-	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(current_overdraft, 0)
-		FROM iam_tenants WHERE tenant_id = $1
-	`, tenantID).Scan(&debt); err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, domain.ErrAccountNotFound
-		}
-		return nil, fmt.Errorf("查询租户账户失败: %w", err)
-	}
-
-	var remainingMicroUSD int64
-	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(remaining_credits), 0)
-		FROM bill_credit_packages
-		WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available'
-		  AND (expires_at IS NULL OR expires_at > $2)
-	`, tenantID, now).Scan(&remainingMicroUSD); err != nil {
-		return nil, fmt.Errorf("查询租户剩余余额失败: %w", err)
-	}
-
-	var totalMicroUSD int64
-	r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(total_credits), 0)
-		FROM bill_credit_packages
-		WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available'
-		  AND (expires_at IS NULL OR expires_at > $2)
-	`, tenantID, now).Scan(&totalMicroUSD)
-
-	var permanentMicroUSD int64
-	r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(remaining_credits), 0)
-		FROM bill_credit_packages
-		WHERE package_type = 'tenant' AND tenant_id = $1 AND status = 'available' AND expires_at IS NULL
-	`, tenantID).Scan(&permanentMicroUSD)
-
-	resp := &BalanceResponse{
-		Currency:                "USD",
-		TotalUSD:                billing.MicroToUSD(totalMicroUSD),
-		UsedUSD:                 billing.MicroToUSD(totalMicroUSD - remainingMicroUSD),
-		RemainingUSD:            billing.MicroToUSD(remainingMicroUSD),
-		AvailableUSD:            billing.MicroToUSD(remainingMicroUSD),
-		PermanentUSD:            billing.MicroToUSD(permanentMicroUSD),
-		TimedUSD:                billing.MicroToUSD(remainingMicroUSD - permanentMicroUSD),
-		OutstandingDebtMicroUSD: debt,
-		ServiceState:            accountServiceState(debt),
-	}
-
-	if detail {
-		lots, err := r.listBalanceLots(ctx, billing.PackageTypeTenant, &tenantID, nil, now)
-		if err == nil {
-			resp.BalanceLots = lots
-		}
-	}
-
-	return resp, nil
+	return r.getBalance(ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID}, detail)
 }
 
 func (r *AccountRepository) GetUserBalance(userID string, detail bool) (*BalanceResponse, error) {
-	ctx := context.Background()
-	now := billing.NowUTC()
+	return r.getBalance(ledger.Ref{Kind: ledger.KindUser, ID: userID}, detail)
+}
 
-	var debt int64
-	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(current_overdraft, 0)
-		FROM iam_accounts WHERE user_id = $1 AND user_type = 4
-	`, userID).Scan(&debt); err != nil {
-		if err == pgx.ErrNoRows {
+// getBalance projects the account's signed balance onto the response shape the
+// portal already speaks.
+//
+// The response still reports availableUsd and outstandingDebtMicroUsd as two
+// non-negative numbers, but they are now two views of one value rather than two
+// stored columns that could disagree: exactly one of them is non-zero. Lot
+// totals are attribution only — the balance is what the admission gate reads,
+// and it is read here through the same function the gate uses.
+func (r *AccountRepository) getBalance(ref ledger.Ref, detail bool) (*BalanceResponse, error) {
+	ctx := context.Background()
+
+	balance, err := ledger.Balance(ctx, r.pool, ref)
+	if err != nil {
+		if errors.Is(err, ledger.ErrAccountNotFound) {
 			return nil, domain.ErrAccountNotFound
 		}
-		return nil, fmt.Errorf("查询用户账户失败: %w", err)
+		return nil, fmt.Errorf("查询账户余额失败: %w", err)
 	}
 
-	var remainingMicroUSD int64
+	var grantedMicroUSD, remainingMicroUSD, permanentMicroUSD int64
 	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(remaining_credits), 0)
-		FROM bill_credit_packages
-		WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
-		  AND (expires_at IS NULL OR expires_at > $2)
-	`, userID, now).Scan(&remainingMicroUSD); err != nil {
-		return nil, fmt.Errorf("查询用户剩余余额失败: %w", err)
+		SELECT COALESCE(SUM(granted_micro), 0),
+		       COALESCE(SUM(granted_micro - consumed_micro), 0),
+		       COALESCE(SUM(granted_micro - consumed_micro) FILTER (WHERE expires_at IS NULL), 0)
+		FROM bill_credit_lots
+		WHERE account_id = $1 AND expired_at IS NULL AND revoked_at IS NULL
+	`, ref.ID).Scan(&grantedMicroUSD, &remainingMicroUSD, &permanentMicroUSD); err != nil {
+		return nil, fmt.Errorf("查询额度批次失败: %w", err)
 	}
 
-	var totalMicroUSD int64
-	r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(total_credits), 0)
-		FROM bill_credit_packages
-		WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
-		  AND (expires_at IS NULL OR expires_at > $2)
-	`, userID, now).Scan(&totalMicroUSD)
-
-	var permanentMicroUSD int64
-	r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(remaining_credits), 0)
-		FROM bill_credit_packages
-		WHERE package_type = 'user' AND user_id = $1 AND status = 'available' AND expires_at IS NULL
-	`, userID).Scan(&permanentMicroUSD)
+	available := max(balance, 0)
+	debt := max(-balance, 0)
 
 	resp := &BalanceResponse{
 		Currency:                "USD",
-		TotalUSD:                billing.MicroToUSD(totalMicroUSD),
-		UsedUSD:                 billing.MicroToUSD(totalMicroUSD - remainingMicroUSD),
-		RemainingUSD:            billing.MicroToUSD(remainingMicroUSD),
-		AvailableUSD:            billing.MicroToUSD(remainingMicroUSD),
+		TotalUSD:                billing.MicroToUSD(grantedMicroUSD),
+		UsedUSD:                 billing.MicroToUSD(grantedMicroUSD - remainingMicroUSD),
+		RemainingUSD:            billing.MicroToUSD(available),
+		AvailableUSD:            billing.MicroToUSD(available),
 		PermanentUSD:            billing.MicroToUSD(permanentMicroUSD),
 		TimedUSD:                billing.MicroToUSD(remainingMicroUSD - permanentMicroUSD),
 		OutstandingDebtMicroUSD: debt,
-		ServiceState:            accountServiceState(debt),
+		ServiceState:            AccountServiceState(balance),
 	}
 
 	if detail {
-		lots, err := r.listBalanceLots(ctx, billing.PackageTypeUser, nil, &userID, now)
+		lots, err := r.listBalanceLots(ctx, ref.ID)
 		if err == nil {
 			resp.BalanceLots = lots
 		}
@@ -196,11 +134,13 @@ func (r *AccountRepository) GetUserBalance(userID string, detail bool) (*Balance
 	return resp, nil
 }
 
-func accountServiceState(debt int64) string {
-	if debt > 0 {
-		return "blocked_debt"
+// AccountServiceState maps a signed balance onto the two states the portal
+// renders. It is the only place that translation happens.
+func AccountServiceState(balanceMicro int64) string {
+	if balanceMicro > 0 {
+		return "active"
 	}
-	return "active"
+	return "blocked_debt"
 }
 
 // EventRow 消费流水行

@@ -13,9 +13,12 @@ import (
 )
 
 func TestCacheDelByIDInvalidatesQuotaSnapshot(t *testing.T) {
-	addr := os.Getenv("AI_TEST_REDIS_ADDR")
+	addr := os.Getenv("DAI_TEST_REDIS_ADDR")
 	if addr == "" {
-		t.Skip("set AI_TEST_REDIS_ADDR to run Redis cache tests")
+		// Same default as the local compose stack, so the test runs with the
+		// dependencies a developer already has up rather than needing a flag
+		// nobody remembers to set.
+		addr = "127.0.0.1:16379"
 	}
 	client := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() { _ = client.Close() })

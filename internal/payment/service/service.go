@@ -405,16 +405,10 @@ func (s *PaymentService) CreateWithdrawal(ctx context.Context, p CreateWithdrawa
 	if err != nil {
 		return nil, err
 	}
-	var currentOverdraft int64
-	if err := tx.QueryRow(ctx, `
-		SELECT COALESCE(current_overdraft, 0)
-		FROM iam_tenants WHERE tenant_id = $1
-	`, p.TenantID).Scan(&currentOverdraft); err != nil {
-		return nil, err
-	}
-	// A tenant may run AI into an overdraft, but the administrator must not pay
-	// cash out while the tenant still owes that amount.
-	if currentOverdraft > 0 || account.BalanceMicroUSD < p.AmountMicroUSD {
+	// A tenant may run AI into a negative balance, but cash must not be paid out
+	// while it is negative. With a signed balance that is the same comparison as
+	// "can they afford the withdrawal", so it needs no separate debt check.
+	if account.BalanceMicroUSD < p.AmountMicroUSD {
 		return nil, domain.ErrCashInsufficientBalance
 	}
 	if err := paymentpg.DeductTenantBalanceTx(ctx, tx, p.TenantID, p.AmountMicroUSD); err != nil {

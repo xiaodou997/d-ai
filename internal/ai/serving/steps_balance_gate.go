@@ -8,26 +8,39 @@ import (
 	"xiaodou/dai/internal/ai/subscription"
 )
 
-// AccountBalance is the live spendable USD balance used for request admission.
-// AvailableMicroUSD excludes expired or unavailable balance lots. Debt is kept
-// separate because a recharge must clear it before new balance becomes usable.
-type AccountBalance struct {
-	AvailableMicroUSD int64
-	DebtMicroUSD      int64
+// AccountBalances carries the signed spendable balance of the two accounts a
+// request can draw on. Negative means the account owes money; there is no
+// separate debt field, because a balance below zero already says so.
+type AccountBalances struct {
+	TenantMicroUSD int64
+	UserMicroUSD   int64
+	// UserPresent distinguishes "the user has no balance" from "this request
+	// has no user account", which matters because only the former is a refusal.
+	UserPresent bool
 }
 
-// AccountBalanceResolver reads the current tenant and end-user account state.
-// The check is deliberately side-effect free so the same step can run for
-// synchronous execution and asynchronous task admission.
+// AccountBalanceResolver reads live balances for admission. One call returns
+// both accounts so the gate can never compare numbers read at different
+// instants, and so display paths and the gate share a single query shape.
+//
+// The check is side-effect free, which lets the same step run for synchronous
+// execution and for async task admission.
 type AccountBalanceResolver interface {
-	ResolveTenantBalance(ctx context.Context, tenantID string) (AccountBalance, error)
-	ResolveUserBalance(ctx context.Context, tenantID, userID string) (AccountBalance, error)
+	ResolveBalances(ctx context.Context, tenantID, userID string) (AccountBalances, error)
 }
 
-// BalanceGateStep rejects an unpaid caller before any upstream work starts.
-// Tenant balance is always required because the tenant pays the platform cost.
-// A subscription-covered end user does not need PAYG balance, but existing user
-// debt still blocks service until it is cleared.
+// BalanceGateStep refuses an unfunded caller before any upstream work starts.
+//
+// The rule is the whole rule: a request is admitted while the balance is
+// strictly positive. Settlement is free to take that balance negative — a
+// request already served must be recorded — and the next request is what stops.
+// Bounding the overshoot is not this step's job and needs no credit limit: the
+// gap is one round of in-flight requests, which is small because each request
+// is small.
+//
+// The tenant always pays the platform, so tenant balance is always required. A
+// subscription-covered end user draws on plan quota rather than PAYG balance,
+// so only their tenant is checked.
 type BalanceGateStep struct {
 	Resolver AccountBalanceResolver
 }
@@ -41,38 +54,43 @@ func (s *BalanceGateStep) Execute(ctx context.Context, req *Request) error {
 	}
 	subject := req.RuntimeSubject()
 	if subject == nil || subject.TenantID == "" {
-		return nil
+		return nil // internal/untenanted traffic is not billed
 	}
 
-	tenantBalance, err := s.Resolver.ResolveTenantBalance(ctx, subject.TenantID)
-	if err != nil {
-		return apiErrorWithCause(http.StatusServiceUnavailable, "balance_state_unavailable",
-			"unable to determine tenant balance", err)
-	}
-	if tenantBalance.DebtMicroUSD > 0 {
-		return apiError(http.StatusPaymentRequired, "insufficient_balance",
-			"tenant account has outstanding debt; recharge before continuing")
-	}
-	if tenantBalance.AvailableMicroUSD <= 0 {
-		return apiError(http.StatusPaymentRequired, "insufficient_balance",
-			"tenant USD balance is exhausted")
+	userID := ""
+	if subject.Scope == coreidentity.ScopeUser {
+		userID = subject.UserID
 	}
 
-	if subject.Scope != coreidentity.ScopeUser || subject.UserID == "" {
-		return nil
-	}
-	userBalance, err := s.Resolver.ResolveUserBalance(ctx, subject.TenantID, subject.UserID)
+	balances, err := s.Resolver.ResolveBalances(ctx, subject.TenantID, userID)
 	if err != nil {
 		return apiErrorWithCause(http.StatusServiceUnavailable, "balance_state_unavailable",
-			"unable to determine user balance", err)
+			"unable to determine account balance", err)
 	}
-	if userBalance.DebtMicroUSD > 0 {
+	if balances.TenantMicroUSD <= 0 {
 		return apiError(http.StatusPaymentRequired, "insufficient_balance",
-			"user account has outstanding debt; recharge before continuing")
+			"tenant USD balance is exhausted; recharge before continuing")
 	}
-	if req.BillingSource != subscription.BillingSourceSubscription && userBalance.AvailableMicroUSD <= 0 {
+	if userID == "" {
+		return nil
+	}
+	if !balances.UserPresent {
+		return apiError(http.StatusServiceUnavailable, "balance_state_unavailable",
+			"unable to determine user balance")
+	}
+	// A subscription covers what a request costs, not what the user already
+	// owes: plan quota pays for new usage, but a negative balance is settled
+	// debt and still has to be cleared with money.
+	if req.BillingSource == subscription.BillingSourceSubscription {
+		if balances.UserMicroUSD < 0 {
+			return apiError(http.StatusPaymentRequired, "insufficient_balance",
+				"user account has outstanding debt; recharge before continuing")
+		}
+		return nil
+	}
+	if balances.UserMicroUSD <= 0 {
 		return apiError(http.StatusPaymentRequired, "insufficient_balance",
-			"user USD balance is exhausted")
+			"user USD balance is exhausted; recharge before continuing")
 	}
 	return nil
 }

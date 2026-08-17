@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,25 +9,18 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/core/surface"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
+	"xiaodou/dai/internal/ai/testsupport"
 )
 
 func openGroupTransferTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
-	dsn := os.Getenv("AI_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set AI_TEST_DATABASE_URL to run group transfer DB tests")
-	}
 	ctx := context.Background()
-	config, err := pgxpool.ParseConfig(dsn)
+	// MaxConns 必须为 1：下面用的是 TEMP 表，只在建表的那个会话里可见。
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 1})
 	if err != nil {
-		t.Fatalf("parse test database URL: %v", err)
+		t.Skipf("group transfer test database unavailable: %v", err)
 	}
-	config.MaxConns = 1
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatalf("open test database: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
 	if _, err := pool.Exec(ctx, `
 		CREATE TEMP TABLE ai_groups (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id TEXT NOT NULL,

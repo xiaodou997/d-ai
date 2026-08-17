@@ -8,11 +8,12 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/billing"
-	"xiaodou/dai/internal/billing/pg"
+	"xiaodou/dai/internal/billing/ledger"
 )
 
-// GrantParams records a USD balance grant, clears debt, and creates one
-// expiring or permanent balance lot for the remainder.
+// GrantParams records a USD balance grant and creates one expiring or permanent
+// balance lot for it.
+//
 // 由外部事务传入 tx，内部不 Begin/Commit —— 调用方（admin recharge handler /
 // 微信支付 Settle）各自决定事务边界。
 type GrantParams struct {
@@ -37,13 +38,14 @@ type GrantResult struct {
 	OrderTime           time.Time
 }
 
-// GrantBalance 在外部事务内写充值订单，先抵扣对应主体的透支额度，剩余部分发新额度包。
-// 抽自原 admin_finance.go 的 recharge handler 裸 SQL，行为不变；现由 admin 手动充值、
-// 微信支付回调核销复用。
+// GrantBalance 在外部事务内写充值订单并把金额加到账户余额上。
+//
+// 负余额不需要任何特殊处理：余额是一个有符号数，加钱这一个动作同时完成了「清欠」
+// 和「充值」。ledger 只为真正变成可用余额的那部分建额度包，已经被过去用量消耗掉的
+// 部分不会重新变成可花的钱。
 func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, error) {
 	now := billing.NowUTC()
 	orderID := "ORD_" + uuid.New().String()[:24]
-	packageID := "PKG_" + uuid.New().String()[:24]
 
 	var userIDVal, paymentRefVal, noteVal any
 	if p.UserID != "" {
@@ -66,45 +68,35 @@ func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 		return nil, err
 	}
 
-	// 自动清欠：优先抵扣对应主体的 current_overdraft，剩余进入新额度包。
-	remaining := p.AmountMicroUSD
-	var clearedOverdraft int64
-	var pkgType string
-	if p.UserID == "" {
-		pkgType = billing.PackageTypeTenant
-		cleared, err := pg.DecreaseTenantOverdraft(ctx, tx, p.TenantID, remaining)
-		if err != nil {
-			return nil, err
-		}
-		clearedOverdraft, remaining = cleared, remaining-cleared
-	} else {
-		pkgType = billing.PackageTypeUser
-		cleared, err := pg.DecreaseUserOverdraft(ctx, tx, p.UserID, remaining)
-		if err != nil {
-			return nil, err
-		}
-		clearedOverdraft, remaining = cleared, remaining-cleared
+	ref := GrantRef(p.TenantID, p.UserID)
+	balanceBefore, err := ledger.Balance(ctx, tx, ref)
+	if err != nil {
+		return nil, err
+	}
+	lotID, err := ledger.Grant(ctx, tx, ref, p.AmountMicroUSD, p.ExpiresAt, p.Source, orderID)
+	if err != nil {
+		return nil, err
 	}
 
-	createdPackageID := ""
-	if remaining > 0 {
-		createdPackageID = packageID
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO bill_credit_packages
-			(package_id, package_type, tenant_id, user_id,
-			 total_credits, remaining_credits, expires_at, status, source,
-			 recharge_order_id, version, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, 'available', $8, $9, 0, $10, $10)
-		`, packageID, pkgType, p.TenantID, userIDVal, remaining, remaining, p.ExpiresAt, p.Source, orderID, now); err != nil {
-			return nil, err
-		}
+	clearedDebt := int64(0)
+	if balanceBefore < 0 {
+		clearedDebt = min(-balanceBefore, p.AmountMicroUSD)
 	}
 
 	return &GrantResult{
 		OrderID:             orderID,
-		BalanceLotID:        createdPackageID,
-		ClearedDebtMicroUSD: clearedOverdraft,
-		LotAmountMicroUSD:   remaining,
+		BalanceLotID:        lotID,
+		ClearedDebtMicroUSD: clearedDebt,
+		LotAmountMicroUSD:   p.AmountMicroUSD - clearedDebt,
 		OrderTime:           now,
 	}, nil
+}
+
+// GrantRef addresses the account a grant or charge belongs to: the end user
+// when one is named, the tenant otherwise.
+func GrantRef(tenantID, userID string) ledger.Ref {
+	if userID != "" {
+		return ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID}
+	}
+	return ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID}
 }

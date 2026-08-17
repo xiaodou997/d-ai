@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -12,29 +11,19 @@ import (
 	commercial "xiaodou/dai/internal/ai/commercial"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/testsupport"
 )
 
 func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 	t.Helper()
 
-	dsn := os.Getenv("AI_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set AI_TEST_DATABASE_URL to run commercial group target DB tests")
-	}
 	ctx := context.Background()
-	config, err := pgxpool.ParseConfig(dsn)
+	// MaxConns 必须为 1：下面用的是 TEMP 表，只在建表的那个会话里可见。
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 1})
 	if err != nil {
-		t.Fatalf("parse test database URL: %v", err)
+		t.Skipf("commercial group target test database unavailable: %v", err)
 	}
-	config.MaxConns = 1
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		t.Fatalf("connect test database: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	if err := pool.Ping(ctx); err != nil {
-		t.Fatalf("ping test database: %v", err)
-	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
 	if _, err := pool.Exec(ctx, `
 		CREATE TEMP TABLE ai_groups (
 			id UUID PRIMARY KEY,

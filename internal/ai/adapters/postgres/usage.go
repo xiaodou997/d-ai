@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
@@ -17,26 +16,30 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
-	billingsvc "xiaodou/dai/internal/billing/service"
+	"xiaodou/dai/internal/billing/outbox"
 )
 
 const usageClientUserAgentMaxLen = 512
 
 const (
-	usageCompletionMaxAttempts = 3
-	usageCompletionRetryBase   = 25 * time.Millisecond
+	usageCompletionMaxAttempts = 5
+	usageCompletionRetryBase   = 50 * time.Millisecond
 )
 
 // UsageLogger implements serving.UsageLogger.
-// It creates the usage log row, upserts the hourly rollup, directly charges the
-// account, and computes billing amounts via the unified Price Book model (PriceBookBiller):
-// platform (tenant) price, cascaded user price, and the API-key quota debit.
+// It creates the usage log row, upserts the hourly rollup, enqueues the balance
+// charge, and computes billing amounts via the unified Price Book model
+// (PriceBookBiller): platform (tenant) price, cascaded user price, and the
+// API-key quota debit.
+//
+// It does not move money itself. The charge is enqueued on bill_charge_outbox
+// in the same transaction as the usage row, and applied to the ledger by
+// billing/outbox shortly afterwards. Keeping the account update out of the
+// request transaction is what lets requests for one tenant settle in parallel.
 type UsageLogger struct {
 	pool              *pgxpool.Pool
 	q                 *dbgen.Queries
 	biller            usageBiller
-	deduction         *billingsvc.DeductionService
-	recoveryRedis     *redis.Client
 	apiKeyInvalidator apiKeyCacheInvalidator
 	logger            *zap.Logger
 }
@@ -51,26 +54,14 @@ type usageBiller interface {
 
 func NewUsageLogger(pool *pgxpool.Pool, biller usageBiller) *UsageLogger {
 	return &UsageLogger{
-		pool:      pool,
-		q:         dbgen.New(pool),
-		biller:    biller,
-		deduction: billingsvc.NewDeductionService(pool, zap.NewNop()),
-		logger:    zap.NewNop(),
+		pool:   pool,
+		q:      dbgen.New(pool),
+		biller: biller,
+		logger: zap.NewNop(),
 	}
 }
 
-// WithDeductionService injects the shared in-process direct-charge service.
-// The default created by NewUsageLogger keeps standalone recovery/tests safe;
-// production wires the same service used by the rest of the application.
-func (l *UsageLogger) WithDeductionService(deduction *billingsvc.DeductionService) *UsageLogger {
-	if deduction != nil {
-		l.deduction = deduction
-	}
-	return l
-}
-
-func (l *UsageLogger) WithRecoveryQueue(client *redis.Client, logger *zap.Logger) *UsageLogger {
-	l.recoveryRedis = client
+func (l *UsageLogger) WithLogger(logger *zap.Logger) *UsageLogger {
 	if logger != nil {
 		l.logger = logger
 	}
@@ -103,11 +94,12 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 	}
 	req.BillingResult = billing
 	var lastErr error
+	backoff := usageCompletionRetryBase
 	for attempt := 1; attempt <= usageCompletionMaxAttempts; attempt++ {
-		completed, accrued, err := l.logOnce(ctx, req, billing)
+		completed, err := l.logOnce(ctx, req, billing)
 		if err == nil {
 			if completed {
-				l.afterCompletion(req, billing, accrued)
+				l.invalidateAPIKeyCache(req.RuntimeSubject())
 			}
 			return nil
 		}
@@ -115,29 +107,30 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 		if attempt == usageCompletionMaxAttempts {
 			break
 		}
-		timer := time.NewTimer(time.Duration(attempt) * usageCompletionRetryBase)
+		timer := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return fmt.Errorf("complete usage after %d attempt(s): %w", attempt, errors.Join(lastErr, ctx.Err()))
 		case <-timer.C:
 		}
+		backoff *= 3
 	}
-	completionErr := fmt.Errorf("complete usage after %d attempts: %w", usageCompletionMaxAttempts, lastErr)
-	if err := l.enqueueRecovery(ctx, req, billing); err != nil {
-		return errors.Join(completionErr, fmt.Errorf("enqueue usage recovery: %w", err))
-	}
-	return fmt.Errorf("%w: %v", ErrUsageCompletionQueued, completionErr)
+	// Nothing was committed, so nothing is half-recorded: the usage row and the
+	// charge share one transaction. Reaching here means PostgreSQL was
+	// unreachable for the whole retry window, which the admission gate would
+	// also have failed closed on.
+	return fmt.Errorf("complete usage after %d attempts: %w", usageCompletionMaxAttempts, lastErr)
 }
 
 // logOnce performs one idempotent completion attempt. A commit whose result is
 // unknown can be retried safely: request_id is unique and every financial
 // mutation is in the same transaction as that insert.
-func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing domain.BillingResult) (bool, bool, error) {
+func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing domain.BillingResult) (bool, error) {
 	subject := req.RuntimeSubject()
 	tx, err := l.pool.Begin(ctx)
 	if err != nil {
-		return false, false, fmt.Errorf("begin usage completion: %w", err)
+		return false, fmt.Errorf("begin usage completion: %w", err)
 	}
 	defer tx.Rollback(ctx)
 	qtx := l.q.WithTx(tx)
@@ -145,9 +138,9 @@ func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing
 	if _, err := l.createUsageLog(ctx, qtx, req, billing); errors.Is(err, pgx.ErrNoRows) {
 		// request_id is the completion idempotency key. Duplicate completion must
 		// not increment API key quota or rollups again.
-		return false, false, nil
+		return false, nil
 	} else if err != nil {
-		return false, false, fmt.Errorf("create usage log: %w", err)
+		return false, fmt.Errorf("create usage log: %w", err)
 	}
 	if subject.AuthMethod == coreidentity.AuthMethodAPIKey && subject.APIKeyID != "" {
 		rows, err := qtx.ConfirmAPIKeyQuotaUsage(ctx, dbgen.ConfirmAPIKeyQuotaUsageParams{
@@ -155,30 +148,25 @@ func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing
 			QuotaUsed: billing.APIKeyQuotaCostMicro,
 		})
 		if err != nil {
-			return false, false, fmt.Errorf("confirm api key quota: %w", err)
+			return false, fmt.Errorf("confirm api key quota: %w", err)
 		}
 		if rows != 1 {
-			return false, false, fmt.Errorf("confirm api key quota: key not found")
+			return false, fmt.Errorf("confirm api key quota: key not found")
 		}
 	}
-	accrued, err := l.accrueFinancials(ctx, tx, qtx, req, billing)
-	if err != nil {
-		return false, false, err
+	if err := l.accrueFinancials(ctx, tx, qtx, req, billing); err != nil {
+		return false, err
 	}
 	if err := qtx.UpsertUsageRollupHourly(ctx, buildUsageRollupParams(req, billing)); err != nil {
-		return false, false, fmt.Errorf("complete usage rollup: %w", err)
+		return false, fmt.Errorf("complete usage rollup: %w", err)
 	}
 	if err := l.reconcileAsyncTaskCharge(ctx, tx, req, billing); err != nil {
-		return false, false, err
+		return false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return false, false, fmt.Errorf("commit usage completion: %w", err)
+		return false, fmt.Errorf("commit usage completion: %w", err)
 	}
-	return true, accrued, nil
-}
-
-func (l *UsageLogger) afterCompletion(req *serving.Request, billing domain.BillingResult, accrued bool) {
-	l.invalidateAPIKeyCache(req.RuntimeSubject())
+	return true, nil
 }
 
 // reconcileAsyncTaskCharge makes the usage completion authoritative for a
@@ -213,18 +201,23 @@ func (l *UsageLogger) invalidateAPIKeyCache(subject *coreidentity.Subject) {
 }
 
 // accrueFinancials runs in the same transaction as the unique usage insert.
-// The usage row is therefore the idempotency anchor for quota, subscription,
-// and direct balance charging.
+// The usage row is therefore the idempotency anchor for quota, subscription
+// quota, and the enqueued balance charge.
+//
+// Subscription quota is debited here because it is a counter on a row this
+// request already owns. The balance charge is only enqueued: applying it needs
+// the account row, and holding that lock inside the request transaction is what
+// made every request for one tenant settle in single file.
 func (l *UsageLogger) accrueFinancials(
 	ctx context.Context,
 	tx pgx.Tx,
 	q *dbgen.Queries,
 	req *serving.Request,
 	billing domain.BillingResult,
-) (bool, error) {
+) error {
 	subject := req.RuntimeSubject()
 	if subject == nil || subject.TenantID == "" {
-		return false, nil
+		return nil
 	}
 	ownerType := runtimeSubjectOwnerType(subject)
 	tenantMicro := billing.TenantPayableMicro
@@ -240,7 +233,7 @@ func (l *UsageLogger) accrueFinancials(
 			// record, but consumes no package quota. A positive unmeterable amount
 			// indicates a broken admission snapshot and must fail closed.
 			if billing.RetailBaseMicro > 0 {
-				return false, fmt.Errorf("complete subscription billing: admitted usage is not meterable")
+				return fmt.Errorf("complete subscription billing: admitted usage is not meterable")
 			}
 			subMicro = 0
 		}
@@ -249,38 +242,25 @@ func (l *UsageLogger) accrueFinancials(
 				ID:             mustParseUUID(req.SubscriptionID),
 				Win5hUsedMicro: subMicro,
 			}); err != nil {
-				return false, fmt.Errorf("complete subscription billing: %w", err)
+				return fmt.Errorf("complete subscription billing: %w", err)
 			}
 		}
 		userMicro = 0
 	}
 	if tenantMicro == 0 && userMicro == 0 {
-		return false, nil
+		return nil
 	}
-	if l.deduction == nil {
-		return false, errors.New("complete direct billing: deduction service is unavailable")
+	if err := outbox.Enqueue(ctx, tx, outbox.Charge{
+		RequestID:   req.RequestID,
+		TenantID:    subject.TenantID,
+		UserID:      subject.UserID,
+		TenantMicro: tenantMicro,
+		UserMicro:   userMicro,
+		Description: "AI 请求额度扣费",
+	}); err != nil {
+		return fmt.Errorf("enqueue balance charge: %w", err)
 	}
-	result, err := l.deduction.ConsumeTx(ctx, tx, billingsvc.ConsumeParams{
-		IdempotencyKey: "ai-usage:" + req.RequestID,
-		ClientID:       "dai-ai",
-		TenantID:       subject.TenantID,
-		UserID:         subject.UserID,
-		Description:    "AI 请求额度扣费",
-		TenantAmount:   tenantMicro,
-		UserAmount:     userMicro,
-		AllowOverdraft: true,
-	})
-	if err != nil {
-		return false, fmt.Errorf("complete direct billing: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE ai_usage_logs
-		SET billing_event_id = $1, billing_status = $2
-		WHERE request_id = $3
-	`, result.EventID, string(domain.BillingConfirmed), req.RequestID); err != nil {
-		return false, fmt.Errorf("link direct billing event to usage: %w", err)
-	}
-	return true, nil
+	return nil
 }
 
 func usageUserMultiplierOverrideSnapshot(billing domain.BillingResult) pgtype.Numeric {
@@ -513,9 +493,6 @@ func resolution(req *serving.Request) string {
 	return req.TokenUsage.VideoResolution
 }
 
-// billingStatus returns the status written with the usage record. Direct
-// charging is in the same transaction, so a positive amount is confirmed
-// before the usage row becomes visible.
 // usageBillingSource coalesces an empty gate decision to "payg" so the usage
 // log never violates the billing_source CHECK constraint.
 func usageBillingSource(src string) string {
@@ -525,9 +502,13 @@ func usageBillingSource(src string) string {
 	return src
 }
 
+// billingStatus is the settlement state at insert time. A billable request is
+// written "pending" and the outbox consumer promotes it to "confirmed" once the
+// balance has actually moved, so the column now reports what really happened
+// instead of asserting a charge that had not been applied yet.
 func billingStatus(req *serving.Request) string {
 	if req.BillingResult.TenantPayableMicro == 0 && req.BillingResult.UserChargedMicro == 0 {
 		return string(domain.BillingFree)
 	}
-	return string(domain.BillingConfirmed)
+	return string(domain.BillingPending)
 }

@@ -9,6 +9,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	billingdomain "xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/ledger"
+	billingpg "xiaodou/dai/internal/billing/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -270,11 +272,14 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 		out.Body.Status = "PARTIAL_REVERSAL"
 	}
 	out.Body.OrderID = result.OrderID
-	out.Body.BalanceLotID = result.PackageID
+	out.Body.BalanceLotID = result.BalanceLotID
 	out.Body.ReversedAmountUSD = billingdomain.MicroToUSD(result.ReversedCredits)
 	out.Body.OriginalAmountUSD = billingdomain.MicroToUSD(result.OriginalCredits)
 	out.Body.LostAmountUSD = billingdomain.MicroToUSD(result.LostCredits)
-	out.Body.BalanceLotStatus = result.PackageStatus
+	out.Body.BalanceLotStatus = "revoked"
+	if result.IsPartial {
+		out.Body.BalanceLotStatus = "depleted"
+	}
 	return out, nil
 }
 
@@ -295,25 +300,23 @@ func (h *adminHandlers) refund(ctx context.Context, in *refundInput) (*messageOu
 	return out, nil
 }
 
+// getDebt reports the negative half of the account balance. Debt is not stored:
+// it is what a balance below zero means, so this reads the same number the
+// admission gate reads instead of a parallel column that could disagree.
 func (h *adminHandlers) getDebt(ctx context.Context, in *debtStatusInput) (*debtStatusOutput, error) {
-	var debt int64
-	var err error
+	kind := ledger.KindUser
 	if in.OwnerType == "tenant" {
-		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_tenants WHERE tenant_id = $1`, in.AccountID).Scan(&debt)
-	} else {
-		err = h.pool.QueryRow(ctx, `SELECT COALESCE(current_overdraft,0) FROM iam_accounts WHERE user_id = $1 AND user_type = 4`, in.AccountID).Scan(&debt)
+		kind = ledger.KindTenant
 	}
+	balance, err := ledger.Balance(ctx, h.pool, ledger.Ref{Kind: kind, ID: in.AccountID})
 	if err != nil {
 		return nil, httpx.ErrBadRequest.WithDetail("账户不存在")
 	}
 	out := &debtStatusOutput{}
 	out.Body.OwnerType = in.OwnerType
 	out.Body.AccountID = in.AccountID
-	out.Body.OutstandingDebtMicroUSD = debt
-	out.Body.ServiceState = "active"
-	if debt > 0 {
-		out.Body.ServiceState = "blocked_debt"
-	}
+	out.Body.OutstandingDebtMicroUSD = max(-balance, 0)
+	out.Body.ServiceState = billingpg.AccountServiceState(balance)
 	return out, nil
 }
 

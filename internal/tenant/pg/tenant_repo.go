@@ -465,7 +465,10 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&stats.InviteCodeCount); err != nil {
 		return nil, err
 	}
-	if err := r.pool.QueryRow(ctx, `SELECT COALESCE(SUM(remaining_credits), 0) FROM bill_credit_packages WHERE package_type = 'user' AND tenant_id = $1 AND status = 'available'`, tenantID).Scan(&userTotalMicro); err != nil {
+	if err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(GREATEST(balance_micro, 0)), 0)
+		FROM bill_accounts WHERE account_kind = 2 AND tenant_id = $1
+	`, tenantID).Scan(&userTotalMicro); err != nil {
 		return nil, err
 	}
 

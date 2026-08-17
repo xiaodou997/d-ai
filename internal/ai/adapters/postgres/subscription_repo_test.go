@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,38 +13,22 @@ import (
 
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/subscription"
+	"xiaodou/dai/internal/ai/testsupport"
 )
 
-// 需要真实 Postgres（含 ai_sub_* schema）：设置 AI_TEST_DATABASE_URL 后运行，否则跳过。
+// 运行在 testsupport 提供的一次性 canonical schema 上，与其余数据库测试共用
+// DAI_TEST_DATABASE_URL；schema 随测试销毁，不需要手工清理。
 func subTestRepo(t *testing.T) (*SubscriptionRepo, *pgxpool.Pool, context.Context, string, string) {
 	t.Helper()
-	dsn := os.Getenv("AI_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("set AI_TEST_DATABASE_URL to run subscription DB tests")
-	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{})
 	if err != nil {
-		t.Skipf("connect: %v", err)
+		t.Skipf("subscription test database unavailable: %v", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		t.Skipf("ping: %v", err)
-	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	tenantID := "t_" + suffix
 	userID := "u_" + suffix
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_sub_subscriptions WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_sub_orders WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_sub_plan_purchase_policy_revisions WHERE plan_id IN (SELECT id FROM ai_sub_plans WHERE tenant_id=$1)`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_sub_plan_purchase_policies WHERE plan_id IN (SELECT id FROM ai_sub_plans WHERE tenant_id=$1)`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_sub_plan_groups WHERE plan_id IN (SELECT id FROM ai_sub_plans WHERE tenant_id=$1)`, tenantID) // 补偿：原 FK CASCADE 已移除
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_sub_plans WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_user_groups WHERE tenant_id=$1`, tenantID)
-		_, _ = pool.Exec(ctx, `DELETE FROM ai_groups WHERE name LIKE 'grp_'||$1||'%'`, tenantID)
-		pool.Close()
-	})
 	return NewSubscriptionRepo(dbgen.New(pool), pool), pool, ctx, tenantID, userID
 }
 

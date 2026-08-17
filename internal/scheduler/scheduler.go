@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	domain "xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/ledger"
 )
 
 // jwtKeyRetirer 定义 JWT 密钥退役接口，避免循环依赖
@@ -43,8 +44,7 @@ func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper p
 func (s *Scheduler) Start() {
 	s.logger.Info("Scheduler started")
 
-	go s.runPackageExpiryTask()
-	go s.runDepletedPackageTask()
+	go s.runLotExpiryTask()
 	go s.runJWTKeyRetireTask()
 	go s.runPaymentSweepTask()
 }
@@ -55,95 +55,66 @@ func (s *Scheduler) Stop() {
 	s.logger.Info("Scheduler stopped")
 }
 
-// ==================== 资源包过期清理 ====================
+// ==================== 额度批次过期结算 ====================
 
-func (s *Scheduler) runPackageExpiryTask() {
+// 过期不再是查询时的时间过滤，而是一次真实的余额扣减，所以它必须跑得足够勤：
+// 一笔额度的过期时刻和余额反映出来的时刻之间就是这个间隔。
+const lotExpiryInterval = 5 * time.Minute
+
+// 一轮最多结算多少个批次。超出的部分下一轮继续，避免单次事务过大。
+const lotExpiryBatch = 500
+
+func (s *Scheduler) runLotExpiryTask() {
+	ticker := time.NewTicker(lotExpiryInterval)
+	defer ticker.Stop()
 	for {
-		now := time.Now()
-		next := time.Date(now.Year(), now.Month(), now.Day()+1, 1, 0, 0, 0, now.Location())
-
 		select {
 		case <-s.stopChan:
 			return
-		case <-time.After(next.Sub(now)):
-			s.cleanupExpiredPackages()
+		case <-ticker.C:
+			s.settleExpiredLots()
 		}
 	}
 }
 
-func (s *Scheduler) cleanupExpiredPackages() {
-	s.logger.Info("[定时任务] 开始清理过期额度包")
-
+// settleExpiredLots removes the unspent remainder of every lot whose validity
+// window has closed. Repeating is safe: expired_at is the idempotency anchor.
+func (s *Scheduler) settleExpiredLots() {
 	ctx := context.Background()
 	now := domain.NowUTC()
 
-	result, err := s.pool.Exec(ctx, `
-		UPDATE bill_credit_packages
-		SET status = 'expired', updated_at = now()
-		WHERE status = 'available'
-		      AND expires_at IS NOT NULL
-		      AND expires_at < $1
-	`, now)
-	if err != nil {
-		s.logger.Error("[定时任务] 标记过期额度包失败", zap.Error(err))
-		return
-	}
-
-	affected := result.RowsAffected()
-	if affected == 0 {
-		s.logger.Info("[定时任务] 没有需要清理的过期额度包")
-		return
-	}
-	s.logger.Info("[定时任务] 过期额度包清理完成", zap.Int64("packageCount", affected))
-}
-
-// ==================== 耗尽资源包清理 ====================
-
-func (s *Scheduler) runDepletedPackageTask() {
+	total := 0
 	for {
-		now := time.Now()
-		next := time.Date(now.Year(), now.Month(), now.Day()+1, 1, 30, 0, 0, now.Location())
-
-		select {
-		case <-s.stopChan:
+		settled, err := s.settleExpiredLotBatch(ctx, now)
+		if err != nil {
+			s.logger.Error("[定时任务] 结算过期额度批次失败", zap.Error(err))
 			return
-		case <-time.After(next.Sub(now)):
-			s.cleanupDepletedPackages()
+		}
+		total += settled
+		if settled < lotExpiryBatch {
+			break
 		}
 	}
+	if total > 0 {
+		s.logger.Info("[定时任务] 过期额度批次结算完成", zap.Int("lotCount", total))
+	}
 }
 
-func (s *Scheduler) cleanupDepletedPackages() {
-	s.logger.Info("[定时任务] 开始清理耗尽额度包")
-
-	ctx := context.Background()
-
-	var depletedCount int
-	s.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM bill_credit_packages
-		WHERE status = 'available' AND remaining_credits <= 0
-	`).Scan(&depletedCount)
-
-	if depletedCount == 0 {
-		s.logger.Info("[定时任务] 没有需要清理的耗尽额度包")
-		return
-	}
-
-	now := domain.NowUTC()
-
-	result, err := s.pool.Exec(ctx, `
-		UPDATE bill_credit_packages
-		SET status = 'depleted', updated_at = $1
-		WHERE status = 'available' AND remaining_credits <= 0
-	`, now)
+func (s *Scheduler) settleExpiredLotBatch(ctx context.Context, now time.Time) (int, error) {
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		s.logger.Error("[定时任务] 清理耗尽额度包失败", zap.Error(err))
-		return
+		return 0, err
 	}
+	defer tx.Rollback(ctx)
 
-	s.logger.Info("[定时任务] 耗尽额度包清理完成",
-		zap.Int64("depletedCount", result.RowsAffected()),
-	)
+	settled, err := ledger.ExpireDueLots(ctx, tx, now, lotExpiryBatch)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return settled, nil
 }
 
 // ==================== JWT 密钥退役 ====================
@@ -212,7 +183,6 @@ func (s *Scheduler) sweepPayments() {
 // RunAllTasks 手动执行所有任务（用于测试）
 func (s *Scheduler) RunAllTasks() {
 	s.logger.Info("手动触发所有定时任务")
-	s.cleanupExpiredPackages()
-	s.cleanupDepletedPackages()
+	s.settleExpiredLots()
 	s.sweepPayments()
 }

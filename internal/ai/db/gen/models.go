@@ -819,21 +819,43 @@ type AuthSigningKey struct {
 	RetiredAt  pgtype.Timestamptz `json:"retired_at"`
 }
 
-type BillCreditPackage struct {
-	ID               int64              `json:"id"`
-	PackageID        string             `json:"package_id"`
-	PackageType      string             `json:"package_type"`
-	TenantID         string             `json:"tenant_id"`
-	UserID           pgtype.Text        `json:"user_id"`
-	TotalCredits     int64              `json:"total_credits"`
-	RemainingCredits int64              `json:"remaining_credits"`
-	ExpiresAt        pgtype.Timestamptz `json:"expires_at"`
-	Status           string             `json:"status"`
-	Source           string             `json:"source"`
-	RechargeOrderID  pgtype.Text        `json:"recharge_order_id"`
-	Version          int32              `json:"version"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+type BillAccount struct {
+	AccountID    string             `json:"account_id"`
+	AccountKind  int16              `json:"account_kind"`
+	TenantID     string             `json:"tenant_id"`
+	BalanceMicro int64              `json:"balance_micro"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BillChargeOutbox struct {
+	ID          int64              `json:"id"`
+	RequestID   string             `json:"request_id"`
+	TenantID    string             `json:"tenant_id"`
+	UserID      pgtype.Text        `json:"user_id"`
+	TenantMicro int64              `json:"tenant_micro"`
+	UserMicro   int64              `json:"user_micro"`
+	Description string             `json:"description"`
+	Status      string             `json:"status"`
+	Attempts    int32              `json:"attempts"`
+	LastError   pgtype.Text        `json:"last_error"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	SettledAt   pgtype.Timestamptz `json:"settled_at"`
+}
+
+type BillCreditLot struct {
+	ID              int64              `json:"id"`
+	LotID           string             `json:"lot_id"`
+	AccountID       string             `json:"account_id"`
+	GrantedMicro    int64              `json:"granted_micro"`
+	ConsumedMicro   int64              `json:"consumed_micro"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	ExpiredAt       pgtype.Timestamptz `json:"expired_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	Source          string             `json:"source"`
+	RechargeOrderID pgtype.Text        `json:"recharge_order_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type BillEvent struct {
@@ -853,17 +875,6 @@ type BillEvent struct {
 	TerminalNote   pgtype.Text        `json:"terminal_note"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
-}
-
-type BillOverdraftAdjustment struct {
-	ID          int64              `json:"id"`
-	AccountType int32              `json:"account_type"`
-	AccountID   string             `json:"account_id"`
-	FromLimit   int64              `json:"from_limit"`
-	ToLimit     int64              `json:"to_limit"`
-	OperatorID  string             `json:"operator_id"`
-	Reason      string             `json:"reason"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type BillRechargeOrder struct {
@@ -908,24 +919,21 @@ type FileAsset struct {
 }
 
 type IamAccount struct {
-	ID               int64              `json:"id"`
-	UserID           string             `json:"user_id"`
-	TenantID         pgtype.Text        `json:"tenant_id"`
-	Username         string             `json:"username"`
-	PasswordHash     string             `json:"password_hash"`
-	Email            pgtype.Text        `json:"email"`
-	Phone            pgtype.Text        `json:"phone"`
-	UserType         int32              `json:"user_type"`
-	InternalNote     string             `json:"internal_note"`
-	Nickname         pgtype.Text        `json:"nickname"`
-	Avatar           pgtype.Text        `json:"avatar"`
-	FrozenCredits    int64              `json:"frozen_credits"`
-	OverdraftLimit   int64              `json:"overdraft_limit"`
-	CurrentOverdraft int64              `json:"current_overdraft"`
-	Status           string             `json:"status"`
-	LastLoginAt      pgtype.Timestamptz `json:"last_login_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID           int64              `json:"id"`
+	UserID       string             `json:"user_id"`
+	TenantID     pgtype.Text        `json:"tenant_id"`
+	Username     string             `json:"username"`
+	PasswordHash string             `json:"password_hash"`
+	Email        pgtype.Text        `json:"email"`
+	Phone        pgtype.Text        `json:"phone"`
+	UserType     int32              `json:"user_type"`
+	InternalNote string             `json:"internal_note"`
+	Nickname     pgtype.Text        `json:"nickname"`
+	Avatar       pgtype.Text        `json:"avatar"`
+	Status       string             `json:"status"`
+	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type IamInvitationCode struct {
@@ -943,17 +951,14 @@ type IamInvitationCode struct {
 }
 
 type IamTenant struct {
-	ID               int64              `json:"id"`
-	TenantID         string             `json:"tenant_id"`
-	TenantName       string             `json:"tenant_name"`
-	ContactPerson    pgtype.Text        `json:"contact_person"`
-	ContactEmail     pgtype.Text        `json:"contact_email"`
-	FrozenCredits    int64              `json:"frozen_credits"`
-	OverdraftLimit   int64              `json:"overdraft_limit"`
-	CurrentOverdraft int64              `json:"current_overdraft"`
-	Status           string             `json:"status"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID            int64              `json:"id"`
+	TenantID      string             `json:"tenant_id"`
+	TenantName    string             `json:"tenant_name"`
+	ContactPerson pgtype.Text        `json:"contact_person"`
+	ContactEmail  pgtype.Text        `json:"contact_email"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type IamTenantPortalBranding struct {

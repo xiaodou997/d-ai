@@ -48,12 +48,18 @@ func TestAPITaskCreateAndGetAreIdempotent(t *testing.T) {
 		groupID  = "22222222-2222-2222-2222-222222222222"
 		tenantID = "tenant-p3"
 	)
+	// One statement per Exec: a parameterised query goes over the extended
+	// protocol, which does not accept multiple commands in one string.
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id)
-		VALUES ($1::uuid, $2, 'p3 group', '33333333-3333-3333-3333-333333333333'::uuid);
+		VALUES ($1::uuid, $2, 'p3 group', '33333333-3333-3333-3333-333333333333'::uuid)
+	`, groupID, tenantID); err != nil {
+		t.Fatalf("seed group: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_api_keys (id, owner_type, tenant_id, group_id, key_hash, key_ciphertext, last_four, name, status)
-		VALUES ($3::uuid, 'tenant', $2, $1::uuid, $4, '', 'key1', 'p3 key', 'active')
-	`, groupID, tenantID, keyID, apikey.Hash(rawKey)); err != nil {
+		VALUES ($1::uuid, 'tenant', $2, $3::uuid, $4, '', 'key1', 'p3 key', 'active')
+	`, keyID, tenantID, groupID, apikey.Hash(rawKey)); err != nil {
 		t.Fatalf("seed API key: %v", err)
 	}
 

@@ -6,75 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/testsupport"
 )
 
-func mustExecRiskControl(t *testing.T, ctx context.Context, pool *pgxpool.Pool, sql string) {
-	t.Helper()
-	if _, err := pool.Exec(ctx, sql); err != nil {
-		t.Fatalf("exec sql failed: %v\nsql: %s", err, sql)
-	}
-}
-
-// setupRiskControlSchema creates the risk-control tables inside the
-// disposable test schema (search_path already points at it via the pool
-// returned by testsupport.OpenAsyncTaskTestPool). Mirrors db/init.sql's
-// definitions closely enough to exercise real pgtype round-tripping.
-func setupRiskControlSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
-	t.Helper()
-	mustExecRiskControl(t, ctx, pool, `
-		CREATE TABLE ai_settings (
-		  key        TEXT        PRIMARY KEY,
-		  value      JSONB       NOT NULL,
-		  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		)
-	`)
-	mustExecRiskControl(t, ctx, pool, `
-		CREATE TABLE ai_content_moderation_logs (
-		  id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-		  request_id           TEXT,
-		  tenant_id            TEXT,
-		  user_id              TEXT,
-		  api_key_id           UUID,
-		  model_code           TEXT,
-		  capability_type      TEXT,
-		  mode                 TEXT        NOT NULL,
-		  action               TEXT        NOT NULL,
-		  flagged              BOOLEAN     NOT NULL DEFAULT false,
-		  matched_keyword      TEXT,
-		  highest_category     TEXT,
-		  highest_score        NUMERIC(8,6),
-		  category_scores      JSONB,
-		  threshold_snapshot   JSONB,
-		  input_excerpt        TEXT,
-		  upstream_latency_ms  INTEGER,
-		  error                TEXT,
-		  hit_layer            TEXT,
-		  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-		)
-	`)
-	mustExecRiskControl(t, ctx, pool, `
-		CREATE TABLE ai_risk_events (
-		  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-		  event_type       TEXT        NOT NULL DEFAULT 'content_violation',
-		  severity         TEXT        NOT NULL DEFAULT 'medium',
-		  tenant_id        TEXT,
-		  user_id          TEXT,
-		  source_log_id    UUID,
-		  summary          TEXT        NOT NULL,
-		  detail           JSONB       NOT NULL DEFAULT '{}',
-		  status           TEXT        NOT NULL DEFAULT 'open',
-		  resolved_by      TEXT,
-		  resolved_at      TIMESTAMPTZ,
-		  resolution_note  TEXT,
-		  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-		)
-	`)
-}
+// The risk-control tables come from the canonical schema that
+// testsupport.OpenAsyncTaskTestPool loads, so these tests exercise the real
+// column types and constraints rather than a hand-copied approximation.
 
 func TestRiskControlRepo_SettingRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -84,20 +23,23 @@ func TestRiskControlRepo_SettingRoundTrip(t *testing.T) {
 		t.Skipf("open risk control test pool: %v", err)
 	}
 	defer func() { _ = cleanup(ctx) }()
-	setupRiskControlSchema(t, ctx, pool)
 
 	repo := NewRiskControlRepo(dbgen.New(pool))
 
-	if _, err := repo.GetSetting(ctx, "risk_control_config"); err == nil || err != domain.ErrNotFound {
+	// The canonical schema seeds risk_control_config, so the missing-key case
+	// needs a key the schema does not ship.
+	const key = "risk_control_config_roundtrip_probe"
+
+	if _, err := repo.GetSetting(ctx, key); err == nil || err != domain.ErrNotFound {
 		t.Fatalf("expected ErrNotFound before first write, got %v", err)
 	}
 
 	cfg := domain.RiskControlConfig{Enabled: true, Mode: domain.RiskControlModeObserve}
 	raw, _ := json.Marshal(cfg)
-	if err := repo.UpsertSetting(ctx, "risk_control_config", raw); err != nil {
+	if err := repo.UpsertSetting(ctx, key, raw); err != nil {
 		t.Fatalf("upsert setting: %v", err)
 	}
-	got, err := repo.GetSetting(ctx, "risk_control_config")
+	got, err := repo.GetSetting(ctx, key)
 	if err != nil {
 		t.Fatalf("get setting: %v", err)
 	}
@@ -118,7 +60,6 @@ func TestRiskControlRepo_LogInsertListCountFilter(t *testing.T) {
 		t.Skipf("open risk control test pool: %v", err)
 	}
 	defer func() { _ = cleanup(ctx) }()
-	setupRiskControlSchema(t, ctx, pool)
 
 	repo := NewRiskControlRepo(dbgen.New(pool))
 	score := 0.91
@@ -207,7 +148,6 @@ func TestRiskControlRepo_EventInsertListResolve(t *testing.T) {
 		t.Skipf("open risk control test pool: %v", err)
 	}
 	defer func() { _ = cleanup(ctx) }()
-	setupRiskControlSchema(t, ctx, pool)
 
 	repo := NewRiskControlRepo(dbgen.New(pool))
 	detail, _ := json.Marshal(map[string]any{"violation_count": 3})

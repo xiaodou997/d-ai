@@ -15,6 +15,8 @@ import (
 	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
 	"xiaodou/dai/internal/ai/testsupport"
+	"xiaodou/dai/internal/billing/ledger"
+	"xiaodou/dai/internal/billing/outbox"
 )
 
 type fixedUsageBiller struct {
@@ -49,7 +51,9 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 		_, _ = pool.Exec(ctx, `DELETE FROM ai_usage_rollups_hourly WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM ai_usage_logs WHERE request_id = ANY($1::text[])`, requestIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id = ANY($1::text[])`, tenantIDs)
-		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_packages WHERE tenant_id = ANY($1::text[])`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM bill_charge_outbox WHERE tenant_id = ANY($1::text[])`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_lots WHERE account_id IN (SELECT account_id FROM bill_accounts WHERE tenant_id = ANY($1::text[]))`, tenantIDs)
+		_, _ = pool.Exec(ctx, `DELETE FROM bill_accounts WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_accounts WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 	})
@@ -73,20 +77,8 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 	seedDirectBillingAccounts(t, ctx, pool, tenantID, userID, "usage")
 	seedDirectBillingAccounts(t, ctx, pool, rollbackTenantID, rollbackUserID, "rollback")
 	seedDirectBillingAccounts(t, ctx, pool, failedSubTenantID, failedSubUserID, "failed-sub")
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO bill_credit_packages
-		  (package_id, package_type, tenant_id, total_credits, remaining_credits, source, status)
-		VALUES ($1, 'tenant', $2, 700, 700, 'ADMIN_RECHARGE', 'available')
-	`, "pkg-tenant-"+suffix, tenantID); err != nil {
-		t.Fatalf("seed tenant quota package: %v", err)
-	}
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO bill_credit_packages
-		  (package_id, package_type, tenant_id, user_id, total_credits, remaining_credits, source, status)
-		VALUES ($1, 'user', $2, $3, 900, 900, 'ADMIN_RECHARGE', 'available')
-	`, "pkg-user-"+suffix, tenantID, userID); err != nil {
-		t.Fatalf("seed user quota package: %v", err)
-	}
+	grantTestBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID}, 700)
+	grantTestBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID}, 900)
 
 	req := usageCompletionRequest(requestID, tenantID, userID)
 	if _, err := pool.Exec(ctx, `
@@ -104,6 +96,17 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 	}
 
 	assertUsageCompletionState(t, ctx, pool, requestID, tenantID, userID, 1, 700, 900)
+
+	// Log ran twice; the balance must show exactly one charge. request_id is
+	// unique on both ai_usage_logs and bill_charge_outbox, so the replay adds
+	// neither a usage row nor a second debit.
+	if got := accountBalance(t, ctx, pool, tenantID); got != 0 {
+		t.Fatalf("tenant balance after one 700 charge on a 700 grant = %d, want 0", got)
+	}
+	if got := accountBalance(t, ctx, pool, userID); got != 0 {
+		t.Fatalf("user balance after one 900 charge on a 900 grant = %d, want 0", got)
+	}
+
 	var callerCharge int64
 	if err := pool.QueryRow(ctx, `SELECT caller_charge FROM ai_async_tasks WHERE request_id = $1`, requestID).Scan(&callerCharge); err != nil {
 		t.Fatalf("read cancelled async task charge: %v", err)
@@ -243,20 +246,71 @@ func usageCompletionRequest(requestID, tenantID, userID string) *serving.Request
 	}
 }
 
+// seedDirectBillingAccounts creates the identity rows only. The bill_accounts
+// rows appear on their own: provisioning is a schema trigger, so forgetting it
+// here is not possible.
 func seedDirectBillingAccounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenantID, userID, label string) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO iam_tenants (tenant_id, tenant_name, status, current_overdraft)
-		VALUES ($1, $2, 'active', 0)
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ($1, $2, 'active')
 	`, tenantID, "usage-test-"+label); err != nil {
 		t.Fatalf("seed tenant account: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status, current_overdraft)
-		VALUES ($1, $2, $3, 'x', 4, 'active', 0)
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
+		VALUES ($1, $2, $3, 'x', 4, 'active')
 	`, userID, tenantID, "u_"+label+"-"+tenantID[len(tenantID)-8:]); err != nil {
 		t.Fatalf("seed user account: %v", err)
 	}
+	for _, id := range []string{tenantID, userID} {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bill_accounts WHERE account_id = $1)`, id).Scan(&exists); err != nil {
+			t.Fatalf("check provisioned billing account: %v", err)
+		}
+		if !exists {
+			t.Fatalf("billing account was not provisioned for %s", id)
+		}
+	}
+}
+
+func grantTestBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ref ledger.Ref, micro int64) {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin grant: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := ledger.Grant(ctx, tx, ref, micro, nil, "ADMIN_RECHARGE", ""); err != nil {
+		t.Fatalf("grant balance to %s: %v", ref.ID, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit grant: %v", err)
+	}
+}
+
+// drainOutbox settles every queued charge so a test can assert on final
+// balances. Production runs the same consumer on a timer.
+func drainOutbox(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	for range 10 {
+		applied, err := outbox.NewConsumer(pool, nil).DrainOnce(ctx)
+		if err != nil {
+			t.Fatalf("drain billing outbox: %v", err)
+		}
+		if applied == 0 {
+			return
+		}
+	}
+}
+
+func accountBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, accountID string) int64 {
+	t.Helper()
+	var balance int64
+	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = $1`, accountID).Scan(&balance); err != nil {
+		t.Fatalf("read balance for %s: %v", accountID, err)
+	}
+	return balance
 }
 
 func assertUsageCompletionState(
@@ -292,8 +346,42 @@ func assertUsageCompletionState(
 		}
 		return
 	}
+
+	// Before the outbox drains, the usage row must say "pending" rather than
+	// claim a charge that has not been applied — and the queued charge must
+	// already exist, because it was committed with the usage row.
+	if billingStatus != "pending" || eventID != nil {
+		t.Fatalf("pre-settlement usage billing = event:%v status:%s, want pending with no event", eventID, billingStatus)
+	}
+	var queuedTenant, queuedUser int64
+	if err := pool.QueryRow(ctx, `
+		SELECT tenant_micro, user_micro FROM bill_charge_outbox WHERE request_id = $1
+	`, requestID).Scan(&queuedTenant, &queuedUser); err != nil {
+		t.Fatalf("read queued charge: %v", err)
+	}
+	if queuedTenant != wantTenantMicro || queuedUser != wantUserMicro {
+		t.Fatalf("queued charge = (%d,%d), want (%d,%d)", queuedTenant, queuedUser, wantTenantMicro, wantUserMicro)
+	}
+
+	drainOutbox(t, ctx, pool)
+
+	if err := pool.QueryRow(ctx, `
+		SELECT billing_event_id, billing_status
+		FROM ai_usage_logs WHERE request_id = $1
+	`, requestID).Scan(&eventID, &billingStatus); err != nil {
+		t.Fatalf("read settled usage billing state: %v", err)
+	}
 	if eventID == nil || billingStatus != "confirmed" {
-		t.Fatalf("direct charge link = event:%v status:%s", eventID, billingStatus)
+		t.Fatalf("settled charge link = event:%v status:%s", eventID, billingStatus)
+	}
+	var outboxStatus string
+	if err := pool.QueryRow(ctx, `
+		SELECT status FROM bill_charge_outbox WHERE request_id = $1
+	`, requestID).Scan(&outboxStatus); err != nil {
+		t.Fatalf("read settled outbox status: %v", err)
+	}
+	if outboxStatus != "done" {
+		t.Fatalf("outbox status = %s, want done", outboxStatus)
 	}
 	var eventTenant, eventUser string
 	var tenantMicro, userMicro *int64

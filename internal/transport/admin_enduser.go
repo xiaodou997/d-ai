@@ -179,9 +179,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		SELECT eu.user_id, eu.tenant_id, eu.username, eu.email, eu.phone, eu.internal_note, eu.nickname, eu.avatar,
 		       eu.status, eu.last_login_at, eu.created_at,
 		       COALESCE(t.tenant_name, '') AS tenant_name,
-		       COALESCE((SELECT SUM(remaining_credits) FROM bill_credit_packages
-		                 WHERE package_type = 'user' AND user_id = eu.user_id AND status = 'available'), 0)
-		         - COALESCE(eu.current_overdraft, 0) AS credits
+		       COALESCE((SELECT b.balance_micro FROM bill_accounts b WHERE b.account_id = eu.user_id), 0) AS credits
 		%s
 		%s ORDER BY eu.created_at DESC LIMIT $%d OFFSET $%d
 	`, from, where, idx, idx+1), qargs...)
@@ -398,36 +396,29 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	defer tx.Rollback(ctx)
 
 	var status string
-	var overdraft int64
 	err = tx.QueryRow(ctx, `
-		SELECT status, current_overdraft
-		FROM iam_accounts
+		SELECT status FROM iam_accounts
 		WHERE user_id = $1 AND user_type = 4
 		FOR UPDATE
-	`, in.ID).Scan(&status, &overdraft)
+	`, in.ID).Scan(&status)
 	if errors.Is(err, pgx.ErrNoRows) || status == "deleted" {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if overdraft > 0 {
-		return nil, httpx.ErrConflict.WithDetail("用户仍有未结清透支，不能删除")
-	}
 
-	var availableMicroUSD int64
+	// 一个数字就能表达两条规则：欠费不能删（会赖掉账），有余额也不能删（会吞掉钱）。
+	var balanceMicroUSD int64
 	if err := tx.QueryRow(ctx, `
-		SELECT COALESCE(SUM(remaining_credits), 0)
-		FROM (
-			SELECT remaining_credits
-			FROM bill_credit_packages
-			WHERE package_type = 'user' AND user_id = $1 AND status = 'available'
-			FOR UPDATE
-		) packages
-	`, in.ID).Scan(&availableMicroUSD); err != nil {
+		SELECT balance_micro FROM bill_accounts WHERE account_id = $1 FOR UPDATE
+	`, in.ID).Scan(&balanceMicroUSD); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if availableMicroUSD > 0 {
+	if balanceMicroUSD < 0 {
+		return nil, httpx.ErrConflict.WithDetail("用户仍有未结清欠费，不能删除")
+	}
+	if balanceMicroUSD > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户仍有可用 USD 余额，不能删除")
 	}
 

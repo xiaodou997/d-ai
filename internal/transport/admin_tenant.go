@@ -343,12 +343,14 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 	}
 	defer tx.Rollback(ctx)
 
+	// 停用/启用只改访问权，不动钱。租户被停用后由 BanChecker 在网关层拦截
+	// （gateway.go:141），余额不需要、也不应该跟着变：过期额度批次现在是一次
+	// 真实的余额扣减，用它当"冻结开关"会真的把租户的钱扣掉，而且启用时无法还原。
 	if in.Body.Status == "disabled" {
-		// 停用：级联停用组织用户、终端用户，并停用租户额度包。
+		// 停用：级联停用组织用户和终端用户。
 		stmts := []string{
 			`UPDATE iam_tenants SET status = 'disabled', updated_at = $1 WHERE tenant_id = $2`,
 			`UPDATE iam_accounts SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'active'`,
-			`UPDATE bill_credit_packages SET status = 'expired', updated_at = $1 WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'available'`,
 		}
 		for _, s := range stmts {
 			if _, err := tx.Exec(ctx, s, now, in.ID); err != nil {
@@ -388,12 +390,6 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		rows.Close()
-		if _, err := tx.Exec(ctx, `
-			UPDATE bill_credit_packages SET status = 'available', updated_at = $1
-			WHERE package_type = 'tenant' AND tenant_id = $2 AND status = 'expired'
-		`, now, in.ID); err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)

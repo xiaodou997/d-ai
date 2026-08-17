@@ -27,16 +27,12 @@ CREATE TABLE iam_tenants (
     tenant_name TEXT NOT NULL,
     contact_person TEXT,
     contact_email TEXT,
-    frozen_credits BIGINT NOT NULL DEFAULT 0 CHECK (frozen_credits >= 0),
-    overdraft_limit BIGINT NOT NULL DEFAULT 0 CHECK (overdraft_limit >= 0),
-    current_overdraft BIGINT NOT NULL DEFAULT 0 CHECK (current_overdraft >= 0),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'suspended')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_iam_tenants_status ON iam_tenants (status);
-CREATE INDEX idx_iam_tenants_has_overdraft ON iam_tenants (tenant_id) WHERE current_overdraft > 0;
 
 CREATE TABLE iam_accounts (
     id BIGSERIAL PRIMARY KEY,
@@ -50,9 +46,6 @@ CREATE TABLE iam_accounts (
     internal_note TEXT NOT NULL DEFAULT '',
     nickname TEXT,
     avatar TEXT,
-    frozen_credits BIGINT NOT NULL DEFAULT 0 CHECK (frozen_credits >= 0),
-    overdraft_limit BIGINT NOT NULL DEFAULT 0 CHECK (overdraft_limit >= 0),
-    current_overdraft BIGINT NOT NULL DEFAULT 0 CHECK (current_overdraft >= 0),
     status TEXT NOT NULL DEFAULT 'active',
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -73,8 +66,6 @@ CREATE UNIQUE INDEX ux_iam_accounts_email_normalized ON iam_accounts (lower(emai
     WHERE email IS NOT NULL;
 CREATE INDEX idx_iam_accounts_tenant_type ON iam_accounts (tenant_id, user_type);
 CREATE INDEX idx_iam_accounts_type_status ON iam_accounts (user_type, status);
-CREATE INDEX idx_iam_accounts_has_overdraft ON iam_accounts (user_id)
-    WHERE user_type = 4 AND current_overdraft > 0;
 
 CREATE TABLE iam_invitation_codes (
     id BIGSERIAL PRIMARY KEY,
@@ -126,8 +117,56 @@ CREATE TABLE auth_audit_logs (
 CREATE INDEX idx_auth_audit_logs_event_time ON auth_audit_logs (event_type, created_at DESC);
 
 -- Billing and payment
--- All billing ledger amounts use micro-USD ($1 = 1,000,000 micro-USD). Legacy
--- credit-shaped column names are retained at the storage boundary only.
+-- All billing ledger amounts use micro-USD ($1 = 1,000,000 micro-USD).
+--
+-- bill_accounts.balance_micro is the single authority for "how much money does
+-- this account have". It is deliberately SIGNED and deliberately has no CHECK:
+-- a negative balance IS the debt. Nothing else in this schema may represent a
+-- balance, and no reader may reassemble one from other tables.
+--
+--   admission  = balance_micro > 0
+--   settlement = balance_micro -= cost   (may go negative, never blocked)
+--   top-up     = balance_micro += amount (negative balance is absorbed)
+CREATE TABLE bill_accounts (
+    account_id TEXT PRIMARY KEY,
+    account_kind SMALLINT NOT NULL CHECK (account_kind IN (1, 2)),
+    tenant_id TEXT NOT NULL,
+    balance_micro BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_bill_accounts_tenant ON bill_accounts (tenant_id, account_kind);
+CREATE INDEX idx_bill_accounts_negative ON bill_accounts (account_id) WHERE balance_micro <= 0;
+
+-- Every tenant and every end user has exactly one account row, guaranteed here
+-- rather than at each of the several places that create them. Admission reads
+-- this table and fails closed on a missing row, so "someone forgot to
+-- provision" would take a caller offline; making it structural removes the
+-- possibility instead of documenting it.
+CREATE FUNCTION bill_provision_account() RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'iam_tenants' THEN
+        INSERT INTO bill_accounts (account_id, account_kind, tenant_id)
+        VALUES (NEW.tenant_id, 1, NEW.tenant_id)
+        ON CONFLICT (account_id) DO NOTHING;
+    ELSIF NEW.user_type = 4 AND NEW.tenant_id IS NOT NULL THEN
+        INSERT INTO bill_accounts (account_id, account_kind, tenant_id)
+        VALUES (NEW.user_id, 2, NEW.tenant_id)
+        ON CONFLICT (account_id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_bill_provision_tenant_account
+    AFTER INSERT ON iam_tenants
+    FOR EACH ROW EXECUTE FUNCTION bill_provision_account();
+
+CREATE TRIGGER trg_bill_provision_user_account
+    AFTER INSERT ON iam_accounts
+    FOR EACH ROW EXECUTE FUNCTION bill_provision_account();
+
 CREATE TABLE bill_recharge_orders (
     id BIGSERIAL PRIMARY KEY,
     order_id TEXT NOT NULL UNIQUE,
@@ -157,35 +196,34 @@ CREATE INDEX idx_bill_recharge_orders_tenant ON bill_recharge_orders (order_type
 CREATE INDEX idx_bill_recharge_orders_user ON bill_recharge_orders (user_id, created_at DESC) WHERE user_id IS NOT NULL;
 CREATE INDEX idx_bill_recharge_orders_status ON bill_recharge_orders (status, created_at DESC);
 
-CREATE TABLE bill_credit_packages (
+-- Credit lots record WHERE a grant came from and WHEN it expires. They are an
+-- attribution detail, never the balance: bill_accounts.balance_micro is.
+-- Lot state is derived, not stored: a lot is spent when
+-- consumed_micro >= granted_micro, gone when expired_at/revoked_at is set.
+CREATE TABLE bill_credit_lots (
     id BIGSERIAL PRIMARY KEY,
-    package_id TEXT NOT NULL UNIQUE,
-    package_type TEXT NOT NULL CHECK (package_type IN ('tenant', 'user')),
-    tenant_id TEXT NOT NULL,
-    user_id TEXT,
-    total_credits BIGINT NOT NULL CHECK (total_credits > 0),
-    remaining_credits BIGINT NOT NULL CHECK (remaining_credits >= 0 AND remaining_credits <= total_credits),
+    lot_id TEXT NOT NULL UNIQUE,
+    account_id TEXT NOT NULL REFERENCES bill_accounts (account_id),
+    granted_micro BIGINT NOT NULL CHECK (granted_micro > 0),
+    consumed_micro BIGINT NOT NULL DEFAULT 0 CHECK (consumed_micro >= 0),
     expires_at TIMESTAMPTZ,
-    status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'expired', 'depleted', 'revoked')),
-    source TEXT NOT NULL CONSTRAINT bill_credit_packages_source_check
+    expired_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    source TEXT NOT NULL CONSTRAINT bill_credit_lots_source_check
         CHECK (source IN ('ADMIN_RECHARGE', 'TENANT_RECHARGE', 'REFUND', 'ONLINE_TOPUP', 'USER_TOPUP_INCOME')),
     recharge_order_id TEXT,
-    version INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CHECK (
-        (package_type = 'tenant' AND user_id IS NULL)
-        OR (package_type = 'user' AND user_id IS NOT NULL)
-    )
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_bill_credit_packages_tenant_fifo
-    ON bill_credit_packages (package_type, tenant_id, status, expires_at, created_at);
-CREATE INDEX idx_bill_credit_packages_user_fifo
-    ON bill_credit_packages (package_type, user_id, status, expires_at, created_at)
-    WHERE user_id IS NOT NULL;
-CREATE INDEX idx_bill_credit_packages_order
-    ON bill_credit_packages (recharge_order_id)
+CREATE INDEX idx_bill_credit_lots_fifo
+    ON bill_credit_lots (account_id, expires_at NULLS LAST, created_at)
+    WHERE expired_at IS NULL AND revoked_at IS NULL;
+CREATE INDEX idx_bill_credit_lots_due
+    ON bill_credit_lots (expires_at)
+    WHERE expired_at IS NULL AND revoked_at IS NULL AND expires_at IS NOT NULL;
+CREATE INDEX idx_bill_credit_lots_order
+    ON bill_credit_lots (recharge_order_id)
     WHERE recharge_order_id IS NOT NULL;
 
 CREATE TABLE bill_events (
@@ -215,19 +253,28 @@ CREATE INDEX idx_bill_events_pending ON bill_events (status, created_at) WHERE s
 CREATE INDEX idx_bill_events_type_tenant ON bill_events (event_type, tenant_id, created_at DESC);
 CREATE INDEX idx_bill_events_refund_of ON bill_events (refund_of) WHERE refund_of IS NOT NULL;
 
-CREATE TABLE bill_overdraft_adjustments (
+-- Settlement outbox. The AI runtime writes one row in the SAME transaction as
+-- the ai_usage_logs insert, so a usage record and its charge can never diverge:
+-- if the usage row exists, the charge is owed and will be applied. A background
+-- consumer drains it with FOR UPDATE SKIP LOCKED, which keeps it safe across
+-- instances and makes head-of-line blocking on a poison row impossible.
+CREATE TABLE bill_charge_outbox (
     id BIGSERIAL PRIMARY KEY,
-    account_type INTEGER NOT NULL CHECK (account_type IN (1, 2)),
-    account_id TEXT NOT NULL,
-    from_limit BIGINT NOT NULL CHECK (from_limit >= 0),
-    to_limit BIGINT NOT NULL CHECK (to_limit >= 0),
-    operator_id TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    request_id TEXT NOT NULL UNIQUE,
+    tenant_id TEXT NOT NULL,
+    user_id TEXT,
+    tenant_micro BIGINT NOT NULL DEFAULT 0 CHECK (tenant_micro >= 0),
+    user_micro BIGINT NOT NULL DEFAULT 0 CHECK (user_micro >= 0),
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    settled_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_bill_overdraft_adjustments_account
-    ON bill_overdraft_adjustments (account_type, account_id, created_at DESC);
+CREATE INDEX idx_bill_charge_outbox_pending ON bill_charge_outbox (id) WHERE status = 'pending';
+CREATE INDEX idx_bill_charge_outbox_failed ON bill_charge_outbox (created_at DESC) WHERE status = 'failed';
 
 CREATE TABLE pay_orders (
     id BIGSERIAL PRIMARY KEY,
@@ -566,7 +613,17 @@ CREATE INDEX idx_ledger_credit_leases_account
   --   5. 本基线不包含旧平台分组授权和上游真实成本模型。
   -- ============================================================================
 
-  CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  -- Extensions are database-global while this file is applied per schema, so two
+  -- sessions loading it at once can both pass IF NOT EXISTS and then collide on
+  -- pg_extension_name_index. Swallowing that race keeps concurrent test-schema
+  -- loads (and repeated deploys) from failing on a no-op.
+  DO $$
+  BEGIN
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+  EXCEPTION
+      WHEN duplicate_object OR unique_violation THEN NULL;
+  END
+  $$;
 
   -- ============================================================================
   -- 定价体系（Price Book 统一定价）
@@ -1981,6 +2038,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 2);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 3);
 
 COMMIT;

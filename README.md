@@ -31,7 +31,9 @@ D-AI 在一个进程中提供身份、权限、计费和 AI 能力，Portal 按 
 ├── internal/
 │   ├── config/                 # 统一配置
 │   ├── auth/                   # JWT / 黑名单 / 会话
-│   ├── billing/                # USD 额度账本 / 直接扣费 / 透支管理
+│   ├── billing/                # 有符号 USD 余额账本
+│   │   ├── ledger/             #   余额唯一读写入口（负数即欠费）
+│   │   └── outbox/             #   AI 扣费的可靠结算队列
 │   ├── user/                   # 用户管理
 │   ├── tenant/                 # 租户管理
 │   ├── invite/                 # 邀请码
@@ -87,6 +89,23 @@ make db-recreate
 
 后端可用 `curl http://localhost:19641/health` 和 `curl http://localhost:19641/ready` 检查。Portal 开发服务器使用同一后端的 Vite 代理。
 本地开发管理员和数据库维护规则见 [`docs/DATABASE.md`](docs/DATABASE.md)。
+
+## 测试
+
+```bash
+# 拉起 PostgreSQL/Redis 并跑全量（含计费集成测试）
+make test
+
+# 只跑不依赖外部服务的测试；计费路径会 skip
+make test-unit
+
+make test-frontend
+make typecheck
+```
+
+`make test` 设置 `DAI_TEST_DATABASE_STRICT=1`：数据库配置了却连不上时直接失败，
+不会退化成 skip。计费正确性只在这些测试真的跑起来时才成立，一个全靠 skip 换来的
+绿色是没有意义的。
 
 ## 构建
 

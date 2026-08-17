@@ -11,20 +11,16 @@ import (
 )
 
 type fakeAccountBalanceResolver struct {
-	tenant    AccountBalance
-	user      AccountBalance
-	tenantErr error
-	userErr   error
-	userCalls int
+	balances AccountBalances
+	err      error
+	calls    int
+	lastUser string
 }
 
-func (r *fakeAccountBalanceResolver) ResolveTenantBalance(context.Context, string) (AccountBalance, error) {
-	return r.tenant, r.tenantErr
-}
-
-func (r *fakeAccountBalanceResolver) ResolveUserBalance(context.Context, string, string) (AccountBalance, error) {
-	r.userCalls++
-	return r.user, r.userErr
+func (r *fakeAccountBalanceResolver) ResolveBalances(_ context.Context, _, userID string) (AccountBalances, error) {
+	r.calls++
+	r.lastUser = userID
+	return r.balances, r.err
 }
 
 func balanceGateRequest(scope coreidentity.Scope, billingSource string) *Request {
@@ -43,30 +39,55 @@ func requireBalanceGateError(t *testing.T, err error, status int, code string) {
 	}
 }
 
-func TestBalanceGateRejectsTenantDebtBeforeUserLookup(t *testing.T) {
+// Both balances come from one resolver call, so the gate can never compare a
+// tenant balance and a user balance observed at different instants.
+func TestBalanceGateReadsBothAccountsInOneCall(t *testing.T) {
 	resolver := &fakeAccountBalanceResolver{
-		tenant: AccountBalance{AvailableMicroUSD: 1_000_000, DebtMicroUSD: 1},
-		user:   AccountBalance{AvailableMicroUSD: 1_000_000},
+		balances: AccountBalances{TenantMicroUSD: 1_000_000, UserMicroUSD: 1_000_000, UserPresent: true},
+	}
+	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
+		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourcePayg))
+	if err != nil {
+		t.Fatalf("funded request was rejected: %v", err)
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("resolver calls = %d, want 1", resolver.calls)
+	}
+	if resolver.lastUser != "user-1" {
+		t.Fatalf("resolver user = %q, want user-1", resolver.lastUser)
+	}
+}
+
+func TestBalanceGateRejectsTenantInDebt(t *testing.T) {
+	resolver := &fakeAccountBalanceResolver{
+		balances: AccountBalances{TenantMicroUSD: -1, UserMicroUSD: 1_000_000, UserPresent: true},
 	}
 	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
 		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourcePayg))
 	requireBalanceGateError(t, err, http.StatusPaymentRequired, "insufficient_balance")
-	if resolver.userCalls != 0 {
-		t.Fatalf("user balance was queried %d time(s) after tenant rejection", resolver.userCalls)
-	}
 }
 
 func TestBalanceGateRejectsExhaustedTenant(t *testing.T) {
-	resolver := &fakeAccountBalanceResolver{tenant: AccountBalance{}}
+	resolver := &fakeAccountBalanceResolver{balances: AccountBalances{TenantMicroUSD: 0}}
 	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
 		balanceGateRequest(coreidentity.ScopeTenant, subscription.BillingSourcePayg))
 	requireBalanceGateError(t, err, http.StatusPaymentRequired, "insufficient_balance")
 }
 
+// The overdraft the business accepts: settlement took the balance negative and
+// the very next request is refused. This is the regression that kept recurring.
+func TestBalanceGateRejectsUserAfterOverdraft(t *testing.T) {
+	resolver := &fakeAccountBalanceResolver{
+		balances: AccountBalances{TenantMicroUSD: 1_000_000, UserMicroUSD: -500_000, UserPresent: true},
+	}
+	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
+		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourcePayg))
+	requireBalanceGateError(t, err, http.StatusPaymentRequired, "insufficient_balance")
+}
+
 func TestBalanceGateRejectsPaygUserWithoutBalance(t *testing.T) {
 	resolver := &fakeAccountBalanceResolver{
-		tenant: AccountBalance{AvailableMicroUSD: 1_000_000},
-		user:   AccountBalance{},
+		balances: AccountBalances{TenantMicroUSD: 1_000_000, UserMicroUSD: 0, UserPresent: true},
 	}
 	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
 		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourcePayg))
@@ -75,8 +96,7 @@ func TestBalanceGateRejectsPaygUserWithoutBalance(t *testing.T) {
 
 func TestBalanceGateAllowsSubscriptionUserWithoutPaygBalance(t *testing.T) {
 	resolver := &fakeAccountBalanceResolver{
-		tenant: AccountBalance{AvailableMicroUSD: 1_000_000},
-		user:   AccountBalance{},
+		balances: AccountBalances{TenantMicroUSD: 1_000_000, UserMicroUSD: 0, UserPresent: true},
 	}
 	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
 		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourceSubscription))
@@ -85,10 +105,9 @@ func TestBalanceGateAllowsSubscriptionUserWithoutPaygBalance(t *testing.T) {
 	}
 }
 
-func TestBalanceGateRejectsSubscriptionUserDebt(t *testing.T) {
+func TestBalanceGateRejectsSubscriptionUserInDebt(t *testing.T) {
 	resolver := &fakeAccountBalanceResolver{
-		tenant: AccountBalance{AvailableMicroUSD: 1_000_000},
-		user:   AccountBalance{DebtMicroUSD: 1},
+		balances: AccountBalances{TenantMicroUSD: 1_000_000, UserMicroUSD: -1, UserPresent: true},
 	}
 	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
 		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourceSubscription))
@@ -96,8 +115,20 @@ func TestBalanceGateRejectsSubscriptionUserDebt(t *testing.T) {
 }
 
 func TestBalanceGateFailsClosedWhenBalanceCannotBeRead(t *testing.T) {
-	resolver := &fakeAccountBalanceResolver{tenantErr: errors.New("database unavailable")}
+	resolver := &fakeAccountBalanceResolver{err: errors.New("database unavailable")}
 	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
 		balanceGateRequest(coreidentity.ScopeTenant, subscription.BillingSourcePayg))
+	requireBalanceGateError(t, err, http.StatusServiceUnavailable, "balance_state_unavailable")
+}
+
+// A user-scoped request whose account row is missing is an unknown billing
+// state, not a zero balance, and must fail closed rather than be refused as
+// unfunded.
+func TestBalanceGateFailsClosedWhenUserAccountMissing(t *testing.T) {
+	resolver := &fakeAccountBalanceResolver{
+		balances: AccountBalances{TenantMicroUSD: 1_000_000, UserPresent: false},
+	}
+	err := (&BalanceGateStep{Resolver: resolver}).Execute(context.Background(),
+		balanceGateRequest(coreidentity.ScopeUser, subscription.BillingSourcePayg))
 	requireBalanceGateError(t, err, http.StatusServiceUnavailable, "balance_state_unavailable")
 }

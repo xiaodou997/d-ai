@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Go
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dai_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+    env:
+      DAI_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable
+      DAI_TEST_REDIS_ADDR: 127.0.0.1:6379
+      # Billing correctness is only proven when these tests actually run. Without
+      # this the suite degrades to skips the moment the database is unreachable,
+      # and a green run stops meaning anything.
+      DAI_TEST_DATABASE_STRICT: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Assert database tests were not skipped
+        run: |
+          go test ./internal/billing/... ./internal/ai/adapters/postgres/... -v 2>&1 | tee /tmp/db-tests.log
+          if grep -q '^--- SKIP' /tmp/db-tests.log; then
+            echo "::error::database-backed tests were skipped; billing was not verified"
+            grep -B2 '^--- SKIP' /tmp/db-tests.log
+            exit 1
+          fi
+
+      - name: OpenAPI contract is current
+        run: |
+          go run ./cmd/openapi
+          git diff --exit-code contracts/openapi.yaml
+
+  frontend:
+    name: Portal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Generated API types are current
+        run: bun run ensure:api
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
