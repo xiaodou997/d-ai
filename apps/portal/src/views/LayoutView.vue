@@ -43,6 +43,8 @@ const { handleLogout } = usePortalShellScaffold({
   <PortalShellLayout
     :theme="theme"
     :app-version="portalEnv.appVersion"
+    brand="D-AI"
+    brand-icon-url="/brand/dai-icon.png"
     :nav="menuStore.items"
     :user="user"
     :user-menu="userMenu"

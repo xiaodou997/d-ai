@@ -36,7 +36,11 @@ async function startLogin() {
 <template>
   <main class="login-page">
     <section class="login-card" aria-labelledby="login-title">
-      <div class="login-brand">D-AI</div>
+      <img
+        class="login-logo"
+        src="/brand/dai-logo.png"
+        alt="D-AI Unified Intelligence Platform"
+      />
       <p class="login-kicker">统一 AI 服务平台</p>
       <h1 id="login-title">登录</h1>
       <p class="login-description">使用账号登录，系统会根据你的身份和权限展示对应的工作区。</p>
@@ -107,10 +111,11 @@ async function startLogin() {
   box-shadow: var(--ds-shadow-pop);
 }
 
-.login-brand {
-  color: var(--ds-accent);
-  font: 700 28px/1 var(--ds-font-display);
-  letter-spacing: 0;
+.login-logo {
+  display: block;
+  width: min(100%, 420px);
+  height: auto;
+  margin: 0 auto;
 }
 
 .login-kicker {
