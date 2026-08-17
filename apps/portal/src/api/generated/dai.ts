@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 修改用户名/邮箱（仅租户用户和终端用户） */
+        put: operations["auth-update-profile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/refresh": {
         parameters: {
             query?: never;
@@ -6588,6 +6605,7 @@ export interface components {
              */
             readonly $schema?: string;
             password: string;
+            /** @description 用户名或邮箱 */
             username: string;
         };
         MeOutputBody: {
@@ -8547,8 +8565,10 @@ export interface components {
             paymentCurrency: string;
             scene: string;
             status: string;
+            tenantName?: string;
             topupMode: string;
             transactionId?: string;
+            username?: string;
         };
         TopupOrderOutputBody: {
             /**
@@ -8726,6 +8746,18 @@ export interface components {
             name?: string;
             /** @description 状态：active 或 disabled */
             status?: string;
+        };
+        UpdateProfileInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UpdateProfileInputBody.json
+             */
+            readonly $schema?: string;
+            /** @description 新邮箱，空字符串表示清除 */
+            email: string | null;
+            /** @description 新用户名 */
+            username: string | null;
         };
         UpdateSystemAdminInputBody: {
             /**
@@ -10502,6 +10534,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ChangePasswordInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-update-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileInputBody"];
             };
         };
         responses: {

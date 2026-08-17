@@ -1,6 +1,6 @@
 {
   "name": "dai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "D-AI — 统一 AI 服务（单后端 + 单 Portal，单二进制部署）",

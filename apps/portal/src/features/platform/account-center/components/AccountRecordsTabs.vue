@@ -3,6 +3,7 @@ import { FileClock } from "lucide-vue-next";
 import { DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
 import type { TenantBalanceLedgerItem, TenantTopupOrderItem } from "@/api/types/tenant";
 import type { RechargeRecordItem } from "@/api/types/platformTenant";
+import { isOnlineRecharge, rechargeMethodText } from "@/utils/recharge";
 import {
   balanceSourceText, balanceStatusText, balanceTransactionText, formatMicroUSD, formatTime,
   formatUSD,
@@ -28,7 +29,8 @@ const pendingOrderColumns: DsTableColumn[] = [
   { key: "createdAt", title: "创建时间", width: 180 }
 ];
 const rechargeColumns: DsTableColumn[] = [
-  { key: "source", title: "来源" }, { key: "paidAmount", title: "支付金额", width: 125, align: "right" },
+  { key: "source", title: "来源" }, { key: "rechargeMethod", title: "充值方式", width: 110 },
+  { key: "paidAmount", title: "支付金额", width: 125, align: "right" },
   { key: "amount", title: "到账金额", width: 130, align: "right" }, { key: "status", title: "状态", width: 100 },
   { key: "note", title: "备注" }, { key: "createdTime", title: "时间", width: 180 }
 ];
@@ -64,6 +66,7 @@ function statusTone(status: string): DsTagTone {
       <div class="records-panel__table">
         <DsTable :frame="false" :columns="rechargeColumns" :rows="rechargeRecords.items" row-key="orderId" :loading="loading.recharges" empty-title="暂无充值记录">
           <template #cell-source="{ row }">{{ balanceSourceText(row.orderType) }}</template>
+          <template #cell-rechargeMethod="{ row }"><DsTag :tone="isOnlineRecharge(row.orderType) ? 'accent' : 'neutral'">{{ rechargeMethodText(row.orderType) }}</DsTag></template>
           <template #cell-paidAmount="{ row }">{{ row.paidAmountMinor ? `$${(row.paidAmountMinor / 100).toFixed(2)}` : "—" }}</template>
           <template #cell-amount="{ row }"><span class="amount-positive">+{{ formatUSD(row.amountUsd) }}</span></template>
           <template #cell-status="{ row }"><DsTag :tone="statusTone(row.status)">{{ balanceStatusText(row.status) }}</DsTag></template>

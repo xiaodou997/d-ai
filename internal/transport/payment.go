@@ -64,7 +64,7 @@ type topupConfigOutput struct {
 type createTopupOrderInput struct {
 	Body struct {
 		AmountMicroUSD int64  `json:"amountMicroUsd" required:"false" doc:"自定义充值金额，单位 micro-USD；必须可精确换算为美分"`
-	PackageID      string `json:"packageId" required:"false" doc:"快捷额度包 ID"`
+		PackageID      string `json:"packageId" required:"false" doc:"快捷额度包 ID"`
 	}
 }
 
@@ -117,6 +117,8 @@ type listTopupOrdersInput struct {
 type topupOrderItem struct {
 	OrderID                string `json:"orderId"`
 	Scene                  string `json:"scene"`
+	TenantName             string `json:"tenantName,omitempty"`
+	Username               string `json:"username,omitempty"`
 	Status                 string `json:"status"`
 	PaymentCurrency        string `json:"paymentCurrency"`
 	PaymentAmountMinor     int64  `json:"paymentAmountMinor"`
@@ -138,7 +140,7 @@ type listTopupOrdersOutput struct {
 
 func orderToItem(o *payment.Order) topupOrderItem {
 	return topupOrderItem{
-		OrderID: o.OrderID, Scene: o.Scene, Status: o.Status,
+		OrderID: o.OrderID, Scene: o.Scene, TenantName: o.TenantName, Username: o.Username, Status: o.Status,
 		PaymentCurrency: o.PaymentCurrency, PaymentAmountMinor: o.PaymentAmountMinor,
 		GrossAmountMicroUSD: o.GrossAmountMicroUSD, FeeAmountMicroUSD: o.FeeAmountMicroUSD,
 		GiftAmountMicroUSD: o.GiftAmountMicroUSD, CreditedAmountMicroUSD: o.CreditedAmountMicroUSD,

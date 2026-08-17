@@ -61,9 +61,14 @@
         <template #cell-amount="{ row }">
           <span class="recharge-records-num recharge-records-credits">+${{ (row.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
         </template>
+        <template #cell-rechargeMethod="{ row }">
+          <DsTag :tone="isOnlineRecharge(row.orderType) ? 'accent' : 'neutral'">
+            {{ rechargeMethodText(row.orderType) }}
+          </DsTag>
+        </template>
         <template #cell-orderType="{ row }">
-          <DsTag :tone="row.orderType === 'platform_to_tenant' ? 'accent' : 'positive'">
-            {{ row.orderType === 'platform_to_tenant' ? '平台→租户' : '租户→用户' }}
+          <DsTag :tone="orderTypeTone(row.orderType)">
+            {{ orderTypeText(row.orderType) }}
           </DsTag>
         </template>
         <template #cell-status="{ row }">
@@ -136,6 +141,7 @@ import {
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
+import { isOnlineRecharge, rechargeMethodText } from '@/utils/recharge'
 
 const columns: DsTableColumn[] = [
   { key: 'orderId', title: '充值单号', width: 200, mono: true },
@@ -143,6 +149,7 @@ const columns: DsTableColumn[] = [
   { key: 'username', title: '用户名' },
   { key: 'paidAmount', title: '实付金额', align: 'right' },
   { key: 'amount', title: '到账金额', align: 'right' },
+  { key: 'rechargeMethod', title: '充值方式', width: 110, align: 'center' },
   { key: 'orderType', title: '类型', align: 'center' },
   { key: 'status', title: '状态', align: 'center' },
   { key: 'note', title: '备注' },
@@ -192,6 +199,20 @@ const formatTime = (ts?: number) => (ts ? new Date(ts).toLocaleString('zh-CN', {
 const statusLabel = (s: string) => (({ active: '有效', reversed: '已撤销' } as any)[s] || s || '有效')
 const statusTone = (s: string): 'positive' | 'info' =>
   (({ active: 'positive', reversed: 'info' } as const)[s] ?? 'positive')
+
+const orderTypeText = (orderType: string) => ({
+  platform_to_tenant: '平台→租户',
+  tenant_to_user: '租户→用户',
+  online_tenant_topup: '租户在线充值',
+  online_user_topup: '用户在线充值',
+  user_topup_income: '用户充值收入'
+} as Record<string, string>)[orderType] || orderType
+
+const orderTypeTone = (orderType: string): 'accent' | 'positive' | 'info' => {
+  if (orderType === 'platform_to_tenant' || orderType === 'online_tenant_topup') return 'accent'
+  if (orderType === 'user_topup_income') return 'info'
+  return 'positive'
+}
 
 const handleReverse = (row: any) => {
   reverseRow.value = row

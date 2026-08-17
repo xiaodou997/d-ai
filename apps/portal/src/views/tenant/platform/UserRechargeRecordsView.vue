@@ -59,6 +59,9 @@
         <template #cell-amount="{ row }">
           <span class="recharge-records-credits">+${{ row.amountUsd?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
         </template>
+        <template #cell-rechargeMethod="{ row }">
+          <DsTag :tone="isOnlineRecharge(row.orderType) ? 'accent' : 'neutral'">{{ rechargeMethodText(row.orderType) }}</DsTag>
+        </template>
         <template #cell-status="{ row }">
           <DsTag :tone="statusTone(row.status)">{{ statusLabel(row.status) }}</DsTag>
         </template>
@@ -124,12 +127,14 @@ import {
 
 import { platformTenantApi } from "@/api/platformTenant";
 import type { RechargeRecordItem } from "@/api/types/platformTenant";
+import { isOnlineRecharge, rechargeMethodText } from "@/utils/recharge";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "充值单号", width: 200, mono: true },
   { key: "username", title: "用户名", width: 130 },
   { key: "paidAmount", title: "实付金额（USD）", width: 140, align: "right" },
   { key: "amount", title: "到账金额（USD）", width: 140, align: "right" },
+  { key: "rechargeMethod", title: "充值方式", width: 110, align: "center" },
   { key: "status", title: "状态", width: 90 },
   { key: "note", title: "备注" },
   { key: "createdTime", title: "时间", width: 180 },

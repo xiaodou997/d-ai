@@ -245,14 +245,59 @@ func ListOrders(ctx context.Context, pool *pgxpool.Pool, p ListOrdersParams) ([]
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
 	var list []*payment.Order
 	for rows.Next() {
 		o, err := scanOrder(rows)
 		if err != nil {
+			rows.Close()
 			return nil, 0, err
 		}
 		list = append(list, o)
 	}
-	return list, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, 0, err
+	}
+	rows.Close()
+	if err := loadOrderPartyNames(ctx, pool, list); err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
+// loadOrderPartyNames enriches list projections without denormalizing mutable
+// tenant and user names into the immutable payment snapshot.
+func loadOrderPartyNames(ctx context.Context, pool *pgxpool.Pool, orders []*payment.Order) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	byID := make(map[string]*payment.Order, len(orders))
+	orderIDs := make([]string, 0, len(orders))
+	for _, order := range orders {
+		byID[order.OrderID] = order
+		orderIDs = append(orderIDs, order.OrderID)
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT o.order_id, COALESCE(t.tenant_name, ''), COALESCE(u.username, '')
+		FROM pay_orders o
+		LEFT JOIN iam_tenants t ON t.tenant_id = o.tenant_id
+		LEFT JOIN iam_accounts u ON u.user_id = o.user_id AND u.user_type = 4
+		WHERE o.order_id = ANY($1)
+	`, orderIDs)
+	if err != nil {
+		return fmt.Errorf("查询支付订单主体名称失败: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var orderID, tenantName, username string
+		if err := rows.Scan(&orderID, &tenantName, &username); err != nil {
+			return fmt.Errorf("扫描支付订单主体名称失败: %w", err)
+		}
+		if order := byID[orderID]; order != nil {
+			order.TenantName = tenantName
+			order.Username = username
+		}
+	}
+	return rows.Err()
 }

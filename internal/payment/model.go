@@ -45,7 +45,9 @@ type Order struct {
 	OutTradeNo             string
 	Scene                  string
 	TenantID               string
+	TenantName             string // 列表查询时关联的当前租户名称
 	UserID                 string // 为空表示 tenant_topup
+	Username               string // 列表查询时关联的当前用户名
 	TopupMode              string
 	PackageID              string
 	PackageName            string

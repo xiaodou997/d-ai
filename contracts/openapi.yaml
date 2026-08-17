@@ -7992,9 +7992,13 @@ components:
           type: string
         status:
           type: string
+        tenantName:
+          type: string
         topupMode:
           type: string
         transactionId:
+          type: string
+        username:
           type: string
       required:
         - orderId

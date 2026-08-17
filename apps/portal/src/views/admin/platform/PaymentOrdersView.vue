@@ -56,6 +56,12 @@
         :loading="loading"
         empty-title="暂无支付订单"
       >
+        <template #cell-tenantName="{ row }">
+          {{ row.tenantName || "—" }}
+        </template>
+        <template #cell-username="{ row }">
+          {{ row.username || "—" }}
+        </template>
         <template #cell-scene="{ row }">
           {{ sceneText(row.scene) }}
         </template>
@@ -122,6 +128,8 @@ import type { PaymentOrderItem } from "@/api/types/admin";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "订单号", width: 200, mono: true },
+  { key: "tenantName", title: "租户名称", width: 150 },
+  { key: "username", title: "用户名", width: 130 },
   { key: "scene", title: "充值对象", width: 110 },
   { key: "topupMode", title: "充值方式", width: 150 },
   { key: "amount", title: "支付金额", width: 120, align: "right" },

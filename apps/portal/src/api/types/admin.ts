@@ -527,6 +527,8 @@ export interface WechatConfigWriteInput {
 export interface PaymentOrderItem {
   orderId: string;
   scene: "user_topup" | "tenant_topup";
+  tenantName?: string;
+  username?: string;
   status: string;
   paymentCurrency: string;
   paymentAmountMinor: number;

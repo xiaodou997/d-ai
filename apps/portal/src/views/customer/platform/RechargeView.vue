@@ -26,6 +26,9 @@
         <template #cell-amount="{ row }">
           <span class="recharge-credits">+${{ (row.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
         </template>
+        <template #cell-rechargeMethod="{ row }">
+          <DsTag :tone="isOnlineRecharge(row.orderType) ? 'accent' : 'neutral'">{{ rechargeMethodText(row.orderType) }}</DsTag>
+        </template>
         <template #cell-status="{ row }">
           <DsTag :tone="rechargeStatusTone(row.status)">
             {{ rechargeStatusText(row.status) }}
@@ -56,11 +59,13 @@ import { PortalPagePanel } from "@/platform";
 import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { RechargeRecordItem } from "@/api/types/platformCustomer";
+import { isOnlineRecharge, rechargeMethodText } from "@/utils/recharge";
 
 const columns: DsTableColumn[] = [
   { key: "orderId", title: "充值单号", width: 200, mono: true },
   { key: "paidAmount", title: "实付金额（USD）", width: 150, align: "right" },
   { key: "amount", title: "到账金额（USD）", width: 160, align: "right" },
+  { key: "rechargeMethod", title: "充值方式", width: 110, align: "center" },
   { key: "status", title: "状态", width: 110 },
   { key: "note", title: "备注" },
   { key: "createdTime", title: "充值时间", width: 180 }
