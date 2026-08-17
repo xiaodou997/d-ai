@@ -82,7 +82,7 @@
             <el-option v-for="tenant in tenantOptions" :key="tenant.tenantId" :label="`${tenant.tenantName || '未命名租户'} · ${tenant.tenantId}`" :value="tenant.tenantId" />
           </el-select>
         </el-form-item>
-        <el-form-item label="扣减金额（USD）" required>
+        <el-form-item label="扣减金额" required>
           <el-input-number v-model="createForm.amountUsd" :min="0" :precision="6" :controls="false" class="create-form__full" />
         </el-form-item>
         <div class="create-form__grid">
@@ -120,9 +120,9 @@ import type { WithdrawalItem } from "@/api/types/admin";
 
 const columns: DsTableColumn[] = [
   { key: "withdrawalId", title: "记录单号", width: 200, mono: true },
-  { key: "amount", title: "扣减金额（USD）", width: 150, align: "right" },
-  { key: "feeAmount", title: "手续费（USD）", width: 130, align: "right" },
-  { key: "payoutAmount", title: "应付金额（USD）", width: 140, align: "right" },
+  { key: "amount", title: "扣减金额", width: 150, align: "right" },
+  { key: "feeAmount", title: "手续费", width: 130, align: "right" },
+  { key: "payoutAmount", title: "应付金额", width: 140, align: "right" },
   { key: "accountName", title: "收款户名", width: 120 },
   { key: "bankName", title: "开户行", width: 140 },
   { key: "accountNo", title: "账号", width: 180, mono: true },

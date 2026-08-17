@@ -37,7 +37,7 @@
       <div class="dashboard-body">
     <!-- ① 平台 → 租户 -->
     <PortalContentCard
-      title="平台 → 租户（USD）"
+      title="平台 → 租户"
       :description="`充值类数据为${periodLabel}汇总，余额为当前实时值`"
     >
       <PortalMetricGrid>
@@ -57,7 +57,7 @@
           hint="当前状态正常的租户"
         />
         <DsMetricCard
-          label="租户 USD 余额"
+          label="租户余额"
           :value="fmtUSD(stats.tenantTotalBalanceUsd)"
           hint="所有租户当前余额合计"
         />
@@ -66,7 +66,7 @@
 
     <!-- ② 租户 → 用户 -->
     <PortalContentCard
-      title="租户 → 用户（USD）"
+      title="租户 → 用户"
       :description="`充值类数据为${periodLabel}汇总，余额为当前实时值`"
     >
       <PortalMetricGrid>
@@ -86,7 +86,7 @@
           :hint="`${periodLabel}注册用户数`"
         />
         <DsMetricCard
-          label="用户 USD 余额"
+          label="用户余额"
           :value="fmtUSD(stats.userTotalBalanceUsd)"
           hint="所有用户当前余额合计"
         />
@@ -132,7 +132,7 @@
               <span>{{ item.clientName || item.clientId || '—' }}</span>
             </div>
             <div class="dash-resource__val">
-              <p class="dash-resource__credits">${{ fmtNum(item.amountUsd) }} <span class="dash-resource__unit">USD</span></p>
+              <p class="dash-resource__credits">${{ fmtNum(item.amountUsd) }}</p>
               <p class="dash-resource__pct">{{ item.percentage }}%</p>
             </div>
           </div>

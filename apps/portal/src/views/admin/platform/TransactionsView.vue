@@ -183,8 +183,8 @@ const columns: DsTableColumn[] = [
   { key: 'username', title: '用户名' },
   { key: 'clientId', title: 'Client' },
   { key: 'description', title: '描述' },
-  { key: 'tenantAmount', title: '租户金额（USD）', align: 'right' },
-  { key: 'userAmount', title: '用户金额（USD）', align: 'right' },
+  { key: 'tenantAmount', title: '租户金额', align: 'right' },
+  { key: 'userAmount', title: '用户金额', align: 'right' },
   { key: 'status', title: '状态', width: 100 },
   { key: 'createdTime', title: '交易时间', width: 170 },
   { key: 'actions', title: '操作', width: 190 }

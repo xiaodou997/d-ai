@@ -6,7 +6,7 @@ withDefaults(
   }>(),
   {
     row: null,
-    label: '金额（USD）'
+    label: '金额'
   }
 )
 

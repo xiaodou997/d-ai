@@ -17,14 +17,14 @@
         <span class="recharge-target__identity">{{ targetIdentity }}</span>
       </div>
       <div v-if="targetBalanceUsd != null" class="recharge-target__balance">
-        <span>当前 USD 余额</span>
+        <span>当前余额</span>
         <strong>${{ targetBalanceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</strong>
       </div>
     </div>
 
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <div class="recharge-fields">
-        <el-form-item label="实付金额（USD）" prop="paidAmountUsd">
+        <el-form-item label="实付金额" prop="paidAmountUsd">
           <el-input-number
             v-model="form.paidAmountUsd"
             :min="0"
@@ -39,10 +39,10 @@
               ${{ amount }}
             </button>
           </div>
-          <p class="recharge-hint">支付渠道金额按 USD cents 保存</p>
+          <p class="recharge-hint">支付渠道金额按分保存</p>
         </el-form-item>
 
-        <el-form-item label="到账金额（USD）" prop="amountUsd">
+        <el-form-item label="到账金额" prop="amountUsd">
           <el-input-number
             v-model="form.amountUsd"
             :min="0.000001"
@@ -136,7 +136,7 @@ const form = reactive({
 
 const isZeroAmount = computed(() => form.paidAmountUsd === 0)
 const rules = computed<FormRules>(() => ({
-  paidAmountUsd: [{ required: true, type: 'number', min: 0, message: '请填写实付金额（USD）', trigger: ['blur', 'change'] }],
+  paidAmountUsd: [{ required: true, type: 'number', min: 0, message: '请填写实付金额', trigger: ['blur', 'change'] }],
   amountUsd: [{ required: true, type: 'number', min: 0.000001, message: '到账金额至少为 $0.000001', trigger: ['blur', 'change'] }],
   reason: isZeroAmount.value
     ? [

@@ -89,7 +89,7 @@ function packageToForm(item: TopupPackage): PackageForm {
 function formToPackage(item: PackageForm): TopupPackage {
   return {
     id: item.id.trim() || `p${Date.now()}`,
-    name: item.name.trim() || `${item.paymentAmountUsd} USD 额度包`,
+    name: item.name.trim() || `${item.paymentAmountUsd} 额度包`,
     paymentAmountMicroUsd: Math.round(Number(item.paymentAmountUsd || 0) * 1_000_000),
     giftAmountMicroUsd: Math.round(Number(item.giftAmountUsd || 0) * 1_000_000),
     validityDays: item.validityDays || null,
@@ -103,7 +103,7 @@ function addPackage() {
   const next = ruleForm.packages.length + 1;
   ruleForm.packages.push({
     id: `p${Date.now()}`,
-    name: `${next * 10} USD 额度包`,
+    name: `${next * 10} 额度包`,
     paymentAmountUsd: next * 10,
     giftAmountUsd: 0,
     validityDays: null,
@@ -321,7 +321,7 @@ onMounted(() => {
           <section class="settings-section">
             <div class="section-heading">
               <h4>手续费与有效期</h4>
-              <p>所有金额均为 USD；自定义充值按支付金额扣除手续费后入账。</p>
+              <p>所有金额均按统一货币单位计价；自定义充值按支付金额扣除手续费后入账。</p>
             </div>
             <div class="form-grid form-grid--3">
               <el-form-item label="充值手续费">
@@ -375,11 +375,11 @@ onMounted(() => {
                     <el-input v-model="pkg.name" placeholder="10 元体验包" />
                   </label>
                   <label class="package-field">
-                    <span>支付金额（USD）</span>
+                    <span>支付金额</span>
                     <el-input-number v-model="pkg.paymentAmountUsd" :min="0.000001" :max="10000" :precision="6" :controls="false" class="w-full" />
                   </label>
                   <label class="package-field">
-                    <span>赠送金额（USD）</span>
+                    <span>赠送金额</span>
                     <el-input-number v-model="pkg.giftAmountUsd" :min="0" :precision="6" :controls="false" class="w-full" />
                   </label>
                   <label class="package-field"><span>有效期（天）</span><el-input-number v-model="pkg.validityDays" :min="1" :controls="false" clearable class="w-full" placeholder="长期有效" /></label>

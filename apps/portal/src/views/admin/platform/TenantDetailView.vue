@@ -229,7 +229,7 @@ const rechargeSubmitting = ref(false)
 
 // 页头副标题集中展示关键信息
 const headerDescription = computed(
-  () => `租户 ID：${tenantId} · USD 余额：$${credits.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+  () => `租户 ID：${tenantId} · 余额：$${credits.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 )
 
 const orgUserColumns: DsTableColumn[] = [
@@ -251,7 +251,7 @@ const userColumns: DsTableColumn[] = [
 
 const txColumns: DsTableColumn[] = [
   { key: 'eventId', title: '交易流水', mono: true },
-  { key: 'amount', title: '金额（USD）', align: 'right', width: 150 },
+  { key: 'amount', title: '金额', align: 'right', width: 150 },
   { key: 'status', title: '状态', width: 120 },
   { key: 'createdTime', title: '时间', width: 170 }
 ]

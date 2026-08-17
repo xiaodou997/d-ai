@@ -215,7 +215,7 @@ const columns: DsTableColumn[] = [
   { key: 'contactPerson', title: '联系人' },
   { key: 'contactEmail', title: '联系邮箱' },
   { key: 'status', title: '状态', width: 100 },
-  { key: 'balance', title: 'USD 余额', align: 'right' },
+  { key: 'balance', title: '余额', align: 'right' },
   { key: 'userCount', title: '用户数', align: 'center' },
   { key: 'createdTime', title: '入驻时间' },
   { key: 'actions', title: '操作', width: 260 }

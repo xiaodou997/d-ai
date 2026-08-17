@@ -4,7 +4,6 @@
       <div>
         <p class="debt-status__label">未结债务</p>
         <p class="debt-status__value">{{ formatMicroUSD(status?.outstanding_debt_micro_usd ?? 0) }}</p>
-        <p class="debt-status__unit">USD</p>
       </div>
       <el-tag :type="blocked ? 'danger' : 'success'" effect="light">
         {{ blocked ? '服务已停止' : '服务正常' }}
@@ -74,7 +73,6 @@ defineExpose({ refresh: fetchStatus });
 }
 
 .debt-status__label,
-.debt-status__unit,
 .debt-status__meta {
   color: #64748b;
   font-size: 12px;
@@ -86,10 +84,6 @@ defineExpose({ refresh: fetchStatus });
   font-size: 24px;
   font-weight: 700;
   line-height: 1.2;
-}
-
-.debt-status__unit {
-  margin: 2px 0 0;
 }
 
 .debt-status__meta {

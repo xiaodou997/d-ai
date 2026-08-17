@@ -148,7 +148,7 @@ const columns: DsTableColumn[] = [
   { key: 'tenantName', title: '归属租户' },
   { key: 'email', title: '邮箱' },
   { key: 'status', title: '状态', width: 130 },
-  { key: 'balance', title: 'USD 余额', align: 'right' },
+  { key: 'balance', title: '余额', align: 'right' },
   { key: 'lastLoginTime', title: '最后登录' },
   { key: 'createdTime', title: '注册时间' },
   { key: 'actions', title: '操作', width: 80 }

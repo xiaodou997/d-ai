@@ -10,7 +10,7 @@
     <PortalPagePanel
       :icon="Landmark"
       :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '租户余额' }]"
-      description="充值、服务消费、用户充值收入和管理员提现扣减均归集到租户统一 USD 额度。"
+      description="充值、服务消费、用户充值收入和管理员提现扣减均归集到租户统一额度。"
     >
       <template #filters>
         <DsFilterBar>
@@ -105,15 +105,15 @@ import type { BalanceLedgerItem, TenantBalanceItem } from "@/api/types/admin";
 const columns: DsTableColumn[] = [
   { key: "tenantId", title: "租户 ID", width: 200, mono: true },
   { key: "tenantName", title: "租户名称" },
-  { key: "balance", title: "余额（USD）", align: "right" },
+  { key: "balance", title: "余额", align: "right" },
   { key: "actions", title: "操作", width: 100 }
 ];
 
 // 流水弹窗固定取前 50 条(API 限制,不做翻页)
 const ledgerColumns: DsTableColumn[] = [
   { key: "txnType", title: "类型", width: 120 },
-  { key: "amount", title: "金额（USD）", width: 130, align: "right" },
-  { key: "balanceAfter", title: "变动后余额（USD）", width: 160, align: "right" },
+  { key: "amount", title: "金额", width: 130, align: "right" },
+  { key: "balanceAfter", title: "变动后余额", width: 160, align: "right" },
   { key: "note", title: "备注" },
   { key: "createdAt", title: "时间", width: 170 }
 ];

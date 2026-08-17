@@ -16,7 +16,7 @@
       <template v-else-if="balance">
         <section class="account-drawer__hero" :class="{ 'is-debt': hasDebt }">
           <div>
-            <p>净 USD 余额</p>
+            <p>净余额</p>
             <strong>{{ formatUSD(netBalance) }}</strong>
           </div>
           <DsTag :tone="hasDebt ? 'danger' : 'positive'">
