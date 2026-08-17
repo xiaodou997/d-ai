@@ -58,11 +58,12 @@ build-linux-amd64: frontend embed database-artifacts ## 构建生产 Docker 使�
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY)-linux-amd64 ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)-linux-amd64"
 
-database-artifacts: ## 将初始化和人工升级 SQL 复制到发布目录
+database-artifacts: ## 将初始化、人工升级和回滚 SQL 复制到发布目录
 	rm -rf $(DB_RELEASE_DIR)
 	mkdir -p $(DB_RELEASE_DIR)
 	cp internal/db/init.sql $(DB_RELEASE_DIR)/init.sql
 	cp -R internal/db/changes $(DB_RELEASE_DIR)/
+	cp -R internal/db/rollback $(DB_RELEASE_DIR)/
 
 frontend: ## 构建前端
 	bun install
