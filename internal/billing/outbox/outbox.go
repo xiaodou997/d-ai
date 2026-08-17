@@ -22,6 +22,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/billing/ledger"
@@ -75,6 +77,31 @@ const (
 	defaultInterval    = 500 * time.Millisecond
 	defaultBatchSize   = 100
 	defaultMaxAttempts = 10
+	// A backlog older than this means the consumer is stalled or wedged, not
+	// merely busy. Balances stop advancing while admission keeps reading them,
+	// so it has to be loud rather than only visible on a metrics dashboard.
+	stallWarnAfter = 2 * time.Minute
+)
+
+// Settlement is the only thing standing between a recorded usage row and the
+// money actually moving, so its health is exported rather than inferred.
+var (
+	pendingCharges = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "dai_billing_outbox_pending",
+		Help: "Charges recorded with a usage row but not yet applied to a balance.",
+	})
+	failedCharges = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "dai_billing_outbox_failed",
+		Help: "Charges parked after exhausting their attempts; each one is money not collected.",
+	})
+	oldestPendingSeconds = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "dai_billing_outbox_oldest_pending_seconds",
+		Help: "Age of the oldest unsettled charge. Sustained growth means settlement has stopped.",
+	})
+	appliedCharges = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "dai_billing_outbox_applied_total",
+		Help: "Charges successfully applied to a balance.",
+	})
 )
 
 // Consumer drains the outbox into the ledger.
@@ -117,6 +144,7 @@ func (c *Consumer) Run(ctx context.Context) {
 		if err != nil && ctx.Err() == nil {
 			c.logger.Error("billing outbox drain failed", zap.Error(err))
 		}
+		c.publishHealth(ctx)
 		if applied == c.batchSize && err == nil {
 			continue
 		}
@@ -126,6 +154,33 @@ func (c *Consumer) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
+	}
+}
+
+// publishHealth exports the queue state after every cycle. Nothing else can
+// tell an operator that settlement has stopped: usage keeps being recorded and
+// requests keep being admitted against balances that are no longer moving.
+func (c *Consumer) publishHealth(ctx context.Context) {
+	stats, err := Stats(ctx, c.pool)
+	if err != nil {
+		if ctx.Err() == nil {
+			c.logger.Warn("billing outbox stats unavailable", zap.Error(err))
+		}
+		return
+	}
+	pendingCharges.Set(float64(stats.Pending))
+	failedCharges.Set(float64(stats.Failed))
+	oldestPendingSeconds.Set(stats.OldestS)
+
+	if stats.OldestS >= stallWarnAfter.Seconds() {
+		c.logger.Error("billing settlement is falling behind; balances are not advancing",
+			zap.Int64("pending", stats.Pending),
+			zap.Int64("failed", stats.Failed),
+			zap.Float64("oldest_pending_seconds", stats.OldestS))
+	}
+	if stats.Failed > 0 {
+		c.logger.Warn("billing charges parked after exhausting attempts",
+			zap.Int64("failed", stats.Failed))
 	}
 }
 
@@ -194,6 +249,7 @@ func (c *Consumer) DrainOnce(ctx context.Context) (int, error) {
 		if err := sp.Commit(ctx); err != nil {
 			return 0, fmt.Errorf("release outbox savepoint: %w", err)
 		}
+		appliedCharges.Inc()
 	}
 
 	if err := tx.Commit(ctx); err != nil {

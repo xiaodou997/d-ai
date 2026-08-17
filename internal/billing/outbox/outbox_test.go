@@ -304,6 +304,40 @@ func TestTenantOnlyChargeNeedsNoUser(t *testing.T) {
 	}
 }
 
+// Settlement health has to be observable: usage keeps being recorded and
+// requests keep being admitted while a stalled consumer leaves balances frozen,
+// so a stuck queue is invisible without this.
+func TestStatsReportQueueHealth(t *testing.T) {
+	pool, ctx := openOutboxPool(t)
+	tenantID, userID := seedTenantAndUser(t, ctx, pool)
+	grant(t, ctx, pool, ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID}, 1_000_000)
+
+	enqueue(t, ctx, pool, outbox.Charge{
+		RequestID: "req-health", TenantID: tenantID, UserID: userID, UserMicro: 100,
+	})
+
+	before, err := outbox.Stats(ctx, pool)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if before.Pending != 1 || before.Failed != 0 {
+		t.Fatalf("stats before drain = %+v, want 1 pending / 0 failed", before)
+	}
+	if before.OldestS < 0 {
+		t.Fatalf("oldest pending age = %v, want >= 0", before.OldestS)
+	}
+
+	drain(t, ctx, pool)
+
+	after, err := outbox.Stats(ctx, pool)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if after.Pending != 0 || after.Failed != 0 || after.OldestS != 0 {
+		t.Fatalf("stats after drain = %+v, want empty queue", after)
+	}
+}
+
 func TestEnqueueIgnoresZeroAmounts(t *testing.T) {
 	pool, ctx := openOutboxPool(t)
 	tenantID, userID := seedTenantAndUser(t, ctx, pool)

@@ -520,6 +520,10 @@ func main() {
 	runtimeGateway.Routes(router)
 	mgmtConsole.Routes(router)
 
+	// Prometheus 抓取端点。埋点一直都在，但此前没有挂上任何路由，等于没有。
+	// 计费结算的健康度（bill_charge_outbox 积压/失败/最老未结算时长）也从这里出。
+	router.Handle("/metrics", aimetrics.Handler())
+
 	// 健康检查
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -618,6 +622,7 @@ func isBackendPath(requestPath string) bool {
 		"/openapi.json",
 		"/health",
 		"/ready",
+		"/metrics",
 	} {
 		if requestPath == prefix || strings.HasPrefix(requestPath, prefix+"/") {
 			return true
