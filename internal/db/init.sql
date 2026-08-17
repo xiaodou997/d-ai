@@ -195,6 +195,9 @@ CREATE TABLE bill_recharge_orders (
 CREATE INDEX idx_bill_recharge_orders_tenant ON bill_recharge_orders (order_type, tenant_id, created_at DESC);
 CREATE INDEX idx_bill_recharge_orders_user ON bill_recharge_orders (user_id, created_at DESC) WHERE user_id IS NOT NULL;
 CREATE INDEX idx_bill_recharge_orders_status ON bill_recharge_orders (status, created_at DESC);
+CREATE UNIQUE INDEX uq_bill_recharge_orders_user_topup_income_payment_ref
+    ON bill_recharge_orders (payment_ref)
+    WHERE order_type = 'user_topup_income' AND payment_ref IS NOT NULL;
 
 -- Credit lots record WHERE a grant came from and WHEN it expires. They are an
 -- attribution detail, never the balance: bill_accounts.balance_micro is.
@@ -2038,6 +2041,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 3);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 4);
 
 COMMIT;

@@ -2,14 +2,15 @@
 
 ## 当前基线
 
-- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `3`。
+- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `4`。
 - 初始化脚本只允许在空 PostgreSQL schema 中执行，不能用于覆盖或修复已有数据库。
 - 应用启动只校验 `dai_schema_metadata.version`，不会执行 DDL 或升级 SQL。
 - `internal/db/changes/` 存放首次发布后的人工升级 SQL。
 - 结构调整必须直接更新完整基线并保持 `internal/db/schema.go` 中的期望版本一致。
 
-开发阶段已有的旧本地数据卷使用过 schema 版本 `2` 到 `9`，需要执行一次
-`make db-recreate`，不能通过修改版本号继续使用。
+已有数据库必须从当前版本开始，按编号连续执行 `internal/db/changes/` 中的升级脚本；
+不能通过直接修改版本号跳过升级。不需要保留数据的本地开发库可以使用
+`make db-recreate` 按最新基线重建。
 
 ## 余额模型
 
