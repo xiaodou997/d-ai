@@ -122,12 +122,13 @@ release/
 6. 在空数据库验证完整基线，在目标版本的数据库副本验证升级 SQL。
 7. 发布时备份数据库，在维护窗口按版本顺序人工执行，再启动新应用。
 
-例如数据库从版本 `3` 升级到版本 `6`，必须依次执行：
+例如数据库从版本 `3` 升级到版本 `7`，必须依次执行：
 
 ```text
 0004_YYYYMMDD_description.sql
 0005_YYYYMMDD_description.sql
 0006_YYYYMMDD_description.sql
+0007_YYYYMMDD_description.sql
 ```
 
 应用版本与数据库版本不一致时会拒绝启动；它不会自动修复，也不能通过直接修改

@@ -25,6 +25,13 @@ import (
 	"xiaodou/dai/internal/payment/wechat"
 )
 
+const (
+	// ClosedOrderRetention keeps an unpaid order available for delayed callback
+	// investigation and reconciliation before physical cleanup.
+	ClosedOrderRetention    = 30 * 24 * time.Hour
+	closedOrderCleanupBatch = 500
+)
+
 // PaymentService 是 payment 域的唯一编排入口。
 type PaymentService struct {
 	pool     *pgxpool.Pool
@@ -323,6 +330,27 @@ func (s *PaymentService) SweepOnce(ctx context.Context) {
 	}
 	for _, o := range inFlight {
 		s.sweepInFlightOrder(ctx, o)
+	}
+}
+
+// CleanupClosedOrders removes only stale unpaid payment shells. Paid orders,
+// fulfilled orders and any order with a balance/refund link are retained.
+func (s *PaymentService) CleanupClosedOrders(ctx context.Context) {
+	cutoff := billingdomain.NowUTC().Add(-ClosedOrderRetention)
+	total := 0
+	for {
+		deleted, err := paymentpg.DeleteStaleClosedOrders(ctx, s.pool, cutoff, closedOrderCleanupBatch)
+		if err != nil {
+			s.logger.Error("[支付清理] 删除已关闭未支付订单失败", zap.Error(err))
+			return
+		}
+		total += deleted
+		if deleted < closedOrderCleanupBatch {
+			break
+		}
+	}
+	if total > 0 {
+		s.logger.Info("[支付清理] 已删除长期未支付订单", zap.Int("orderCount", total), zap.Duration("retention", ClosedOrderRetention))
 	}
 }
 

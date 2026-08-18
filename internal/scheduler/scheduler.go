@@ -20,21 +20,28 @@ type paymentSweeper interface {
 	SweepOnce(ctx context.Context)
 }
 
+type paymentOrderCleaner interface {
+	CleanupClosedOrders(ctx context.Context)
+}
+
 // Scheduler 定时任务调度器
 type Scheduler struct {
 	pool           *pgxpool.Pool
 	keyRetirer     jwtKeyRetirer
 	paymentSweeper paymentSweeper
+	paymentCleaner paymentOrderCleaner
 	logger         *zap.Logger
 	stopChan       chan struct{}
 }
 
 // NewScheduler 创建调度器
 func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper paymentSweeper, logger *zap.Logger) *Scheduler {
+	cleaner, _ := paymentSweeper.(paymentOrderCleaner)
 	return &Scheduler{
 		pool:           pool,
 		keyRetirer:     keyRetirer,
 		paymentSweeper: paymentSweeper,
+		paymentCleaner: cleaner,
 		logger:         logger,
 		stopChan:       make(chan struct{}),
 	}
@@ -47,6 +54,7 @@ func (s *Scheduler) Start() {
 	go s.runLotExpiryTask()
 	go s.runJWTKeyRetireTask()
 	go s.runPaymentSweepTask()
+	go s.runPaymentCleanupTask()
 }
 
 // Stop 停止定时任务
@@ -180,9 +188,39 @@ func (s *Scheduler) sweepPayments() {
 	s.paymentSweeper.SweepOnce(ctx)
 }
 
+const closedOrderCleanupInterval = 24 * time.Hour
+
+func (s *Scheduler) runPaymentCleanupTask() {
+	s.cleanupClosedOrders()
+	ticker := time.NewTicker(closedOrderCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-ticker.C:
+			s.cleanupClosedOrders()
+		}
+	}
+}
+
+func (s *Scheduler) cleanupClosedOrders() {
+	if s.paymentCleaner == nil {
+		return
+	}
+	ctx := context.Background()
+	var locked bool
+	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment_cleanup'))`).Scan(&locked); err != nil || !locked {
+		return
+	}
+	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment_cleanup'))`) //nolint
+	s.paymentCleaner.CleanupClosedOrders(ctx)
+}
+
 // RunAllTasks 手动执行所有任务（用于测试）
 func (s *Scheduler) RunAllTasks() {
 	s.logger.Info("手动触发所有定时任务")
 	s.settleExpiredLots()
 	s.sweepPayments()
+	s.cleanupClosedOrders()
 }

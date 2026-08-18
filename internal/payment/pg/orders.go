@@ -152,6 +152,55 @@ func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, orderID, status, fail
 	return err
 }
 
+// DeleteStaleClosedOrders removes only closed payment shells that never paid
+// and never produced a balance grant. The caller supplies the retention cutoff
+// so the cleanup policy stays outside the repository layer.
+func DeleteStaleClosedOrders(ctx context.Context, pool *pgxpool.Pool, before time.Time, limit int) (int, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := pool.Query(ctx, `
+		WITH stale AS (
+			SELECT p.order_id
+			FROM pay_orders p
+			WHERE p.status = $1
+			  AND p.fulfillment_status = $2
+			  AND p.refund_status = $3
+			  AND p.paid_at IS NULL
+			  AND p.transaction_id IS NULL
+			  AND p.balance_order_id IS NULL
+			  AND p.updated_at < $4
+			  AND NOT EXISTS (
+				  SELECT 1 FROM bill_recharge_orders r
+				  WHERE r.payment_order_id = p.order_id
+			  )
+			  AND NOT EXISTS (
+				  SELECT 1 FROM pay_refunds f
+				  WHERE f.payment_order_id = p.order_id
+			  )
+			ORDER BY p.updated_at ASC
+			LIMIT $5
+			FOR UPDATE SKIP LOCKED
+		)
+		DELETE FROM pay_orders p
+		USING stale
+		WHERE p.order_id = stale.order_id
+		RETURNING p.order_id
+	`, payment.OrderStatusClosed, payment.FulfillmentStatusPending, payment.RefundStatusNone, before, limit)
+	if err != nil {
+		return 0, fmt.Errorf("清理已关闭未支付订单失败: %w", err)
+	}
+	defer rows.Close()
+	deleted := 0
+	for rows.Next() {
+		deleted++
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("读取清理订单结果失败: %w", err)
+	}
+	return deleted, nil
+}
+
 // ListSweepCandidates 返回需要 sweep 处理的订单：created/paying/expired 且已过期。纳入 expired
 // 是为了让"Close 失败→标记 expired"之后仍能被下一轮 sweep 重新 Query+Close（设计文档 §4.5
 // "失败置 expired，下轮重试关单"）——若不重新纳入候选集，Close 失败会让订单永久停在 expired，
