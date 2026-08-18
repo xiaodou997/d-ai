@@ -42,7 +42,7 @@
           </DsFilterField>
           <DsFilterField label="到账状态">
             <el-select v-model="query.fulfillmentStatus" class="filter-select" placeholder="全部状态" clearable>
-              <el-option label="待到账" value="pending" />
+              <el-option label="未到账" value="pending" />
               <el-option label="已到账" value="credited" />
               <el-option label="部分撤回" value="partially_reversed" />
               <el-option label="已撤回 / 冲正" value="reversed" />
@@ -115,7 +115,7 @@
         <template #cell-status="{ row }">
           <div class="status-cell">
             <DsTag :tone="paymentTone(row.paymentStatus)">{{ paymentStatusText(row.paymentStatus) }}</DsTag>
-            <DsTag :tone="fulfillmentTone(row.fulfillmentStatus)">{{ fulfillmentStatusText(row.fulfillmentStatus, row.refundStatus) }}</DsTag>
+            <DsTag :tone="fulfillmentTone(row.fulfillmentStatus, row.paymentStatus)">{{ fulfillmentStatusText(row.fulfillmentStatus, row.refundStatus, row.paymentStatus) }}</DsTag>
             <DsTag v-if="row.refundStatus === 'refunded'" tone="danger">已退款</DsTag>
           </div>
         </template>
@@ -164,7 +164,7 @@
           </div>
           <div>
             <span class="detail-label">到账状态</span>
-            <DsTag :tone="fulfillmentTone(detail.fulfillmentStatus)">{{ fulfillmentStatusText(detail.fulfillmentStatus, detail.refundStatus) }}</DsTag>
+            <DsTag :tone="fulfillmentTone(detail.fulfillmentStatus, detail.paymentStatus)">{{ fulfillmentStatusText(detail.fulfillmentStatus, detail.refundStatus, detail.paymentStatus) }}</DsTag>
           </div>
           <div v-if="detail.method === 'online'">
             <span class="detail-label">退款状态</span>
@@ -620,8 +620,10 @@ function paymentStatusText(value: string) {
   return ({ not_required: "无需支付", created: "待支付", paying: "确认中", paid: "已支付", closed: "已关闭", expired: "已过期" } as Record<string, string>)[value] || value;
 }
 
-function fulfillmentStatusText(value: string, refundStatus?: string) {
+function fulfillmentStatusText(value: string, refundStatus?: string, paymentStatus?: string) {
   if (value === "reversed" && refundStatus === "refunded") return "已冲正";
+  if (value === "pending" && paymentStatus === "closed") return "已关闭（未到账）";
+  if (value === "pending" && paymentStatus === "expired") return "已过期（未到账）";
   return ({ pending: "待到账", credited: "已到账", partially_reversed: "部分撤回", reversed: "已撤回" } as Record<string, string>)[value] || value;
 }
 
@@ -634,7 +636,9 @@ function paymentTone(value: string): Tone {
   return ({ paid: "positive", created: "warning", paying: "warning", closed: "info", expired: "danger", not_required: "neutral" } as Record<string, Tone>)[value] || "neutral";
 }
 
-function fulfillmentTone(value: string): Tone {
+function fulfillmentTone(value: string, paymentStatus?: string): Tone {
+  if (value === "pending" && paymentStatus === "closed") return "info";
+  if (value === "pending" && paymentStatus === "expired") return "danger";
   return ({ pending: "warning", credited: "accent", partially_reversed: "warning", reversed: "info" } as Record<string, Tone>)[value] || "neutral";
 }
 
