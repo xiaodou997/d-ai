@@ -128,14 +128,14 @@ func TestDrainAppliesChargeAndLinksUsage(t *testing.T) {
 	}
 
 	var status string
-	var eventID *string
+	var settledAt *time.Time
 	if err := pool.QueryRow(ctx, `
-		SELECT billing_status, billing_event_id FROM ai_usage_logs WHERE request_id = 'req-1'
-	`).Scan(&status, &eventID); err != nil {
+		SELECT billing_status, settled_at FROM ai_usage_logs WHERE request_id = 'req-1'
+	`).Scan(&status, &settledAt); err != nil {
 		t.Fatalf("read usage: %v", err)
 	}
-	if status != "confirmed" || eventID == nil {
-		t.Fatalf("usage after settlement = status:%s event:%v", status, eventID)
+	if status != "settled" || settledAt == nil {
+		t.Fatalf("usage after settlement = status:%s settled_at:%v", status, settledAt)
 	}
 }
 
@@ -285,18 +285,9 @@ func TestTenantOnlyChargeNeedsNoUser(t *testing.T) {
 	tenantID, _ := seedTenantAndUser(t, ctx, pool)
 	grant(t, ctx, pool, ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID}, 5_000)
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if err := outbox.Enqueue(ctx, tx, outbox.Charge{
+	enqueue(t, ctx, pool, outbox.Charge{
 		RequestID: "req-tenant", TenantID: tenantID, TenantMicro: 1_200,
-	}); err != nil {
-		t.Fatalf("enqueue: %v", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	})
 
 	drain(t, ctx, pool)
 	if got := balance(t, ctx, pool, tenantID); got != 5_000-1_200 {

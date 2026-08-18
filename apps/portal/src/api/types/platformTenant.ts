@@ -50,24 +50,6 @@ export interface AccountBalance {
 	balanceLots?: BalanceLot[];
 }
 
-// ===== 交易流水 =====
-export interface AccountTransactionItem {
-  eventId: string;
-  userId: string;
-  description: string;
-	tenantAmountUsd: number;
-	userAmountUsd: number;
-  status: string;
-  terminalNote: string;
-  metadata: string;
-  createdTime?: number | null;
-  finishedTime?: number | null;
-  username: string;
-  tenantName: string;
-  clientId: string;
-  appName: string;
-}
-
 // ===== 充值记录 =====
 export interface RechargeRecordItem {
   orderId: string;

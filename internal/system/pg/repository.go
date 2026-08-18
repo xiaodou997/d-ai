@@ -94,16 +94,15 @@ type GetConsumptionTrendParams struct {
 func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params GetConsumptionTrendParams) ([]ConsumptionTrendRow, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT date_trunc('day', created_at) AS day_bucket,
-		       SUM(COALESCE(tenant_credits, 0) + COALESCE(user_credits, 0)) AS total
-		FROM bill_events
-		WHERE status = 'succeeded'
-		  AND event_type = 'charge'
+		       SUM(COALESCE(tenant_payable, 0) + COALESCE(user_charged, 0)) AS total
+		FROM ai_usage_logs
+		WHERE billing_status = 'settled'
 		  AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz)
 		  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
 		  AND ($3::text IS NULL OR tenant_id = $3::text)
 		  AND ($4::bigint IS NULL OR
-		       ($4::bigint = 1 AND tenant_credits IS NOT NULL) OR
-		       ($4::bigint = 2 AND user_credits IS NOT NULL))
+		       ($4::bigint = 1 AND tenant_payable > 0) OR
+		       ($4::bigint = 2 AND user_charged > 0))
 		GROUP BY day_bucket ORDER BY day_bucket
 	`, params.TimeFrom, params.TimeTo, params.TenantID, params.AccountType)
 	if err != nil {
@@ -137,16 +136,15 @@ type GetResourceStatisticsParams struct {
 
 func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params GetResourceStatisticsParams) ([]ResourceStatisticsRow, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT COALESCE(dt.client_id, '') AS client_id,
-		       COALESCE(NULLIF(dt.client_id, ''), 'D-AI') AS client_name,
-		       SUM(COALESCE(dt.tenant_credits, 0) + COALESCE(dt.user_credits, 0)) AS total
-		FROM bill_events dt
-		WHERE dt.status = 'succeeded'
-		  AND dt.event_type = 'charge'
+		SELECT COALESCE(dt.request_source, '') AS client_id,
+		       COALESCE(NULLIF(dt.request_source, ''), 'D-AI') AS client_name,
+		       SUM(COALESCE(dt.tenant_payable, 0) + COALESCE(dt.user_charged, 0)) AS total
+		FROM ai_usage_logs dt
+		WHERE dt.billing_status = 'settled'
 		  AND ($1::timestamptz IS NULL OR dt.created_at >= $1::timestamptz)
 		  AND ($2::timestamptz IS NULL OR dt.created_at < $2::timestamptz)
 		  AND ($3::text IS NULL OR dt.tenant_id = $3::text)
-		GROUP BY dt.client_id ORDER BY total DESC
+		GROUP BY dt.request_source ORDER BY total DESC
 	`, params.TimeFrom, params.TimeTo, params.TenantID)
 	if err != nil {
 		return nil, err

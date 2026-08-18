@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(13);
-    expect(leavesFor(2)).toHaveLength(12);
+    expect(leavesFor(1)).toHaveLength(12);
+    expect(leavesFor(2)).toHaveLength(11);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -28,7 +28,6 @@ describe("portal module registry", () => {
       "租户管理",
       "终端用户",
       "管理员与身份",
-      "账户与交易",
       "结算与支付",
       "上游与定价",
       "路由策略",
@@ -199,11 +198,11 @@ describe("portal module registry", () => {
     expect(portalModules.some((module) => module.path === "/admin/ai/tenant-policy")).toBe(false);
   });
 
-  it("keeps account lookup in tenant and user context instead of billing tabs", () => {
-    const billing = portalModules.find((module) => module.id === "admin-billing-workspace");
+  it("keeps recharge operations in settlement and removes the legacy billing-event tab", () => {
+    const settlement = portalModules.find((module) => module.id === "admin-settlement-workspace");
 
-    expect(billing?.tabs?.map((tab) => tab.id)).toEqual(["recharges", "transactions", "orders"]);
-    expect(billing?.tabs?.some((tab) => tab.path === "accounts")).toBe(false);
+    expect(settlement?.tabs?.map((tab) => tab.id)).toContain("recharges");
+    expect(settlement?.tabs?.some((tab) => tab.id === "transactions")).toBe(false);
   });
 
   it("exposes routing policy as a standalone AI gateway menu", () => {

@@ -1382,21 +1382,45 @@ components:
     BatchOpError:
       additionalProperties: false
       properties:
-        eventId:
-          type: string
         reason:
           type: string
+        requestId:
+          type: string
       required:
-        - eventId
+        - requestId
         - reason
       type: object
-    BatchOpOutputBody:
+    BatchRefundUsageInputBody:
       additionalProperties: false
       properties:
         $schema:
           description: A URL to the JSON Schema for this object.
           examples:
-            - https://example.com/schemas/BatchOpOutputBody.json
+            - https://example.com/schemas/BatchRefundUsageInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        reason:
+          type: string
+        requestIds:
+          items:
+            type: string
+          maxItems: 100
+          minItems: 1
+          type:
+            - array
+            - "null"
+      required:
+        - requestIds
+        - reason
+      type: object
+    BatchUsageOpOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/BatchUsageOpOutputBody.json
           format: uri
           readOnly: true
           type: string
@@ -1431,30 +1455,6 @@ components:
         - totalUserUsd
         - successCount
         - failCount
-      type: object
-    BatchRefundInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/BatchRefundInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        eventIds:
-          items:
-            type: string
-          maxItems: 100
-          minItems: 1
-          type:
-            - array
-            - "null"
-        reason:
-          type: string
-      required:
-        - eventIds
-        - reason
       type: object
     CashAccountItem:
       additionalProperties: false
@@ -2875,73 +2875,21 @@ components:
         - balanceUsd
         - createdTime
       type: object
-    EventRow:
-      additionalProperties: false
-      properties:
-        appName:
-          type: string
-        clientId:
-          type: string
-        createdTime:
-          format: int64
-          type:
-            - integer
-            - "null"
-        description:
-          type: string
-        eventId:
-          type: string
-        finishedTime:
-          format: int64
-          type: integer
-        metadata:
-          type: string
-        status:
-          type: string
-        tenantAmountUsd:
-          format: double
-          type: number
-        tenantName:
-          type: string
-        terminalNote:
-          type: string
-        userAmountUsd:
-          format: double
-          type: number
-        userId:
-          type: string
-        username:
-          type: string
-      required:
-        - eventId
-        - userId
-        - description
-        - tenantAmountUsd
-        - userAmountUsd
-        - status
-        - terminalNote
-        - metadata
-        - createdTime
-        - username
-        - tenantName
-        - clientId
-        - appName
-      type: object
     FailedTxAlert:
       additionalProperties: false
       properties:
         createdTime:
           format: int64
           type: integer
-        eventId:
+        requestId:
+          type: string
+        settlementError:
           type: string
         status:
           type: string
-        terminalNote:
-          type: string
       required:
-        - eventId
-        - terminalNote
+        - requestId
+        - settlementError
         - status
         - createdTime
       type: object
@@ -5027,37 +4975,6 @@ components:
         - page
         - size
       type: object
-    PageEventRow:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/PageEventRow.json
-          format: uri
-          readOnly: true
-          type: string
-        items:
-          items:
-            $ref: "#/components/schemas/EventRow"
-          type:
-            - array
-            - "null"
-        page:
-          format: int64
-          type: integer
-        size:
-          format: int64
-          type: integer
-        total:
-          format: int64
-          type: integer
-      required:
-        - items
-        - total
-        - page
-        - size
-      type: object
     PageInviteCodeItem:
       additionalProperties: false
       properties:
@@ -6061,23 +5978,6 @@ components:
       required:
         - refreshToken
       type: object
-    RefundInputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RefundInputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        eventId:
-          type: string
-        reason:
-          type: string
-      required:
-        - eventId
-      type: object
     ReplaceTenantUpstreamAccessInputBody:
       additionalProperties: false
       properties:
@@ -6804,10 +6704,10 @@ components:
           format: uri
           readOnly: true
           type: string
-        billing_event_id:
-          type: string
         created_at:
           format: date-time
+          type: string
+        debit_reference:
           type: string
         fail_reason:
           type: string
@@ -8021,6 +7921,9 @@ components:
           description: 推理 token 数
           format: int32
           type: integer
+        refund_status:
+          description: 退款状态：none/refunded
+          type: string
         request_id:
           description: 请求 ID
           type: string
@@ -8083,6 +7986,7 @@ components:
         - service_tier
         - billing_status
         - billing_status_label
+        - refund_status
         - billing_source
         - request_status
       type: object
@@ -9625,6 +9529,19 @@ components:
           description: 推理 token 数
           format: int32
           type: integer
+        refund_operator_id:
+          description: 退款操作人
+          type: string
+        refund_reason:
+          description: 退款原因
+          type: string
+        refund_status:
+          description: 退款状态：none/refunded
+          type: string
+        refunded_at:
+          description: 退款时间，Unix 毫秒
+          format: int64
+          type: integer
         request_id:
           description: 请求 ID
           type: string
@@ -9664,6 +9581,13 @@ components:
           type: number
         service_tier:
           description: 服务档位：standard/fast
+          type: string
+        settled_at:
+          description: 结算时间，Unix 毫秒
+          format: int64
+          type: integer
+        settlement_error:
+          description: 结算失败原因
           type: string
         stream:
           description: 是否流式请求
@@ -9740,6 +9664,7 @@ components:
         - api_key_quota_usd
         - service_tier
         - billing_status
+        - refund_status
         - request_status
         - protocol_conversion_enabled
         - upstream_model_mapping_applied
@@ -9765,6 +9690,8 @@ components:
           description: 仅管理员可见：本次请求每次候选路由（上游账号/凭据）重试的明细
         billing_breakdown: {}
         billing_group_label_snapshot:
+          type: string
+        billing_status:
           type: string
         cache_read_tokens:
           format: int32
@@ -9839,6 +9766,15 @@ components:
         reasoning_tokens:
           format: int32
           type: integer
+        refund_operator_id:
+          type: string
+        refund_reason:
+          type: string
+        refund_status:
+          type: string
+        refunded_at:
+          format: int64
+          type: integer
         request_id:
           type: string
         request_messages: {}
@@ -9871,6 +9807,11 @@ components:
         selected_upstream_target_type:
           type: string
         service_tier:
+          type: string
+        settled_at:
+          format: int64
+          type: integer
+        settlement_error:
           type: string
         stream:
           description: 是否流式请求
@@ -9908,6 +9849,8 @@ components:
         - total_tokens
         - attempts_count
         - service_tier
+        - billing_status
+        - refund_status
       type: object
     UsageLogsOutputBody:
       additionalProperties: false
@@ -9937,6 +9880,23 @@ components:
         - stats
         - records
         - included
+      type: object
+    UsageRefundInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/UsageRefundInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        reason:
+          type: string
+        requestId:
+          type: string
+      required:
+        - requestId
       type: object
     UsageStatsDTO:
       additionalProperties: false
@@ -10564,6 +10524,9 @@ components:
         billing_source:
           description: 计费来源：payg=按量 / subscription=订阅内
           type: string
+        billing_status:
+          description: 计费状态
+          type: string
         cache_read_tokens:
           description: 缓存读 token 数
           format: int32
@@ -10625,6 +10588,9 @@ components:
           description: 推理 token 数
           format: int32
           type: integer
+        refund_status:
+          description: 退款状态：none/refunded
+          type: string
         request_id:
           description: 请求 ID
           type: string
@@ -10674,6 +10640,8 @@ components:
         - billable_units
         - user_charged_usd
         - service_tier
+        - billing_status
+        - refund_status
         - billing_source
         - request_status
       type: object
@@ -11634,82 +11602,6 @@ paths:
       summary: 账户统计
       tags:
         - account
-  /api/v1/account/transactions:
-    get:
-      operationId: account-transactions
-      parameters:
-        - explode: false
-          in: query
-          name: tenantId
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: userId
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: tenantName
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: username
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: clientName
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: status
-          schema:
-            type: string
-        - explode: false
-          in: query
-          name: timeFrom
-          schema:
-            format: int64
-            type: integer
-        - explode: false
-          in: query
-          name: timeTo
-          schema:
-            format: int64
-            type: integer
-        - explode: false
-          in: query
-          name: page
-          schema:
-            default: 1
-            format: int64
-            type: integer
-        - explode: false
-          in: query
-          name: size
-          schema:
-            default: 20
-            format: int64
-            type: integer
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PageEventRow"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 额度明细（含服务扣款审计）
-      tags:
-        - account
   /api/v1/admin/announcements:
     get:
       operationId: admin-list-announcements
@@ -12514,6 +12406,56 @@ paths:
       summary: 创建提现记录并直接扣减租户额度
       tags:
         - admin-payment
+  /api/v1/ai/usage/batch-refund:
+    post:
+      operationId: admin-batch-refund-usage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchRefundUsageInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchUsageOpOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 批量退款 AI 使用记录
+      tags:
+        - admin-usage
+  /api/v1/ai/usage/refund:
+    post:
+      operationId: admin-refund-usage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageRefundInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: AI 使用记录退款
+      tags:
+        - admin-finance
   /api/v1/analytics/consumption-trend:
     get:
       operationId: admin-consumption-trend
@@ -12841,31 +12783,6 @@ paths:
       summary: 认证审计日志
       tags:
         - admin-finance
-  /api/v1/billing/events/batch-refund:
-    post:
-      operationId: admin-batch-refund-events
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BatchRefundInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BatchOpOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 批量退款
-      tags:
-        - admin-billing-events
   /api/v1/credential-pools:
     get:
       description: 返回固定供应商 OAuth 凭证池列表。本端点为只读契约，不返回任何 token、密文或 provider API key。
@@ -14561,31 +14478,6 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 撤销充值
-      tags:
-        - admin-finance
-  /api/v1/refunds:
-    post:
-      operationId: admin-refund
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RefundInputBody"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MessageOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 手动全额退款
       tags:
         - admin-finance
   /api/v1/risk-control/config:

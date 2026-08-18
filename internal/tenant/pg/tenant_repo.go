@@ -50,29 +50,6 @@ type InviteCodeItem struct {
 	UpdatedTime     int64  `json:"updatedTime"`
 }
 
-// TenantStats 租户统计数据
-type TenantStats struct {
-	EndUserCount     int64   `json:"endUserCount"`
-	InviteCodeCount  int64   `json:"inviteCodeCount"`
-	UserDeductionUSD float64 `json:"userDeductionUsd"`
-}
-
-// EventItem 消费流水条目
-type EventItem struct {
-	ID              int64   `json:"id"`
-	EventID         string  `json:"eventId"`
-	TenantID        string  `json:"tenantId"`
-	UserID          string  `json:"userId,omitempty"`
-	ClientID        string  `json:"clientId,omitempty"`
-	Description     string  `json:"description"`
-	TenantAmountUSD float64 `json:"tenantAmountUsd,omitempty"`
-	UserAmountUSD   float64 `json:"userAmountUsd,omitempty"`
-	Username        string  `json:"username,omitempty"`
-	TenantName      string  `json:"tenantName,omitempty"`
-	Status          int     `json:"status"`
-	CreatedTime     int64   `json:"createdTime"`
-}
-
 // RechargeItem 充值记录条目
 type RechargeItem struct {
 	ID              int64   `json:"id"`
@@ -320,69 +297,6 @@ func (r *TenantRepo) DeleteInvitationCode(ctx context.Context, id int64, tenantI
 	return err
 }
 
-// GetStats 获取租户统计数据
-func (r *TenantRepo) GetStats(ctx context.Context, tenantID string) (*TenantStats, error) {
-	stats := &TenantStats{}
-	var deductionMicro int64
-	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount)
-	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&stats.InviteCodeCount)
-	r.pool.QueryRow(ctx, `SELECT COALESCE(SUM(user_credits), 0) FROM bill_events WHERE tenant_id = $1 AND status = 'succeeded' AND event_type = 'charge'`, tenantID).Scan(&deductionMicro)
-	stats.UserDeductionUSD = billing.MicroToUSD(deductionMicro)
-	return stats, nil
-}
-
-// ListTransactions 查询消费流水（分页）
-func (r *TenantRepo) ListTransactions(ctx context.Context, tenantID string, page, size int) ([]EventItem, int64, error) {
-	var total int64
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bill_events WHERE tenant_id = $1 AND event_type = 'charge'`, tenantID).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	offset := (page - 1) * size
-	rows, err := r.pool.Query(ctx, `
-		SELECT dt.id, dt.event_id, dt.tenant_id, COALESCE(dt.user_id,''), COALESCE(dt.client_id,''),
-		       COALESCE(dt.description,''), COALESCE(dt.tenant_credits,0), COALESCE(dt.user_credits,0),
-		       dt.status, dt.created_at,
-		       COALESCE(eu.username, '') AS username,
-		       COALESCE(t.tenant_name, '') AS tenant_name
-		FROM bill_events dt
-		LEFT JOIN iam_tenants t ON t.tenant_id = dt.tenant_id
-			LEFT JOIN iam_accounts eu ON eu.user_id = dt.user_id AND eu.user_type = 4
-		WHERE dt.tenant_id = $1 AND dt.event_type = 'charge'
-		ORDER BY dt.created_at DESC LIMIT $2 OFFSET $3
-	`, tenantID, size, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	var list []EventItem
-	for rows.Next() {
-		var item EventItem
-		var tenantMicro, userMicro int64
-		var status string
-		var createdAt time.Time
-		if err := rows.Scan(
-			&item.ID, &item.EventID, &item.TenantID,
-			&item.UserID, &item.ClientID, &item.Description,
-			&tenantMicro, &userMicro, &status, &createdAt,
-			&item.Username, &item.TenantName,
-		); err != nil {
-			continue
-		}
-		item.Status = txStatusToInt(status)
-		item.TenantAmountUSD = billing.MicroToUSD(tenantMicro)
-		item.UserAmountUSD = billing.MicroToUSD(userMicro)
-		item.CreatedTime = createdAt.UnixMilli()
-		list = append(list, item)
-	}
-	if list == nil {
-		list = []EventItem{}
-	}
-	return list, total, rows.Err()
-}
-
 // ListRechargeRecords 查询充值记录（分页）—— 租户只查看本租户收到的充值
 // （platform_to_tenant 管理员手动充值 + online_tenant_topup 微信在线充值）
 func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, page, size int) ([]RechargeItem, int64, error) {
@@ -473,10 +387,9 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 	}
 
 	behaviorBase := `
-		FROM bill_events
+		FROM ai_usage_logs
 		WHERE tenant_id = $1
-		  AND status = 'succeeded'
-		  AND event_type = 'charge'
+		  AND billing_status = 'settled'
 	`
 	behaviorArgs := []any{tenantID}
 	argIdx := 2
@@ -493,9 +406,9 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 
 	if err := r.pool.QueryRow(ctx, `
 		SELECT
-			COALESCE(SUM(COALESCE(user_credits, 0)), 0),
-			COUNT(*) FILTER (WHERE user_id IS NOT NULL AND COALESCE(user_credits, 0) > 0),
-			COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL AND COALESCE(user_credits, 0) > 0)
+			COALESCE(SUM(COALESCE(user_charged, 0)), 0),
+			COUNT(*) FILTER (WHERE user_id IS NOT NULL AND COALESCE(user_charged, 0) > 0),
+			COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL AND COALESCE(user_charged, 0) > 0)
 	`+behaviorBase, behaviorArgs...).Scan(
 		&userDeductionMicro,
 		&stats.UserConsumptionCount,
@@ -538,35 +451,22 @@ func (r *TenantRepo) GetUserConsumptionRanking(ctx context.Context, tenantID str
 		SELECT
 			e.user_id,
 			COALESCE(NULLIF(u.username, ''), '已删除用户') AS username,
-			SUM(COALESCE(e.user_credits, 0)) AS credits,
+			SUM(COALESCE(e.user_charged, 0)) AS credits,
 			COUNT(*) AS transaction_count,
-			SUM(SUM(COALESCE(e.user_credits, 0))) OVER () AS total_credits
-		FROM bill_events e
+			SUM(SUM(COALESCE(e.user_charged, 0))) OVER () AS total_credits
+		FROM ai_usage_logs e
 			LEFT JOIN iam_accounts u ON u.user_id = e.user_id AND u.user_type = 4
 		WHERE e.tenant_id = $1
-		  AND e.status = 'succeeded'
-		  AND e.event_type = 'charge'
+		  AND e.billing_status = 'settled'
 		  AND e.user_id IS NOT NULL
-		  AND COALESCE(e.user_credits, 0) > 0
-	`
-	args := []any{tenantID}
-	argIdx := 2
-	if timeFrom != nil {
-		query += fmt.Sprintf(" AND e.created_at >= $%d", argIdx)
-		args = append(args, *timeFrom)
-		argIdx++
-	}
-	if timeTo != nil {
-		query += fmt.Sprintf(" AND e.created_at < $%d", argIdx)
-		args = append(args, *timeTo)
-		argIdx++
-	}
-	query += fmt.Sprintf(`
+		  AND COALESCE(e.user_charged, 0) > 0
+		  AND ($2::timestamptz IS NULL OR e.created_at >= $2::timestamptz)
+		  AND ($3::timestamptz IS NULL OR e.created_at < $3::timestamptz)
 		GROUP BY e.user_id, u.username
 		ORDER BY credits DESC, transaction_count DESC, e.user_id
-		LIMIT $%d
-	`, argIdx)
-	args = append(args, limit)
+		LIMIT $4
+	`
+	args := []any{tenantID, timeFrom, timeTo, limit}
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -594,29 +494,18 @@ func (r *TenantRepo) GetUserConsumptionRanking(ctx context.Context, tenantID str
 func (r *TenantRepo) GetClientConsumption(ctx context.Context, tenantID string, timeFrom, timeTo *time.Time) ([]ClientConsumptionItem, error) {
 	query := `
 			SELECT
-				COALESCE(dt.client_id, '') AS client_id,
-				COALESCE(NULLIF(dt.client_id, ''), 'D-AI') AS client_name,
-				SUM(COALESCE(dt.user_credits, 0)) AS credits
-			FROM bill_events dt
-			WHERE dt.tenant_id = $1 AND dt.status = 'succeeded' AND dt.event_type = 'charge'
+				COALESCE(dt.request_source, '') AS client_id,
+				COALESCE(NULLIF(dt.request_source, ''), 'D-AI') AS client_name,
+				SUM(COALESCE(dt.user_charged, 0)) AS credits
+			FROM ai_usage_logs dt
+			WHERE dt.tenant_id = $1 AND dt.billing_status = 'settled'
+			  AND ($2::timestamptz IS NULL OR dt.created_at >= $2::timestamptz)
+			  AND ($3::timestamptz IS NULL OR dt.created_at < $3::timestamptz)
+			GROUP BY dt.request_source
+			HAVING SUM(COALESCE(dt.user_charged, 0)) > 0
+			ORDER BY credits DESC
 	`
-	args := []any{tenantID}
-	argIdx := 2
-	if timeFrom != nil {
-		query += fmt.Sprintf(" AND dt.created_at >= $%d", argIdx)
-		args = append(args, *timeFrom)
-		argIdx++
-	}
-	if timeTo != nil {
-		query += fmt.Sprintf(" AND dt.created_at < $%d", argIdx)
-		args = append(args, *timeTo)
-		argIdx++
-	}
-	query += `
-				GROUP BY dt.client_id
-				HAVING SUM(COALESCE(dt.user_credits, 0)) > 0
-				ORDER BY credits DESC
-	`
+	args := []any{tenantID, timeFrom, timeTo}
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -687,21 +576,6 @@ func inviteStatusFromInt(status int) string {
 		return "disabled"
 	}
 	return "active"
-}
-
-func txStatusToInt(status string) int {
-	switch status {
-	case "succeeded":
-		return 1
-	case "cancelled":
-		return 2
-	case "refunded":
-		return 3
-	case "released":
-		return 4
-	default:
-		return 0
-	}
 }
 
 func millisPtr(t *time.Time) *int64 {

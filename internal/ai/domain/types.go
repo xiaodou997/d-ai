@@ -64,15 +64,10 @@ const (
 type BillingStatus string
 
 const (
-	BillingPending   BillingStatus = "pending"
-	BillingFrozen    BillingStatus = "frozen"
-	BillingConfirmed BillingStatus = "confirmed"
-	BillingCancelled BillingStatus = "cancelled"
-	BillingFree      BillingStatus = "free"
-	// PendingSettle = 已完成请求级入账，等待 V3 Credit Lease settlement
-	// Settled       = 对应 V3 settlement 已投递，settled_event_id 已回填
-	BillingPendingSettle BillingStatus = "pending_settle"
-	BillingSettled       BillingStatus = "settled"
+	BillingFree    BillingStatus = "free"
+	BillingPending BillingStatus = "pending"
+	BillingSettled BillingStatus = "settled"
+	BillingFailed  BillingStatus = "failed"
 )
 
 // RequestStatus describes the outcome of an AI request.

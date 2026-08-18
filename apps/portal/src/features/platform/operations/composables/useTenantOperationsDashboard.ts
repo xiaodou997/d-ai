@@ -1,6 +1,7 @@
 import { computed, onMounted, shallowRef } from "vue";
 
 import { platformTenantApi } from "@/api/platformTenant";
+import { tenantUsageApi } from "@/features/ai/usage";
 import {
   DEFAULT_WORKBENCH_RANGE_ID,
   buildWorkbenchRangeWindow,
@@ -11,10 +12,10 @@ import {
 } from "@/components/workbench/workbenchRanges";
 import type {
   AccountBalance,
-  AccountTransactionItem,
   TenantAnalyticsOverview,
   UserConsumptionItem
 } from "@/api/types/platformTenant";
+import type { TenantUsageLog } from "@/features/ai/usage";
 
 const emptyOverview = (): TenantAnalyticsOverview => ({
   endUserCount: 0,
@@ -42,7 +43,7 @@ export function useTenantOperationsDashboard() {
   const serviceBalance = shallowRef<AccountBalance>(emptyServiceBalance());
   const overview = shallowRef<TenantAnalyticsOverview>(emptyOverview());
   const consumptionRanking = shallowRef<UserConsumptionItem[]>([]);
-  const recentConsumption = shallowRef<AccountTransactionItem[]>([]);
+  const recentConsumption = shallowRef<TenantUsageLog[]>([]);
 
   const summaryLoading = shallowRef(false);
   const serviceBalanceLoading = shallowRef(false);
@@ -79,12 +80,12 @@ export function useTenantOperationsDashboard() {
     const [overviewResult, rankingResult, recentResult] = await Promise.allSettled([
       platformTenantApi.getAnalyticsOverview(params),
       platformTenantApi.getUserConsumption({ ...params, limit: 8 }),
-      platformTenantApi.getTransactions({
-        page: 1,
-        size: 8,
-        status: "succeeded",
-        timeFrom: params.timeFrom,
-        timeTo: params.timeTo
+      tenantUsageApi.listRecords({
+        limit: 8,
+        offset: 0,
+        request_status: "success",
+        date_from: new Date(params.timeFrom).toISOString(),
+        date_to: new Date(params.timeTo).toISOString()
       })
     ]);
     if (requestEpoch !== latestRangeRequestEpoch) return;
@@ -102,7 +103,7 @@ export function useTenantOperationsDashboard() {
       console.error("获取用户消费贡献榜失败:", rankingResult.reason);
     }
     if (recentResult.status === "fulfilled") {
-      recentConsumption.value = recentResult.value.items;
+      recentConsumption.value = recentResult.value.records ?? [];
     } else {
       recentConsumption.value = [];
       console.error("获取近期用户消费失败:", recentResult.reason);

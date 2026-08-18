@@ -55,7 +55,6 @@ type AiAsyncTask struct {
 	ErrorMessage           pgtype.Text        `json:"error_message"`
 	InternalErrorDetail    pgtype.Text        `json:"internal_error_detail"`
 	FailedStep             pgtype.Text        `json:"failed_step"`
-	BillingEventID         pgtype.Text        `json:"billing_event_id"`
 	CallerCharge           int64              `json:"caller_charge"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	StartedAt              pgtype.Timestamptz `json:"started_at"`
@@ -123,7 +122,6 @@ type AiBillingSettlementBatch struct {
 	ActualTenantMicro    int64              `json:"actual_tenant_micro"`
 	ActualUserMicro      int64              `json:"actual_user_micro"`
 	Status               string             `json:"status"`
-	BillingEventID       pgtype.Text        `json:"billing_event_id"`
 	TenantDeductedMicro  int64              `json:"tenant_deducted_micro"`
 	UserDeductedMicro    int64              `json:"user_deducted_micro"`
 	TenantDebtAddedMicro int64              `json:"tenant_debt_added_micro"`
@@ -447,7 +445,8 @@ type AiSubOrder struct {
 	PurchasePolicySnapshot             []byte             `json:"purchase_policy_snapshot"`
 	InventoryReserved                  bool               `json:"inventory_reserved"`
 	Status                             string             `json:"status"`
-	BillingEventID                     pgtype.Text        `json:"billing_event_id"`
+	DebitReference                     pgtype.Text        `json:"debit_reference"`
+	DebitedAt                          pgtype.Timestamptz `json:"debited_at"`
 	SubscriptionID                     pgtype.UUID        `json:"subscription_id"`
 	FailReason                         pgtype.Text        `json:"fail_reason"`
 	PaidAt                             pgtype.Timestamptz `json:"paid_at"`
@@ -633,12 +632,15 @@ type AiUsageLog struct {
 	ApiKeyQuotaCost                    int64              `json:"api_key_quota_cost"`
 	ServiceTier                        string             `json:"service_tier"`
 	BillingBreakdown                   []byte             `json:"billing_breakdown"`
-	BillingEventID                     pgtype.Text        `json:"billing_event_id"`
 	BillingWindowID                    pgtype.Text        `json:"billing_window_id"`
 	SettlementBatchID                  pgtype.UUID        `json:"settlement_batch_id"`
-	SettledEventID                     pgtype.Text        `json:"settled_event_id"`
 	SettledAt                          pgtype.Timestamptz `json:"settled_at"`
 	BillingStatus                      string             `json:"billing_status"`
+	SettlementError                    pgtype.Text        `json:"settlement_error"`
+	RefundStatus                       string             `json:"refund_status"`
+	RefundReason                       pgtype.Text        `json:"refund_reason"`
+	RefundOperatorID                   pgtype.Text        `json:"refund_operator_id"`
+	RefundedAt                         pgtype.Timestamptz `json:"refunded_at"`
 	RequestStatus                      string             `json:"request_status"`
 	HttpStatus                         pgtype.Int4        `json:"http_status"`
 	UpstreamStatus                     pgtype.Int4        `json:"upstream_status"`
@@ -844,56 +846,56 @@ type BillChargeOutbox struct {
 }
 
 type BillCreditLot struct {
-	ID              int64              `json:"id"`
-	LotID           string             `json:"lot_id"`
-	AccountID       string             `json:"account_id"`
-	GrantedMicro    int64              `json:"granted_micro"`
-	ConsumedMicro   int64              `json:"consumed_micro"`
-	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
-	ExpiredAt       pgtype.Timestamptz `json:"expired_at"`
-	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
-	Source          string             `json:"source"`
-	RechargeOrderID pgtype.Text        `json:"recharge_order_id"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-type BillEvent struct {
-	ID             int64              `json:"id"`
-	EventID        string             `json:"event_id"`
-	IdempotencyKey pgtype.Text        `json:"idempotency_key"`
-	TenantID       string             `json:"tenant_id"`
-	UserID         pgtype.Text        `json:"user_id"`
-	ClientID       pgtype.Text        `json:"client_id"`
-	Description    pgtype.Text        `json:"description"`
-	EventType      string             `json:"event_type"`
-	RefundOf       pgtype.Text        `json:"refund_of"`
-	TenantCredits  pgtype.Int8        `json:"tenant_credits"`
-	UserCredits    pgtype.Int8        `json:"user_credits"`
-	Status         string             `json:"status"`
-	Metadata       []byte             `json:"metadata"`
-	TerminalNote   pgtype.Text        `json:"terminal_note"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	FinishedAt     pgtype.Timestamptz `json:"finished_at"`
+	ID                 int64              `json:"id"`
+	LotID              string             `json:"lot_id"`
+	AccountID          string             `json:"account_id"`
+	GrantedMicro       int64              `json:"granted_micro"`
+	ConsumedMicro      int64              `json:"consumed_micro"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	ExpiredAt          pgtype.Timestamptz `json:"expired_at"`
+	ExpiredUnusedMicro pgtype.Int8        `json:"expired_unused_micro"`
+	RevokedAt          pgtype.Timestamptz `json:"revoked_at"`
+	Source             string             `json:"source"`
+	RechargeOrderID    pgtype.Text        `json:"recharge_order_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type BillRechargeOrder struct {
-	ID             int64              `json:"id"`
-	OrderID        string             `json:"order_id"`
-	OrderType      string             `json:"order_type"`
-	TenantID       string             `json:"tenant_id"`
-	UserID         pgtype.Text        `json:"user_id"`
-	CreditAmount   int64              `json:"credit_amount"`
-	PaidAmount     int64              `json:"paid_amount"`
-	PaymentRef     pgtype.Text        `json:"payment_ref"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	OperatorID     string             `json:"operator_id"`
-	Note           pgtype.Text        `json:"note"`
-	Status         string             `json:"status"`
-	ReversedAt     pgtype.Timestamptz `json:"reversed_at"`
-	ReversedBy     pgtype.Text        `json:"reversed_by"`
-	ReversalReason pgtype.Text        `json:"reversal_reason"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ID                  int64              `json:"id"`
+	OrderID             string             `json:"order_id"`
+	OrderType           string             `json:"order_type"`
+	TenantID            string             `json:"tenant_id"`
+	UserID              pgtype.Text        `json:"user_id"`
+	CreditAmount        int64              `json:"credit_amount"`
+	PaidAmount          int64              `json:"paid_amount"`
+	PaymentRef          pgtype.Text        `json:"payment_ref"`
+	PaymentOrderID      pgtype.Text        `json:"payment_order_id"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	OperatorID          string             `json:"operator_id"`
+	Note                pgtype.Text        `json:"note"`
+	Status              string             `json:"status"`
+	ReversedAt          pgtype.Timestamptz `json:"reversed_at"`
+	ReversedBy          pgtype.Text        `json:"reversed_by"`
+	ReversalReason      pgtype.Text        `json:"reversal_reason"`
+	ReversedAmountMicro int64              `json:"reversed_amount_micro"`
+	LostAmountMicro     int64              `json:"lost_amount_micro"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type BillRefundReversalEffect struct {
+	ID                      int64              `json:"id"`
+	ReversalID              string             `json:"reversal_id"`
+	RefundID                string             `json:"refund_id"`
+	RechargeOrderID         string             `json:"recharge_order_id"`
+	AccountID               string             `json:"account_id"`
+	CreditAmountMicro       int64              `json:"credit_amount_micro"`
+	AvailableReclaimedMicro int64              `json:"available_reclaimed_micro"`
+	NonAvailableDebitMicro  int64              `json:"non_available_debit_micro"`
+	ExpiredAmountMicro      int64              `json:"expired_amount_micro"`
+	AccountDebitMicro       int64              `json:"account_debit_micro"`
+	BalanceAfterMicro       int64              `json:"balance_after_micro"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
 type DaiSchemaMetadatum struct {
@@ -1005,7 +1007,6 @@ type LedgerCreditLease struct {
 	UserDebtAddedMicro   int64              `json:"user_debt_added_micro"`
 	AccountState         string             `json:"account_state"`
 	AllowFurtherUsage    bool               `json:"allow_further_usage"`
-	SettledEventID       pgtype.Text        `json:"settled_event_id"`
 	SettledAt            pgtype.Timestamptz `json:"settled_at"`
 	ReleasedAt           pgtype.Timestamptz `json:"released_at"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
@@ -1052,6 +1053,8 @@ type PayOrder struct {
 	CodeUrl                pgtype.Text        `json:"code_url"`
 	TransactionID          pgtype.Text        `json:"transaction_id"`
 	Status                 string             `json:"status"`
+	FulfillmentStatus      string             `json:"fulfillment_status"`
+	RefundStatus           string             `json:"refund_status"`
 	PaidAt                 pgtype.Timestamptz `json:"paid_at"`
 	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
 	BalanceOrderID         pgtype.Text        `json:"balance_order_id"`
@@ -1059,6 +1062,22 @@ type PayOrder struct {
 	NotifyRaw              []byte             `json:"notify_raw"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+type PayRefund struct {
+	ID                int64              `json:"id"`
+	RefundID          string             `json:"refund_id"`
+	PaymentOrderID    string             `json:"payment_order_id"`
+	RefundMethod      string             `json:"refund_method"`
+	RefundReference   string             `json:"refund_reference"`
+	ChannelRefundID   pgtype.Text        `json:"channel_refund_id"`
+	RefundAmountMinor int64              `json:"refund_amount_minor"`
+	Status            string             `json:"status"`
+	RefundedAt        pgtype.Timestamptz `json:"refunded_at"`
+	Reason            string             `json:"reason"`
+	Note              pgtype.Text        `json:"note"`
+	OperatorID        string             `json:"operator_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type PayTenantSetting struct {

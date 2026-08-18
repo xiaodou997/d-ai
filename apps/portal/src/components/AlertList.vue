@@ -25,7 +25,7 @@
       </div>
 
       <!-- 交易失败 -->
-      <div v-for="item in failedTransactions" :key="item.eventId" class="group p-4 bg-white hover:bg-amber-50/30 border border-slate-100 rounded-2xl transition-all relative overflow-hidden">
+      <div v-for="item in failedTransactions" :key="item.requestId" class="group p-4 bg-white hover:bg-amber-50/30 border border-slate-100 rounded-2xl transition-all relative overflow-hidden">
         <div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-500"></div>
         <div class="flex items-start justify-between mb-1">
           <div class="flex items-center">
@@ -33,14 +33,14 @@
               <el-icon><CircleCloseFilled /></el-icon>
             </span>
             <div class="overflow-hidden">
-              <p class="text-sm font-bold text-slate-700 truncate">扣费失败: {{ item.eventId }}</p>
+              <p class="text-sm font-bold text-slate-700 truncate">扣费失败: {{ item.requestId }}</p>
               <p class="text-[11px] text-slate-400 font-medium uppercase mt-0.5">{{ formatDateTime(item.createdTime) }}</p>
             </div>
           </div>
         </div>
         <div class="mt-2 bg-slate-50 p-2 rounded-lg">
           <p class="text-xs text-slate-500 leading-relaxed font-medium">
-            <span class="text-amber-600 font-bold">原因:</span> {{ item.terminalNote }}
+            <span class="text-amber-600 font-bold">原因:</span> {{ item.settlementError || '结算失败，待人工处理' }}
           </p>
         </div>
       </div>

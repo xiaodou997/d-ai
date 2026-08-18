@@ -19,7 +19,6 @@ import type {
   DebtStatusOutputBody,
   PageAuditLogItem,
   PageRechargeRecordItem,
-  PageTransactionItem,
   RechargeOutputBody,
   PageAdminUserItem,
   PageEndUserItem,
@@ -303,41 +302,20 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  listTransactions(params: {
-    page?: number;
-    size?: number;
-    tenantId?: string;
-    userId?: string;
-    tenantName?: string;
-    username?: string;
-    clientName?: string;
-    status?: string;
-    timeFrom?: number;
-    timeTo?: number;
-  }) {
-    return request()<PageTransactionItem>({
-      method: "GET",
-      path: "/api/v1/account/transactions",
-      headers: apiHeaders,
-      query: params,
-      baseUrl: apiBaseUrl
-    });
-  },
-
-  // ---- 计费事件人工干预（交易流水）----
-  refund(body: { eventId: string; reason?: string }) {
+  // ---- AI 使用记录人工退款 ----
+  refundUsage(body: { requestId: string; reason?: string }) {
     return request()<{ status: string }>({
       method: "POST",
-      path: "/api/v1/refunds",
+      path: "/api/v1/ai/usage/refund",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
     });
   },
-  batchRefundEvents(body: { eventIds: string[]; reason: string }) {
+  batchRefundUsage(body: { requestIds: string[]; reason: string }) {
     return request()<BatchOpResult>({
       method: "POST",
-      path: "/api/v1/billing/events/batch-refund",
+      path: "/api/v1/ai/usage/batch-refund",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl

@@ -79,11 +79,8 @@ var (
 	ErrTenantOverdraftExceeded   = &BizError{Code: 2011, Message: "租户余额不足且透支额度已用尽"}
 	ErrUserOverdraftExceeded     = &BizError{Code: 2012, Message: "用户余额不足且透支额度已用尽"}
 
-	// 交易/充值错误 (3xxx)
-	ErrTransactionNotFound      = &BizError{Code: 3001, Message: "交易不存在"}
-	ErrTransactionExpired       = &BizError{Code: 3002, Message: "交易已过期"}
-	ErrTransactionCanceled      = &BizError{Code: 3003, Message: "交易已取消"}
-	ErrTransactionSuccess       = &BizError{Code: 3004, Message: "交易已完成"}
+	// 使用记录/充值错误 (3xxx)
+	ErrUsageNotFound            = &BizError{Code: 3001, Message: "使用记录不存在"}
 	ErrDuplicateRequest         = &BizError{Code: 3005, Message: "重复请求"}
 	ErrInvalidAmount            = &BizError{Code: 3006, Message: "无效金额"}
 	ErrRechargeNotFound         = &BizError{Code: 3007, Message: "充值记录不存在"}
@@ -127,7 +124,7 @@ const CodeInternalError = 999999
 func IsNotFoundError(err error) bool {
 	return errors.Is(err, ErrNotFound) ||
 		errors.Is(err, ErrAccountNotFound) ||
-		errors.Is(err, ErrTransactionNotFound) ||
+		errors.Is(err, ErrUsageNotFound) ||
 		errors.Is(err, ErrRechargeNotFound) ||
 		errors.Is(err, ErrPackageNotFound)
 }

@@ -50,7 +50,6 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 		requestIDs := []string{requestID, rollbackRequestID, failedSubRequestID}
 		_, _ = pool.Exec(ctx, `DELETE FROM ai_usage_rollups_hourly WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM ai_usage_logs WHERE request_id = ANY($1::text[])`, requestIDs)
-		_, _ = pool.Exec(ctx, `DELETE FROM bill_events WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_charge_outbox WHERE tenant_id = ANY($1::text[])`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_credit_lots WHERE account_id IN (SELECT account_id FROM bill_accounts WHERE tenant_id = ANY($1::text[]))`, tenantIDs)
 		_, _ = pool.Exec(ctx, `DELETE FROM bill_accounts WHERE tenant_id = ANY($1::text[])`, tenantIDs)
@@ -328,12 +327,11 @@ func assertUsageCompletionState(
 	if logs != wantLogs {
 		t.Fatalf("usage logs = %d, want %d", logs, wantLogs)
 	}
-	var eventID *string
 	var billingStatus string
 	err := pool.QueryRow(ctx, `
-		SELECT billing_event_id, billing_status
+		SELECT billing_status
 		FROM ai_usage_logs WHERE request_id = $1
-	`, requestID).Scan(&eventID, &billingStatus)
+	`, requestID).Scan(&billingStatus)
 	if err != nil {
 		if wantLogs == 0 {
 			return
@@ -341,8 +339,8 @@ func assertUsageCompletionState(
 		t.Fatalf("read usage billing state: %v", err)
 	}
 	if wantTenantMicro == 0 && wantUserMicro == 0 {
-		if eventID != nil || billingStatus != "free" {
-			t.Fatalf("zero-amount usage billing = event:%v status:%s", eventID, billingStatus)
+		if billingStatus != "free" {
+			t.Fatalf("zero-amount usage billing = status:%s", billingStatus)
 		}
 		return
 	}
@@ -350,8 +348,8 @@ func assertUsageCompletionState(
 	// Before the outbox drains, the usage row must say "pending" rather than
 	// claim a charge that has not been applied — and the queued charge must
 	// already exist, because it was committed with the usage row.
-	if billingStatus != "pending" || eventID != nil {
-		t.Fatalf("pre-settlement usage billing = event:%v status:%s, want pending with no event", eventID, billingStatus)
+	if billingStatus != "pending" {
+		t.Fatalf("pre-settlement usage billing = status:%s, want pending", billingStatus)
 	}
 	var queuedTenant, queuedUser int64
 	if err := pool.QueryRow(ctx, `
@@ -365,14 +363,15 @@ func assertUsageCompletionState(
 
 	drainOutbox(t, ctx, pool)
 
+	var settledAt *time.Time
 	if err := pool.QueryRow(ctx, `
-		SELECT billing_event_id, billing_status
+		SELECT billing_status, settled_at
 		FROM ai_usage_logs WHERE request_id = $1
-	`, requestID).Scan(&eventID, &billingStatus); err != nil {
+	`, requestID).Scan(&billingStatus, &settledAt); err != nil {
 		t.Fatalf("read settled usage billing state: %v", err)
 	}
-	if eventID == nil || billingStatus != "confirmed" {
-		t.Fatalf("settled charge link = event:%v status:%s", eventID, billingStatus)
+	if settledAt == nil || billingStatus != "settled" {
+		t.Fatalf("settled charge state = settled_at:%v status:%s", settledAt, billingStatus)
 	}
 	var outboxStatus string
 	if err := pool.QueryRow(ctx, `
@@ -382,29 +381,6 @@ func assertUsageCompletionState(
 	}
 	if outboxStatus != "done" {
 		t.Fatalf("outbox status = %s, want done", outboxStatus)
-	}
-	var eventTenant, eventUser string
-	var tenantMicro, userMicro *int64
-	var eventStatus, eventType string
-	err = pool.QueryRow(ctx, `
-		SELECT tenant_id, COALESCE(user_id, ''), tenant_credits, user_credits, status, event_type
-		FROM bill_events WHERE event_id = $1
-	`, *eventID).Scan(&eventTenant, &eventUser, &tenantMicro, &userMicro, &eventStatus, &eventType)
-	if err != nil {
-		t.Fatalf("read direct charge event: %v", err)
-	}
-	gotTenant, gotUser := int64(0), int64(0)
-	if tenantMicro != nil {
-		gotTenant = *tenantMicro
-	}
-	if userMicro != nil {
-		gotUser = *userMicro
-	}
-	if eventTenant != tenantID || eventUser != userID || gotTenant != wantTenantMicro || gotUser != wantUserMicro ||
-		eventStatus != "succeeded" || eventType != "charge" {
-		t.Fatalf("direct charge event = tenant:%s user:%s amounts:(%d,%d) status:%s type:%s, want tenant:%s user:%s amounts:(%d,%d) succeeded charge",
-			eventTenant, eventUser, gotTenant, gotUser, eventStatus, eventType,
-			tenantID, userID, wantTenantMicro, wantUserMicro)
 	}
 }
 

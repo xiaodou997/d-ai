@@ -1,12 +1,12 @@
 <!--
   租户详情 — 1:1 搬运自 v1/platform/platform-admin/src/views/Tenant/TenantDetail.vue。
-  4 Tab：组织用户 / 关联用户 / 未结债务 / 财务流水。
+  3 Tab：组织用户 / 关联用户 / 未结债务。
   适配：axios → platformAdminApi；头部用 getTenant + getAccountBalance；
        债务状态使用只读 DebtStatusPanel。
   重构：页面骨架迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        详情页无筛选/分页槽,标签页与各 Tab 内容置于同卡 body 内 24px 容器排布），
        组织用户列表接入 useListPage；请求参数与筛选语义保持不变，弹窗仍为 element-plus。
-       关联用户固定拉取前 100 条、财务流水固定拉取前 20 条（接口限制），不渲染分页器。
+       关联用户固定拉取前 100 条（接口限制），不渲染分页器。
 -->
 <template>
   <div class="tenant-detail-page">
@@ -126,27 +126,6 @@
         <DebtStatusPanel v-if="activeTab === 'debt'" owner-type="tenant" :account-id="tenantId" />
       </div>
 
-      <!-- 财务流水 -->
-      <div v-show="activeTab === 'transactions'" class="td-pane">
-        <DsTable
-          :frame="false"
-          :columns="txColumns"
-          :rows="transactions"
-          row-key="eventId"
-          :loading="transactionsLoading"
-          empty-title="暂无财务流水"
-        >
-          <template #cell-amount="{ row }">
-            <span class="td-num">${{ ((row.tenantAmountUsd || 0) + (row.userAmountUsd || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
-          </template>
-          <template #cell-status="{ row }">
-            <DsTag :tone="txStatusInfo(row.status).tone">{{ txStatusInfo(row.status).label }}</DsTag>
-          </template>
-          <template #cell-createdTime="{ row }">
-            <span class="td-time">{{ formatTime(row.createdTime) }}</span>
-          </template>
-        </DsTable>
-      </div>
       </div>
     </PortalPagePanel>
 
@@ -217,8 +196,7 @@ const activeTab = ref('orgUsers')
 const tabs = [
   { key: 'orgUsers', label: '组织用户' },
   { key: 'users', label: '关联用户' },
-  { key: 'debt', label: '未结债务' },
-  { key: 'transactions', label: '财务流水' }
+  { key: 'debt', label: '未结债务' }
 ]
 
 const tenantInfo = ref<TenantDetailOutput | null>(null)
@@ -247,13 +225,6 @@ const userColumns: DsTableColumn[] = [
   { key: 'nickname', title: '昵称' },
   { key: 'status', title: '状态', width: 100 },
   { key: 'createdTime', title: '注册时间', width: 170 }
-]
-
-const txColumns: DsTableColumn[] = [
-  { key: 'eventId', title: '交易流水', mono: true },
-  { key: 'amount', title: '金额', align: 'right', width: 150 },
-  { key: 'status', title: '状态', width: 120 },
-  { key: 'createdTime', title: '时间', width: 170 }
 ]
 
 // 组织用户：关键词筛选 + 分页，接入 useListPage
@@ -293,22 +264,8 @@ const users = ref<any[]>([])
 const usersLoading = ref(false)
 const usersLoaded = ref(false)
 
-// 财务流水：接口无分页参数，固定拉取前 20 条，故不渲染分页器
-const transactions = ref<any[]>([])
-const transactionsLoading = ref(false)
-const transactionsLoaded = ref(false)
-
 const formatTime = (ts?: number) => (ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—')
 const endUserStatus = (s: number) => (({ 1: '正常', 2: '禁用', 3: '锁定', 4: '级联停用' } as any)[s] || '未知')
-
-const TX_STATUS_MAP: Record<string, { label: string; tone: 'positive' | 'danger' | 'warning' | 'info' }> = {
-  succeeded: { label: '成功', tone: 'positive' },
-  pending: { label: '进行中', tone: 'warning' },
-  released: { label: '已释放', tone: 'danger' },
-  cancelled: { label: '取消', tone: 'info' },
-  refunded: { label: '已退款', tone: 'info' }
-}
-const txStatusInfo = (status: string) => TX_STATUS_MAP[status] ?? { label: status || '—', tone: 'info' as const }
 
 const handleRecharge = () => {
   rechargeDialogVisible.value = true
@@ -373,21 +330,8 @@ const fetchUsers = async () => {
   }
 }
 
-const fetchTransactions = async () => {
-  if (transactionsLoaded.value) return
-  transactionsLoading.value = true
-  try {
-    const data = await platformAdminApi.listTransactions({ tenantId, page: 1, size: 20 })
-    transactions.value = data.items || []
-    transactionsLoaded.value = true
-  } finally {
-    transactionsLoading.value = false
-  }
-}
-
 const handleTabChange = (name: string) => {
   if (name === 'users') fetchUsers()
-  else if (name === 'transactions') fetchTransactions()
 }
 
 watch(activeTab, handleTabChange)

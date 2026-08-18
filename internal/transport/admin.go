@@ -5,7 +5,6 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/auth"
-	billingpg "xiaodou/dai/internal/billing/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
@@ -17,7 +16,6 @@ type adminHandlers struct {
 	pool       *pgxpool.Pool
 	tenantRepo *tenantpg.TenantRepository
 	systemRepo *systempg.SystemRepository
-	txRepo     *billingpg.EventRepository
 	deduction  *billingsvc.DeductionService
 	blacklist  *auth.BlacklistService
 	log        *zap.Logger
@@ -28,7 +26,6 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		pool:       d.Pool,
 		tenantRepo: tenantpg.NewTenantRepository(d.Pool),
 		systemRepo: systempg.NewSystemRepository(d.Pool),
-		txRepo:     billingpg.NewEventRepository(d.Pool),
 		deduction:  d.Deduction,
 		blacklist:  d.Blacklist,
 		log:        d.Logger,

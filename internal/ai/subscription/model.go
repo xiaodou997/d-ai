@@ -124,7 +124,8 @@ type Order struct {
 	PurchasePolicySnapshot             PurchasePolicy
 	InventoryReserved                  bool
 	Status                             string
-	BillingEventID                     string
+	DebitReference                     string
+	DebitedAt                          *time.Time
 	SubscriptionID                     string
 	FailReason                         string
 	PaidAt                             *time.Time
@@ -304,5 +305,5 @@ type Repo interface {
 
 	// FinalizeOrder 购买 finalize 事务（按用户 advisory 串行）：从订单不可变权益快照建订阅 →
 	// 订单置 paid。幂等：订单已 paid 时返回既有订阅。
-	FinalizeOrder(ctx context.Context, order *Order, eventID string) (*Subscription, error)
+	FinalizeOrder(ctx context.Context, order *Order, debitReference string) (*Subscription, error)
 }

@@ -445,7 +445,7 @@ type subOrderDTO struct {
 	PlanName              string               `json:"plan_name"`
 	PriceMicroUSD         int64                `json:"price_micro_usd"`
 	Status                string               `json:"status"`
-	BillingEventID        string               `json:"billing_event_id,omitempty"`
+	DebitReference        string               `json:"debit_reference,omitempty"`
 	SubscriptionID        string               `json:"subscription_id,omitempty"`
 	FailReason            string               `json:"fail_reason,omitempty"`
 	PurchasePolicyVersion int64                `json:"purchase_policy_version"`
@@ -465,7 +465,7 @@ func subOrderToDTO(o subscription.Order) subOrderDTO {
 		PlanName:              o.PlanNameSnapshot,
 		PriceMicroUSD:         o.PriceMicroUSD,
 		Status:                o.Status,
-		BillingEventID:        o.BillingEventID,
+		DebitReference:        o.DebitReference,
 		SubscriptionID:        o.SubscriptionID,
 		FailReason:            o.FailReason,
 		PurchasePolicyVersion: o.PurchasePolicyVersion,

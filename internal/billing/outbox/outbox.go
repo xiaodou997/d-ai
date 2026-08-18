@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -237,7 +236,7 @@ func (c *Consumer) DrainOnce(ctx context.Context) (int, error) {
 		}
 		if applyErr := c.apply(ctx, sp, row.charge); applyErr != nil {
 			_ = sp.Rollback(ctx)
-			if err := c.recordFailure(ctx, tx, row.id, row.attempts+1, applyErr); err != nil {
+			if err := c.recordFailure(ctx, tx, row.id, row.charge.RequestID, row.attempts+1, applyErr); err != nil {
 				return 0, err
 			}
 			c.logger.Error("billing outbox charge failed",
@@ -281,19 +280,6 @@ func (c *Consumer) apply(ctx context.Context, tx pgx.Tx, charge Charge) error {
 		}
 	}
 
-	eventID := "EV_" + uuid.New().String()[:24]
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO bill_events
-		(event_id, idempotency_key, tenant_id, user_id, description, client_id,
-		 event_type, tenant_credits, user_credits, status, created_at, finished_at)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, 'dai-ai',
-		        'charge', NULLIF($6, 0), NULLIF($7, 0), 'succeeded', now(), now())
-		ON CONFLICT (idempotency_key) DO NOTHING
-	`, eventID, "ai-usage:"+charge.RequestID, charge.TenantID, charge.UserID,
-		charge.Description, charge.TenantMicro, charge.UserMicro); err != nil {
-		return fmt.Errorf("record charge event: %w", err)
-	}
-
 	if _, err := tx.Exec(ctx, `
 		UPDATE bill_charge_outbox
 		SET status = 'done', attempts = attempts + 1, settled_at = now(), last_error = NULL
@@ -302,12 +288,16 @@ func (c *Consumer) apply(ctx context.Context, tx pgx.Tx, charge Charge) error {
 		return fmt.Errorf("mark charge settled: %w", err)
 	}
 
-	if _, err := tx.Exec(ctx, `
+	result, err := tx.Exec(ctx, `
 		UPDATE ai_usage_logs
-		SET billing_event_id = $1, billing_status = 'confirmed'
-		WHERE request_id = $2
-	`, eventID, charge.RequestID); err != nil {
-		return fmt.Errorf("link charge event to usage: %w", err)
+		SET billing_status = 'settled', settlement_error = NULL, settled_at = now()
+		WHERE request_id = $1
+	`, charge.RequestID)
+	if err != nil {
+		return fmt.Errorf("mark usage settled: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return fmt.Errorf("mark usage settled: request %s not found", charge.RequestID)
 	}
 	return nil
 }
@@ -316,7 +306,7 @@ func (c *Consumer) apply(ctx context.Context, tx pgx.Tx, charge Charge) error {
 // rollback that discarded the failed attempt. A charge that keeps failing is
 // parked in 'failed' rather than retried forever, which takes it out of the
 // pending index and makes it visible to operators.
-func (c *Consumer) recordFailure(ctx context.Context, tx pgx.Tx, id int64, attempts int, cause error) error {
+func (c *Consumer) recordFailure(ctx context.Context, tx pgx.Tx, id int64, requestID string, attempts int, cause error) error {
 	status := "pending"
 	if attempts >= c.maxAttempts {
 		status = "failed"
@@ -327,6 +317,15 @@ func (c *Consumer) recordFailure(ctx context.Context, tx pgx.Tx, id int64, attem
 		WHERE id = $4
 	`, status, attempts, cause.Error(), id); err != nil {
 		return fmt.Errorf("record outbox failure: %w", err)
+	}
+	if status == "failed" {
+		if _, err := tx.Exec(ctx, `
+			UPDATE ai_usage_logs
+			SET billing_status = 'failed', settlement_error = $1
+			WHERE request_id = $2
+		`, cause.Error(), requestID); err != nil {
+			return fmt.Errorf("mark usage settlement failed: %w", err)
+		}
 	}
 	return nil
 }

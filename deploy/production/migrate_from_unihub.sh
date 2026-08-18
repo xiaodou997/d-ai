@@ -110,7 +110,7 @@ copy_target_columns urm iam_invitation_codes
 copy_target_columns urm auth_signing_keys
 copy_target_columns urm auth_audit_logs
 
-echo "Migrating URM balances and financial history"
+echo "Migrating URM balances and recharge history"
 copy_query urm bill_recharge_orders \
   "id,order_id,order_type,tenant_id,user_id,credit_amount,paid_amount,payment_ref,expires_at,operator_id,note,status,reversed_at,reversed_by,reversal_reason,created_at" \
   "
@@ -129,7 +129,6 @@ copy_query urm bill_credit_packages \
            recharge_order_id, version, created_at, updated_at
     FROM public.bill_credit_packages
   "
-copy_target_columns urm bill_events
 copy_target_columns urm bill_overdraft_adjustments
 copy_query urm pay_orders \
   "id,order_id,out_trade_no,scene,tenant_id,user_id,topup_mode,package_id,package_name,package_badge,payment_currency,payment_amount_minor,ledger_currency,gross_amount_micro_usd,fee_amount_micro_usd,gift_amount_micro_usd,credited_amount_micro_usd,fee_rate_bp,tenant_income_micro_usd,balance_expires_at,channel,code_url,transaction_id,status,paid_at,expires_at,balance_order_id,fail_note,notify_raw,created_at,updated_at" \

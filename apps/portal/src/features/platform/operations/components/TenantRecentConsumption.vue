@@ -8,10 +8,10 @@ import { computed } from "vue";
 import { ReceiptText } from "lucide-vue-next";
 import { DsTable, type DsTableColumn } from "@/shared/ui";
 
-import type { AccountTransactionItem } from "@/api/types/platformTenant";
+import type { TenantUsageLog } from "@/features/ai/usage";
 
 const props = defineProps<{
-  items: readonly AccountTransactionItem[];
+  items: readonly TenantUsageLog[];
   rangeLabel: string;
   loading: boolean;
 }>();
@@ -24,7 +24,7 @@ const columns: DsTableColumn[] = [
 ];
 
 // DsTable rows 类型为 any[],readonly props 在此做一次断言,不改数据本身
-const tableRows = computed(() => props.items as AccountTransactionItem[]);
+const tableRows = computed(() => props.items as TenantUsageLog[]);
 
 const emit = defineEmits<{
   openDetails: [];
@@ -61,18 +61,18 @@ function formatTime(timestamp?: number | null) {
         :frame="false"
         :columns="columns"
         :rows="tableRows"
-        row-key="eventId"
+        row-key="request_id"
         :loading="loading"
         empty-title="当前时间范围内暂无用户消费"
       >
         <template #cell-username="{ row }">
-          <strong class="recent-panel__user">{{ row.username || "未知用户" }}</strong>
+          <strong class="recent-panel__user">{{ row.user_id || "未知用户" }}</strong>
         </template>
         <template #cell-userAmount="{ row }">
-          <strong class="recent-panel__credits">${{ numberFormatter.format(row.userAmountUsd ?? 0) }}</strong>
+          <strong class="recent-panel__credits">${{ numberFormatter.format(row.user_charged_usd ?? 0) }}</strong>
         </template>
-        <template #cell-appName="{ row }">{{ row.appName || row.description || "—" }}</template>
-        <template #cell-createdTime="{ row }">{{ formatTime(row.createdTime) }}</template>
+        <template #cell-appName="{ row }">{{ row.request_source || row.model_code || "—" }}</template>
+        <template #cell-createdTime="{ row }">{{ formatTime(row.created_at) }}</template>
       </DsTable>
     </div>
   </section>

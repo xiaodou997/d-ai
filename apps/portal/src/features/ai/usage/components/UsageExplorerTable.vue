@@ -91,6 +91,15 @@ function totalDurationText(row: AdminUsageRow) {
 function subjectMeta(row: AdminUsageRow) {
   return [row.identity.user.label, row.identity.user.meta].filter(Boolean).join(" · ");
 }
+
+function billingStatusLabel(status?: string) {
+  return {
+    free: "免费",
+    pending: "待结算",
+    settled: "已结算",
+    failed: "结算失败"
+  }[status || ""] || status || "—";
+}
 </script>
 
 <template>
@@ -200,6 +209,9 @@ function subjectMeta(row: AdminUsageRow) {
           >
             {{ row.error_message || row.error_code || row.trace_id || "点击整行查看完整链路与载荷" }}
           </span>
+          <span class="stack-cell__sub settlement-state">
+            结算：{{ billingStatusLabel(row.billing_status) }}<template v-if="row.refund_status === 'refunded'"> · 已退款</template>
+          </span>
         </div>
       </template>
     </DsTable>
@@ -287,6 +299,10 @@ function subjectMeta(row: AdminUsageRow) {
 
 .stack-cell__sub--danger {
   color: var(--ds-danger);
+}
+
+.settlement-state {
+  color: var(--ds-muted);
 }
 
 .profile-chip {

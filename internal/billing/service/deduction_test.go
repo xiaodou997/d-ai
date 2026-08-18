@@ -3,12 +3,100 @@ package service_test
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/ledger"
 	"xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/dbtest"
 )
+
+func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ('tenant_refund', 'Refund Tenant', 'active');
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
+		VALUES ('user_refund', 'tenant_refund', 'refund-user', 'x', 4, 'active');
+		INSERT INTO ai_usage_logs (
+			request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
+			model_code, requested_model, capability_type, billable_unit_type,
+			tenant_payable, user_payable, user_charged, billing_status, request_status,
+			client_protocol, billing_source, settled_at
+		) VALUES (
+			'req-refund', 'user', 'jwt', 'web_chat', 'tenant_refund', 'user_refund',
+			'model', 'model', 'chat', 'token', 100, 200, 200, 'settled', 'success',
+			'openai_chat', 'payg', now()
+		)
+	`); err != nil {
+		t.Fatalf("seed refund usage: %v", err)
+	}
+
+	grantRefundBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindTenant, ID: "tenant_refund", TenantID: "tenant_refund"}, 1000)
+	grantRefundBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindUser, ID: "user_refund", TenantID: "tenant_refund"}, 2000)
+
+	deduction := service.NewDeductionService(pool, zap.NewNop())
+	if err := deduction.RefundUsage("req-refund", "operator correction", "admin-refund"); err != nil {
+		t.Fatalf("refund usage: %v", err)
+	}
+
+	var tenantBalance, userBalance int64
+	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'tenant_refund'`).Scan(&tenantBalance); err != nil {
+		t.Fatalf("read tenant balance: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_refund'`).Scan(&userBalance); err != nil {
+		t.Fatalf("read user balance: %v", err)
+	}
+	if tenantBalance != 1100 || userBalance != 2200 {
+		t.Fatalf("refunded balances = %d/%d, want 1100/2200", tenantBalance, userBalance)
+	}
+
+	var refundStatus, reason, operator string
+	var refundedAt *time.Time
+	if err := pool.QueryRow(ctx, `
+		SELECT refund_status, refund_reason, refund_operator_id, refunded_at
+		FROM ai_usage_logs WHERE request_id = 'req-refund'
+	`).Scan(&refundStatus, &reason, &operator, &refundedAt); err != nil {
+		t.Fatalf("read usage refund audit: %v", err)
+	}
+	if refundStatus != "refunded" || reason != "operator correction" || operator != "admin-refund" || refundedAt == nil {
+		t.Fatalf("usage refund audit = %s/%s/%s/%v", refundStatus, reason, operator, refundedAt)
+	}
+
+	if err := deduction.RefundUsage("req-refund", "duplicate", "admin-refund"); err == nil {
+		t.Fatal("duplicate usage refund succeeded")
+	}
+	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_refund'`).Scan(&userBalance); err != nil {
+		t.Fatalf("read user balance after duplicate: %v", err)
+	}
+	if userBalance != 2200 {
+		t.Fatalf("duplicate refund changed user balance to %d", userBalance)
+	}
+}
+
+func grantRefundBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ref ledger.Ref, amount int64) {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin grant: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := ledger.Grant(ctx, tx, ref, amount, nil, billing.PackageSourceAdminRecharge, ""); err != nil {
+		t.Fatalf("grant refund balance: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit grant: %v", err)
+	}
+}
 
 func TestReverseOnlineUserCreditRequiresRefundWorkflow(t *testing.T) {
 	ctx := context.Background()

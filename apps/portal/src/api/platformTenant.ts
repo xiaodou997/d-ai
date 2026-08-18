@@ -2,7 +2,6 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import type {
   AccountBalance,
-  AccountTransactionItem,
   ClientConsumptionItem,
   CreateEndUserOutput,
   CreateInviteCodeOutput,
@@ -81,23 +80,6 @@ export const platformTenantApi = {
       path: "/api/v1/account/balance",
       headers: apiHeaders,
       query: { detail },
-      baseUrl
-    });
-  },
-  getTransactions(params: {
-    page?: number;
-    size?: number;
-    username?: string;
-    clientName?: string;
-    status?: string;
-    timeFrom?: number;
-    timeTo?: number;
-  }) {
-    return platform()<Page<AccountTransactionItem>>({
-      method: "GET",
-      path: "/api/v1/account/transactions",
-      headers: apiHeaders,
-      query: params,
       baseUrl
     });
   },

@@ -21,29 +21,6 @@ export interface TenantPortalBranding {
   faviconPath?: string;
 }
 
-export interface TenantTransactionItem {
-  eventId: string;
-  userId: string;
-  description: string;
-  tenantAmountUsd: number;
-  userAmountUsd: number;
-  status: string;
-  terminalNote: string;
-  metadata: string;
-  createdTime?: number;
-  finishedTime?: number;
-  username: string;
-  tenantName: string;
-  clientId: string;
-}
-
-export interface PageTenantTransactionItem {
-  items: TenantTransactionItem[];
-  total: number;
-  page: number;
-  size: number;
-}
-
 export interface TenantRechargeRecordItem {
   orderId: string;
   orderType: string;

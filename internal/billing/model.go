@@ -29,21 +29,6 @@ const (
 	PackageStatusRevoked   = "revoked"
 )
 
-// EventStatus 消费事件状态
-const (
-	EventStatusPending   = "pending"
-	EventStatusSucceeded = "succeeded"
-	EventStatusCancelled = "cancelled"
-	EventStatusReleased  = "released"
-	EventStatusRefunded  = "refunded"
-)
-
-// EventType 消费事件类型
-const (
-	EventTypeCharge = "charge"
-	EventTypeRefund = "refund"
-)
-
 // OrderType 充值订单类型
 const (
 	OrderTypePlatformToTenant  = "platform_to_tenant"
@@ -68,26 +53,6 @@ const (
 	OrderStatusReversed = "reversed"
 )
 
-// BillingEvent 消费事件聚合根（对应 bill_events 表）
-type BillingEvent struct {
-	ID             int64
-	EventID        string
-	IdempotencyKey string
-	TenantID       string
-	UserID         string
-	ClientID       string
-	Description    string
-	EventType      string  // charge / refund
-	RefundOf       *string // refund 时指向原始 EventID
-	TenantCredits  *int64  // legacy DB mapping; value is tenant micro-USD
-	UserCredits    *int64  // legacy DB mapping; value is user micro-USD
-	Status         string  // pending / succeeded / cancelled / released / refunded
-	Metadata       string
-	TerminalNote   string
-	CreatedAt      time.Time
-	FinishedAt     *time.Time
-}
-
 // RechargeOrder 充值订单（对应 bill_recharge_orders 表）
 type RechargeOrder struct {
 	ID             int64
@@ -111,26 +76,4 @@ type RechargeOrder struct {
 // NowUTC 获取当前 UTC 时间
 func NowUTC() time.Time {
 	return time.UnixMilli(domain.NowMillis()).UTC()
-}
-
-func (e *BillingEvent) IsPending() bool {
-	return e.Status == EventStatusPending
-}
-
-func (e *BillingEvent) Confirm() {
-	e.Status = EventStatusSucceeded
-	now := NowUTC()
-	e.FinishedAt = &now
-}
-
-func (e *BillingEvent) Cancel() {
-	e.Status = EventStatusCancelled
-	now := NowUTC()
-	e.FinishedAt = &now
-}
-
-func (e *BillingEvent) AutoRelease() {
-	e.Status = EventStatusReleased
-	now := NowUTC()
-	e.FinishedAt = &now
 }

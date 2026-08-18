@@ -10,16 +10,14 @@ import (
 	billingsvc "xiaodou/dai/internal/billing/service"
 )
 
-// ---- DTO ----
-
-type batchRefundInput struct {
+type batchRefundUsageInput struct {
 	Body struct {
-		EventIDs []string `json:"eventIds" minItems:"1" maxItems:"100"`
-		Reason   string   `json:"reason"`
+		RequestIDs []string `json:"requestIds" minItems:"1" maxItems:"100"`
+		Reason     string   `json:"reason"`
 	}
 }
 
-type batchOpOutput struct {
+type batchUsageOpOutput struct {
 	Body struct {
 		Succeeded      []string                  `json:"succeeded"`
 		Failed         []billingsvc.BatchOpError `json:"failed"`
@@ -30,24 +28,23 @@ type batchOpOutput struct {
 	}
 }
 
-// registerAdminBillingEvents 注册账务审计所需的批量退款端点。
-func registerAdminBillingEvents(api huma.API, d Deps) {
+func registerAdminUsageBilling(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
 
-	huma.Register(api, huma.Operation{OperationID: "admin-batch-refund-events", Method: http.MethodPost, Path: "/api/v1/billing/events/batch-refund",
-		Summary: "批量退款", Tags: []string{"admin-billing-events"}, Middlewares: sysUser}, h.batchRefundEvents)
+	huma.Register(api, huma.Operation{OperationID: "admin-batch-refund-usage", Method: http.MethodPost, Path: "/api/v1/ai/usage/batch-refund",
+		Summary: "批量退款 AI 使用记录", Tags: []string{"admin-usage"}, Middlewares: sysUser}, h.batchRefundUsage)
 }
 
-func (h *adminHandlers) batchRefundEvents(ctx context.Context, in *batchRefundInput) (*batchOpOutput, error) {
+func (h *adminHandlers) batchRefundUsage(ctx context.Context, in *batchRefundUsageInput) (*batchUsageOpOutput, error) {
 	claims := userClaimsFromCtx(ctx)
-	res := h.deduction.BatchRefund(in.Body.EventIDs, in.Body.Reason, userIDOf(claims))
-	return batchResult(res), nil
+	res := h.deduction.BatchRefundUsage(in.Body.RequestIDs, in.Body.Reason, userIDOf(claims))
+	return batchUsageResult(res), nil
 }
 
-func batchResult(res billingsvc.BatchOpResult) *batchOpOutput {
-	out := &batchOpOutput{}
+func batchUsageResult(res billingsvc.BatchOpResult) *batchUsageOpOutput {
+	out := &batchUsageOpOutput{}
 	out.Body.Succeeded = res.Succeeded
 	out.Body.Failed = res.Failed
 	out.Body.TotalTenantUSD = billingdomain.MicroToUSD(res.TotalTenantCredits)

@@ -239,33 +239,6 @@ CREATE INDEX idx_bill_credit_lots_order
     ON bill_credit_lots (recharge_order_id)
     WHERE recharge_order_id IS NOT NULL;
 
-CREATE TABLE bill_events (
-    id BIGSERIAL PRIMARY KEY,
-    event_id TEXT NOT NULL UNIQUE,
-    idempotency_key TEXT UNIQUE,
-    tenant_id TEXT NOT NULL,
-    user_id TEXT,
-    client_id TEXT,
-    description TEXT,
-    event_type TEXT NOT NULL DEFAULT 'charge' CHECK (event_type IN ('charge', 'refund')),
-    refund_of TEXT,
-    tenant_credits BIGINT CHECK (tenant_credits IS NULL OR tenant_credits >= 0),
-    user_credits BIGINT CHECK (user_credits IS NULL OR user_credits >= 0),
-    status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'succeeded', 'cancelled', 'released', 'refunded')),
-    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    terminal_note TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    finished_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_bill_events_idempotency ON bill_events (idempotency_key) WHERE idempotency_key IS NOT NULL;
-CREATE INDEX idx_bill_events_tenant_time ON bill_events (tenant_id, created_at DESC);
-CREATE INDEX idx_bill_events_user_time ON bill_events (user_id, created_at DESC) WHERE user_id IS NOT NULL;
-CREATE INDEX idx_bill_events_pending ON bill_events (status, created_at) WHERE status = 'pending';
-CREATE INDEX idx_bill_events_type_tenant ON bill_events (event_type, tenant_id, created_at DESC);
-CREATE INDEX idx_bill_events_refund_of ON bill_events (refund_of) WHERE refund_of IS NOT NULL;
-
 -- Settlement outbox. The AI runtime writes one row in the SAME transaction as
 -- the ai_usage_logs insert, so a usage record and its charge can never diverge:
 -- if the usage row exists, the charge is owed and will be applied. A background
@@ -591,8 +564,8 @@ CREATE INDEX idx_ann_audit_announcement
     ON ann_audit_events (announcement_id, created_at DESC);
 
 -- Credit leases
--- Credit leases are mutable escrow records. They are deliberately separate
--- from bill_events, which remains the immutable financial-event journal.
+-- Credit leases are mutable escrow records. The request/usage row is the
+-- user-visible AI billing fact; leases only hold temporary settlement state.
 CREATE TABLE ledger_credit_leases (
     id BIGSERIAL PRIMARY KEY,
     lease_id TEXT NOT NULL UNIQUE,
@@ -622,7 +595,6 @@ CREATE TABLE ledger_credit_leases (
     account_state TEXT NOT NULL DEFAULT 'OK'
         CHECK (account_state IN ('OK', 'OVERDRAFT', 'EXHAUSTED')),
     allow_further_usage BOOLEAN NOT NULL DEFAULT true,
-    settled_event_id TEXT,
     settled_at TIMESTAMPTZ,
     released_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -649,7 +621,6 @@ CREATE TABLE ledger_credit_leases (
             AND user_deducted_micro = 0
             AND tenant_debt_added_micro = 0
             AND user_debt_added_micro = 0
-            AND settled_event_id IS NULL
             AND settled_at IS NULL)
         OR
         (settlement_state = 'settled'
@@ -658,10 +629,6 @@ CREATE TABLE ledger_credit_leases (
             AND actual_user_micro IS NOT NULL
             AND tenant_deducted_micro + tenant_debt_added_micro = actual_tenant_micro
             AND user_deducted_micro + user_debt_added_micro = actual_user_micro
-            AND (
-                (actual_tenant_micro > 0 OR actual_user_micro > 0)
-                = (settled_event_id IS NOT NULL)
-            )
             AND settled_at IS NOT NULL
             AND escrow_state = 'released')
     )
@@ -1237,13 +1204,15 @@ CREATE INDEX idx_ledger_credit_leases_account
     api_key_quota_cost     BIGINT      NOT NULL DEFAULT 0,
     service_tier           TEXT        NOT NULL DEFAULT 'standard',
     billing_breakdown      JSONB       NOT NULL DEFAULT '{}'::jsonb,
-    billing_event_id     TEXT,
     billing_window_id      TEXT,
     settlement_batch_id    UUID,
-    -- 分账层聚合扣款后回填这两列，关联到 bill_events.event_id。
-    settled_event_id       TEXT,
     settled_at             TIMESTAMPTZ,
     billing_status         TEXT        NOT NULL,
+    settlement_error      TEXT,
+    refund_status         TEXT        NOT NULL DEFAULT 'none',
+    refund_reason         TEXT,
+    refund_operator_id    TEXT,
+    refunded_at           TIMESTAMPTZ,
     request_status         TEXT        NOT NULL,
     http_status            INTEGER,
     upstream_status        INTEGER,
@@ -1290,6 +1259,11 @@ CREATE INDEX idx_ledger_credit_leases_account
       user_charged <= user_payable
       AND (billing_source <> 'payg' OR user_charged = user_payable)
       AND (billing_source <> 'subscription' OR (user_charged = 0 AND subscription_id IS NOT NULL))
+    ),
+    CONSTRAINT ai_usage_logs_billing_status_check CHECK (billing_status IN ('free', 'pending', 'settled', 'failed')),
+    CONSTRAINT ai_usage_logs_refund_status_check CHECK (
+      (refund_status = 'none' AND refunded_at IS NULL)
+      OR (refund_status = 'refunded' AND refunded_at IS NOT NULL)
     )
   );
 
@@ -1300,7 +1274,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_model_time        ON ai_usage_logs (model_code, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_source_time       ON ai_usage_logs (request_source, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_subscription      ON ai_usage_logs (subscription_id, created_at DESC) WHERE subscription_id IS NOT NULL;
-  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_billing_event   ON ai_usage_logs (billing_event_id);
+  CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_billing_status ON ai_usage_logs (billing_status, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_route             ON ai_usage_logs (group_target_id);
   CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_tenant_error_time ON ai_usage_logs (tenant_id, created_at DESC)
     WHERE request_status = 'failed';
@@ -1417,7 +1391,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     -- 仅管理员详情接口可查：未脱敏/未截断的真实底层错误（Go 错误链 + 上游原始报文全文）
     internal_error_detail TEXT,
     failed_step        VARCHAR(64),
-    billing_event_id TEXT,
     -- 计费是纯后扣：提交时的准入闸门只拒绝，不预扣，因此没有 estimated_cost。
     caller_charge        BIGINT      NOT NULL DEFAULT 0,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1857,7 +1830,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     actual_tenant_micro       BIGINT      NOT NULL CHECK (actual_tenant_micro >= 0),
     actual_user_micro         BIGINT      NOT NULL CHECK (actual_user_micro >= 0),
     status                    TEXT        NOT NULL CHECK (status IN ('pending', 'delivered', 'reconciling')),
-    billing_event_id              TEXT,
     tenant_deducted_micro     BIGINT      NOT NULL DEFAULT 0 CHECK (tenant_deducted_micro >= 0),
     user_deducted_micro       BIGINT      NOT NULL DEFAULT 0 CHECK (user_deducted_micro >= 0),
     tenant_debt_added_micro   BIGINT      NOT NULL DEFAULT 0 CHECK (tenant_debt_added_micro >= 0),
@@ -2003,7 +1975,8 @@ CREATE INDEX idx_ledger_credit_leases_account
     inventory_reserved BOOLEAN     NOT NULL DEFAULT false,
     status             TEXT        NOT NULL DEFAULT 'created'
                            CHECK (status IN ('created', 'deducting', 'paid', 'failed')),
-    billing_event_id       TEXT,                             -- 扣款成功后回填 bill_events.event_id
+    debit_reference       TEXT,
+    debited_at            TIMESTAMPTZ,
     subscription_id    UUID,                             -- paid 后回填
     fail_reason        TEXT,
     paid_at            TIMESTAMPTZ,
@@ -2025,6 +1998,9 @@ CREATE INDEX idx_ledger_credit_leases_account
   CREATE INDEX IF NOT EXISTS idx_ai_sub_orders_user      ON ai_sub_orders (tenant_id, user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_ai_sub_orders_reconcile ON ai_sub_orders (updated_at)
     WHERE status IN ('created', 'deducting');
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_sub_orders_debit_reference
+    ON ai_sub_orders (debit_reference)
+    WHERE debit_reference IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ai_sub_orders_purchase_eligibility
     ON ai_sub_orders (tenant_id, user_id, plan_id, created_at DESC)
     WHERE status IN ('created', 'deducting', 'paid');
@@ -2122,6 +2098,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 7);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 8);
 
 COMMIT;

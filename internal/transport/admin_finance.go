@@ -64,10 +64,10 @@ type reverseRechargeOutput struct {
 	}
 }
 
-type refundInput struct {
+type usageRefundInput struct {
 	Body struct {
-		EventID string `json:"eventId"`
-		Reason  string `json:"reason" required:"false"`
+		RequestID string `json:"requestId"`
+		Reason    string `json:"reason" required:"false"`
 	}
 }
 
@@ -140,8 +140,8 @@ func registerAdminFinance(api huma.API, d Deps) {
 		Summary: "充值（租户/用户）", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant, DefaultStatus: http.StatusCreated}, h.recharge)
 	huma.Register(api, huma.Operation{OperationID: "admin-reverse-recharge", Method: http.MethodPost, Path: "/api/v1/recharges/{orderId}/reverse",
 		Summary: "撤销充值", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant}, h.reverseRecharge)
-	huma.Register(api, huma.Operation{OperationID: "admin-refund", Method: http.MethodPost, Path: "/api/v1/refunds",
-		Summary: "手动全额退款", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.refund)
+	huma.Register(api, huma.Operation{OperationID: "admin-refund-usage", Method: http.MethodPost, Path: "/api/v1/ai/usage/refund",
+		Summary: "AI 使用记录退款", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.refundUsage)
 	huma.Register(api, huma.Operation{OperationID: "admin-get-debt", Method: http.MethodGet, Path: "/api/v1/admin/debts/{owner_type}/{id}",
 		Summary: "查询账户当前债务", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.getDebt)
 	huma.Register(api, huma.Operation{OperationID: "admin-auth-audit-logs", Method: http.MethodGet, Path: "/api/v1/auth-audit-logs",
@@ -283,7 +283,7 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 	return out, nil
 }
 
-func (h *adminHandlers) refund(ctx context.Context, in *refundInput) (*messageOutput, error) {
+func (h *adminHandlers) refundUsage(ctx context.Context, in *usageRefundInput) (*messageOutput, error) {
 	claims := userClaimsFromCtx(ctx)
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
@@ -292,7 +292,7 @@ func (h *adminHandlers) refund(ctx context.Context, in *refundInput) (*messageOu
 	if reason == "" {
 		reason = "管理员手动退款"
 	}
-	if err := h.deduction.Refund(in.Body.EventID, reason, claims.UserID); err != nil {
+	if err := h.deduction.RefundUsage(in.Body.RequestID, reason, claims.UserID); err != nil {
 		return nil, toProblem(err)
 	}
 	out := &messageOutput{}

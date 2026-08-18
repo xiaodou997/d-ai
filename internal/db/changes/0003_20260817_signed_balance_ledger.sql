@@ -32,7 +32,7 @@
 --   FROM iam_accounts a WHERE a.user_type = 4
 --   ORDER BY 2, 1;
 --
--- 已消费流水（bill_events）保留。AI 执行记录不受影响。
+-- 旧版消费流水表保留；AI 执行记录不受影响。
 
 BEGIN;
 

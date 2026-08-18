@@ -174,23 +174,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/account/transactions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 额度明细（含服务扣款审计） */
-        get: operations["account-transactions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/announcements": {
         parameters: {
             query?: never;
@@ -520,6 +503,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/usage/batch-refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批量退款 AI 使用记录 */
+        post: operations["admin-batch-refund-usage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/usage/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** AI 使用记录退款 */
+        post: operations["admin-refund-usage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/consumption-trend": {
         parameters: {
             query?: never;
@@ -673,23 +690,6 @@ export interface paths {
         get: operations["admin-auth-audit-logs"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/events/batch-refund": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 批量退款 */
-        post: operations["admin-batch-refund-events"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1488,23 +1488,6 @@ export interface paths {
         put?: never;
         /** 撤销充值 */
         post: operations["admin-reverse-recharge"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/refunds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** 手动全额退款 */
-        post: operations["admin-refund"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5060,14 +5043,24 @@ export interface components {
             binding_ids: string[] | null;
         };
         BatchOpError: {
-            eventId: string;
             reason: string;
+            requestId: string;
         };
-        BatchOpOutputBody: {
+        BatchRefundUsageInputBody: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchOpOutputBody.json
+             * @example https://example.com/schemas/BatchRefundUsageInputBody.json
+             */
+            readonly $schema?: string;
+            reason: string;
+            requestIds: string[] | null;
+        };
+        BatchUsageOpOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/BatchUsageOpOutputBody.json
              */
             readonly $schema?: string;
             /** Format: int64 */
@@ -5080,16 +5073,6 @@ export interface components {
             totalTenantUsd: number;
             /** Format: double */
             totalUserUsd: number;
-        };
-        BatchRefundInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/BatchRefundInputBody.json
-             */
-            readonly $schema?: string;
-            eventIds: string[] | null;
-            reason: string;
         };
         CashAccountItem: {
             /** Format: int64 */
@@ -5938,32 +5921,12 @@ export interface components {
             userId: string;
             username: string;
         };
-        EventRow: {
-            appName: string;
-            clientId: string;
-            /** Format: int64 */
-            createdTime: number | null;
-            description: string;
-            eventId: string;
-            /** Format: int64 */
-            finishedTime?: number;
-            metadata: string;
-            status: string;
-            /** Format: double */
-            tenantAmountUsd: number;
-            tenantName: string;
-            terminalNote: string;
-            /** Format: double */
-            userAmountUsd: number;
-            userId: string;
-            username: string;
-        };
         FailedTxAlert: {
             /** Format: int64 */
             createdTime: number;
-            eventId: string;
+            requestId: string;
+            settlementError: string;
             status: string;
-            terminalNote: string;
         };
         FetchEndpointUpstreamModelsOutputBody: {
             /**
@@ -6967,21 +6930,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        PageEventRow: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PageEventRow.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["EventRow"][] | null;
-            /** Format: int64 */
-            page: number;
-            /** Format: int64 */
-            size: number;
-            /** Format: int64 */
-            total: number;
-        };
         PageInviteCodeItem: {
             /**
              * Format: uri
@@ -7550,16 +7498,6 @@ export interface components {
             readonly $schema?: string;
             refreshToken: string;
         };
-        RefundInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RefundInputBody.json
-             */
-            readonly $schema?: string;
-            eventId: string;
-            reason?: string;
-        };
         ReplaceTenantUpstreamAccessInputBody: {
             /**
              * Format: uri
@@ -7977,9 +7915,9 @@ export interface components {
              * @example https://example.com/schemas/SubOrderDTO.json
              */
             readonly $schema?: string;
-            billing_event_id?: string;
             /** Format: date-time */
             created_at: string;
+            debit_reference?: string;
             fail_reason?: string;
             id: string;
             order_no: string;
@@ -8635,6 +8573,8 @@ export interface components {
              * @description 推理 token 数
              */
             reasoning_tokens: number;
+            /** @description 退款状态：none/refunded */
+            refund_status: string;
             /** @description 请求 ID */
             request_id: string;
             /** @description 请求来源 */
@@ -9583,6 +9523,17 @@ export interface components {
              * @description 推理 token 数
              */
             reasoning_tokens: number;
+            /** @description 退款操作人 */
+            refund_operator_id?: string;
+            /** @description 退款原因 */
+            refund_reason?: string;
+            /** @description 退款状态：none/refunded */
+            refund_status: string;
+            /**
+             * Format: int64
+             * @description 退款时间，Unix 毫秒
+             */
+            refunded_at?: number;
             /** @description 请求 ID */
             request_id: string;
             /**
@@ -9619,6 +9570,13 @@ export interface components {
             retail_base_usd: number;
             /** @description 服务档位：standard/fast */
             service_tier: string;
+            /**
+             * Format: int64
+             * @description 结算时间，Unix 毫秒
+             */
+            settled_at?: number;
+            /** @description 结算失败原因 */
+            settlement_error?: string;
             /** @description 是否流式请求 */
             stream: boolean;
             /** @description 租户 ID */
@@ -9682,6 +9640,7 @@ export interface components {
             attempts_detail?: unknown;
             billing_breakdown?: unknown;
             billing_group_label_snapshot?: string;
+            billing_status: string;
             /** Format: int32 */
             cache_read_tokens: number;
             /** Format: int32 */
@@ -9728,6 +9687,11 @@ export interface components {
             reasoning_effort?: string;
             /** Format: int32 */
             reasoning_tokens: number;
+            refund_operator_id?: string;
+            refund_reason?: string;
+            refund_status: string;
+            /** Format: int64 */
+            refunded_at?: number;
             request_id: string;
             request_messages?: unknown;
             request_params?: unknown;
@@ -9748,6 +9712,9 @@ export interface components {
             selected_upstream_model?: string;
             selected_upstream_target_type?: string;
             service_tier: string;
+            /** Format: int64 */
+            settled_at?: number;
+            settlement_error?: string;
             /** @description 是否流式请求 */
             stream: boolean;
             tenant_id?: string;
@@ -9773,6 +9740,16 @@ export interface components {
             stats: components["schemas"]["UsageStatsDTO"];
             /** Format: int64 */
             total: number;
+        };
+        UsageRefundInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/UsageRefundInputBody.json
+             */
+            readonly $schema?: string;
+            reason?: string;
+            requestId: string;
         };
         UsageStatsDTO: {
             /**
@@ -10209,6 +10186,8 @@ export interface components {
             billing_group_label_snapshot?: string;
             /** @description 计费来源：payg=按量 / subscription=订阅内 */
             billing_source: string;
+            /** @description 计费状态 */
+            billing_status: string;
             /**
              * Format: int32
              * @description 缓存读 token 数
@@ -10273,6 +10252,8 @@ export interface components {
              * @description 推理 token 数
              */
             reasoning_tokens: number;
+            /** @description 退款状态：none/refunded */
+            refund_status: string;
             /** @description 请求 ID */
             request_id: string;
             /** @description 请求来源 */
@@ -10947,46 +10928,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountStatsResult"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "account-transactions": {
-        parameters: {
-            query?: {
-                tenantId?: string;
-                userId?: string;
-                tenantName?: string;
-                username?: string;
-                clientName?: string;
-                status?: string;
-                timeFrom?: number;
-                timeTo?: number;
-                page?: number;
-                size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageEventRow"];
                 };
             };
             /** @description Error */
@@ -11818,6 +11759,72 @@ export interface operations {
             };
         };
     };
+    "admin-batch-refund-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchRefundUsageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchUsageOpOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-refund-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageRefundInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "admin-consumption-trend": {
         parameters: {
             query?: {
@@ -12102,39 +12109,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageAuditLogItem"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-batch-refund-events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BatchRefundInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BatchOpOutputBody"];
                 };
             };
             /** @description Error */
@@ -13977,39 +13951,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReverseRechargeOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-refund": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RefundInputBody"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageOutputBody"];
                 };
             };
             /** @description Error */

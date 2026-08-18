@@ -934,8 +934,13 @@ SELECT
   api_key_quota_cost,
   service_tier,
   billing_breakdown,
-  billing_event_id,
   billing_status,
+  settlement_error,
+  refund_status,
+  refund_reason,
+  refund_operator_id,
+  settled_at,
+  refunded_at,
   request_status,
   http_status,
   upstream_status,
@@ -1010,8 +1015,13 @@ type GetUsageLogByRequestIDRow struct {
 	ApiKeyQuotaCost                    int64              `json:"api_key_quota_cost"`
 	ServiceTier                        string             `json:"service_tier"`
 	BillingBreakdown                   []byte             `json:"billing_breakdown"`
-	BillingEventID                     pgtype.Text        `json:"billing_event_id"`
 	BillingStatus                      string             `json:"billing_status"`
+	SettlementError                    pgtype.Text        `json:"settlement_error"`
+	RefundStatus                       string             `json:"refund_status"`
+	RefundReason                       pgtype.Text        `json:"refund_reason"`
+	RefundOperatorID                   pgtype.Text        `json:"refund_operator_id"`
+	SettledAt                          pgtype.Timestamptz `json:"settled_at"`
+	RefundedAt                         pgtype.Timestamptz `json:"refunded_at"`
 	RequestStatus                      string             `json:"request_status"`
 	HttpStatus                         pgtype.Int4        `json:"http_status"`
 	UpstreamStatus                     pgtype.Int4        `json:"upstream_status"`
@@ -1087,8 +1097,13 @@ func (q *Queries) GetUsageLogByRequestID(ctx context.Context, requestID string) 
 		&i.ApiKeyQuotaCost,
 		&i.ServiceTier,
 		&i.BillingBreakdown,
-		&i.BillingEventID,
 		&i.BillingStatus,
+		&i.SettlementError,
+		&i.RefundStatus,
+		&i.RefundReason,
+		&i.RefundOperatorID,
+		&i.SettledAt,
+		&i.RefundedAt,
 		&i.RequestStatus,
 		&i.HttpStatus,
 		&i.UpstreamStatus,
@@ -1990,8 +2005,13 @@ SELECT
   api_key_quota_cost,
   service_tier,
   billing_breakdown,
-  billing_event_id,
   billing_status,
+  settlement_error,
+  refund_status,
+  refund_reason,
+  refund_operator_id,
+  settled_at,
+  refunded_at,
   request_status,
   http_status,
   upstream_status,
@@ -2087,8 +2107,13 @@ type ListUsageLogsRow struct {
 	ApiKeyQuotaCost                    int64              `json:"api_key_quota_cost"`
 	ServiceTier                        string             `json:"service_tier"`
 	BillingBreakdown                   []byte             `json:"billing_breakdown"`
-	BillingEventID                     pgtype.Text        `json:"billing_event_id"`
 	BillingStatus                      string             `json:"billing_status"`
+	SettlementError                    pgtype.Text        `json:"settlement_error"`
+	RefundStatus                       string             `json:"refund_status"`
+	RefundReason                       pgtype.Text        `json:"refund_reason"`
+	RefundOperatorID                   pgtype.Text        `json:"refund_operator_id"`
+	SettledAt                          pgtype.Timestamptz `json:"settled_at"`
+	RefundedAt                         pgtype.Timestamptz `json:"refunded_at"`
 	RequestStatus                      string             `json:"request_status"`
 	HttpStatus                         pgtype.Int4        `json:"http_status"`
 	UpstreamStatus                     pgtype.Int4        `json:"upstream_status"`
@@ -2184,8 +2209,13 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.ApiKeyQuotaCost,
 			&i.ServiceTier,
 			&i.BillingBreakdown,
-			&i.BillingEventID,
 			&i.BillingStatus,
+			&i.SettlementError,
+			&i.RefundStatus,
+			&i.RefundReason,
+			&i.RefundOperatorID,
+			&i.SettledAt,
+			&i.RefundedAt,
 			&i.RequestStatus,
 			&i.HttpStatus,
 			&i.UpstreamStatus,
@@ -2242,6 +2272,8 @@ SELECT
   billable_unit_type,
   billable_units,
   service_tier,
+  billing_status,
+  refund_status,
   user_payable,
   user_charged,
   billing_source,
@@ -2290,6 +2322,8 @@ type ListUsageLogsByTenantUserRow struct {
 	BillableUnitType                string             `json:"billable_unit_type"`
 	BillableUnits                   int64              `json:"billable_units"`
 	ServiceTier                     string             `json:"service_tier"`
+	BillingStatus                   string             `json:"billing_status"`
+	RefundStatus                    string             `json:"refund_status"`
 	UserPayable                     int64              `json:"user_payable"`
 	UserCharged                     int64              `json:"user_charged"`
 	BillingSource                   string             `json:"billing_source"`
@@ -2339,6 +2373,8 @@ func (q *Queries) ListUsageLogsByTenantUser(ctx context.Context, arg ListUsageLo
 			&i.BillableUnitType,
 			&i.BillableUnits,
 			&i.ServiceTier,
+			&i.BillingStatus,
+			&i.RefundStatus,
 			&i.UserPayable,
 			&i.UserCharged,
 			&i.BillingSource,

@@ -370,7 +370,6 @@ func buildUsageLogParams(req *serving.Request, billing domain.BillingResult) dbg
 		ApiKeyQuotaCost:                    billing.APIKeyQuotaCostMicro,
 		ServiceTier:                        string(billing.ServiceTier),
 		BillingBreakdown:                   billing.BillingBreakdownJSON,
-		BillingEventID:                     pgtype.Text{},
 		BillingStatus:                      billingStatus(req),
 		RequestStatus:                      string(req.RequestStatus),
 		HttpStatus:                         nullableInt4(req.HTTPStatus),
@@ -511,9 +510,8 @@ func usageBillingSource(src string) string {
 }
 
 // billingStatus is the settlement state at insert time. A billable request is
-// written "pending" and the outbox consumer promotes it to "confirmed" once the
-// balance has actually moved, so the column now reports what really happened
-// instead of asserting a charge that had not been applied yet.
+// written "pending" and the outbox consumer promotes it to "settled" once the
+// balance has actually moved.
 func billingStatus(req *serving.Request) string {
 	if req.BillingResult.TenantPayableMicro == 0 && req.BillingResult.UserChargedMicro == 0 {
 		return string(domain.BillingFree)

@@ -57,8 +57,13 @@ type UsageLog struct {
 	APIKeyQuotaCostMicro               int64
 	ServiceTier                        string
 	BillingBreakdownJSON               []byte
-	BillingEventID                     string
 	BillingStatus                      string
+	SettlementError                    string
+	RefundStatus                       string
+	RefundReason                       string
+	RefundOperatorID                   string
+	SettledAt                          *time.Time
+	RefundedAt                         *time.Time
 	RequestStatus                      string
 	HTTPStatus                         *int32
 	UpstreamStatus                     *int32

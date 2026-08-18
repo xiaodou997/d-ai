@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -48,17 +48,37 @@ func (p *BillingPurchaser) DebitStrict(ctx context.Context, req DebitRequest) (*
 	}
 	defer tx.Rollback(ctx)
 
-	// The idempotency key is unique on bill_events, so a retried purchase
-	// returns the original receipt instead of charging a second time.
-	var existingEventID string
+	const keyPrefix = "ai-sub-"
+	orderNo := strings.TrimPrefix(req.IdempotencyKey, keyPrefix)
+	if orderNo == "" || orderNo == req.IdempotencyKey {
+		return nil, errors.New("subscription debit idempotency key has invalid format")
+	}
+
+	// The purchase order is the idempotency anchor. It is locked before the
+	// ledger debit, so a retry returns the same debit reference without charging
+	// a second time.
+	var orderTenantID, orderUserID, debitReference, orderStatus string
 	err = tx.QueryRow(ctx, `
-		SELECT event_id FROM bill_events WHERE idempotency_key = $1
-	`, req.IdempotencyKey).Scan(&existingEventID)
+		SELECT tenant_id, user_id, COALESCE(debit_reference, ''), status
+		FROM ai_sub_orders WHERE order_no = $1 FOR UPDATE
+	`, orderNo).Scan(&orderTenantID, &orderUserID, &debitReference, &orderStatus)
 	if err == nil {
-		return &DebitReceipt{AuthorizationID: existingEventID}, nil
+		if orderTenantID != req.TenantID || orderUserID != req.UserID {
+			return nil, errors.New("subscription debit order ownership mismatch")
+		}
+		if debitReference != "" {
+			return &DebitReceipt{AuthorizationID: debitReference}, nil
+		}
+		if orderStatus != OrderDeducting && orderStatus != OrderCreated {
+			return nil, fmt.Errorf("subscription order is not debitable (status=%s)", orderStatus)
+		}
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("look up subscription debit: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("look up subscription debit: %w", err)
+		}
+	} else {
+		return nil, fmt.Errorf("subscription order not found: %s", orderNo)
 	}
 
 	if req.TenantMicro > 0 {
@@ -79,22 +99,19 @@ func (p *BillingPurchaser) DebitStrict(ctx context.Context, req DebitRequest) (*
 		}
 	}
 
-	eventID := "EV_" + uuid.New().String()[:24]
+	debitReference = "subscription:" + orderNo
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO bill_events
-		(event_id, idempotency_key, tenant_id, user_id, description, client_id,
-		 event_type, tenant_credits, user_credits, status, created_at, finished_at)
-		VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6,
-		        'charge', NULLIF($7, 0), NULLIF($8, 0), 'succeeded', now(), now())
-	`, eventID, req.IdempotencyKey, req.TenantID, req.UserID, req.Description, p.clientID,
-		req.TenantMicro, req.UserMicro); err != nil {
-		return nil, fmt.Errorf("record subscription debit: %w", err)
+		UPDATE ai_sub_orders
+		SET debit_reference = $1, debited_at = now(), updated_at = now()
+		WHERE order_no = $2 AND debit_reference IS NULL
+	`, debitReference, orderNo); err != nil {
+		return nil, fmt.Errorf("record subscription debit reference: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
-	return &DebitReceipt{AuthorizationID: eventID}, nil
+	return &DebitReceipt{AuthorizationID: debitReference}, nil
 }
 
 func mapLedgerError(err error) error {

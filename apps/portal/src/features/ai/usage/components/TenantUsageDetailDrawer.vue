@@ -54,6 +54,8 @@ function multiplierLabel(value?: number | null) {
         <h3>状态</h3>
         <dl>
           <dt>请求状态</dt><dd><UsageTag kind="status" :value="row.request_status" /></dd>
+          <dt>结算状态</dt><dd>{{ row.billing_status_label || row.billing_status }}</dd>
+          <dt>退款状态</dt><dd>{{ row.refund_status === "refunded" ? "已退款" : "未退款" }}</dd>
           <dt>HTTP 状态</dt><dd>{{ row.http_status ?? "-" }}</dd>
           <dt>错误码</dt><dd class="mono">{{ row.error_code ?? "-" }}</dd>
           <dt>错误信息</dt><dd class="error-msg">{{ row.error_message ?? "-" }}</dd>

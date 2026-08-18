@@ -106,6 +106,12 @@ type usageLogDTO struct {
 	APIKeyQuotaUSD                     float64  `json:"api_key_quota_usd" doc:"API key 配额USD 金额"`
 	ServiceTier                        string   `json:"service_tier" doc:"服务档位：standard/fast"`
 	BillingStatus                      string   `json:"billing_status" doc:"计费状态"`
+	SettlementError                    *string  `json:"settlement_error,omitempty" doc:"结算失败原因"`
+	RefundStatus                       string   `json:"refund_status" doc:"退款状态：none/refunded"`
+	RefundReason                       *string  `json:"refund_reason,omitempty" doc:"退款原因"`
+	RefundOperatorID                   *string  `json:"refund_operator_id,omitempty" doc:"退款操作人"`
+	SettledAt                          *int64   `json:"settled_at,omitempty" doc:"结算时间，Unix 毫秒"`
+	RefundedAt                         *int64   `json:"refunded_at,omitempty" doc:"退款时间，Unix 毫秒"`
 	RequestStatus                      string   `json:"request_status" doc:"请求状态"`
 	HTTPStatus                         *int32   `json:"http_status,omitempty" doc:"HTTP 状态码"`
 	UpstreamStatus                     *int32   `json:"upstream_status,omitempty" doc:"上游状态码"`
@@ -180,6 +186,13 @@ type usageLogDetailDTO struct {
 	Resolution                         *string         `json:"resolution,omitempty" doc:"图片/视频规格，例如 1024x1024 / 720p"`
 	ServiceTier                        string          `json:"service_tier"`
 	BillingBreakdown                   json.RawMessage `json:"billing_breakdown,omitempty"`
+	BillingStatus                      string          `json:"billing_status"`
+	SettlementError                    *string         `json:"settlement_error,omitempty"`
+	RefundStatus                       string          `json:"refund_status"`
+	RefundReason                       *string         `json:"refund_reason,omitempty"`
+	RefundOperatorID                   *string         `json:"refund_operator_id,omitempty"`
+	SettledAt                          *int64          `json:"settled_at,omitempty"`
+	RefundedAt                         *int64          `json:"refunded_at,omitempty"`
 	LatencyMs                          *int32          `json:"latency_ms,omitempty"`
 	FirstTokenLatencyMs                *int32          `json:"first_token_latency_ms,omitempty"`
 	RequestTotalMs                     *int32          `json:"request_total_ms,omitempty"`
@@ -231,6 +244,7 @@ type tenantUsageLogDTO struct {
 	ServiceTier                        string  `json:"service_tier" doc:"服务档位：standard/fast"`
 	BillingStatus                      string  `json:"billing_status" doc:"计费状态"`
 	BillingStatusLabel                 string  `json:"billing_status_label" doc:"计费状态展示名"`
+	RefundStatus                       string  `json:"refund_status" doc:"退款状态：none/refunded"`
 	BillingSource                      string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
 	RequestStatus                      string  `json:"request_status" doc:"请求状态"`
 	HTTPStatus                         *int32  `json:"http_status,omitempty" doc:"HTTP 状态码"`
@@ -273,6 +287,8 @@ type userUsageLogDTO struct {
 	BillableUnits                   int64   `json:"billable_units" doc:"计费单位数"`
 	UserChargedUSD                  float64 `json:"user_charged_usd" doc:"用户实际扣款USD 金额"`
 	ServiceTier                     string  `json:"service_tier" doc:"服务档位：standard/fast"`
+	BillingStatus                   string  `json:"billing_status" doc:"计费状态"`
+	RefundStatus                    string  `json:"refund_status" doc:"退款状态：none/refunded"`
 	BillingSource                   string  `json:"billing_source" doc:"计费来源：payg=按量 / subscription=订阅内"`
 	RequestStatus                   string  `json:"request_status" doc:"请求状态"`
 	HTTPStatus                      *int32  `json:"http_status,omitempty" doc:"HTTP 状态码"`
@@ -770,6 +786,12 @@ func usageLogToDTO(log domain.UsageLog) usageLogDTO {
 		APIKeyQuotaUSD:                     moneyfmt.MicroToUSD(log.APIKeyQuotaCostMicro),
 		ServiceTier:                        log.ServiceTier,
 		BillingStatus:                      log.BillingStatus,
+		SettlementError:                    stringPtrOrNil(log.SettlementError),
+		RefundStatus:                       log.RefundStatus,
+		RefundReason:                       stringPtrOrNil(log.RefundReason),
+		RefundOperatorID:                   stringPtrOrNil(log.RefundOperatorID),
+		SettledAt:                          timeToMillisPtrPtr(log.SettledAt),
+		RefundedAt:                         timeToMillisPtrPtr(log.RefundedAt),
 		RequestStatus:                      log.RequestStatus,
 		HTTPStatus:                         log.HTTPStatus,
 		UpstreamStatus:                     log.UpstreamStatus,
@@ -853,6 +875,13 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		Resolution:                         stringPtrOrNil(detail.Resolution),
 		ServiceTier:                        detail.ServiceTier,
 		BillingBreakdown:                   jsonObjectOrEmpty(detail.BillingBreakdownJSON),
+		BillingStatus:                      detail.BillingStatus,
+		SettlementError:                    stringPtrOrNil(detail.SettlementError),
+		RefundStatus:                       detail.RefundStatus,
+		RefundReason:                       stringPtrOrNil(detail.RefundReason),
+		RefundOperatorID:                   stringPtrOrNil(detail.RefundOperatorID),
+		SettledAt:                          timeToMillisPtrPtr(detail.SettledAt),
+		RefundedAt:                         timeToMillisPtrPtr(detail.RefundedAt),
 		LatencyMs:                          detail.LatencyMs,
 		FirstTokenLatencyMs:                detail.FirstTokenLatencyMs,
 		RequestTotalMs:                     detail.RequestTotalMs,
@@ -904,6 +933,7 @@ func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 		ServiceTier:                        log.ServiceTier,
 		BillingStatus:                      log.BillingStatus,
 		BillingStatusLabel:                 billingStatusLabel(log.BillingStatus),
+		RefundStatus:                       log.RefundStatus,
 		BillingSource:                      billingSourceOrDefault(log.BillingSource),
 		RequestStatus:                      log.RequestStatus,
 		HTTPStatus:                         log.HTTPStatus,
@@ -940,6 +970,8 @@ func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow) userUsageLogDTO {
 		BillableUnits:                   row.BillableUnits,
 		UserChargedUSD:                  moneyfmt.MicroToUSD(row.UserCharged),
 		ServiceTier:                     row.ServiceTier,
+		BillingStatus:                   row.BillingStatus,
+		RefundStatus:                    row.RefundStatus,
 		BillingSource:                   billingSourceOrDefault(row.BillingSource),
 		RequestStatus:                   row.RequestStatus,
 		HTTPStatus:                      int4ToPtr(row.HttpStatus),
@@ -981,22 +1013,23 @@ func int4ToPtr(value pgtype.Int4) *int32 {
 func billingStatusLabel(status string) string {
 	switch status {
 	case "pending":
-		return "待确认"
-	case "pending_settle":
 		return "待结算"
 	case "settled":
 		return "已结算"
-	case "frozen":
-		return "已冻结"
-	case "confirmed":
-		return "已确认"
-	case "cancelled":
-		return "已取消"
+	case "failed":
+		return "结算失败"
 	case "free":
 		return "免费"
 	default:
 		return status
 	}
+}
+
+func timeToMillisPtrPtr(t *time.Time) *int64 {
+	if t == nil {
+		return nil
+	}
+	return timeToMillisPtr(*t)
 }
 
 func dailyTrendRowToDTO(row domain.DailyTrendRow) dailyTrendRowDTO {

@@ -39,7 +39,7 @@ func TestUsageRepoAllowsGlobalAdminLogsWithoutTenantFilter(t *testing.T) {
 		  '10000000-0000-0000-0000-000000000001', 'req-tenant-a', 'tenant', 'api_key', 'api_key', 'tenant-a', 'curl/8.7.1',
 		  'gpt-5.4-mini', 'chat', 10, 20, 30,
 		  'token', 30, NULL, 100, 200, 250, 300, 300,
-		  50, 'pending_settle', 'success', 150, $1
+          50, 'pending', 'success', 150, $1
 		)
 	`, older)
 	mustExecUsageRepo(t, ctx, pool, `
@@ -52,7 +52,7 @@ func TestUsageRepoAllowsGlobalAdminLogsWithoutTenantFilter(t *testing.T) {
 		  '10000000-0000-0000-0000-000000000002', 'req-tenant-b', 'tenant', 'api_key', 'api_key', 'tenant-b', 'Mozilla/5.0',
 		  'gpt-image-1', 'image_generation', 7, 11, 18,
 		  'image', 1, '1024x1024', 80, 120, 140, 160, 160,
-		  20, 'pending_settle', 'failed', 'upstream failed', $1
+		  20, 'pending', 'failed', 'upstream failed', $1
 		)
 	`, newer)
 

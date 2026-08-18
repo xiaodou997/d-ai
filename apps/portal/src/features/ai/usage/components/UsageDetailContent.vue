@@ -26,6 +26,7 @@ import {
 import { normalizeUsageAttempts, type UsageAttemptDetail, type UsageLogDetailDTO } from "../model";
 import {
   formatJSON,
+  formatTimestamp,
   resolveFirstResponseByteMs,
   resolveHeaderMs,
   resolveRequestSetupMs,
@@ -178,6 +179,23 @@ function formatTimeValue(value?: number | null) {
   return formatMs(value ?? null);
 }
 
+function billingStatusLabel(status?: string) {
+  return {
+    free: "免费",
+    pending: "待结算",
+    settled: "已结算",
+    failed: "结算失败"
+  }[status || ""] || status || "—";
+}
+
+function refundStatusLabel(status?: string) {
+  return status === "refunded" ? "已退款" : "未退款";
+}
+
+function timestampLabel(value?: number) {
+  return value ? formatTimestamp(value) : "—";
+}
+
 function formatContextTier(line: BillingPriceLineSnapshot | undefined) {
   if (!line || line.token_price_tier_index == null) return "—";
   const upper = line.token_price_tier_up_to_input_tokens == null
@@ -259,6 +277,39 @@ function formatContextTier(line: BillingPriceLineSnapshot | undefined) {
               <span>{{ fact.label }}</span>
               <strong>{{ fact.value }}</strong>
             </article>
+          </div>
+        </PortalContentCard>
+
+        <PortalContentCard title="结算与退款" description="使用记录同时承载本次请求的结算和退款状态。">
+          <div class="usage-detail-kv">
+            <div>
+              <span>结算状态</span>
+              <strong>{{ billingStatusLabel(detail?.billing_status) }}</strong>
+            </div>
+            <div>
+              <span>结算时间</span>
+              <strong>{{ timestampLabel(detail?.settled_at) }}</strong>
+            </div>
+            <div>
+              <span>退款状态</span>
+              <strong>{{ refundStatusLabel(detail?.refund_status) }}</strong>
+            </div>
+            <div>
+              <span>退款时间</span>
+              <strong>{{ timestampLabel(detail?.refunded_at) }}</strong>
+            </div>
+            <div v-if="detail?.settlement_error" class="usage-detail-kv__wide">
+              <span>结算失败原因</span>
+              <strong class="usage-detail-kv__danger">{{ detail.settlement_error }}</strong>
+            </div>
+            <div v-if="detail?.refund_reason">
+              <span>退款原因</span>
+              <strong>{{ detail.refund_reason }}</strong>
+            </div>
+            <div v-if="detail?.refund_operator_id">
+              <span>退款操作人</span>
+              <strong class="mono">{{ detail.refund_operator_id }}</strong>
+            </div>
           </div>
         </PortalContentCard>
 
@@ -558,6 +609,18 @@ function formatContextTier(line: BillingPriceLineSnapshot | undefined) {
 
 .usage-detail-kv {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.usage-detail-kv__wide {
+  grid-column: 1 / -1;
+}
+
+.usage-detail-kv__danger {
+  color: var(--ds-danger) !important;
+}
+
+.mono {
+  font-family: var(--ds-font-mono);
 }
 
 .usage-detail-overview__grid {

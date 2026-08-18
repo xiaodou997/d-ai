@@ -42,16 +42,3 @@ func okSuccess() *successOutput {
 	out.Body.Success = true
 	return out
 }
-
-type eventStatusOutput struct {
-	Body struct {
-		EventID            string `json:"eventId"`
-		Status             string `json:"status"`
-		TenantDeducted     int64  `json:"tenantDeducted,omitempty"`
-		UserDeducted       int64  `json:"userDeducted,omitempty"`
-		TenantOverdraftAdd int64  `json:"tenantOverdraftAdd,omitempty"`
-		UserOverdraftAdd   int64  `json:"userOverdraftAdd,omitempty"`
-		AccountState       string `json:"accountState,omitempty"`
-		AllowFurtherUsage  bool   `json:"allowFurtherUsage,omitempty"`
-	}
-}

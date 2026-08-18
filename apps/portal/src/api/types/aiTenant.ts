@@ -547,7 +547,8 @@ export interface TenantSubOrder {
   plan_name: string;
   price_micro_usd: number;
   status: string;
-  billing_event_id?: string;
+  debit_reference?: string;
+  debited_at?: string;
   subscription_id?: string;
   fail_reason?: string;
   purchase_policy_version: number;

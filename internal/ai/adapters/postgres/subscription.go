@@ -149,7 +149,8 @@ func toOrder(r dbgen.AiSubOrder) subscription.Order {
 		PurchasePolicySnapshot:             parsePurchasePolicy(r.PurchasePolicySnapshot),
 		InventoryReserved:                  r.InventoryReserved,
 		Status:                             r.Status,
-		BillingEventID:                     txtStr(r.BillingEventID),
+		DebitReference:                     txtStr(r.DebitReference),
+		DebitedAt:                          tsPtr(r.DebitedAt),
 		SubscriptionID:                     uuidToString(r.SubscriptionID),
 		FailReason:                         txtStr(r.FailReason),
 		PaidAt:                             tsPtr(r.PaidAt),
@@ -1122,7 +1123,7 @@ func (r *SubscriptionRepo) ListSubscriptions(ctx context.Context, f subscription
 
 // FinalizeOrder 购买 finalize 事务：与预占共用用户级串行锁 → 幂等短路 → 判定 active/pending
 // → 建订阅 → 订单置 paid。janitor 卡单重放走同一路径（订单已 paid 时返回既有订阅）。
-func (r *SubscriptionRepo) FinalizeOrder(ctx context.Context, order *subscription.Order, eventID string) (*subscription.Subscription, error) {
+func (r *SubscriptionRepo) FinalizeOrder(ctx context.Context, order *subscription.Order, debitReference string) (*subscription.Subscription, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -1190,7 +1191,7 @@ func (r *SubscriptionRepo) FinalizeOrder(ctx context.Context, order *subscriptio
 	}
 
 	n, err := q.MarkOrderPaid(ctx, dbgen.MarkOrderPaidParams{
-		ID: cur.ID, BillingEventID: nullableText(eventID), SubscriptionID: sub.ID,
+		ID: cur.ID, DebitReference: nullableText(debitReference), SubscriptionID: sub.ID,
 	})
 	if err != nil {
 		return nil, err

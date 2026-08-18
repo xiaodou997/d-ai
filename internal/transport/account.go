@@ -38,23 +38,6 @@ type accountBalanceOutput struct {
 	Body *billingpg.BalanceResponse
 }
 
-type accountTxInput struct {
-	TenantID   string `query:"tenantId" required:"false"`
-	UserID     string `query:"userId" required:"false"`
-	TenantName string `query:"tenantName" required:"false"`
-	Username   string `query:"username" required:"false"`
-	ClientName string `query:"clientName" required:"false"`
-	Status     string `query:"status" required:"false"`
-	TimeFrom   int64  `query:"timeFrom" required:"false"`
-	TimeTo     int64  `query:"timeTo" required:"false"`
-	Page       int    `query:"page" default:"1"`
-	Size       int    `query:"size" default:"20"`
-}
-
-type accountTxOutput struct {
-	Body httpx.Page[billingpg.EventRow]
-}
-
 type rechargeRecordsInput struct {
 	TenantID     string `query:"tenantId" required:"false"`
 	UserID       string `query:"userId" required:"false"`
@@ -86,8 +69,6 @@ func registerAccount(api huma.API, d Deps) {
 
 	huma.Register(api, huma.Operation{OperationID: "account-balance", Method: http.MethodGet, Path: "/api/v1/account/balance",
 		Summary: "账户余额", Tags: []string{"account"}, Middlewares: authed}, h.balance)
-	huma.Register(api, huma.Operation{OperationID: "account-transactions", Method: http.MethodGet, Path: "/api/v1/account/transactions",
-		Summary: "额度明细（含服务扣款审计）", Tags: []string{"account"}, Middlewares: authed}, h.transactions)
 	huma.Register(api, huma.Operation{OperationID: "account-recharge-records", Method: http.MethodGet, Path: "/api/v1/account/recharge-records",
 		Summary: "充值记录", Tags: []string{"account"}, Middlewares: authed}, h.rechargeRecords)
 	huma.Register(api, huma.Operation{OperationID: "account-stats", Method: http.MethodGet, Path: "/api/v1/account/stats",
@@ -124,45 +105,6 @@ func (h *accountHandlers) balance(ctx context.Context, in *accountBalanceInput) 
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	return &accountBalanceOutput{Body: res}, nil
-}
-
-func (h *accountHandlers) transactions(ctx context.Context, in *accountTxInput) (*accountTxOutput, error) {
-	claims := userClaimsFromCtx(ctx)
-	if claims == nil {
-		return nil, httpx.ErrUnauthorized
-	}
-	p := billingpg.ListTransactionsParams{
-		TenantID: in.TenantID, UserID: in.UserID, TenantName: in.TenantName,
-		Username: in.Username, ClientName: in.ClientName, Status: in.Status,
-	}
-	if in.TimeFrom > 0 {
-		t := time.UnixMilli(in.TimeFrom).UTC()
-		p.TimeFrom = &t
-	}
-	if in.TimeTo > 0 {
-		t := time.UnixMilli(in.TimeTo).UTC()
-		p.TimeTo = &t
-	}
-	switch claims.UserType {
-	case 3:
-		p.TenantID, p.UserID, p.TenantName, p.Username = claims.TenantID, "", "", ""
-	case 4:
-		p.TenantID, p.UserID, p.TenantName, p.Username = claims.TenantID, claims.UserID, "", ""
-	}
-	p.Page, p.Size = normalizePage(in.Page, in.Size)
-
-	list, total, err := h.repo.ListTransactions(p)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	// 终端用户只查看自己的扣费金额。
-	if claims.UserType == 4 {
-		for i := range list {
-			list[i].TenantAmountUSD = list[i].UserAmountUSD
-			list[i].UserAmountUSD = 0
-		}
-	}
-	return &accountTxOutput{Body: httpx.NewPage(list, total, p.Page, p.Size)}, nil
 }
 
 func (h *accountHandlers) rechargeRecords(ctx context.Context, in *rechargeRecordsInput) (*rechargeRecordsOutput, error) {

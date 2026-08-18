@@ -28,6 +28,14 @@ function multiplierLabel(value?: number | null) {
 function serviceTierLabel(row: CustomerUsageLog) {
   return row.service_tier || "-";
 }
+function billingStatusLabel(status?: string) {
+  return {
+    free: "免费",
+    pending: "待结算",
+    settled: "已结算",
+    failed: "结算失败"
+  }[status || ""] || status || "-";
+}
 </script>
 
 <template>
@@ -50,6 +58,8 @@ function serviceTierLabel(row: CustomerUsageLog) {
         <h3>状态</h3>
         <dl>
           <dt>请求状态</dt><dd><UsageTag kind="status" :value="row.request_status" /></dd>
+          <dt>结算状态</dt><dd>{{ billingStatusLabel(row.billing_status) }}</dd>
+          <dt>退款状态</dt><dd>{{ row.refund_status === "refunded" ? "已退款" : "未退款" }}</dd>
           <dt>HTTP 状态</dt><dd>{{ row.http_status ?? "-" }}</dd>
           <dt>错误码</dt><dd class="mono">{{ row.error_code ?? "-" }}</dd>
           <dt>错误信息</dt><dd class="error-message">{{ row.error_message ?? "-" }}</dd>

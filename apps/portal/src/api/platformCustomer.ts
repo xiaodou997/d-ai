@@ -5,7 +5,6 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import type {
   AccountBalance,
-  AccountTransactionItem,
   CustomerPortalBrand,
   Page,
   RechargeRecordItem,
@@ -37,17 +36,6 @@ export const platformCustomerApi = {
       path: "/api/v1/account/balance",
       headers: apiHeaders,
       query: { detail },
-      baseUrl
-    });
-  },
-
-  // 我的余额流水（分页）
-  getTransactions(params: { page?: number; size?: number }) {
-    return platform()<Page<AccountTransactionItem>>({
-      method: "GET",
-      path: "/api/v1/account/transactions",
-      headers: apiHeaders,
-      query: params,
       baseUrl
     });
   },

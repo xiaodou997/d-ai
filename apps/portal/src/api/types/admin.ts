@@ -33,10 +33,10 @@ export interface PageAdminUserItem {
 }
 
 export interface DashboardAlertItem {
-  eventId: string;
+  requestId: string;
   status: string;
   createdTime: number;
-  terminalNote?: string;
+  settlementError?: string;
 }
 
 export interface DashboardAlertsOutputBody {
@@ -357,31 +357,8 @@ export interface RechargeOutputBody {
   orderTime: number;
 }
 
-export interface TransactionItem {
-  eventId: string;
-  userId: string;
-  description: string;
-  tenantAmountUsd: number;
-  userAmountUsd: number;
-  status: string;
-  terminalNote: string;
-  metadata: string;
-  createdTime?: number;
-  finishedTime?: number;
-  username: string;
-  tenantName: string;
-  clientId: string;
-}
-
 export interface PageRechargeRecordItem {
   items: RechargeRecordItem[];
-  total: number;
-  page: number;
-  size: number;
-}
-
-export interface PageTransactionItem {
-  items: TransactionItem[];
   total: number;
   page: number;
   size: number;
@@ -441,8 +418,8 @@ export interface ResourceStatItem {
   percentage: string;
 }
 export interface FailedTxAlert {
-  eventId: string;
-  terminalNote: string;
+  requestId: string;
+  settlementError: string;
   status: string;
   createdTime: number;
 }
@@ -450,9 +427,9 @@ export interface DashboardAlertsOutput {
   failedTransactions: FailedTxAlert[];
 }
 
-// ---- 批量计费事件操作结果（batch-refund）----
+// ---- 批量使用记录退款结果（batch-refund）----
 export interface BatchOpError {
-  eventId: string;
+  requestId: string;
   reason: string;
 }
 export interface BatchOpResult {

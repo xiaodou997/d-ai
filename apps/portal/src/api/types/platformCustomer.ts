@@ -31,23 +31,6 @@ export interface BalanceLotView extends BalanceLot {
   status: number;
 }
 
-export interface AccountTransactionItem {
-  eventId: string;
-  userId: string;
-  description: string;
-  tenantAmountUsd: number;
-  userAmountUsd: number;
-  status: string;
-  terminalNote: string;
-  metadata: string;
-  createdTime?: number | null;
-  finishedTime?: number | null;
-  username: string;
-  tenantName: string;
-  clientId: string;
-  appName: string;
-}
-
 export interface RechargeRecordItem {
   orderId: string;
   orderType: string;
