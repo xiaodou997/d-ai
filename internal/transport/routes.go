@@ -14,6 +14,7 @@ import (
 	announcementpkg "xiaodou/dai/internal/announcement"
 	"xiaodou/dai/internal/auth"
 	billingsvc "xiaodou/dai/internal/billing/service"
+	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/config"
 	invitepkg "xiaodou/dai/internal/invite"
 	notificationpkg "xiaodou/dai/internal/notification"
@@ -89,6 +90,7 @@ type Deps struct {
 	RiskControlChecker   *riskcontrol.Checker
 	Modules              *systempkg.Service
 	ProxyNodes           *proxypkg.Service
+	DataCleanup          *cleanuppkg.Service
 }
 
 // Register 在 Huma API 上注册全部端点。
@@ -128,6 +130,7 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerProxyNodes(api, d)
 	registerNotifications(api, d)
 	registerModules(api, d)
+	registerDataCleanup(api, d)
 
 	// 公开端点（无认证）
 	registerPublic(api, d)

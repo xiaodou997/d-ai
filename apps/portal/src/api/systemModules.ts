@@ -30,6 +30,46 @@ export type ProxyNode = {
   updatedAt: string;
 };
 
+export type DataCleanupPolicy = {
+  enabled: boolean;
+  requestBodyDays: number;
+  requestPayloadDays: number;
+  notificationDays: number;
+  moderationDays: number;
+  riskEventDays: number;
+  adminAuditDays: number;
+  auditBlobDays: number;
+  usageRollupDays: number;
+  batchSize: number;
+};
+
+export type DataCleanupPreviewItem = {
+  target: string;
+  label: string;
+  retentionDays: number;
+  cutoff: string;
+  eligibleRows: number;
+};
+
+export type DataCleanupPreview = {
+  policy: DataCleanupPolicy;
+  generatedAt: string;
+  items: DataCleanupPreviewItem[];
+};
+
+export type DataCleanupRun = {
+  id: string;
+  trigger: "automatic" | "manual";
+  status: "queued" | "running" | "completed" | "failed";
+  requestedBy?: string;
+  targets: string[];
+  summary: Record<string, number>;
+  error?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+};
+
 type ProxyNodeWrite = {
   name: string;
   proxyType: "http" | "socks5";
@@ -65,5 +105,20 @@ export const systemModulesApi = {
   },
   sendNotification(body: { eventKey: string; channel: "in_app" | "webhook"; recipientUserId?: string; recipientUserType?: number; tenantId?: string; title: string; body: string; webhookUrl?: string }) {
     return request()<{ id: string; status: string }>({ method: "POST", path: "/api/v1/admin/notifications/send", headers: apiHeaders, body, baseUrl: apiBaseUrl });
+  },
+  getCleanupPolicy() {
+    return request()<DataCleanupPolicy>({ method: "GET", path: "/api/v1/admin/data-cleanup/policy", headers: apiHeaders, baseUrl: apiBaseUrl });
+  },
+  updateCleanupPolicy(body: DataCleanupPolicy) {
+    return request()<DataCleanupPolicy>({ method: "PUT", path: "/api/v1/admin/data-cleanup/policy", headers: apiHeaders, body, baseUrl: apiBaseUrl });
+  },
+  previewCleanup() {
+    return request()<DataCleanupPreview>({ method: "GET", path: "/api/v1/admin/data-cleanup/preview", headers: apiHeaders, baseUrl: apiBaseUrl });
+  },
+  listCleanupRuns() {
+    return request()<DataCleanupRun[]>({ method: "GET", path: "/api/v1/admin/data-cleanup/runs", headers: apiHeaders, baseUrl: apiBaseUrl });
+  },
+  startCleanup(body: { targets: string[]; confirmation: string }) {
+    return request()<DataCleanupRun>({ method: "POST", path: "/api/v1/admin/data-cleanup/runs", headers: apiHeaders, body, baseUrl: apiBaseUrl });
   }
 };

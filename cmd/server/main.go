@@ -63,6 +63,7 @@ import (
 	"xiaodou/dai/internal/auth"
 	billingoutbox "xiaodou/dai/internal/billing/outbox"
 	billingsvc "xiaodou/dai/internal/billing/service"
+	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
 	daidb "xiaodou/dai/internal/db"
@@ -183,6 +184,7 @@ func main() {
 	moduleSvc := systempkg.NewService(pool)
 	proxySvc := proxypkg.NewService(pool, moduleSvc)
 	notificationSvc := notificationpkg.NewService(pool)
+	dataCleanupSvc := cleanuppkg.NewService(pool, appLogger)
 
 	// Ban reconciler
 	banReconciler := auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute)
@@ -469,6 +471,7 @@ func main() {
 	})
 	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
 	asyncTasks.Start(ctx)
+	dataCleanupSvc.Start(ctx)
 
 	// Hourly cleanups
 	go runHourlyCleanup(ctx, func() { imageAssetSvc.CleanupExpired() })
@@ -521,6 +524,7 @@ func main() {
 		RiskControlChecker:   riskControlChecker,
 		Modules:              moduleSvc,
 		ProxyNodes:           proxySvc,
+		DataCleanup:          dataCleanupSvc,
 	}
 
 	router, api := server.New(server.Options{

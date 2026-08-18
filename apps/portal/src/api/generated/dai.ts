@@ -296,6 +296,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/data-cleanup/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 读取数据清理策略 */
+        get: operations["admin-get-data-cleanup-policy"];
+        /** 更新数据清理策略 */
+        put: operations["admin-update-data-cleanup-policy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data-cleanup/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 预览数据清理范围 */
+        get: operations["admin-preview-data-cleanup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data-cleanup/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查看数据清理运行记录 */
+        get: operations["admin-list-data-cleanup-runs"];
+        put?: never;
+        /** 手动执行数据清理 */
+        post: operations["admin-start-data-cleanup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/debts/{owner_type}/{id}": {
         parameters: {
             query?: never;
@@ -5744,6 +5797,16 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        DataCleanupRunInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DataCleanupRunInputBody.json
+             */
+            readonly $schema?: string;
+            confirmation: string;
+            targets: string[] | null;
+        };
         DebtStatusOutputBody: {
             /**
              * Format: uri
@@ -6972,6 +7035,33 @@ export interface components {
             /** @description 首字母缩写匹配（预留，P0 固定 false） */
             include_initials: boolean;
         };
+        Policy: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Policy.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            adminAuditDays: number;
+            /** Format: int64 */
+            auditBlobDays: number;
+            /** Format: int64 */
+            batchSize: number;
+            enabled: boolean;
+            /** Format: int64 */
+            moderationDays: number;
+            /** Format: int64 */
+            notificationDays: number;
+            /** Format: int64 */
+            requestBodyDays: number;
+            /** Format: int64 */
+            requestPayloadDays: number;
+            /** Format: int64 */
+            riskEventDays: number;
+            /** Format: int64 */
+            usageRollupDays: number;
+        };
         PoolAvailableModelsDTO: {
             /**
              * Format: uri
@@ -7167,6 +7257,28 @@ export interface components {
             items: components["schemas"]["PoolCredentialDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        Preview: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Preview.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            generatedAt: string;
+            items: components["schemas"]["PreviewItem"][] | null;
+            policy: components["schemas"]["Policy"];
+        };
+        PreviewItem: {
+            /** Format: date-time */
+            cutoff: string;
+            /** Format: int64 */
+            eligibleRows: number;
+            label: string;
+            /** Format: int64 */
+            retentionDays: number;
+            target: string;
         };
         PriceBookDTO: {
             /**
@@ -7747,6 +7859,29 @@ export interface components {
             scope: string;
             /** @description 评分权重 */
             weights: components["schemas"]["ScoreWeightsDTO"];
+        };
+        Run: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Run.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            error?: string;
+            id: string;
+            requestedBy?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            status: string;
+            summary: {
+                [key: string]: number;
+            };
+            targets: string[] | null;
+            trigger: string;
         };
         RuntimeAPIError: {
             code: string;
@@ -11215,6 +11350,159 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageCashLedgerItem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-get-data-cleanup-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Policy"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-update-data-cleanup-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Policy"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Policy"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-preview-data-cleanup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Preview"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-list-data-cleanup-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-start-data-cleanup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataCleanupRunInputBody"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
                 };
             };
             /** @description Error */

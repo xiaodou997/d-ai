@@ -428,6 +428,27 @@ CREATE TABLE sys_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 后台数据清理运行记录。清理按批次执行，避免单次长事务锁住大表。
+CREATE TABLE sys_data_cleanup_runs (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trigger      TEXT NOT NULL CHECK (trigger IN ('automatic', 'manual')),
+    status       TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+    requested_by TEXT,
+    targets      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    summary      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    error        TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at   TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+
+-- 整个实例只允许一个清理运行，避免手动清理和定时清理互相争抢。
+CREATE UNIQUE INDEX uq_sys_data_cleanup_active
+    ON sys_data_cleanup_runs ((1))
+    WHERE status IN ('queued', 'running');
+CREATE INDEX idx_sys_data_cleanup_runs_created
+    ON sys_data_cleanup_runs (created_at DESC);
+
 CREATE TABLE pay_tenant_settings (
     tenant_id TEXT PRIMARY KEY,
     value JSONB NOT NULL,
@@ -1780,6 +1801,8 @@ CREATE INDEX idx_ledger_credit_leases_account
     size_bytes   INT         NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  CREATE INDEX IF NOT EXISTS idx_ai_audit_blobs_created_at
+    ON ai_audit_blobs (created_at);
 
   -- ============================================================================
   -- Billing ledger
@@ -2127,6 +2150,24 @@ VALUES (
 )
 ON CONFLICT (key) DO NOTHING;
 
+INSERT INTO sys_settings (key, value)
+VALUES (
+    'data_cleanup',
+    '{
+        "enabled": true,
+        "requestBodyDays": 30,
+        "requestPayloadDays": 180,
+        "notificationDays": 90,
+        "moderationDays": 90,
+        "riskEventDays": 365,
+        "adminAuditDays": 365,
+        "auditBlobDays": 180,
+        "usageRollupDays": 730,
+        "batchSize": 1000
+    }'::jsonb
+)
+ON CONFLICT (key) DO NOTHING;
+
 INSERT INTO pay_wechat_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- Schema contract checked by the application at startup. Insert this last so a
@@ -2138,6 +2179,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 9);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 10);
 
 COMMIT;
