@@ -101,7 +101,7 @@ export interface PortalModule {
 
 const adminOverview = { id: "admin-overview-category", label: "概览", order: 0 };
 const adminOrganization = { id: "admin-organization", label: "组织与权限", order: 10 };
-const adminFinance = { id: "admin-finance", label: "资金与账务", order: 20 };
+const adminFinance = { id: "admin-finance", label: "资金管理", order: 20 };
 const adminAi = { id: "admin-ai", label: "AI 网关", order: 30 };
 const adminOperations = { id: "admin-operations", label: "平台运营", order: 40 };
 const tenantUsers = { id: "tenant-users", label: "用户与权限", order: 10 };
@@ -159,18 +159,26 @@ export const portalModules: PortalModule[] = [
   },
   {
     id: "admin-settlement-workspace",
-    label: "结算与支付",
+    label: "资金中心",
     path: "/admin/settlement",
     icon: "banknote",
     capability: "admin.settlement",
     navGroup: adminFinance,
     order: 20,
     tabs: [
-      { id: "recharges", label: "充值订单", path: "recharges", component: () => import("@/views/admin/platform/RechargeRecordsView.vue") },
-      { id: "withdrawals", label: "提现记录", path: "withdrawals", component: () => import("@/views/admin/platform/WithdrawalsView.vue") },
-      { id: "cash", label: "账户余额", path: "cash", component: () => import("@/views/admin/platform/CashAccountsView.vue") },
-      { id: "payment", label: "支付配置", path: "payment", component: () => import("@/views/admin/platform/PaymentSettingsView.vue") }
+      { id: "recharges", label: "充值订单", icon: "receipt-text", path: "recharges", component: () => import("@/views/admin/platform/RechargeRecordsView.vue") },
+      { id: "withdrawals", label: "提现记录", icon: "banknote-arrow-down", path: "withdrawals", component: () => import("@/views/admin/platform/WithdrawalsView.vue") }
     ]
+  },
+  {
+    id: "admin-payment-settings",
+    label: "支付设置",
+    path: "/admin/settings/payment",
+    icon: "credit-card",
+    capability: "admin.settlement",
+    navGroup: adminFinance,
+    order: 30,
+    component: () => import("@/views/admin/platform/PaymentSettingsView.vue")
   },
   {
     id: "admin-monitoring-workspace",

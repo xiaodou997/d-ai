@@ -450,23 +450,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/tenant-balances": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** 租户 USD 余额总览 */
-        get: operations["admin-list-tenant-balances"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/wechat-config": {
         parameters: {
             query?: never;
@@ -5074,13 +5057,6 @@ export interface components {
             /** Format: double */
             totalUserUsd: number;
         };
-        CashAccountItem: {
-            /** Format: int64 */
-            balanceMicroUsd: number;
-            currency: string;
-            tenantId: string;
-            tenantName?: string;
-        };
         CashAccountOutputBody: {
             /**
              * Format: uri
@@ -6878,21 +6854,6 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["AuditLogItem"][] | null;
-            /** Format: int64 */
-            page: number;
-            /** Format: int64 */
-            size: number;
-            /** Format: int64 */
-            total: number;
-        };
-        PageCashAccountItem: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PageCashAccountItem.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["CashAccountItem"][] | null;
             /** Format: int64 */
             page: number;
             /** Format: int64 */
@@ -11586,38 +11547,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminRechargeOrder"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "admin-list-tenant-balances": {
-        parameters: {
-            query?: {
-                page?: number;
-                size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageCashAccountItem"];
                 };
             };
             /** @description Error */

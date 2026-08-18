@@ -20,7 +20,7 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// adminPaymentHandlers 承载管理端支付配置、订单、提现和统一余额总览端点（type 1,2）。
+// adminPaymentHandlers 承载管理端支付配置、订单和提现端点（type 1,2）。
 type adminPaymentHandlers struct {
 	*paymentHandlers
 	pool      *pgxpool.Pool
@@ -139,22 +139,6 @@ type syncOrderInput struct {
 	OrderID string `path:"orderId"`
 }
 
-type cashAccountsInput struct {
-	Page int `query:"page" default:"1"`
-	Size int `query:"size" default:"20"`
-}
-
-type cashAccountItem struct {
-	TenantID        string `json:"tenantId"`
-	TenantName      string `json:"tenantName,omitempty"`
-	Currency        string `json:"currency"`
-	BalanceMicroUSD int64  `json:"balanceMicroUsd"`
-}
-
-type cashAccountsOutput struct {
-	Body httpx.Page[cashAccountItem]
-}
-
 type adminCashLedgerInput struct {
 	TenantID string `query:"tenantId"`
 	TxnType  string `query:"txnType" required:"false"`
@@ -246,8 +230,6 @@ func registerAdminPayment(api huma.API, d Deps) {
 	huma.Register(api, huma.Operation{OperationID: "admin-record-completed-recharge-refund", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/refund-reversal",
 		Summary: "登记已完成退款并整单冲正", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.recordCompletedRechargeRefund)
 
-	huma.Register(api, huma.Operation{OperationID: "admin-list-tenant-balances", Method: http.MethodGet, Path: "/api/v1/admin/tenant-balances",
-		Summary: "租户 USD 余额总览", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashAccounts)
 	huma.Register(api, huma.Operation{OperationID: "admin-list-balance-ledger", Method: http.MethodGet, Path: "/api/v1/admin/balance-ledger",
 		Summary: "任意租户余额流水", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashLedger)
 
@@ -448,22 +430,6 @@ func (h *adminPaymentHandlers) syncOrder(ctx context.Context, in *syncOrderInput
 	out.Body.PaidAt = millisFromTimePtr(order.PaidAt)
 	out.Body.BalanceExpiresAt = millisFromTimePtr(order.BalanceExpiresAt)
 	return out, nil
-}
-
-func (h *adminPaymentHandlers) listCashAccounts(ctx context.Context, in *cashAccountsInput) (*cashAccountsOutput, error) {
-	list, total, err := h.svc.ListCashAccounts(ctx, in.Page, in.Size)
-	if err != nil {
-		return nil, toProblem(err)
-	}
-	items := make([]cashAccountItem, 0, len(list))
-	for _, a := range list {
-		items = append(items, cashAccountItem{
-			TenantID: a.TenantID, TenantName: a.TenantName, Currency: "USD",
-			BalanceMicroUSD: a.BalanceMicroUSD,
-		})
-	}
-	page, size := normalizePage(in.Page, in.Size)
-	return &cashAccountsOutput{Body: httpx.NewPage(items, total, page, size)}, nil
 }
 
 func (h *adminPaymentHandlers) listCashLedger(ctx context.Context, in *adminCashLedgerInput) (*cashLedgerOutput, error) {

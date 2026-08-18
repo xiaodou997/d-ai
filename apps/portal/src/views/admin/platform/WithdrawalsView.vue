@@ -7,7 +7,7 @@
   <div class="withdrawals-page">
     <PortalPagePanel
       :icon="Banknote"
-      :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '提现记录' }]"
+      :breadcrumbs="[{ label: '资金中心' }, { label: '提现记录' }]"
       description="租户联系管理员后，由管理员创建提现记录；创建时原子扣减租户额度。"
     >
       <template #filters>

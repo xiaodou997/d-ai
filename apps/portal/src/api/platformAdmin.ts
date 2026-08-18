@@ -5,7 +5,6 @@ import type {
   ConsumptionTrendOutput,
   DashboardAlertsOutput,
   GlobalStatsRow,
-  PageTenantBalanceItem,
   PageBalanceLedgerItem,
   PagePaymentOrderItem,
   PageAdminRechargeOrder,
@@ -514,15 +513,6 @@ export const platformAdminApi = {
       path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/refund-reversal`,
       headers: apiHeaders,
       body,
-      baseUrl: apiBaseUrl
-    });
-  },
-  listTenantBalances(params: { page?: number; size?: number } = {}) {
-    return request()<PageTenantBalanceItem>({
-      method: "GET",
-      path: "/api/v1/admin/tenant-balances",
-      headers: apiHeaders,
-      query: params,
       baseUrl: apiBaseUrl
     });
   },

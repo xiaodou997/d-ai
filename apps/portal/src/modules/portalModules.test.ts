@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(12);
-    expect(leavesFor(2)).toHaveLength(11);
+    expect(leavesFor(1)).toHaveLength(13);
+    expect(leavesFor(2)).toHaveLength(12);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -28,7 +28,8 @@ describe("portal module registry", () => {
       "租户管理",
       "终端用户",
       "管理员与身份",
-      "结算与支付",
+      "资金中心",
+      "支付设置",
       "上游与定价",
       "路由策略",
       "使用记录",
@@ -203,6 +204,11 @@ describe("portal module registry", () => {
 
     expect(settlement?.tabs?.map((tab) => tab.id)).toContain("recharges");
     expect(settlement?.tabs?.some((tab) => tab.id === "transactions")).toBe(false);
+    expect(settlement?.tabs?.map((tab) => tab.id)).toEqual(["recharges", "withdrawals"]);
+    expect(portalModules.find((module) => module.id === "admin-payment-settings")).toMatchObject({
+      label: "支付设置",
+      path: "/admin/settings/payment"
+    });
   });
 
   it("exposes routing policy as a standalone AI gateway menu", () => {

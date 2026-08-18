@@ -6,7 +6,8 @@ import { platformAdminApi } from '@/api/platformAdmin'
 
 vi.mock('@/api/platformAdmin', () => ({
   platformAdminApi: {
-    getAccountBalance: vi.fn()
+    getAccountBalance: vi.fn(),
+    listBalanceLedger: vi.fn()
   }
 }))
 
@@ -28,6 +29,7 @@ const passthroughStub = { template: '<div><slot /><slot name="action" /></div>' 
 describe('AccountOverviewDrawer', () => {
   beforeEach(() => {
     vi.mocked(platformAdminApi.getAccountBalance).mockResolvedValue(balanceResponse)
+    vi.mocked(platformAdminApi.listBalanceLedger).mockResolvedValue({ items: [], total: 0, page: 1, size: 20 })
   })
 
   it('loads the selected account and includes debt in the net balance', async () => {

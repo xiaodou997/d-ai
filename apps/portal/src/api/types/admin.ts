@@ -616,20 +616,6 @@ export interface PageAdminRechargeOrder {
   size: number;
 }
 
-export interface TenantBalanceItem {
-  tenantId: string;
-  tenantName?: string;
-  currency: string;
-  balanceMicroUsd: number;
-}
-
-export interface PageTenantBalanceItem {
-  items: TenantBalanceItem[];
-  total: number;
-  page: number;
-  size: number;
-}
-
 export interface BalanceLedgerItem {
   txnId: string;
   txnType: string;

@@ -2,8 +2,8 @@
   <div class="recharge-orders-page">
     <PortalPagePanel
       :icon="ReceiptText"
-      :breadcrumbs="[{ label: '资金与账务' }, { label: '充值订单' }]"
-      description="统一查看手动充值、微信支付、退款记录与额度冲正状态。"
+      :breadcrumbs="[{ label: '资金中心' }, { label: '充值订单' }]"
+      description="统一查看手动充值、微信支付、退款和额度冲正状态。"
     >
       <template #filters>
         <DsFilterBar>

@@ -66,6 +66,39 @@
             </template>
           </DsTable>
         </section>
+
+        <section v-if="accountType === 1" class="account-drawer__ledger">
+          <div class="account-drawer__section-head">
+            <div>
+              <h3>最近额度流水</h3>
+              <p>仅在租户详情中展示最近 20 条资金变动。</p>
+            </div>
+            <el-button :icon="RefreshRight" circle text aria-label="刷新额度流水" @click="fetchLedger" />
+          </div>
+          <DsTable
+            :frame="false"
+            :columns="ledgerColumns"
+            :rows="ledger"
+            row-key="txnId"
+            :loading="ledgerLoading"
+            empty-title="暂无额度流水"
+          >
+            <template #cell-txnType="{ row }">
+              {{ ledgerTypeLabel(row.txnType) }}
+            </template>
+            <template #cell-amount="{ row }">
+              <span :class="row.amountMicroUsd >= 0 ? 'account-drawer__amount--positive' : 'account-drawer__amount--negative'">
+                {{ row.amountMicroUsd >= 0 ? '+' : '' }}{{ formatMicroUSD(row.amountMicroUsd) }}
+              </span>
+            </template>
+            <template #cell-balanceAfter="{ row }">
+              {{ formatMicroUSD(row.balanceAfterMicroUsd) }}
+            </template>
+            <template #cell-createdAt="{ row }">
+              {{ formatTime(row.createdAt) }}
+            </template>
+          </DsTable>
+        </section>
       </template>
     </div>
   </DsDrawer>
@@ -75,7 +108,7 @@
 import { computed, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { platformAdminApi } from '@/api/platformAdmin'
-import type { AccountBalanceOutput } from '@/api/types/admin'
+import type { AccountBalanceOutput, BalanceLedgerItem } from '@/api/types/admin'
 import { DsDrawer, DsEmpty, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 
 const props = defineProps<{
@@ -89,6 +122,8 @@ const emit = defineEmits<{ close: [] }>()
 const loading = ref(false)
 const error = ref('')
 const balance = ref<AccountBalanceOutput | null>(null)
+const ledger = ref<BalanceLedgerItem[]>([])
+const ledgerLoading = ref(false)
 let requestVersion = 0
 
 const accountTypeLabel = computed(() => props.accountType === 1 ? '租户' : '用户')
@@ -103,6 +138,14 @@ const packageColumns: DsTableColumn[] = [
   { key: 'source', title: '来源', width: 110 }
 ]
 
+const ledgerColumns: DsTableColumn[] = [
+  { key: 'txnType', title: '类型', width: 120 },
+  { key: 'amount', title: '变动金额', width: 130, align: 'right' },
+  { key: 'balanceAfter', title: '变动后余额', width: 150, align: 'right' },
+  { key: 'note', title: '备注' },
+  { key: 'createdAt', title: '时间', width: 170 }
+]
+
 const formatUSD = (value?: number | null) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 const formatMicroUSD = (value?: number | null) => formatUSD(Number(value || 0) / 1_000_000)
 const formatTime = (value: string | number) => new Date(value).toLocaleString('zh-CN', { hour12: false })
@@ -113,6 +156,14 @@ const sourceLabel = (source: string) => ({
   USER_TOPUP_INCOME: '用户充值收入',
   REFUND: '退款返还'
 } as Record<string, string>)[source] || source || '其他'
+
+const ledgerTypeLabel = (type: string) => ({
+  topup_income: '在线充值入账',
+  refund_reversal: '退款收入冲正',
+  consumption: '服务消费',
+  withdraw: '提现',
+  adjust: '人工调整'
+} as Record<string, string>)[type] || type || '其他'
 
 const fetchBalance = async () => {
   if (!props.open || !props.accountId) return
@@ -136,11 +187,29 @@ const fetchBalance = async () => {
   }
 }
 
+const fetchLedger = async () => {
+  if (!props.open || props.accountType !== 1 || !props.accountId) return
+  ledgerLoading.value = true
+  try {
+    const result = await platformAdminApi.listBalanceLedger({ tenantId: props.accountId, page: 1, size: 20 })
+    ledger.value = result.items || []
+  } catch {
+    ledger.value = []
+  } finally {
+    ledgerLoading.value = false
+  }
+}
+
 watch(
   () => [props.open, props.accountType, props.accountId] as const,
   ([open]) => {
-    if (open) void fetchBalance()
-    else requestVersion++
+    if (open) {
+      void fetchBalance()
+      void fetchLedger()
+    } else {
+      requestVersion++
+      ledger.value = []
+    }
   },
   { immediate: true }
 )
@@ -259,6 +328,20 @@ watch(
 
 .account-drawer__package-balance {
   font-variant-numeric: tabular-nums;
+}
+
+.account-drawer__ledger {
+  margin-top: 24px;
+}
+
+.account-drawer__amount--positive {
+  color: var(--ds-positive);
+  font-weight: 700;
+}
+
+.account-drawer__amount--negative {
+  color: var(--ds-muted);
+  font-weight: 700;
 }
 
 @media (max-width: 640px) {

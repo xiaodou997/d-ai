@@ -481,10 +481,6 @@ func (s *PaymentService) ListCashLedger(ctx context.Context, tenantID, txnType s
 	return paymentpg.ListCashLedger(ctx, s.pool, tenantID, txnType, page, size)
 }
 
-func (s *PaymentService) ListCashAccounts(ctx context.Context, page, size int) ([]*paymentpg.CashAccountRow, int64, error) {
-	return paymentpg.ListCashAccounts(ctx, s.pool, page, size)
-}
-
 func (s *PaymentService) ListWithdrawals(ctx context.Context, tenantID, status string, page, size int) ([]*payment.Withdrawal, int64, error) {
 	return paymentpg.ListWithdrawals(ctx, s.pool, tenantID, status, page, size)
 }

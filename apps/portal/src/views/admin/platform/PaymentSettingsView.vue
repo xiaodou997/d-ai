@@ -1,5 +1,5 @@
 <!--
-  支付配置 — 微信收款 / 租户充值与管理员提现规则 两个分区通过 DsTabs 切换。
+  支付设置 — 微信收款 / 租户充值与管理员提现规则 两个分区通过 DsTabs 切换。
   重构：迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行）,
        两大配置块改为同卡 Tab 切换(与租户详情页同模式);颜色全部使用 var(--ds-*) token;
        表单仍为 element-plus，业务逻辑与请求参数完全不变。
@@ -213,7 +213,7 @@ onMounted(() => {
   <div class="payment-settings-page">
     <PortalPagePanel
       :icon="CreditCard"
-      :breadcrumbs="[{ label: '用户中心' }, { label: '财务中心' }, { label: '支付配置' }]"
+      :breadcrumbs="[{ label: '资金中心' }, { label: '支付设置' }]"
       description="用业务语言配置收款、额度到账和管理员提现规则。这里的设置主要给租户充值使用，租户可单独配置终端用户充值。"
     >
       <div class="settings-body">
