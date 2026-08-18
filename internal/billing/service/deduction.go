@@ -176,17 +176,10 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 	if orderType == billing.OrderTypeUserTopupIncome {
 		return nil, shared.ErrRechargeNotReversible
 	}
+	// Online recharge is reversed only by the completed-refund workflow, which
+	// also reverses tenant income and writes the cash-ledger correction.
 	if paymentOrderID != "" {
-		var paymentStatus, fulfillmentStatus string
-		if err := tx.QueryRow(ctx, `
-			SELECT status, fulfillment_status FROM pay_orders
-			WHERE order_id = $1 FOR UPDATE
-		`, paymentOrderID).Scan(&paymentStatus, &fulfillmentStatus); err != nil {
-			return nil, fmt.Errorf("锁定关联支付订单失败: %w", err)
-		}
-		if paymentStatus != "paid" || fulfillmentStatus != "credited" {
-			return nil, shared.ErrRechargeNotReversible
-		}
+		return nil, shared.ErrRechargeNotReversible
 	}
 
 	revocation, err := ledger.RevokeOrderLots(ctx, tx, orderID)
@@ -211,15 +204,6 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 	fulfillmentStatus := "reversed"
 	if lostMicro > 0 {
 		fulfillmentStatus = "partially_reversed"
-	}
-	if paymentOrderID != "" {
-		if _, err := tx.Exec(ctx, `
-			UPDATE pay_orders
-			SET fulfillment_status = $1, updated_at = $2
-			WHERE order_id = $3
-		`, fulfillmentStatus, now, paymentOrderID); err != nil {
-			return nil, fmt.Errorf("同步支付订单到账状态失败: %w", err)
-		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

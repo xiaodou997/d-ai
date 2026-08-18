@@ -553,6 +553,7 @@ export interface PagePaymentOrderItem {
 
 export type RechargePaymentStatus = "not_required" | "created" | "paying" | "paid" | "closed" | "expired";
 export type RechargeFulfillmentStatus = "pending" | "credited" | "partially_reversed" | "reversed";
+export type RechargeRefundStatus = "none" | "refunded" | "not_applicable";
 
 export interface RechargeCreditDetail {
   balanceOrderId: string;
@@ -572,6 +573,26 @@ export interface RechargeCreditDetail {
   consumedAmountMicroUsd: number;
   remainingAmountMicroUsd: number;
   lotStatus: string;
+  refundId?: string;
+  refundAvailableMicroUsd: number;
+  refundNonAvailableMicroUsd: number;
+  refundExpiredMicroUsd: number;
+  refundAccountDebitMicroUsd: number;
+  refundBalanceAfterMicroUsd: number;
+}
+
+export interface AdminRefundRecord {
+  refundId: string;
+  method: "wechat" | "offline";
+  refundReference: string;
+  channelRefundId?: string;
+  refundAmountMinor: number;
+  status: "completed";
+  refundedAt: number;
+  reason: string;
+  note?: string;
+  operatorId: string;
+  createdAt: number;
 }
 
 export interface AdminRechargeOrder {
@@ -592,6 +613,7 @@ export interface AdminRechargeOrder {
   tenantIncomeMicroUsd: number;
   paymentStatus: RechargePaymentStatus;
   fulfillmentStatus: RechargeFulfillmentStatus;
+  refundStatus: RechargeRefundStatus;
   outTradeNo?: string;
   transactionId?: string;
   topupMode?: string;
@@ -607,6 +629,7 @@ export interface AdminRechargeOrder {
   reversedBy?: string;
   reversalReason?: string;
   credits?: RechargeCreditDetail[];
+  refund?: AdminRefundRecord;
 }
 
 export interface PageAdminRechargeOrder {

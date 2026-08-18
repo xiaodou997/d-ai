@@ -484,6 +484,7 @@ export const platformAdminApi = {
     targetType?: "tenant" | "user";
     paymentStatus?: string;
     fulfillmentStatus?: string;
+    refundStatus?: string;
     timeFrom?: number;
     timeTo?: number;
     page?: number;
@@ -517,6 +518,22 @@ export const platformAdminApi = {
     return request()<AdminRechargeOrder>({
       method: "POST",
       path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/reverse-credit`,
+      headers: apiHeaders,
+      body,
+      baseUrl: apiBaseUrl
+    });
+  },
+  recordCompletedRechargeRefund(orderId: string, body: {
+    method: "wechat" | "offline";
+    refundReference: string;
+    channelRefundId?: string;
+    refundedAt: number;
+    reason: string;
+    note?: string;
+  }) {
+    return request()<AdminRechargeOrder>({
+      method: "POST",
+      path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/refund-reversal`,
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl

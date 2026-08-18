@@ -333,7 +333,54 @@ func TestExpireDueLotsOnlyReclaimsTheUnspentPart(t *testing.T) {
 	if got := balanceOf(t, ctx, pool, user); got != 0 {
 		t.Fatalf("balance = %d, want 0 (300000 unspent reclaimed from 300000 left)", got)
 	}
+	var consumedMicro int64
+	var expiredUnusedMicro *int64
+	if err := pool.QueryRow(ctx, `
+		SELECT consumed_micro, expired_unused_micro
+		FROM bill_credit_lots
+		WHERE account_id = $1 AND expired_at IS NOT NULL
+	`, user.ID).Scan(&consumedMicro, &expiredUnusedMicro); err != nil {
+		t.Fatalf("read expired lot accounting: %v", err)
+	}
+	if consumedMicro != 200_000 || expiredUnusedMicro == nil || *expiredUnusedMicro != 300_000 {
+		t.Fatalf("expired lot consumed/unused = %d/%v, want 200000/300000", consumedMicro, expiredUnusedMicro)
+	}
 	assertLotInvariant(t, ctx, pool, user)
+}
+
+func TestRefundReversalRejectsLegacyExpiredLotWithoutAccountingSnapshot(t *testing.T) {
+	pool, ctx := openLedgerPool(t)
+	_, user := seedAccounts(t, ctx, pool)
+	const orderID = "ORD_legacy_expired_refund"
+	mustGrant(t, ctx, pool, user, 500_000, nil, orderID)
+	if err := inTx(t, ctx, pool, func(tx pgx.Tx) error {
+		return ledger.Charge(ctx, tx, user, 200_000)
+	}); err != nil {
+		t.Fatalf("charge before legacy expiry: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE bill_accounts SET balance_micro = 0 WHERE account_id = $1
+	`, user.ID); err != nil {
+		t.Fatalf("settle legacy expired balance: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE bill_credit_lots
+		SET expired_at = now(), consumed_micro = granted_micro
+		WHERE recharge_order_id = $1
+	`, orderID); err != nil {
+		t.Fatalf("stamp legacy expired lot: %v", err)
+	}
+
+	err := inTx(t, ctx, pool, func(tx pgx.Tx) error {
+		_, err := ledger.ReverseGrantForRefund(ctx, tx, user.ID, orderID, 500_000)
+		return err
+	})
+	if !errors.Is(err, ledger.ErrRefundReversalUnreconciled) {
+		t.Fatalf("legacy expired reversal error = %v, want unreconciled", err)
+	}
+	if got := balanceOf(t, ctx, pool, user); got != 0 {
+		t.Fatalf("legacy rejection changed balance to %d", got)
+	}
 }
 
 // Reversing a top-up reclaims what is unspent and reports what was not.

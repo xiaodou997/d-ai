@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"xiaodou/dai/internal/payment"
@@ -16,6 +17,7 @@ type ListAdminRechargeOrdersParams struct {
 	TargetType        string
 	PaymentStatus     string
 	FulfillmentStatus string
+	RefundStatus      string
 	TimeFrom          *time.Time
 	TimeTo            *time.Time
 	Page              int
@@ -33,7 +35,7 @@ WITH recharge_orders AS (
            COALESCE(p.user_id, '') AS user_id, COALESCE(u.username, '') AS username,
            p.payment_amount_minor, p.gross_amount_micro_usd, p.fee_amount_micro_usd,
            p.gift_amount_micro_usd, p.credited_amount_micro_usd, p.tenant_income_micro_usd,
-           p.status AS payment_status, p.fulfillment_status,
+	           p.status AS payment_status, p.fulfillment_status, p.refund_status,
            p.out_trade_no, COALESCE(p.transaction_id, '') AS transaction_id,
            p.topup_mode, COALESCE(p.package_name, '') AS package_name, p.channel,
            COALESCE(r.note, '') AS note, COALESCE(p.fail_note, '') AS fail_note,
@@ -61,6 +63,7 @@ WITH recharge_orders AS (
 	             WHEN r.lost_amount_micro > 0 THEN 'partially_reversed'
 	             ELSE 'reversed'
 	           END AS fulfillment_status,
+	           'not_applicable'::text AS refund_status,
            ''::text AS out_trade_no, ''::text AS transaction_id,
            ''::text AS topup_mode, ''::text AS package_name, 'manual'::text AS channel,
            COALESCE(r.note, '') AS note, ''::text AS fail_note,
@@ -79,7 +82,7 @@ order_id, balance_order_id, method, target_type, order_type,
 tenant_id, tenant_name, user_id, username,
 payment_amount_minor, gross_amount_micro_usd, fee_amount_micro_usd,
 gift_amount_micro_usd, credited_amount_micro_usd, tenant_income_micro_usd,
-payment_status, fulfillment_status, out_trade_no, transaction_id,
+payment_status, fulfillment_status, refund_status, out_trade_no, transaction_id,
 topup_mode, package_name, channel, note, fail_note,
 created_at, paid_at, payment_expires_at, balance_expires_at,
 reversed_at, reversed_by, reversal_reason`
@@ -128,6 +131,11 @@ func GetAdminRechargeOrder(ctx context.Context, pool *pgxpool.Pool, orderID stri
 		return nil, err
 	}
 	item.Credits = credits
+	refund, err := getAdminRefund(ctx, pool, item.OrderID)
+	if err != nil {
+		return nil, err
+	}
+	item.Refund = refund
 	return &item, nil
 }
 
@@ -153,6 +161,9 @@ func adminRechargeFilters(p ListAdminRechargeOrdersParams) (string, []any) {
 	if p.FulfillmentStatus != "" {
 		add("fulfillment_status = $%d", p.FulfillmentStatus)
 	}
+	if p.RefundStatus != "" {
+		add("refund_status = $%d", p.RefundStatus)
+	}
 	if p.TimeFrom != nil {
 		add("created_at >= $%d", *p.TimeFrom)
 	}
@@ -175,7 +186,7 @@ func scanAdminRechargeOrder(row rowScanner) (payment.AdminRechargeOrder, error) 
 		&item.TenantID, &item.TenantName, &item.UserID, &item.Username,
 		&item.PaidAmountMinor, &item.GrossAmountMicroUSD, &item.FeeAmountMicroUSD,
 		&item.GiftAmountMicroUSD, &item.CreditedAmountMicroUSD, &item.TenantIncomeMicroUSD,
-		&item.PaymentStatus, &item.FulfillmentStatus, &item.OutTradeNo, &item.TransactionID,
+		&item.PaymentStatus, &item.FulfillmentStatus, &item.RefundStatus, &item.OutTradeNo, &item.TransactionID,
 		&item.TopupMode, &item.PackageName, &item.Channel, &item.Note, &item.FailNote,
 		&createdAt, &paidAt, &paymentExpiresAt, &balanceExpiresAt,
 		&reversedAt, &item.ReversedBy, &item.ReversalReason,
@@ -205,9 +216,13 @@ func listRechargeCredits(ctx context.Context, pool *pgxpool.Pool, orderID, balan
 		         WHEN l.expired_at IS NOT NULL THEN 'expired'
 		         WHEN l.consumed_micro >= l.granted_micro THEN 'depleted'
 		         ELSE 'available'
-		       END
+		       END,
+		       COALESCE(e.refund_id, ''), COALESCE(e.available_reclaimed_micro, 0),
+		       COALESCE(e.non_available_debit_micro, 0), COALESCE(e.expired_amount_micro, 0),
+		       COALESCE(e.account_debit_micro, 0), COALESCE(e.balance_after_micro, 0)
 		FROM bill_recharge_orders r
 		LEFT JOIN bill_credit_lots l ON l.recharge_order_id = r.order_id
+		LEFT JOIN bill_refund_reversal_effects e ON e.recharge_order_id = r.order_id
 		WHERE `
 	args := []any{orderID, balanceOrderID}
 	if online {
@@ -231,6 +246,8 @@ func listRechargeCredits(ctx context.Context, pool *pgxpool.Pool, orderID, balan
 			&credit.ReversalReason, &credit.ReversedAmountMicroUSD, &credit.LostAmountMicroUSD,
 			&credit.LotID, &credit.GrantedAmountMicroUSD,
 			&credit.ConsumedAmountMicroUSD, &credit.RemainingAmountMicroUSD, &credit.LotStatus,
+			&credit.RefundID, &credit.RefundAvailableMicroUSD, &credit.RefundNonAvailableMicroUSD,
+			&credit.RefundExpiredMicroUSD, &credit.RefundAccountDebitMicroUSD, &credit.RefundBalanceAfterMicroUSD,
 		); err != nil {
 			return nil, err
 		}
@@ -239,6 +256,29 @@ func listRechargeCredits(ctx context.Context, pool *pgxpool.Pool, orderID, balan
 		credits = append(credits, credit)
 	}
 	return credits, rows.Err()
+}
+
+func getAdminRefund(ctx context.Context, pool *pgxpool.Pool, paymentOrderID string) (*payment.AdminRefundRecord, error) {
+	var refund payment.AdminRefundRecord
+	var refundedAt, createdAt time.Time
+	err := pool.QueryRow(ctx, `
+		SELECT refund_id, refund_method, refund_reference, COALESCE(channel_refund_id, ''),
+		       refund_amount_minor, status, refunded_at, reason, COALESCE(note, ''), operator_id, created_at
+		FROM pay_refunds WHERE payment_order_id = $1
+	`, paymentOrderID).Scan(
+		&refund.RefundID, &refund.Method, &refund.RefundReference, &refund.ChannelRefundID,
+		&refund.RefundAmountMinor, &refund.Status, &refundedAt, &refund.Reason, &refund.Note,
+		&refund.OperatorID, &createdAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("查询退款记录失败: %w", err)
+	}
+	refund.RefundedAt = refundedAt.UnixMilli()
+	refund.CreatedAt = createdAt.UnixMilli()
+	return &refund, nil
 }
 
 func timeMillis(value *time.Time) *int64 {

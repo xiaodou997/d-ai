@@ -114,6 +114,8 @@ var (
 	ErrCashInsufficientBalance = &BizError{Code: 7005, Message: "现金余额不足"}
 	ErrWithdrawalNotFound      = &BizError{Code: 7006, Message: "提现申请不存在"}
 	ErrWithdrawalInvalidState  = &BizError{Code: 7007, Message: "提现申请状态已变化，请刷新后重试"}
+	ErrPaymentRefundNotAllowed = &BizError{Code: 7008, Message: "该支付订单不能执行退款冲正"}
+	ErrPaymentAlreadyRefunded  = &BizError{Code: 7009, Message: "该支付订单已经完成退款冲正"}
 )
 
 // CodeInternalError 系统内部错误码（不可预期的系统故障，非业务错误）

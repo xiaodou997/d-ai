@@ -65,7 +65,7 @@ func scanOrder(row pgx.Row) (*payment.Order, error) {
 		&o.PaymentCurrency, &o.PaymentAmountMinor, &o.LedgerCurrency, &o.GrossAmountMicroUSD,
 		&o.FeeRateBp, &o.FeeAmountMicroUSD, &o.GiftAmountMicroUSD, &o.CreditedAmountMicroUSD,
 		&o.TenantIncomeMicroUSD, &balanceExpiresAt,
-		&o.Channel, &codeURL, &transactionID, &o.Status, &o.FulfillmentStatus, &paidAt, &o.ExpiresAt,
+		&o.Channel, &codeURL, &transactionID, &o.Status, &o.FulfillmentStatus, &o.RefundStatus, &paidAt, &o.ExpiresAt,
 		&balanceOrderID, &failNote, &o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
@@ -105,12 +105,17 @@ const orderColumns = `
 	topup_mode, package_id, package_name, package_badge,
 	payment_currency, payment_amount_minor, ledger_currency, gross_amount_micro_usd, fee_rate_bp,
 	fee_amount_micro_usd, gift_amount_micro_usd, credited_amount_micro_usd, tenant_income_micro_usd, balance_expires_at,
-	channel, code_url, transaction_id, status, fulfillment_status, paid_at, expires_at,
+	channel, code_url, transaction_id, status, fulfillment_status, refund_status, paid_at, expires_at,
 	balance_order_id, fail_note, created_at, updated_at`
 
 // GetOrderByID 按 order_id 查询（不加锁，供只读端点使用）。
 func GetOrderByID(ctx context.Context, pool *pgxpool.Pool, orderID string) (*payment.Order, error) {
 	row := pool.QueryRow(ctx, `SELECT `+orderColumns+` FROM pay_orders WHERE order_id = $1`, orderID)
+	return scanOrder(row)
+}
+
+func GetOrderByIDForUpdate(ctx context.Context, tx pgx.Tx, orderID string) (*payment.Order, error) {
+	row := tx.QueryRow(ctx, `SELECT `+orderColumns+` FROM pay_orders WHERE order_id = $1 FOR UPDATE`, orderID)
 	return scanOrder(row)
 }
 

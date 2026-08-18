@@ -217,6 +217,10 @@ CREATE TABLE bill_credit_lots (
     consumed_micro BIGINT NOT NULL DEFAULT 0 CHECK (consumed_micro >= 0),
     expires_at TIMESTAMPTZ,
     expired_at TIMESTAMPTZ,
+    expired_unused_micro BIGINT CHECK (
+        expired_unused_micro IS NULL
+        OR (expired_unused_micro >= 0 AND expired_unused_micro <= granted_micro)
+    ),
     revoked_at TIMESTAMPTZ,
     source TEXT NOT NULL CONSTRAINT bill_credit_lots_source_check
         CHECK (source IN ('ADMIN_RECHARGE', 'TENANT_RECHARGE', 'REFUND', 'ONLINE_TOPUP', 'USER_TOPUP_INCOME')),
@@ -313,6 +317,8 @@ CREATE TABLE pay_orders (
     status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'paying', 'paid', 'closed', 'expired')),
     fulfillment_status TEXT NOT NULL DEFAULT 'pending'
         CHECK (fulfillment_status IN ('pending', 'credited', 'partially_reversed', 'reversed')),
+    refund_status TEXT NOT NULL DEFAULT 'none'
+        CHECK (refund_status IN ('none', 'refunded')),
     paid_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL,
     balance_order_id TEXT,
@@ -327,6 +333,10 @@ CREATE TABLE pay_orders (
     CONSTRAINT pay_orders_fulfillment_pairing_check CHECK (
         (status = 'paid' AND fulfillment_status IN ('credited', 'partially_reversed', 'reversed'))
         OR (status <> 'paid' AND fulfillment_status = 'pending')
+    ),
+    CONSTRAINT pay_orders_refund_pairing_check CHECK (
+        refund_status = 'none'
+        OR (refund_status = 'refunded' AND status = 'paid' AND fulfillment_status = 'reversed')
     )
 );
 
@@ -346,11 +356,57 @@ CREATE INDEX idx_pay_orders_sweep ON pay_orders (status, expires_at) WHERE statu
 CREATE INDEX idx_pay_orders_tenant ON pay_orders (tenant_id, created_at DESC);
 CREATE INDEX idx_pay_orders_user ON pay_orders (user_id, created_at DESC) WHERE user_id IS NOT NULL;
 
+CREATE TABLE pay_refunds (
+    id BIGSERIAL PRIMARY KEY,
+    refund_id TEXT NOT NULL UNIQUE,
+    payment_order_id TEXT NOT NULL UNIQUE REFERENCES pay_orders (order_id),
+    refund_method TEXT NOT NULL CHECK (refund_method IN ('wechat', 'offline')),
+    refund_reference TEXT NOT NULL CHECK (btrim(refund_reference) <> ''),
+    channel_refund_id TEXT,
+    refund_amount_minor BIGINT NOT NULL CHECK (refund_amount_minor > 0),
+    status TEXT NOT NULL DEFAULT 'completed' CHECK (status = 'completed'),
+    refunded_at TIMESTAMPTZ NOT NULL,
+    reason TEXT NOT NULL CHECK (btrim(reason) <> ''),
+    note TEXT,
+    operator_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pay_refunds_channel_reference_check CHECK (
+        refund_method = 'offline'
+        OR (channel_refund_id IS NOT NULL AND btrim(channel_refund_id) <> '')
+    ),
+    UNIQUE (refund_method, refund_reference)
+);
+
+CREATE UNIQUE INDEX uq_pay_refunds_channel_refund_id ON pay_refunds (channel_refund_id)
+    WHERE channel_refund_id IS NOT NULL;
+CREATE INDEX idx_pay_refunds_refunded_at ON pay_refunds (refunded_at DESC);
+
+CREATE TABLE bill_refund_reversal_effects (
+    id BIGSERIAL PRIMARY KEY,
+    reversal_id TEXT NOT NULL UNIQUE,
+    refund_id TEXT NOT NULL REFERENCES pay_refunds (refund_id),
+    recharge_order_id TEXT NOT NULL UNIQUE REFERENCES bill_recharge_orders (order_id),
+    account_id TEXT NOT NULL REFERENCES bill_accounts (account_id),
+    credit_amount_micro BIGINT NOT NULL CHECK (credit_amount_micro > 0),
+    available_reclaimed_micro BIGINT NOT NULL CHECK (available_reclaimed_micro >= 0),
+    non_available_debit_micro BIGINT NOT NULL CHECK (non_available_debit_micro >= 0),
+    expired_amount_micro BIGINT NOT NULL CHECK (expired_amount_micro >= 0),
+    account_debit_micro BIGINT NOT NULL CHECK (account_debit_micro >= 0),
+    balance_after_micro BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT bill_refund_reversal_effects_components_check CHECK (
+        available_reclaimed_micro + non_available_debit_micro + expired_amount_micro = credit_amount_micro
+        AND available_reclaimed_micro + non_available_debit_micro = account_debit_micro
+    )
+);
+
+CREATE INDEX idx_bill_refund_reversal_effects_refund ON bill_refund_reversal_effects (refund_id);
+
 CREATE TABLE pay_cash_ledger (
     id BIGSERIAL PRIMARY KEY,
     txn_id TEXT NOT NULL UNIQUE,
     tenant_id TEXT NOT NULL,
-    txn_type TEXT NOT NULL CHECK (txn_type IN ('topup_income', 'consumption', 'withdraw', 'adjust')),
+    txn_type TEXT NOT NULL CHECK (txn_type IN ('topup_income', 'refund_reversal', 'consumption', 'withdraw', 'adjust')),
     amount_micro_usd BIGINT NOT NULL,
     balance_after_micro_usd BIGINT NOT NULL,
     ref_type TEXT,
@@ -2064,6 +2120,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 5);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 6);
 
 COMMIT;

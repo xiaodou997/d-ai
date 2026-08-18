@@ -19,5 +19,6 @@ describe("account center presentation", () => {
   it("maps balance sources and transaction names", () => {
     expect(balanceSourceText("online_tenant_topup")).toBe("在线充值");
     expect(balanceTransactionText("topup_income")).toBe("用户充值收入");
+    expect(balanceTransactionText("refund_reversal")).toBe("退款收入冲正");
   });
 });

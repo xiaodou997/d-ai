@@ -158,6 +158,7 @@ function formatMicroUSD(value: number) {
 function txnTypeText(type: string) {
   const map: Record<string, string> = {
     topup_income: "在线充值入账",
+    refund_reversal: "退款收入冲正",
     consumption: "服务消费",
     withdraw: "提现",
     adjust: "人工调整"

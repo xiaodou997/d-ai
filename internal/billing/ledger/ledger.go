@@ -417,9 +417,9 @@ func ExpireDueLots(ctx context.Context, tx Execer, now time.Time, limit int) (in
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE bill_credit_lots
-			SET expired_at = $1, consumed_micro = granted_micro, updated_at = now()
-			WHERE lot_id = $2
-		`, now, l.lotID); err != nil {
+			SET expired_at = $1, expired_unused_micro = $2, updated_at = now()
+			WHERE lot_id = $3
+		`, now, l.remaining, l.lotID); err != nil {
 			return 0, fmt.Errorf("mark lot %s expired: %w", l.lotID, err)
 		}
 	}

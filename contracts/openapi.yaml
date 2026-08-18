@@ -229,6 +229,10 @@ components:
           type: integer
         paymentStatus:
           type: string
+        refund:
+          $ref: "#/components/schemas/AdminRefundRecord"
+        refundStatus:
+          type: string
         reversalReason:
           type: string
         reversedAt:
@@ -268,6 +272,46 @@ components:
         - tenantIncomeMicroUsd
         - paymentStatus
         - fulfillmentStatus
+        - refundStatus
+        - createdAt
+      type: object
+    AdminRefundRecord:
+      additionalProperties: false
+      properties:
+        channelRefundId:
+          type: string
+        createdAt:
+          format: int64
+          type: integer
+        method:
+          type: string
+        note:
+          type: string
+        operatorId:
+          type: string
+        reason:
+          type: string
+        refundAmountMinor:
+          format: int64
+          type: integer
+        refundId:
+          type: string
+        refundReference:
+          type: string
+        refundedAt:
+          format: int64
+          type: integer
+        status:
+          type: string
+      required:
+        - refundId
+        - method
+        - refundReference
+        - refundAmountMinor
+        - status
+        - refundedAt
+        - reason
+        - operatorId
         - createdAt
       type: object
     AdminUserItem:
@@ -5785,6 +5829,23 @@ components:
           type: string
         primary:
           type: boolean
+        refundAccountDebitMicroUsd:
+          format: int64
+          type: integer
+        refundAvailableMicroUsd:
+          format: int64
+          type: integer
+        refundBalanceAfterMicroUsd:
+          format: int64
+          type: integer
+        refundExpiredMicroUsd:
+          format: int64
+          type: integer
+        refundId:
+          type: string
+        refundNonAvailableMicroUsd:
+          format: int64
+          type: integer
         remainingAmountMicroUsd:
           format: int64
           type: integer
@@ -5812,6 +5873,11 @@ components:
         - consumedAmountMicroUsd
         - remainingAmountMicroUsd
         - lotStatus
+        - refundAvailableMicroUsd
+        - refundNonAvailableMicroUsd
+        - refundExpiredMicroUsd
+        - refundAccountDebitMicroUsd
+        - refundBalanceAfterMicroUsd
       type: object
     RechargeInputBody:
       additionalProperties: false
@@ -5939,6 +6005,45 @@ components:
         - username
         - tenantName
         - createdTime
+      type: object
+    RecordCompletedRefundInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RecordCompletedRefundInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        channelRefundId:
+          maxLength: 128
+          type: string
+        method:
+          enum:
+            - wechat
+            - offline
+          type: string
+        note:
+          maxLength: 1000
+          type: string
+        reason:
+          maxLength: 500
+          minLength: 1
+          type: string
+        refundReference:
+          maxLength: 128
+          minLength: 1
+          type: string
+        refundedAt:
+          format: int64
+          minimum: 1
+          type: integer
+      required:
+        - method
+        - refundReference
+        - refundedAt
+        - reason
       type: object
     RefreshInputBody:
       additionalProperties: false
@@ -12108,6 +12213,15 @@ paths:
             type: string
         - explode: false
           in: query
+          name: refundStatus
+          schema:
+            enum:
+              - none
+              - refunded
+              - not_applicable
+            type: string
+        - explode: false
+          in: query
           name: timeFrom
           schema:
             format: int64
@@ -12173,6 +12287,37 @@ paths:
       summary: 充值订单统一详情
       tags:
         - admin-payment
+  /api/v1/admin/recharge-orders/{orderId}/refund-reversal:
+    post:
+      operationId: admin-record-completed-recharge-refund
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordCompletedRefundInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRechargeOrder"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 登记已完成退款并整单冲正
+      tags:
+        - admin-payment
   /api/v1/admin/recharge-orders/{orderId}/reverse-credit:
     post:
       operationId: admin-reverse-recharge-order-credit
@@ -12201,7 +12346,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 撤回充值订单剩余额度
+      summary: 撤回手动充值剩余额度
       tags:
         - admin-payment
   /api/v1/admin/recharge-orders/{orderId}/sync:

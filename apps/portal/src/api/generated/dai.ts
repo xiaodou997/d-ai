@@ -416,6 +416,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/recharge-orders/{orderId}/refund-reversal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登记已完成退款并整单冲正 */
+        post: operations["admin-record-completed-recharge-refund"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/recharge-orders/{orderId}/reverse-credit": {
         parameters: {
             query?: never;
@@ -425,7 +442,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 撤回充值订单剩余额度 */
+        /** 撤回手动充值剩余额度 */
         post: operations["admin-reverse-recharge-order-credit"];
         delete?: never;
         options?: never;
@@ -4433,6 +4450,8 @@ export interface components {
             /** Format: int64 */
             paymentExpiresAt?: number;
             paymentStatus: string;
+            refund?: components["schemas"]["AdminRefundRecord"];
+            refundStatus: string;
             reversalReason?: string;
             /** Format: int64 */
             reversedAt?: number;
@@ -4446,6 +4465,22 @@ export interface components {
             transactionId?: string;
             userId?: string;
             username?: string;
+        };
+        AdminRefundRecord: {
+            channelRefundId?: string;
+            /** Format: int64 */
+            createdAt: number;
+            method: string;
+            note?: string;
+            operatorId: string;
+            reason: string;
+            /** Format: int64 */
+            refundAmountMinor: number;
+            refundId: string;
+            refundReference: string;
+            /** Format: int64 */
+            refundedAt: number;
+            status: string;
         };
         AdminUserItem: {
             /** Format: int64 */
@@ -7403,6 +7438,17 @@ export interface components {
             orderType: string;
             primary: boolean;
             /** Format: int64 */
+            refundAccountDebitMicroUsd: number;
+            /** Format: int64 */
+            refundAvailableMicroUsd: number;
+            /** Format: int64 */
+            refundBalanceAfterMicroUsd: number;
+            /** Format: int64 */
+            refundExpiredMicroUsd: number;
+            refundId?: string;
+            /** Format: int64 */
+            refundNonAvailableMicroUsd: number;
+            /** Format: int64 */
             remainingAmountMicroUsd: number;
             reversalReason?: string;
             /** Format: int64 */
@@ -7478,6 +7524,22 @@ export interface components {
             tenantName: string;
             userId: string;
             username: string;
+        };
+        RecordCompletedRefundInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RecordCompletedRefundInputBody.json
+             */
+            readonly $schema?: string;
+            channelRefundId?: string;
+            /** @enum {string} */
+            method: "wechat" | "offline";
+            note?: string;
+            reason: string;
+            refundReference: string;
+            /** Format: int64 */
+            refundedAt: number;
         };
         RefreshInputBody: {
             /**
@@ -11432,6 +11494,7 @@ export interface operations {
                 targetType?: "tenant" | "user";
                 paymentStatus?: string;
                 fulfillmentStatus?: string;
+                refundStatus?: "none" | "refunded" | "not_applicable";
                 timeFrom?: number;
                 timeTo?: number;
                 page?: number;
@@ -11473,6 +11536,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRechargeOrder"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-record-completed-recharge-refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordCompletedRefundInputBody"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

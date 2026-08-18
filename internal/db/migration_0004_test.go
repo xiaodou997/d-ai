@@ -20,6 +20,13 @@ func TestMigration0004RepairsLegacyUserTopupTenantIncome(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
+		DROP TABLE bill_refund_reversal_effects;
+		DROP TABLE pay_refunds;
+		ALTER TABLE pay_orders DROP COLUMN refund_status;
+		ALTER TABLE bill_credit_lots DROP COLUMN expired_unused_micro;
+		ALTER TABLE pay_cash_ledger DROP CONSTRAINT pay_cash_ledger_txn_type_check;
+		ALTER TABLE pay_cash_ledger ADD CONSTRAINT pay_cash_ledger_txn_type_check
+			CHECK (txn_type IN ('topup_income', 'consumption', 'withdraw', 'adjust'));
 		ALTER TABLE bill_recharge_orders
 			DROP CONSTRAINT bill_recharge_orders_payment_link_check,
 			DROP CONSTRAINT bill_recharge_orders_payment_order_fk;

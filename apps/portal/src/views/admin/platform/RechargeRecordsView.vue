@@ -3,7 +3,7 @@
     <PortalPagePanel
       :icon="ReceiptText"
       :breadcrumbs="[{ label: '账户与交易' }, { label: '充值订单' }]"
-      description="统一查看手动充值、微信支付、额度到账与撤回状态。"
+      description="统一查看手动充值、微信支付、退款记录与额度冲正状态。"
     >
       <template #filters>
         <DsFilterBar>
@@ -45,7 +45,14 @@
               <el-option label="待到账" value="pending" />
               <el-option label="已到账" value="credited" />
               <el-option label="部分撤回" value="partially_reversed" />
-              <el-option label="已撤回" value="reversed" />
+              <el-option label="已撤回 / 冲正" value="reversed" />
+            </el-select>
+          </DsFilterField>
+          <DsFilterField label="退款状态">
+            <el-select v-model="query.refundStatus" class="filter-select" placeholder="全部状态" clearable>
+              <el-option label="未退款" value="none" />
+              <el-option label="已退款" value="refunded" />
+              <el-option label="不适用" value="not_applicable" />
             </el-select>
           </DsFilterField>
 
@@ -108,7 +115,8 @@
         <template #cell-status="{ row }">
           <div class="status-cell">
             <DsTag :tone="paymentTone(row.paymentStatus)">{{ paymentStatusText(row.paymentStatus) }}</DsTag>
-            <DsTag :tone="fulfillmentTone(row.fulfillmentStatus)">{{ fulfillmentStatusText(row.fulfillmentStatus) }}</DsTag>
+            <DsTag :tone="fulfillmentTone(row.fulfillmentStatus)">{{ fulfillmentStatusText(row.fulfillmentStatus, row.refundStatus) }}</DsTag>
+            <DsTag v-if="row.refundStatus === 'refunded'" tone="danger">已退款</DsTag>
           </div>
         </template>
         <template #cell-createdAt="{ row }">
@@ -125,7 +133,10 @@
             <el-tooltip v-if="canSync(row)" content="同步支付状态" placement="top">
               <el-button link type="primary" aria-label="同步支付状态" @click="syncOrder(row)"><RefreshCw :size="17" /></el-button>
             </el-tooltip>
-            <el-tooltip v-if="row.fulfillmentStatus === 'credited'" content="撤回剩余额度" placement="top">
+            <el-tooltip v-if="canRefund(row)" content="登记退款并整单冲正" placement="top">
+              <el-button link type="danger" aria-label="登记退款并整单冲正" @click="openRefund(row)"><BanknoteArrowDown :size="17" /></el-button>
+            </el-tooltip>
+            <el-tooltip v-else-if="row.method === 'manual' && row.fulfillmentStatus === 'credited'" content="撤回剩余额度" placement="top">
               <el-button link type="danger" aria-label="撤回剩余额度" @click="openReverse(row)"><Undo2 :size="17" /></el-button>
             </el-tooltip>
           </div>
@@ -159,7 +170,11 @@
           </div>
           <div>
             <span class="detail-label">到账状态</span>
-            <DsTag :tone="fulfillmentTone(detail.fulfillmentStatus)">{{ fulfillmentStatusText(detail.fulfillmentStatus) }}</DsTag>
+            <DsTag :tone="fulfillmentTone(detail.fulfillmentStatus)">{{ fulfillmentStatusText(detail.fulfillmentStatus, detail.refundStatus) }}</DsTag>
+          </div>
+          <div v-if="detail.method === 'online'">
+            <span class="detail-label">退款状态</span>
+            <DsTag :tone="detail.refundStatus === 'refunded' ? 'danger' : 'neutral'">{{ detail.refundStatus === "refunded" ? "已退款" : "未退款" }}</DsTag>
           </div>
           <div>
             <span class="detail-label">充值对象</span>
@@ -174,6 +189,17 @@
           <DetailRow label="赠送金额" :value="formatMicroUSD(detail.giftAmountMicroUsd)" />
           <DetailRow label="实际到账" :value="formatMicroUSD(detail.creditedAmountMicroUsd)" strong />
           <DetailRow v-if="detail.tenantIncomeMicroUsd > 0" label="租户收入额度" :value="formatMicroUSD(detail.tenantIncomeMicroUsd)" />
+        </DetailSection>
+
+        <DetailSection v-if="detail.refund" title="退款记录">
+          <DetailRow label="退款方式" :value="refundMethodText(detail.refund.method)" />
+          <DetailRow label="退款金额" :value="formatPaid(detail.refund.refundAmountMinor)" strong />
+          <DetailRow :label="detail.refund.method === 'wechat' ? '商户退款单号' : '线下凭证号'" :value="detail.refund.refundReference" mono copyable @copy="copyText(detail.refund.refundReference)" />
+          <DetailRow v-if="detail.refund.channelRefundId" label="微信退款单号" :value="detail.refund.channelRefundId" mono copyable @copy="copyText(detail.refund.channelRefundId)" />
+          <DetailRow label="退款完成时间" :value="formatTime(detail.refund.refundedAt)" />
+          <DetailRow label="退款原因" :value="detail.refund.reason" />
+          <DetailRow label="操作人" :value="detail.refund.operatorId" mono />
+          <DetailRow v-if="detail.refund.note" label="退款备注" :value="detail.refund.note" />
         </DetailSection>
 
         <DetailSection title="支付与对账">
@@ -197,7 +223,15 @@
                 </div>
                 <DsTag :tone="credit.status === 'reversed' ? 'info' : 'positive'">{{ creditStatusText(credit) }}</DsTag>
               </div>
-              <dl class="credit-metrics">
+              <dl v-if="credit.refundId" class="credit-metrics credit-metrics--refund">
+                <div><dt>原到账</dt><dd>{{ formatMicroUSD(credit.creditAmountMicroUsd) }}</dd></div>
+                <div><dt>收回可用额度</dt><dd>{{ formatMicroUSD(credit.refundAvailableMicroUsd) }}</dd></div>
+                <div><dt>消费/清欠冲正</dt><dd>{{ formatMicroUSD(credit.refundNonAvailableMicroUsd) }}</dd></div>
+                <div><dt>已过期未重复扣</dt><dd>{{ formatMicroUSD(credit.refundExpiredMicroUsd) }}</dd></div>
+                <div><dt>账户实际扣减</dt><dd>{{ formatMicroUSD(credit.refundAccountDebitMicroUsd) }}</dd></div>
+                <div><dt>冲正后余额</dt><dd :class="{ 'debt-value': credit.refundBalanceAfterMicroUsd < 0 }">{{ formatMicroUSD(credit.refundBalanceAfterMicroUsd) }}</dd></div>
+              </dl>
+              <dl v-else class="credit-metrics">
                 <div><dt>到账</dt><dd>{{ formatMicroUSD(credit.creditAmountMicroUsd) }}</dd></div>
                 <div><dt>已消费</dt><dd>{{ formatMicroUSD(consumedCredit(credit)) }}</dd></div>
                 <div><dt>{{ credit.status === 'reversed' ? '已回收' : '剩余' }}</dt><dd>{{ formatMicroUSD(credit.status === 'reversed' ? credit.reversedAmountMicroUsd : credit.remainingAmountMicroUsd) }}</dd></div>
@@ -219,14 +253,15 @@
 
       <template #footer>
         <el-button v-if="detail && canSync(detail)" :loading="syncing" @click="syncOrder(detail)"><RefreshCw :size="16" />同步支付状态</el-button>
-        <el-button v-if="detail?.fulfillmentStatus === 'credited'" type="danger" @click="openReverse(detail)"><Undo2 :size="16" />撤回额度</el-button>
+        <el-button v-if="detail && canRefund(detail)" type="danger" @click="openRefund(detail)"><BanknoteArrowDown :size="16" />登记退款并冲正</el-button>
+        <el-button v-else-if="detail?.method === 'manual' && detail.fulfillmentStatus === 'credited'" type="danger" @click="openReverse(detail)"><Undo2 :size="16" />撤回额度</el-button>
       </template>
     </DsDrawer>
 
     <el-dialog v-model="reverseDialogOpen" title="确认撤回额度" width="520px" :close-on-click-modal="false" append-to-body>
       <div v-if="reverseTarget" class="reverse-content">
         <div class="reverse-warning">
-          此操作只回收目标账户额度包的可用余额。微信支付状态仍保持“已支付”，不会发起退款；用户在线充值产生的租户收入额度不受影响。
+          此操作仅用于没有在线支付的手动充值，回收目标账户额度包中的剩余额度；已经消费的部分不会形成额外欠费。
         </div>
         <dl class="reverse-summary">
           <div><dt>订单</dt><dd class="mono">{{ reverseTarget.orderId }}</dd></div>
@@ -245,13 +280,59 @@
         <el-button type="danger" :loading="reversing" @click="confirmReverse">确认撤回额度</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="refundDialogOpen" title="登记已完成退款并整单冲正" width="640px" :close-on-click-modal="false" append-to-body>
+      <div v-if="refundTarget" class="refund-content">
+        <div class="refund-warning">
+          仅在退款资金已经实际退回后执行。确认后将同时冲正用户到账额度和租户收入额度，已消费或曾用于清欠的部分可能使账户形成负余额。
+        </div>
+        <dl class="refund-order-summary">
+          <div><dt>支付订单</dt><dd class="mono">{{ refundTarget.orderId }}</dd></div>
+          <div><dt>原支付金额</dt><dd>{{ formatPaid(refundTarget.paidAmountMinor) }}</dd></div>
+          <div><dt>用户到账</dt><dd>{{ formatMicroUSD(refundTarget.creditedAmountMicroUsd) }}</dd></div>
+          <div v-if="refundTarget.tenantIncomeMicroUsd > 0"><dt>租户收入</dt><dd>{{ formatMicroUSD(refundTarget.tenantIncomeMicroUsd) }}</dd></div>
+        </dl>
+        <div v-if="refundTarget.credits?.length" class="refund-impact-list">
+          <div v-for="credit in refundTarget.credits" :key="credit.balanceOrderId" class="refund-impact-row">
+            <div><strong>{{ credit.primary ? "目标到账额度" : "关联租户收入" }}</strong><span class="secondary-text">{{ credit.balanceOrderId }}</span></div>
+            <span>预计扣减 {{ formatMicroUSD(estimatedRefundDebit(credit)) }}</span>
+          </div>
+        </div>
+        <el-form label-position="top">
+          <div class="refund-form-grid">
+            <el-form-item label="退款方式" required>
+              <el-segmented v-model="refundForm.method" :options="refundMethodOptions" />
+            </el-form-item>
+            <el-form-item label="退款完成时间" required>
+              <el-date-picker v-model="refundForm.refundedAt" type="datetime" placeholder="选择退款完成时间" :disabled-date="disableFutureDate" />
+            </el-form-item>
+            <el-form-item :label="refundForm.method === 'wechat' ? '商户退款单号' : '线下退款凭证号'" required>
+              <el-input v-model="refundForm.refundReference" maxlength="128" placeholder="用于退款对账" />
+            </el-form-item>
+            <el-form-item v-if="refundForm.method === 'wechat'" label="微信退款单号" required>
+              <el-input v-model="refundForm.channelRefundId" maxlength="128" placeholder="微信支付退款单号" />
+            </el-form-item>
+          </div>
+          <el-form-item label="退款原因" required>
+            <el-input v-model="refundForm.reason" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="记录退款与冲正原因" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="refundForm.note" type="textarea" :rows="2" maxlength="1000" show-word-limit placeholder="可记录线下经办信息或其他说明" />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="refundDialogOpen = false">取消</el-button>
+        <el-button type="danger" :loading="refunding" @click="confirmRefund">确认已退款并整单冲正</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { defineComponent, h, ref } from "vue";
+import { defineComponent, h, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
-import { Copy, PanelRightOpen, ReceiptText, RefreshCw, RotateCcw, Search, Undo2 } from "lucide-vue-next";
+import { BanknoteArrowDown, Copy, PanelRightOpen, ReceiptText, RefreshCw, RotateCcw, Search, Undo2 } from "lucide-vue-next";
 import { platformAdminApi } from "@/api/platformAdmin";
 import type { AdminRechargeOrder, RechargeCreditDetail } from "@/api/types/admin";
 import { PortalPagePanel, useListPage } from "@/platform";
@@ -272,7 +353,7 @@ const columns: DsTableColumn[] = [
   { key: "method", title: "来源", width: 100 },
   { key: "reconciliation", title: "对账单号", width: 280 },
   { key: "amount", title: "支付 / 到账", width: 160, align: "right" },
-  { key: "status", title: "支付 / 到账状态", width: 190 },
+  { key: "status", title: "支付 / 到账状态", width: 240 },
   { key: "createdAt", title: "时间", width: 180 },
   { key: "actions", title: "操作", width: 110, align: "center" }
 ];
@@ -286,8 +367,9 @@ const {
   targetType: "" | "tenant" | "user";
   paymentStatus: string;
   fulfillmentStatus: string;
+  refundStatus: string;
 }, AdminRechargeOrder>({
-  initialQuery: { keyword: "", method: "", targetType: "", paymentStatus: "", fulfillmentStatus: "" },
+  initialQuery: { keyword: "", method: "", targetType: "", paymentStatus: "", fulfillmentStatus: "", refundStatus: "" },
   pageSize: 20,
   fetcher: async (params) => {
     try {
@@ -297,6 +379,7 @@ const {
         targetType: params.targetType || undefined,
         paymentStatus: params.paymentStatus || undefined,
         fulfillmentStatus: params.fulfillmentStatus || undefined,
+        refundStatus: params.refundStatus || undefined,
         page: params.page,
         size: params.pageSize
       });
@@ -316,6 +399,21 @@ const reverseDialogOpen = ref(false);
 const reverseTarget = ref<AdminRechargeOrder | null>(null);
 const reverseReason = ref("");
 const reversing = ref(false);
+const refundDialogOpen = ref(false);
+const refundTarget = ref<AdminRechargeOrder | null>(null);
+const refunding = ref(false);
+const refundMethodOptions = [
+  { label: "微信退款", value: "wechat" },
+  { label: "线下退款", value: "offline" }
+];
+const refundForm = reactive({
+  method: "wechat" as "wechat" | "offline",
+  refundReference: "",
+  channelRefundId: "",
+  refundedAt: new Date(),
+  reason: "",
+  note: ""
+});
 
 const DetailSection = defineComponent({
   props: { title: { type: String, required: true } },
@@ -407,6 +505,56 @@ async function confirmReverse() {
   }
 }
 
+async function openRefund(row: AdminRechargeOrder) {
+  refundForm.method = "wechat";
+  refundForm.refundReference = "";
+  refundForm.channelRefundId = "";
+  refundForm.refundedAt = new Date();
+  refundForm.reason = "";
+  refundForm.note = "";
+  try {
+    refundTarget.value = row.credits ? row : await platformAdminApi.getAdminRechargeOrder(row.orderId);
+    refundDialogOpen.value = true;
+  } catch {
+    ElMessage.error("获取退款冲正信息失败");
+  }
+}
+
+async function confirmRefund() {
+  if (!refundTarget.value) return;
+  if (!refundForm.refundReference.trim() || !refundForm.reason.trim()) {
+    ElMessage.warning("请填写退款单号和退款原因");
+    return;
+  }
+  if (refundForm.method === "wechat" && !refundForm.channelRefundId.trim()) {
+    ElMessage.warning("请填写微信退款单号");
+    return;
+  }
+  if (!refundForm.refundedAt || refundForm.refundedAt.getTime() > Date.now()) {
+    ElMessage.warning("退款完成时间不能晚于当前时间");
+    return;
+  }
+  refunding.value = true;
+  try {
+    const updated = await platformAdminApi.recordCompletedRechargeRefund(refundTarget.value.orderId, {
+      method: refundForm.method,
+      refundReference: refundForm.refundReference.trim(),
+      channelRefundId: refundForm.method === "wechat" ? refundForm.channelRefundId.trim() : undefined,
+      refundedAt: refundForm.refundedAt.getTime(),
+      reason: refundForm.reason.trim(),
+      note: refundForm.note.trim() || undefined
+    });
+    refundDialogOpen.value = false;
+    if (detail.value?.orderId === updated.orderId) detail.value = updated;
+    ElMessage.success("退款已登记，用户额度与租户收入已完成整单冲正");
+    await refresh();
+  } catch (error: any) {
+    ElMessage.error(error?.detail || error?.message || "退款冲正失败");
+  } finally {
+    refunding.value = false;
+  }
+}
+
 function primaryCredit(order: AdminRechargeOrder) {
   return order.credits?.find((credit) => credit.primary);
 }
@@ -418,6 +566,19 @@ function consumedPrimaryCredit(order: AdminRechargeOrder) {
 
 function canSync(order: AdminRechargeOrder) {
   return order.method === "online" && (order.paymentStatus === "created" || order.paymentStatus === "paying");
+}
+
+function canRefund(order: AdminRechargeOrder) {
+  return order.method === "online" && order.paymentStatus === "paid" && order.fulfillmentStatus === "credited" && order.refundStatus === "none";
+}
+
+function estimatedRefundDebit(credit: RechargeCreditDetail) {
+  const expired = credit.lotStatus === "expired" ? credit.remainingAmountMicroUsd : 0;
+  return Math.max(credit.creditAmountMicroUsd - expired, 0);
+}
+
+function disableFutureDate(value: Date) {
+  return value.getTime() > Date.now();
 }
 
 async function copyText(value?: string) {
@@ -465,8 +626,13 @@ function paymentStatusText(value: string) {
   return ({ not_required: "无需支付", created: "待支付", paying: "确认中", paid: "已支付", closed: "已关闭", expired: "已过期" } as Record<string, string>)[value] || value;
 }
 
-function fulfillmentStatusText(value: string) {
+function fulfillmentStatusText(value: string, refundStatus?: string) {
+  if (value === "reversed" && refundStatus === "refunded") return "已冲正";
   return ({ pending: "待到账", credited: "已到账", partially_reversed: "部分撤回", reversed: "已撤回" } as Record<string, string>)[value] || value;
+}
+
+function refundMethodText(value: string) {
+  return value === "wechat" ? "微信退款" : "线下退款";
 }
 
 type Tone = "positive" | "warning" | "danger" | "info" | "neutral" | "accent";
@@ -479,6 +645,7 @@ function fulfillmentTone(value: string): Tone {
 }
 
 function creditStatusText(credit: RechargeCreditDetail) {
+  if (credit.refundId) return "已冲正";
   if (credit.status === "reversed") return credit.lostAmountMicroUsd > 0 ? "部分撤回" : "已撤回";
   return ({ available: "可用", depleted: "已耗尽", expired: "已过期", revoked: "已撤回", no_lot: "无可用额度包" } as Record<string, string>)[credit.lotStatus] || "有效";
 }
@@ -504,7 +671,7 @@ function consumedCredit(credit: RechargeCreditDetail) {
 .copy-button:hover { background: var(--ds-panel-muted); color: var(--ds-accent); }
 .amount-cell { align-items: flex-end; font-variant-numeric: tabular-nums; }
 .credited-amount { color: var(--ds-positive); font-weight: 600; }
-.status-cell { display: flex; align-items: center; gap: 6px; }
+.status-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .time-cell { font-size: 12px; white-space: nowrap; }
 .row-actions { display: flex; align-items: center; justify-content: center; gap: 5px; }
 .detail-loading { padding: 8px 0; }
@@ -513,7 +680,7 @@ function consumedCredit(credit: RechargeCreditDetail) {
 .detail-section:first-child { padding-top: 0; }
 .detail-section:last-child { border-bottom: 0; }
 .detail-section h3 { margin: 0 0 15px; color: var(--ds-ink); font-size: 14px; font-weight: 700; }
-.detail-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.detail-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
 .detail-summary > div { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 8px; }
 .detail-label { color: var(--ds-muted); font-size: 12px; }
 :deep(.detail-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; }
@@ -531,6 +698,8 @@ function consumedCredit(credit: RechargeCreditDetail) {
 .credit-metrics div { display: flex; flex-direction: column; gap: 3px; }
 .credit-metrics dt { color: var(--ds-muted); font-size: 11px; }
 .credit-metrics dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.credit-metrics--refund { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.debt-value { color: var(--ds-danger); font-weight: 700; }
 .credit-lot { margin-top: 10px; font-size: 12px; overflow-wrap: anywhere; }
 .empty-detail { grid-column: 1 / -1; margin: 0; color: var(--ds-faint); font-size: 13px; }
 .reverse-content { display: flex; flex-direction: column; gap: 18px; }
@@ -540,8 +709,21 @@ function consumedCredit(credit: RechargeCreditDetail) {
 .reverse-summary dt { margin-bottom: 4px; color: var(--ds-muted); font-size: 12px; }
 .reverse-summary dd { margin: 0; overflow-wrap: anywhere; color: var(--ds-ink); font-size: 13px; }
 .reverse-summary .reclaim-value { color: var(--ds-danger); font-weight: 700; }
+.refund-content { display: flex; flex-direction: column; gap: 18px; }
+.refund-warning { padding: 12px 14px; border: 1px solid var(--ds-danger); border-radius: var(--ds-radius-control); background: var(--ds-danger-soft); color: var(--ds-ink); font-size: 13px; line-height: 1.6; }
+.refund-order-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; margin: 0; }
+.refund-order-summary div { min-width: 0; }
+.refund-order-summary dt { margin-bottom: 4px; color: var(--ds-muted); font-size: 12px; }
+.refund-order-summary dd { margin: 0; overflow-wrap: anywhere; color: var(--ds-ink); font-size: 13px; }
+.refund-impact-list { display: flex; flex-direction: column; border-block: 1px solid var(--ds-line); }
+.refund-impact-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0; border-top: 1px solid var(--ds-line); font-size: 13px; }
+.refund-impact-row:first-child { border-top: 0; }
+.refund-impact-row > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.refund-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.refund-form-grid :deep(.el-date-editor), .refund-form-grid :deep(.el-segmented) { width: 100%; }
 @media (max-width: 720px) {
-  .detail-summary, :deep(.detail-grid), .credit-metrics, .reverse-summary { grid-template-columns: 1fr; }
+  .detail-summary, :deep(.detail-grid), .credit-metrics, .reverse-summary, .refund-order-summary, .refund-form-grid { grid-template-columns: 1fr; }
   :deep(.detail-row) { grid-template-columns: 1fr; gap: 4px; }
+  .refund-impact-row { align-items: flex-start; flex-direction: column; gap: 5px; }
 }
 </style>

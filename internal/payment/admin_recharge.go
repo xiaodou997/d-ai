@@ -21,6 +21,7 @@ type AdminRechargeOrder struct {
 	TenantIncomeMicroUSD   int64                  `json:"tenantIncomeMicroUsd"`
 	PaymentStatus          string                 `json:"paymentStatus"`
 	FulfillmentStatus      string                 `json:"fulfillmentStatus"`
+	RefundStatus           string                 `json:"refundStatus"`
 	OutTradeNo             string                 `json:"outTradeNo,omitempty"`
 	TransactionID          string                 `json:"transactionId,omitempty"`
 	TopupMode              string                 `json:"topupMode,omitempty"`
@@ -36,24 +37,45 @@ type AdminRechargeOrder struct {
 	ReversedBy             string                 `json:"reversedBy,omitempty"`
 	ReversalReason         string                 `json:"reversalReason,omitempty"`
 	Credits                []RechargeCreditDetail `json:"credits,omitempty"`
+	Refund                 *AdminRefundRecord     `json:"refund,omitempty"`
+}
+
+type AdminRefundRecord struct {
+	RefundID          string `json:"refundId"`
+	Method            string `json:"method"`
+	RefundReference   string `json:"refundReference"`
+	ChannelRefundID   string `json:"channelRefundId,omitempty"`
+	RefundAmountMinor int64  `json:"refundAmountMinor"`
+	Status            string `json:"status"`
+	RefundedAt        int64  `json:"refundedAt"`
+	Reason            string `json:"reason"`
+	Note              string `json:"note,omitempty"`
+	OperatorID        string `json:"operatorId"`
+	CreatedAt         int64  `json:"createdAt"`
 }
 
 type RechargeCreditDetail struct {
-	BalanceOrderID          string `json:"balanceOrderId"`
-	OrderType               string `json:"orderType"`
-	Primary                 bool   `json:"primary"`
-	CreditAmountMicroUSD    int64  `json:"creditAmountMicroUsd"`
-	Status                  string `json:"status"`
-	Note                    string `json:"note,omitempty"`
-	BalanceExpiresAt        *int64 `json:"balanceExpiresAt,omitempty"`
-	ReversedAt              *int64 `json:"reversedAt,omitempty"`
-	ReversedBy              string `json:"reversedBy,omitempty"`
-	ReversalReason          string `json:"reversalReason,omitempty"`
-	ReversedAmountMicroUSD  int64  `json:"reversedAmountMicroUsd"`
-	LostAmountMicroUSD      int64  `json:"lostAmountMicroUsd"`
-	LotID                   string `json:"lotId,omitempty"`
-	GrantedAmountMicroUSD   int64  `json:"grantedAmountMicroUsd"`
-	ConsumedAmountMicroUSD  int64  `json:"consumedAmountMicroUsd"`
-	RemainingAmountMicroUSD int64  `json:"remainingAmountMicroUsd"`
-	LotStatus               string `json:"lotStatus"`
+	BalanceOrderID             string `json:"balanceOrderId"`
+	OrderType                  string `json:"orderType"`
+	Primary                    bool   `json:"primary"`
+	CreditAmountMicroUSD       int64  `json:"creditAmountMicroUsd"`
+	Status                     string `json:"status"`
+	Note                       string `json:"note,omitempty"`
+	BalanceExpiresAt           *int64 `json:"balanceExpiresAt,omitempty"`
+	ReversedAt                 *int64 `json:"reversedAt,omitempty"`
+	ReversedBy                 string `json:"reversedBy,omitempty"`
+	ReversalReason             string `json:"reversalReason,omitempty"`
+	ReversedAmountMicroUSD     int64  `json:"reversedAmountMicroUsd"`
+	LostAmountMicroUSD         int64  `json:"lostAmountMicroUsd"`
+	LotID                      string `json:"lotId,omitempty"`
+	GrantedAmountMicroUSD      int64  `json:"grantedAmountMicroUsd"`
+	ConsumedAmountMicroUSD     int64  `json:"consumedAmountMicroUsd"`
+	RemainingAmountMicroUSD    int64  `json:"remainingAmountMicroUsd"`
+	LotStatus                  string `json:"lotStatus"`
+	RefundID                   string `json:"refundId,omitempty"`
+	RefundAvailableMicroUSD    int64  `json:"refundAvailableMicroUsd"`
+	RefundNonAvailableMicroUSD int64  `json:"refundNonAvailableMicroUsd"`
+	RefundExpiredMicroUSD      int64  `json:"refundExpiredMicroUsd"`
+	RefundAccountDebitMicroUSD int64  `json:"refundAccountDebitMicroUsd"`
+	RefundBalanceAfterMicroUSD int64  `json:"refundBalanceAfterMicroUsd"`
 }

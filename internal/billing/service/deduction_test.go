@@ -10,7 +10,7 @@ import (
 	"xiaodou/dai/internal/dbtest"
 )
 
-func TestReverseOnlineUserCreditKeepsPaymentPaidAndTenantIncome(t *testing.T) {
+func TestReverseOnlineUserCreditRequiresRefundWorkflow(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
 	if err != nil {
@@ -49,12 +49,8 @@ func TestReverseOnlineUserCreditKeepsPaymentPaidAndTenantIncome(t *testing.T) {
 		t.Fatalf("seed online recharge: %v", err)
 	}
 
-	result, err := service.NewDeductionService(pool, zap.NewNop()).ReverseOrder("ORD_REVERSE_USER", "risk review", "admin-1")
-	if err != nil {
-		t.Fatalf("reverse online credit: %v", err)
-	}
-	if !result.IsPartial || result.OriginalCredits != 1200000 || result.ReversedCredits != 600000 || result.LostCredits != 600000 || result.FulfillmentStatus != "partially_reversed" {
-		t.Fatalf("unexpected reverse result: %+v", result)
+	if _, err := service.NewDeductionService(pool, zap.NewNop()).ReverseOrder("ORD_REVERSE_USER", "risk review", "admin-1"); err == nil {
+		t.Fatal("online recharge was reversed without completed refund workflow")
 	}
 
 	var paymentStatus, fulfillmentStatus, primaryStatus, incomeStatus string
@@ -77,7 +73,7 @@ func TestReverseOnlineUserCreditKeepsPaymentPaidAndTenantIncome(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'tenant_reverse'`).Scan(&tenantBalance); err != nil {
 		t.Fatalf("read tenant balance: %v", err)
 	}
-	if paymentStatus != "paid" || fulfillmentStatus != "partially_reversed" || primaryStatus != "reversed" || incomeStatus != "active" || userBalance != 0 || tenantBalance != 900000 || reversedAmount != 600000 || lostAmount != 600000 {
+	if paymentStatus != "paid" || fulfillmentStatus != "credited" || primaryStatus != "active" || incomeStatus != "active" || userBalance != 600000 || tenantBalance != 900000 || reversedAmount != 0 || lostAmount != 0 {
 		t.Fatalf("states payment/fulfillment/primary/income/user/tenant/reversed/lost = %s/%s/%s/%s/%d/%d/%d/%d", paymentStatus, fulfillmentStatus, primaryStatus, incomeStatus, userBalance, tenantBalance, reversedAmount, lostAmount)
 	}
 }

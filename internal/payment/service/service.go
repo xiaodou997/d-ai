@@ -120,7 +120,7 @@ func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrde
 		FeeAmountMicroUSD: calc.FeeAmountMicroUSD, GiftAmountMicroUSD: calc.GiftAmountMicroUSD,
 		CreditedAmountMicroUSD: calc.CreditedAmountMicroUSD, TenantIncomeMicroUSD: tenantIncomeMicroUSD,
 		BalanceExpiresAt: balanceExpiresAt, Channel: "wechat_native", Status: payment.OrderStatusCreated,
-		FulfillmentStatus: payment.FulfillmentStatusPending, ExpiresAt: expiresAt,
+		FulfillmentStatus: payment.FulfillmentStatusPending, RefundStatus: payment.RefundStatusNone, ExpiresAt: expiresAt,
 	}
 	if err := paymentpg.InsertOrder(ctx, s.pool, order); err != nil {
 		return nil, err

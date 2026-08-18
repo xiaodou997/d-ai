@@ -45,5 +45,5 @@ export function balanceStatusText(status: string): string {
 }
 
 export function balanceTransactionText(type: string): string {
-  return ({ topup_income: "用户充值收入", consumption: "服务消费", withdraw: "提现", adjust: "余额调整" } as Record<string, string>)[type] ?? type;
+  return ({ topup_income: "用户充值收入", refund_reversal: "退款收入冲正", consumption: "服务消费", withdraw: "提现", adjust: "余额调整" } as Record<string, string>)[type] ?? type;
 }

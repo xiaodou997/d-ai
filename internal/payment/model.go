@@ -19,6 +19,13 @@ const (
 	FulfillmentStatusReversed          = "reversed"
 )
 
+const (
+	RefundStatusNone     = "none"
+	RefundStatusRefunded = "refunded"
+	RefundMethodWechat   = "wechat"
+	RefundMethodOffline  = "offline"
+)
+
 // 支付订单状态机：created -> paying -> paid（终态）；created/paying -> closed/expired（终态，
 // 但 closed/expired 收到微信侧 SUCCESS 仍需补入账，见 Settle）。
 const (
@@ -31,10 +38,11 @@ const (
 
 // 现金流水类型
 const (
-	CashTxnTopupIncome = "topup_income"
-	CashTxnConsumption = "consumption"
-	CashTxnWithdraw    = "withdraw"
-	CashTxnAdjust      = "adjust"
+	CashTxnTopupIncome    = "topup_income"
+	CashTxnRefundReversal = "refund_reversal"
+	CashTxnConsumption    = "consumption"
+	CashTxnWithdraw       = "withdraw"
+	CashTxnAdjust         = "adjust"
 )
 
 // 提现历史状态兼容值。新提现由管理员直接创建并记为 paid，不再经过
@@ -76,12 +84,43 @@ type Order struct {
 	TransactionID          string
 	Status                 string
 	FulfillmentStatus      string
+	RefundStatus           string
 	PaidAt                 *time.Time
 	ExpiresAt              time.Time
 	BalanceOrderID         string
 	FailNote               string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
+}
+
+// Refund records a completed external refund. The original payment remains
+// paid; this is the separate refund fact used for reconciliation and reversal.
+type Refund struct {
+	RefundID          string
+	PaymentOrderID    string
+	Method            string
+	RefundReference   string
+	ChannelRefundID   string
+	RefundAmountMinor int64
+	Status            string
+	RefundedAt        time.Time
+	Reason            string
+	Note              string
+	OperatorID        string
+	CreatedAt         time.Time
+}
+
+type RefundReversalEffect struct {
+	ReversalID                 string
+	RefundID                   string
+	RechargeOrderID            string
+	AccountID                  string
+	CreditAmountMicroUSD       int64
+	AvailableReclaimedMicroUSD int64
+	NonAvailableDebitMicroUSD  int64
+	ExpiredAmountMicroUSD      int64
+	AccountDebitMicroUSD       int64
+	BalanceAfterMicroUSD       int64
 }
 
 // BalanceAccount is the tenant's single USD balance projection.

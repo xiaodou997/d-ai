@@ -97,6 +97,7 @@ type adminRechargeOrdersInput struct {
 	TargetType        string `query:"targetType" required:"false" enum:"tenant,user"`
 	PaymentStatus     string `query:"paymentStatus" required:"false"`
 	FulfillmentStatus string `query:"fulfillmentStatus" required:"false"`
+	RefundStatus      string `query:"refundStatus" required:"false" enum:"none,refunded,not_applicable"`
 	TimeFrom          int64  `query:"timeFrom" required:"false"`
 	TimeTo            int64  `query:"timeTo" required:"false"`
 	Page              int    `query:"page" default:"1"`
@@ -119,6 +120,18 @@ type reverseAdminRechargeOrderInput struct {
 	OrderID string `path:"orderId"`
 	Body    struct {
 		Reason string `json:"reason" minLength:"1"`
+	}
+}
+
+type recordCompletedRefundInput struct {
+	OrderID string `path:"orderId"`
+	Body    struct {
+		Method          string `json:"method" enum:"wechat,offline"`
+		RefundReference string `json:"refundReference" minLength:"1" maxLength:"128"`
+		ChannelRefundID string `json:"channelRefundId" required:"false" maxLength:"128"`
+		RefundedAt      int64  `json:"refundedAt" minimum:"1"`
+		Reason          string `json:"reason" minLength:"1" maxLength:"500"`
+		Note            string `json:"note" required:"false" maxLength:"1000"`
 	}
 }
 
@@ -229,7 +242,9 @@ func registerAdminPayment(api huma.API, d Deps) {
 	huma.Register(api, huma.Operation{OperationID: "admin-sync-recharge-order", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/sync",
 		Summary: "同步充值订单支付状态", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.syncRechargeOrder)
 	huma.Register(api, huma.Operation{OperationID: "admin-reverse-recharge-order-credit", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/reverse-credit",
-		Summary: "撤回充值订单剩余额度", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.reverseRechargeOrderCredit)
+		Summary: "撤回手动充值剩余额度", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.reverseRechargeOrderCredit)
+	huma.Register(api, huma.Operation{OperationID: "admin-record-completed-recharge-refund", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/refund-reversal",
+		Summary: "登记已完成退款并整单冲正", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.recordCompletedRechargeRefund)
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-tenant-balances", Method: http.MethodGet, Path: "/api/v1/admin/tenant-balances",
 		Summary: "租户 USD 余额总览", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashAccounts)
@@ -319,7 +334,8 @@ func (h *adminPaymentHandlers) listRechargeOrders(ctx context.Context, in *admin
 	p := paymentpg.ListAdminRechargeOrdersParams{
 		Keyword: in.Keyword, Method: in.Method, TargetType: in.TargetType,
 		PaymentStatus: in.PaymentStatus, FulfillmentStatus: in.FulfillmentStatus,
-		Page: in.Page, Size: in.Size,
+		RefundStatus: in.RefundStatus,
+		Page:         in.Page, Size: in.Size,
 	}
 	if in.TimeFrom > 0 {
 		value := time.UnixMilli(in.TimeFrom).UTC()
@@ -371,11 +387,37 @@ func (h *adminPaymentHandlers) reverseRechargeOrderCredit(ctx context.Context, i
 	if item.BalanceOrderID == "" || item.FulfillmentStatus != payment.FulfillmentStatusCredited {
 		return nil, toProblem(domain.ErrRechargeNotReversible)
 	}
+	if item.Method != "manual" {
+		return nil, httpx.ErrBadRequest.WithDetail("在线充值必须在退款完成后执行整单冲正")
+	}
 	reason := strings.TrimSpace(in.Body.Reason)
 	if reason == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("撤回原因不能为空")
 	}
 	if _, err := h.deduction.ReverseOrder(item.BalanceOrderID, reason, claims.UserID); err != nil {
+		return nil, toProblem(err)
+	}
+	return h.getRechargeOrder(ctx, &adminRechargeOrderInput{OrderID: item.OrderID})
+}
+
+func (h *adminPaymentHandlers) recordCompletedRechargeRefund(ctx context.Context, in *recordCompletedRefundInput) (*adminRechargeOrderOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	item, err := paymentpg.GetAdminRechargeOrder(ctx, h.pool, in.OrderID)
+	if err != nil {
+		return nil, adminRechargeOrderLookupProblem(err)
+	}
+	if item.Method != "online" {
+		return nil, httpx.ErrBadRequest.WithDetail("手动充值没有支付退款流程")
+	}
+	if _, err := h.svc.RecordCompletedRefund(ctx, paymentsvc.RecordCompletedRefundParams{
+		PaymentOrderID: item.OrderID,
+		Method:         in.Body.Method, RefundReference: in.Body.RefundReference,
+		ChannelRefundID: in.Body.ChannelRefundID, RefundedAt: time.UnixMilli(in.Body.RefundedAt).UTC(),
+		Reason: in.Body.Reason, Note: in.Body.Note, OperatorID: claims.UserID,
+	}); err != nil {
 		return nil, toProblem(err)
 	}
 	return h.getRechargeOrder(ctx, &adminRechargeOrderInput{OrderID: item.OrderID})
