@@ -133,12 +133,6 @@
             <el-tooltip v-if="canSync(row)" content="同步支付状态" placement="top">
               <el-button link type="primary" aria-label="同步支付状态" @click="syncOrder(row)"><RefreshCw :size="17" /></el-button>
             </el-tooltip>
-            <el-tooltip v-if="canRefund(row)" content="登记退款并整单冲正" placement="top">
-              <el-button link type="danger" aria-label="登记退款并整单冲正" @click="openRefund(row)"><BanknoteArrowDown :size="17" /></el-button>
-            </el-tooltip>
-            <el-tooltip v-else-if="row.method === 'manual' && row.fulfillmentStatus === 'credited'" content="撤回剩余额度" placement="top">
-              <el-button link type="danger" aria-label="撤回剩余额度" @click="openReverse(row)"><Undo2 :size="17" /></el-button>
-            </el-tooltip>
           </div>
         </template>
       </DsTable>
