@@ -18,19 +18,23 @@ func InsertOrder(ctx context.Context, pool *pgxpool.Pool, o *payment.Order) erro
 	if o.UserID != "" {
 		userIDVal = o.UserID
 	}
+	fulfillmentStatus := o.FulfillmentStatus
+	if fulfillmentStatus == "" {
+		fulfillmentStatus = payment.FulfillmentStatusPending
+	}
 	_, err := pool.Exec(ctx, `
 		INSERT INTO pay_orders
 		(order_id, out_trade_no, scene, tenant_id, user_id, topup_mode, package_id, package_name, package_badge,
 		 payment_currency, payment_amount_minor, ledger_currency, gross_amount_micro_usd, fee_rate_bp,
 		 fee_amount_micro_usd, gift_amount_micro_usd, credited_amount_micro_usd, tenant_income_micro_usd,
-		 balance_expires_at, channel, status, expires_at, created_at, updated_at)
+		 balance_expires_at, channel, status, fulfillment_status, expires_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7,''), NULLIF($8,''), NULLIF($9,''),
-		 $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, now(), now())
+		 $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, now(), now())
 	`, o.OrderID, o.OutTradeNo, o.Scene, o.TenantID, userIDVal,
 		o.TopupMode, o.PackageID, o.PackageName, o.PackageBadge,
 		o.PaymentCurrency, o.PaymentAmountMinor, o.LedgerCurrency, o.GrossAmountMicroUSD,
 		o.FeeRateBp, o.FeeAmountMicroUSD, o.GiftAmountMicroUSD, o.CreditedAmountMicroUSD,
-		o.TenantIncomeMicroUSD, o.BalanceExpiresAt, o.Channel, o.Status, o.ExpiresAt)
+		o.TenantIncomeMicroUSD, o.BalanceExpiresAt, o.Channel, o.Status, fulfillmentStatus, o.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("创建支付订单失败: %w", err)
 	}
@@ -61,7 +65,7 @@ func scanOrder(row pgx.Row) (*payment.Order, error) {
 		&o.PaymentCurrency, &o.PaymentAmountMinor, &o.LedgerCurrency, &o.GrossAmountMicroUSD,
 		&o.FeeRateBp, &o.FeeAmountMicroUSD, &o.GiftAmountMicroUSD, &o.CreditedAmountMicroUSD,
 		&o.TenantIncomeMicroUSD, &balanceExpiresAt,
-		&o.Channel, &codeURL, &transactionID, &o.Status, &paidAt, &o.ExpiresAt,
+		&o.Channel, &codeURL, &transactionID, &o.Status, &o.FulfillmentStatus, &paidAt, &o.ExpiresAt,
 		&balanceOrderID, &failNote, &o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
@@ -101,7 +105,7 @@ const orderColumns = `
 	topup_mode, package_id, package_name, package_badge,
 	payment_currency, payment_amount_minor, ledger_currency, gross_amount_micro_usd, fee_rate_bp,
 	fee_amount_micro_usd, gift_amount_micro_usd, credited_amount_micro_usd, tenant_income_micro_usd, balance_expires_at,
-	channel, code_url, transaction_id, status, paid_at, expires_at,
+	channel, code_url, transaction_id, status, fulfillment_status, paid_at, expires_at,
 	balance_order_id, fail_note, created_at, updated_at`
 
 // GetOrderByID 按 order_id 查询（不加锁，供只读端点使用）。
@@ -119,10 +123,10 @@ func GetOrderByOutTradeNoForUpdate(ctx context.Context, tx pgx.Tx, outTradeNo st
 // MarkPaidTx atomically marks the payment as paid and links the balance grant.
 func MarkPaidTx(ctx context.Context, tx pgx.Tx, orderID, transactionID, balanceOrderID string, notifyRaw []byte) error {
 	_, err := tx.Exec(ctx, `
-		UPDATE pay_orders SET status = $1, transaction_id = $2, balance_order_id = $3,
-		       paid_at = now(), notify_raw = $4, updated_at = now()
-		WHERE order_id = $5
-	`, payment.OrderStatusPaid, transactionID, balanceOrderID, notifyRaw, orderID)
+		UPDATE pay_orders SET status = $1, fulfillment_status = $2, transaction_id = $3, balance_order_id = $4,
+		       paid_at = now(), notify_raw = $5, updated_at = now()
+		WHERE order_id = $6
+	`, payment.OrderStatusPaid, payment.FulfillmentStatusCredited, transactionID, balanceOrderID, notifyRaw, orderID)
 	return err
 }
 

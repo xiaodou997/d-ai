@@ -20,6 +20,15 @@ func TestMigration0004RepairsLegacyUserTopupTenantIncome(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
+		ALTER TABLE bill_recharge_orders
+			DROP CONSTRAINT bill_recharge_orders_payment_link_check,
+			DROP CONSTRAINT bill_recharge_orders_payment_order_fk;
+		DROP INDEX idx_bill_recharge_orders_payment_order;
+		ALTER TABLE bill_recharge_orders
+			DROP COLUMN payment_order_id,
+			DROP COLUMN reversed_amount_micro,
+			DROP COLUMN lost_amount_micro;
+		ALTER TABLE pay_orders DROP COLUMN fulfillment_status;
 		DROP INDEX uq_bill_recharge_orders_user_topup_income_payment_ref;
 		UPDATE dai_schema_metadata SET version = 3 WHERE singleton = TRUE;
 	`); err != nil {

@@ -382,6 +382,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/recharge-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 充值订单统一列表 */
+        get: operations["admin-list-recharge-orders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/recharge-orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 充值订单统一详情 */
+        get: operations["admin-get-recharge-order"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/recharge-orders/{orderId}/reverse-credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤回充值订单剩余额度 */
+        post: operations["admin-reverse-recharge-order-credit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/recharge-orders/{orderId}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 同步充值订单支付状态 */
+        post: operations["admin-sync-recharge-order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/tenant-balances": {
         parameters: {
             query?: never;
@@ -4328,6 +4396,57 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        AdminRechargeOrder: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AdminRechargeOrder.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            balanceExpiresAt?: number;
+            balanceOrderId?: string;
+            channel?: string;
+            /** Format: int64 */
+            createdAt: number;
+            /** Format: int64 */
+            creditedAmountMicroUsd: number;
+            credits?: components["schemas"]["RechargeCreditDetail"][] | null;
+            failNote?: string;
+            /** Format: int64 */
+            feeAmountMicroUsd: number;
+            fulfillmentStatus: string;
+            /** Format: int64 */
+            giftAmountMicroUsd: number;
+            /** Format: int64 */
+            grossAmountMicroUsd: number;
+            method: string;
+            note?: string;
+            orderId: string;
+            orderType: string;
+            outTradeNo?: string;
+            packageName?: string;
+            /** Format: int64 */
+            paidAmountMinor: number;
+            /** Format: int64 */
+            paidAt?: number;
+            /** Format: int64 */
+            paymentExpiresAt?: number;
+            paymentStatus: string;
+            reversalReason?: string;
+            /** Format: int64 */
+            reversedAt?: number;
+            reversedBy?: string;
+            targetType: string;
+            tenantId: string;
+            /** Format: int64 */
+            tenantIncomeMicroUsd: number;
+            tenantName: string;
+            topupMode?: string;
+            transactionId?: string;
+            userId?: string;
+            username?: string;
+        };
         AdminUserItem: {
             /** Format: int64 */
             createdTime: number;
@@ -6693,6 +6812,21 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        PageAdminRechargeOrder: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PageAdminRechargeOrder.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["AdminRechargeOrder"][] | null;
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            total: number;
+        };
         PageAdminUserItem: {
             /**
              * Format: uri
@@ -7251,6 +7385,33 @@ export interface components {
             success: boolean;
             userId: string;
         };
+        RechargeCreditDetail: {
+            /** Format: int64 */
+            balanceExpiresAt?: number;
+            balanceOrderId: string;
+            /** Format: int64 */
+            consumedAmountMicroUsd: number;
+            /** Format: int64 */
+            creditAmountMicroUsd: number;
+            /** Format: int64 */
+            grantedAmountMicroUsd: number;
+            /** Format: int64 */
+            lostAmountMicroUsd: number;
+            lotId?: string;
+            lotStatus: string;
+            note?: string;
+            orderType: string;
+            primary: boolean;
+            /** Format: int64 */
+            remainingAmountMicroUsd: number;
+            reversalReason?: string;
+            /** Format: int64 */
+            reversedAmountMicroUsd: number;
+            /** Format: int64 */
+            reversedAt?: number;
+            reversedBy?: string;
+            status: string;
+        };
         RechargeInputBody: {
             /**
              * Format: uri
@@ -7404,6 +7565,15 @@ export interface components {
              */
             readonly $schema?: string;
             resources: components["schemas"]["ResourceStatItem"][] | null;
+        };
+        ReverseAdminRechargeOrderInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReverseAdminRechargeOrderInputBody.json
+             */
+            readonly $schema?: string;
+            reason: string;
         };
         ReverseRechargeInputBody: {
             /**
@@ -11241,6 +11411,142 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GlobalSettings"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-list-recharge-orders": {
+        parameters: {
+            query?: {
+                keyword?: string;
+                method?: "manual" | "online";
+                targetType?: "tenant" | "user";
+                paymentStatus?: string;
+                fulfillmentStatus?: string;
+                timeFrom?: number;
+                timeTo?: number;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAdminRechargeOrder"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-get-recharge-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRechargeOrder"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-reverse-recharge-order-credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReverseAdminRechargeOrderInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRechargeOrder"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-sync-recharge-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRechargeOrder"];
                 };
             };
             /** @description Error */

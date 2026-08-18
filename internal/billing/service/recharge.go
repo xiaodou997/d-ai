@@ -23,6 +23,7 @@ type GrantParams struct {
 	AmountMicroUSD int64
 	PaidAmount     int64
 	PaymentRef     string
+	PaymentOrderID string
 	Note           string
 	OperatorID     string
 	Source         string // billing.PackageSource*
@@ -47,12 +48,15 @@ func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 	now := billing.NowUTC()
 	orderID := "ORD_" + uuid.New().String()[:24]
 
-	var userIDVal, paymentRefVal, noteVal any
+	var userIDVal, paymentRefVal, paymentOrderIDVal, noteVal any
 	if p.UserID != "" {
 		userIDVal = p.UserID
 	}
 	if p.PaymentRef != "" {
 		paymentRefVal = p.PaymentRef
+	}
+	if p.PaymentOrderID != "" {
+		paymentOrderIDVal = p.PaymentOrderID
 	}
 	if p.Note != "" {
 		noteVal = p.Note
@@ -61,10 +65,10 @@ func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO bill_recharge_orders
 		(order_id, order_type, tenant_id, user_id, credit_amount, paid_amount,
-		 payment_ref, expires_at, operator_id, note, status, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11)
+		 payment_ref, payment_order_id, expires_at, operator_id, note, status, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active', $12)
 	`, orderID, p.OrderType, p.TenantID, userIDVal, p.AmountMicroUSD, p.PaidAmount,
-		paymentRefVal, p.ExpiresAt, p.OperatorID, noteVal, now); err != nil {
+		paymentRefVal, paymentOrderIDVal, p.ExpiresAt, p.OperatorID, noteVal, now); err != nil {
 		return nil, err
 	}
 

@@ -8,6 +8,8 @@ import type {
   PageTenantBalanceItem,
   PageBalanceLedgerItem,
   PagePaymentOrderItem,
+  PageAdminRechargeOrder,
+  AdminRechargeOrder,
   PageWithdrawalItem,
   WithdrawalItem,
   PaymentGlobalSettings,
@@ -473,6 +475,50 @@ export const platformAdminApi = {
       method: "POST",
       path: `/api/v1/admin/payment-orders/${encodeURIComponent(orderId)}/sync`,
       headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    });
+  },
+  listAdminRechargeOrders(params: {
+    keyword?: string;
+    method?: "manual" | "online";
+    targetType?: "tenant" | "user";
+    paymentStatus?: string;
+    fulfillmentStatus?: string;
+    timeFrom?: number;
+    timeTo?: number;
+    page?: number;
+    size?: number;
+  } = {}) {
+    return request()<PageAdminRechargeOrder>({
+      method: "GET",
+      path: "/api/v1/admin/recharge-orders",
+      headers: apiHeaders,
+      query: params,
+      baseUrl: apiBaseUrl
+    });
+  },
+  getAdminRechargeOrder(orderId: string) {
+    return request()<AdminRechargeOrder>({
+      method: "GET",
+      path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}`,
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    });
+  },
+  syncAdminRechargeOrder(orderId: string) {
+    return request()<AdminRechargeOrder>({
+      method: "POST",
+      path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/sync`,
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    });
+  },
+  reverseAdminRechargeOrderCredit(orderId: string, body: { reason: string }) {
+    return request()<AdminRechargeOrder>({
+      method: "POST",
+      path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/reverse-credit`,
+      headers: apiHeaders,
+      body,
       baseUrl: apiBaseUrl
     });
   },

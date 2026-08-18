@@ -2,10 +2,17 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	billingsvc "xiaodou/dai/internal/billing/service"
+	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
 	paymentpg "xiaodou/dai/internal/payment/pg"
 	paymentsvc "xiaodou/dai/internal/payment/service"
@@ -16,10 +23,12 @@ import (
 // adminPaymentHandlers 承载管理端支付配置、订单、提现和统一余额总览端点（type 1,2）。
 type adminPaymentHandlers struct {
 	*paymentHandlers
+	pool      *pgxpool.Pool
+	deduction *billingsvc.DeductionService
 }
 
 func newAdminPaymentHandlers(d Deps) *adminPaymentHandlers {
-	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d)}
+	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d), pool: d.Pool, deduction: d.Deduction}
 }
 
 // ---- DTO：平台充值/提现规则 ----
@@ -80,6 +89,37 @@ type adminPaymentOrdersInput struct {
 
 type adminPaymentOrdersOutput struct {
 	Body httpx.Page[topupOrderItem]
+}
+
+type adminRechargeOrdersInput struct {
+	Keyword           string `query:"keyword" required:"false"`
+	Method            string `query:"method" required:"false" enum:"manual,online"`
+	TargetType        string `query:"targetType" required:"false" enum:"tenant,user"`
+	PaymentStatus     string `query:"paymentStatus" required:"false"`
+	FulfillmentStatus string `query:"fulfillmentStatus" required:"false"`
+	TimeFrom          int64  `query:"timeFrom" required:"false"`
+	TimeTo            int64  `query:"timeTo" required:"false"`
+	Page              int    `query:"page" default:"1"`
+	Size              int    `query:"size" default:"20"`
+}
+
+type adminRechargeOrdersOutput struct {
+	Body httpx.Page[payment.AdminRechargeOrder]
+}
+
+type adminRechargeOrderInput struct {
+	OrderID string `path:"orderId"`
+}
+
+type adminRechargeOrderOutput struct {
+	Body payment.AdminRechargeOrder
+}
+
+type reverseAdminRechargeOrderInput struct {
+	OrderID string `path:"orderId"`
+	Body    struct {
+		Reason string `json:"reason" minLength:"1"`
+	}
 }
 
 type syncOrderInput struct {
@@ -182,6 +222,14 @@ func registerAdminPayment(api huma.API, d Deps) {
 		Summary: "在线支付订单列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listOrders)
 	huma.Register(api, huma.Operation{OperationID: "admin-sync-payment-order", Method: http.MethodPost, Path: "/api/v1/admin/payment-orders/{orderId}/sync",
 		Summary: "手动查单同步（mock 模式下即仿真支付成功）", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.syncOrder)
+	huma.Register(api, huma.Operation{OperationID: "admin-list-recharge-orders", Method: http.MethodGet, Path: "/api/v1/admin/recharge-orders",
+		Summary: "充值订单统一列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listRechargeOrders)
+	huma.Register(api, huma.Operation{OperationID: "admin-get-recharge-order", Method: http.MethodGet, Path: "/api/v1/admin/recharge-orders/{orderId}",
+		Summary: "充值订单统一详情", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.getRechargeOrder)
+	huma.Register(api, huma.Operation{OperationID: "admin-sync-recharge-order", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/sync",
+		Summary: "同步充值订单支付状态", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.syncRechargeOrder)
+	huma.Register(api, huma.Operation{OperationID: "admin-reverse-recharge-order-credit", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/reverse-credit",
+		Summary: "撤回充值订单剩余额度", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.reverseRechargeOrderCredit)
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-tenant-balances", Method: http.MethodGet, Path: "/api/v1/admin/tenant-balances",
 		Summary: "租户 USD 余额总览", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashAccounts)
@@ -265,6 +313,79 @@ func (h *adminPaymentHandlers) listOrders(ctx context.Context, in *adminPaymentO
 	}
 	page, size := normalizePage(in.Page, in.Size)
 	return &adminPaymentOrdersOutput{Body: httpx.NewPage(items, total, page, size)}, nil
+}
+
+func (h *adminPaymentHandlers) listRechargeOrders(ctx context.Context, in *adminRechargeOrdersInput) (*adminRechargeOrdersOutput, error) {
+	p := paymentpg.ListAdminRechargeOrdersParams{
+		Keyword: in.Keyword, Method: in.Method, TargetType: in.TargetType,
+		PaymentStatus: in.PaymentStatus, FulfillmentStatus: in.FulfillmentStatus,
+		Page: in.Page, Size: in.Size,
+	}
+	if in.TimeFrom > 0 {
+		value := time.UnixMilli(in.TimeFrom).UTC()
+		p.TimeFrom = &value
+	}
+	if in.TimeTo > 0 {
+		value := time.UnixMilli(in.TimeTo).UTC()
+		p.TimeTo = &value
+	}
+	items, total, err := paymentpg.ListAdminRechargeOrders(ctx, h.pool, p)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	page, size := normalizePage(in.Page, in.Size)
+	return &adminRechargeOrdersOutput{Body: httpx.NewPage(items, total, page, size)}, nil
+}
+
+func (h *adminPaymentHandlers) getRechargeOrder(ctx context.Context, in *adminRechargeOrderInput) (*adminRechargeOrderOutput, error) {
+	item, err := paymentpg.GetAdminRechargeOrder(ctx, h.pool, in.OrderID)
+	if err != nil {
+		return nil, adminRechargeOrderLookupProblem(err)
+	}
+	return &adminRechargeOrderOutput{Body: *item}, nil
+}
+
+func (h *adminPaymentHandlers) syncRechargeOrder(ctx context.Context, in *adminRechargeOrderInput) (*adminRechargeOrderOutput, error) {
+	item, err := paymentpg.GetAdminRechargeOrder(ctx, h.pool, in.OrderID)
+	if err != nil {
+		return nil, adminRechargeOrderLookupProblem(err)
+	}
+	if item.Method != "online" {
+		return nil, httpx.ErrBadRequest.WithDetail("手动充值不需要同步支付状态")
+	}
+	if _, err := h.svc.SyncOrder(ctx, item.OrderID); err != nil {
+		return nil, toProblem(err)
+	}
+	return h.getRechargeOrder(ctx, in)
+}
+
+func (h *adminPaymentHandlers) reverseRechargeOrderCredit(ctx context.Context, in *reverseAdminRechargeOrderInput) (*adminRechargeOrderOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	item, err := paymentpg.GetAdminRechargeOrder(ctx, h.pool, in.OrderID)
+	if err != nil {
+		return nil, adminRechargeOrderLookupProblem(err)
+	}
+	if item.BalanceOrderID == "" || item.FulfillmentStatus != payment.FulfillmentStatusCredited {
+		return nil, toProblem(domain.ErrRechargeNotReversible)
+	}
+	reason := strings.TrimSpace(in.Body.Reason)
+	if reason == "" {
+		return nil, httpx.ErrBadRequest.WithDetail("撤回原因不能为空")
+	}
+	if _, err := h.deduction.ReverseOrder(item.BalanceOrderID, reason, claims.UserID); err != nil {
+		return nil, toProblem(err)
+	}
+	return h.getRechargeOrder(ctx, &adminRechargeOrderInput{OrderID: item.OrderID})
+}
+
+func adminRechargeOrderLookupProblem(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return toProblem(domain.ErrPaymentOrderNotFound)
+	}
+	return httpx.ErrInternal.WithCause(err)
 }
 
 func (h *adminPaymentHandlers) syncOrder(ctx context.Context, in *syncOrderInput) (*topupOrderStatusOutput, error) {

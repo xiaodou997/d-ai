@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/ledger"
@@ -137,12 +136,14 @@ func appendOpTx(ctx context.Context, tx pgx.Tx, eventID string, op map[string]an
 
 // ReverseResult 充值撤销结果
 type ReverseResult struct {
-	OrderID         string
-	BalanceLotID    string
-	OriginalCredits int64
-	ReversedCredits int64
-	LostCredits     int64
-	IsPartial       bool
+	OrderID           string
+	PaymentOrderID    string
+	FulfillmentStatus string
+	BalanceLotID      string
+	OriginalCredits   int64
+	ReversedCredits   int64
+	LostCredits       int64
+	IsPartial         bool
 }
 
 // ReverseOrder 撤销充值订单。
@@ -156,10 +157,12 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 	}
 	defer tx.Rollback(ctx)
 
-	var status, orderType string
+	var status, orderType, paymentOrderID string
+	var creditAmount int64
 	err = tx.QueryRow(ctx, `
-		SELECT status, order_type FROM bill_recharge_orders WHERE order_id = $1 FOR UPDATE
-	`, orderID).Scan(&status, &orderType)
+		SELECT status, order_type, COALESCE(payment_order_id, ''), credit_amount
+		FROM bill_recharge_orders WHERE order_id = $1 FOR UPDATE
+	`, orderID).Scan(&status, &orderType, &paymentOrderID, &creditAmount)
 	if err != nil {
 		return nil, shared.ErrRechargeNotFound
 	}
@@ -169,9 +172,21 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 	if status != billing.OrderStatusActive {
 		return nil, shared.ErrRechargeNotReversible
 	}
-	// 在线充值（微信支付）不可撤销，权限校验之外再兜底一道
-	if slices.Contains(billing.OnlineOrderTypes, orderType) {
+	// 用户在线支付形成的租户收入不是目标用户的额度包，不跟随额度撤回。
+	if orderType == billing.OrderTypeUserTopupIncome {
 		return nil, shared.ErrRechargeNotReversible
+	}
+	if paymentOrderID != "" {
+		var paymentStatus, fulfillmentStatus string
+		if err := tx.QueryRow(ctx, `
+			SELECT status, fulfillment_status FROM pay_orders
+			WHERE order_id = $1 FOR UPDATE
+		`, paymentOrderID).Scan(&paymentStatus, &fulfillmentStatus); err != nil {
+			return nil, fmt.Errorf("锁定关联支付订单失败: %w", err)
+		}
+		if paymentStatus != "paid" || fulfillmentStatus != "credited" {
+			return nil, shared.ErrRechargeNotReversible
+		}
 	}
 
 	revocation, err := ledger.RevokeOrderLots(ctx, tx, orderID)
@@ -182,14 +197,29 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 	if revocation.ReclaimedMicro == 0 {
 		return nil, shared.ErrRechargeCreditsExhausted
 	}
+	lostMicro := creditAmount - revocation.ReclaimedMicro
 
 	now := billing.NowUTC()
 	if _, err := tx.Exec(ctx, `
 		UPDATE bill_recharge_orders
-		SET status = 'reversed', reversed_at = $1, reversed_by = $2, reversal_reason = $3
-		WHERE order_id = $4
-	`, now, operatorID, reason, orderID); err != nil {
+		SET status = 'reversed', reversed_at = $1, reversed_by = $2, reversal_reason = $3,
+		    reversed_amount_micro = $4, lost_amount_micro = $5
+		WHERE order_id = $6
+	`, now, operatorID, reason, revocation.ReclaimedMicro, lostMicro, orderID); err != nil {
 		return nil, fmt.Errorf("更新充值订单状态失败: %w", err)
+	}
+	fulfillmentStatus := "reversed"
+	if lostMicro > 0 {
+		fulfillmentStatus = "partially_reversed"
+	}
+	if paymentOrderID != "" {
+		if _, err := tx.Exec(ctx, `
+			UPDATE pay_orders
+			SET fulfillment_status = $1, updated_at = $2
+			WHERE order_id = $3
+		`, fulfillmentStatus, now, paymentOrderID); err != nil {
+			return nil, fmt.Errorf("同步支付订单到账状态失败: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -205,17 +235,19 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 		zap.String("orderId", orderID),
 		zap.String("operator_id", operatorID),
 		zap.Int64("reversedCredits", revocation.ReclaimedMicro),
-		zap.Int64("lostCredits", revocation.SpentMicro()),
-		zap.Bool("isPartial", revocation.SpentMicro() > 0),
+		zap.Int64("lostCredits", lostMicro),
+		zap.Bool("isPartial", lostMicro > 0),
 	)
 
 	return &ReverseResult{
-		OrderID:         orderID,
-		BalanceLotID:    lotID,
-		OriginalCredits: revocation.GrantedMicro,
-		ReversedCredits: revocation.ReclaimedMicro,
-		LostCredits:     revocation.SpentMicro(),
-		IsPartial:       revocation.SpentMicro() > 0,
+		OrderID:           orderID,
+		PaymentOrderID:    paymentOrderID,
+		FulfillmentStatus: fulfillmentStatus,
+		BalanceLotID:      lotID,
+		OriginalCredits:   creditAmount,
+		ReversedCredits:   revocation.ReclaimedMicro,
+		LostCredits:       lostMicro,
+		IsPartial:         lostMicro > 0,
 	}, nil
 }
 

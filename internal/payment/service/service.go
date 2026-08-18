@@ -119,7 +119,8 @@ func (s *PaymentService) CreateTopupOrder(ctx context.Context, p CreateTopupOrde
 		GrossAmountMicroUSD: calc.GrossAmountMicroUSD, FeeRateBp: calc.FeeRateBp,
 		FeeAmountMicroUSD: calc.FeeAmountMicroUSD, GiftAmountMicroUSD: calc.GiftAmountMicroUSD,
 		CreditedAmountMicroUSD: calc.CreditedAmountMicroUSD, TenantIncomeMicroUSD: tenantIncomeMicroUSD,
-		BalanceExpiresAt: balanceExpiresAt, Channel: "wechat_native", Status: payment.OrderStatusCreated, ExpiresAt: expiresAt,
+		BalanceExpiresAt: balanceExpiresAt, Channel: "wechat_native", Status: payment.OrderStatusCreated,
+		FulfillmentStatus: payment.FulfillmentStatusPending, ExpiresAt: expiresAt,
 	}
 	if err := paymentpg.InsertOrder(ctx, s.pool, order); err != nil {
 		return nil, err
@@ -217,7 +218,7 @@ func (s *PaymentService) Settle(ctx context.Context, outTradeNo string, txn *wec
 	grant, err := billingsvc.GrantBalance(ctx, tx, billingsvc.GrantParams{
 		OrderType: orderType, TenantID: order.TenantID, UserID: order.UserID,
 		AmountMicroUSD: order.CreditedAmountMicroUSD, PaidAmount: order.PaymentAmountMinor,
-		PaymentRef: txn.TransactionID, OperatorID: "system:wechatpay", Source: source, ExpiresAt: order.BalanceExpiresAt,
+		PaymentRef: txn.TransactionID, PaymentOrderID: order.OrderID, OperatorID: "system:wechatpay", Source: source, ExpiresAt: order.BalanceExpiresAt,
 	})
 	if err != nil {
 		return err
@@ -233,7 +234,7 @@ func (s *PaymentService) Settle(ctx context.Context, outTradeNo string, txn *wec
 			incomeGrant, err := billingsvc.GrantBalance(ctx, tx, billingsvc.GrantParams{
 				OrderType: billingdomain.OrderTypeUserTopupIncome, TenantID: order.TenantID,
 				AmountMicroUSD: order.TenantIncomeMicroUSD, PaidAmount: order.PaymentAmountMinor,
-				PaymentRef: txn.TransactionID, OperatorID: "system:wechatpay", Source: billingdomain.PackageSourceUserTopupIncome,
+				PaymentRef: txn.TransactionID, PaymentOrderID: order.OrderID, OperatorID: "system:wechatpay", Source: billingdomain.PackageSourceUserTopupIncome,
 			})
 			if err != nil {
 				return err

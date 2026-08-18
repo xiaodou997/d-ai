@@ -551,6 +551,71 @@ export interface PagePaymentOrderItem {
   size: number;
 }
 
+export type RechargePaymentStatus = "not_required" | "created" | "paying" | "paid" | "closed" | "expired";
+export type RechargeFulfillmentStatus = "pending" | "credited" | "partially_reversed" | "reversed";
+
+export interface RechargeCreditDetail {
+  balanceOrderId: string;
+  orderType: string;
+  primary: boolean;
+  creditAmountMicroUsd: number;
+  status: string;
+  note?: string;
+  balanceExpiresAt?: number | null;
+  reversedAt?: number | null;
+  reversedBy?: string;
+  reversalReason?: string;
+  reversedAmountMicroUsd: number;
+  lostAmountMicroUsd: number;
+  lotId?: string;
+  grantedAmountMicroUsd: number;
+  consumedAmountMicroUsd: number;
+  remainingAmountMicroUsd: number;
+  lotStatus: string;
+}
+
+export interface AdminRechargeOrder {
+  orderId: string;
+  balanceOrderId?: string;
+  method: "manual" | "online";
+  targetType: "tenant" | "user";
+  orderType: string;
+  tenantId: string;
+  tenantName: string;
+  userId?: string;
+  username?: string;
+  paidAmountMinor: number;
+  grossAmountMicroUsd: number;
+  feeAmountMicroUsd: number;
+  giftAmountMicroUsd: number;
+  creditedAmountMicroUsd: number;
+  tenantIncomeMicroUsd: number;
+  paymentStatus: RechargePaymentStatus;
+  fulfillmentStatus: RechargeFulfillmentStatus;
+  outTradeNo?: string;
+  transactionId?: string;
+  topupMode?: string;
+  packageName?: string;
+  channel?: string;
+  note?: string;
+  failNote?: string;
+  createdAt: number;
+  paidAt?: number | null;
+  paymentExpiresAt?: number | null;
+  balanceExpiresAt?: number | null;
+  reversedAt?: number | null;
+  reversedBy?: string;
+  reversalReason?: string;
+  credits?: RechargeCreditDetail[];
+}
+
+export interface PageAdminRechargeOrder {
+  items: AdminRechargeOrder[];
+  total: number;
+  page: number;
+  size: number;
+}
+
 export interface TenantBalanceItem {
   tenantId: string;
   tenantName?: string;

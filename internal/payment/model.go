@@ -10,6 +10,15 @@ const (
 	SceneTenantTopup = "tenant_topup"
 )
 
+// Fulfillment status is deliberately separate from the provider payment
+// status. A paid order remains paid even when its credited balance is revoked.
+const (
+	FulfillmentStatusPending           = "pending"
+	FulfillmentStatusCredited          = "credited"
+	FulfillmentStatusPartiallyReversed = "partially_reversed"
+	FulfillmentStatusReversed          = "reversed"
+)
+
 // 支付订单状态机：created -> paying -> paid（终态）；created/paying -> closed/expired（终态，
 // 但 closed/expired 收到微信侧 SUCCESS 仍需补入账，见 Settle）。
 const (
@@ -66,6 +75,7 @@ type Order struct {
 	CodeURL                string
 	TransactionID          string
 	Status                 string
+	FulfillmentStatus      string
 	PaidAt                 *time.Time
 	ExpiresAt              time.Time
 	BalanceOrderID         string

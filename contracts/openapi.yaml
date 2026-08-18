@@ -164,6 +164,112 @@ components:
         - items
         - total
       type: object
+    AdminRechargeOrder:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/AdminRechargeOrder.json
+          format: uri
+          readOnly: true
+          type: string
+        balanceExpiresAt:
+          format: int64
+          type: integer
+        balanceOrderId:
+          type: string
+        channel:
+          type: string
+        createdAt:
+          format: int64
+          type: integer
+        creditedAmountMicroUsd:
+          format: int64
+          type: integer
+        credits:
+          items:
+            $ref: "#/components/schemas/RechargeCreditDetail"
+          type:
+            - array
+            - "null"
+        failNote:
+          type: string
+        feeAmountMicroUsd:
+          format: int64
+          type: integer
+        fulfillmentStatus:
+          type: string
+        giftAmountMicroUsd:
+          format: int64
+          type: integer
+        grossAmountMicroUsd:
+          format: int64
+          type: integer
+        method:
+          type: string
+        note:
+          type: string
+        orderId:
+          type: string
+        orderType:
+          type: string
+        outTradeNo:
+          type: string
+        packageName:
+          type: string
+        paidAmountMinor:
+          format: int64
+          type: integer
+        paidAt:
+          format: int64
+          type: integer
+        paymentExpiresAt:
+          format: int64
+          type: integer
+        paymentStatus:
+          type: string
+        reversalReason:
+          type: string
+        reversedAt:
+          format: int64
+          type: integer
+        reversedBy:
+          type: string
+        targetType:
+          type: string
+        tenantId:
+          type: string
+        tenantIncomeMicroUsd:
+          format: int64
+          type: integer
+        tenantName:
+          type: string
+        topupMode:
+          type: string
+        transactionId:
+          type: string
+        userId:
+          type: string
+        username:
+          type: string
+      required:
+        - orderId
+        - method
+        - targetType
+        - orderType
+        - tenantId
+        - tenantName
+        - paidAmountMinor
+        - grossAmountMicroUsd
+        - feeAmountMicroUsd
+        - giftAmountMicroUsd
+        - creditedAmountMicroUsd
+        - tenantIncomeMicroUsd
+        - paymentStatus
+        - fulfillmentStatus
+        - createdAt
+      type: object
     AdminUserItem:
       additionalProperties: false
       properties:
@@ -4629,6 +4735,37 @@ components:
         - items
         - total
       type: object
+    PageAdminRechargeOrder:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/PageAdminRechargeOrder.json
+          format: uri
+          readOnly: true
+          type: string
+        items:
+          items:
+            $ref: "#/components/schemas/AdminRechargeOrder"
+          type:
+            - array
+            - "null"
+        page:
+          format: int64
+          type: integer
+        size:
+          format: int64
+          type: integer
+        total:
+          format: int64
+          type: integer
+      required:
+        - items
+        - total
+        - page
+        - size
+      type: object
     PageAdminUserItem:
       additionalProperties: false
       properties:
@@ -5618,6 +5755,64 @@ components:
         - userId
         - message
       type: object
+    RechargeCreditDetail:
+      additionalProperties: false
+      properties:
+        balanceExpiresAt:
+          format: int64
+          type: integer
+        balanceOrderId:
+          type: string
+        consumedAmountMicroUsd:
+          format: int64
+          type: integer
+        creditAmountMicroUsd:
+          format: int64
+          type: integer
+        grantedAmountMicroUsd:
+          format: int64
+          type: integer
+        lostAmountMicroUsd:
+          format: int64
+          type: integer
+        lotId:
+          type: string
+        lotStatus:
+          type: string
+        note:
+          type: string
+        orderType:
+          type: string
+        primary:
+          type: boolean
+        remainingAmountMicroUsd:
+          format: int64
+          type: integer
+        reversalReason:
+          type: string
+        reversedAmountMicroUsd:
+          format: int64
+          type: integer
+        reversedAt:
+          format: int64
+          type: integer
+        reversedBy:
+          type: string
+        status:
+          type: string
+      required:
+        - balanceOrderId
+        - orderType
+        - primary
+        - creditAmountMicroUsd
+        - status
+        - reversedAmountMicroUsd
+        - lostAmountMicroUsd
+        - grantedAmountMicroUsd
+        - consumedAmountMicroUsd
+        - remainingAmountMicroUsd
+        - lotStatus
+      type: object
     RechargeInputBody:
       additionalProperties: false
       properties:
@@ -5902,6 +6097,22 @@ components:
             - "null"
       required:
         - resources
+      type: object
+    ReverseAdminRechargeOrderInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ReverseAdminRechargeOrderInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        reason:
+          minLength: 1
+          type: string
+      required:
+        - reason
       type: object
     ReverseRechargeInputBody:
       additionalProperties: false
@@ -11858,6 +12069,164 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 更新平台充值与提现规则
+      tags:
+        - admin-payment
+  /api/v1/admin/recharge-orders:
+    get:
+      operationId: admin-list-recharge-orders
+      parameters:
+        - explode: false
+          in: query
+          name: keyword
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: method
+          schema:
+            enum:
+              - manual
+              - online
+            type: string
+        - explode: false
+          in: query
+          name: targetType
+          schema:
+            enum:
+              - tenant
+              - user
+            type: string
+        - explode: false
+          in: query
+          name: paymentStatus
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: fulfillmentStatus
+          schema:
+            type: string
+        - explode: false
+          in: query
+          name: timeFrom
+          schema:
+            format: int64
+            type: integer
+        - explode: false
+          in: query
+          name: timeTo
+          schema:
+            format: int64
+            type: integer
+        - explode: false
+          in: query
+          name: page
+          schema:
+            default: 1
+            format: int64
+            type: integer
+        - explode: false
+          in: query
+          name: size
+          schema:
+            default: 20
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageAdminRechargeOrder"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 充值订单统一列表
+      tags:
+        - admin-payment
+  /api/v1/admin/recharge-orders/{orderId}:
+    get:
+      operationId: admin-get-recharge-order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRechargeOrder"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 充值订单统一详情
+      tags:
+        - admin-payment
+  /api/v1/admin/recharge-orders/{orderId}/reverse-credit:
+    post:
+      operationId: admin-reverse-recharge-order-credit
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReverseAdminRechargeOrderInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRechargeOrder"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 撤回充值订单剩余额度
+      tags:
+        - admin-payment
+  /api/v1/admin/recharge-orders/{orderId}/sync:
+    post:
+      operationId: admin-sync-recharge-order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRechargeOrder"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 同步充值订单支付状态
       tags:
         - admin-payment
   /api/v1/admin/tenant-balances:

@@ -178,6 +178,7 @@ CREATE TABLE bill_recharge_orders (
     credit_amount BIGINT NOT NULL CHECK (credit_amount > 0),
     paid_amount BIGINT NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
     payment_ref TEXT,
+    payment_order_id TEXT,
     expires_at TIMESTAMPTZ,
     operator_id TEXT NOT NULL,
     note TEXT,
@@ -185,10 +186,15 @@ CREATE TABLE bill_recharge_orders (
     reversed_at TIMESTAMPTZ,
     reversed_by TEXT,
     reversal_reason TEXT,
+    reversed_amount_micro BIGINT NOT NULL DEFAULT 0 CHECK (reversed_amount_micro >= 0),
+    lost_amount_micro BIGINT NOT NULL DEFAULT 0 CHECK (lost_amount_micro >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT bill_recharge_orders_user_id_pairing_check CHECK (
         (order_type IN ('platform_to_tenant', 'online_tenant_topup', 'user_topup_income') AND user_id IS NULL)
         OR (order_type IN ('tenant_to_user', 'online_user_topup') AND user_id IS NOT NULL)
+    ),
+    CONSTRAINT bill_recharge_orders_reversal_amount_check CHECK (
+        reversed_amount_micro + lost_amount_micro <= credit_amount
     )
 );
 
@@ -305,6 +311,8 @@ CREATE TABLE pay_orders (
     code_url TEXT,
     transaction_id TEXT,
     status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'paying', 'paid', 'closed', 'expired')),
+    fulfillment_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (fulfillment_status IN ('pending', 'credited', 'partially_reversed', 'reversed')),
     paid_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL,
     balance_order_id TEXT,
@@ -315,8 +323,23 @@ CREATE TABLE pay_orders (
     CHECK (
         (scene = 'user_topup' AND user_id IS NOT NULL)
         OR (scene = 'tenant_topup' AND user_id IS NULL)
+    ),
+    CONSTRAINT pay_orders_fulfillment_pairing_check CHECK (
+        (status = 'paid' AND fulfillment_status IN ('credited', 'partially_reversed', 'reversed'))
+        OR (status <> 'paid' AND fulfillment_status = 'pending')
     )
 );
+
+ALTER TABLE bill_recharge_orders
+    ADD CONSTRAINT bill_recharge_orders_payment_order_fk
+    FOREIGN KEY (payment_order_id) REFERENCES pay_orders (order_id),
+    ADD CONSTRAINT bill_recharge_orders_payment_link_check CHECK (
+        (order_type IN ('online_user_topup', 'online_tenant_topup', 'user_topup_income') AND payment_order_id IS NOT NULL)
+        OR (order_type IN ('platform_to_tenant', 'tenant_to_user') AND payment_order_id IS NULL)
+    );
+
+CREATE INDEX idx_bill_recharge_orders_payment_order ON bill_recharge_orders (payment_order_id)
+    WHERE payment_order_id IS NOT NULL;
 
 CREATE UNIQUE INDEX uq_pay_orders_txn ON pay_orders (transaction_id) WHERE transaction_id IS NOT NULL;
 CREATE INDEX idx_pay_orders_sweep ON pay_orders (status, expires_at) WHERE status IN ('created', 'paying');
@@ -2041,6 +2064,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 4);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 5);
 
 COMMIT;
