@@ -14,6 +14,7 @@ export type PortalCapability =
   | "admin.ai.upstream"
   | "admin.ai.security"
   | "admin.announcements"
+  | "admin.system"
   | "tenant.overview"
   | "tenant.users"
   | "tenant.ai.models"
@@ -43,6 +44,7 @@ const capabilityUserTypes: Record<PortalCapability, readonly PortalUserType[]> =
   "admin.ai.upstream": [1, 2],
   "admin.ai.security": [1, 2],
   "admin.announcements": [1, 2],
+  "admin.system": [1, 2],
   "tenant.overview": [3],
   "tenant.users": [3],
   "tenant.ai.models": [3],
@@ -261,6 +263,16 @@ export const portalModules: PortalModule[] = [
     navGroup: adminOperations,
     order: 10,
     component: () => import("@/views/admin/platform/AnnouncementsView.vue")
+  },
+  {
+    id: "admin-system-modules",
+    label: "系统模块",
+    path: "/admin/system-modules",
+    icon: "blocks",
+    capability: "admin.system",
+    navGroup: adminOperations,
+    order: 20,
+    component: () => import("@/views/admin/platform/SystemModulesView.vue")
   },
   {
     id: "tenant-overview",

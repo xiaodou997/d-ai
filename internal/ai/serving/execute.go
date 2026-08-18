@@ -20,6 +20,7 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/egress"
 	"xiaodou/dai/internal/ai/formats"
+	"xiaodou/dai/internal/ai/privacy"
 	"xiaodou/dai/internal/ai/routing"
 )
 
@@ -80,6 +81,12 @@ type ProtocolBridge interface {
 	StreamErrorFrame(req *Request, code, msg string) []byte
 }
 
+type ModuleGate interface {
+	IsActive(ctx context.Context, name string) (bool, error)
+}
+
+const modulePIIProtection = "pii_protection"
+
 // ImageResponseNormalizer restores the response representation requested by
 // an OpenAI Images caller after the upstream response has been converted to
 // the client protocol. Implementations own image validation, URL fetching and
@@ -106,6 +113,8 @@ type ExecuteStep struct {
 	Stats           routing.RouteStatsStore    // optional; used for inflight tracking alongside scorer
 	Sticky          stickyWriter               // optional; writes/deletes sticky binding on success/failure
 	ImageNormalizer ImageResponseNormalizer    // optional; normalizes image URL/Base64 response mismatches
+	ModuleGate      ModuleGate                 // optional; controls feature module activation
+	Privacy         *privacy.Protector         // optional; protects upstream request content
 }
 
 // Transporter makes the actual HTTP call to an upstream provider.
@@ -1249,11 +1258,13 @@ func (s *ExecuteStep) executeSync(dc *deadlineController, req *Request, resp *Up
 
 	policy := publicEgressPolicy(req, req.Candidate)
 	bodyBytes = s.Bridge.NormalizeResponseBody(req, bodyBytes)
+	bodyBytes = s.restorePII(req, bodyBytes)
 	bodyBytes = egress.SanitizeJSON(bodyBytes, policy)
 
 	// Extract the assistant reply for the audit log from the original body
 	// (before model-name rewrite, but model identity is captured separately).
 	req.AuditResponseMessage = audit.ExtractSyncResponseMessage(req.UpstreamResponseBody, req.Candidate.Protocol)
+	req.AuditResponseMessage = s.restorePII(req, req.AuditResponseMessage)
 
 	// A 200 whose body is actually an error object is a failed attempt — fail
 	// over to another route instead of relaying a broken success.
@@ -1461,6 +1472,7 @@ awaitLoop:
 			return err
 		}
 		unwrapped := s.Bridge.NormalizeResponseBody(req, data)
+		unwrapped = s.restorePII(req, unwrapped)
 		finalData := publicSanitizer.SanitizeSSEData(unwrapped)
 		auditAcc.AddChunk(finalData)
 		if bytes.Equal(finalData, data) {
@@ -1679,6 +1691,7 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 		req.TokenUsage = u
 	}
 	req.AuditResponseMessage = audit.ExtractSyncResponseMessage(req.UpstreamResponseBody, req.Candidate.Protocol)
+	req.AuditResponseMessage = s.restorePII(req, req.AuditResponseMessage)
 
 	// Translate provider → client.
 	if s.Bridge == nil {
@@ -1696,7 +1709,8 @@ func (s *ExecuteStep) executeSyncConvert(dc *deadlineController, req *Request, r
 	// Sanitize with the CLIENT protocol policy — the bytes are now client-format.
 	policy := publicEgressPolicy(req, req.Candidate)
 	policy.Protocol = req.ClientProtocol
-	out := egress.SanitizeJSON([]byte(converted), policy)
+	out := s.restorePII(req, []byte(converted))
+	out = egress.SanitizeJSON(out, policy)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
@@ -1811,6 +1825,7 @@ awaitLoop:
 
 	emitFrames := func(frames []corebridge.StreamFrame) error {
 		for _, fr := range frames {
+			fr.Text = string(s.restorePII(req, []byte(fr.Text)))
 			if fr.Model != "" {
 				fr.Model = req.PublicModel() // 对外模型名；替代 egress 模型重写
 			}
@@ -1866,6 +1881,13 @@ awaitLoop:
 			return s.finishStreamConvert(req, startTime, &auditBuf, accumulatedOutputBytes, readErr, dc, w, flusher, provider, emitFrames, emitter)
 		}
 	}
+}
+
+func (s *ExecuteStep) restorePII(req *Request, body []byte) []byte {
+	if s == nil || s.Privacy == nil || req == nil || req.PIIMap == nil {
+		return body
+	}
+	return s.Privacy.RestoreJSON(body, req.PIIMap)
 }
 
 // finishStreamConvert ends a committed converted stream: on clean EOF it flushes
@@ -2218,7 +2240,28 @@ func (s *ExecuteStep) buildUpstreamBody(req *Request) (corebridge.PreparedReques
 	if s == nil || s.Bridge == nil {
 		return corebridge.PreparedRequest{}, fmt.Errorf("runtime bridge is not configured for request preparation")
 	}
-	prepared, err := s.Bridge.PrepareRequest(req, req.Envelope.ClientBody)
+	body := req.Envelope.ClientBody
+	if s.Privacy != nil && s.ModuleGate != nil {
+		checkCtx := context.Background()
+		if req.Envelope.R != nil {
+			checkCtx = req.Envelope.R.Context()
+		}
+		active, err := s.ModuleGate.IsActive(checkCtx, modulePIIProtection)
+		if err != nil {
+			return corebridge.PreparedRequest{}, fmt.Errorf("check pii protection module: %w", err)
+		}
+		if active && req.PIIMap == nil {
+			protected, mapping, err := s.Privacy.RedactJSON(body)
+			if err != nil {
+				return corebridge.PreparedRequest{}, fmt.Errorf("protect request body: %w", err)
+			}
+			req.PIIProtectedBody, req.PIIMap = protected, mapping
+		}
+		if active && req.PIIProtectedBody != nil {
+			body = req.PIIProtectedBody
+		}
+	}
+	prepared, err := s.Bridge.PrepareRequest(req, body)
 	if err != nil {
 		return corebridge.PreparedRequest{}, err
 	}

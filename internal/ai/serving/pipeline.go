@@ -24,6 +24,7 @@ import (
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/privacy"
 	"xiaodou/dai/internal/ai/routing"
 )
 
@@ -44,6 +45,11 @@ type Request struct {
 	// reach into the envelope. It is populated by the HTTP handler before the
 	// pipeline runs.
 	Envelope *RequestEnvelope
+
+	// PIIProtectedBody and PIIMap live only for this request. The original
+	// client body remains on Envelope for moderation, audit and billing.
+	PIIProtectedBody []byte
+	PIIMap           *privacy.Mapping
 
 	// Parsed from HTTP body before pipeline starts. The full client body lives
 	// on Envelope.ClientBody and is the source of truth for the upstream call.

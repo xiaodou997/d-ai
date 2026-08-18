@@ -752,6 +752,46 @@ CREATE INDEX idx_ledger_credit_leases_account
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
 
+  -- AI 出口代理节点。密码使用应用层密钥加密后写入 proxy_password_enc。
+  CREATE TABLE IF NOT EXISTS ai_proxy_nodes (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                TEXT NOT NULL,
+    proxy_type          TEXT NOT NULL CHECK (proxy_type IN ('http', 'socks5')),
+    endpoint            TEXT NOT NULL CHECK (btrim(endpoint) <> ''),
+    username            TEXT NOT NULL DEFAULT '',
+    proxy_password_enc  TEXT NOT NULL DEFAULT '',
+    weight              INTEGER NOT NULL DEFAULT 1 CHECK (weight > 0 AND weight <= 1000),
+    status              TEXT NOT NULL DEFAULT 'disabled',
+    health_status       TEXT NOT NULL DEFAULT 'unknown' CHECK (health_status IN ('unknown', 'healthy', 'unhealthy')),
+    last_checked_at     TIMESTAMPTZ,
+    last_error          TEXT,
+    created_by          TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_proxy_nodes_status ON ai_proxy_nodes (status, health_status, updated_at DESC);
+
+  -- 统一通知服务的站内/Webhook 投递记录。
+  CREATE TABLE IF NOT EXISTS sys_notification_deliveries (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_key           TEXT NOT NULL,
+    channel             TEXT NOT NULL CHECK (channel IN ('in_app', 'webhook')),
+    recipient_user_id   TEXT,
+    recipient_user_type INTEGER,
+    tenant_id           TEXT,
+    title               TEXT NOT NULL,
+    body                TEXT NOT NULL,
+    payload             JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
+    attempts            INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    last_error          TEXT,
+    idempotency_key     TEXT UNIQUE,
+    sent_at             TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_sys_notification_user ON sys_notification_deliveries (recipient_user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_sys_notification_status ON sys_notification_deliveries (status, created_at ASC);
+
   CREATE TABLE IF NOT EXISTS ai_api_keys (
     id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_type     TEXT        NOT NULL CHECK (owner_type IN ('user', 'tenant')),
@@ -2098,6 +2138,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 8);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 9);
 
 COMMIT;

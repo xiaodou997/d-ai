@@ -7,9 +7,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/net/proxy"
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
@@ -17,7 +21,15 @@ import (
 
 // Client implements serving.Transporter.
 type Client struct {
-	http *http.Client
+	http          *http.Client
+	baseTransport *http.Transport
+	selector      ProxySelector
+}
+
+// ProxySelector chooses the egress proxy for one upstream attempt. Returning
+// nil keeps the request on the direct network path.
+type ProxySelector interface {
+	SelectProxy(ctx context.Context) (*url.URL, error)
 }
 
 // NewClient creates a transport client.
@@ -41,13 +53,17 @@ func NewClient(headerTimeout time.Duration) *Client {
 	if headerTimeout > 0 {
 		transport.ResponseHeaderTimeout = headerTimeout
 	}
-	return &Client{
+	client := &Client{
+		baseTransport: transport,
 		http: &http.Client{
 			// No Timeout — see comment above.
 			Transport: transport,
 		},
 	}
+	return client
 }
+
+func (c *Client) SetProxySelector(selector ProxySelector) { c.selector = selector }
 
 // Do executes an upstream HTTP request and returns the response.
 // The caller is responsible for closing resp.Body.
@@ -76,7 +92,36 @@ func (c *Client) Do(ctx context.Context, req *serving.UpstreamRequest) (*serving
 		httpReq.Header.Set(k, v)
 	}
 
-	resp, err := c.http.Do(httpReq)
+	client := c.http
+	if c.selector != nil {
+		proxyURL, selectErr := c.selector.SelectProxy(ctx)
+		if selectErr != nil {
+			return nil, fmt.Errorf("select egress proxy: %w", selectErr)
+		}
+		if proxyURL != nil && proxyURL.Scheme == "socks5" {
+			transport := c.baseTransport.Clone()
+			auth := (*proxy.Auth)(nil)
+			if proxyURL.User != nil {
+				password, _ := proxyURL.User.Password()
+				auth = &proxy.Auth{User: proxyURL.User.Username(), Password: password}
+			}
+			dialer, dialErr := proxy.SOCKS5("tcp", proxyURL.Host, auth, proxy.Direct)
+			if dialErr != nil {
+				return nil, fmt.Errorf("create socks5 proxy dialer: %w", dialErr)
+			}
+			transport.Proxy = nil
+			transport.DialContext = func(_ context.Context, network, address string) (net.Conn, error) {
+				return dialer.Dial(network, address)
+			}
+			client = &http.Client{Transport: transport}
+		} else if proxyURL != nil {
+			transport := c.baseTransport.Clone()
+			transport.Proxy = http.ProxyURL(proxyURL)
+			client = &http.Client{Transport: transport}
+		}
+	}
+
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("http do %s %s: %w", req.Method, url, err)
 	}

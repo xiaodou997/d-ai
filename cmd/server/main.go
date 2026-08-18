@@ -42,6 +42,8 @@ import (
 	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
 	"xiaodou/dai/internal/ai/observability/tracing"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
+	"xiaodou/dai/internal/ai/privacy"
+	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/secret"
@@ -66,9 +68,11 @@ import (
 	daidb "xiaodou/dai/internal/db"
 	invitepkg "xiaodou/dai/internal/invite"
 	invitepg "xiaodou/dai/internal/invite/pg"
+	notificationpkg "xiaodou/dai/internal/notification"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/internal/payment/wechat"
 	"xiaodou/dai/internal/scheduler"
+	systempkg "xiaodou/dai/internal/system"
 	"xiaodou/dai/internal/transport"
 	userpkg "xiaodou/dai/internal/user"
 	userpg "xiaodou/dai/internal/user/pg"
@@ -176,6 +180,9 @@ func main() {
 	wechatCfgStore := wechat.NewConfigStore(pool)
 	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger)
 	announcementSvc := announcementpkg.NewService(announcementpg.NewRepository(pool))
+	moduleSvc := systempkg.NewService(pool)
+	proxySvc := proxypkg.NewService(pool, moduleSvc)
+	notificationSvc := notificationpkg.NewService(pool)
 
 	// Ban reconciler
 	banReconciler := auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute)
@@ -357,6 +364,7 @@ func main() {
 
 	// Upstream HTTP transport + client runtime
 	upstreamHTTPTransport := aitransport.NewClient(0)
+	upstreamHTTPTransport.SetProxySelector(proxySvc)
 	fixedClientRuntime := clientruntime.New(
 		clienttransport.New(upstreamHTTPTransport),
 		clientcredentials.New(oauthCreds, refresher),
@@ -377,6 +385,8 @@ func main() {
 		Stats:           routeStats,
 		Sticky:          stickyStore,
 		ImageNormalizer: fileStore,
+		ModuleGate:      moduleSvc,
+		Privacy:         privacy.NewProtector(),
 	}
 	usageCompletionFinalizer := &serving.UsageLogFinalizer{Logger: usageLogger, Metrics: metricsGW}
 	auditFinalizer := &serving.AuditFinalizer{Worker: auditWorker}
@@ -481,6 +491,7 @@ func main() {
 		Invite:        inviteSvc,
 		Payment:       paymentSvc,
 		Announcements: announcementSvc,
+		Notifications: notificationSvc,
 
 		Queries:         q,
 		OAuth:           oauthCreds,
@@ -508,6 +519,8 @@ func main() {
 		RiskControlLogSvc:    riskControlLogSvc,
 		RiskControlEventSvc:  riskControlEventSvc,
 		RiskControlChecker:   riskControlChecker,
+		Modules:              moduleSvc,
+		ProxyNodes:           proxySvc,
 	}
 
 	router, api := server.New(server.Options{

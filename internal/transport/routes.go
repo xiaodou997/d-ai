@@ -16,7 +16,9 @@ import (
 	billingsvc "xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/config"
 	invitepkg "xiaodou/dai/internal/invite"
+	notificationpkg "xiaodou/dai/internal/notification"
 	paymentsvc "xiaodou/dai/internal/payment/service"
+	systempkg "xiaodou/dai/internal/system"
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
@@ -27,6 +29,7 @@ import (
 	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
+	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
@@ -55,6 +58,7 @@ type Deps struct {
 	Invite        *invitepkg.InviteService
 	Payment       *paymentsvc.PaymentService
 	Announcements *announcementpkg.Service
+	Notifications *notificationpkg.Service
 
 	// AI 域
 	Queries         *aidb.Queries
@@ -83,6 +87,8 @@ type Deps struct {
 	RiskControlLogSvc    *riskcontrol.LogService
 	RiskControlEventSvc  *riskcontrol.EventService
 	RiskControlChecker   *riskcontrol.Checker
+	Modules              *systempkg.Service
+	ProxyNodes           *proxypkg.Service
 }
 
 // Register 在 Huma API 上注册全部端点。
@@ -119,6 +125,9 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerTenantCash(api, d)
 	registerAdminPayment(api, d)
 	registerAnnouncements(api, d)
+	registerProxyNodes(api, d)
+	registerNotifications(api, d)
+	registerModules(api, d)
 
 	// 公开端点（无认证）
 	registerPublic(api, d)
