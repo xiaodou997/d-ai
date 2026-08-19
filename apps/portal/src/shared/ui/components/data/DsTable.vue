@@ -237,6 +237,9 @@ function toggleExpand(row: unknown) {
 
 <style scoped>
 .ds-table {
+  /* 作为 flex 子项时允许自身收缩，才能把超宽 table 留在这里滚动；
+     否则内容的 min-content 宽度会把整个上层面板撑宽，最终被面板的 overflow 裁掉。 */
+  min-width: 0;
   overflow-x: auto;
   border: 1px solid var(--ds-line);
   border-radius: var(--ds-radius-panel);

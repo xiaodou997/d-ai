@@ -135,6 +135,7 @@ function billingSourceLabel(row: CustomerUsageLog) {
 .customer-usage-table {
   display: flex;
   min-height: 0;
+  min-width: 0;
   flex: 1;
   flex-direction: column;
 }
@@ -142,6 +143,7 @@ function billingSourceLabel(row: CustomerUsageLog) {
 .customer-usage-table :deep(.ds-table) {
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .customer-usage-table__pager {
