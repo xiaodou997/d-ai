@@ -116,18 +116,54 @@ const customerAccount = { id: "customer-account", label: "账户与开发", orde
 
 export const portalModules: PortalModule[] = [
   {
-    id: "admin-overview",
-    label: "概览",
-    path: "/admin/overview",
+    id: "admin-dashboard",
+    label: "仪表盘",
+    path: "/admin/dashboard",
     icon: "layout-dashboard",
     capability: "admin.overview",
     navGroup: adminOverview,
     order: 0,
-    navTabs: true,
-    tabs: [
-      { id: "platform", label: "平台经营", navLabel: "经营", icon: "bar-chart-3", path: "platform", component: () => import("@/views/admin/platform/DashboardView.vue") },
-      { id: "ai", label: "AI 运营", icon: "bot", path: "ai", component: () => import("@/views/admin/ai/DashboardView.vue") }
-    ]
+    component: () => import("@/views/admin/overview/AdminDashboardView.vue")
+  },
+  {
+    id: "admin-business-overview",
+    label: "业务概览",
+    path: "/admin/overview/business",
+    icon: "bar-chart-3",
+    capability: "admin.overview",
+    navGroup: adminOverview,
+    order: 10,
+    component: () => import("@/views/admin/overview/BusinessOverviewView.vue")
+  },
+  {
+    id: "admin-cost-analysis",
+    label: "成本分析",
+    path: "/admin/overview/cost",
+    icon: "banknote",
+    capability: "admin.overview",
+    navGroup: adminOverview,
+    order: 20,
+    component: () => import("@/views/admin/overview/CostAnalysisView.vue")
+  },
+  {
+    id: "admin-operations-overview",
+    label: "运维总览",
+    path: "/admin/overview/operations",
+    icon: "gauge",
+    capability: "admin.overview",
+    navGroup: adminOverview,
+    order: 30,
+    component: () => import("@/views/admin/overview/OperationsOverviewView.vue")
+  },
+  {
+    id: "admin-health-overview",
+    label: "健康监控",
+    path: "/admin/overview/health",
+    icon: "heart-pulse",
+    capability: "admin.overview",
+    navGroup: adminOverview,
+    order: 40,
+    component: () => import("@/views/admin/overview/HealthMonitoringView.vue")
   },
   {
     id: "admin-organization-workspace",
@@ -181,19 +217,6 @@ export const portalModules: PortalModule[] = [
     navGroup: adminFinance,
     order: 30,
     component: () => import("@/views/admin/platform/PaymentSettingsView.vue")
-  },
-  {
-    id: "admin-monitoring-workspace",
-    label: "运行监控",
-    path: "/admin/ai/monitoring",
-    icon: "heart-pulse",
-    capability: "admin.ai.monitor",
-    navGroup: adminOverview,
-    order: 10,
-    tabs: [
-      { id: "status", label: "系统状态", path: "status", component: () => import("@/views/admin/ai/SystemStatusView.vue") },
-      { id: "analytics", label: "用量分析", path: "analytics", component: () => import("@/views/admin/ai/gateway/UsageAnalyticsView.vue") }
-    ]
   },
   {
     id: "admin-upstream-workspace",
@@ -556,7 +579,7 @@ export function userHasPortalCapability(userType: number, capability: string): b
 }
 
 export function defaultPortalPathForUserType(userType: number): string {
-  if (userType === 1 || userType === 2) return "/admin/overview/platform";
+  if (userType === 1 || userType === 2) return "/admin/dashboard";
   if (userType === 3) return "/tenant/overview/business";
   return "/customer/workbench";
 }

@@ -14,17 +14,19 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(13);
-    expect(leavesFor(2)).toHaveLength(12);
+    expect(leavesFor(1)).toHaveLength(16);
+    expect(leavesFor(2)).toHaveLength(15);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
 
-  it("builds task-oriented workspaces instead of legacy page entries", () => {
+  it("builds separate admin overview pages instead of legacy page entries", () => {
     expect(leavesFor(1).map((item) => item.label)).toEqual([
-      "经营",
-      "AI 运营",
-      "运行监控",
+      "仪表盘",
+      "业务概览",
+      "成本分析",
+      "运维总览",
+      "健康监控",
       "租户管理",
       "终端用户",
       "管理员与身份",
@@ -34,7 +36,8 @@ describe("portal module registry", () => {
       "路由策略",
       "使用记录",
       "审计与风控",
-      "公告管理"
+      "公告管理",
+      "系统模块"
     ]);
     expect(leavesFor(4).map((item) => item.label)).toEqual([
       "工作台",
@@ -49,17 +52,22 @@ describe("portal module registry", () => {
     ]);
   });
 
-  it("exposes overview as a category with business, AI operation, and admin monitoring menus", () => {
-    const adminOverview = buildPortalNav(1, "/admin/overview/ai")[0];
+  it("exposes overview as a category with dashboard, business, cost, operations, and health menus", () => {
+    const adminOverview = buildPortalNav(1, "/admin/overview/operations")[0];
     const tenantOverview = buildPortalNav(3, "/tenant/overview/business")[0];
+
+    expect(portalModules.some((module) => module.path === "/admin/overview")).toBe(false);
+    expect(portalModules.some((module) => module.path === "/admin/ai/monitoring")).toBe(false);
 
     expect(adminOverview).toMatchObject({
       label: "概览",
       active: true,
       children: [
-        { label: "经营", to: "/admin/overview/platform", active: false },
-        { label: "AI 运营", to: "/admin/overview/ai", active: true },
-        { label: "运行监控", to: "/admin/ai/monitoring", active: false }
+        { label: "仪表盘", to: "/admin/dashboard", active: false },
+        { label: "业务概览", to: "/admin/overview/business", active: false },
+        { label: "成本分析", to: "/admin/overview/cost", active: false },
+        { label: "运维总览", to: "/admin/overview/operations", active: true },
+        { label: "健康监控", to: "/admin/overview/health", active: false }
       ]
     });
     expect(tenantOverview).toMatchObject({
@@ -71,14 +79,16 @@ describe("portal module registry", () => {
       ]
     });
 
-    const monitoringOverview = buildPortalNav(1, "/admin/ai/monitoring/status")[0];
-    expect(monitoringOverview).toMatchObject({
+    const healthOverview = buildPortalNav(1, "/admin/overview/health")[0];
+    expect(healthOverview).toMatchObject({
       label: "概览",
       active: true,
       children: [
-        { label: "经营", active: false },
-        { label: "AI 运营", active: false },
-        { label: "运行监控", active: true }
+        { label: "仪表盘", active: false },
+        { label: "业务概览", active: false },
+        { label: "成本分析", active: false },
+        { label: "运维总览", active: false },
+        { label: "健康监控", active: true }
       ]
     });
   });
@@ -215,7 +225,6 @@ describe("portal module registry", () => {
     const aiGatewayMenus = buildPortalNav(1, "/admin/ai/routing")
       .find((item) => item.id === "admin-ai")
       ?.children;
-    const monitoring = portalModules.find((module) => module.id === "admin-monitoring-workspace");
 
     expect(aiGatewayMenus).toMatchObject([
       { id: "admin-upstream-workspace", label: "上游与定价", active: false },
@@ -229,7 +238,6 @@ describe("portal module registry", () => {
       { id: "admin-usage", label: "使用记录", active: false },
       { id: "admin-security-workspace", label: "审计与风控", active: false }
     ]);
-    expect(monitoring?.tabs?.map((tab) => tab.id)).toEqual(["status", "analytics"]);
   });
 
   it("exposes usage records separately from security controls", () => {
@@ -260,7 +268,7 @@ describe("portal module registry", () => {
   });
 
   it("provides role-specific home and profile destinations", () => {
-    expect(defaultPortalPathForUserType(1)).toBe("/admin/overview/platform");
+    expect(defaultPortalPathForUserType(1)).toBe("/admin/dashboard");
     expect(defaultPortalPathForUserType(3)).toBe("/tenant/overview/business");
     expect(defaultPortalPathForUserType(4)).toBe("/customer/workbench");
     expect(profilePathForUserType(2)).toBe("/admin/profile");

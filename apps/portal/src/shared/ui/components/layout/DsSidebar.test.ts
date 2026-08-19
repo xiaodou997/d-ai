@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
 import DsSidebar from "./DsSidebar.vue";
+import { resolveSidebarIcon } from "./sidebar-icons";
 
 const groups = [
   {
@@ -29,6 +30,10 @@ function mountSidebar(collapsed = false) {
 }
 
 describe("DsSidebar grouped navigation", () => {
+  it("resolves the system modules menu icon", () => {
+    expect(resolveSidebarIcon("blocks")).toBeDefined();
+  });
+
   it("renders category headings as static labels and keeps every menu visible", () => {
     const wrapper = mountSidebar();
     const bodies = wrapper.findAll(".ds-sidebar__group-body");

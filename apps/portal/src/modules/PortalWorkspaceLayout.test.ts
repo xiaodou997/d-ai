@@ -9,12 +9,6 @@ vi.mock("@/stores/auth", () => ({
 }));
 
 describe("PortalWorkspaceLayout navigation", () => {
-  it("hides duplicate tabs when the module exposes its tabs in the sidebar", async () => {
-    const wrapper = await mountWorkspace("admin-overview");
-
-    expect(wrapper.find(".portal-workspace-layout__tabs").exists()).toBe(false);
-  });
-
   it("hides duplicate tabs when admin organization views are separate sidebar menus", async () => {
     const wrapper = await mountWorkspace("admin-organization-workspace");
 
