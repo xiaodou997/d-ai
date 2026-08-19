@@ -25,8 +25,7 @@ describe("portal module registry", () => {
       "仪表盘",
       "业务概览",
       "成本分析",
-      "运维总览",
-      "健康监控",
+      "运维监控",
       "租户管理",
       "终端用户",
       "管理员与身份",
@@ -35,6 +34,7 @@ describe("portal module registry", () => {
       "上游与定价",
       "路由策略",
       "使用记录",
+      "用量分析",
       "审计与风控",
       "公告管理",
       "系统模块"
@@ -52,11 +52,12 @@ describe("portal module registry", () => {
     ]);
   });
 
-  it("exposes overview as a category with dashboard, business, cost, operations, and health menus", () => {
+  it("keeps health details inside the operations overview instead of a separate menu", () => {
     const adminOverview = buildPortalNav(1, "/admin/overview/operations")[0];
     const tenantOverview = buildPortalNav(3, "/tenant/overview/business")[0];
 
     expect(portalModules.some((module) => module.path === "/admin/overview")).toBe(false);
+    expect(portalModules.some((module) => module.path === "/admin/overview/health")).toBe(false);
     expect(portalModules.some((module) => module.path === "/admin/ai/monitoring")).toBe(false);
 
     expect(adminOverview).toMatchObject({
@@ -66,8 +67,7 @@ describe("portal module registry", () => {
         { label: "仪表盘", to: "/admin/dashboard", active: false },
         { label: "业务概览", to: "/admin/overview/business", active: false },
         { label: "成本分析", to: "/admin/overview/cost", active: false },
-        { label: "运维总览", to: "/admin/overview/operations", active: true },
-        { label: "健康监控", to: "/admin/overview/health", active: false }
+        { label: "运维监控", to: "/admin/overview/operations", active: true }
       ]
     });
     expect(tenantOverview).toMatchObject({
@@ -76,19 +76,6 @@ describe("portal module registry", () => {
       children: [
         { label: "仪表盘", to: "/tenant/overview/business", active: true },
         { label: "AI 运营", to: "/tenant/overview/ai", active: false }
-      ]
-    });
-
-    const healthOverview = buildPortalNav(1, "/admin/overview/health")[0];
-    expect(healthOverview).toMatchObject({
-      label: "概览",
-      active: true,
-      children: [
-        { label: "仪表盘", active: false },
-        { label: "业务概览", active: false },
-        { label: "成本分析", active: false },
-        { label: "运维总览", active: false },
-        { label: "健康监控", active: true }
       ]
     });
   });
@@ -236,18 +223,26 @@ describe("portal module registry", () => {
         active: true
       },
       { id: "admin-usage", label: "使用记录", active: false },
+      { id: "admin-usage-analytics", label: "用量分析", active: false },
       { id: "admin-security-workspace", label: "审计与风控", active: false }
     ]);
   });
 
   it("exposes usage records separately from security controls", () => {
     const usageMenu = leavesFor(1, "/admin/ai/usage/request-1").find((item) => item.id === "admin-usage");
+    const analyticsMenu = leavesFor(1, "/admin/ai/analytics").find((item) => item.id === "admin-usage-analytics");
     const security = portalModules.find((module) => module.id === "admin-security-workspace");
 
     expect(usageMenu).toMatchObject({
       label: "使用记录",
       to: "/admin/ai/usage",
       icon: "scroll-text",
+      active: true
+    });
+    expect(analyticsMenu).toMatchObject({
+      label: "用量分析",
+      to: "/admin/ai/analytics",
+      icon: "bar-chart-3",
       active: true
     });
     expect(security?.tabs?.map((tab) => tab.id)).toEqual(["audit", "risk"]);

@@ -147,23 +147,13 @@ export const portalModules: PortalModule[] = [
   },
   {
     id: "admin-operations-overview",
-    label: "运维总览",
+    label: "运维监控",
     path: "/admin/overview/operations",
     icon: "gauge",
     capability: "admin.overview",
     navGroup: adminOverview,
     order: 30,
     component: () => import("@/views/admin/overview/OperationsOverviewView.vue")
-  },
-  {
-    id: "admin-health-overview",
-    label: "健康监控",
-    path: "/admin/overview/health",
-    icon: "heart-pulse",
-    capability: "admin.overview",
-    navGroup: adminOverview,
-    order: 40,
-    component: () => import("@/views/admin/overview/HealthMonitoringView.vue")
   },
   {
     id: "admin-organization-workspace",
@@ -252,6 +242,16 @@ export const portalModules: PortalModule[] = [
     order: 40,
     name: "ai-usage",
     component: () => import("@/views/admin/ai/gateway/UsageView.vue")
+  },
+  {
+    id: "admin-usage-analytics",
+    label: "用量分析",
+    path: "/admin/ai/analytics",
+    icon: "bar-chart-3",
+    capability: "admin.ai.monitor",
+    navGroup: adminAi,
+    order: 45,
+    component: () => import("@/views/admin/ai/gateway/UsageAnalyticsView.vue")
   },
   {
     id: "admin-usage-detail",

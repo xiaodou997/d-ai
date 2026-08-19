@@ -9,6 +9,7 @@ interface FlatRoute {
   name?: string;
   allowedUserTypes?: number[];
   public?: boolean;
+  redirect?: string;
 }
 
 function joinRoutePath(parent: string, child: string): string {
@@ -26,7 +27,8 @@ function flattenRoutes(records: readonly RouteRecordRaw[], parent = ""): FlatRou
       allowedUserTypes: Array.isArray(record.meta?.allowedUserTypes)
         ? (record.meta.allowedUserTypes as number[])
         : undefined,
-      public: record.meta?.public === true
+      public: record.meta?.public === true,
+      redirect: typeof record.redirect === "string" ? record.redirect : undefined
     };
     return [current, ...flattenRoutes(record.children ?? [], path)];
   });
@@ -63,6 +65,16 @@ describe("unified portal route contract", () => {
     expect(flatRoutes.find((route) => route.name === "ai-group-detail")?.path).toBe("/tenant/ai/models/groups/:groupId");
     expect(flatRoutes.find((route) => route.name === "ai-usage-detail")?.path).toBe("/admin/ai/usage/:requestId");
     expect(flatRoutes.find((route) => route.name === "tenant-user-detail")?.path).toBe("/tenant/users/directory/:userId");
+  });
+
+  it("redirects legacy admin overview and monitoring URLs to their replacements", () => {
+    expect(flatRoutes.find((route) => route.path === "/admin/overview")?.redirect).toBe("/admin/overview/business");
+    expect(flatRoutes.find((route) => route.path === "/admin/overview/platform")?.redirect).toBe("/admin/overview/business");
+    expect(flatRoutes.find((route) => route.path === "/admin/overview/ai")?.redirect).toBe("/admin/ai/analytics");
+    expect(flatRoutes.find((route) => route.path === "/admin/overview/health")?.redirect).toBe("/admin/overview/operations?tab=health");
+    expect(flatRoutes.find((route) => route.path === "/admin/ai/monitoring")?.redirect).toBe("/admin/overview/operations?tab=health");
+    expect(flatRoutes.find((route) => route.path === "/admin/ai/monitoring/status")?.redirect).toBe("/admin/overview/operations?tab=health");
+    expect(flatRoutes.find((route) => route.path === "/admin/ai/monitoring/analytics")?.redirect).toBe("/admin/ai/analytics");
   });
 
   it("generates one route tree from every registered module", () => {
