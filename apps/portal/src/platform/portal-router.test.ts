@@ -16,6 +16,7 @@ vi.mock("./http", () => ({
 
 const baseRoute: PortalRouteLike = {
   path: "/overview",
+  fullPath: "/overview",
   query: {},
   hash: "",
   matched: [{ meta: {} }]
@@ -48,11 +49,33 @@ describe("unified Portal route authorization", () => {
     const result = await guard({
       ...baseRoute,
       path: "/legal/privacy",
+      fullPath: "/legal/privacy",
       matched: [{ meta: { public: true } }]
     });
 
     expect(result).toBe(true);
     expect(useAuthStore).not.toHaveBeenCalled();
+  });
+
+  it("preserves query and hash when an unauthenticated route redirects to login", async () => {
+    vi.mocked(redirectPortalToLogin).mockClear();
+    const { guard, store } = guardHarness();
+    store.accessToken = "";
+
+    await expect(
+      guard({
+        ...baseRoute,
+        path: "/admin/overview/operations",
+        fullPath: "/admin/overview/operations?tab=health#modules",
+        query: { tab: "health" },
+        hash: "#modules"
+      })
+    ).resolves.toBe(false);
+
+    expect(redirectPortalToLogin).toHaveBeenCalledWith(
+      expect.objectContaining({ portal: "unified" }),
+      "/admin/overview/operations?tab=health#modules"
+    );
   });
 
   it("clears local auth state before redirecting an invalid session to login", async () => {
@@ -61,7 +84,7 @@ describe("unified Portal route authorization", () => {
     store.ensureSession = vi.fn().mockRejectedValue(new Error("account disabled"));
 
     await expect(
-      guard({ ...baseRoute, path: "/overview", matched: [{ meta: {} }] })
+      guard({ ...baseRoute, path: "/overview", fullPath: "/overview", matched: [{ meta: {} }] })
     ).resolves.toBe(false);
 
     expect(store.clear).toHaveBeenCalledOnce();

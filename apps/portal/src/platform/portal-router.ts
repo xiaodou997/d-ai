@@ -20,6 +20,7 @@ export interface PortalAuthGuardOptions {
 
 export interface PortalRouteLike {
   path: string;
+  fullPath: string;
   query: Record<string, unknown>;
   hash: string;
   matched: Array<{ meta: Record<string, unknown> }>;
@@ -67,14 +68,14 @@ export function attachPortalAuthGuard(router: PortalRouterLike, options: PortalA
     const authStore = options.useAuthStore();
     authStore.init();
     if (!authStore.accessToken) {
-      return redirectToLogin(to.path);
+      return redirectToLogin(to.fullPath);
     }
 
     try {
       await authStore.ensureSession();
     } catch {
       authStore.clear();
-      return redirectToLogin(to.path);
+      return redirectToLogin(to.fullPath);
     }
 
     if (!routeAllowedForUserType(to, authStore.userType, options.hasCapability)) {
