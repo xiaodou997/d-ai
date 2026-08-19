@@ -37,9 +37,8 @@ const router = useRouter();
 
 <template>
   <AiWorkbenchSection
-    eyebrow="Usage Map"
-    title="模型与入口版图"
-    :description="`围绕 ${props.rangeLabel} 聚合模型消耗与入口结构，先看版图，再进明细。`"
+    title="模型与调用来源"
+    :description="`按 ${props.rangeLabel} 聚合模型使用量与 API、网页对话、网页生图等调用来源。`"
   >
     <template #actions>
       <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/tenant/ai/usage')">

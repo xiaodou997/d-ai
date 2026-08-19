@@ -1,15 +1,14 @@
 <!--
-  智能服务工作台(AI 数据大盘):资产与授权面 + 核心调用信号 + 模型/入口版图 + 质量信号 + 最近工作记录。
+  租户业务概览:服务资产 + 核心调用信号 + 模型/来源结构 + 质量信号。
   重构:迁移至新设计系统一体面板(PortalPagePanel:图标徽章+面包屑标题+描述同行,
-       时间窗口/快捷入口/刷新收进 #actions,四个区块收进同卡 body、以 1px 分隔线分区,
+       时间窗口/快捷入口/刷新收进 #actions,三个区块收进同卡 body、以 1px 分隔线分区,
        指标卡统一 DsMetricCard);来源分布等图表色值由硬编码 hex 改为运行时解析
        var(--ds-*) token(见 components/chartTokens.ts);业务逻辑与请求参数不变。
 -->
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Refresh } from "@element-plus/icons-vue";
-import { LayoutDashboard } from "lucide-vue-next";
+import { BarChart3, RefreshCw } from "lucide-vue-next";
 
 import { PortalPagePanel } from "@/platform";
 
@@ -17,7 +16,6 @@ import TenantWorkbenchRangeTabs from "@/components/workbench/TenantWorkbenchRang
 import AiWorkbenchMetricsSection from "./components/AiWorkbenchMetricsSection.vue";
 import AiWorkbenchChartsSection from "./components/AiWorkbenchChartsSection.vue";
 import AiWorkbenchQualitySection from "./components/AiWorkbenchQualitySection.vue";
-import AiWorkbenchWorkspaceTrailSection from "./components/AiWorkbenchWorkspaceTrailSection.vue";
 import {
   DEFAULT_WORKBENCH_RANGE_ID,
   WORKBENCH_RANGE_OPTIONS,
@@ -31,8 +29,6 @@ import { aiTenantApi, formatUSD } from "@/api/aiTenant";
 import { listTenantUsageRecords, type TenantUsageLog } from "@/features/ai/usage";
 import { tenantApi } from "@/api/tenant";
 import type {
-  ChatSession,
-  ConsoleImageJob,
   TenantAiDashboardRecentError,
   TenantAiDashboardTopModel,
 } from "@/api/types/aiTenant";
@@ -47,8 +43,6 @@ const analysisLoading = ref(false);
 
 const topModels = ref<TenantAiDashboardTopModel[]>([]);
 const recentErrors = ref<TenantAiDashboardRecentError[]>([]);
-const workspaceSessions = ref<ChatSession[]>([]);
-const workspaceJobs = ref<ConsoleImageJob[]>([]);
 const usageInsightLogs = ref<TenantUsageLog[]>([]);
 const usageInsightTotal = ref(0);
 const users = ref<TenantEndUserItem[]>([]);
@@ -60,9 +54,9 @@ const aiStats = reactive({
   groupCount: 0,
   modelCount: 0,
   apiKeyCount: 0,
-  totalCost: 0,
   totalRequests: 0,
   successRequests: 0,
+  totalTokens: 0,
   avgLatency: 0
 });
 
@@ -130,13 +124,6 @@ const accessMetrics = computed(() => [
 
 const signalMetrics = computed(() => [
   {
-    key: "total-cost",
-    label: "平台结算扣费",
-    value: formatUSD(aiStats.totalCost),
-    hint: `${selectedRangeLabel.value}租户结算金额`,
-    loading: signalLoading.value
-  },
-  {
     key: "total-requests",
     label: "请求总数",
     value: formatMetricNumber(aiStats.totalRequests),
@@ -148,6 +135,13 @@ const signalMetrics = computed(() => [
     label: "成功率",
     value: successRate.value,
     hint: `${formatMetricNumber(aiStats.successRequests)} 次成功`,
+    loading: signalLoading.value
+  },
+  {
+    key: "total-tokens",
+    label: "Token 使用量",
+    value: formatMetricNumber(aiStats.totalTokens),
+    hint: `${selectedRangeLabel.value}输入与输出合计`,
     loading: signalLoading.value
   },
   {
@@ -254,7 +248,7 @@ const topUserInsights = computed(() => {
   }
 
   return Array.from(buckets.values())
-    .sort((a, b) => b.totalAmountUSD - a.totalAmountUSD || b.requestCount - a.requestCount || b.lastActive - a.lastActive)
+    .sort((a, b) => b.requestCount - a.requestCount || b.totalAmountUSD - a.totalAmountUSD || b.lastActive - a.lastActive)
     .slice(0, 6)
     .map((bucket) => ({
       ...bucket,
@@ -275,18 +269,14 @@ const buildUsageRange = (range: WorkbenchRangeOption) => {
 const fetchAccessOverview = async () => {
   aiLoading.value = true;
   try {
-    const [groupsRes, modelsRes, keysRes, sessionsRes, jobsRes] = await Promise.all([
+    const [groupsRes, modelsRes, keysRes] = await Promise.all([
       aiTenantApi.listMyGroups().catch(() => ({ items: [], total: 0 })),
       aiTenantApi.listAvailableModels().catch(() => ({ items: [], total: 0 })),
-      aiTenantApi.listApiKeys().catch(() => ({ items: [], total: 0 })),
-      aiTenantApi.listWorkspaceChatSessions({ limit: 6 }).catch(() => ({ items: [], total: 0 })),
-      aiTenantApi.listWorkspaceImageJobs({ limit: 6 }).catch(() => ({ items: [], total: 0 }))
+      aiTenantApi.listApiKeys().catch(() => ({ items: [], total: 0 }))
     ]);
     aiStats.groupCount = groupsRes.total || groupsRes.items?.length || 0;
     aiStats.modelCount = modelsRes.items?.length || 0;
     aiStats.apiKeyCount = keysRes.items?.length || 0;
-    workspaceSessions.value = sessionsRes.items || [];
-    workspaceJobs.value = jobsRes.items || [];
   } catch (e) {
     console.error("获取AI统计失败:", e);
   } finally {
@@ -334,9 +324,9 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
 
     if (requestEpoch !== latestRangeRequestEpoch) return;
 
-    aiStats.totalCost = Number(summaryRes?.total_tenant_payable_usd ?? 0);
     aiStats.totalRequests = Number(summaryRes?.total_requests ?? usageRes.stats?.total_requests ?? 0);
     aiStats.successRequests = Number(summaryRes?.successful_requests ?? usageRes.stats?.success_count ?? 0);
+    aiStats.totalTokens = Number(summaryRes?.total_tokens ?? usageRes.stats?.total_tokens ?? 0);
     aiStats.avgLatency = Number(summaryRes?.avg_latency_ms ?? usageRes.stats?.avg_latency_ms ?? 0);
     topModels.value = modelsRes.items || [];
     recentErrors.value = errorsRes.items || [];
@@ -345,9 +335,9 @@ const fetchRangeBoundData = async (range: WorkbenchRangeOption, requestEpoch: nu
   } catch (e) {
     console.error("获取调用结构分析失败:", e);
     if (requestEpoch !== latestRangeRequestEpoch) return;
-    aiStats.totalCost = 0;
     aiStats.totalRequests = 0;
     aiStats.successRequests = 0;
+    aiStats.totalTokens = 0;
     aiStats.avgLatency = 0;
     topModels.value = [];
     recentErrors.value = [];
@@ -407,9 +397,9 @@ onMounted(() => {
   <div class="ai-dashboard-page">
     <PortalPagePanel
       fill
-      :icon="LayoutDashboard"
-      :breadcrumbs="[{ label: '智能服务' }, { label: '概览' }, { label: '工作台' }]"
-      description="把资产、消耗、入口与质量信号压在一屏。"
+      :icon="BarChart3"
+      :breadcrumbs="[{ label: '概览' }, { label: '业务概览' }]"
+      description="观察 AI 服务资产、调用规模、使用结构与质量信号。"
     >
       <template #actions>
         <TenantWorkbenchRangeTabs
@@ -422,8 +412,8 @@ onMounted(() => {
         <el-button @click="router.push('/tenant/ai/models/prices')">价格表</el-button>
         <el-button @click="router.push('/tenant/developer/keys')">API 密钥</el-button>
         <el-button type="primary" :loading="loading" @click="fetchData">
-          <template #icon><el-icon><Refresh /></el-icon></template>
-          刷新工作台
+          <template #icon><RefreshCw :size="15" /></template>
+          刷新
         </el-button>
       </template>
 
@@ -451,11 +441,6 @@ onMounted(() => {
           :range-label="selectedRangeLabel"
         />
 
-        <AiWorkbenchWorkspaceTrailSection
-          :sessions="workspaceSessions"
-          :jobs="workspaceJobs"
-          :loading="aiLoading"
-        />
       </div>
     </PortalPagePanel>
   </div>
@@ -470,7 +455,7 @@ onMounted(() => {
   flex-direction: column;
 }
 
-/* 面板 body 无内边距,四个区块在同卡内以 1px 分隔线分区(见 AiWorkbenchSection) */
+/* 面板 body 无内边距,三个区块在同卡内以 1px 分隔线分区(见 AiWorkbenchSection) */
 .ai-dashboard-body {
   display: flex;
   flex: 1;

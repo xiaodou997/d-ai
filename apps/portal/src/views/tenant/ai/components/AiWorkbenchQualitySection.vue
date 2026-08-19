@@ -50,9 +50,8 @@ const errorTone = (value: string): "positive" | "danger" | "warning" | "neutral"
 
 <template>
   <AiWorkbenchSection
-    eyebrow="Quality Signals"
-    title="异常与质量信号"
-    :description="`把 ${props.rangeLabel} 的失败请求和调用样本中的高消耗用户放在同一区块，快速判断哪里不稳、谁最值得盯。`"
+    title="调用质量"
+    :description="`结合 ${props.rangeLabel} 的失败请求与核心调用用户，判断服务稳定性和主要使用主体。`"
   >
     <template #actions>
       <el-button text type="primary" class="!text-xs font-bold" @click="router.push('/tenant/ai/usage')">

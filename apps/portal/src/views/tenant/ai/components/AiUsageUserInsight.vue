@@ -1,5 +1,5 @@
 <!--
-  AI 工作台样本用户消耗 Top 图(echarts 横向条形图 + 排名列表)。
+  业务概览核心调用用户 Top 图(echarts 横向条形图 + 排名列表)。
   重构:图表色值由硬编码 hex 改为运行时解析 var(--ds-*) token(chartTokens.ts),
        解析失败回退 echarts 默认色板。
 -->
@@ -33,7 +33,7 @@ const props = defineProps<{
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: EChartsType | null = null;
 
-const activeItems = computed(() => props.items.filter((item) => item.totalAmountUSD > 0));
+const activeItems = computed(() => props.items.filter((item) => item.requestCount > 0));
 
 const truncateLabel = (value: string) => (value.length > 10 ? `${value.slice(0, 10)}…` : value);
 
@@ -77,7 +77,7 @@ const renderChart = () => {
       formatter: (params: Array<{ name: string; value: number; dataIndex: number }>) => {
         const param = params[0];
         const item = chartRows[param.dataIndex];
-        return `${item.userLabel}<br/>${item.amountText} · ${item.requestCount.toLocaleString("zh-CN")} 次请求 · ${item.successRateText} 成功率`;
+        return `${item.userLabel}<br/>${item.requestCount.toLocaleString("zh-CN")} 次请求 · ${item.successRateText} 成功率 · ${item.amountText}`;
       }
     },
     xAxis: {
@@ -98,7 +98,7 @@ const renderChart = () => {
     series: [
       {
         type: "bar",
-        data: chartRows.map((item) => item.totalAmountUSD),
+        data: chartRows.map((item) => item.requestCount),
         barWidth: 16,
         showBackground: true,
         backgroundStyle: {
@@ -139,8 +139,8 @@ onUnmounted(() => {
   <div class="user-insight">
     <div class="user-insight__header">
       <div>
-        <h3 class="user-insight__title">样本用户消耗 Top 6</h3>
-        <p class="user-insight__desc">基于当前调用样本先看消耗强弱，再用排名列表补充请求数和最近活跃时间。</p>
+        <h3 class="user-insight__title">核心调用用户 Top 6</h3>
+        <p class="user-insight__desc">基于当前调用样本按请求量排序，并补充成功率、结算金额和最近活跃时间。</p>
       </div>
     </div>
 
@@ -148,7 +148,7 @@ onUnmounted(() => {
       <el-icon class="user-insight__spinner" :size="32"><Loading /></el-icon>
     </div>
 
-    <div v-else-if="!activeItems.length" class="user-insight__empty">暂无用户消耗数据</div>
+    <div v-else-if="!activeItems.length" class="user-insight__empty">暂无用户调用数据</div>
 
     <div v-else class="user-insight__body">
       <div ref="chartRef" class="user-insight__chart"></div>
@@ -158,10 +158,10 @@ onUnmounted(() => {
           <div class="user-insight__rank">{{ index + 1 }}</div>
           <div class="user-insight__copy">
             <p class="user-insight__name">{{ item.userLabel }}</p>
-            <p class="user-insight__meta">{{ item.requestCount.toLocaleString("zh-CN") }} 次请求 · {{ item.successRateText }} 成功率</p>
+            <p class="user-insight__meta">{{ item.successRateText }} 成功率 · {{ item.amountText }}</p>
           </div>
           <div class="user-insight__value">
-            <strong>{{ item.amountText }}</strong>
+            <strong>{{ item.requestCount.toLocaleString("zh-CN") }} 次</strong>
             <span>{{ item.lastActiveText }}</span>
           </div>
         </article>

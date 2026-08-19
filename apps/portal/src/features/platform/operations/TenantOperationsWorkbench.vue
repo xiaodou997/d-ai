@@ -1,12 +1,12 @@
 <!--
-  租户运营数据大盘:余额/到账/消费指标 + 用户消费贡献榜 + 近期用户消费。
+  租户财务概览:余额/到账/成本指标 + 用户消费贡献榜 + 近期用户消费。
   重构:页头 TenantWorkbenchHeader(旧 PortalPageHeader 封装) → PortalPagePanel 一体面板
        (图标徽章 + 面包屑标题 + 描述同行,#actions 保留时间窗切换与刷新),
        指标与双栏面板收进同卡 body 的 24px 容器;fill 链:根 flex:1 → PortalPagePanel fill → body 伸展。
-       业务逻辑与请求不变;TenantWorkbenchHeader 由租户运营工作台使用,保留原文件。
+       财务指标补充 AI 结算成本;TenantWorkbenchHeader 由租户运营工作台使用,保留原文件。
 -->
 <script setup lang="ts">
-import { LayoutDashboard, RefreshCw } from "lucide-vue-next";
+import { Banknote, RefreshCw } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { PortalPagePanel } from "@/platform";
 
@@ -25,9 +25,9 @@ const dashboard = useTenantOperationsDashboard();
   <div class="page-container operations-workbench">
     <PortalPagePanel
       fill
-      :icon="LayoutDashboard"
-      :breadcrumbs="[{ label: '租户运营' }, { label: '概览' }, { label: '工作台' }]"
-      description="关注收到的货款、用户消费和核心用户贡献。"
+      :icon="Banknote"
+      :breadcrumbs="[{ label: '概览' }, { label: '财务概览' }]"
+      description="汇总账户余额、用户收入、AI 服务成本与近期消费流水。"
     >
       <template #actions>
         <TenantWorkbenchRangeTabs
@@ -55,6 +55,7 @@ const dashboard = useTenantOperationsDashboard();
         <TenantBusinessMetrics
           :service-balance="dashboard.serviceBalance.value"
           :overview="dashboard.overview.value"
+          :financial-summary="dashboard.financialSummary.value"
           :range-label="dashboard.selectedRangeLabel.value"
           :loading="dashboard.summaryLoading.value"
           :service-balance-loading="dashboard.serviceBalanceLoading.value"

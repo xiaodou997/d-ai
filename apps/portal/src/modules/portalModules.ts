@@ -326,8 +326,8 @@ export const portalModules: PortalModule[] = [
     order: 0,
     navTabs: true,
     tabs: [
-      { id: "business", label: "业务经营", navLabel: "仪表盘", icon: "bar-chart-3", path: "business", component: () => import("@/views/tenant/platform/DashboardView.vue") },
-      { id: "ai", label: "AI 运营", icon: "bot", path: "ai", component: () => import("@/views/tenant/ai/DashboardView.vue") }
+      { id: "business", label: "业务概览", icon: "bar-chart-3", path: "business", component: () => import("@/views/tenant/ai/DashboardView.vue") },
+      { id: "finance", label: "财务概览", icon: "banknote", path: "finance", component: () => import("@/views/tenant/platform/DashboardView.vue") }
     ]
   },
   {

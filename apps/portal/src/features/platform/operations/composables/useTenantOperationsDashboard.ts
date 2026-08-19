@@ -1,6 +1,7 @@
 import { computed, onMounted, shallowRef } from "vue";
 
 import { platformTenantApi } from "@/api/platformTenant";
+import { aiTenantApi } from "@/api/aiTenant";
 import { tenantUsageApi } from "@/features/ai/usage";
 import {
   DEFAULT_WORKBENCH_RANGE_ID,
@@ -16,6 +17,7 @@ import type {
   UserConsumptionItem
 } from "@/api/types/platformTenant";
 import type { TenantUsageLog } from "@/features/ai/usage";
+import type { TenantAiDashboardSummary } from "@/api/types/aiTenant";
 
 const emptyOverview = (): TenantAnalyticsOverview => ({
   endUserCount: 0,
@@ -42,6 +44,7 @@ export function useTenantOperationsDashboard() {
   const selectedRangeId = shallowRef<WorkbenchRangeId>(DEFAULT_WORKBENCH_RANGE_ID);
   const serviceBalance = shallowRef<AccountBalance>(emptyServiceBalance());
   const overview = shallowRef<TenantAnalyticsOverview>(emptyOverview());
+  const financialSummary = shallowRef<TenantAiDashboardSummary | null>(null);
   const consumptionRanking = shallowRef<UserConsumptionItem[]>([]);
   const recentConsumption = shallowRef<TenantUsageLog[]>([]);
 
@@ -77,15 +80,19 @@ export function useTenantOperationsDashboard() {
     rankingLoading.value = true;
     recentLoading.value = true;
     const params = rangeParams(range);
-    const [overviewResult, rankingResult, recentResult] = await Promise.allSettled([
+    const dateRange = {
+      date_from: new Date(params.timeFrom).toISOString(),
+      date_to: new Date(params.timeTo).toISOString()
+    };
+    const [overviewResult, financialResult, rankingResult, recentResult] = await Promise.allSettled([
       platformTenantApi.getAnalyticsOverview(params),
+      aiTenantApi.getDashboardSummary(dateRange),
       platformTenantApi.getUserConsumption({ ...params, limit: 8 }),
       tenantUsageApi.listRecords({
         limit: 8,
         offset: 0,
         request_status: "success",
-        date_from: new Date(params.timeFrom).toISOString(),
-        date_to: new Date(params.timeTo).toISOString()
+        ...dateRange
       })
     ]);
     if (requestEpoch !== latestRangeRequestEpoch) return;
@@ -95,6 +102,12 @@ export function useTenantOperationsDashboard() {
     } else {
       overview.value = emptyOverview();
       console.error("获取租户经营概览失败:", overviewResult.reason);
+    }
+    if (financialResult.status === "fulfilled") {
+      financialSummary.value = financialResult.value;
+    } else {
+      financialSummary.value = null;
+      console.error("获取租户 AI 结算概览失败:", financialResult.reason);
     }
     if (rankingResult.status === "fulfilled") {
       consumptionRanking.value = rankingResult.value;
@@ -142,6 +155,7 @@ export function useTenantOperationsDashboard() {
     selectedRangeLabel,
     serviceBalance: computed(() => serviceBalance.value),
     overview: computed(() => overview.value),
+    financialSummary: computed(() => financialSummary.value),
     consumptionRanking: computed(() => consumptionRanking.value),
     recentConsumption: computed(() => recentConsumption.value),
     summaryLoading: computed(() => summaryLoading.value),

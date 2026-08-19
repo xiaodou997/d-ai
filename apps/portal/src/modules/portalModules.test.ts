@@ -76,8 +76,8 @@ describe("portal module registry", () => {
       label: "概览",
       active: true,
       children: [
-        { label: "仪表盘", to: "/tenant/overview/business", active: true },
-        { label: "AI 运营", to: "/tenant/overview/ai", active: false }
+        { label: "业务概览", to: "/tenant/overview/business", active: true },
+        { label: "财务概览", to: "/tenant/overview/finance", active: false }
       ]
     });
   });

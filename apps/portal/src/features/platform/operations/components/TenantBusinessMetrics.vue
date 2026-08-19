@@ -1,25 +1,27 @@
 <!--
-  数据大盘指标区:可用余额/到账金额/用户消费/活跃用户四张指标卡 + 可用余额条。
+  财务概览指标区:可用余额/到账金额/用户消费/AI 服务成本四张指标卡 + 账户操作入口。
   颜色全部走 var(--ds-*) token;指标卡复用 TenantWorkbenchMetricCard(图标+色调语义,
-  超出 DsMetricCard 的 label/value/hint 能力,故不换),数据与 props 不变。
+  超出 DsMetricCard 的 label/value/hint 能力,故不换)。
 -->
 <script setup lang="ts">
 import { computed } from "vue";
 import {
   BadgeDollarSign,
   Landmark,
+  ReceiptText,
   ShoppingBag,
-  UsersRound,
   WalletCards
 } from "lucide-vue-next";
 
 import TenantWorkbenchMetricCard from "@/components/workbench/TenantWorkbenchMetricCard.vue";
 import type { AccountBalance, TenantAnalyticsOverview } from "@/api/types/platformTenant";
+import type { TenantAiDashboardSummary } from "@/api/types/aiTenant";
 import { formatDisplayMicroUSD as formatMicroUSD, formatDisplayUSD as formatUSD } from "@/shared/currency";
 
 const props = defineProps<{
   serviceBalance: AccountBalance;
   overview: TenantAnalyticsOverview;
+  financialSummary: TenantAiDashboardSummary | null;
   rangeLabel: string;
   loading: boolean;
   serviceBalanceLoading: boolean;
@@ -30,8 +32,6 @@ const emit = defineEmits<{
   topUpServiceBalance: [];
 }>();
 
-const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
-
 const metrics = computed(() => [
   {
     key: "cash-balance",
@@ -39,7 +39,8 @@ const metrics = computed(() => [
     value: formatUSD(props.serviceBalance.availableUsd),
     hint: "统一额度账户，支持透支",
     icon: WalletCards,
-    tone: "emerald" as const
+    tone: "emerald" as const,
+    loading: props.serviceBalanceLoading
   },
   {
     key: "settlement-income",
@@ -47,7 +48,8 @@ const metrics = computed(() => [
     value: formatMicroUSD(props.overview.settlementIncomeMicroUsd),
     hint: "用户在线充值扣除手续费后的实际入账",
     icon: BadgeDollarSign,
-    tone: "blue" as const
+    tone: "blue" as const,
+    loading: props.loading
   },
   {
     key: "user-consumption",
@@ -55,21 +57,19 @@ const metrics = computed(() => [
     value: formatUSD(props.overview.userDeductionUsd),
     hint: "按成功 AI 请求使用记录汇总",
     icon: ShoppingBag,
-    tone: "amber" as const
+    tone: "amber" as const,
+    loading: props.loading
   },
   {
-    key: "active-users",
-    label: "活跃消费用户",
-    value: numberFormatter.format(props.overview.activeUserCount ?? 0),
-    hint: `${numberFormatter.format(props.overview.userConsumptionCount ?? 0)} 笔成功消费`,
-    icon: UsersRound,
-    tone: "indigo" as const
+    key: "ai-service-cost",
+    label: `${props.rangeLabel} AI 服务成本`,
+    value: props.financialSummary ? formatUSD(props.financialSummary.total_tenant_payable_usd) : "—",
+    hint: props.financialSummary ? "平台按实际 AI 用量向租户结算" : "AI 结算数据暂不可用",
+    icon: ReceiptText,
+    tone: "indigo" as const,
+    loading: props.loading
   }
 ]);
-
-const serviceBalanceValue = computed(() =>
-  props.serviceBalanceLoading ? "—" : formatUSD(props.serviceBalance.availableUsd)
-);
 
 </script>
 
@@ -77,8 +77,8 @@ const serviceBalanceValue = computed(() =>
   <section class="business-summary" aria-labelledby="business-summary-title">
     <div class="business-summary__head">
       <div>
-        <p class="business-summary__eyebrow">经营概览</p>
-        <h2 id="business-summary-title" class="business-summary__title">余额与用户使用</h2>
+        <p class="business-summary__eyebrow">财务概览</p>
+        <h2 id="business-summary-title" class="business-summary__title">资金与结算</h2>
       </div>
       <button class="business-summary__cash-link" type="button" @click="emit('openSettlement')">
         查看余额
@@ -94,7 +94,7 @@ const serviceBalanceValue = computed(() =>
         :hint="metric.hint"
         :icon="metric.icon"
         :tone="metric.tone"
-        :loading="loading"
+        :loading="metric.loading"
       />
     </div>
 
@@ -103,13 +103,13 @@ const serviceBalanceValue = computed(() =>
         <Landmark :size="18" :stroke-width="1.9" />
       </div>
       <div class="service-balance__copy">
-        <span class="service-balance__label">可用 USD 余额</span>
-        <span class="service-balance__hint">服务消费与管理员提现扣减共用</span>
+        <span class="service-balance__label">统一额度账户</span>
+        <span class="service-balance__hint">集中管理 AI 服务消费、账户充值与余额明细</span>
       </div>
-      <strong class="service-balance__value">{{ serviceBalanceValue }}</strong>
-      <button class="service-balance__action" type="button" @click="emit('topUpServiceBalance')">
-        充值
-      </button>
+      <div class="service-balance__actions">
+        <button class="service-balance__action" type="button" @click="emit('openSettlement')">账户明细</button>
+        <button class="service-balance__action" type="button" @click="emit('topUpServiceBalance')">充值</button>
+      </div>
     </div>
   </section>
 </template>
@@ -167,7 +167,7 @@ const serviceBalanceValue = computed(() =>
 
 .service-balance {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   border: 1px solid var(--ds-line);
@@ -204,12 +204,10 @@ const serviceBalanceValue = computed(() =>
   font-size: 11px;
 }
 
-.service-balance__value {
-  color: var(--ds-ink-soft);
-  font-size: 13px;
-  font-weight: 750;
-  letter-spacing: 0;
-  white-space: nowrap;
+.service-balance__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 @media (max-width: 1100px) {
@@ -227,18 +225,9 @@ const serviceBalanceValue = computed(() =>
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .service-balance {
-    grid-template-columns: 34px minmax(0, 1fr) auto;
-  }
-
-  .service-balance__value {
-    grid-column: 2 / 3;
-    white-space: normal;
-  }
-
-  .service-balance__action {
-    grid-column: 3;
-    grid-row: 1 / span 2;
+  .service-balance__actions {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
   }
 }
 </style>

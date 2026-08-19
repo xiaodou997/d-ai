@@ -27,9 +27,8 @@ const displayValue = (metric: MetricItem) => (metric.loading ? "—" : String(me
 
 <template>
   <AiWorkbenchSection
-    eyebrow="Access Surface"
-    title="资产与授权面"
-    description="聚焦平台向租户开放了什么，以及租户已经铺开了多少密钥与入口。"
+    title="服务资产"
+    description="汇总当前可用模型、模型分组和 API 密钥。"
   >
     <div class="ai-metric-grid">
       <DsMetricCard
@@ -45,9 +44,8 @@ const displayValue = (metric: MetricItem) => (metric.loading ? "—" : String(me
 
     <div class="ai-metric-cluster">
       <div class="ai-metric-cluster__lead">
-        <p class="ai-metric-cluster__eyebrow">Core Signals</p>
-        <h3 class="ai-metric-cluster__title">核心调用信号</h3>
-        <p class="ai-metric-cluster__desc">{{ rangeLabel }}内统一观察调用量、成功率、消费金额与平均延迟。</p>
+        <h3 class="ai-metric-cluster__title">调用概况</h3>
+        <p class="ai-metric-cluster__desc">{{ rangeLabel }}内统一观察请求量、成功率、Token 使用量与平均延迟。</p>
       </div>
 
       <div class="ai-metric-grid">
@@ -97,15 +95,6 @@ const displayValue = (metric: MetricItem) => (metric.loading ? "—" : String(me
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.ai-metric-cluster__eyebrow {
-  margin: 0;
-  color: var(--ds-accent-hover);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
 }
 
 .ai-metric-cluster__title {

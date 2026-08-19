@@ -31,6 +31,7 @@ export const routes: RouteRecordRaw[] = [
       { path: "admin/ai/monitoring", redirect: "/admin/overview/operations?tab=health" },
       { path: "admin/ai/monitoring/status", redirect: "/admin/overview/operations?tab=health" },
       { path: "admin/ai/monitoring/analytics", redirect: "/admin/ai/analytics" },
+      { path: "tenant/overview/ai", redirect: "/tenant/overview/business" },
       ...buildPortalModuleRoutes()
     ]
   },
