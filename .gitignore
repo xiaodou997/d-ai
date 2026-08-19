@@ -19,6 +19,7 @@ cmd/server/frontend_dist/assets/
 # Config (local only)
 config.yaml
 **/config.yaml
+.codex-vpn-staging/
 
 # IDE
 .idea/
