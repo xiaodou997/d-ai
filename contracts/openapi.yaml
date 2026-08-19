@@ -5,6 +5,9 @@ components:
       properties:
         balanceLotId:
           type: string
+        createdAt:
+          format: date-time
+          type: string
         expiresAt:
           format: date-time
           type: string
@@ -20,6 +23,7 @@ components:
         - balanceLotId
         - totalUsd
         - remainingUsd
+        - createdAt
         - source
       type: object
     AccountDTO:

@@ -38,13 +38,14 @@ type AccountBalanceLot struct {
 	BalanceLotID string     `json:"balanceLotId"`
 	TotalUSD     float64    `json:"totalUsd"`
 	RemainingUSD float64    `json:"remainingUsd"`
+	CreatedAt    time.Time  `json:"createdAt"`
 	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
 	Source       string     `json:"source"`
 }
 
 func (r *AccountRepository) listBalanceLots(ctx context.Context, accountID string) ([]AccountBalanceLot, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT lot_id, granted_micro, granted_micro - consumed_micro, expires_at, source
+		SELECT lot_id, granted_micro, granted_micro - consumed_micro, created_at, expires_at, source
 		FROM bill_credit_lots
 		WHERE account_id = $1
 		  AND expired_at IS NULL
@@ -61,7 +62,7 @@ func (r *AccountRepository) listBalanceLots(ctx context.Context, accountID strin
 	for rows.Next() {
 		var lot AccountBalanceLot
 		var grantedMicro, remainingMicro int64
-		if err := rows.Scan(&lot.BalanceLotID, &grantedMicro, &remainingMicro, &lot.ExpiresAt, &lot.Source); err != nil {
+		if err := rows.Scan(&lot.BalanceLotID, &grantedMicro, &remainingMicro, &lot.CreatedAt, &lot.ExpiresAt, &lot.Source); err != nil {
 			return nil, err
 		}
 		lot.TotalUSD = billing.MicroToUSD(grantedMicro)

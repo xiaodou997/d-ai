@@ -4328,6 +4328,8 @@ export interface components {
         AccountBalanceLot: {
             balanceLotId: string;
             /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
             expiresAt?: string;
             /** Format: double */
             remainingUsd: number;

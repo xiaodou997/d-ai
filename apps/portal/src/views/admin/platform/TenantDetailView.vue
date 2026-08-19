@@ -1,8 +1,7 @@
 <!--
   租户详情 — 1:1 搬运自 v1/platform/platform-admin/src/views/Tenant/TenantDetail.vue。
-  3 Tab：组织用户 / 关联用户 / 未结债务。
+  2 Tab：组织用户 / 关联用户。
   适配：axios → platformAdminApi；头部用 getTenant + getAccountBalance；
-       债务状态使用只读 DebtStatusPanel。
   重构：页面骨架迁移至新设计系统一体面板（PortalPagePanel:图标徽章+面包屑标题+描述同行,
        详情页无筛选/分页槽,标签页与各 Tab 内容置于同卡 body 内 24px 容器排布），
        组织用户列表接入 useListPage；请求参数与筛选语义保持不变，弹窗仍为 element-plus。
@@ -121,11 +120,6 @@
         </DsTable>
       </div>
 
-      <!-- 未结债务 -->
-      <div v-show="activeTab === 'debt'" class="td-pane">
-        <DebtStatusPanel v-if="activeTab === 'debt'" owner-type="tenant" :account-id="tenantId" />
-      </div>
-
       </div>
     </PortalPagePanel>
 
@@ -186,17 +180,15 @@ import {
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
 import type { TenantDetailOutput } from '@/api/types/admin'
-import DebtStatusPanel from '@/components/DebtStatusPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
 const tenantId = String(route.params.id || '')
-const activeTab = ref('orgUsers')
+const activeTab = ref(route.query.tab === 'users' ? 'users' : 'orgUsers')
 
 const tabs = [
   { key: 'orgUsers', label: '组织用户' },
-  { key: 'users', label: '关联用户' },
-  { key: 'debt', label: '未结债务' }
+  { key: 'users', label: '关联用户' }
 ]
 
 const tenantInfo = ref<TenantDetailOutput | null>(null)
@@ -332,6 +324,8 @@ const fetchUsers = async () => {
 
 const handleTabChange = (name: string) => {
   if (name === 'users') fetchUsers()
+  const { tab: _tab, ...query } = route.query
+  void router.replace({ query: name === 'users' ? { ...query, tab: 'users' } : query })
 }
 
 watch(activeTab, handleTabChange)
@@ -384,6 +378,7 @@ const handleResetOrgUserPwd = async (row: any) => {
 onMounted(() => {
   fetchTenantInfo()
   fetchBalance()
+  if (activeTab.value === 'users') fetchUsers()
 })
 </script>
 

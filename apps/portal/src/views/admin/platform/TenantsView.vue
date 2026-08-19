@@ -93,7 +93,14 @@
           </span>
         </template>
         <template #cell-userCount="{ row }">
-          <span class="tenants-num">{{ row.userCount }}</span>
+          <button
+            type="button"
+            class="tenants-count-link tenants-num"
+            :aria-label="`查看${row.tenantName}的关联用户`"
+            @click="goAssociatedUsers(row.tenantId)"
+          >
+            {{ row.userCount ?? 0 }}
+          </button>
         </template>
         <template #cell-createdTime="{ row }">
           <span class="tenants-time">{{ formatTime(row.createdTime) }}</span>
@@ -337,6 +344,10 @@ const goTenantDetail = (tenantId: string) => {
   router.push(`/admin/organization/tenants/${tenantId}`)
 }
 
+const goAssociatedUsers = (tenantId: string) => {
+  router.push({ path: `/admin/organization/tenants/${tenantId}`, query: { tab: 'users' } })
+}
+
 const goTenantPolicy = (tenantId: string) => {
   router.push(`/admin/organization/tenants/${tenantId}/policy`)
 }
@@ -475,6 +486,19 @@ const handleDelete = async (id: string) => {
 }
 
 .tenants-name-link:hover {
+  color: var(--ds-accent-hover);
+  text-decoration: underline;
+}
+
+.tenants-count-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ds-accent);
+  cursor: pointer;
+}
+
+.tenants-count-link:hover {
   color: var(--ds-accent-hover);
   text-decoration: underline;
 }

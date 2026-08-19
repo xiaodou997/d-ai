@@ -3,7 +3,7 @@
     :open="open"
     :title="`${accountTypeLabel}账户`"
     :subtitle="`${accountName || accountId} · ${accountId}`"
-    width="720px"
+    width="1040px"
     @close="emit('close')"
   >
     <div v-loading="loading" class="account-drawer">
@@ -57,6 +57,9 @@
               <span class="account-drawer__package-balance">
                 {{ formatUSD(row.remainingUsd) }} / {{ formatUSD(row.totalUsd) }}
               </span>
+            </template>
+            <template #cell-createdAt="{ row }">
+              <span>{{ formatTime(row.createdAt) }}</span>
             </template>
             <template #cell-expiresAt="{ row }">
               <span>{{ row.expiresAt ? formatTime(row.expiresAt) : '永久有效' }}</span>
@@ -134,6 +137,7 @@ const hasDebt = computed(() => debtUsd.value > 0)
 const packageColumns: DsTableColumn[] = [
   { key: 'balanceLotId', title: '额度包 ID', mono: true },
   { key: 'balance', title: '剩余 / 总量', align: 'right', width: 150 },
+  { key: 'createdAt', title: '创建时间', width: 170 },
   { key: 'expiresAt', title: '有效期', width: 170 },
   { key: 'source', title: '来源', width: 110 }
 ]
@@ -148,7 +152,9 @@ const ledgerColumns: DsTableColumn[] = [
 
 const formatUSD = (value?: number | null) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
 const formatMicroUSD = (value?: number | null) => formatUSD(Number(value || 0) / 1_000_000)
-const formatTime = (value: string | number) => new Date(value).toLocaleString('zh-CN', { hour12: false })
+const formatTime = (value?: string | number | null) => value
+  ? new Date(value).toLocaleString('zh-CN', { hour12: false })
+  : '—'
 const sourceLabel = (source: string) => ({
   ADMIN_RECHARGE: '平台充值',
   TENANT_RECHARGE: '租户充值',

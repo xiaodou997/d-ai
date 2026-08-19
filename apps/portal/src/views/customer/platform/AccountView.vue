@@ -141,6 +141,7 @@ async function fetchData() {
             balanceLotId: pkg.balanceLotId,
             totalUsd: pkg.totalUsd,
             remainingUsd: pkg.remainingUsd,
+            createdAt: pkg.createdAt,
             expiresAt: pkg.expiresAt,
             source: pkg.source || "充值",
             status: expiredMs && expiredMs < Date.now() ? 2 : pkg.remainingUsd <= 0 ? 3 : 1

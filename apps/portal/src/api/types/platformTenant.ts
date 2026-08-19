@@ -33,6 +33,7 @@ export interface BalanceLot {
 	balanceLotId: string;
 	totalUsd: number;
 	remainingUsd: number;
+  createdAt: string;
   expiresAt?: string | null;
   source: string;
 }
