@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(17);
-    expect(leavesFor(2)).toHaveLength(16);
+    expect(leavesFor(1)).toHaveLength(18);
+    expect(leavesFor(2)).toHaveLength(17);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -38,6 +38,7 @@ describe("portal module registry", () => {
       "审计与风控",
       "公告管理",
       "敏感信息保护",
+      "代理出口",
       "系统模块"
     ]);
     expect(leavesFor(4).map((item) => item.label)).toEqual([
@@ -81,8 +82,8 @@ describe("portal module registry", () => {
     });
   });
 
-  it("exposes sensitive information protection as an operations menu", () => {
-    const operationsMenus = buildPortalNav(1, "/admin/system-modules/pii-protection")
+  it("exposes sensitive information protection and proxy egress as operations menus", () => {
+    const operationsMenus = buildPortalNav(1, "/admin/proxy-nodes")
       .find((item) => item.id === "admin-operations")
       ?.children;
 
@@ -93,6 +94,13 @@ describe("portal module registry", () => {
         label: "敏感信息保护",
         to: "/admin/system-modules/pii-protection",
         icon: "shield-check",
+        active: false
+      },
+      {
+        id: "admin-proxy-egress",
+        label: "代理出口",
+        to: "/admin/proxy-nodes",
+        icon: "network",
         active: true
       },
       { id: "admin-system-modules", label: "系统模块", active: false }

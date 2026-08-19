@@ -298,13 +298,23 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/platform/SensitiveInformationProtectionView.vue")
   },
   {
+    id: "admin-proxy-egress",
+    label: "代理出口",
+    path: "/admin/proxy-nodes",
+    icon: "network",
+    capability: "admin.system",
+    navGroup: adminOperations,
+    order: 30,
+    component: () => import("@/views/admin/platform/ProxyEgressView.vue")
+  },
+  {
     id: "admin-system-modules",
     label: "系统模块",
     path: "/admin/system-modules",
     icon: "blocks",
     capability: "admin.system",
     navGroup: adminOperations,
-    order: 30,
+    order: 40,
     component: () => import("@/views/admin/platform/SystemModulesView.vue")
   },
   {

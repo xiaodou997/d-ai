@@ -154,9 +154,9 @@ func (s *Service) Upsert(ctx context.Context, id string, input UpsertInput, acto
 		VALUES ($1, $2, $3, $4, $5, COALESCE(NULLIF($6, ''), ''), $7, $8, NULLIF($9, ''))
 		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, proxy_type = EXCLUDED.proxy_type,
 		 endpoint = EXCLUDED.endpoint, username = EXCLUDED.username,
-		 proxy_password_enc = COALESCE(EXCLUDED.proxy_password_enc, ai_proxy_nodes.proxy_password_enc),
+		 proxy_password_enc = CASE WHEN $10 THEN EXCLUDED.proxy_password_enc ELSE ai_proxy_nodes.proxy_password_enc END,
 		 weight = EXCLUDED.weight, status = EXCLUDED.status, updated_at = now()`,
-		id, input.Name, input.ProxyType, input.Endpoint, input.Username, encrypted, input.Weight, input.Status, actor)
+		id, input.Name, input.ProxyType, input.Endpoint, input.Username, encrypted, input.Weight, input.Status, actor, input.Password != "")
 	if err != nil {
 		return Node{}, err
 	}

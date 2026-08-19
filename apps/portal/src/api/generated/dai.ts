@@ -521,6 +521,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/proxy-nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 代理出口节点 */
+        get: operations["admin-list-proxy-nodes"];
+        put?: never;
+        /** 创建代理出口节点 */
+        post: operations["admin-create-proxy-node"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/proxy-nodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新代理出口节点 */
+        put: operations["admin-update-proxy-node"];
+        post?: never;
+        /** 删除代理出口节点 */
+        delete: operations["admin-delete-proxy-node"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/recharge-orders": {
         parameters: {
             query?: never;
@@ -6906,6 +6942,30 @@ export interface components {
             readonly $schema?: string;
             enabled: boolean;
         };
+        Node: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Node.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            createdAt: string;
+            endpoint: string;
+            healthStatus: string;
+            id: string;
+            /** Format: date-time */
+            lastCheckedAt?: string;
+            lastError?: string;
+            name: string;
+            proxyType: string;
+            status: string;
+            /** Format: date-time */
+            updatedAt: string;
+            username?: string;
+            /** Format: int64 */
+            weight: number;
+        };
         OauthPoolHealthDTO: {
             /**
              * Format: int64
@@ -7540,6 +7600,24 @@ export interface components {
             items: components["schemas"]["PriceBookDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        ProxyNodeBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ProxyNodeBody.json
+             */
+            readonly $schema?: string;
+            endpoint: string;
+            name: string;
+            password?: string;
+            /** @enum {string} */
+            proxyType: "http" | "socks5";
+            /** @enum {string} */
+            status?: "active" | "disabled";
+            username?: string;
+            /** Format: int64 */
+            weight?: number;
         };
         PublicInvitationOutputBody: {
             /**
@@ -12054,6 +12132,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GlobalSettings"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-list-proxy-nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Node"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-create-proxy-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProxyNodeBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Node"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-update-proxy-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProxyNodeBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Node"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-delete-proxy-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
                 };
             };
             /** @description Error */

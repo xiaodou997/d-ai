@@ -32,7 +32,7 @@ type Definition struct {
 
 var definitions = []Definition{
 	{Name: ModuleNotification, DisplayName: "统一通知服务", Description: "统一管理站内通知、Webhook 发送和系统事件提醒。", Category: "integration", AdminRoute: "/admin/system-modules", Order: 10},
-	{Name: ModuleProxyEgress, DisplayName: "代理出口节点", Description: "管理 AI 上游的 HTTP / SOCKS5 代理出口和健康状态。", Category: "integration", AdminRoute: "/admin/system-modules", Order: 20},
+	{Name: ModuleProxyEgress, DisplayName: "代理出口节点", Description: "管理 AI 上游的 HTTP / SOCKS5 代理出口和健康状态。", Category: "integration", AdminRoute: "/admin/proxy-nodes", Order: 20},
 	{Name: ModulePII, DisplayName: "敏感信息保护", Description: "发送给 AI 上游前替换敏感信息，返回客户端前恢复原文。", Category: "security", AdminRoute: "/admin/system-modules/pii-protection", Order: 30},
 }
 

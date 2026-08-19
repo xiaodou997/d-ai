@@ -32,9 +32,6 @@ type proxyNodeUpdateInput struct {
 }
 
 func registerProxyNodes(api huma.API, d Deps) {
-	if d.ProxyNodes == nil {
-		return
-	}
 	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1, 2)}
 	huma.Register(api, huma.Operation{OperationID: "admin-list-proxy-nodes", Method: http.MethodGet, Path: "/api/v1/admin/proxy-nodes", Summary: "代理出口节点", Tags: []string{"proxy-nodes"}, Middlewares: admin}, func(ctx context.Context, _ *struct{}) (*proxyNodesOutput, error) {
 		items, err := d.ProxyNodes.List(ctx)
