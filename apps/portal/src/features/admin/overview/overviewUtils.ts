@@ -1,12 +1,13 @@
 import type { DashboardSummaryDTO, SystemStatusDTO } from "@/api/types/ai";
 import type { DailyTrendRowDTO } from "@/features/ai/usage/model";
+import { formatDisplayUSD } from "@/shared/currency";
 
 export function formatNumber(value: number | string | null | undefined) {
   return (Number(value) || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
 }
 
 export function formatUSD(value: number | string | null | undefined) {
-  return `$${(Number(value) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+  return formatDisplayUSD(value);
 }
 
 export function formatMs(value: number | string | null | undefined) {

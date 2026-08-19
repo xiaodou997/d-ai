@@ -14,12 +14,11 @@ import { DsEmpty, DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type
 
 import { aiTenantApi } from "@/api/aiTenant";
 import type { TenantAiVisibleGroup, TenantSubPlan } from "@/api/types/aiTenant";
+import { formatDisplayMicroUSD } from "@/shared/currency";
 import SubscriptionPlanDialog from "./SubscriptionPlanDialog.vue";
 import SubscriptionPurchasePolicyHistoryDrawer from "./SubscriptionPurchasePolicyHistoryDrawer.vue";
 import { subscriptionPurchasePolicyLabel } from "./subscriptionPurchasePolicy";
 import { estimateSubscriptionPaygValue, type SubscriptionPricingGroup } from "./subscriptionPricing";
-
-const MICRO_USD = 1_000_000;
 
 const loading = shallowRef(false);
 const plans = shallowRef<TenantSubPlan[]>([]);
@@ -82,7 +81,7 @@ function statusTone(status: string): "neutral" | "positive" | "warning" {
   return map[status] ?? "neutral";
 }
 
-function usdLabel(micro?: number | null) { return micro == null ? "无额外限制" : `$${(micro / MICRO_USD).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
+function usdLabel(micro?: number | null) { return micro == null ? "无额外限制" : formatDisplayMicroUSD(micro); }
 
 function paygValueHint(plan: TenantSubPlan) {
   const groups: SubscriptionPricingGroup[] = [];

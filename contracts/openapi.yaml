@@ -4655,6 +4655,21 @@ components:
       required:
         - message
       type: object
+    ModuleEnabledInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ModuleEnabledInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        enabled:
+          type: boolean
+      required:
+        - enabled
+      type: object
     OauthPoolHealthDTO:
       additionalProperties: false
       properties:
@@ -4736,6 +4751,31 @@ components:
       required:
         - items
         - total
+      type: object
+    PIIConfig:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/PIIConfig.json
+          format: uri
+          readOnly: true
+          type: string
+        enabled:
+          type: boolean
+        placeholderPrefix:
+          type: string
+        rules:
+          items:
+            $ref: "#/components/schemas/RuleConfig"
+          type:
+            - array
+            - "null"
+      required:
+        - enabled
+        - rules
+        - placeholderPrefix
       type: object
     PageAdminRechargeOrder:
       additionalProperties: false
@@ -5495,6 +5535,40 @@ components:
         - retentionDays
         - cutoff
         - eligibleRows
+      type: object
+    PreviewPIIConfigInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/PreviewPIIConfigInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        config:
+          $ref: "#/components/schemas/PIIConfig"
+        text:
+          maxLength: 10000
+          type: string
+      required:
+        - config
+        - text
+      type: object
+    PreviewPIIConfigOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/PreviewPIIConfigOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        protectedText:
+          type: string
+      required:
+        - protectedText
       type: object
     PriceBookDTO:
       additionalProperties: false
@@ -6597,6 +6671,26 @@ components:
         - scope
         - weights
       type: object
+    RuleConfig:
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        id:
+          type: string
+        name:
+          type: string
+        pattern:
+          type: string
+        system:
+          type: boolean
+      required:
+        - id
+        - name
+        - pattern
+        - enabled
+        - system
+      type: object
     Run:
       additionalProperties: false
       properties:
@@ -6802,6 +6896,54 @@ components:
         - latency
         - load
         - health
+      type: object
+    Status:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/Status.json
+          format: uri
+          readOnly: true
+          type: string
+        active:
+          type: boolean
+        adminRoute:
+          type: string
+        available:
+          type: boolean
+        category:
+          type: string
+        configError:
+          type: string
+        configValidated:
+          type: boolean
+        description:
+          type: string
+        displayName:
+          type: string
+        enabled:
+          type: boolean
+        health:
+          type: string
+        name:
+          type: string
+        order:
+          format: int64
+          type: integer
+      required:
+        - available
+        - enabled
+        - active
+        - configValidated
+        - health
+        - name
+        - displayName
+        - description
+        - category
+        - adminRoute
+        - order
       type: object
     StatusPathInputBody:
       additionalProperties: false
@@ -12187,6 +12329,172 @@ paths:
       summary: 查询账户当前债务
       tags:
         - admin-finance
+  /api/v1/admin/modules:
+    get:
+      operationId: admin-list-modules
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Status"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 模块状态
+      tags:
+        - modules
+  /api/v1/admin/modules/pii-protection/config:
+    get:
+      operationId: admin-get-pii-protection-config
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PIIConfig"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 敏感信息保护配置
+      tags:
+        - modules
+    put:
+      operationId: admin-update-pii-protection-config
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PIIConfig"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PIIConfig"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 更新敏感信息保护配置
+      tags:
+        - modules
+  /api/v1/admin/modules/pii-protection/defaults:
+    get:
+      operationId: admin-get-pii-protection-defaults
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PIIConfig"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 敏感信息保护默认配置
+      tags:
+        - modules
+  /api/v1/admin/modules/pii-protection/preview:
+    post:
+      operationId: admin-preview-pii-protection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PreviewPIIConfigInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreviewPIIConfigOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 预览敏感信息替换结果
+      tags:
+        - modules
+  /api/v1/admin/modules/{name}:
+    get:
+      operationId: admin-get-module
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 模块详情
+      tags:
+        - modules
+  /api/v1/admin/modules/{name}/enabled:
+    put:
+      operationId: admin-set-module-enabled
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModuleEnabledInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 启用或禁用模块
+      tags:
+        - modules
   /api/v1/admin/payment-orders:
     get:
       operationId: admin-list-payment-orders

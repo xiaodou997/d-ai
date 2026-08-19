@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/ai/privacy"
 	systempkg "xiaodou/dai/internal/system"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -30,10 +31,28 @@ type moduleEnabledInput struct {
 	}
 }
 
-func registerModules(api huma.API, d Deps) {
-	if d.Modules == nil {
-		return
+type piiConfigOutput struct {
+	Body systempkg.PIIConfig
+}
+
+type updatePIIConfigInput struct {
+	Body systempkg.PIIConfig
+}
+
+type previewPIIConfigInput struct {
+	Body struct {
+		Config systempkg.PIIConfig `json:"config"`
+		Text   string              `json:"text" maxLength:"10000"`
 	}
+}
+
+type previewPIIConfigOutput struct {
+	Body struct {
+		ProtectedText string `json:"protectedText"`
+	}
+}
+
+func registerModules(api huma.API, d Deps) {
 	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1, 2)}
 
 	huma.Register(api, huma.Operation{
@@ -49,6 +68,75 @@ func registerModules(api huma.API, d Deps) {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		return &moduleStatusesOutput{Body: items}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-get-pii-protection-config",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/admin/modules/pii-protection/config",
+		Summary:     "敏感信息保护配置",
+		Tags:        []string{"modules"},
+		Middlewares: admin,
+	}, func(ctx context.Context, _ *struct{}) (*piiConfigOutput, error) {
+		config, err := d.Modules.GetPIIConfig(ctx)
+		if err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		return &piiConfigOutput{Body: config}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-get-pii-protection-defaults",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/admin/modules/pii-protection/defaults",
+		Summary:     "敏感信息保护默认配置",
+		Tags:        []string{"modules"},
+		Middlewares: admin,
+	}, func(context.Context, *struct{}) (*piiConfigOutput, error) {
+		return &piiConfigOutput{Body: systempkg.DefaultPIIConfig()}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-update-pii-protection-config",
+		Method:      http.MethodPut,
+		Path:        "/api/v1/admin/modules/pii-protection/config",
+		Summary:     "更新敏感信息保护配置",
+		Tags:        []string{"modules"},
+		Middlewares: admin,
+	}, func(ctx context.Context, in *updatePIIConfigInput) (*piiConfigOutput, error) {
+		actor := ""
+		if claims := userClaimsFromCtx(ctx); claims != nil {
+			actor = claims.UserID
+		}
+		config, err := d.Modules.UpdatePIIConfig(ctx, in.Body, actor)
+		if errors.Is(err, systempkg.ErrModuleConfigInvalid) {
+			return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+		}
+		if err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		return &piiConfigOutput{Body: config}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID: "admin-preview-pii-protection",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/admin/modules/pii-protection/preview",
+		Summary:     "预览敏感信息替换结果",
+		Tags:        []string{"modules"},
+		Middlewares: admin,
+	}, func(_ context.Context, in *previewPIIConfigInput) (*previewPIIConfigOutput, error) {
+		protector, err := privacy.NewProtectorWithConfig(privacy.Config{
+			Rules:             in.Body.Config.Rules,
+			PlaceholderPrefix: in.Body.Config.PlaceholderPrefix,
+		})
+		if err != nil {
+			return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+		}
+		protected, _ := protector.RedactText([]byte(in.Body.Text))
+		out := &previewPIIConfigOutput{}
+		out.Body.ProtectedText = string(protected)
+		return out, nil
 	})
 
 	huma.Register(api, huma.Operation{

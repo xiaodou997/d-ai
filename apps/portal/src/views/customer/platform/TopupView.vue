@@ -6,6 +6,7 @@ import { PortalPagePanel, PortalQrPayDialog, type QrPayPollResult } from "@/plat
 import { DsEmpty, DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { TopupConfig, TopupOrderCreated, TopupOrderItem, TopupPackage } from "@/api/types/platformCustomer";
+import { formatDisplayMicroUSD as formatMicroUSD } from "@/shared/currency";
 
 const MICRO_USD = 1_000_000;
 const columns: DsTableColumn[] = [
@@ -36,7 +37,6 @@ const canSubmitCustom = computed(() => Boolean(config.value
   && customPreview.value.gross >= config.value.minMicroUsd
   && customPreview.value.gross <= config.value.maxMicroUsd
   && customPreview.value.credited > 0));
-function formatMicroUSD(value: number) { return `$${(Number(value ?? 0) / MICRO_USD).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
 function formatTime(value?: number | null) { return value ? new Date(value).toLocaleString("zh-CN") : "—"; }
 function statusTone(status: string): "positive" | "warning" | "danger" | "neutral" {
   if (status === "paid") return "positive"; if (status === "created" || status === "paying") return "warning"; if (status === "expired") return "danger"; return "neutral";

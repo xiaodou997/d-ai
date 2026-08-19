@@ -180,6 +180,7 @@ import {
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
 import type { TenantDetailOutput } from '@/api/types/admin'
+import { formatDisplayUSD } from '@/shared/currency'
 
 const route = useRoute()
 const router = useRouter()
@@ -199,7 +200,7 @@ const rechargeSubmitting = ref(false)
 
 // 页头副标题集中展示关键信息
 const headerDescription = computed(
-  () => `租户 ID：${tenantId} · 余额：$${credits.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+  () => `租户 ID：${tenantId} · 余额：${formatDisplayUSD(credits.value)}`
 )
 
 const orgUserColumns: DsTableColumn[] = [

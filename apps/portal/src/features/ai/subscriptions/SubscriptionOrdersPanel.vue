@@ -12,6 +12,7 @@ import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableC
 
 import { aiTenantApi } from "@/api/aiTenant";
 import type { TenantSubOrder } from "@/api/types/aiTenant";
+import { formatDisplayMicroUSD as formatMicroUSD } from "@/shared/currency";
 
 const userId = shallowRef("");
 const statusFilter = shallowRef("");
@@ -42,8 +43,6 @@ function statusTone(status: string): "positive" | "warning" | "danger" | "neutra
   return map[status] ?? "neutral";
 }
 function fmtTime(value?: string | null) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-"; }
-function formatMicroUSD(value: number) { return `$${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
-
 async function fetchOrders() {
   loading.value = true;
   try {

@@ -15,6 +15,20 @@ export type SystemModuleStatus = {
   health: string;
 };
 
+export type PIIRuleConfig = {
+  id: string;
+  name: string;
+  pattern: string;
+  enabled: boolean;
+  system: boolean;
+};
+
+export type PIIProtectionConfig = {
+  enabled: boolean;
+  rules: PIIRuleConfig[];
+  placeholderPrefix: string;
+};
+
 export type ProxyNode = {
   id: string;
   name: string;
@@ -90,6 +104,18 @@ export const systemModulesApi = {
   },
   setEnabled(name: string, enabled: boolean) {
     return request()<SystemModuleStatus>({ method: "PUT", path: `/api/v1/admin/modules/${encodeURIComponent(name)}/enabled`, headers: apiHeaders, body: { enabled }, baseUrl: apiBaseUrl });
+  },
+  getPIIProtectionConfig() {
+    return request()<PIIProtectionConfig>({ method: "GET", path: "/api/v1/admin/modules/pii-protection/config", headers: apiHeaders, baseUrl: apiBaseUrl });
+  },
+  getPIIProtectionDefaults() {
+    return request()<PIIProtectionConfig>({ method: "GET", path: "/api/v1/admin/modules/pii-protection/defaults", headers: apiHeaders, baseUrl: apiBaseUrl });
+  },
+  updatePIIProtectionConfig(body: PIIProtectionConfig) {
+    return request()<PIIProtectionConfig>({ method: "PUT", path: "/api/v1/admin/modules/pii-protection/config", headers: apiHeaders, body, baseUrl: apiBaseUrl });
+  },
+  previewPIIProtection(body: { config: PIIProtectionConfig; text: string }) {
+    return request()<{ protectedText: string }>({ method: "POST", path: "/api/v1/admin/modules/pii-protection/preview", headers: apiHeaders, body, baseUrl: apiBaseUrl });
   },
   listProxyNodes() {
     return request()<ProxyNode[]>({ method: "GET", path: "/api/v1/admin/proxy-nodes", headers: apiHeaders, baseUrl: apiBaseUrl });

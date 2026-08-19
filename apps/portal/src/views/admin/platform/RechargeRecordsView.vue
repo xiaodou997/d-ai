@@ -330,6 +330,7 @@ import { BanknoteArrowDown, Copy, PanelRightOpen, ReceiptText, RefreshCw, Rotate
 import { platformAdminApi } from "@/api/platformAdmin";
 import type { AdminRechargeOrder, RechargeCreditDetail } from "@/api/types/admin";
 import { PortalPagePanel, useListPage } from "@/platform";
+import { formatDisplayMicroUSD as formatMicroUSD } from "@/shared/currency";
 import {
   DsDrawer,
   DsFilterBar,
@@ -583,10 +584,6 @@ async function copyText(value?: string) {
   } catch {
     ElMessage.error("复制失败");
   }
-}
-
-function formatMicroUSD(value?: number | null) {
-  return `$${(Number(value ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
 
 function formatPaid(value?: number | null) {

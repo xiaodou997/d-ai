@@ -1,4 +1,9 @@
 import type { AccountBalance } from "@/api/types/platformTenant";
+import {
+  formatDisplayMicroUSD,
+  formatDisplayUSD,
+  MICRO_USD_PER_USD
+} from "@/shared/currency";
 
 export type AccountCenterTab = "recharges" | "ledger";
 
@@ -9,7 +14,7 @@ export interface AccountCenterPage<T> {
   size: number;
 }
 
-export const MICRO_USD_PER_USD = 1_000_000;
+export { MICRO_USD_PER_USD };
 
 export function emptyAccountBalance(): AccountBalance {
   return {
@@ -24,11 +29,11 @@ export function normalizeAccountTab(value: unknown): AccountCenterTab {
 }
 
 export function formatUSD(value: number | null | undefined): string {
-  return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+  return formatDisplayUSD(value);
 }
 
 export function formatMicroUSD(value: number | null | undefined): string {
-  return formatUSD(Number(value ?? 0) / MICRO_USD_PER_USD);
+  return formatDisplayMicroUSD(value);
 }
 
 export function formatTime(value?: number | string | null): string {

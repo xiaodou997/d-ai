@@ -23,6 +23,7 @@ import { Refresh } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { platformAdminApi } from "../api/platformAdmin";
 import type { DebtStatusOutputBody } from "@/api/types/admin";
+import { formatDisplayMicroUSD as formatMicroUSD } from "@/shared/currency";
 
 const props = defineProps<{
   ownerType: "tenant" | "user";
@@ -32,8 +33,6 @@ const props = defineProps<{
 const loading = ref(false);
 const status = ref<DebtStatusOutputBody | null>(null);
 const blocked = computed(() => status.value?.service_state === "blocked_debt");
-const formatMicroUSD = (value: number) => `$${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
-
 async function fetchStatus() {
   if (!props.accountId) return;
   loading.value = true;

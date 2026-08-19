@@ -57,7 +57,7 @@
           <span class="recharge-records-amount">${{ (row.paidAmountMinor / 100).toFixed(2) }}</span>
         </template>
         <template #cell-amount="{ row }">
-          <span class="recharge-records-credits">+${{ row.amountUsd?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
+          <span class="recharge-records-credits">+{{ formatDisplayUSD(row.amountUsd) }}</span>
         </template>
         <template #cell-rechargeMethod="{ row }">
           <DsTag :tone="isOnlineRecharge(row.orderType) ? 'accent' : 'neutral'">{{ rechargeMethodText(row.orderType) }}</DsTag>
@@ -93,7 +93,7 @@
         <el-alert type="danger" :closable="false" show-icon class="reverse-warning-alert" title="此操作将回收该充值对应额度包的剩余金额，请确认操作无误。" />
         <div v-if="reverseRow" class="space-y-2 text-sm">
           <div class="flex justify-between"><span class="recharge-records-dialog-label">充值单号</span><span class="font-mono">{{ reverseRow.orderId }}</span></div>
-          <div class="flex justify-between"><span class="recharge-records-dialog-label">到账金额</span><span class="font-bold">${{ (reverseRow.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span></div>
+          <div class="flex justify-between"><span class="recharge-records-dialog-label">到账金额</span><span class="font-bold">{{ formatDisplayUSD(reverseRow.amountUsd) }}</span></div>
         </div>
         <el-form :model="reverseForm" label-position="top">
           <el-form-item label="撤销原因" required>
@@ -127,6 +127,7 @@ import {
 
 import { platformTenantApi } from "@/api/platformTenant";
 import type { RechargeRecordItem } from "@/api/types/platformTenant";
+import { formatDisplayUSD } from "@/shared/currency";
 import { isOnlineRecharge, rechargeMethodText } from "@/utils/recharge";
 
 const columns: DsTableColumn[] = [

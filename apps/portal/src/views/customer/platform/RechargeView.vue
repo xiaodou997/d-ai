@@ -24,7 +24,7 @@
           <span class="recharge-amount">${{ ((row.paidAmountMinor || 0) / 100).toFixed(2) }}</span>
         </template>
         <template #cell-amount="{ row }">
-          <span class="recharge-credits">+${{ (row.amountUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</span>
+          <span class="recharge-credits">+{{ formatDisplayUSD(row.amountUsd) }}</span>
         </template>
         <template #cell-rechargeMethod="{ row }">
           <DsTag :tone="isOnlineRecharge(row.orderType) ? 'accent' : 'neutral'">{{ rechargeMethodText(row.orderType) }}</DsTag>
@@ -59,6 +59,7 @@ import { PortalPagePanel } from "@/platform";
 import { DsPagination, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { RechargeRecordItem } from "@/api/types/platformCustomer";
+import { formatDisplayUSD } from "@/shared/currency";
 import { isOnlineRecharge, rechargeMethodText } from "@/utils/recharge";
 
 const columns: DsTableColumn[] = [

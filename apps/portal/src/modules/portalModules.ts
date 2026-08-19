@@ -288,13 +288,23 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/platform/AnnouncementsView.vue")
   },
   {
+    id: "admin-sensitive-information-protection",
+    label: "敏感信息保护",
+    path: "/admin/system-modules/pii-protection",
+    icon: "shield-check",
+    capability: "admin.system",
+    navGroup: adminOperations,
+    order: 20,
+    component: () => import("@/views/admin/platform/SensitiveInformationProtectionView.vue")
+  },
+  {
     id: "admin-system-modules",
     label: "系统模块",
     path: "/admin/system-modules",
     icon: "blocks",
     capability: "admin.system",
     navGroup: adminOperations,
-    order: 20,
+    order: 30,
     component: () => import("@/views/admin/platform/SystemModulesView.vue")
   },
   {

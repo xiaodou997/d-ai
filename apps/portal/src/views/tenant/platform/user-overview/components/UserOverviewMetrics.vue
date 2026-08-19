@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { DsMetricCard } from "@/shared/ui";
 import type { TenantUsageStats } from "@/features/ai/usage";
 import type { EndUserItem } from "@/api/types/platformTenant";
+import { formatDisplayUSD } from "@/shared/currency";
 import { formatDateTime, formatNumber } from "../formatters";
 import type { UserOverviewGroupSummary, UserOverviewRiskSignal } from "../model";
 
@@ -31,7 +32,7 @@ const cards = computed<MetricCard[]>(() => {
     {
       key: "balance",
       label: "当前 USD 余额",
-      value: `$${Number(props.user?.balanceUsd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`,
+      value: formatDisplayUSD(props.user?.balanceUsd),
       meta: props.user?.status === 1 ? "账户可用余额" : "账号停用中"
     },
     {

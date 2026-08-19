@@ -13,7 +13,7 @@ describe("account center presentation", () => {
     expect(normalizeAccountTab("recharges")).toBe("recharges");
     expect(normalizeAccountTab("unknown")).toBe("ledger");
     expect(formatUSD(12345.5)).toBe("$12,345.50");
-    expect(formatMicroUSD(123_456_789)).toBe("$123.456789");
+    expect(formatMicroUSD(123_456_789)).toBe("$123.45");
   });
 
   it("maps balance sources and transaction names", () => {

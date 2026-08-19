@@ -11,8 +11,8 @@ import { DsFilterBar, DsFilterField, DsPagination, DsTable, DsTag, type DsTableC
 
 import { aiTenantApi } from "@/api/aiTenant";
 import type { TenantSubscription } from "@/api/types/aiTenant";
+import { formatDisplayMicroUSD } from "@/shared/currency";
 
-const MICRO_USD = 1_000_000;
 const userId = shallowRef("");
 const statusFilter = shallowRef("");
 const subscriptions = shallowRef<TenantSubscription[]>([]);
@@ -40,7 +40,7 @@ function statusTone(status: string): "positive" | "warning" | "neutral" {
   const map: Record<string, "positive" | "warning" | "neutral"> = { active: "positive", pending: "warning", expired: "neutral", cancelled: "neutral" };
   return map[status] ?? "neutral";
 }
-function micro(value?: number | null) { return value == null ? "不限" : `$${(value / MICRO_USD).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
+function micro(value?: number | null) { return value == null ? "不限" : formatDisplayMicroUSD(value); }
 function fmtTime(value?: string | null) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-"; }
 
 async function fetchSubscriptions() {

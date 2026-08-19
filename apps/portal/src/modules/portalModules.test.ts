@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(16);
-    expect(leavesFor(2)).toHaveLength(15);
+    expect(leavesFor(1)).toHaveLength(17);
+    expect(leavesFor(2)).toHaveLength(16);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -37,6 +37,7 @@ describe("portal module registry", () => {
       "用量分析",
       "审计与风控",
       "公告管理",
+      "敏感信息保护",
       "系统模块"
     ]);
     expect(leavesFor(4).map((item) => item.label)).toEqual([
@@ -78,6 +79,24 @@ describe("portal module registry", () => {
         { label: "AI 运营", to: "/tenant/overview/ai", active: false }
       ]
     });
+  });
+
+  it("exposes sensitive information protection as an operations menu", () => {
+    const operationsMenus = buildPortalNav(1, "/admin/system-modules/pii-protection")
+      .find((item) => item.id === "admin-operations")
+      ?.children;
+
+    expect(operationsMenus).toMatchObject([
+      { id: "admin-announcements", label: "公告管理", active: false },
+      {
+        id: "admin-sensitive-information-protection",
+        label: "敏感信息保护",
+        to: "/admin/system-modules/pii-protection",
+        icon: "shield-check",
+        active: true
+      },
+      { id: "admin-system-modules", label: "系统模块", active: false }
+    ]);
   });
 
   it("marks a workspace active for any child or detail route", () => {

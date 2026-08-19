@@ -89,7 +89,7 @@
         </template>
         <template #cell-balance="{ row }">
           <span class="tenants-num tenants-credits" :class="{ 'tenants-credits--danger': row.status === 3 }">
-            ${{ (row.balanceUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
+            {{ formatDisplayUSD(row.balanceUsd) }}
           </span>
         </template>
         <template #cell-userCount="{ row }">
@@ -213,6 +213,7 @@ import {
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
 import type { TenantListItem } from '@/api/types/admin'
+import { formatDisplayUSD } from '@/shared/currency'
 
 const router = useRouter()
 

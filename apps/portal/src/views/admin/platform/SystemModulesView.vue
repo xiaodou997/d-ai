@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { Blocks, Play, Plus, RefreshCw, Save, Trash2 } from "lucide-vue-next";
+import { useRouter } from "vue-router";
+import { Blocks, Play, Plus, RefreshCw, Save, Settings, Trash2 } from "lucide-vue-next";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { PortalPagePanel, PortalContentCard } from "@/platform";
 import { DsButton, DsEmpty, DsInput, DsSelect, DsSwitch, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
@@ -14,6 +15,7 @@ import {
 } from "@/api/systemModules";
 
 const loading = ref(false);
+const router = useRouter();
 const modules = ref<SystemModuleStatus[]>([]);
 const nodes = ref<ProxyNode[]>([]);
 const savingModule = ref<string | null>(null);
@@ -47,6 +49,7 @@ function updateCleanupNumber(key: keyof DataCleanupPolicy, value: string) {
   cleanupPolicy.value[key] = Number(value) as never;
 }
 function cleanupDate(value?: string) { return value ? new Date(value).toLocaleString() : "-"; }
+function hasDetailPage(item: SystemModuleStatus) { return item.adminRoute !== "/admin/system-modules"; }
 
 async function load() {
   loading.value = true;
@@ -170,7 +173,10 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
           <article v-for="item in modules" :key="item.name" class="module-card">
             <div class="module-card__head"><div><p class="module-card__title">{{ item.displayName }}</p><p class="module-card__name">{{ item.name }}</p></div><DsSwitch :model-value="item.enabled" :disabled="savingModule === item.name" @update:model-value="toggle(item, $event)" /></div>
             <p class="module-card__description">{{ item.description }}</p>
-            <div class="module-card__foot"><DsTag :tone="tone(item)">{{ statusLabel(item) }}</DsTag><span v-if="item.configError" class="module-error">{{ item.configError }}</span></div>
+            <div class="module-card__foot">
+              <div class="module-card__status"><DsTag :tone="tone(item)">{{ statusLabel(item) }}</DsTag><span v-if="item.configError" class="module-error">{{ item.configError }}</span></div>
+              <DsButton v-if="hasDetailPage(item)" size="sm" @click="router.push(item.adminRoute)"><template #icon><Settings :size="13" /></template>配置</DsButton>
+            </div>
           </article>
         </div>
 
@@ -252,8 +258,9 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
 .module-body { display: flex; flex-direction: column; gap: 20px; padding: 24px; }
 .module-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .module-card { display: flex; flex-direction: column; gap: 16px; padding: 18px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-panel); background: var(--ds-panel); box-shadow: var(--ds-shadow-sm); }
-.module-card__head, .module-card__foot, .form-row, .form-actions, .row-actions { display: flex; align-items: center; gap: 10px; }
+.module-card__head, .module-card__foot, .module-card__status, .form-row, .form-actions, .row-actions { display: flex; align-items: center; gap: 10px; }
 .module-card__head { justify-content: space-between; align-items: flex-start; }
+.module-card__foot { justify-content: space-between; }
 .module-card__title, .module-card__name, .module-card__description, .module-error, .form-title { margin: 0; }
 .module-card__title { color: var(--ds-ink); font-weight: 700; }
 .module-card__name { margin-top: 4px; color: var(--ds-muted); font: 12px var(--ds-font-mono); }

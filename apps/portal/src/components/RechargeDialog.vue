@@ -18,7 +18,7 @@
       </div>
       <div v-if="targetBalanceUsd != null" class="recharge-target__balance">
         <span>当前余额</span>
-        <strong>${{ targetBalanceUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}</strong>
+        <strong>{{ formatDisplayUSD(targetBalanceUsd) }}</strong>
       </div>
     </div>
 
@@ -104,6 +104,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from 'vue'
 import { ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { formatDisplayUSD } from '@/shared/currency'
 import type { RechargeFormPayload } from './recharge'
 
 withDefaults(defineProps<{

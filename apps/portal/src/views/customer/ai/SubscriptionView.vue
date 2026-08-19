@@ -18,6 +18,7 @@ import { Crown } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import { DsEmpty, DsTable, DsTabs, DsTag, type DsTableColumn } from "@/shared/ui";
 import { formatMultiplier } from "@/platform/ai/utils";
+import { formatDisplayMicroUSD, formatDisplayUSD } from "@/shared/currency";
 
 import { aiCustomerApi } from "@/api/aiCustomer";
 import { platformCustomerApi } from "@/api/platformCustomer";
@@ -85,12 +86,12 @@ const now = shallowRef(Date.now());
 let ticker: ReturnType<typeof setInterval> | null = null;
 
 function usdLabel(v: number): string {
-  return `$${Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+  return formatDisplayUSD(v);
 }
 
 function microUSD(v: number | null | undefined): string {
   if (v == null) return "不限";
-  return usdLabel(v / 1_000_000);
+  return formatDisplayMicroUSD(v);
 }
 
 const insufficient = computed(() => (buyPlan.value ? availableUsd.value * 1_000_000 < buyPlan.value.price_micro_usd : false));

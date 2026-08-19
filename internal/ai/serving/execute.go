@@ -85,6 +85,10 @@ type ModuleGate interface {
 	IsActive(ctx context.Context, name string) (bool, error)
 }
 
+type PIIProtectionProvider interface {
+	PIIProtection(ctx context.Context) (bool, *privacy.Protector, error)
+}
+
 const modulePIIProtection = "pii_protection"
 
 // ImageResponseNormalizer restores the response representation requested by
@@ -2246,12 +2250,27 @@ func (s *ExecuteStep) buildUpstreamBody(req *Request) (corebridge.PreparedReques
 		if req.Envelope.R != nil {
 			checkCtx = req.Envelope.R.Context()
 		}
-		active, err := s.ModuleGate.IsActive(checkCtx, modulePIIProtection)
-		if err != nil {
-			return corebridge.PreparedRequest{}, fmt.Errorf("check pii protection module: %w", err)
+		active := false
+		protector := s.Privacy
+		if provider, ok := s.ModuleGate.(PIIProtectionProvider); ok {
+			configuredProtector := (*privacy.Protector)(nil)
+			var err error
+			active, configuredProtector, err = provider.PIIProtection(checkCtx)
+			if err != nil {
+				return corebridge.PreparedRequest{}, fmt.Errorf("load pii protection config: %w", err)
+			}
+			if configuredProtector != nil {
+				protector = configuredProtector
+			}
+		} else {
+			var err error
+			active, err = s.ModuleGate.IsActive(checkCtx, modulePIIProtection)
+			if err != nil {
+				return corebridge.PreparedRequest{}, fmt.Errorf("check pii protection module: %w", err)
+			}
 		}
 		if active && req.PIIMap == nil {
-			protected, mapping, err := s.Privacy.RedactJSON(body)
+			protected, mapping, err := protector.RedactJSON(body)
 			if err != nil {
 				return corebridge.PreparedRequest{}, fmt.Errorf("protect request body: %w", err)
 			}

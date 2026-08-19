@@ -9,6 +9,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Wallet } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
+import { formatDisplayMicroUSD as formatMicroUSD, formatDisplayUSD } from "@/shared/currency";
 import { tenantApi } from "@/api/tenant";
 import type { TenantPaymentSettings, TopupPackage } from "@/api/types/tenant";
 
@@ -36,8 +37,6 @@ const customPreview = computed(() => {
   const fee = Math.ceil((gross * percentToBp(form.feePercent)) / 10000);
   return { gross: formatMicroUSD(gross), fee: formatMicroUSD(fee), net: formatMicroUSD(Math.max(0, gross - fee)) };
 });
-function formatMicroUSD(value: number) { return `$${(value / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
-
 function percentToBp(value: number) {
   return Math.round(Number(value || 0) * 100);
 }
@@ -172,7 +171,7 @@ onMounted(fetchSettings);
                   <span v-if="!pkg.enabled" class="package-preview__hidden">已隐藏</span>
                   <strong>${{ Number(pkg.paymentAmountUsd || 0).toFixed(2) }}</strong>
                   <em>{{ pkg.name || "未命名额度包" }}</em>
-                  <span class="package-preview__credits">到账 ${{ (Number(pkg.paymentAmountUsd || 0) + Number(pkg.giftAmountUsd || 0)).toFixed(6) }}</span>
+                  <span class="package-preview__credits">到账 {{ formatDisplayUSD(Number(pkg.paymentAmountUsd || 0) + Number(pkg.giftAmountUsd || 0)) }}</span>
                 </div>
                 <div class="package-fields">
                   <label class="package-field">

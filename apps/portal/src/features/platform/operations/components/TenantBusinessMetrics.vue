@@ -15,6 +15,7 @@ import {
 
 import TenantWorkbenchMetricCard from "@/components/workbench/TenantWorkbenchMetricCard.vue";
 import type { AccountBalance, TenantAnalyticsOverview } from "@/api/types/platformTenant";
+import { formatDisplayMicroUSD as formatMicroUSD, formatDisplayUSD as formatUSD } from "@/shared/currency";
 
 const props = defineProps<{
   serviceBalance: AccountBalance;
@@ -28,13 +29,6 @@ const emit = defineEmits<{
   openSettlement: [];
   topUpServiceBalance: [];
 }>();
-
-const currencyFormatter = new Intl.NumberFormat("zh-CN", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-});
 
 const numberFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
 
@@ -77,8 +71,6 @@ const serviceBalanceValue = computed(() =>
   props.serviceBalanceLoading ? "—" : formatUSD(props.serviceBalance.availableUsd)
 );
 
-function formatUSD(amount: number) { return currencyFormatter.format(Number(amount ?? 0)); }
-function formatMicroUSD(amount: number) { return formatUSD(Number(amount ?? 0) / 1_000_000); }
 </script>
 
 <template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import QRCode from "qrcode";
+import { formatDisplayMicroUSD } from "@/shared/currency";
 
 export interface QrPayPollResult {
   status: "created" | "paying" | "paid" | "closed" | "expired";
@@ -49,10 +50,7 @@ function formatCountdown(seconds: number) {
 
 const countdownLabel = computed(() => formatCountdown(Math.max(0, remainingSeconds.value)));
 const paidAmount = computed(() => (props.paymentAmountMinor / 100).toFixed(2));
-const creditedAmount = computed(() => (props.creditedAmountMicroUsd / 1_000_000).toLocaleString("en-US", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 6
-}));
+const creditedAmount = computed(() => formatDisplayMicroUSD(props.creditedAmountMicroUsd));
 
 async function drawQrCode() {
   await nextTick();
@@ -124,7 +122,7 @@ function handleClose() {
     <div class="qr-pay-body">
       <div class="qr-pay-amount">
         <span class="qr-pay-amount-value">${{ paidAmount }}</span>
-        <span class="qr-pay-amount-detail">到账 ${{ creditedAmount }}</span>
+        <span class="qr-pay-amount-detail">到账 {{ creditedAmount }}</span>
       </div>
 
       <div class="qr-pay-canvas-wrap">

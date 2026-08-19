@@ -14,6 +14,7 @@ import SubscriptionGroupPricingTable from './SubscriptionGroupPricingTable.vue'
 import SubscriptionPlanBasicsEditor from './SubscriptionPlanBasicsEditor.vue'
 import SubscriptionPurchasePolicyEditor from './SubscriptionPurchasePolicyEditor.vue'
 import { defaultSubscriptionPurchasePolicy } from './subscriptionPurchasePolicy'
+import { formatDisplayUSD as usdLabel } from '@/shared/currency'
 import {
   estimateSubscriptionPaygValue,
   type SubscriptionPricingGroup
@@ -101,8 +102,6 @@ function microToUSD(value?: number | null): number | null {
 function usdToMicro(value?: number | null): number | null {
   return value == null ? null : Math.round(Number(value) * MICRO_USD)
 }
-
-function usdLabel(value: number): string { return `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}` }
 
 function paygValueHint(usd?: number | null): string {
   if (usd == null) return '无额外限制'

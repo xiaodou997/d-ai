@@ -47,3 +47,37 @@ func TestProtectorRoundTripNonJSONText(t *testing.T) {
 		t.Fatalf("PII was not restored: %s", restored)
 	}
 }
+
+func TestProtectorUsesConfiguredRulesAndPrefix(t *testing.T) {
+	protector, err := NewProtectorWithConfig(Config{
+		PlaceholderPrefix: "secure",
+		Rules: []RuleConfig{
+			{ID: "employee_id", Name: "员工编号", Pattern: `EMP-[0-9]{4}`, Enabled: true},
+			{ID: "email", Name: "邮箱", Pattern: `[^ ]+@[^ ]+`, Enabled: false},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	protected, mapping := protector.RedactText([]byte("EMP-1234 alice@example.com"))
+	if got := string(protected); got != "__SECURE_PII_EMPLOYEE_ID_1__ alice@example.com" {
+		t.Fatalf("unexpected protected text: %s", got)
+	}
+	if got := string(protector.RestoreText(protected, mapping)); got != "EMP-1234 alice@example.com" {
+		t.Fatalf("unexpected restored text: %s", got)
+	}
+}
+
+func TestValidateConfigRejectsInvalidRules(t *testing.T) {
+	_, err := ValidateConfig(Config{
+		PlaceholderPrefix: "DAI",
+		Rules:             []RuleConfig{{ID: "broken", Name: "无效规则", Pattern: "("}},
+	})
+	if err == nil {
+		t.Fatal("expected invalid regular expression to fail validation")
+	}
+	_, err = ValidateConfig(Config{PlaceholderPrefix: "bad-prefix!"})
+	if err == nil {
+		t.Fatal("expected invalid placeholder prefix to fail validation")
+	}
+}

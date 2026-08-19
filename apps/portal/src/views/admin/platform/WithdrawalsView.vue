@@ -117,6 +117,7 @@ import {
 } from "@/shared/ui";
 import { platformAdminApi } from "@/api/platformAdmin";
 import type { WithdrawalItem } from "@/api/types/admin";
+import { formatDisplayMicroUSD as formatMicroUSD } from "@/shared/currency";
 
 const columns: DsTableColumn[] = [
   { key: "withdrawalId", title: "记录单号", width: 200, mono: true },
@@ -169,10 +170,6 @@ function formatTime(ts?: number | null) {
   if (!ts) return "—";
   return new Date(ts).toLocaleString("zh-CN");
 }
-function formatMicroUSD(value: number) {
-  return `$${(Number(value ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
-}
-
 type DsTagTone = "neutral" | "accent" | "positive" | "warning" | "danger" | "info";
 
 function statusTone(s: string): DsTagTone {

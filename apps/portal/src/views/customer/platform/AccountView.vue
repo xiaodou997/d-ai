@@ -107,6 +107,7 @@ import { PortalPagePanel } from "@/platform";
 import { DsEmpty, DsMetricCard, DsTag } from "@/shared/ui";
 import { platformCustomerApi } from "@/api/platformCustomer";
 import type { BalanceLotView } from "@/api/types/platformCustomer";
+import { formatDisplayUSD as formatUSD } from "@/shared/currency";
 
 const loading = ref(false);
 const pkgLoading = ref(false);
@@ -118,8 +119,6 @@ const stats = reactive({
 });
 
 const packages = ref<BalanceLotView[]>([]);
-function formatUSD(value: number) { return `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`; }
-
 function formatDate(ts?: string | number | null) {
   if (!ts) return "—";
   return new Date(ts).toLocaleDateString("zh-CN");

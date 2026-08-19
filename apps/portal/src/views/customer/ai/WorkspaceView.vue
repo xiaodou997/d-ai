@@ -16,11 +16,13 @@ import {
   PortalImageJobTable
 } from "@/platform/ai/images";
 import {
+  formatUSD as formatUsageUSD,
   UsageCostCell,
   UsageTag,
   UsageTokenCell,
   requestSourceOptions
 } from "@/platform/ai/usage";
+import { formatDisplayUSD } from "@/shared/currency";
 import { computed, nextTick, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
 import { LayoutDashboard } from "lucide-vue-next";
@@ -86,7 +88,6 @@ const balanceInfo = reactive({
   availableUsd: 0,
   outstandingDebtUsd: 0
 });
-const formatUSD = (value: number | null | undefined) => `$${Number(value ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 const formatNumber = (value: number) => Number(value ?? 0).toLocaleString("en-US");
 
 const chartModelRef = shallowRef<HTMLElement | null>(null);
@@ -451,10 +452,10 @@ function isAbortError(error: unknown) {
     <!-- Balance & Usage Stats -->
     <PortalMetricGrid
       :metrics="[
-        { label: '额度余额', value: formatUSD(balanceInfo.totalUsd) },
-        { label: '可用额度', value: formatUSD(balanceInfo.availableUsd) },
-        { label: '当前透支', value: formatUSD(balanceInfo.outstandingDebtUsd) },
-        { label: '总消耗', value: formatUSD(summary?.total_user_charged_usd || 0) },
+        { label: '额度余额', value: formatDisplayUSD(balanceInfo.totalUsd) },
+        { label: '可用额度', value: formatDisplayUSD(balanceInfo.availableUsd) },
+        { label: '当前透支', value: formatDisplayUSD(balanceInfo.outstandingDebtUsd) },
+        { label: '总消耗', value: formatDisplayUSD(summary?.total_user_charged_usd || 0) },
         { label: '输入 Token', value: formatNumber(summary?.total_prompt_tokens || 0) },
         { label: '输出 Token', value: formatNumber(summary?.total_completion_tokens || 0) },
         { label: '总请求次数', value: String(summary?.request_count || 0) }
@@ -507,7 +508,7 @@ function isAbortError(error: unknown) {
         <template #actions>
           <el-button link type="primary" @click="openImageWorkspace">查看全部</el-button>
         </template>
-        <PortalImageJobTable :jobs="recentJobRows" :format-u-s-d="formatUSD" />
+        <PortalImageJobTable :jobs="recentJobRows" :format-u-s-d="formatUsageUSD" />
       </PortalContentCard>
     </div>
 

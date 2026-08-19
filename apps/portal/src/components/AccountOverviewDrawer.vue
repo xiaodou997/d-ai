@@ -112,6 +112,7 @@ import { computed, ref, watch } from 'vue'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { platformAdminApi } from '@/api/platformAdmin'
 import type { AccountBalanceOutput, BalanceLedgerItem } from '@/api/types/admin'
+import { formatDisplayMicroUSD as formatMicroUSD, formatDisplayUSD as formatUSD } from '@/shared/currency'
 import { DsDrawer, DsEmpty, DsTable, DsTag, type DsTableColumn } from '@/shared/ui'
 
 const props = defineProps<{
@@ -150,8 +151,6 @@ const ledgerColumns: DsTableColumn[] = [
   { key: 'createdAt', title: '时间', width: 170 }
 ]
 
-const formatUSD = (value?: number | null) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
-const formatMicroUSD = (value?: number | null) => formatUSD(Number(value || 0) / 1_000_000)
 const formatTime = (value?: string | number | null) => value
   ? new Date(value).toLocaleString('zh-CN', { hour12: false })
   : '—'

@@ -15,6 +15,7 @@ import PortalPagePanel from "../../page/PortalPagePanel.vue";
 import PortalApiKeyEditorDialog from "./PortalApiKeyEditorDialog.vue";
 import PortalApiKeyUsageDialog from "./PortalApiKeyUsageDialog.vue";
 import { formatMultiplier } from "../utils";
+import { formatDisplayMicroUSD as formatMicroUSD } from "@/shared/currency";
 import type {
   PortalApiKeyApi,
   PortalApiKeyGroupRecord,
@@ -74,7 +75,6 @@ const groups = shallowRef<PortalApiKeyGroupRecord[]>([]);
 const dialogVisible = shallowRef(false);
 const editingKeyId = shallowRef("");
 const saving = shallowRef(false);
-const formatMicroUSD = (value: number | null | undefined) => `$${(Number(value ?? 0) / 1_000_000).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 const generatedKey = shallowRef("");
 const showKeyDialog = shallowRef(false);
 const revealingKeyId = shallowRef("");

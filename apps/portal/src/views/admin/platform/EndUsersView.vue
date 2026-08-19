@@ -87,7 +87,7 @@
         </template>
         <template #cell-balance="{ row }">
           <span class="endusers-num endusers-credits" :class="{ 'endusers-credits--negative': Number(row.balanceUsd || 0) < 0 }">
-            ${{ Number(row.balanceUsd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }) }}
+            {{ formatDisplayUSD(row.balanceUsd) }}
           </span>
         </template>
         <template #cell-lastLoginTime="{ row }">
@@ -139,6 +139,7 @@ import {
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
 import type { EndUserItem } from '@/api/types/admin'
+import { formatDisplayUSD } from '@/shared/currency'
 
 const router = useRouter()
 

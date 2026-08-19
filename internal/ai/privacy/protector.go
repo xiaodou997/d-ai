@@ -3,14 +3,46 @@ package privacy
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 )
 
+const (
+	defaultPlaceholderPrefix = "DAI"
+	maxRules                 = 64
+	maxPatternLength         = 4096
+)
+
+var (
+	ruleIDPattern      = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	prefixPattern      = regexp.MustCompile(`^[A-Z0-9_]{1,32}$`)
+	defaultRuleConfigs = []RuleConfig{
+		{ID: "email", Name: "邮箱", Pattern: `(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`, Enabled: true, System: true},
+		{ID: "phone", Name: "中国大陆手机号", Pattern: `(?:\+?86[ -]?)?1[3-9][0-9]{9}\b`, Enabled: true, System: true},
+		{ID: "bearer", Name: "Bearer Token", Pattern: `(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}`, Enabled: true, System: true},
+		{ID: "jwt", Name: "JWT", Pattern: `\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`, Enabled: true, System: true},
+		{ID: "api_key", Name: "API Key", Pattern: `\b(?:sk|key|token)[-_][A-Za-z0-9_-]{16,}\b`, Enabled: true, System: true},
+	}
+)
+
+type RuleConfig struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Pattern string `json:"pattern"`
+	Enabled bool   `json:"enabled"`
+	System  bool   `json:"system"`
+}
+
+type Config struct {
+	Rules             []RuleConfig `json:"rules"`
+	PlaceholderPrefix string       `json:"placeholderPrefix"`
+}
+
 type rule struct {
-	name string
-	re   *regexp.Regexp
+	id string
+	re *regexp.Regexp
 }
 
 // Mapping is request-scoped and must never be persisted or logged. It is used
@@ -19,16 +51,78 @@ type Mapping struct {
 	values map[string]string
 }
 
-type Protector struct{ rules []rule }
+type Protector struct {
+	rules             []rule
+	placeholderPrefix string
+}
+
+func DefaultConfig() Config {
+	rules := make([]RuleConfig, len(defaultRuleConfigs))
+	copy(rules, defaultRuleConfigs)
+	return Config{Rules: rules, PlaceholderPrefix: defaultPlaceholderPrefix}
+}
 
 func NewProtector() *Protector {
-	return &Protector{rules: []rule{
-		{name: "email", re: regexp.MustCompile(`(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b`)},
-		{name: "phone", re: regexp.MustCompile(`(?:\+?86[ -]?)?1[3-9][0-9]{9}\b`)},
-		{name: "bearer", re: regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}`)},
-		{name: "jwt", re: regexp.MustCompile(`\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`)},
-		{name: "api_key", re: regexp.MustCompile(`\b(?:sk|key|token)[-_][A-Za-z0-9_-]{16,}\b`)},
-	}}
+	protector, err := NewProtectorWithConfig(DefaultConfig())
+	if err != nil {
+		panic(err)
+	}
+	return protector
+}
+
+func NewProtectorWithConfig(config Config) (*Protector, error) {
+	normalized, err := ValidateConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	rules := make([]rule, 0, len(normalized.Rules))
+	for _, item := range normalized.Rules {
+		if !item.Enabled {
+			continue
+		}
+		compiled, err := regexp.Compile(item.Pattern)
+		if err != nil {
+			return nil, fmt.Errorf("compile rule %q: %w", item.ID, err)
+		}
+		rules = append(rules, rule{id: item.ID, re: compiled})
+	}
+	return &Protector{rules: rules, placeholderPrefix: normalized.PlaceholderPrefix}, nil
+}
+
+func ValidateConfig(config Config) (Config, error) {
+	prefix := strings.ToUpper(strings.TrimSpace(config.PlaceholderPrefix))
+	if !prefixPattern.MatchString(prefix) {
+		return Config{}, fmt.Errorf("占位符前缀只能包含 1-32 位大写字母、数字或下划线")
+	}
+	if len(config.Rules) > maxRules {
+		return Config{}, fmt.Errorf("脱敏规则不能超过 %d 条", maxRules)
+	}
+
+	seen := make(map[string]struct{}, len(config.Rules))
+	rules := make([]RuleConfig, 0, len(config.Rules))
+	for index, item := range config.Rules {
+		item.ID = strings.TrimSpace(item.ID)
+		item.Name = strings.TrimSpace(item.Name)
+		item.Pattern = strings.TrimSpace(item.Pattern)
+		if !ruleIDPattern.MatchString(item.ID) {
+			return Config{}, fmt.Errorf("第 %d 条规则标识只能包含字母、数字、下划线或连字符", index+1)
+		}
+		if item.Name == "" || len([]rune(item.Name)) > 64 {
+			return Config{}, fmt.Errorf("规则 %q 的名称不能为空且不能超过 64 个字符", item.ID)
+		}
+		if item.Pattern == "" || len(item.Pattern) > maxPatternLength {
+			return Config{}, fmt.Errorf("规则 %q 的正则不能为空且不能超过 %d 个字符", item.ID, maxPatternLength)
+		}
+		if _, exists := seen[item.ID]; exists {
+			return Config{}, fmt.Errorf("规则标识 %q 重复", item.ID)
+		}
+		if _, err := regexp.Compile(item.Pattern); err != nil {
+			return Config{}, fmt.Errorf("规则 %q 的正则无效: %w", item.ID, err)
+		}
+		seen[item.ID] = struct{}{}
+		rules = append(rules, item)
+	}
+	return Config{Rules: rules, PlaceholderPrefix: prefix}, nil
 }
 
 func (p *Protector) RedactJSON(body []byte) ([]byte, *Mapping, error) {
@@ -37,7 +131,7 @@ func (p *Protector) RedactJSON(body []byte) ([]byte, *Mapping, error) {
 	}
 	var value any
 	if err := json.Unmarshal(body, &value); err != nil {
-		protected, mapping := p.redactText(body)
+		protected, mapping := p.RedactText(body)
 		return protected, mapping, nil
 	}
 	mapping := &Mapping{values: make(map[string]string)}
@@ -124,7 +218,10 @@ func (p *Protector) redactString(value string, mapping *Mapping) string {
 					return placeholder
 				}
 			}
-			placeholder := "__DAI_PII_" + rule.name + "_" + string(rune('A'+len(mapping.values))) + "__"
+			placeholder := fmt.Sprintf("__%s_PII_%s_%d__", p.placeholderPrefix, strings.ToUpper(rule.id), len(mapping.values)+1)
+			for strings.Contains(value, placeholder) {
+				placeholder += "_"
+			}
 			mapping.values[placeholder] = original
 			return placeholder
 		})
@@ -132,7 +229,7 @@ func (p *Protector) redactString(value string, mapping *Mapping) string {
 	return value
 }
 
-func (p *Protector) redactText(body []byte) ([]byte, *Mapping) {
+func (p *Protector) RedactText(body []byte) ([]byte, *Mapping) {
 	mapping := &Mapping{values: make(map[string]string)}
 	return []byte(p.redactString(string(body), mapping)), mapping
 }
