@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from "vue";
+import { computed, ref } from "vue";
 
 import { aiAdminApi } from "@/api/aiAdmin";
 import { platformAdminApi } from "@/api/platformAdmin";
@@ -68,9 +68,14 @@ export function useAdminOverviewData(
     return wanted.has(section);
   }
 
-  function take<T>(result: PromiseSettledResult<T>, section: OverviewSection): T | undefined {
+  function take<T>(
+    result: PromiseSettledResult<T>,
+    section: OverviewSection,
+    reset: () => void
+  ): T | undefined {
     if (result.status === "fulfilled") return result.value;
     failedSections.value.push(section);
+    reset();
     return undefined;
   }
 
@@ -97,31 +102,34 @@ export function useAdminOverviewData(
 
     if (requestSequence.value !== sequence) return;
 
-    const summaryValue = take(results[0], "summary");
+    const summaryValue = take(results[0], "summary", () => { summary.value = emptySummary(); });
     if (summaryValue) summary.value = summaryValue;
-    const modelsValue = take(results[1], "models");
+    const modelsValue = take(results[1], "models", () => { models.value = []; });
     if (modelsValue) models.value = modelsValue.items ?? [];
-    const tenantsValue = take(results[2], "tenants");
+    const tenantsValue = take(results[2], "tenants", () => {
+      tenants.value = [];
+      tenantIncluded.value = normalizeIdentityIncluded(undefined);
+    });
     if (tenantsValue) {
       tenants.value = tenantsValue.items ?? [];
       tenantIncluded.value = normalizeIdentityIncluded(tenantsValue.included);
     }
-    const errorsValue = take(results[3], "errors");
+    const errorsValue = take(results[3], "errors", () => { errors.value = []; });
     if (errorsValue) errors.value = errorsValue.items ?? [];
-    const trendValue = take(results[4], "trend");
+    const trendValue = take(results[4], "trend", () => { trend.value = []; });
     if (trendValue) trend.value = trendValue.items ?? [];
-    const upstreamsValue = take(results[5], "upstreams");
+    const upstreamsValue = take(results[5], "upstreams", () => { upstreams.value = []; });
     if (upstreamsValue) upstreams.value = upstreamsValue.items ?? [];
-    const systemValue = take(results[6], "system");
+    const systemValue = take(results[6], "system", () => { system.value = null; });
     if (systemValue) system.value = systemValue;
-    const globalValue = take(results[7], "global");
+    const globalValue = take(results[7], "global", () => { global.value = null; });
     if (globalValue) global.value = globalValue;
-    const modulesValue = take(results[8], "modules");
+    const modulesValue = take(results[8], "modules", () => { modules.value = []; });
     if (modulesValue) modules.value = modulesValue;
-    const proxyValue = take(results[9], "proxy");
+    const proxyValue = take(results[9], "proxy", () => { proxyNodes.value = []; });
     if (proxyValue) proxyNodes.value = proxyValue;
 
-    lastUpdatedAt.value = new Date();
+    lastUpdatedAt.value = failedSections.value.length < wanted.size ? new Date() : null;
     loading.value = false;
   }
 

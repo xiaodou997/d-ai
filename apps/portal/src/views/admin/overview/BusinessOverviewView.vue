@@ -4,6 +4,7 @@ import { BarChart3 } from "lucide-vue-next";
 
 import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from "@/platform";
 import { DsEmpty, DsMetricCard, DsTable, type DsTableColumn } from "@/shared/ui";
+import OverviewDataWarning from "@/features/admin/overview/OverviewDataWarning.vue";
 import OverviewRangeControls from "@/features/admin/overview/OverviewRangeControls.vue";
 import OverviewTrendChart from "@/features/admin/overview/OverviewTrendChart.vue";
 import { useAdminOverviewData } from "@/features/admin/overview/useAdminOverviewData";
@@ -11,7 +12,7 @@ import { formatNumber, formatUSD, successRate, trendLabels } from "@/features/ad
 import { PortalIdentityCell, resolveIdentityTenantLabel, resolveIdentityTenantMeta } from "@/platform/ai/identity";
 
 const data = useAdminOverviewData(["summary", "models", "tenants", "trend", "global"], "30d");
-const { selectedRangeId, selectedRange, loading, lastUpdatedAt, summary, models, tenants, tenantIncluded, trend, global, refresh, changeRange } = data;
+const { failedSections, selectedRangeId, selectedRange, loading, lastUpdatedAt, summary, models, tenants, tenantIncluded, trend, global, refresh, changeRange } = data;
 
 const businessHint = computed(() => global.value ? `${selectedRange.value.label}平台业务数据` : "等待业务数据");
 const modelColumns: DsTableColumn[] = [
@@ -38,6 +39,7 @@ onMounted(() => { void refresh(); });
     <PortalPagePanel :icon="BarChart3" :breadcrumbs="[{ label: '概览' }, { label: '业务概览' }]" description="观察平台整体使用结构、业务增长和主要模型/租户。">
       <template #actions><OverviewRangeControls :model-value="selectedRangeId" :loading="loading" :updated-at="lastUpdatedAt" @update:model-value="changeRange" @refresh="refresh" /></template>
       <div class="overview-body">
+        <OverviewDataWarning :sections="failedSections" />
         <PortalMetricGrid>
           <DsMetricCard label="活跃租户" :value="`${formatNumber(global?.activeTenants)} 个`" :hint="businessHint" />
           <DsMetricCard label="新增终端用户" :value="`${formatNumber(global?.newUsers)} 名`" :hint="`${selectedRange.label}注册`" />

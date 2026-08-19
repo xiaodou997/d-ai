@@ -4,13 +4,14 @@ import { Banknote } from "lucide-vue-next";
 
 import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from "@/platform";
 import { DsEmpty, DsMetricCard, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import OverviewDataWarning from "@/features/admin/overview/OverviewDataWarning.vue";
 import OverviewRangeControls from "@/features/admin/overview/OverviewRangeControls.vue";
 import OverviewTrendChart from "@/features/admin/overview/OverviewTrendChart.vue";
 import { useAdminOverviewData } from "@/features/admin/overview/useAdminOverviewData";
 import { formatNumber, formatUSD, trendLabels } from "@/features/admin/overview/overviewUtils";
 
 const data = useAdminOverviewData(["summary", "trend", "upstreams"], "30d");
-const { selectedRangeId, loading, lastUpdatedAt, summary, trend, upstreams, refresh, changeRange } = data;
+const { failedSections, selectedRangeId, loading, lastUpdatedAt, summary, trend, upstreams, refresh, changeRange } = data;
 
 const referenceCostRate = computed(() => {
   const payable = Number(summary.value.total_tenant_payable_usd) || 0;
@@ -40,6 +41,7 @@ onMounted(() => { void refresh(); });
     <PortalPagePanel :icon="Banknote" :breadcrumbs="[{ label: '概览' }, { label: '成本分析' }]" description="分析 AI 服务的参考成本、结算金额和不同上游资源的成本结构。">
       <template #actions><OverviewRangeControls :model-value="selectedRangeId" :loading="loading" :updated-at="lastUpdatedAt" @update:model-value="changeRange" @refresh="refresh" /></template>
       <div class="overview-body">
+        <OverviewDataWarning :sections="failedSections" />
         <div class="cost-note">成本口径：参考成本来自请求命中的上游价格快照；租户应收和用户实际扣款来自同一笔用量结算结果。</div>
         <PortalMetricGrid>
           <DsMetricCard label="上游参考成本" :value="formatUSD(summary.total_catalog_base_usd)" hint="价格表基准，不代表实际供应商账单" />

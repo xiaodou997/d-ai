@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { Activity, AlertTriangle, LayoutDashboard } from "lucide-vue-next";
+import { Activity, LayoutDashboard } from "lucide-vue-next";
 
 import { PortalContentCard, PortalMetricGrid, PortalPagePanel } from "@/platform";
 import { DsEmpty, DsMetricCard, DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
+import OverviewDataWarning from "@/features/admin/overview/OverviewDataWarning.vue";
 import OverviewRangeControls from "@/features/admin/overview/OverviewRangeControls.vue";
 import OverviewTrendChart from "@/features/admin/overview/OverviewTrendChart.vue";
 import { useAdminOverviewData } from "@/features/admin/overview/useAdminOverviewData";
 import { formatMs, formatNumber, statusLabel, statusTone, successRate, systemStatusLabel, systemStatusTone, trendLabels } from "@/features/admin/overview/overviewUtils";
 
-const data = useAdminOverviewData(["summary", "models", "errors", "system", "modules", "proxy"], "24h");
+const data = useAdminOverviewData(["summary", "models", "errors", "trend", "system", "modules", "proxy"], "24h");
 const { failedSections, selectedRangeId, loading, lastUpdatedAt, selectedRange, summary, models, errors, trend, system, modules, proxyNodes, refresh, changeRange } = data;
 
 const activeModuleCount = computed(() => modules.value.filter((item) => item.active).length);
@@ -49,7 +50,7 @@ onMounted(() => { void refresh(); });
       </template>
 
       <div class="overview-body">
-        <div v-if="failedSections.length" class="overview-warning"><AlertTriangle :size="15" />部分数据暂时无法加载，已展示可用结果。</div>
+        <OverviewDataWarning :sections="failedSections" />
 
         <PortalMetricGrid>
           <DsMetricCard label="请求量" :value="formatNumber(summary.total_requests)" :hint="`${selectedRange.label}总调用`" />
@@ -59,7 +60,7 @@ onMounted(() => { void refresh(); });
         </PortalMetricGrid>
 
         <div class="overview-grid overview-grid--main">
-          <PortalContentCard title="系统状态" description="只展示需要快速判断的核心状态，详细排查进入健康监控。">
+          <PortalContentCard title="系统状态" description="只展示需要快速判断的核心状态，详细排查进入运维监控的健康详情。">
             <template #actions><DsTag :tone="systemStatusTone(system)">{{ systemStatusLabel(system) }}</DsTag></template>
             <div class="status-list">
               <div v-for="item in statusItems" :key="item.label" class="status-row">
@@ -108,7 +109,6 @@ onMounted(() => { void refresh(); });
 <style scoped>
 .overview-page { min-height: 100%; }
 .overview-body { display: flex; flex-direction: column; gap: 20px; padding: 24px; }
-.overview-warning { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--ds-warning) 30%, var(--ds-line)); border-radius: var(--ds-radius-control); background: var(--ds-warning-soft); color: var(--ds-warning); font-size: 12px; }
 .overview-grid { display: grid; gap: 20px; }
 .overview-grid--main { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }
 .overview-grid--bottom { grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); }
