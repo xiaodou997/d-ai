@@ -72,12 +72,19 @@ type BillingDeps struct {
 // CatalogDeps contains provider, model, price and upstream control-plane
 // collaborators.
 type CatalogDeps struct {
-	ClientCatalog     *clientcatalog.Service
+	ClientCatalog     ClientCatalogResolver
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
 	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService
+}
+
+// ClientCatalogResolver is the narrow model-discovery port needed by OAuth
+// pool management. Cache policy and provider inspection stay in the concrete
+// clientcatalog implementation owned by composition root.
+type ClientCatalogResolver interface {
+	Resolve(ctx context.Context, pool domain.CredentialPool) clientcatalog.Result
 }
 
 // RuntimeDeps contains request execution state and runtime policy.

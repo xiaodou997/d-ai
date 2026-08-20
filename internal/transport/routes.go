@@ -23,7 +23,6 @@ import (
 	// AI 域
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/billingcontrol"
-	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/identitycontrol"
@@ -111,7 +110,7 @@ type AIBillingDeps struct {
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
 type AICatalogDeps struct {
-	ClientCatalog     *clientcatalog.Service
+	ClientCatalog     aitransport.ClientCatalogResolver
 	PriceBookSvc      *billingcontrol.Service
 	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService

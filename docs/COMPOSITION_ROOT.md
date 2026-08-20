@@ -37,6 +37,7 @@ httpServers.Start / Shutdown
 - AI 系统端点已经只依赖 `ScoreWeightsStore` 评分权重端口，不再暴露 PostgreSQL `RouteWeightsStore` 具体类型；其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理端点只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
+- OAuth pool 管理的模型发现只依赖 `ClientCatalogResolver`，模型缓存和 provider inspection 仍封装在 composition root 的服务中。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
