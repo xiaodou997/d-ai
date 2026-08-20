@@ -395,6 +395,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：平台 `transport.Deps` 与 AI `transport.AIDeps` 分离，新增 `transport.Module` 并由 AI 模块独立注册路由。
 - 端口收敛：AI 系统端点改用 `ScoreWeightsStore` 最小接口，评分权重 PostgreSQL adapter 留在 composition root。
 - 端口收敛：AI 认证端点改用 `HumaBanChecker`，Ban 状态 Redis adapter 留在 composition root。
+- 端口收敛：OAuth 凭证管理端点改用 `OAuthTokenRefresher`，不再暴露后台刷新器具体类型。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
 - 下一候选项：P1-02 继续将平台与 AI 组内的数据库、Redis、adapter 依赖替换为最小端口。

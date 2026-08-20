@@ -32,7 +32,6 @@ import (
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
-	"xiaodou/dai/internal/ai/tokenrefresh"
 	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
@@ -100,7 +99,7 @@ type AIInfrastructureDeps struct {
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
 	OAuth          *pgadapter.OAuthCredentialStore
-	TokenRefresher *tokenrefresh.Refresher
+	TokenRefresher aitransport.OAuthTokenRefresher
 	APIKeySvc      *identitycontrol.Service
 	WorkspaceSvc   *workspacesvc.Service
 }

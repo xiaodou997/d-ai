@@ -26,7 +26,6 @@ import (
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
-	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
@@ -48,7 +47,7 @@ type InfrastructureDeps struct {
 // collaborators used by AI routes.
 type IdentityDeps struct {
 	OAuth            *pgadapter.OAuthCredentialStore
-	TokenRefresher   *tokenrefresh.Refresher
+	TokenRefresher   OAuthTokenRefresher
 	APIKeySvc        *identitycontrol.Service
 	WorkspaceSvc     *workspacesvc.Service
 	IdentityProvider IdentityProvider
@@ -56,6 +55,13 @@ type IdentityDeps struct {
 	TokenRevocations TokenRevocationChecker
 	BanChecker       HumaBanChecker
 	TenantEndUsers   TenantEndUserVerifier
+}
+
+// OAuthTokenRefresher is the manual-refresh port needed by credential
+// management endpoints. The background polling implementation stays outside
+// the transport package.
+type OAuthTokenRefresher interface {
+	RefreshByID(ctx context.Context, credID string) error
 }
 
 // BillingDeps contains AI subscription and prepaid billing collaborators.
