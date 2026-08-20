@@ -120,12 +120,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-01 建立模块依赖规则
 
-- [ ] 规划 `identity`、`billing`、`catalog`、`runtime`、`operations` 模块责任。
-- [ ] 每个模块包含 `domain`、`application`、`ports`、`adapters` 边界。
-- [ ] Transport 只依赖 application command/query，不直接访问数据库。
-- [ ] 禁止模块绕过公开端口写入其他模块表。
-- [ ] 使用依赖检查脚本或 linter 在 CI 中阻止反向依赖。
-- [ ] 记录允许的跨模块事务和所有权例外。
+- [x] 规划 `identity`、`billing`、`catalog`、`runtime`、`operations` 模块责任。
+- [x] 定义每个模块的 `domain`、`application`、`ports`、`adapters` 目标边界。
+- [~] Transport 只依赖 application command/query，不直接访问数据库；当前遗留越界已冻结并登记，P1-03 负责清零。
+- [~] 禁止模块绕过公开端口写入其他模块表；包级依赖已门禁，数据库角色和表所有权在 P1-07 完成。
+- [x] 使用 `cmd/checkdeps` 依赖检查器并接入 Make/CI，阻止未登记的反向依赖。
+- [x] 在 `docs/MODULE_DEPENDENCY_RULES.md` 和例外台账记录允许的跨模块事务及历史例外。
 
 ### P1-02 拆分 composition root 和巨型依赖容器
 

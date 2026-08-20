@@ -1,0 +1,23 @@
+# Reviewed legacy edges. The checker only permits exact edges listed here;
+# every entry must have an owner and a removal target. Do not add a wildcard.
+# Format: <from> -> <to> | owner / removal target | why it still exists
+
+xiaodou/dai/internal/ai/transport -> xiaodou/dai/internal/ai/adapters/postgres | P1-03 / move handler I/O behind AI application ports | legacy AI handlers still construct PostgreSQL-backed services
+xiaodou/dai/internal/ai/transport -> xiaodou/dai/internal/ai/db/gen | P1-03 / replace generated query access with application queries | legacy AI handlers use sqlc query types in DTO adapters
+xiaodou/dai/internal/ai/transport -> github.com/jackc/pgx/v5 | P1-03 / remove pgx types from handlers | legacy transaction and error mapping helpers
+xiaodou/dai/internal/ai/transport -> github.com/jackc/pgx/v5/pgconn | P1-03 / remove pgx types from handlers | legacy PostgreSQL error mapping
+xiaodou/dai/internal/ai/transport -> github.com/jackc/pgx/v5/pgtype | P1-03 / remove pgx types from handlers | legacy nullable DTO conversion
+xiaodou/dai/internal/ai/transport -> github.com/jackc/pgx/v5/pgxpool | P1-03 / remove pool from handlers | legacy AI transport dependency container
+xiaodou/dai/internal/ai/transport -> github.com/redis/go-redis/v9 | P1-03 / move cache operations behind runtime ports | legacy AI transport dependency container
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/ai/adapters/postgres | P1-03 / expose AI application services only | composition is currently passed through the HTTP dependency container
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/ai/db/gen | P1-03 / expose AI query services only | admin handlers still use generated query types
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/auth/pg | P1-03 / move identity queries to application services | legacy login and account handlers construct repositories
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/billing/ledger | P1-03 / expose billing query/command ports | one admin balance endpoint calls the ledger directly
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/billing/pg | P1-03 / expose billing application services only | legacy finance handlers construct repositories
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/invite/pg | P1-03 / move invite persistence behind application services | legacy invitation handler constructs a repository
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/payment/pg | P1-03 / move payment persistence behind application services | legacy payment and finance handlers construct repositories
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/system/pg | P1-03 / expose operations queries only | legacy admin handler constructs a repository
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/tenant/pg | P1-03 / move tenant persistence behind application services | legacy admin handler constructs a repository
+xiaodou/dai/internal/transport -> github.com/jackc/pgx/v5 | P1-03 / remove pgx from handlers | direct SQL, transaction and error mapping remain in legacy handlers
+xiaodou/dai/internal/transport -> github.com/jackc/pgx/v5/pgxpool | P1-03 / remove pool from handlers | the current Deps container exposes the database pool
+xiaodou/dai/internal/transport -> github.com/redis/go-redis/v9 | P1-03 / move rate limits and cache behind ports | the current Deps container exposes the Redis client

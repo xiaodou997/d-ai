@@ -54,6 +54,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Module dependency direction
+        run: go run ./cmd/checkdeps
+
       - name: Test
         run: go test ./...
 
