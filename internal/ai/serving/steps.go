@@ -302,6 +302,9 @@ const financialCompletionTimeout = 8 * time.Second
 func (s *UsageLogFinalizer) Name() string { return "usage_completion" }
 
 func (s *UsageLogFinalizer) Finalize(ctx context.Context, req *Request) {
+	if req != nil && req.AuditPayload == nil {
+		req.AuditPayload = BuildAuditPayload(req)
+	}
 	req.MarkCompleted(time.Now())
 	if s.Logger != nil {
 		// The upstream result may already be committed to the client. Financial
@@ -323,12 +326,18 @@ func (s *UsageLogFinalizer) Finalize(ctx context.Context, req *Request) {
 }
 
 // ============================================================================
-// AuditFinalizer — asynchronously persists the full request/response payload
+// AuditFinalizer — durably enqueues the full request/response payload
 // ============================================================================
 
-// AuditSubmitter enqueues a payload for async persistence.
+// AuditSubmitter enqueues a payload for durable asynchronous materialization.
 type AuditSubmitter interface {
 	Submit(p *audit.Payload) bool
+}
+
+// ContextAuditSubmitter is implemented by durable submitters that can retain
+// the enqueue briefly after a client disconnects.
+type ContextAuditSubmitter interface {
+	SubmitContext(ctx context.Context, p *audit.Payload) bool
 }
 
 // AuditFinalizer implements Finalizer: builds an audit.Payload from the
@@ -341,9 +350,30 @@ type AuditFinalizer struct {
 
 func (f *AuditFinalizer) Name() string { return "audit_log" }
 
-func (f *AuditFinalizer) Finalize(_ context.Context, req *Request) {
+func (f *AuditFinalizer) Finalize(ctx context.Context, req *Request) {
 	if f.Worker == nil {
 		return
+	}
+	p := req.AuditPayload
+	if p == nil {
+		p = BuildAuditPayload(req)
+		req.AuditPayload = p
+	}
+	if submitter, ok := f.Worker.(ContextAuditSubmitter); ok {
+		enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		submitter.SubmitContext(enqueueCtx, p)
+		cancel()
+		return
+	}
+	f.Worker.Submit(p)
+}
+
+// BuildAuditPayload converts the completed request into the durable audit
+// envelope. It is shared by UsageLogFinalizer and AuditFinalizer so normal
+// requests can enqueue it in the usage transaction without rebuilding it.
+func BuildAuditPayload(req *Request) *audit.Payload {
+	if req == nil {
+		return nil
 	}
 
 	var messages, params json.RawMessage
@@ -399,8 +429,7 @@ func (f *AuditFinalizer) Finalize(_ context.Context, req *Request) {
 		FailedStep:                  req.FailedStep,
 		AttemptsDetail:              BuildAttemptsDetail(req.Attempts),
 	}
-
-	f.Worker.Submit(p)
+	return p
 }
 
 // ============================================================================

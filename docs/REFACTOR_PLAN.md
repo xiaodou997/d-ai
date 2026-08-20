@@ -91,13 +91,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P0-06 让审计写入具备持久可靠性
 
-- [ ] 用 PostgreSQL durable inbox/outbox 替代仅存在于内存的审计 channel。
-- [ ] 审计入队与核心用量事实按需要处于同一事务。
-- [ ] Worker 使用租约或 `FOR UPDATE SKIP LOCKED`，支持多副本和崩溃恢复。
-- [ ] 写入失败保留重试状态，不静默丢弃记录。
-- [ ] 增加队列深度、最老待处理时长、失败和死信指标与告警。
-- [ ] 消除 `audit.Worker.byteUsed` 的并发数据竞争。
-- [ ] 增加进程崩溃、数据库故障、超大载荷和队列积压测试。
+- [x] 用 PostgreSQL durable inbox/outbox 替代仅存在于内存的审计 channel。
+- [x] 审计入队与核心用量事实按需要处于同一事务。
+- [x] Worker 使用租约或 `FOR UPDATE SKIP LOCKED`，支持多副本和崩溃恢复。
+- [x] 写入失败保留重试状态，不静默丢弃记录。
+- [x] 增加队列深度、最老待处理时长、失败和死信指标与告警。
+- [x] 消除 `audit.Worker.byteUsed` 的并发数据竞争。
+- [x] 增加进程崩溃、数据库故障、超大载荷和队列积压测试。
 
 ### P0-07 保护签名密钥和敏感配置
 
@@ -355,3 +355,15 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 验证：新增公共 origin、Host/Forwarded 伪造、可信/非可信代理、多级客户端 IP 和 capability URL 测试；`go test ./...`、`go vet ./...` 均通过。
 - 遗留风险：浏览器级端到端测试尚未建立；代理网段和公共 origin 仍需由每个生产部署按实际拓扑配置。
 - 下一候选项：`P0-06 让审计写入具备持久可靠性`。
+
+### P0-06（2026-08-20）
+
+- 状态：实现完成并通过回归。
+- 持久化：schema 14 新增 `ai_audit_inbox`，请求审计先以 JSONB envelope 入库；`request_id` 唯一约束和 payload 幂等插入防止重复记录。
+- 事务：正常路由请求由 UsageLogger 将审计 inbox 与 `ai_usage_logs`、额度扣减和 charge outbox 放入同一 PostgreSQL 事务；早期失败仍可独立 durable enqueue。
+- Worker：移除内存 channel 和 `byteUsed`，改为多副本安全的 `FOR UPDATE SKIP LOCKED` 租约领取；租约过期可恢复，物化 payload 与删除 inbox 行同事务完成。
+- 失败语义：媒体或 payload 写入失败保存 `last_error`，指数退避重试，超过 10 次进入 `dead`；超大载荷不再静默丢弃而是拒绝 durable enqueue 并记录结构化错误。
+- 观测：新增待处理数、最老待处理时长、入队、完成、失败和 dead 指标；运维说明见 `docs/AUDIT_RELIABILITY.md`。
+- 验证：新增 schema 14 迁移、事务回滚、入队幂等、claim/complete、失败转 dead 和 worker 回归测试；`go test ./...` 通过。
+- 遗留风险：dead 行需要运维确认原因后人工重置；浏览器级端到端测试仍未建立。
+- 下一候选项：`P0-07 保护签名密钥和敏感配置`。

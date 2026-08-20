@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"xiaodou/dai/internal/ai/audit"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
@@ -41,11 +42,16 @@ type UsageLogger struct {
 	q                 *dbgen.Queries
 	biller            usageBiller
 	apiKeyInvalidator apiKeyCacheInvalidator
+	auditEnqueuer     auditTxEnqueuer
 	logger            *zap.Logger
 }
 
 type apiKeyCacheInvalidator interface {
 	DelByID(context.Context, string) error
+}
+
+type auditTxEnqueuer interface {
+	EnqueueTx(context.Context, pgx.Tx, *audit.Payload) error
 }
 
 type usageBiller interface {
@@ -70,6 +76,11 @@ func (l *UsageLogger) WithLogger(logger *zap.Logger) *UsageLogger {
 
 func (l *UsageLogger) WithAPIKeyCacheInvalidator(invalidator apiKeyCacheInvalidator) *UsageLogger {
 	l.apiKeyInvalidator = invalidator
+	return l
+}
+
+func (l *UsageLogger) WithAuditEnqueuer(enqueuer auditTxEnqueuer) *UsageLogger {
+	l.auditEnqueuer = enqueuer
 	return l
 }
 
@@ -141,6 +152,11 @@ func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing
 		return false, nil
 	} else if err != nil {
 		return false, fmt.Errorf("create usage log: %w", err)
+	}
+	if l.auditEnqueuer != nil && req.AuditPayload != nil {
+		if err := l.auditEnqueuer.EnqueueTx(ctx, tx, req.AuditPayload); err != nil {
+			return false, fmt.Errorf("enqueue audit inbox with usage: %w", err)
+		}
 	}
 	if subject.AuthMethod == coreidentity.AuthMethodAPIKey && subject.APIKeyID != "" {
 		rows, err := qtx.ConfirmAPIKeyQuotaUsage(ctx, dbgen.ConfirmAPIKeyQuotaUsageParams{

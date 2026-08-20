@@ -1791,8 +1791,32 @@ CREATE INDEX idx_ledger_credit_leases_account
     PRIMARY KEY (id)
   );
 
-  CREATE INDEX IF NOT EXISTS idx_arp_request_id ON ai_request_payloads (request_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_arp_request_id ON ai_request_payloads (request_id);
   CREATE INDEX IF NOT EXISTS idx_arp_created_at ON ai_request_payloads (created_at);
+
+  -- Durable audit inbox. The request path only commits this compact JSONB
+  -- envelope; a worker later materializes it into ai_request_payloads.
+  -- Rows are leased rather than deleted on claim, so a crashed worker can be
+  -- recovered and retried without an external queue.
+  CREATE TABLE IF NOT EXISTS ai_audit_inbox (
+    id           BIGSERIAL PRIMARY KEY,
+    request_id   TEXT NOT NULL UNIQUE,
+    payload      JSONB NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending'
+      CHECK (status IN ('pending', 'processing', 'dead')),
+    attempts     INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    locked_at    TIMESTAMPTZ,
+    locked_by    TEXT,
+    last_error   TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    dead_at      TIMESTAMPTZ
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ai_audit_inbox_ready
+    ON ai_audit_inbox (available_at, created_at) WHERE status = 'pending';
+  CREATE INDEX IF NOT EXISTS idx_ai_audit_inbox_status
+    ON ai_audit_inbox (status, created_at);
 
   -- ============================================================================
   -- 归档存储过程：将 N 个月前的数据搬到归档表，然后从主表删除。
@@ -2249,6 +2273,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 13);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 14);
 
 COMMIT;

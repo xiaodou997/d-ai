@@ -353,7 +353,9 @@ func main() {
 
 	// Price book biller + usage logger
 	priceBookBiller := aiadapters.NewPriceBookBiller(priceBookSvc, q, pool)
-	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).WithLogger(appLogger)
+	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).
+		WithLogger(appLogger).
+		WithAuditEnqueuer(auditStore)
 
 	// Balance settlement. The runtime only enqueues charges; this consumer is
 	// what actually moves money, so it must be running for balances to advance.

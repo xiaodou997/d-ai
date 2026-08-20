@@ -2,11 +2,13 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/audit"
 )
@@ -35,41 +37,187 @@ const insertPayloadSQL = `
 	) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid, NULLIF($9, ''),
 		NULLIF($10, ''), NULLIF($11, ''), $12, NULLIF($13, ''), NULLIF($14, ''),
 		$15, NULLIF($16, ''), $17, $18, $19, $20, $21, $22, $23, NULLIF($24, ''), NULLIF($25, ''),
-		$26)`
+		$26)
+	ON CONFLICT (request_id) DO NOTHING`
 
-// InsertBatch writes a batch of audit payload rows using a pgx pipeline.
-// Individual row errors are logged and skipped; the batch is best-effort.
-func (s *AuditStore) InsertBatch(ctx context.Context, payloads []*audit.Payload) error {
-	if len(payloads) == 0 {
-		return nil
+// Enqueue writes the compact audit envelope to the durable inbox.
+func (s *AuditStore) Enqueue(ctx context.Context, payload *audit.Payload) error {
+	if payload == nil || payload.RequestID == "" {
+		return errors.New("audit payload requires a request id")
 	}
-	batch := &pgx.Batch{}
-	for _, p := range payloads {
-		batch.Queue(insertPayloadSQL,
-			p.RequestID, p.ClientProtocol, p.ClientIP, p.UserAgent,
-			p.RequestPath, p.AuthMasked, p.RequestModel,
-			p.MatchedDispatchRuleID, p.MatchedDispatchRuleSummary,
-			p.ResolvedLogicalModel, p.ResolvedProviderFamily,
-			p.ProtocolConversionEnabled, p.SelectedUpstreamProtocol, p.SelectedUpstreamModel,
-			p.UpstreamModelMappingApplied, p.PublicResponseModel,
-			p.RequestMessages, p.RequestParams, p.ResponseMessage, p.MediaRefs,
-			p.RequestStatus, p.HTTPStatus, p.ErrorCode,
-			p.InternalErrorDetail, p.FailedStep,
-			p.AttemptsDetail,
-		)
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin audit enqueue: %w", err)
 	}
-	br := s.pool.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for _, p := range payloads {
-		if _, err := br.Exec(); err != nil {
-			zap.L().Warn("audit: insert row failed",
-				zap.Error(err),
-				zap.String("request_id", p.RequestID),
-			)
-		}
+	defer tx.Rollback(ctx)
+	if err := s.EnqueueTx(ctx, tx, payload); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit audit enqueue: %w", err)
 	}
 	return nil
+}
+
+// EnqueueTx is used by UsageLogger so normal requests commit the audit inbox
+// row in the same transaction as the usage and financial facts.
+func (s *AuditStore) EnqueueTx(ctx context.Context, tx pgx.Tx, payload *audit.Payload) error {
+	if payload == nil || payload.RequestID == "" {
+		return errors.New("audit payload requires a request id")
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal audit payload: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO ai_audit_inbox (request_id, payload)
+		VALUES ($1, $2::jsonb)
+		ON CONFLICT (request_id) DO NOTHING
+	`, payload.RequestID, raw); err != nil {
+		return fmt.Errorf("insert audit inbox: %w", err)
+	}
+	return nil
+}
+
+// Claim leases ready and expired-processing rows. The transaction is committed
+// before the payload is processed so a slow blob write never holds row locks.
+func (s *AuditStore) Claim(ctx context.Context, workerID string, limit int, lease time.Duration) ([]audit.Delivery, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin audit claim: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	leaseBefore := time.Now().UTC().Add(-lease)
+	rows, err := tx.Query(ctx, `
+		WITH claimed AS (
+			SELECT id
+			FROM ai_audit_inbox
+			WHERE (status = 'pending' AND available_at <= now())
+			   OR (status = 'processing' AND locked_at < $3)
+			ORDER BY available_at, created_at
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE ai_audit_inbox AS inbox
+		SET status = 'processing', attempts = inbox.attempts + 1,
+			locked_at = now(), locked_by = $2
+		FROM claimed
+		WHERE inbox.id = claimed.id
+		RETURNING inbox.id, inbox.request_id, inbox.payload, inbox.attempts
+	`, limit, workerID, leaseBefore)
+	if err != nil {
+		return nil, fmt.Errorf("claim audit inbox: %w", err)
+	}
+	defer rows.Close()
+	deliveries := make([]audit.Delivery, 0, limit)
+	for rows.Next() {
+		var delivery audit.Delivery
+		var requestID string
+		var raw []byte
+		if err := rows.Scan(&delivery.ID, &requestID, &raw, &delivery.Attempts); err != nil {
+			return nil, fmt.Errorf("scan audit inbox: %w", err)
+		}
+		var payload audit.Payload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			payload.RequestID = requestID
+			delivery.Payload = nil
+		} else {
+			delivery.Payload = &payload
+		}
+		delivery.WorkerID = workerID
+		deliveries = append(deliveries, delivery)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read audit inbox: %w", err)
+	}
+	rows.Close()
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit audit claim: %w", err)
+	}
+	return deliveries, nil
+}
+
+// Complete materializes the payload and removes the inbox row atomically.
+// Both operations are idempotent, which makes crash recovery safe.
+func (s *AuditStore) Complete(ctx context.Context, delivery audit.Delivery) error {
+	if delivery.Payload == nil {
+		return errors.New("audit delivery payload is nil")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin audit completion: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := insertPayload(ctx, tx, delivery.Payload); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		DELETE FROM ai_audit_inbox
+		WHERE id = $1 AND request_id = $2 AND status = 'processing' AND locked_by = $3
+	`, delivery.ID, delivery.Payload.RequestID, delivery.WorkerID); err != nil {
+		return fmt.Errorf("remove completed audit inbox row: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit audit completion: %w", err)
+	}
+	return nil
+}
+
+func insertPayload(ctx context.Context, tx pgx.Tx, p *audit.Payload) error {
+	if _, err := tx.Exec(ctx, insertPayloadSQL,
+		p.RequestID, p.ClientProtocol, p.ClientIP, p.UserAgent,
+		p.RequestPath, p.AuthMasked, p.RequestModel,
+		p.MatchedDispatchRuleID, p.MatchedDispatchRuleSummary,
+		p.ResolvedLogicalModel, p.ResolvedProviderFamily,
+		p.ProtocolConversionEnabled, p.SelectedUpstreamProtocol, p.SelectedUpstreamModel,
+		p.UpstreamModelMappingApplied, p.PublicResponseModel,
+		p.RequestMessages, p.RequestParams, p.ResponseMessage, p.MediaRefs,
+		p.RequestStatus, p.HTTPStatus, p.ErrorCode,
+		p.InternalErrorDetail, p.FailedStep,
+		p.AttemptsDetail,
+	); err != nil {
+		return fmt.Errorf("insert audit payload: %w", err)
+	}
+	return nil
+}
+
+func (s *AuditStore) Retry(ctx context.Context, delivery audit.Delivery, availableAt time.Time, cause error, dead bool) error {
+	status := "pending"
+	if dead {
+		status = "dead"
+	}
+	message := "audit delivery failed"
+	if cause != nil {
+		message = cause.Error()
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE ai_audit_inbox
+		SET status = $1, available_at = $2, last_error = $3,
+			dead_at = CASE WHEN $1 = 'dead' THEN now() ELSE NULL END,
+			locked_at = NULL, locked_by = NULL
+		WHERE id = $4 AND status = 'processing' AND locked_by = $5
+	`, status, availableAt, message, delivery.ID, delivery.WorkerID)
+	if err != nil {
+		return fmt.Errorf("record audit delivery failure: %w", err)
+	}
+	return nil
+}
+
+func (s *AuditStore) Stats(ctx context.Context) (audit.QueueStats, error) {
+	var stats audit.QueueStats
+	if err := s.pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE status IN ('pending', 'processing')),
+			COUNT(*) FILTER (WHERE status = 'dead'),
+			COALESCE(EXTRACT(EPOCH FROM now() - MIN(created_at) FILTER (WHERE status IN ('pending', 'processing'))), 0)
+		FROM ai_audit_inbox
+	`).Scan(&stats.Pending, &stats.Dead, &stats.OldestS); err != nil {
+		return audit.QueueStats{}, fmt.Errorf("read audit inbox stats: %w", err)
+	}
+	return stats, nil
 }
 
 // AuditRecord is the combined row returned by GetByRequestID.

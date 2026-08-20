@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"xiaodou/dai/internal/ai/audit"
 	"xiaodou/dai/internal/ai/core/catalog"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
@@ -122,6 +123,10 @@ type Request struct {
 	// Sync requests: populated immediately after body read.
 	// Stream requests: populated after the stream drains (finishStream).
 	AuditResponseMessage []byte
+	// AuditPayload is built once by the finalizer chain. The PostgreSQL usage
+	// logger uses it to enqueue the durable audit inbox in the same transaction
+	// as the usage and financial facts.
+	AuditPayload *audit.Payload
 
 	// Filled by Execute step
 	TokenUsage           domain.TokenUsage
