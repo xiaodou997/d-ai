@@ -31,6 +31,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			},
 			AIIdentityDeps: AIIdentityDeps{
 				OAuth:          oauth,
+				PoolReader:     oauth,
 				TokenRefresher: refresher,
 			},
 			AICatalogDeps: AICatalogDeps{
@@ -40,7 +41,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		nil,
 	)
 
-	if got.OAuth != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
+	if got.OAuth != oauth || got.PoolReader != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
 	if got.SecretMasterKey != "secret-master-key" || got.HTTPClient != httpClient {

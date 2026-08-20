@@ -396,7 +396,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 端口收敛：AI 系统端点改用 `ScoreWeightsStore` 最小接口，评分权重 PostgreSQL adapter 留在 composition root。
 - 端口收敛：AI 认证端点改用 `HumaBanChecker`，Ban 状态 Redis adapter 留在 composition root。
 - 端口收敛：OAuth 凭证管理端点改用 `OAuthTokenRefresher`，不再暴露后台刷新器具体类型。
+- 端口收敛：AI 上游模型绑定的 pool 只读查询改用 `OAuthPoolReader`；OAuth CRUD 和凭证生命周期仍保留在具体 store，便于后续继续拆分写端口。
 - 端口收敛：OAuth pool 模型发现改用 `ClientCatalogResolver`，Transport 不再暴露具体 catalog service。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 继续将平台与 AI 组内的数据库、Redis、adapter 依赖替换为最小端口。
+- 下一候选项：P1-02 继续拆分 `OAuthCredentialStore` 的 CRUD、凭证生命周期和其他数据库/Redis adapter 依赖为最小端口。

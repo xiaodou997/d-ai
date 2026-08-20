@@ -387,10 +387,10 @@ type upstreamAccountDTO struct {
 }
 
 func ensurePoolExists(ctx context.Context, d AIDeps, poolID string) (*domain.CredentialPool, error) {
-	if d.OAuth == nil {
+	if d.PoolReader == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 	}
-	pool, err := d.OAuth.GetPool(ctx, poolID)
+	pool, err := d.PoolReader.GetPool(ctx, poolID)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}

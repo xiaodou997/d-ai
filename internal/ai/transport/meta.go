@@ -47,6 +47,7 @@ type InfrastructureDeps struct {
 // collaborators used by AI routes.
 type IdentityDeps struct {
 	OAuth            *pgadapter.OAuthCredentialStore
+	PoolReader       OAuthPoolReader
 	TokenRefresher   OAuthTokenRefresher
 	APIKeySvc        *identitycontrol.Service
 	WorkspaceSvc     *workspacesvc.Service
@@ -62,6 +63,13 @@ type IdentityDeps struct {
 // the transport package.
 type OAuthTokenRefresher interface {
 	RefreshByID(ctx context.Context, credID string) error
+}
+
+// OAuthPoolReader is the narrow read-only port needed by AI model-binding
+// routes. Pool CRUD and credential lifecycle operations remain on the
+// transitional OAuth store until their write ports are split out.
+type OAuthPoolReader interface {
+	GetPool(ctx context.Context, poolID string) (*domain.CredentialPool, error)
 }
 
 // BillingDeps contains AI subscription and prepaid billing collaborators.
