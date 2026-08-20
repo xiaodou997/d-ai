@@ -4,9 +4,10 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"os/signal"
 	"path"
 	"path/filepath"
@@ -14,8 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	// ── AI 域 ──
@@ -66,7 +65,6 @@ import (
 	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
-	daidb "xiaodou/dai/internal/db"
 	invitepkg "xiaodou/dai/internal/invite"
 	invitepg "xiaodou/dai/internal/invite/pg"
 	notificationpkg "xiaodou/dai/internal/notification"
@@ -91,9 +89,16 @@ var frontendFS embed.FS
 var version = "dev"
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "D-AI startup failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load configuration: %w", err)
 	}
 
 	appLogger := logger.InitLogger(cfg.App.Env, logger.LogConfig{
@@ -106,7 +111,7 @@ func main() {
 
 	originResolver, err := weborigin.NewResolver(cfg.Server.PublicBaseURL, cfg.Server.TrustedProxyCIDRs)
 	if err != nil {
-		appLogger.Fatal("invalid public origin or trusted proxy configuration", zap.Error(err))
+		return fmt.Errorf("invalid public origin or trusted proxy configuration: %w", err)
 	}
 
 	appLogger.Info("configuration loaded",
@@ -115,54 +120,38 @@ func main() {
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 	shutdownTracing := tracing.Init(ctx)
+	shutdowns := &shutdownStack{}
+	defer func() {
+		// Cancel first so context-owned workers stop before their database and
+		// cache dependencies are released by the stack.
+		stop()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = shutdownTracing(shutdownCtx)
+		if err := shutdowns.Close(shutdownCtx); err != nil {
+			appLogger.Error("resource shutdown failed", zap.Error(err))
+		}
+	}()
 
 	// ──────────────────────────────────────────────────────
 	// 1. 基础设施：PostgreSQL（单库）+ Redis
 	// ──────────────────────────────────────────────────────
 
-	dsn := cfg.Database.DSNString()
-	if dsn == "" {
-		appLogger.Fatal("database connection string is required")
-	}
-
-	pgConfig, err := pgxpool.ParseConfig(dsn)
+	infra, err := openInfrastructure(ctx, cfg, appLogger)
 	if err != nil {
-		appLogger.Fatal("parse database DSN failed", zap.Error(err))
+		return err
 	}
-	if cfg.Database.MaxConns > 0 {
-		pgConfig.MaxConns = cfg.Database.MaxConns
-	}
-	if cfg.Database.MinConns > 0 {
-		pgConfig.MinConns = cfg.Database.MinConns
-	}
-	if cfg.Database.MaxConnLifetime > 0 {
-		pgConfig.MaxConnLifetime = cfg.Database.MaxConnLifetime
-	}
-
-	pool, err := pgxpool.NewWithConfig(ctx, pgConfig)
-	if err != nil {
-		appLogger.Fatal("connect postgres failed", zap.Error(err))
-	}
-	defer pool.Close()
-
-	if err := daidb.VerifySchema(ctx, pool); err != nil {
-		appLogger.Fatal("database schema verification failed", zap.Error(err))
-	}
-	appLogger.Info("database schema verified", zap.Int("version", daidb.ExpectedSchemaVersion))
-
-	// Redis
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     cfg.Redis.Addr,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
+	pool, redisClient := infra.pool, infra.redis
+	// Dependencies are registered immediately after construction. Any later
+	// module assembly error therefore releases them before run() returns.
+	shutdowns.Add("postgres", func(context.Context) error {
+		pool.Close()
+		return nil
 	})
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		appLogger.Fatal("connect redis failed", zap.Error(err))
-	}
-	defer redisClient.Close()
-	appLogger.Info("redis connected", zap.String("addr", cfg.Redis.Addr))
+	shutdowns.Add("redis", func(context.Context) error {
+		return redisClient.Close()
+	})
 
 	// ──────────────────────────────────────────────────────
 	// 2. 平台身份与计费域装配
@@ -170,7 +159,7 @@ func main() {
 
 	previousSecretKeys, err := config.ParsePreviousSecretKeys(cfg.Security.SecretMasterKeyPrevious)
 	if err != nil {
-		appLogger.Fatal("invalid sensitive configuration keyring", zap.Error(err))
+		return fmt.Errorf("invalid sensitive configuration keyring: %w", err)
 	}
 	secretKeyring, err := clientsecret.NewKeyring(
 		cfg.Security.SecretMasterKeyID,
@@ -178,10 +167,10 @@ func main() {
 		previousSecretKeys,
 	)
 	if err != nil {
-		appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
+		return fmt.Errorf("sensitive configuration crypto init failed: %w", err)
 	}
 	if err := clientsecret.ConfigureKeyring(secretKeyring); err != nil {
-		appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
+		return fmt.Errorf("sensitive configuration crypto init failed: %w", err)
 	}
 
 	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
@@ -303,7 +292,7 @@ func main() {
 		MaxBytes:   cfg.Files.MaxBytes,
 	})
 	if fsErr != nil {
-		appLogger.Fatal("file store init failed", zap.Error(fsErr))
+		return fmt.Errorf("file store init failed: %w", fsErr)
 	}
 
 	// Image assets
@@ -455,7 +444,7 @@ func main() {
 		RedactDetail: serving.RedactInternalErrorDetail,
 	})
 	if asynctaskErr != nil {
-		appLogger.Fatal("build async task engine failed", zap.Error(asynctaskErr))
+		return fmt.Errorf("build async task engine failed: %w", asynctaskErr)
 	}
 
 	var runtimeGateway = gateway.New(gateway.Deps{
@@ -493,6 +482,10 @@ func main() {
 	})
 	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
 	asyncTasks.Start(ctx)
+	shutdowns.Add("async task engine", func(ctx context.Context) error {
+		asyncTasks.Stop(ctx)
+		return nil
+	})
 	dataCleanupSvc.Start(ctx)
 
 	// Hourly cleanups
@@ -628,56 +621,27 @@ func main() {
 
 	addr := cfg.Server.Addr
 
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           weborigin.Middleware(router, originResolver),
-		ReadHeaderTimeout: 10 * time.Second,
+	httpRuntime := newHTTPServers(httpServerOptions{
+		PublicAddr:        addr,
+		ManagementAddr:    strings.TrimSpace(cfg.Server.ManagementAddr),
+		PublicHandler:     weborigin.Middleware(router, originResolver),
+		ManagementHandler: server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux))),
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
-		// Streaming AI responses use application-level response-header, first-byte,
-		// idle-gap and max-duration deadlines in serving; a server write timeout
-		// would terminate healthy long-lived streams prematurely.
-		WriteTimeout:   0,
-		IdleTimeout:    time.Duration(cfg.Server.IdleTimeout) * time.Second,
-		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
-	}
-	var managementServer *http.Server
-	if managementAddr := strings.TrimSpace(cfg.Server.ManagementAddr); managementAddr != "" {
-		managementServer = &http.Server{
-			Addr:              managementAddr,
-			Handler:           server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux))),
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       10 * time.Second,
-			WriteTimeout:      10 * time.Second,
-			IdleTimeout:       30 * time.Second,
-			MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
-		}
-		go func() {
-			appLogger.Info("D-AI management listener started", zap.String("addr", managementAddr))
-			if err := managementServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				appLogger.Error("management listener failed", zap.Error(err))
-				stop()
-			}
-		}()
-	}
-
-	go func() {
-		appLogger.Info("D-AI server listening", zap.String("addr", addr), zap.String("version", version))
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			appLogger.Error("server failed", zap.Error(err))
-			stop()
-		}
-	}()
+		IdleTimeout:       time.Duration(cfg.Server.IdleTimeout) * time.Second,
+		MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
+		Logger:            appLogger,
+		Version:           version,
+	})
+	httpRuntime.Start(stop)
 
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = httpServer.Shutdown(shutdownCtx)
-	if managementServer != nil {
-		_ = managementServer.Shutdown(shutdownCtx)
+	if err := httpRuntime.Shutdown(shutdownCtx); err != nil {
+		appLogger.Warn("HTTP listener shutdown incomplete", zap.Error(err))
 	}
-	asyncTasks.Stop(shutdownCtx)
-	_ = shutdownTracing(shutdownCtx)
 	appLogger.Info("server shutdown complete")
+	return nil
 }
 
 // ── 辅助函数 ──────────────────────────────────────────

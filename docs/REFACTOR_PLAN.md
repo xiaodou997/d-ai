@@ -129,12 +129,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-02 拆分 composition root 和巨型依赖容器
 
-- [ ] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期。
+- [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP 生命周期和逆序关闭已抽出，平台/AI 模块装配仍待继续拆分。
 - [ ] 删除包含几十个字段的 `transport.Deps` / `AIDeps` service locator。
 - [ ] 每个模块提供最小的 Register/Module 接口和显式依赖。
-- [ ] 后台组件统一实现 Start/Stop/Health 生命周期。
-- [ ] 启动失败时按逆序释放已经创建的资源。
-- [ ] 为各运行角色增加装配测试。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis 已接入统一关闭路径，其他 worker 仍待补齐。
+- [~] 启动失败时按逆序释放已经创建的资源；基础设施和已登记的异步任务已覆盖，全部模块仍待登记。
+- [~] 为各运行角色增加装配测试；当前覆盖资源栈和公共/管理监听参数，完整模块装配测试待拆分完成后补齐。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
