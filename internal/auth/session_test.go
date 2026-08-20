@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/dbtest"
 )
@@ -211,6 +212,9 @@ func TestTenantDisableAndAccountDeleteRejectRefresh(t *testing.T) {
 }
 
 func newTestSessionService(pool *pgxpool.Pool) *SessionService {
+	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
+		panic(err)
+	}
 	jwt := NewJWTService(config.JWTConfig{Expiration: 15 * time.Minute, RefreshExpiration: time.Hour, Issuer: "dai-test"}, pool)
 	return NewSessionService(pool, jwt, time.Hour)
 }

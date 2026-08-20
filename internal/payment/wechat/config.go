@@ -115,6 +115,7 @@ func (s *ConfigStore) Load(ctx context.Context) (*MerchantConfig, error) {
 			return nil, fmt.Errorf("解密商户私钥失败: %w", err)
 		}
 		cfg.MchPrivateKey = plain
+		s.maybeReencrypt(ctx, "mch_private_key_enc", mchPrivateKeyEnc)
 	}
 	if apiv3Enc != "" {
 		plain, err := clientsecret.Decrypt(apiv3Enc)
@@ -122,8 +123,27 @@ func (s *ConfigStore) Load(ctx context.Context) (*MerchantConfig, error) {
 			return nil, fmt.Errorf("解密 APIv3Key 失败: %w", err)
 		}
 		cfg.APIv3Key = plain
+		s.maybeReencrypt(ctx, "apiv3_key_enc", apiv3Enc)
 	}
 	return &cfg, nil
+}
+
+// maybeReencrypt upgrades credentials written with a previous key without
+// changing payment configuration semantics. Errors are intentionally ignored:
+// a successful decrypt keeps the current request available, while a later
+// load retries the migration.
+func (s *ConfigStore) maybeReencrypt(ctx context.Context, column, ciphertext string) {
+	if !clientsecret.NeedsReencrypt(ciphertext) {
+		return
+	}
+	reencrypted, err := clientsecret.Reencrypt(ciphertext)
+	if err != nil {
+		return
+	}
+	if column != "mch_private_key_enc" && column != "apiv3_key_enc" {
+		return
+	}
+	_, _ = s.pool.Exec(ctx, "UPDATE pay_wechat_config SET "+column+" = $1, updated_at = now() WHERE id = 1", reencrypted)
 }
 
 // LoadAdminView 返回脱敏视图，供管理端 GET 接口展示。

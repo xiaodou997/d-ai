@@ -29,8 +29,12 @@ auth:
   activation_expiration: 24h
 
 security:
-  # URM 与 AI 敏感配置的统一加密主密钥；生产环境填入原 URM 密钥
+  # URM、JWT 和 AI 敏感配置的统一加密主密钥；生产环境必须使用高熵随机值
   secret_master_key: ''
+  # 当前密钥版本；轮换时先改 ID 和主密钥，再把旧值放入 previous
+  secret_master_key_id: v1
+  # 旧密钥列表，格式：keyID=key；仅保留仍在宽限期内的旧密钥
+  secret_master_key_previous: []
 
 storage:
   data_dir: data

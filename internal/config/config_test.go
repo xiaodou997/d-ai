@@ -19,6 +19,33 @@ func TestLoadUsesUnifiedSecretAndStorageEnvironment(t *testing.T) {
 	}
 }
 
+func TestLoadParsesVersionedSecretKeyring(t *testing.T) {
+	setRequiredEnvironment(t, "production")
+	active := "0123456789abcdef0123456789abcdef"
+	previous := "abcdef0123456789abcdef0123456789"
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY", active)
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY_ID", "v2")
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY_PREVIOUS", "v1="+previous)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Security.SecretMasterKeyID != "v2" || len(cfg.Security.SecretMasterKeyPrevious) != 1 {
+		t.Fatalf("secret keyring = %#v", cfg.Security)
+	}
+}
+
+func TestLoadRejectsMalformedPreviousSecretKey(t *testing.T) {
+	setRequiredEnvironment(t, "production")
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY", "0123456789abcdef0123456789abcdef")
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY_PREVIOUS", "v1-without-value")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load accepted malformed previous secret key")
+	}
+}
+
 func TestLoadRequiresSecretMasterKeyInProduction(t *testing.T) {
 	setRequiredEnvironment(t, "production")
 	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY", "")

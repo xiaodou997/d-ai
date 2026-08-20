@@ -193,7 +193,19 @@ func (s *MFAService) secret(ctx context.Context, userID string) (string, error) 
 	if encrypted == "" {
 		return "", ErrMFAUnavailable
 	}
-	return clientsecret.Decrypt(encrypted)
+	plain, err := clientsecret.Decrypt(encrypted)
+	if err != nil {
+		return "", err
+	}
+	if clientsecret.NeedsReencrypt(encrypted) {
+		if reencrypted, err := clientsecret.Reencrypt(encrypted); err == nil {
+			_, _ = s.pool.Exec(ctx, `
+				UPDATE iam_accounts SET mfa_secret_encrypted = $1, updated_at = now()
+				WHERE user_id = $2 AND user_type IN (1, 2)
+			`, reencrypted, userID)
+		}
+	}
+	return plain, nil
 }
 
 func mfaChallengeKey(token string) string {

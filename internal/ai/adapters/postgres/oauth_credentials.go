@@ -14,6 +14,7 @@ import (
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/secret"
+	"xiaodou/dai/internal/clientsecret"
 )
 
 // OAuthCredentialStore handles credential pool operations.
@@ -325,7 +326,7 @@ func (s *OAuthCredentialStore) selectRoundRobin(ctx context.Context, poolID stri
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("no active oauth credentials for pool %s", poolID)
 	}
-	return s.decryptRow(rows[0])
+	return s.decryptRow(ctx, rows[0])
 }
 
 // SelectPinnedCredential returns one specific credential of a pool, used by
@@ -357,7 +358,7 @@ func (s *OAuthCredentialStore) SelectPinnedCredential(
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("credential %s is not an active member of pool %s", credID, poolID)
 	}
-	return s.decryptRow(rows[0])
+	return s.decryptRow(ctx, rows[0])
 }
 
 func (s *OAuthCredentialStore) selectWeighted(ctx context.Context, poolID string) (*domain.OAuthCredential, error) {
@@ -369,7 +370,7 @@ func (s *OAuthCredentialStore) selectWeighted(ctx context.Context, poolID string
 		return nil, fmt.Errorf("no active oauth credentials for pool %s", poolID)
 	}
 	row := weightedSelectOAuth(rows)
-	cred, err := s.decryptRow(row)
+	cred, err := s.decryptRow(ctx, row)
 	if err != nil {
 		return nil, err
 	}
@@ -749,14 +750,14 @@ func (s *OAuthCredentialStore) GetDecryptedByID(ctx context.Context, credID stri
 	if err != nil {
 		return nil, err
 	}
-	return s.decryptRow(*row)
+	return s.decryptRow(ctx, *row)
 }
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-func (s *OAuthCredentialStore) decryptRow(row OAuthCredentialRow) (*domain.OAuthCredential, error) {
+func (s *OAuthCredentialStore) decryptRow(ctx context.Context, row OAuthCredentialRow) (*domain.OAuthCredential, error) {
 	at, err := secret.DecryptProviderKey(s.masterKey, row.AccessTokenCiphertext)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt access token for cred %s: %w", row.ID, err)
@@ -768,6 +769,7 @@ func (s *OAuthCredentialStore) decryptRow(row OAuthCredentialRow) (*domain.OAuth
 			return nil, fmt.Errorf("decrypt refresh token for cred %s: %w", row.ID, err)
 		}
 	}
+	s.maybeReencrypt(ctx, row, at, rt)
 
 	var meta map[string]any
 	if len(row.AuthMetadataRaw) > 0 {
@@ -790,6 +792,38 @@ func (s *OAuthCredentialStore) decryptRow(row OAuthCredentialRow) (*domain.OAuth
 		Status:        domain.OAuthCredentialStatus(row.Status),
 		CooldownUntil: row.CooldownUntil,
 	}, nil
+}
+
+// maybeReencrypt upgrades legacy or previous-key ciphertext on the serving
+// path. The update intentionally does not bump token_version: it changes only
+// the at-rest representation and must not invalidate an in-flight refresh.
+func (s *OAuthCredentialStore) maybeReencrypt(ctx context.Context, row OAuthCredentialRow, accessToken, refreshToken string) {
+	if !clientsecret.IsConfigured() {
+		return
+	}
+	accessCipher := row.AccessTokenCiphertext
+	refreshCipher := row.RefreshTokenCiphertext
+	changed := false
+	if clientsecret.NeedsReencrypt(accessCipher) {
+		if encrypted, err := secret.EncryptProviderKey(s.masterKey, accessToken); err == nil {
+			accessCipher, changed = encrypted, true
+		}
+	}
+	if refreshCipher != "" && clientsecret.NeedsReencrypt(refreshCipher) {
+		if encrypted, err := secret.EncryptProviderKey(s.masterKey, refreshToken); err == nil {
+			refreshCipher, changed = encrypted, true
+		}
+	}
+	if !changed {
+		return
+	}
+	_, _ = s.pool.Exec(ctx, `
+		UPDATE ai_provider_oauth_credentials
+		SET access_token_ciphertext = $2,
+		    refresh_token_ciphertext = NULLIF($3, ''),
+		    updated_at = now()
+		WHERE id = $1
+	`, row.ID, accessCipher, refreshCipher)
 }
 
 func (s *OAuthCredentialStore) scanRows(ctx context.Context, query string, args ...any) ([]OAuthCredentialRow, error) {

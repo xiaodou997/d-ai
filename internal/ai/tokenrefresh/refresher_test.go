@@ -62,6 +62,18 @@ func TestTokenRefreshNetworkFailureIsRetryable(t *testing.T) {
 	}
 }
 
+func TestTokenRefreshRejectsMissingExplicitClientSecret(t *testing.T) {
+	refresher := &Refresher{client: &http.Client{}}
+	_, err := refresher.callTokenEndpoint(context.Background(), providerConfig{
+		TokenURL:      "https://oauth.example/token",
+		ClientID:      "client-id",
+		RequireSecret: true,
+	}, "refresh-token")
+	if err == nil || !strings.Contains(err.Error(), "client secret is not configured") {
+		t.Fatalf("missing client secret error = %v", err)
+	}
+}
+
 func TestDefaultProviderConfigsMatchCurrentClientRefreshContracts(t *testing.T) {
 	t.Setenv("GEMINI_OAUTH_CLIENT_SECRET", "")
 	t.Setenv("ANTIGRAVITY_OAUTH_CLIENT_SECRET", "")
@@ -88,13 +100,11 @@ func TestDefaultProviderConfigsMatchCurrentClientRefreshContracts(t *testing.T) 
 			provider: domain.FixedProviderGeminiCLI,
 			tokenURL: "https://oauth2.googleapis.com/token",
 			scope:    geminiCLIScope,
-			secret:   geminiCLIClientSecret,
 		},
 		{
 			provider: domain.FixedProviderAntigravity,
 			tokenURL: "https://oauth2.googleapis.com/token",
 			scope:    antigravityScope,
-			secret:   antigravityClientSecret,
 		},
 	}
 

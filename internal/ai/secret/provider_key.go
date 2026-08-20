@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"xiaodou/dai/internal/clientsecret"
 )
 
 const (
@@ -20,6 +22,9 @@ const (
 func EncryptProviderKey(master string, plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", errors.New("provider key is required")
+	}
+	if clientsecret.IsConfigured() {
+		return clientsecret.Encrypt(plaintext)
 	}
 	if master == "" {
 		return "", errors.New("secret master key is required")
@@ -50,6 +55,11 @@ func EncryptProviderKey(master string, plaintext string) (string, error) {
 func DecryptProviderKey(master string, ciphertext string) (string, error) {
 	if strings.HasPrefix(ciphertext, plainPrefix) {
 		return strings.TrimPrefix(ciphertext, plainPrefix), nil
+	}
+	if clientsecret.IsConfigured() {
+		if plaintext, err := clientsecret.Decrypt(ciphertext); err == nil {
+			return plaintext, nil
+		}
 	}
 	if !strings.HasPrefix(ciphertext, aesGCMPrefix) {
 		return "", errors.New("unsupported provider key ciphertext format")

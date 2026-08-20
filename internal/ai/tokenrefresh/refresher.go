@@ -47,11 +47,12 @@ var oauthTokenLike = regexp.MustCompile(`[A-Za-z0-9_\-.]{24,}`)
 
 // providerConfig holds the token refresh settings for a fixed OAuth provider.
 type providerConfig struct {
-	TokenURL     string
-	ClientID     string
-	ClientSecret string // empty for providers that don't need it
-	Scope        string
-	UseJSON      bool // true = JSON body; false = form-encoded body
+	TokenURL      string
+	ClientID      string
+	ClientSecret  string // empty for providers that don't need it
+	RequireSecret bool
+	Scope         string
+	UseJSON       bool // true = JSON body; false = form-encoded body
 }
 
 const (
@@ -62,19 +63,7 @@ const (
 	antigravityScope = geminiCLIScope + " " +
 		"https://www.googleapis.com/auth/cclog " +
 		"https://www.googleapis.com/auth/experimentsandconfigs"
-
-	// These are installed-application OAuth credentials shipped by the upstream
-	// clients. Environment variables remain available for emergency rotation.
-	geminiCLIClientSecret   = "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"
-	antigravityClientSecret = "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"
 )
-
-func envOrDefault(name, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-		return value
-	}
-	return fallback
-}
 
 // defaultProviderConfigs mirrors the refresh contract of each simulated client.
 func defaultProviderConfigs() map[domain.FixedProviderType]providerConfig {
@@ -91,18 +80,20 @@ func defaultProviderConfigs() map[domain.FixedProviderType]providerConfig {
 			UseJSON:  true,
 		},
 		domain.FixedProviderGeminiCLI: {
-			TokenURL:     "https://oauth2.googleapis.com/token",
-			ClientID:     "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
-			ClientSecret: envOrDefault("GEMINI_OAUTH_CLIENT_SECRET", geminiCLIClientSecret),
-			Scope:        geminiCLIScope,
-			UseJSON:      false,
+			TokenURL:      "https://oauth2.googleapis.com/token",
+			ClientID:      "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
+			ClientSecret:  strings.TrimSpace(os.Getenv("GEMINI_OAUTH_CLIENT_SECRET")),
+			RequireSecret: true,
+			Scope:         geminiCLIScope,
+			UseJSON:       false,
 		},
 		domain.FixedProviderAntigravity: {
-			TokenURL:     "https://oauth2.googleapis.com/token",
-			ClientID:     "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com",
-			ClientSecret: envOrDefault("ANTIGRAVITY_OAUTH_CLIENT_SECRET", antigravityClientSecret),
-			Scope:        antigravityScope,
-			UseJSON:      false,
+			TokenURL:      "https://oauth2.googleapis.com/token",
+			ClientID:      "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com",
+			ClientSecret:  strings.TrimSpace(os.Getenv("ANTIGRAVITY_OAUTH_CLIENT_SECRET")),
+			RequireSecret: true,
+			Scope:         antigravityScope,
+			UseJSON:       false,
 		},
 	}
 }
@@ -254,6 +245,9 @@ func (r *Refresher) refreshOne(ctx context.Context, row pgadapter.OAuthCredentia
 
 // callTokenEndpoint sends a refresh_token grant request to the provider's token URL.
 func (r *Refresher) callTokenEndpoint(ctx context.Context, cfg providerConfig, refreshToken string) (*tokenResponse, error) {
+	if cfg.RequireSecret && cfg.ClientSecret == "" {
+		return nil, errors.New("oauth client secret is not configured")
+	}
 	var (
 		reqBody     io.Reader
 		contentType string

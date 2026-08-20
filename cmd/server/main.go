@@ -168,17 +168,28 @@ func main() {
 	// 2. 平台身份与计费域装配
 	// ──────────────────────────────────────────────────────
 
+	previousSecretKeys, err := config.ParsePreviousSecretKeys(cfg.Security.SecretMasterKeyPrevious)
+	if err != nil {
+		appLogger.Fatal("invalid sensitive configuration keyring", zap.Error(err))
+	}
+	secretKeyring, err := clientsecret.NewKeyring(
+		cfg.Security.SecretMasterKeyID,
+		cfg.Security.SecretMasterKey,
+		previousSecretKeys,
+	)
+	if err != nil {
+		appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
+	}
+	if err := clientsecret.ConfigureKeyring(secretKeyring); err != nil {
+		appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
+	}
+
 	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
 	sessionSvc := auth.NewSessionService(pool, jwtSvc, cfg.JWT.RefreshExpiration)
 	activationSvc := auth.NewActivationService(pool, cfg.Auth.ActivationExpiration)
 	blacklist := auth.NewBlacklistService(redisClient, appLogger)
 	mfaSvc := auth.NewMFAService(pool, redisClient)
 	recentAuthSvc := auth.NewRecentAuthService(redisClient)
-	if cfg.Security.SecretMasterKey != "" {
-		if err := clientsecret.Configure(cfg.Security.SecretMasterKey); err != nil {
-			appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
-		}
-	}
 
 	// Billing services — 进程内直接调用的核心
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)

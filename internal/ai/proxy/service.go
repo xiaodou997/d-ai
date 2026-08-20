@@ -184,21 +184,21 @@ func (s *Service) SelectProxy(ctx context.Context) (*url.URL, error) {
 		}
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT endpoint, proxy_type, username, proxy_password_enc, weight
+		SELECT id::text, endpoint, proxy_type, username, proxy_password_enc, weight
 		FROM ai_proxy_nodes WHERE status = 'active' AND health_status <> 'unhealthy'`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	type candidate struct {
-		endpoint, kind, username, encrypted string
-		weight                              int
+		id, endpoint, kind, username, encrypted string
+		weight                                  int
 	}
 	items := make([]candidate, 0)
 	total := 0
 	for rows.Next() {
 		var item candidate
-		if err := rows.Scan(&item.endpoint, &item.kind, &item.username, &item.encrypted, &item.weight); err != nil {
+		if err := rows.Scan(&item.id, &item.endpoint, &item.kind, &item.username, &item.encrypted, &item.weight); err != nil {
 			return nil, err
 		}
 		if item.weight < 1 {
@@ -232,6 +232,13 @@ func (s *Service) SelectProxy(ctx context.Context) (*url.URL, error) {
 			password, err = clientsecret.Decrypt(selected.encrypted)
 			if err != nil {
 				return nil, err
+			}
+			if clientsecret.NeedsReencrypt(selected.encrypted) {
+				if reencrypted, err := clientsecret.Reencrypt(selected.encrypted); err == nil {
+					_, _ = s.pool.Exec(ctx, `
+						UPDATE ai_proxy_nodes SET proxy_password_enc = $1, updated_at = now() WHERE id = $2
+					`, reencrypted, selected.id)
+				}
 			}
 		}
 		parsed.User = url.UserPassword(selected.username, password)

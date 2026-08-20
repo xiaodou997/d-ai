@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -143,6 +144,10 @@ func (s *JWTService) generateAndSaveKey() error {
 	if err != nil {
 		return err
 	}
+	privateKeyCiphertext, err := clientsecret.Encrypt(privateKeyPEM)
+	if err != nil {
+		return fmt.Errorf("encrypt JWT private key: %w", err)
+	}
 	publicKeyPEM, err := marshalPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		return err
@@ -153,7 +158,7 @@ func (s *JWTService) generateAndSaveKey() error {
 	_, err = s.database.Exec(ctx, `
 		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
 		VALUES ($1, $2, $3, 'active', $4)
-	`, kid, privateKeyPEM, publicKeyPEM, now)
+	`, kid, privateKeyCiphertext, publicKeyPEM, now)
 	return err
 }
 
@@ -178,15 +183,37 @@ func (s *JWTService) reloadKeys() error {
 	for rows.Next() {
 		var kid, privPEM, pubPEM, status string
 		if err := rows.Scan(&kid, &privPEM, &pubPEM, &status); err != nil {
-			continue
+			return fmt.Errorf("scan auth signing key %q: %w", kid, err)
 		}
-		privateKey, err := parsePrivateKey(privPEM)
+		privateKeyPEM, decryptErr := clientsecret.Decrypt(privPEM)
+		legacyPlaintext := false
+		if decryptErr != nil {
+			// Pre-P0-07 installations stored PEM directly. Accept it only for
+			// this migration path and immediately replace it with ciphertext.
+			if _, parseErr := parsePrivateKey(privPEM); parseErr != nil {
+				return fmt.Errorf("decrypt JWT private key %q: %w", kid, decryptErr)
+			}
+			privateKeyPEM = privPEM
+			legacyPlaintext = true
+		}
+		privateKey, err := parsePrivateKey(privateKeyPEM)
 		if err != nil {
-			continue
+			return fmt.Errorf("parse JWT private key %q: %w", kid, err)
+		}
+		if legacyPlaintext {
+			ciphertext, err := clientsecret.Encrypt(privateKeyPEM)
+			if err != nil {
+				return fmt.Errorf("encrypt migrated JWT private key %q: %w", kid, err)
+			}
+			if _, err := s.database.Exec(ctx, `
+				UPDATE auth_signing_keys SET private_key = $1 WHERE kid = $2
+			`, ciphertext, kid); err != nil {
+				return fmt.Errorf("persist migrated JWT private key %q: %w", kid, err)
+			}
 		}
 		publicKey, err := parsePublicKey(pubPEM)
 		if err != nil {
-			continue
+			return fmt.Errorf("parse JWT public key %q: %w", kid, err)
 		}
 		entry := &keyEntry{kid: kid, privateKey: privateKey, publicKey: publicKey}
 		if status == "active" {
@@ -337,6 +364,10 @@ func (s *JWTService) RotateKey() error {
 	if err != nil {
 		return err
 	}
+	privateKeyCiphertext, err := clientsecret.Encrypt(privateKeyPEM)
+	if err != nil {
+		return fmt.Errorf("encrypt JWT private key: %w", err)
+	}
 	publicKeyPEM, err := marshalPublicKey(&privateKey.PublicKey)
 	if err != nil {
 		return err
@@ -356,7 +387,7 @@ func (s *JWTService) RotateKey() error {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO auth_signing_keys (kid, private_key, public_key, status, created_at)
 		VALUES ($1, $2, $3, 'active', $4)
-	`, newKid, privateKeyPEM, publicKeyPEM, now)
+	`, newKid, privateKeyCiphertext, publicKeyPEM, now)
 	if err != nil {
 		return fmt.Errorf("insert new key: %w", err)
 	}

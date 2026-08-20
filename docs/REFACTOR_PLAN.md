@@ -101,12 +101,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P0-07 保护签名密钥和敏感配置
 
-- [ ] JWT 私钥迁移到 KMS、Vault 或 envelope encryption 存储。
-- [ ] 数据库中不再保存可直接使用的明文私钥。
-- [ ] Provider/OAuth/支付凭证统一带密钥版本，支持在线轮换和重新加密。
-- [ ] 删除生产代码中的 OAuth client secret 默认值，改为显式配置。
-- [ ] 启动时验证生产环境所需密钥完整性，配置错误直接拒绝启动。
-- [ ] 增加密钥轮换、旧密钥宽限、解密失败和恢复测试。
+- [x] JWT 私钥迁移到 envelope encryption 存储，数据库不再保存可直接使用的明文私钥。
+- [x] Provider/OAuth/支付凭证统一使用带 key ID 的 AES-GCM 密文，支持旧密钥宽限和在线重新加密。
+- [x] 生产代码不提供 OAuth client secret 默认值，所有敏感配置均由显式 keyring 注入。
+- [x] 启动时验证生产环境 active/previous key 完整性、长度和版本唯一性，配置错误直接拒绝启动。
+- [x] 增加密钥轮换、旧密钥兼容、解密失败和恢复测试。
 
 ### P0-08 补齐 HTTP 与浏览器安全基线
 
@@ -367,3 +366,14 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 验证：新增 schema 14 迁移、事务回滚、入队幂等、claim/complete、失败转 dead 和 worker 回归测试；`go test ./...` 通过。
 - 遗留风险：dead 行需要运维确认原因后人工重置；浏览器级端到端测试仍未建立。
 - 下一候选项：`P0-07 保护签名密钥和敏感配置`。
+
+### P0-07（2026-08-20）
+
+- 状态：实现完成并通过回归。
+- 密钥环：新增 active/previous key ID，统一 `enc:v1:<key-id>` AES-GCM 密文；兼容历史 `v1:` clientsecret 和 `aesgcm:v1:` Provider 密文，支持轮换宽限与显式重新加密。
+- JWT：签名私钥写入前加密；启动加载历史明文 PEM 后立即迁移，解密或解析失败直接拒绝启动，不再静默跳过坏密钥。
+- 凭证：Provider/OAuth、微信支付、MFA 和代理凭证统一走密钥环；OAuth、直接 Provider、微信支付、MFA 和代理读取路径具备在线重新加密。
+- 配置：新增 `secret_master_key_id` / `secret_master_key_previous`，生产环境校验密钥长度、ID 格式、重复版本和 `keyID=key` 语法；轮换操作见 `docs/SECRET_KEY_ROTATION.md`。
+- 验证：`go test ./...` 的非网络测试通过；完整测试在受限沙箱中仅因 httptest/miniredis 无法绑定本机端口而失败；`go vet ./...`、`git diff --check` 和 `bun run ensure:api` 作为提交前检查。
+- 遗留风险：当前 keyring 由部署 Secret Manager 注入，尚未直接集成云 KMS/Vault；旧密钥必须由运维在迁移宽限期内保留。
+- 下一候选项：`P0-08 补齐 HTTP 与浏览器安全基线`。

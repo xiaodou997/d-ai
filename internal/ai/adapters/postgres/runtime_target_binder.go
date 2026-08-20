@@ -17,6 +17,7 @@ import (
 	"xiaodou/dai/internal/ai/runtimecompat"
 	"xiaodou/dai/internal/ai/secret"
 	"xiaodou/dai/internal/ai/upstreamaccess"
+	"xiaodou/dai/internal/clientsecret"
 )
 
 // RuntimeTargetBinder bridges rebuilt runtime planning to the current
@@ -124,6 +125,13 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 	apiKey, err := decryptDirectProviderKey(b.masterKey, row.ApiKeyCiphertext)
 	if err != nil {
 		return coreupstream.RuntimeBinding{}, credentialRejection(err)
+	}
+	if clientsecret.IsConfigured() && clientsecret.NeedsReencrypt(row.ApiKeyCiphertext) {
+		if encrypted, err := secret.EncryptProviderKey(b.masterKey, apiKey); err == nil {
+			_, _ = b.pool.Exec(ctx, `
+				UPDATE ai_upstream_accounts SET api_key_ciphertext = $1, updated_at = now() WHERE id = $2
+			`, encrypted, row.ID)
+		}
 	}
 	defaultMultiplier := 1.0
 	if row.TenantMultiplier.Valid {

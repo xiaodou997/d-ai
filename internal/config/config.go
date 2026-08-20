@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/weborigin"
 )
 
@@ -83,7 +84,9 @@ type AuthConfig struct {
 }
 
 type SecurityConfig struct {
-	SecretMasterKey string `mapstructure:"secret_master_key"` // URM 与 AI 敏感配置加密
+	SecretMasterKey         string   `mapstructure:"secret_master_key"`          // URM 与 AI 敏感配置加密
+	SecretMasterKeyID       string   `mapstructure:"secret_master_key_id"`       // 当前密钥版本
+	SecretMasterKeyPrevious []string `mapstructure:"secret_master_key_previous"` // 旧密钥，格式为 keyID=key
 }
 
 type LegalConfig struct {
@@ -168,6 +171,8 @@ func Load() (*Config, error) {
 
 	// 默认值 —— Security
 	v.SetDefault("security.secret_master_key", "")
+	v.SetDefault("security.secret_master_key_id", "v1")
+	v.SetDefault("security.secret_master_key_previous", []string{})
 
 	// 默认值 —— Legal
 	v.SetDefault("legal.terms_version", "2026-07-19")
@@ -254,7 +259,9 @@ func bindEnvs(v *viper.Viper) {
 		"DAI_JWT_REFRESH_EXPIRATION":                "jwt.refresh_expiration",
 		"DAI_AUTH_ACTIVATION_EXPIRATION":            "auth.activation_expiration",
 		// Security
-		"DAI_SECURITY_SECRET_MASTER_KEY": "security.secret_master_key",
+		"DAI_SECURITY_SECRET_MASTER_KEY":          "security.secret_master_key",
+		"DAI_SECURITY_SECRET_MASTER_KEY_ID":       "security.secret_master_key_id",
+		"DAI_SECURITY_SECRET_MASTER_KEY_PREVIOUS": "security.secret_master_key_previous",
 		// Legal
 		"DAI_LEGAL_TERMS_VERSION":   "legal.terms_version",
 		"DAI_LEGAL_PRIVACY_VERSION": "legal.privacy_version",
@@ -321,6 +328,12 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DAI_SECURITY_SECRET_MASTER_KEY"); v != "" {
 		cfg.Security.SecretMasterKey = v
 	}
+	if v := os.Getenv("DAI_SECURITY_SECRET_MASTER_KEY_ID"); v != "" {
+		cfg.Security.SecretMasterKeyID = v
+	}
+	if v := os.Getenv("DAI_SECURITY_SECRET_MASTER_KEY_PREVIOUS"); v != "" {
+		cfg.Security.SecretMasterKeyPrevious = splitList(v)
+	}
 	if v := os.Getenv("DAI_LOG_LEVEL"); v != "" {
 		cfg.Log.Level = v
 	}
@@ -345,6 +358,15 @@ func validate(cfg *Config) error {
 	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Security.SecretMasterKey) == "" {
 		return fmt.Errorf("security.secret_master_key is required in production")
 	}
+	if cfg.App.Env == "production" {
+		previous, err := ParsePreviousSecretKeys(cfg.Security.SecretMasterKeyPrevious)
+		if err != nil {
+			return err
+		}
+		if _, err := clientsecret.NewKeyring(cfg.Security.SecretMasterKeyID, cfg.Security.SecretMasterKey, previous); err != nil {
+			return fmt.Errorf("invalid security secret keyring: %w", err)
+		}
+	}
 	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Server.PublicBaseURL) == "" {
 		return fmt.Errorf("server.public_base_url is required in production")
 	}
@@ -363,6 +385,29 @@ func validate(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// ParsePreviousSecretKeys converts configuration entries of the form
+// "keyID=key" into the keyring map. Split only at the first '=' so padded
+// base64 values remain intact.
+func ParsePreviousSecretKeys(entries []string) (map[string]string, error) {
+	previous := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		id, key, ok := strings.Cut(entry, "=")
+		if !ok || strings.TrimSpace(id) == "" || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("security.secret_master_key_previous entry %q must use keyID=key format", entry)
+		}
+		id = strings.TrimSpace(id)
+		if _, exists := previous[id]; exists {
+			return nil, fmt.Errorf("duplicate previous secret master key ID %q", id)
+		}
+		previous[id] = strings.TrimSpace(key)
+	}
+	return previous, nil
 }
 
 func splitList(value string) []string {
