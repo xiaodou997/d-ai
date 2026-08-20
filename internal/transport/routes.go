@@ -94,7 +94,7 @@ type AIInfrastructureDeps struct {
 	SecretMasterKey string
 	AIHTTPClient    *http.Client
 	Health          routing.HealthTracker
-	Weights         *pgadapter.RouteWeightsStore
+	Weights         aitransport.ScoreWeightsStore
 	BanChecker      *banstate.Checker
 }
 

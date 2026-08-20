@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
+	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/ai/upstreamaccess"
@@ -75,8 +77,16 @@ type CatalogDeps struct {
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
-	Weights         *pgadapter.RouteWeightsStore
+	Weights         ScoreWeightsStore
 	SecretMasterKey string
+}
+
+// ScoreWeightsStore is the minimal port required by the system endpoints.
+// PostgreSQL-backed caching and persistence belong to the adapter package;
+// transport only needs to read and update effective weights.
+type ScoreWeightsStore interface {
+	Get(ctx context.Context, scope string) serving.ScoreWeights
+	Upsert(ctx context.Context, scope string, weights serving.ScoreWeights) error
 }
 
 // OperationsDeps contains dashboards, audit and risk-control collaborators.

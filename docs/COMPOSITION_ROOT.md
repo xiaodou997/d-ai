@@ -34,6 +34,7 @@ httpServers.Start / Shutdown
 ## 尚未清零的装配遗留
 
 - `transport.Deps` 与 `transport.AIDeps` 组内仍有具体 PostgreSQL/Redis/adapter 类型；P1-02 后续会按端点组继续替换为最小端口集合。
+- AI 系统端点已经只依赖 `ScoreWeightsStore` 评分权重端口，不再暴露 PostgreSQL `RouteWeightsStore` 具体类型；其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
