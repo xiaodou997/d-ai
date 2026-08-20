@@ -15,6 +15,7 @@ import (
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
+	"xiaodou/dai/internal/weborigin"
 )
 
 // ============================================================================
@@ -428,18 +429,10 @@ func apiErrorWithCause(status int, code, message string, cause error) *APIError 
 	return &APIError{Status: status, Code: code, Message: message, cause: cause}
 }
 
-// clientIPFromRequest returns the originating client IP, preferring the
-// X-Forwarded-For / X-Real-IP headers set by upstream proxies and falling
-// back to the raw connection address.
+// clientIPFromRequest returns the originating client IP through the shared
+// trusted-proxy resolver, falling back to the direct connection address.
 func clientIPFromRequest(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		first, _, _ := strings.Cut(xff, ",")
-		return strings.TrimSpace(first)
-	}
-	if xr := r.Header.Get("X-Real-IP"); xr != "" {
-		return strings.TrimSpace(xr)
-	}
-	return r.RemoteAddr
+	return weborigin.ClientIPFromRequest(r)
 }
 
 func bearerToken(header string) string {

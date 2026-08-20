@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/gen2brain/webp"
+
+	"xiaodou/dai/internal/weborigin"
 )
 
 const (
@@ -155,7 +157,7 @@ func (s *Service) StoreOpenAIImagesResponse(ctx context.Context, owner Owner, ta
 		if len(data) == 0 {
 			continue
 		}
-		asset, err := s.storeOne(taskID, i, data, contentType, assetKey, expiresAt)
+		asset, err := s.storeOne(ctx, taskID, i, data, contentType, assetKey, expiresAt)
 		if err != nil {
 			return StoreResponseResult{Body: body}, err
 		}
@@ -228,7 +230,7 @@ func (s *Service) NormalizeOpenAIResponse(ctx context.Context, body []byte, resp
 			item.OriginalURL = ""
 			continue
 		}
-		url, err := s.storeEphemeralImage(data, contentType)
+		url, err := s.storeEphemeralImage(ctx, data, contentType)
 		if err != nil {
 			return nil, fmt.Errorf("store normalized image %d: %w", index, err)
 		}
@@ -272,7 +274,7 @@ func isHTTPImageURL(value string) bool {
 	return parsed.Scheme == "http" || parsed.Scheme == "https"
 }
 
-func (s *Service) storeEphemeralImage(data []byte, contentType string) (string, error) {
+func (s *Service) storeEphemeralImage(ctx context.Context, data []byte, contentType string) (string, error) {
 	if len(data) == 0 {
 		return "", errors.New("image is empty")
 	}
@@ -297,7 +299,7 @@ func (s *Service) storeEphemeralImage(data []byte, contentType string) (string, 
 	if err := writeFile(filepath.Join(s.storageDir, "ephemeral", filename), data); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/%s?key=%s", s.publicEphemeralBasePath(), safePath(id), key), nil
+	return weborigin.Resolve(ctx, fmt.Sprintf("%s/%s?key=%s", s.publicEphemeralBasePath(), safePath(id), key)), nil
 }
 
 func (s *Service) publicEphemeralBasePath() string {
@@ -755,7 +757,7 @@ func isPublicImageDownloadAddr(addr netip.Addr) bool {
 		!addr.IsUnspecified()
 }
 
-func (s *Service) storeOne(taskID string, index int, data []byte, contentType, assetKey string, expiresAt time.Time) (StoredAsset, error) {
+func (s *Service) storeOne(ctx context.Context, taskID string, index int, data []byte, contentType, assetKey string, expiresAt time.Time) (StoredAsset, error) {
 	img, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return StoredAsset{}, fmt.Errorf("decode generated image: %w", err)
@@ -806,9 +808,9 @@ func (s *Service) storeOne(taskID string, index int, data []byte, contentType, a
 	return StoredAsset{
 		ID:                  fmt.Sprintf("%s:%d", taskID, index),
 		Index:               index,
-		PreviewURL:          s.publicAssetURL(taskID, index, "preview", assetKey),
-		DisplayURL:          s.publicAssetURL(taskID, index, "preview", assetKey),
-		OriginalURL:         s.publicAssetURL(taskID, index, "original", assetKey),
+		PreviewURL:          s.publicAssetURL(ctx, taskID, index, "preview", assetKey),
+		DisplayURL:          s.publicAssetURL(ctx, taskID, index, "preview", assetKey),
+		OriginalURL:         s.publicAssetURL(ctx, taskID, index, "original", assetKey),
 		OriginalContentType: contentType,
 		OriginalSizeBytes:   int64(len(data)),
 		PreviewContentType:  displayContentType,
@@ -819,8 +821,8 @@ func (s *Service) storeOne(taskID string, index int, data []byte, contentType, a
 	}, nil
 }
 
-func (s *Service) publicAssetURL(taskID string, index int, variant, key string) string {
-	return fmt.Sprintf("%s/%s/assets/%d/%s?key=%s", s.publicBasePath, safePath(taskID), index, variant, key)
+func (s *Service) publicAssetURL(ctx context.Context, taskID string, index int, variant, key string) string {
+	return weborigin.Resolve(ctx, fmt.Sprintf("%s/%s/assets/%d/%s?key=%s", s.publicBasePath, safePath(taskID), index, variant, key))
 }
 
 func randomToken() (string, error) {

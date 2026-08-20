@@ -8,6 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/weborigin"
 )
 
 // ChiRequestLogger returns an http.Handler middleware that logs every HTTP request
@@ -72,7 +74,7 @@ func ChiRequestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 					zap.String("path", path),
 					zap.Int("status", status),
 					zap.Duration("latency", latency),
-					zap.String("client_ip", r.RemoteAddr),
+					zap.String("client_ip", weborigin.ClientIPFromRequest(r)),
 					zap.Int("bytes", ww.BytesWritten()),
 				}
 

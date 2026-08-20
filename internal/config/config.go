@@ -2,12 +2,15 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/viper"
+
+	"xiaodou/dai/internal/weborigin"
 )
 
 // Config 是 D-AI 单进程应用配置。
@@ -48,9 +51,11 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	Addr        string `mapstructure:"addr"` // e.g. ":19641"
-	ReadTimeout int    `mapstructure:"read_timeout"`
-	IdleTimeout int    `mapstructure:"idle_timeout"`
+	Addr              string   `mapstructure:"addr"` // e.g. ":19641"
+	ReadTimeout       int      `mapstructure:"read_timeout"`
+	IdleTimeout       int      `mapstructure:"idle_timeout"`
+	PublicBaseURL     string   `mapstructure:"public_base_url"`
+	TrustedProxyCIDRs []string `mapstructure:"trusted_proxy_cidrs"`
 }
 
 type DatabaseConfig struct {
@@ -141,6 +146,8 @@ func Load() (*Config, error) {
 	v.SetDefault("server.addr", ":19641")
 	v.SetDefault("server.read_timeout", 30)
 	v.SetDefault("server.idle_timeout", 60)
+	v.SetDefault("server.public_base_url", "")
+	v.SetDefault("server.trusted_proxy_cidrs", []string{})
 
 	// 默认值 —— 数据库（统一用 URL，兼容 DSN）
 	v.SetDefault("database.url", "postgres://postgres:postgres@localhost:5432/dai?sslmode=disable")
@@ -232,6 +239,8 @@ func bindEnvs(v *viper.Viper) {
 		// 通用
 		"DAI_APP_ENV":                               "app.env",
 		"DAI_SERVER_ADDR":                           "server.addr",
+		"DAI_PUBLIC_BASE_URL":                       "server.public_base_url",
+		"DAI_TRUSTED_PROXY_CIDRS":                   "server.trusted_proxy_cidrs",
 		"DAI_DATABASE_URL":                          "database.url",
 		"DAI_DATABASE_DSN":                          "database.dsn",
 		"DAI_DB_MAX_CONNS":                          "database.max_conns",
@@ -286,6 +295,12 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DAI_SERVER_ADDR"); v != "" {
 		cfg.Server.Addr = v
 	}
+	if v := os.Getenv("DAI_PUBLIC_BASE_URL"); v != "" {
+		cfg.Server.PublicBaseURL = v
+	}
+	if v := os.Getenv("DAI_TRUSTED_PROXY_CIDRS"); v != "" {
+		cfg.Server.TrustedProxyCIDRs = splitList(v)
+	}
 	if v := os.Getenv("DAI_DATABASE_URL"); v != "" {
 		cfg.Database.URL = v
 	}
@@ -330,8 +345,35 @@ func validate(cfg *Config) error {
 	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Security.SecretMasterKey) == "" {
 		return fmt.Errorf("security.secret_master_key is required in production")
 	}
+	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Server.PublicBaseURL) == "" {
+		return fmt.Errorf("server.public_base_url is required in production")
+	}
+	normalizedOrigin, err := weborigin.NormalizePublicOrigin(cfg.Server.PublicBaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid HTTP origin/proxy configuration: %w", err)
+	}
+	if cfg.App.Env == "production" {
+		parsed, _ := url.Parse(normalizedOrigin)
+		if parsed == nil || parsed.Scheme != "https" {
+			return fmt.Errorf("server.public_base_url must use https in production")
+		}
+	}
+	if _, err := weborigin.NewResolver(normalizedOrigin, cfg.Server.TrustedProxyCIDRs); err != nil {
+		return fmt.Errorf("invalid HTTP origin/proxy configuration: %w", err)
+	}
 
 	return nil
+}
+
+func splitList(value string) []string {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' || r == '\t' || r == '\n' })
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if normalized := strings.TrimSpace(part); normalized != "" {
+			result = append(result, normalized)
+		}
+	}
+	return result
 }
 
 // ─── Helpers ───────────────────────────────────────────

@@ -83,11 +83,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P0-05 建立可信代理和公共 URL 边界
 
-- [ ] 增加明确的 `public_base_url` 配置。
-- [ ] 增加可信代理 CIDR 配置，非可信来源不得覆盖 forwarded headers。
-- [ ] 注册链接、法律链接和文件 capability URL 使用经过验证的公共 origin。
-- [ ] 访问日志和风控使用同一套可信客户端 IP 解析逻辑。
-- [ ] 增加伪造 `X-Forwarded-*`、多级代理和直连场景测试。
+- [x] 增加明确的 `public_base_url` 配置。
+- [x] 增加可信代理 CIDR 配置，非可信来源不得覆盖 forwarded headers。
+- [x] 注册链接、法律链接和文件 capability URL 使用经过验证的公共 origin。
+- [x] 访问日志和风控使用同一套可信客户端 IP 解析逻辑。
+- [x] 增加伪造 `X-Forwarded-*`、多级代理和直连场景测试。
 
 ### P0-06 让审计写入具备持久可靠性
 
@@ -329,7 +329,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - MFA：schema 13 增加加密 TOTP 密钥和启用状态；管理员个人中心可注册/确认 MFA，启用后密码登录返回 5 分钟、最多 5 次尝试的一次性挑战，验证成功后才创建 session。
 - 敏感操作：管理员账号/租户/用户状态变更、密码重置、删除、退款等操作要求 Redis 中存在 10 分钟近期密码或 MFA 认证标记；新增 `POST /api/auth/recent-auth` 用于恢复该标记。
 - 验证：新增限速渐进退避、多实例共享 Redis、近期认证过期、Redis 故障 fail-closed、TOTP 时间窗口、并发挑战消费和 schema 13 迁移测试；`go test ./...`、`go vet ./...`、`bun run test`（63 个文件/211 个测试）、`bun run typecheck`、`bun run build:frontend`、`bun run ensure:api` 均通过。
-- 遗留风险：可信代理客户端 IP 解析仍按 `P0-05` 独立收紧；恢复码/硬件 WebAuthn 作为后续增强，生产管理员应在启用 TOTP 后保存组织级离线恢复流程。
+- 遗留风险：恢复码/硬件 WebAuthn 作为后续增强，生产管理员应在启用 TOTP 后保存组织级离线恢复流程。
 - 下一候选项：`P0-04 改造浏览器 Token 存储`。
 
 ### P0-04（2026-08-20）
@@ -341,5 +341,17 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 多标签页：使用 Web Locks API 或带租约的 localStorage 锁串行化 Refresh Token 轮换；通过 userInfo storage 事件同步登录、登出和 session 失效。
 - 契约与说明：OpenAPI 增加 Cookie 参数和 `Set-Cookie` 响应头；Portal Cookie 说明、认证文档和刷新页面流程同步更新。
 - 验证：新增 Cookie 属性、同源校验、刷新 Cookie 契约和 Portal 认证 Store 回归测试；`go test ./...`、`go vet ./...`、`bun run test`（64 个文件/214 个测试）、`bun run typecheck`、`bun run build:frontend`、`bun run ensure:api` 均通过。
-- 遗留风险：生产环境仍需在可信代理边界（`P0-05`）完成后，将同源校验与公共 origin 配置统一收紧；浏览器级端到端测试尚未建立。
+- 遗留风险：浏览器级端到端测试尚未建立。
 - 下一候选项：`P0-05 建立可信代理和公共 URL 边界`。
+
+### P0-05（2026-08-20）
+
+- 状态：完成并通过验收。
+- 配置：新增 `server.public_base_url` / `DAI_PUBLIC_BASE_URL` 和 `server.trusted_proxy_cidrs` / `DAI_TRUSTED_PROXY_CIDRS`；生产必须使用 HTTPS 公共 origin，CIDR 在启动时校验。
+- 可信解析：只有直接对端属于可信代理网段时才读取 `X-Forwarded-*`、`X-Real-IP` 和 RFC 7239 `Forwarded`；多级链路从服务端一侧反向解析第一个非可信客户端地址，直连伪造头被忽略。
+- URL 边界：注册链接、法律链接、文件 capability URL 和图片 capability URL 统一使用固定公共 origin；未配置 origin 的开发请求保持相对路径。
+- 观测与风控：访问日志、登录限速、AI 用量和风控统一读取可信客户端 IP。
+- 文档：新增 `docs/HTTP_BOUNDARIES.md`，同步更新本地和生产配置示例。
+- 验证：新增公共 origin、Host/Forwarded 伪造、可信/非可信代理、多级客户端 IP 和 capability URL 测试；`go test ./...`、`go vet ./...` 均通过。
+- 遗留风险：浏览器级端到端测试尚未建立；代理网段和公共 origin 仍需由每个生产部署按实际拓扑配置。
+- 下一候选项：`P0-06 让审计写入具备持久可靠性`。

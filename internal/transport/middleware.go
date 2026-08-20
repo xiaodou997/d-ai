@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/auth"
+	"xiaodou/dai/internal/weborigin"
 )
 
 type ctxKey int
@@ -22,9 +23,12 @@ const (
 
 func requestClientMetadata(api huma.API) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		ip := ctx.RemoteAddr()
-		if host, _, err := net.SplitHostPort(ip); err == nil {
-			ip = host
+		ip := weborigin.ClientIPFromContext(ctx.Context())
+		if ip == "" {
+			ip = ctx.RemoteAddr()
+			if host, _, err := net.SplitHostPort(ip); err == nil {
+				ip = host
+			}
 		}
 		if strings.TrimSpace(ip) == "" {
 			ip = "unknown"
@@ -45,12 +49,36 @@ func requestClientIP(ctx context.Context) string {
 // API clients; browser requests that provide either header must match Host.
 func requireSameOrigin(api huma.API) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
-		if !sameOriginMatches(ctx.Header("Origin"), ctx.Header("Referer"), ctx.Host(), ctx.TLS() != nil) {
+		trustedOrigin := weborigin.FromContext(ctx.Context())
+		valid := sameOriginMatches(ctx.Header("Origin"), ctx.Header("Referer"), ctx.Host(), ctx.TLS() != nil)
+		if trustedOrigin != "" {
+			valid = sameOriginMatchesOrigin(ctx.Header("Origin"), ctx.Header("Referer"), trustedOrigin)
+		}
+		if !valid {
 			_ = huma.WriteErr(api, ctx, http.StatusForbidden, "请求来源不受信任")
 			return
 		}
 		next(ctx)
 	}
+}
+
+func sameOriginMatchesOrigin(originHeader, refererHeader, expectedOrigin string) bool {
+	origin := strings.TrimSpace(originHeader)
+	if origin == "" {
+		origin = strings.TrimSpace(refererHeader)
+	}
+	if origin == "" {
+		return true
+	}
+	parsedExpected, err := url.Parse(expectedOrigin)
+	if err != nil || parsedExpected.Scheme == "" || parsedExpected.Host == "" || parsedExpected.User != nil {
+		return false
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.User != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, parsedExpected.Scheme) && strings.EqualFold(parsed.Host, parsedExpected.Host)
 }
 
 func sameOriginMatches(originHeader, refererHeader, host string, tls bool) bool {

@@ -7,6 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/weborigin"
 )
 
 // RequestLogger returns middleware that installs a per-request LogContext,
@@ -53,7 +55,7 @@ func RequestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 					zap.String("path", routePath),
 					zap.Int("status", status),
 					zap.Duration("latency", elapsed),
-					zap.String("client_ip", r.RemoteAddr),
+					zap.String("client_ip", weborigin.ClientIPFromRequest(r)),
 					zap.Int("bytes", ww.BytesWritten()),
 					zap.String("user_agent", r.UserAgent()),
 				}

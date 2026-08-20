@@ -28,9 +28,49 @@ func TestLoadRequiresSecretMasterKeyInProduction(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresPublicBaseURLInProduction(t *testing.T) {
+	setRequiredEnvironment(t, "production")
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY", "production-secret")
+	t.Setenv("DAI_PUBLIC_BASE_URL", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load succeeded without the production public base URL")
+	}
+}
+
+func TestLoadParsesTrustedProxyCIDRs(t *testing.T) {
+	setRequiredEnvironment(t, "development")
+	t.Setenv("DAI_PUBLIC_BASE_URL", "https://dai.example.test/")
+	t.Setenv("DAI_TRUSTED_PROXY_CIDRS", "127.0.0.1/32, 10.0.0.0/8")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.PublicBaseURL != "https://dai.example.test/" {
+		t.Fatalf("public base URL = %q", cfg.Server.PublicBaseURL)
+	}
+	if got, want := len(cfg.Server.TrustedProxyCIDRs), 2; got != want {
+		t.Fatalf("trusted proxy CIDRs = %d, want %d", got, want)
+	}
+}
+
+func TestLoadRejectsHTTPPublicBaseURLInProduction(t *testing.T) {
+	setRequiredEnvironment(t, "production")
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY", "production-secret")
+	t.Setenv("DAI_PUBLIC_BASE_URL", "http://portal.example.test")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load accepted an HTTP public base URL in production")
+	}
+}
+
 func setRequiredEnvironment(t *testing.T, appEnv string) {
 	t.Helper()
 	t.Setenv("DAI_APP_ENV", appEnv)
 	t.Setenv("DAI_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/dai?sslmode=disable")
 	t.Setenv("DAI_REDIS_ADDR", "127.0.0.1:6379")
+	if appEnv == "production" {
+		t.Setenv("DAI_PUBLIC_BASE_URL", "https://dai.example.test")
+	}
 }

@@ -104,6 +104,11 @@ func main() {
 	defer appLogger.Sync()
 	logger.SetGlobal(appLogger)
 
+	originResolver, err := weborigin.NewResolver(cfg.Server.PublicBaseURL, cfg.Server.TrustedProxyCIDRs)
+	if err != nil {
+		appLogger.Fatal("invalid public origin or trusted proxy configuration", zap.Error(err))
+	}
+
 	appLogger.Info("configuration loaded",
 		zap.String("server_addr", cfg.Server.Addr),
 		zap.String("env", cfg.App.Env),
@@ -602,7 +607,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           weborigin.Middleware(router),
+		Handler:           weborigin.Middleware(router, originResolver),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		WriteTimeout:      0,

@@ -9,6 +9,10 @@ server:
   addr: ':19641'
   read_timeout: 30
   idle_timeout: 60
+  # 生产必须配置可信的浏览器/链接公共 origin；不要从 Host 头推导公网 URL。
+  public_base_url: ''
+  # 仅列出实际反向代理的来源网段；空值表示不信任任何 forwarded 头。
+  trusted_proxy_cidrs: []
 
 database:
   url: postgres://postgres:postgres@localhost:15432/dai?sslmode=disable

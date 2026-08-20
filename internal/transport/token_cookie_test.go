@@ -47,3 +47,15 @@ func TestSameOriginMatches(t *testing.T) {
 		})
 	}
 }
+
+func TestSameOriginMatchesConfiguredPublicOrigin(t *testing.T) {
+	if !sameOriginMatchesOrigin("https://portal.example.test", "", "https://portal.example.test") {
+		t.Fatal("same configured origin was rejected")
+	}
+	if sameOriginMatchesOrigin("https://attacker.example.test", "", "https://portal.example.test") {
+		t.Fatal("cross-origin request was accepted")
+	}
+	if sameOriginMatchesOrigin("http://portal.example.test", "", "https://portal.example.test") {
+		t.Fatal("scheme downgrade was accepted")
+	}
+}

@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"xiaodou/dai/internal/weborigin"
 )
 
 func TestImageBytesDecodesBase64PNG(t *testing.T) {
@@ -201,6 +203,27 @@ func TestNormalizeOpenAIResponseCreatesPlatformURLForBase64(t *testing.T) {
 	}
 }
 
+func TestNormalizeOpenAIResponseUsesTrustedPublicOrigin(t *testing.T) {
+	data := testPNG(t)
+	svc := New(Config{StorageDir: t.TempDir()}, nil)
+	ctx := weborigin.WithOrigin(context.Background(), "https://portal.example.test")
+	body := []byte(`{"data":[{"b64_json":"` + encodeStdBase64(data) + `"}]}`)
+
+	normalized, err := svc.NormalizeOpenAIResponse(ctx, body, "url")
+	if err != nil {
+		t.Fatalf("NormalizeOpenAIResponse: %v", err)
+	}
+	var response struct {
+		Data []responseImageItem `json:"data"`
+	}
+	if err := json.Unmarshal(normalized, &response); err != nil || len(response.Data) != 1 {
+		t.Fatalf("normalized response = %s, err = %v", normalized, err)
+	}
+	if !strings.HasPrefix(response.Data[0].URL, "https://portal.example.test/runtime/v1/images/assets/") {
+		t.Fatalf("asset URL = %q", response.Data[0].URL)
+	}
+}
+
 func TestNormalizeOpenAIResponseRejectsMalformedImagePayload(t *testing.T) {
 	svc := New(Config{StorageDir: t.TempDir()}, nil)
 	for _, body := range [][]byte{
@@ -217,7 +240,7 @@ func TestNormalizeOpenAIResponseRejectsMalformedImagePayload(t *testing.T) {
 func TestEphemeralAssetRequiresMatchingCapabilityKey(t *testing.T) {
 	data := testPNG(t)
 	svc := New(Config{StorageDir: t.TempDir()}, nil)
-	rawURL, err := svc.storeEphemeralImage(data, "image/png")
+	rawURL, err := svc.storeEphemeralImage(context.Background(), data, "image/png")
 	if err != nil {
 		t.Fatalf("storeEphemeralImage: %v", err)
 	}
