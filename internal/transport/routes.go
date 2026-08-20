@@ -97,11 +97,12 @@ type AIInfrastructureDeps struct {
 
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
-	OAuth          *pgadapter.OAuthCredentialStore
-	PoolReader     aitransport.OAuthPoolReader
-	TokenRefresher aitransport.OAuthTokenRefresher
-	APIKeySvc      *identitycontrol.Service
-	WorkspaceSvc   *workspacesvc.Service
+	OAuth            *pgadapter.OAuthCredentialStore
+	CredentialReader aitransport.OAuthCredentialReader
+	PoolReader       aitransport.OAuthPoolReader
+	TokenRefresher   aitransport.OAuthTokenRefresher
+	APIKeySvc        *identitycontrol.Service
+	WorkspaceSvc     *workspacesvc.Service
 }
 
 // AIBillingDeps contains AI-side subscription and billing collaborators.
@@ -234,6 +235,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		},
 		IdentityDeps: aitransport.IdentityDeps{
 			OAuth:            d.OAuth,
+			CredentialReader: d.CredentialReader,
 			PoolReader:       d.PoolReader,
 			TokenRefresher:   d.TokenRefresher,
 			TokenVerifier:    platform.JWT,

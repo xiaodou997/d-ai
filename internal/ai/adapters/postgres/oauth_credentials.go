@@ -666,8 +666,22 @@ func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in OAu
 	return id, nil
 }
 
-// ListForPool returns all credentials for a pool (raw, encrypted).
-func (s *OAuthCredentialStore) ListForPool(ctx context.Context, poolID string) ([]OAuthCredentialRow, error) {
+// ListForPool returns the non-secret management view of all credentials in a
+// pool. Token ciphertexts stay inside the adapter and are never exposed to
+// transport callers.
+func (s *OAuthCredentialStore) ListForPool(ctx context.Context, poolID string) ([]domain.OAuthCredentialSummary, error) {
+	rows, err := s.listForPoolRows(ctx, poolID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.OAuthCredentialSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, oauthCredentialSummary(row))
+	}
+	return out, nil
+}
+
+func (s *OAuthCredentialStore) listForPoolRows(ctx context.Context, poolID string) ([]OAuthCredentialRow, error) {
 	const q = `
 		SELECT id, pool_id, name, provider_type, email,
 		       access_token_ciphertext, refresh_token_ciphertext,
@@ -680,6 +694,36 @@ func (s *OAuthCredentialStore) ListForPool(ctx context.Context, poolID string) (
 		WHERE pool_id = $1
 		ORDER BY created_at ASC`
 	return s.scanRows(ctx, q, poolID)
+}
+
+func oauthCredentialSummary(row OAuthCredentialRow) domain.OAuthCredentialSummary {
+	var metadata map[string]any
+	if len(row.AuthMetadataRaw) > 0 {
+		_ = json.Unmarshal(row.AuthMetadataRaw, &metadata)
+	}
+	return domain.OAuthCredentialSummary{
+		ID:                   row.ID,
+		PoolID:               row.PoolID,
+		Name:                 row.Name,
+		ProviderType:         row.ProviderType,
+		Email:                row.Email,
+		TokenType:            row.TokenType,
+		Scope:                row.Scope,
+		ExpiresAt:            row.ExpiresAt,
+		AuthMetadata:         domain.RedactSensitiveMetadata(metadata),
+		Weight:               row.Weight,
+		Status:               row.Status,
+		InvalidReason:        row.InvalidReason,
+		CooldownUntil:        row.CooldownUntil,
+		LastUsedAt:           row.LastUsedAt,
+		LastRefreshedAt:      row.LastRefreshedAt,
+		LastFailedAt:         row.LastFailedAt,
+		ConsecutiveFailCount: row.ConsecutiveFailCount,
+		SuccessCount:         row.SuccessCount,
+		FailCount:            row.FailCount,
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
+	}
 }
 
 func (s *OAuthCredentialStore) UpdateStatus(ctx context.Context, credID string, status string) error {

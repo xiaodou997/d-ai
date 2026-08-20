@@ -360,6 +360,34 @@ type OAuthCredential struct {
 	CooldownUntil *time.Time
 }
 
+// OAuthCredentialSummary is the non-secret read model exposed to management
+// and transport layers. It deliberately omits access/refresh token
+// ciphertexts while retaining the health and audit fields used by the pool
+// credential list endpoint.
+type OAuthCredentialSummary struct {
+	ID                   string
+	PoolID               string
+	Name                 string
+	ProviderType         string
+	Email                string
+	TokenType            string
+	Scope                string
+	ExpiresAt            *time.Time
+	AuthMetadata         map[string]any
+	Weight               int
+	Status               string
+	InvalidReason        string
+	CooldownUntil        *time.Time
+	LastUsedAt           *time.Time
+	LastRefreshedAt      *time.Time
+	LastFailedAt         *time.Time
+	ConsecutiveFailCount int
+	SuccessCount         int64
+	FailCount            int64
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+}
+
 // AccountID extracts the account ID from AuthMetadata (Codex-specific).
 func (c *OAuthCredential) AccountID() string {
 	if c.AuthMetadata == nil {

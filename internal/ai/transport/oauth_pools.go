@@ -356,20 +356,20 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "返回指定 OAuth 凭证池内账号的非敏感展示信息与健康指标；不返回 access token、refresh token、密文或 key hash。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *poolCredentialsInput) (*poolCredentialsOutput, error) {
-		if d.OAuth == nil {
+		if d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
 		if in.PoolID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("poolID is required")
 		}
-		rows, err := d.OAuth.ListForPool(ctx, in.PoolID)
+		rows, err := d.CredentialReader.ListForPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &poolCredentialsOutput{}
 		out.Body.Items = make([]poolCredentialDTO, 0, len(rows))
 		for _, row := range rows {
-			out.Body.Items = append(out.Body.Items, poolCredentialToDTO(row))
+			out.Body.Items = append(out.Body.Items, poolCredentialSummaryToDTO(row))
 		}
 		out.Body.Total = len(out.Body.Items)
 		return out, nil
@@ -893,6 +893,32 @@ func getPoolCredentialScoped(ctx context.Context, store *pgadapter.OAuthCredenti
 }
 
 func poolCredentialToDTO(row pgadapter.OAuthCredentialRow) poolCredentialDTO {
+	return poolCredentialSummaryToDTO(domain.OAuthCredentialSummary{
+		ID:                   row.ID,
+		PoolID:               row.PoolID,
+		Name:                 row.Name,
+		ProviderType:         row.ProviderType,
+		Email:                row.Email,
+		TokenType:            row.TokenType,
+		Scope:                row.Scope,
+		ExpiresAt:            row.ExpiresAt,
+		AuthMetadata:         authMetadataToMap(row.AuthMetadataRaw),
+		Weight:               row.Weight,
+		Status:               row.Status,
+		InvalidReason:        row.InvalidReason,
+		CooldownUntil:        row.CooldownUntil,
+		LastUsedAt:           row.LastUsedAt,
+		LastRefreshedAt:      row.LastRefreshedAt,
+		LastFailedAt:         row.LastFailedAt,
+		ConsecutiveFailCount: row.ConsecutiveFailCount,
+		SuccessCount:         row.SuccessCount,
+		FailCount:            row.FailCount,
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
+	})
+}
+
+func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentialDTO {
 	return poolCredentialDTO{
 		ID:                   row.ID,
 		PoolID:               row.PoolID,
@@ -902,7 +928,7 @@ func poolCredentialToDTO(row pgadapter.OAuthCredentialRow) poolCredentialDTO {
 		TokenType:            row.TokenType,
 		Scope:                row.Scope,
 		ExpiresAt:            timePtrToMillis(row.ExpiresAt),
-		AuthMetadata:         authMetadataToMap(row.AuthMetadataRaw),
+		AuthMetadata:         redactSensitiveMetadata(row.AuthMetadata),
 		Weight:               row.Weight,
 		Status:               row.Status,
 		InvalidReason:        stringPtrOrNil(row.InvalidReason),
@@ -930,45 +956,7 @@ func authMetadataToMap(raw []byte) map[string]any {
 }
 
 func redactSensitiveMetadata(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		if isSensitiveMetadataKey(key) {
-			continue
-		}
-		out[key] = redactSensitiveMetadataValue(value)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func redactSensitiveMetadataValue(value any) any {
-	switch v := value.(type) {
-	case map[string]any:
-		return redactSensitiveMetadata(v)
-	case []any:
-		out := make([]any, 0, len(v))
-		for _, item := range v {
-			out = append(out, redactSensitiveMetadataValue(item))
-		}
-		return out
-	default:
-		return value
-	}
-}
-
-func isSensitiveMetadataKey(key string) bool {
-	normalized := strings.ToLower(key)
-	for _, part := range []string{"token", "secret", "password", "cipher", "api_key", "apikey", "key_hash"} {
-		if strings.Contains(normalized, part) {
-			return true
-		}
-	}
-	return false
+	return domain.RedactSensitiveMetadata(in)
 }
 
 func oauthPoolHealthToDTO(row pgadapter.PoolHealthRow) oauthPoolHealthDTO {
