@@ -167,6 +167,8 @@ func main() {
 	sessionSvc := auth.NewSessionService(pool, jwtSvc, cfg.JWT.RefreshExpiration)
 	activationSvc := auth.NewActivationService(pool, cfg.Auth.ActivationExpiration)
 	blacklist := auth.NewBlacklistService(redisClient, appLogger)
+	mfaSvc := auth.NewMFAService(pool, redisClient)
+	recentAuthSvc := auth.NewRecentAuthService(redisClient)
 	if cfg.Security.SecretMasterKey != "" {
 		if err := clientsecret.Configure(cfg.Security.SecretMasterKey); err != nil {
 			appLogger.Fatal("sensitive configuration crypto init failed", zap.Error(err))
@@ -501,6 +503,8 @@ func main() {
 		JWT:           jwtSvc,
 		Sessions:      sessionSvc,
 		Activations:   activationSvc,
+		MFA:           mfaSvc,
+		RecentAuth:    recentAuthSvc,
 		Blacklist:     blacklist,
 		Legal:         cfg.Legal,
 		UserService:   userSvc,

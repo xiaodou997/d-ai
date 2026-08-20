@@ -16,10 +16,12 @@ import (
 )
 
 type authTokenResponse struct {
-	AccessToken      string `json:"accessToken"`
-	RefreshToken     string `json:"refreshToken,omitempty"`
-	ExpiresIn        int64  `json:"expiresIn"`
-	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
+	AccessToken       string `json:"accessToken"`
+	RefreshToken      string `json:"refreshToken,omitempty"`
+	ExpiresIn         int64  `json:"expiresIn"`
+	RefreshExpiresIn  int64  `json:"refreshExpiresIn"`
+	MFARequired       bool   `json:"mfaRequired,omitempty"`
+	MFAChallengeToken string `json:"mfaChallengeToken,omitempty"`
 }
 
 type authTokenOutput struct {
@@ -28,18 +30,28 @@ type authTokenOutput struct {
 
 // authHandlers handles unified Portal credentials and session refresh.
 type authHandlers struct {
-	repo        *authpg.AuthRepository
-	sessions    *auth.SessionService
-	activations *auth.ActivationService
-	log         *zap.Logger
+	repo              *authpg.AuthRepository
+	sessions          *auth.SessionService
+	activations       *auth.ActivationService
+	mfa               *auth.MFAService
+	recentAuth        *auth.RecentAuthService
+	limiter           *auth.LoginRateLimiter
+	activationLimiter *auth.LoginRateLimiter
+	mfaLimiter        *auth.LoginRateLimiter
+	log               *zap.Logger
 }
 
 func newAuthHandlers(d Deps) *authHandlers {
 	return &authHandlers{
-		repo:        authpg.NewAuthRepository(d.Pool),
-		sessions:    d.Sessions,
-		activations: d.Activations,
-		log:         d.Logger,
+		repo:              authpg.NewAuthRepository(d.Pool),
+		sessions:          d.Sessions,
+		activations:       d.Activations,
+		mfa:               d.MFA,
+		recentAuth:        d.RecentAuth,
+		limiter:           auth.NewLoginRateLimiter(d.Redis),
+		activationLimiter: auth.NewScopedRateLimiter(d.Redis, "dai:auth:activation:"),
+		mfaLimiter:        auth.NewScopedRateLimiter(d.Redis, "dai:auth:mfa:"),
+		log:               d.Logger,
 	}
 }
 
@@ -67,6 +79,30 @@ type passwordPolicyOutput struct {
 	Body auth.PasswordPolicy
 }
 
+type mfaVerifyInput struct {
+	Body struct {
+		ChallengeToken string `json:"challengeToken" minLength:"1"`
+		Code           string `json:"code" minLength:"6" maxLength:"6"`
+	}
+}
+
+type mfaEnrollmentOutput struct {
+	Body auth.MFAEnrollment
+}
+
+type mfaCodeInput struct {
+	Body struct {
+		Code string `json:"code" minLength:"6" maxLength:"6"`
+	}
+}
+
+type recentAuthInput struct {
+	Body struct {
+		Password string `json:"password" minLength:"1"`
+		Code     string `json:"code,omitempty" minLength:"6" maxLength:"6"`
+	}
+}
+
 type loginPrincipal struct {
 	UserID            string
 	Username          string
@@ -74,6 +110,7 @@ type loginPrincipal struct {
 	UserType          int
 	UserTypeDisplay   string
 	CredentialVersion int64
+	MFAEnabled        bool
 }
 
 func (h *authHandlers) authenticateUser(ctx context.Context, username, password string) (loginPrincipal, *httpx.AppError) {
@@ -82,10 +119,10 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
 	if u.Status != "active" {
-		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("账户已被禁用，请联系管理员")
+		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
 	if u.CredentialState != "active" {
-		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("账户尚未激活或密码已重置，请使用最新激活凭证设置密码")
+		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
 	if u.UserType >= 3 {
 		active, err := h.repo.CheckTenantActive(ctx, u.TenantID)
@@ -93,7 +130,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 			return loginPrincipal{}, httpx.ErrInternal.WithCause(err)
 		}
 		if !active {
-			return loginPrincipal{}, httpx.ErrForbidden.WithDetail("租户已被停用或暂停")
+			return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 		}
 	}
 
@@ -106,6 +143,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 		UserType:          u.UserType,
 		UserTypeDisplay:   userTypeDisplayName(u.UserType),
 		CredentialVersion: u.CredentialVersion,
+		MFAEnabled:        u.MFAEnabled,
 	}, nil
 }
 
@@ -117,6 +155,7 @@ func registerAuthPublic(api huma.API, d Deps) {
 		Path:        "/api/auth/login",
 		Summary:     "账号密码登录",
 		Tags:        []string{"auth"},
+		Middlewares: huma.Middlewares{requestClientMetadata(api)},
 	}, h.login)
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-refresh",
@@ -126,6 +165,11 @@ func registerAuthPublic(api huma.API, d Deps) {
 		Tags:        []string{"auth"},
 	}, h.refresh)
 	huma.Register(api, huma.Operation{
+		OperationID: "auth-mfa-verify", Method: "POST", Path: "/api/auth/mfa/verify",
+		Summary: "验证管理员 MFA", Tags: []string{"auth"},
+		Middlewares: huma.Middlewares{requestClientMetadata(api)},
+	}, h.verifyMFA)
+	huma.Register(api, huma.Operation{
 		OperationID: "auth-password-policy", Method: "GET", Path: "/api/auth/password-policy",
 		Summary: "获取密码策略", Tags: []string{"auth"},
 	}, func(context.Context, *struct{}) (*passwordPolicyOutput, error) {
@@ -134,6 +178,7 @@ func registerAuthPublic(api huma.API, d Deps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-activate-account", Method: "POST", Path: "/api/auth/activate",
 		Summary: "使用一次性令牌激活账号或设置重置后的密码", Tags: []string{"auth"},
+		Middlewares: huma.Middlewares{requestClientMetadata(api)},
 	}, h.activateAccount)
 }
 
@@ -141,8 +186,23 @@ func (h *authHandlers) activateAccount(ctx context.Context, input *activateAccou
 	if h.activations == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("激活服务不可用")
 	}
-	err := h.activations.Activate(ctx, strings.TrimSpace(input.Body.Token), input.Body.Password)
+	dimensions := auth.LoginRateDimensions{Account: strings.ToLower(strings.TrimSpace(input.Body.Token)), IP: requestClientIP(ctx)}
+	decision, err := h.activationLimiter.Check(ctx, dimensions)
 	if err != nil {
+		return nil, httpx.ErrUnavailable.WithDetail("激活服务暂不可用，请稍后重试")
+	}
+	if !decision.Allowed {
+		return nil, httpx.ErrTooManyReqs.WithDetail("激活尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
+	}
+	err = h.activations.Activate(ctx, strings.TrimSpace(input.Body.Token), input.Body.Password)
+	if err != nil {
+		retryAfter, rateErr := h.activationLimiter.RecordFailure(ctx, dimensions)
+		if rateErr != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("激活服务暂不可用，请稍后重试")
+		}
+		if retryAfter > 0 {
+			return nil, httpx.ErrTooManyReqs.WithDetail("激活尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
+		}
 		switch {
 		case errors.Is(err, auth.ErrWeakPassword):
 			return nil, httpx.ErrBadRequest.WithDetail(auth.CurrentPasswordPolicy().Description)
@@ -156,6 +216,9 @@ func (h *authHandlers) activateAccount(ctx context.Context, input *activateAccou
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 	}
+	if err := h.activationLimiter.Reset(ctx, dimensions); err != nil {
+		return nil, httpx.ErrUnavailable.WithDetail("激活服务暂不可用，请稍后重试")
+	}
 	out := &messageOutput{}
 	out.Body.Message = "密码设置成功，请登录"
 	return out, nil
@@ -163,14 +226,51 @@ func (h *authHandlers) activateAccount(ctx context.Context, input *activateAccou
 
 func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authTokenOutput, error) {
 	username := strings.TrimSpace(input.Body.Username)
+	dimensions := auth.LoginRateDimensions{Account: strings.ToLower(username), IP: requestClientIP(ctx), Tenant: h.repo.LookupTenantForLogin(ctx, username)}
+	decision, err := h.limiter.Check(ctx, dimensions)
+	if err != nil {
+		h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录限速服务不可用"})
+		return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
+	}
+	if !decision.Allowed {
+		h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "deny", ReasonCode: "login_rate_limited", ReasonMessage: "登录尝试触发限速"})
+		return nil, httpx.ErrTooManyReqs.WithDetail("登录尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
+	}
 	p, appErr := h.authenticateUser(ctx, username, input.Body.Password)
 	if appErr != nil {
+		retryAfter, rateErr := h.limiter.RecordFailure(ctx, dimensions)
+		if rateErr != nil {
+			h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录失败计数不可用"})
+			return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
+		}
 		h.audit(ctx, authpg.AuditEvent{
 			EventType: "user_login", PrincipalType: "user", Decision: "deny",
 			ReasonCode: appErr.Code, ReasonMessage: appErr.Detail,
 			Metadata: map[string]any{"username": username},
 		})
+		if retryAfter > 0 {
+			return nil, httpx.ErrTooManyReqs.WithDetail("登录尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
+		}
 		return nil, appErr
+	}
+	dimensions.Tenant = p.TenantID
+	if err := h.limiter.Reset(ctx, dimensions); err != nil {
+		h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID, Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录成功后无法清理限速状态"})
+		return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
+	}
+	if p.UserType <= 2 && p.MFAEnabled {
+		if h.mfa == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务不可用")
+		}
+		challenge, err := h.mfa.CreateChallenge(ctx, auth.Principal{UserID: p.UserID, Username: p.Username, TenantID: p.TenantID, UserType: p.UserType, UserTypeDisplay: p.UserTypeDisplay, CredentialVersion: p.CredentialVersion})
+		if err != nil {
+			h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "admin", UserID: p.UserID, Decision: "error", ReasonCode: "mfa_challenge_failed", ReasonMessage: "创建 MFA 挑战失败"})
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+		}
+		return &authTokenOutput{Body: authTokenResponse{MFARequired: true, MFAChallengeToken: challenge}}, nil
+	}
+	if h.recentAuth == nil || h.recentAuth.Mark(ctx, p.UserID, "password") != nil {
+		return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用，请稍后重试")
 	}
 	pair, err := h.sessions.Create(ctx, auth.Principal{
 		UserID: p.UserID, Username: p.Username, TenantID: p.TenantID,
@@ -194,6 +294,47 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
 		ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
 	}}, nil
+}
+
+func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*authTokenOutput, error) {
+	if h.mfa == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务不可用")
+	}
+	dimensions := auth.LoginRateDimensions{Account: strings.ToLower(strings.TrimSpace(input.Body.ChallengeToken)), IP: requestClientIP(ctx)}
+	decision, err := h.mfaLimiter.Check(ctx, dimensions)
+	if err != nil {
+		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+	}
+	if !decision.Allowed {
+		return nil, httpx.ErrTooManyReqs.WithDetail("MFA 尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
+	}
+	principal, err := h.mfa.VerifyChallenge(ctx, strings.TrimSpace(input.Body.ChallengeToken), strings.TrimSpace(input.Body.Code))
+	if err != nil {
+		retryAfter, rateErr := h.mfaLimiter.RecordFailure(ctx, dimensions)
+		if rateErr != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+		}
+		h.audit(ctx, authpg.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", Decision: "deny", ReasonCode: "invalid_mfa_code", ReasonMessage: "MFA 验证失败"})
+		if retryAfter > 0 {
+			return nil, httpx.ErrTooManyReqs.WithDetail("MFA 尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
+		}
+		if errors.Is(err, auth.ErrMFAUnavailable) {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+		}
+		return nil, httpx.ErrUnauthorized.WithDetail("MFA 验证码无效或已过期")
+	}
+	if err := h.mfaLimiter.Reset(ctx, dimensions); err != nil {
+		return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+	}
+	if h.recentAuth == nil || h.recentAuth.Mark(ctx, principal.UserID, "totp") != nil {
+		return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用，请稍后重试")
+	}
+	pair, err := h.sessions.Create(ctx, principal)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	h.audit(ctx, authpg.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", UserID: principal.UserID, Decision: "success"})
+	return &authTokenOutput{Body: authTokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn}}, nil
 }
 
 func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authTokenOutput, error) {

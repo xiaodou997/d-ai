@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type userInfoOutput struct {
 		UserType   int    `json:"userType"`
 		TenantID   string `json:"tenantId"`
 		TenantName string `json:"tenantName"`
+		MFAEnabled bool   `json:"mfaEnabled"`
 	}
 }
 
@@ -47,6 +49,9 @@ type messageOutput struct {
 
 // registerAuthProtected 注册统一 Portal 的登录后账号端点。
 func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
+	recent := append(append(huma.Middlewares{}, mw...), requestClientMetadata(api))
+	mfaConfirmLimiter := auth.NewScopedRateLimiter(d.Redis, "dai:auth:mfa-confirm:")
+	recentAuthLimiter := auth.NewScopedRateLimiter(d.Redis, "dai:auth:recent-auth:")
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-current-user",
 		Method:      http.MethodGet,
@@ -71,6 +76,7 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		out.Body.UserType = snapshot.userType
 		out.Body.TenantID = snapshot.tenantID
 		out.Body.TenantName = snapshot.tenantName
+		out.Body.MFAEnabled = snapshot.mfaEnabled
 		return out, nil
 	})
 
@@ -106,7 +112,7 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		Path:        "/api/auth/password",
 		Summary:     "修改密码",
 		Tags:        []string{"auth"},
-		Middlewares: mw,
+		Middlewares: recent,
 	}, func(ctx context.Context, in *changePasswordInput) (*messageOutput, error) {
 		claims := userClaimsFromCtx(ctx)
 		if claims == nil {
@@ -234,6 +240,111 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		out.Body.Message = "资料已更新，请重新登录"
 		return out, nil
 	})
+
+	huma.Register(api, huma.Operation{OperationID: "auth-mfa-enroll", Method: http.MethodPost, Path: "/api/auth/mfa/enroll", Summary: "注册管理员 MFA", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, _ *struct{}) (*mfaEnrollmentOutput, error) {
+		claims := userClaimsFromCtx(ctx)
+		if claims == nil || (claims.UserType != 1 && claims.UserType != 2) {
+			return nil, httpx.ErrForbidden.WithDetail("仅平台管理员可注册 MFA")
+		}
+		if d.MFA == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务不可用")
+		}
+		result, err := d.MFA.Enroll(ctx, claims.UserID, claims.Username)
+		if errors.Is(err, auth.ErrMFAAlreadyEnabled) {
+			return nil, httpx.ErrConflict.WithDetail("MFA 已启用")
+		}
+		if err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		return &mfaEnrollmentOutput{Body: result}, nil
+	})
+
+	huma.Register(api, huma.Operation{OperationID: "auth-mfa-confirm", Method: http.MethodPost, Path: "/api/auth/mfa/confirm", Summary: "确认管理员 MFA", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, in *mfaCodeInput) (*messageOutput, error) {
+		claims := userClaimsFromCtx(ctx)
+		if claims == nil || (claims.UserType != 1 && claims.UserType != 2) {
+			return nil, httpx.ErrForbidden.WithDetail("仅平台管理员可确认 MFA")
+		}
+		if d.MFA == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务不可用")
+		}
+		dimensions := auth.LoginRateDimensions{Account: claims.UserID, IP: requestClientIP(ctx)}
+		decision, err := mfaConfirmLimiter.Check(ctx, dimensions)
+		if err != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+		}
+		if !decision.Allowed {
+			return nil, httpx.ErrTooManyReqs.WithDetail("MFA 尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
+		}
+		if err := d.MFA.ConfirmEnrollment(ctx, claims.UserID, strings.TrimSpace(in.Body.Code)); err != nil {
+			retryAfter, rateErr := mfaConfirmLimiter.RecordFailure(ctx, dimensions)
+			if rateErr != nil {
+				return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+			}
+			if retryAfter > 0 {
+				return nil, httpx.ErrTooManyReqs.WithDetail("MFA 尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
+			}
+			if errors.Is(err, auth.ErrInvalidMFACode) {
+				return nil, httpx.ErrUnauthorized.WithDetail("MFA 验证码无效")
+			}
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		if err := mfaConfirmLimiter.Reset(ctx, dimensions); err != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
+		}
+		if d.RecentAuth == nil || d.RecentAuth.Mark(ctx, claims.UserID, "totp_enrollment") != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用")
+		}
+		return &messageOutput{Body: struct {
+			Message string `json:"message"`
+		}{Message: "MFA 已启用"}}, nil
+	})
+
+	huma.Register(api, huma.Operation{OperationID: "auth-recent-auth", Method: http.MethodPost, Path: "/api/auth/recent-auth", Summary: "重新验证当前账号", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, in *recentAuthInput) (*messageOutput, error) {
+		claims := userClaimsFromCtx(ctx)
+		if claims == nil {
+			return nil, httpx.ErrUnauthorized
+		}
+		dimensions := auth.LoginRateDimensions{Account: claims.UserID, IP: requestClientIP(ctx)}
+		decision, err := recentAuthLimiter.Check(ctx, dimensions)
+		if err != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("重新认证服务暂不可用，请稍后重试")
+		}
+		if !decision.Allowed {
+			return nil, httpx.ErrTooManyReqs.WithDetail("重新认证尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
+		}
+		u, err := authpg.NewAuthRepository(d.Pool).GetPortalUserForLogin(ctx, claims.Username)
+		if err != nil || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Body.Password)) != nil {
+			retryAfter, rateErr := recentAuthLimiter.RecordFailure(ctx, dimensions)
+			if rateErr != nil {
+				return nil, httpx.ErrUnavailable.WithDetail("重新认证服务暂不可用，请稍后重试")
+			}
+			if retryAfter > 0 {
+				return nil, httpx.ErrTooManyReqs.WithDetail("重新认证尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
+			}
+			return nil, httpx.ErrUnauthorized.WithDetail("重新认证失败")
+		}
+		if u.MFAEnabled {
+			if d.MFA == nil || !d.MFA.VerifyCode(ctx, claims.UserID, strings.TrimSpace(in.Body.Code)) {
+				retryAfter, rateErr := recentAuthLimiter.RecordFailure(ctx, dimensions)
+				if rateErr != nil {
+					return nil, httpx.ErrUnavailable.WithDetail("重新认证服务暂不可用，请稍后重试")
+				}
+				if retryAfter > 0 {
+					return nil, httpx.ErrTooManyReqs.WithDetail("重新认证尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
+				}
+				return nil, httpx.ErrUnauthorized.WithDetail("需要有效的 MFA 验证码")
+			}
+		}
+		if err := recentAuthLimiter.Reset(ctx, dimensions); err != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("重新认证服务暂不可用，请稍后重试")
+		}
+		if d.RecentAuth == nil || d.RecentAuth.Mark(ctx, claims.UserID, "recent_auth") != nil {
+			return nil, httpx.ErrUnavailable.WithDetail("近期认证服务暂不可用")
+		}
+		return &messageOutput{Body: struct {
+			Message string `json:"message"`
+		}{Message: "重新认证成功"}}, nil
+	})
 }
 
 type currentUserSnapshot struct {
@@ -242,6 +353,7 @@ type currentUserSnapshot struct {
 	userType   int
 	tenantID   string
 	tenantName string
+	mfaEnabled bool
 	status     string
 }
 
@@ -274,7 +386,7 @@ func queryCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) 
 	var snapshot currentUserSnapshot
 	err := d.Pool.QueryRow(ctx, `
 		SELECT u.user_id, u.username, u.user_type, COALESCE(u.tenant_id, ''),
-		       COALESCE(t.tenant_name, ''), u.status
+		       COALESCE(t.tenant_name, ''), u.mfa_enabled, u.status
 		FROM iam_accounts u
 		LEFT JOIN iam_tenants t ON t.tenant_id = u.tenant_id
 		WHERE u.user_id = $1 AND u.user_type = $2
@@ -284,6 +396,7 @@ func queryCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) 
 		&snapshot.userType,
 		&snapshot.tenantID,
 		&snapshot.tenantName,
+		&snapshot.mfaEnabled,
 		&snapshot.status,
 	)
 	if err != nil {

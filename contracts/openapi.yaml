@@ -1331,6 +1331,10 @@ components:
         expiresIn:
           format: int64
           type: integer
+        mfaChallengeToken:
+          type: string
+        mfaRequired:
+          type: boolean
         refreshExpiresIn:
           format: int64
           type: integer
@@ -4661,6 +4665,24 @@ components:
         - username
         - password
       type: object
+    MFAEnrollment:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/MFAEnrollment.json
+          format: uri
+          readOnly: true
+          type: string
+        otpauthUrl:
+          type: string
+        secret:
+          type: string
+      required:
+        - secret
+        - otpauthUrl
+      type: object
     MeOutputBody:
       additionalProperties: false
       properties:
@@ -4716,6 +4738,44 @@ components:
           type: string
       required:
         - message
+      type: object
+    MfaCodeInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/MfaCodeInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        code:
+          maxLength: 6
+          minLength: 6
+          type: string
+      required:
+        - code
+      type: object
+    MfaVerifyInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/MfaVerifyInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        challengeToken:
+          minLength: 1
+          type: string
+        code:
+          maxLength: 6
+          minLength: 6
+          type: string
+      required:
+        - challengeToken
+        - code
       type: object
     ModuleEnabledInputBody:
       additionalProperties: false
@@ -6045,6 +6105,26 @@ components:
         - success
         - userId
         - message
+      type: object
+    RecentAuthInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/RecentAuthInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        code:
+          maxLength: 6
+          minLength: 6
+          type: string
+        password:
+          minLength: 1
+          type: string
+      required:
+        - password
       type: object
     RechargeCreditDetail:
       additionalProperties: false
@@ -10932,6 +11012,8 @@ components:
           format: uri
           readOnly: true
           type: string
+        mfaEnabled:
+          type: boolean
         sub:
           type: string
         tenantId:
@@ -10949,6 +11031,7 @@ components:
         - userType
         - tenantId
         - tenantName
+        - mfaEnabled
       type: object
     UserUsageLogDTO:
       additionalProperties: false
@@ -11858,6 +11941,75 @@ paths:
       summary: 当前用户信息
       tags:
         - auth
+  /api/auth/mfa/confirm:
+    post:
+      operationId: auth-mfa-confirm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodeInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 确认管理员 MFA
+      tags:
+        - auth
+  /api/auth/mfa/enroll:
+    post:
+      operationId: auth-mfa-enroll
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MFAEnrollment"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 注册管理员 MFA
+      tags:
+        - auth
+  /api/auth/mfa/verify:
+    post:
+      operationId: auth-mfa-verify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaVerifyInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 验证管理员 MFA
+      tags:
+        - auth
   /api/auth/password:
     put:
       operationId: auth-change-password
@@ -11925,6 +12077,31 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 修改用户名/邮箱（仅租户用户和终端用户）
+      tags:
+        - auth
+  /api/auth/recent-auth:
+    post:
+      operationId: auth-recent-auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecentAuthInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 重新验证当前账号
       tags:
         - auth
   /api/auth/refresh:

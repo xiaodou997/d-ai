@@ -89,6 +89,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/mfa/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 确认管理员 MFA */
+        post: operations["auth-mfa-confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 注册管理员 MFA */
+        post: operations["auth-mfa-enroll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 验证管理员 MFA */
+        post: operations["auth-mfa-verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/password": {
         parameters: {
             query?: never;
@@ -134,6 +185,23 @@ export interface paths {
         /** 修改用户名/邮箱（仅租户用户和终端用户） */
         put: operations["auth-update-profile"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/recent-auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重新验证当前账号 */
+        post: operations["auth-recent-auth"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5242,6 +5310,8 @@ export interface components {
             accessToken: string;
             /** Format: int64 */
             expiresIn: number;
+            mfaChallengeToken?: string;
+            mfaRequired?: boolean;
             /** Format: int64 */
             refreshExpiresIn: number;
             refreshToken?: string;
@@ -6987,6 +7057,16 @@ export interface components {
             /** @description 用户名或邮箱 */
             username: string;
         };
+        MFAEnrollment: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MFAEnrollment.json
+             */
+            readonly $schema?: string;
+            otpauthUrl: string;
+            secret: string;
+        };
         MeOutputBody: {
             /**
              * Format: uri
@@ -7014,6 +7094,25 @@ export interface components {
              */
             readonly $schema?: string;
             message: string;
+        };
+        MfaCodeInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MfaCodeInputBody.json
+             */
+            readonly $schema?: string;
+            code: string;
+        };
+        MfaVerifyInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MfaVerifyInputBody.json
+             */
+            readonly $schema?: string;
+            challengeToken: string;
+            code: string;
         };
         ModuleEnabledInputBody: {
             /**
@@ -7759,6 +7858,16 @@ export interface components {
             message: string;
             success: boolean;
             userId: string;
+        };
+        RecentAuthInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/RecentAuthInputBody.json
+             */
+            readonly $schema?: string;
+            code?: string;
+            password: string;
         };
         RechargeCreditDetail: {
             /** Format: int64 */
@@ -10608,6 +10717,7 @@ export interface components {
              * @example https://example.com/schemas/UserInfoOutputBody.json
              */
             readonly $schema?: string;
+            mfaEnabled: boolean;
             sub: string;
             tenantId: string;
             tenantName: string;
@@ -11211,6 +11321,101 @@ export interface operations {
             };
         };
     };
+    "auth-mfa-confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodeInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-mfa-enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MFAEnrollment"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-mfa-verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaVerifyInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthTokenResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "auth-change-password": {
         parameters: {
             query?: never;
@@ -11283,6 +11488,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateProfileInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-recent-auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecentAuthInputBody"];
             };
         };
         responses: {

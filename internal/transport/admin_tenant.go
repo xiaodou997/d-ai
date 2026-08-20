@@ -104,6 +104,7 @@ func registerAdminTenants(api huma.API, d Deps) {
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
 	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
+	sysUserSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-list-tenants", Method: http.MethodGet, Path: "/api/v1/tenants",
@@ -112,7 +113,7 @@ func registerAdminTenants(api huma.API, d Deps) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-create-tenant", Method: http.MethodPost, Path: "/api/v1/tenants",
-		Summary: "创建租户", Tags: []string{"admin-tenants"}, Middlewares: sysUser, DefaultStatus: http.StatusCreated,
+		Summary: "创建租户", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive, DefaultStatus: http.StatusCreated,
 	}, h.createTenant)
 
 	huma.Register(api, huma.Operation{
@@ -122,17 +123,17 @@ func registerAdminTenants(api huma.API, d Deps) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-update-tenant", Method: http.MethodPut, Path: "/api/v1/tenants/{id}",
-		Summary: "更新租户", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+		Summary: "更新租户", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.updateTenant)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-delete-tenant", Method: http.MethodDelete, Path: "/api/v1/tenants/{id}",
-		Summary: "删除租户", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+		Summary: "删除租户", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.deleteTenant)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-update-tenant-status", Method: http.MethodPatch, Path: "/api/v1/tenants/{id}/status",
-		Summary: "启用/停用租户（级联）", Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+		Summary: "启用/停用租户（级联）", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.updateTenantStatus)
 }
 

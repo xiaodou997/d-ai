@@ -10,6 +10,9 @@
 - Refresh Token 的绝对有效期由 `jwt.refresh_expiration` / `DAI_JWT_REFRESH_EXPIRATION` 配置，轮换不会延长 session family 的绝对过期时间。
 - 新建账号和密码重置后的账号使用 `pending_activation` 凭证状态，不能创建、刷新或继续使用登录会话。
 - 激活令牌是带 `dai_act_` 前缀的 256 bit 随机不透明凭证；数据库只保存 SHA-256 哈希，默认有效期由 `auth.activation_expiration` / `DAI_AUTH_ACTIVATION_EXPIRATION` 配置。
+- 登录按账号标识、来源 IP、账号-IP 组合和租户-IP 组合使用 Redis 原子计数；失败达到阈值后采用指数退避。Redis 不可用时登录直接 fail-closed，并写入结构化认证审计事件。
+- 平台管理员可在个人中心注册 TOTP MFA。启用后密码登录只返回短时一次性 MFA 挑战，验证码验证成功后才签发 session；敏感管理操作还要求 10 分钟内完成过密码或 MFA 近期认证。
+- 修改密码、注册/确认 MFA 等高影响账号操作同样要求近期认证；近期认证标记在 Redis 不可用时拒绝放行。
 
 ## 生命周期
 
@@ -50,11 +53,18 @@
 `POST /api/auth/activate` 消费一次性令牌并设置正式密码。Portal 激活链接把令牌放在
 URL fragment 中，避免令牌发送给 HTTP 服务或反向代理，读取后立即清空地址栏。
 
+管理员 MFA 使用 `POST /api/auth/mfa/enroll`、`POST /api/auth/mfa/confirm` 和
+`POST /api/auth/mfa/verify`；TOTP 密钥以应用主密钥加密后写入账号表，数据库不保存可直接
+使用的明文密钥。敏感操作在近期认证过期后返回重新认证提示，可通过
+`POST /api/auth/recent-auth` 使用当前密码（已启用 MFA 的管理员还需验证码）恢复权限。
+
 ## 数据库升级
 
 已有 schema 10 数据库必须在部署新二进制前依次人工执行：
 
 1. `internal/db/changes/0011_20260820_auth_sessions.sql`
 2. `internal/db/changes/0012_20260820_account_activation.sql`
+3. `internal/db/changes/0013_20260820_admin_mfa.sql`
 
-已有 schema 11 数据库只执行第二项。应用要求 schema 12，且不会自动执行 DDL。
+已有 schema 11 数据库执行第二、三项；已有 schema 12 数据库只执行第三项。应用要求
+schema 13，且不会自动执行 DDL。

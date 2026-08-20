@@ -54,6 +54,8 @@ type Deps struct {
 	JWT           *auth.JWTService
 	Sessions      *auth.SessionService
 	Activations   *auth.ActivationService
+	MFA           *auth.MFAService
+	RecentAuth    *auth.RecentAuthService
 	Blacklist     *auth.BlacklistService
 	Legal         config.LegalConfig
 	UserService   *userpkg.UserService

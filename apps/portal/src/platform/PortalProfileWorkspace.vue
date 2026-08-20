@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, shallowRef } from "vue";
+import { computed, reactive, ref, shallowRef, watch } from "vue";
 import type { FormInstance, FormRules } from "element-plus";
 
 import { notifyError, notifySuccess } from "./feedback";
@@ -20,6 +20,11 @@ const props = withDefaults(
     initialUsername?: string;
     initialEmail?: string;
     afterProfileChanged?: () => Promise<void> | void;
+    mfa?: {
+      enabled?: boolean;
+      enroll: () => Promise<{ secret: string; otpauthUrl: string }>;
+      confirm: (code: string) => Promise<unknown>;
+    };
     title?: string;
     subtitle?: string;
   }>(),
@@ -30,7 +35,8 @@ const props = withDefaults(
     updateProfile: undefined,
     initialUsername: "",
     initialEmail: "",
-    afterProfileChanged: undefined
+    afterProfileChanged: undefined,
+    mfa: undefined
   }
 );
 
@@ -39,6 +45,19 @@ const profileLoading = shallowRef(false);
 const passwordFormRef = ref<FormInstance>();
 const passwordPolicy = usePasswordPolicy();
 const profileFormRef = ref<FormInstance>();
+const mfaSecret = ref("");
+const mfaURL = ref("");
+const mfaCode = ref("");
+const mfaLoading = ref(false);
+const mfaError = ref("");
+const mfaEnabled = ref(Boolean(props.mfa?.enabled));
+
+watch(
+  () => props.mfa?.enabled,
+  (enabled) => {
+    if (enabled !== undefined) mfaEnabled.value = enabled;
+  }
+);
 
 const profileForm = reactive({
   username: props.initialUsername,
@@ -140,6 +159,38 @@ async function handleUpdateProfile() {
     }
   });
 }
+
+async function startMFAEnrollment() {
+  if (!props.mfa) return;
+  mfaLoading.value = true;
+  mfaError.value = "";
+  try {
+    const enrollment = await props.mfa.enroll();
+    mfaSecret.value = enrollment.secret;
+    mfaURL.value = enrollment.otpauthUrl;
+  } catch (error) {
+    mfaError.value = error instanceof Error ? error.message : "MFA 注册失败，请稍后重试";
+  } finally {
+    mfaLoading.value = false;
+  }
+}
+
+async function confirmMFAEnrollment() {
+  if (!props.mfa || mfaCode.value.length !== 6) return;
+  mfaLoading.value = true;
+  mfaError.value = "";
+  try {
+    await props.mfa.confirm(mfaCode.value);
+    mfaEnabled.value = true;
+    mfaSecret.value = "";
+    mfaURL.value = "";
+    mfaCode.value = "";
+  } catch (error) {
+    mfaError.value = error instanceof Error ? error.message : "MFA 验证失败，请检查验证码";
+  } finally {
+    mfaLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -204,6 +255,27 @@ async function handleUpdateProfile() {
           </el-form-item>
         </el-form>
       </el-card>
+
+      <el-card v-if="mfa" shadow="never" class="mt-4">
+        <template #header><span class="card-title">管理员 MFA</span></template>
+        <template v-if="mfaEnabled">
+          <p class="password-policy">MFA 已启用。之后登录和敏感操作会要求验证动态验证码。</p>
+        </template>
+        <template v-else-if="mfaSecret">
+          <p class="password-policy">请将以下密钥添加到身份验证器，并输入当前 6 位验证码完成启用。</p>
+          <code class="mfa-secret">{{ mfaSecret }}</code>
+          <p class="mfa-url">{{ mfaURL }}</p>
+          <div class="mfa-confirm-row">
+            <el-input v-model="mfaCode" inputmode="numeric" maxlength="6" placeholder="6 位验证码" />
+            <el-button type="primary" :loading="mfaLoading" @click="confirmMFAEnrollment">启用 MFA</el-button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="password-policy">启用 TOTP 后可显著降低管理员账号被盗用的风险。</p>
+          <el-button type="primary" :loading="mfaLoading" @click="startMFAEnrollment">开始设置 MFA</el-button>
+        </template>
+        <p v-if="mfaError" class="profile-error" role="alert">{{ mfaError }}</p>
+      </el-card>
     </main>
   </div>
 </template>
@@ -212,6 +284,11 @@ async function handleUpdateProfile() {
 .page-container {
   padding: 4px;
 }
+
+.mfa-secret { display: block; margin: 12px 0; padding: 10px 12px; border-radius: var(--ds-radius-control); background: var(--ds-paper); color: var(--ds-ink); font-family: var(--ds-font-mono); letter-spacing: 0.08em; }
+.mfa-url { color: var(--ds-muted); font-size: 12px; word-break: break-all; }
+.mfa-confirm-row { display: flex; gap: 10px; align-items: center; max-width: 440px; }
+.profile-error { color: var(--ds-danger); font-size: 13px; }
 
 .page-header {
   margin-bottom: 16px;

@@ -70,6 +70,7 @@ type PortalUserForLogin struct {
 	Status            string
 	CredentialVersion int64
 	CredentialState   string
+	MFAEnabled        bool
 }
 
 func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
@@ -82,12 +83,26 @@ func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, log
 func (r *AuthRepository) GetPortalUserForLogin(ctx context.Context, identifier string) (PortalUserForLogin, error) {
 	var u PortalUserForLogin
 	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, COALESCE(tenant_id, ''), username, password_hash, user_type, status, credential_version, credential_state
+		SELECT user_id, COALESCE(tenant_id, ''), username, password_hash, user_type, status, credential_version, credential_state, mfa_enabled
 		FROM iam_accounts
 		WHERE lower(username) = lower(btrim($1))
 		   OR (email IS NOT NULL AND lower(email) = lower(btrim($1)))
-	`, identifier).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status, &u.CredentialVersion, &u.CredentialState)
+	`, identifier).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status, &u.CredentialVersion, &u.CredentialState, &u.MFAEnabled)
 	return u, err
+}
+
+// LookupTenantForLogin returns only the tenant dimension used by abuse
+// controls. It is intentionally not exposed to the HTTP response, so a failed
+// lookup cannot be used to enumerate accounts or tenants.
+func (r *AuthRepository) LookupTenantForLogin(ctx context.Context, identifier string) string {
+	var tenantID string
+	_ = r.pool.QueryRow(ctx, `
+		SELECT COALESCE(tenant_id, '') FROM iam_accounts
+		WHERE lower(username) = lower(btrim($1))
+		   OR (email IS NOT NULL AND lower(email) = lower(btrim($1)))
+		LIMIT 1
+	`, identifier).Scan(&tenantID)
+	return tenantID
 }
 
 // CheckTenantActive 检查租户是否处于 active 状态

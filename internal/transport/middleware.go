@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,7 +14,54 @@ import (
 
 type ctxKey int
 
-const userClaimsCtxKey ctxKey = iota
+const (
+	userClaimsCtxKey ctxKey = iota
+	requestClientIPCtxKey
+)
+
+func requestClientMetadata(api huma.API) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		ip := ctx.RemoteAddr()
+		if host, _, err := net.SplitHostPort(ip); err == nil {
+			ip = host
+		}
+		if strings.TrimSpace(ip) == "" {
+			ip = "unknown"
+		}
+		next(huma.WithValue(ctx, requestClientIPCtxKey, ip))
+	}
+}
+
+func requestClientIP(ctx context.Context) string {
+	if value, ok := ctx.Value(requestClientIPCtxKey).(string); ok && value != "" {
+		return value
+	}
+	return "unknown"
+}
+
+func requireRecentAuth(api huma.API, recent *auth.RecentAuthService) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		claims, ok := ctx.Context().Value(userClaimsCtxKey).(*auth.Claims)
+		if !ok || claims == nil {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
+			return
+		}
+		if recent == nil {
+			_ = huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "近期认证服务不可用")
+			return
+		}
+		valid, err := recent.Check(ctx.Context(), claims.UserID)
+		if err != nil {
+			_ = huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "近期认证服务不可用")
+			return
+		}
+		if !valid {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "该敏感操作需要近期重新认证")
+			return
+		}
+		next(ctx)
+	}
+}
 
 // userAuth 是 Huma 中间件：校验用户 JWT 并做黑名单/强制
 // 登出检查，通过则把完整 Claims 注入上下文。

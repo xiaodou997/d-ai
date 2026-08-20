@@ -84,20 +84,21 @@ func registerAdminEndUsers(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
-	tenantOnly := huma.Middlewares{ua, requireUserType(api, 3)}
+	sysOrTenantSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2, 3), requireRecentAuth(api, d.RecentAuth)}
+	tenantOnlySensitive := huma.Middlewares{ua, requireUserType(api, 3), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-end-users", Method: http.MethodGet, Path: "/api/v1/users",
 		Summary: "终端用户列表", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.listEndUsers)
 	huma.Register(api, huma.Operation{OperationID: "admin-create-end-user", Method: http.MethodPost, Path: "/api/v1/users",
-		Summary: "创建终端用户（租户）", Tags: []string{"admin-end-users"}, Middlewares: tenantOnly, DefaultStatus: http.StatusCreated}, h.createEndUser)
+		Summary: "创建终端用户（租户）", Tags: []string{"admin-end-users"}, Middlewares: tenantOnlySensitive, DefaultStatus: http.StatusCreated}, h.createEndUser)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-end-user", Method: http.MethodPatch, Path: "/api/v1/users/{id}",
-		Summary: "更新终端用户资料（租户）", Tags: []string{"admin-end-users"}, Middlewares: tenantOnly}, h.updateEndUser)
+		Summary: "更新终端用户资料（租户）", Tags: []string{"admin-end-users"}, Middlewares: tenantOnlySensitive}, h.updateEndUser)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-end-user-status", Method: http.MethodPatch, Path: "/api/v1/users/{id}/status",
-		Summary: "启用/停用终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.updateEndUserStatus)
+		Summary: "启用/停用终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenantSensitive}, h.updateEndUserStatus)
 	huma.Register(api, huma.Operation{OperationID: "admin-reset-end-user-password", Method: http.MethodPost, Path: "/api/v1/users/{id}/reset-password",
-		Summary: "重置终端用户密码", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.resetEndUserPassword)
+		Summary: "重置终端用户密码", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenantSensitive}, h.resetEndUserPassword)
 	huma.Register(api, huma.Operation{OperationID: "admin-delete-end-user", Method: http.MethodDelete, Path: "/api/v1/users/{id}",
-		Summary: "删除终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.deleteEndUser)
+		Summary: "删除终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenantSensitive}, h.deleteEndUser)
 }
 
 // checkUserBelongsToTenant 校验 userID 归属 callerTenantID（空=管理员跳过）。

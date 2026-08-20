@@ -132,16 +132,17 @@ func orderTypeFromPackageType(packageType int) (string, error) {
 func registerAdminFinance(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
 	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
 	superAdmin := huma.Middlewares{ua, requireUserType(api, 1)}
+	sysUserSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2), requireRecentAuth(api, d.RecentAuth)}
+	sysOrTenantSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2, 3), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-recharge", Method: http.MethodPost, Path: "/api/v1/recharges",
-		Summary: "充值（租户/用户）", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant, DefaultStatus: http.StatusCreated}, h.recharge)
+		Summary: "充值（租户/用户）", Tags: []string{"admin-finance"}, Middlewares: sysOrTenantSensitive, DefaultStatus: http.StatusCreated}, h.recharge)
 	huma.Register(api, huma.Operation{OperationID: "admin-reverse-recharge", Method: http.MethodPost, Path: "/api/v1/recharges/{orderId}/reverse",
-		Summary: "撤销充值", Tags: []string{"admin-finance"}, Middlewares: sysOrTenant}, h.reverseRecharge)
+		Summary: "撤销充值", Tags: []string{"admin-finance"}, Middlewares: sysOrTenantSensitive}, h.reverseRecharge)
 	huma.Register(api, huma.Operation{OperationID: "admin-refund-usage", Method: http.MethodPost, Path: "/api/v1/ai/usage/refund",
-		Summary: "AI 使用记录退款", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.refundUsage)
+		Summary: "AI 使用记录退款", Tags: []string{"admin-finance"}, Middlewares: sysUserSensitive}, h.refundUsage)
 	huma.Register(api, huma.Operation{OperationID: "admin-get-debt", Method: http.MethodGet, Path: "/api/v1/admin/debts/{owner_type}/{id}",
 		Summary: "查询账户当前债务", Tags: []string{"admin-finance"}, Middlewares: sysUser}, h.getDebt)
 	huma.Register(api, huma.Operation{OperationID: "admin-auth-audit-logs", Method: http.MethodGet, Path: "/api/v1/auth-audit-logs",

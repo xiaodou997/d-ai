@@ -5,6 +5,18 @@ export interface AuthTokenResponse {
   refreshToken?: string;
   expiresIn: number;
   refreshExpiresIn: number;
+  mfaRequired?: boolean;
+  mfaChallengeToken?: string;
+}
+
+export class MFARequiredError extends Error {
+  readonly challengeToken: string;
+
+  constructor(challengeToken: string) {
+    super("请输入管理员 MFA 验证码");
+    this.name = "MFARequiredError";
+    this.challengeToken = challengeToken;
+  }
 }
 
 export interface UserInfoResponse {
@@ -13,6 +25,7 @@ export interface UserInfoResponse {
   userType: number;
   tenantId: string;
   tenantName: string;
+  mfaEnabled?: boolean;
 }
 
 export interface CreateAuthApiOptions {
@@ -31,6 +44,12 @@ export function createPortalAuthApi(options: CreateAuthApiOptions) {
     async refreshToken(refreshToken: string): Promise<AuthTokenResponse> {
       return requestAuth(options, "/api/auth/refresh", {
         refreshToken
+      });
+    },
+    async verifyMFA(challengeToken: string, code: string): Promise<AuthTokenResponse> {
+      return requestAuth(options, "/api/auth/mfa/verify", {
+        challengeToken,
+        code
       });
     },
     async logout(): Promise<{ success?: boolean; message?: string }> {

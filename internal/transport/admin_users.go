@@ -129,30 +129,32 @@ func registerAdminUsers(api huma.API, d Deps) {
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	superAdmin := huma.Middlewares{ua, requireUserType(api, 1)}
 	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	superAdminSensitive := huma.Middlewares{ua, requireUserType(api, 1), requireRecentAuth(api, d.RecentAuth)}
+	sysUserSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2), requireRecentAuth(api, d.RecentAuth)}
 
 	// 系统管理员
 	huma.Register(api, huma.Operation{OperationID: "admin-list-system-admins", Method: http.MethodGet, Path: "/api/v1/system-admins",
 		Summary: "系统管理员列表", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.listSystemAdmins)
 	huma.Register(api, huma.Operation{OperationID: "admin-create-system-admin", Method: http.MethodPost, Path: "/api/v1/system-admins",
-		Summary: "创建平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin, DefaultStatus: http.StatusCreated}, h.createSystemAdmin)
+		Summary: "创建平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdminSensitive, DefaultStatus: http.StatusCreated}, h.createSystemAdmin)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-system-admin", Method: http.MethodPut, Path: "/api/v1/system-admins/{id}",
-		Summary: "更新平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.updateSystemAdmin)
+		Summary: "更新平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdminSensitive}, h.updateSystemAdmin)
 	huma.Register(api, huma.Operation{OperationID: "admin-delete-system-admin", Method: http.MethodDelete, Path: "/api/v1/system-admins/{id}",
-		Summary: "删除平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.deleteSystemAdmin)
+		Summary: "删除平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdminSensitive}, h.deleteSystemAdmin)
 	huma.Register(api, huma.Operation{OperationID: "admin-reset-system-admin-password", Method: http.MethodPost, Path: "/api/v1/system-admins/{id}/reset-password",
-		Summary: "签发平台管理员密码重置凭证", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.resetSystemAdminPassword)
+		Summary: "签发平台管理员密码重置凭证", Tags: []string{"admin-system-admins"}, Middlewares: superAdminSensitive}, h.resetSystemAdminPassword)
 
 	// 租户组织用户
 	huma.Register(api, huma.Operation{OperationID: "admin-list-tenant-users", Method: http.MethodGet, Path: "/api/v1/tenant-users",
 		Summary: "租户用户列表", Tags: []string{"admin-tenant-users"}, Middlewares: sysUser}, h.listTenantUsers)
 	huma.Register(api, huma.Operation{OperationID: "admin-create-tenant-user", Method: http.MethodPost, Path: "/api/v1/tenant-users",
-		Summary: "创建租户用户", Tags: []string{"admin-tenant-users"}, Middlewares: sysUser, DefaultStatus: http.StatusCreated}, h.createTenantUser)
+		Summary: "创建租户用户", Tags: []string{"admin-tenant-users"}, Middlewares: sysUserSensitive, DefaultStatus: http.StatusCreated}, h.createTenantUser)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-tenant-user-status", Method: http.MethodPatch, Path: "/api/v1/tenant-users/{id}/status",
-		Summary: "启用/停用租户用户", Tags: []string{"admin-tenant-users"}, Middlewares: sysUser}, h.updateTenantUserStatus)
+		Summary: "启用/停用租户用户", Tags: []string{"admin-tenant-users"}, Middlewares: sysUserSensitive}, h.updateTenantUserStatus)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-tenant-user", Method: http.MethodPut, Path: "/api/v1/tenant-users/{id}",
-		Summary: "更新租户用户", Tags: []string{"admin-tenant-users"}, Middlewares: sysUser}, h.updateTenantUser)
+		Summary: "更新租户用户", Tags: []string{"admin-tenant-users"}, Middlewares: sysUserSensitive}, h.updateTenantUser)
 	huma.Register(api, huma.Operation{OperationID: "admin-reset-tenant-user-password", Method: http.MethodPost, Path: "/api/v1/tenant-users/{id}/reset-password",
-		Summary: "重置租户用户密码", Tags: []string{"admin-tenant-users"}, Middlewares: sysUser}, h.resetTenantUserPassword)
+		Summary: "重置租户用户密码", Tags: []string{"admin-tenant-users"}, Middlewares: sysUserSensitive}, h.resetTenantUserPassword)
 }
 
 func (h *adminHandlers) listSystemAdmins(ctx context.Context, in *listSystemAdminsInput) (*adminUserListOutput, error) {

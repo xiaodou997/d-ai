@@ -42,6 +42,9 @@ CREATE TABLE iam_accounts (
     password_hash TEXT NOT NULL,
     credential_version BIGINT NOT NULL DEFAULT 1 CHECK (credential_version > 0),
     credential_state TEXT NOT NULL DEFAULT 'active' CHECK (credential_state IN ('active', 'pending_activation')),
+    mfa_secret_encrypted TEXT,
+    mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    mfa_enrolled_at TIMESTAMPTZ,
     email TEXT,
     phone TEXT,
     user_type INTEGER NOT NULL CHECK (user_type IN (1, 2, 3, 4)),
@@ -2246,6 +2249,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 12);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 13);
 
 COMMIT;

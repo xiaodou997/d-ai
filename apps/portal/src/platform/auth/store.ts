@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
+import { MFARequiredError } from "./api";
 import type { AuthTokenResponse, UserInfoResponse } from "./api";
 
 export interface AuthStoreOptions {
@@ -9,6 +10,7 @@ export interface AuthStoreOptions {
   expectedUserTypes: number[];
   login?: (username: string, password: string) => Promise<AuthTokenResponse>;
   refreshToken: (refreshToken: string) => Promise<AuthTokenResponse>;
+  verifyMFA?: (challengeToken: string, code: string) => Promise<AuthTokenResponse>;
   logout: () => Promise<unknown>;
   logoutRedirectUrl?: string | (() => string | null);
   getCurrentUser: () => Promise<UserInfoResponse>;
@@ -26,6 +28,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     const refreshTokenValue = ref(localStorage.getItem(`${options.storagePrefix}:refreshToken`) || "");
     const expiresIn = ref(Number(localStorage.getItem(`${options.storagePrefix}:expiresIn`) || "0"));
     const userInfo = ref<UserInfoResponse | null>(readUserInfo(options.storagePrefix));
+    const mfaChallengeToken = ref("");
     const sessionValidatedAt = ref(0);
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     let refreshInFlight: Promise<AuthTokenResponse> | null = null;
@@ -50,6 +53,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       refreshTokenValue.value = "";
       expiresIn.value = 0;
       userInfo.value = null;
+      mfaChallengeToken.value = "";
       sessionValidatedAt.value = 0;
       refreshInFlight = null;
       sessionValidationInFlight = null;
@@ -123,9 +127,32 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
         throw new Error("password login is not configured");
       }
       const token = await options.login(username, password);
+      if (token.mfaRequired) {
+        if (!token.mfaChallengeToken) throw new Error("MFA challenge missing");
+        mfaChallengeToken.value = token.mfaChallengeToken;
+        throw new MFARequiredError(token.mfaChallengeToken);
+      }
       accessToken.value = token.accessToken;
       refreshTokenValue.value = token.refreshToken || "";
       expiresIn.value = token.expiresIn;
+      persist();
+      try {
+        await fetchUserInfo();
+      } catch (error) {
+        clear();
+        throw error;
+      }
+      startAutoRefresh();
+      return token;
+    }
+
+    async function verifyMFA(code: string) {
+      if (!options.verifyMFA || !mfaChallengeToken.value) throw new Error("MFA challenge missing");
+      const token = await options.verifyMFA(mfaChallengeToken.value, code);
+      accessToken.value = token.accessToken;
+      refreshTokenValue.value = token.refreshToken || "";
+      expiresIn.value = token.expiresIn;
+      mfaChallengeToken.value = "";
       persist();
       try {
         await fetchUserInfo();
@@ -201,6 +228,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       init,
       clear,
       login,
+      verifyMFA,
       logout,
       fetchUserInfo,
       ensureSession,

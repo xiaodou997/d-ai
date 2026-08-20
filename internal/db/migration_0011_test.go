@@ -19,6 +19,7 @@ func TestMigration0011AddsStatefulAuthSessions(t *testing.T) {
 	if _, err := pool.Exec(ctx, `
 		DROP TABLE auth_activation_tokens;
 		ALTER TABLE iam_accounts DROP COLUMN credential_state;
+		ALTER TABLE iam_accounts DROP COLUMN mfa_secret_encrypted, DROP COLUMN mfa_enabled, DROP COLUMN mfa_enrolled_at;
 		DROP TRIGGER trg_auth_revoke_sessions_on_account_change ON iam_accounts;
 		DROP FUNCTION auth_revoke_sessions_on_account_change();
 		DROP TABLE auth_refresh_tokens;
@@ -72,6 +73,7 @@ func TestMigration0011RejectsMissingSchemaMetadata(t *testing.T) {
 	if _, err := pool.Exec(ctx, `
 		DROP TABLE auth_activation_tokens;
 		ALTER TABLE iam_accounts DROP COLUMN credential_state;
+		ALTER TABLE iam_accounts DROP COLUMN mfa_secret_encrypted, DROP COLUMN mfa_enabled, DROP COLUMN mfa_enrolled_at;
 		DROP TRIGGER trg_auth_revoke_sessions_on_account_change ON iam_accounts;
 		DROP FUNCTION auth_revoke_sessions_on_account_change();
 		DROP TABLE auth_refresh_tokens;

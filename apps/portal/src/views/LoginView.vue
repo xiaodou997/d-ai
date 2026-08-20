@@ -4,6 +4,7 @@ import { Eye, EyeOff } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 
 import { useAuthStore } from "@/stores/auth";
+import { MFARequiredError } from "@/platform/auth/api";
 
 const route = useRoute();
 const router = useRouter();
@@ -13,6 +14,8 @@ const password = ref("");
 const showPassword = ref(false);
 const pending = ref(false);
 const errorMessage = ref("");
+const mfaCode = ref("");
+const mfaRequired = ref(false);
 
 const redirectPath = computed(() => {
   const value = typeof route.query.redirect === "string" ? route.query.redirect : "/overview";
@@ -26,7 +29,25 @@ async function startLogin() {
     await authStore.login(username.value, password.value);
     await router.replace(redirectPath.value);
   } catch (error) {
+    if (error instanceof MFARequiredError) {
+      mfaRequired.value = true;
+      errorMessage.value = "请输入管理员 MFA 验证码。";
+      return;
+    }
     errorMessage.value = error instanceof Error ? error.message : "登录失败，请重试";
+  } finally {
+    pending.value = false;
+  }
+}
+
+async function verifyMFA() {
+  pending.value = true;
+  errorMessage.value = "";
+  try {
+    await authStore.verifyMFA(mfaCode.value);
+    await router.replace(redirectPath.value);
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "MFA 验证失败，请重试";
   } finally {
     pending.value = false;
   }
@@ -42,7 +63,7 @@ async function startLogin() {
         alt="D-AI Unified Intelligence Platform"
       />
 
-      <form class="login-form" @submit.prevent="startLogin">
+      <form v-if="!mfaRequired" class="login-form" @submit.prevent="startLogin">
         <label class="login-field">
           <span>用户名或邮箱</span>
           <input
@@ -82,6 +103,16 @@ async function startLogin() {
 
         <button type="submit" class="login-button" :disabled="pending">
           {{ pending ? "登录中…" : "登录" }}
+        </button>
+      </form>
+
+      <form v-else class="login-form" @submit.prevent="verifyMFA">
+        <label class="login-field">
+          <span>管理员 MFA 验证码</span>
+          <input v-model="mfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="请输入 6 位验证码" required autofocus />
+        </label>
+        <button type="submit" class="login-button" :disabled="pending || mfaCode.length !== 6">
+          {{ pending ? "验证中…" : "验证并登录" }}
         </button>
       </form>
 
