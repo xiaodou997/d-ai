@@ -10,59 +10,18 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"go.uber.org/zap"
 
-	// ── AI 域 ──
-	"xiaodou/dai/internal/ai/adapters/bridgefmt"
-	"xiaodou/dai/internal/ai/adapters/clientcredentials"
-	"xiaodou/dai/internal/ai/adapters/clienttransport"
-	aiadapters "xiaodou/dai/internal/ai/adapters/postgres"
-	redisadapter "xiaodou/dai/internal/ai/adapters/redis"
-	"xiaodou/dai/internal/ai/apikey"
-	"xiaodou/dai/internal/ai/asynctask"
-	"xiaodou/dai/internal/ai/audit"
-	"xiaodou/dai/internal/ai/billingcontrol"
-	"xiaodou/dai/internal/ai/blobstore"
-	"xiaodou/dai/internal/ai/clientcatalog"
-	"xiaodou/dai/internal/ai/clientruntime"
-	"xiaodou/dai/internal/ai/commercial"
-	"xiaodou/dai/internal/ai/console"
-	coreruntime "xiaodou/dai/internal/ai/core/runtime"
-	aidb "xiaodou/dai/internal/ai/db/gen"
-	"xiaodou/dai/internal/ai/filestore"
-	"xiaodou/dai/internal/ai/gateway"
-	"xiaodou/dai/internal/ai/identitycontrol"
-	"xiaodou/dai/internal/ai/imageassets"
-	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
 	"xiaodou/dai/internal/ai/observability/tracing"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
-	"xiaodou/dai/internal/ai/privacy"
-	"xiaodou/dai/internal/ai/riskcontrol"
-	"xiaodou/dai/internal/ai/routing"
-	"xiaodou/dai/internal/ai/secret"
-	"xiaodou/dai/internal/ai/serving"
-	"xiaodou/dai/internal/ai/subscription"
-	"xiaodou/dai/internal/ai/tokenrefresh"
-	"xiaodou/dai/internal/ai/upstreamaccess"
-	"xiaodou/dai/internal/ai/upstreamcontrol"
-	workspacesvc "xiaodou/dai/internal/ai/workspace"
-
-	// AI transport (for upstream HTTP client)
-	aitransport "xiaodou/dai/internal/ai/transport"
-
-	// ── 平台基础设施与跨域 wiring ──
-	billingoutbox "xiaodou/dai/internal/billing/outbox"
 	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/transport"
 	"xiaodou/dai/internal/weborigin"
 
 	// ── 公共库 ──
-	"xiaodou/dai/libs/go/banstate"
 	"xiaodou/dai/libs/go/logger"
 	"xiaodou/dai/libs/go/server"
 )
@@ -150,303 +109,28 @@ func run() error {
 		platform.Stop()
 		return nil
 	})
-	jwtSvc := platform.JWT
 	sessionSvc := platform.Sessions
 	activationSvc := platform.Activations
-	blacklist := platform.Blacklist
-	mfaSvc := platform.MFA
-	recentAuthSvc := platform.RecentAuth
-	deductionSvc := platform.Deduction
-	userSvc := platform.UserService
-	inviteSvc := platform.Invite
-	paymentSvc := platform.Payment
-	announcementSvc := platform.Announcements
-	notificationSvc := platform.Notifications
-	moduleSvc := platform.Modules
-	proxySvc := platform.ProxyNodes
 	dataCleanupSvc := platform.DataCleanup
 
 	// ──────────────────────────────────────────────────────
 	// 3. AI 域服务装配
 	// ──────────────────────────────────────────────────────
 
-	q := aidb.New(pool)
-	banChecker := banstate.NewChecker(redisClient)
-
-	// ── AI 领域服务（管理端 + 工作端）──
-
-	// Price Book
-	priceBookSvc := billingcontrol.New(aiadapters.NewPriceBookRepo(q, pool), billingcontrol.NewHTTPFetcher(cfg.Pricing.LiteLLMURL))
-	priceBookSvc.Start(ctx)
-
-	// Commercial
-	commercialRepo := aiadapters.NewCommercialRepo(q, pool)
-	commercialSvc := commercial.NewService(commercialRepo)
-	groupTransferSvc := commercial.NewGroupTransferService(commercialRepo, commercial.GroupTransferOptions{})
-
-	// Observability (Dashboard / Usage / Audit)
-	dashboardSvc := observabilitycontrol.NewDashboardService(aiadapters.NewDashboardRepo(q))
-	usageSvc := observabilitycontrol.NewUsageService(aiadapters.NewUsageRepo(q, pool))
-	auditSvc := observabilitycontrol.NewAuditService(aiadapters.NewAuditRepo(q))
-
-	// Upstream accounts
-	accountSvc := upstreamcontrol.New(aiadapters.NewAccountRepo(q, pool), func(plaintext string) (string, error) {
-		return secret.EncryptProviderKey(cfg.Security.SecretMasterKey, plaintext)
-	})
-	upstreamAccessSvc := upstreamaccess.New(aiadapters.NewUpstreamAccessRepo(pool))
-
-	// API Keys
-	apiKeyCache := apikey.NewCache(redisClient)
-	apiKeySvc := identitycontrol.New(
-		aiadapters.NewAPIKeyRepo(q),
-		apiKeyCacheForSvc(apiKeyCache),
-		func(plaintext string) (string, error) {
-			return secret.EncryptProviderKey(cfg.Security.SecretMasterKey, plaintext)
-		},
-		func(ciphertext string) (string, error) {
-			return secret.DecryptProviderKey(cfg.Security.SecretMasterKey, ciphertext)
-		},
-	)
-
-	// Risk Control
-	riskControlRepo := aiadapters.NewRiskControlRepo(q)
-	riskControlConfigSvc := riskcontrol.NewConfigService(riskControlRepo)
-	riskControlLogSvc := riskcontrol.NewLogService(riskControlRepo)
-	riskControlEventSvc := riskcontrol.NewEventService(riskControlRepo)
-	riskControlChecker := &riskcontrol.Checker{
-		Config:          riskControlConfigSvc,
-		Logs:            riskControlLogSvc,
-		Events:          riskControlEventSvc,
-		HTTPClient:      &http.Client{},
-		SecretMasterKey: cfg.Security.SecretMasterKey,
-		Logger:          appLogger,
+	ai, err := buildAIModules(cfg, pool, redisClient, appLogger, platform)
+	if err != nil {
+		return fmt.Errorf("build AI modules failed: %w", err)
 	}
-	riskControlWorker := riskcontrol.NewWorker(riskControlChecker, appLogger)
-	go riskControlWorker.Start(ctx, 0)
-
-	// Audit worker
-	auditStore := aiadapters.NewAuditStore(pool)
-	blobStore := blobstore.NewPGStore(pool)
-	auditWorker := audit.NewWorker(auditStore, blobStore, audit.WorkerOptions{
-		StoreImageBlobs: cfg.Audit.StoreImageBlobs,
-	})
-	go auditWorker.Start(ctx)
-
-	// Subscription
-	purchaser := subscription.NewBillingPurchaser(pool, "dai")
-	subsSvc := subscription.NewService(aiadapters.NewSubscriptionRepo(q, pool), purchaser, appLogger)
-
-	// Workspace
-	workspaceRepo := aiadapters.NewWorkspaceRepo(pool, aiadapters.NewGroupAccessReader(pool), aiadapters.NewRouteInspector(pool))
-	workspaceSvc := workspacesvc.NewService(
-		workspaceRepo,
-		workspacesvc.WithChatCatalog(aiadapters.NewWorkspaceChatCatalog(workspaceRepo)),
-		workspacesvc.WithChatWriter(workspaceRepo),
-		workspacesvc.WithChatRuntimeWriter(workspaceRepo),
-	)
-
-	// File store
-	fileStore, fsErr := filestore.New(pool, filestore.Config{
-		StorageDir: filepath.Join(cfg.Storage.DataDir, "files"),
-		AssetTTL:   cfg.Files.AssetTTL,
-		URLTTL:     cfg.Files.URLTTL,
-		MaxBytes:   cfg.Files.MaxBytes,
-	})
-	if fsErr != nil {
-		return fmt.Errorf("file store init failed: %w", fsErr)
-	}
-
-	// Image assets
-	imageAssetSvc := imageassets.New(imageassets.Config{
-		StorageDir: filepath.Join(cfg.Storage.DataDir, "images"),
-		Retention:  cfg.Image.Retention,
-	}, &http.Client{Timeout: 60 * time.Second})
-
-	// ── AI Serving Pipeline + Gateway Runtime ──
-
-	// OAuth credentials store + token refresher
-	oauthCreds := aiadapters.NewOAuthCredentialStore(pool, cfg.Security.SecretMasterKey)
-	refresher := tokenrefresh.New(oauthCreds, appLogger)
-	go refresher.Start(ctx)
-	appLogger.Info("oauth token refresher started")
-
-	// Bridge runtime + route inspector
-	bridgeRuntime := bridgefmt.NewRuntime()
-	grantChecker := aiadapters.NewGroupAccessReader(pool)
-	routeInspector := aiadapters.NewRouteInspector(pool)
-	routeInspector.WithBridgeSupport(bridgeRuntime)
-
-	// Health tracker (Redis-backed for multi-node)
-	innerTracker := routing.DefaultInMemoryTracker()
-	rht := routing.NewRedisHealthTracker(innerTracker, redisClient)
-	healthTracker := routing.HealthTracker(rht)
-	metricsGW := aimetrics.NewGateway()
-
-	// Rate limiters
-	// The default in-flight cap is what makes billing overshoot a finite number:
-	// settlement is post-paid, so an account overdraws by at most this many
-	// concurrent requests' worth before admission refuses the next one.
-	rateLimiter := redisadapter.NewRateLimiter(redisClient, q).
-		WithDefaultInFlight(cfg.Runtime.DefaultInFlightPerAccount)
-	upstreamConcurrencyLimiter := redisadapter.NewUpstreamConcurrencyLimiter(redisClient)
-
-	// Route stats + sticky store + scorer
-	routeWeightsStore := aiadapters.NewRouteWeightsStore(pool)
-	routeStats := redisadapter.NewRedisRouteStats(redisClient)
-	stickyStore := routing.StickyStore(redisadapter.NewRedisSticky(redisClient))
-	scorer := &serving.MultiDimScorer{
-		Health:  healthTracker,
-		Stats:   routeStats,
-		Weights: routeWeightsStore,
-	}
-
-	// Runtime binding resolver + planner
-	runtimeBinder := coreruntime.NewCachedBindingResolver(
-		aiadapters.NewRuntimeTargetBinder(q, pool, cfg.Security.SecretMasterKey).WithBridgeSupport(bridgeRuntime),
-		coreruntime.BindingResolverOptions{
-			DisableCache: true,
-			Authorizer:   aiadapters.NewRuntimeBindingAuthorizer(pool),
-		},
-	)
-	runtimePlanner := coreruntime.NewResolver(coreruntime.NewPlanner(commercialSvc), runtimeBinder)
-	commercialRepo.WithRuntimeResolver(runtimePlanner)
-	runtimeRouteSelector := gateway.NewRuntimeRouteSelector(runtimePlanner, appLogger)
-
-	// Price book biller + usage logger
-	priceBookBiller := aiadapters.NewPriceBookBiller(priceBookSvc, q, pool)
-	usageLogger := aiadapters.NewUsageLogger(pool, priceBookBiller).
-		WithLogger(appLogger).
-		WithAuditEnqueuer(auditStore)
-
-	// Balance settlement. The runtime only enqueues charges; this consumer is
-	// what actually moves money, so it must be running for balances to advance.
-	go billingoutbox.NewConsumer(pool, appLogger).Run(ctx)
-
-	// API key cache (already created above, wire to usage logger)
-	usageLogger.WithAPIKeyCacheInvalidator(apiKeyCache)
-
-	// Content moderation step (already created riskControlChecker above)
-	contentModerationStep := &serving.ContentModerationStep{Checker: riskControlChecker, Worker: riskControlWorker}
-
-	// Pipeline steps
-	quotaCheckStep := &serving.QuotaCheckStep{}
-	subscriptionGateStep := &serving.SubscriptionGateStep{Subs: subsPort(subsSvc), Logger: appLogger}
-	balanceGateStep := &serving.BalanceGateStep{Resolver: aiadapters.NewRuntimeBalanceResolver(pool)}
-	billingGuardStep := &serving.BillingGuardStep{Resolver: priceBookBiller}
-	routeCandidatesStep := &serving.RouteCandidatesStep{Selector: runtimeRouteSelector, Sticky: stickyStore}
-	rateLimitStep := &serving.RateLimitStep{Limiter: rateLimiter}
-
-	// Upstream HTTP transport + client runtime
-	upstreamHTTPTransport := aitransport.NewClient(0)
-	upstreamHTTPTransport.SetProxySelector(proxySvc)
-	fixedClientRuntime := clientruntime.New(
-		clienttransport.New(upstreamHTTPTransport),
-		clientcredentials.New(oauthCreds, refresher),
-	)
-	poolModelCatalog := clientcatalog.New(oauthCreds, fixedClientRuntime, appLogger)
-	managementHTTPClient := &http.Client{}
-
-	executeStep := &serving.ExecuteStep{
-		Transport:       upstreamHTTPTransport,
-		ClientRuntime:   fixedClientRuntime,
-		UpstreamLimiter: upstreamConcurrencyLimiter,
-		Bridge:          bridgeRuntime,
-		Health:          healthTracker,
-		OAuthPool:       oauthCreds,
-		AccountState:    accountSvc,
-		Budget:          serving.DefaultRetryBudget(),
-		Scorer:          scorer,
-		Stats:           routeStats,
-		Sticky:          stickyStore,
-		ImageNormalizer: fileStore,
-		ModuleGate:      moduleSvc,
-		Privacy:         privacy.NewProtector(),
-	}
-	usageCompletionFinalizer := &serving.UsageLogFinalizer{Logger: usageLogger, Metrics: metricsGW}
-	auditFinalizer := &serving.AuditFinalizer{Worker: auditWorker}
-	rateLimitFinalizer := serving.RateLimitFinalizer{}
-
-	pipeline := serving.NewPipeline(
-		&serving.AuthNStep{Resolver: aiadapters.NewAPIKeyResolver(q)},
-		contentModerationStep,
-		quotaCheckStep,
-		subscriptionGateStep,
-		balanceGateStep,
-		routeCandidatesStep,
-		billingGuardStep,
-		rateLimitStep,
-		executeStep,
-	).WithFinalizers(
-		usageCompletionFinalizer,
-		auditFinalizer,
-		rateLimitFinalizer,
-	)
-
-	// Runtime engine + gateway
-	runtimeEngine := gateway.NewRuntimeEngine(pipeline)
-	taskAdmission := serving.NewAdmissionGate(
-		quotaCheckStep, subscriptionGateStep, balanceGateStep, routeCandidatesStep, billingGuardStep,
-	)
-	asyncTasks, asynctaskErr := asynctask.New(asynctask.Config{
-		Workers:              cfg.AsyncTasks.Workers,
-		PollInterval:         cfg.AsyncTasks.PollInterval,
-		LeaseTTL:             cfg.AsyncTasks.LeaseTTL,
-		MaxInFlightPerTenant: cfg.AsyncTasks.MaxInFlightPerTenant,
-		Retention:            cfg.AsyncTasks.Retention,
-		ReapInterval:         cfg.AsyncTasks.ReapInterval,
-		ReapBatch:            cfg.AsyncTasks.ReapBatch,
-		WebhookWorkers:       cfg.AsyncTasks.WebhookWorkers,
-		WebhookPollInterval:  cfg.AsyncTasks.WebhookPollInterval,
-		WebhookLeaseTTL:      cfg.AsyncTasks.WebhookLeaseTTL,
-	}, asynctask.Deps{
-		Pool:         pool,
-		Logger:       appLogger,
-		Subjects:     gateway.NewTaskSubjectResolver(q),
-		RedactDetail: serving.RedactInternalErrorDetail,
-	})
-	if asynctaskErr != nil {
-		return fmt.Errorf("build async task engine failed: %w", asynctaskErr)
-	}
-
-	var runtimeGateway = gateway.New(gateway.Deps{
-		Logger:        appLogger,
-		Postgres:      pool,
-		Pipeline:      pipeline,
-		Queries:       q,
-		APIKeyCache:   apiKeyCache,
-		BanChecker:    banChecker,
-		RuntimeEngine: runtimeEngine,
-		AsyncTasks:    asyncTasks,
-		TaskAdmission: taskAdmission,
-	})
-	runtimeGateway.RegisterTaskHandlers(asyncTasks)
-
-	// Management console
-	mgmtConsole := console.New(console.Deps{
-		Postgres:       pool,
-		Redis:          redisClient,
-		Logger:         appLogger,
-		Queries:        q,
-		TokenVerifier:  jwtSvc,
-		BanChecker:     banChecker,
-		HTTPClient:     managementHTTPClient,
-		OAuthCreds:     oauthCreds,
-		TokenRefresher: refresher,
-		RouteInspector: routeInspector,
-		APIKeyCache:    apiKeyCache,
-		Gateway:        runtimeGateway,
-		GrantChecker:   grantChecker,
-		WorkspaceSvc:   workspaceSvc,
-		ImageAssets:    imageAssetSvc,
-		FileStore:      fileStore,
-		AsyncTasks:     cfg.AsyncTasks,
-	})
-	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
-	asyncTasks.Start(ctx)
-	shutdowns.Add("async task engine", func(ctx context.Context) error {
-		asyncTasks.Stop(ctx)
+	ai.Start(ctx)
+	shutdowns.Add("AI modules", func(ctx context.Context) error {
+		ai.Stop(ctx)
 		return nil
 	})
+	fileStore := ai.FileStore
+	imageAssetSvc := ai.ImageAssets
+	runtimeGateway := ai.RuntimeGateway
+	mgmtConsole := ai.ManagementConsole
+
 	dataCleanupSvc.Start(ctx)
 
 	// Hourly cleanups
@@ -467,75 +151,7 @@ func run() error {
 	// 4. 统一 Transport 装配
 	// ──────────────────────────────────────────────────────
 
-	deps := transport.Deps{
-		InfrastructureDeps: transport.InfrastructureDeps{
-			Version: version,
-			Pool:    pool,
-			Redis:   redisClient,
-			Logger:  appLogger,
-		},
-		PortalDeps: transport.PortalDeps{
-			SecureCookies: cfg.App.Env == "production",
-			Legal:         cfg.Legal,
-		},
-		IdentityDeps: transport.IdentityDeps{
-			JWT:         jwtSvc,
-			Sessions:    sessionSvc,
-			Activations: activationSvc,
-			MFA:         mfaSvc,
-			RecentAuth:  recentAuthSvc,
-			Blacklist:   blacklist,
-			UserService: userSvc,
-			Invite:      inviteSvc,
-		},
-		BillingDeps: transport.BillingDeps{
-			Deduction: deductionSvc,
-			Payment:   paymentSvc,
-		},
-		OperationsDeps: transport.OperationsDeps{
-			Announcements: announcementSvc,
-			Notifications: notificationSvc,
-			Modules:       moduleSvc,
-			ProxyNodes:    proxySvc,
-			DataCleanup:   dataCleanupSvc,
-		},
-		AIDeps: transport.AIDeps{
-			AIInfrastructureDeps: transport.AIInfrastructureDeps{
-				Queries:         q,
-				SecretMasterKey: cfg.Security.SecretMasterKey,
-				AIHTTPClient:    managementHTTPClient,
-				Health:          healthTracker,
-				Weights:         routeWeightsStore,
-				BanChecker:      banChecker,
-			},
-			AIIdentityDeps: transport.AIIdentityDeps{
-				OAuth:          oauthCreds,
-				TokenRefresher: refresher,
-				APIKeySvc:      apiKeySvc,
-				WorkspaceSvc:   workspaceSvc,
-			},
-			AIBillingDeps: transport.AIBillingDeps{
-				Subscriptions: subsSvc,
-			},
-			AICatalogDeps: transport.AICatalogDeps{
-				ClientCatalog:     poolModelCatalog,
-				PriceBookSvc:      priceBookSvc,
-				CommercialSvc:     commercialSvc,
-				GroupTransferSvc:  groupTransferSvc,
-				AccountSvc:        accountSvc,
-				UpstreamAccessSvc: upstreamAccessSvc,
-			},
-			AIOperationsDeps: transport.AIOperationsDeps{
-				DashboardSvc:         dashboardSvc,
-				UsageSvc:             usageSvc,
-				AuditSvc:             auditSvc,
-				RiskControlConfigSvc: riskControlConfigSvc,
-				RiskControlLogSvc:    riskControlLogSvc,
-				RiskControlEventSvc:  riskControlEventSvc,
-				RiskControlChecker:   riskControlChecker,
-			},
-		},
-	}
+	deps := ai.Deps
 
 	router, api := server.New(server.Options{
 		Title:        "D-AI",
@@ -581,7 +197,7 @@ func run() error {
 	// remote scraper must expose this listener through a private management
 	// network or an authenticated proxy.
 	managementMux := http.NewServeMux()
-	managementMux.Handle("/metrics", aimetrics.Handler())
+	managementMux.Handle("/metrics", ai.MetricsHandler)
 	managementMux.Handle("/health", healthHandler)
 	managementMux.Handle("/ready", readyHandler)
 
@@ -684,24 +300,6 @@ func isBackendPath(requestPath string) bool {
 		}
 	}
 	return false
-}
-
-// subsPort adapts a possibly-nil *subscription.Service into the serving
-// Subscriptions port, returning a genuinely nil interface when the service is
-// unset so the gate step's nil-check works.
-func subsPort(s *subscription.Service) serving.Subscriptions {
-	if s == nil {
-		return nil
-	}
-	return s
-}
-
-// apiKeyCacheForSvc adapts *apikey.Cache into identitycontrol.KeyCache.
-func apiKeyCacheForSvc(c *apikey.Cache) identitycontrol.KeyCache {
-	if c == nil {
-		return nil
-	}
-	return c
 }
 
 // runHourlyCleanup runs cleanup() immediately, then every hour until ctx cancels.

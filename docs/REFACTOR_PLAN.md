@@ -129,12 +129,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-02 拆分 composition root 和巨型依赖容器
 
-- [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP 生命周期和平台模块生命周期已抽出，AI 模块装配仍待继续拆分。
+- [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / `AIDeps` service locator；字段已按领域分组，具体端口和容器本身仍待拆除。
 - [ ] 每个模块提供最小的 Register/Module 接口和显式依赖。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis 已接入统一关闭路径，其他 worker 仍待补齐。
-- [~] 启动失败时按逆序释放已经创建的资源；基础设施和已登记的异步任务已覆盖，全部模块仍待登记。
-- [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台模块生命周期和公共/管理监听参数，完整 AI 模块装配测试待拆分完成后补齐。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
+- [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
+- [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -387,3 +387,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 限制与超时：业务 HTTP Server 设置 32 KiB header 上限和 64 MiB 全局 body 上限；AI `WriteTimeout=0` 保留，由既有 serving deadline controller 执行首字节、空闲间隔和总时长限制。
 - 验证：新增安全头、缓存覆盖、声明 body 超限和 chunked body 上限测试；`go vet ./...`、`bun run ensure:api` 和 OpenAPI/Portal 生成链通过。
 - 遗留风险：管理监听若被部署显式改为非 loopback，必须由私有网络或认证反向代理保护；浏览器级 CSP/HSTS 仍需在真实 HTTPS 域名上做一次端到端验收。
+
+### P1-02（进行中，2026-08-20）
+
+- 本次变更：新增 `aiModules`，集中装配 AI 控制面、Serving pipeline、Gateway、Console、文件/图片服务和异步任务；`run` 仅保留组合顺序、HTTP 注册和健康检查。
+- 生命周期：价格同步、风险审查、审计、OAuth Token refresh、结算 Outbox 和异步任务由 `aiModules.Start/Stop` 统一启动与关闭，根 context 取消仍负责无独立 Stop 的 worker。
+- 验证：相关 `go test`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 和 `git diff --check` 通过。
+- 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 继续将 `transport.Deps` / `AIDeps` 替换为最小端口和显式 Module 接口。
