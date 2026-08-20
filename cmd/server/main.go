@@ -42,7 +42,6 @@ import (
 	"xiaodou/dai/internal/ai/observability/tracing"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/privacy"
-	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/secret"
@@ -56,25 +55,10 @@ import (
 	// AI transport (for upstream HTTP client)
 	aitransport "xiaodou/dai/internal/ai/transport"
 
-	// ── 平台身份、计费与运营域 ──
-	announcementpkg "xiaodou/dai/internal/announcement"
-	announcementpg "xiaodou/dai/internal/announcement/pg"
-	"xiaodou/dai/internal/auth"
+	// ── 平台基础设施与跨域 wiring ──
 	billingoutbox "xiaodou/dai/internal/billing/outbox"
-	billingsvc "xiaodou/dai/internal/billing/service"
-	cleanuppkg "xiaodou/dai/internal/cleanup"
-	"xiaodou/dai/internal/clientsecret"
 	"xiaodou/dai/internal/config"
-	invitepkg "xiaodou/dai/internal/invite"
-	invitepg "xiaodou/dai/internal/invite/pg"
-	notificationpkg "xiaodou/dai/internal/notification"
-	paymentsvc "xiaodou/dai/internal/payment/service"
-	"xiaodou/dai/internal/payment/wechat"
-	"xiaodou/dai/internal/scheduler"
-	systempkg "xiaodou/dai/internal/system"
 	"xiaodou/dai/internal/transport"
-	userpkg "xiaodou/dai/internal/user"
-	userpg "xiaodou/dai/internal/user/pg"
 	"xiaodou/dai/internal/weborigin"
 
 	// ── 公共库 ──
@@ -157,53 +141,30 @@ func run() error {
 	// 2. 平台身份与计费域装配
 	// ──────────────────────────────────────────────────────
 
-	previousSecretKeys, err := config.ParsePreviousSecretKeys(cfg.Security.SecretMasterKeyPrevious)
+	platform, err := buildPlatformModules(cfg, pool, redisClient, appLogger)
 	if err != nil {
-		return fmt.Errorf("invalid sensitive configuration keyring: %w", err)
+		return fmt.Errorf("build platform modules failed: %w", err)
 	}
-	secretKeyring, err := clientsecret.NewKeyring(
-		cfg.Security.SecretMasterKeyID,
-		cfg.Security.SecretMasterKey,
-		previousSecretKeys,
-	)
-	if err != nil {
-		return fmt.Errorf("sensitive configuration crypto init failed: %w", err)
-	}
-	if err := clientsecret.ConfigureKeyring(secretKeyring); err != nil {
-		return fmt.Errorf("sensitive configuration crypto init failed: %w", err)
-	}
-
-	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
-	sessionSvc := auth.NewSessionService(pool, jwtSvc, cfg.JWT.RefreshExpiration)
-	activationSvc := auth.NewActivationService(pool, cfg.Auth.ActivationExpiration)
-	blacklist := auth.NewBlacklistService(redisClient, appLogger)
-	mfaSvc := auth.NewMFAService(pool, redisClient)
-	recentAuthSvc := auth.NewRecentAuthService(redisClient)
-
-	// Billing services — 进程内直接调用的核心
-	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
-
-	// User / Invite / Payment / Announcement
-	userRepo := userpg.NewUserRepository(pool)
-	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
-	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
-	wechatCfgStore := wechat.NewConfigStore(pool)
-	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger)
-	announcementSvc := announcementpkg.NewService(announcementpg.NewRepository(pool))
-	moduleSvc := systempkg.NewService(pool)
-	proxySvc := proxypkg.NewService(pool, moduleSvc)
-	notificationSvc := notificationpkg.NewService(pool)
-	dataCleanupSvc := cleanuppkg.NewService(pool, appLogger)
-
-	// Ban reconciler
-	banReconciler := auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute)
-	banReconciler.Start()
-	defer banReconciler.Stop()
-
-	// Scheduler
-	sched := scheduler.NewScheduler(pool, jwtSvc, paymentSvc, appLogger)
-	sched.Start()
-	defer sched.Stop()
+	platform.Start()
+	shutdowns.Add("platform modules", func(context.Context) error {
+		platform.Stop()
+		return nil
+	})
+	jwtSvc := platform.JWT
+	sessionSvc := platform.Sessions
+	activationSvc := platform.Activations
+	blacklist := platform.Blacklist
+	mfaSvc := platform.MFA
+	recentAuthSvc := platform.RecentAuth
+	deductionSvc := platform.Deduction
+	userSvc := platform.UserService
+	inviteSvc := platform.Invite
+	paymentSvc := platform.Payment
+	announcementSvc := platform.Announcements
+	notificationSvc := platform.Notifications
+	moduleSvc := platform.Modules
+	proxySvc := platform.ProxyNodes
+	dataCleanupSvc := platform.DataCleanup
 
 	// ──────────────────────────────────────────────────────
 	// 3. AI 域服务装配

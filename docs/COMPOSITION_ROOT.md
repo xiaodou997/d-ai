@@ -8,7 +8,7 @@ config.Load
     ↓
 openInfrastructure  ── PostgreSQL / Redis / schema verification
     ↓
-platform + AI module assembly（当前仍在 run 内，下一步继续拆）
+platformModules + AI module assembly（AI 仍在 run 内，下一步继续拆）
     ↓
 transport and HTTP route registration
     ↓
@@ -24,10 +24,12 @@ httpServers.Start / Shutdown
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
 - `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、billing、catalog、runtime、operations
   责任拆成嵌入式依赖组；handler 的 `d.Field` 访问保持兼容，但 composition root 必须显式写出所属组。
+- `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
+  的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 
 ## 尚未清零的装配遗留
 
-- 平台模块和 AI 模块仍在 `run` 中顺序构造，下一步按 identity、billing、catalog、runtime、operations 拆成显式模块装配函数。
+- AI 模块仍在 `run` 中顺序构造，下一步按 identity、billing、catalog、runtime、operations 拆成显式模块装配函数。
 - `transport.Deps` 与 `ai/transport.AIDeps` 仍是兼容型依赖容器，组内仍有具体 PostgreSQL/Redis/adapter 类型；P1-02 后续会按端点组替换为最小端口集合和 Module 接口。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
