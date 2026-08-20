@@ -418,7 +418,7 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "管理侧只允许在 active/disabled 间切换状态；invalid 由运行时失败路径维护。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *updatePoolCredentialInput) (*poolCredentialOutput, error) {
-		if d.OAuth == nil || d.CredentialReader == nil {
+		if d.CredentialWriter == nil || d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
 		if _, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID); err != nil {
@@ -428,12 +428,12 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 			return nil, mapServiceError(err)
 		}
 		if in.Body.Status != nil {
-			if err := d.OAuth.UpdateStatus(ctx, in.CredID, strings.TrimSpace(*in.Body.Status)); err != nil {
+			if err := d.CredentialWriter.UpdateStatus(ctx, in.CredID, strings.TrimSpace(*in.Body.Status)); err != nil {
 				return nil, mapServiceError(err)
 			}
 		}
 		if in.Body.Weight != nil {
-			if err := d.OAuth.UpdateWeight(ctx, in.CredID, *in.Body.Weight); err != nil {
+			if err := d.CredentialWriter.UpdateWeight(ctx, in.CredID, *in.Body.Weight); err != nil {
 				return nil, mapServiceError(err)
 			}
 		}
@@ -454,7 +454,7 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "调用 token refresher 刷新指定凭证，返回刷新后的凭证（不含 token 明文）。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *refreshPoolCredentialInput) (*poolCredentialOutput, error) {
-		if d.OAuth == nil || d.CredentialReader == nil {
+		if d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
 		if d.TokenRefresher == nil {
@@ -483,13 +483,13 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "永久删除指定凭证池内的 OAuth credential。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *deletePoolCredentialInput) (*deletePoolCredentialOutput, error) {
-		if d.OAuth == nil || d.CredentialReader == nil {
+		if d.CredentialWriter == nil || d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
 		if _, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := d.OAuth.Delete(ctx, in.CredID); err != nil {
+		if err := d.CredentialWriter.Delete(ctx, in.CredID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &deletePoolCredentialOutput{}

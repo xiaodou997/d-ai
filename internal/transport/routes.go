@@ -99,6 +99,7 @@ type AIInfrastructureDeps struct {
 type AIIdentityDeps struct {
 	OAuth            *pgadapter.OAuthCredentialStore
 	CredentialReader aitransport.OAuthCredentialReader
+	CredentialWriter aitransport.OAuthCredentialWriter
 	PoolReader       aitransport.OAuthPoolReader
 	TokenRefresher   aitransport.OAuthTokenRefresher
 	APIKeySvc        *identitycontrol.Service
@@ -236,6 +237,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		IdentityDeps: aitransport.IdentityDeps{
 			OAuth:            d.OAuth,
 			CredentialReader: d.CredentialReader,
+			CredentialWriter: d.CredentialWriter,
 			PoolReader:       d.PoolReader,
 			TokenRefresher:   d.TokenRefresher,
 			TokenVerifier:    platform.JWT,

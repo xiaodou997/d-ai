@@ -48,6 +48,7 @@ type InfrastructureDeps struct {
 type IdentityDeps struct {
 	OAuth            *pgadapter.OAuthCredentialStore
 	CredentialReader OAuthCredentialReader
+	CredentialWriter OAuthCredentialWriter
 	PoolReader       OAuthPoolReader
 	TokenRefresher   OAuthTokenRefresher
 	APIKeySvc        *identitycontrol.Service
@@ -67,8 +68,8 @@ type OAuthTokenRefresher interface {
 }
 
 // OAuthPoolReader is the narrow read-only port needed by AI model-binding
-// routes. Pool CRUD and credential lifecycle operations remain on the
-// transitional OAuth store until their write ports are split out.
+// routes. Pool CRUD remains on the transitional OAuth store until its write
+// port is split out.
 type OAuthPoolReader interface {
 	GetPool(ctx context.Context, poolID string) (*domain.CredentialPool, error)
 }
@@ -79,6 +80,14 @@ type OAuthPoolReader interface {
 type OAuthCredentialReader interface {
 	ListForPool(ctx context.Context, poolID string) ([]domain.OAuthCredentialSummary, error)
 	GetSummaryByID(ctx context.Context, credID string) (*domain.OAuthCredentialSummary, error)
+}
+
+// OAuthCredentialWriter contains the management mutations for an existing
+// credential. Import and serving lifecycle operations are separate concerns.
+type OAuthCredentialWriter interface {
+	UpdateStatus(ctx context.Context, credID string, status string) error
+	UpdateWeight(ctx context.Context, credID string, weight int) error
+	Delete(ctx context.Context, credID string) error
 }
 
 // BillingDeps contains AI subscription and prepaid billing collaborators.

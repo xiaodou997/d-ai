@@ -37,9 +37,10 @@ httpServers.Start / Shutdown
 - AI 系统端点已经只依赖 `ScoreWeightsStore` 评分权重端口，不再暴露 PostgreSQL `RouteWeightsStore` 具体类型；其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理端点只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
-- AI 上游模型绑定的 pool 存在性读取改用 `OAuthPoolReader` 只读端口；凭证 CRUD 和生命周期操作仍暂时通过具体 OAuth store，作为下一阶段的渐进拆分边界。
+- AI 上游模型绑定的 pool 存在性读取改用 `OAuthPoolReader` 只读端口；pool CRUD 与凭证导入仍暂时通过具体 OAuth store，作为下一阶段的渐进拆分边界。
 - 凭证池账号列表改用 `OAuthCredentialReader` 和无密文 `domain.OAuthCredentialSummary`；adapter 内部完成密文隔离与 metadata 脱敏，Transport 不再接收 `OAuthCredentialRow`。
 - 凭证创建响应及更新/刷新/删除前的 pool 归属校验也复用 `GetSummaryByID`；只有 serving/token refresh 仍保留原始 `GetByID`，因为它们需要在 adapter 内解密。
+- 凭证状态、权重更新和删除改用 `OAuthCredentialWriter`；刷新端点只依赖摘要 reader 与 `OAuthTokenRefresher`，不再要求完整 OAuth store。
 - OAuth pool 管理的模型发现只依赖 `ClientCatalogResolver`，模型缓存和 provider inspection 仍封装在 composition root 的服务中。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
