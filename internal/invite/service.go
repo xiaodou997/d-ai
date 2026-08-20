@@ -217,6 +217,9 @@ func (s *InviteService) RegisterUser(ctx context.Context, code, username, passwo
 	}
 
 	userID := "U_" + shared.GenerateRandomString(16)
+	if err := auth.ValidatePassword(password, normalizedUsername); err != nil {
+		return nil, err
+	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

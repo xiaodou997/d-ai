@@ -40,10 +40,11 @@
               <el-input
                 v-model="passwordForm.newPassword"
                 type="password"
-                placeholder="请输入新密码（至少6位）"
+                :placeholder="passwordPolicy?.description || '请输入新密码'"
                 show-password
               />
             </el-form-item>
+            <p v-if="passwordPolicy" class="profile-password-policy">{{ passwordPolicy.description }}</p>
             <el-form-item label="确认密码" prop="confirmPassword">
               <el-input
                 v-model="passwordForm.confirmPassword"
@@ -69,6 +70,7 @@ import { UserRound } from "lucide-vue-next";
 import { PortalPagePanel, notifyError, notifySuccess } from "@/platform";
 import { useAuthStore } from "@/stores/auth";
 import { platformCustomerApi } from "@/api/platformCustomer";
+import { usePasswordPolicy, validatePasswordAgainstPolicy } from "@/platform/auth/passwordPolicy";
 
 interface ProfileField {
   label: string;
@@ -86,6 +88,7 @@ const profileFields = computed<ProfileField[]>(() => [
 
 const loading = shallowRef(false);
 const passwordFormRef = ref<FormInstance>();
+const passwordPolicy = usePasswordPolicy();
 
 const passwordForm = reactive({
   oldPassword: "",
@@ -97,7 +100,14 @@ const passwordRules: FormRules = {
   oldPassword: [{ required: true, message: "请输入旧密码", trigger: "blur" }],
   newPassword: [
     { required: true, message: "请输入新密码", trigger: "blur" },
-    { min: 6, message: "密码长度至少为6位", trigger: "blur" }
+    {
+      validator: (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+        if (!passwordPolicy.value) return callback(new Error("密码策略尚未加载"));
+        const message = validatePasswordAgainstPolicy(value, authStore.username || "", passwordPolicy.value);
+        callback(message ? new Error(message) : undefined);
+      },
+      trigger: "blur"
+    }
   ],
   confirmPassword: [
     { required: true, message: "请再次输入新密码", trigger: "blur" },
@@ -157,6 +167,12 @@ async function handleChangePassword() {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.profile-password-policy {
+  margin: -8px 0 16px 100px;
+  color: var(--ds-muted);
+  font-size: 12px;
 }
 
 /* PortalPagePanel body 无内边距,用 24px 容器排布基本信息与修改密码两个分区 */

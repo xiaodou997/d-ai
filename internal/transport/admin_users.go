@@ -2,13 +2,14 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
@@ -19,12 +20,13 @@ import (
 // ---- DTO ----
 
 type adminUserItem struct {
-	UserID      string `json:"userId"`
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	Status      int    `json:"status"`
-	StatusText  string `json:"statusText"`
-	CreatedTime int64  `json:"createdTime"`
+	UserID          string `json:"userId"`
+	Username        string `json:"username"`
+	Email           string `json:"email"`
+	Status          int    `json:"status"`
+	StatusText      string `json:"statusText"`
+	CredentialState string `json:"credentialState"`
+	CreatedTime     int64  `json:"createdTime"`
 }
 
 type listSystemAdminsInput struct {
@@ -41,24 +43,23 @@ type createSystemAdminInput struct {
 	Body struct {
 		Username string `json:"username"`
 		Email    string `json:"email" required:"false"`
-		Password string `json:"password" required:"false"`
 	}
 }
 
 type createUserOutput struct {
 	Body struct {
-		UserID          string `json:"userId"`
-		Username        string `json:"username"`
-		DefaultPassword bool   `json:"defaultPassword"`
+		UserID              string `json:"userId"`
+		Username            string `json:"username"`
+		ActivationToken     string `json:"activationToken"`
+		ActivationExpiresIn int64  `json:"activationExpiresIn"`
 	}
 }
 
 type updateSystemAdminInput struct {
 	ID   string `path:"id"`
 	Body struct {
-		Email    string `json:"email" required:"false"`
-		Status   int    `json:"status" required:"false"`
-		Password string `json:"password" required:"false"`
+		Email  string `json:"email" required:"false"`
+		Status int    `json:"status" required:"false"`
 	}
 }
 
@@ -87,9 +88,8 @@ type statusPathInput struct {
 type updateTenantUserInput struct {
 	ID   string `path:"id"`
 	Body struct {
-		Email    string `json:"email" required:"false"`
-		Status   int    `json:"status" required:"false"`
-		Password string `json:"password" required:"false"`
+		Email  string `json:"email" required:"false"`
+		Status int    `json:"status" required:"false"`
 	}
 }
 
@@ -139,6 +139,8 @@ func registerAdminUsers(api huma.API, d Deps) {
 		Summary: "更新平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.updateSystemAdmin)
 	huma.Register(api, huma.Operation{OperationID: "admin-delete-system-admin", Method: http.MethodDelete, Path: "/api/v1/system-admins/{id}",
 		Summary: "删除平台管理员", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.deleteSystemAdmin)
+	huma.Register(api, huma.Operation{OperationID: "admin-reset-system-admin-password", Method: http.MethodPost, Path: "/api/v1/system-admins/{id}/reset-password",
+		Summary: "签发平台管理员密码重置凭证", Tags: []string{"admin-system-admins"}, Middlewares: superAdmin}, h.resetSystemAdminPassword)
 
 	// 租户组织用户
 	huma.Register(api, huma.Operation{OperationID: "admin-list-tenant-users", Method: http.MethodGet, Path: "/api/v1/tenant-users",
@@ -169,7 +171,7 @@ func (h *adminHandlers) listSystemAdmins(ctx context.Context, in *listSystemAdmi
 	offset := (in.Page - 1) * in.Size
 	qp := append(append([]any{}, params...), in.Size, offset)
 	rows, err := h.pool.Query(ctx,
-		fmt.Sprintf("SELECT user_id, username, email, status, created_at FROM iam_accounts WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, idx, idx+1),
+		fmt.Sprintf("SELECT user_id, username, email, status, credential_state, created_at FROM iam_accounts WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, idx, idx+1),
 		qp...)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -202,20 +204,21 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 	if count > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 	}
-	pass := in.Body.Password
-	if pass == "" {
-		pass = "123456"
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	userID := "SA_" + uuid.New().String()[:24]
 	now := billingdomain.NowUTC()
-	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, username, password_hash, email, user_type, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 2, 'active', $5, $5)
-	`, userID, username, string(hash), in.Body.Email, now); err != nil {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, 'pending_activation', $4, 2, 'active', $5, $5)
+	`, userID, username, credential.PasswordHash, in.Body.Email, now); err != nil {
 		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 		}
@@ -224,10 +227,17 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
+	if err := h.activations.Store(ctx, tx, userID, auth.ActivationPurposeAccount, credential); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
 	out := &createUserOutput{}
 	out.Body.UserID = userID
 	out.Body.Username = username
-	out.Body.DefaultPassword = pass == "123456"
+	out.Body.ActivationToken = credential.Token
+	out.Body.ActivationExpiresIn = int64(time.Until(credential.ExpiresAt).Seconds())
 	return out, nil
 }
 
@@ -244,18 +254,8 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 	if in.Body.Status == 2 {
 		status = "disabled"
 	}
-	var err error
-	if in.Body.Password != "" {
-		var hash []byte
-		if hash, err = bcrypt.GenerateFromPassword([]byte(in.Body.Password), bcrypt.DefaultCost); err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, credential_version = credential_version + 1, updated_at = $4 WHERE user_id = $5 AND user_type = 2",
-			in.Body.Email, status, string(hash), now, in.ID)
-	} else {
-		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 2",
-			in.Body.Email, status, now, in.ID)
-	}
+	_, err := h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 2",
+		in.Body.Email, status, now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -264,12 +264,29 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 			_ = h.blacklist.BanUser(ctx, in.ID)
 		} else {
 			_ = h.blacklist.UnbanUser(ctx, in.ID)
-			if in.Body.Password != "" {
-				_ = h.blacklist.LogoutUser(in.ID)
-			}
 		}
 	}
 	return okSuccess(), nil
+}
+
+func (h *adminHandlers) resetSystemAdminPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
+	var userType int
+	if err := h.pool.QueryRow(ctx, `SELECT user_type FROM iam_accounts WHERE user_id = $1 AND status <> 'deleted'`, in.ID).Scan(&userType); err != nil || userType != 2 {
+		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
+	}
+	result, err := h.activations.Reset(ctx, in.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
+	}
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if h.blacklist != nil {
+		_ = h.blacklist.LogoutUser(in.ID)
+	}
+	out := &activationCredentialOutput{}
+	setActivationOutput(out, result)
+	return out, nil
 }
 
 func (h *adminHandlers) deleteSystemAdmin(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
@@ -297,13 +314,13 @@ func (h *adminHandlers) listTenantUsers(ctx context.Context, in *listTenantUsers
 	var total int64
 	offset := (in.Page - 1) * in.Size
 	countSQL := `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3`
-	querySQL := `SELECT user_id, username, email, status, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+	querySQL := `SELECT user_id, username, email, status, credential_state, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 	countArgs := []any{in.TenantID}
 	queryArgs := []any{in.TenantID, in.Size, offset}
 	if in.Keyword != "" {
 		kw := "%" + in.Keyword + "%"
 		countSQL = `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2)`
-		querySQL = `SELECT user_id, username, email, status, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`
+		querySQL = `SELECT user_id, username, email, status, credential_state, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`
 		countArgs = []any{in.TenantID, kw}
 		queryArgs = []any{in.TenantID, kw, in.Size, offset}
 	}
@@ -339,16 +356,21 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 	if exists > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	userID := "TU_" + uuid.New().String()[:24]
 	now := billingdomain.NowUTC()
-	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, user_type, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, 3, 'active', $6, $6)
-	`, userID, in.Body.TenantID, username, string(hash), in.Body.Email, now); err != nil {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'pending_activation', $5, 3, 'active', $6, $6)
+	`, userID, in.Body.TenantID, username, credential.PasswordHash, in.Body.Email, now); err != nil {
 		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
@@ -357,10 +379,17 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
+	if err := h.activations.Store(ctx, tx, userID, auth.ActivationPurposeAccount, credential); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
 	out := &createUserOutput{}
 	out.Body.UserID = userID
 	out.Body.Username = username
-	out.Body.DefaultPassword = true
+	out.Body.ActivationToken = credential.Token
+	out.Body.ActivationExpiresIn = int64(time.Until(credential.ExpiresAt).Seconds())
 	return out, nil
 }
 
@@ -390,18 +419,8 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 	if in.Body.Status == 2 {
 		status = "disabled"
 	}
-	var err error
-	if in.Body.Password != "" {
-		var hash []byte
-		if hash, err = bcrypt.GenerateFromPassword([]byte(in.Body.Password), bcrypt.DefaultCost); err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, credential_version = credential_version + 1, updated_at = $4 WHERE user_id = $5 AND user_type = 3",
-			in.Body.Email, status, string(hash), now, in.ID)
-	} else {
-		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 3",
-			in.Body.Email, status, now, in.ID)
-	}
+	_, err := h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 3",
+		in.Body.Email, status, now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -411,47 +430,53 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 			_ = h.blacklist.BanUser(ctx, in.ID)
 		} else {
 			_ = h.blacklist.UnbanUser(ctx, in.ID)
-			if in.Body.Password != "" {
-				_ = h.blacklist.LogoutUser(in.ID)
-			}
 		}
 	}
 	return okSuccess(), nil
 }
 
-func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
-	if err != nil {
+func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
+	var exists bool
+	if err := h.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM iam_accounts
+			WHERE user_id = $1 AND user_type = 3 AND status <> 'deleted'
+		)
+	`, in.ID).Scan(&exists); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	now := billingdomain.NowUTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2 WHERE user_id = $3 AND user_type = 3`, string(hash), now, in.ID)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+	if !exists {
+		return nil, httpx.ErrNotFound.WithDetail("租户用户不存在")
 	}
-	if result.RowsAffected() == 0 {
+	result, err := h.activations.Reset(ctx, in.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
+	}
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	if h.blacklist != nil {
 		_ = h.blacklist.LogoutUser(in.ID)
 	}
-	return okSuccess(), nil
+	out := &activationCredentialOutput{}
+	setActivationOutput(out, result)
+	return out, nil
 }
 
-// scanAdminUserRow 扫描 (user_id, username, email, status, created_at) 一行，
+// scanAdminUserRow 扫描管理员或租户用户列表的一行。
 // statusToInt 把存储状态映射为前端整型。
 func scanAdminUserRow(rows interface {
 	Scan(...any) error
 }, statusToInt func(string) int) (adminUserItem, error) {
-	var userID, username, status string
+	var userID, username, status, credentialState string
 	var email *string
 	var createdAt time.Time
-	if err := rows.Scan(&userID, &username, &email, &status, &createdAt); err != nil {
+	if err := rows.Scan(&userID, &username, &email, &status, &credentialState, &createdAt); err != nil {
 		return adminUserItem{}, err
 	}
 	it := adminUserItem{
 		UserID: userID, Username: username,
-		Status: statusToInt(status), CreatedTime: millisFromTime(createdAt),
+		Status: statusToInt(status), CredentialState: credentialState, CreatedTime: millisFromTime(createdAt),
 	}
 	if email != nil {
 		it.Email = *email
@@ -459,6 +484,8 @@ func scanAdminUserRow(rows interface {
 	it.StatusText = "正常"
 	if it.Status != 1 {
 		it.StatusText = "停用"
+	} else if credentialState == "pending_activation" {
+		it.StatusText = "待激活"
 	}
 	return it, nil
 }

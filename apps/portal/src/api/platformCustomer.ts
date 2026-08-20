@@ -51,7 +51,7 @@ export const platformCustomerApi = {
     });
   },
 
-  // 修改密码（旧密码校验 + 新密码 ≥6 位）
+  // 修改密码（后端统一密码策略）
   changePassword(body: { oldPassword: string; newPassword: string }) {
     return platform()<{ message: string }>({
       method: "PUT",

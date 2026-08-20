@@ -22,6 +22,7 @@ import type {
   PageAdminUserItem,
   PageEndUserItem,
   PageTenantListItem,
+  ActivationCredentialOutput,
   CreateAdminUserOutput,
   TenantDetailOutput,
   WechatConfig,
@@ -34,7 +35,7 @@ function request() {
 
 export const platformAdminApi = {
   // ---- 账号自助 ----
-  // 修改本人密码（旧密码校验 + 新密码 ≥6 位）
+  // 修改本人密码（后端统一密码策略）
   changePassword(body: { oldPassword: string; newPassword: string }) {
     return request()<{ message: string }>({
       method: "PUT",
@@ -55,7 +56,7 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  createSystemAdmin(body: { username: string; email?: string; password?: string }) {
+  createSystemAdmin(body: { username: string; email?: string }) {
     return request()<CreateAdminUserOutput>({
       method: "POST",
       path: "/api/v1/system-admins",
@@ -64,7 +65,7 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  updateSystemAdmin(id: string, body: { email?: string; status?: number; password?: string }) {
+  updateSystemAdmin(id: string, body: { email?: string; status?: number }) {
     return request()<{ status: string }>({
       method: "PUT",
       path: `/api/v1/system-admins/${encodeURIComponent(id)}`,
@@ -77,6 +78,14 @@ export const platformAdminApi = {
     return request()<{ status: string }>({
       method: "DELETE",
       path: `/api/v1/system-admins/${encodeURIComponent(id)}`,
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    });
+  },
+  resetSystemAdminPassword(id: string) {
+    return request()<ActivationCredentialOutput>({
+      method: "POST",
+      path: `/api/v1/system-admins/${encodeURIComponent(id)}/reset-password`,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
     });
@@ -117,7 +126,13 @@ export const platformAdminApi = {
     initUsername?: string;
     initEmail?: string;
   }) {
-    return request()<{ tenantId: string; initUserId?: string; initUsername?: string }>({
+    return request()<{
+      tenantId: string;
+      initUserId?: string;
+      initUsername?: string;
+      activationToken?: string;
+      activationExpiresIn?: number;
+    }>({
       method: "POST",
       path: "/api/v1/tenants",
       headers: apiHeaders,
@@ -188,7 +203,7 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     });
   },
-  updateTenantUser(id: string, body: { email?: string; status?: number; password?: string }) {
+  updateTenantUser(id: string, body: { email?: string; status?: number }) {
     return request()<{ status: string }>({
       method: "PUT",
       path: `/api/v1/tenant-users/${encodeURIComponent(id)}`,
@@ -198,7 +213,7 @@ export const platformAdminApi = {
     });
   },
   resetTenantUserPassword(id: string) {
-    return request()<{ status: string }>({
+    return request()<ActivationCredentialOutput>({
       method: "POST",
       path: `/api/v1/tenant-users/${encodeURIComponent(id)}/reset-password`,
       headers: apiHeaders,
@@ -225,7 +240,7 @@ export const platformAdminApi = {
     });
   },
   createEndUser(body: { username: string; email?: string; phone?: string }) {
-    return request()<{ userId: string; tenantId: string; username: string; defaultPassword: string }>({
+    return request()<CreateAdminUserOutput>({
       method: "POST",
       path: "/api/v1/users",
       headers: apiHeaders,
@@ -243,7 +258,7 @@ export const platformAdminApi = {
     });
   },
   resetEndUserPassword(id: string) {
-    return request()<{ message: string }>({
+    return request()<ActivationCredentialOutput>({
       method: "POST",
       path: `/api/v1/users/${encodeURIComponent(id)}/reset-password`,
       headers: apiHeaders,

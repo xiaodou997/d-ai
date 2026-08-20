@@ -15,6 +15,7 @@ export interface AdminUserItem {
   email?: string;
   status: number;
   statusText: string;
+  credentialState: "active" | "pending_activation";
   createdTime: number;
 }
 
@@ -108,6 +109,7 @@ export interface EndUserItem {
   email?: string;
   phone?: string;
   status: number;
+  credentialState: "active" | "pending_activation";
   balanceUsd?: number;
   createdTime?: number;
   lastLoginTime?: number;
@@ -377,7 +379,13 @@ export interface DebtStatusOutputBody {
 export interface CreateAdminUserOutput {
   userId: string;
   username: string;
-  defaultPassword: boolean;
+  activationToken: string;
+  activationExpiresIn: number;
+}
+
+export interface ActivationCredentialOutput {
+  activationToken: string;
+  activationExpiresIn: number;
 }
 
 export interface TenantDetailOutput {

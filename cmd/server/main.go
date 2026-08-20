@@ -165,6 +165,7 @@ func main() {
 
 	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
 	sessionSvc := auth.NewSessionService(pool, jwtSvc, cfg.JWT.RefreshExpiration)
+	activationSvc := auth.NewActivationService(pool, cfg.Auth.ActivationExpiration)
 	blacklist := auth.NewBlacklistService(redisClient, appLogger)
 	if cfg.Security.SecretMasterKey != "" {
 		if err := clientsecret.Configure(cfg.Security.SecretMasterKey); err != nil {
@@ -482,6 +483,11 @@ func main() {
 			appLogger.Warn("expired auth session cleanup failed", zap.Error(err))
 		}
 	})
+	go runHourlyCleanup(ctx, func() {
+		if _, err := activationSvc.DeleteExpired(ctx, 5000); err != nil {
+			appLogger.Warn("expired activation credential cleanup failed", zap.Error(err))
+		}
+	})
 
 	// ──────────────────────────────────────────────────────
 	// 4. 统一 Transport 装配
@@ -494,6 +500,7 @@ func main() {
 		Logger:        appLogger,
 		JWT:           jwtSvc,
 		Sessions:      sessionSvc,
+		Activations:   activationSvc,
 		Blacklist:     blacklist,
 		Legal:         cfg.Legal,
 		UserService:   userSvc,

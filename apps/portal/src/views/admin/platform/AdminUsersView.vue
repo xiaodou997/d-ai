@@ -66,7 +66,7 @@
           </DsEmpty>
         </template>
         <template #cell-status="{ row }">
-          <DsTag :tone="statusTone(row.status)">
+          <DsTag :tone="row.credentialState === 'pending_activation' ? 'neutral' : statusTone(row.status)">
             {{ row.statusText }}
           </DsTag>
         </template>
@@ -134,6 +134,7 @@ import {
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
+import { showActivationCredential } from '@/platform/auth/activation'
 
 const columns: DsTableColumn[] = [
   { key: 'userId', title: '用户 ID', width: 160, mono: true },
@@ -210,11 +211,14 @@ const handleSubmit = async () => {
         await platformAdminApi.updateSystemAdmin(form.userId, { email: form.email, status: form.status })
         ElMessage.success('更新成功')
       } else {
-        await platformAdminApi.createSystemAdmin({
+        const credential = await platformAdminApi.createSystemAdmin({
           username: form.username,
           email: form.email
         })
-        ElMessage({ type: 'success', message: `管理员「${form.username}」已创建，默认密码：123456`, duration: 6000 })
+        dialogVisible.value = false
+        void refresh()
+        await showActivationCredential(credential, `管理员「${form.username}」`)
+        return
       }
       dialogVisible.value = false
       refresh()
@@ -228,13 +232,13 @@ const handleSubmit = async () => {
 
 const handleResetPassword = async (row: any) => {
   try {
-    await ElMessageBox.confirm(`确定将「${row.username}」的密码重置为 123456 吗？`, '重置密码', {
+    await ElMessageBox.confirm(`重置后「${row.username}」的现有会话将全部失效，账号需通过新链接重新激活。`, '重置密码', {
       confirmButtonText: '确定重置',
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await platformAdminApi.updateSystemAdmin(row.userId, { email: row.email, status: row.status, password: '123456' })
-    ElMessage.success('密码已重置为 123456')
+    const credential = await platformAdminApi.resetSystemAdminPassword(row.userId)
+    await showActivationCredential(credential, `管理员「${row.username}」`)
   } catch (err) {
     if (err !== 'cancel') ElMessage.error('重置失败')
   }

@@ -77,6 +77,7 @@ export interface EndUserItem {
   nickname?: string;
   avatar?: string;
   status: number; // 1=active, 2=disabled
+	credentialState: "active" | "pending_activation";
 	balanceUsd: number;
   lastLoginTime?: number | null;
   createdTime: number;
@@ -86,7 +87,13 @@ export interface CreateEndUserOutput {
   userId: string;
   tenantId: string;
   username: string;
-  defaultPassword: string;
+  activationToken: string;
+  activationExpiresIn: number;
+}
+
+export interface ActivationCredentialOutput {
+  activationToken: string;
+  activationExpiresIn: number;
 }
 
 // ===== 邀请码 =====

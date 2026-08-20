@@ -70,7 +70,8 @@
         </template>
         <template #cell-status="{ row }">
           <div class="endusers-status-control">
-            <el-tooltip :content="statusSwitchTip(row.status)" placement="top">
+            <DsTag v-if="row.credentialState === 'pending_activation'" tone="neutral">待激活</DsTag>
+            <el-tooltip v-else :content="statusSwitchTip(row.status)" placement="top">
               <el-switch
                 :model-value="row.status === 1"
                 :loading="isStatusUpdating(row.userId)"
@@ -82,7 +83,7 @@
                 @change="handleStatusChange(row, Boolean($event))"
               />
             </el-tooltip>
-            <span v-if="!isStatusControllable(row.status)" class="endusers-status-note">{{ row.statusDisplay }}</span>
+            <span v-if="row.credentialState !== 'pending_activation' && !isStatusControllable(row.status)" class="endusers-status-note">{{ row.statusDisplay }}</span>
           </div>
         </template>
         <template #cell-balance="{ row }">
@@ -135,6 +136,7 @@ import {
   DsFilterField,
   DsPagination,
   DsTable,
+  DsTag,
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'

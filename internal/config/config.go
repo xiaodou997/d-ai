@@ -17,6 +17,7 @@ type Config struct {
 	Database   DatabaseConfig  `mapstructure:"database"`
 	Redis      RedisConfig     `mapstructure:"redis"`
 	JWT        JWTConfig       `mapstructure:"jwt"`
+	Auth       AuthConfig      `mapstructure:"auth"`
 	Security   SecurityConfig  `mapstructure:"security"`
 	Legal      LegalConfig     `mapstructure:"legal"`
 	Storage    StorageConfig   `mapstructure:"storage"`
@@ -70,6 +71,10 @@ type JWTConfig struct {
 	Expiration        time.Duration `mapstructure:"expiration"`
 	RefreshExpiration time.Duration `mapstructure:"refresh_expiration"`
 	Issuer            string        `mapstructure:"issuer"`
+}
+
+type AuthConfig struct {
+	ActivationExpiration time.Duration `mapstructure:"activation_expiration"`
 }
 
 type SecurityConfig struct {
@@ -152,6 +157,7 @@ func Load() (*Config, error) {
 	v.SetDefault("jwt.expiration", "15m")
 	v.SetDefault("jwt.refresh_expiration", "168h")
 	v.SetDefault("jwt.issuer", "dai")
+	v.SetDefault("auth.activation_expiration", "24h")
 
 	// 默认值 —— Security
 	v.SetDefault("security.secret_master_key", "")
@@ -237,6 +243,7 @@ func bindEnvs(v *viper.Viper) {
 		"DAI_REDIS_DB":                              "redis.db",
 		"DAI_JWT_EXPIRATION":                        "jwt.expiration",
 		"DAI_JWT_REFRESH_EXPIRATION":                "jwt.refresh_expiration",
+		"DAI_AUTH_ACTIVATION_EXPIRATION":            "auth.activation_expiration",
 		// Security
 		"DAI_SECURITY_SECRET_MASTER_KEY": "security.secret_master_key",
 		// Legal

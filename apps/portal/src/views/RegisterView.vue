@@ -15,10 +15,12 @@ import {
 
 import { platformPublicApi } from "@/api/platformPublic";
 import type {
+  PasswordPolicy,
   PublicInvitation,
   PublicRegistrationPayload
 } from "@/api/types/platformPublic";
 import { PortalLegalFooter } from "@/platform";
+import { validatePasswordAgainstPolicy } from "@/platform/auth/passwordPolicy";
 
 type RegisterState = "loading" | "ready" | "invalid" | "error" | "success";
 
@@ -26,6 +28,7 @@ const invitationCodePattern = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/;
 
 const route = useRoute();
 const invitation = ref<PublicInvitation | null>(null);
+const passwordPolicy = ref<PasswordPolicy | null>(null);
 const state = ref<RegisterState>("loading");
 const loadError = ref("");
 const submitError = ref("");
@@ -48,7 +51,9 @@ const code = computed(() => String(route.params.code || "").trim().toUpperCase()
 const siteName = computed(
   () => invitation.value?.customerSiteName || invitation.value?.tenantName || "D-AI"
 );
-const canSubmit = computed(() => state.value === "ready" && Boolean(invitation.value) && !pending.value);
+const canSubmit = computed(
+  () => state.value === "ready" && Boolean(invitation.value) && Boolean(passwordPolicy.value) && !pending.value
+);
 
 watch(code, () => {
   void loadInvitation();
@@ -59,6 +64,7 @@ async function loadInvitation() {
   loadGeneration.value = generation;
   resetForm();
   invitation.value = null;
+  passwordPolicy.value = null;
   loadError.value = "";
   submitError.value = "";
   faviconVisible.value = true;
@@ -71,10 +77,14 @@ async function loadInvitation() {
   }
 
   try {
-    const result = await platformPublicApi.getInvitation(code.value);
+    const [result, policy] = await Promise.all([
+      platformPublicApi.getInvitation(code.value),
+      platformPublicApi.getPasswordPolicy()
+    ]);
     if (generation !== loadGeneration.value) return;
 
     invitation.value = result;
+    passwordPolicy.value = policy;
     state.value = result.canRegister && result.status === "active" ? "ready" : "invalid";
   } catch (error) {
     if (generation !== loadGeneration.value) return;
@@ -132,7 +142,13 @@ async function submitRegistration() {
 
 function validateForm(): string {
   if (!form.username.trim()) return "请输入用户名。";
-  if (form.password.length < 6) return "密码至少需要 6 位。";
+  if (!passwordPolicy.value) return "密码策略尚未加载。";
+  const passwordError = validatePasswordAgainstPolicy(
+    form.password,
+    form.username,
+    passwordPolicy.value
+  );
+  if (passwordError) return passwordError;
   if (form.password !== form.confirmPassword) return "两次输入的密码不一致。";
   if (!form.accepted) return "请先阅读并同意服务条款和隐私政策。";
   return "";
@@ -245,8 +261,8 @@ function statusOf(error: unknown): number | undefined {
                 name="password"
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="new-password"
-                placeholder="至少 6 位字符"
-                minlength="6"
+                :placeholder="passwordPolicy?.description"
+                :minlength="passwordPolicy?.minLength"
                 required
               />
               <button
@@ -271,7 +287,7 @@ function statusOf(error: unknown): number | undefined {
                 :type="showConfirmPassword ? 'text' : 'password'"
                 autocomplete="new-password"
                 placeholder="请再次输入密码"
-                minlength="6"
+                :minlength="passwordPolicy?.minLength"
                 required
               />
               <button

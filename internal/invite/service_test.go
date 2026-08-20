@@ -272,7 +272,7 @@ func TestRegisterUserReturnsRegisteredUser(t *testing.T) {
 	}
 	svc := NewInviteService(repo, zap.NewNop())
 
-	user, err := svc.RegisterUser(context.Background(), "s6jumxvh", "alice", "secret123", &email, nil, LegalAcceptance{
+	user, err := svc.RegisterUser(context.Background(), "s6jumxvh", "alice", "Correct-Horse-47", &email, nil, LegalAcceptance{
 		TermsVersion: "2026-07-19", PrivacyVersion: "2026-07-19",
 	})
 	if err != nil {

@@ -67,7 +67,7 @@
             <span v-else>{{ row.email }}</span>
           </template>
           <template #cell-status="{ row }">
-            <DsTag :tone="row.status === 1 ? 'positive' : 'neutral'">
+            <DsTag :tone="row.credentialState === 'pending_activation' ? 'neutral' : row.status === 1 ? 'positive' : 'neutral'">
               {{ row.statusText }}
             </DsTag>
           </template>
@@ -77,11 +77,7 @@
           <template #cell-actions="{ row }">
             <el-button v-if="row.status === 1" link type="warning" @click="handleToggleOrgUser(row, 'disabled')">停用</el-button>
             <el-button v-else link type="success" @click="handleToggleOrgUser(row, 'active')">启用</el-button>
-            <el-popconfirm title="确定重置该用户密码为 123456 吗？" @confirm="handleResetOrgUserPwd(row)">
-              <template #reference>
-                <el-button link type="primary">重置密码</el-button>
-              </template>
-            </el-popconfirm>
+            <el-button link type="primary" @click="handleResetOrgUserPwd(row)">重置密码</el-button>
           </template>
         </DsTable>
         <div class="td-pager">
@@ -151,7 +147,7 @@
         <el-form-item label="邮箱" prop="email">
           <el-input v-model="createOrgUserForm.email" placeholder="邮箱（可选）" />
         </el-form-item>
-        <p class="text-xs text-amber-500">默认密码：123456，请提醒用户及时修改</p>
+        <p class="td-note">创建后将生成一次性激活链接。</p>
       </el-form>
       <template #footer>
         <el-button @click="createOrgUserVisible = false">取消</el-button>
@@ -179,6 +175,7 @@ import {
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
+import { showActivationCredential } from '@/platform/auth/activation'
 import type { TenantDetailOutput } from '@/api/types/admin'
 import { formatDisplayUSD } from '@/shared/currency'
 
@@ -343,10 +340,10 @@ const submitCreateOrgUser = async () => {
     if (!valid) return
     createOrgUserSubmitting.value = true
     try {
-      await platformAdminApi.createTenantUser({ tenantId, username: createOrgUserForm.username, email: createOrgUserForm.email || undefined })
-      ElMessage.success(`用户「${createOrgUserForm.username}」已创建，默认密码：123456`)
+      const credential = await platformAdminApi.createTenantUser({ tenantId, username: createOrgUserForm.username, email: createOrgUserForm.email || undefined })
       createOrgUserVisible.value = false
-      refreshOrgUsers()
+      void refreshOrgUsers()
+      await showActivationCredential(credential, `用户「${createOrgUserForm.username}」`)
     } catch (err: any) {
       ElMessage.error(err?.message || '创建失败')
     } finally {
@@ -369,10 +366,15 @@ const handleToggleOrgUser = async (row: any, status: 'active' | 'disabled') => {
 
 const handleResetOrgUserPwd = async (row: any) => {
   try {
-    await platformAdminApi.resetTenantUserPassword(row.userId)
-    ElMessage.success('密码已重置为 123456')
-  } catch {
-    ElMessage.error('重置失败')
+    await ElMessageBox.confirm(
+      `重置后「${row.username}」的现有会话将全部失效，账号需通过新链接重新激活。`,
+      '重置密码',
+      { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
+    )
+    const credential = await platformAdminApi.resetTenantUserPassword(row.userId)
+    await showActivationCredential(credential, `用户「${row.username}」`)
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error('重置失败')
   }
 }
 

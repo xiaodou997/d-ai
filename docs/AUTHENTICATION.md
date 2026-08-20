@@ -8,6 +8,8 @@
 - Refresh Token 是带 `dai_rt_` 前缀的 256 bit 随机不透明凭证，不是 JWT。
 - 数据库只保存 Refresh Token 的 SHA-256 哈希，不保存可直接使用的明文。
 - Refresh Token 的绝对有效期由 `jwt.refresh_expiration` / `DAI_JWT_REFRESH_EXPIRATION` 配置，轮换不会延长 session family 的绝对过期时间。
+- 新建账号和密码重置后的账号使用 `pending_activation` 凭证状态，不能创建、刷新或继续使用登录会话。
+- 激活令牌是带 `dai_act_` 前缀的 256 bit 随机不透明凭证；数据库只保存 SHA-256 哈希，默认有效期由 `auth.activation_expiration` / `DAI_AUTH_ACTIVATION_EXPIRATION` 配置。
 
 ## 生命周期
 
@@ -22,6 +24,10 @@
 `iam_accounts.credential_version` 原子递增；数据库触发器会撤销该账号的全部 session。
 账号停用、级联停用和软删除同样触发全部会话撤销；硬删除通过外键级联删除会话。
 租户状态在每次刷新时重新校验，停用或暂停后不能继续刷新。
+
+账号创建和重置会生成单次激活令牌，同一账号始终只有最新令牌可用。激活在事务中
+消费令牌、写入正式密码、切换为 `active` 凭证状态并提升凭证版本。账号或租户即使
+处于停用状态也可以完成凭证设置，但登录和会话检查仍会按业务状态拒绝访问。
 
 ## HTTP 契约
 
@@ -40,7 +46,15 @@
 当前版本仍通过 JSON body 传递 Refresh Token；迁移到 HttpOnly Cookie 属于 `P0-04`，
 不会混入本次服务端生命周期重构。
 
+`GET /api/auth/password-policy` 返回 Portal 展示和校验使用的统一密码策略；
+`POST /api/auth/activate` 消费一次性令牌并设置正式密码。Portal 激活链接把令牌放在
+URL fragment 中，避免令牌发送给 HTTP 服务或反向代理，读取后立即清空地址栏。
+
 ## 数据库升级
 
-已有 schema 10 数据库必须在部署新二进制前人工执行
-`internal/db/changes/0011_20260820_auth_sessions.sql`。应用要求 schema 11，且不会自动执行 DDL。
+已有 schema 10 数据库必须在部署新二进制前依次人工执行：
+
+1. `internal/db/changes/0011_20260820_auth_sessions.sql`
+2. `internal/db/changes/0012_20260820_account_activation.sql`
+
+已有 schema 11 数据库只执行第二项。应用要求 schema 12，且不会自动执行 DDL。

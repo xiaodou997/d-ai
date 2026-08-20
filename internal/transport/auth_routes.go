@@ -28,7 +28,7 @@ type userInfoOutput struct {
 type changePasswordInput struct {
 	Body struct {
 		OldPassword string `json:"oldPassword"`
-		NewPassword string `json:"newPassword" minLength:"6" doc:"新密码至少 6 位"`
+		NewPassword string `json:"newPassword" minLength:"12" maxLength:"72" doc:"新密码必须符合统一密码策略"`
 	}
 }
 
@@ -120,6 +120,9 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		}
 		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Body.OldPassword)) != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("旧密码不正确")
+		}
+		if err := auth.ValidatePassword(in.Body.NewPassword, claims.Username); err != nil {
+			return nil, httpx.ErrBadRequest.WithDetail(auth.CurrentPasswordPolicy().Description)
 		}
 		newHash, herr := bcrypt.GenerateFromPassword([]byte(in.Body.NewPassword), bcrypt.DefaultCost)
 		if herr != nil {

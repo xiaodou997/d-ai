@@ -168,6 +168,46 @@ components:
         - items
         - total
       type: object
+    ActivateAccountInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ActivateAccountInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        password:
+          maxLength: 72
+          minLength: 12
+          type: string
+        token:
+          minLength: 1
+          type: string
+      required:
+        - token
+        - password
+      type: object
+    ActivationCredentialOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ActivationCredentialOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        activationExpiresIn:
+          format: int64
+          type: integer
+        activationToken:
+          type: string
+      required:
+        - activationToken
+        - activationExpiresIn
+      type: object
     AdminRechargeOrder:
       additionalProperties: false
       properties:
@@ -324,6 +364,8 @@ components:
         createdTime:
           format: int64
           type: integer
+        credentialState:
+          type: string
         email:
           type: string
         status:
@@ -341,6 +383,7 @@ components:
         - email
         - status
         - statusText
+        - credentialState
         - createdTime
       type: object
     AnnouncementDraftBody:
@@ -1526,8 +1569,9 @@ components:
           readOnly: true
           type: string
         newPassword:
-          description: 新密码至少 6 位
-          minLength: 6
+          description: 新密码必须符合统一密码策略
+          maxLength: 72
+          minLength: 12
           type: string
         oldPassword:
           type: string
@@ -1812,7 +1856,10 @@ components:
           format: uri
           readOnly: true
           type: string
-        defaultPassword:
+        activationExpiresIn:
+          format: int64
+          type: integer
+        activationToken:
           type: string
         tenantId:
           type: string
@@ -1824,7 +1871,8 @@ components:
         - userId
         - tenantId
         - username
-        - defaultPassword
+        - activationToken
+        - activationExpiresIn
       type: object
     CreateInvitationInputBody:
       additionalProperties: false
@@ -1906,8 +1954,6 @@ components:
           type: string
         email:
           type: string
-        password:
-          type: string
         username:
           type: string
       required:
@@ -1948,6 +1994,11 @@ components:
             - https://example.com/schemas/CreateTenantOutputBody.json
           format: uri
           readOnly: true
+          type: string
+        activationExpiresIn:
+          format: int64
+          type: integer
+        activationToken:
           type: string
         initUserId:
           type: string
@@ -2007,8 +2058,11 @@ components:
           format: uri
           readOnly: true
           type: string
-        defaultPassword:
-          type: boolean
+        activationExpiresIn:
+          format: int64
+          type: integer
+        activationToken:
+          type: string
         userId:
           type: string
         username:
@@ -2016,7 +2070,8 @@ components:
       required:
         - userId
         - username
-        - defaultPassword
+        - activationToken
+        - activationExpiresIn
       type: object
     CreateWithdrawalInputBody:
       additionalProperties: false
@@ -2859,6 +2914,8 @@ components:
         createdTime:
           format: int64
           type: integer
+        credentialState:
+          type: string
         email:
           type: string
         internalNote:
@@ -2886,6 +2943,7 @@ components:
         - tenantId
         - username
         - status
+        - credentialState
         - balanceUsd
         - createdTime
       type: object
@@ -5202,6 +5260,33 @@ components:
         - page
         - size
       type: object
+    PasswordPolicy:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/PasswordPolicy.json
+          format: uri
+          readOnly: true
+          type: string
+        description:
+          type: string
+        maxBytes:
+          format: int64
+          type: integer
+        minLength:
+          format: int64
+          type: integer
+        requiredCharacterClasses:
+          format: int64
+          type: integer
+      required:
+        - minLength
+        - maxBytes
+        - requiredCharacterClasses
+        - description
+      type: object
     PinyinConfigDTO:
       additionalProperties: false
       properties:
@@ -5919,7 +6004,8 @@ components:
             - string
             - "null"
         password:
-          minLength: 6
+          maxLength: 72
+          minLength: 12
           type: string
         phone:
           type:
@@ -8937,8 +9023,6 @@ components:
           type: string
         email:
           type: string
-        password:
-          type: string
         status:
           format: int64
           type: integer
@@ -9030,8 +9114,6 @@ components:
           readOnly: true
           type: string
         email:
-          type: string
-        password:
           type: string
         status:
           format: int64
@@ -11688,6 +11770,31 @@ paths:
       summary: JWKS 公钥集
       tags:
         - auth
+  /api/auth/activate:
+    post:
+      operationId: auth-activate-account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateAccountInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 使用一次性令牌激活账号或设置重置后的密码
+      tags:
+        - auth
   /api/auth/login:
     post:
       operationId: auth-login
@@ -11774,6 +11881,25 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 修改密码
+      tags:
+        - auth
+  /api/auth/password-policy:
+    get:
+      operationId: auth-password-policy
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordPolicy"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 获取密码策略
       tags:
         - auth
   /api/auth/profile:
@@ -15608,6 +15734,31 @@ paths:
       summary: 更新平台管理员
       tags:
         - admin-system-admins
+  /api/v1/system-admins/{id}/reset-password:
+    post:
+      operationId: admin-reset-system-admin-password
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivationCredentialOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 签发平台管理员密码重置凭证
+      tags:
+        - admin-system-admins
   /api/v1/system/status:
     get:
       description: 返回 PostgreSQL、Redis 与路由健康跟踪快照。
@@ -15763,7 +15914,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessOutputBody"
+                $ref: "#/components/schemas/ActivationCredentialOutputBody"
           description: OK
         default:
           content:
@@ -21253,7 +21404,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MessageOutputBody"
+                $ref: "#/components/schemas/ActivationCredentialOutputBody"
           description: OK
         default:
           content:

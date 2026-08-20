@@ -2,6 +2,7 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import type {
   AccountBalance,
+  ActivationCredentialOutput,
   ClientConsumptionItem,
   CreateEndUserOutput,
   CreateInviteCodeOutput,
@@ -23,7 +24,7 @@ const baseUrl = apiBaseUrl;
 
 export const platformTenantApi = {
   // ===== 账号自助 =====
-  // 修改密码（旧密码校验 + 新密码 ≥6 位）
+  // 修改密码（后端统一密码策略）
   changePassword(body: { oldPassword: string; newPassword: string }) {
     return platform()<{ message: string }>({
       method: "PUT",
@@ -148,7 +149,7 @@ export const platformTenantApi = {
     });
   },
   resetUserPassword(userId: string) {
-    return platform()<{ message: string }>({
+    return platform()<ActivationCredentialOutput>({
       method: "POST",
       path: `/api/v1/users/${encodeURIComponent(userId)}/reset-password`,
       headers: apiHeaders,

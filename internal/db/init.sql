@@ -41,6 +41,7 @@ CREATE TABLE iam_accounts (
     username TEXT NOT NULL CHECK (username <> '' AND username = btrim(username)),
     password_hash TEXT NOT NULL,
     credential_version BIGINT NOT NULL DEFAULT 1 CHECK (credential_version > 0),
+    credential_state TEXT NOT NULL DEFAULT 'active' CHECK (credential_state IN ('active', 'pending_activation')),
     email TEXT,
     phone TEXT,
     user_type INTEGER NOT NULL CHECK (user_type IN (1, 2, 3, 4)),
@@ -130,6 +131,20 @@ CREATE TABLE auth_refresh_tokens (
 CREATE UNIQUE INDEX ux_auth_refresh_tokens_active_session
     ON auth_refresh_tokens (session_id) WHERE status = 'active';
 CREATE INDEX idx_auth_refresh_tokens_session ON auth_refresh_tokens (session_id);
+
+CREATE TABLE auth_activation_tokens (
+    token_hash BYTEA PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES iam_accounts (user_id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL CHECK (purpose IN ('account_activation', 'password_reset')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX ux_auth_activation_tokens_pending_user
+    ON auth_activation_tokens (user_id) WHERE consumed_at IS NULL;
+CREATE INDEX idx_auth_activation_tokens_expires
+    ON auth_activation_tokens (expires_at) WHERE consumed_at IS NULL;
 
 CREATE FUNCTION auth_revoke_sessions_on_account_change() RETURNS TRIGGER AS $$
 BEGIN
@@ -2231,6 +2246,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 11);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 12);
 
 COMMIT;

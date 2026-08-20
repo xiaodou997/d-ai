@@ -10,7 +10,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
@@ -58,9 +57,11 @@ type createTenantInput struct {
 
 type createTenantOutput struct {
 	Body struct {
-		TenantID     string `json:"tenantId"`
-		InitUserID   string `json:"initUserId,omitempty"`
-		InitUsername string `json:"initUsername,omitempty"`
+		TenantID            string `json:"tenantId"`
+		InitUserID          string `json:"initUserId,omitempty"`
+		InitUsername        string `json:"initUsername,omitempty"`
+		ActivationToken     string `json:"activationToken,omitempty"`
+		ActivationExpiresIn int64  `json:"activationExpiresIn,omitempty"`
 	}
 }
 
@@ -217,15 +218,15 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 	out := &createTenantOutput{}
 	out.Body.TenantID = tenantID
 	if initUsername != "" {
-		hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+		credential, err := h.activations.NewCredential()
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		initUserID := "TU_" + uuid.New().String()[:24]
 		if _, err := tx.Exec(ctx, `
-				INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, user_type, status, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, 3, 'active', $6, $6)
-			`, initUserID, tenantID, initUsername, string(hash), in.Body.InitEmail, now); err != nil {
+					INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, 'pending_activation', $5, 3, 'active', $6, $6)
+				`, initUserID, tenantID, initUsername, credential.PasswordHash, in.Body.InitEmail, now); err != nil {
 			if authpg.IsUsernameTaken(err) {
 				return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 			}
@@ -234,8 +235,13 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 			}
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
+		if err := h.activations.Store(ctx, tx, initUserID, auth.ActivationPurposeAccount, credential); err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
 		out.Body.InitUserID = initUserID
 		out.Body.InitUsername = initUsername
+		out.Body.ActivationToken = credential.Token
+		out.Body.ActivationExpiresIn = int64(time.Until(credential.ExpiresAt).Seconds())
 	}
 
 	if err := tx.Commit(ctx); err != nil {

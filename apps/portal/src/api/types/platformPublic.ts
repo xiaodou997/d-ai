@@ -34,3 +34,19 @@ export interface PublicRegistrationResult {
   userId: string;
   message: string;
 }
+
+export interface PasswordPolicy {
+  minLength: number;
+  maxBytes: number;
+  requiredCharacterClasses: number;
+  description: string;
+}
+
+export interface ActivateAccountPayload {
+  token: string;
+  password: string;
+}
+
+export interface ActivateAccountResult {
+  message: string;
+}

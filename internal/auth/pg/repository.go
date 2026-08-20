@@ -69,6 +69,7 @@ type PortalUserForLogin struct {
 	UserType          int
 	Status            string
 	CredentialVersion int64
+	CredentialState   string
 }
 
 func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
@@ -81,11 +82,11 @@ func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, log
 func (r *AuthRepository) GetPortalUserForLogin(ctx context.Context, identifier string) (PortalUserForLogin, error) {
 	var u PortalUserForLogin
 	err := r.pool.QueryRow(ctx, `
-		SELECT user_id, COALESCE(tenant_id, ''), username, password_hash, user_type, status, credential_version
+		SELECT user_id, COALESCE(tenant_id, ''), username, password_hash, user_type, status, credential_version, credential_state
 		FROM iam_accounts
 		WHERE lower(username) = lower(btrim($1))
 		   OR (email IS NOT NULL AND lower(email) = lower(btrim($1)))
-	`, identifier).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status, &u.CredentialVersion)
+	`, identifier).Scan(&u.UserID, &u.TenantID, &u.Username, &u.PasswordHash, &u.UserType, &u.Status, &u.CredentialVersion, &u.CredentialState)
 	return u, err
 }
 

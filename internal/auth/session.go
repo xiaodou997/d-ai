@@ -50,21 +50,21 @@ func (s *SessionService) Create(ctx context.Context, principal Principal) (*Toke
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var accountStatus, tenantStatus string
+	var accountStatus, tenantStatus, credentialState string
 	var currentCredentialVersion int64
 	if err := tx.QueryRow(ctx, `
-		SELECT a.status, a.credential_version, COALESCE(t.status, 'active')
+		SELECT a.status, a.credential_version, a.credential_state, COALESCE(t.status, 'active')
 		FROM iam_accounts a
 		LEFT JOIN iam_tenants t ON t.tenant_id = a.tenant_id
 		WHERE a.user_id = $1
 		FOR SHARE OF a
-	`, principal.UserID).Scan(&accountStatus, &currentCredentialVersion, &tenantStatus); err != nil {
+	`, principal.UserID).Scan(&accountStatus, &currentCredentialVersion, &credentialState, &tenantStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrAccountInactive
 		}
 		return nil, fmt.Errorf("validate login account: %w", err)
 	}
-	if accountStatus != "active" || currentCredentialVersion != principal.CredentialVersion {
+	if accountStatus != "active" || credentialState != "active" || currentCredentialVersion != principal.CredentialVersion {
 		return nil, ErrAccountInactive
 	}
 	if principal.UserType >= 3 && tenantStatus != "active" {
@@ -106,7 +106,7 @@ func (s *SessionService) Rotate(ctx context.Context, raw string) (*TokenPair, Pr
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var sessionID uuid.UUID
-	var tokenStatus, sessionStatus, accountStatus, tenantStatus string
+	var tokenStatus, sessionStatus, accountStatus, tenantStatus, credentialState string
 	var tokenExpiresAt, sessionExpiresAt time.Time
 	var sessionCredentialVersion, accountCredentialVersion int64
 	principal := Principal{}
@@ -114,7 +114,7 @@ func (s *SessionService) Rotate(ctx context.Context, raw string) (*TokenPair, Pr
 		SELECT rt.session_id, rt.status, rt.expires_at,
 		       s.status, s.expires_at, s.credential_version,
 		       a.user_id, a.username, COALESCE(a.tenant_id, ''), a.user_type,
-		       a.status, a.credential_version,
+		       a.status, a.credential_version, a.credential_state,
 		       COALESCE(t.status, 'active')
 		FROM auth_refresh_tokens rt
 		JOIN auth_sessions s ON s.session_id = rt.session_id
@@ -126,7 +126,7 @@ func (s *SessionService) Rotate(ctx context.Context, raw string) (*TokenPair, Pr
 		&sessionID, &tokenStatus, &tokenExpiresAt,
 		&sessionStatus, &sessionExpiresAt, &sessionCredentialVersion,
 		&principal.UserID, &principal.Username, &principal.TenantID, &principal.UserType,
-		&accountStatus, &accountCredentialVersion, &tenantStatus,
+		&accountStatus, &accountCredentialVersion, &credentialState, &tenantStatus,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, zero, ErrInvalidRefreshToken
@@ -156,6 +156,8 @@ func (s *SessionService) Rotate(ctx context.Context, raw string) (*TokenPair, Pr
 		invalidReason, invalidErr = "session_expired", ErrInvalidRefreshToken
 	case accountStatus != "active":
 		invalidReason, invalidErr = "account_inactive", ErrAccountInactive
+	case credentialState != "active":
+		invalidReason, invalidErr = "credential_inactive", ErrSessionInactive
 	case sessionCredentialVersion != accountCredentialVersion:
 		invalidReason, invalidErr = "credential_changed", ErrSessionInactive
 	case principal.UserType >= 3 && tenantStatus != "active":

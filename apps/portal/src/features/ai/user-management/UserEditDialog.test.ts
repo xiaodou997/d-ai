@@ -28,6 +28,7 @@ const user = {
   phone: "13800000000",
   internalNote: "旧备注",
   status: 1,
+  credentialState: "active" as const,
   balanceUsd: 0,
   createdTime: 1_700_000_000_000
 };

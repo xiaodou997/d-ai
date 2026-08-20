@@ -125,7 +125,7 @@ export const tenantApi = {
     });
   },
   resetEndUserPassword(userId: string) {
-    return request()<{ message: string }>({
+    return request()<{ activationToken: string; activationExpiresIn: number }>({
       method: "POST",
       path: `/api/v1/users/${encodeURIComponent(userId)}/reset-password`,
       headers: apiHeaders,

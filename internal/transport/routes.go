@@ -53,6 +53,7 @@ type Deps struct {
 	// 平台身份与计费域
 	JWT           *auth.JWTService
 	Sessions      *auth.SessionService
+	Activations   *auth.ActivationService
 	Blacklist     *auth.BlacklistService
 	Legal         config.LegalConfig
 	UserService   *userpkg.UserService

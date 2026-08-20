@@ -28,16 +28,18 @@ type authTokenOutput struct {
 
 // authHandlers handles unified Portal credentials and session refresh.
 type authHandlers struct {
-	repo     *authpg.AuthRepository
-	sessions *auth.SessionService
-	log      *zap.Logger
+	repo        *authpg.AuthRepository
+	sessions    *auth.SessionService
+	activations *auth.ActivationService
+	log         *zap.Logger
 }
 
 func newAuthHandlers(d Deps) *authHandlers {
 	return &authHandlers{
-		repo:     authpg.NewAuthRepository(d.Pool),
-		sessions: d.Sessions,
-		log:      d.Logger,
+		repo:        authpg.NewAuthRepository(d.Pool),
+		sessions:    d.Sessions,
+		activations: d.Activations,
+		log:         d.Logger,
 	}
 }
 
@@ -52,6 +54,17 @@ type refreshInput struct {
 	Body struct {
 		RefreshToken string `json:"refreshToken" minLength:"1"`
 	}
+}
+
+type activateAccountInput struct {
+	Body struct {
+		Token    string `json:"token" minLength:"1"`
+		Password string `json:"password" minLength:"12" maxLength:"72"`
+	}
+}
+
+type passwordPolicyOutput struct {
+	Body auth.PasswordPolicy
 }
 
 type loginPrincipal struct {
@@ -70,6 +83,9 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 	}
 	if u.Status != "active" {
 		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("账户已被禁用，请联系管理员")
+	}
+	if u.CredentialState != "active" {
+		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("账户尚未激活或密码已重置，请使用最新激活凭证设置密码")
 	}
 	if u.UserType >= 3 {
 		active, err := h.repo.CheckTenantActive(ctx, u.TenantID)
@@ -109,6 +125,40 @@ func registerAuthPublic(api huma.API, d Deps) {
 		Summary:     "刷新登录凭证",
 		Tags:        []string{"auth"},
 	}, h.refresh)
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-password-policy", Method: "GET", Path: "/api/auth/password-policy",
+		Summary: "获取密码策略", Tags: []string{"auth"},
+	}, func(context.Context, *struct{}) (*passwordPolicyOutput, error) {
+		return &passwordPolicyOutput{Body: auth.CurrentPasswordPolicy()}, nil
+	})
+	huma.Register(api, huma.Operation{
+		OperationID: "auth-activate-account", Method: "POST", Path: "/api/auth/activate",
+		Summary: "使用一次性令牌激活账号或设置重置后的密码", Tags: []string{"auth"},
+	}, h.activateAccount)
+}
+
+func (h *authHandlers) activateAccount(ctx context.Context, input *activateAccountInput) (*messageOutput, error) {
+	if h.activations == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("激活服务不可用")
+	}
+	err := h.activations.Activate(ctx, strings.TrimSpace(input.Body.Token), input.Body.Password)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrWeakPassword):
+			return nil, httpx.ErrBadRequest.WithDetail(auth.CurrentPasswordPolicy().Description)
+		case errors.Is(err, auth.ErrExpiredActivationToken):
+			return nil, httpx.ErrConflict.WithDetail("激活凭证已过期，请联系管理员重新签发")
+		case errors.Is(err, auth.ErrUsedActivationToken):
+			return nil, httpx.ErrConflict.WithDetail("激活凭证已使用，请勿重复提交")
+		case errors.Is(err, auth.ErrInvalidActivationToken):
+			return nil, httpx.ErrUnauthorized.WithDetail("激活凭证无效")
+		default:
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+	}
+	out := &messageOutput{}
+	out.Body.Message = "密码设置成功，请登录"
+	return out, nil
 }
 
 func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authTokenOutput, error) {

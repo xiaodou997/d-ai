@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 使用一次性令牌激活账号或设置重置后的密码 */
+        post: operations["auth-activate-account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -82,6 +99,23 @@ export interface paths {
         get?: never;
         /** 修改密码 */
         put: operations["auth-change-password"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取密码策略 */
+        get: operations["auth-password-policy"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1816,6 +1850,23 @@ export interface paths {
         post?: never;
         /** 删除平台管理员 */
         delete: operations["admin-delete-system-admin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system-admins/{id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 签发平台管理员密码重置凭证 */
+        post: operations["admin-reset-system-admin-password"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4573,6 +4624,27 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        ActivateAccountInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ActivateAccountInputBody.json
+             */
+            readonly $schema?: string;
+            password: string;
+            token: string;
+        };
+        ActivationCredentialOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ActivationCredentialOutputBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            activationExpiresIn: number;
+            activationToken: string;
+        };
         AdminRechargeOrder: {
             /**
              * Format: uri
@@ -4645,6 +4717,7 @@ export interface components {
         AdminUserItem: {
             /** Format: int64 */
             createdTime: number;
+            credentialState: string;
             email: string;
             /** Format: int64 */
             status: number;
@@ -5285,7 +5358,7 @@ export interface components {
              * @example https://example.com/schemas/ChangePasswordInputBody.json
              */
             readonly $schema?: string;
-            /** @description 新密码至少 6 位 */
+            /** @description 新密码必须符合统一密码策略 */
             newPassword: string;
             oldPassword: string;
         };
@@ -5434,7 +5507,9 @@ export interface components {
              * @example https://example.com/schemas/CreateEndUserOutputBody.json
              */
             readonly $schema?: string;
-            defaultPassword: string;
+            /** Format: int64 */
+            activationExpiresIn: number;
+            activationToken: string;
             tenantId: string;
             userId: string;
             username: string;
@@ -5488,7 +5563,6 @@ export interface components {
              */
             readonly $schema?: string;
             email?: string;
-            password?: string;
             username: string;
         };
         CreateTenantInputBody: {
@@ -5513,6 +5587,9 @@ export interface components {
              * @example https://example.com/schemas/CreateTenantOutputBody.json
              */
             readonly $schema?: string;
+            /** Format: int64 */
+            activationExpiresIn?: number;
+            activationToken?: string;
             initUserId?: string;
             initUsername?: string;
             tenantId: string;
@@ -5551,7 +5628,9 @@ export interface components {
              * @example https://example.com/schemas/CreateUserOutputBody.json
              */
             readonly $schema?: string;
-            defaultPassword: boolean;
+            /** Format: int64 */
+            activationExpiresIn: number;
+            activationToken: string;
             userId: string;
             username: string;
         };
@@ -6090,6 +6169,7 @@ export interface components {
             balanceUsd: number;
             /** Format: int64 */
             createdTime: number;
+            credentialState: string;
             email?: string;
             internalNote?: string;
             /** Format: int64 */
@@ -7215,6 +7295,21 @@ export interface components {
             size: number;
             /** Format: int64 */
             total: number;
+        };
+        PasswordPolicy: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PasswordPolicy.json
+             */
+            readonly $schema?: string;
+            description: string;
+            /** Format: int64 */
+            maxBytes: number;
+            /** Format: int64 */
+            minLength: number;
+            /** Format: int64 */
+            requiredCharacterClasses: number;
         };
         PinyinConfigDTO: {
             enabled: boolean;
@@ -9287,7 +9382,6 @@ export interface components {
              */
             readonly $schema?: string;
             email?: string;
-            password?: string;
             /** Format: int64 */
             status?: number;
         };
@@ -9344,7 +9438,6 @@ export interface components {
              */
             readonly $schema?: string;
             email?: string;
-            password?: string;
             /** Format: int64 */
             status?: number;
         };
@@ -10994,6 +11087,39 @@ export interface operations {
             };
         };
     };
+    "auth-activate-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateAccountInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "auth-login": {
         parameters: {
             query?: never;
@@ -11105,6 +11231,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "auth-password-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordPolicy"];
                 };
             };
             /** @description Error */
@@ -15194,6 +15349,37 @@ export interface operations {
             };
         };
     };
+    "admin-reset-system-admin-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivationCredentialOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "ai-get-system-status": {
         parameters: {
             query?: never;
@@ -15372,7 +15558,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessOutputBody"];
+                    "application/json": components["schemas"]["ActivationCredentialOutputBody"];
                 };
             };
             /** @description Error */
@@ -21142,7 +21328,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageOutputBody"];
+                    "application/json": components["schemas"]["ActivationCredentialOutputBody"];
                 };
             };
             /** @description Error */

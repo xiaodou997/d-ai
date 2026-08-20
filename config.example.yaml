@@ -21,6 +21,9 @@ jwt:
   refresh_expiration: 168h
   issuer: dai
 
+auth:
+  activation_expiration: 24h
+
 security:
   # URM 与 AI 敏感配置的统一加密主密钥；生产环境填入原 URM 密钥
   secret_master_key: ''

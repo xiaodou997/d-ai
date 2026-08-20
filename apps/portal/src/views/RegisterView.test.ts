@@ -7,11 +7,13 @@ import type { PublicInvitation } from "@/api/types/platformPublic";
 import RegisterView from "./RegisterView.vue";
 
 const getInvitation = vi.hoisted(() => vi.fn());
+const getPasswordPolicy = vi.hoisted(() => vi.fn());
 const registerInvitation = vi.hoisted(() => vi.fn());
 
 vi.mock("@/api/platformPublic", () => ({
   platformPublicApi: {
     getInvitation,
+    getPasswordPolicy,
     registerInvitation
   }
 }));
@@ -19,8 +21,15 @@ vi.mock("@/api/platformPublic", () => ({
 describe("public invitation registration", () => {
   beforeEach(() => {
     getInvitation.mockReset();
+    getPasswordPolicy.mockReset();
     registerInvitation.mockReset();
     getInvitation.mockResolvedValue(activeInvitation());
+    getPasswordPolicy.mockResolvedValue({
+      minLength: 12,
+      maxBytes: 72,
+      requiredCharacterClasses: 3,
+      description: "至少 12 个字符，至少包含三类字符"
+    });
     registerInvitation.mockResolvedValue({ success: true, userId: "user-1", message: "registered" });
   });
 
@@ -28,6 +37,7 @@ describe("public invitation registration", () => {
     const { wrapper } = await mountRegister();
 
     expect(getInvitation).toHaveBeenCalledWith("ABCD2345");
+    expect(getPasswordPolicy).toHaveBeenCalledOnce();
     expect(wrapper.text()).toContain("示例工作区");
     expect(wrapper.find('input[name="username"]').exists()).toBe(true);
     expect(wrapper.find('input[name="password"]').exists()).toBe(true);
@@ -52,8 +62,8 @@ describe("public invitation registration", () => {
     const { wrapper } = await mountRegister();
 
     await wrapper.find('input[name="username"]').setValue("alice");
-    await wrapper.find('input[name="password"]').setValue("secret1");
-    await wrapper.find('input[name="confirmPassword"]').setValue("secret1");
+    await wrapper.find('input[name="password"]').setValue("Correct-Horse-47");
+    await wrapper.find('input[name="confirmPassword"]').setValue("Correct-Horse-47");
     await wrapper.find('input[name="email"]').setValue("alice@example.com");
     await wrapper.find('input[name="accepted"]').setValue(true);
     await wrapper.find("form").trigger("submit");
@@ -61,7 +71,7 @@ describe("public invitation registration", () => {
 
     expect(registerInvitation).toHaveBeenCalledWith("ABCD2345", {
       username: "alice",
-      password: "secret1",
+      password: "Correct-Horse-47",
       email: "alice@example.com",
       termsVersion: "2026-07-19",
       privacyVersion: "2026-07-19"
@@ -74,7 +84,7 @@ describe("public invitation registration", () => {
     const { wrapper } = await mountRegister();
 
     await wrapper.find('input[name="username"]').setValue("alice");
-    await wrapper.find('input[name="password"]').setValue("secret1");
+    await wrapper.find('input[name="password"]').setValue("Correct-Horse-47");
     await wrapper.find('input[name="confirmPassword"]').setValue("different");
     await wrapper.find("form").trigger("submit");
     await flushPromises();

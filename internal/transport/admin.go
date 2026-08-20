@@ -13,22 +13,36 @@ import (
 // adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
 // handler 的逻辑（部分内联 SQL + 已搬 repo），输出强类型 DTO、错误 problem+json。
 type adminHandlers struct {
-	pool       *pgxpool.Pool
-	tenantRepo *tenantpg.TenantRepository
-	systemRepo *systempg.SystemRepository
-	deduction  *billingsvc.DeductionService
-	blacklist  *auth.BlacklistService
-	log        *zap.Logger
+	pool        *pgxpool.Pool
+	tenantRepo  *tenantpg.TenantRepository
+	systemRepo  *systempg.SystemRepository
+	deduction   *billingsvc.DeductionService
+	blacklist   *auth.BlacklistService
+	activations *auth.ActivationService
+	log         *zap.Logger
+}
+
+type activationCredentialOutput struct {
+	Body struct {
+		ActivationToken     string `json:"activationToken"`
+		ActivationExpiresIn int64  `json:"activationExpiresIn"`
+	}
+}
+
+func setActivationOutput(out *activationCredentialOutput, result auth.ActivationResult) {
+	out.Body.ActivationToken = result.Token
+	out.Body.ActivationExpiresIn = result.ExpiresIn
 }
 
 func newAdminHandlers(d Deps) *adminHandlers {
 	return &adminHandlers{
-		pool:       d.Pool,
-		tenantRepo: tenantpg.NewTenantRepository(d.Pool),
-		systemRepo: systempg.NewSystemRepository(d.Pool),
-		deduction:  d.Deduction,
-		blacklist:  d.Blacklist,
-		log:        d.Logger,
+		pool:        d.Pool,
+		tenantRepo:  tenantpg.NewTenantRepository(d.Pool),
+		systemRepo:  systempg.NewSystemRepository(d.Pool),
+		deduction:   d.Deduction,
+		blacklist:   d.Blacklist,
+		activations: d.Activations,
+		log:         d.Logger,
 	}
 }
 

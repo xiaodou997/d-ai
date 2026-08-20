@@ -64,6 +64,7 @@ export interface TenantEndUserItem {
   nickname?: string;
   avatar?: string;
   status: number;
+  credentialState: "active" | "pending_activation";
   balanceUsd?: number;
   lastLoginTime?: number;
   createdTime?: number;
@@ -80,7 +81,8 @@ export interface CreateTenantEndUserOutputBody {
   userId: string;
   tenantId: string;
   username: string;
-  defaultPassword: string;
+  activationToken: string;
+  activationExpiresIn: number;
 }
 
 export interface TenantInvitationItem {

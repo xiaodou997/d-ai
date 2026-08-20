@@ -11,7 +11,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
@@ -22,19 +21,20 @@ import (
 // ---- DTO ----
 
 type endUserItem struct {
-	UserID        string  `json:"userId"`
-	TenantID      string  `json:"tenantId"`
-	Username      string  `json:"username"`
-	TenantName    string  `json:"tenantName,omitempty"`
-	Email         string  `json:"email,omitempty"`
-	Phone         string  `json:"phone,omitempty"`
-	InternalNote  string  `json:"internalNote,omitempty"`
-	Nickname      string  `json:"nickname,omitempty"`
-	Avatar        string  `json:"avatar,omitempty"`
-	Status        int     `json:"status"`
-	BalanceUSD    float64 `json:"balanceUsd"`
-	LastLoginTime *int64  `json:"lastLoginTime,omitempty"`
-	CreatedTime   int64   `json:"createdTime"`
+	UserID          string  `json:"userId"`
+	TenantID        string  `json:"tenantId"`
+	Username        string  `json:"username"`
+	TenantName      string  `json:"tenantName,omitempty"`
+	Email           string  `json:"email,omitempty"`
+	Phone           string  `json:"phone,omitempty"`
+	InternalNote    string  `json:"internalNote,omitempty"`
+	Nickname        string  `json:"nickname,omitempty"`
+	Avatar          string  `json:"avatar,omitempty"`
+	Status          int     `json:"status"`
+	CredentialState string  `json:"credentialState"`
+	BalanceUSD      float64 `json:"balanceUsd"`
+	LastLoginTime   *int64  `json:"lastLoginTime,omitempty"`
+	CreatedTime     int64   `json:"createdTime"`
 }
 
 type listEndUsersInput struct {
@@ -71,10 +71,11 @@ type updateEndUserInput struct {
 
 type createEndUserOutput struct {
 	Body struct {
-		UserID          string `json:"userId"`
-		TenantID        string `json:"tenantId"`
-		Username        string `json:"username"`
-		DefaultPassword string `json:"defaultPassword"`
+		UserID              string `json:"userId"`
+		TenantID            string `json:"tenantId"`
+		Username            string `json:"username"`
+		ActivationToken     string `json:"activationToken"`
+		ActivationExpiresIn int64  `json:"activationExpiresIn"`
 	}
 }
 
@@ -101,12 +102,9 @@ func registerAdminEndUsers(api huma.API, d Deps) {
 
 // checkUserBelongsToTenant 校验 userID 归属 callerTenantID（空=管理员跳过）。
 func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
-	if callerTenantID == "" {
-		return nil
-	}
 	var tenantID string
 	err := h.pool.QueryRow(ctx, `
-		SELECT tenant_id FROM iam_accounts
+		SELECT COALESCE(tenant_id, '') FROM iam_accounts
 		WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'
 	`, userID).Scan(&tenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -115,7 +113,7 @@ func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, ca
 	if err != nil {
 		return httpx.ErrInternal.WithCause(err)
 	}
-	if tenantID != callerTenantID {
+	if callerTenantID != "" && tenantID != callerTenantID {
 		return httpx.ErrForbidden.WithDetail("无权操作")
 	}
 	return nil
@@ -177,7 +175,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 	qargs := append(append([]any{}, args...), size, offset)
 	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
 		SELECT eu.user_id, eu.tenant_id, eu.username, eu.email, eu.phone, eu.internal_note, eu.nickname, eu.avatar,
-		       eu.status, eu.last_login_at, eu.created_at,
+		       eu.status, eu.credential_state, eu.last_login_at, eu.created_at,
 		       COALESCE(t.tenant_name, '') AS tenant_name,
 		       COALESCE((SELECT b.balance_micro FROM bill_accounts b WHERE b.account_id = eu.user_id), 0) AS credits
 		%s
@@ -194,15 +192,16 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 		var creditsMicro int64
 		var email, phone, nickname, avatar, tenantName *string
 		var internalNote string
-		var status string
+		var status, credentialState string
 		var lastLogin *time.Time
 		var createdAt time.Time
 		if err := rows.Scan(&it.UserID, &it.TenantID, &it.Username, &email, &phone, &internalNote, &nickname, &avatar,
-			&status, &lastLogin, &createdAt, &tenantName, &creditsMicro); err != nil {
+			&status, &credentialState, &lastLogin, &createdAt, &tenantName, &creditsMicro); err != nil {
 			continue
 		}
 		it.BalanceUSD = billingdomain.MicroToUSD(creditsMicro)
 		it.Status = adminUserStatusToInt(status)
+		it.CredentialState = credentialState
 		it.CreatedTime = millisFromTime(createdAt)
 		if tenantName != nil {
 			it.TenantName = *tenantName
@@ -245,16 +244,21 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	if exists > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	userID := "U_" + strings.ToUpper(uuid.NewString()[:24])
 	now := time.Now().UTC()
-	if _, err := h.pool.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, phone, internal_note, user_type, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 4, 'active', $8, $8)
-	`, userID, claims.TenantID, username, string(hash), in.Body.Email, in.Body.Phone, strings.TrimSpace(in.Body.InternalNote), now); err != nil {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, phone, internal_note, user_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'pending_activation', $5, $6, $7, 4, 'active', $8, $8)
+	`, userID, claims.TenantID, username, credential.PasswordHash, in.Body.Email, in.Body.Phone, strings.TrimSpace(in.Body.InternalNote), now); err != nil {
 		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
@@ -263,11 +267,18 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
+	if err := h.activations.Store(ctx, tx, userID, auth.ActivationPurposeAccount, credential); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
 	out := &createEndUserOutput{}
 	out.Body.UserID = userID
 	out.Body.TenantID = claims.TenantID
 	out.Body.Username = username
-	out.Body.DefaultPassword = "123456"
+	out.Body.ActivationToken = credential.Token
+	out.Body.ActivationExpiresIn = int64(time.Until(credential.ExpiresAt).Seconds())
 	return out, nil
 }
 
@@ -345,7 +356,7 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 	return out, nil
 }
 
-func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDInput) (*messageOutput, error) {
+func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
 	claims := userClaimsFromCtx(ctx)
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
@@ -357,19 +368,18 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 	if err := h.checkUserBelongsToTenant(ctx, in.ID, callerTenantID); err != nil {
 		return nil, err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+	result, err := h.activations.Reset(ctx, in.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
-	now := time.Now().UTC()
-	if _, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2 WHERE user_id = $3 AND user_type = 4`, string(hash), now, in.ID); err != nil {
+	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	if h.blacklist != nil {
 		_ = h.blacklist.LogoutUser(in.ID)
 	}
-	out := &messageOutput{}
-	out.Body.Message = "密码已重置为 123456"
+	out := &activationCredentialOutput{}
+	setActivationOutput(out, result)
 	return out, nil
 }
 

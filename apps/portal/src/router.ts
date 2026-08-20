@@ -42,6 +42,11 @@ export const routes: RouteRecordRaw[] = [
     meta: { public: true, title: "邀请注册" }
   },
   {
+    path: "/activate",
+    component: () => import("./views/ActivateAccountView.vue"),
+    meta: { public: true, title: "激活账号" }
+  },
+  {
     path: "/legal",
     component: LegalCenterLayout,
     meta: { public: true, title: "法律中心" },

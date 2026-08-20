@@ -181,7 +181,7 @@
               <el-input v-model="form.initEmail" placeholder="管理员邮箱（可选）" />
             </el-form-item>
           </div>
-          <p v-if="form.initUsername" class="text-xs text-amber-500 -mt-2 mb-4">初始密码为 <strong>123456</strong>，请提醒租户及时修改</p>
+          <p v-if="form.initUsername" class="tenants-form-note">创建后将生成初始管理员的一次性激活链接。</p>
         </template>
       </el-form>
       <template #footer>
@@ -212,6 +212,7 @@ import {
   type DsTableColumn
 } from '@/shared/ui'
 import { platformAdminApi } from '@/api/platformAdmin'
+import { showActivationCredential } from '@/platform/auth/activation'
 import type { TenantListItem } from '@/api/types/admin'
 import { formatDisplayUSD } from '@/shared/currency'
 
@@ -420,12 +421,16 @@ const handleSubmit = async () => {
           body.initUsername = form.initUsername
           if (form.initEmail) body.initEmail = form.initEmail
         }
-        const res: any = await platformAdminApi.createTenant(body)
-        if (res.initUsername) {
-          ElMessage({ type: 'success', message: `创建成功！初始管理员「${res.initUsername}」已创建，默认密码：123456`, duration: 6000 })
-        } else {
-          ElMessage.success('创建成功')
-        }
+        const res = await platformAdminApi.createTenant(body)
+        dialogVisible.value = false
+        void refresh()
+        if (res.initUsername && res.activationToken && res.activationExpiresIn) {
+          await showActivationCredential(
+            { activationToken: res.activationToken, activationExpiresIn: res.activationExpiresIn },
+            `初始管理员「${res.initUsername}」`
+          )
+        } else ElMessage.success('创建成功')
+        return
       }
       dialogVisible.value = false
       refresh()
@@ -454,6 +459,12 @@ const handleDelete = async (id: string) => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.tenants-form-note {
+  margin: -8px 0 16px;
+  color: var(--ds-muted);
+  font-size: 12px;
 }
 
 .tenants-search-input {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/config"
 	invitepkg "xiaodou/dai/internal/invite"
 	invitepg "xiaodou/dai/internal/invite/pg"
@@ -53,7 +54,7 @@ type publicRegistrationInput struct {
 	Code string `path:"code"`
 	Body struct {
 		Username       string  `json:"username"`
-		Password       string  `json:"password" minLength:"6"`
+		Password       string  `json:"password" minLength:"12" maxLength:"72"`
 		Email          *string `json:"email" required:"false"`
 		Phone          *string `json:"phone" required:"false"`
 		TermsVersion   string  `json:"termsVersion" minLength:"1"`
@@ -140,6 +141,8 @@ func (h *publicHandlers) registerInvitation(ctx context.Context, in *publicRegis
 			return nil, httpx.ErrBadRequest.WithDetail("邀请码格式无效")
 		case errors.Is(err, invitepkg.ErrLegalAcceptanceRequired):
 			return nil, httpx.ErrBadRequest.WithDetail("请同意服务条款和隐私政策")
+		case errors.Is(err, auth.ErrWeakPassword):
+			return nil, httpx.ErrBadRequest.WithDetail(auth.CurrentPasswordPolicy().Description)
 		case errors.Is(err, invitepg.ErrInvitationCodeNotFound):
 			return nil, httpx.ErrConflict.WithDetail("邀请码不存在")
 		case errors.Is(err, invitepkg.ErrInvitationCodeUnavailable):

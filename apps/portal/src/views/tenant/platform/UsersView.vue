@@ -50,7 +50,8 @@
           </DsEmpty>
         </template>
         <template #cell-status="{ row }">
-          <el-tooltip :content="row.status === 1 ? '点击停用用户' : '点击启用用户'" placement="top">
+          <DsTag v-if="row.credentialState === 'pending_activation'" tone="neutral">待激活</DsTag>
+          <el-tooltip v-else :content="row.status === 1 ? '点击停用用户' : '点击启用用户'" placement="top">
             <el-switch
               :model-value="row.status === 1"
               :loading="isStatusUpdating(row.userId)"
@@ -132,12 +133,7 @@
             placeholder="仅租户内部可见（可选）"
           />
         </el-form-item>
-        <el-alert
-          title="默认密码为 123456，创建后请通知终端用户登录后自行修改。"
-          type="warning"
-          :closable="false"
-          show-icon
-        />
+        <el-alert title="创建后将生成一次性激活链接。" type="info" :closable="false" show-icon />
       </el-form>
       <template #footer>
         <el-button @click="showCreateDialog = false">取消</el-button>
@@ -175,11 +171,13 @@ import {
   DsFilterField,
   DsPagination,
   DsTable,
+  DsTag,
   type DsTableColumn
 } from "@/shared/ui";
 
 import { platformTenantApi } from "@/api/platformTenant";
 import type { EndUserItem } from "@/api/types/platformTenant";
+import { showActivationCredential } from "@/platform/auth/activation";
 
 const columns: DsTableColumn[] = [
   { key: "userId", title: "用户 ID", width: 110, mono: true },
@@ -279,9 +277,9 @@ async function submitCreateUser() {
       phone: createForm.phone?.trim() || undefined,
       internalNote: createForm.internalNote.trim() || undefined
     });
-    ElMessage.success(`用户创建成功，默认密码 ${data?.defaultPassword || "123456"}`);
     showCreateDialog.value = false;
-    fetchUsers();
+    void fetchUsers();
+    await showActivationCredential(data, `用户「${createForm.username.trim()}」`);
   } catch (e: any) {
     ElMessage.error(e?.message || "创建失败");
   } finally {
@@ -365,13 +363,13 @@ function openGroupPolicy(row: EndUserItem) {
 
 async function handleResetPassword(row: EndUserItem) {
   try {
-    await ElMessageBox.confirm(`确定要将用户「${row.username}」的密码重置为 123456 吗？`, "确认重置密码", {
+    await ElMessageBox.confirm(`重置后「${row.username}」的现有会话将全部失效，账号需通过新链接重新激活。`, "确认重置密码", {
       confirmButtonText: "确认重置",
       cancelButtonText: "取消",
       type: "warning"
     });
-    await platformTenantApi.resetUserPassword(row.userId);
-    ElMessage.success("密码已重置为 123456");
+    const credential = await platformTenantApi.resetUserPassword(row.userId);
+    await showActivationCredential(credential, `用户「${row.username}」`);
   } catch (e: any) {
     if (e !== "cancel") ElMessage.error(e?.message || "操作失败");
   }

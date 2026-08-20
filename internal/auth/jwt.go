@@ -311,6 +311,7 @@ func (s *JWTService) validateAccessSession(claims *Claims) error {
 			  AND s.credential_version = $3
 			  AND a.credential_version = $3
 			  AND a.status = 'active'
+			  AND a.credential_state = 'active'
 			  AND (a.user_type < 3 OR t.status = 'active')
 		)
 	`, claims.SessionID, claims.UserID, claims.CredentialVersion).Scan(&valid)
