@@ -9,8 +9,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	"xiaodou/dai/libs/go/server"
-
 	announcementpkg "xiaodou/dai/internal/announcement"
 	"xiaodou/dai/internal/auth"
 	billingsvc "xiaodou/dai/internal/billing/service"
@@ -107,7 +105,6 @@ func Register(api huma.API, d Deps) {
 }
 
 func registerMeta(api huma.API, d Deps) {
-	server.Health(api, "dai", d.Version)
 	registerInfo(api, d.Version)
 	registerJWKS(api, d.JWT)
 }

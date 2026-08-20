@@ -21,18 +21,21 @@ func TestPortalHandlerServesSPAAndStaticAssets(t *testing.T) {
 		path        string
 		wantStatus  int
 		wantContent string
+		wantCache   string
 	}{
 		{
 			name:        "frontend route falls back to index",
 			path:        "/login",
 			wantStatus:  http.StatusOK,
 			wantContent: "D-AI Portal",
+			wantCache:   "no-store",
 		},
 		{
 			name:        "static asset is served directly",
 			path:        "/assets/app.js",
 			wantStatus:  http.StatusOK,
 			wantContent: "console.log('portal')",
+			wantCache:   "public, max-age=31536000, immutable",
 		},
 		{
 			name:       "unknown API is not handled as a frontend route",
@@ -53,6 +56,9 @@ func TestPortalHandlerServesSPAAndStaticAssets(t *testing.T) {
 			}
 			if tt.wantContent != "" && !strings.Contains(response.Body.String(), tt.wantContent) {
 				t.Fatalf("body = %q, want content %q", response.Body.String(), tt.wantContent)
+			}
+			if tt.wantCache != "" && response.Header().Get("Cache-Control") != tt.wantCache {
+				t.Fatalf("cache-control = %q, want %q", response.Header().Get("Cache-Control"), tt.wantCache)
 			}
 		})
 	}

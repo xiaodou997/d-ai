@@ -109,12 +109,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P0-08 补齐 HTTP 与浏览器安全基线
 
-- [ ] 增加 CSP、HSTS、`X-Content-Type-Options`、frame、referrer 和 permissions 策略。
-- [ ] 为静态资源、HTML、私有文件和 API 分别定义缓存策略。
-- [ ] `/metrics`、调试端点和管理探针放入独立管理监听地址或受认证保护。
-- [ ] 为普通 JSON API 设置统一请求体和 header 大小上限。
-- [ ] 保持 AI 流式响应需要的 `WriteTimeout=0`，但增加应用层空闲与总时限。
-- [ ] 增加安全头、缓存和超限响应测试。
+- [x] 增加 CSP、HSTS、`X-Content-Type-Options`、frame、referrer 和 permissions 策略。
+- [x] 为静态资源、HTML、私有文件和 API 分别定义缓存策略。
+- [x] `/metrics`、调试端点和管理探针移到独立的 loopback 管理监听地址。
+- [x] 为普通 JSON API 设置统一请求体和 header 大小上限。
+- [x] 保持 AI 流式响应需要的 `WriteTimeout=0`，并由应用层执行首字节、空闲间隔与总时限。
+- [x] 增加安全头、缓存和超限响应测试。
 
 ## P1：领域边界与后端结构
 
@@ -377,3 +377,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 验证：`go test ./...` 的非网络测试通过；完整测试在受限沙箱中仅因 httptest/miniredis 无法绑定本机端口而失败；`go vet ./...`、`git diff --check` 和 `bun run ensure:api` 作为提交前检查。
 - 遗留风险：当前 keyring 由部署 Secret Manager 注入，尚未直接集成云 KMS/Vault；旧密钥必须由运维在迁移宽限期内保留。
 - 下一候选项：`P0-08 补齐 HTTP 与浏览器安全基线`。
+
+### P0-08（2026-08-20）
+
+- 状态：实现完成并通过回归。
+- 响应头：统一注入 CSP、HSTS（生产）、`nosniff`、DENY frame、Referrer-Policy、Permissions-Policy 和 COOP。
+- 缓存：Portal HTML 使用 `no-store`，带 hash 的 `/assets/` 使用 immutable 长缓存，其他嵌入静态资源限制为 24 小时；API、runtime、OpenAPI 和探针默认 `no-store`，私有文件保持 `private, no-store`，显式公共 favicon 可覆盖缓存策略。
+- 管理面：`/metrics`、`/ready` 和管理探针从业务监听移到 `server.management_addr`（默认 `127.0.0.1:19642`）；Huma `/docs` 与实时 OpenAPI 调试路由默认关闭；生产 Compose 健康检查改走管理监听，业务监听只保留存活 `/health`。
+- 限制与超时：业务 HTTP Server 设置 32 KiB header 上限和 64 MiB 全局 body 上限；AI `WriteTimeout=0` 保留，由既有 serving deadline controller 执行首字节、空闲间隔和总时长限制。
+- 验证：新增安全头、缓存覆盖、声明 body 超限和 chunked body 上限测试；`go vet ./...`、`bun run ensure:api` 和 OpenAPI/Portal 生成链通过。
+- 遗留风险：管理监听若被部署显式改为非 loopback，必须由私有网络或认证反向代理保护；浏览器级 CSP/HSTS 仍需在真实 HTTPS 域名上做一次端到端验收。

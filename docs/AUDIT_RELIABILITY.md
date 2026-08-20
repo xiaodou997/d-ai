@@ -11,7 +11,7 @@ worker 使用 `FOR UPDATE SKIP LOCKED` 领取 `pending` 行，并写入租约标
 
 媒体或 payload 写入失败会保留 `last_error`，按指数退避重新进入 `pending`；达到最大
 尝试次数后进入 `dead`，不会静默丢失。队列待处理量、最老待处理时长、失败和 dead 数量
-通过 `/metrics` 暴露，dead 行应由运维确认根因后再人工重置为 `pending`。
+通过管理监听的 `/metrics` 暴露（默认 `http://127.0.0.1:19642/metrics`），dead 行应由运维确认根因后再人工重置为 `pending`。
 
 schema 14 的升级脚本是
 `internal/db/changes/0014_20260820_durable_audit_inbox.sql`；生产发布必须先完成该

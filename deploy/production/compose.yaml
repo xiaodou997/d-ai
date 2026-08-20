@@ -25,7 +25,7 @@ services:
     networks:
       - dev-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:19641/ready"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:19642/ready"]
       interval: 5s
       timeout: 3s
       retries: 30

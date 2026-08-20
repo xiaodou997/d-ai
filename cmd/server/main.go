@@ -565,9 +565,11 @@ func main() {
 	}
 
 	router, api := server.New(server.Options{
-		Title:   "D-AI",
-		Version: version,
-		Logger:  appLogger,
+		Title:        "D-AI",
+		Version:      version,
+		Logger:       appLogger,
+		HSTS:         cfg.App.Env == "production",
+		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
 
 	transport.Register(api, deps)
@@ -578,17 +580,15 @@ func main() {
 	runtimeGateway.Routes(router)
 	mgmtConsole.Routes(router)
 
-	// Prometheus 抓取端点。埋点一直都在，但此前没有挂上任何路由，等于没有。
-	// 计费结算的健康度（bill_charge_outbox 积压/失败/最老未结算时长）也从这里出。
-	router.Handle("/metrics", aimetrics.Handler())
-
 	// 健康检查
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version})
 	})
-	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+	readyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
 		if err := pool.Ping(r.Context()); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "component": "postgres"})
@@ -601,6 +601,16 @@ func main() {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 	})
+	router.Handle("/health", healthHandler)
+
+	// Prometheus and management probes stay off the public business listener.
+	// The default management address is loopback; deployments that need a
+	// remote scraper must expose this listener through a private management
+	// network or an authenticated proxy.
+	managementMux := http.NewServeMux()
+	managementMux.Handle("/metrics", aimetrics.Handler())
+	managementMux.Handle("/health", healthHandler)
+	managementMux.Handle("/ready", readyHandler)
 
 	// ──────────────────────────────────────────────────────
 	// 5. 前端静态文件 embed
@@ -623,8 +633,31 @@ func main() {
 		Handler:           weborigin.Middleware(router, originResolver),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
-		WriteTimeout:      0,
-		IdleTimeout:       time.Duration(cfg.Server.IdleTimeout) * time.Second,
+		// Streaming AI responses use application-level response-header, first-byte,
+		// idle-gap and max-duration deadlines in serving; a server write timeout
+		// would terminate healthy long-lived streams prematurely.
+		WriteTimeout:   0,
+		IdleTimeout:    time.Duration(cfg.Server.IdleTimeout) * time.Second,
+		MaxHeaderBytes: cfg.Server.MaxHeaderBytes,
+	}
+	var managementServer *http.Server
+	if managementAddr := strings.TrimSpace(cfg.Server.ManagementAddr); managementAddr != "" {
+		managementServer = &http.Server{
+			Addr:              managementAddr,
+			Handler:           server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux))),
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       30 * time.Second,
+			MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,
+		}
+		go func() {
+			appLogger.Info("D-AI management listener started", zap.String("addr", managementAddr))
+			if err := managementServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				appLogger.Error("management listener failed", zap.Error(err))
+				stop()
+			}
+		}()
 	}
 
 	go func() {
@@ -639,6 +672,9 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+	if managementServer != nil {
+		_ = managementServer.Shutdown(shutdownCtx)
+	}
 	asyncTasks.Stop(shutdownCtx)
 	_ = shutdownTracing(shutdownCtx)
 	appLogger.Info("server shutdown complete")
@@ -652,6 +688,7 @@ func newPortalHandler(dist fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		filePath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if info, err := fs.Stat(dist, filePath); err == nil && !info.IsDir() {
+			setPortalCachePolicy(w, r.URL.Path, filePath)
 			fileServer.ServeHTTP(w, r)
 			return
 		}
@@ -664,8 +701,23 @@ func newPortalHandler(dist fs.FS) http.Handler {
 		request := r.Clone(r.Context())
 		request.URL.Path = "/"
 		request.URL.RawPath = ""
+		w.Header().Set("Cache-Control", "no-store")
 		fileServer.ServeHTTP(w, request)
 	})
+}
+
+func setPortalCachePolicy(w http.ResponseWriter, requestPath, filePath string) {
+	if filePath == "index.html" || requestPath == "/" {
+		w.Header().Set("Cache-Control", "no-store")
+		return
+	}
+	if strings.HasPrefix(requestPath, "/assets/") {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		return
+	}
+	// Brand images and other embedded static files are public but not assumed
+	// content-hashed, so keep their cache lifetime bounded.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 }
 
 func isBackendPath(requestPath string) bool {
@@ -678,6 +730,7 @@ func isBackendPath(requestPath string) bool {
 		"/assets",
 		"/docs",
 		"/openapi.json",
+		"/healthz",
 		"/health",
 		"/ready",
 		"/metrics",

@@ -53,11 +53,20 @@ type Options struct {
 	Logger *zap.Logger
 	// CORSOrigins 是允许的跨域来源；为空表示不挂 CORS 中间件。
 	CORSOrigins []string
+	// HSTS enables Strict-Transport-Security for deployments whose public
+	// origin is HTTPS. It must remain disabled for local HTTP development.
+	HSTS bool
+	// MaxBodyBytes is the global upper bound for request bodies. Individual
+	// upload handlers may apply a smaller route-specific limit.
+	MaxBodyBytes int64
+	// ExposeDocs enables Huma's interactive docs and live OpenAPI routes. The
+	// production business listener keeps these debug surfaces disabled.
+	ExposeDocs bool
 }
 
 // New 构造一个挂好统一中间件链的 chi 路由与 Huma API。
 //
-// 中间件顺序（自外向内）：RequestID → CORS → 请求日志 → Recoverer。
+// 中间件顺序（自外向内）：RequestID → CORS → 安全头/缓存/大小限制 → 请求日志 → Recoverer。
 // 这样跨域头与 request_id 对所有响应（含 panic 的 500）均可用。
 func New(opts Options) (*chi.Mux, huma.API) {
 	r := chi.NewMux()
@@ -73,12 +82,19 @@ func New(opts Options) (*chi.Mux, huma.API) {
 			MaxAge:           300,
 		}))
 	}
+	r.Use(SecurityHeaders(opts.HSTS))
+	r.Use(NoStoreAPI)
+	r.Use(RequestBodyLimit(opts.MaxBodyBytes))
 	if opts.Logger != nil {
 		r.Use(logger.ChiRequestLogger(opts.Logger))
 	}
 	r.Use(Recoverer(opts.Logger))
 
 	cfg := huma.DefaultConfig(opts.Title, opts.Version)
+	if !opts.ExposeDocs {
+		cfg.DocsPath = ""
+		cfg.OpenAPIPath = ""
+	}
 	cfg.Transformers = append([]huma.Transformer{recordErrorResponse}, cfg.Transformers...)
 	api := humachi.New(r, cfg)
 	return r, api

@@ -4487,26 +4487,6 @@ export interface paths {
         patch: operations["admin-update-end-user-status"];
         trace?: never;
     };
-    "/healthz": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 健康检查
-         * @description 返回服务存活状态，用于探针与冒烟。
-         */
-        get: operations["health-check"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/public/jwks.json": {
         parameters: {
             query?: never;
@@ -6718,23 +6698,6 @@ export interface components {
             items: components["schemas"]["GroupDTO"][] | null;
             /** Format: int64 */
             total: number;
-        };
-        HealthOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/HealthOutputBody.json
-             */
-            readonly $schema?: string;
-            /** @description 服务名 */
-            service: string;
-            /**
-             * @description 固定为 ok
-             * @example ok
-             */
-            status: string;
-            /** @description 服务版本 */
-            version: string;
         };
         HealthRecordDTO: {
             /**
@@ -21603,35 +21566,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "health-check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HealthOutputBody"];
                 };
             };
             /** @description Error */

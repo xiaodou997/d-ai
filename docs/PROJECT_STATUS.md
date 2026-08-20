@@ -42,7 +42,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 ### P1：发布门禁
 
 - 将 `make openapi`、`bun run ensure:api`、`bun run typecheck`、`bun run test`、`bun run build:frontend` 纳入 CI。
-- 增加 `make build` 后的单二进制 `/health`、`/ready`、首页和 `/api/v1/info` smoke。
+- 增加 `make build` 后的单二进制业务 `/health`、管理 `/ready`/`/metrics`、首页和 `/api/v1/info` smoke。
 - 补充应用 Dockerfile、release 构建说明和跨平台构建矩阵。
 
 ### P1：测试环境统一
@@ -59,7 +59,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 | `bun run test` | 55 个测试文件、191 个测试通过 |
 | `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
 | `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
-| `make dev`、后端 health/ready/info | 旧本地数据卷需先 `make db-recreate` 后验证 |
+| `make dev`、后端 health/management-ready/info | 旧本地数据卷需先 `make db-recreate` 后验证 |
 | `go test ./...` | 通过 |
 
 ## 后续顺序

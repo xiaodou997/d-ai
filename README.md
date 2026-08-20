@@ -89,7 +89,7 @@ make db-recreate
 开发阶段使用过旧 schema 版本 `2` 到 `9` 的本地数据卷必须执行一次
 `make db-recreate`；项目不保留这些首发前版本的升级链。
 
-后端可用 `curl http://localhost:19641/health` 和 `curl http://localhost:19641/ready` 检查。Portal 开发服务器使用同一后端的 Vite 代理。
+后端业务监听可用 `curl http://localhost:19641/health` 检查存活；`/ready` 和 `/metrics` 位于仅绑定回环的管理监听 `http://localhost:19642`。Portal 开发服务器使用同一后端的 Vite 代理。
 本地开发管理员和数据库维护规则见 [`docs/DATABASE.md`](docs/DATABASE.md)。
 
 ## 测试

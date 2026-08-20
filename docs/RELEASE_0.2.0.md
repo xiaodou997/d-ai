@@ -78,7 +78,7 @@ ORDER BY 2, 1;
 
 - [ ] **对账不一致就地停止，走「窗口内回滚」，不要放流量进来**
 - [ ] 启动 0.2.0，确认日志出现 `database schema verified {"version": 3}`
-- [ ] `curl /health` 与 `curl /ready` 均为 `ok`
+- [ ] 业务监听 `curl /health` 为 `ok`；管理监听 `curl http://127.0.0.1:19642/ready` 为 `ok`
 
 ---
 
@@ -87,7 +87,7 @@ ORDER BY 2, 1;
 结算改为异步后，**余额前进完全依赖后台 outbox 消费者**。它停摆时用量照常记录、
 请求照常放行，而余额不再变化——所以这几项必须确认：
 
-- [ ] `curl /metrics | grep dai_billing_outbox`
+- [ ] `curl http://127.0.0.1:19642/metrics | grep dai_billing_outbox`
 
   | 指标 | 期望 |
   | --- | --- |

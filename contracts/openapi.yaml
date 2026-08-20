@@ -4000,32 +4000,6 @@ components:
         - items
         - total
       type: object
-    HealthOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/HealthOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        service:
-          description: 服务名
-          type: string
-        status:
-          description: 固定为 ok
-          examples:
-            - ok
-          type: string
-        version:
-          description: 服务版本
-          type: string
-      required:
-        - status
-        - service
-        - version
-      type: object
     HealthRecordDTO:
       additionalProperties: false
       properties:
@@ -21636,26 +21610,6 @@ paths:
       summary: 启用/停用终端用户
       tags:
         - admin-end-users
-  /healthz:
-    get:
-      description: 返回服务存活状态，用于探针与冒烟。
-      operationId: health-check
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 健康检查
-      tags:
-        - meta
   /public/jwks.json:
     get:
       operationId: get-jwks-public

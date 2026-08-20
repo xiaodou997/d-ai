@@ -17,6 +17,24 @@ func TestLoadUsesUnifiedSecretAndStorageEnvironment(t *testing.T) {
 	if cfg.Storage.DataDir != "/data" {
 		t.Fatalf("data dir = %q, want /data", cfg.Storage.DataDir)
 	}
+	if cfg.Server.MaxBodyBytes != 64<<20 || cfg.Server.MaxHeaderBytes != 32<<10 {
+		t.Fatalf("HTTP limits = body:%d header:%d", cfg.Server.MaxBodyBytes, cfg.Server.MaxHeaderBytes)
+	}
+}
+
+func TestLoadParsesManagementListenerAndHTTPLimits(t *testing.T) {
+	setRequiredEnvironment(t, "development")
+	t.Setenv("DAI_SERVER_MANAGEMENT_ADDR", "127.0.0.1:19699")
+	t.Setenv("DAI_SERVER_MAX_BODY_BYTES", "1048576")
+	t.Setenv("DAI_SERVER_MAX_HEADER_BYTES", "8192")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Server.ManagementAddr != "127.0.0.1:19699" || cfg.Server.MaxBodyBytes != 1048576 || cfg.Server.MaxHeaderBytes != 8192 {
+		t.Fatalf("server security config = %+v", cfg.Server)
+	}
 }
 
 func TestLoadParsesVersionedSecretKeyring(t *testing.T) {

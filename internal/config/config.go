@@ -52,9 +52,12 @@ type AppConfig struct {
 }
 
 type ServerConfig struct {
-	Addr              string   `mapstructure:"addr"` // e.g. ":19641"
+	Addr              string   `mapstructure:"addr"`            // e.g. ":19641"
+	ManagementAddr    string   `mapstructure:"management_addr"` // metrics/probes listener, loopback by default
 	ReadTimeout       int      `mapstructure:"read_timeout"`
 	IdleTimeout       int      `mapstructure:"idle_timeout"`
+	MaxBodyBytes      int64    `mapstructure:"max_body_bytes"`
+	MaxHeaderBytes    int      `mapstructure:"max_header_bytes"`
 	PublicBaseURL     string   `mapstructure:"public_base_url"`
 	TrustedProxyCIDRs []string `mapstructure:"trusted_proxy_cidrs"`
 }
@@ -147,8 +150,11 @@ func Load() (*Config, error) {
 	// 默认值 —— 通用
 	v.SetDefault("app.env", "development")
 	v.SetDefault("server.addr", ":19641")
+	v.SetDefault("server.management_addr", "127.0.0.1:19642")
 	v.SetDefault("server.read_timeout", 30)
 	v.SetDefault("server.idle_timeout", 60)
+	v.SetDefault("server.max_body_bytes", int64(64<<20))
+	v.SetDefault("server.max_header_bytes", 32<<10)
 	v.SetDefault("server.public_base_url", "")
 	v.SetDefault("server.trusted_proxy_cidrs", []string{})
 
@@ -244,6 +250,9 @@ func bindEnvs(v *viper.Viper) {
 		// 通用
 		"DAI_APP_ENV":                               "app.env",
 		"DAI_SERVER_ADDR":                           "server.addr",
+		"DAI_SERVER_MANAGEMENT_ADDR":                "server.management_addr",
+		"DAI_SERVER_MAX_BODY_BYTES":                 "server.max_body_bytes",
+		"DAI_SERVER_MAX_HEADER_BYTES":               "server.max_header_bytes",
 		"DAI_PUBLIC_BASE_URL":                       "server.public_base_url",
 		"DAI_TRUSTED_PROXY_CIDRS":                   "server.trusted_proxy_cidrs",
 		"DAI_DATABASE_URL":                          "database.url",
@@ -301,6 +310,9 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("DAI_SERVER_ADDR"); v != "" {
 		cfg.Server.Addr = v
+	}
+	if v, ok := os.LookupEnv("DAI_SERVER_MANAGEMENT_ADDR"); ok {
+		cfg.Server.ManagementAddr = strings.TrimSpace(v)
 	}
 	if v := os.Getenv("DAI_PUBLIC_BASE_URL"); v != "" {
 		cfg.Server.PublicBaseURL = v
@@ -369,6 +381,15 @@ func validate(cfg *Config) error {
 	}
 	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Server.PublicBaseURL) == "" {
 		return fmt.Errorf("server.public_base_url is required in production")
+	}
+	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Server.ManagementAddr) == "" {
+		return fmt.Errorf("server.management_addr is required in production")
+	}
+	if cfg.Server.MaxBodyBytes <= 0 {
+		return fmt.Errorf("server.max_body_bytes must be positive")
+	}
+	if cfg.Server.MaxHeaderBytes < 1024 {
+		return fmt.Errorf("server.max_header_bytes must be at least 1024")
 	}
 	normalizedOrigin, err := weborigin.NormalizePublicOrigin(cfg.Server.PublicBaseURL)
 	if err != nil {

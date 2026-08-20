@@ -7,8 +7,12 @@ app:
 
 server:
   addr: ':19641'
+  # metrics / readiness management listener；默认仅绑定回环地址，不暴露到公网
+  management_addr: '127.0.0.1:19642'
   read_timeout: 30
   idle_timeout: 60
+  max_body_bytes: 67108864
+  max_header_bytes: 32768
   # 生产必须配置可信的浏览器/链接公共 origin；不要从 Host 头推导公网 URL。
   public_base_url: ''
   # 仅列出实际反向代理的来源网段；空值表示不信任任何 forwarded 头。
