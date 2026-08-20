@@ -35,7 +35,7 @@ export function createStandardPortalAuthStore(options: CreateStandardPortalAuthS
     storagePrefix: options.env.storagePrefix,
     expectedUserTypes: options.expectedUserTypes,
     login: (username, password) => authApi.login(username, password),
-    refreshToken: (refreshToken) => authApi.refreshToken(refreshToken),
+    refreshToken: () => authApi.refreshToken(),
     verifyMFA: (challengeToken, code) => authApi.verifyMFA(challengeToken, code),
     logout: () => authApi.logout(),
     getCurrentUser: () => authApi.getCurrentUser()

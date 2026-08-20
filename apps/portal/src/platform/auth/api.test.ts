@@ -11,7 +11,6 @@ describe("unified Portal password login", () => {
       new Response(
         JSON.stringify({
           accessToken: "access-token",
-          refreshToken: "refresh-token",
           expiresIn: 3600,
           refreshExpiresIn: 604800
         }),
@@ -49,10 +48,11 @@ describe("unified Portal password login", () => {
       baseUrl: ""
     });
 
-    await api.refreshToken("refresh-token");
+    await api.refreshToken();
 
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe("/api/auth/refresh");
-    expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-token" });
+    expect(init?.body).toBeUndefined();
+    expect(init?.credentials).toBe("include");
   });
 });

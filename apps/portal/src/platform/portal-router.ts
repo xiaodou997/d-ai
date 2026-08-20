@@ -67,9 +67,6 @@ export function attachPortalAuthGuard(router: PortalRouterLike, options: PortalA
 
     const authStore = options.useAuthStore();
     authStore.init();
-    if (!authStore.accessToken) {
-      return redirectToLogin(to.fullPath);
-    }
 
     try {
       await authStore.ensureSession();

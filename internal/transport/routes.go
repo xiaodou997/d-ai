@@ -49,6 +49,9 @@ type Deps struct {
 	Pool    *pgxpool.Pool
 	Redis   *redis.Client
 	Logger  *zap.Logger
+	// SecureCookies enables the Secure attribute for browser session cookies.
+	// Development HTTP deployments may disable it; production wiring always enables it.
+	SecureCookies bool
 
 	// 平台身份与计费域
 	JWT           *auth.JWTService

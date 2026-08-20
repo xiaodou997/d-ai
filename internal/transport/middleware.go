@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -37,6 +38,34 @@ func requestClientIP(ctx context.Context) string {
 		return value
 	}
 	return "unknown"
+}
+
+// requireSameOrigin protects cookie-bearing state changes from cross-site
+// requests. Requests without Origin/Referer are kept compatible with native
+// API clients; browser requests that provide either header must match Host.
+func requireSameOrigin(api huma.API) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		if !sameOriginMatches(ctx.Header("Origin"), ctx.Header("Referer"), ctx.Host(), ctx.TLS() != nil) {
+			_ = huma.WriteErr(api, ctx, http.StatusForbidden, "请求来源不受信任")
+			return
+		}
+		next(ctx)
+	}
+}
+
+func sameOriginMatches(originHeader, refererHeader, host string, tls bool) bool {
+	origin := strings.TrimSpace(originHeader)
+	if origin == "" {
+		origin = strings.TrimSpace(refererHeader)
+	}
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" || parsed.User != nil || !strings.EqualFold(parsed.Host, host) {
+		return false
+	}
+	return !tls || parsed.Scheme == "https"
 }
 
 func requireRecentAuth(api huma.API, recent *auth.RecentAuthService) func(huma.Context, func(huma.Context)) {

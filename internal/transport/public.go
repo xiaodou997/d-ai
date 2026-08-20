@@ -89,6 +89,7 @@ func registerPublic(api huma.API, d Deps) {
 		Summary:       "通过邀请注册链接注册终端用户",
 		Tags:          []string{"public"},
 		DefaultStatus: http.StatusCreated,
+		Middlewares:   huma.Middlewares{requireSameOrigin(api)},
 	}, h.registerInvitation)
 }
 

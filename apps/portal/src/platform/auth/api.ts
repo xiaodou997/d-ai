@@ -2,7 +2,6 @@ import type { RequestAdapter } from "@/api";
 
 export interface AuthTokenResponse {
   accessToken: string;
-  refreshToken?: string;
   expiresIn: number;
   refreshExpiresIn: number;
   mfaRequired?: boolean;
@@ -41,10 +40,8 @@ export function createPortalAuthApi(options: CreateAuthApiOptions) {
         password
       });
     },
-    async refreshToken(refreshToken: string): Promise<AuthTokenResponse> {
-      return requestAuth(options, "/api/auth/refresh", {
-        refreshToken
-      });
+    async refreshToken(): Promise<AuthTokenResponse> {
+      return requestAuth(options, "/api/auth/refresh");
     },
     async verifyMFA(challengeToken: string, code: string): Promise<AuthTokenResponse> {
       return requestAuth(options, "/api/auth/mfa/verify", {
@@ -77,14 +74,15 @@ function authEndpoint(baseUrl: string, path: string): string {
 async function requestAuth(
   options: CreateAuthApiOptions,
   path: string,
-  body: Record<string, string>
+  body?: Record<string, string>
 ): Promise<AuthTokenResponse> {
   const response = await fetch(authEndpoint(options.baseUrl, path), {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(body)
+    credentials: "include",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
 
   if (!response.ok) {

@@ -74,12 +74,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P0-04 改造浏览器 Token 存储
 
-- [ ] Access Token 只保存在内存，不写入 `localStorage` 或 `sessionStorage`。
-- [ ] Refresh Token 改为 `HttpOnly`、`Secure`、`SameSite` Cookie。
-- [ ] 明确 Cookie path、domain、过期和清除行为。
-- [ ] 对状态变更请求加入 CSRF 防护或严格同源校验。
-- [ ] 处理多标签页登录、刷新、登出和 session 失效同步。
-- [ ] 修正法律与隐私说明，使其与实际认证机制一致。
+- [x] Access Token 只保存在内存，不写入 `localStorage` 或 `sessionStorage`。
+- [x] Refresh Token 改为 `HttpOnly`、`Secure`、`SameSite` Cookie。
+- [x] 明确 Cookie path、domain、过期和清除行为。
+- [x] 对状态变更请求加入 CSRF 防护或严格同源校验。
+- [x] 处理多标签页登录、刷新、登出和 session 失效同步。
+- [x] 修正法律与隐私说明，使其与实际认证机制一致。
 
 ### P0-05 建立可信代理和公共 URL 边界
 
@@ -291,7 +291,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：63 个测试文件、211 个测试通过
+- [x] `bun run test`：64 个测试文件、214 个测试通过
 - [x] `bun run ensure:api`
 - [ ] `staticcheck ./...`：当前存在潜在 nil dereference、无效赋值和遗留死代码
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
@@ -308,7 +308,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 变更：schema 11 增加服务端 session family、Refresh Token 哈希和凭证版本；刷新采用事务锁与单次轮换，重放撤销整个 family；Access Token 默认 15 分钟并实时校验会话；登出、改密、重置、账号/租户状态和删除均纳入撤销链路。
 - 契约：更新 OpenAPI、Portal 生成类型和 `refreshExpiresIn`；新增 `docs/AUTHENTICATION.md`。
 - 验证：`go test ./...`、`go vet ./...`、`bun run test`、`bun run typecheck`、`bun run ensure:api`。
-- 遗留风险：浏览器仍在 `localStorage` 保存 Token，按 `P0-04` 迁移 HttpOnly Cookie；Access 会话校验当前直接查询 PostgreSQL，后续可在保持撤销正确性的前提下增加短 TTL 缓存。
+- 遗留风险：Access 会话校验当前直接查询 PostgreSQL，后续可在保持撤销正确性的前提下增加短 TTL 缓存。
 - 下一候选项：`P0-02 删除固定默认密码和弱密码流程`。
 
 ### P0-02（2026-08-20）
@@ -331,3 +331,15 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 验证：新增限速渐进退避、多实例共享 Redis、近期认证过期、Redis 故障 fail-closed、TOTP 时间窗口、并发挑战消费和 schema 13 迁移测试；`go test ./...`、`go vet ./...`、`bun run test`（63 个文件/211 个测试）、`bun run typecheck`、`bun run build:frontend`、`bun run ensure:api` 均通过。
 - 遗留风险：可信代理客户端 IP 解析仍按 `P0-05` 独立收紧；恢复码/硬件 WebAuthn 作为后续增强，生产管理员应在启用 TOTP 后保存组织级离线恢复流程。
 - 下一候选项：`P0-04 改造浏览器 Token 存储`。
+
+### P0-04（2026-08-20）
+
+- 状态：完成并通过验收。
+- 存储：Access Token 仅驻留当前标签页内存；Refresh Token 不再进入 JSON 响应、Web Storage 或 JavaScript 状态，改由 `dai_refresh_token` HttpOnly Cookie 携带。
+- Cookie：固定 `Path=/api/auth`、host-only（不设置 `Domain`）、`SameSite=Strict`；生产环境启用 `Secure`，刷新轮换同步更新 `Max-Age/Expires`，登出使用同属性立即清除。
+- CSRF：登录、刷新、MFA 验证、激活和登出执行 Origin/Referer 与 Host 校验；无来源头的原生 API 客户端保持兼容。
+- 多标签页：使用 Web Locks API 或带租约的 localStorage 锁串行化 Refresh Token 轮换；通过 userInfo storage 事件同步登录、登出和 session 失效。
+- 契约与说明：OpenAPI 增加 Cookie 参数和 `Set-Cookie` 响应头；Portal Cookie 说明、认证文档和刷新页面流程同步更新。
+- 验证：新增 Cookie 属性、同源校验、刷新 Cookie 契约和 Portal 认证 Store 回归测试；`go test ./...`、`go vet ./...`、`bun run test`（64 个文件/214 个测试）、`bun run typecheck`、`bun run build:frontend`、`bun run ensure:api` 均通过。
+- 遗留风险：生产环境仍需在可信代理边界（`P0-05`）完成后，将同源校验与公共 origin 配置统一收紧；浏览器级端到端测试尚未建立。
+- 下一候选项：`P0-05 建立可信代理和公共 URL 边界`。

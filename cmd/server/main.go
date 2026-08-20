@@ -500,6 +500,7 @@ func main() {
 		Pool:          pool,
 		Redis:         redisClient,
 		Logger:        appLogger,
+		SecureCookies: cfg.App.Env == "production",
 		JWT:           jwtSvc,
 		Sessions:      sessionSvc,
 		Activations:   activationSvc,

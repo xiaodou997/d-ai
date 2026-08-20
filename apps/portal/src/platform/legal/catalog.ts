@@ -95,14 +95,14 @@ export const legalDocuments: readonly LegalDocument[] = [
   {
     id: "cookies",
     title: "Cookie 说明",
-    summary: "说明跨子域单点登录所需 Cookie 的用途与控制方式。",
+    summary: "说明必要会话 Cookie 的用途与控制方式。",
     version: DOCUMENT_VERSION,
     effectiveDate: "2026-07-19",
     sections: [
       {
         heading: "必要 Cookie",
         paragraphs: [
-          "平台使用必要的会话 Cookie 支持管理员、租户和终端用户在各自门户中的登录、授权回跳和登出。该 Cookie 采用 HttpOnly、Secure（生产环境）和 SameSite 等安全属性，并按会话配置自动失效。",
+          "平台使用必要的会话 Cookie 支持管理员、租户和终端用户登录、刷新会话和登出。Refresh Token Cookie 仅限当前站点的 /api/auth 路径，采用 HttpOnly、Secure（生产环境）和 SameSite=Strict 等安全属性，并按 session family 剩余寿命自动失效。Access Token 只保存在当前页面内存中。",
         ],
       },
       {

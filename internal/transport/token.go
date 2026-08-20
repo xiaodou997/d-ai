@@ -3,7 +3,9 @@ package transport
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5/middleware"
@@ -17,7 +19,6 @@ import (
 
 type authTokenResponse struct {
 	AccessToken       string `json:"accessToken"`
-	RefreshToken      string `json:"refreshToken,omitempty"`
 	ExpiresIn         int64  `json:"expiresIn"`
 	RefreshExpiresIn  int64  `json:"refreshExpiresIn"`
 	MFARequired       bool   `json:"mfaRequired,omitempty"`
@@ -25,7 +26,46 @@ type authTokenResponse struct {
 }
 
 type authTokenOutput struct {
-	Body authTokenResponse
+	SetCookie []http.Cookie `header:"Set-Cookie"`
+	Body      authTokenResponse
+}
+
+type authLogoutOutput struct {
+	SetCookie http.Cookie `header:"Set-Cookie"`
+	Body      struct {
+		Success bool `json:"success"`
+	}
+}
+
+const refreshCookieName = "dai_refresh_token"
+
+func refreshCookie(value string, maxAge int64, secure bool) http.Cookie {
+	cookie := http.Cookie{
+		Name:     refreshCookieName,
+		Value:    value,
+		Path:     "/api/auth",
+		MaxAge:   int(maxAge),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
+	}
+	if maxAge > 0 {
+		cookie.Expires = time.Now().UTC().Add(time.Duration(maxAge) * time.Second)
+	}
+	return cookie
+}
+
+func clearRefreshCookie(secure bool) http.Cookie {
+	return http.Cookie{
+		Name:     refreshCookieName,
+		Value:    "",
+		Path:     "/api/auth",
+		MaxAge:   -1,
+		Expires:  time.Unix(1, 0).UTC(),
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
+	}
 }
 
 // authHandlers handles unified Portal credentials and session refresh.
@@ -38,6 +78,7 @@ type authHandlers struct {
 	limiter           *auth.LoginRateLimiter
 	activationLimiter *auth.LoginRateLimiter
 	mfaLimiter        *auth.LoginRateLimiter
+	secureCookies     bool
 	log               *zap.Logger
 }
 
@@ -51,6 +92,7 @@ func newAuthHandlers(d Deps) *authHandlers {
 		limiter:           auth.NewLoginRateLimiter(d.Redis),
 		activationLimiter: auth.NewScopedRateLimiter(d.Redis, "dai:auth:activation:"),
 		mfaLimiter:        auth.NewScopedRateLimiter(d.Redis, "dai:auth:mfa:"),
+		secureCookies:     d.SecureCookies,
 		log:               d.Logger,
 	}
 }
@@ -63,9 +105,7 @@ type loginInput struct {
 }
 
 type refreshInput struct {
-	Body struct {
-		RefreshToken string `json:"refreshToken" minLength:"1"`
-	}
+	RefreshTokenCookie string `cookie:"dai_refresh_token" required:"true"`
 }
 
 type activateAccountInput struct {
@@ -155,7 +195,7 @@ func registerAuthPublic(api huma.API, d Deps) {
 		Path:        "/api/auth/login",
 		Summary:     "账号密码登录",
 		Tags:        []string{"auth"},
-		Middlewares: huma.Middlewares{requestClientMetadata(api)},
+		Middlewares: huma.Middlewares{requireSameOrigin(api), requestClientMetadata(api)},
 	}, h.login)
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-refresh",
@@ -163,11 +203,12 @@ func registerAuthPublic(api huma.API, d Deps) {
 		Path:        "/api/auth/refresh",
 		Summary:     "刷新登录凭证",
 		Tags:        []string{"auth"},
+		Middlewares: huma.Middlewares{requireSameOrigin(api)},
 	}, h.refresh)
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-mfa-verify", Method: "POST", Path: "/api/auth/mfa/verify",
 		Summary: "验证管理员 MFA", Tags: []string{"auth"},
-		Middlewares: huma.Middlewares{requestClientMetadata(api)},
+		Middlewares: huma.Middlewares{requireSameOrigin(api), requestClientMetadata(api)},
 	}, h.verifyMFA)
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-password-policy", Method: "GET", Path: "/api/auth/password-policy",
@@ -178,7 +219,7 @@ func registerAuthPublic(api huma.API, d Deps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-activate-account", Method: "POST", Path: "/api/auth/activate",
 		Summary: "使用一次性令牌激活账号或设置重置后的密码", Tags: []string{"auth"},
-		Middlewares: huma.Middlewares{requestClientMetadata(api)},
+		Middlewares: huma.Middlewares{requireSameOrigin(api), requestClientMetadata(api)},
 	}, h.activateAccount)
 }
 
@@ -290,10 +331,12 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 		Decision: "success", Metadata: map[string]any{"username": p.Username, "userType": p.UserType},
 	})
 	h.log.Info("user logged in", principalLogFields(p.UserID, p.TenantID)...)
-	return &authTokenOutput{Body: authTokenResponse{
-		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
-		ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
-	}}, nil
+	return &authTokenOutput{
+		SetCookie: []http.Cookie{refreshCookie(pair.RefreshToken, pair.RefreshExpiresIn, h.secureCookies)},
+		Body: authTokenResponse{
+			AccessToken: pair.AccessToken, ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
+		},
+	}, nil
 }
 
 func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*authTokenOutput, error) {
@@ -334,13 +377,16 @@ func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*a
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	h.audit(ctx, authpg.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", UserID: principal.UserID, Decision: "success"})
-	return &authTokenOutput{Body: authTokenResponse{AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn}}, nil
+	return &authTokenOutput{
+		SetCookie: []http.Cookie{refreshCookie(pair.RefreshToken, pair.RefreshExpiresIn, h.secureCookies)},
+		Body:      authTokenResponse{AccessToken: pair.AccessToken, ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn},
+	}, nil
 }
 
 func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authTokenOutput, error) {
-	refreshToken := strings.TrimSpace(input.Body.RefreshToken)
+	refreshToken := strings.TrimSpace(input.RefreshTokenCookie)
 	if refreshToken == "" {
-		return nil, httpx.ErrBadRequest.WithDetail("缺少 refreshToken")
+		return nil, httpx.ErrUnauthorized.WithDetail("Refresh Token 缺失或已过期")
 	}
 	pair, principal, err := h.sessions.Rotate(ctx, refreshToken)
 	auditBase := authpg.AuditEvent{
@@ -362,10 +408,12 @@ func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authT
 	}
 	auditBase.Decision = "success"
 	h.audit(ctx, auditBase)
-	return &authTokenOutput{Body: authTokenResponse{
-		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
-		ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
-	}}, nil
+	return &authTokenOutput{
+		SetCookie: []http.Cookie{refreshCookie(pair.RefreshToken, pair.RefreshExpiresIn, h.secureCookies)},
+		Body: authTokenResponse{
+			AccessToken: pair.AccessToken, ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
+		},
+	}, nil
 }
 
 func principalType(userType int) string {

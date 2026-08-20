@@ -61,6 +61,7 @@ describe("unified Portal route authorization", () => {
     vi.mocked(redirectPortalToLogin).mockClear();
     const { guard, store } = guardHarness();
     store.accessToken = "";
+    store.ensureSession = vi.fn().mockRejectedValue(new Error("refresh cookie missing"));
 
     await expect(
       guard({

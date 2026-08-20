@@ -5300,6 +5300,15 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        AuthLogoutOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AuthLogoutOutputBody.json
+             */
+            readonly $schema?: string;
+            success: boolean;
+        };
         AuthTokenResponse: {
             /**
              * Format: uri
@@ -5314,7 +5323,6 @@ export interface components {
             mfaRequired?: boolean;
             /** Format: int64 */
             refreshExpiresIn: number;
-            refreshToken?: string;
         };
         BalanceResponse: {
             /**
@@ -7989,15 +7997,6 @@ export interface components {
             refundReference: string;
             /** Format: int64 */
             refundedAt: number;
-        };
-        RefreshInputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RefreshInputBody.json
-             */
-            readonly $schema?: string;
-            refreshToken: string;
         };
         ReplaceTenantUpstreamAccessInputBody: {
             /**
@@ -11246,6 +11245,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11275,10 +11275,11 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessOutputBody"];
+                    "application/json": components["schemas"]["AuthLogoutOutputBody"];
                 };
             };
             /** @description Error */
@@ -11399,6 +11400,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -11549,17 +11551,16 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RefreshInputBody"];
+            cookie: {
+                dai_refresh_token: string;
             };
         };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
                 headers: {
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {

@@ -3,10 +3,14 @@
 ## 凭证模型
 
 - Access Token 是 RS256 JWT，默认有效期 15 分钟。
+- Portal 只在当前标签页内存中保存 Access Token，不写入 `localStorage` 或 `sessionStorage`。
 - Access Token 必须包含 `sid` 和 `credential_version`；不带 `sid` 的旧 JWT 会被拒绝。
 - Access Token 验签后还会校验数据库会话、凭证版本、账号和租户状态，撤销不依赖 Redis 可用性。
 - Refresh Token 是带 `dai_rt_` 前缀的 256 bit 随机不透明凭证，不是 JWT。
 - 数据库只保存 Refresh Token 的 SHA-256 哈希，不保存可直接使用的明文。
+- 浏览器通过 `dai_refresh_token` HttpOnly Cookie 携带 Refresh Token；Cookie 固定为
+  `Path=/api/auth`、无 `Domain`（host-only）、`SameSite=Strict`，生产环境启用 `Secure`，
+  `Max-Age` 与当前 session family 剩余寿命一致。登出使用相同属性立即清除 Cookie。
 - Refresh Token 的绝对有效期由 `jwt.refresh_expiration` / `DAI_JWT_REFRESH_EXPIRATION` 配置，轮换不会延长 session family 的绝对过期时间。
 - 新建账号和密码重置后的账号使用 `pending_activation` 凭证状态，不能创建、刷新或继续使用登录会话。
 - 激活令牌是带 `dai_act_` 前缀的 256 bit 随机不透明凭证；数据库只保存 SHA-256 哈希，默认有效期由 `auth.activation_expiration` / `DAI_AUTH_ACTIVATION_EXPIRATION` 配置。
@@ -39,15 +43,17 @@
 ```json
 {
   "accessToken": "eyJ...",
-  "refreshToken": "dai_rt_...",
   "expiresIn": 900,
   "refreshExpiresIn": 604800
 }
 ```
 
 `refreshExpiresIn` 是当前 session family 距绝对过期的剩余秒数，刷新后只会减少。
-当前版本仍通过 JSON body 传递 Refresh Token；迁移到 HttpOnly Cookie 属于 `P0-04`，
-不会混入本次服务端生命周期重构。
+Refresh Token 不再出现在 JSON body 或前端 JavaScript 状态中；Portal 请求使用同源凭证携带
+HttpOnly Cookie。浏览器刷新页面后会先用 Cookie 换取新的内存 Access Token。
+
+登录、刷新、MFA 验证、激活和登出等会改变认证状态的请求执行严格同源来源校验；Cookie
+本身使用 `SameSite=Strict`，避免跨站请求携带会话凭证。
 
 `GET /api/auth/password-policy` 返回 Portal 展示和校验使用的统一密码策略；
 `POST /api/auth/activate` 消费一次性令牌并设置正式密码。Portal 激活链接把令牌放在

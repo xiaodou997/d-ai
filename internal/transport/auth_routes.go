@@ -50,6 +50,7 @@ type messageOutput struct {
 // registerAuthProtected 注册统一 Portal 的登录后账号端点。
 func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 	recent := append(append(huma.Middlewares{}, mw...), requestClientMetadata(api))
+	logoutMiddleware := append(append(huma.Middlewares{}, mw...), requireSameOrigin(api))
 	mfaConfirmLimiter := auth.NewScopedRateLimiter(d.Redis, "dai:auth:mfa-confirm:")
 	recentAuthLimiter := auth.NewScopedRateLimiter(d.Redis, "dai:auth:recent-auth:")
 	huma.Register(api, huma.Operation{
@@ -86,8 +87,8 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		Path:        "/api/auth/logout",
 		Summary:     "登出（撤销当前会话）",
 		Tags:        []string{"auth"},
-		Middlewares: mw,
-	}, func(ctx context.Context, _ *struct{}) (*successOutput, error) {
+		Middlewares: logoutMiddleware,
+	}, func(ctx context.Context, _ *struct{}) (*authLogoutOutput, error) {
 		claims := userClaimsFromCtx(ctx)
 		if claims == nil {
 			return nil, httpx.ErrUnauthorized
@@ -103,7 +104,9 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 				_ = d.Blacklist.AddToBlacklist(claims.ID, exp)
 			}
 		}
-		return okSuccess(), nil
+		out := &authLogoutOutput{SetCookie: clearRefreshCookie(d.SecureCookies)}
+		out.Body.Success = true
+		return out, nil
 	})
 
 	huma.Register(api, huma.Operation{

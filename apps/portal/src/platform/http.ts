@@ -75,6 +75,7 @@ export function createFetchAdapter(options: HttpClientOptions = {}): RequestAdap
       fetch(url, {
         method,
         headers: buildHeaders(options, headers, body),
+        credentials: "include",
         body: payload,
         signal
       });
