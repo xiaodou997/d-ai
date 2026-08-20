@@ -21,14 +21,22 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	blacklist := &auth.BlacklistService{}
 
 	got := buildAIDeps(Deps{
-		OAuth:           oauth,
-		TokenRefresher:  refresher,
-		ClientCatalog:   catalog,
-		SecretMasterKey: "secret-master-key",
-		AIHTTPClient:    httpClient,
-		Health:          health,
-		Weights:         weights,
-		Blacklist:       blacklist,
+		AIDeps: AIDeps{
+			AIInfrastructureDeps: AIInfrastructureDeps{
+				SecretMasterKey: "secret-master-key",
+				AIHTTPClient:    httpClient,
+				Health:          health,
+				Weights:         weights,
+			},
+			AIIdentityDeps: AIIdentityDeps{
+				OAuth:          oauth,
+				TokenRefresher: refresher,
+			},
+			AICatalogDeps: AICatalogDeps{
+				ClientCatalog: catalog,
+			},
+		},
+		IdentityDeps: IdentityDeps{Blacklist: blacklist},
 	})
 
 	if got.OAuth != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {

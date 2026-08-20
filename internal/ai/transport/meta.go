@@ -31,44 +31,74 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-type AIDeps struct {
-	Postgres        *pgxpool.Pool
-	Redis           *redis.Client
-	Queries         *dbgen.Queries
-	OAuth           *pgadapter.OAuthCredentialStore
-	TokenRefresher  *tokenrefresh.Refresher
-	ClientCatalog   *clientcatalog.Service
-	SecretMasterKey string
-	HTTPClient      *http.Client
-	Logger          *zap.Logger
-	Health          routing.HealthTracker
-	Weights         *pgadapter.RouteWeightsStore
+// InfrastructureDeps contains concrete process clients used by legacy
+// transport adapters. It is isolated as a group so the next migration can
+// replace these fields with application ports without changing every route.
+type InfrastructureDeps struct {
+	Postgres   *pgxpool.Pool
+	Redis      *redis.Client
+	Queries    *dbgen.Queries
+	HTTPClient *http.Client
+	Logger     *zap.Logger
+}
 
-	// IdentityProvider 在进程内获取用户和租户信息。
-	// nil 时 identity enrichment 返回空结果。
+// IdentityDeps contains authentication, API key and workspace identity
+// collaborators used by AI routes.
+type IdentityDeps struct {
+	OAuth            *pgadapter.OAuthCredentialStore
+	TokenRefresher   *tokenrefresh.Refresher
+	APIKeySvc        *identitycontrol.Service
+	WorkspaceSvc     *workspacesvc.Service
 	IdentityProvider IdentityProvider
-
 	TokenVerifier    TokenVerifier
 	TokenRevocations TokenRevocationChecker
 	BanChecker       HumaBanChecker
 	TenantEndUsers   TenantEndUserVerifier
+}
 
+// BillingDeps contains AI subscription and prepaid billing collaborators.
+type BillingDeps struct {
+	Subscriptions *subscription.Service
+}
+
+// CatalogDeps contains provider, model, price and upstream control-plane
+// collaborators.
+type CatalogDeps struct {
+	ClientCatalog     *clientcatalog.Service
 	PriceBookSvc      *billingcontrol.Service
-	AccountSvc        *upstreamcontrol.Service // 上游账号管理
+	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
-	CommercialSvc     *commercial.Service // 新 commercial control plane（当前已承接 limit 线）
+	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService
-	DashboardSvc      *observabilitycontrol.DashboardService
-	UsageSvc          *observabilitycontrol.UsageService
-	AuditSvc          *observabilitycontrol.AuditService
-	APIKeySvc         *identitycontrol.Service
-	WorkspaceSvc      *workspacesvc.Service
-	Subscriptions     *subscription.Service // AI 订阅制套餐（nil 时禁用）
+}
+
+// RuntimeDeps contains request execution state and runtime policy.
+type RuntimeDeps struct {
+	Health          routing.HealthTracker
+	Weights         *pgadapter.RouteWeightsStore
+	SecretMasterKey string
+}
+
+// OperationsDeps contains dashboards, audit and risk-control collaborators.
+type OperationsDeps struct {
+	DashboardSvc *observabilitycontrol.DashboardService
+	UsageSvc     *observabilitycontrol.UsageService
+	AuditSvc     *observabilitycontrol.AuditService
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。
 	RiskControlConfigSvc *riskcontrol.ConfigService
 	RiskControlLogSvc    *riskcontrol.LogService
 	RiskControlEventSvc  *riskcontrol.EventService
 	RiskControlChecker   *riskcontrol.Checker // 供 /risk-control/test 复用 Detect()，不落库
+}
+
+// AIDeps groups the explicit dependencies required by AI HTTP registration.
+type AIDeps struct {
+	InfrastructureDeps
+	IdentityDeps
+	BillingDeps
+	CatalogDeps
+	RuntimeDeps
+	OperationsDeps
 }
 
 func RegisterAI(api huma.API, d AIDeps) {

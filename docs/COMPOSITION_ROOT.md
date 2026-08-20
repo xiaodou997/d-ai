@@ -22,11 +22,13 @@ httpServers.Start / Shutdown
 - `shutdownStack` 记录已成功构造的资源，按构造逆序关闭，并且重复调用安全；因此部分启动失败也会释放已经拿到的基础设施。
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
+- `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、billing、catalog、runtime、operations
+  责任拆成嵌入式依赖组；handler 的 `d.Field` 访问保持兼容，但 composition root 必须显式写出所属组。
 
 ## 尚未清零的装配遗留
 
 - 平台模块和 AI 模块仍在 `run` 中顺序构造，下一步按 identity、billing、catalog、runtime、operations 拆成显式模块装配函数。
-- `transport.Deps` 与 `ai/transport.AIDeps` 仍是大依赖容器，暂时作为兼容边界；P1-02 后续会按端点组替换为最小端口集合。
+- `transport.Deps` 与 `ai/transport.AIDeps` 仍是兼容型依赖容器，组内仍有具体 PostgreSQL/Redis/adapter 类型；P1-02 后续会按端点组替换为最小端口集合和 Module 接口。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

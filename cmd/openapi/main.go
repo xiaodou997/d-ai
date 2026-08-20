@@ -24,7 +24,7 @@ func main() {
 		Version: contractVersion,
 	})
 	transport.Register(api, transport.Deps{
-		Version: contractVersion,
+		InfrastructureDeps: transport.InfrastructureDeps{Version: contractVersion},
 	})
 	// Runtime gateway endpoints are native chi routes, so their schemas are
 	// added explicitly to the same Huma document.

@@ -40,62 +40,122 @@ import (
 	"xiaodou/dai/libs/go/banstate"
 )
 
-// Deps 汇集统一 transport 层注册端点所需的领域依赖。
-type Deps struct {
-	// 基础设施
+// InfrastructureDeps contains process-wide clients shared by transport
+// adapters. It is kept as a named group so the composition root can replace
+// these clients with ports when the legacy SQL handlers are migrated.
+type InfrastructureDeps struct {
 	Version string
 	Pool    *pgxpool.Pool
 	Redis   *redis.Client
 	Logger  *zap.Logger
+}
+
+// PortalDeps contains transport policy and public-facing configuration.
+type PortalDeps struct {
 	// SecureCookies enables the Secure attribute for browser session cookies.
 	// Development HTTP deployments may disable it; production wiring always enables it.
 	SecureCookies bool
-
-	// 平台身份与计费域
-	JWT           *auth.JWTService
-	Sessions      *auth.SessionService
-	Activations   *auth.ActivationService
-	MFA           *auth.MFAService
-	RecentAuth    *auth.RecentAuthService
-	Blacklist     *auth.BlacklistService
 	Legal         config.LegalConfig
-	UserService   *userpkg.UserService
-	Deduction     *billingsvc.DeductionService
-	Invite        *invitepkg.InviteService
-	Payment       *paymentsvc.PaymentService
+}
+
+// IdentityDeps contains account, session, tenant and invitation use cases.
+type IdentityDeps struct {
+	JWT         *auth.JWTService
+	Sessions    *auth.SessionService
+	Activations *auth.ActivationService
+	MFA         *auth.MFAService
+	RecentAuth  *auth.RecentAuthService
+	Blacklist   *auth.BlacklistService
+	UserService *userpkg.UserService
+	Invite      *invitepkg.InviteService
+}
+
+// BillingDeps contains payment and balance application services.
+type BillingDeps struct {
+	Deduction *billingsvc.DeductionService
+	Payment   *paymentsvc.PaymentService
+}
+
+// OperationsDeps contains platform operations, notification and cleanup
+// services. These are kept separate from identity and billing so future role
+// binaries can omit them without changing transport signatures.
+type OperationsDeps struct {
 	Announcements *announcementpkg.Service
 	Notifications *notificationpkg.Service
+	Modules       *systempkg.Service
+	ProxyNodes    *proxypkg.Service
+	DataCleanup   *cleanuppkg.Service
+}
 
-	// AI 域
+// AIInfrastructureDeps contains generated query access and runtime-level
+// policies needed while the legacy AI transport is being migrated.
+type AIInfrastructureDeps struct {
 	Queries         *aidb.Queries
-	OAuth           *pgadapter.OAuthCredentialStore
-	TokenRefresher  *tokenrefresh.Refresher
-	ClientCatalog   *clientcatalog.Service
 	SecretMasterKey string
 	AIHTTPClient    *http.Client
 	Health          routing.HealthTracker
 	Weights         *pgadapter.RouteWeightsStore
 	BanChecker      *banstate.Checker
+}
 
-	// AI 域
-	PriceBookSvc         *billingcontrol.Service
-	CommercialSvc        *commercial.Service
-	GroupTransferSvc     *commercial.GroupTransferService
+// AIIdentityDeps contains AI-side identity and workspace collaborators.
+type AIIdentityDeps struct {
+	OAuth          *pgadapter.OAuthCredentialStore
+	TokenRefresher *tokenrefresh.Refresher
+	APIKeySvc      *identitycontrol.Service
+	WorkspaceSvc   *workspacesvc.Service
+}
+
+// AIBillingDeps contains AI-side subscription and billing collaborators.
+type AIBillingDeps struct {
+	Subscriptions *subscription.Service
+}
+
+// AICatalogDeps contains AI-side model, pricing and upstream collaborators.
+type AICatalogDeps struct {
+	ClientCatalog     *clientcatalog.Service
+	PriceBookSvc      *billingcontrol.Service
+	CommercialSvc     *commercial.Service
+	GroupTransferSvc  *commercial.GroupTransferService
+	AccountSvc        *upstreamcontrol.Service
+	UpstreamAccessSvc *upstreamaccess.Service
+}
+
+// AIOperationsDeps contains AI-side dashboards, audit and risk-control collaborators.
+type AIOperationsDeps struct {
 	DashboardSvc         *observabilitycontrol.DashboardService
 	UsageSvc             *observabilitycontrol.UsageService
 	AuditSvc             *observabilitycontrol.AuditService
-	AccountSvc           *upstreamcontrol.Service
-	UpstreamAccessSvc    *upstreamaccess.Service
-	APIKeySvc            *identitycontrol.Service
-	WorkspaceSvc         *workspacesvc.Service
-	Subscriptions        *subscription.Service
 	RiskControlConfigSvc *riskcontrol.ConfigService
 	RiskControlLogSvc    *riskcontrol.LogService
 	RiskControlEventSvc  *riskcontrol.EventService
 	RiskControlChecker   *riskcontrol.Checker
-	Modules              *systempkg.Service
-	ProxyNodes           *proxypkg.Service
-	DataCleanup          *cleanuppkg.Service
+}
+
+// AIDeps contains the AI control-plane and runtime services exposed by the
+// unified transport. Embedded groups preserve handler selectors while making
+// composition ownership explicit.
+type AIDeps struct {
+	AIInfrastructureDeps
+	AIIdentityDeps
+	AIBillingDeps
+	AICatalogDeps
+	AIOperationsDeps
+}
+
+// Deps 汇集统一 transport 层注册端点所需的显式领域依赖组。
+//
+// The embedded groups preserve the existing d.Field handler access pattern,
+// but composition code must now name the owning group explicitly. This is an
+// incremental step away from a flat service locator; the next step is to
+// replace the remaining infrastructure fields with application ports.
+type Deps struct {
+	InfrastructureDeps
+	PortalDeps
+	IdentityDeps
+	BillingDeps
+	OperationsDeps
+	AIDeps
 }
 
 // Register 在 Huma API 上注册全部端点。
@@ -152,35 +212,47 @@ func registerAITransport(api huma.API, d Deps) {
 func buildAIDeps(d Deps) aitransport.AIDeps {
 	identity := newAIIdentityAdapter(d.Pool, d.UserService)
 	aiDeps := aitransport.AIDeps{
-		Postgres:             d.Pool,
-		Redis:                d.Redis,
-		Queries:              d.Queries,
-		OAuth:                d.OAuth,
-		TokenRefresher:       d.TokenRefresher,
-		ClientCatalog:        d.ClientCatalog,
-		Logger:               d.Logger,
-		HTTPClient:           d.AIHTTPClient,
-		Health:               d.Health,
-		Weights:              d.Weights,
-		TokenVerifier:        d.JWT,
-		TokenRevocations:     d.Blacklist,
-		BanChecker:           d.BanChecker,
-		SecretMasterKey:      d.SecretMasterKey,
-		PriceBookSvc:         d.PriceBookSvc,
-		CommercialSvc:        d.CommercialSvc,
-		GroupTransferSvc:     d.GroupTransferSvc,
-		DashboardSvc:         d.DashboardSvc,
-		UsageSvc:             d.UsageSvc,
-		AuditSvc:             d.AuditSvc,
-		AccountSvc:           d.AccountSvc,
-		UpstreamAccessSvc:    d.UpstreamAccessSvc,
-		APIKeySvc:            d.APIKeySvc,
-		WorkspaceSvc:         d.WorkspaceSvc,
-		Subscriptions:        d.Subscriptions,
-		RiskControlConfigSvc: d.RiskControlConfigSvc,
-		RiskControlLogSvc:    d.RiskControlLogSvc,
-		RiskControlEventSvc:  d.RiskControlEventSvc,
-		RiskControlChecker:   d.RiskControlChecker,
+		InfrastructureDeps: aitransport.InfrastructureDeps{
+			Postgres:   d.Pool,
+			Redis:      d.Redis,
+			Queries:    d.Queries,
+			Logger:     d.Logger,
+			HTTPClient: d.AIHTTPClient,
+		},
+		IdentityDeps: aitransport.IdentityDeps{
+			OAuth:            d.OAuth,
+			TokenRefresher:   d.TokenRefresher,
+			TokenVerifier:    d.JWT,
+			TokenRevocations: d.Blacklist,
+			BanChecker:       d.BanChecker,
+			APIKeySvc:        d.APIKeySvc,
+			WorkspaceSvc:     d.WorkspaceSvc,
+		},
+		BillingDeps: aitransport.BillingDeps{
+			Subscriptions: d.Subscriptions,
+		},
+		CatalogDeps: aitransport.CatalogDeps{
+			ClientCatalog:     d.ClientCatalog,
+			PriceBookSvc:      d.PriceBookSvc,
+			CommercialSvc:     d.CommercialSvc,
+			GroupTransferSvc:  d.GroupTransferSvc,
+			AccountSvc:        d.AccountSvc,
+			UpstreamAccessSvc: d.UpstreamAccessSvc,
+		},
+		RuntimeDeps: aitransport.RuntimeDeps{
+			Health:          d.Health,
+			Weights:         d.Weights,
+			SecretMasterKey: d.SecretMasterKey,
+		},
+		OperationsDeps: aitransport.OperationsDeps{
+			DashboardSvc:         d.DashboardSvc,
+			UsageSvc:             d.UsageSvc,
+			AuditSvc:             d.AuditSvc,
+			RiskControlConfigSvc: d.RiskControlConfigSvc,
+			RiskControlLogSvc:    d.RiskControlLogSvc,
+			RiskControlEventSvc:  d.RiskControlEventSvc,
+			RiskControlChecker:   d.RiskControlChecker,
+		},
 	}
 	if identity != nil {
 		aiDeps.IdentityProvider = identity
