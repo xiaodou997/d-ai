@@ -2,6 +2,7 @@
   "name": "dai",
   "version": "0.2.1",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "D-AI — 统一 AI 服务（单后端 + 单 Portal，单二进制部署）",
   "packageManager": "bun@1.3.14",

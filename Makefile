@@ -5,8 +5,9 @@ VERSION  := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 BUILD_DIR := release
 FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
+LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api help
 
 # ---- 本地开发 ----
 
@@ -40,19 +41,19 @@ db-recreate: ## 删除本地数据卷并用 init.sql 重建（会清空本地数
 
 # ---- 构建 ----
 
-build: frontend embed database-artifacts ## 构建单二进制和数据库 SQL 发布附件
+build: frontend embed database-artifacts legal-artifacts ## 构建单二进制和发布附件
 	@echo "Building $(BINARY) v$(VERSION)..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)"
 
-build-server: database-artifacts ## 只构建后端和数据库 SQL 发布附件（不含前端）
+build-server: database-artifacts legal-artifacts ## 只构建后端和发布附件（不含前端）
 	@echo "Building server-only..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)"
 
-build-linux-amd64: frontend embed database-artifacts ## 构建生产 Docker 使用的 Linux amd64 二进制
+build-linux-amd64: frontend embed database-artifacts legal-artifacts ## 构建生产 Docker 使用的 Linux amd64 二进制
 	@echo "Building $(BINARY) linux/amd64 v$(VERSION)..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY)-linux-amd64 ./cmd/server
@@ -64,6 +65,10 @@ database-artifacts: ## 将初始化、人工升级和回滚 SQL 复制到发布�
 	cp internal/db/init.sql $(DB_RELEASE_DIR)/init.sql
 	cp -R internal/db/changes $(DB_RELEASE_DIR)/
 	cp -R internal/db/rollback $(DB_RELEASE_DIR)/
+
+legal-artifacts: ## 将开源许可、第三方通知和商标政策复制到发布目录
+	mkdir -p $(BUILD_DIR)
+	cp $(LEGAL_RELEASE_FILES) $(BUILD_DIR)/
 
 frontend: ## 构建前端
 	bun install

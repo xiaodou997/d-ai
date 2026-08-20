@@ -1,5 +1,7 @@
 # D-AI
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+
 统一 AI 服务（单后端 + 单前端 + 单二进制部署）。
 
 D-AI 在一个进程中提供身份、权限、计费和 AI 能力，Portal 按 `userType` 动态展示菜单和主题。
@@ -110,7 +112,7 @@ make typecheck
 ## 构建
 
 ```bash
-# 生成 release/dai，并附带 release/sql 数据库初始化和人工升级 SQL
+# 生成 release/dai，并附带数据库 SQL、许可证和第三方通知
 make build
 
 # 仅后端（当前可用于验证 Go 编译）
@@ -125,6 +127,30 @@ make build-linux-amd64
 - [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：项目现状、已完成重构、剩余验收项和实施顺序。
 - [`docs/DATABASE.md`](docs/DATABASE.md)：完整 schema、人工变更和版本校验规则。
 - [`apps/portal/README.md`](apps/portal/README.md)：Portal 目录、API facade 和契约生成说明。
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)：贡献流程与贡献许可要求。
+- [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md)：直接依赖许可证清单与发布审计范围。
+
+## 许可证与商业授权
+
+D-AI 采用双许可模式：
+
+- 开源使用遵循 [GNU Affero General Public License v3.0 only](LICENSE)。AGPL
+  允许商业使用，但修改后通过网络向用户提供服务时，必须履行对应源代码等
+  义务。
+- 不希望受 AGPL 开源义务约束的组织，可以向项目版权持有人申请单独的
+  [商业许可证](COMMERCIAL_LICENSE.md)。商业许可证的具体权利仅由双方签署的
+  书面协议授予。
+
+D-AI 名称和 Logo 不随代码许可证自动授权，允许的描述性使用和修改版命名规则
+见 [商标政策](TRADEMARKS.md)。外部贡献必须接受 [D-AI CLA](CLA.md)，以维持
+开源与商业双许可能力。
+
+## 第三方服务声明
+
+D-AI 是独立开源项目，与 OpenAI、Anthropic、Google 及代码中提及的其他第三方
+服务提供商不存在隶属、合作、赞助或官方背书关系。相关产品名称和商标归各自
+权利人所有。D-AI 仅提供可由用户自行配置的连接能力，用户负责管理自己的凭据
+并决定如何使用相关第三方服务。
 
 ## 架构原则
 
