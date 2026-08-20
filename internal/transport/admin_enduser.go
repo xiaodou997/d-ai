@@ -362,8 +362,11 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	now := time.Now().UTC()
-	if _, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 4`, string(hash), now, in.ID); err != nil {
+	if _, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2 WHERE user_id = $3 AND user_type = 4`, string(hash), now, in.ID); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if h.blacklist != nil {
+		_ = h.blacklist.LogoutUser(in.ID)
 	}
 	out := &messageOutput{}
 	out.Body.Message = "密码已重置为 123456"

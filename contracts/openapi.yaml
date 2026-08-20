@@ -1288,11 +1288,15 @@ components:
         expiresIn:
           format: int64
           type: integer
+        refreshExpiresIn:
+          format: int64
+          type: integer
         refreshToken:
           type: string
       required:
         - accessToken
         - expiresIn
+        - refreshExpiresIn
       type: object
     BalanceResponse:
       additionalProperties: false
@@ -11725,7 +11729,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 登出（撤销当前 Token）
+      summary: 登出（撤销当前会话）
       tags:
         - auth
   /api/auth/me:

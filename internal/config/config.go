@@ -149,7 +149,7 @@ func Load() (*Config, error) {
 	v.SetDefault("redis.db", 0)
 
 	// 默认值 —— JWT
-	v.SetDefault("jwt.expiration", "2h")
+	v.SetDefault("jwt.expiration", "15m")
 	v.SetDefault("jwt.refresh_expiration", "168h")
 	v.SetDefault("jwt.issuer", "dai")
 

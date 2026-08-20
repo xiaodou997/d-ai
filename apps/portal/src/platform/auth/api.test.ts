@@ -12,7 +12,8 @@ describe("unified Portal password login", () => {
         JSON.stringify({
           accessToken: "access-token",
           refreshToken: "refresh-token",
-          expiresIn: 3600
+          expiresIn: 3600,
+          refreshExpiresIn: 604800
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
@@ -37,7 +38,7 @@ describe("unified Portal password login", () => {
 
   it("uses the direct refresh endpoint without an OAuth grant type", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ accessToken: "next", expiresIn: 3600 }), {
+      new Response(JSON.stringify({ accessToken: "next", expiresIn: 3600, refreshExpiresIn: 604700 }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       })

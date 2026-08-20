@@ -78,13 +78,19 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		OperationID: "auth-logout",
 		Method:      http.MethodPost,
 		Path:        "/api/auth/logout",
-		Summary:     "登出（撤销当前 Token）",
+		Summary:     "登出（撤销当前会话）",
 		Tags:        []string{"auth"},
 		Middlewares: mw,
 	}, func(ctx context.Context, _ *struct{}) (*successOutput, error) {
 		claims := userClaimsFromCtx(ctx)
 		if claims == nil {
 			return nil, httpx.ErrUnauthorized
+		}
+		if d.Sessions == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("会话服务不可用")
+		}
+		if err := d.Sessions.Revoke(ctx, claims.SessionID, "logout"); err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ExpiresAt != nil {
 			if exp := time.Until(claims.ExpiresAt.Time); exp > 0 {
@@ -120,15 +126,17 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 			return nil, httpx.ErrInternal.WithCause(herr)
 		}
 		if _, uerr := d.Pool.Exec(ctx, `
-				UPDATE iam_accounts SET password_hash = $1, updated_at = $2
+					UPDATE iam_accounts
+					SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2
 				WHERE user_id = $3 AND user_type = $4
 			`, string(newHash), time.Now().UTC(), claims.UserID, claims.UserType,
 		); uerr != nil {
 			return nil, httpx.ErrInternal.WithCause(uerr)
 		}
-		// 使旧 token 失效
+		// 数据库触发器撤销全部 refresh session；Redis 立即拒绝现存 access token。
 		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ID != "" {
 			_ = d.Blacklist.AddToBlacklist(claims.ID, 2*time.Hour)
+			_ = d.Blacklist.LogoutUser(claims.UserID)
 		}
 
 		out := &messageOutput{}
@@ -198,9 +206,10 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 
 		if _, err := d.Pool.Exec(ctx, `
 			UPDATE iam_accounts
-			SET username = CASE WHEN $1 THEN $2 ELSE username END,
-			    email = CASE WHEN $3 THEN NULLIF($4, '') ELSE email END,
-			    updated_at = $5
+				SET username = CASE WHEN $1 THEN $2 ELSE username END,
+				    email = CASE WHEN $3 THEN NULLIF($4, '') ELSE email END,
+				    credential_version = credential_version + 1,
+				    updated_at = $5
 			WHERE user_id = $6 AND user_type = $7
 		`, usernameSet, username, emailSet, email, time.Now().UTC(), claims.UserID, claims.UserType); err != nil {
 			if authpg.IsUsernameTaken(err) {
@@ -215,6 +224,7 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		// 用户名变更后旧 token 中的 claim 已过期，强制重新登录
 		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ID != "" {
 			_ = d.Blacklist.AddToBlacklist(claims.ID, 2*time.Hour)
+			_ = d.Blacklist.LogoutUser(claims.UserID)
 		}
 
 		out := &messageOutput{}

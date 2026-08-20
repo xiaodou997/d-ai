@@ -21,14 +21,26 @@ import (
 
 // Claims JWT Token 声明
 type Claims struct {
-	PrincipalType   string `json:"principal_type"`
-	TokenUse        string `json:"token_use"`
-	UserID          string `json:"user_id,omitempty"`
-	Username        string `json:"username,omitempty"`
-	TenantID        string `json:"tenant_id,omitempty"`
-	UserType        int    `json:"user_type,omitempty"`
-	UserTypeDisplay string `json:"user_type_display,omitempty"`
+	PrincipalType     string `json:"principal_type"`
+	TokenUse          string `json:"token_use"`
+	SessionID         string `json:"sid,omitempty"`
+	CredentialVersion int64  `json:"credential_version,omitempty"`
+	UserID            string `json:"user_id,omitempty"`
+	Username          string `json:"username,omitempty"`
+	TenantID          string `json:"tenant_id,omitempty"`
+	UserType          int    `json:"user_type,omitempty"`
+	UserTypeDisplay   string `json:"user_type_display,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// Principal is the account snapshot bound to a login session.
+type Principal struct {
+	UserID            string
+	Username          string
+	TenantID          string
+	UserType          int
+	UserTypeDisplay   string
+	CredentialVersion int64
 }
 
 // TokenPair Token 对（Access Token + Refresh Token）
@@ -73,30 +85,28 @@ type KeyInfo struct {
 
 // JWTService JWT 服务（RS256 + JWKS + 密钥轮换）
 type JWTService struct {
-	database               *pgxpool.Pool
-	cfg                    config.JWTConfig
-	mu                     sync.RWMutex
-	activeKey              *keyEntry
-	graceKeys              []*keyEntry
-	accessTokenExpiration  time.Duration
-	refreshTokenExpiration time.Duration
-	issuer                 string
+	database              *pgxpool.Pool
+	cfg                   config.JWTConfig
+	mu                    sync.RWMutex
+	activeKey             *keyEntry
+	graceKeys             []*keyEntry
+	accessTokenExpiration time.Duration
+	issuer                string
 }
+
+const accessSessionValidationTimeout = 2 * time.Second
 
 // NewJWTService 创建 JWT 服务
 // 从数据库加载密钥，若无则自动生成并写入数据库
 func NewJWTService(cfg config.JWTConfig, database *pgxpool.Pool) *JWTService {
-	refreshExpiration := cfg.RefreshExpiration
-	if refreshExpiration == 0 {
-		refreshExpiration = 7 * 24 * time.Hour
-	}
-
 	s := &JWTService{
-		database:               database,
-		cfg:                    cfg,
-		accessTokenExpiration:  cfg.Expiration,
-		refreshTokenExpiration: refreshExpiration,
-		issuer:                 cfg.Issuer,
+		database:              database,
+		cfg:                   cfg,
+		accessTokenExpiration: cfg.Expiration,
+		issuer:                cfg.Issuer,
+	}
+	if s.accessTokenExpiration == 0 {
+		s.accessTokenExpiration = 15 * time.Minute
 	}
 
 	if err := s.reloadKeys(); err != nil {
@@ -197,65 +207,41 @@ func (s *JWTService) reloadKeys() error {
 	return nil
 }
 
-// GenerateToken 生成单一 Access Token
-func (s *JWTService) GenerateToken(userID, username, tenantID string, userType int, userTypeDisplay string) (string, error) {
-	pair, err := s.GenerateTokenPair(userID, username, tenantID, userType, userTypeDisplay)
-	if err != nil {
-		return "", err
-	}
-	return pair.AccessToken, nil
-}
-
-// GenerateTokenPair 生成 Token 对，token header 携带 kid
-func (s *JWTService) GenerateTokenPair(userID, username, tenantID string, userType int, userTypeDisplay string) (*TokenPair, error) {
+// GenerateAccessToken creates a session-bound access token.
+func (s *JWTService) GenerateAccessToken(principal Principal, sessionID string) (string, error) {
 	s.mu.RLock()
 	activeKey := s.activeKey
 	s.mu.RUnlock()
 
 	if activeKey == nil {
-		return nil, fmt.Errorf("no active signing key")
+		return "", fmt.Errorf("no active signing key")
 	}
 
 	now := time.Now()
-
-	makeToken := func(tokenType string, expiration time.Duration) (string, error) {
-		claims := Claims{
-			PrincipalType:   "user",
-			TokenUse:        tokenType,
-			UserID:          userID,
-			Username:        username,
-			TenantID:        tenantID,
-			UserType:        userType,
-			UserTypeDisplay: userTypeDisplay,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				Issuer:    s.issuer,
-				ID:        uuid.New().String(),
-				Subject:   userID,
-			},
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-		token.Header["kid"] = activeKey.kid
-		return token.SignedString(activeKey.privateKey)
+	claims := Claims{
+		PrincipalType:     "user",
+		TokenUse:          "access",
+		SessionID:         sessionID,
+		CredentialVersion: principal.CredentialVersion,
+		UserID:            principal.UserID,
+		Username:          principal.Username,
+		TenantID:          principal.TenantID,
+		UserType:          principal.UserType,
+		UserTypeDisplay:   principal.UserTypeDisplay,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTokenExpiration)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    s.issuer,
+			ID:        uuid.New().String(),
+			Subject:   principal.UserID,
+		},
 	}
-
-	accessTokenStr, err := makeToken("access", s.accessTokenExpiration)
-	if err != nil {
-		return nil, err
-	}
-	refreshTokenStr, err := makeToken("refresh", s.refreshTokenExpiration)
-	if err != nil {
-		return nil, err
-	}
-
-	return &TokenPair{
-		AccessToken:      accessTokenStr,
-		RefreshToken:     refreshTokenStr,
-		ExpiresIn:        int64(s.accessTokenExpiration.Seconds()),
-		RefreshExpiresIn: int64(s.refreshTokenExpiration.Seconds()),
-	}, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = activeKey.kid
+	return token.SignedString(activeKey.privateKey)
 }
+
+func (s *JWTService) AccessTokenExpiration() time.Duration { return s.accessTokenExpiration }
 
 // ParseToken 解析并验证 Token，根据 kid 选择公钥
 // 新系统不兼容无 kid 的 token
@@ -295,77 +281,46 @@ func (s *JWTService) ParseToken(tokenString string) (*Claims, error) {
 		return nil, err
 	}
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		if claims.PrincipalType == "user" && claims.TokenUse == "access" {
+			if err := s.validateAccessSession(claims); err != nil {
+				return nil, err
+			}
+		}
 		return claims, nil
 	}
 	return nil, jwt.ErrSignatureInvalid
 }
 
-// RefreshToken 刷新 Token（仅 Access Token）
-func (s *JWTService) RefreshToken(tokenString string) (string, error) {
-	claims, err := s.ParseToken(tokenString)
+func (s *JWTService) validateAccessSession(claims *Claims) error {
+	if claims.SessionID == "" || claims.CredentialVersion <= 0 {
+		return ErrSessionInactive
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), accessSessionValidationTimeout)
+	defer cancel()
+	var valid bool
+	err := s.database.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM auth_sessions s
+			JOIN iam_accounts a ON a.user_id = s.user_id
+			LEFT JOIN iam_tenants t ON t.tenant_id = a.tenant_id
+			WHERE s.session_id = $1
+			  AND s.user_id = $2
+			  AND s.status = 'active'
+			  AND s.expires_at > now()
+			  AND s.credential_version = $3
+			  AND a.credential_version = $3
+			  AND a.status = 'active'
+			  AND (a.user_type < 3 OR t.status = 'active')
+		)
+	`, claims.SessionID, claims.UserID, claims.CredentialVersion).Scan(&valid)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("validate access session: %w", err)
 	}
-	return s.GenerateToken(claims.UserID, claims.Username, claims.TenantID, claims.UserType, claims.UserTypeDisplay)
-}
-
-// RefreshTokenPair 使用 Refresh Token 获取新的 Token 对
-func (s *JWTService) RefreshTokenPair(refreshTokenString string, rotateRefreshToken bool) (*TokenPair, error) {
-	claims, err := s.ParseToken(refreshTokenString)
-	if err != nil {
-		return nil, err
+	if !valid {
+		return ErrSessionInactive
 	}
-	if claims.PrincipalType != "user" || claims.TokenUse != "refresh" {
-		return nil, ErrInvalidTokenType
-	}
-
-	s.mu.RLock()
-	activeKey := s.activeKey
-	s.mu.RUnlock()
-
-	now := time.Now()
-
-	makeToken := func(tokenType string, expiration time.Duration) (string, error) {
-		newClaims := Claims{
-			PrincipalType:   "user",
-			TokenUse:        tokenType,
-			UserID:          claims.UserID,
-			Username:        claims.Username,
-			TenantID:        claims.TenantID,
-			UserType:        claims.UserType,
-			UserTypeDisplay: claims.UserTypeDisplay,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(expiration)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				Issuer:    s.issuer,
-				ID:        uuid.New().String(),
-				Subject:   claims.UserID,
-			},
-		}
-		token := jwt.NewWithClaims(jwt.SigningMethodRS256, newClaims)
-		token.Header["kid"] = activeKey.kid
-		return token.SignedString(activeKey.privateKey)
-	}
-
-	accessTokenStr, err := makeToken("access", s.accessTokenExpiration)
-	if err != nil {
-		return nil, err
-	}
-
-	var newRefreshToken string
-	if rotateRefreshToken {
-		newRefreshToken, err = makeToken("refresh", s.refreshTokenExpiration)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &TokenPair{
-		AccessToken:      accessTokenStr,
-		RefreshToken:     newRefreshToken,
-		ExpiresIn:        int64(s.accessTokenExpiration.Seconds()),
-		RefreshExpiresIn: int64(s.refreshTokenExpiration.Seconds()),
-	}, nil
+	return nil
 }
 
 // RotateKey 密钥轮换：生成新密钥，旧 active 密钥进入 24 小时宽限期
@@ -507,9 +462,6 @@ func (s *JWTService) GetPublicKeyPEM() (string, error) {
 	}
 	return marshalPublicKey(activeKey.publicKey)
 }
-
-// ErrInvalidTokenType Token 类型错误
-var ErrInvalidTokenType = fmt.Errorf("invalid token type")
 
 // ==================== 内部工具函数 ====================
 

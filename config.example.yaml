@@ -17,7 +17,7 @@ redis:
   addr: 127.0.0.1:16379
 
 jwt:
-  expiration: 2h
+  expiration: 15m
   refresh_expiration: 168h
   issuer: dai
 

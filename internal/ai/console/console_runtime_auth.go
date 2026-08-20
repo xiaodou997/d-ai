@@ -55,7 +55,7 @@ func (s *Console) consoleRuntimeSubject(w http.ResponseWriter, r *http.Request) 
 	}
 
 	claims, err := s.tokenVerifier.ParseToken(token)
-	if err != nil {
+	if err != nil || claims == nil || claims.PrincipalType != "user" || claims.TokenUse != "access" || claims.SessionID == "" {
 		s.logger.Warn("runtime token validation failed",
 			consoleRequestLogFields(r, zap.Error(err))...,
 		)

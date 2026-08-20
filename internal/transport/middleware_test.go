@@ -12,7 +12,8 @@ func TestIsUserAccessClaims(t *testing.T) {
 		claims *auth.Claims
 		want   bool
 	}{
-		{name: "access token", claims: &auth.Claims{PrincipalType: "user", TokenUse: "access"}, want: true},
+		{name: "access token", claims: &auth.Claims{PrincipalType: "user", TokenUse: "access", SessionID: "session-1"}, want: true},
+		{name: "legacy access without session", claims: &auth.Claims{PrincipalType: "user", TokenUse: "access"}},
 		{name: "refresh token", claims: &auth.Claims{PrincipalType: "user", TokenUse: "refresh"}},
 		{name: "non-user principal", claims: &auth.Claims{PrincipalType: "admin", TokenUse: "access"}},
 		{name: "missing claims", claims: nil},

@@ -164,6 +164,7 @@ func main() {
 	// ──────────────────────────────────────────────────────
 
 	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
+	sessionSvc := auth.NewSessionService(pool, jwtSvc, cfg.JWT.RefreshExpiration)
 	blacklist := auth.NewBlacklistService(redisClient, appLogger)
 	if cfg.Security.SecretMasterKey != "" {
 		if err := clientsecret.Configure(cfg.Security.SecretMasterKey); err != nil {
@@ -476,6 +477,11 @@ func main() {
 	// Hourly cleanups
 	go runHourlyCleanup(ctx, func() { imageAssetSvc.CleanupExpired() })
 	go runHourlyCleanup(ctx, func() { fileStore.CleanupExpired(ctx, 500) })
+	go runHourlyCleanup(ctx, func() {
+		if _, err := sessionSvc.DeleteExpired(ctx, 5000); err != nil {
+			appLogger.Warn("expired auth session cleanup failed", zap.Error(err))
+		}
+	})
 
 	// ──────────────────────────────────────────────────────
 	// 4. 统一 Transport 装配
@@ -487,6 +493,7 @@ func main() {
 		Redis:         redisClient,
 		Logger:        appLogger,
 		JWT:           jwtSvc,
+		Sessions:      sessionSvc,
 		Blacklist:     blacklist,
 		Legal:         cfg.Legal,
 		UserService:   userSvc,

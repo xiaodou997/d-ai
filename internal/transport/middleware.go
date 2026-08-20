@@ -51,7 +51,7 @@ func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistSe
 }
 
 func isUserAccessClaims(claims *auth.Claims) bool {
-	return claims != nil && claims.PrincipalType == "user" && claims.TokenUse == "access"
+	return claims != nil && claims.PrincipalType == "user" && claims.TokenUse == "access" && claims.SessionID != ""
 }
 
 // requireUserType 要求当前用户类型在 allowed 内，否则 403。须挂在 userAuth 之后。

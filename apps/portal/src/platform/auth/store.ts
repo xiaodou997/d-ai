@@ -1,22 +1,14 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
-import type { UserInfoResponse } from "./api";
+import type { AuthTokenResponse, UserInfoResponse } from "./api";
 
 export interface AuthStoreOptions {
   storeId: string;
   storagePrefix: string;
   expectedUserTypes: number[];
-  login?: (username: string, password: string) => Promise<{
-    accessToken: string;
-    refreshToken?: string;
-    expiresIn: number;
-  }>;
-  refreshToken: (refreshToken: string) => Promise<{
-    accessToken: string;
-    refreshToken?: string;
-    expiresIn: number;
-  }>;
+  login?: (username: string, password: string) => Promise<AuthTokenResponse>;
+  refreshToken: (refreshToken: string) => Promise<AuthTokenResponse>;
   logout: () => Promise<unknown>;
   logoutRedirectUrl?: string | (() => string | null);
   getCurrentUser: () => Promise<UserInfoResponse>;
@@ -36,11 +28,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     const userInfo = ref<UserInfoResponse | null>(readUserInfo(options.storagePrefix));
     const sessionValidatedAt = ref(0);
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-    let refreshInFlight: Promise<{
-      accessToken: string;
-      refreshToken?: string;
-      expiresIn: number;
-    }> | null = null;
+    let refreshInFlight: Promise<AuthTokenResponse> | null = null;
     let sessionValidationInFlight: Promise<UserInfoResponse> | null = null;
 
     const isAuthenticated = computed(() => Boolean(accessToken.value && userInfo.value));

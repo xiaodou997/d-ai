@@ -47,7 +47,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 登出（撤销当前 Token） */
+        /** 登出（撤销当前会话） */
         post: operations["auth-logout"];
         delete?: never;
         options?: never;
@@ -5169,6 +5169,8 @@ export interface components {
             accessToken: string;
             /** Format: int64 */
             expiresIn: number;
+            /** Format: int64 */
+            refreshExpiresIn: number;
             refreshToken?: string;
         };
         BalanceResponse: {

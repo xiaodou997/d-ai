@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -15,9 +16,10 @@ import (
 )
 
 type authTokenResponse struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken,omitempty"`
-	ExpiresIn    int64  `json:"expiresIn"`
+	AccessToken      string `json:"accessToken"`
+	RefreshToken     string `json:"refreshToken,omitempty"`
+	ExpiresIn        int64  `json:"expiresIn"`
+	RefreshExpiresIn int64  `json:"refreshExpiresIn"`
 }
 
 type authTokenOutput struct {
@@ -26,16 +28,16 @@ type authTokenOutput struct {
 
 // authHandlers handles unified Portal credentials and session refresh.
 type authHandlers struct {
-	repo *authpg.AuthRepository
-	jwt  *auth.JWTService
-	log  *zap.Logger
+	repo     *authpg.AuthRepository
+	sessions *auth.SessionService
+	log      *zap.Logger
 }
 
 func newAuthHandlers(d Deps) *authHandlers {
 	return &authHandlers{
-		repo: authpg.NewAuthRepository(d.Pool),
-		jwt:  d.JWT,
-		log:  d.Logger,
+		repo:     authpg.NewAuthRepository(d.Pool),
+		sessions: d.Sessions,
+		log:      d.Logger,
 	}
 }
 
@@ -53,11 +55,12 @@ type refreshInput struct {
 }
 
 type loginPrincipal struct {
-	UserID          string
-	Username        string
-	TenantID        string
-	UserType        int
-	UserTypeDisplay string
+	UserID            string
+	Username          string
+	TenantID          string
+	UserType          int
+	UserTypeDisplay   string
+	CredentialVersion int64
 }
 
 func (h *authHandlers) authenticateUser(ctx context.Context, username, password string) (loginPrincipal, *httpx.AppError) {
@@ -81,11 +84,12 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 	_ = h.repo.UpdateLoginTime(ctx, u.UserID, nowUTC())
 
 	return loginPrincipal{
-		UserID:          u.UserID,
-		Username:        u.Username,
-		TenantID:        u.TenantID,
-		UserType:        u.UserType,
-		UserTypeDisplay: userTypeDisplayName(u.UserType),
+		UserID:            u.UserID,
+		Username:          u.Username,
+		TenantID:          u.TenantID,
+		UserType:          u.UserType,
+		UserTypeDisplay:   userTypeDisplayName(u.UserType),
+		CredentialVersion: u.CredentialVersion,
 	}, nil
 }
 
@@ -118,7 +122,11 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 		})
 		return nil, appErr
 	}
-	pair, err := h.jwt.GenerateTokenPair(p.UserID, p.Username, p.TenantID, p.UserType, p.UserTypeDisplay)
+	pair, err := h.sessions.Create(ctx, auth.Principal{
+		UserID: p.UserID, Username: p.Username, TenantID: p.TenantID,
+		UserType: p.UserType, UserTypeDisplay: p.UserTypeDisplay,
+		CredentialVersion: p.CredentialVersion,
+	})
 	if err != nil {
 		h.log.Error("generate token pair failed", principalLogFields(p.UserID, p.TenantID, zap.Error(err))...)
 		h.audit(ctx, authpg.AuditEvent{
@@ -133,7 +141,8 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 	})
 	h.log.Info("user logged in", principalLogFields(p.UserID, p.TenantID)...)
 	return &authTokenOutput{Body: authTokenResponse{
-		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn,
+		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
+		ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
 	}}, nil
 }
 
@@ -142,52 +151,34 @@ func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authT
 	if refreshToken == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少 refreshToken")
 	}
-	claims, err := h.jwt.ParseToken(refreshToken)
-	if err != nil || claims.PrincipalType != "user" || claims.TokenUse != "refresh" {
-		h.audit(ctx, authpg.AuditEvent{
-			EventType: "token_refresh", PrincipalType: "user", Decision: "deny",
-			ReasonCode: "invalid_refresh_token", ReasonMessage: "Refresh Token 无效或已过期",
-		})
-		return nil, httpx.ErrUnauthorized.WithDetail("Refresh Token 无效或已过期")
-	}
+	pair, principal, err := h.sessions.Rotate(ctx, refreshToken)
 	auditBase := authpg.AuditEvent{
-		EventType: "token_refresh", PrincipalType: principalType(claims.UserType),
-		UserID: claims.UserID, JTI: claims.ID,
+		EventType: "token_refresh", PrincipalType: principalType(principal.UserType),
+		UserID: principal.UserID,
 	}
-	if claims.UserType >= 3 {
-		active, err := h.repo.CheckTenantActive(ctx, claims.TenantID)
-		if err != nil {
-			auditBase.Decision = "error"
-			auditBase.ReasonCode = "tenant_lookup_failed"
-			auditBase.ReasonMessage = "租户状态检查失败"
-			h.audit(ctx, auditBase)
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		if !active {
-			auditBase.Decision = "deny"
-			auditBase.ReasonCode = "tenant_inactive"
-			auditBase.ReasonMessage = "租户已被停用或暂停"
-			h.audit(ctx, auditBase)
-			return nil, httpx.ErrForbidden.WithDetail("租户已被停用或暂停，请重新登录")
-		}
-	}
-	pair, err := h.jwt.RefreshTokenPair(refreshToken, true)
 	if err != nil {
 		auditBase.Decision = "deny"
-		auditBase.ReasonCode = "refresh_rejected"
+		auditBase.ReasonCode = "invalid_refresh_token"
+		if errors.Is(err, auth.ErrRefreshTokenReused) {
+			auditBase.ReasonCode = "refresh_token_reused"
+		}
 		auditBase.ReasonMessage = "Refresh Token 无效或已过期"
 		h.audit(ctx, auditBase)
+		if errors.Is(err, auth.ErrTenantInactive) {
+			return nil, httpx.ErrForbidden.WithDetail("租户已被停用或暂停，请重新登录")
+		}
 		return nil, httpx.ErrUnauthorized.WithDetail("Refresh Token 无效或已过期")
 	}
 	auditBase.Decision = "success"
 	h.audit(ctx, auditBase)
 	return &authTokenOutput{Body: authTokenResponse{
-		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken, ExpiresIn: pair.ExpiresIn,
+		AccessToken: pair.AccessToken, RefreshToken: pair.RefreshToken,
+		ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn,
 	}}, nil
 }
 
 func principalType(userType int) string {
-	if userType <= 2 {
+	if userType == 1 || userType == 2 {
 		return "admin"
 	}
 	return "user"

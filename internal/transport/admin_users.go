@@ -250,7 +250,7 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 		if hash, err = bcrypt.GenerateFromPassword([]byte(in.Body.Password), bcrypt.DefaultCost); err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
-		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, updated_at = $4 WHERE user_id = $5 AND user_type = 2",
+		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, credential_version = credential_version + 1, updated_at = $4 WHERE user_id = $5 AND user_type = 2",
 			in.Body.Email, status, string(hash), now, in.ID)
 	} else {
 		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 2",
@@ -258,6 +258,16 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 	}
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if h.blacklist != nil {
+		if status == "disabled" {
+			_ = h.blacklist.BanUser(ctx, in.ID)
+		} else {
+			_ = h.blacklist.UnbanUser(ctx, in.ID)
+			if in.Body.Password != "" {
+				_ = h.blacklist.LogoutUser(in.ID)
+			}
+		}
 	}
 	return okSuccess(), nil
 }
@@ -386,7 +396,7 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 		if hash, err = bcrypt.GenerateFromPassword([]byte(in.Body.Password), bcrypt.DefaultCost); err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
-		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, updated_at = $4 WHERE user_id = $5 AND user_type = 3",
+		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, password_hash = $3, credential_version = credential_version + 1, updated_at = $4 WHERE user_id = $5 AND user_type = 3",
 			in.Body.Email, status, string(hash), now, in.ID)
 	} else {
 		_, err = h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 3",
@@ -401,6 +411,9 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 			_ = h.blacklist.BanUser(ctx, in.ID)
 		} else {
 			_ = h.blacklist.UnbanUser(ctx, in.ID)
+			if in.Body.Password != "" {
+				_ = h.blacklist.LogoutUser(in.ID)
+			}
 		}
 	}
 	return okSuccess(), nil
@@ -412,12 +425,15 @@ func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantI
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	now := billingdomain.NowUTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 3`, string(hash), now, in.ID)
+	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2 WHERE user_id = $3 AND user_type = 3`, string(hash), now, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	if result.RowsAffected() == 0 {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
+	}
+	if h.blacklist != nil {
+		_ = h.blacklist.LogoutUser(in.ID)
 	}
 	return okSuccess(), nil
 }

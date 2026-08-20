@@ -60,7 +60,7 @@ func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessag
 		}
 
 		claims, err := d.TokenVerifier.ParseToken(token)
-		if err != nil || claims == nil || claims.PrincipalType != "user" || claims.TokenUse != "access" {
+		if err != nil || claims == nil || claims.PrincipalType != "user" || claims.TokenUse != "access" || claims.SessionID == "" {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid bearer token")
 			return
 		}
