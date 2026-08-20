@@ -78,6 +78,7 @@ type OAuthPoolReader interface {
 // remain inside the transitional OAuth store.
 type OAuthCredentialReader interface {
 	ListForPool(ctx context.Context, poolID string) ([]domain.OAuthCredentialSummary, error)
+	GetSummaryByID(ctx context.Context, credID string) (*domain.OAuthCredentialSummary, error)
 }
 
 // BillingDeps contains AI subscription and prepaid billing collaborators.

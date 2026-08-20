@@ -789,6 +789,18 @@ func (s *OAuthCredentialStore) GetByID(ctx context.Context, credID string) (*OAu
 	return &rows[0], nil
 }
 
+// GetSummaryByID returns the non-secret management view of one credential.
+// Serving and token refresh continue to use GetByID because they need the
+// encrypted row internally for decryption.
+func (s *OAuthCredentialStore) GetSummaryByID(ctx context.Context, credID string) (*domain.OAuthCredentialSummary, error) {
+	row, err := s.GetByID(ctx, credID)
+	if err != nil {
+		return nil, err
+	}
+	summary := oauthCredentialSummary(*row)
+	return &summary, nil
+}
+
 func (s *OAuthCredentialStore) GetDecryptedByID(ctx context.Context, credID string) (*domain.OAuthCredential, error) {
 	row, err := s.GetByID(ctx, credID)
 	if err != nil {

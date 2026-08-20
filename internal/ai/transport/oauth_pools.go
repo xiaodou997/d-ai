@@ -2,7 +2,6 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -383,7 +382,7 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "向指定凭证池导入 OAuth credential。响应只返回非敏感展示字段，不返回 access token、refresh token 或密文。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *createPoolCredentialInput) (*poolCredentialOutput, error) {
-		if d.OAuth == nil {
+		if d.OAuth == nil || d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
 		providerType := strings.TrimSpace(in.Body.ProviderType)
@@ -402,12 +401,12 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		row, err := d.OAuth.GetByID(ctx, id)
+		row, err := d.CredentialReader.GetSummaryByID(ctx, id)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &poolCredentialOutput{}
-		out.Body = poolCredentialToDTO(*row)
+		out.Body = poolCredentialSummaryToDTO(*row)
 		return out, nil
 	})
 
@@ -419,10 +418,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "管理侧只允许在 active/disabled 间切换状态；invalid 由运行时失败路径维护。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *updatePoolCredentialInput) (*poolCredentialOutput, error) {
-		if d.OAuth == nil {
+		if d.OAuth == nil || d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
-		if _, err := getPoolCredentialScoped(ctx, d.OAuth, in.PoolID, in.CredID); err != nil {
+		if _, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if err := validatePoolCredentialPatch(in.Body); err != nil {
@@ -438,12 +437,12 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 				return nil, mapServiceError(err)
 			}
 		}
-		row, err := getPoolCredentialScoped(ctx, d.OAuth, in.PoolID, in.CredID)
+		row, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &poolCredentialOutput{}
-		out.Body = poolCredentialToDTO(*row)
+		out.Body = poolCredentialSummaryToDTO(*row)
 		return out, nil
 	})
 
@@ -455,24 +454,24 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "调用 token refresher 刷新指定凭证，返回刷新后的凭证（不含 token 明文）。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *refreshPoolCredentialInput) (*poolCredentialOutput, error) {
-		if d.OAuth == nil {
+		if d.OAuth == nil || d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
 		if d.TokenRefresher == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("token refresher is not configured")
 		}
-		if _, err := getPoolCredentialScoped(ctx, d.OAuth, in.PoolID, in.CredID); err != nil {
+		if _, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if err := d.TokenRefresher.RefreshByID(ctx, in.CredID); err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("token refresh failed: " + err.Error())
 		}
-		row, err := getPoolCredentialScoped(ctx, d.OAuth, in.PoolID, in.CredID)
+		row, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &poolCredentialOutput{}
-		out.Body = poolCredentialToDTO(*row)
+		out.Body = poolCredentialSummaryToDTO(*row)
 		return out, nil
 	})
 
@@ -484,10 +483,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "永久删除指定凭证池内的 OAuth credential。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *deletePoolCredentialInput) (*deletePoolCredentialOutput, error) {
-		if d.OAuth == nil {
+		if d.OAuth == nil || d.CredentialReader == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 		}
-		if _, err := getPoolCredentialScoped(ctx, d.OAuth, in.PoolID, in.CredID); err != nil {
+		if _, err := getPoolCredentialScoped(ctx, d.CredentialReader, in.PoolID, in.CredID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if err := d.OAuth.Delete(ctx, in.CredID); err != nil {
@@ -881,8 +880,8 @@ func validatePoolCredentialPatch(req poolCredentialPatchRequest) error {
 	return nil
 }
 
-func getPoolCredentialScoped(ctx context.Context, store *pgadapter.OAuthCredentialStore, poolID, credID string) (*pgadapter.OAuthCredentialRow, error) {
-	row, err := store.GetByID(ctx, credID)
+func getPoolCredentialScoped(ctx context.Context, reader OAuthCredentialReader, poolID, credID string) (*domain.OAuthCredentialSummary, error) {
+	row, err := reader.GetSummaryByID(ctx, credID)
 	if err != nil {
 		return nil, err
 	}
@@ -890,32 +889,6 @@ func getPoolCredentialScoped(ctx context.Context, store *pgadapter.OAuthCredenti
 		return nil, pgx.ErrNoRows
 	}
 	return row, nil
-}
-
-func poolCredentialToDTO(row pgadapter.OAuthCredentialRow) poolCredentialDTO {
-	return poolCredentialSummaryToDTO(domain.OAuthCredentialSummary{
-		ID:                   row.ID,
-		PoolID:               row.PoolID,
-		Name:                 row.Name,
-		ProviderType:         row.ProviderType,
-		Email:                row.Email,
-		TokenType:            row.TokenType,
-		Scope:                row.Scope,
-		ExpiresAt:            row.ExpiresAt,
-		AuthMetadata:         authMetadataToMap(row.AuthMetadataRaw),
-		Weight:               row.Weight,
-		Status:               row.Status,
-		InvalidReason:        row.InvalidReason,
-		CooldownUntil:        row.CooldownUntil,
-		LastUsedAt:           row.LastUsedAt,
-		LastRefreshedAt:      row.LastRefreshedAt,
-		LastFailedAt:         row.LastFailedAt,
-		ConsecutiveFailCount: row.ConsecutiveFailCount,
-		SuccessCount:         row.SuccessCount,
-		FailCount:            row.FailCount,
-		CreatedAt:            row.CreatedAt,
-		UpdatedAt:            row.UpdatedAt,
-	})
 }
 
 func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentialDTO {
@@ -942,17 +915,6 @@ func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentia
 		CreatedAt:            timeToMillisPtr(row.CreatedAt),
 		UpdatedAt:            timeToMillisPtr(row.UpdatedAt),
 	}
-}
-
-func authMetadataToMap(raw []byte) map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil
-	}
-	return redactSensitiveMetadata(out)
 }
 
 func redactSensitiveMetadata(in map[string]any) map[string]any {

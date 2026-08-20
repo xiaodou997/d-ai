@@ -398,6 +398,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 端口收敛：OAuth 凭证管理端点改用 `OAuthTokenRefresher`，不再暴露后台刷新器具体类型。
 - 端口收敛：AI 上游模型绑定的 pool 只读查询改用 `OAuthPoolReader`；OAuth CRUD 和凭证生命周期仍保留在具体 store，便于后续继续拆分写端口。
 - 端口收敛：凭证池账号列表改用 `OAuthCredentialReader` 与无密文 `OAuthCredentialSummary`；adapter 在边界内完成 metadata 脱敏，Transport 不再依赖原始 credential row。
+- 端口收敛：凭证创建响应及更新/刷新/删除前的 scoped read 改用 `GetSummaryByID`；原始 `GetByID` 仅保留给 adapter 内部 serving/token refresh 解密路径。
 - 端口收敛：OAuth pool 模型发现改用 `ClientCatalogResolver`，Transport 不再暴露具体 catalog service。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
