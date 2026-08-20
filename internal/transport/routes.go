@@ -37,7 +37,6 @@ import (
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
-	"xiaodou/dai/libs/go/banstate"
 )
 
 // InfrastructureDeps contains process-wide clients shared by transport
@@ -95,7 +94,7 @@ type AIInfrastructureDeps struct {
 	AIHTTPClient    *http.Client
 	Health          routing.HealthTracker
 	Weights         aitransport.ScoreWeightsStore
-	BanChecker      *banstate.Checker
+	BanChecker      aitransport.HumaBanChecker
 }
 
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
