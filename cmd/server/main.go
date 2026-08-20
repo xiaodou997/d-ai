@@ -161,7 +161,7 @@ func run() error {
 		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
 
-	transport.Register(api, deps)
+	transport.Register(api, deps, ai.AIDeps)
 	transport.RegisterRaw(router, deps)
 
 	// AI gateway + console + fileStore 路由

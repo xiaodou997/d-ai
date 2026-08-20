@@ -20,8 +20,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
 
-	got := buildAIDeps(Deps{
-		AIDeps: AIDeps{
+	got := buildAIDeps(
+		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
+		AIDeps{
 			AIInfrastructureDeps: AIInfrastructureDeps{
 				SecretMasterKey: "secret-master-key",
 				AIHTTPClient:    httpClient,
@@ -36,8 +37,8 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ClientCatalog: catalog,
 			},
 		},
-		IdentityDeps: IdentityDeps{Blacklist: blacklist},
-	})
+		nil,
+	)
 
 	if got.OAuth != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
 		t.Fatal("OAuth management dependencies were not preserved")

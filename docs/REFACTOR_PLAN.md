@@ -130,8 +130,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-02 拆分 composition root 和巨型依赖容器
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
-- [~] 删除包含几十个字段的 `transport.Deps` / `AIDeps` service locator；字段已按领域分组，具体端口和容器本身仍待拆除。
-- [ ] 每个模块提供最小的 Register/Module 接口和显式依赖。
+- [~] 删除包含几十个字段的 `transport.Deps` / `AIDeps` service locator；平台与 AI 容器已分离并按域分组，具体端口和容器本身仍待拆除。
+- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
@@ -392,6 +392,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 本次变更：新增 `aiModules`，集中装配 AI 控制面、Serving pipeline、Gateway、Console、文件/图片服务和异步任务；`run` 仅保留组合顺序、HTTP 注册和健康检查。
 - 生命周期：价格同步、风险审查、审计、OAuth Token refresh、结算 Outbox 和异步任务由 `aiModules.Start/Stop` 统一启动与关闭，根 context 取消仍负责无独立 Stop 的 worker。
-- 验证：相关 `go test`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 和 `git diff --check` 通过。
+- 依赖边界：平台 `transport.Deps` 与 AI `transport.AIDeps` 分离，新增 `transport.Module` 并由 AI 模块独立注册路由。
+- 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 继续将 `transport.Deps` / `AIDeps` 替换为最小端口和显式 Module 接口。
+- 下一候选项：P1-02 继续将平台与 AI 组内的数据库、Redis、adapter 依赖替换为最小端口。

@@ -133,8 +133,8 @@ type AIOperationsDeps struct {
 }
 
 // AIDeps contains the AI control-plane and runtime services exposed by the
-// unified transport. Embedded groups preserve handler selectors while making
-// composition ownership explicit.
+// AI transport module. It is intentionally separate from Deps so a role that
+// only serves platform endpoints cannot accidentally receive AI services.
 type AIDeps struct {
 	AIInfrastructureDeps
 	AIIdentityDeps
@@ -143,25 +143,49 @@ type AIDeps struct {
 	AIOperationsDeps
 }
 
-// Deps 汇集统一 transport 层注册端点所需的显式领域依赖组。
+// Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
 //
 // The embedded groups preserve the existing d.Field handler access pattern,
-// but composition code must now name the owning group explicitly. This is an
-// incremental step away from a flat service locator; the next step is to
-// replace the remaining infrastructure fields with application ports.
+// but composition code must now name the owning group explicitly. AI
+// dependencies are passed separately through AIDeps.
 type Deps struct {
 	InfrastructureDeps
 	PortalDeps
 	IdentityDeps
 	BillingDeps
 	OperationsDeps
-	AIDeps
 }
 
-// Register 在 Huma API 上注册全部端点。
-func Register(api huma.API, d Deps) {
+// Module is a transport route module. Each module owns one explicit
+// dependency bundle and can be registered independently by a future runtime
+// role.
+type Module interface {
+	Register(api huma.API)
+}
+
+type aiModule struct {
+	platform Deps
+	deps     AIDeps
+}
+
+type aiIdentityProvider interface {
+	aitransport.IdentityProvider
+	aitransport.TenantEndUserVerifier
+}
+
+func (m aiModule) Register(api huma.API) {
+	identity := newAIIdentityAdapter(m.platform.Pool, m.platform.UserService)
+	aitransport.RegisterAI(api, buildAIDeps(m.platform, m.deps, identity))
+}
+
+// Register 在 Huma API 上注册平台端点和显式 AI 模块。
+func Register(api huma.API, d Deps, ai AIDeps) {
 	registerMeta(api, d)
 	registerPublicPlane(api, d)
+	modules := []Module{aiModule{platform: d, deps: ai}}
+	for _, module := range modules {
+		module.Register(api)
+	}
 }
 
 func registerMeta(api huma.API, d Deps) {
@@ -199,31 +223,22 @@ func registerPublicPlane(api huma.API, d Deps) {
 	// 公开端点（无认证）
 	registerPublic(api, d)
 
-	// AI 域端点
-	registerAITransport(api, d)
 }
 
-// registerAITransport 将 AI 域端点注册到统一 Huma API 上。
-func registerAITransport(api huma.API, d Deps) {
-	aiDeps := buildAIDeps(d)
-	aitransport.RegisterAI(api, aiDeps)
-}
-
-func buildAIDeps(d Deps) aitransport.AIDeps {
-	identity := newAIIdentityAdapter(d.Pool, d.UserService)
+func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
 	aiDeps := aitransport.AIDeps{
 		InfrastructureDeps: aitransport.InfrastructureDeps{
-			Postgres:   d.Pool,
-			Redis:      d.Redis,
+			Postgres:   platform.Pool,
+			Redis:      platform.Redis,
 			Queries:    d.Queries,
-			Logger:     d.Logger,
+			Logger:     platform.Logger,
 			HTTPClient: d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
 			OAuth:            d.OAuth,
 			TokenRefresher:   d.TokenRefresher,
-			TokenVerifier:    d.JWT,
-			TokenRevocations: d.Blacklist,
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
 			BanChecker:       d.BanChecker,
 			APIKeySvc:        d.APIKeySvc,
 			WorkspaceSvc:     d.WorkspaceSvc,

@@ -56,6 +56,7 @@ import (
 // dependencies and the route owners consumed by the composition root.
 type aiModules struct {
 	Deps              transport.Deps
+	AIDeps            transport.AIDeps
 	FileStore         *filestore.Service
 	ImageAssets       *imageassets.Service
 	RuntimeGateway    *gateway.Gateway
@@ -350,41 +351,41 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				ProxyNodes:    platform.ProxyNodes,
 				DataCleanup:   platform.DataCleanup,
 			},
-			AIDeps: transport.AIDeps{
-				AIInfrastructureDeps: transport.AIInfrastructureDeps{
-					Queries:         q,
-					SecretMasterKey: cfg.Security.SecretMasterKey,
-					AIHTTPClient:    managementHTTPClient,
-					Health:          healthTracker,
-					Weights:         routeWeightsStore,
-					BanChecker:      banChecker,
-				},
-				AIIdentityDeps: transport.AIIdentityDeps{
-					OAuth:          oauthCreds,
-					TokenRefresher: refresher,
-					APIKeySvc:      apiKeySvc,
-					WorkspaceSvc:   workspaceSvc,
-				},
-				AIBillingDeps: transport.AIBillingDeps{
-					Subscriptions: subsSvc,
-				},
-				AICatalogDeps: transport.AICatalogDeps{
-					ClientCatalog:     poolModelCatalog,
-					PriceBookSvc:      priceBookSvc,
-					CommercialSvc:     commercialSvc,
-					GroupTransferSvc:  groupTransferSvc,
-					AccountSvc:        accountSvc,
-					UpstreamAccessSvc: upstreamAccessSvc,
-				},
-				AIOperationsDeps: transport.AIOperationsDeps{
-					DashboardSvc:         dashboardSvc,
-					UsageSvc:             usageSvc,
-					AuditSvc:             auditSvc,
-					RiskControlConfigSvc: riskControlConfigSvc,
-					RiskControlLogSvc:    riskControlLogSvc,
-					RiskControlEventSvc:  riskControlEventSvc,
-					RiskControlChecker:   riskControlChecker,
-				},
+		},
+		AIDeps: transport.AIDeps{
+			AIInfrastructureDeps: transport.AIInfrastructureDeps{
+				Queries:         q,
+				SecretMasterKey: cfg.Security.SecretMasterKey,
+				AIHTTPClient:    managementHTTPClient,
+				Health:          healthTracker,
+				Weights:         routeWeightsStore,
+				BanChecker:      banChecker,
+			},
+			AIIdentityDeps: transport.AIIdentityDeps{
+				OAuth:          oauthCreds,
+				TokenRefresher: refresher,
+				APIKeySvc:      apiKeySvc,
+				WorkspaceSvc:   workspaceSvc,
+			},
+			AIBillingDeps: transport.AIBillingDeps{
+				Subscriptions: subsSvc,
+			},
+			AICatalogDeps: transport.AICatalogDeps{
+				ClientCatalog:     poolModelCatalog,
+				PriceBookSvc:      priceBookSvc,
+				CommercialSvc:     commercialSvc,
+				GroupTransferSvc:  groupTransferSvc,
+				AccountSvc:        accountSvc,
+				UpstreamAccessSvc: upstreamAccessSvc,
+			},
+			AIOperationsDeps: transport.AIOperationsDeps{
+				DashboardSvc:         dashboardSvc,
+				UsageSvc:             usageSvc,
+				AuditSvc:             auditSvc,
+				RiskControlConfigSvc: riskControlConfigSvc,
+				RiskControlLogSvc:    riskControlLogSvc,
+				RiskControlEventSvc:  riskControlEventSvc,
+				RiskControlChecker:   riskControlChecker,
 			},
 		},
 		FileStore:          fileStore,

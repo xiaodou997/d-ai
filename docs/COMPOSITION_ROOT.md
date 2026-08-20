@@ -28,10 +28,12 @@ httpServers.Start / Shutdown
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
+- Transport 已将平台 `Deps` 与 AI `AIDeps` 分离，并通过 `transport.Module` 注册 AI 路由；后续运行角色可以
+  只注册所需模块，不再必须接收整套跨域依赖。
 
 ## 尚未清零的装配遗留
 
-- `transport.Deps` 与 `ai/transport.AIDeps` 仍是兼容型依赖容器，组内仍有具体 PostgreSQL/Redis/adapter 类型；P1-02 后续会按端点组替换为最小端口集合和 Module 接口。
+- `transport.Deps` 与 `transport.AIDeps` 组内仍有具体 PostgreSQL/Redis/adapter 类型；P1-02 后续会按端点组继续替换为最小端口集合。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
