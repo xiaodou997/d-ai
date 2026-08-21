@@ -401,7 +401,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 端口收敛：凭证创建响应及更新/刷新/删除前的 scoped read 改用 `GetSummaryByID`；原始 `GetByID` 仅保留给 adapter 内部 serving/token refresh 解密路径。
 - 端口收敛：凭证状态、权重更新和删除改用 `OAuthCredentialWriter`；刷新端点移除对完整 OAuth store 的冗余依赖。
 - 端口收敛：凭证导入改用 `OAuthCredentialCreator` 与领域级 `OAuthCredentialCreate` 命令；Transport 不再通过完整 OAuth store 创建凭证或接收 adapter 写入模型。
+- 端口收敛：OAuth pool 健康汇总改用 `OAuthPoolHealthReader` 与领域级 `OAuthPoolHealthSummary`；AI Transport 依赖容器不再暴露具体 `OAuthCredentialStore`。
 - 端口收敛：OAuth pool 模型发现改用 `ClientCatalogResolver`，Transport 不再暴露具体 catalog service。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将 OAuth pool 健康摘要查询从 `OAuthCredentialStore` 拆为独立只读端口。
+- 下一候选项：P1-02 用最小密钥加解密端口替代 AI Transport 中直接持有的 `SecretMasterKey`。

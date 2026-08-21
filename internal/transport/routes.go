@@ -21,7 +21,6 @@ import (
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
-	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/commercial"
 	aidb "xiaodou/dai/internal/ai/db/gen"
@@ -97,12 +96,12 @@ type AIInfrastructureDeps struct {
 
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
-	OAuth             *pgadapter.OAuthCredentialStore
 	CredentialCreator aitransport.OAuthCredentialCreator
 	CredentialReader  aitransport.OAuthCredentialReader
 	CredentialWriter  aitransport.OAuthCredentialWriter
 	PoolReader        aitransport.OAuthPoolReader
 	PoolWriter        aitransport.OAuthPoolWriter
+	PoolHealthReader  aitransport.OAuthPoolHealthReader
 	TokenRefresher    aitransport.OAuthTokenRefresher
 	APIKeySvc         *identitycontrol.Service
 	WorkspaceSvc      *workspacesvc.Service
@@ -237,12 +236,12 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			HTTPClient: d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
-			OAuth:             d.OAuth,
 			CredentialCreator: d.CredentialCreator,
 			CredentialReader:  d.CredentialReader,
 			CredentialWriter:  d.CredentialWriter,
 			PoolReader:        d.PoolReader,
 			PoolWriter:        d.PoolWriter,
+			PoolHealthReader:  d.PoolHealthReader,
 			TokenRefresher:    d.TokenRefresher,
 			TokenVerifier:     platform.JWT,
 			TokenRevocations:  platform.Blacklist,

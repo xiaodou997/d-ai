@@ -368,6 +368,21 @@ type CredentialPoolUpdate struct {
 	TenantMultiplier  *float64
 }
 
+// OAuthPoolHealthSummary is the non-secret aggregate used by pool health
+// management queries.
+type OAuthPoolHealthSummary struct {
+	PoolID            string
+	PoolName          string
+	FixedProviderType FixedProviderType
+	OAuthStrategy     string
+	Total             int
+	Active            int
+	Invalid           int
+	Disabled          int
+	CoolingDown       int
+	ExpiringSoon      int
+}
+
 // OAuthCredential represents a single OAuth token entry in a credential pool.
 // AccessToken and RefreshToken are decrypted values ready for use.
 type OAuthCredential struct {

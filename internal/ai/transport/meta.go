@@ -13,7 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
-	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
@@ -46,12 +45,12 @@ type InfrastructureDeps struct {
 // IdentityDeps contains authentication, API key and workspace identity
 // collaborators used by AI routes.
 type IdentityDeps struct {
-	OAuth             *pgadapter.OAuthCredentialStore
 	CredentialCreator OAuthCredentialCreator
 	CredentialReader  OAuthCredentialReader
 	CredentialWriter  OAuthCredentialWriter
 	PoolReader        OAuthPoolReader
 	PoolWriter        OAuthPoolWriter
+	PoolHealthReader  OAuthPoolHealthReader
 	TokenRefresher    OAuthTokenRefresher
 	APIKeySvc         *identitycontrol.Service
 	WorkspaceSvc      *workspacesvc.Service
@@ -60,6 +59,12 @@ type IdentityDeps struct {
 	TokenRevocations  TokenRevocationChecker
 	BanChecker        HumaBanChecker
 	TenantEndUsers    TenantEndUserVerifier
+}
+
+// OAuthPoolHealthReader is the aggregate query port used by the pool health
+// management endpoint.
+type OAuthPoolHealthReader interface {
+	GetPoolHealthSummary(ctx context.Context) ([]domain.OAuthPoolHealthSummary, error)
 }
 
 // OAuthCredentialCreator is the secret-bearing write port needed only by the

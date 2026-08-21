@@ -528,21 +528,7 @@ func (s *OAuthCredentialStore) ListExpiring(ctx context.Context, within time.Dur
 // Pool health summary (admin dashboard)
 // ============================================================================
 
-// PoolHealthRow is one pool's credential health summary.
-type PoolHealthRow struct {
-	PoolID            string
-	PoolName          string
-	FixedProviderType string
-	OAuthStrategy     string
-	Total             int
-	Active            int
-	Invalid           int
-	Disabled          int
-	CoolingDown       int
-	ExpiringSoon      int
-}
-
-func (s *OAuthCredentialStore) GetPoolHealthSummary(ctx context.Context) ([]PoolHealthRow, error) {
+func (s *OAuthCredentialStore) GetPoolHealthSummary(ctx context.Context) ([]domain.OAuthPoolHealthSummary, error) {
 	const q = `
 		SELECT
 		    p.id::text                AS pool_id,
@@ -571,9 +557,9 @@ func (s *OAuthCredentialStore) GetPoolHealthSummary(ctx context.Context) ([]Pool
 	}
 	defer rows.Close()
 
-	var out []PoolHealthRow
+	var out []domain.OAuthPoolHealthSummary
 	for rows.Next() {
-		var r PoolHealthRow
+		var r domain.OAuthPoolHealthSummary
 		if err := rows.Scan(
 			&r.PoolID, &r.PoolName, &r.FixedProviderType, &r.OAuthStrategy,
 			&r.Total, &r.Active, &r.Invalid, &r.Disabled, &r.CoolingDown, &r.ExpiringSoon,

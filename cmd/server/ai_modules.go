@@ -362,12 +362,12 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				BanChecker:      banChecker,
 			},
 			AIIdentityDeps: transport.AIIdentityDeps{
-				OAuth:             oauthCreds,
 				CredentialCreator: oauthCreds,
 				CredentialReader:  oauthCreds,
 				CredentialWriter:  oauthCreds,
 				PoolReader:        oauthCreds,
 				PoolWriter:        oauthCreds,
+				PoolHealthReader:  oauthCreds,
 				TokenRefresher:    refresher,
 				APIKeySvc:         apiKeySvc,
 				WorkspaceSvc:      workspaceSvc,

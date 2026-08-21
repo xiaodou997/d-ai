@@ -9,7 +9,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5"
 
-	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/clientruntime"
 	"xiaodou/dai/internal/ai/domain"
@@ -621,10 +620,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "返回每个 OAuth 凭证池的账号状态聚合指标。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, _ *struct{}) (*oauthPoolHealthOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolHealthReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth pool health reader is not configured")
 		}
-		rows, err := d.OAuth.GetPoolHealthSummary(ctx)
+		rows, err := d.PoolHealthReader.GetPoolHealthSummary(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -923,11 +922,11 @@ func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentia
 	}
 }
 
-func oauthPoolHealthToDTO(row pgadapter.PoolHealthRow) oauthPoolHealthDTO {
+func oauthPoolHealthToDTO(row domain.OAuthPoolHealthSummary) oauthPoolHealthDTO {
 	return oauthPoolHealthDTO{
 		PoolID:            row.PoolID,
 		PoolName:          row.PoolName,
-		FixedProviderType: row.FixedProviderType,
+		FixedProviderType: string(row.FixedProviderType),
 		OAuthStrategy:     row.OAuthStrategy,
 		Total:             row.Total,
 		Active:            row.Active,

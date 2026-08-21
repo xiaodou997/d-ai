@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +27,16 @@ type credentialCreatorStub struct {
 type poolWriterStub struct {
 	created domain.CredentialPoolCreate
 	id      string
+}
+
+type poolHealthReaderStub struct {
+	called bool
+	rows   []domain.OAuthPoolHealthSummary
+}
+
+func (s *poolHealthReaderStub) GetPoolHealthSummary(context.Context) ([]domain.OAuthPoolHealthSummary, error) {
+	s.called = true
+	return s.rows, nil
 }
 
 func (s *poolWriterStub) CreatePool(_ context.Context, input domain.CredentialPoolCreate) (string, error) {
@@ -123,6 +134,44 @@ func TestCreateCredentialPoolUsesDedicatedPoolPorts(t *testing.T) {
 	}
 	if writer.created.Name != "Port pool" || writer.created.FixedProviderType != domain.FixedProviderCodex {
 		t.Fatalf("CreatePool() input = %#v", writer.created)
+	}
+}
+
+func TestOAuthPoolHealthUsesDedicatedReaderPort(t *testing.T) {
+	reader := &poolHealthReaderStub{rows: []domain.OAuthPoolHealthSummary{{
+		PoolID:            "pool-1",
+		PoolName:          "Health pool",
+		FixedProviderType: domain.FixedProviderCodex,
+		OAuthStrategy:     "round_robin",
+		Total:             3,
+		Active:            2,
+		Invalid:           1,
+	}}}
+	router, api := server.New(server.Options{Title: "test", Version: "test"})
+	registerOAuthPools(api, AIDeps{IdentityDeps: IdentityDeps{PoolHealthReader: reader}})
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/oauth-pool-health", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("oauth pool health status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if !reader.called {
+		t.Fatal("GetPoolHealthSummary() was not called")
+	}
+	var body struct {
+		Items []oauthPoolHealthDTO `json:"items"`
+		Total int                  `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if body.Total != 1 || len(body.Items) != 1 {
+		t.Fatalf("health response = %#v", body)
+	}
+	item := body.Items[0]
+	if item.PoolID != "pool-1" || item.FixedProviderType != string(domain.FixedProviderCodex) || item.Active != 2 {
+		t.Fatalf("health item = %#v", item)
 	}
 }
 
