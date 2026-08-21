@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/subscription"
@@ -192,8 +190,8 @@ func buildIdentityIncluded(ctx context.Context, d AIDeps, userIDs []string, tena
 }
 
 func logIdentityEnrichmentFailure(d AIDeps, kind string, err error) {
-	if d.Logger != nil {
-		d.Logger.Warn("identity enrichment failed open", zap.String("kind", kind), zap.Error(err))
+	if d.IdentityEnrichmentFailures != nil {
+		d.IdentityEnrichmentFailures.ObserveFailure(kind, err)
 	}
 }
 

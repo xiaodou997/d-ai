@@ -126,13 +126,14 @@ type AICatalogDeps struct {
 
 // AIOperationsDeps contains AI-side dashboards, audit and risk-control collaborators.
 type AIOperationsDeps struct {
-	DashboardSvc         *observabilitycontrol.DashboardService
-	UsageSvc             *observabilitycontrol.UsageService
-	AuditSvc             *observabilitycontrol.AuditService
-	RiskControlConfigSvc *riskcontrol.ConfigService
-	RiskControlLogSvc    *riskcontrol.LogService
-	RiskControlEventSvc  *riskcontrol.EventService
-	RiskControlChecker   *riskcontrol.Checker
+	DashboardSvc               *observabilitycontrol.DashboardService
+	UsageSvc                   *observabilitycontrol.UsageService
+	AuditSvc                   *observabilitycontrol.AuditService
+	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
+	RiskControlConfigSvc       *riskcontrol.ConfigService
+	RiskControlLogSvc          *riskcontrol.LogService
+	RiskControlEventSvc        *riskcontrol.EventService
+	RiskControlChecker         *riskcontrol.Checker
 }
 
 // AIDeps contains the AI control-plane and runtime services exposed by the
@@ -234,7 +235,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			Postgres:    platform.Pool,
 			RedisHealth: d.RedisHealth,
 			Queries:     d.Queries,
-			Logger:      platform.Logger,
 			HTTPClient:  d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
@@ -269,13 +269,14 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			ProviderSecrets: d.ProviderSecrets,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
-			DashboardSvc:         d.DashboardSvc,
-			UsageSvc:             d.UsageSvc,
-			AuditSvc:             d.AuditSvc,
-			RiskControlConfigSvc: d.RiskControlConfigSvc,
-			RiskControlLogSvc:    d.RiskControlLogSvc,
-			RiskControlEventSvc:  d.RiskControlEventSvc,
-			RiskControlChecker:   d.RiskControlChecker,
+			DashboardSvc:               d.DashboardSvc,
+			UsageSvc:                   d.UsageSvc,
+			AuditSvc:                   d.AuditSvc,
+			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
+			RiskControlConfigSvc:       d.RiskControlConfigSvc,
+			RiskControlLogSvc:          d.RiskControlLogSvc,
+			RiskControlEventSvc:        d.RiskControlEventSvc,
+			RiskControlChecker:         d.RiskControlChecker,
 		},
 	}
 	if identity != nil {

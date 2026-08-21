@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
@@ -38,7 +37,6 @@ type InfrastructureDeps struct {
 	RedisHealth ComponentHealthProbe
 	Queries     *dbgen.Queries
 	HTTPClient  HTTPDoer
-	Logger      *zap.Logger
 }
 
 // ComponentHealthProbe is the minimal infrastructure check needed by the
@@ -179,14 +177,21 @@ type ScoreWeightsStore interface {
 
 // OperationsDeps contains dashboards, audit and risk-control collaborators.
 type OperationsDeps struct {
-	DashboardSvc *observabilitycontrol.DashboardService
-	UsageSvc     *observabilitycontrol.UsageService
-	AuditSvc     *observabilitycontrol.AuditService
+	DashboardSvc               *observabilitycontrol.DashboardService
+	UsageSvc                   *observabilitycontrol.UsageService
+	AuditSvc                   *observabilitycontrol.AuditService
+	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。
 	RiskControlConfigSvc *riskcontrol.ConfigService
 	RiskControlLogSvc    *riskcontrol.LogService
 	RiskControlEventSvc  *riskcontrol.EventService
 	RiskControlChecker   *riskcontrol.Checker // 供 /risk-control/test 复用 Detect()，不落库
+}
+
+// IdentityEnrichmentFailureObserver records fail-open identity lookup errors
+// without coupling transport to a logging implementation or field type.
+type IdentityEnrichmentFailureObserver interface {
+	ObserveFailure(kind string, err error)
 }
 
 // AIDeps groups the explicit dependencies required by AI HTTP registration.

@@ -33,6 +33,7 @@ import (
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/imageassets"
+	aiobservability "xiaodou/dai/internal/ai/observability"
 	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/privacy"
@@ -89,6 +90,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	q := aidb.New(pool)
 	banChecker := banstate.NewChecker(redisClient)
 	redisHealth := redisadapter.NewHealthProbe(redisClient)
+	identityEnrichmentFailures := aiobservability.NewIdentityEnrichmentLogger(appLogger)
 	providerSecrets := secret.NewProviderKeyCodec(cfg.Security.SecretMasterKey)
 
 	priceBookSvc := billingcontrol.New(
@@ -384,13 +386,14 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				UpstreamAccessSvc: upstreamAccessSvc,
 			},
 			AIOperationsDeps: transport.AIOperationsDeps{
-				DashboardSvc:         dashboardSvc,
-				UsageSvc:             usageSvc,
-				AuditSvc:             auditSvc,
-				RiskControlConfigSvc: riskControlConfigSvc,
-				RiskControlLogSvc:    riskControlLogSvc,
-				RiskControlEventSvc:  riskControlEventSvc,
-				RiskControlChecker:   riskControlChecker,
+				DashboardSvc:               dashboardSvc,
+				UsageSvc:                   usageSvc,
+				AuditSvc:                   auditSvc,
+				IdentityEnrichmentFailures: identityEnrichmentFailures,
+				RiskControlConfigSvc:       riskControlConfigSvc,
+				RiskControlLogSvc:          riskControlLogSvc,
+				RiskControlEventSvc:        riskControlEventSvc,
+				RiskControlChecker:         riskControlChecker,
 			},
 		},
 		FileStore:          fileStore,

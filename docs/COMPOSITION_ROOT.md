@@ -48,6 +48,7 @@ httpServers.Start / Shutdown
 - AI Transport 的上游模型发现、外部模型目录和账号连通性检测只依赖 `HTTPDoer`；具体 `http.Client` 的连接池、重定向和 transport 超时策略由 composition root 持有。
 - models.dev 能力目录由 composition root 创建的 `externalmodels.Service` 持有 Redis、HTTP 和实例级缓存；AI Transport 只接收 `ModelCapabilityResolver`，不再编排外部目录基础设施。
 - AI 系统状态端点只接收 `ComponentHealthProbe`；Redis adapter 封装 `PING` 和 go-redis 命令类型，AI Transport 依赖容器不再持有 `*redis.Client`。
+- usage identity enrichment 的 fail-open 告警只依赖 `IdentityEnrichmentFailureObserver`；observability adapter 负责 zap 日志消息与字段，AI Transport 不再持有 `*zap.Logger`。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

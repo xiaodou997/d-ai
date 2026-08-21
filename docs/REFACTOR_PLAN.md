@@ -407,6 +407,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - HTTP 边界：上游模型发现、models.dev 目录刷新和账号连通性检测统一依赖最小 `HTTPDoer` 端口；连接池、重定向和 transport 超时策略继续由 composition root 构造的具体客户端持有。
 - 模型能力边界：`externalmodels.Service` 封装 Redis、HTTP 和进程内缓存，移除包级共享缓存；AI Transport 仅依赖 `ModelCapabilityResolver`，未装配或目录未命中时保持本地启发式降级。
 - 健康检查边界：AI 系统状态端点通过 `ComponentHealthProbe` 检查 Redis，go-redis 的 `Ping` 命令类型封装在 Redis adapter；AI Transport 基础设施容器不再持有具体 `*redis.Client`。
+- 可观测性边界：usage identity enrichment 失败通过 `IdentityEnrichmentFailureObserver` 上报，zap 消息与字段映射封装在 observability adapter；AI Transport 不再持有具体 `*zap.Logger`，失败时继续返回空补全结果。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将 usage identity enrichment 的具体 `*zap.Logger` 收敛为专用失败 observer 端口，并从 AI Transport 基础设施容器移除 logger。
+- 下一候选项：P1-02 将模型发现、连通性检测和绑定校验中的 sqlc 上游账号读取收敛为领域级 `UpstreamAccountReader`，避免 Transport 接收账号持久化行。

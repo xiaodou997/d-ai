@@ -24,6 +24,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
 	providerSecrets := &providerSecretCodecStub{}
+	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
 
 	got := buildAIDeps(
 		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
@@ -48,6 +49,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ClientCatalog:     catalog,
 				ModelCapabilities: modelCapabilities,
 			},
+			AIOperationsDeps: AIOperationsDeps{
+				IdentityEnrichmentFailures: identityEnrichmentFailures,
+			},
 		},
 		nil,
 	)
@@ -63,6 +67,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.RedisHealth != redisHealth || got.Health != health || got.Weights != weights {
 		t.Fatal("routing management dependencies were not preserved")
+	}
+	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
+		t.Fatal("observability dependencies were not preserved")
 	}
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")
@@ -81,6 +88,10 @@ func (*httpDoerStub) Do(*http.Request) (*http.Response, error) { return nil, nil
 type componentHealthProbeStub struct{}
 
 func (*componentHealthProbeStub) Check(context.Context) error { return nil }
+
+type identityEnrichmentFailureObserverStub struct{}
+
+func (*identityEnrichmentFailureObserverStub) ObserveFailure(string, error) {}
 
 type modelCapabilityResolverStub struct{}
 
