@@ -16,3 +16,16 @@ type AuditLog struct {
 	HttpStatus     *int32
 	CreatedAt      time.Time
 }
+
+// AdminAuditEvent is the write-side domain model for an administrative action.
+// Optional database columns use empty strings or nil without exposing sqlc or
+// pgx types outside the persistence adapter.
+type AdminAuditEvent struct {
+	Actor          string
+	Action         string
+	ObjectType     string
+	ObjectID       string
+	RequestSummary []byte
+	Result         string
+	HttpStatus     *int32
+}

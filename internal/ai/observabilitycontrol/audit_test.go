@@ -10,6 +10,7 @@ import (
 
 type auditRepoStub struct {
 	gotLimit int32
+	gotEvent domain.AdminAuditEvent
 	items    []domain.AuditLog
 	err      error
 }
@@ -17,6 +18,11 @@ type auditRepoStub struct {
 func (m *auditRepoStub) List(ctx context.Context, limit int32) ([]domain.AuditLog, error) {
 	m.gotLimit = limit
 	return m.items, m.err
+}
+
+func (m *auditRepoStub) Record(ctx context.Context, event domain.AdminAuditEvent) error {
+	m.gotEvent = event
+	return m.err
 }
 
 func TestAuditListDefaultsLimitWhenZero(t *testing.T) {
@@ -79,5 +85,37 @@ func TestAuditListReturnsItems(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].ID != "a1" {
 		t.Fatalf("items not returned: %+v", items)
+	}
+}
+
+func TestAuditRecordPassesEventThrough(t *testing.T) {
+	status := int32(201)
+	repo := &auditRepoStub{}
+	svc := NewAuditService(repo)
+	event := domain.AdminAuditEvent{
+		Actor:          "admin-1",
+		Action:         "groups.import",
+		ObjectType:     "group_config_bundle",
+		ObjectID:       "bundle-1",
+		RequestSummary: []byte(`{"group_count":2}`),
+		Result:         "success",
+		HttpStatus:     &status,
+	}
+
+	if err := svc.Record(context.Background(), event); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.gotEvent.Actor != event.Actor || repo.gotEvent.Action != event.Action || repo.gotEvent.ObjectID != event.ObjectID {
+		t.Fatalf("event not preserved: %+v", repo.gotEvent)
+	}
+	if repo.gotEvent.HttpStatus == nil || *repo.gotEvent.HttpStatus != status || string(repo.gotEvent.RequestSummary) != string(event.RequestSummary) {
+		t.Fatalf("event payload not preserved: %+v", repo.gotEvent)
+	}
+}
+
+func TestAuditRecordPropagatesError(t *testing.T) {
+	svc := NewAuditService(&auditRepoStub{err: errors.New("boom")})
+	if err := svc.Record(context.Background(), domain.AdminAuditEvent{Action: "groups.import"}); err == nil {
+		t.Fatal("want repo error")
 	}
 }

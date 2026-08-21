@@ -40,3 +40,16 @@ func (r *AuditRepo) List(ctx context.Context, limit int32) ([]domain.AuditLog, e
 	}
 	return out, nil
 }
+
+func (r *AuditRepo) Record(ctx context.Context, event domain.AdminAuditEvent) error {
+	_, err := r.q.CreateAuditLog(ctx, dbgen.CreateAuditLogParams{
+		Actor:          nullableText(event.Actor),
+		Action:         event.Action,
+		ObjectType:     nullableText(event.ObjectType),
+		ObjectID:       nullableText(event.ObjectID),
+		RequestSummary: event.RequestSummary,
+		Result:         event.Result,
+		HttpStatus:     int32PtrToInt4(event.HttpStatus),
+	})
+	return err
+}

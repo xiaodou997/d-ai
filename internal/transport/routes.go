@@ -23,7 +23,6 @@ import (
 	// AI 域
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/commercial"
-	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	proxypkg "xiaodou/dai/internal/ai/proxy"
@@ -83,10 +82,9 @@ type OperationsDeps struct {
 	DataCleanup   *cleanuppkg.Service
 }
 
-// AIInfrastructureDeps contains generated query access and runtime-level
-// policies needed while the legacy AI transport is being migrated.
+// AIInfrastructureDeps contains runtime-level infrastructure policies used by
+// AI transport.
 type AIInfrastructureDeps struct {
-	Queries         *aidb.Queries
 	ProviderSecrets aitransport.ProviderSecretCodec
 	AIHTTPClient    aitransport.HTTPDoer
 	RedisHealth     aitransport.ComponentHealthProbe
@@ -131,6 +129,7 @@ type AIOperationsDeps struct {
 	UsageSvc                   *observabilitycontrol.UsageService
 	UserUsageLogs              aitransport.UserUsageLogReader
 	AuditSvc                   *observabilitycontrol.AuditService
+	AdminAudit                 aitransport.AdminAuditRecorder
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 	RiskControlConfigSvc       *riskcontrol.ConfigService
 	RiskControlLogSvc          *riskcontrol.LogService
@@ -236,7 +235,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		InfrastructureDeps: aitransport.InfrastructureDeps{
 			Postgres:    platform.Pool,
 			RedisHealth: d.RedisHealth,
-			Queries:     d.Queries,
 			HTTPClient:  d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
@@ -276,6 +274,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			UsageSvc:                   d.UsageSvc,
 			UserUsageLogs:              d.UserUsageLogs,
 			AuditSvc:                   d.AuditSvc,
+			AdminAudit:                 d.AdminAudit,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 			RiskControlConfigSvc:       d.RiskControlConfigSvc,
 			RiskControlLogSvc:          d.RiskControlLogSvc,

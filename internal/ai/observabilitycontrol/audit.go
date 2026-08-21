@@ -13,6 +13,7 @@ const (
 
 type AuditRepository interface {
 	List(ctx context.Context, limit int32) ([]domain.AuditLog, error)
+	Record(ctx context.Context, event domain.AdminAuditEvent) error
 }
 
 type AuditService struct {
@@ -31,4 +32,8 @@ func (s *AuditService) List(ctx context.Context, limit int32) ([]domain.AuditLog
 		limit = maxAuditLimit
 	}
 	return s.repo.List(ctx, limit)
+}
+
+func (s *AuditService) Record(ctx context.Context, event domain.AdminAuditEvent) error {
+	return s.repo.Record(ctx, event)
 }

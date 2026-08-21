@@ -15,7 +15,6 @@ import (
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
-	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
@@ -35,7 +34,6 @@ import (
 type InfrastructureDeps struct {
 	Postgres    *pgxpool.Pool
 	RedisHealth ComponentHealthProbe
-	Queries     *dbgen.Queries
 	HTTPClient  HTTPDoer
 }
 
@@ -166,6 +164,12 @@ type UserUsageLogReader interface {
 	ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error)
 }
 
+// AdminAuditRecorder is the write-only audit port used by management
+// mutations. Persistence failures are handled by each caller's policy.
+type AdminAuditRecorder interface {
+	Record(ctx context.Context, event domain.AdminAuditEvent) error
+}
+
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
@@ -194,6 +198,7 @@ type OperationsDeps struct {
 	UsageSvc                   *observabilitycontrol.UsageService
 	UserUsageLogs              UserUsageLogReader
 	AuditSvc                   *observabilitycontrol.AuditService
+	AdminAudit                 AdminAuditRecorder
 	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。
 	RiskControlConfigSvc *riskcontrol.ConfigService

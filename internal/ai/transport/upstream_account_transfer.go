@@ -9,9 +9,6 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5/pgtype"
-
-	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/libs/go/httpx"
@@ -580,20 +577,24 @@ func normalizedRawJSONBytes(raw json.RawMessage) []byte {
 }
 
 func voidAdminAudit(ctx context.Context, d AIDeps, action, objectType, objectID string, summary map[string]any, result string, httpStatus int32) {
-	if d.Queries == nil {
+	if d.AdminAudit == nil {
 		return
 	}
 	raw, err := json.Marshal(summary)
 	if err != nil {
 		raw = []byte("{}")
 	}
-	_, _ = d.Queries.CreateAuditLog(ctx, dbgen.CreateAuditLogParams{
-		Actor:          pgtype.Text{String: claimsUserID(ctx), Valid: claimsUserID(ctx) != ""},
+	var status *int32
+	if httpStatus > 0 {
+		status = &httpStatus
+	}
+	_ = d.AdminAudit.Record(ctx, domain.AdminAuditEvent{
+		Actor:          claimsUserID(ctx),
 		Action:         action,
-		ObjectType:     pgtype.Text{String: objectType, Valid: objectType != ""},
-		ObjectID:       pgtype.Text{String: objectID, Valid: objectID != ""},
+		ObjectType:     objectType,
+		ObjectID:       objectID,
 		RequestSummary: raw,
 		Result:         result,
-		HttpStatus:     pgtype.Int4{Int32: httpStatus, Valid: httpStatus > 0},
+		HttpStatus:     status,
 	})
 }

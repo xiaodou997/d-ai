@@ -354,7 +354,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		},
 		AIDeps: transport.AIDeps{
 			AIInfrastructureDeps: transport.AIInfrastructureDeps{
-				Queries:         q,
 				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    managementHTTPClient,
 				RedisHealth:     redisHealth,
@@ -391,6 +390,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				UsageSvc:                   usageSvc,
 				UserUsageLogs:              usageSvc,
 				AuditSvc:                   auditSvc,
+				AdminAudit:                 auditSvc,
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				RiskControlConfigSvc:       riskControlConfigSvc,
 				RiskControlLogSvc:          riskControlLogSvc,

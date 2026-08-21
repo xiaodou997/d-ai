@@ -27,6 +27,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	providerSecrets := &providerSecretCodecStub{}
 	accountReader := &upstreamAccountReaderStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
+	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
 
 	got := buildAIDeps(
@@ -56,6 +57,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				UserUsageLogs:              userUsageLogs,
+				AdminAudit:                 adminAudit,
 			},
 		},
 		nil,
@@ -78,6 +80,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.UserUsageLogs != userUsageLogs {
 		t.Fatal("user usage log reader was not preserved")
+	}
+	if got.AdminAudit != adminAudit {
+		t.Fatal("admin audit recorder was not preserved")
 	}
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")
@@ -118,3 +123,7 @@ type userUsageLogReaderStub struct{}
 func (*userUsageLogReaderStub) ListUserLogs(context.Context, string, string, string, int32) ([]domain.UsageLog, error) {
 	return nil, nil
 }
+
+type adminAuditRecorderStub struct{}
+
+func (*adminAuditRecorderStub) Record(context.Context, domain.AdminAuditEvent) error { return nil }
