@@ -139,6 +139,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
 - [x] 租户上游访问策略端点只依赖 `UpstreamAccessManager` 最小端口，AI/顶层 Transport 依赖容器不再暴露具体 `*upstreamaccess.Service`。
 - [x] 分组配置导出、预检和导入只依赖 `GroupTransferManager` 最小端口，AI/顶层 Transport 依赖容器不再暴露具体 `*commercial.GroupTransferService`。
+- [x] 管理审计日志列表只依赖 `AdminAuditLogReader` 读端口，与 `AdminAuditRecorder` 写端口分离，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.AuditService`。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -424,6 +425,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖门禁：删除 7 条 AI Transport 和 2 条主 Transport 已失效的基础设施例外，并补充规则测试；后续重新引入 pgx、Redis、sqlc 或 adapter 依赖会直接导致 `cmd/checkdeps` 失败。
 - 上游访问边界：租户上游策略列表与全量替换统一依赖 `UpstreamAccessManager` 的 `ListForTenant` / `ReplacePolicies`；具体 service 只由 composition root 构造，顶层 Transport 也仅转发端口。路由测试覆盖 DTO 映射、策略命令与未装配 503。
 - 分组迁移边界：分组配置 `Export` / `Preview` / `Import` 统一依赖 `GroupTransferManager`；具体 planning service 只由 composition root 构造，顶层 Transport 仅转发端口。路由测试覆盖租户 claims、三类请求/响应与未装配 503，审计行为保持不变。
+- 审计读取边界：管理审计列表通过单方法 `AdminAuditLogReader` 读取 `domain.AuditLog`，与既有 `AdminAuditRecorder` 写端口独立装配；具体 service 只在 composition root 同时满足两个端口。路由测试覆盖 limit 上限、DTO 投影和未装配 503。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：`AIDeps` 仍保留多个具体业务 service，容器本身仍是 service locator；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将只使用 `List` 的具体 `*observabilitycontrol.AuditService` 替换为单方法 `AdminAuditLogReader` 端口，继续缩小 `AIDeps`。
+- 下一候选项：P1-02 将具体 `*observabilitycontrol.DashboardService` 替换为只包含 `Summary` / `TopModels` / `TopTenants` / `RecentErrors` 的 `DashboardQueryReader` 端口，继续缩小 `AIDeps`。

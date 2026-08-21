@@ -43,14 +43,14 @@ func registerAudit(api huma.API, d AIDeps) {
 		Description: "返回 AI 管理面审计日志，按创建时间倒序。limit 默认 100，最大 500。",
 		Tags:        []string{"audit"},
 	}, func(ctx context.Context, in *auditLogsInput) (*auditLogsOutput, error) {
-		if d.AuditSvc == nil {
+		if d.AuditLogs == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("audit service is not configured")
 		}
 		limit, err := auditLimitFromInput(in.Limit)
 		if err != nil {
 			return nil, err
 		}
-		logs, err := d.AuditSvc.List(ctx, limit)
+		logs, err := d.AuditLogs.List(ctx, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

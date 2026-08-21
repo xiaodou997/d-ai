@@ -131,7 +131,7 @@ type AIOperationsDeps struct {
 	DashboardSvc               *observabilitycontrol.DashboardService
 	UsageSvc                   *observabilitycontrol.UsageService
 	UserUsageLogs              aitransport.UserUsageLogReader
-	AuditSvc                   *observabilitycontrol.AuditService
+	AuditLogs                  aitransport.AdminAuditLogReader
 	AdminAudit                 aitransport.AdminAuditRecorder
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 	RiskControlConfigSvc       *riskcontrol.ConfigService
@@ -279,7 +279,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			DashboardSvc:               d.DashboardSvc,
 			UsageSvc:                   d.UsageSvc,
 			UserUsageLogs:              d.UserUsageLogs,
-			AuditSvc:                   d.AuditSvc,
+			AuditLogs:                  d.AuditLogs,
 			AdminAudit:                 d.AdminAudit,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 			RiskControlConfigSvc:       d.RiskControlConfigSvc,

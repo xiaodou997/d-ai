@@ -33,6 +33,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	modelCatalog := &modelCatalogReaderStub{}
 	priceBooks := &priceBookReaderStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
+	auditLogs := &adminAuditLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
 	upstreamAccess := upstreamaccess.New(nil)
@@ -71,6 +72,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				UserUsageLogs:              userUsageLogs,
+				AuditLogs:                  auditLogs,
 				AdminAudit:                 adminAudit,
 			},
 		},
@@ -100,6 +102,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.UserUsageLogs != userUsageLogs {
 		t.Fatal("user usage log reader was not preserved")
+	}
+	if got.AuditLogs != auditLogs {
+		t.Fatal("admin audit log reader was not preserved")
 	}
 	if got.AdminAudit != adminAudit {
 		t.Fatal("admin audit recorder was not preserved")
@@ -141,6 +146,12 @@ func (*upstreamAccountReaderStub) GetAccountSecret(context.Context, string) (ups
 type userUsageLogReaderStub struct{}
 
 func (*userUsageLogReaderStub) ListUserLogs(context.Context, string, string, string, int32) ([]domain.UsageLog, error) {
+	return nil, nil
+}
+
+type adminAuditLogReaderStub struct{}
+
+func (*adminAuditLogReaderStub) List(context.Context, int32) ([]domain.AuditLog, error) {
 	return nil, nil
 }
 

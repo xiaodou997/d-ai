@@ -210,6 +210,13 @@ type AdminAuditRecorder interface {
 	Record(ctx context.Context, event domain.AdminAuditEvent) error
 }
 
+// AdminAuditLogReader is the read-only audit projection used by the
+// management list endpoint. Audit persistence and writes stay behind separate
+// composition ports.
+type AdminAuditLogReader interface {
+	List(ctx context.Context, limit int32) ([]domain.AuditLog, error)
+}
+
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
@@ -237,7 +244,7 @@ type OperationsDeps struct {
 	DashboardSvc               *observabilitycontrol.DashboardService
 	UsageSvc                   *observabilitycontrol.UsageService
 	UserUsageLogs              UserUsageLogReader
-	AuditSvc                   *observabilitycontrol.AuditService
+	AuditLogs                  AdminAuditLogReader
 	AdminAudit                 AdminAuditRecorder
 	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。
