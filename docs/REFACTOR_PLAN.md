@@ -137,6 +137,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
 - [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
+- [x] 租户上游访问策略端点只依赖 `UpstreamAccessManager` 最小端口，AI/顶层 Transport 依赖容器不再暴露具体 `*upstreamaccess.Service`。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -420,6 +421,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。
 - 依赖门禁：删除 7 条 AI Transport 和 2 条主 Transport 已失效的基础设施例外，并补充规则测试；后续重新引入 pgx、Redis、sqlc 或 adapter 依赖会直接导致 `cmd/checkdeps` 失败。
+- 上游访问边界：租户上游策略列表与全量替换统一依赖 `UpstreamAccessManager` 的 `ListForTenant` / `ReplacePolicies`；具体 service 只由 composition root 构造，顶层 Transport 也仅转发端口。路由测试覆盖 DTO 映射、策略命令与未装配 503。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：`AIDeps` 仍保留多个具体业务 service，容器本身仍是 service locator；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将只使用 `ListForTenant` / `ReplacePolicies` 的具体 `*upstreamaccess.Service` 替换为最小 `UpstreamAccessManager` 端口，继续缩小 `AIDeps`。
+- 下一候选项：P1-02 将只使用 `Export` / `Preview` / `Import` 的具体 `*commercial.GroupTransferService` 替换为最小 `GroupTransferManager` 端口，继续缩小 `AIDeps`。

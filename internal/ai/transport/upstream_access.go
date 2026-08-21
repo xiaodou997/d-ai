@@ -57,10 +57,10 @@ func registerTenantUpstreamAccess(api huma.API, d AIDeps) {
 		Description: "列出平台上游资源及指定租户的访问状态，不返回地址、密钥或凭据。",
 		Tags:        []string{"tenant-policies"},
 	}, func(ctx context.Context, in *tenantUpstreamAccessInput) (*tenantUpstreamAccessOutput, error) {
-		if d.UpstreamAccessSvc == nil {
+		if d.UpstreamAccess == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("upstream access service is not configured")
 		}
-		items, err := d.UpstreamAccessSvc.ListForTenant(ctx, in.TenantID)
+		items, err := d.UpstreamAccess.ListForTenant(ctx, in.TenantID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -89,10 +89,10 @@ func registerTenantUpstreamAccess(api huma.API, d AIDeps) {
 		Description: "全量替换指定租户的上游访问与结算倍率覆盖策略；public 资源始终可访问，倍率覆盖对两种开放方式都生效。",
 		Tags:        []string{"tenant-policies"},
 	}, func(ctx context.Context, in *replaceTenantUpstreamAccessInput) (*replaceTenantUpstreamAccessOutput, error) {
-		if d.UpstreamAccessSvc == nil {
+		if d.UpstreamAccess == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("upstream access service is not configured")
 		}
-		if err := d.UpstreamAccessSvc.ReplacePolicies(ctx, in.TenantID, in.Body.Policies); err != nil {
+		if err := d.UpstreamAccess.ReplacePolicies(ctx, in.TenantID, in.Body.Policies); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &replaceTenantUpstreamAccessOutput{}

@@ -10,6 +10,7 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
+	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/internal/auth"
 )
@@ -33,6 +34,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	userUsageLogs := &userUsageLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
+	upstreamAccess := upstreamaccess.New(nil)
 
 	got := buildAIDeps(
 		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
@@ -61,6 +63,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ModelBindings:     modelBindings,
 				ModelCatalog:      modelCatalog,
 				PriceBooks:        priceBooks,
+				UpstreamAccess:    upstreamAccess,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -76,6 +79,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
+	}
+	if got.UpstreamAccess != upstreamAccess {
+		t.Fatal("upstream access manager was not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")

@@ -132,9 +132,16 @@ type CatalogDeps struct {
 	PriceBooks        PriceBookReader
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
-	UpstreamAccessSvc *upstreamaccess.Service
+	UpstreamAccess    UpstreamAccessManager
 	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService
+}
+
+// UpstreamAccessManager is the tenant policy surface required by management
+// routes. Runtime authorization remains a separate adapter concern.
+type UpstreamAccessManager interface {
+	ListForTenant(ctx context.Context, tenantID string) ([]upstreamaccess.ResourceAccess, error)
+	ReplacePolicies(ctx context.Context, tenantID string, policies []upstreamaccess.TenantResourcePolicy) error
 }
 
 // ClientCatalogResolver is the narrow model-discovery port needed by OAuth

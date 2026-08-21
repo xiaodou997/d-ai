@@ -389,7 +389,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				CommercialSvc:     commercialSvc,
 				GroupTransferSvc:  groupTransferSvc,
 				AccountSvc:        accountSvc,
-				UpstreamAccessSvc: upstreamAccessSvc,
+				UpstreamAccess:    upstreamAccessSvc,
 			},
 			AIOperationsDeps: transport.AIOperationsDeps{
 				DashboardSvc:               dashboardSvc,
