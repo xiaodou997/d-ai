@@ -19,12 +19,13 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
+	providerSecrets := &providerSecretCodecStub{}
 
 	got := buildAIDeps(
 		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
 		AIDeps{
 			AIInfrastructureDeps: AIInfrastructureDeps{
-				SecretMasterKey: "secret-master-key",
+				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    httpClient,
 				Health:          health,
 				Weights:         weights,
@@ -48,7 +49,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
-	if got.SecretMasterKey != "secret-master-key" || got.HTTPClient != httpClient {
+	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
 	}
 	if got.Health != health || got.Weights != weights {
@@ -58,3 +59,8 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		t.Fatal("portal token revocation dependency was not preserved")
 	}
 }
+
+type providerSecretCodecStub struct{}
+
+func (*providerSecretCodecStub) Encrypt(string) (string, error) { return "", nil }
+func (*providerSecretCodecStub) Decrypt(string) (string, error) { return "", nil }

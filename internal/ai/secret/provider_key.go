@@ -19,6 +19,30 @@ const (
 	aesGCMPrefix = "aesgcm:v1:"
 )
 
+// ProviderKeyCodec keeps the master key behind a narrow encryption boundary.
+// Callers receive capabilities rather than the raw key material.
+type ProviderKeyCodec struct {
+	master string
+}
+
+func NewProviderKeyCodec(master string) *ProviderKeyCodec {
+	return &ProviderKeyCodec{master: master}
+}
+
+func (c *ProviderKeyCodec) Encrypt(plaintext string) (string, error) {
+	if c == nil {
+		return "", errors.New("provider key codec is required")
+	}
+	return EncryptProviderKey(c.master, plaintext)
+}
+
+func (c *ProviderKeyCodec) Decrypt(ciphertext string) (string, error) {
+	if c == nil {
+		return "", errors.New("provider key codec is required")
+	}
+	return DecryptProviderKey(c.master, ciphertext)
+}
+
 func EncryptProviderKey(master string, plaintext string) (string, error) {
 	if plaintext == "" {
 		return "", errors.New("provider key is required")

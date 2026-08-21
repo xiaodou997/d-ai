@@ -87,6 +87,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 
 	q := aidb.New(pool)
 	banChecker := banstate.NewChecker(redisClient)
+	providerSecrets := secret.NewProviderKeyCodec(cfg.Security.SecretMasterKey)
 
 	priceBookSvc := billingcontrol.New(
 		aiadapters.NewPriceBookRepo(q, pool),
@@ -101,21 +102,15 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	usageSvc := observabilitycontrol.NewUsageService(aiadapters.NewUsageRepo(q, pool))
 	auditSvc := observabilitycontrol.NewAuditService(aiadapters.NewAuditRepo(q))
 
-	accountSvc := upstreamcontrol.New(aiadapters.NewAccountRepo(q, pool), func(plaintext string) (string, error) {
-		return secret.EncryptProviderKey(cfg.Security.SecretMasterKey, plaintext)
-	})
+	accountSvc := upstreamcontrol.New(aiadapters.NewAccountRepo(q, pool), providerSecrets.Encrypt)
 	upstreamAccessSvc := upstreamaccess.New(aiadapters.NewUpstreamAccessRepo(pool))
 
 	apiKeyCache := apikey.NewCache(redisClient)
 	apiKeySvc := identitycontrol.New(
 		aiadapters.NewAPIKeyRepo(q),
 		apiKeyCacheForSvc(apiKeyCache),
-		func(plaintext string) (string, error) {
-			return secret.EncryptProviderKey(cfg.Security.SecretMasterKey, plaintext)
-		},
-		func(ciphertext string) (string, error) {
-			return secret.DecryptProviderKey(cfg.Security.SecretMasterKey, ciphertext)
-		},
+		providerSecrets.Encrypt,
+		providerSecrets.Decrypt,
 	)
 
 	riskControlRepo := aiadapters.NewRiskControlRepo(q)
@@ -355,7 +350,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		AIDeps: transport.AIDeps{
 			AIInfrastructureDeps: transport.AIInfrastructureDeps{
 				Queries:         q,
-				SecretMasterKey: cfg.Security.SecretMasterKey,
+				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    managementHTTPClient,
 				Health:          healthTracker,
 				Weights:         routeWeightsStore,

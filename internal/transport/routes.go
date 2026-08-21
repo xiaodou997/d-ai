@@ -87,7 +87,7 @@ type OperationsDeps struct {
 // policies needed while the legacy AI transport is being migrated.
 type AIInfrastructureDeps struct {
 	Queries         *aidb.Queries
-	SecretMasterKey string
+	ProviderSecrets aitransport.ProviderSecretCodec
 	AIHTTPClient    *http.Client
 	Health          routing.HealthTracker
 	Weights         aitransport.ScoreWeightsStore
@@ -263,7 +263,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		RuntimeDeps: aitransport.RuntimeDeps{
 			Health:          d.Health,
 			Weights:         d.Weights,
-			SecretMasterKey: d.SecretMasterKey,
+			ProviderSecrets: d.ProviderSecrets,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
 			DashboardSvc:         d.DashboardSvc,

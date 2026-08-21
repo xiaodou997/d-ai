@@ -139,7 +139,14 @@ type ClientCatalogResolver interface {
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
 	Weights         ScoreWeightsStore
-	SecretMasterKey string
+	ProviderSecrets ProviderSecretCodec
+}
+
+// ProviderSecretCodec is the minimal encryption capability needed by HTTP
+// management flows. Raw master key material stays inside its implementation.
+type ProviderSecretCodec interface {
+	Encrypt(plaintext string) (string, error)
+	Decrypt(ciphertext string) (string, error)
 }
 
 // ScoreWeightsStore is the minimal port required by the system endpoints.

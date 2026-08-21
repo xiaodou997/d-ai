@@ -14,7 +14,6 @@ import (
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/externalmodels"
-	"xiaodou/dai/internal/ai/secret"
 	"xiaodou/dai/internal/ai/upstreamcompat"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -82,8 +81,8 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		Description: "调用上游 /v1/models 并推断能力与协议，不落库。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *fetchEndpointUpstreamModelsInput) (*fetchEndpointUpstreamModelsOutput, error) {
-		if d.Queries == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
+		if d.Queries == nil || d.ProviderSecrets == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
 		}
 		accountID, err := parseTransportUUID(in.AccountID)
 		if err != nil {
@@ -93,7 +92,7 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := secret.DecryptProviderKey(d.SecretMasterKey, account.ApiKeyCiphertext)
+		apiKey, err := d.ProviderSecrets.Decrypt(account.ApiKeyCiphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("failed to decrypt api key")
 		}

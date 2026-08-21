@@ -21,7 +21,6 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/imageedit"
 	"xiaodou/dai/internal/ai/imagepayload"
-	"xiaodou/dai/internal/ai/secret"
 	"xiaodou/dai/internal/ai/upstreamcompat"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -85,8 +84,8 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		Description:  "按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401/403 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。",
 		Tags:         []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *upstreamAccountTestInput) (*upstreamAccountTestOutput, error) {
-		if d.Queries == nil || d.Postgres == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
+		if d.Queries == nil || d.Postgres == nil || d.ProviderSecrets == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
 		}
 		accountID, err := parseTransportUUID(in.AccountID)
 		if err != nil {
@@ -100,7 +99,7 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := secret.DecryptProviderKey(d.SecretMasterKey, account.ApiKeyCiphertext)
+		apiKey, err := d.ProviderSecrets.Decrypt(account.ApiKeyCiphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("failed to decrypt api key")
 		}

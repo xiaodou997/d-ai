@@ -13,7 +13,6 @@ import (
 
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/secret"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -195,8 +194,8 @@ func registerUpstreamAccountTransfer(api huma.API, d AIDeps) {
 }
 
 func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, includeBindings bool) (*upstreamAccountExportOutput, error) {
-	if d.AccountSvc == nil {
-		return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
+	if d.AccountSvc == nil || d.ProviderSecrets == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("account service or provider secret codec is not configured")
 	}
 	if includeBindings && d.Postgres == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
@@ -227,7 +226,7 @@ func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, 
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := secret.DecryptProviderKey(d.SecretMasterKey, secretRow.Ciphertext)
+		apiKey, err := d.ProviderSecrets.Decrypt(secretRow.Ciphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("decrypt provider key failed for account " + id)
 		}

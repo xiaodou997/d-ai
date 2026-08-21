@@ -403,6 +403,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 端口收敛：凭证导入改用 `OAuthCredentialCreator` 与领域级 `OAuthCredentialCreate` 命令；Transport 不再通过完整 OAuth store 创建凭证或接收 adapter 写入模型。
 - 端口收敛：OAuth pool 健康汇总改用 `OAuthPoolHealthReader` 与领域级 `OAuthPoolHealthSummary`；AI Transport 依赖容器不再暴露具体 `OAuthCredentialStore`。
 - 端口收敛：OAuth pool 模型发现改用 `ClientCatalogResolver`，Transport 不再暴露具体 catalog service。
+- 密钥边界：AI Transport 使用 `ProviderSecretCodec` 执行上游密钥加解密，不再持有或传播原始 `SecretMasterKey`；composition root 构造的 `ProviderKeyCodec` 保持既有密文兼容。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 用最小密钥加解密端口替代 AI Transport 中直接持有的 `SecretMasterKey`。
+- 下一候选项：P1-02 将上游模型发现和连通性端点的具体 `*http.Client` 收敛为最小 `HTTPDoer` 端口。
