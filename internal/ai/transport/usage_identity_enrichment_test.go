@@ -9,14 +9,7 @@ import (
 
 func TestIdentityEnrichmentFailuresAreObservedAndFailOpen(t *testing.T) {
 	observer := &identityEnrichmentFailureObserverStub{events: make(map[string]string)}
-	d := AIDeps{
-		IdentityDeps: IdentityDeps{IdentityProvider: failingIdentityProvider{}},
-		OperationsDeps: OperationsDeps{
-			IdentityEnrichmentFailures: observer,
-		},
-	}
-
-	included := buildIdentityIncluded(t.Context(), d, []string{"user-1"}, []string{"tenant-1"})
+	included := buildIdentityIncluded(t.Context(), failingIdentityProvider{}, observer, []string{"user-1"}, []string{"tenant-1"})
 	if len(included.Users) != 0 || len(included.Tenants) != 0 {
 		t.Fatalf("included = %#v, want empty fail-open result", included)
 	}

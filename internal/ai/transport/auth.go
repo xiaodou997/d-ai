@@ -28,25 +28,34 @@ type TenantEndUserVerifier interface {
 	CheckTenantEndUser(ctx context.Context, tenantID, userID string) error
 }
 
+// HTTPAuthDeps contains only the capabilities required by user-facing Huma
+// authentication middleware. Route modules can own this bundle without
+// receiving the complete AI transport dependency graph.
+type HTTPAuthDeps struct {
+	TokenVerifier    TokenVerifier
+	TokenRevocations TokenRevocationChecker
+	BanChecker       HumaBanChecker
+}
+
 type authClaimsContextKey struct{}
 
-func platformUserAuth(api huma.API, d AIDeps) func(huma.Context, func(huma.Context)) {
+func platformUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
 	return userAuth(api, d, map[int]bool{1: true, 2: true}, "platform user required")
 }
 
-func platformOrTenantUserAuth(api huma.API, d AIDeps) func(huma.Context, func(huma.Context)) {
+func platformOrTenantUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
 	return userAuth(api, d, map[int]bool{1: true, 2: true, 3: true}, "platform or tenant user required")
 }
 
-func tenantUserAuth(api huma.API, d AIDeps) func(huma.Context, func(huma.Context)) {
+func tenantUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
 	return userAuth(api, d, map[int]bool{3: true}, "tenant user required")
 }
 
-func endUserAuth(api huma.API, d AIDeps) func(huma.Context, func(huma.Context)) {
+func endUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
 	return userAuth(api, d, map[int]bool{4: true}, "end user required")
 }
 
-func userAuth(api huma.API, d AIDeps, allowedTypes map[int]bool, forbiddenMessage string) func(huma.Context, func(huma.Context)) {
+func userAuth(api huma.API, d HTTPAuthDeps, allowedTypes map[int]bool, forbiddenMessage string) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		if d.TokenVerifier == nil {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "authentication is not configured")

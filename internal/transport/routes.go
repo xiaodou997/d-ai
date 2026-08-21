@@ -106,14 +106,17 @@ type AIIdentityDeps struct {
 	WorkspaceImages   workspace.ImageJobReader
 }
 
-// AIBillingDeps contains AI-side subscription and billing collaborators.
-type AIBillingDeps struct {
-	SubscriptionPlans      aitransport.SubscriptionPlanCatalog
-	SubscriptionPlanWriter aitransport.SubscriptionPlanManager
-	SubscriptionPurchases  aitransport.SubscriptionPurchaser
-	Subscriptions          aitransport.SubscriptionReader
-	SubscriptionOrders     aitransport.SubscriptionOrderReader
-	SubscriptionGroupNames aitransport.SubscriptionGroupNameResolver
+// AISubscriptionHTTPDeps contains the collaborators owned by the independently
+// registered subscription HTTP module.
+type AISubscriptionHTTPDeps struct {
+	SubscriptionPlans          aitransport.SubscriptionPlanCatalog
+	SubscriptionPlanWriter     aitransport.SubscriptionPlanManager
+	SubscriptionPurchases      aitransport.SubscriptionPurchaser
+	Subscriptions              aitransport.SubscriptionReader
+	SubscriptionOrders         aitransport.SubscriptionOrderReader
+	SubscriptionGroupNames     aitransport.SubscriptionGroupNameResolver
+	BanChecker                 aitransport.HumaBanChecker
+	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
@@ -160,9 +163,15 @@ type AIOperationsDeps struct {
 type AIDeps struct {
 	AIInfrastructureDeps
 	AIIdentityDeps
-	AIBillingDeps
 	AICatalogDeps
 	AIOperationsDeps
+}
+
+// AIHTTPDeps is a composition-only collection of independently registered AI
+// route modules. Handlers receive the narrower module dependency type.
+type AIHTTPDeps struct {
+	Core          AIDeps
+	Subscriptions AISubscriptionHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -187,7 +196,7 @@ type Module interface {
 
 type aiModule struct {
 	platform Deps
-	deps     AIDeps
+	deps     AIHTTPDeps
 }
 
 type aiIdentityProvider interface {
@@ -197,11 +206,12 @@ type aiIdentityProvider interface {
 
 func (m aiModule) Register(api huma.API) {
 	identity := newAIIdentityAdapter(m.platform.Pool, m.platform.UserService)
-	aitransport.RegisterAI(api, buildAIDeps(m.platform, m.deps, identity))
+	aitransport.RegisterAICore(api, buildAIDeps(m.platform, m.deps.Core, identity))
+	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
-func Register(api huma.API, d Deps, ai AIDeps) {
+func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	registerMeta(api, d)
 	registerPublicPlane(api, d)
 	modules := []Module{aiModule{platform: d, deps: ai}}
@@ -275,14 +285,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			WorkspaceManager:  d.WorkspaceManager,
 			WorkspaceImages:   d.WorkspaceImages,
 		},
-		BillingDeps: aitransport.BillingDeps{
-			SubscriptionPlans:      d.SubscriptionPlans,
-			SubscriptionPlanWriter: d.SubscriptionPlanWriter,
-			SubscriptionPurchases:  d.SubscriptionPurchases,
-			Subscriptions:          d.Subscriptions,
-			SubscriptionOrders:     d.SubscriptionOrders,
-			SubscriptionGroupNames: d.SubscriptionGroupNames,
-		},
 		CatalogDeps: aitransport.CatalogDeps{
 			ClientCatalog:      d.ClientCatalog,
 			ModelCapabilities:  d.ModelCapabilities,
@@ -328,6 +330,27 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		aiDeps.TenantEndUsers = identity
 	}
 	return aiDeps
+}
+
+func buildSubscriptionHTTPDeps(platform Deps, d AISubscriptionHTTPDeps, identity aiIdentityProvider) aitransport.SubscriptionHTTPDeps {
+	deps := aitransport.SubscriptionHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		SubscriptionPlans:          d.SubscriptionPlans,
+		SubscriptionPlanWriter:     d.SubscriptionPlanWriter,
+		SubscriptionPurchases:      d.SubscriptionPurchases,
+		Subscriptions:              d.Subscriptions,
+		SubscriptionOrders:         d.SubscriptionOrders,
+		SubscriptionGroupNames:     d.SubscriptionGroupNames,
+		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
+	}
+	if identity != nil {
+		deps.IdentityProvider = identity
+	}
+	return deps
 }
 
 // RegisterRaw 注册非 JSON 契约的 chi 原生端点。

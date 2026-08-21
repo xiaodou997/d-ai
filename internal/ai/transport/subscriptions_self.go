@@ -41,7 +41,7 @@ type subPurchaseOutput struct {
 	}
 }
 
-func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
+func registerUserSelfSubscriptions(api huma.API, d SubscriptionHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-subscription-plans",
 		Method:      http.MethodGet,

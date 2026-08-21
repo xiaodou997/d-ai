@@ -16,6 +16,7 @@ import (
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
 	"xiaodou/dai/internal/ai/tokenrefresh"
+	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/internal/ai/workspace"
@@ -33,6 +34,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
+	jwt := &auth.JWTService{}
+	banChecker := &humaBanCheckerStub{}
+	identity := &aiIdentityProviderStub{}
 	providerSecrets := &providerSecretCodecStub{}
 	accountReader := &upstreamAccountReaderStub{}
 	modelBindings := &upstreamModelBindingStoreStub{}
@@ -86,14 +90,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				WorkspaceManager:  workspacePorts,
 				WorkspaceImages:   workspacePorts,
 			},
-			AIBillingDeps: AIBillingDeps{
-				SubscriptionPlans:      subscriptionPorts,
-				SubscriptionPlanWriter: subscriptionPorts,
-				SubscriptionPurchases:  subscriptionPorts,
-				Subscriptions:          subscriptionPorts,
-				SubscriptionOrders:     subscriptionPorts,
-				SubscriptionGroupNames: subscriptionPorts,
-			},
 			AICatalogDeps: AICatalogDeps{
 				ClientCatalog:      catalog,
 				ModelCapabilities:  modelCapabilities,
@@ -140,9 +136,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.WorkspaceOverview != workspacePorts || got.WorkspaceModels != workspacePorts || got.WorkspaceSessions != workspacePorts || got.WorkspaceManager != workspacePorts || got.WorkspaceImages != workspacePorts {
 		t.Fatal("workspace capability ports were not preserved")
-	}
-	if got.SubscriptionPlans != subscriptionPorts || got.SubscriptionPlanWriter != subscriptionPorts || got.SubscriptionPurchases != subscriptionPorts || got.Subscriptions != subscriptionPorts || got.SubscriptionOrders != subscriptionPorts || got.SubscriptionGroupNames != subscriptionPorts {
-		t.Fatal("subscription capability ports were not preserved")
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
@@ -192,6 +185,33 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")
 	}
+
+	subscriptions := buildSubscriptionHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AISubscriptionHTTPDeps{
+			SubscriptionPlans:          subscriptionPorts,
+			SubscriptionPlanWriter:     subscriptionPorts,
+			SubscriptionPurchases:      subscriptionPorts,
+			Subscriptions:              subscriptionPorts,
+			SubscriptionOrders:         subscriptionPorts,
+			SubscriptionGroupNames:     subscriptionPorts,
+			BanChecker:                 banChecker,
+			IdentityEnrichmentFailures: identityEnrichmentFailures,
+		},
+		identity,
+	)
+	if subscriptions.Auth.TokenVerifier != jwt || subscriptions.Auth.TokenRevocations != blacklist || subscriptions.Auth.BanChecker != banChecker {
+		t.Fatal("subscription auth dependencies were not preserved")
+	}
+	if subscriptions.SubscriptionPlans != subscriptionPorts || subscriptions.SubscriptionPlanWriter != subscriptionPorts || subscriptions.SubscriptionPurchases != subscriptionPorts || subscriptions.Subscriptions != subscriptionPorts || subscriptions.SubscriptionOrders != subscriptionPorts || subscriptions.SubscriptionGroupNames != subscriptionPorts {
+		t.Fatal("subscription capability ports were not preserved")
+	}
+	if subscriptions.IdentityEnrichmentFailures != identityEnrichmentFailures {
+		t.Fatal("subscription identity enrichment observer was not preserved")
+	}
+	if subscriptions.IdentityProvider != identity {
+		t.Fatal("subscription identity provider was not preserved")
+	}
 }
 
 type providerSecretCodecStub struct{}
@@ -210,6 +230,23 @@ func (*componentHealthProbeStub) Check(context.Context) error { return nil }
 type identityEnrichmentFailureObserverStub struct{}
 
 func (*identityEnrichmentFailureObserverStub) ObserveFailure(string, error) {}
+
+type humaBanCheckerStub struct{}
+
+func (*humaBanCheckerStub) IsBanned(context.Context, string) (bool, error)       { return false, nil }
+func (*humaBanCheckerStub) IsTenantBanned(context.Context, string) (bool, error) { return false, nil }
+
+type aiIdentityProviderStub struct{}
+
+func (*aiIdentityProviderStub) BatchGetUsers(context.Context, []string) (map[string]*aitransport.IdentityUser, error) {
+	return nil, nil
+}
+
+func (*aiIdentityProviderStub) BatchGetTenants(context.Context, []string) (map[string]*aitransport.IdentityTenant, error) {
+	return nil, nil
+}
+
+func (*aiIdentityProviderStub) CheckTenantEndUser(context.Context, string, string) error { return nil }
 
 type modelCapabilityResolverStub struct{}
 

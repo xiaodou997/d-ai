@@ -126,7 +126,7 @@ type subTenantListOrdersInput struct {
 	Offset int32  `query:"offset" default:"0" doc:"偏移量；默认 0"`
 }
 
-func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
+func registerTenantSelfSubscriptions(api huma.API, d SubscriptionHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-self-subscription-plans",
 		Method:      http.MethodGet,

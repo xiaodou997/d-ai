@@ -25,7 +25,7 @@ func main() {
 	})
 	transport.Register(api, transport.Deps{
 		InfrastructureDeps: transport.InfrastructureDeps{Version: contractVersion},
-	}, transport.AIDeps{})
+	}, transport.AIHTTPDeps{})
 	// Runtime gateway endpoints are native chi routes, so their schemas are
 	// added explicitly to the same Huma document.
 	gateway.RegisterOpenAPI(api)

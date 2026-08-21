@@ -156,13 +156,13 @@ func TestSubscriptionUserRoutesUseSeparatedPorts(t *testing.T) {
 	orders := &subscriptionOrderReaderStub{items: []subscription.Order{order}, order: order}
 	groupNames := &subscriptionGroupNameResolverStub{}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerUserSelfSubscriptions(api, AIDeps{BillingDeps: BillingDeps{
+	registerUserSelfSubscriptions(api, SubscriptionHTTPDeps{
 		SubscriptionPlans:      plans,
 		SubscriptionPurchases:  purchases,
 		Subscriptions:          subscriptions,
 		SubscriptionOrders:     orders,
 		SubscriptionGroupNames: groupNames,
-	}})
+	})
 	handler := withCommercialClaims(router, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
 
 	requireCommercialStatus(t, performSubscriptionRequest(handler, http.MethodGet, "/api/v1/users/me/subscription-plans", "", ""), http.StatusOK)
@@ -193,14 +193,14 @@ func TestSubscriptionPlanReadAndWritePortsAreIndependent(t *testing.T) {
 	plan := subscription.Plan{ID: "plan-1", TenantID: "tenant-1", Name: "Starter", Status: subscription.PlanDraft}
 	plans := &subscriptionPlanCatalogStub{plans: []subscription.Plan{plan}, plan: plan}
 	readRouter, readAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerUserSelfSubscriptions(readAPI, AIDeps{BillingDeps: BillingDeps{SubscriptionPlans: plans}})
+	registerUserSelfSubscriptions(readAPI, SubscriptionHTTPDeps{SubscriptionPlans: plans})
 	readHandler := withCommercialClaims(readRouter, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
 	requireCommercialStatus(t, performSubscriptionRequest(readHandler, http.MethodGet, "/api/v1/users/me/subscription-plans", "", ""), http.StatusOK)
 	requireCommercialStatus(t, performSubscriptionRequest(readHandler, http.MethodPost, "/api/v1/users/me/subscription-orders", `{"plan_id":"plan-1"}`, "idem-1"), http.StatusServiceUnavailable)
 
 	manager := &subscriptionPlanManagerStub{plan: plan}
 	writeRouter, writeAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantSelfSubscriptions(writeAPI, AIDeps{BillingDeps: BillingDeps{SubscriptionPlanWriter: manager}})
+	registerTenantSelfSubscriptions(writeAPI, SubscriptionHTTPDeps{SubscriptionPlanWriter: manager})
 	writeHandler := withCommercialClaims(writeRouter, &auth.Claims{TenantID: "tenant-1", UserID: "tenant-admin"})
 	body := `{"name":"Starter","price_micro_usd":1000000,"duration_days":7,"total_limit_micro_usd":5000000,"groups":[{"group_id":"group-1","quota_debit_multiplier":1}]}`
 	requireCommercialStatus(t, performSubscriptionRequest(writeHandler, http.MethodPost, "/api/v1/tenants/me/subscription-plans", body, ""), http.StatusCreated)
@@ -211,10 +211,10 @@ func TestSubscriptionPlanReadAndWritePortsAreIndependent(t *testing.T) {
 	}
 
 	combinedRouter, combinedAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantSelfSubscriptions(combinedAPI, AIDeps{BillingDeps: BillingDeps{
+	registerTenantSelfSubscriptions(combinedAPI, SubscriptionHTTPDeps{
 		SubscriptionPlans:      plans,
 		SubscriptionPlanWriter: manager,
-	}})
+	})
 	combinedHandler := withCommercialClaims(combinedRouter, &auth.Claims{TenantID: "tenant-1", UserID: "tenant-admin"})
 	requireCommercialStatus(t, performSubscriptionRequest(combinedHandler, http.MethodPut, "/api/v1/tenants/me/subscription-plans/plan-1", body, ""), http.StatusOK)
 	requireCommercialStatus(t, performSubscriptionRequest(combinedHandler, http.MethodPut, "/api/v1/tenants/me/subscription-plans/plan-1/status", `{"status":"on_sale"}`, ""), http.StatusOK)
@@ -229,6 +229,22 @@ func TestSubscriptionGroupNameResolutionRemainsOptional(t *testing.T) {
 	}}, time.Now())
 	if len(items) != 1 || len(items[0].Groups) != 1 || items[0].Groups[0].Name != "" {
 		t.Fatalf("DTOs without resolver = %#v", items)
+	}
+}
+
+func TestSubscriptionRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	coreResponse := performSubscriptionRequest(coreRouter, http.MethodGet, "/api/v1/users/me/subscription-plans", "", "")
+	if coreResponse.Code != http.StatusNotFound {
+		t.Fatalf("core AI subscription route status = %d, want %d", coreResponse.Code, http.StatusNotFound)
+	}
+
+	subscriptionRouter, subscriptionAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterSubscriptions(subscriptionAPI, SubscriptionHTTPDeps{})
+	subscriptionResponse := performSubscriptionRequest(subscriptionRouter, http.MethodGet, "/api/v1/users/me/subscription-plans", "", "")
+	if subscriptionResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("independent subscription route status = %d, want %d", subscriptionResponse.Code, http.StatusUnauthorized)
 	}
 }
 

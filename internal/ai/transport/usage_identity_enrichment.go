@@ -59,7 +59,7 @@ func buildIdentityIncludedForLogs(ctx context.Context, d AIDeps, records []domai
 		}
 	}
 
-	return buildIdentityIncluded(ctx, d, userIDs, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
 }
 
 func buildIdentityIncludedForRanking(ctx context.Context, d AIDeps, rows []domain.UsageUserRankingRow) IdentityIncludedDTO {
@@ -83,7 +83,7 @@ func buildIdentityIncludedForRanking(ctx context.Context, d AIDeps, rows []domai
 		}
 	}
 
-	return buildIdentityIncluded(ctx, d, userIDs, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
 }
 
 func buildIdentityIncludedForDashboardTenants(ctx context.Context, d AIDeps, rows []domain.DashboardTopTenant) IdentityIncludedDTO {
@@ -92,7 +92,7 @@ func buildIdentityIncludedForDashboardTenants(ctx context.Context, d AIDeps, row
 	for _, row := range rows {
 		tenantIDs = appendUniqueID(tenantIDs, seenTenants, row.TenantID)
 	}
-	return buildIdentityIncluded(ctx, d, nil, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, nil, tenantIDs)
 }
 
 func buildIdentityIncludedForLimitPolicies(ctx context.Context, d AIDeps, policies []commercial.LimitPolicy) IdentityIncludedDTO {
@@ -104,19 +104,19 @@ func buildIdentityIncludedForLimitPolicies(ctx context.Context, d AIDeps, polici
 		}
 		tenantIDs = appendUniqueID(tenantIDs, seenTenants, policy.ScopeID)
 	}
-	return buildIdentityIncluded(ctx, d, nil, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, nil, tenantIDs)
 }
 
-func buildIdentityIncludedForSubPlans(ctx context.Context, d AIDeps, plans []subscription.Plan) IdentityIncludedDTO {
+func buildIdentityIncludedForSubPlans(ctx context.Context, d SubscriptionHTTPDeps, plans []subscription.Plan) IdentityIncludedDTO {
 	tenantIDs := make([]string, 0, len(plans))
 	seenTenants := make(map[string]struct{}, len(plans))
 	for _, plan := range plans {
 		tenantIDs = appendUniqueID(tenantIDs, seenTenants, plan.TenantID)
 	}
-	return buildIdentityIncluded(ctx, d, nil, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, nil, tenantIDs)
 }
 
-func buildIdentityIncludedForSubscriptions(ctx context.Context, d AIDeps, subs []subscription.Subscription) IdentityIncludedDTO {
+func buildIdentityIncludedForSubscriptions(ctx context.Context, d SubscriptionHTTPDeps, subs []subscription.Subscription) IdentityIncludedDTO {
 	userIDs := make([]string, 0, len(subs))
 	tenantIDs := make([]string, 0, len(subs))
 	seenUsers := make(map[string]struct{}, len(subs))
@@ -125,10 +125,10 @@ func buildIdentityIncludedForSubscriptions(ctx context.Context, d AIDeps, subs [
 		userIDs = appendUniqueID(userIDs, seenUsers, sub.UserID)
 		tenantIDs = appendUniqueID(tenantIDs, seenTenants, sub.TenantID)
 	}
-	return buildIdentityIncluded(ctx, d, userIDs, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
 }
 
-func buildIdentityIncludedForSubOrders(ctx context.Context, d AIDeps, orders []subscription.Order) IdentityIncludedDTO {
+func buildIdentityIncludedForSubOrders(ctx context.Context, d SubscriptionHTTPDeps, orders []subscription.Order) IdentityIncludedDTO {
 	userIDs := make([]string, 0, len(orders))
 	tenantIDs := make([]string, 0, len(orders))
 	seenUsers := make(map[string]struct{}, len(orders))
@@ -137,11 +137,11 @@ func buildIdentityIncludedForSubOrders(ctx context.Context, d AIDeps, orders []s
 		userIDs = appendUniqueID(userIDs, seenUsers, order.UserID)
 		tenantIDs = appendUniqueID(tenantIDs, seenTenants, order.TenantID)
 	}
-	return buildIdentityIncluded(ctx, d, userIDs, tenantIDs)
+	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
 }
 
-func buildIdentityIncluded(ctx context.Context, d AIDeps, userIDs []string, tenantIDs []string) IdentityIncludedDTO {
-	if d.IdentityProvider == nil {
+func buildIdentityIncluded(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, userIDs []string, tenantIDs []string) IdentityIncludedDTO {
+	if provider == nil {
 		return emptyIdentityIncluded()
 	}
 
@@ -154,9 +154,9 @@ func buildIdentityIncluded(ctx context.Context, d AIDeps, userIDs []string, tena
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			users, err := d.IdentityProvider.BatchGetUsers(enrichCtx, userIDs)
+			users, err := provider.BatchGetUsers(enrichCtx, userIDs)
 			if err != nil {
-				logIdentityEnrichmentFailure(d, "users", err)
+				logIdentityEnrichmentFailure(observer, "users", err)
 				return
 			}
 			for userID, user := range users {
@@ -172,9 +172,9 @@ func buildIdentityIncluded(ctx context.Context, d AIDeps, userIDs []string, tena
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tenants, err := d.IdentityProvider.BatchGetTenants(enrichCtx, tenantIDs)
+			tenants, err := provider.BatchGetTenants(enrichCtx, tenantIDs)
 			if err != nil {
-				logIdentityEnrichmentFailure(d, "tenants", err)
+				logIdentityEnrichmentFailure(observer, "tenants", err)
 				return
 			}
 			for tenantID, tenant := range tenants {
@@ -189,9 +189,9 @@ func buildIdentityIncluded(ctx context.Context, d AIDeps, userIDs []string, tena
 	return included
 }
 
-func logIdentityEnrichmentFailure(d AIDeps, kind string, err error) {
-	if d.IdentityEnrichmentFailures != nil {
-		d.IdentityEnrichmentFailures.ObserveFailure(kind, err)
+func logIdentityEnrichmentFailure(observer IdentityEnrichmentFailureObserver, kind string, err error) {
+	if observer != nil {
+		observer.ObserveFailure(kind, err)
 	}
 }
 
