@@ -84,7 +84,6 @@ type AIInfrastructureDeps struct {
 
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
-	PoolReader        aitransport.OAuthPoolReader
 	APIKeys           aitransport.APIKeyReader
 	APIKeyWriter      aitransport.APIKeyWriter
 	APIKeyLifecycle   aitransport.APIKeyLifecycleManager
@@ -179,6 +178,15 @@ type AIOAuthManagementHTTPDeps struct {
 	BanChecker        aitransport.HumaBanChecker
 }
 
+// AIModelBindingHTTPDeps contains the collaborators owned by the independently
+// registered account and OAuth-pool model-binding HTTP module.
+type AIModelBindingHTTPDeps struct {
+	AccountReader aitransport.UpstreamAccountReader
+	PoolReader    aitransport.OAuthPoolReader
+	ModelBindings aitransport.UpstreamModelBindingStore
+	BanChecker    aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -221,6 +229,7 @@ type AIHTTPDeps struct {
 	Dashboard       AIDashboardHTTPDeps
 	Usage           AIUsageHTTPDeps
 	OAuthManagement AIOAuthManagementHTTPDeps
+	ModelBindings   AIModelBindingHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -263,6 +272,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterDashboard(api, buildDashboardHTTPDeps(m.platform, m.deps.Dashboard, identity))
 	aitransport.RegisterUsage(api, buildUsageHTTPDeps(m.platform, m.deps.Usage, identity))
 	aitransport.RegisterOAuthManagement(api, buildOAuthManagementHTTPDeps(m.platform, m.deps.OAuthManagement))
+	aitransport.RegisterModelBindings(api, buildModelBindingHTTPDeps(m.platform, m.deps.ModelBindings))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -318,7 +328,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			HTTPClient: d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
-			PoolReader:        d.PoolReader,
 			TokenVerifier:     platform.JWT,
 			TokenRevocations:  platform.Blacklist,
 			BanChecker:        d.BanChecker,
@@ -480,6 +489,19 @@ func buildOAuthManagementHTTPDeps(platform Deps, d AIOAuthManagementHTTPDeps) ai
 		TokenRefresher:    d.TokenRefresher,
 		ClientCatalog:     d.ClientCatalog,
 		ModelBindings:     d.ModelBindings,
+	}
+}
+
+func buildModelBindingHTTPDeps(platform Deps, d AIModelBindingHTTPDeps) aitransport.ModelBindingHTTPDeps {
+	return aitransport.ModelBindingHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		AccountReader: d.AccountReader,
+		PoolReader:    d.PoolReader,
+		ModelBindings: d.ModelBindings,
 	}
 }
 

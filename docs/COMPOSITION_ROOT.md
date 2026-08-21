@@ -29,7 +29,7 @@ httpServers.Start / Shutdown
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
-  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage` 和 `OAuthManagement`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
+  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement` 和 `ModelBindings`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
 ## 尚未清零的装配遗留
 
@@ -37,7 +37,8 @@ httpServers.Start / Shutdown
 - AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `AIDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助与工作区仍从 Core 复用同一读端口，具体 `DashboardService` 只在 composition root 构造。
 - 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户、用户和工作区仍从 Core 复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。
-- OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Core 仅保留共享 `PoolReader` / `ModelBindings` 能力，Serving 和后台刷新器仍由 composition root/运行时持有。
+- OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Core 仅保留共享 `ModelBindings` 能力，Serving 和后台刷新器仍由 composition root/运行时持有。
+- 账号/凭证池模型绑定管理已经由独立 `ModelBindingHTTPDeps` 组合账号读取、池读取和 `UpstreamModelBindingStore`；Core 仅继续向发现、连通性和迁移流程提供共享端口。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
 - AI 上游模型绑定、凭证导入和 pool CRUD 查询统一使用 `OAuthPoolReader`；创建、更新、状态变更和删除使用 `OAuthPoolWriter` 与领域级 `CredentialPoolCreate` / `CredentialPoolUpdate` 命令。
@@ -78,6 +79,7 @@ httpServers.Start / Shutdown
 - 管理仪表盘 HTTP 已由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份补全端口和 `HTTPAuthDeps`，并通过 `RegisterDashboard` 注册平台管理员认证分组；租户自助和工作区端点继续由 Core 使用共享查询端口。
 - 管理用量 HTTP 已由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份补全端口和 `HTTPAuthDeps`，并通过 `RegisterUsage` 注册平台管理员认证分组；租户、用户和工作区端点继续由 Core 使用共享查询端口。
 - OAuth pool/credential HTTP 已由独立 `OAuthManagementHTTPDeps` 组合池/凭证读写、健康、刷新、目录和绑定端口，并通过 `RegisterOAuthManagement` 注册平台管理员认证分组；Core 不再注册 OAuth pool/credential 管理路径。
+- 账号/凭证池模型绑定 HTTP 已由独立 `ModelBindingHTTPDeps` 组合账号/池读取和绑定存储端口，并通过 `RegisterModelBindings` 注册平台管理员认证分组；Core 不再注册模型绑定管理路径。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

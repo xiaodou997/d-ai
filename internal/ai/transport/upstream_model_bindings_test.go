@@ -3,9 +3,12 @@ package transport
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/libs/go/server"
 )
 
 type poolReaderStub struct {
@@ -98,9 +101,7 @@ func (s *poolReaderStub) GetPool(_ context.Context, poolID string) (*domain.Cred
 func TestEnsurePoolExistsUsesReadOnlyPoolPort(t *testing.T) {
 	reader := &poolReaderStub{pool: &domain.CredentialPool{ID: "pool-1"}}
 
-	got, err := ensurePoolExists(context.Background(), AIDeps{
-		IdentityDeps: IdentityDeps{PoolReader: reader},
-	}, "pool-1")
+	got, err := ensurePoolExists(context.Background(), reader, "pool-1")
 	if err != nil {
 		t.Fatalf("ensurePoolExists() error = %v", err)
 	}
@@ -113,7 +114,7 @@ func TestEnsurePoolExistsUsesReadOnlyPoolPort(t *testing.T) {
 }
 
 func TestEnsurePoolExistsRequiresPoolReader(t *testing.T) {
-	if _, err := ensurePoolExists(context.Background(), AIDeps{}, "pool-1"); err == nil {
+	if _, err := ensurePoolExists(context.Background(), nil, "pool-1"); err == nil {
 		t.Fatal("ensurePoolExists() error = nil, want unavailable error")
 	}
 }
@@ -121,9 +122,7 @@ func TestEnsurePoolExistsRequiresPoolReader(t *testing.T) {
 func TestCreateUpstreamModelBindingUsesDomainStore(t *testing.T) {
 	const accountID = "10000000-0000-0000-0000-000000000001"
 	store := &modelBindingStoreStub{created: domain.UpstreamModelBinding{ID: "binding-1", ModelCode: "gpt-test"}}
-	got, err := createUpstreamModelBinding(context.Background(), AIDeps{
-		CatalogDeps: CatalogDeps{ModelBindings: store},
-	}, string(domain.UpstreamKindDirect), accountID, string(domain.EndpointProtocolOpenAICompatible), nil, upstreamModelBindingWriteRequest{
+	got, err := createUpstreamModelBinding(context.Background(), store, string(domain.UpstreamKindDirect), accountID, string(domain.EndpointProtocolOpenAICompatible), nil, upstreamModelBindingWriteRequest{
 		ModelCode: "gpt-test",
 	})
 	if err != nil {
@@ -141,6 +140,49 @@ func TestCreateUpstreamModelBindingUsesDomainStore(t *testing.T) {
 	if store.gotWrite.CapabilityType != "chat" || store.gotWrite.APIFormat != "openai_responses" || len(store.gotWrite.ConfigJSON) == 0 {
 		t.Fatalf("normalized write = %+v", store.gotWrite)
 	}
+}
+
+func TestModelBindingRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/upstream-accounts/account-1/model-bindings"},
+		{method: http.MethodPost, path: "/api/v1/upstream-accounts/account-1/model-bindings"},
+		{method: http.MethodPatch, path: "/api/v1/upstream-accounts/account-1/model-bindings/binding-1"},
+		{method: http.MethodDelete, path: "/api/v1/upstream-accounts/account-1/model-bindings/binding-1"},
+		{method: http.MethodPost, path: "/api/v1/upstream-accounts/account-1/model-bindings/batch-delete"},
+		{method: http.MethodGet, path: "/api/v1/credential-pools/pool-1/model-bindings"},
+		{method: http.MethodPost, path: "/api/v1/credential-pools/pool-1/model-bindings"},
+		{method: http.MethodPatch, path: "/api/v1/credential-pools/pool-1/model-bindings/binding-1"},
+		{method: http.MethodDelete, path: "/api/v1/credential-pools/pool-1/model-bindings/binding-1"},
+		{method: http.MethodPost, path: "/api/v1/credential-pools/pool-1/model-bindings/batch-delete"},
+	}
+
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	for _, route := range routes {
+		recorder := performModelBindingRequest(coreRouter, route.method, route.path)
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("core AI model-binding route %s %s status = %d, want %d", route.method, route.path, recorder.Code, http.StatusNotFound)
+		}
+	}
+
+	modelBindingRouter, modelBindingAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterModelBindings(modelBindingAPI, ModelBindingHTTPDeps{})
+	for _, route := range routes {
+		recorder := performModelBindingRequest(modelBindingRouter, route.method, route.path)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("independent model-binding route %s %s status = %d, want %d", route.method, route.path, recorder.Code, http.StatusUnauthorized)
+		}
+	}
+}
+
+func performModelBindingRequest(handler http.Handler, method, path string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, path, nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
 }
 
 func TestLoadUpstreamTestBindingUsesDomainStore(t *testing.T) {

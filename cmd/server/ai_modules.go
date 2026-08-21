@@ -368,7 +368,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 					BanChecker:      banChecker,
 				},
 				AIIdentityDeps: transport.AIIdentityDeps{
-					PoolReader:        oauthCreds,
 					APIKeys:           apiKeySvc,
 					APIKeyWriter:      apiKeySvc,
 					APIKeyLifecycle:   apiKeySvc,
@@ -458,6 +457,12 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				ClientCatalog:     poolModelCatalog,
 				ModelBindings:     modelBindings,
 				BanChecker:        banChecker,
+			},
+			ModelBindings: transport.AIModelBindingHTTPDeps{
+				AccountReader: accountSvc,
+				PoolReader:    oauthCreds,
+				ModelBindings: modelBindings,
+				BanChecker:    banChecker,
 			},
 		},
 		FileStore:          fileStore,

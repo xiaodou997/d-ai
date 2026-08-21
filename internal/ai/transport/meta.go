@@ -39,7 +39,6 @@ type HTTPDoer interface {
 // IdentityDeps contains authentication, API key and workspace identity
 // collaborators used by AI routes.
 type IdentityDeps struct {
-	PoolReader        OAuthPoolReader
 	APIKeys           APIKeyReader
 	APIKeyWriter      APIKeyWriter
 	APIKeyLifecycle   APIKeyLifecycleManager
@@ -419,7 +418,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerUpstreamAccounts(management, d)
 	registerUpstreamDiscovery(management, d)
 	registerUpstreamAccountTest(management, d)
-	registerUpstreamModelBindings(management, d)
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)

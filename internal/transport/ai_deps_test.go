@@ -69,7 +69,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				AIHTTPClient:    httpClient,
 			},
 			AIIdentityDeps: AIIdentityDeps{
-				PoolReader:        oauth,
 				APIKeys:           apiKeyPorts,
 				APIKeyWriter:      apiKeyPorts,
 				APIKeyLifecycle:   apiKeyPorts,
@@ -112,9 +111,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		nil,
 	)
 
-	if got.PoolReader != oauth {
-		t.Fatal("shared OAuth pool reader was not preserved")
-	}
 	if got.APIKeys != apiKeyPorts || got.APIKeyWriter != apiKeyPorts || got.APIKeyLifecycle != apiKeyPorts || got.APIKeySecrets != apiKeyPorts {
 		t.Fatal("API key capability ports were not preserved")
 	}
@@ -289,6 +285,22 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if oauthManagement.CredentialCreator != oauth || oauthManagement.CredentialReader != oauth || oauthManagement.CredentialWriter != oauth || oauthManagement.PoolReader != oauth || oauthManagement.PoolWriter != oauth || oauthManagement.PoolHealthReader != oauth || oauthManagement.TokenRefresher != refresher || oauthManagement.ClientCatalog != catalog || oauthManagement.ModelBindings != modelBindings {
 		t.Fatal("OAuth management dependencies were not preserved")
+	}
+
+	modelBindingsHTTP := buildModelBindingHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIModelBindingHTTPDeps{
+			AccountReader: accountReader,
+			PoolReader:    oauth,
+			ModelBindings: modelBindings,
+			BanChecker:    banChecker,
+		},
+	)
+	if modelBindingsHTTP.Auth.TokenVerifier != jwt || modelBindingsHTTP.Auth.TokenRevocations != blacklist || modelBindingsHTTP.Auth.BanChecker != banChecker {
+		t.Fatal("model-binding auth dependencies were not preserved")
+	}
+	if modelBindingsHTTP.AccountReader != accountReader || modelBindingsHTTP.PoolReader != oauth || modelBindingsHTTP.ModelBindings != modelBindings {
+		t.Fatal("model-binding dependencies were not preserved")
 	}
 }
 

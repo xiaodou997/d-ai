@@ -240,7 +240,7 @@ func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, 
 			ExtraHeaders:          copyRawJSONOrObject(account.ExtraHeaders),
 		}
 		if includeBindings {
-			bindings, err := listUpstreamModelBindings(ctx, d, "direct_upstream", id)
+			bindings, err := listUpstreamModelBindings(ctx, d.ModelBindings, "direct_upstream", id)
 			if err != nil {
 				return nil, err
 			}
@@ -346,7 +346,7 @@ func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountIm
 				continue
 			}
 			createdBindingKeys[key] = struct{}{}
-			createdBinding, err := createUpstreamModelBinding(ctx, d, "direct_upstream", created.ID, fixedProviderEndpointProtocolFromAccount(created.DefaultProtocol), nil, transferBindingToWriteRequest(binding))
+			createdBinding, err := createUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", created.ID, fixedProviderEndpointProtocolFromAccount(created.DefaultProtocol), nil, transferBindingToWriteRequest(binding))
 			if err != nil {
 				out.Body.SkippedModelBindings = append(out.Body.SkippedModelBindings, upstreamAccountImportSkippedDTO{Name: binding.ModelCode, Reason: err.Error()})
 				out.Body.Summary.SkipModelBindings++

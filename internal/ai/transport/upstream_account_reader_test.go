@@ -11,10 +11,9 @@ func TestEnsureDirectUpstreamExistsUsesAccountReader(t *testing.T) {
 	reader := &recordingUpstreamAccountReader{
 		account: upstreamcontrol.AccountSecret{DefaultProtocol: "anthropic"},
 	}
-	d := AIDeps{CatalogDeps: CatalogDeps{AccountReader: reader}}
 	const accountID = "6f8f5771-b98c-44d4-997d-fd4848ce5d2d"
 
-	got, err := ensureDirectUpstreamExists(t.Context(), d, accountID)
+	got, err := ensureDirectUpstreamExists(t.Context(), reader, accountID)
 	if err != nil {
 		t.Fatalf("ensure direct upstream: %v", err)
 	}
@@ -28,9 +27,7 @@ func TestEnsureDirectUpstreamExistsUsesAccountReader(t *testing.T) {
 
 func TestEnsureDirectUpstreamExistsRejectsInvalidIDBeforeReader(t *testing.T) {
 	reader := &recordingUpstreamAccountReader{}
-	d := AIDeps{CatalogDeps: CatalogDeps{AccountReader: reader}}
-
-	if _, err := ensureDirectUpstreamExists(t.Context(), d, "not-a-uuid"); err == nil {
+	if _, err := ensureDirectUpstreamExists(t.Context(), reader, "not-a-uuid"); err == nil {
 		t.Fatal("expected invalid account ID error")
 	}
 	if reader.accountID != "" {

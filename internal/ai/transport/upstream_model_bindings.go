@@ -120,12 +120,12 @@ type batchDeleteUpstreamModelBindingsOutput struct {
 	}
 }
 
-func registerUpstreamModelBindings(api huma.API, d AIDeps) {
+func registerUpstreamModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 	registerAccountModelBindings(api, d)
 	registerPoolModelBindings(api, d)
 }
 
-func registerAccountModelBindings(api huma.API, d AIDeps) {
+func registerAccountModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-account-model-bindings",
 		Method:      http.MethodGet,
@@ -134,10 +134,10 @@ func registerAccountModelBindings(api huma.API, d AIDeps) {
 		Description: "返回指定上游账号的 ai_upstream_models 显式绑定列表。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *accountModelBindingsInput) (*upstreamModelBindingsOutput, error) {
-		if _, err := ensureDirectUpstreamExists(ctx, d, in.AccountID); err != nil {
+		if _, err := ensureDirectUpstreamExists(ctx, d.AccountReader, in.AccountID); err != nil {
 			return nil, err
 		}
-		items, err := listUpstreamModelBindings(ctx, d, "direct_upstream", in.AccountID)
+		items, err := listUpstreamModelBindings(ctx, d.ModelBindings, "direct_upstream", in.AccountID)
 		if err != nil {
 			return nil, err
 		}
@@ -152,11 +152,11 @@ func registerAccountModelBindings(api huma.API, d AIDeps) {
 		Description: "为指定上游账号直接创建一条 ai_upstream_models 显式绑定。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *createAccountModelBindingInput) (*upstreamModelBindingOutput, error) {
-		account, err := ensureDirectUpstreamExists(ctx, d, in.AccountID)
+		account, err := ensureDirectUpstreamExists(ctx, d.AccountReader, in.AccountID)
 		if err != nil {
 			return nil, err
 		}
-		item, err := createUpstreamModelBinding(ctx, d, "direct_upstream", in.AccountID, fixedProviderEndpointProtocolFromAccount(account.DefaultProtocol), nil, in.Body)
+		item, err := createUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, fixedProviderEndpointProtocolFromAccount(account.DefaultProtocol), nil, in.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -171,11 +171,11 @@ func registerAccountModelBindings(api huma.API, d AIDeps) {
 		Description: "更新指定上游账号的一条 ai_upstream_models 显式绑定。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *updateAccountModelBindingInput) (*upstreamModelBindingOutput, error) {
-		account, err := ensureDirectUpstreamExists(ctx, d, in.AccountID)
+		account, err := ensureDirectUpstreamExists(ctx, d.AccountReader, in.AccountID)
 		if err != nil {
 			return nil, err
 		}
-		item, err := updateUpstreamModelBinding(ctx, d, "direct_upstream", in.AccountID, in.BindingID, fixedProviderEndpointProtocolFromAccount(account.DefaultProtocol), nil, in.Body)
+		item, err := updateUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, in.BindingID, fixedProviderEndpointProtocolFromAccount(account.DefaultProtocol), nil, in.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -189,10 +189,10 @@ func registerAccountModelBindings(api huma.API, d AIDeps) {
 		Summary:     "删除上游账号显式模型绑定",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *deleteAccountModelBindingInput) (*deleteUpstreamModelBindingOutput, error) {
-		if _, err := ensureDirectUpstreamExists(ctx, d, in.AccountID); err != nil {
+		if _, err := ensureDirectUpstreamExists(ctx, d.AccountReader, in.AccountID); err != nil {
 			return nil, err
 		}
-		if err := deleteUpstreamModelBinding(ctx, d, "direct_upstream", in.AccountID, in.BindingID); err != nil {
+		if err := deleteUpstreamModelBinding(ctx, d.ModelBindings, "direct_upstream", in.AccountID, in.BindingID); err != nil {
 			return nil, err
 		}
 		out := &deleteUpstreamModelBindingOutput{}
@@ -212,10 +212,10 @@ func registerAccountModelBindings(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if _, err := ensureDirectUpstreamExists(ctx, d, in.AccountID); err != nil {
+		if _, err := ensureDirectUpstreamExists(ctx, d.AccountReader, in.AccountID); err != nil {
 			return nil, err
 		}
-		deleted, err := batchDeleteUpstreamModelBindings(ctx, d, "direct_upstream", in.AccountID, bindingIDs)
+		deleted, err := batchDeleteUpstreamModelBindings(ctx, d.ModelBindings, "direct_upstream", in.AccountID, bindingIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -225,7 +225,7 @@ func registerAccountModelBindings(api huma.API, d AIDeps) {
 	})
 }
 
-func registerPoolModelBindings(api huma.API, d AIDeps) {
+func registerPoolModelBindings(api huma.API, d ModelBindingHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-pool-model-bindings",
 		Method:      http.MethodGet,
@@ -234,10 +234,10 @@ func registerPoolModelBindings(api huma.API, d AIDeps) {
 		Description: "返回指定凭证池的 ai_upstream_models 显式绑定列表。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *poolModelBindingsInput) (*upstreamModelBindingsOutput, error) {
-		if _, err := ensurePoolExists(ctx, d, in.PoolID); err != nil {
+		if _, err := ensurePoolExists(ctx, d.PoolReader, in.PoolID); err != nil {
 			return nil, err
 		}
-		items, err := listUpstreamModelBindings(ctx, d, "oauth_pool", in.PoolID)
+		items, err := listUpstreamModelBindings(ctx, d.ModelBindings, "oauth_pool", in.PoolID)
 		if err != nil {
 			return nil, err
 		}
@@ -252,11 +252,11 @@ func registerPoolModelBindings(api huma.API, d AIDeps) {
 		Description: "为指定凭证池直接创建一条 ai_upstream_models 显式绑定。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *createPoolModelBindingInput) (*upstreamModelBindingOutput, error) {
-		pool, err := ensurePoolExists(ctx, d, in.PoolID)
+		pool, err := ensurePoolExists(ctx, d.PoolReader, in.PoolID)
 		if err != nil {
 			return nil, err
 		}
-		item, err := createUpstreamModelBinding(ctx, d, "oauth_pool", in.PoolID, fixedProviderEndpointProtocol(pool.FixedProviderType), &pool.FixedProviderType, in.Body)
+		item, err := createUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, fixedProviderEndpointProtocol(pool.FixedProviderType), &pool.FixedProviderType, in.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -271,11 +271,11 @@ func registerPoolModelBindings(api huma.API, d AIDeps) {
 		Description: "更新指定凭证池的一条 ai_upstream_models 显式绑定。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *updatePoolModelBindingInput) (*upstreamModelBindingOutput, error) {
-		pool, err := ensurePoolExists(ctx, d, in.PoolID)
+		pool, err := ensurePoolExists(ctx, d.PoolReader, in.PoolID)
 		if err != nil {
 			return nil, err
 		}
-		item, err := updateUpstreamModelBinding(ctx, d, "oauth_pool", in.PoolID, in.BindingID, fixedProviderEndpointProtocol(pool.FixedProviderType), &pool.FixedProviderType, in.Body)
+		item, err := updateUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, in.BindingID, fixedProviderEndpointProtocol(pool.FixedProviderType), &pool.FixedProviderType, in.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -289,10 +289,10 @@ func registerPoolModelBindings(api huma.API, d AIDeps) {
 		Summary:     "删除凭证池显式模型绑定",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *deletePoolModelBindingInput) (*deleteUpstreamModelBindingOutput, error) {
-		if _, err := ensurePoolExists(ctx, d, in.PoolID); err != nil {
+		if _, err := ensurePoolExists(ctx, d.PoolReader, in.PoolID); err != nil {
 			return nil, err
 		}
-		if err := deleteUpstreamModelBinding(ctx, d, "oauth_pool", in.PoolID, in.BindingID); err != nil {
+		if err := deleteUpstreamModelBinding(ctx, d.ModelBindings, "oauth_pool", in.PoolID, in.BindingID); err != nil {
 			return nil, err
 		}
 		out := &deleteUpstreamModelBindingOutput{}
@@ -312,10 +312,10 @@ func registerPoolModelBindings(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if _, err := ensurePoolExists(ctx, d, in.PoolID); err != nil {
+		if _, err := ensurePoolExists(ctx, d.PoolReader, in.PoolID); err != nil {
 			return nil, err
 		}
-		deleted, err := batchDeleteUpstreamModelBindings(ctx, d, "oauth_pool", in.PoolID, bindingIDs)
+		deleted, err := batchDeleteUpstreamModelBindings(ctx, d.ModelBindings, "oauth_pool", in.PoolID, bindingIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -354,15 +354,15 @@ func bindingRecordToDTO(item domain.UpstreamModelBinding) upstreamModelBindingDT
 	}
 }
 
-func ensureDirectUpstreamExists(ctx context.Context, d AIDeps, accountID string) (upstreamAccountDTO, error) {
-	if d.AccountReader == nil {
+func ensureDirectUpstreamExists(ctx context.Context, reader UpstreamAccountReader, accountID string) (upstreamAccountDTO, error) {
+	if reader == nil {
 		return upstreamAccountDTO{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
 	_, err := parseTransportUUID(accountID)
 	if err != nil {
 		return upstreamAccountDTO{}, httpx.ErrBadRequest.WithDetail("invalid accountID")
 	}
-	account, err := d.AccountReader.GetAccountSecret(ctx, accountID)
+	account, err := reader.GetAccountSecret(ctx, accountID)
 	if err != nil {
 		return upstreamAccountDTO{}, mapServiceError(err)
 	}
@@ -373,11 +373,11 @@ type upstreamAccountDTO struct {
 	DefaultProtocol string
 }
 
-func ensurePoolExists(ctx context.Context, d AIDeps, poolID string) (*domain.CredentialPool, error) {
-	if d.PoolReader == nil {
+func ensurePoolExists(ctx context.Context, reader OAuthPoolReader, poolID string) (*domain.CredentialPool, error) {
+	if reader == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
 	}
-	pool, err := d.PoolReader.GetPool(ctx, poolID)
+	pool, err := reader.GetPool(ctx, poolID)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -388,34 +388,34 @@ func modelBindingScope(upstreamKind, upstreamID string) domain.UpstreamModelBind
 	return domain.UpstreamModelBindingScope{Kind: domain.UpstreamKind(upstreamKind), ID: upstreamID}
 }
 
-func listUpstreamModelBindings(ctx context.Context, d AIDeps, upstreamKind, upstreamID string) ([]domain.UpstreamModelBinding, error) {
-	if d.ModelBindings == nil {
+func listUpstreamModelBindings(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID string) ([]domain.UpstreamModelBinding, error) {
+	if store == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	items, err := d.ModelBindings.List(ctx, modelBindingScope(upstreamKind, upstreamID))
+	items, err := store.List(ctx, modelBindingScope(upstreamKind, upstreamID))
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
 	return items, nil
 }
 
-func createUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
-	if d.ModelBindings == nil {
+func createUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
+	if store == nil {
 		return domain.UpstreamModelBinding{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
 	write, err := normalizeUpstreamModelBindingWrite(req, endpointProtocol, fixedProviderType, nil)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
-	item, err := d.ModelBindings.Create(ctx, modelBindingScope(upstreamKind, upstreamID), write)
+	item, err := store.Create(ctx, modelBindingScope(upstreamKind, upstreamID), write)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	return item, nil
 }
 
-func updateUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
-	current, err := getUpstreamModelBinding(ctx, d, upstreamKind, upstreamID, bindingID)
+func updateUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, bindingID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
+	current, err := getUpstreamModelBinding(ctx, store, upstreamKind, upstreamID, bindingID)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, err
 	}
@@ -423,18 +423,18 @@ func updateUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, ups
 	if normalizeErr != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(normalizeErr)
 	}
-	item, err := d.ModelBindings.Update(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID, write)
+	item, err := store.Update(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID, write)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	return item, nil
 }
 
-func deleteUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID string) error {
-	if d.ModelBindings == nil {
+func deleteUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, bindingID string) error {
+	if store == nil {
 		return httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	return mapServiceError(d.ModelBindings.Delete(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID))
+	return mapServiceError(store.Delete(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID))
 }
 
 func normalizeBatchDeleteBindingIDs(rawIDs []string) ([]string, error) {
@@ -458,22 +458,22 @@ func normalizeBatchDeleteBindingIDs(rawIDs []string) ([]string, error) {
 	return ids, nil
 }
 
-func batchDeleteUpstreamModelBindings(ctx context.Context, d AIDeps, upstreamKind, upstreamID string, bindingIDs []string) (int64, error) {
-	if d.ModelBindings == nil {
+func batchDeleteUpstreamModelBindings(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID string, bindingIDs []string) (int64, error) {
+	if store == nil {
 		return 0, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	deleted, err := d.ModelBindings.BatchDelete(ctx, modelBindingScope(upstreamKind, upstreamID), bindingIDs)
+	deleted, err := store.BatchDelete(ctx, modelBindingScope(upstreamKind, upstreamID), bindingIDs)
 	if err != nil {
 		return 0, mapServiceError(err)
 	}
 	return deleted, nil
 }
 
-func getUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID string) (domain.UpstreamModelBinding, error) {
-	if d.ModelBindings == nil {
+func getUpstreamModelBinding(ctx context.Context, store UpstreamModelBindingStore, upstreamKind, upstreamID, bindingID string) (domain.UpstreamModelBinding, error) {
+	if store == nil {
 		return domain.UpstreamModelBinding{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	item, err := d.ModelBindings.Get(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID)
+	item, err := store.Get(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID)
 	if err != nil {
 		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
