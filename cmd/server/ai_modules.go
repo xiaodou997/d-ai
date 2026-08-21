@@ -372,7 +372,10 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				PoolWriter:        oauthCreds,
 				PoolHealthReader:  oauthCreds,
 				TokenRefresher:    refresher,
-				APIKeySvc:         apiKeySvc,
+				APIKeys:           apiKeySvc,
+				APIKeyWriter:      apiKeySvc,
+				APIKeyLifecycle:   apiKeySvc,
+				APIKeySecrets:     apiKeySvc,
 				WorkspaceSvc:      workspaceSvc,
 			},
 			AIBillingDeps: transport.AIBillingDeps{

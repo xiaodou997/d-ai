@@ -12,6 +12,7 @@ import (
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
+	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
@@ -56,13 +57,44 @@ type IdentityDeps struct {
 	PoolWriter        OAuthPoolWriter
 	PoolHealthReader  OAuthPoolHealthReader
 	TokenRefresher    OAuthTokenRefresher
-	APIKeySvc         *identitycontrol.Service
+	APIKeys           APIKeyReader
+	APIKeyWriter      APIKeyWriter
+	APIKeyLifecycle   APIKeyLifecycleManager
+	APIKeySecrets     APIKeySecretManager
 	WorkspaceSvc      *workspacesvc.Service
 	IdentityProvider  IdentityProvider
 	TokenVerifier     TokenVerifier
 	TokenRevocations  TokenRevocationChecker
 	BanChecker        HumaBanChecker
 	TenantEndUsers    TenantEndUserVerifier
+}
+
+// APIKeyReader exposes only non-secret API key summaries. Ownership checks use
+// the same scoped lists so callers cannot probe keys outside their tenant/user.
+type APIKeyReader interface {
+	ListForTenant(ctx context.Context, tenantID string) ([]coreidentity.APIKey, error)
+	ListForUser(ctx context.Context, tenantID, userID string) ([]coreidentity.APIKey, error)
+}
+
+// APIKeyWriter contains API key creation and mutable metadata operations.
+type APIKeyWriter interface {
+	Create(ctx context.Context, in identitycontrol.CreateInput) (identitycontrol.Created, error)
+	Update(ctx context.Context, in identitycontrol.UpdateInput) (coreidentity.APIKey, error)
+}
+
+// APIKeyLifecycleManager owns status transitions and deletion. Creation routes
+// also require this port because limit-policy failure triggers a compensating
+// key deletion.
+type APIKeyLifecycleManager interface {
+	UpdateStatus(ctx context.Context, id, tenantID, status string) (coreidentity.APIKey, error)
+	Delete(ctx context.Context, id, tenantID string) error
+}
+
+// APIKeySecretManager isolates plaintext access for an existing key. Newly
+// minted plaintext remains part of APIKeyWriter.Create's creation result.
+type APIKeySecretManager interface {
+	Reveal(ctx context.Context, id, tenantID string) (string, error)
+	Rotate(ctx context.Context, id, tenantID string) (identitycontrol.Created, error)
 }
 
 // OAuthPoolHealthReader is the aggregate query port used by the pool health

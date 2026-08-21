@@ -99,7 +99,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Tags:          []string{"api-keys"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *tenantSelfAPIKeyWriteInput) (*apiKeyCreatedOutput, error) {
-		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
+		if d.APIKeyWriter == nil || d.APIKeyLifecycle == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -116,13 +116,13 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if cb := strings.TrimSpace(claimsUserID(ctx)); cb != "" && write.CreatedBy == "" {
 			write.CreatedBy = cb
 		}
-		created, err := d.APIKeySvc.Create(ctx, write)
+		created, err := d.APIKeyWriter.Create(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
 		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
 		if err != nil {
-			_ = d.APIKeySvc.Delete(ctx, created.Key.ID, tenantID)
+			_ = d.APIKeyLifecycle.Delete(ctx, created.Key.ID, tenantID)
 			return nil, mapServiceError(err)
 		}
 		out := &apiKeyCreatedOutput{}
@@ -139,7 +139,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 更新本租户 API key 的基础信息与独立限流策略。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantSelfUpdateAPIKeyInput) (*apiKeyOutput, error) {
-		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
+		if d.APIKeys == nil || d.APIKeyWriter == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -150,13 +150,13 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
+		if err := ensureTenantAPIKeyScope(ctx, d.APIKeys, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, tenantID, "", in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		key, err := d.APIKeySvc.Update(ctx, write)
+		key, err := d.APIKeyWriter.Update(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -176,7 +176,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Summary:     "更新租户自助 API key 状态",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantSelfUpdateAPIKeyStatusInput) (*apiKeyOutput, error) {
-		if d.APIKeySvc == nil {
+		if d.APIKeys == nil || d.APIKeyLifecycle == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -187,10 +187,10 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
+		if err := ensureTenantAPIKeyScope(ctx, d.APIKeys, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		key, err := d.APIKeySvc.UpdateStatus(ctx, in.APIKeyID, tenantID, status)
+		key, err := d.APIKeyLifecycle.UpdateStatus(ctx, in.APIKeyID, tenantID, status)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -207,17 +207,17 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 读取本租户 API key 的当前完整明文，用于再次复制。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantSelfAPIKeyIDInput) (*apiKeyRevealOutput, error) {
-		if d.APIKeySvc == nil {
+		if d.APIKeys == nil || d.APIKeySecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
+		if err := ensureTenantAPIKeyScope(ctx, d.APIKeys, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		plaintext, err := d.APIKeySvc.Reveal(ctx, in.APIKeyID, tenantID)
+		plaintext, err := d.APIKeySecrets.Reveal(ctx, in.APIKeyID, tenantID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -234,17 +234,17 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 为本租户 API key 生成新密钥并失效旧密钥缓存。响应返回新密钥明文，后续也可再次复制。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantSelfAPIKeyIDInput) (*apiKeyCreatedOutput, error) {
-		if d.APIKeySvc == nil {
+		if d.APIKeys == nil || d.APIKeySecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
+		if err := ensureTenantAPIKeyScope(ctx, d.APIKeys, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		created, err := d.APIKeySvc.Rotate(ctx, in.APIKeyID, tenantID)
+		created, err := d.APIKeySecrets.Rotate(ctx, in.APIKeyID, tenantID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -261,17 +261,17 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Summary:     "删除租户自助 API key",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantSelfAPIKeyIDInput) (*deleteAPIKeyOutput, error) {
-		if d.APIKeySvc == nil {
+		if d.APIKeys == nil || d.APIKeyLifecycle == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
+		if err := ensureTenantAPIKeyScope(ctx, d.APIKeys, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := d.APIKeySvc.Delete(ctx, in.APIKeyID, tenantID); err != nil {
+		if err := d.APIKeyLifecycle.Delete(ctx, in.APIKeyID, tenantID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if d.LimitPolicies != nil {

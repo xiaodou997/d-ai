@@ -146,6 +146,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 上游账号列表、管理员写入和连通性状态协调分别依赖目录、管理和健康端口；导出组合目录、密钥读取与解密端口，导入组合目录与管理端口，AI/顶层 Transport 不再暴露具体 `*upstreamcontrol.Service`。
 - [x] 平台价格表管理、租户价格表自助和 LiteLLM 同步分别依赖三组显式端口；分组生效价格只依赖聚合模型目录，AI/顶层 Transport 不再暴露具体 `*billingcontrol.Service` 或要求无关价格服务就绪。
 - [x] 商业控制面按分组目录、分组写入、调度规则、上游目标、用户绑定和限额策略拆成六组端口；API Key 只组合可见分组与限额能力，AI/顶层 Transport 不再暴露具体 `*commercial.Service`。
+- [x] API Key 按安全摘要查询、创建更新、状态/删除生命周期和敏感密钥回显/轮换拆成四组端口；平台、租户、用户自助与限额路由按需组合能力，AI/顶层 Transport 不再暴露具体 `*identitycontrol.Service`。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -427,6 +428,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 基础设施边界：系统状态的 PostgreSQL/Redis 检查统一依赖 `ComponentHealthProbe`，账号迁移的价格簿校验依赖 `PriceBookReader`；AI Transport 已清零 `*pgxpool.Pool` 字段、import 和调用，PostgreSQL 连接只留在 composition root 与 adapter。
 - 价格表边界：平台 CRUD/手工条目、租户可见范围/自助迁移、LiteLLM 查询与同步分别依赖 `PlatformPriceBookManager`、`TenantPriceBookManager`、`PriceBookSyncManager`；租户和用户分组生效价格复用 `ModelCatalogReader`，不再错误依赖完整价格表服务。
 - 商业控制面边界：分组读与可见性、分组配置写入、调度规则、上游目标绑定、终端用户绑定和限额策略分别依赖六组显式端口；API Key 创建和更新只组合 `CommercialGroupCatalog` 与 `CommercialLimitPolicyManager`，具体 `commercial.Service` 只留在 composition root 和运行时管线。
+- API Key 边界：非敏感摘要查询、创建与元数据更新、状态与删除生命周期、明文回显与轮换分别依赖 `APIKeyReader`、`APIKeyWriter`、`APIKeyLifecycleManager` 和 `APIKeySecretManager`；创建路由显式组合生命周期端口完成限额策略失败后的补偿删除，具体 `identitycontrol.Service` 只在 composition root 构造。
 - 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。
@@ -439,4 +441,4 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：`AIDeps` 仍保留多个具体业务 service，容器本身仍是 service locator；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将具体 `*upstreamcontrol.Service` 按账号查询、管理写入、迁移与连通性状态更新拆为关联端口，继续缩小 `CatalogDeps`。
+- 下一候选项：P1-02 将具体 `*workspace.Service` 按工作区查询、管理写入、成员关系与密钥管理拆为关联端口，继续缩小 `IdentityDeps`。

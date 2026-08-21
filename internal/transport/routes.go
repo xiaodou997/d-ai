@@ -21,7 +21,6 @@ import (
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
-	"xiaodou/dai/internal/ai/identitycontrol"
 	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
@@ -97,7 +96,10 @@ type AIIdentityDeps struct {
 	PoolWriter        aitransport.OAuthPoolWriter
 	PoolHealthReader  aitransport.OAuthPoolHealthReader
 	TokenRefresher    aitransport.OAuthTokenRefresher
-	APIKeySvc         *identitycontrol.Service
+	APIKeys           aitransport.APIKeyReader
+	APIKeyWriter      aitransport.APIKeyWriter
+	APIKeyLifecycle   aitransport.APIKeyLifecycleManager
+	APIKeySecrets     aitransport.APIKeySecretManager
 	WorkspaceSvc      *workspacesvc.Service
 }
 
@@ -255,7 +257,10 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			TokenVerifier:     platform.JWT,
 			TokenRevocations:  platform.Blacklist,
 			BanChecker:        d.BanChecker,
-			APIKeySvc:         d.APIKeySvc,
+			APIKeys:           d.APIKeys,
+			APIKeyWriter:      d.APIKeyWriter,
+			APIKeyLifecycle:   d.APIKeyLifecycle,
+			APIKeySecrets:     d.APIKeySecrets,
 			WorkspaceSvc:      d.WorkspaceSvc,
 		},
 		BillingDeps: aitransport.BillingDeps{

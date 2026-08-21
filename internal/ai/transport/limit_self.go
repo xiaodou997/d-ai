@@ -8,7 +8,6 @@ import (
 
 	"xiaodou/dai/internal/ai/commercial"
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -93,7 +92,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·租户 API 密钥限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), "", d.APIKeySvc, d.LimitPolicies)
+		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), "", d.APIKeys, d.LimitPolicies)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -103,14 +102,14 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·创建或更新租户 API 密钥限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *selfUpsertAPIKeyLimitInput) (*runtimeLimitPolicyOutput, error) {
-		if d.LimitPolicies == nil || d.APIKeySvc == nil {
+		if d.LimitPolicies == nil || d.APIKeys == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
+		if err := ensureTenantAPIKeyScope(ctx, d.APIKeys, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		policy, err := upsertScopedLimitPolicy(ctx, d.LimitPolicies, commercial.LimitPolicyWrite{
@@ -135,7 +134,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助·个人 API 密钥限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), userIDFromContext(ctx), d.APIKeySvc, d.LimitPolicies)
+		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), userIDFromContext(ctx), d.APIKeys, d.LimitPolicies)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -145,7 +144,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助·创建或更新个人 API 密钥限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *selfUpsertAPIKeyLimitInput) (*runtimeLimitPolicyOutput, error) {
-		if d.LimitPolicies == nil || d.APIKeySvc == nil {
+		if d.LimitPolicies == nil || d.APIKeys == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -153,7 +152,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		if err := ensureUserAPIKeyScope(ctx, d.APIKeySvc, tenantID, userID, in.APIKeyID); err != nil {
+		if err := ensureUserAPIKeyScope(ctx, d.APIKeys, tenantID, userID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		policy, err := upsertScopedLimitPolicy(ctx, d.LimitPolicies, commercial.LimitPolicyWrite{
@@ -187,8 +186,8 @@ func singleScopedPolicyResponse(ctx context.Context, policies CommercialLimitPol
 	return out, nil
 }
 
-func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID string, apiKeySvc *identitycontrol.Service, policies CommercialLimitPolicyManager) (*runtimeLimitPoliciesOutput, error) {
-	if apiKeySvc == nil || policies == nil {
+func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID string, apiKeys APIKeyReader, policies CommercialLimitPolicyManager) (*runtimeLimitPoliciesOutput, error) {
+	if apiKeys == nil || policies == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 	}
 	if tenantID == "" {
@@ -199,9 +198,9 @@ func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID str
 		err  error
 	)
 	if userID == "" {
-		keys, err = apiKeySvc.ListForTenant(ctx, tenantID)
+		keys, err = apiKeys.ListForTenant(ctx, tenantID)
 	} else {
-		keys, err = apiKeySvc.ListForUser(ctx, tenantID, userID)
+		keys, err = apiKeys.ListForUser(ctx, tenantID, userID)
 	}
 	if err != nil {
 		return nil, mapServiceError(err)

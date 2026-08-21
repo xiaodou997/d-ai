@@ -10,6 +10,7 @@ import (
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
@@ -49,6 +50,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	riskEvents := riskcontrol.NewEventService(nil)
 	upstreamAccess := upstreamaccess.New(nil)
 	commercialPorts := commercial.NewService(nil)
+	apiKeyPorts := identitycontrol.New(nil, nil, nil, nil)
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAIDeps(
@@ -70,6 +72,10 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				PoolWriter:        oauth,
 				PoolHealthReader:  oauth,
 				TokenRefresher:    refresher,
+				APIKeys:           apiKeyPorts,
+				APIKeyWriter:      apiKeyPorts,
+				APIKeyLifecycle:   apiKeyPorts,
+				APIKeySecrets:     apiKeyPorts,
 			},
 			AICatalogDeps: AICatalogDeps{
 				ClientCatalog:      catalog,
@@ -111,6 +117,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 
 	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
 		t.Fatal("OAuth management dependencies were not preserved")
+	}
+	if got.APIKeys != apiKeyPorts || got.APIKeyWriter != apiKeyPorts || got.APIKeyLifecycle != apiKeyPorts || got.APIKeySecrets != apiKeyPorts {
+		t.Fatal("API key capability ports were not preserved")
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
