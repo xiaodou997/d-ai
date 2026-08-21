@@ -393,7 +393,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			},
 			AIOperationsDeps: transport.AIOperationsDeps{
 				DashboardQueries:           dashboardSvc,
-				UsageSvc:                   usageSvc,
+				UsageQueries:               usageSvc,
 				UserUsageLogs:              usageSvc,
 				AuditLogs:                  auditSvc,
 				AdminAudit:                 auditSvc,

@@ -238,3 +238,23 @@ type UsageFilter struct {
 	DateFrom      *time.Time
 	DateTo        *time.Time
 }
+
+// UsageSummaryFilter scopes aggregate usage projections. It stays separate
+// from UsageFilter so aggregate and log-row query contracts can evolve
+// independently.
+type UsageSummaryFilter struct {
+	TenantID      string
+	UserID        string
+	ModelCode     string
+	RequestStatus string
+	RequestSource string
+	DateFrom      *time.Time
+	DateTo        *time.Time
+}
+
+// UsageLogPage combines the filtered total, aggregate stats and page records.
+type UsageLogPage struct {
+	Total   int64
+	Stats   UsageStats
+	Records []UsageLog
+}

@@ -184,7 +184,7 @@ func (r *UsageRepo) GetLogDetail(ctx context.Context, requestID string) (domain.
 	return detail, nil
 }
 
-func (r *UsageRepo) Summary(ctx context.Context, f observabilitycontrol.SummaryFilter) ([]domain.UsageSummaryRow, error) {
+func (r *UsageRepo) Summary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageSummaryRow, error) {
 	rows, err := r.q.ListUsageSummary(ctx, dbgen.ListUsageSummaryParams{
 		TenantID:      akText(f.TenantID),
 		UserID:        akText(f.UserID),
@@ -216,7 +216,7 @@ func (r *UsageRepo) Summary(ctx context.Context, f observabilitycontrol.SummaryF
 	return out, nil
 }
 
-func (r *UsageRepo) UnitSummary(ctx context.Context, f observabilitycontrol.SummaryFilter) ([]domain.UsageUnitSummaryRow, error) {
+func (r *UsageRepo) UnitSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUnitSummaryRow, error) {
 	rows, err := r.q.ListUsageUnitSummary(ctx, dbgen.ListUsageUnitSummaryParams{
 		TenantID:      akText(f.TenantID),
 		UserID:        akText(f.UserID),
@@ -287,7 +287,7 @@ const upstreamUsageSummarySQL = `
 	ORDER BY request_count DESC, total_tokens DESC
 `
 
-func (r *UsageRepo) UpstreamSummary(ctx context.Context, f observabilitycontrol.SummaryFilter) ([]domain.UsageUpstreamSummaryRow, error) {
+func (r *UsageRepo) UpstreamSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUpstreamSummaryRow, error) {
 	rows, err := r.pool.Query(ctx, upstreamUsageSummarySQL,
 		akText(f.TenantID), akText(f.UserID), akText(f.ModelCode),
 		akText(f.RequestStatus), akText(f.RequestSource),
@@ -339,7 +339,7 @@ const userRankingSQL = `
 	LIMIT $8
 `
 
-func (r *UsageRepo) UserRanking(ctx context.Context, f observabilitycontrol.SummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error) {
+func (r *UsageRepo) UserRanking(ctx context.Context, f domain.UsageSummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error) {
 	rows, err := r.pool.Query(ctx, userRankingSQL,
 		akText(f.TenantID),
 		akText(f.UserID),

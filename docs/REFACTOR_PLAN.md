@@ -141,6 +141,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 分组配置导出、预检和导入只依赖 `GroupTransferManager` 最小端口，AI/顶层 Transport 依赖容器不再暴露具体 `*commercial.GroupTransferService`。
 - [x] 管理审计日志列表只依赖 `AdminAuditLogReader` 读端口，与 `AdminAuditRecorder` 写端口分离，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.AuditService`。
 - [x] 管理端、租户端和工作区仪表盘统一依赖 `DashboardQueryReader` 聚合读端口，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.DashboardService`。
+- [x] 管理端、租户端、用户端和工作区用量查询统一依赖 `UsageQueryReader`，分页与汇总数据结构下沉到 domain，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.UsageService`。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -428,6 +429,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 分组迁移边界：分组配置 `Export` / `Preview` / `Import` 统一依赖 `GroupTransferManager`；具体 planning service 只由 composition root 构造，顶层 Transport 仅转发端口。路由测试覆盖租户 claims、三类请求/响应与未装配 503，审计行为保持不变。
 - 审计读取边界：管理审计列表通过单方法 `AdminAuditLogReader` 读取 `domain.AuditLog`，与既有 `AdminAuditRecorder` 写端口独立装配；具体 service 只在 composition root 同时满足两个端口。路由测试覆盖 limit 上限、DTO 投影和未装配 503。
 - 仪表盘读取边界：管理端四类统计、租户自助统计和工作区概览统一通过 `DashboardQueryReader` 读取领域投影；具体 service 只在 composition root 构造。路由测试覆盖四个查询方法、scope/时间窗口、limit 上限、金额与错误 DTO 投影及未装配 503。
+- 用量读取边界：分页日志、详情、模型/计费单位/上游汇总、用户排行、用户汇总和每日趋势统一通过 `UsageQueryReader`；受限用户日志继续使用独立 `UserUsageLogReader`。`UsageSummaryFilter` / `UsageLogPage` 已迁入 domain，Transport 与 PostgreSQL adapter 不再依赖 control 包 DTO。路由测试覆盖 8 个方法、scope/时间窗口、分页与 limit、金额投影及未装配 503。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：`AIDeps` 仍保留多个具体业务 service，容器本身仍是 service locator；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将具体 `*observabilitycontrol.UsageService` 替换为覆盖管理、租户与工作区用量查询的 `UsageQueryReader` 端口，继续缩小 `AIDeps`。
+- 下一候选项：P1-02 将四个具体 risk-control service/checker 拆为配置存储、检测、日志读取和事件处置端口，继续缩小 `OperationsDeps`。

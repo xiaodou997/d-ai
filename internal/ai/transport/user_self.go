@@ -521,7 +521,7 @@ func registerUserSelfUsage(api huma.API, d AIDeps) {
 		Description: "按当前用户 token 返回本用户的用量汇总。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *userSelfUsageSummaryInput) (*userUsageSummaryOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -529,7 +529,7 @@ func registerUserSelfUsage(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		summary, err := d.UsageSvc.UserSummary(ctx, tenantID, userID, in.RequestSource)
+		summary, err := d.UsageQueries.UserSummary(ctx, tenantID, userID, in.RequestSource)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

@@ -24,7 +24,6 @@ import (
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/identitycontrol"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
 	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
@@ -129,7 +128,7 @@ type AICatalogDeps struct {
 // AIOperationsDeps contains AI-side dashboards, audit and risk-control collaborators.
 type AIOperationsDeps struct {
 	DashboardQueries           aitransport.DashboardQueryReader
-	UsageSvc                   *observabilitycontrol.UsageService
+	UsageQueries               aitransport.UsageQueryReader
 	UserUsageLogs              aitransport.UserUsageLogReader
 	AuditLogs                  aitransport.AdminAuditLogReader
 	AdminAudit                 aitransport.AdminAuditRecorder
@@ -277,7 +276,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		},
 		OperationsDeps: aitransport.OperationsDeps{
 			DashboardQueries:           d.DashboardQueries,
-			UsageSvc:                   d.UsageSvc,
+			UsageQueries:               d.UsageQueries,
 			UserUsageLogs:              d.UserUsageLogs,
 			AuditLogs:                  d.AuditLogs,
 			AdminAudit:                 d.AdminAudit,

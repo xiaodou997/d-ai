@@ -332,7 +332,7 @@ func buildUserWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOver
 }
 
 func buildWorkspaceOverview[T any](ctx context.Context, d AIDeps, owner workspace.Owner, in *workspaceOverviewInput, render func([]domain.UsageLog, workspaceUsageSummaryDTO, []workspace.ChatSession, []workspace.ImageJob) *T) (*T, error) {
-	if d.WorkspaceSvc == nil || d.UsageSvc == nil {
+	if d.WorkspaceSvc == nil || d.UsageQueries == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace dependencies are not configured")
 	}
 	logLimit, err := workspaceLogLimitFromInput(in.LogLimit)
@@ -510,12 +510,12 @@ func workspaceLogsAndSummary(ctx context.Context, d AIDeps, owner workspace.Owne
 		UserID:        owner.UserID,
 		RequestSource: requestSource,
 	}
-	page, err := d.UsageSvc.ListLogs(ctx, filter, limit, 0)
+	page, err := d.UsageQueries.ListLogs(ctx, filter, limit, 0)
 	if err != nil {
 		return nil, workspaceUsageSummaryDTO{}, mapServiceError(err)
 	}
 	if owner.Scope == identity.ScopeUser {
-		summary, err := d.UsageSvc.UserSummary(ctx, owner.TenantID, owner.UserID, requestSource)
+		summary, err := d.UsageQueries.UserSummary(ctx, owner.TenantID, owner.UserID, requestSource)
 		if err != nil {
 			return nil, workspaceUsageSummaryDTO{}, mapServiceError(err)
 		}

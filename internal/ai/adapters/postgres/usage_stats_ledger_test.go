@@ -6,7 +6,6 @@ import (
 
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/testsupport"
 )
 
@@ -255,7 +254,7 @@ func TestUpstreamSummaryReportsOutputPerResource(t *testing.T) {
 	}
 
 	repo := NewUsageRepo(dbgen.New(pool), pool)
-	rows, err := repo.UpstreamSummary(ctx, observabilitycontrol.SummaryFilter{TenantID: tenantID})
+	rows, err := repo.UpstreamSummary(ctx, domain.UsageSummaryFilter{TenantID: tenantID})
 	if err != nil {
 		t.Fatalf("UpstreamSummary() error = %v", err)
 	}

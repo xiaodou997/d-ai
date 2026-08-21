@@ -20,28 +20,12 @@ type UsageRepository interface {
 	ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) ([]domain.UsageLog, error)
 	ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error)
 	GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error)
-	Summary(ctx context.Context, f SummaryFilter) ([]domain.UsageSummaryRow, error)
-	UnitSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUnitSummaryRow, error)
-	UpstreamSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUpstreamSummaryRow, error)
-	UserRanking(ctx context.Context, f SummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error)
+	Summary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageSummaryRow, error)
+	UnitSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUnitSummaryRow, error)
+	UpstreamSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUpstreamSummaryRow, error)
+	UserRanking(ctx context.Context, f domain.UsageSummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error)
 	UserSummary(ctx context.Context, tenantID, userID, requestSource string) (domain.UserUsageSummary, error)
 	DailyTrend(ctx context.Context, dateFrom, dateTo *time.Time) ([]domain.DailyTrendRow, error)
-}
-
-type SummaryFilter struct {
-	TenantID      string
-	UserID        string
-	ModelCode     string
-	RequestStatus string
-	RequestSource string
-	DateFrom      *time.Time
-	DateTo        *time.Time
-}
-
-type LogPage struct {
-	Total   int64
-	Stats   domain.UsageStats
-	Records []domain.UsageLog
 }
 
 type UsageService struct {
@@ -52,7 +36,7 @@ func NewUsageService(repo UsageRepository) *UsageService {
 	return &UsageService{repo: repo}
 }
 
-func (s *UsageService) ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) (LogPage, error) {
+func (s *UsageService) ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) (domain.UsageLogPage, error) {
 	if limit <= 0 {
 		limit = defaultLogLimit
 	}
@@ -64,17 +48,17 @@ func (s *UsageService) ListLogs(ctx context.Context, f domain.UsageFilter, limit
 	}
 	total, err := s.repo.CountLogs(ctx, f)
 	if err != nil {
-		return LogPage{}, err
+		return domain.UsageLogPage{}, err
 	}
 	stats, err := s.repo.StatsFor(ctx, f)
 	if err != nil {
-		return LogPage{}, err
+		return domain.UsageLogPage{}, err
 	}
 	records, err := s.repo.ListLogs(ctx, f, limit, offset)
 	if err != nil {
-		return LogPage{}, err
+		return domain.UsageLogPage{}, err
 	}
-	return LogPage{Total: total, Stats: stats, Records: records}, nil
+	return domain.UsageLogPage{Total: total, Stats: stats, Records: records}, nil
 }
 
 func (s *UsageService) GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error) {
@@ -85,19 +69,19 @@ func (s *UsageService) ListUserLogs(ctx context.Context, tenantID, userID, reque
 	return s.repo.ListUserLogs(ctx, tenantID, userID, requestSource, limit)
 }
 
-func (s *UsageService) Summary(ctx context.Context, f SummaryFilter) ([]domain.UsageSummaryRow, error) {
+func (s *UsageService) Summary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageSummaryRow, error) {
 	return s.repo.Summary(ctx, f)
 }
 
-func (s *UsageService) UnitSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUnitSummaryRow, error) {
+func (s *UsageService) UnitSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUnitSummaryRow, error) {
 	return s.repo.UnitSummary(ctx, f)
 }
 
-func (s *UsageService) UpstreamSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUpstreamSummaryRow, error) {
+func (s *UsageService) UpstreamSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUpstreamSummaryRow, error) {
 	return s.repo.UpstreamSummary(ctx, f)
 }
 
-func (s *UsageService) UserRanking(ctx context.Context, f SummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error) {
+func (s *UsageService) UserRanking(ctx context.Context, f domain.UsageSummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error) {
 	if limit <= 0 {
 		limit = defaultRankingLimit
 	}

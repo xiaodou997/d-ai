@@ -45,16 +45,16 @@ func (m *usageRepoStub) ListUserLogs(ctx context.Context, tenantID, userID, requ
 func (m *usageRepoStub) GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error) {
 	return domain.UsageLogDetail{}, m.err
 }
-func (m *usageRepoStub) Summary(ctx context.Context, f SummaryFilter) ([]domain.UsageSummaryRow, error) {
+func (m *usageRepoStub) Summary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageSummaryRow, error) {
 	return nil, m.err
 }
-func (m *usageRepoStub) UnitSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUnitSummaryRow, error) {
+func (m *usageRepoStub) UnitSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUnitSummaryRow, error) {
 	return nil, m.err
 }
-func (m *usageRepoStub) UpstreamSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUpstreamSummaryRow, error) {
+func (m *usageRepoStub) UpstreamSummary(ctx context.Context, f domain.UsageSummaryFilter) ([]domain.UsageUpstreamSummaryRow, error) {
 	return m.upstreamRows, m.err
 }
-func (m *usageRepoStub) UserRanking(ctx context.Context, f SummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error) {
+func (m *usageRepoStub) UserRanking(ctx context.Context, f domain.UsageSummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error) {
 	m.gotLimit = limit
 	return m.rankingRows, m.err
 }
@@ -159,10 +159,10 @@ func TestUsageDailyTrendPassThroughsWindow(t *testing.T) {
 
 func TestUsageSummaryPassThroughs(t *testing.T) {
 	svc := NewUsageService(&usageRepoStub{})
-	if _, err := svc.Summary(context.Background(), SummaryFilter{}); err != nil {
+	if _, err := svc.Summary(context.Background(), domain.UsageSummaryFilter{}); err != nil {
 		t.Fatalf("Summary: %v", err)
 	}
-	if _, err := svc.UnitSummary(context.Background(), SummaryFilter{}); err != nil {
+	if _, err := svc.UnitSummary(context.Background(), domain.UsageSummaryFilter{}); err != nil {
 		t.Fatalf("UnitSummary: %v", err)
 	}
 	if _, err := svc.UserSummary(context.Background(), "t1", "u1", ""); err != nil {
@@ -173,14 +173,14 @@ func TestUsageSummaryPassThroughs(t *testing.T) {
 func TestUsageUserRankingDefaultsAndCaps(t *testing.T) {
 	repo := &usageRepoStub{}
 	svc := NewUsageService(repo)
-	if _, err := svc.UserRanking(context.Background(), SummaryFilter{}, 0); err != nil {
+	if _, err := svc.UserRanking(context.Background(), domain.UsageSummaryFilter{}, 0); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if repo.gotLimit != defaultRankingLimit {
 		t.Fatalf("want default ranking limit %d, got %d", defaultRankingLimit, repo.gotLimit)
 	}
 
-	if _, err := svc.UserRanking(context.Background(), SummaryFilter{}, 9999); err != nil {
+	if _, err := svc.UserRanking(context.Background(), domain.UsageSummaryFilter{}, 9999); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if repo.gotLimit != maxRankingLimit {
@@ -193,7 +193,7 @@ func TestUsageUserRankingPassThroughsRows(t *testing.T) {
 		rankingRows: []domain.UsageUserRankingRow{{TenantID: "t1", UserID: "u1", RequestCount: 3}},
 	}
 	svc := NewUsageService(repo)
-	rows, err := svc.UserRanking(context.Background(), SummaryFilter{}, 20)
+	rows, err := svc.UserRanking(context.Background(), domain.UsageSummaryFilter{}, 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

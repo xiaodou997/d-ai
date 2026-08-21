@@ -11,7 +11,6 @@ import (
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/subscription"
 	"xiaodou/dai/internal/ai/testsupport"
@@ -113,7 +112,7 @@ func TestUsageCompletionIsIdempotentAndAtomic(t *testing.T) {
 	if callerCharge != 900 {
 		t.Fatalf("cancelled async task caller charge = %d, want 900", callerCharge)
 	}
-	upstreamRows, err := NewUsageRepo(dbgen.New(pool), pool).UpstreamSummary(ctx, observabilitycontrol.SummaryFilter{TenantID: tenantID})
+	upstreamRows, err := NewUsageRepo(dbgen.New(pool), pool).UpstreamSummary(ctx, domain.UsageSummaryFilter{TenantID: tenantID})
 	if err != nil {
 		t.Fatalf("read upstream reference-cost summary: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/ai/upstreamaccess"
@@ -33,6 +34,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	modelCatalog := &modelCatalogReaderStub{}
 	priceBooks := &priceBookReaderStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
+	usageQueries := observabilitycontrol.NewUsageService(nil)
 	dashboardQueries := &dashboardQueryReaderStub{}
 	auditLogs := &adminAuditLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
@@ -73,6 +75,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				UserUsageLogs:              userUsageLogs,
+				UsageQueries:               usageQueries,
 				DashboardQueries:           dashboardQueries,
 				AuditLogs:                  auditLogs,
 				AdminAudit:                 adminAudit,
@@ -104,6 +107,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.UserUsageLogs != userUsageLogs {
 		t.Fatal("user usage log reader was not preserved")
+	}
+	if got.UsageQueries != usageQueries {
+		t.Fatal("usage query reader was not preserved")
 	}
 	if got.DashboardQueries != dashboardQueries {
 		t.Fatal("dashboard query reader was not preserved")

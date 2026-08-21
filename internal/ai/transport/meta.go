@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -14,7 +15,6 @@ import (
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/identitycontrol"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/serving"
@@ -226,6 +226,21 @@ type DashboardQueryReader interface {
 	RecentErrors(ctx context.Context, filter domain.DashboardFilter, limit int32) ([]domain.DashboardRecentError, error)
 }
 
+// UsageQueryReader contains the aggregate and paginated usage reads shared by
+// management, tenant self-service, user self-service and workspace routes.
+// The dedicated UserUsageLogReader remains separate for the restricted user
+// log projection.
+type UsageQueryReader interface {
+	DailyTrend(ctx context.Context, dateFrom, dateTo *time.Time) ([]domain.DailyTrendRow, error)
+	ListLogs(ctx context.Context, filter domain.UsageFilter, limit, offset int32) (domain.UsageLogPage, error)
+	GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error)
+	Summary(ctx context.Context, filter domain.UsageSummaryFilter) ([]domain.UsageSummaryRow, error)
+	UnitSummary(ctx context.Context, filter domain.UsageSummaryFilter) ([]domain.UsageUnitSummaryRow, error)
+	UpstreamSummary(ctx context.Context, filter domain.UsageSummaryFilter) ([]domain.UsageUpstreamSummaryRow, error)
+	UserRanking(ctx context.Context, filter domain.UsageSummaryFilter, limit int32) ([]domain.UsageUserRankingRow, error)
+	UserSummary(ctx context.Context, tenantID, userID, requestSource string) (domain.UserUsageSummary, error)
+}
+
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
@@ -251,7 +266,7 @@ type ScoreWeightsStore interface {
 // OperationsDeps contains dashboards, audit and risk-control collaborators.
 type OperationsDeps struct {
 	DashboardQueries           DashboardQueryReader
-	UsageSvc                   *observabilitycontrol.UsageService
+	UsageQueries               UsageQueryReader
 	UserUsageLogs              UserUsageLogReader
 	AuditLogs                  AdminAuditLogReader
 	AdminAudit                 AdminAuditRecorder

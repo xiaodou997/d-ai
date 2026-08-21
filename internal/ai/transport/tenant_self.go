@@ -17,7 +17,6 @@ import (
 
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -408,7 +407,7 @@ func registerTenantSelfUsage(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；不含上游/供应商/API key 等内部字段。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *tenantSelfUsageLogsInput) (*tenantUsageLogsOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -432,7 +431,7 @@ func registerTenantSelfUsage(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		page, err := d.UsageSvc.ListLogs(ctx, filter, limit, offset)
+		page, err := d.UsageQueries.ListLogs(ctx, filter, limit, offset)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -454,7 +453,7 @@ func registerTenantSelfUsage(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 按模型聚合本租户用量，支持精确的 [start, end) 时间窗口。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *tenantSelfUsageSummaryInput) (*usageSummaryOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -465,7 +464,7 @@ func registerTenantSelfUsage(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		filter := observabilitycontrol.SummaryFilter{
+		filter := domain.UsageSummaryFilter{
 			TenantID:      tenantID,
 			UserID:        in.UserID,
 			ModelCode:     in.ModelCode,
@@ -474,7 +473,7 @@ func registerTenantSelfUsage(api huma.API, d AIDeps) {
 			DateFrom:      dateFrom,
 			DateTo:        dateTo,
 		}
-		rows, err := d.UsageSvc.Summary(ctx, filter)
+		rows, err := d.UsageQueries.Summary(ctx, filter)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

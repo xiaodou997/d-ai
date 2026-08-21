@@ -10,7 +10,6 @@ import (
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/moneyfmt"
-	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -446,7 +445,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "返回按自然日聚合的用量趋势，支持精确的 [start, end) 时间窗口；未传时默认近 30 天。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *dailyTrendInput) (*dailyTrendOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		dateFrom, dateTo, err := parseOptionalRFC3339Window(in.DateFrom, in.DateTo)
@@ -454,7 +453,7 @@ func registerUsage(api huma.API, d AIDeps) {
 			return nil, err
 		}
 		dateFrom, dateTo = applyDefaultRFC3339Window(dateFrom, dateTo, 30*24*time.Hour)
-		rows, err := d.UsageSvc.DailyTrend(ctx, dateFrom, dateTo)
+		rows, err := d.UsageQueries.DailyTrend(ctx, dateFrom, dateTo)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -475,7 +474,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "返回 AI 网关用量日志分页，以及同过滤条件下的聚合统计。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageLogsInput) (*usageLogsOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		filter, err := usageLogFilterFromInput(in)
@@ -486,7 +485,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		page, err := d.UsageSvc.ListLogs(ctx, filter, limit, offset)
+		page, err := d.UsageQueries.ListLogs(ctx, filter, limit, offset)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -509,10 +508,10 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "返回单次请求的调度链路和请求载荷摘要。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageLogDetailInput) (*usageLogDetailOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
-		detail, err := d.UsageSvc.GetLogDetail(ctx, in.RequestID)
+		detail, err := d.UsageQueries.GetLogDetail(ctx, in.RequestID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -527,14 +526,14 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "按模型聚合 AI 网关用量，支持精确的 [start, end) 时间窗口。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageSummaryInput) (*usageSummaryOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		filter, err := usageSummaryFilterFromInput(in)
 		if err != nil {
 			return nil, err
 		}
-		rows, err := d.UsageSvc.Summary(ctx, filter)
+		rows, err := d.UsageQueries.Summary(ctx, filter)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -555,14 +554,14 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "按计费单位类型聚合 AI 网关用量，支持精确的 [start, end) 时间窗口。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageSummaryInput) (*usageUnitSummaryOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		filter, err := usageSummaryFilterFromInput(in)
 		if err != nil {
 			return nil, err
 		}
-		rows, err := d.UsageSvc.UnitSummary(ctx, filter)
+		rows, err := d.UsageQueries.UnitSummary(ctx, filter)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -583,14 +582,14 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "按实际命中的上游账号或凭证池聚合参考费用和租户结算应收，使用与 usage log 相同的结算结果。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageSummaryInput) (*usageUpstreamSummaryOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		filter, err := usageSummaryFilterFromInput(in)
 		if err != nil {
 			return nil, err
 		}
-		rows, err := d.UsageSvc.UpstreamSummary(ctx, filter)
+		rows, err := d.UsageQueries.UpstreamSummary(ctx, filter)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -611,7 +610,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		Description: "按用户计费USD 金额降序返回用户排行，支持精确的 [start, end) 时间窗口和使用记录筛选口径。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *usageUserRankingInput) (*usageUserRankingOutput, error) {
-		if d.UsageSvc == nil {
+		if d.UsageQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("usage service is not configured")
 		}
 		filter, err := usageSummaryFilterFromInput(&usageSummaryInput{
@@ -630,7 +629,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		rows, err := d.UsageSvc.UserRanking(ctx, filter, limit)
+		rows, err := d.UsageQueries.UserRanking(ctx, filter, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -687,15 +686,15 @@ func userUsageLimitFromInput(limit int32) (int32, error) {
 	return limit, nil
 }
 
-func usageSummaryFilterFromInput(in *usageSummaryInput) (observabilitycontrol.SummaryFilter, error) {
+func usageSummaryFilterFromInput(in *usageSummaryInput) (domain.UsageSummaryFilter, error) {
 	if in == nil {
 		in = &usageSummaryInput{}
 	}
 	dateFrom, dateTo, err := parseOptionalRFC3339Window(in.DateFrom, in.DateTo)
 	if err != nil {
-		return observabilitycontrol.SummaryFilter{}, err
+		return domain.UsageSummaryFilter{}, err
 	}
-	return observabilitycontrol.SummaryFilter{
+	return domain.UsageSummaryFilter{
 		TenantID:      in.TenantID,
 		UserID:        in.UserID,
 		ModelCode:     in.ModelCode,
