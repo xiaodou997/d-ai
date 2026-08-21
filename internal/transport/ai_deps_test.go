@@ -19,6 +19,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	catalog := &clientcatalog.Service{}
 	modelCapabilities := &modelCapabilityResolverStub{}
 	httpClient := &httpDoerStub{}
+	redisHealth := &componentHealthProbeStub{}
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
@@ -30,6 +31,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIInfrastructureDeps: AIInfrastructureDeps{
 				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    httpClient,
+				RedisHealth:     redisHealth,
 				Health:          health,
 				Weights:         weights,
 			},
@@ -59,7 +61,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
 	}
-	if got.Health != health || got.Weights != weights {
+	if got.RedisHealth != redisHealth || got.Health != health || got.Weights != weights {
 		t.Fatal("routing management dependencies were not preserved")
 	}
 	if got.TokenRevocations != blacklist {
@@ -75,6 +77,10 @@ func (*providerSecretCodecStub) Decrypt(string) (string, error) { return "", nil
 type httpDoerStub struct{}
 
 func (*httpDoerStub) Do(*http.Request) (*http.Response, error) { return nil, nil }
+
+type componentHealthProbeStub struct{}
+
+func (*componentHealthProbeStub) Check(context.Context) error { return nil }
 
 type modelCapabilityResolverStub struct{}
 

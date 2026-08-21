@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/billingcontrol"
@@ -31,15 +30,21 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// InfrastructureDeps contains concrete process clients used by legacy
-// transport adapters. It is isolated as a group so the next migration can
-// replace these fields with application ports without changing every route.
+// InfrastructureDeps contains transitional process collaborators used by
+// legacy transport adapters. Concrete clients are replaced one endpoint group
+// at a time without changing every route at once.
 type InfrastructureDeps struct {
-	Postgres   *pgxpool.Pool
-	Redis      *redis.Client
-	Queries    *dbgen.Queries
-	HTTPClient HTTPDoer
-	Logger     *zap.Logger
+	Postgres    *pgxpool.Pool
+	RedisHealth ComponentHealthProbe
+	Queries     *dbgen.Queries
+	HTTPClient  HTTPDoer
+	Logger      *zap.Logger
+}
+
+// ComponentHealthProbe is the minimal infrastructure check needed by the
+// system status endpoint. Client-specific command types stay in adapters.
+type ComponentHealthProbe interface {
+	Check(ctx context.Context) error
 }
 
 // HTTPDoer is the only outbound HTTP capability required by AI transport.

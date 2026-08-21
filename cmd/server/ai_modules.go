@@ -88,6 +88,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 
 	q := aidb.New(pool)
 	banChecker := banstate.NewChecker(redisClient)
+	redisHealth := redisadapter.NewHealthProbe(redisClient)
 	providerSecrets := secret.NewProviderKeyCodec(cfg.Security.SecretMasterKey)
 
 	priceBookSvc := billingcontrol.New(
@@ -354,6 +355,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				Queries:         q,
 				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    managementHTTPClient,
+				RedisHealth:     redisHealth,
 				Health:          healthTracker,
 				Weights:         routeWeightsStore,
 				BanChecker:      banChecker,

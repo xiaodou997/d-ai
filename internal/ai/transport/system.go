@@ -79,7 +79,7 @@ func registerSystem(api huma.API, d AIDeps) {
 		out := &systemStatusOutput{}
 		out.Body.Timestamp = time.Now().UTC().UnixMilli()
 		out.Body.DB = dbStatus(ctx, d)
-		out.Body.Redis = redisStatus(ctx, d)
+		out.Body.Redis = componentProbeStatus(ctx, d.RedisHealth)
 		out.Body.Health = healthSummaryFromTracker(d.Health)
 		return out, nil
 	})
@@ -144,11 +144,11 @@ func dbStatus(ctx context.Context, d AIDeps) componentStatus {
 	return componentStatus{Status: "ok"}
 }
 
-func redisStatus(ctx context.Context, d AIDeps) componentStatus {
-	if d.Redis == nil {
+func componentProbeStatus(ctx context.Context, probe ComponentHealthProbe) componentStatus {
+	if probe == nil {
 		return componentStatus{Status: "disabled"}
 	}
-	if err := d.Redis.Ping(ctx).Err(); err != nil {
+	if err := probe.Check(ctx); err != nil {
 		return componentStatus{Status: "error", Error: err.Error()}
 	}
 	return componentStatus{Status: "ok"}

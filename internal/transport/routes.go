@@ -89,6 +89,7 @@ type AIInfrastructureDeps struct {
 	Queries         *aidb.Queries
 	ProviderSecrets aitransport.ProviderSecretCodec
 	AIHTTPClient    aitransport.HTTPDoer
+	RedisHealth     aitransport.ComponentHealthProbe
 	Health          routing.HealthTracker
 	Weights         aitransport.ScoreWeightsStore
 	BanChecker      aitransport.HumaBanChecker
@@ -230,11 +231,11 @@ func registerPublicPlane(api huma.API, d Deps) {
 func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
 	aiDeps := aitransport.AIDeps{
 		InfrastructureDeps: aitransport.InfrastructureDeps{
-			Postgres:   platform.Pool,
-			Redis:      platform.Redis,
-			Queries:    d.Queries,
-			Logger:     platform.Logger,
-			HTTPClient: d.AIHTTPClient,
+			Postgres:    platform.Pool,
+			RedisHealth: d.RedisHealth,
+			Queries:     d.Queries,
+			Logger:      platform.Logger,
+			HTTPClient:  d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
 			CredentialCreator: d.CredentialCreator,
