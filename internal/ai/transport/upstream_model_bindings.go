@@ -368,18 +368,18 @@ func bindingRecordToDTO(item upstreamModelBindingRecord) upstreamModelBindingDTO
 }
 
 func ensureDirectUpstreamExists(ctx context.Context, d AIDeps, accountID string) (upstreamAccountDTO, error) {
-	if d.Queries == nil {
+	if d.AccountReader == nil {
 		return upstreamAccountDTO{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	parsedID, err := parseTransportUUID(accountID)
+	_, err := parseTransportUUID(accountID)
 	if err != nil {
 		return upstreamAccountDTO{}, httpx.ErrBadRequest.WithDetail("invalid accountID")
 	}
-	row, err := d.Queries.GetUpstreamAccount(ctx, parsedID)
+	account, err := d.AccountReader.GetAccountSecret(ctx, accountID)
 	if err != nil {
 		return upstreamAccountDTO{}, mapServiceError(err)
 	}
-	return upstreamAccountDTO{DefaultProtocol: row.DefaultProtocol}, nil
+	return upstreamAccountDTO{DefaultProtocol: account.DefaultProtocol}, nil
 }
 
 type upstreamAccountDTO struct {

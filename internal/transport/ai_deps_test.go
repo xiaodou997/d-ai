@@ -10,6 +10,7 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
+	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/internal/auth"
 )
 
@@ -24,6 +25,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
 	providerSecrets := &providerSecretCodecStub{}
+	accountReader := &upstreamAccountReaderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
 
 	got := buildAIDeps(
@@ -48,6 +50,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AICatalogDeps: AICatalogDeps{
 				ClientCatalog:     catalog,
 				ModelCapabilities: modelCapabilities,
+				AccountReader:     accountReader,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -59,7 +62,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
-	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities {
+	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader {
 		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
@@ -97,4 +100,10 @@ type modelCapabilityResolverStub struct{}
 
 func (*modelCapabilityResolverStub) Lookup(context.Context, string) (domain.CapabilityType, bool) {
 	return "", false
+}
+
+type upstreamAccountReaderStub struct{}
+
+func (*upstreamAccountReaderStub) GetAccountSecret(context.Context, string) (upstreamcontrol.AccountSecret, error) {
+	return upstreamcontrol.AccountSecret{}, nil
 }

@@ -84,10 +84,10 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		Description:  "按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401/403 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。",
 		Tags:         []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *upstreamAccountTestInput) (*upstreamAccountTestOutput, error) {
-		if d.Queries == nil || d.Postgres == nil || d.ProviderSecrets == nil {
+		if d.AccountReader == nil || d.Postgres == nil || d.ProviderSecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
 		}
-		accountID, err := parseTransportUUID(in.AccountID)
+		_, err := parseTransportUUID(in.AccountID)
 		if err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("invalid accountID")
 		}
@@ -95,11 +95,11 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		if modelCode == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("model_code is required")
 		}
-		account, err := d.Queries.GetUpstreamAccount(ctx, accountID)
+		account, err := d.AccountReader.GetAccountSecret(ctx, in.AccountID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := d.ProviderSecrets.Decrypt(account.ApiKeyCiphertext)
+		apiKey, err := d.ProviderSecrets.Decrypt(account.Ciphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("failed to decrypt api key")
 		}
@@ -116,7 +116,7 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 			image = &decoded
 		}
 		result := runUpstreamAccountTest(ctx, d.HTTPClient, upstreamTestConfig{
-			BaseURL:                     account.BaseUrl,
+			BaseURL:                     account.BaseURL,
 			APIKey:                      apiKey,
 			ExtraHeaders:                account.ExtraHeaders,
 			APIFormat:                   binding.APIFormat,

@@ -80,22 +80,22 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		Description: "调用上游 /v1/models 并推断能力与协议，不落库。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *fetchEndpointUpstreamModelsInput) (*fetchEndpointUpstreamModelsOutput, error) {
-		if d.Queries == nil || d.ProviderSecrets == nil {
+		if d.AccountReader == nil || d.ProviderSecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
 		}
 		accountID, err := parseTransportUUID(in.AccountID)
 		if err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("invalid accountID")
 		}
-		account, err := d.Queries.GetUpstreamAccount(ctx, accountID)
+		account, err := d.AccountReader.GetAccountSecret(ctx, in.AccountID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		apiKey, err := d.ProviderSecrets.Decrypt(account.ApiKeyCiphertext)
+		apiKey, err := d.ProviderSecrets.Decrypt(account.Ciphertext)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("failed to decrypt api key")
 		}
-		models, err := fetchUpstreamModelList(ctx, d.HTTPClient, account.BaseUrl, apiKey, account.DefaultProtocol, account.ExtraHeaders)
+		models, err := fetchUpstreamModelList(ctx, d.HTTPClient, account.BaseURL, apiKey, account.DefaultProtocol, account.ExtraHeaders)
 		if err != nil {
 			return nil, httpx.New("upstream_unavailable", http.StatusBadGateway, "Upstream Unavailable").WithDetail(sanitizeUpstreamFetchError(err))
 		}
@@ -139,14 +139,14 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		Tags:          []string{"upstream-accounts"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *importEndpointUpstreamModelsInput) (*importEndpointUpstreamModelsOutput, error) {
-		if d.Queries == nil || d.Postgres == nil {
+		if d.AccountReader == nil || d.Postgres == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
 		}
 		accountID, err := parseTransportUUID(in.AccountID)
 		if err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("invalid accountID")
 		}
-		account, err := d.Queries.GetUpstreamAccount(ctx, accountID)
+		account, err := d.AccountReader.GetAccountSecret(ctx, in.AccountID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

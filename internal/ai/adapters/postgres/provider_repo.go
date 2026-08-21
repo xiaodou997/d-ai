@@ -126,13 +126,19 @@ func (r *AccountRepo) GetAccountSecret(ctx context.Context, id string) (upstream
 	if err != nil {
 		return upstreamcontrol.AccountSecret{}, err
 	}
+	return accountSecretFromRow(row), nil
+}
+
+func accountSecretFromRow(row dbgen.AiUpstreamAccount) upstreamcontrol.AccountSecret {
 	return upstreamcontrol.AccountSecret{
 		Ciphertext:        row.ApiKeyCiphertext,
+		BaseURL:           row.BaseUrl,
+		ExtraHeaders:      row.ExtraHeaders,
 		DefaultProtocol:   row.DefaultProtocol,
 		TenantDisplayName: row.TenantDisplayName,
 		TenantAccessMode:  row.TenantAccessMode,
 		Status:            row.Status,
-	}, nil
+	}
 }
 
 func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.AccountUpdate) (domain.UpstreamAccount, error) {

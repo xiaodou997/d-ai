@@ -49,6 +49,8 @@ type AccountUpdate struct {
 
 type AccountSecret struct {
 	Ciphertext        string
+	BaseURL           string
+	ExtraHeaders      []byte
 	DefaultProtocol   string
 	TenantDisplayName string
 	TenantAccessMode  string

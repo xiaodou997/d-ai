@@ -379,6 +379,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			AICatalogDeps: transport.AICatalogDeps{
 				ClientCatalog:     poolModelCatalog,
 				ModelCapabilities: modelCapabilities,
+				AccountReader:     accountSvc,
 				PriceBookSvc:      priceBookSvc,
 				CommercialSvc:     commercialSvc,
 				GroupTransferSvc:  groupTransferSvc,

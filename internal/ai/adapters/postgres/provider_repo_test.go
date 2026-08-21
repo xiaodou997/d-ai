@@ -199,3 +199,23 @@ func TestAccountRepoDeleteAccountCleansBindings(t *testing.T) {
 		t.Fatalf("upstream model rows = %d, want 0", count)
 	}
 }
+
+func TestAccountSecretFromRowMapsManagementFields(t *testing.T) {
+	row := dbgen.AiUpstreamAccount{
+		ApiKeyCiphertext:  "ciphertext",
+		BaseUrl:           "https://upstream.example",
+		ExtraHeaders:      []byte(`{"X-Tenant":"tenant-1"}`),
+		DefaultProtocol:   "anthropic",
+		TenantDisplayName: "Shared Claude",
+		TenantAccessMode:  "allow_all",
+		Status:            "active",
+	}
+
+	got := accountSecretFromRow(row)
+	if got.Ciphertext != row.ApiKeyCiphertext || got.BaseURL != row.BaseUrl || string(got.ExtraHeaders) != string(row.ExtraHeaders) {
+		t.Fatalf("secret transport fields = %#v", got)
+	}
+	if got.DefaultProtocol != row.DefaultProtocol || got.TenantDisplayName != row.TenantDisplayName || got.TenantAccessMode != row.TenantAccessMode || got.Status != row.Status {
+		t.Fatalf("secret account metadata = %#v", got)
+	}
+}

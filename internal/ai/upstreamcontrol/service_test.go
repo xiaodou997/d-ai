@@ -2,6 +2,7 @@ package upstreamcontrol
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"xiaodou/dai/internal/ai/domain"
@@ -20,6 +21,25 @@ type repoStub struct {
 	invalidReason     string
 	deleteAccountID   string
 	deleteErr         error
+}
+
+func TestGetAccountSecretDelegatesDomainFields(t *testing.T) {
+	want := AccountSecret{
+		Ciphertext:      "cipher",
+		BaseURL:         "https://upstream.example",
+		ExtraHeaders:    []byte(`{"X-Test":"value"}`),
+		DefaultProtocol: string(domain.EndpointProtocolOpenAICompatible),
+		Status:          domain.UpstreamAccountStatusActive,
+	}
+	svc := New(&repoStub{secret: want}, nil)
+
+	got, err := svc.GetAccountSecret(t.Context(), "account-1")
+	if err != nil {
+		t.Fatalf("GetAccountSecret() error = %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("GetAccountSecret() = %#v, want %#v", got, want)
+	}
 }
 
 func (s *repoStub) CreateAccount(_ context.Context, in AccountCreate) (domain.UpstreamAccount, error) {

@@ -132,6 +132,7 @@ type BillingDeps struct {
 type CatalogDeps struct {
 	ClientCatalog     ClientCatalogResolver
 	ModelCapabilities ModelCapabilityResolver
+	AccountReader     UpstreamAccountReader
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
@@ -151,6 +152,12 @@ type ClientCatalogResolver interface {
 // concrete resolver assembled at the composition root.
 type ModelCapabilityResolver interface {
 	Lookup(ctx context.Context, modelCode string) (domain.CapabilityType, bool)
+}
+
+// UpstreamAccountReader exposes the secret-bearing account fields needed by
+// management flows without leaking generated persistence rows into transport.
+type UpstreamAccountReader interface {
+	GetAccountSecret(ctx context.Context, id string) (upstreamcontrol.AccountSecret, error)
 }
 
 // RuntimeDeps contains request execution state and runtime policy.
