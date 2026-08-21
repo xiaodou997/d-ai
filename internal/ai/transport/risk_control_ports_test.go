@@ -110,11 +110,13 @@ func TestRiskControlRoutesUsePorts(t *testing.T) {
 			Status: domain.RiskEventStatusResolved, ResolvedBy: "admin-1", CreatedAt: createdAt,
 		},
 	}
+	codec := &providerSecretCodecStub{ciphertext: "encrypted-secret"}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerRiskControl(api, AIDeps{OperationsDeps: OperationsDeps{
+	registerRiskControl(api, RiskControlHTTPDeps{
+		ProviderSecrets:   codec,
 		RiskControlConfig: configStore, RiskControlDetector: detector,
 		RiskControlLogs: logs, RiskEvents: events,
-	}})
+	})
 
 	configRecorder := performRiskControlRequest(router, http.MethodGet, "/api/v1/risk-control/config", "")
 	requireRiskControlStatus(t, configRecorder, http.StatusOK)
@@ -124,10 +126,10 @@ func TestRiskControlRoutesUsePorts(t *testing.T) {
 		t.Fatalf("config response = %#v", config)
 	}
 
-	updateBody := `{"enabled":true,"mode":"pre_block","keyword":{"enabled":false,"entries":[],"homoglyph_map_extra":{},"pinyin":{"enabled":false,"entries":[],"include_initials":false}},"provider":{"base_url":"https://moderation.example","model":"moderation-test","timeout_ms":1200},"thresholds":{},"sample_rate":1,"verdict_cache_ttl_seconds":600,"scope_group_ids":[],"violation_window_hours":24,"risk_event_threshold":3,"record_non_hits":false,"block_status_code":403,"block_message":"blocked"}`
+	updateBody := `{"enabled":true,"mode":"pre_block","keyword":{"enabled":false,"entries":[],"homoglyph_map_extra":{},"pinyin":{"enabled":false,"entries":[],"include_initials":false}},"provider":{"base_url":"https://moderation.example","api_key":"new-secret","model":"moderation-test","timeout_ms":1200},"thresholds":{},"sample_rate":1,"verdict_cache_ttl_seconds":600,"scope_group_ids":[],"violation_window_hours":24,"risk_event_threshold":3,"record_non_hits":false,"block_status_code":403,"block_message":"blocked"}`
 	updateRecorder := performRiskControlRequest(router, http.MethodPut, "/api/v1/risk-control/config", updateBody)
 	requireRiskControlStatus(t, updateRecorder, http.StatusOK)
-	if configStore.updated.Mode != domain.RiskControlModePreBlock || configStore.updated.Provider.APIKeyCiphertext != "existing-secret" {
+	if codec.encryptInput != "new-secret" || configStore.updated.Mode != domain.RiskControlModePreBlock || configStore.updated.Provider.APIKeyCiphertext != "encrypted-secret" {
 		t.Fatalf("updated config = %#v", configStore.updated)
 	}
 
@@ -189,7 +191,7 @@ func TestRiskControlRoutesUsePorts(t *testing.T) {
 
 func TestRiskControlRoutesRequirePorts(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerRiskControl(api, AIDeps{})
+	registerRiskControl(api, RiskControlHTTPDeps{})
 
 	requests := []struct {
 		method string
@@ -204,6 +206,22 @@ func TestRiskControlRoutesRequirePorts(t *testing.T) {
 	for _, request := range requests {
 		recorder := performRiskControlRequest(router, request.method, request.path, request.body)
 		requireRiskControlStatus(t, recorder, http.StatusServiceUnavailable)
+	}
+}
+
+func TestRiskControlRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	coreResponse := performRiskControlRequest(coreRouter, http.MethodGet, "/api/v1/risk-control/config", "")
+	if coreResponse.Code != http.StatusNotFound {
+		t.Fatalf("core AI risk-control route status = %d, want %d", coreResponse.Code, http.StatusNotFound)
+	}
+
+	riskRouter, riskAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterRiskControl(riskAPI, RiskControlHTTPDeps{})
+	riskResponse := performRiskControlRequest(riskRouter, http.MethodGet, "/api/v1/risk-control/config", "")
+	if riskResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("independent risk-control route status = %d, want %d", riskResponse.Code, http.StatusUnauthorized)
 	}
 }
 

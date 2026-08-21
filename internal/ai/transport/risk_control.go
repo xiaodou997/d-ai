@@ -200,7 +200,7 @@ type resolveRiskEventInput struct {
 // Registration
 // ============================================================================
 
-func registerRiskControl(api huma.API, d AIDeps) {
+func registerRiskControl(api huma.API, d RiskControlHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-risk-control-config",
 		Method:      http.MethodGet,

@@ -150,6 +150,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] AI 工作台按概览、模型目录、会话查询、会话管理、运行时消息持久化和图片任务查询拆成六组共享端口；Huma Transport、Console 和顶层装配不再暴露具体 `*workspace.Service`。
 - [x] 订阅控制面按套餐查询、套餐管理、购买事务、订阅查询、订单查询和分组名称解析拆成六组端口；Serving 继续使用独立准入/扣费热路径端口，AI/顶层 Transport 不再暴露具体 `*subscription.Service`。
 - [x] 订阅 HTTP 路由提取为独立 `SubscriptionHTTPDeps` / `RegisterSubscriptions` 纵向模块；通用 `AIDeps` 与 `RegisterAICore` 不再持有或注册订阅能力，认证和身份补全也只接收模块显式依赖。
+- [x] 风控管理路由提取为独立 `RiskControlHTTPDeps` / `RegisterRiskControl` 纵向模块；四组业务端口脱离通用 `AIDeps`，平台管理员认证和风控所需 `ProviderSecretCodec` 改为模块显式注入，Serving/worker 继续复用原实现。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -445,6 +446,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 仪表盘读取边界：管理端四类统计、租户自助统计和工作区概览统一通过 `DashboardQueryReader` 读取领域投影；具体 service 只在 composition root 构造。路由测试覆盖四个查询方法、scope/时间窗口、limit 上限、金额与错误 DTO 投影及未装配 503。
 - 用量读取边界：分页日志、详情、模型/计费单位/上游汇总、用户排行、用户汇总和每日趋势统一通过 `UsageQueryReader`；受限用户日志继续使用独立 `UserUsageLogReader`。`UsageSummaryFilter` / `UsageLogPage` 已迁入 domain，Transport 与 PostgreSQL adapter 不再依赖 control 包 DTO。路由测试覆盖 8 个方法、scope/时间窗口、分页与 limit、金额投影及未装配 503。
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
+- 风控 HTTP 模块：`RiskControlHTTPDeps` 独立组合四组业务端口、`HTTPAuthDeps` 与 `ProviderSecretCodec`；`RegisterRiskControl` 自行注册平台管理员认证分组。契约测试确认 core 不注册风控路径、独立模块执行认证，配置更新路由只把明文 API key 交给 codec 并向存储端传递密文。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
-- 遗留风险：订阅路由已脱离 `AIDeps`，其余 AI core 路由仍共享巨型接口型 service locator；顶层平台 `OperationsDeps` 仍保留多项具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 按相同模式提取依赖边界较集中的风控路由为 `RiskControlHTTPDeps` / `RegisterRiskControl`，继续缩小 `AIDeps` 并验证平台管理员认证模块化。
+- 遗留风险：订阅与风控路由已脱离 `AIDeps`，其余 AI core 路由仍共享巨型接口型 service locator；顶层平台 `OperationsDeps` 仍保留多项具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 提取管理审计读取路由为独立 `AuditLogHTTPDeps` / `RegisterAuditLog`；保留跨域写入使用的 `AdminAuditRecorder`，继续把查询入口与横切写端口解耦。

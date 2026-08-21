@@ -397,29 +397,6 @@ type UsageQueryReader interface {
 	UserSummary(ctx context.Context, tenantID, userID, requestSource string) (domain.UserUsageSummary, error)
 }
 
-// RiskControlConfigStore owns the mutable moderation configuration.
-type RiskControlConfigStore interface {
-	Get(ctx context.Context) (domain.RiskControlConfig, error)
-	Update(ctx context.Context, config domain.RiskControlConfig) error
-}
-
-// RiskControlDetector executes a non-persisting moderation check for the
-// management test endpoint. Implementations may still use an in-memory cache.
-type RiskControlDetector interface {
-	Detect(ctx context.Context, config domain.RiskControlConfig, text string) domain.RiskControlDetection
-}
-
-// RiskControlLogReader exposes paginated moderation audit history.
-type RiskControlLogReader interface {
-	List(ctx context.Context, filter domain.ContentModerationLogFilter, limit, offset int32) (domain.ContentModerationLogPage, error)
-}
-
-// RiskEventManager exposes the human-review queue and its state transition.
-type RiskEventManager interface {
-	List(ctx context.Context, filter domain.RiskEventFilter, limit, offset int32) (domain.RiskEventPage, error)
-	Resolve(ctx context.Context, id, status, resolvedBy, note string) (domain.RiskEvent, error)
-}
-
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
@@ -442,7 +419,7 @@ type ScoreWeightsStore interface {
 	Upsert(ctx context.Context, scope string, weights serving.ScoreWeights) error
 }
 
-// OperationsDeps contains dashboards, audit and risk-control collaborators.
+// OperationsDeps contains dashboard, usage, audit and enrichment collaborators.
 type OperationsDeps struct {
 	DashboardQueries           DashboardQueryReader
 	UsageQueries               UsageQueryReader
@@ -450,10 +427,6 @@ type OperationsDeps struct {
 	AuditLogs                  AdminAuditLogReader
 	AdminAudit                 AdminAuditRecorder
 	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
-	RiskControlConfig          RiskControlConfigStore
-	RiskControlDetector        RiskControlDetector
-	RiskControlLogs            RiskControlLogReader
-	RiskEvents                 RiskEventManager
 }
 
 // IdentityEnrichmentFailureObserver records fail-open identity lookup errors
@@ -485,7 +458,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerDashboard(management, d)
 	registerUsage(management, d)
 	registerAudit(management, d)
-	registerRiskControl(management, d)
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)

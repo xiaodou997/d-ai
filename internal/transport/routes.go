@@ -143,7 +143,7 @@ type AICatalogDeps struct {
 	UpstreamAccess     aitransport.UpstreamAccessManager
 }
 
-// AIOperationsDeps contains AI-side dashboards, audit and risk-control collaborators.
+// AIOperationsDeps contains AI-side dashboard, usage, audit and enrichment collaborators.
 type AIOperationsDeps struct {
 	DashboardQueries           aitransport.DashboardQueryReader
 	UsageQueries               aitransport.UsageQueryReader
@@ -151,10 +151,17 @@ type AIOperationsDeps struct {
 	AuditLogs                  aitransport.AdminAuditLogReader
 	AdminAudit                 aitransport.AdminAuditRecorder
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
-	RiskControlConfig          aitransport.RiskControlConfigStore
-	RiskControlDetector        aitransport.RiskControlDetector
-	RiskControlLogs            aitransport.RiskControlLogReader
-	RiskEvents                 aitransport.RiskEventManager
+}
+
+// AIRiskControlHTTPDeps contains the collaborators owned by the independently
+// registered risk-control HTTP module.
+type AIRiskControlHTTPDeps struct {
+	ProviderSecrets     aitransport.ProviderSecretCodec
+	RiskControlConfig   aitransport.RiskControlConfigStore
+	RiskControlDetector aitransport.RiskControlDetector
+	RiskControlLogs     aitransport.RiskControlLogReader
+	RiskEvents          aitransport.RiskEventManager
+	BanChecker          aitransport.HumaBanChecker
 }
 
 // AIDeps contains the AI control-plane and runtime services exposed by the
@@ -172,6 +179,7 @@ type AIDeps struct {
 type AIHTTPDeps struct {
 	Core          AIDeps
 	Subscriptions AISubscriptionHTTPDeps
+	RiskControl   AIRiskControlHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -208,6 +216,7 @@ func (m aiModule) Register(api huma.API) {
 	identity := newAIIdentityAdapter(m.platform.Pool, m.platform.UserService)
 	aitransport.RegisterAICore(api, buildAIDeps(m.platform, m.deps.Core, identity))
 	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
+	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -319,10 +328,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			AuditLogs:                  d.AuditLogs,
 			AdminAudit:                 d.AdminAudit,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
-			RiskControlConfig:          d.RiskControlConfig,
-			RiskControlDetector:        d.RiskControlDetector,
-			RiskControlLogs:            d.RiskControlLogs,
-			RiskEvents:                 d.RiskEvents,
 		},
 	}
 	if identity != nil {
@@ -351,6 +356,21 @@ func buildSubscriptionHTTPDeps(platform Deps, d AISubscriptionHTTPDeps, identity
 		deps.IdentityProvider = identity
 	}
 	return deps
+}
+
+func buildRiskControlHTTPDeps(platform Deps, d AIRiskControlHTTPDeps) aitransport.RiskControlHTTPDeps {
+	return aitransport.RiskControlHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		ProviderSecrets:     d.ProviderSecrets,
+		RiskControlConfig:   d.RiskControlConfig,
+		RiskControlDetector: d.RiskControlDetector,
+		RiskControlLogs:     d.RiskControlLogs,
+		RiskEvents:          d.RiskEvents,
+	}
 }
 
 // RegisterRaw 注册非 JSON 契约的 chi 原生端点。

@@ -119,10 +119,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				DashboardQueries:           dashboardQueries,
 				AuditLogs:                  auditLogs,
 				AdminAudit:                 adminAudit,
-				RiskControlConfig:          riskConfig,
-				RiskControlDetector:        riskDetector,
-				RiskControlLogs:            riskLogs,
-				RiskEvents:                 riskEvents,
 			},
 		},
 		nil,
@@ -179,9 +175,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.AdminAudit != adminAudit {
 		t.Fatal("admin audit recorder was not preserved")
 	}
-	if got.RiskControlConfig != riskConfig || got.RiskControlDetector != riskDetector || got.RiskControlLogs != riskLogs || got.RiskEvents != riskEvents {
-		t.Fatal("risk control ports were not preserved")
-	}
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")
 	}
@@ -211,6 +204,24 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if subscriptions.IdentityProvider != identity {
 		t.Fatal("subscription identity provider was not preserved")
+	}
+
+	riskControl := buildRiskControlHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIRiskControlHTTPDeps{
+			ProviderSecrets:     providerSecrets,
+			RiskControlConfig:   riskConfig,
+			RiskControlDetector: riskDetector,
+			RiskControlLogs:     riskLogs,
+			RiskEvents:          riskEvents,
+			BanChecker:          banChecker,
+		},
+	)
+	if riskControl.Auth.TokenVerifier != jwt || riskControl.Auth.TokenRevocations != blacklist || riskControl.Auth.BanChecker != banChecker {
+		t.Fatal("risk-control auth dependencies were not preserved")
+	}
+	if riskControl.ProviderSecrets != providerSecrets || riskControl.RiskControlConfig != riskConfig || riskControl.RiskControlDetector != riskDetector || riskControl.RiskControlLogs != riskLogs || riskControl.RiskEvents != riskEvents {
+		t.Fatal("risk-control dependencies were not preserved")
 	}
 }
 
