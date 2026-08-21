@@ -6,12 +6,12 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 )
 
-func TestOAuthCredentialSummaryRedactsSensitiveMetadata(t *testing.T) {
+func TestOAuthCredentialSummaryAllowsOnlyKnownIdentityMetadata(t *testing.T) {
 	row := OAuthCredentialRow{
 		ID:                    "cred-1",
 		PoolID:                "pool-1",
 		AccessTokenCiphertext: "ciphertext-must-stay-private",
-		AuthMetadataRaw:       []byte(`{"account_id":"account-1","refresh_token":"must-not-leak","nested":{"api_key":"must-not-leak"}}`),
+		AuthMetadataRaw:       []byte(`{"account_id":"account-1","plan_type":"team","refresh_token":"must-not-leak","private_key":"must-not-leak","nested":{"api_key":"must-not-leak"}}`),
 	}
 
 	got := oauthCredentialSummary(row)
@@ -24,12 +24,14 @@ func TestOAuthCredentialSummaryRedactsSensitiveMetadata(t *testing.T) {
 	if _, ok := got.AuthMetadata["refresh_token"]; ok {
 		t.Fatal("refresh token metadata leaked into summary")
 	}
-	nested, ok := got.AuthMetadata["nested"].(map[string]any)
-	if !ok {
-		t.Fatalf("nested metadata type = %T", got.AuthMetadata["nested"])
+	if _, ok := got.AuthMetadata["private_key"]; ok {
+		t.Fatal("private key metadata leaked into summary")
 	}
-	if _, ok := nested["api_key"]; ok {
-		t.Fatal("nested API key metadata leaked into summary")
+	if _, ok := got.AuthMetadata["nested"]; ok {
+		t.Fatal("opaque nested metadata leaked into summary")
+	}
+	if got.AuthMetadata["plan_type"] != "team" {
+		t.Fatalf("plan metadata was lost: %#v", got.AuthMetadata)
 	}
 
 	var _ domain.OAuthCredentialSummary = got

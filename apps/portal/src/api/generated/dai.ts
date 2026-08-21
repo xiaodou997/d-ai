@@ -7450,7 +7450,7 @@ export interface components {
              * @example https://example.com/schemas/PoolCredentialDTO.json
              */
             readonly $schema?: string;
-            /** @description 导入时的账户元数据；不含 access/refresh token */
+            /** @description 允许公开的账户身份元数据；仅包含已知 ID 和套餐字段 */
             auth_metadata?: {
                 [key: string]: unknown;
             };
@@ -7565,7 +7565,7 @@ export interface components {
             account_id?: string;
             /** @description Codex 导出 account_user_id，会合并到 auth_metadata */
             account_user_id?: string;
-            /** @description 账户元数据；响应会剔除 token/secret/key/password/cipher 类字段 */
+            /** @description 运行时账户元数据；响应仅返回已知的非敏感账户身份字段 */
             auth_metadata?: {
                 [key: string]: unknown;
             };

@@ -24,13 +24,16 @@ func (s credentialReaderStub) GetSummaryByID(context.Context, string) (*domain.O
 	return s.summary, nil
 }
 
-func TestPoolCredentialSummaryToDTORedactsMetadata(t *testing.T) {
+func TestPoolCredentialSummaryToDTOAllowsOnlyKnownIdentityMetadata(t *testing.T) {
 	dto := poolCredentialSummaryToDTO(domain.OAuthCredentialSummary{
 		ID:     "cred-1",
 		Status: "active",
 		AuthMetadata: map[string]any{
-			"account_id":   "account-1",
-			"access_token": "must-not-leak",
+			"account_id":    "account-1",
+			"plan_type":     "team",
+			"access_token":  "must-not-leak",
+			"private_key":   "must-not-leak",
+			"authorization": "must-not-leak",
 			"nested": map[string]any{
 				"client_secret": "must-not-leak",
 			},
@@ -43,12 +46,13 @@ func TestPoolCredentialSummaryToDTORedactsMetadata(t *testing.T) {
 	if _, ok := dto.AuthMetadata["access_token"]; ok {
 		t.Fatal("access token metadata leaked into DTO")
 	}
-	nested, ok := dto.AuthMetadata["nested"].(map[string]any)
-	if !ok {
-		t.Fatalf("nested metadata type = %T, want map[string]any", dto.AuthMetadata["nested"])
+	for _, key := range []string{"private_key", "authorization", "nested"} {
+		if _, ok := dto.AuthMetadata[key]; ok {
+			t.Fatalf("metadata key %q leaked into DTO", key)
+		}
 	}
-	if _, ok := nested["client_secret"]; ok {
-		t.Fatal("nested client secret metadata leaked into DTO")
+	if dto.AuthMetadata["plan_type"] != "team" {
+		t.Fatalf("plan metadata was lost: %#v", dto.AuthMetadata)
 	}
 }
 

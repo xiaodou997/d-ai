@@ -114,7 +114,7 @@ type poolCredentialDTO struct {
 	TokenType            string         `json:"token_type" doc:"Token 类型"`
 	Scope                string         `json:"scope" doc:"授权范围"`
 	ExpiresAt            *int64         `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒"`
-	AuthMetadata         map[string]any `json:"auth_metadata,omitempty" doc:"导入时的账户元数据；不含 access/refresh token"`
+	AuthMetadata         map[string]any `json:"auth_metadata,omitempty" doc:"允许公开的账户身份元数据；仅包含已知 ID 和套餐字段"`
 	Weight               int            `json:"weight" doc:"权重"`
 	Status               string         `json:"status" enum:"active,invalid,disabled" doc:"状态"`
 	InvalidReason        *string        `json:"invalid_reason,omitempty" doc:"失效原因"`
@@ -146,7 +146,7 @@ type poolCredentialWriteRequest struct {
 	Scope         string         `json:"scope,omitempty" doc:"授权范围"`
 	ExpiresAt     *int64         `json:"expires_at,omitempty" doc:"过期时间，Unix 秒；兼容 Codex OAuth 导出"`
 	Weight        *int           `json:"weight,omitempty" minimum:"0" doc:"权重；为空或 0 时默认 100"`
-	AuthMetadata  map[string]any `json:"auth_metadata,omitempty" doc:"账户元数据；响应会剔除 token/secret/key/password/cipher 类字段"`
+	AuthMetadata  map[string]any `json:"auth_metadata,omitempty" doc:"运行时账户元数据；响应仅返回已知的非敏感账户身份字段"`
 	AccountID     string         `json:"account_id,omitempty" doc:"Codex 导出 account_id，会合并到 auth_metadata"`
 	PlanType      string         `json:"plan_type,omitempty" doc:"Codex 导出 plan_type，会合并到 auth_metadata"`
 	UserID        string         `json:"user_id,omitempty" doc:"Codex 导出 user_id，会合并到 auth_metadata"`
@@ -901,7 +901,7 @@ func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentia
 		TokenType:            row.TokenType,
 		Scope:                row.Scope,
 		ExpiresAt:            timePtrToMillis(row.ExpiresAt),
-		AuthMetadata:         redactSensitiveMetadata(row.AuthMetadata),
+		AuthMetadata:         domain.CredentialSummaryMetadata(row.AuthMetadata),
 		Weight:               row.Weight,
 		Status:               row.Status,
 		InvalidReason:        stringPtrOrNil(row.InvalidReason),
@@ -915,10 +915,6 @@ func poolCredentialSummaryToDTO(row domain.OAuthCredentialSummary) poolCredentia
 		CreatedAt:            timeToMillisPtr(row.CreatedAt),
 		UpdatedAt:            timeToMillisPtr(row.UpdatedAt),
 	}
-}
-
-func redactSensitiveMetadata(in map[string]any) map[string]any {
-	return domain.RedactSensitiveMetadata(in)
 }
 
 func oauthPoolHealthToDTO(row pgadapter.PoolHealthRow) oauthPoolHealthDTO {

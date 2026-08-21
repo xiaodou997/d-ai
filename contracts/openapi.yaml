@@ -5467,7 +5467,7 @@ components:
           type: string
         auth_metadata:
           additionalProperties: {}
-          description: 导入时的账户元数据；不含 access/refresh token
+          description: 允许公开的账户身份元数据；仅包含已知 ID 和套餐字段
           type: object
         consecutive_fail_count:
           description: 连续失败次数
@@ -5606,7 +5606,7 @@ components:
           type: string
         auth_metadata:
           additionalProperties: {}
-          description: 账户元数据；响应会剔除 token/secret/key/password/cipher 类字段
+          description: 运行时账户元数据；响应仅返回已知的非敏感账户身份字段
           type: object
         email:
           description: 账号邮箱

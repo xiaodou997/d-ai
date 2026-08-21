@@ -1,48 +1,33 @@
 package domain
 
-import "strings"
+// credentialSummaryMetadataKeys is an allowlist, not a secret-name denylist:
+// imported provider metadata is arbitrary and a new credential-shaped key
+// must never become public merely because its spelling was not anticipated.
+var credentialSummaryMetadataKeys = [...]string{
+	"account_id",
+	"chatgpt_account_id",
+	"accountId",
+	"plan_type",
+	"user_id",
+	"account_user_id",
+}
 
-// RedactSensitiveMetadata returns a copy of account metadata without values
-// that could contain credentials or key material. It is shared by adapters
-// and transport so a non-secret read model remains safe at every boundary.
-func RedactSensitiveMetadata(in map[string]any) map[string]any {
+// CredentialSummaryMetadata returns the small, non-secret account identity
+// subset allowed in management responses. Values must be strings; maps,
+// arrays and other opaque provider payloads remain available only to runtime.
+func CredentialSummaryMetadata(in map[string]any) map[string]any {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		if sensitiveMetadataKey(key) {
-			continue
+	out := make(map[string]any, len(credentialSummaryMetadataKeys))
+	for _, key := range credentialSummaryMetadataKeys {
+		value, ok := in[key].(string)
+		if ok {
+			out[key] = value
 		}
-		out[key] = redactSensitiveMetadataValue(value)
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
-}
-
-func redactSensitiveMetadataValue(value any) any {
-	switch v := value.(type) {
-	case map[string]any:
-		return RedactSensitiveMetadata(v)
-	case []any:
-		out := make([]any, 0, len(v))
-		for _, item := range v {
-			out = append(out, redactSensitiveMetadataValue(item))
-		}
-		return out
-	default:
-		return value
-	}
-}
-
-func sensitiveMetadataKey(key string) bool {
-	normalized := strings.ToLower(key)
-	for _, part := range []string{"token", "secret", "password", "cipher", "api_key", "apikey", "key_hash"} {
-		if strings.Contains(normalized, part) {
-			return true
-		}
-	}
-	return false
 }

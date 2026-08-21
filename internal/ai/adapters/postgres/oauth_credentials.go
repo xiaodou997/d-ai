@@ -710,7 +710,7 @@ func oauthCredentialSummary(row OAuthCredentialRow) domain.OAuthCredentialSummar
 		TokenType:            row.TokenType,
 		Scope:                row.Scope,
 		ExpiresAt:            row.ExpiresAt,
-		AuthMetadata:         domain.RedactSensitiveMetadata(metadata),
+		AuthMetadata:         domain.CredentialSummaryMetadata(metadata),
 		Weight:               row.Weight,
 		Status:               row.Status,
 		InvalidReason:        row.InvalidReason,
