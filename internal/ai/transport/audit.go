@@ -34,7 +34,7 @@ type auditLogsOutput struct {
 	}
 }
 
-func registerAudit(api huma.API, d AIDeps) {
+func registerAudit(api huma.API, d AuditLogHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-audit-logs",
 		Method:      http.MethodGet,

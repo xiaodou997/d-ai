@@ -117,7 +117,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				UserUsageLogs:              userUsageLogs,
 				UsageQueries:               usageQueries,
 				DashboardQueries:           dashboardQueries,
-				AuditLogs:                  auditLogs,
 				AdminAudit:                 adminAudit,
 			},
 		},
@@ -169,9 +168,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.DashboardQueries != dashboardQueries {
 		t.Fatal("dashboard query reader was not preserved")
 	}
-	if got.AuditLogs != auditLogs {
-		t.Fatal("admin audit log reader was not preserved")
-	}
 	if got.AdminAudit != adminAudit {
 		t.Fatal("admin audit recorder was not preserved")
 	}
@@ -222,6 +218,20 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if riskControl.ProviderSecrets != providerSecrets || riskControl.RiskControlConfig != riskConfig || riskControl.RiskControlDetector != riskDetector || riskControl.RiskControlLogs != riskLogs || riskControl.RiskEvents != riskEvents {
 		t.Fatal("risk-control dependencies were not preserved")
+	}
+
+	auditLog := buildAuditLogHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIAuditLogHTTPDeps{
+			AuditLogs:  auditLogs,
+			BanChecker: banChecker,
+		},
+	)
+	if auditLog.Auth.TokenVerifier != jwt || auditLog.Auth.TokenRevocations != blacklist || auditLog.Auth.BanChecker != banChecker {
+		t.Fatal("audit-log auth dependencies were not preserved")
+	}
+	if auditLog.AuditLogs != auditLogs {
+		t.Fatal("admin audit log reader was not preserved")
 	}
 }
 

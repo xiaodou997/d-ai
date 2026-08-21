@@ -23,13 +23,13 @@ httpServers.Start / Shutdown
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
 - `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、catalog、runtime、operations
-  责任拆成嵌入式依赖组；订阅与风控 HTTP 已脱离该容器，由独立模块依赖注册。
+  责任拆成嵌入式依赖组；订阅、风控与审计读取 HTTP 已脱离该容器，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
-  `Subscriptions` 和 `RiskControl`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
+  `Subscriptions`、`RiskControl` 和 `AuditLog`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
 ## 尚未清零的装配遗留
 
@@ -70,6 +70,7 @@ httpServers.Start / Shutdown
 - 管理端、租户端、用户端和工作区用量查询统一通过 `UsageQueryReader` 进入 AI Transport，受限用户日志保留独立 `UserUsageLogReader`；具体 `observabilitycontrol.UsageService` 只在 composition root 构造并分别注入两个读端口。
 - 风控管理路由分别通过 `RiskControlConfigStore`、`RiskControlDetector`、`RiskControlLogReader` 和 `RiskEventManager` 进入 AI Transport；具体 config/log/event service 与 checker 只在 composition root 构造，serving/worker 继续复用 checker。
 - 风控 HTTP 已由独立 `RiskControlHTTPDeps` 组合四组业务端口、`HTTPAuthDeps` 和 `ProviderSecretCodec`，并通过 `RegisterRiskControl` 注册平台管理员认证分组；AI core `AIDeps` 不再接收或注册风控能力。
+- 管理审计读取 HTTP 已由独立 `AuditLogHTTPDeps` 组合 `AdminAuditLogReader` 和 `HTTPAuthDeps`，并通过 `RegisterAuditLog` 注册平台管理员认证分组；AI core `AIDeps` 不再接收或注册读取端口，迁移写入继续使用核心的 `AdminAuditRecorder`。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

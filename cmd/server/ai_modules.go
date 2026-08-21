@@ -415,7 +415,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 					DashboardQueries:           dashboardSvc,
 					UsageQueries:               usageSvc,
 					UserUsageLogs:              usageSvc,
-					AuditLogs:                  auditSvc,
 					AdminAudit:                 auditSvc,
 					IdentityEnrichmentFailures: identityEnrichmentFailures,
 				},
@@ -437,6 +436,10 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				RiskControlLogs:     riskControlLogSvc,
 				RiskEvents:          riskControlEventSvc,
 				BanChecker:          banChecker,
+			},
+			AuditLog: transport.AIAuditLogHTTPDeps{
+				AuditLogs:  auditSvc,
+				BanChecker: banChecker,
 			},
 		},
 		FileStore:          fileStore,

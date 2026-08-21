@@ -366,13 +366,6 @@ type AdminAuditRecorder interface {
 	Record(ctx context.Context, event domain.AdminAuditEvent) error
 }
 
-// AdminAuditLogReader is the read-only audit projection used by the
-// management list endpoint. Audit persistence and writes stay behind separate
-// composition ports.
-type AdminAuditLogReader interface {
-	List(ctx context.Context, limit int32) ([]domain.AuditLog, error)
-}
-
 // DashboardQueryReader is the aggregate analytics projection shared by
 // management, tenant self-service and workspace overview routes.
 type DashboardQueryReader interface {
@@ -424,7 +417,6 @@ type OperationsDeps struct {
 	DashboardQueries           DashboardQueryReader
 	UsageQueries               UsageQueryReader
 	UserUsageLogs              UserUsageLogReader
-	AuditLogs                  AdminAuditLogReader
 	AdminAudit                 AdminAuditRecorder
 	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 }
@@ -457,7 +449,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerUpstreamModelBindings(management, d)
 	registerDashboard(management, d)
 	registerUsage(management, d)
-	registerAudit(management, d)
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)

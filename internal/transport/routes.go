@@ -148,9 +148,15 @@ type AIOperationsDeps struct {
 	DashboardQueries           aitransport.DashboardQueryReader
 	UsageQueries               aitransport.UsageQueryReader
 	UserUsageLogs              aitransport.UserUsageLogReader
-	AuditLogs                  aitransport.AdminAuditLogReader
 	AdminAudit                 aitransport.AdminAuditRecorder
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
+}
+
+// AIAuditLogHTTPDeps contains the collaborators owned by the independently
+// registered management audit-log HTTP module.
+type AIAuditLogHTTPDeps struct {
+	AuditLogs  aitransport.AdminAuditLogReader
+	BanChecker aitransport.HumaBanChecker
 }
 
 // AIRiskControlHTTPDeps contains the collaborators owned by the independently
@@ -180,6 +186,7 @@ type AIHTTPDeps struct {
 	Core          AIDeps
 	Subscriptions AISubscriptionHTTPDeps
 	RiskControl   AIRiskControlHTTPDeps
+	AuditLog      AIAuditLogHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -217,6 +224,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterAICore(api, buildAIDeps(m.platform, m.deps.Core, identity))
 	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
 	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))
+	aitransport.RegisterAuditLog(api, buildAuditLogHTTPDeps(m.platform, m.deps.AuditLog))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -325,7 +333,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			DashboardQueries:           d.DashboardQueries,
 			UsageQueries:               d.UsageQueries,
 			UserUsageLogs:              d.UserUsageLogs,
-			AuditLogs:                  d.AuditLogs,
 			AdminAudit:                 d.AdminAudit,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 		},
@@ -370,6 +377,17 @@ func buildRiskControlHTTPDeps(platform Deps, d AIRiskControlHTTPDeps) aitranspor
 		RiskControlDetector: d.RiskControlDetector,
 		RiskControlLogs:     d.RiskControlLogs,
 		RiskEvents:          d.RiskEvents,
+	}
+}
+
+func buildAuditLogHTTPDeps(platform Deps, d AIAuditLogHTTPDeps) aitransport.AuditLogHTTPDeps {
+	return aitransport.AuditLogHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		AuditLogs: d.AuditLogs,
 	}
 }
 

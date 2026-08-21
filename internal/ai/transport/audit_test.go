@@ -40,7 +40,7 @@ func TestAuditRouteUsesAdminAuditLogReader(t *testing.T) {
 		CreatedAt:      createdAt,
 	}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerAudit(api, AIDeps{OperationsDeps: OperationsDeps{AuditLogs: reader}})
+	registerAudit(api, AuditLogHTTPDeps{AuditLogs: reader})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs?limit=999", nil)
 	recorder := httptest.NewRecorder()
@@ -73,7 +73,7 @@ func TestAuditRouteUsesAdminAuditLogReader(t *testing.T) {
 
 func TestAuditRouteRequiresAdminAuditLogReader(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerAudit(api, AIDeps{})
+	registerAudit(api, AuditLogHTTPDeps{})
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs", nil)
 	recorder := httptest.NewRecorder()
@@ -81,5 +81,25 @@ func TestAuditRouteRequiresAdminAuditLogReader(t *testing.T) {
 
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestAuditLogRouteRegistersIndependentlyFromCoreAI(t *testing.T) {
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	coreRequest := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs", nil)
+	coreRecorder := httptest.NewRecorder()
+	coreRouter.ServeHTTP(coreRecorder, coreRequest)
+	if coreRecorder.Code != http.StatusNotFound {
+		t.Fatalf("core AI audit-log route status = %d, want %d", coreRecorder.Code, http.StatusNotFound)
+	}
+
+	auditRouter, auditAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAuditLog(auditAPI, AuditLogHTTPDeps{})
+	auditRequest := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs", nil)
+	auditRecorder := httptest.NewRecorder()
+	auditRouter.ServeHTTP(auditRecorder, auditRequest)
+	if auditRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("independent audit-log route status = %d, want %d", auditRecorder.Code, http.StatusUnauthorized)
 	}
 }
