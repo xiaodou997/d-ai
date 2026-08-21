@@ -38,8 +38,15 @@ type InfrastructureDeps struct {
 	Postgres   *pgxpool.Pool
 	Redis      *redis.Client
 	Queries    *dbgen.Queries
-	HTTPClient *http.Client
+	HTTPClient HTTPDoer
 	Logger     *zap.Logger
+}
+
+// HTTPDoer is the only outbound HTTP capability required by AI transport.
+// Connection pooling, redirects and transport-level timeouts remain owned by
+// the concrete client constructed at the composition root.
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // IdentityDeps contains authentication, API key and workspace identity

@@ -54,6 +54,12 @@ type providerEntry struct {
 
 type modelIndex map[string]modelEntry
 
+// HTTPDoer is the outbound HTTP capability needed to refresh the directory.
+// Its transport policy is configured by the composition root.
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 var shared indexCache
 
 // indexCache 是进程内的两级缓存：命中窗口内直接复用已解析好的索引，
@@ -66,7 +72,7 @@ type indexCache struct {
 	failedUntil time.Time // 拉取失败后的冷却期截止时间，冷却期内不再重试网络请求
 }
 
-func (c *indexCache) get(ctx context.Context, redisClient *redis.Client, httpClient *http.Client) modelIndex {
+func (c *indexCache) get(ctx context.Context, redisClient *redis.Client, httpClient HTTPDoer) modelIndex {
 	c.mu.RLock()
 	if c.index != nil && time.Now().Before(c.expiresAt) {
 		idx := c.index
@@ -100,7 +106,7 @@ func (c *indexCache) get(ctx context.Context, redisClient *redis.Client, httpCli
 	return idx
 }
 
-func loadRawPayload(ctx context.Context, redisClient *redis.Client, httpClient *http.Client) ([]byte, error) {
+func loadRawPayload(ctx context.Context, redisClient *redis.Client, httpClient HTTPDoer) ([]byte, error) {
 	if redisClient != nil {
 		if raw, err := redisClient.Get(ctx, redisCacheKey).Bytes(); err == nil && len(raw) > 0 {
 			return raw, nil
@@ -118,7 +124,7 @@ func loadRawPayload(ctx context.Context, redisClient *redis.Client, httpClient *
 	return raw, nil
 }
 
-func fetchFromSource(ctx context.Context, httpClient *http.Client) ([]byte, error) {
+func fetchFromSource(ctx context.Context, httpClient HTTPDoer) ([]byte, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
@@ -213,7 +219,7 @@ func containsStr(list []string, target string) bool {
 // Lookup 按 model_code 查询 models.dev 缓存目录，返回结构化可辨识的能力类型。
 // ok=false 表示未命中，或命中了但模态无法区分 chat/embedding/rerank——
 // 两种情况调用方都应回退到 domain.InferModelCapabilityAndProtocol 的本地启发式。
-func Lookup(ctx context.Context, redisClient *redis.Client, httpClient *http.Client, modelCode string) (domain.CapabilityType, bool) {
+func Lookup(ctx context.Context, redisClient *redis.Client, httpClient HTTPDoer, modelCode string) (domain.CapabilityType, bool) {
 	key := strings.ToLower(strings.TrimSpace(modelCode))
 	if key == "" {
 		return "", false

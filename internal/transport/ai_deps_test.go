@@ -15,7 +15,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	oauth := &pgadapter.OAuthCredentialStore{}
 	refresher := &tokenrefresh.Refresher{}
 	catalog := &clientcatalog.Service{}
-	httpClient := &http.Client{}
+	httpClient := &httpDoerStub{}
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
@@ -64,3 +64,7 @@ type providerSecretCodecStub struct{}
 
 func (*providerSecretCodecStub) Encrypt(string) (string, error) { return "", nil }
 func (*providerSecretCodecStub) Decrypt(string) (string, error) { return "", nil }
+
+type httpDoerStub struct{}
+
+func (*httpDoerStub) Do(*http.Request) (*http.Response, error) { return nil, nil }

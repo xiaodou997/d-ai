@@ -88,7 +88,7 @@ type OperationsDeps struct {
 type AIInfrastructureDeps struct {
 	Queries         *aidb.Queries
 	ProviderSecrets aitransport.ProviderSecretCodec
-	AIHTTPClient    *http.Client
+	AIHTTPClient    aitransport.HTTPDoer
 	Health          routing.HealthTracker
 	Weights         aitransport.ScoreWeightsStore
 	BanChecker      aitransport.HumaBanChecker

@@ -260,7 +260,7 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 
 // ---- 上游模型列表抓取（移植自 console.fetchUpstreamModelList，去掉 *Console 依赖）----
 
-func fetchUpstreamModelList(ctx context.Context, client *http.Client, baseURL, apiKey, defaultProtocol string, extraHeaders []byte) ([]discoveredModelDTO, error) {
+func fetchUpstreamModelList(ctx context.Context, client HTTPDoer, baseURL, apiKey, defaultProtocol string, extraHeaders []byte) ([]discoveredModelDTO, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}

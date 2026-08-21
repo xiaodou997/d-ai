@@ -360,7 +360,7 @@ func (r *upstreamTestBodyReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func runUpstreamAccountTest(ctx context.Context, client *http.Client, cfg upstreamTestConfig) upstreamTestResult {
+func runUpstreamAccountTest(ctx context.Context, client HTTPDoer, cfg upstreamTestConfig) upstreamTestResult {
 	if client == nil {
 		client = http.DefaultClient
 	}
