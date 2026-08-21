@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/libs/go/httpx"
@@ -119,19 +117,6 @@ type batchDeleteUpstreamModelBindingsOutput struct {
 	Body struct {
 		Deleted int64 `json:"deleted" doc:"实际删除数量"`
 	}
-}
-
-type upstreamModelBindingRecord struct {
-	ID                string
-	ModelCode         string
-	CapabilityType    string
-	APIFormat         string
-	UpstreamModelName string
-	Status            string
-	ConfigJSON        []byte
-	ImagePolicy       imageGenerationBindingPolicy
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
 }
 
 func registerUpstreamModelBindings(api huma.API, d AIDeps) {
@@ -339,7 +324,7 @@ func registerPoolModelBindings(api huma.API, d AIDeps) {
 	})
 }
 
-func bindingListOutput(items []upstreamModelBindingRecord) *upstreamModelBindingsOutput {
+func bindingListOutput(items []domain.UpstreamModelBinding) *upstreamModelBindingsOutput {
 	out := &upstreamModelBindingsOutput{}
 	out.Body.Items = make([]upstreamModelBindingDTO, 0, len(items))
 	for _, item := range items {
@@ -349,7 +334,8 @@ func bindingListOutput(items []upstreamModelBindingRecord) *upstreamModelBinding
 	return out
 }
 
-func bindingRecordToDTO(item upstreamModelBindingRecord) upstreamModelBindingDTO {
+func bindingRecordToDTO(item domain.UpstreamModelBinding) upstreamModelBindingDTO {
+	imagePolicy := parseImageGenerationBindingPolicy(item.ConfigJSON)
 	return upstreamModelBindingDTO{
 		ID:                          item.ID,
 		ModelCode:                   item.ModelCode,
@@ -357,11 +343,11 @@ func bindingRecordToDTO(item upstreamModelBindingRecord) upstreamModelBindingDTO
 		APIFormat:                   item.APIFormat,
 		UpstreamModelName:           item.UpstreamModelName,
 		Status:                      item.Status,
-		ImageStreamMode:             item.ImagePolicy.StreamMode,
-		ImageEditTransport:          item.ImagePolicy.EditTransport,
-		ImageUpstreamResponseFormat: item.ImagePolicy.UpstreamResponseFormat,
-		ImageMaxOutputCount:         item.ImagePolicy.MaxOutputCount,
-		ImageEditMaxOutputCount:     item.ImagePolicy.EditMaxOutputCount,
+		ImageStreamMode:             imagePolicy.StreamMode,
+		ImageEditTransport:          imagePolicy.EditTransport,
+		ImageUpstreamResponseFormat: imagePolicy.UpstreamResponseFormat,
+		ImageMaxOutputCount:         imagePolicy.MaxOutputCount,
+		ImageEditMaxOutputCount:     imagePolicy.EditMaxOutputCount,
 		CreatedAt:                   timeToMillisPtr(item.CreatedAt),
 		UpdatedAt:                   timeToMillisPtr(item.UpdatedAt),
 	}
@@ -397,159 +383,65 @@ func ensurePoolExists(ctx context.Context, d AIDeps, poolID string) (*domain.Cre
 	return pool, nil
 }
 
-func listUpstreamModelBindings(ctx context.Context, d AIDeps, upstreamKind, upstreamID string) ([]upstreamModelBindingRecord, error) {
-	if d.Postgres == nil {
+func modelBindingScope(upstreamKind, upstreamID string) domain.UpstreamModelBindingScope {
+	return domain.UpstreamModelBindingScope{Kind: domain.UpstreamKind(upstreamKind), ID: upstreamID}
+}
+
+func listUpstreamModelBindings(ctx context.Context, d AIDeps, upstreamKind, upstreamID string) ([]domain.UpstreamModelBinding, error) {
+	if d.ModelBindings == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	rows, err := d.Postgres.Query(ctx, `
-		SELECT
-			id::text,
-			model_code,
-			capability_type,
-			api_format,
-			upstream_model_name,
-			status,
-			config_json,
-			created_at,
-			updated_at
-		FROM ai_upstream_models
-		WHERE upstream_kind = $1 AND upstream_id = $2::uuid
-		ORDER BY model_code ASC, api_format ASC, upstream_model_name ASC
-	`, upstreamKind, upstreamID)
+	items, err := d.ModelBindings.List(ctx, modelBindingScope(upstreamKind, upstreamID))
 	if err != nil {
-		return nil, httpx.ErrInternal.WithDetail("load upstream model bindings failed: " + err.Error())
-	}
-	defer rows.Close()
-
-	items := make([]upstreamModelBindingRecord, 0)
-	for rows.Next() {
-		item, scanErr := scanUpstreamModelBindingRow(rows.Scan)
-		if scanErr != nil {
-			return nil, httpx.ErrInternal.WithDetail("scan upstream model binding failed: " + scanErr.Error())
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, httpx.ErrInternal.WithDetail("iterate upstream model bindings failed: " + err.Error())
+		return nil, mapServiceError(err)
 	}
 	return items, nil
 }
 
-func createUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (upstreamModelBindingRecord, error) {
+func createUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
+	if d.ModelBindings == nil {
+		return domain.UpstreamModelBinding{}, httpx.ErrUnavailable.WithDetail("database is not configured")
+	}
 	write, err := normalizeUpstreamModelBindingWrite(req, endpointProtocol, fixedProviderType, nil)
 	if err != nil {
-		return upstreamModelBindingRecord{}, mapServiceError(err)
+		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
-	rows, err := d.Postgres.Query(ctx, `
-		INSERT INTO ai_upstream_models (
-			upstream_kind,
-			upstream_id,
-			model_code,
-			capability_type,
-			api_format,
-			upstream_model_name,
-			status,
-			config_json
-		) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb)
-		RETURNING
-			id::text,
-			model_code,
-			capability_type,
-			api_format,
-			upstream_model_name,
-			status,
-			config_json,
-			created_at,
-			updated_at
-	`, upstreamKind, upstreamID, write.ModelCode, write.CapabilityType, write.APIFormat, write.UpstreamModelName, write.Status, write.ConfigJSON)
+	item, err := d.ModelBindings.Create(ctx, modelBindingScope(upstreamKind, upstreamID), write)
 	if err != nil {
-		return upstreamModelBindingRecord{}, mapServiceError(err)
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("create upstream model binding failed: " + err.Error())
-		}
-		return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("create upstream model binding returned no row")
-	}
-	item, scanErr := scanUpstreamModelBindingRow(rows.Scan)
-	if scanErr != nil {
-		return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("scan upstream model binding failed: " + scanErr.Error())
+		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	return item, nil
 }
 
-func updateUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (upstreamModelBindingRecord, error) {
+func updateUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID, endpointProtocol string, fixedProviderType *domain.FixedProviderType, req upstreamModelBindingWriteRequest) (domain.UpstreamModelBinding, error) {
 	current, err := getUpstreamModelBinding(ctx, d, upstreamKind, upstreamID, bindingID)
 	if err != nil {
-		return upstreamModelBindingRecord{}, err
+		return domain.UpstreamModelBinding{}, err
 	}
 	write, normalizeErr := normalizeUpstreamModelBindingWrite(req, endpointProtocol, fixedProviderType, &current)
 	if normalizeErr != nil {
-		return upstreamModelBindingRecord{}, mapServiceError(normalizeErr)
+		return domain.UpstreamModelBinding{}, mapServiceError(normalizeErr)
 	}
-	rows, err := d.Postgres.Query(ctx, `
-		UPDATE ai_upstream_models
-		SET
-			model_code = $4,
-			capability_type = $5,
-			api_format = $6,
-			upstream_model_name = $7,
-			status = $8,
-			config_json = $9::jsonb,
-			updated_at = now()
-		WHERE id = $1::uuid AND upstream_kind = $2 AND upstream_id = $3::uuid
-		RETURNING
-			id::text,
-			model_code,
-			capability_type,
-			api_format,
-			upstream_model_name,
-			status,
-			config_json,
-			created_at,
-			updated_at
-	`, bindingID, upstreamKind, upstreamID, write.ModelCode, write.CapabilityType, write.APIFormat, write.UpstreamModelName, write.Status, write.ConfigJSON)
+	item, err := d.ModelBindings.Update(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID, write)
 	if err != nil {
-		return upstreamModelBindingRecord{}, mapServiceError(err)
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("update upstream model binding failed: " + err.Error())
-		}
-		return upstreamModelBindingRecord{}, httpx.ErrNotFound.WithDetail("upstream model binding not found")
-	}
-	item, scanErr := scanUpstreamModelBindingRow(rows.Scan)
-	if scanErr != nil {
-		return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("scan upstream model binding failed: " + scanErr.Error())
+		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	return item, nil
 }
 
 func deleteUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID string) error {
-	if _, err := getUpstreamModelBinding(ctx, d, upstreamKind, upstreamID, bindingID); err != nil {
-		return err
+	if d.ModelBindings == nil {
+		return httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	tag, err := d.Postgres.Exec(ctx, `
-		DELETE FROM ai_upstream_models
-		WHERE id = $1::uuid AND upstream_kind = $2 AND upstream_id = $3::uuid
-	`, bindingID, upstreamKind, upstreamID)
-	if err != nil {
-		return httpx.ErrInternal.WithDetail("delete upstream model binding failed: " + err.Error())
-	}
-	if tag.RowsAffected() == 0 {
-		return httpx.ErrNotFound.WithDetail("upstream model binding not found")
-	}
-	return nil
+	return mapServiceError(d.ModelBindings.Delete(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID))
 }
 
-func normalizeBatchDeleteBindingIDs(rawIDs []string) ([]pgtype.UUID, error) {
+func normalizeBatchDeleteBindingIDs(rawIDs []string) ([]string, error) {
 	if len(rawIDs) == 0 {
 		return nil, domain.NewValidationError("binding_ids", "at least one binding ID is required")
 	}
 
-	ids := make([]pgtype.UUID, 0, len(rawIDs))
+	ids := make([]string, 0, len(rawIDs))
 	seen := make(map[[16]byte]struct{}, len(rawIDs))
 	for _, rawID := range rawIDs {
 		id, err := parseTransportUUID(strings.TrimSpace(rawID))
@@ -560,88 +452,31 @@ func normalizeBatchDeleteBindingIDs(rawIDs []string) ([]pgtype.UUID, error) {
 			continue
 		}
 		seen[id.Bytes] = struct{}{}
-		ids = append(ids, id)
+		ids = append(ids, uuidToString(id))
 	}
 	return ids, nil
 }
 
-func batchDeleteUpstreamModelBindings(ctx context.Context, d AIDeps, upstreamKind, upstreamID string, bindingIDs []pgtype.UUID) (int64, error) {
-	if d.Postgres == nil {
+func batchDeleteUpstreamModelBindings(ctx context.Context, d AIDeps, upstreamKind, upstreamID string, bindingIDs []string) (int64, error) {
+	if d.ModelBindings == nil {
 		return 0, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	tag, err := d.Postgres.Exec(ctx, `
-		DELETE FROM ai_upstream_models
-		WHERE upstream_kind = $1
-		  AND upstream_id = $2::uuid
-		  AND id = ANY($3::uuid[])
-	`, upstreamKind, upstreamID, bindingIDs)
+	deleted, err := d.ModelBindings.BatchDelete(ctx, modelBindingScope(upstreamKind, upstreamID), bindingIDs)
 	if err != nil {
-		return 0, httpx.ErrInternal.WithDetail("batch delete upstream model bindings failed: " + err.Error())
+		return 0, mapServiceError(err)
 	}
-	return tag.RowsAffected(), nil
+	return deleted, nil
 }
 
-func getUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID string) (upstreamModelBindingRecord, error) {
-	if d.Postgres == nil {
-		return upstreamModelBindingRecord{}, httpx.ErrUnavailable.WithDetail("database is not configured")
+func getUpstreamModelBinding(ctx context.Context, d AIDeps, upstreamKind, upstreamID, bindingID string) (domain.UpstreamModelBinding, error) {
+	if d.ModelBindings == nil {
+		return domain.UpstreamModelBinding{}, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
-	rows, err := d.Postgres.Query(ctx, `
-		SELECT
-			id::text,
-			model_code,
-			capability_type,
-			api_format,
-			upstream_model_name,
-			status,
-			config_json,
-			created_at,
-			updated_at
-		FROM ai_upstream_models
-		WHERE id = $1::uuid AND upstream_kind = $2 AND upstream_id = $3::uuid
-	`, bindingID, upstreamKind, upstreamID)
+	item, err := d.ModelBindings.Get(ctx, modelBindingScope(upstreamKind, upstreamID), bindingID)
 	if err != nil {
-		return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("load upstream model binding failed: " + err.Error())
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("load upstream model binding failed: " + err.Error())
-		}
-		return upstreamModelBindingRecord{}, httpx.ErrNotFound.WithDetail("upstream model binding not found")
-	}
-	item, scanErr := scanUpstreamModelBindingRow(rows.Scan)
-	if scanErr != nil {
-		return upstreamModelBindingRecord{}, httpx.ErrInternal.WithDetail("scan upstream model binding failed: " + scanErr.Error())
+		return domain.UpstreamModelBinding{}, mapServiceError(err)
 	}
 	return item, nil
-}
-
-func scanUpstreamModelBindingRow(scan func(dest ...any) error) (upstreamModelBindingRecord, error) {
-	var item upstreamModelBindingRecord
-	if err := scan(
-		&item.ID,
-		&item.ModelCode,
-		&item.CapabilityType,
-		&item.APIFormat,
-		&item.UpstreamModelName,
-		&item.Status,
-		&item.ConfigJSON,
-		&item.CreatedAt,
-		&item.UpdatedAt,
-	); err != nil {
-		return upstreamModelBindingRecord{}, err
-	}
-	item.ImagePolicy = parseImageGenerationBindingPolicy(item.ConfigJSON)
-	return item, nil
-}
-
-type normalizedUpstreamModelBindingWrite struct {
-	ModelCode         string
-	CapabilityType    string
-	APIFormat         string
-	UpstreamModelName string
-	Status            string
-	ConfigJSON        []byte
 }
 
 type imageGenerationBindingPolicy struct {
@@ -652,13 +487,13 @@ type imageGenerationBindingPolicy struct {
 	EditMaxOutputCount     int
 }
 
-func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, endpointProtocol string, fixedProviderType *domain.FixedProviderType, current *upstreamModelBindingRecord) (normalizedUpstreamModelBindingWrite, error) {
+func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, endpointProtocol string, fixedProviderType *domain.FixedProviderType, current *domain.UpstreamModelBinding) (domain.UpstreamModelBindingWrite, error) {
 	modelCode := strings.TrimSpace(req.ModelCode)
 	if modelCode == "" && current != nil {
 		modelCode = current.ModelCode
 	}
 	if modelCode == "" {
-		return normalizedUpstreamModelBindingWrite{}, domain.NewValidationError("model_code", "model_code is required")
+		return domain.UpstreamModelBindingWrite{}, domain.NewValidationError("model_code", "model_code is required")
 	}
 
 	capabilityType := strings.TrimSpace(req.CapabilityType)
@@ -670,7 +505,7 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 		}
 	}
 	if err := validateBindingCapabilityType(capabilityType); err != nil {
-		return normalizedUpstreamModelBindingWrite{}, err
+		return domain.UpstreamModelBindingWrite{}, err
 	}
 
 	apiFormat := strings.TrimSpace(req.APIFormat)
@@ -684,7 +519,7 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 		}
 	}
 	if err := validateBindingProtocol("api_format", apiFormat); err != nil {
-		return normalizedUpstreamModelBindingWrite{}, err
+		return domain.UpstreamModelBindingWrite{}, err
 	}
 
 	upstreamModelName := strings.TrimSpace(req.UpstreamModelName)
@@ -699,12 +534,12 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 	if fixedProviderType != nil {
 		expectedProtocol := string(domain.FixedProviderProtocol(*fixedProviderType))
 		if apiFormat != expectedProtocol {
-			return normalizedUpstreamModelBindingWrite{}, domain.NewValidationError("api_format", "fixed-provider pool bindings must use API format "+expectedProtocol)
+			return domain.UpstreamModelBindingWrite{}, domain.NewValidationError("api_format", "fixed-provider pool bindings must use API format "+expectedProtocol)
 		}
 	}
 
 	if !bindingProtocolSupportsCapability(domain.UpstreamProtocol(apiFormat), domain.CapabilityType(capabilityType)) {
-		return normalizedUpstreamModelBindingWrite{}, domain.NewValidationError("api_format", fmt.Sprintf("API format %s does not support capability %s", apiFormat, capabilityType))
+		return domain.UpstreamModelBindingWrite{}, domain.NewValidationError("api_format", fmt.Sprintf("API format %s does not support capability %s", apiFormat, capabilityType))
 	}
 
 	status := strings.TrimSpace(req.Status)
@@ -718,15 +553,15 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 	switch status {
 	case "active", "disabled":
 	default:
-		return normalizedUpstreamModelBindingWrite{}, domain.NewValidationError("status", "status must be active or disabled")
+		return domain.UpstreamModelBindingWrite{}, domain.NewValidationError("status", "status must be active or disabled")
 	}
 
 	configJSON, err := mergeImageGenerationBindingPolicy(currentConfigJSON(current), req)
 	if err != nil {
-		return normalizedUpstreamModelBindingWrite{}, err
+		return domain.UpstreamModelBindingWrite{}, err
 	}
 
-	return normalizedUpstreamModelBindingWrite{
+	return domain.UpstreamModelBindingWrite{
 		ModelCode:         modelCode,
 		CapabilityType:    capabilityType,
 		APIFormat:         apiFormat,
@@ -736,7 +571,7 @@ func normalizeUpstreamModelBindingWrite(req upstreamModelBindingWriteRequest, en
 	}, nil
 }
 
-func currentConfigJSON(current *upstreamModelBindingRecord) []byte {
+func currentConfigJSON(current *domain.UpstreamModelBinding) []byte {
 	if current == nil {
 		return nil
 	}

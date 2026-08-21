@@ -194,7 +194,7 @@ func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, 
 	if d.AccountSvc == nil || d.ProviderSecrets == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("account service or provider secret codec is not configured")
 	}
-	if includeBindings && d.Postgres == nil {
+	if includeBindings && d.ModelBindings == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
 	ids := uniqueNonEmptyStrings(accountIDs)
@@ -289,7 +289,7 @@ func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountIm
 	if d.AccountSvc == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 	}
-	if hasTransferModelBindings(req.Accounts) && d.Postgres == nil {
+	if hasTransferModelBindings(req.Accounts) && d.ModelBindings == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
 	}
 	if _, err := previewImportUpstreamAccounts(ctx, d, req); err != nil {
@@ -362,18 +362,19 @@ func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountIm
 	return out, nil
 }
 
-func bindingRecordToTransferDTO(item upstreamModelBindingRecord) upstreamAccountTransferBindingDTO {
+func bindingRecordToTransferDTO(item domain.UpstreamModelBinding) upstreamAccountTransferBindingDTO {
+	imagePolicy := parseImageGenerationBindingPolicy(item.ConfigJSON)
 	return upstreamAccountTransferBindingDTO{
 		ModelCode:                   item.ModelCode,
 		CapabilityType:              item.CapabilityType,
 		APIFormat:                   item.APIFormat,
 		UpstreamModelName:           item.UpstreamModelName,
 		Status:                      item.Status,
-		ImageStreamMode:             item.ImagePolicy.StreamMode,
-		ImageEditTransport:          item.ImagePolicy.EditTransport,
-		ImageUpstreamResponseFormat: item.ImagePolicy.UpstreamResponseFormat,
-		ImageMaxOutputCount:         item.ImagePolicy.MaxOutputCount,
-		ImageEditMaxOutputCount:     item.ImagePolicy.EditMaxOutputCount,
+		ImageStreamMode:             imagePolicy.StreamMode,
+		ImageEditTransport:          imagePolicy.EditTransport,
+		ImageUpstreamResponseFormat: imagePolicy.UpstreamResponseFormat,
+		ImageMaxOutputCount:         imagePolicy.MaxOutputCount,
+		ImageEditMaxOutputCount:     imagePolicy.EditMaxOutputCount,
 	}
 }
 

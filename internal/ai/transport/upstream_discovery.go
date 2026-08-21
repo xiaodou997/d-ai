@@ -83,7 +83,7 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		if d.AccountReader == nil || d.ProviderSecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
 		}
-		accountID, err := parseTransportUUID(in.AccountID)
+		_, err := parseTransportUUID(in.AccountID)
 		if err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("invalid accountID")
 		}
@@ -99,25 +99,16 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, httpx.New("upstream_unavailable", http.StatusBadGateway, "Upstream Unavailable").WithDetail(sanitizeUpstreamFetchError(err))
 		}
-		rows, err := d.Postgres.Query(ctx, `
-			SELECT model_code
-			FROM ai_upstream_models
-			WHERE upstream_kind = 'direct_upstream' AND upstream_id = $1
-		`, accountID)
+		if d.ModelBindings == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("model binding store is not configured")
+		}
+		codes, err := d.ModelBindings.ListModelCodes(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: in.AccountID})
 		if err != nil {
-			return nil, httpx.ErrInternal.WithDetail("load upstream model bindings failed: " + err.Error())
+			return nil, mapServiceError(err)
 		}
-		defer rows.Close()
-		existing := make(map[string]struct{})
-		for rows.Next() {
-			var code string
-			if err := rows.Scan(&code); err != nil {
-				return nil, httpx.ErrInternal.WithDetail("scan upstream model bindings failed: " + err.Error())
-			}
+		existing := make(map[string]struct{}, len(codes))
+		for _, code := range codes {
 			existing[code] = struct{}{}
-		}
-		if err := rows.Err(); err != nil {
-			return nil, httpx.ErrInternal.WithDetail("iterate upstream model bindings failed: " + err.Error())
 		}
 		for i := range models {
 			if _, ok := existing[models[i].ID]; ok {
@@ -139,10 +130,10 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		Tags:          []string{"upstream-accounts"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *importEndpointUpstreamModelsInput) (*importEndpointUpstreamModelsOutput, error) {
-		if d.AccountReader == nil || d.Postgres == nil {
+		if d.AccountReader == nil || d.ModelBindings == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database is not configured")
 		}
-		accountID, err := parseTransportUUID(in.AccountID)
+		_, err := parseTransportUUID(in.AccountID)
 		if err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail("invalid accountID")
 		}
@@ -160,70 +151,31 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 			}
 		}
 
-		out := &importEndpointUpstreamModelsOutput{}
-		out.Body.Created = []string{}
-		out.Body.Skipped = []string{}
-
-		tx, err := d.Postgres.Begin(ctx)
-		if err != nil {
-			return nil, httpx.ErrInternal.WithDetail("begin tx failed: " + err.Error())
-		}
-		defer tx.Rollback(ctx)
-
-		existingRows, err := tx.Query(ctx, `
-			SELECT model_code
-			FROM ai_upstream_models
-			WHERE upstream_kind = 'direct_upstream' AND upstream_id = $1
-		`, accountID)
-		if err != nil {
-			return nil, httpx.ErrInternal.WithDetail("load upstream model bindings failed: " + err.Error())
-		}
-		existing := make(map[string]struct{})
-		for existingRows.Next() {
-			var code string
-			if err := existingRows.Scan(&code); err != nil {
-				existingRows.Close()
-				return nil, httpx.ErrInternal.WithDetail("scan upstream model bindings failed: " + err.Error())
-			}
-			existing[code] = struct{}{}
-		}
-		existingRows.Close()
-		if err := existingRows.Err(); err != nil {
-			return nil, httpx.ErrInternal.WithDetail("iterate upstream model bindings failed: " + err.Error())
-		}
-
+		writes := make([]domain.UpstreamModelBindingWrite, 0, len(in.Body.Models))
 		for _, m := range in.Body.Models {
 			m = strings.TrimSpace(m)
 			if m == "" {
-				continue
-			}
-			if _, ok := existing[m]; ok {
-				out.Body.Skipped = append(out.Body.Skipped, m)
 				continue
 			}
 			defaults, err := resolveImportedModelBindingDefaults(m, account.DefaultProtocol, apiFormatOverride)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			if _, err := tx.Exec(ctx, `
-			INSERT INTO ai_upstream_models (
-				upstream_kind,
-				upstream_id,
-				model_code,
-				capability_type,
-				api_format,
-				upstream_model_name,
-				status
-			) VALUES ('direct_upstream', $1, $2, $3, $4, $5, 'active')
-		`, accountID, m, string(defaults.CapabilityType), string(defaults.APIFormat), m); err != nil {
-				return nil, httpx.ErrInternal.WithDetail("insert upstream model binding failed: " + err.Error())
-			}
-			existing[m] = struct{}{}
-			out.Body.Created = append(out.Body.Created, m)
+			writes = append(writes, domain.UpstreamModelBindingWrite{
+				ModelCode:         m,
+				CapabilityType:    string(defaults.CapabilityType),
+				APIFormat:         string(defaults.APIFormat),
+				UpstreamModelName: m,
+				Status:            "active",
+			})
 		}
-		if err := tx.Commit(ctx); err != nil {
-			return nil, httpx.ErrInternal.WithDetail("commit tx failed: " + err.Error())
+		result, err := d.ModelBindings.Import(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: in.AccountID}, writes)
+		if err != nil {
+			return nil, mapServiceError(err)
 		}
+		out := &importEndpointUpstreamModelsOutput{}
+		out.Body.Created = result.Created
+		out.Body.Skipped = result.Skipped
 		return out, nil
 	})
 

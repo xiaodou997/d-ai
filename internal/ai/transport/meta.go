@@ -131,6 +131,7 @@ type CatalogDeps struct {
 	ClientCatalog     ClientCatalogResolver
 	ModelCapabilities ModelCapabilityResolver
 	AccountReader     UpstreamAccountReader
+	ModelBindings     UpstreamModelBindingStore
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
@@ -156,6 +157,20 @@ type ModelCapabilityResolver interface {
 // management flows without leaking generated persistence rows into transport.
 type UpstreamAccountReader interface {
 	GetAccountSecret(ctx context.Context, id string) (upstreamcontrol.AccountSecret, error)
+}
+
+// UpstreamModelBindingStore owns management persistence and the atomic model
+// discovery import. Transport retains request validation and DTO mapping.
+type UpstreamModelBindingStore interface {
+	List(ctx context.Context, scope domain.UpstreamModelBindingScope) ([]domain.UpstreamModelBinding, error)
+	ListModelCodes(ctx context.Context, scope domain.UpstreamModelBindingScope) ([]string, error)
+	FindByModel(ctx context.Context, scope domain.UpstreamModelBindingScope, modelCode string) (domain.UpstreamModelBinding, error)
+	Get(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingID string) (domain.UpstreamModelBinding, error)
+	Create(ctx context.Context, scope domain.UpstreamModelBindingScope, write domain.UpstreamModelBindingWrite) (domain.UpstreamModelBinding, error)
+	Update(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingID string, write domain.UpstreamModelBindingWrite) (domain.UpstreamModelBinding, error)
+	Delete(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingID string) error
+	BatchDelete(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingIDs []string) (int64, error)
+	Import(ctx context.Context, scope domain.UpstreamModelBindingScope, writes []domain.UpstreamModelBindingWrite) (domain.UpstreamModelBindingImportResult, error)
 }
 
 // UserUsageLogReader exposes the current user's scoped usage projection while

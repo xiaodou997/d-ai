@@ -26,6 +26,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	blacklist := &auth.BlacklistService{}
 	providerSecrets := &providerSecretCodecStub{}
 	accountReader := &upstreamAccountReaderStub{}
+	modelBindings := &upstreamModelBindingStoreStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
@@ -53,6 +54,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ClientCatalog:     catalog,
 				ModelCapabilities: modelCapabilities,
 				AccountReader:     accountReader,
+				ModelBindings:     modelBindings,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -66,7 +68,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
-	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader {
+	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings {
 		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
@@ -127,3 +129,33 @@ func (*userUsageLogReaderStub) ListUserLogs(context.Context, string, string, str
 type adminAuditRecorderStub struct{}
 
 func (*adminAuditRecorderStub) Record(context.Context, domain.AdminAuditEvent) error { return nil }
+
+type upstreamModelBindingStoreStub struct{}
+
+func (*upstreamModelBindingStoreStub) List(context.Context, domain.UpstreamModelBindingScope) ([]domain.UpstreamModelBinding, error) {
+	return nil, nil
+}
+func (*upstreamModelBindingStoreStub) ListModelCodes(context.Context, domain.UpstreamModelBindingScope) ([]string, error) {
+	return nil, nil
+}
+func (*upstreamModelBindingStoreStub) FindByModel(context.Context, domain.UpstreamModelBindingScope, string) (domain.UpstreamModelBinding, error) {
+	return domain.UpstreamModelBinding{}, nil
+}
+func (*upstreamModelBindingStoreStub) Get(context.Context, domain.UpstreamModelBindingScope, string) (domain.UpstreamModelBinding, error) {
+	return domain.UpstreamModelBinding{}, nil
+}
+func (*upstreamModelBindingStoreStub) Create(context.Context, domain.UpstreamModelBindingScope, domain.UpstreamModelBindingWrite) (domain.UpstreamModelBinding, error) {
+	return domain.UpstreamModelBinding{}, nil
+}
+func (*upstreamModelBindingStoreStub) Update(context.Context, domain.UpstreamModelBindingScope, string, domain.UpstreamModelBindingWrite) (domain.UpstreamModelBinding, error) {
+	return domain.UpstreamModelBinding{}, nil
+}
+func (*upstreamModelBindingStoreStub) Delete(context.Context, domain.UpstreamModelBindingScope, string) error {
+	return nil
+}
+func (*upstreamModelBindingStoreStub) BatchDelete(context.Context, domain.UpstreamModelBindingScope, []string) (int64, error) {
+	return 0, nil
+}
+func (*upstreamModelBindingStoreStub) Import(context.Context, domain.UpstreamModelBindingScope, []domain.UpstreamModelBindingWrite) (domain.UpstreamModelBindingImportResult, error) {
+	return domain.UpstreamModelBindingImportResult{}, nil
+}

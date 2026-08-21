@@ -116,6 +116,7 @@ type AICatalogDeps struct {
 	ClientCatalog     aitransport.ClientCatalogResolver
 	ModelCapabilities aitransport.ModelCapabilityResolver
 	AccountReader     aitransport.UpstreamAccountReader
+	ModelBindings     aitransport.UpstreamModelBindingStore
 	PriceBookSvc      *billingcontrol.Service
 	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService
@@ -258,6 +259,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			ClientCatalog:     d.ClientCatalog,
 			ModelCapabilities: d.ModelCapabilities,
 			AccountReader:     d.AccountReader,
+			ModelBindings:     d.ModelBindings,
 			PriceBookSvc:      d.PriceBookSvc,
 			CommercialSvc:     d.CommercialSvc,
 			GroupTransferSvc:  d.GroupTransferSvc,

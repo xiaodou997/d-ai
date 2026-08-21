@@ -84,7 +84,7 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		Description:  "按所选模型的能力(生图/对话)对上游直发一条真实请求并返回结果，不计费。401/403 会把非停用账号标记为 invalid；invalid 账号验证成功后恢复 active。",
 		Tags:         []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *upstreamAccountTestInput) (*upstreamAccountTestOutput, error) {
-		if d.AccountReader == nil || d.Postgres == nil || d.ProviderSecrets == nil {
+		if d.AccountReader == nil || d.ModelBindings == nil || d.ProviderSecrets == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("database or provider secret codec is not configured")
 		}
 		_, err := parseTransportUUID(in.AccountID)
@@ -172,24 +172,22 @@ func reconcileUpstreamAccountTestStatus(ctx context.Context, d AIDeps, accountID
 }
 
 func loadUpstreamTestBinding(ctx context.Context, d AIDeps, accountID, modelCode string) (upstreamTestBinding, error) {
-	var b upstreamTestBinding
-	var configJSON []byte
-	err := d.Postgres.QueryRow(ctx, `
-		SELECT api_format, upstream_model_name, capability_type, config_json
-		FROM ai_upstream_models
-		WHERE upstream_kind = 'direct_upstream'
-		  AND upstream_id = $1::uuid
-		  AND model_code = $2
-		ORDER BY (status = 'active') DESC
-		LIMIT 1
-	`, accountID, modelCode).Scan(&b.APIFormat, &b.UpstreamModel, &b.CapabilityType, &configJSON)
+	if d.ModelBindings == nil {
+		return upstreamTestBinding{}, httpx.ErrUnavailable.WithDetail("model binding store is not configured")
+	}
+	binding, err := d.ModelBindings.FindByModel(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: accountID}, modelCode)
 	if err != nil {
-		return upstreamTestBinding{}, httpx.ErrNotFound.WithDetail("no upstream model binding found for model_code on this account")
+		return upstreamTestBinding{}, mapServiceError(err)
+	}
+	b := upstreamTestBinding{
+		APIFormat:      binding.APIFormat,
+		UpstreamModel:  binding.UpstreamModelName,
+		CapabilityType: binding.CapabilityType,
+		ImagePolicy:    parseImageGenerationBindingPolicy(binding.ConfigJSON),
 	}
 	if strings.TrimSpace(b.UpstreamModel) == "" {
 		b.UpstreamModel = modelCode
 	}
-	b.ImagePolicy = parseImageGenerationBindingPolicy(configJSON)
 	return b, nil
 }
 

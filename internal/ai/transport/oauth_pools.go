@@ -523,7 +523,7 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Tags:          []string{"credential-pools"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *importPoolAvailableModelsInput) (*importPoolAvailableModelsOutput, error) {
-		if d.PoolReader == nil || d.Postgres == nil {
+		if d.PoolReader == nil || d.ModelBindings == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader or database is not configured")
 		}
 		if in.PoolID == "" {
@@ -543,39 +543,8 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 			allowedModels[modelCode] = struct{}{}
 		}
 
-		tx, err := d.Postgres.Begin(ctx)
-		if err != nil {
-			return nil, httpx.ErrInternal.WithDetail("begin tx failed: " + err.Error())
-		}
-		defer tx.Rollback(ctx)
-
-		existingRows, err := tx.Query(ctx, `
-			SELECT model_code
-			FROM ai_upstream_models
-			WHERE upstream_kind = 'oauth_pool' AND upstream_id = $1::uuid
-		`, in.PoolID)
-		if err != nil {
-			return nil, httpx.ErrInternal.WithDetail("load upstream model bindings failed: " + err.Error())
-		}
-		existing := make(map[string]struct{})
-		for existingRows.Next() {
-			var code string
-			if err := existingRows.Scan(&code); err != nil {
-				existingRows.Close()
-				return nil, httpx.ErrInternal.WithDetail("scan upstream model bindings failed: " + err.Error())
-			}
-			existing[code] = struct{}{}
-		}
-		existingRows.Close()
-		if err := existingRows.Err(); err != nil {
-			return nil, httpx.ErrInternal.WithDetail("iterate upstream model bindings failed: " + err.Error())
-		}
-
 		endpointProtocol := fixedProviderEndpointProtocol(pool.FixedProviderType)
-		out := &importPoolAvailableModelsOutput{}
-		out.Body.Created = []string{}
-		out.Body.Skipped = []string{}
-
+		writes := make([]domain.UpstreamModelBindingWrite, 0, len(in.Body.Models))
 		for _, modelCode := range in.Body.Models {
 			modelCode = strings.TrimSpace(modelCode)
 			if modelCode == "" {
@@ -584,31 +553,22 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 			if _, ok := allowedModels[modelCode]; !ok {
 				return nil, httpx.ErrBadRequest.WithDetail("model is not present in the current pool catalog: " + modelCode)
 			}
-			if _, ok := existing[modelCode]; ok {
-				out.Body.Skipped = append(out.Body.Skipped, modelCode)
-				continue
-			}
 			capType, proto := inferCapabilityAndProtocol(modelCode, endpointProtocol)
-			if _, err := tx.Exec(ctx, `
-			INSERT INTO ai_upstream_models (
-				upstream_kind,
-				upstream_id,
-				model_code,
-				capability_type,
-				api_format,
-				upstream_model_name,
-				status
-			) VALUES ('oauth_pool', $1::uuid, $2, $3, $4, $5, 'active')
-		`, in.PoolID, modelCode, capType, proto, modelCode); err != nil {
-				return nil, httpx.ErrInternal.WithDetail("insert upstream model binding failed: " + err.Error())
-			}
-			existing[modelCode] = struct{}{}
-			out.Body.Created = append(out.Body.Created, modelCode)
+			writes = append(writes, domain.UpstreamModelBindingWrite{
+				ModelCode:         modelCode,
+				CapabilityType:    capType,
+				APIFormat:         proto,
+				UpstreamModelName: modelCode,
+				Status:            "active",
+			})
 		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return nil, httpx.ErrInternal.WithDetail("commit tx failed: " + err.Error())
+		result, err := d.ModelBindings.Import(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindPool, ID: in.PoolID}, writes)
+		if err != nil {
+			return nil, mapServiceError(err)
 		}
+		out := &importPoolAvailableModelsOutput{}
+		out.Body.Created = result.Created
+		out.Body.Skipped = result.Skipped
 		return out, nil
 	})
 

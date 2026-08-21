@@ -107,6 +107,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	auditSvc := observabilitycontrol.NewAuditService(aiadapters.NewAuditRepo(q))
 
 	accountSvc := upstreamcontrol.New(aiadapters.NewAccountRepo(q, pool), providerSecrets.Encrypt)
+	modelBindings := aiadapters.NewUpstreamModelBindingStore(pool)
 	upstreamAccessSvc := upstreamaccess.New(aiadapters.NewUpstreamAccessRepo(pool))
 
 	apiKeyCache := apikey.NewCache(redisClient)
@@ -379,6 +380,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				ClientCatalog:     poolModelCatalog,
 				ModelCapabilities: modelCapabilities,
 				AccountReader:     accountSvc,
+				ModelBindings:     modelBindings,
 				PriceBookSvc:      priceBookSvc,
 				CommercialSvc:     commercialSvc,
 				GroupTransferSvc:  groupTransferSvc,
