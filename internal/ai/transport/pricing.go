@@ -21,14 +21,14 @@ func registerTenantSelfPricing(api huma.API, d AIDeps) {
 		Summary:     "租户可用模型列表",
 		Tags:        []string{"model-grants"},
 	}, func(ctx context.Context, _ *struct{}) (*userAvailableModelsOutput, error) {
-		if d.Postgres == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("postgres dependency is not configured")
+		if d.ModelCatalog == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("model catalog reader is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		items, err := listAvailableModelsForScope(ctx, d.Postgres, tenantID, "")
+		items, err := listAvailableModelsForScope(ctx, d.ModelCatalog, tenantID, "")
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

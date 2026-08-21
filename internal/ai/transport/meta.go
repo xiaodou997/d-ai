@@ -132,6 +132,7 @@ type CatalogDeps struct {
 	ModelCapabilities ModelCapabilityResolver
 	AccountReader     UpstreamAccountReader
 	ModelBindings     UpstreamModelBindingStore
+	ModelCatalog      ModelCatalogReader
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
@@ -171,6 +172,14 @@ type UpstreamModelBindingStore interface {
 	Delete(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingID string) error
 	BatchDelete(ctx context.Context, scope domain.UpstreamModelBindingScope, bindingIDs []string) (int64, error)
 	Import(ctx context.Context, scope domain.UpstreamModelBindingScope, writes []domain.UpstreamModelBindingWrite) (domain.UpstreamModelBindingImportResult, error)
+}
+
+// ModelCatalogReader owns the aggregate visibility and pricing queries used
+// by tenant and user catalog endpoints.
+type ModelCatalogReader interface {
+	ListAvailableModelPrices(ctx context.Context, scope domain.ModelCatalogScope) ([]domain.RoutedModelPrice, error)
+	ListRoutedGroupPrices(ctx context.Context, groupID string) ([]domain.RoutedModelPrice, error)
+	ListTenantUpstreamResources(ctx context.Context, tenantID string) ([]domain.TenantUpstreamResource, error)
 }
 
 // UserUsageLogReader exposes the current user's scoped usage projection while

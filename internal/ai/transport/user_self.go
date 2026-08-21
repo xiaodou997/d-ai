@@ -449,8 +449,8 @@ func registerUserSelfModelGrants(api huma.API, d AIDeps) {
 		Description: "按当前用户 token 返回本用户可用的模型（租户默认公开分组 ∪ 用户例外分组）。价格表只提供计价，不扩大可用范围。",
 		Tags:        []string{"model-grants"},
 	}, func(ctx context.Context, _ *struct{}) (*userAvailableModelsOutput, error) {
-		if d.Postgres == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("postgres dependency is not configured")
+		if d.ModelCatalog == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("model catalog reader is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
@@ -460,7 +460,7 @@ func registerUserSelfModelGrants(api huma.API, d AIDeps) {
 		if userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("user id is required")
 		}
-		rows, err := listAvailableModelsForScope(ctx, d.Postgres, tenantID, userID)
+		rows, err := listAvailableModelsForScope(ctx, d.ModelCatalog, tenantID, userID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

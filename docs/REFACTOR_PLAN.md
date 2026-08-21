@@ -412,6 +412,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 用户用量读取边界：终端用户自助日志通过 `UserUsageLogReader` 读取 `domain.UsageLog`；专用查询的租户/用户/request source 参数构造与 sqlc row 映射封装进 `UsageRepo`，保持原过滤、倒序和 limit 语义，AI Transport 不再直接执行该查询。
 - 审计写入边界：账号与分组迁移审计通过 `AdminAuditRecorder` 写入 `domain.AdminAuditEvent`；`AuditRepo` 负责可空字段和 sqlc 参数映射，保持写入失败不阻断迁移的 best-effort 语义。AI Transport 与顶层路由装配已移除最后一处 `*dbgen.Queries` 字段、import 和调用。
 - 模型绑定边界：管理 CRUD、账号/凭证池模型目录导入、账号迁移导入导出和连通性测试统一依赖 `UpstreamModelBindingStore` 与领域模型；PostgreSQL adapter 持有 scoped 查询和原子导入事务，AI Transport 不再直接读写模型绑定表。
+- 模型目录边界：租户/用户可用模型、分组有效价格和租户可选上游资源统一依赖 `ModelCatalogReader` 与领域投影；PostgreSQL adapter 封装分组授权、资源可见性、价格表和模型绑定的聚合 JOIN 及 JSONB 解码，Transport 只保留 DTO、价格区间和倍率计算。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将可用模型与租户上游目录的聚合 JOIN 收敛为目录查询端口，继续清理 AI Transport 中剩余的 `*pgxpool.Pool` 读路径。
+- 下一候选项：P1-02 用健康探针和价格簿查询端口替换 AI Transport 最后两处 `*pgxpool.Pool` 调用，清零传输层的具体 PostgreSQL 依赖。

@@ -70,100 +70,11 @@ type tenantGroupEffectivePricesOutput struct {
 	}
 }
 
-type routedGroupPriceEntry struct {
-	ModelCode         string
-	CapabilityType    string
-	TokenPriceTiers   []domain.TokenPriceTier
-	ImageDefaultPrice float64
-	VideoDefaultPrice float64
-	ImagePrices       []domain.ResolutionUSDPrice
-	VideoPrices       []domain.ResolutionUSDPrice
-	AudioTTSPerChar   float64
-	AudioSTTPerMinute float64
-}
-
-func listRoutedGroupPriceEntries(ctx context.Context, d AIDeps, groupID string) ([]routedGroupPriceEntry, error) {
-	if d.Postgres == nil {
-		return nil, httpx.ErrUnavailable.WithDetail("postgres dependency is not configured")
+func listRoutedGroupPriceEntries(ctx context.Context, d AIDeps, groupID string) ([]domain.RoutedModelPrice, error) {
+	if d.ModelCatalog == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("model catalog reader is not configured")
 	}
-	rows, err := d.Postgres.Query(ctx, `
-		SELECT DISTINCT
-		  um.model_code,
-		  um.capability_type,
-		  e.token_price_tiers,
-		  e.image_default_price,
-		  e.video_default_price,
-		  e.image_prices,
-		  e.video_prices,
-		  e.audio_tts_per_char,
-		  e.audio_stt_per_minute
-		FROM ai_groups g
-		JOIN ai_group_targets gt
-		  ON gt.group_id = g.id AND gt.status = 'active'
-		JOIN ai_upstream_models um
-		  ON um.upstream_kind = gt.target_kind
-		 AND um.upstream_id = gt.target_id
-		 AND um.status = 'active'
-		JOIN ai_price_book_entries e
-		  ON e.price_book_id = g.retail_price_book_id
-		 AND e.model_code = um.model_code
-		 AND e.capability_type = um.capability_type
-		LEFT JOIN ai_upstream_accounts a
-		  ON gt.target_kind = 'direct_upstream' AND a.id = gt.target_id
-		LEFT JOIN ai_credential_pools cp
-		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
-		JOIN ai_price_book_entries account_e
-		  ON account_e.price_book_id = COALESCE(a.price_book_id, cp.price_book_id)
-		 AND account_e.model_code = um.model_code
-		 AND account_e.capability_type = um.capability_type
-		WHERE g.id = $1::uuid
-		  AND g.status = 'active'
-		  AND (
-		    (gt.target_kind = 'direct_upstream' AND a.status = 'active')
-		    OR
-		    (gt.target_kind = 'oauth_pool' AND cp.status = 'active')
-		  )
-		ORDER BY um.model_code ASC, um.capability_type ASC
-	`, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make([]routedGroupPriceEntry, 0)
-	for rows.Next() {
-		var item routedGroupPriceEntry
-		var imagePricesRaw []byte
-		var videoPricesRaw []byte
-		var tokenPriceTiersRaw []byte
-		if err := rows.Scan(
-			&item.ModelCode,
-			&item.CapabilityType,
-			&tokenPriceTiersRaw,
-			&item.ImageDefaultPrice,
-			&item.VideoDefaultPrice,
-			&imagePricesRaw,
-			&videoPricesRaw,
-			&item.AudioTTSPerChar,
-			&item.AudioSTTPerMinute,
-		); err != nil {
-			return nil, err
-		}
-		if err := json.Unmarshal(tokenPriceTiersRaw, &item.TokenPriceTiers); err != nil {
-			return nil, err
-		}
-		if err := decodeUSDResolutionsInto(imagePricesRaw, &item.ImagePrices); err != nil {
-			return nil, err
-		}
-		if err := decodeUSDResolutionsInto(videoPricesRaw, &item.VideoPrices); err != nil {
-			return nil, err
-		}
-		out = append(out, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return d.ModelCatalog.ListRoutedGroupPrices(ctx, groupID)
 }
 
 func userVisibleGroupToDTO(item commercial.AccessibleGroup) userVisibleGroupDTO {

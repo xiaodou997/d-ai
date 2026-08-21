@@ -27,6 +27,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	providerSecrets := &providerSecretCodecStub{}
 	accountReader := &upstreamAccountReaderStub{}
 	modelBindings := &upstreamModelBindingStoreStub{}
+	modelCatalog := &modelCatalogReaderStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
@@ -55,6 +56,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ModelCapabilities: modelCapabilities,
 				AccountReader:     accountReader,
 				ModelBindings:     modelBindings,
+				ModelCatalog:      modelCatalog,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -68,7 +70,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
-	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings {
+	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog {
 		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
@@ -131,6 +133,18 @@ type adminAuditRecorderStub struct{}
 func (*adminAuditRecorderStub) Record(context.Context, domain.AdminAuditEvent) error { return nil }
 
 type upstreamModelBindingStoreStub struct{}
+
+type modelCatalogReaderStub struct{}
+
+func (*modelCatalogReaderStub) ListAvailableModelPrices(context.Context, domain.ModelCatalogScope) ([]domain.RoutedModelPrice, error) {
+	return nil, nil
+}
+func (*modelCatalogReaderStub) ListRoutedGroupPrices(context.Context, string) ([]domain.RoutedModelPrice, error) {
+	return nil, nil
+}
+func (*modelCatalogReaderStub) ListTenantUpstreamResources(context.Context, string) ([]domain.TenantUpstreamResource, error) {
+	return nil, nil
+}
 
 func (*upstreamModelBindingStoreStub) List(context.Context, domain.UpstreamModelBindingScope) ([]domain.UpstreamModelBinding, error) {
 	return nil, nil
