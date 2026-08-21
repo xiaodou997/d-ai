@@ -2,11 +2,15 @@ package transport
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/libs/go/server"
 )
 
 type credentialReaderStub struct {
@@ -18,6 +22,24 @@ type credentialCreatorStub struct {
 	input  domain.OAuthCredentialCreate
 	id     string
 }
+
+type poolWriterStub struct {
+	created domain.CredentialPoolCreate
+	id      string
+}
+
+func (s *poolWriterStub) CreatePool(_ context.Context, input domain.CredentialPoolCreate) (string, error) {
+	s.created = input
+	return s.id, nil
+}
+
+func (*poolWriterStub) UpdatePool(context.Context, string, domain.CredentialPoolUpdate) error {
+	return nil
+}
+
+func (*poolWriterStub) UpdatePoolStatus(context.Context, string, string) error { return nil }
+
+func (*poolWriterStub) DeletePool(context.Context, string) error { return nil }
 
 func (s *credentialCreatorStub) Create(_ context.Context, poolID string, input domain.OAuthCredentialCreate) (string, error) {
 	s.poolID = poolID
@@ -65,6 +87,42 @@ func TestImportPoolCredentialUsesDedicatedCreatorPort(t *testing.T) {
 	}
 	if creator.input.ProviderType != domain.FixedProviderCodex || creator.input.AccessToken != "access-token" {
 		t.Fatalf("creator input = %#v", creator.input)
+	}
+}
+
+func TestCreateCredentialPoolUsesDedicatedPoolPorts(t *testing.T) {
+	reader := &poolReaderStub{pool: &domain.CredentialPool{
+		ID:                "pool-1",
+		Name:              "Port pool",
+		TenantDisplayName: "Port pool",
+		TenantAccessMode:  "public",
+		FixedProviderType: domain.FixedProviderCodex,
+		OAuthStrategy:     "round_robin",
+		Status:            "disabled",
+	}}
+	writer := &poolWriterStub{id: "pool-1"}
+	router, api := server.New(server.Options{Title: "test", Version: "test"})
+	registerOAuthPools(api, AIDeps{IdentityDeps: IdentityDeps{
+		PoolReader: reader,
+		PoolWriter: writer,
+	}})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/credential-pools", strings.NewReader(`{
+		"name":" Port pool ",
+		"fixed_provider_type":"codex"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create credential pool status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if reader.poolID != "pool-1" {
+		t.Fatalf("GetPool() pool ID = %q, want pool-1", reader.poolID)
+	}
+	if writer.created.Name != "Port pool" || writer.created.FixedProviderType != domain.FixedProviderCodex {
+		t.Fatalf("CreatePool() input = %#v", writer.created)
 	}
 }
 

@@ -51,6 +51,7 @@ type IdentityDeps struct {
 	CredentialReader  OAuthCredentialReader
 	CredentialWriter  OAuthCredentialWriter
 	PoolReader        OAuthPoolReader
+	PoolWriter        OAuthPoolWriter
 	TokenRefresher    OAuthTokenRefresher
 	APIKeySvc         *identitycontrol.Service
 	WorkspaceSvc      *workspacesvc.Service
@@ -74,11 +75,20 @@ type OAuthTokenRefresher interface {
 	RefreshByID(ctx context.Context, credID string) error
 }
 
-// OAuthPoolReader is the narrow read-only port needed by AI model-binding and
-// credential import routes. Pool CRUD remains on the transitional OAuth store
-// until its write port is split out.
+// OAuthPoolReader is the non-secret pool query port used by management,
+// model-binding and credential import routes.
 type OAuthPoolReader interface {
+	ListPools(ctx context.Context) ([]domain.CredentialPool, error)
 	GetPool(ctx context.Context, poolID string) (*domain.CredentialPool, error)
+}
+
+// OAuthPoolWriter contains the pool management mutations. Credential serving
+// and health aggregation are separate concerns.
+type OAuthPoolWriter interface {
+	CreatePool(ctx context.Context, in domain.CredentialPoolCreate) (string, error)
+	UpdatePool(ctx context.Context, poolID string, in domain.CredentialPoolUpdate) error
+	UpdatePoolStatus(ctx context.Context, poolID, status string) error
+	DeletePool(ctx context.Context, poolID string) error
 }
 
 // OAuthCredentialReader is the narrow non-secret read port needed by

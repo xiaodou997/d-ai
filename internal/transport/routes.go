@@ -102,6 +102,7 @@ type AIIdentityDeps struct {
 	CredentialReader  aitransport.OAuthCredentialReader
 	CredentialWriter  aitransport.OAuthCredentialWriter
 	PoolReader        aitransport.OAuthPoolReader
+	PoolWriter        aitransport.OAuthPoolWriter
 	TokenRefresher    aitransport.OAuthTokenRefresher
 	APIKeySvc         *identitycontrol.Service
 	WorkspaceSvc      *workspacesvc.Service
@@ -241,6 +242,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			CredentialReader:  d.CredentialReader,
 			CredentialWriter:  d.CredentialWriter,
 			PoolReader:        d.PoolReader,
+			PoolWriter:        d.PoolWriter,
 			TokenRefresher:    d.TokenRefresher,
 			TokenVerifier:     platform.JWT,
 			TokenRevocations:  platform.Blacklist,

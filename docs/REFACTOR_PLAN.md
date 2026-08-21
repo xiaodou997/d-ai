@@ -396,7 +396,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 端口收敛：AI 系统端点改用 `ScoreWeightsStore` 最小接口，评分权重 PostgreSQL adapter 留在 composition root。
 - 端口收敛：AI 认证端点改用 `HumaBanChecker`，Ban 状态 Redis adapter 留在 composition root。
 - 端口收敛：OAuth 凭证管理端点改用 `OAuthTokenRefresher`，不再暴露后台刷新器具体类型。
-- 端口收敛：AI 上游模型绑定和凭证导入的 pool 只读查询改用 `OAuthPoolReader`；pool CRUD 仍保留在具体 store，便于后续继续拆分写端口。
+- 端口收敛：AI 上游模型绑定、凭证导入和 pool CRUD 查询统一使用 `OAuthPoolReader`；创建、更新、状态变更和删除使用 `OAuthPoolWriter` 与领域级创建/更新命令。
 - 端口收敛：凭证池账号列表改用 `OAuthCredentialReader` 与无密文 `OAuthCredentialSummary`；管理摘要采用已知账户 ID/套餐字符串字段允许列表，未知 provider metadata、嵌套结构和密钥材料不离开运行时边界，Transport 不再依赖原始 credential row。
 - 端口收敛：凭证创建响应及更新/刷新/删除前的 scoped read 改用 `GetSummaryByID`；原始 `GetByID` 仅保留给 adapter 内部 serving/token refresh 解密路径。
 - 端口收敛：凭证状态、权重更新和删除改用 `OAuthCredentialWriter`；刷新端点移除对完整 OAuth store 的冗余依赖。
@@ -404,4 +404,4 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 端口收敛：OAuth pool 模型发现改用 `ClientCatalogResolver`，Transport 不再暴露具体 catalog service。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将 OAuth pool CRUD 拆为最小读写端口，再拆分健康摘要查询。
+- 下一候选项：P1-02 将 OAuth pool 健康摘要查询从 `OAuthCredentialStore` 拆为独立只读端口。

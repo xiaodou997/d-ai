@@ -367,6 +367,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				CredentialReader:  oauthCreds,
 				CredentialWriter:  oauthCreds,
 				PoolReader:        oauthCreds,
+				PoolWriter:        oauthCreds,
 				TokenRefresher:    refresher,
 				APIKeySvc:         apiKeySvc,
 				WorkspaceSvc:      workspaceSvc,

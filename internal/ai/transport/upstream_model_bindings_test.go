@@ -10,6 +10,11 @@ import (
 type poolReaderStub struct {
 	poolID string
 	pool   *domain.CredentialPool
+	pools  []domain.CredentialPool
+}
+
+func (s *poolReaderStub) ListPools(context.Context) ([]domain.CredentialPool, error) {
+	return s.pools, nil
 }
 
 func (s *poolReaderStub) GetPool(_ context.Context, poolID string) (*domain.CredentialPool, error) {

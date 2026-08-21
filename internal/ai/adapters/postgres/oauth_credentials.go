@@ -31,21 +31,8 @@ func NewOAuthCredentialStore(pool *pgxpool.Pool, masterKey string) *OAuthCredent
 // CredentialPool CRUD
 // ============================================================================
 
-// CredentialPoolInput is used to create or update a pool.
-type CredentialPoolInput struct {
-	Name              string
-	TenantDisplayName string
-	TenantAccessMode  string
-	FixedProviderType string
-	OAuthStrategy     string
-	Notes             string
-	Status            string
-	PriceBookID       string
-	TenantMultiplier  *float64
-}
-
 // CreatePool inserts a new credential pool and returns its ID.
-func (s *OAuthCredentialStore) CreatePool(ctx context.Context, in CredentialPoolInput) (string, error) {
+func (s *OAuthCredentialStore) CreatePool(ctx context.Context, in domain.CredentialPoolCreate) (string, error) {
 	strategy := in.OAuthStrategy
 	if strategy == "" {
 		strategy = "round_robin"
@@ -69,7 +56,7 @@ func (s *OAuthCredentialStore) CreatePool(ctx context.Context, in CredentialPool
 			price_book_id, tenant_multiplier)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id::text`,
-		in.Name, in.TenantDisplayName, in.TenantAccessMode, in.FixedProviderType, strategy, in.Notes, status,
+		in.Name, in.TenantDisplayName, in.TenantAccessMode, string(in.FixedProviderType), strategy, in.Notes, status,
 		nullableUUID(in.PriceBookID), floatPtrToNumeric(in.TenantMultiplier),
 	).Scan(&id)
 	if err != nil {
@@ -141,7 +128,7 @@ func (s *OAuthCredentialStore) ListPools(ctx context.Context) ([]domain.Credenti
 }
 
 // UpdatePool updates mutable pool fields.
-func (s *OAuthCredentialStore) UpdatePool(ctx context.Context, poolID string, in CredentialPoolInput) error {
+func (s *OAuthCredentialStore) UpdatePool(ctx context.Context, poolID string, in domain.CredentialPoolUpdate) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err

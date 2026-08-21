@@ -19,11 +19,11 @@ func TestOAuthCredentialTokenCASRejectsStaleRefresh(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	store := NewOAuthCredentialStore(pool, "0123456789abcdef0123456789abcdef")
-	poolID, err := store.CreatePool(ctx, CredentialPoolInput{
+	poolID, err := store.CreatePool(ctx, domain.CredentialPoolCreate{
 		Name:              "token-cas-pool",
 		TenantDisplayName: "Token CAS Pool",
 		TenantAccessMode:  "public",
-		FixedProviderType: string(domain.FixedProviderCodex),
+		FixedProviderType: domain.FixedProviderCodex,
 		Status:            "active",
 	})
 	if err != nil {
@@ -93,11 +93,11 @@ func TestOAuthCredentialCooldownExcludesAndThenRestoresSelection(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	store := NewOAuthCredentialStore(pool, "0123456789abcdef0123456789abcdef")
-	poolID, err := store.CreatePool(ctx, CredentialPoolInput{
+	poolID, err := store.CreatePool(ctx, domain.CredentialPoolCreate{
 		Name:              "cooldown-pool",
 		TenantDisplayName: "Cooldown Pool",
 		TenantAccessMode:  "public",
-		FixedProviderType: string(domain.FixedProviderCodex),
+		FixedProviderType: domain.FixedProviderCodex,
 		Status:            "active",
 	})
 	if err != nil {

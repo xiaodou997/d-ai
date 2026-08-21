@@ -22,11 +22,11 @@ func TestOAuthCredentialReadsTolerateNullTextColumns(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	store := NewOAuthCredentialStore(pool, "0123456789abcdef0123456789abcdef")
-	poolID, err := store.CreatePool(ctx, CredentialPoolInput{
+	poolID, err := store.CreatePool(ctx, domain.CredentialPoolCreate{
 		Name:              "null-text-pool",
 		TenantDisplayName: "Null Text Pool",
 		TenantAccessMode:  "public",
-		FixedProviderType: string(domain.FixedProviderCodex),
+		FixedProviderType: domain.FixedProviderCodex,
 		Status:            "active",
 	})
 	if err != nil {

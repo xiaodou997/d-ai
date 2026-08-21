@@ -341,6 +341,33 @@ type CredentialPool struct {
 	UpdatedAt         time.Time
 }
 
+// CredentialPoolCreate contains the fields accepted when creating a pool.
+// FixedProviderType is intentionally absent from the update command because a
+// pool cannot change provider after creation.
+type CredentialPoolCreate struct {
+	Name              string
+	TenantDisplayName string
+	TenantAccessMode  string
+	FixedProviderType FixedProviderType
+	OAuthStrategy     string
+	Notes             string
+	Status            string
+	PriceBookID       string
+	TenantMultiplier  *float64
+}
+
+// CredentialPoolUpdate contains only mutable pool fields.
+type CredentialPoolUpdate struct {
+	Name              string
+	TenantDisplayName string
+	TenantAccessMode  string
+	OAuthStrategy     string
+	Notes             string
+	Status            string
+	PriceBookID       string
+	TenantMultiplier  *float64
+}
+
 // OAuthCredential represents a single OAuth token entry in a credential pool.
 // AccessToken and RefreshToken are decrypted values ready for use.
 type OAuthCredential struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/testsupport"
 )
 
@@ -22,11 +23,11 @@ func TestCredentialPoolRoundTrip(t *testing.T) {
 	store := NewOAuthCredentialStore(pool, "0123456789abcdef0123456789abcdef")
 	multiplier := 1.5
 
-	id, err := store.CreatePool(ctx, CredentialPoolInput{
+	id, err := store.CreatePool(ctx, domain.CredentialPoolCreate{
 		Name:              "codex-pool",
 		TenantDisplayName: "Codex Pool",
 		TenantAccessMode:  "public",
-		FixedProviderType: "codex",
+		FixedProviderType: domain.FixedProviderCodex,
 		Notes:             "created by test",
 		TenantMultiplier:  &multiplier,
 	})
@@ -49,7 +50,7 @@ func TestCredentialPoolRoundTrip(t *testing.T) {
 	}
 
 	updatedMultiplier := 2.0
-	if err := store.UpdatePool(ctx, id, CredentialPoolInput{
+	if err := store.UpdatePool(ctx, id, domain.CredentialPoolUpdate{
 		Name:              "codex-pool-renamed",
 		TenantDisplayName: "Codex Pool 2",
 		TenantAccessMode:  "restricted",

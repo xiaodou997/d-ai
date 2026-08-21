@@ -228,10 +228,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "返回固定供应商 OAuth 凭证池列表。本端点为只读契约，不返回任何 token、密文或 provider API key。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, _ *struct{}) (*credentialPoolsOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader is not configured")
 		}
-		pools, err := d.OAuth.ListPools(ctx)
+		pools, err := d.PoolReader.ListPools(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -252,18 +252,18 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "创建固定供应商 OAuth 凭证池；可服务模型和上游协议由显式上游模型绑定维护。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *createCredentialPoolInput) (*credentialPoolOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolReader == nil || d.PoolWriter == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader or writer is not configured")
 		}
 		write, err := credentialPoolCreateInput(in.Body)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		id, err := d.OAuth.CreatePool(ctx, write)
+		id, err := d.PoolWriter.CreatePool(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		pool, err := d.OAuth.GetPool(ctx, id)
+		pool, err := d.PoolReader.GetPool(ctx, id)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -280,10 +280,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "更新凭证池可变字段；fixed_provider_type 创建后不可变。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *updateCredentialPoolInput) (*credentialPoolOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolReader == nil || d.PoolWriter == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader or writer is not configured")
 		}
-		current, err := d.OAuth.GetPool(ctx, in.PoolID)
+		current, err := d.PoolReader.GetPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -291,10 +291,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := d.OAuth.UpdatePool(ctx, in.PoolID, write); err != nil {
+		if err := d.PoolWriter.UpdatePool(ctx, in.PoolID, write); err != nil {
 			return nil, mapServiceError(err)
 		}
-		updated, err := d.OAuth.GetPool(ctx, in.PoolID)
+		updated, err := d.PoolReader.GetPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -311,17 +311,17 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "独立启用或停用凭证池；新增凭证池默认停用。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *updateCredentialPoolStatusInput) (*credentialPoolOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolReader == nil || d.PoolWriter == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader or writer is not configured")
 		}
 		status, err := validateCredentialPoolStatus(in.Body.Status)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := d.OAuth.UpdatePoolStatus(ctx, in.PoolID, status); err != nil {
+		if err := d.PoolWriter.UpdatePoolStatus(ctx, in.PoolID, status); err != nil {
 			return nil, mapServiceError(err)
 		}
-		updated, err := d.OAuth.GetPool(ctx, in.PoolID)
+		updated, err := d.PoolReader.GetPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -336,10 +336,10 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "删除凭证池会级联删除池内 OAuth credential；若存在上游部署引用，数据库会拒绝删除。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *deleteCredentialPoolInput) (*deleteCredentialPoolOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolWriter == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool writer is not configured")
 		}
-		if err := d.OAuth.DeletePool(ctx, in.PoolID); err != nil {
+		if err := d.PoolWriter.DeletePool(ctx, in.PoolID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &deleteCredentialPoolOutput{}
@@ -492,13 +492,13 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "优先通过版本化客户端 Profile 在线发现模型，并以缓存、最后成功快照或内置目录降级。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *poolAvailableModelsInput) (*poolAvailableModelsOutput, error) {
-		if d.OAuth == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.PoolReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader is not configured")
 		}
 		if in.PoolID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("poolID is required")
 		}
-		pool, err := d.OAuth.GetPool(ctx, in.PoolID)
+		pool, err := d.PoolReader.GetPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -524,13 +524,13 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Tags:          []string{"credential-pools"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *importPoolAvailableModelsInput) (*importPoolAvailableModelsOutput, error) {
-		if d.OAuth == nil || d.Postgres == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store or database is not configured")
+		if d.PoolReader == nil || d.Postgres == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader or database is not configured")
 		}
 		if in.PoolID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("poolID is required")
 		}
-		pool, err := d.OAuth.GetPool(ctx, in.PoolID)
+		pool, err := d.PoolReader.GetPool(ctx, in.PoolID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -655,34 +655,34 @@ func credentialPoolToDTO(pool domain.CredentialPool) credentialPoolDTO {
 	}
 }
 
-func credentialPoolCreateInput(req credentialPoolWriteRequest) (pgadapter.CredentialPoolInput, error) {
+func credentialPoolCreateInput(req credentialPoolWriteRequest) (domain.CredentialPoolCreate, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return pgadapter.CredentialPoolInput{}, domain.NewValidationError("name", "name is required")
+		return domain.CredentialPoolCreate{}, domain.NewValidationError("name", "name is required")
 	}
 	fixedType := strings.TrimSpace(req.FixedProviderType)
 	if fixedType == "" {
-		return pgadapter.CredentialPoolInput{}, domain.NewValidationError("fixed_provider_type", "fixed_provider_type is required")
+		return domain.CredentialPoolCreate{}, domain.NewValidationError("fixed_provider_type", "fixed_provider_type is required")
 	}
 	if err := validateFixedProviderType(fixedType); err != nil {
-		return pgadapter.CredentialPoolInput{}, err
+		return domain.CredentialPoolCreate{}, err
 	}
 	strategy, err := credentialPoolStrategyOrDefault(req.OAuthStrategy)
 	if err != nil {
-		return pgadapter.CredentialPoolInput{}, err
+		return domain.CredentialPoolCreate{}, err
 	}
 	if req.TenantMultiplier != nil && *req.TenantMultiplier < 0 {
-		return pgadapter.CredentialPoolInput{}, domain.NewValidationError("tenant_multiplier", "tenant_multiplier must be >= 0")
+		return domain.CredentialPoolCreate{}, domain.NewValidationError("tenant_multiplier", "tenant_multiplier must be >= 0")
 	}
 	accessMode, err := upstreamaccess.NormalizeMode(req.TenantAccessMode)
 	if err != nil {
-		return pgadapter.CredentialPoolInput{}, err
+		return domain.CredentialPoolCreate{}, err
 	}
-	return pgadapter.CredentialPoolInput{
+	return domain.CredentialPoolCreate{
 		Name:              name,
 		TenantDisplayName: upstreamaccess.NormalizeDisplayName(name, req.TenantDisplayName),
 		TenantAccessMode:  accessMode,
-		FixedProviderType: fixedType,
+		FixedProviderType: domain.FixedProviderType(fixedType),
 		OAuthStrategy:     strategy,
 		Notes:             req.Notes,
 		Status:            "disabled",
@@ -691,7 +691,7 @@ func credentialPoolCreateInput(req credentialPoolWriteRequest) (pgadapter.Creden
 	}, nil
 }
 
-func credentialPoolUpdateInput(current domain.CredentialPool, req credentialPoolWriteRequest) (pgadapter.CredentialPoolInput, error) {
+func credentialPoolUpdateInput(current domain.CredentialPool, req credentialPoolWriteRequest) (domain.CredentialPoolUpdate, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = current.Name
@@ -701,7 +701,7 @@ func credentialPoolUpdateInput(current domain.CredentialPool, req credentialPool
 		var err error
 		strategy, err = credentialPoolStrategyOrDefault(req.OAuthStrategy)
 		if err != nil {
-			return pgadapter.CredentialPoolInput{}, err
+			return domain.CredentialPoolUpdate{}, err
 		}
 	}
 	priceBookID := current.PriceBookID
@@ -711,7 +711,7 @@ func credentialPoolUpdateInput(current domain.CredentialPool, req credentialPool
 	multiplier := current.TenantMultiplier
 	if req.TenantMultiplier != nil {
 		if *req.TenantMultiplier < 0 {
-			return pgadapter.CredentialPoolInput{}, domain.NewValidationError("tenant_multiplier", "tenant_multiplier must be >= 0")
+			return domain.CredentialPoolUpdate{}, domain.NewValidationError("tenant_multiplier", "tenant_multiplier must be >= 0")
 		}
 		multiplier = *req.TenantMultiplier
 	}
@@ -720,18 +720,17 @@ func credentialPoolUpdateInput(current domain.CredentialPool, req credentialPool
 		var err error
 		accessMode, err = upstreamaccess.NormalizeMode(req.TenantAccessMode)
 		if err != nil {
-			return pgadapter.CredentialPoolInput{}, err
+			return domain.CredentialPoolUpdate{}, err
 		}
 	}
 	displayName := current.TenantDisplayName
 	if strings.TrimSpace(req.TenantDisplayName) != "" {
 		displayName = upstreamaccess.NormalizeDisplayName(name, req.TenantDisplayName)
 	}
-	return pgadapter.CredentialPoolInput{
+	return domain.CredentialPoolUpdate{
 		Name:              name,
 		TenantDisplayName: displayName,
 		TenantAccessMode:  accessMode,
-		FixedProviderType: string(current.FixedProviderType),
 		OAuthStrategy:     strategy,
 		Notes:             req.Notes,
 		Status:            current.Status,
