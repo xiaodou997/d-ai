@@ -234,7 +234,7 @@ func TestTenantPriceBookRoutesUseAuthenticatedTenantAcrossPorts(t *testing.T) {
 	}}}
 	syncer := &priceBookSyncManagerStub{}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantPriceBooks(api, AIDeps{CatalogDeps: CatalogDeps{TenantPriceBooks: manager, PriceBookSync: syncer}})
+	registerTenantPriceBooks(api, TenantCatalogHTTPDeps{TenantPriceBooks: manager, PriceBookSync: syncer})
 	handler := withPriceBookClaims(router, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
 
 	listRecorder := performPriceBookRequest(handler, http.MethodGet, "/api/v1/tenants/me/price-books", "")
@@ -268,13 +268,13 @@ func TestPriceBookRoutesRequireTheirOwnPorts(t *testing.T) {
 	requirePriceBookStatus(t, performPriceBookRequest(syncOnlyRouter, http.MethodGet, "/api/v1/price-books/litellm/models", ""), http.StatusOK)
 
 	tenantManagerRouter, tenantManagerAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantPriceBooks(tenantManagerAPI, AIDeps{CatalogDeps: CatalogDeps{TenantPriceBooks: &tenantPriceBookManagerStub{}}})
+	registerTenantPriceBooks(tenantManagerAPI, TenantCatalogHTTPDeps{TenantPriceBooks: &tenantPriceBookManagerStub{}})
 	tenantManagerHandler := withPriceBookClaims(tenantManagerRouter, &auth.Claims{TenantID: "tenant-1"})
 	requirePriceBookStatus(t, performPriceBookRequest(tenantManagerHandler, http.MethodGet, "/api/v1/tenants/me/price-books", ""), http.StatusOK)
 	requirePriceBookStatus(t, performPriceBookRequest(tenantManagerHandler, http.MethodGet, "/api/v1/tenants/me/price-books/litellm/models", ""), http.StatusServiceUnavailable)
 
 	tenantSyncRouter, tenantSyncAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantPriceBooks(tenantSyncAPI, AIDeps{CatalogDeps: CatalogDeps{PriceBookSync: &priceBookSyncManagerStub{}}})
+	registerTenantPriceBooks(tenantSyncAPI, TenantCatalogHTTPDeps{PriceBookSync: &priceBookSyncManagerStub{}})
 	tenantSyncHandler := withPriceBookClaims(tenantSyncRouter, &auth.Claims{TenantID: "tenant-1"})
 	requirePriceBookStatus(t, performPriceBookRequest(tenantSyncHandler, http.MethodGet, "/api/v1/tenants/me/price-books", ""), http.StatusServiceUnavailable)
 	requirePriceBookStatus(t, performPriceBookRequest(tenantSyncHandler, http.MethodGet, "/api/v1/tenants/me/price-books/litellm/models", ""), http.StatusOK)

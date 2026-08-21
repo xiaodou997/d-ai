@@ -36,7 +36,7 @@ type tenantUpstreamResourcesOutput struct {
 	}
 }
 
-func registerTenantUpstreamCatalog(api huma.API, d AIDeps) {
+func registerTenantUpstreamCatalog(api huma.API, d TenantCatalogHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-upstream-resources",
 		Method:      http.MethodGet,
@@ -52,7 +52,7 @@ func registerTenantUpstreamCatalog(api huma.API, d AIDeps) {
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		items, err := loadTenantUpstreamResources(ctx, d, tenantID)
+		items, err := loadTenantUpstreamResources(ctx, d.ModelCatalog, tenantID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -63,11 +63,11 @@ func registerTenantUpstreamCatalog(api huma.API, d AIDeps) {
 	})
 }
 
-func loadTenantUpstreamResources(ctx context.Context, d AIDeps, tenantID string) ([]tenantUpstreamResourceDTO, error) {
-	if d.ModelCatalog == nil {
+func loadTenantUpstreamResources(ctx context.Context, reader ModelCatalogReader, tenantID string) ([]tenantUpstreamResourceDTO, error) {
+	if reader == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("model catalog reader is not configured")
 	}
-	resources, err := d.ModelCatalog.ListTenantUpstreamResources(ctx, tenantID)
+	resources, err := reader.ListTenantUpstreamResources(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}

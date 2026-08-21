@@ -47,7 +47,7 @@ func TestTenantUpstreamAccessUsesManagerPort(t *testing.T) {
 		EffectiveTenantMultiplier: 1.25,
 	}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantUpstreamAccess(api, AIDeps{CatalogDeps: CatalogDeps{UpstreamAccess: manager}})
+	registerTenantUpstreamAccess(api, UpstreamAccessManagementHTTPDeps{UpstreamAccess: manager})
 
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/tenants/tenant-1/upstream-access", nil))
@@ -77,7 +77,7 @@ func TestTenantUpstreamAccessUsesManagerPort(t *testing.T) {
 func TestReplaceTenantUpstreamAccessUsesManagerPort(t *testing.T) {
 	manager := &upstreamAccessManagerStub{}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantUpstreamAccess(api, AIDeps{CatalogDeps: CatalogDeps{UpstreamAccess: manager}})
+	registerTenantUpstreamAccess(api, UpstreamAccessManagementHTTPDeps{UpstreamAccess: manager})
 
 	request := httptest.NewRequest(http.MethodPut, "/api/v1/tenants/tenant-2/upstream-access", strings.NewReader(`{
 		"policies":[{"resource_kind":"oauth_pool","resource_id":"pool-1","access_granted":true,"tenant_multiplier_override":1.5}]
@@ -100,7 +100,7 @@ func TestReplaceTenantUpstreamAccessUsesManagerPort(t *testing.T) {
 
 func TestTenantUpstreamAccessRequiresManagerPort(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerTenantUpstreamAccess(api, AIDeps{})
+	registerTenantUpstreamAccess(api, UpstreamAccessManagementHTTPDeps{})
 
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/tenants/tenant-1/upstream-access", nil))

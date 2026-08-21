@@ -128,7 +128,6 @@ type CatalogDeps struct {
 	PlatformPriceBooks PlatformPriceBookManager
 	TenantPriceBooks   TenantPriceBookManager
 	PriceBookSync      PriceBookSyncManager
-	UpstreamAccess     UpstreamAccessManager
 	Groups             CommercialGroupCatalog
 	GroupManager       CommercialGroupManager
 	DispatchRules      CommercialDispatchRuleManager
@@ -389,15 +388,11 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	management.UseMiddleware(platformUserAuth(api, auth))
 	registerPriceBooks(management, d)
 	registerLimits(management, d)
-	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)
 	tenant := huma.NewGroup(api)
 	tenant.UseMiddleware(tenantUserAuth(api, auth))
 	registerGroups(tenant, d)
 	registerGroupTransfer(tenant, d)
-	registerTenantSelfPricing(tenant, d)
-	registerTenantPriceBooks(tenant, d)
-	registerTenantUpstreamCatalog(tenant, d)
 	registerTenantSelfAPIKeys(tenant, d)
 	registerTenantSelf(tenant, d)
 	registerTenantSelfWorkspace(tenant, d)

@@ -87,7 +87,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				GroupTargets:       commercialPorts,
 				UserBindings:       commercialPorts,
 				LimitPolicies:      commercialPorts,
-				UpstreamAccess:     upstreamAccess,
 				GroupTransfer:      groupTransfer,
 			},
 			AIOperationsDeps: AIOperationsDeps{
@@ -115,9 +114,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.Groups != commercialPorts || got.GroupManager != commercialPorts || got.DispatchRules != commercialPorts || got.GroupTargets != commercialPorts || got.UserBindings != commercialPorts || got.LimitPolicies != commercialPorts {
 		t.Fatal("commercial control-plane ports were not preserved")
-	}
-	if got.UpstreamAccess != upstreamAccess {
-		t.Fatal("upstream access manager was not preserved")
 	}
 	if got.GroupTransfer != groupTransfer {
 		t.Fatal("group transfer manager was not preserved")
@@ -324,6 +320,28 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if accountManagement.Accounts != accountPorts || accountManagement.AccountManager != accountPorts || accountManagement.AccountReader != accountReader || accountManagement.ProviderSecrets != providerSecrets || accountManagement.ModelBindings != modelBindings || accountManagement.PriceBooks != priceBooks || accountManagement.AdminAudit != adminAudit {
 		t.Fatal("upstream account management dependencies were not preserved")
+	}
+
+	upstreamAccessHTTP := buildUpstreamAccessManagementHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIUpstreamAccessManagementHTTPDeps{UpstreamAccess: upstreamAccess, BanChecker: banChecker},
+	)
+	if upstreamAccessHTTP.Auth.TokenVerifier != jwt || upstreamAccessHTTP.Auth.TokenRevocations != blacklist || upstreamAccessHTTP.Auth.BanChecker != banChecker || upstreamAccessHTTP.UpstreamAccess != upstreamAccess {
+		t.Fatal("upstream access management dependencies were not preserved")
+	}
+
+	tenantCatalog := buildTenantCatalogHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AITenantCatalogHTTPDeps{
+			ModelCatalog:     modelCatalog,
+			Groups:           commercialPorts,
+			TenantPriceBooks: priceBookPorts,
+			PriceBookSync:    priceBookPorts,
+			BanChecker:       banChecker,
+		},
+	)
+	if tenantCatalog.Auth.TokenVerifier != jwt || tenantCatalog.Auth.TokenRevocations != blacklist || tenantCatalog.Auth.BanChecker != banChecker || tenantCatalog.ModelCatalog != modelCatalog || tenantCatalog.Groups != commercialPorts || tenantCatalog.TenantPriceBooks != priceBookPorts || tenantCatalog.PriceBookSync != priceBookPorts {
+		t.Fatal("tenant catalog dependencies were not preserved")
 	}
 }
 

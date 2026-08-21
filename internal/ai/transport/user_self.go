@@ -176,7 +176,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		out.Body.EffectiveUserMultiplier = matched.EffectiveUserMultiplier
 		out.Body.Items = make([]tenantGroupEffectivePriceDTO, 0)
 
-		entries, err := listRoutedGroupPriceEntries(ctx, d, matched.Group.ID)
+		entries, err := listRoutedGroupPriceEntries(ctx, d.ModelCatalog, matched.Group.ID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

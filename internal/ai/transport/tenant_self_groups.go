@@ -70,11 +70,11 @@ type tenantGroupEffectivePricesOutput struct {
 	}
 }
 
-func listRoutedGroupPriceEntries(ctx context.Context, d AIDeps, groupID string) ([]domain.RoutedModelPrice, error) {
-	if d.ModelCatalog == nil {
+func listRoutedGroupPriceEntries(ctx context.Context, reader ModelCatalogReader, groupID string) ([]domain.RoutedModelPrice, error) {
+	if reader == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("model catalog reader is not configured")
 	}
-	return d.ModelCatalog.ListRoutedGroupPrices(ctx, groupID)
+	return reader.ListRoutedGroupPrices(ctx, groupID)
 }
 
 func userVisibleGroupToDTO(item commercial.AccessibleGroup) userVisibleGroupDTO {

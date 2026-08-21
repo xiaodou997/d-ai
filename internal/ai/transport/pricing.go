@@ -13,7 +13,7 @@ import (
 // registerTenantSelfPricing exposes tenant-scoped model and retail price
 // helpers. The price multiplier is the group's user multiplier only; upstream
 // account multipliers belong to the independent tenant-charge ledger.
-func registerTenantSelfPricing(api huma.API, d AIDeps) {
+func registerTenantSelfPricing(api huma.API, d TenantCatalogHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-self-available-models",
 		Method:      http.MethodGet,
@@ -54,7 +54,7 @@ func registerTenantSelfPricing(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		entries, err := listRoutedGroupPriceEntries(ctx, d, group.ID)
+		entries, err := listRoutedGroupPriceEntries(ctx, d.ModelCatalog, group.ID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

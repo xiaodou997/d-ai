@@ -386,7 +386,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 					UserBindings:       commercialSvc,
 					LimitPolicies:      commercialSvc,
 					GroupTransfer:      groupTransferSvc,
-					UpstreamAccess:     upstreamAccessSvc,
 				},
 				AIOperationsDeps: transport.AIOperationsDeps{
 					DashboardQueries:           dashboardSvc,
@@ -471,6 +470,17 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				PriceBooks:      priceBookSvc,
 				AdminAudit:      auditSvc,
 				BanChecker:      banChecker,
+			},
+			UpstreamAccess: transport.AIUpstreamAccessManagementHTTPDeps{
+				UpstreamAccess: upstreamAccessSvc,
+				BanChecker:     banChecker,
+			},
+			TenantCatalog: transport.AITenantCatalogHTTPDeps{
+				ModelCatalog:     modelCatalog,
+				Groups:           commercialSvc,
+				TenantPriceBooks: priceBookSvc,
+				PriceBookSync:    priceBookSvc,
+				BanChecker:       banChecker,
 			},
 		},
 		FileStore:          fileStore,

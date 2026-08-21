@@ -114,7 +114,6 @@ type AICatalogDeps struct {
 	UserBindings       aitransport.CommercialUserBindingManager
 	LimitPolicies      aitransport.CommercialLimitPolicyManager
 	GroupTransfer      aitransport.GroupTransferManager
-	UpstreamAccess     aitransport.UpstreamAccessManager
 }
 
 // AIOperationsDeps contains AI-side dashboard, usage, audit and enrichment collaborators.
@@ -199,6 +198,23 @@ type AIUpstreamAccountManagementHTTPDeps struct {
 	BanChecker      aitransport.HumaBanChecker
 }
 
+// AIUpstreamAccessManagementHTTPDeps contains the collaborators owned by the
+// independently registered platform-admin upstream-access policy module.
+type AIUpstreamAccessManagementHTTPDeps struct {
+	UpstreamAccess aitransport.UpstreamAccessManager
+	BanChecker     aitransport.HumaBanChecker
+}
+
+// AITenantCatalogHTTPDeps contains the collaborators owned by the
+// independently registered tenant self-service catalog module.
+type AITenantCatalogHTTPDeps struct {
+	ModelCatalog     aitransport.ModelCatalogReader
+	Groups           aitransport.CommercialGroupCatalog
+	TenantPriceBooks aitransport.TenantPriceBookManager
+	PriceBookSync    aitransport.PriceBookSyncManager
+	BanChecker       aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -243,6 +259,8 @@ type AIHTTPDeps struct {
 	ModelBindings       AIModelBindingHTTPDeps
 	UpstreamDiagnostics AIUpstreamDiagnosticsHTTPDeps
 	UpstreamAccounts    AIUpstreamAccountManagementHTTPDeps
+	UpstreamAccess      AIUpstreamAccessManagementHTTPDeps
+	TenantCatalog       AITenantCatalogHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -288,6 +306,8 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterModelBindings(api, buildModelBindingHTTPDeps(m.platform, m.deps.ModelBindings))
 	aitransport.RegisterUpstreamDiagnostics(api, buildUpstreamDiagnosticsHTTPDeps(m.platform, m.deps.UpstreamDiagnostics))
 	aitransport.RegisterUpstreamAccountManagement(api, buildUpstreamAccountManagementHTTPDeps(m.platform, m.deps.UpstreamAccounts))
+	aitransport.RegisterUpstreamAccessManagement(api, buildUpstreamAccessManagementHTTPDeps(m.platform, m.deps.UpstreamAccess))
+	aitransport.RegisterTenantCatalog(api, buildTenantCatalogHTTPDeps(m.platform, m.deps.TenantCatalog))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -365,7 +385,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			UserBindings:       d.UserBindings,
 			LimitPolicies:      d.LimitPolicies,
 			GroupTransfer:      d.GroupTransfer,
-			UpstreamAccess:     d.UpstreamAccess,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
 			DashboardQueries:           d.DashboardQueries,
@@ -396,6 +415,31 @@ func buildUpstreamAccountManagementHTTPDeps(platform Deps, d AIUpstreamAccountMa
 		ModelBindings:   d.ModelBindings,
 		PriceBooks:      d.PriceBooks,
 		AdminAudit:      d.AdminAudit,
+	}
+}
+
+func buildUpstreamAccessManagementHTTPDeps(platform Deps, d AIUpstreamAccessManagementHTTPDeps) aitransport.UpstreamAccessManagementHTTPDeps {
+	return aitransport.UpstreamAccessManagementHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		UpstreamAccess: d.UpstreamAccess,
+	}
+}
+
+func buildTenantCatalogHTTPDeps(platform Deps, d AITenantCatalogHTTPDeps) aitransport.TenantCatalogHTTPDeps {
+	return aitransport.TenantCatalogHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		ModelCatalog:     d.ModelCatalog,
+		Groups:           d.Groups,
+		TenantPriceBooks: d.TenantPriceBooks,
+		PriceBookSync:    d.PriceBookSync,
 	}
 }
 

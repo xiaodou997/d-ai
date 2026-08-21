@@ -30,7 +30,7 @@ type priceBookTransferBundle struct {
 type priceBookTransferOutput struct{ Body priceBookTransferBundle }
 type importTenantPriceBookInput struct{ Body priceBookTransferBundle }
 
-func registerTenantPriceBooks(api huma.API, d AIDeps) {
+func registerTenantPriceBooks(api huma.API, d TenantCatalogHTTPDeps) {
 	managerReady := func() error {
 		if d.TenantPriceBooks == nil {
 			return httpx.ErrUnavailable.WithDetail("price book service is not configured")

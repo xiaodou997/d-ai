@@ -48,7 +48,7 @@ type replaceTenantUpstreamAccessOutput struct {
 	}
 }
 
-func registerTenantUpstreamAccess(api huma.API, d AIDeps) {
+func registerTenantUpstreamAccess(api huma.API, d UpstreamAccessManagementHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-upstream-access",
 		Method:      http.MethodGet,

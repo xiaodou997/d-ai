@@ -23,13 +23,13 @@ httpServers.Start / Shutdown
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
 - `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、catalog、operations
-  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断和上游账号管理 HTTP 已脱离该容器，由独立模块依赖注册。
+  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问和租户目录 HTTP 已脱离该容器，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
-  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics` 和 `UpstreamAccounts`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
+  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics`、`UpstreamAccounts`、`UpstreamAccess` 和 `TenantCatalog`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
 ## 尚未清零的装配遗留
 
@@ -41,6 +41,8 @@ httpServers.Start / Shutdown
 - 账号/凭证池模型绑定管理已经由独立 `ModelBindingHTTPDeps` 组合账号读取、池读取和 `UpstreamModelBindingStore`；Core 不再注册模型绑定管理路径。
 - 上游发现与连通性已经由独立 `UpstreamDiagnosticsHTTPDeps` 组合账号读取、模型绑定、密钥解密、HTTP、能力目录和账号健康端口；Core 不再注册诊断路径。
 - 上游账号 CRUD 与迁移已经由独立 `UpstreamAccountManagementHTTPDeps` 组合账号目录、管理、密钥、绑定、价格簿和审计端口；Core 不再持有账号管理、Provider 密钥、账号读取、模型绑定和价格簿校验字段。
+- 平台租户上游访问策略已经由独立 `UpstreamAccessManagementHTTPDeps` 组合 `UpstreamAccessManager` 和平台管理员认证；Core 不再持有该控制面端口。
+- 租户模型、价格表和上游资源目录已经由独立 `TenantCatalogHTTPDeps` 组合模型目录、分组目录、租户价格表和价格同步端口；Core 不再注册这些租户目录路径。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
 - AI 上游模型绑定、凭证导入和 pool CRUD 查询统一使用 `OAuthPoolReader`；创建、更新、状态变更和删除使用 `OAuthPoolWriter` 与领域级 `CredentialPoolCreate` / `CredentialPoolUpdate` 命令。
@@ -84,6 +86,8 @@ httpServers.Start / Shutdown
 - 账号/凭证池模型绑定 HTTP 已由独立 `ModelBindingHTTPDeps` 组合账号/池读取和绑定存储端口，并通过 `RegisterModelBindings` 注册平台管理员认证分组；Core 不再注册模型绑定管理路径。
 - 上游诊断 HTTP 已由独立 `UpstreamDiagnosticsHTTPDeps` 组合发现、能力推断和连通性测试端口，并通过 `RegisterUpstreamDiagnostics` 注册平台管理员认证分组；Core 不再注册这些诊断路径。
 - 上游账号管理 HTTP 已由独立 `UpstreamAccountManagementHTTPDeps` 组合 CRUD、导入/导出迁移和审计端口，并通过 `RegisterUpstreamAccountManagement` 注册平台管理员认证分组；Core 不再注册 8 条账号管理路径。
+- 上游访问策略 HTTP 已由独立 `UpstreamAccessManagementHTTPDeps` 组合租户策略端口，并通过 `RegisterUpstreamAccessManagement` 注册平台管理员认证分组；Core 不再注册 2 条策略路径。
+- 租户目录 HTTP 已由独立 `TenantCatalogHTTPDeps` 组合模型、价格和上游资源目录端口，并通过 `RegisterTenantCatalog` 注册租户用户认证分组；Core 不再注册 17 条租户目录路径。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
