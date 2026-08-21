@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
+	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
@@ -34,6 +35,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	modelBindings := &upstreamModelBindingStoreStub{}
 	modelCatalog := &modelCatalogReaderStub{}
 	priceBooks := &priceBookReaderStub{}
+	priceBookPorts := billingcontrol.New(nil, nil)
 	userUsageLogs := &userUsageLogReaderStub{}
 	usageQueries := observabilitycontrol.NewUsageService(nil)
 	dashboardQueries := &dashboardQueryReaderStub{}
@@ -69,17 +71,20 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				TokenRefresher:    refresher,
 			},
 			AICatalogDeps: AICatalogDeps{
-				ClientCatalog:     catalog,
-				ModelCapabilities: modelCapabilities,
-				AccountReader:     accountReader,
-				Accounts:          accountPorts,
-				AccountManager:    accountPorts,
-				AccountHealth:     accountPorts,
-				ModelBindings:     modelBindings,
-				ModelCatalog:      modelCatalog,
-				PriceBooks:        priceBooks,
-				UpstreamAccess:    upstreamAccess,
-				GroupTransfer:     groupTransfer,
+				ClientCatalog:      catalog,
+				ModelCapabilities:  modelCapabilities,
+				AccountReader:      accountReader,
+				Accounts:           accountPorts,
+				AccountManager:     accountPorts,
+				AccountHealth:      accountPorts,
+				ModelBindings:      modelBindings,
+				ModelCatalog:       modelCatalog,
+				PriceBooks:         priceBooks,
+				PlatformPriceBooks: priceBookPorts,
+				TenantPriceBooks:   priceBookPorts,
+				PriceBookSync:      priceBookPorts,
+				UpstreamAccess:     upstreamAccess,
+				GroupTransfer:      groupTransfer,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -102,6 +107,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
+	}
+	if got.PlatformPriceBooks != priceBookPorts || got.TenantPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
+		t.Fatal("price book ports were not preserved")
 	}
 	if got.Accounts != accountPorts || got.AccountManager != accountPorts || got.AccountHealth != accountPorts {
 		t.Fatal("upstream account ports were not preserved")

@@ -21,7 +21,6 @@ import (
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
-	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	proxypkg "xiaodou/dai/internal/ai/proxy"
@@ -110,19 +109,21 @@ type AIBillingDeps struct {
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
 type AICatalogDeps struct {
-	ClientCatalog     aitransport.ClientCatalogResolver
-	ModelCapabilities aitransport.ModelCapabilityResolver
-	AccountReader     aitransport.UpstreamAccountReader
-	ModelBindings     aitransport.UpstreamModelBindingStore
-	ModelCatalog      aitransport.ModelCatalogReader
-	PriceBooks        aitransport.PriceBookReader
-	PriceBookSvc      *billingcontrol.Service
-	CommercialSvc     *commercial.Service
-	GroupTransfer     aitransport.GroupTransferManager
-	Accounts          aitransport.UpstreamAccountCatalog
-	AccountManager    aitransport.UpstreamAccountManager
-	AccountHealth     aitransport.UpstreamAccountHealthWriter
-	UpstreamAccess    aitransport.UpstreamAccessManager
+	ClientCatalog      aitransport.ClientCatalogResolver
+	ModelCapabilities  aitransport.ModelCapabilityResolver
+	AccountReader      aitransport.UpstreamAccountReader
+	ModelBindings      aitransport.UpstreamModelBindingStore
+	ModelCatalog       aitransport.ModelCatalogReader
+	PriceBooks         aitransport.PriceBookReader
+	PlatformPriceBooks aitransport.PlatformPriceBookManager
+	TenantPriceBooks   aitransport.TenantPriceBookManager
+	PriceBookSync      aitransport.PriceBookSyncManager
+	CommercialSvc      *commercial.Service
+	GroupTransfer      aitransport.GroupTransferManager
+	Accounts           aitransport.UpstreamAccountCatalog
+	AccountManager     aitransport.UpstreamAccountManager
+	AccountHealth      aitransport.UpstreamAccountHealthWriter
+	UpstreamAccess     aitransport.UpstreamAccessManager
 }
 
 // AIOperationsDeps contains AI-side dashboards, audit and risk-control collaborators.
@@ -257,19 +258,21 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			Subscriptions: d.Subscriptions,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
-			ClientCatalog:     d.ClientCatalog,
-			ModelCapabilities: d.ModelCapabilities,
-			AccountReader:     d.AccountReader,
-			ModelBindings:     d.ModelBindings,
-			ModelCatalog:      d.ModelCatalog,
-			PriceBooks:        d.PriceBooks,
-			PriceBookSvc:      d.PriceBookSvc,
-			CommercialSvc:     d.CommercialSvc,
-			GroupTransfer:     d.GroupTransfer,
-			Accounts:          d.Accounts,
-			AccountManager:    d.AccountManager,
-			AccountHealth:     d.AccountHealth,
-			UpstreamAccess:    d.UpstreamAccess,
+			ClientCatalog:      d.ClientCatalog,
+			ModelCapabilities:  d.ModelCapabilities,
+			AccountReader:      d.AccountReader,
+			ModelBindings:      d.ModelBindings,
+			ModelCatalog:       d.ModelCatalog,
+			PriceBooks:         d.PriceBooks,
+			PlatformPriceBooks: d.PlatformPriceBooks,
+			TenantPriceBooks:   d.TenantPriceBooks,
+			PriceBookSync:      d.PriceBookSync,
+			CommercialSvc:      d.CommercialSvc,
+			GroupTransfer:      d.GroupTransfer,
+			Accounts:           d.Accounts,
+			AccountManager:     d.AccountManager,
+			AccountHealth:      d.AccountHealth,
+			UpstreamAccess:     d.UpstreamAccess,
 		},
 		RuntimeDeps: aitransport.RuntimeDeps{
 			Health:          d.Health,

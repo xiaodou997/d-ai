@@ -182,10 +182,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "返回 AI 网关价格表基础信息。本端点为 Huma 只读契约，兼容写入口仍保留。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, _ *struct{}) (*priceBooksOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		books, err := d.PriceBookSvc.ListPriceBooks(ctx)
+		books, err := d.PlatformPriceBooks.ListPriceBooks(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -208,10 +208,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "创建 AI 网关价格表。状态由服务端初始化为 active。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *createPriceBookInput) (*priceBookOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		book, err := d.PriceBookSvc.CreatePriceBook(ctx, in.Body.Name, in.Body.Description)
+		book, err := d.PlatformPriceBooks.CreatePriceBook(ctx, in.Body.Name, in.Body.Description)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -227,10 +227,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Summary:     "价格表详情",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *getPriceBookInput) (*priceBookOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		book, err := d.PriceBookSvc.GetPlatformPriceBook(ctx, in.BookID)
+		book, err := d.PlatformPriceBooks.GetPlatformPriceBook(ctx, in.BookID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -247,10 +247,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Summary:     "更新价格表",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *updatePriceBookInput) (*priceBookOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		book, err := d.PriceBookSvc.UpdatePriceBook(ctx, in.BookID, in.Body.Name, in.Body.Description, in.Body.Status)
+		book, err := d.PlatformPriceBooks.UpdatePriceBook(ctx, in.BookID, in.Body.Name, in.Body.Description, in.Body.Status)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -266,10 +266,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Summary:     "删除价格表",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *deletePriceBookInput) (*deletePriceBookOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		if err := d.PriceBookSvc.DeletePriceBook(ctx, in.BookID); err != nil {
+		if err := d.PlatformPriceBooks.DeletePriceBook(ctx, in.BookID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &deletePriceBookOutput{}
@@ -285,10 +285,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "从 LiteLLM 价格源中搜索模型，用于价格表条目自动填充。结果仅从内存缓存读取/刷新，不落库。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *priceBookLiteLLMModelsInput) (*liteLLMModelsOutput, error) {
-		if d.PriceBookSvc == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
+		if d.PriceBookSync == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("price book sync service is not configured")
 		}
-		items, err := d.PriceBookSvc.SearchLiteLLM(ctx, in.Q, in.Limit)
+		items, err := d.PriceBookSync.SearchLiteLLM(ctx, in.Q, in.Limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -306,10 +306,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "返回指定价格表中的模型 USD 定价，token/字符字段按每 100 万单位展示。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *priceBookEntriesInput) (*priceBookEntriesOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		entries, err := d.PriceBookSvc.ListEntries(ctx, in.BookID)
+		entries, err := d.PlatformPriceBooks.ListEntries(ctx, in.BookID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -330,10 +330,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "从 LiteLLM 价格源批量导入可识别模型。手动编辑过的条目不会被覆盖。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *importLiteLLMInput) (*importLiteLLMOutput, error) {
-		if d.PriceBookSvc == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
+		if d.PriceBookSync == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("price book sync service is not configured")
 		}
-		res, err := d.PriceBookSvc.ImportFromLiteLLM(ctx, in.BookID)
+		res, err := d.PriceBookSync.ImportFromLiteLLM(ctx, in.BookID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -350,10 +350,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "从 LiteLLM 价格源同步内置常用模型白名单。手动编辑过的条目不会被覆盖。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *syncCommonModelsInput) (*syncCommonModelsOutput, error) {
-		if d.PriceBookSvc == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
+		if d.PriceBookSync == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("price book sync service is not configured")
 		}
-		res, err := d.PriceBookSvc.SyncCommonModels(ctx, in.BookID)
+		res, err := d.PriceBookSync.SyncCommonModels(ctx, in.BookID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -370,10 +370,10 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Description: "手动写入或更新指定模型的 USD 定价。token/字符字段按每 100 万单位接收，服务端落库为 per-token/per-char；写入后标记为 manual，后续 LiteLLM 导入不会覆盖。",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *upsertPriceBookEntryInput) (*priceBookEntryOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
-		entry, err := d.PriceBookSvc.UpsertEntry(ctx, priceBookEntryFromRequest(in.BookID, in.ModelCode, in.Body))
+		entry, err := d.PlatformPriceBooks.UpsertEntry(ctx, priceBookEntryFromRequest(in.BookID, in.ModelCode, in.Body))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -389,13 +389,13 @@ func registerPriceBooks(api huma.API, d AIDeps) {
 		Summary:     "删除价格表条目",
 		Tags:        []string{"price-books"},
 	}, func(ctx context.Context, in *priceBookEntryInput) (*deletePriceBookEntryOutput, error) {
-		if d.PriceBookSvc == nil {
+		if d.PlatformPriceBooks == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("price book service is not configured")
 		}
 		if strings.TrimSpace(in.ModelCode) == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("modelCode is required")
 		}
-		if err := d.PriceBookSvc.DeleteEntry(ctx, in.BookID, in.ModelCode, in.CapabilityType); err != nil {
+		if err := d.PlatformPriceBooks.DeleteEntry(ctx, in.BookID, in.ModelCode, in.CapabilityType); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &deletePriceBookEntryOutput{}

@@ -123,19 +123,21 @@ type BillingDeps struct {
 // CatalogDeps contains provider, model, price and upstream control-plane
 // collaborators.
 type CatalogDeps struct {
-	ClientCatalog     ClientCatalogResolver
-	ModelCapabilities ModelCapabilityResolver
-	AccountReader     UpstreamAccountReader
-	ModelBindings     UpstreamModelBindingStore
-	ModelCatalog      ModelCatalogReader
-	PriceBooks        PriceBookReader
-	PriceBookSvc      *billingcontrol.Service
-	Accounts          UpstreamAccountCatalog
-	AccountManager    UpstreamAccountManager
-	AccountHealth     UpstreamAccountHealthWriter
-	UpstreamAccess    UpstreamAccessManager
-	CommercialSvc     *commercial.Service
-	GroupTransfer     GroupTransferManager
+	ClientCatalog      ClientCatalogResolver
+	ModelCapabilities  ModelCapabilityResolver
+	AccountReader      UpstreamAccountReader
+	ModelBindings      UpstreamModelBindingStore
+	ModelCatalog       ModelCatalogReader
+	PriceBooks         PriceBookReader
+	PlatformPriceBooks PlatformPriceBookManager
+	TenantPriceBooks   TenantPriceBookManager
+	PriceBookSync      PriceBookSyncManager
+	Accounts           UpstreamAccountCatalog
+	AccountManager     UpstreamAccountManager
+	AccountHealth      UpstreamAccountHealthWriter
+	UpstreamAccess     UpstreamAccessManager
+	CommercialSvc      *commercial.Service
+	GroupTransfer      GroupTransferManager
 }
 
 // UpstreamAccessManager is the tenant policy surface required by management
@@ -218,6 +220,44 @@ type ModelCatalogReader interface {
 
 type PriceBookReader interface {
 	GetPriceBook(ctx context.Context, id string) (domain.PriceBook, error)
+}
+
+// PlatformPriceBookManager owns platform-scoped price books and their manual
+// entries. Tenant ownership and external catalog synchronization are separate
+// capabilities.
+type PlatformPriceBookManager interface {
+	ListPriceBooks(ctx context.Context) ([]domain.PriceBook, error)
+	CreatePriceBook(ctx context.Context, name, description string) (domain.PriceBook, error)
+	GetPlatformPriceBook(ctx context.Context, id string) (domain.PriceBook, error)
+	UpdatePriceBook(ctx context.Context, id, name, description, status string) (domain.PriceBook, error)
+	DeletePriceBook(ctx context.Context, id string) error
+	ListEntries(ctx context.Context, priceBookID string) ([]domain.PriceBookEntry, error)
+	UpsertEntry(ctx context.Context, entry domain.PriceBookEntry) (domain.PriceBookEntry, error)
+	DeleteEntry(ctx context.Context, priceBookID, modelCode, capabilityType string) error
+}
+
+// TenantPriceBookManager owns tenant-scoped price books, visible platform
+// projections and portable transfer operations.
+type TenantPriceBookManager interface {
+	ListVisiblePriceBooks(ctx context.Context, tenantID string) ([]domain.PriceBook, error)
+	CreateTenantPriceBook(ctx context.Context, tenantID, name, description string) (domain.PriceBook, error)
+	GetVisiblePriceBook(ctx context.Context, tenantID, id string) (domain.PriceBook, error)
+	UpdateTenantPriceBook(ctx context.Context, tenantID, id, name, description, status string) (domain.PriceBook, error)
+	DeleteTenantPriceBook(ctx context.Context, tenantID, id string) error
+	ListVisibleEntries(ctx context.Context, tenantID, priceBookID string) ([]domain.PriceBookEntry, error)
+	UpsertTenantEntry(ctx context.Context, tenantID string, entry domain.PriceBookEntry) (domain.PriceBookEntry, error)
+	DeleteTenantEntry(ctx context.Context, tenantID, priceBookID, modelCode, capabilityType string) error
+	CloneVisiblePriceBook(ctx context.Context, tenantID, sourceID, name string) (domain.PriceBook, error)
+}
+
+// PriceBookSyncManager is the external pricing catalog surface shared by
+// platform and tenant synchronization routes.
+type PriceBookSyncManager interface {
+	SearchLiteLLM(ctx context.Context, query string, limit int) ([]billingcontrol.LiteLLMModelInfo, error)
+	ImportFromLiteLLM(ctx context.Context, priceBookID string) (billingcontrol.ImportResult, error)
+	SyncCommonModels(ctx context.Context, priceBookID string) (billingcontrol.SyncResult, error)
+	ImportTenantFromLiteLLM(ctx context.Context, tenantID, priceBookID string) (billingcontrol.ImportResult, error)
+	SyncTenantCommonModels(ctx context.Context, tenantID, priceBookID string) (billingcontrol.SyncResult, error)
 }
 
 // UserUsageLogReader exposes the current user's scoped usage projection while

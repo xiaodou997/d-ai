@@ -144,6 +144,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 管理端、租户端、用户端和工作区用量查询统一依赖 `UsageQueryReader`，分页与汇总数据结构下沉到 domain，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.UsageService`。
 - [x] 风控配置、测试检测、审核日志和风险事件分别依赖四组最小端口，检测与分页结果下沉到 domain，AI/顶层 Transport 不再暴露具体 risk-control service/checker。
 - [x] 上游账号列表、管理员写入和连通性状态协调分别依赖目录、管理和健康端口；导出组合目录、密钥读取与解密端口，导入组合目录与管理端口，AI/顶层 Transport 不再暴露具体 `*upstreamcontrol.Service`。
+- [x] 平台价格表管理、租户价格表自助和 LiteLLM 同步分别依赖三组显式端口；分组生效价格只依赖聚合模型目录，AI/顶层 Transport 不再暴露具体 `*billingcontrol.Service` 或要求无关价格服务就绪。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -423,6 +424,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 模型绑定边界：管理 CRUD、账号/凭证池模型目录导入、账号迁移导入导出和连通性测试统一依赖 `UpstreamModelBindingStore` 与领域模型；PostgreSQL adapter 持有 scoped 查询和原子导入事务，AI Transport 不再直接读写模型绑定表。
 - 模型目录边界：租户/用户可用模型、分组有效价格和租户可选上游资源统一依赖 `ModelCatalogReader` 与领域投影；PostgreSQL adapter 封装分组授权、资源可见性、价格表和模型绑定的聚合 JOIN 及 JSONB 解码，Transport 只保留 DTO、价格区间和倍率计算。
 - 基础设施边界：系统状态的 PostgreSQL/Redis 检查统一依赖 `ComponentHealthProbe`，账号迁移的价格簿校验依赖 `PriceBookReader`；AI Transport 已清零 `*pgxpool.Pool` 字段、import 和调用，PostgreSQL 连接只留在 composition root 与 adapter。
+- 价格表边界：平台 CRUD/手工条目、租户可见范围/自助迁移、LiteLLM 查询与同步分别依赖 `PlatformPriceBookManager`、`TenantPriceBookManager`、`PriceBookSyncManager`；租户和用户分组生效价格复用 `ModelCatalogReader`，不再错误依赖完整价格表服务。
 - 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。

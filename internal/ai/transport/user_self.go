@@ -147,8 +147,8 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		Description: "返回当前用户在某可见分组下可使用的模型及其生效 USD 单价（售价表 USD 单价 × 终端用户生效倍率）。",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, in *tenantSelfGroupIDInput) (*userGroupEffectivePricesOutput, error) {
-		if d.CommercialSvc == nil || d.PriceBookSvc == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("commercial/pricebook service is not configured")
+		if d.CommercialSvc == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		userID := userIDFromContext(ctx)

@@ -797,10 +797,10 @@ func loadCommercialGroupMap(ctx context.Context, svc *commercial.Service, tenant
 }
 
 func loadPriceBookNameMap(ctx context.Context, d AIDeps, tenantID string) (map[string]string, error) {
-	if d.PriceBookSvc == nil {
+	if d.TenantPriceBooks == nil {
 		return map[string]string{}, nil
 	}
-	items, err := d.PriceBookSvc.ListVisiblePriceBooks(ctx, tenantID)
+	items, err := d.TenantPriceBooks.ListVisiblePriceBooks(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
