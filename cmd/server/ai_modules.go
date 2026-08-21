@@ -90,6 +90,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	q := aidb.New(pool)
 	banChecker := banstate.NewChecker(redisClient)
 	redisHealth := redisadapter.NewHealthProbe(redisClient)
+	databaseHealth := aiadapters.NewHealthProbe(pool)
 	identityEnrichmentFailures := aiobservability.NewIdentityEnrichmentLogger(appLogger)
 	providerSecrets := secret.NewProviderKeyCodec(cfg.Security.SecretMasterKey)
 
@@ -358,6 +359,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			AIInfrastructureDeps: transport.AIInfrastructureDeps{
 				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    managementHTTPClient,
+				DatabaseHealth:  databaseHealth,
 				RedisHealth:     redisHealth,
 				Health:          healthTracker,
 				Weights:         routeWeightsStore,
@@ -383,6 +385,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				AccountReader:     accountSvc,
 				ModelBindings:     modelBindings,
 				ModelCatalog:      modelCatalog,
+				PriceBooks:        priceBookSvc,
 				PriceBookSvc:      priceBookSvc,
 				CommercialSvc:     commercialSvc,
 				GroupTransferSvc:  groupTransferSvc,

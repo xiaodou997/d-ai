@@ -9,7 +9,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
@@ -28,13 +27,12 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// InfrastructureDeps contains transitional process collaborators used by
-// legacy transport adapters. Concrete clients are replaced one endpoint group
-// at a time without changing every route at once.
+// InfrastructureDeps contains process-level capabilities shared by AI HTTP
+// handlers. Concrete clients remain owned by composition and adapters.
 type InfrastructureDeps struct {
-	Postgres    *pgxpool.Pool
-	RedisHealth ComponentHealthProbe
-	HTTPClient  HTTPDoer
+	DatabaseHealth ComponentHealthProbe
+	RedisHealth    ComponentHealthProbe
+	HTTPClient     HTTPDoer
 }
 
 // ComponentHealthProbe is the minimal infrastructure check needed by the
@@ -133,6 +131,7 @@ type CatalogDeps struct {
 	AccountReader     UpstreamAccountReader
 	ModelBindings     UpstreamModelBindingStore
 	ModelCatalog      ModelCatalogReader
+	PriceBooks        PriceBookReader
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
@@ -180,6 +179,10 @@ type ModelCatalogReader interface {
 	ListAvailableModelPrices(ctx context.Context, scope domain.ModelCatalogScope) ([]domain.RoutedModelPrice, error)
 	ListRoutedGroupPrices(ctx context.Context, groupID string) ([]domain.RoutedModelPrice, error)
 	ListTenantUpstreamResources(ctx context.Context, tenantID string) ([]domain.TenantUpstreamResource, error)
+}
+
+type PriceBookReader interface {
+	GetPriceBook(ctx context.Context, id string) (domain.PriceBook, error)
 }
 
 // UserUsageLogReader exposes the current user's scoped usage projection while

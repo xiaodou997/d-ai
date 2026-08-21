@@ -87,6 +87,7 @@ type OperationsDeps struct {
 type AIInfrastructureDeps struct {
 	ProviderSecrets aitransport.ProviderSecretCodec
 	AIHTTPClient    aitransport.HTTPDoer
+	DatabaseHealth  aitransport.ComponentHealthProbe
 	RedisHealth     aitransport.ComponentHealthProbe
 	Health          routing.HealthTracker
 	Weights         aitransport.ScoreWeightsStore
@@ -118,6 +119,7 @@ type AICatalogDeps struct {
 	AccountReader     aitransport.UpstreamAccountReader
 	ModelBindings     aitransport.UpstreamModelBindingStore
 	ModelCatalog      aitransport.ModelCatalogReader
+	PriceBooks        aitransport.PriceBookReader
 	PriceBookSvc      *billingcontrol.Service
 	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService
@@ -235,9 +237,9 @@ func registerPublicPlane(api huma.API, d Deps) {
 func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
 	aiDeps := aitransport.AIDeps{
 		InfrastructureDeps: aitransport.InfrastructureDeps{
-			Postgres:    platform.Pool,
-			RedisHealth: d.RedisHealth,
-			HTTPClient:  d.AIHTTPClient,
+			DatabaseHealth: d.DatabaseHealth,
+			RedisHealth:    d.RedisHealth,
+			HTTPClient:     d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
 			CredentialCreator: d.CredentialCreator,
@@ -262,6 +264,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			AccountReader:     d.AccountReader,
 			ModelBindings:     d.ModelBindings,
 			ModelCatalog:      d.ModelCatalog,
+			PriceBooks:        d.PriceBooks,
 			PriceBookSvc:      d.PriceBookSvc,
 			CommercialSvc:     d.CommercialSvc,
 			GroupTransferSvc:  d.GroupTransferSvc,

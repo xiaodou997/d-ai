@@ -413,6 +413,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 审计写入边界：账号与分组迁移审计通过 `AdminAuditRecorder` 写入 `domain.AdminAuditEvent`；`AuditRepo` 负责可空字段和 sqlc 参数映射，保持写入失败不阻断迁移的 best-effort 语义。AI Transport 与顶层路由装配已移除最后一处 `*dbgen.Queries` 字段、import 和调用。
 - 模型绑定边界：管理 CRUD、账号/凭证池模型目录导入、账号迁移导入导出和连通性测试统一依赖 `UpstreamModelBindingStore` 与领域模型；PostgreSQL adapter 持有 scoped 查询和原子导入事务，AI Transport 不再直接读写模型绑定表。
 - 模型目录边界：租户/用户可用模型、分组有效价格和租户可选上游资源统一依赖 `ModelCatalogReader` 与领域投影；PostgreSQL adapter 封装分组授权、资源可见性、价格表和模型绑定的聚合 JOIN 及 JSONB 解码，Transport 只保留 DTO、价格区间和倍率计算。
+- 基础设施边界：系统状态的 PostgreSQL/Redis 检查统一依赖 `ComponentHealthProbe`，账号迁移的价格簿校验依赖 `PriceBookReader`；AI Transport 已清零 `*pgxpool.Pool` 字段、import 和调用，PostgreSQL 连接只留在 composition root 与 adapter。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 用健康探针和价格簿查询端口替换 AI Transport 最后两处 `*pgxpool.Pool` 调用，清零传输层的具体 PostgreSQL 依赖。
+- 下一候选项：P1-02 将 PostgreSQL not-found/unique-violation 在 adapter 边界统一翻译为领域错误，移除 AI Transport 错误映射对 `pgx.ErrNoRows` 和 `pgconn.PgError` 的残留依赖。

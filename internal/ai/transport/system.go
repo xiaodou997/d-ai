@@ -78,7 +78,7 @@ func registerSystem(api huma.API, d AIDeps) {
 	}, func(ctx context.Context, _ *struct{}) (*systemStatusOutput, error) {
 		out := &systemStatusOutput{}
 		out.Body.Timestamp = time.Now().UTC().UnixMilli()
-		out.Body.DB = dbStatus(ctx, d)
+		out.Body.DB = componentProbeStatus(ctx, d.DatabaseHealth)
 		out.Body.Redis = componentProbeStatus(ctx, d.RedisHealth)
 		out.Body.Health = healthSummaryFromTracker(d.Health)
 		return out, nil
@@ -132,16 +132,6 @@ func registerSystem(api huma.API, d AIDeps) {
 		out.Body.Weights = scoreWeightsToDTO(d.Weights.Get(ctx, in.Scope))
 		return out, nil
 	})
-}
-
-func dbStatus(ctx context.Context, d AIDeps) componentStatus {
-	if d.Postgres == nil {
-		return componentStatus{Status: "disabled"}
-	}
-	if err := d.Postgres.Ping(ctx); err != nil {
-		return componentStatus{Status: "error", Error: err.Error()}
-	}
-	return componentStatus{Status: "ok"}
 }
 
 func componentProbeStatus(ctx context.Context, probe ComponentHealthProbe) componentStatus {

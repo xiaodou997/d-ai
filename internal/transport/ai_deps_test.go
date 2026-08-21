@@ -20,6 +20,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	catalog := &clientcatalog.Service{}
 	modelCapabilities := &modelCapabilityResolverStub{}
 	httpClient := &httpDoerStub{}
+	databaseHealth := &componentHealthProbeStub{}
 	redisHealth := &componentHealthProbeStub{}
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
@@ -28,6 +29,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	accountReader := &upstreamAccountReaderStub{}
 	modelBindings := &upstreamModelBindingStoreStub{}
 	modelCatalog := &modelCatalogReaderStub{}
+	priceBooks := &priceBookReaderStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
@@ -38,6 +40,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIInfrastructureDeps: AIInfrastructureDeps{
 				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    httpClient,
+				DatabaseHealth:  databaseHealth,
 				RedisHealth:     redisHealth,
 				Health:          health,
 				Weights:         weights,
@@ -57,6 +60,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				AccountReader:     accountReader,
 				ModelBindings:     modelBindings,
 				ModelCatalog:      modelCatalog,
+				PriceBooks:        priceBooks,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -70,13 +74,13 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
-	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog {
+	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
 	}
-	if got.RedisHealth != redisHealth || got.Health != health || got.Weights != weights {
+	if got.DatabaseHealth != databaseHealth || got.RedisHealth != redisHealth || got.Health != health || got.Weights != weights {
 		t.Fatal("routing management dependencies were not preserved")
 	}
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
@@ -135,6 +139,12 @@ func (*adminAuditRecorderStub) Record(context.Context, domain.AdminAuditEvent) e
 type upstreamModelBindingStoreStub struct{}
 
 type modelCatalogReaderStub struct{}
+
+type priceBookReaderStub struct{}
+
+func (*priceBookReaderStub) GetPriceBook(context.Context, string) (domain.PriceBook, error) {
+	return domain.PriceBook{}, nil
+}
 
 func (*modelCatalogReaderStub) ListAvailableModelPrices(context.Context, domain.ModelCatalogScope) ([]domain.RoutedModelPrice, error) {
 	return nil, nil

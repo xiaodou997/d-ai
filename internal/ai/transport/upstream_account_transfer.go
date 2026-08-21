@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -472,15 +473,14 @@ func validateImportPriceBook(ctx context.Context, d AIDeps, priceBookID string) 
 	if priceBookID == "" {
 		return nil
 	}
-	if d.Postgres == nil {
-		return httpx.ErrUnavailable.WithDetail("database is not configured")
+	if d.PriceBooks == nil {
+		return httpx.ErrUnavailable.WithDetail("price book reader is not configured")
 	}
-	var exists bool
-	if err := d.Postgres.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM ai_price_books WHERE id = $1::uuid)`, priceBookID).Scan(&exists); err != nil {
+	if _, err := d.PriceBooks.GetPriceBook(ctx, priceBookID); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return httpx.ErrBadRequest.WithDetail("default_price_book_id does not exist")
+		}
 		return httpx.ErrBadRequest.WithDetail("invalid default_price_book_id")
-	}
-	if !exists {
-		return httpx.ErrBadRequest.WithDetail("default_price_book_id does not exist")
 	}
 	return nil
 }
