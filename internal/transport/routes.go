@@ -28,7 +28,6 @@ import (
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
 	aitransport "xiaodou/dai/internal/ai/transport"
-	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
 )
 
@@ -120,7 +119,9 @@ type AICatalogDeps struct {
 	PriceBookSvc      *billingcontrol.Service
 	CommercialSvc     *commercial.Service
 	GroupTransfer     aitransport.GroupTransferManager
-	AccountSvc        *upstreamcontrol.Service
+	Accounts          aitransport.UpstreamAccountCatalog
+	AccountManager    aitransport.UpstreamAccountManager
+	AccountHealth     aitransport.UpstreamAccountHealthWriter
 	UpstreamAccess    aitransport.UpstreamAccessManager
 }
 
@@ -265,7 +266,9 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			PriceBookSvc:      d.PriceBookSvc,
 			CommercialSvc:     d.CommercialSvc,
 			GroupTransfer:     d.GroupTransfer,
-			AccountSvc:        d.AccountSvc,
+			Accounts:          d.Accounts,
+			AccountManager:    d.AccountManager,
+			AccountHealth:     d.AccountHealth,
 			UpstreamAccess:    d.UpstreamAccess,
 		},
 		RuntimeDeps: aitransport.RuntimeDeps{

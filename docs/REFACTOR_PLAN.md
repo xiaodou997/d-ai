@@ -1,6 +1,6 @@
 # D-AI 重构与优化清单
 
-更新日期：2026-08-20
+更新日期：2026-08-21
 
 ## 目标与原则
 
@@ -143,6 +143,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 管理端、租户端和工作区仪表盘统一依赖 `DashboardQueryReader` 聚合读端口，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.DashboardService`。
 - [x] 管理端、租户端、用户端和工作区用量查询统一依赖 `UsageQueryReader`，分页与汇总数据结构下沉到 domain，AI/顶层 Transport 不再暴露具体 `*observabilitycontrol.UsageService`。
 - [x] 风控配置、测试检测、审核日志和风险事件分别依赖四组最小端口，检测与分页结果下沉到 domain，AI/顶层 Transport 不再暴露具体 risk-control service/checker。
+- [x] 上游账号列表、管理员写入和连通性状态协调分别依赖目录、管理和健康端口；导出组合目录、密钥读取与解密端口，导入组合目录与管理端口，AI/顶层 Transport 不再暴露具体 `*upstreamcontrol.Service`。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 

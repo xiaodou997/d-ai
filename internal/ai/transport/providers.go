@@ -104,10 +104,10 @@ func registerUpstreamAccounts(api huma.API, d AIDeps) {
 		Summary:     "上游账号列表",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, _ *struct{}) (*accountsOutput, error) {
-		if d.AccountSvc == nil {
+		if d.Accounts == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 		}
-		accounts, err := d.AccountSvc.ListAccounts(ctx)
+		accounts, err := d.Accounts.ListAccounts(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -128,10 +128,10 @@ func registerUpstreamAccounts(api huma.API, d AIDeps) {
 		Description: "创建上游账号；可服务模型和上游协议由显式上游模型绑定维护。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *createAccountInput) (*accountOutput, error) {
-		if d.AccountSvc == nil {
+		if d.AccountManager == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 		}
-		a, err := d.AccountSvc.CreateAccount(ctx, upstreamcontrol.CreateAccountInput{
+		a, err := d.AccountManager.CreateAccount(ctx, upstreamcontrol.CreateAccountInput{
 			Name:              in.Body.Name,
 			TenantDisplayName: in.Body.TenantDisplayName,
 			TenantAccessMode:  in.Body.TenantAccessMode,
@@ -157,10 +157,10 @@ func registerUpstreamAccounts(api huma.API, d AIDeps) {
 		Description: "更新上游账号；可服务模型和上游协议由显式上游模型绑定维护。",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *updateAccountInput) (*accountOutput, error) {
-		if d.AccountSvc == nil {
+		if d.AccountManager == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 		}
-		a, err := d.AccountSvc.UpdateAccount(ctx, upstreamcontrol.UpdateAccountInput{
+		a, err := d.AccountManager.UpdateAccount(ctx, upstreamcontrol.UpdateAccountInput{
 			ID:                in.AccountID,
 			Name:              in.Body.Name,
 			TenantDisplayName: in.Body.TenantDisplayName,
@@ -186,10 +186,10 @@ func registerUpstreamAccounts(api huma.API, d AIDeps) {
 		Summary:     "更新上游账号状态",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *updateAccountStatusInput) (*accountOutput, error) {
-		if d.AccountSvc == nil {
+		if d.AccountManager == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 		}
-		a, err := d.AccountSvc.UpdateAccountStatus(ctx, in.AccountID, in.Body.Status)
+		a, err := d.AccountManager.UpdateAccountStatus(ctx, in.AccountID, in.Body.Status)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -203,10 +203,10 @@ func registerUpstreamAccounts(api huma.API, d AIDeps) {
 		Summary:     "删除上游账号",
 		Tags:        []string{"upstream-accounts"},
 	}, func(ctx context.Context, in *deleteAccountInput) (*deleteAccountOutput, error) {
-		if d.AccountSvc == nil {
+		if d.AccountManager == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 		}
-		if err := d.AccountSvc.DeleteAccount(ctx, in.AccountID); err != nil {
+		if err := d.AccountManager.DeleteAccount(ctx, in.AccountID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &deleteAccountOutput{}

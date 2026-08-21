@@ -40,6 +40,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	auditLogs := &adminAuditLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
+	accountPorts := upstreamcontrol.New(nil, nil)
 	riskConfig := riskcontrol.NewConfigService(nil)
 	riskDetector := &riskcontrol.Checker{}
 	riskLogs := riskcontrol.NewLogService(nil)
@@ -71,6 +72,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ClientCatalog:     catalog,
 				ModelCapabilities: modelCapabilities,
 				AccountReader:     accountReader,
+				Accounts:          accountPorts,
+				AccountManager:    accountPorts,
+				AccountHealth:     accountPorts,
 				ModelBindings:     modelBindings,
 				ModelCatalog:      modelCatalog,
 				PriceBooks:        priceBooks,
@@ -98,6 +102,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
+	}
+	if got.Accounts != accountPorts || got.AccountManager != accountPorts || got.AccountHealth != accountPorts {
+		t.Fatal("upstream account ports were not preserved")
 	}
 	if got.UpstreamAccess != upstreamAccess {
 		t.Fatal("upstream access manager was not preserved")

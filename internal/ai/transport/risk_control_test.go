@@ -10,6 +10,8 @@ import (
 type providerSecretCodecStub struct {
 	encryptInput string
 	ciphertext   string
+	decryptInput string
+	plaintext    string
 	err          error
 }
 
@@ -18,7 +20,10 @@ func (s *providerSecretCodecStub) Encrypt(plaintext string) (string, error) {
 	return s.ciphertext, s.err
 }
 
-func (*providerSecretCodecStub) Decrypt(string) (string, error) { return "", nil }
+func (s *providerSecretCodecStub) Decrypt(ciphertext string) (string, error) {
+	s.decryptInput = ciphertext
+	return s.plaintext, s.err
+}
 
 func TestRiskControlConfigWriteUsesProviderSecretCodec(t *testing.T) {
 	apiKey := "moderation-secret"

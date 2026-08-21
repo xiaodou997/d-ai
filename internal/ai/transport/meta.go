@@ -130,7 +130,9 @@ type CatalogDeps struct {
 	ModelCatalog      ModelCatalogReader
 	PriceBooks        PriceBookReader
 	PriceBookSvc      *billingcontrol.Service
-	AccountSvc        *upstreamcontrol.Service
+	Accounts          UpstreamAccountCatalog
+	AccountManager    UpstreamAccountManager
+	AccountHealth     UpstreamAccountHealthWriter
 	UpstreamAccess    UpstreamAccessManager
 	CommercialSvc     *commercial.Service
 	GroupTransfer     GroupTransferManager
@@ -169,6 +171,27 @@ type ModelCapabilityResolver interface {
 // management flows without leaking generated persistence rows into transport.
 type UpstreamAccountReader interface {
 	GetAccountSecret(ctx context.Context, id string) (upstreamcontrol.AccountSecret, error)
+}
+
+// UpstreamAccountCatalog is the non-secret account list projection used by
+// management and transfer workflows.
+type UpstreamAccountCatalog interface {
+	ListAccounts(ctx context.Context) ([]domain.UpstreamAccount, error)
+}
+
+// UpstreamAccountManager owns administrator-initiated account mutations.
+type UpstreamAccountManager interface {
+	CreateAccount(ctx context.Context, input upstreamcontrol.CreateAccountInput) (domain.UpstreamAccount, error)
+	UpdateAccount(ctx context.Context, input upstreamcontrol.UpdateAccountInput) (domain.UpstreamAccount, error)
+	UpdateAccountStatus(ctx context.Context, id, status string) (domain.UpstreamAccount, error)
+	DeleteAccount(ctx context.Context, id string) error
+}
+
+// UpstreamAccountHealthWriter owns runtime status reconciliation after a
+// connectivity probe. It cannot edit account configuration or delete rows.
+type UpstreamAccountHealthWriter interface {
+	UpdateAccountStatus(ctx context.Context, id, status string) (domain.UpstreamAccount, error)
+	MarkAccountInvalid(ctx context.Context, id, reason string) (domain.UpstreamAccount, error)
 }
 
 // UpstreamModelBindingStore owns management persistence and the atomic model

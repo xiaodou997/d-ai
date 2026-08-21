@@ -157,15 +157,15 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 }
 
 func reconcileUpstreamAccountTestStatus(ctx context.Context, d AIDeps, accountID, currentStatus string, result upstreamTestResult) error {
-	if d.AccountSvc == nil || currentStatus == domain.UpstreamAccountStatusDisabled {
+	if d.AccountHealth == nil || currentStatus == domain.UpstreamAccountStatusDisabled {
 		return nil
 	}
 	if result.OK && currentStatus == domain.UpstreamAccountStatusInvalid {
-		_, err := d.AccountSvc.UpdateAccountStatus(ctx, accountID, domain.UpstreamAccountStatusActive)
+		_, err := d.AccountHealth.UpdateAccountStatus(ctx, accountID, domain.UpstreamAccountStatusActive)
 		return err
 	}
 	if result.HTTPStatus == http.StatusUnauthorized || result.HTTPStatus == http.StatusForbidden {
-		_, err := d.AccountSvc.MarkAccountInvalid(ctx, accountID, fmt.Sprintf("connectivity test: upstream returned HTTP %d", result.HTTPStatus))
+		_, err := d.AccountHealth.MarkAccountInvalid(ctx, accountID, fmt.Sprintf("connectivity test: upstream returned HTTP %d", result.HTTPStatus))
 		return err
 	}
 	return nil

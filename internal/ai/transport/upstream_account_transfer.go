@@ -192,7 +192,7 @@ func registerUpstreamAccountTransfer(api huma.API, d AIDeps) {
 }
 
 func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, includeBindings bool) (*upstreamAccountExportOutput, error) {
-	if d.AccountSvc == nil || d.ProviderSecrets == nil {
+	if d.Accounts == nil || d.AccountReader == nil || d.ProviderSecrets == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("account service or provider secret codec is not configured")
 	}
 	if includeBindings && d.ModelBindings == nil {
@@ -202,7 +202,7 @@ func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, 
 	if len(ids) == 0 {
 		return nil, httpx.ErrBadRequest.WithDetail("account_ids is required")
 	}
-	accounts, err := d.AccountSvc.ListAccounts(ctx)
+	accounts, err := d.Accounts.ListAccounts(ctx)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -220,7 +220,7 @@ func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, 
 		if !ok {
 			return nil, httpx.ErrNotFound.WithDetail("upstream account not found: " + id)
 		}
-		secretRow, err := d.AccountSvc.GetAccountSecret(ctx, id)
+		secretRow, err := d.AccountReader.GetAccountSecret(ctx, id)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -260,7 +260,7 @@ type importPreviewResult struct {
 }
 
 func previewImportUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountImportRequest) (importPreviewResult, error) {
-	if d.AccountSvc == nil {
+	if d.Accounts == nil {
 		return importPreviewResult{}, httpx.ErrUnavailable.WithDetail("account service is not configured")
 	}
 	if len(req.Accounts) == 0 {
@@ -287,7 +287,7 @@ func previewImportUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAc
 }
 
 func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountImportRequest) (*upstreamAccountImportOutput, error) {
-	if d.AccountSvc == nil {
+	if d.Accounts == nil || d.AccountManager == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 	}
 	if hasTransferModelBindings(req.Accounts) && d.ModelBindings == nil {
@@ -315,7 +315,7 @@ func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountIm
 			continue
 		}
 		multiplier := defaultTenantMultiplier(req.DefaultTenantMultiplier)
-		created, err := d.AccountSvc.CreateAccount(ctx, upstreamcontrol.CreateAccountInput{
+		created, err := d.AccountManager.CreateAccount(ctx, upstreamcontrol.CreateAccountInput{
 			Name:              strings.TrimSpace(account.Name),
 			TenantDisplayName: strings.TrimSpace(account.TenantDisplayName),
 			TenantAccessMode:  strings.TrimSpace(account.TenantAccessMode),
@@ -457,7 +457,7 @@ func accumulateImportPreview(summary *upstreamAccountImportSummaryDTO, item upst
 }
 
 func existingUpstreamAccountNames(ctx context.Context, d AIDeps) (map[string]struct{}, error) {
-	accounts, err := d.AccountSvc.ListAccounts(ctx)
+	accounts, err := d.Accounts.ListAccounts(ctx)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
