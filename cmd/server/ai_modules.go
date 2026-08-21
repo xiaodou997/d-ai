@@ -365,10 +365,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				AIInfrastructureDeps: transport.AIInfrastructureDeps{
 					ProviderSecrets: providerSecrets,
 					AIHTTPClient:    managementHTTPClient,
-					DatabaseHealth:  databaseHealth,
-					RedisHealth:     redisHealth,
-					Health:          healthTracker,
-					Weights:         routeWeightsStore,
 					BanChecker:      banChecker,
 				},
 				AIIdentityDeps: transport.AIIdentityDeps{
@@ -440,6 +436,13 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			AuditLog: transport.AIAuditLogHTTPDeps{
 				AuditLogs:  auditSvc,
 				BanChecker: banChecker,
+			},
+			System: transport.AISystemHTTPDeps{
+				DatabaseHealth: databaseHealth,
+				RedisHealth:    redisHealth,
+				Health:         healthTracker,
+				Weights:        routeWeightsStore,
+				BanChecker:     banChecker,
 			},
 		},
 		FileStore:          fileStore,

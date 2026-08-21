@@ -3,7 +3,11 @@ package transport
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"xiaodou/dai/libs/go/server"
 )
 
 func TestComponentProbeStatus(t *testing.T) {
@@ -24,6 +28,39 @@ func TestComponentProbeStatus(t *testing.T) {
 				t.Fatalf("status = %#v, want status %q error %q", got, tt.wantStatus, tt.wantError)
 			}
 		})
+	}
+}
+
+func TestSystemRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	paths := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/system/status"},
+		{method: http.MethodGet, path: "/api/v1/route-weights/global"},
+		{method: http.MethodPut, path: "/api/v1/route-weights/global"},
+	}
+
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	for _, route := range paths {
+		coreRequest := httptest.NewRequest(route.method, route.path, nil)
+		coreRecorder := httptest.NewRecorder()
+		coreRouter.ServeHTTP(coreRecorder, coreRequest)
+		if coreRecorder.Code != http.StatusNotFound {
+			t.Fatalf("core AI system route %s %s status = %d, want %d", route.method, route.path, coreRecorder.Code, http.StatusNotFound)
+		}
+	}
+
+	systemRouter, systemAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterSystem(systemAPI, SystemHTTPDeps{})
+	for _, route := range paths {
+		systemRequest := httptest.NewRequest(route.method, route.path, nil)
+		systemRecorder := httptest.NewRecorder()
+		systemRouter.ServeHTTP(systemRecorder, systemRequest)
+		if systemRecorder.Code != http.StatusUnauthorized {
+			t.Fatalf("independent system route %s %s status = %d, want %d", route.method, route.path, systemRecorder.Code, http.StatusUnauthorized)
+		}
 	}
 }
 

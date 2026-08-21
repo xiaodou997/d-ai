@@ -79,10 +79,6 @@ type OperationsDeps struct {
 type AIInfrastructureDeps struct {
 	ProviderSecrets aitransport.ProviderSecretCodec
 	AIHTTPClient    aitransport.HTTPDoer
-	DatabaseHealth  aitransport.ComponentHealthProbe
-	RedisHealth     aitransport.ComponentHealthProbe
-	Health          routing.HealthTracker
-	Weights         aitransport.ScoreWeightsStore
 	BanChecker      aitransport.HumaBanChecker
 }
 
@@ -159,6 +155,16 @@ type AIAuditLogHTTPDeps struct {
 	BanChecker aitransport.HumaBanChecker
 }
 
+// AISystemHTTPDeps contains the collaborators owned by the independently
+// registered system status and route-weight HTTP module.
+type AISystemHTTPDeps struct {
+	DatabaseHealth aitransport.ComponentHealthProbe
+	RedisHealth    aitransport.ComponentHealthProbe
+	Health         routing.HealthTracker
+	Weights        aitransport.ScoreWeightsStore
+	BanChecker     aitransport.HumaBanChecker
+}
+
 // AIRiskControlHTTPDeps contains the collaborators owned by the independently
 // registered risk-control HTTP module.
 type AIRiskControlHTTPDeps struct {
@@ -187,6 +193,7 @@ type AIHTTPDeps struct {
 	Subscriptions AISubscriptionHTTPDeps
 	RiskControl   AIRiskControlHTTPDeps
 	AuditLog      AIAuditLogHTTPDeps
+	System        AISystemHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -225,6 +232,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
 	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))
 	aitransport.RegisterAuditLog(api, buildAuditLogHTTPDeps(m.platform, m.deps.AuditLog))
+	aitransport.RegisterSystem(api, buildSystemHTTPDeps(m.platform, m.deps.System))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -277,9 +285,7 @@ func registerPublicPlane(api huma.API, d Deps) {
 func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
 	aiDeps := aitransport.AIDeps{
 		InfrastructureDeps: aitransport.InfrastructureDeps{
-			DatabaseHealth: d.DatabaseHealth,
-			RedisHealth:    d.RedisHealth,
-			HTTPClient:     d.AIHTTPClient,
+			HTTPClient: d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
 			CredentialCreator: d.CredentialCreator,
@@ -325,8 +331,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			UpstreamAccess:     d.UpstreamAccess,
 		},
 		RuntimeDeps: aitransport.RuntimeDeps{
-			Health:          d.Health,
-			Weights:         d.Weights,
 			ProviderSecrets: d.ProviderSecrets,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
@@ -388,6 +392,20 @@ func buildAuditLogHTTPDeps(platform Deps, d AIAuditLogHTTPDeps) aitransport.Audi
 			BanChecker:       d.BanChecker,
 		},
 		AuditLogs: d.AuditLogs,
+	}
+}
+
+func buildSystemHTTPDeps(platform Deps, d AISystemHTTPDeps) aitransport.SystemHTTPDeps {
+	return aitransport.SystemHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		DatabaseHealth: d.DatabaseHealth,
+		RedisHealth:    d.RedisHealth,
+		Health:         d.Health,
+		Weights:        d.Weights,
 	}
 }
 

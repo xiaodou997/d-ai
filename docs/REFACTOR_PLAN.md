@@ -152,6 +152,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 订阅 HTTP 路由提取为独立 `SubscriptionHTTPDeps` / `RegisterSubscriptions` 纵向模块；通用 `AIDeps` 与 `RegisterAICore` 不再持有或注册订阅能力，认证和身份补全也只接收模块显式依赖。
 - [x] 风控管理路由提取为独立 `RiskControlHTTPDeps` / `RegisterRiskControl` 纵向模块；四组业务端口脱离通用 `AIDeps`，平台管理员认证和风控所需 `ProviderSecretCodec` 改为模块显式注入，Serving/worker 继续复用原实现。
 - [x] 管理审计日志读取提取为独立 `AuditLogHTTPDeps` / `RegisterAuditLog` 纵向模块；只读查询从通用 `AIDeps` 移出，跨域迁移仍通过核心保留的 `AdminAuditRecorder` 写入。
+- [x] 系统状态与路由权重提取为独立 `SystemHTTPDeps` / `RegisterSystem` 纵向模块；`HealthTracker`、`ComponentHealthProbe` 和 `ScoreWeightsStore` 从 Core 运行时依赖组移出，平台管理员认证在模块内完成。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -423,7 +424,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 密钥边界：AI Transport 使用 `ProviderSecretCodec` 执行上游密钥加解密，不再持有或传播原始 `SecretMasterKey`；composition root 构造的 `ProviderKeyCodec` 保持既有密文兼容。
 - HTTP 边界：上游模型发现、models.dev 目录刷新和账号连通性检测统一依赖最小 `HTTPDoer` 端口；连接池、重定向和 transport 超时策略继续由 composition root 构造的具体客户端持有。
 - 模型能力边界：`externalmodels.Service` 封装 Redis、HTTP 和进程内缓存，移除包级共享缓存；AI Transport 仅依赖 `ModelCapabilityResolver`，未装配或目录未命中时保持本地启发式降级。
-- 健康检查边界：AI 系统状态端点通过 `ComponentHealthProbe` 检查 Redis，go-redis 的 `Ping` 命令类型封装在 Redis adapter；AI Transport 基础设施容器不再持有具体 `*redis.Client`。
+- 健康检查边界：AI 系统状态端点通过 `ComponentHealthProbe` 检查 PostgreSQL/Redis，go-redis 的 `Ping` 命令类型封装在 Redis adapter；`SystemHTTPDeps` 只接收探针和 `HealthTracker`，Core 不再持有系统状态端口。
 - 可观测性边界：usage identity enrichment 失败通过 `IdentityEnrichmentFailureObserver` 上报，zap 消息与字段映射封装在 observability adapter；AI Transport 不再持有具体 `*zap.Logger`，失败时继续返回空补全结果。
 - 账号读取边界：模型发现、模型导入、连通性检测和绑定校验通过 `UpstreamAccountReader` 获取 `upstreamcontrol.AccountSecret`；PostgreSQL adapter 负责映射 ciphertext、BaseURL、headers、协议与状态，AI Transport 不再接收上游账号 sqlc row。
 - 用户用量读取边界：终端用户自助日志通过 `UserUsageLogReader` 读取 `domain.UsageLog`；专用查询的租户/用户/request source 参数构造与 sqlc row 映射封装进 `UsageRepo`，保持原过滤、倒序和 limit 语义，AI Transport 不再直接执行该查询。
@@ -438,6 +439,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 订阅边界：套餐查询与租户管理、用户购买事务、订阅历史与当前状态、订单读取、快照分组名称补全分别依赖六组控制面端口；分组名称解析继续 fail-open，Serving 的 `ResolveForGate` / `DebitAdmitted` 保持独立热路径端口，具体 `subscription.Service` 只在 composition root 和后台 janitor 生命周期中持有。
 - 订阅 HTTP 模块：`SubscriptionHTTPDeps` 独立组合六组订阅端口、`HTTPAuthDeps`、身份补全 provider 和失败 observer；`RegisterSubscriptions` 自行注册租户/终端用户认证分组。顶层仅通过 composition-only `AIHTTPDeps` 聚合 Core、订阅、风控和审计读取模块，路由 handler 不再接触聚合容器；契约测试确认 core 不注册订阅路径、独立模块注册后执行认证。
 - 审计 HTTP 模块：`AuditLogHTTPDeps` 独立组合 `AdminAuditLogReader` 和 `HTTPAuthDeps`；`RegisterAuditLog` 自行注册平台管理员认证分组。顶层仅通过 composition-only `AIHTTPDeps` 装配读取模块，`AdminAuditRecorder` 仍留在 Core 供账号/分组迁移写入；契约测试确认 core 不注册审计读取路径、独立模块注册后执行认证。
+- 系统 HTTP 模块：`SystemHTTPDeps` 独立组合 `HealthTracker`、两个 `ComponentHealthProbe`、`ScoreWeightsStore` 和 `HTTPAuthDeps`；`RegisterSystem` 自行注册平台管理员认证分组。顶层通过 `AIHTTPDeps.System` 装配，Core 不再注册系统状态与路由权重路径；契约测试覆盖三条路径的 core 404 与独立模块认证。
 - 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。
@@ -450,5 +452,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
 - 风控 HTTP 模块：`RiskControlHTTPDeps` 独立组合四组业务端口、`HTTPAuthDeps` 与 `ProviderSecretCodec`；`RegisterRiskControl` 自行注册平台管理员认证分组。契约测试确认 core 不注册风控路径、独立模块执行认证，配置更新路由只把明文 API key 交给 codec 并向存储端传递密文。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
-- 遗留风险：订阅、风控和审计读取路由已脱离 `AIDeps`，其余 AI core 路由仍共享巨型接口型 service locator；顶层平台 `OperationsDeps` 仍保留多项具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 提取系统状态与路由权重为独立 `SystemHTTPDeps` / `RegisterSystem`；保留 `HealthTracker`、`ComponentHealthProbe` 和 `ScoreWeightsStore` 三个最小端口，继续缩减 Core 的运行时基础设施依赖。
+- 遗留风险：订阅、风控、审计读取和系统路由已脱离 `AIDeps`，其余 AI core 路由仍共享巨型接口型 service locator；顶层平台 `OperationsDeps` 仍保留多项具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 提取管理端仪表盘查询为独立模块；保留租户自助和工作区对 `DashboardQueryReader` 的共享读取，先把管理统计路由与 Core 认证/注册边界分开。

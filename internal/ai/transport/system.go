@@ -67,7 +67,7 @@ type putRouteWeightsInput struct {
 	Body  scoreWeightsDTO
 }
 
-func registerSystem(api huma.API, d AIDeps) {
+func registerSystem(api huma.API, d SystemHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-system-status",
 		Method:      http.MethodGet,

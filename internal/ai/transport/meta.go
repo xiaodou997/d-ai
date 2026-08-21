@@ -17,8 +17,6 @@ import (
 	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/identitycontrol"
-	"xiaodou/dai/internal/ai/routing"
-	"xiaodou/dai/internal/ai/serving"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	"xiaodou/dai/internal/ai/workspace"
@@ -28,15 +26,7 @@ import (
 // InfrastructureDeps contains process-level capabilities shared by AI HTTP
 // handlers. Concrete clients remain owned by composition and adapters.
 type InfrastructureDeps struct {
-	DatabaseHealth ComponentHealthProbe
-	RedisHealth    ComponentHealthProbe
-	HTTPClient     HTTPDoer
-}
-
-// ComponentHealthProbe is the minimal infrastructure check needed by the
-// system status endpoint. Client-specific command types stay in adapters.
-type ComponentHealthProbe interface {
-	Check(ctx context.Context) error
+	HTTPClient HTTPDoer
 }
 
 // HTTPDoer is the only outbound HTTP capability required by AI transport.
@@ -392,8 +382,6 @@ type UsageQueryReader interface {
 
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
-	Health          routing.HealthTracker
-	Weights         ScoreWeightsStore
 	ProviderSecrets ProviderSecretCodec
 }
 
@@ -402,14 +390,6 @@ type RuntimeDeps struct {
 type ProviderSecretCodec interface {
 	Encrypt(plaintext string) (string, error)
 	Decrypt(ciphertext string) (string, error)
-}
-
-// ScoreWeightsStore is the minimal port required by the system endpoints.
-// PostgreSQL-backed caching and persistence belong to the adapter package;
-// transport only needs to read and update effective weights.
-type ScoreWeightsStore interface {
-	Get(ctx context.Context, scope string) serving.ScoreWeights
-	Upsert(ctx context.Context, scope string, weights serving.ScoreWeights) error
 }
 
 // OperationsDeps contains dashboard, usage, audit and enrichment collaborators.
@@ -436,8 +416,8 @@ type AIDeps struct {
 	OperationsDeps
 }
 
-// RegisterAICore registers the remaining shared AI control-plane routes.
-// Vertically extracted modules such as subscriptions register separately.
+// RegisterAICore registers the shared AI control-plane routes that remain in
+// the core module. Vertically extracted modules register separately.
 func RegisterAICore(api huma.API, d AIDeps) {
 	auth := httpAuthDepsFromAI(d)
 	management := huma.NewGroup(api)
@@ -453,7 +433,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)
 	registerOAuthPools(management, d)
-	registerSystem(management, d)
 	tenant := huma.NewGroup(api)
 	tenant.UseMiddleware(tenantUserAuth(api, auth))
 	registerGroups(tenant, d)

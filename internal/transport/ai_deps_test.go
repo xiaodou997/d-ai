@@ -67,10 +67,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIInfrastructureDeps: AIInfrastructureDeps{
 				ProviderSecrets: providerSecrets,
 				AIHTTPClient:    httpClient,
-				DatabaseHealth:  databaseHealth,
-				RedisHealth:     redisHealth,
-				Health:          health,
-				Weights:         weights,
 			},
 			AIIdentityDeps: AIIdentityDeps{
 				CredentialCreator: oauth,
@@ -153,9 +149,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
 	}
-	if got.DatabaseHealth != databaseHealth || got.RedisHealth != redisHealth || got.Health != health || got.Weights != weights {
-		t.Fatal("routing management dependencies were not preserved")
-	}
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("observability dependencies were not preserved")
 	}
@@ -232,6 +225,23 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if auditLog.AuditLogs != auditLogs {
 		t.Fatal("admin audit log reader was not preserved")
+	}
+
+	system := buildSystemHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AISystemHTTPDeps{
+			DatabaseHealth: databaseHealth,
+			RedisHealth:    redisHealth,
+			Health:         health,
+			Weights:        weights,
+			BanChecker:     banChecker,
+		},
+	)
+	if system.Auth.TokenVerifier != jwt || system.Auth.TokenRevocations != blacklist || system.Auth.BanChecker != banChecker {
+		t.Fatal("system auth dependencies were not preserved")
+	}
+	if system.DatabaseHealth != databaseHealth || system.RedisHealth != redisHealth || system.Health != health || system.Weights != weights {
+		t.Fatal("system dependencies were not preserved")
 	}
 }
 
