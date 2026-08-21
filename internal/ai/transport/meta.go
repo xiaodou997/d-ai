@@ -13,6 +13,7 @@ import (
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/commercial"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
+	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/routing"
@@ -136,7 +137,12 @@ type CatalogDeps struct {
 	AccountManager     UpstreamAccountManager
 	AccountHealth      UpstreamAccountHealthWriter
 	UpstreamAccess     UpstreamAccessManager
-	CommercialSvc      *commercial.Service
+	Groups             CommercialGroupCatalog
+	GroupManager       CommercialGroupManager
+	DispatchRules      CommercialDispatchRuleManager
+	GroupTargets       CommercialGroupTargetManager
+	UserBindings       CommercialUserBindingManager
+	LimitPolicies      CommercialLimitPolicyManager
 	GroupTransfer      GroupTransferManager
 }
 
@@ -153,6 +159,64 @@ type GroupTransferManager interface {
 	Export(ctx context.Context, tenantID string, groupIDs []string) (commercial.GroupTransferBundle, error)
 	Preview(ctx context.Context, tenantID string, request commercial.GroupImportRequest) (commercial.GroupImportPreview, error)
 	Import(ctx context.Context, tenantID string, request commercial.GroupImportRequest) (commercial.GroupImportResult, error)
+}
+
+// CommercialGroupCatalog is the tenant-scoped group read and visibility
+// surface shared by management, self-service pricing and API key validation.
+type CommercialGroupCatalog interface {
+	ListGroups(ctx context.Context, tenantID string) ([]commercial.Group, error)
+	GetGroup(ctx context.Context, scope commercial.TenantGroupScope) (commercial.Group, error)
+	ListVisibleGroupsForTenant(ctx context.Context, tenantID string) ([]commercial.AccessibleGroup, error)
+	ListVisibleGroupsForUser(ctx context.Context, tenantID, userID string) ([]commercial.AccessibleGroup, error)
+}
+
+// CommercialGroupManager owns group configuration and client-surface policy
+// mutations. Group discovery remains on CommercialGroupCatalog.
+type CommercialGroupManager interface {
+	CreateGroup(ctx context.Context, tenantID string, input commercial.GroupWrite) (commercial.Group, error)
+	UpdateGroup(ctx context.Context, scope commercial.TenantGroupScope, input commercial.GroupWrite) (commercial.Group, error)
+	UpdateGroupStatus(ctx context.Context, scope commercial.TenantGroupScope, status commercial.Status) (commercial.Group, error)
+	DeleteGroup(ctx context.Context, scope commercial.TenantGroupScope) error
+	GetGroupClientSurfacePolicy(ctx context.Context, scope commercial.TenantGroupScope) (commercial.GroupClientSurfacePolicy, error)
+	ReplaceGroupClientSurfacePolicy(ctx context.Context, scope commercial.TenantGroupScope, input commercial.GroupClientSurfacePolicyWrite) (commercial.GroupClientSurfacePolicy, error)
+}
+
+// CommercialDispatchRuleManager owns model dispatch configuration and its
+// management-time preview projections.
+type CommercialDispatchRuleManager interface {
+	ListDispatchRules(ctx context.Context, scope commercial.TenantGroupScope) ([]commercial.DispatchRule, error)
+	PreviewDispatch(ctx context.Context, scope commercial.TenantGroupScope, requestedModel string, clientSurface surface.ID) (commercial.DispatchPreview, error)
+	AddDispatchRule(ctx context.Context, scope commercial.TenantGroupScope, input commercial.DispatchRuleWrite) (commercial.DispatchRule, error)
+	UpdateDispatchRule(ctx context.Context, scope commercial.TenantGroupScope, id string, input commercial.DispatchRuleWrite) (commercial.DispatchRule, error)
+	UpdateDispatchRuleStatus(ctx context.Context, scope commercial.TenantGroupScope, id string, status commercial.Status) (commercial.DispatchRule, error)
+	ListDispatchModels(ctx context.Context, scope commercial.TenantGroupScope, clientSurface surface.ID) ([]commercial.DispatchModel, error)
+	DeleteDispatchRule(ctx context.Context, scope commercial.TenantGroupScope, id string) error
+}
+
+// CommercialGroupTargetManager owns group-to-upstream bindings.
+type CommercialGroupTargetManager interface {
+	ListGroupTargetDetails(ctx context.Context, scope commercial.TenantGroupScope) ([]commercial.GroupTargetDetail, error)
+	AddGroupTarget(ctx context.Context, scope commercial.TenantGroupScope, input commercial.GroupTargetWrite) (commercial.GroupTarget, error)
+	GetGroupTargetDetail(ctx context.Context, scope commercial.TenantGroupScope, id string) (commercial.GroupTargetDetail, error)
+	UpdateGroupTarget(ctx context.Context, scope commercial.TenantGroupScope, id string, input commercial.GroupTargetWrite) (commercial.GroupTarget, error)
+	DeleteGroupTarget(ctx context.Context, scope commercial.TenantGroupScope, id string) error
+}
+
+// CommercialUserBindingManager owns explicit end-user group assignments.
+type CommercialUserBindingManager interface {
+	ListUserBindings(ctx context.Context, tenantID, userID string) ([]commercial.UserGroupBinding, error)
+	UpsertUserBinding(ctx context.Context, input commercial.UserGroupBindingWrite) (commercial.UserGroupBinding, error)
+	DeleteUserBinding(ctx context.Context, tenantID, userID, groupID string) error
+}
+
+// CommercialLimitPolicyManager owns tenant, user and API-key concurrency
+// policies used by both administrator and self-service routes.
+type CommercialLimitPolicyManager interface {
+	CreateLimitPolicy(ctx context.Context, input commercial.LimitPolicyWrite) (commercial.LimitPolicy, error)
+	ListLimitPolicies(ctx context.Context, filter commercial.LimitPolicyFilter) ([]commercial.LimitPolicy, error)
+	UpdateLimitPolicy(ctx context.Context, id string, input commercial.LimitPolicyWrite) (commercial.LimitPolicy, error)
+	UpdateLimitPolicyStatus(ctx context.Context, id string, status commercial.Status) (commercial.LimitPolicy, error)
+	DeleteLimitPolicies(ctx context.Context, filter commercial.LimitPolicyFilter) error
 }
 
 // ClientCatalogResolver is the narrow model-discovery port needed by OAuth

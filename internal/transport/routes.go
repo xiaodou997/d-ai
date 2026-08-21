@@ -21,7 +21,6 @@ import (
 	userpkg "xiaodou/dai/internal/user"
 
 	// AI 域
-	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/routing"
@@ -118,7 +117,12 @@ type AICatalogDeps struct {
 	PlatformPriceBooks aitransport.PlatformPriceBookManager
 	TenantPriceBooks   aitransport.TenantPriceBookManager
 	PriceBookSync      aitransport.PriceBookSyncManager
-	CommercialSvc      *commercial.Service
+	Groups             aitransport.CommercialGroupCatalog
+	GroupManager       aitransport.CommercialGroupManager
+	DispatchRules      aitransport.CommercialDispatchRuleManager
+	GroupTargets       aitransport.CommercialGroupTargetManager
+	UserBindings       aitransport.CommercialUserBindingManager
+	LimitPolicies      aitransport.CommercialLimitPolicyManager
 	GroupTransfer      aitransport.GroupTransferManager
 	Accounts           aitransport.UpstreamAccountCatalog
 	AccountManager     aitransport.UpstreamAccountManager
@@ -267,7 +271,12 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			PlatformPriceBooks: d.PlatformPriceBooks,
 			TenantPriceBooks:   d.TenantPriceBooks,
 			PriceBookSync:      d.PriceBookSync,
-			CommercialSvc:      d.CommercialSvc,
+			Groups:             d.Groups,
+			GroupManager:       d.GroupManager,
+			DispatchRules:      d.DispatchRules,
+			GroupTargets:       d.GroupTargets,
+			UserBindings:       d.UserBindings,
+			LimitPolicies:      d.LimitPolicies,
 			GroupTransfer:      d.GroupTransfer,
 			Accounts:           d.Accounts,
 			AccountManager:     d.AccountManager,

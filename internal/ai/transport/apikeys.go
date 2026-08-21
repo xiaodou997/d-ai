@@ -155,14 +155,14 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		Description: "平台代管视图：返回指定租户拥有的 API key 列表，含唯一绑定分组、额度和独立限流摘要。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantAPIKeysInput) (*apiKeysOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		if in.TenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenantID is required")
 		}
 		keys, err := d.APIKeySvc.ListForTenant(ctx, in.TenantID)
-		return apiKeysResponse(ctx, d.CommercialSvc, keys, err)
+		return apiKeysResponse(ctx, d.LimitPolicies, keys, err)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -173,7 +173,7 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		Description: "平台代管视图：创建租户拥有的 API key。响应返回新密钥明文，后续也可通过 reveal 接口再次复制。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *createTenantAPIKeyInput) (*apiKeyCreatedOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		if in.TenantID == "" {
@@ -183,14 +183,14 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, in.TenantID, "", in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, in.TenantID, "", in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		created, err := d.APIKeySvc.Create(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
 		if err != nil {
 			_ = d.APIKeySvc.Delete(ctx, created.Key.ID, in.TenantID)
 			return nil, mapServiceError(err)
@@ -209,7 +209,7 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		Description: "平台代管视图：更新租户 API key 的基础信息与独立限流策略。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *updateTenantAPIKeyInput) (*apiKeyOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		if in.TenantID == "" {
@@ -222,14 +222,14 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, in.TenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, in.TenantID, "", in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, in.TenantID, "", in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		key, err := d.APIKeySvc.Update(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, key.ID, in.Body.LimitPolicy, userIDFromContext(ctx))
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, key.ID, in.Body.LimitPolicy, userIDFromContext(ctx))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -339,8 +339,8 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		if err := d.APIKeySvc.Delete(ctx, in.APIKeyID, in.TenantID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if d.CommercialSvc != nil {
-			_ = d.CommercialSvc.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
+		if d.LimitPolicies != nil {
+			_ = d.LimitPolicies.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
 				ScopeType: commercial.LimitScopeAPIKey,
 				ScopeID:   in.APIKeyID,
 			})
@@ -358,14 +358,14 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		Description: "平台代管视图：返回指定租户下指定用户拥有的 API key 列表，含唯一绑定分组、额度和独立限流摘要。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *userAPIKeysInput) (*apiKeysOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		if in.TenantID == "" || in.UserID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenantID and userID are required")
 		}
 		keys, err := d.APIKeySvc.ListForUser(ctx, in.TenantID, in.UserID)
-		return apiKeysResponse(ctx, d.CommercialSvc, keys, err)
+		return apiKeysResponse(ctx, d.LimitPolicies, keys, err)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -376,7 +376,7 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		Description: "平台代管视图：创建指定租户下用户拥有的 API key。响应返回新密钥明文，后续也可通过 reveal 接口再次复制。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *createUserAPIKeyInput) (*apiKeyCreatedOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		if in.TenantID == "" || in.UserID == "" {
@@ -386,14 +386,14 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, in.TenantID, in.UserID, in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, in.TenantID, in.UserID, in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		created, err := d.APIKeySvc.Create(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
 		if err != nil {
 			_ = d.APIKeySvc.Delete(ctx, created.Key.ID, in.TenantID)
 			return nil, mapServiceError(err)
@@ -412,7 +412,7 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		Description: "平台代管视图：更新用户 API key 的基础信息与独立限流策略。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *updateUserAPIKeyInput) (*apiKeyOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		if in.TenantID == "" || in.UserID == "" {
@@ -425,14 +425,14 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		if err := ensureUserAPIKeyScope(ctx, d.APIKeySvc, in.TenantID, in.UserID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, in.TenantID, in.UserID, in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, in.TenantID, in.UserID, in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		key, err := d.APIKeySvc.Update(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, key.ID, in.Body.LimitPolicy, userIDFromContext(ctx))
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, key.ID, in.Body.LimitPolicy, userIDFromContext(ctx))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -542,8 +542,8 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 		if err := d.APIKeySvc.Delete(ctx, in.APIKeyID, in.TenantID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if d.CommercialSvc != nil {
-			_ = d.CommercialSvc.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
+		if d.LimitPolicies != nil {
+			_ = d.LimitPolicies.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
 				ScopeType: commercial.LimitScopeAPIKey,
 				ScopeID:   in.APIKeyID,
 			})
@@ -563,7 +563,7 @@ func registerTenantSelfAPIKeys(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 查询租户 API key 列表，含唯一绑定分组、额度和独立限流摘要。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, _ *struct{}) (*apiKeysOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -571,7 +571,7 @@ func registerTenantSelfAPIKeys(api huma.API, d AIDeps) {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
 		keys, err := d.APIKeySvc.ListForTenant(ctx, tenantID)
-		return apiKeysResponse(ctx, d.CommercialSvc, keys, err)
+		return apiKeysResponse(ctx, d.LimitPolicies, keys, err)
 	})
 
 }
@@ -702,16 +702,24 @@ func ensureAPIKeyInList(keys []coreidentity.APIKey, apiKeyID string) error {
 	return domain.ErrNotFound
 }
 
-func ensureAPIKeyGroupAccessible(ctx context.Context, svc *commercial.Service, tenantID, userID, groupID string) error {
+func ensureAPIKeyGroupAccessible(ctx context.Context, groups CommercialGroupCatalog, tenantID, userID, groupID string) error {
 	groupID = strings.TrimSpace(groupID)
 	if groupID == "" {
 		return domain.NewValidationError("group_id", "group_id is required")
 	}
-	groups, err := svc.ResolveAccessibleGroups(ctx, coreidentity.Subject{TenantID: tenantID, UserID: userID})
+	var (
+		accessible []commercial.AccessibleGroup
+		err        error
+	)
+	if strings.TrimSpace(userID) == "" {
+		accessible, err = groups.ListVisibleGroupsForTenant(ctx, tenantID)
+	} else {
+		accessible, err = groups.ListVisibleGroupsForUser(ctx, tenantID, userID)
+	}
 	if err != nil {
 		return err
 	}
-	for _, group := range groups {
+	for _, group := range accessible {
 		if group.Group.ID == groupID {
 			return nil
 		}
@@ -719,11 +727,11 @@ func ensureAPIKeyGroupAccessible(ctx context.Context, svc *commercial.Service, t
 	return domain.NewValidationError("group_id", "group is not active or accessible to the key owner")
 }
 
-func apiKeysResponse(ctx context.Context, svc *commercial.Service, keys []coreidentity.APIKey, err error) (*apiKeysOutput, error) {
+func apiKeysResponse(ctx context.Context, policies CommercialLimitPolicyManager, keys []coreidentity.APIKey, err error) (*apiKeysOutput, error) {
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
-	limitMap, lerr := loadAPIKeyLimitPolicyMap(ctx, svc, keys)
+	limitMap, lerr := loadAPIKeyLimitPolicyMap(ctx, policies, keys)
 	if lerr != nil {
 		return nil, mapServiceError(lerr)
 	}
@@ -762,12 +770,12 @@ func apiKeyToDTO(key coreidentity.APIKey, limit *commercial.LimitPolicy) apiKeyD
 	}
 }
 
-func loadAPIKeyLimitPolicyMap(ctx context.Context, svc *commercial.Service, keys []coreidentity.APIKey) (map[string]*commercial.LimitPolicy, error) {
+func loadAPIKeyLimitPolicyMap(ctx context.Context, policies CommercialLimitPolicyManager, keys []coreidentity.APIKey) (map[string]*commercial.LimitPolicy, error) {
 	out := make(map[string]*commercial.LimitPolicy, len(keys))
-	if svc == nil || len(keys) == 0 {
+	if policies == nil || len(keys) == 0 {
 		return out, nil
 	}
-	policies, err := svc.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{ScopeType: commercial.LimitScopeAPIKey})
+	items, err := policies.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{ScopeType: commercial.LimitScopeAPIKey})
 	if err != nil {
 		return nil, err
 	}
@@ -775,8 +783,8 @@ func loadAPIKeyLimitPolicyMap(ctx context.Context, svc *commercial.Service, keys
 	for _, key := range keys {
 		allowed[key.ID] = struct{}{}
 	}
-	for i := range policies {
-		policy := policies[i]
+	for i := range items {
+		policy := items[i]
 		if _, ok := allowed[policy.ScopeID]; !ok {
 			continue
 		}
@@ -787,12 +795,12 @@ func loadAPIKeyLimitPolicyMap(ctx context.Context, svc *commercial.Service, keys
 
 func syncAPIKeyLimitPolicy(
 	ctx context.Context,
-	svc *commercial.Service,
+	policies CommercialLimitPolicyManager,
 	apiKeyID string,
 	req *scopedLimitPolicyWriteRequest,
 	createdBy string,
 ) (*commercial.LimitPolicy, error) {
-	if svc == nil {
+	if policies == nil {
 		if req == nil {
 			return nil, nil
 		}
@@ -801,7 +809,7 @@ func syncAPIKeyLimitPolicy(
 	if req == nil {
 		return nil, nil
 	}
-	existing, err := svc.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
+	existing, err := policies.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
 		ScopeType: commercial.LimitScopeAPIKey,
 		ScopeID:   apiKeyID,
 	})
@@ -820,13 +828,13 @@ func syncAPIKeyLimitPolicy(
 		CreatedBy:        createdBy,
 	}
 	if len(existing) > 0 {
-		policy, err := svc.UpdateLimitPolicy(ctx, existing[0].ID, write)
+		policy, err := policies.UpdateLimitPolicy(ctx, existing[0].ID, write)
 		if err != nil {
 			return nil, err
 		}
 		return &policy, nil
 	}
-	policy, err := svc.CreateLimitPolicy(ctx, write)
+	policy, err := policies.CreateLimitPolicy(ctx, write)
 	if err != nil {
 		return nil, err
 	}

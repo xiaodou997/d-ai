@@ -118,7 +118,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		Description: "按当前用户 token 返回该用户可见的分组及生效售价倍率。",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, _ *struct{}) (*userVisibleGroupsOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.Groups == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -126,7 +126,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		groups, err := d.CommercialSvc.ListVisibleGroupsForUser(ctx, tenantID, userID)
+		groups, err := d.Groups.ListVisibleGroupsForUser(ctx, tenantID, userID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -147,7 +147,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		Description: "返回当前用户在某可见分组下可使用的模型及其生效 USD 单价（售价表 USD 单价 × 终端用户生效倍率）。",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, in *tenantSelfGroupIDInput) (*userGroupEffectivePricesOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.Groups == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -155,7 +155,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		groups, err := d.CommercialSvc.ListVisibleGroupsForUser(ctx, tenantID, userID)
+		groups, err := d.Groups.ListVisibleGroupsForUser(ctx, tenantID, userID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -218,7 +218,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		Description: "按当前用户 token 查询本用户拥有的 API key。仅返回 last_four，不返回明文 key/hash/密文。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, _ *struct{}) (*apiKeysOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -227,7 +227,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
 		keys, err := d.APIKeySvc.ListForUser(ctx, tenantID, userID)
-		return apiKeysResponse(ctx, d.CommercialSvc, keys, err)
+		return apiKeysResponse(ctx, d.LimitPolicies, keys, err)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -239,7 +239,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		Tags:          []string{"api-keys"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *userSelfAPIKeyWriteInput) (*apiKeyCreatedOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -251,7 +251,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, tenantID, userID, in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, tenantID, userID, in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if strings.TrimSpace(write.CreatedBy) == "" {
@@ -261,7 +261,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
 		if err != nil {
 			_ = d.APIKeySvc.Delete(ctx, created.Key.ID, tenantID)
 			return nil, mapServiceError(err)
@@ -280,7 +280,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		Description: "按当前用户 token 更新本用户 API key 的基础信息与独立限流策略。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *userSelfUpdateAPIKeyInput) (*apiKeyOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -295,14 +295,14 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		if err := ensureUserAPIKeyScope(ctx, d.APIKeySvc, tenantID, userID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, tenantID, userID, in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, tenantID, userID, in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		key, err := d.APIKeySvc.Update(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, key.ID, in.Body.LimitPolicy, userID)
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, key.ID, in.Body.LimitPolicy, userID)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -420,8 +420,8 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 		if err := d.APIKeySvc.Delete(ctx, in.APIKeyID, tenantID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if d.CommercialSvc != nil {
-			_ = d.CommercialSvc.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
+		if d.LimitPolicies != nil {
+			_ = d.LimitPolicies.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
 				ScopeType: commercial.LimitScopeAPIKey,
 				ScopeID:   in.APIKeyID,
 			})

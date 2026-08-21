@@ -309,8 +309,8 @@ type deleteUserGroupInput struct {
 }
 
 func registerGroups(api huma.API, d AIDeps) {
-	commercialSvcReady := func() error {
-		if d.CommercialSvc == nil {
+	commercialPortReady := func(port any) error {
+		if port == nil {
 			return httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		return nil
@@ -318,11 +318,11 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-list-groups", Method: http.MethodGet, Path: "/api/v1/tenants/me/groups", Summary: "分组列表", Tags: []string{"groups"}},
 		func(ctx context.Context, _ *struct{}) (*groupsOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.Groups); err != nil {
 				return nil, err
 			}
 			tenantID := tenantIDFromContext(ctx)
-			items, err := d.CommercialSvc.ListGroups(ctx, tenantID)
+			items, err := d.Groups.ListGroups(ctx, tenantID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -343,11 +343,11 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-create-group", Method: http.MethodPost, Path: "/api/v1/tenants/me/groups", Summary: "创建分组", Tags: []string{"groups"}},
 		func(ctx context.Context, in *createGroupInput) (*groupOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupManager); err != nil {
 				return nil, err
 			}
 			tenantID := tenantIDFromContext(ctx)
-			group, err := d.CommercialSvc.CreateGroup(ctx, tenantID, groupWriteFromReq(in.Body))
+			group, err := d.GroupManager.CreateGroup(ctx, tenantID, groupWriteFromReq(in.Body))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -356,10 +356,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-get-group", Method: http.MethodGet, Path: "/api/v1/tenants/me/groups/{groupID}", Summary: "分组详情", Tags: []string{"groups"}},
 		func(ctx context.Context, in *groupIDInput) (*groupOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.Groups); err != nil {
 				return nil, err
 			}
-			group, err := d.CommercialSvc.GetGroup(ctx, tenantGroupScope(ctx, in.GroupID))
+			group, err := d.Groups.GetGroup(ctx, tenantGroupScope(ctx, in.GroupID))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -368,10 +368,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-update-group", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}", Summary: "更新分组", Tags: []string{"groups"}},
 		func(ctx context.Context, in *updateGroupInput) (*groupOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupManager); err != nil {
 				return nil, err
 			}
-			group, err := d.CommercialSvc.UpdateGroup(ctx, tenantGroupScope(ctx, in.GroupID), groupWriteFromReq(in.Body))
+			group, err := d.GroupManager.UpdateGroup(ctx, tenantGroupScope(ctx, in.GroupID), groupWriteFromReq(in.Body))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -380,10 +380,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-update-group-status", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}/status", Summary: "更新分组状态", Tags: []string{"groups"}},
 		func(ctx context.Context, in *updateGroupStatusInput) (*groupOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupManager); err != nil {
 				return nil, err
 			}
-			group, err := d.CommercialSvc.UpdateGroupStatus(ctx, tenantGroupScope(ctx, in.GroupID), commercial.Status(in.Body.Status))
+			group, err := d.GroupManager.UpdateGroupStatus(ctx, tenantGroupScope(ctx, in.GroupID), commercial.Status(in.Body.Status))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -397,10 +397,10 @@ func registerGroups(api huma.API, d AIDeps) {
 		Summary:     "获取分组 API 入口策略",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, in *groupIDInput) (*groupClientSurfacePolicyOutput, error) {
-		if err := commercialSvcReady(); err != nil {
+		if err := commercialPortReady(d.GroupManager); err != nil {
 			return nil, err
 		}
-		policy, err := d.CommercialSvc.GetGroupClientSurfacePolicy(ctx, tenantGroupScope(ctx, in.GroupID))
+		policy, err := d.GroupManager.GetGroupClientSurfacePolicy(ctx, tenantGroupScope(ctx, in.GroupID))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -414,14 +414,14 @@ func registerGroups(api huma.API, d AIDeps) {
 		Summary:     "整体替换分组 API 入口策略",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, in *replaceGroupClientSurfacePolicyInput) (*groupClientSurfacePolicyOutput, error) {
-		if err := commercialSvcReady(); err != nil {
+		if err := commercialPortReady(d.GroupManager); err != nil {
 			return nil, err
 		}
 		allowed := make([]surface.ID, 0, len(in.Body.AllowedSurfaces))
 		for _, item := range in.Body.AllowedSurfaces {
 			allowed = append(allowed, surface.ID(item))
 		}
-		policy, err := d.CommercialSvc.ReplaceGroupClientSurfacePolicy(ctx, tenantGroupScope(ctx, in.GroupID), commercial.GroupClientSurfacePolicyWrite{
+		policy, err := d.GroupManager.ReplaceGroupClientSurfacePolicy(ctx, tenantGroupScope(ctx, in.GroupID), commercial.GroupClientSurfacePolicyWrite{
 			Mode:            commercial.GroupClientSurfacePolicyMode(in.Body.Mode),
 			AllowedSurfaces: allowed,
 		})
@@ -433,10 +433,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-delete-group", Method: http.MethodDelete, Path: "/api/v1/tenants/me/groups/{groupID}", Summary: "删除分组", Tags: []string{"groups"}},
 		func(ctx context.Context, in *groupIDInput) (*deletedOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupManager); err != nil {
 				return nil, err
 			}
-			if err := d.CommercialSvc.DeleteGroup(ctx, tenantGroupScope(ctx, in.GroupID)); err != nil {
+			if err := d.GroupManager.DeleteGroup(ctx, tenantGroupScope(ctx, in.GroupID)); err != nil {
 				return nil, mapServiceError(err)
 			}
 			out := &deletedOutput{}
@@ -446,10 +446,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-list-group-dispatch-rules", Method: http.MethodGet, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-rules", Summary: "分组请求模型调度规则列表", Tags: []string{"groups"}},
 		func(ctx context.Context, in *groupIDInput) (*groupDispatchRulesOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
-			items, err := d.CommercialSvc.ListDispatchRules(ctx, tenantGroupScope(ctx, in.GroupID))
+			items, err := d.DispatchRules.ListDispatchRules(ctx, tenantGroupScope(ctx, in.GroupID))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -464,10 +464,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-preview-group-dispatch", Method: http.MethodPost, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-rules/preview", Summary: "预览分组请求模型调度", Tags: []string{"groups"}},
 		func(ctx context.Context, in *previewGroupDispatchInput) (*groupDispatchPreviewOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
-			preview, err := d.CommercialSvc.PreviewDispatch(ctx, tenantGroupScope(ctx, in.GroupID), in.Body.RequestedModel, surface.ID(in.Body.ClientSurface))
+			preview, err := d.DispatchRules.PreviewDispatch(ctx, tenantGroupScope(ctx, in.GroupID), in.Body.RequestedModel, surface.ID(in.Body.ClientSurface))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -476,14 +476,14 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-add-group-dispatch-rule", Method: http.MethodPost, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-rules", Summary: "新增分组请求模型调度规则", Tags: []string{"groups"}},
 		func(ctx context.Context, in *createGroupDispatchRuleInput) (*groupDispatchRuleOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
 			write, err := dispatchRuleWriteFromRequest(in.Body)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			rule, err := d.CommercialSvc.AddDispatchRule(ctx, tenantGroupScope(ctx, in.GroupID), write)
+			rule, err := d.DispatchRules.AddDispatchRule(ctx, tenantGroupScope(ctx, in.GroupID), write)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -492,14 +492,14 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-update-group-dispatch-rule", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-rules/{ruleID}", Summary: "更新分组请求模型调度规则", Tags: []string{"groups"}},
 		func(ctx context.Context, in *updateGroupDispatchRuleInput) (*groupDispatchRuleOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
 			write, err := dispatchRuleWriteFromRequest(in.Body)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			rule, err := d.CommercialSvc.UpdateDispatchRule(ctx, tenantGroupScope(ctx, in.GroupID), in.RuleID, write)
+			rule, err := d.DispatchRules.UpdateDispatchRule(ctx, tenantGroupScope(ctx, in.GroupID), in.RuleID, write)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -508,10 +508,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-update-group-dispatch-rule-status", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-rules/{ruleID}/status", Summary: "更新分组请求模型调度规则状态", Tags: []string{"groups"}},
 		func(ctx context.Context, in *updateGroupDispatchRuleStatusInput) (*groupDispatchRuleOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
-			rule, err := d.CommercialSvc.UpdateDispatchRuleStatus(ctx, tenantGroupScope(ctx, in.GroupID), in.RuleID, commercial.Status(in.Body.Status))
+			rule, err := d.DispatchRules.UpdateDispatchRuleStatus(ctx, tenantGroupScope(ctx, in.GroupID), in.RuleID, commercial.Status(in.Body.Status))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -520,10 +520,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-list-group-dispatch-models", Method: http.MethodGet, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-models", Summary: "可用于调度的逻辑模型", Tags: []string{"groups"}},
 		func(ctx context.Context, in *dispatchModelsInput) (*dispatchModelsOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
-			items, err := d.CommercialSvc.ListDispatchModels(ctx, tenantGroupScope(ctx, in.GroupID), surface.ID(in.ClientSurface))
+			items, err := d.DispatchRules.ListDispatchModels(ctx, tenantGroupScope(ctx, in.GroupID), surface.ID(in.ClientSurface))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -538,10 +538,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-delete-group-dispatch-rule", Method: http.MethodDelete, Path: "/api/v1/tenants/me/groups/{groupID}/dispatch-rules/{ruleID}", Summary: "删除分组请求模型调度规则", Tags: []string{"groups"}},
 		func(ctx context.Context, in *deleteGroupDispatchRuleInput) (*deletedOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.DispatchRules); err != nil {
 				return nil, err
 			}
-			if err := d.CommercialSvc.DeleteDispatchRule(ctx, tenantGroupScope(ctx, in.GroupID), in.RuleID); err != nil {
+			if err := d.DispatchRules.DeleteDispatchRule(ctx, tenantGroupScope(ctx, in.GroupID), in.RuleID); err != nil {
 				return nil, mapServiceError(err)
 			}
 			out := &deletedOutput{}
@@ -552,10 +552,10 @@ func registerGroups(api huma.API, d AIDeps) {
 	// ---- group targets (分组 → 上游目标) ----
 	huma.Register(api, huma.Operation{OperationID: "ai-list-group-targets", Method: http.MethodGet, Path: "/api/v1/tenants/me/groups/{groupID}/targets", Summary: "分组关联上游目标列表", Tags: []string{"groups"}},
 		func(ctx context.Context, in *groupIDInput) (*groupTargetsOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupTargets); err != nil {
 				return nil, err
 			}
-			items, err := d.CommercialSvc.ListGroupTargetDetails(ctx, tenantGroupScope(ctx, in.GroupID))
+			items, err := d.GroupTargets.ListGroupTargetDetails(ctx, tenantGroupScope(ctx, in.GroupID))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -570,15 +570,15 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-add-group-target", Method: http.MethodPost, Path: "/api/v1/tenants/me/groups/{groupID}/targets", Summary: "关联上游目标", Tags: []string{"groups"}},
 		func(ctx context.Context, in *createGroupTargetInput) (*groupTargetOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupTargets); err != nil {
 				return nil, err
 			}
 			scope := tenantGroupScope(ctx, in.GroupID)
-			target, err := d.CommercialSvc.AddGroupTarget(ctx, scope, groupTargetWriteFromRequest(in.Body))
+			target, err := d.GroupTargets.AddGroupTarget(ctx, scope, groupTargetWriteFromRequest(in.Body))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			detail, err := d.CommercialSvc.GetGroupTargetDetail(ctx, scope, target.ID)
+			detail, err := d.GroupTargets.GetGroupTargetDetail(ctx, scope, target.ID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -587,19 +587,19 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-update-group-target", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}", Summary: "更新关联(优先级/状态)", Tags: []string{"groups"}},
 		func(ctx context.Context, in *updateGroupTargetInput) (*groupTargetOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupTargets); err != nil {
 				return nil, err
 			}
 			scope := tenantGroupScope(ctx, in.GroupID)
-			existing, err := d.CommercialSvc.GetGroupTargetDetail(ctx, scope, in.BindingID)
+			existing, err := d.GroupTargets.GetGroupTargetDetail(ctx, scope, in.BindingID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			target, err := d.CommercialSvc.UpdateGroupTarget(ctx, scope, in.BindingID, groupTargetUpdateWriteFromRequest(existing.GroupTarget, in.Body))
+			target, err := d.GroupTargets.UpdateGroupTarget(ctx, scope, in.BindingID, groupTargetUpdateWriteFromRequest(existing.GroupTarget, in.Body))
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			detail, err := d.CommercialSvc.GetGroupTargetDetail(ctx, scope, target.ID)
+			detail, err := d.GroupTargets.GetGroupTargetDetail(ctx, scope, target.ID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -608,10 +608,10 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-delete-group-target", Method: http.MethodDelete, Path: "/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}", Summary: "解除关联", Tags: []string{"groups"}},
 		func(ctx context.Context, in *deleteGroupTargetInput) (*deletedOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.GroupTargets); err != nil {
 				return nil, err
 			}
-			if err := d.CommercialSvc.DeleteGroupTarget(ctx, tenantGroupScope(ctx, in.GroupID), in.BindingID); err != nil {
+			if err := d.GroupTargets.DeleteGroupTarget(ctx, tenantGroupScope(ctx, in.GroupID), in.BindingID); err != nil {
 				return nil, mapServiceError(err)
 			}
 			out := &deletedOutput{}
@@ -622,18 +622,21 @@ func registerGroups(api huma.API, d AIDeps) {
 	// ---- user bindings ----
 	huma.Register(api, huma.Operation{OperationID: "ai-list-user-groups", Method: http.MethodGet, Path: "/api/v1/tenants/me/users/{userID}/groups", Summary: "用户分组绑定列表", Tags: []string{"groups"}},
 		func(ctx context.Context, in *userGroupsListInput) (*userGroupsOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.UserBindings); err != nil {
+				return nil, err
+			}
+			if err := commercialPortReady(d.Groups); err != nil {
 				return nil, err
 			}
 			tenantID := tenantIDFromContext(ctx)
 			if err := ensureTenantOwnsEndUser(ctx, d.TenantEndUsers, tenantID, in.UserID); err != nil {
 				return nil, err
 			}
-			items, err := d.CommercialSvc.ListUserBindings(ctx, tenantID, in.UserID)
+			items, err := d.UserBindings.ListUserBindings(ctx, tenantID, in.UserID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			groupMap, err := loadCommercialGroupMap(ctx, d.CommercialSvc, tenantID)
+			groupMap, err := loadCommercialGroupMap(ctx, d.Groups, tenantID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -648,14 +651,14 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-upsert-user-group", Method: http.MethodPut, Path: "/api/v1/tenants/me/users/{userID}/groups/{groupID}", Summary: "绑定/更新用户分组", Tags: []string{"groups"}},
 		func(ctx context.Context, in *upsertUserGroupInput) (*deletedOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.UserBindings); err != nil {
 				return nil, err
 			}
 			tenantID := tenantIDFromContext(ctx)
 			if err := ensureTenantOwnsEndUser(ctx, d.TenantEndUsers, tenantID, in.UserID); err != nil {
 				return nil, err
 			}
-			if _, err := d.CommercialSvc.UpsertUserBinding(ctx, commercial.UserGroupBindingWrite{
+			if _, err := d.UserBindings.UpsertUserBinding(ctx, commercial.UserGroupBindingWrite{
 				TenantID:               tenantID,
 				UserID:                 in.UserID,
 				GroupID:                in.GroupID,
@@ -670,14 +673,14 @@ func registerGroups(api huma.API, d AIDeps) {
 
 	huma.Register(api, huma.Operation{OperationID: "ai-delete-user-group", Method: http.MethodDelete, Path: "/api/v1/tenants/me/users/{userID}/groups/{groupID}", Summary: "解绑用户分组", Tags: []string{"groups"}},
 		func(ctx context.Context, in *deleteUserGroupInput) (*deletedOutput, error) {
-			if err := commercialSvcReady(); err != nil {
+			if err := commercialPortReady(d.UserBindings); err != nil {
 				return nil, err
 			}
 			tenantID := tenantIDFromContext(ctx)
 			if err := ensureTenantOwnsEndUser(ctx, d.TenantEndUsers, tenantID, in.UserID); err != nil {
 				return nil, err
 			}
-			if err := d.CommercialSvc.DeleteUserBinding(ctx, tenantID, in.UserID, in.GroupID); err != nil {
+			if err := d.UserBindings.DeleteUserBinding(ctx, tenantID, in.UserID, in.GroupID); err != nil {
 				return nil, mapServiceError(err)
 			}
 			out := &deletedOutput{}
@@ -784,8 +787,8 @@ func userGroupToDTO(binding commercial.UserGroupBinding, group commercial.Group)
 	}
 }
 
-func loadCommercialGroupMap(ctx context.Context, svc *commercial.Service, tenantID string) (map[string]commercial.Group, error) {
-	items, err := svc.ListGroups(ctx, tenantID)
+func loadCommercialGroupMap(ctx context.Context, groups CommercialGroupCatalog, tenantID string) (map[string]commercial.Group, error) {
+	items, err := groups.ListGroups(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}

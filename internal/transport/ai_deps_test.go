@@ -48,6 +48,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	riskLogs := riskcontrol.NewLogService(nil)
 	riskEvents := riskcontrol.NewEventService(nil)
 	upstreamAccess := upstreamaccess.New(nil)
+	commercialPorts := commercial.NewService(nil)
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAIDeps(
@@ -83,6 +84,12 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				PlatformPriceBooks: priceBookPorts,
 				TenantPriceBooks:   priceBookPorts,
 				PriceBookSync:      priceBookPorts,
+				Groups:             commercialPorts,
+				GroupManager:       commercialPorts,
+				DispatchRules:      commercialPorts,
+				GroupTargets:       commercialPorts,
+				UserBindings:       commercialPorts,
+				LimitPolicies:      commercialPorts,
 				UpstreamAccess:     upstreamAccess,
 				GroupTransfer:      groupTransfer,
 			},
@@ -110,6 +117,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.PlatformPriceBooks != priceBookPorts || got.TenantPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
 		t.Fatal("price book ports were not preserved")
+	}
+	if got.Groups != commercialPorts || got.GroupManager != commercialPorts || got.DispatchRules != commercialPorts || got.GroupTargets != commercialPorts || got.UserBindings != commercialPorts || got.LimitPolicies != commercialPorts {
+		t.Fatal("commercial control-plane ports were not preserved")
 	}
 	if got.Accounts != accountPorts || got.AccountManager != accountPorts || got.AccountHealth != accountPorts {
 		t.Fatal("upstream account ports were not preserved")

@@ -99,7 +99,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Tags:          []string{"api-keys"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *tenantSelfAPIKeyWriteInput) (*apiKeyCreatedOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -110,7 +110,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, tenantID, "", in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, tenantID, "", in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		if cb := strings.TrimSpace(claimsUserID(ctx)); cb != "" && write.CreatedBy == "" {
@@ -120,7 +120,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, created.Key.ID, in.Body.LimitPolicy, write.CreatedBy)
 		if err != nil {
 			_ = d.APIKeySvc.Delete(ctx, created.Key.ID, tenantID)
 			return nil, mapServiceError(err)
@@ -139,7 +139,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 更新本租户 API key 的基础信息与独立限流策略。",
 		Tags:        []string{"api-keys"},
 	}, func(ctx context.Context, in *tenantSelfUpdateAPIKeyInput) (*apiKeyOutput, error) {
-		if d.APIKeySvc == nil || d.CommercialSvc == nil {
+		if d.APIKeySvc == nil || d.Groups == nil || d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("api key or commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -153,14 +153,14 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if err := ensureAPIKeyGroupAccessible(ctx, d.CommercialSvc, tenantID, "", in.Body.GroupID); err != nil {
+		if err := ensureAPIKeyGroupAccessible(ctx, d.Groups, tenantID, "", in.Body.GroupID); err != nil {
 			return nil, mapServiceError(err)
 		}
 		key, err := d.APIKeySvc.Update(ctx, write)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.CommercialSvc, key.ID, in.Body.LimitPolicy, userIDFromContext(ctx))
+		limitPolicy, err := syncAPIKeyLimitPolicy(ctx, d.LimitPolicies, key.ID, in.Body.LimitPolicy, userIDFromContext(ctx))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -274,8 +274,8 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
 		if err := d.APIKeySvc.Delete(ctx, in.APIKeyID, tenantID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		if d.CommercialSvc != nil {
-			_ = d.CommercialSvc.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
+		if d.LimitPolicies != nil {
+			_ = d.LimitPolicies.DeleteLimitPolicies(ctx, commercial.LimitPolicyFilter{
 				ScopeType: commercial.LimitScopeAPIKey,
 				ScopeID:   in.APIKeyID,
 			})

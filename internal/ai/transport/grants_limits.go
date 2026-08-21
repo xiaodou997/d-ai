@@ -77,10 +77,10 @@ func registerLimits(api huma.API, d AIDeps) {
 		Summary:     "运行时限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
-		policies, err := d.CommercialSvc.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
+		policies, err := d.LimitPolicies.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
 			ScopeType: commercial.LimitScopeTenant,
 		})
 		if err != nil {
@@ -104,13 +104,13 @@ func registerLimits(api huma.API, d AIDeps) {
 		Tags:          []string{"limit-policies"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *createLimitPolicyInput) (*runtimeLimitPolicyOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		if in.Body.ScopeType != "tenant" {
 			return nil, httpx.ErrBadRequest.WithDetail("admin limit policies only support tenant scope")
 		}
-		policy, err := d.CommercialSvc.CreateLimitPolicy(ctx, limitPolicyWriteFromRequest(in.Body))
+		policy, err := d.LimitPolicies.CreateLimitPolicy(ctx, limitPolicyWriteFromRequest(in.Body))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -126,13 +126,13 @@ func registerLimits(api huma.API, d AIDeps) {
 		Summary:     "更新运行时限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *updateLimitPolicyInput) (*runtimeLimitPolicyOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		if in.Body.ScopeType != "tenant" {
 			return nil, httpx.ErrBadRequest.WithDetail("admin limit policies only support tenant scope")
 		}
-		policy, err := d.CommercialSvc.UpdateLimitPolicy(ctx, in.PolicyID, limitPolicyWriteFromRequest(in.Body))
+		policy, err := d.LimitPolicies.UpdateLimitPolicy(ctx, in.PolicyID, limitPolicyWriteFromRequest(in.Body))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -148,10 +148,10 @@ func registerLimits(api huma.API, d AIDeps) {
 		Summary:     "更新运行时限流策略状态",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *updateLimitPolicyStatusInput) (*runtimeLimitPolicyOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
-		policy, err := d.CommercialSvc.UpdateLimitPolicyStatus(ctx, in.PolicyID, commercial.Status(in.Body.Status))
+		policy, err := d.LimitPolicies.UpdateLimitPolicyStatus(ctx, in.PolicyID, commercial.Status(in.Body.Status))
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

@@ -46,11 +46,11 @@ func registerTenantSelfPricing(api huma.API, d AIDeps) {
 		Description: "返回零售价格表 USD 单价乘分组默认用户倍率后的 USD 价格。",
 		Tags:        []string{"groups"},
 	}, func(ctx context.Context, in *tenantSelfGroupIDInput) (*tenantGroupEffectivePricesOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.Groups == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
-		group, err := d.CommercialSvc.GetGroup(ctx, commercial.TenantGroupScope{TenantID: tenantID, GroupID: in.GroupID})
+		group, err := d.Groups.GetGroup(ctx, commercial.TenantGroupScope{TenantID: tenantID, GroupID: in.GroupID})
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

@@ -43,7 +43,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·指定用户限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *tenantSelfUserLimitInput) (*runtimeLimitPoliciesOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -53,7 +53,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		if err := ensureTenantOwnsEndUser(ctx, d.TenantEndUsers, tenantID, in.UserID); err != nil {
 			return nil, err
 		}
-		return singleScopedPolicyResponse(ctx, d.CommercialSvc, commercial.LimitScopeUser, in.UserID)
+		return singleScopedPolicyResponse(ctx, d.LimitPolicies, commercial.LimitScopeUser, in.UserID)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -63,7 +63,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·创建或更新指定用户限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *tenantSelfUpsertUserLimitInput) (*runtimeLimitPolicyOutput, error) {
-		if d.CommercialSvc == nil {
+		if d.LimitPolicies == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -73,7 +73,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		if err := ensureTenantOwnsEndUser(ctx, d.TenantEndUsers, tenantID, in.UserID); err != nil {
 			return nil, err
 		}
-		policy, err := upsertScopedLimitPolicy(ctx, d.CommercialSvc, commercial.LimitPolicyWrite{
+		policy, err := upsertScopedLimitPolicy(ctx, d.LimitPolicies, commercial.LimitPolicyWrite{
 			ScopeType:        commercial.LimitScopeUser,
 			ScopeID:          in.UserID,
 			ConcurrencyLimit: int32PtrToIntPtr(in.Body.ConcurrencyLimit),
@@ -93,7 +93,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·租户 API 密钥限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), "", d.APIKeySvc, d.CommercialSvc)
+		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), "", d.APIKeySvc, d.LimitPolicies)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -103,7 +103,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·创建或更新租户 API 密钥限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *selfUpsertAPIKeyLimitInput) (*runtimeLimitPolicyOutput, error) {
-		if d.CommercialSvc == nil || d.APIKeySvc == nil {
+		if d.LimitPolicies == nil || d.APIKeySvc == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -113,7 +113,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		if err := ensureTenantAPIKeyScope(ctx, d.APIKeySvc, tenantID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		policy, err := upsertScopedLimitPolicy(ctx, d.CommercialSvc, commercial.LimitPolicyWrite{
+		policy, err := upsertScopedLimitPolicy(ctx, d.LimitPolicies, commercial.LimitPolicyWrite{
 			ScopeType:        commercial.LimitScopeAPIKey,
 			ScopeID:          in.APIKeyID,
 			ConcurrencyLimit: int32PtrToIntPtr(in.Body.ConcurrencyLimit),
@@ -135,7 +135,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助·个人 API 密钥限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), userIDFromContext(ctx), d.APIKeySvc, d.CommercialSvc)
+		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), userIDFromContext(ctx), d.APIKeySvc, d.LimitPolicies)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -145,7 +145,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助·创建或更新个人 API 密钥限流策略",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, in *selfUpsertAPIKeyLimitInput) (*runtimeLimitPolicyOutput, error) {
-		if d.CommercialSvc == nil || d.APIKeySvc == nil {
+		if d.LimitPolicies == nil || d.APIKeySvc == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -156,7 +156,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		if err := ensureUserAPIKeyScope(ctx, d.APIKeySvc, tenantID, userID, in.APIKeyID); err != nil {
 			return nil, mapServiceError(err)
 		}
-		policy, err := upsertScopedLimitPolicy(ctx, d.CommercialSvc, commercial.LimitPolicyWrite{
+		policy, err := upsertScopedLimitPolicy(ctx, d.LimitPolicies, commercial.LimitPolicyWrite{
 			ScopeType:        commercial.LimitScopeAPIKey,
 			ScopeID:          in.APIKeyID,
 			ConcurrencyLimit: int32PtrToIntPtr(in.Body.ConcurrencyLimit),
@@ -170,8 +170,8 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 	})
 }
 
-func singleScopedPolicyResponse(ctx context.Context, svc *commercial.Service, scopeType commercial.LimitScope, scopeID string) (*runtimeLimitPoliciesOutput, error) {
-	policies, err := svc.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
+func singleScopedPolicyResponse(ctx context.Context, policies CommercialLimitPolicyManager, scopeType commercial.LimitScope, scopeID string) (*runtimeLimitPoliciesOutput, error) {
+	items, err := policies.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
 		ScopeType: scopeType,
 		ScopeID:   scopeID,
 	})
@@ -179,16 +179,16 @@ func singleScopedPolicyResponse(ctx context.Context, svc *commercial.Service, sc
 		return nil, mapServiceError(err)
 	}
 	out := &runtimeLimitPoliciesOutput{}
-	out.Body.Items = make([]runtimeLimitPolicyDTO, 0, len(policies))
-	for _, policy := range policies {
+	out.Body.Items = make([]runtimeLimitPolicyDTO, 0, len(items))
+	for _, policy := range items {
 		out.Body.Items = append(out.Body.Items, runtimeLimitPolicyToDTO(policy))
 	}
 	out.Body.Total = len(out.Body.Items)
 	return out, nil
 }
 
-func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID string, apiKeySvc *identitycontrol.Service, commercialSvc *commercial.Service) (*runtimeLimitPoliciesOutput, error) {
-	if apiKeySvc == nil || commercialSvc == nil {
+func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID string, apiKeySvc *identitycontrol.Service, policies CommercialLimitPolicyManager) (*runtimeLimitPoliciesOutput, error) {
+	if apiKeySvc == nil || policies == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 	}
 	if tenantID == "" {
@@ -210,7 +210,7 @@ func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID str
 	for _, key := range keys {
 		scopeIDs = append(scopeIDs, key.ID)
 	}
-	policies, err := commercialSvc.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
+	policyItems, err := policies.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
 		ScopeType: commercial.LimitScopeAPIKey,
 	})
 	if err != nil {
@@ -221,8 +221,8 @@ func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID str
 		allowed[scopeID] = struct{}{}
 	}
 	out := &runtimeLimitPoliciesOutput{}
-	out.Body.Items = make([]runtimeLimitPolicyDTO, 0, len(policies))
-	for _, policy := range policies {
+	out.Body.Items = make([]runtimeLimitPolicyDTO, 0, len(policyItems))
+	for _, policy := range policyItems {
 		if _, ok := allowed[policy.ScopeID]; !ok {
 			continue
 		}
@@ -232,8 +232,8 @@ func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID str
 	return out, nil
 }
 
-func upsertScopedLimitPolicy(ctx context.Context, svc *commercial.Service, in commercial.LimitPolicyWrite) (commercial.LimitPolicy, error) {
-	existing, err := svc.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
+func upsertScopedLimitPolicy(ctx context.Context, policies CommercialLimitPolicyManager, in commercial.LimitPolicyWrite) (commercial.LimitPolicy, error) {
+	existing, err := policies.ListLimitPolicies(ctx, commercial.LimitPolicyFilter{
 		ScopeType: in.ScopeType,
 		ScopeID:   in.ScopeID,
 	})
@@ -241,7 +241,7 @@ func upsertScopedLimitPolicy(ctx context.Context, svc *commercial.Service, in co
 		return commercial.LimitPolicy{}, err
 	}
 	if len(existing) > 0 {
-		return svc.UpdateLimitPolicy(ctx, existing[0].ID, in)
+		return policies.UpdateLimitPolicy(ctx, existing[0].ID, in)
 	}
-	return svc.CreateLimitPolicy(ctx, in)
+	return policies.CreateLimitPolicy(ctx, in)
 }
