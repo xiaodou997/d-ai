@@ -89,10 +89,10 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 		statusResult: domain.UpstreamAccount{ID: "account-status", Name: "Updated", Status: domain.UpstreamAccountStatusActive},
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerUpstreamAccounts(api, AIDeps{CatalogDeps: CatalogDeps{
+	registerUpstreamAccounts(api, UpstreamAccountManagementHTTPDeps{
 		Accounts:       stub,
 		AccountManager: stub,
-	}})
+	})
 
 	listRecorder := performUpstreamAccountRequest(router, http.MethodGet, "/api/v1/upstream-accounts", "")
 	requireUpstreamAccountStatus(t, listRecorder, http.StatusOK)
@@ -147,7 +147,7 @@ func TestUpstreamAccountRoutesUseSeparatedPorts(t *testing.T) {
 
 func TestUpstreamAccountRoutesRequireSeparatedPorts(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerUpstreamAccounts(api, AIDeps{})
+	registerUpstreamAccounts(api, UpstreamAccountManagementHTTPDeps{})
 
 	requests := []struct {
 		method string
@@ -184,13 +184,11 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 		createResult: domain.UpstreamAccount{ID: "account-import", DefaultProtocol: "gemini"},
 	}
 	codec := &providerSecretCodecStub{plaintext: "plaintext-key"}
-	d := AIDeps{
-		CatalogDeps: CatalogDeps{
-			Accounts:       stub,
-			AccountReader:  stub,
-			AccountManager: stub,
-		},
-		RuntimeDeps: RuntimeDeps{ProviderSecrets: codec},
+	d := UpstreamAccountManagementHTTPDeps{
+		Accounts:        stub,
+		AccountReader:   stub,
+		AccountManager:  stub,
+		ProviderSecrets: codec,
 	}
 
 	exported, err := exportUpstreamAccounts(t.Context(), d, []string{"account-export"}, false)

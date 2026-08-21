@@ -94,7 +94,7 @@ type deleteAccountOutput struct {
 	}
 }
 
-func registerUpstreamAccounts(api huma.API, d AIDeps) {
+func registerUpstreamAccounts(api huma.API, d UpstreamAccountManagementHTTPDeps) {
 	registerUpstreamAccountTransfer(api, d)
 
 	huma.Register(api, huma.Operation{

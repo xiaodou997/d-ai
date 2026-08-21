@@ -25,7 +25,7 @@ func TestVoidAdminAuditBuildsDomainEvent(t *testing.T) {
 
 	recorder := &adminAuditRecorderStub{}
 	ctx := context.WithValue(context.Background(), authClaimsContextKey{}, &auth.Claims{UserID: "admin-1"})
-	voidAdminAudit(ctx, AIDeps{OperationsDeps: OperationsDeps{AdminAudit: recorder}}, "groups.import", "group_config_bundle", "bundle-1", map[string]any{
+	voidAdminAudit(ctx, recorder, "groups.import", "group_config_bundle", "bundle-1", map[string]any{
 		"group_count": 2,
 	}, "success", 201)
 
@@ -52,7 +52,7 @@ func TestVoidAdminAuditRemainsBestEffort(t *testing.T) {
 	t.Parallel()
 
 	recorder := &adminAuditRecorderStub{err: errors.New("database unavailable")}
-	voidAdminAudit(context.Background(), AIDeps{OperationsDeps: OperationsDeps{AdminAudit: recorder}}, "accounts.export", "", "", map[string]any{
+	voidAdminAudit(context.Background(), recorder, "accounts.export", "", "", map[string]any{
 		"invalid": func() {},
 	}, "failed", 0)
 
@@ -66,5 +66,5 @@ func TestVoidAdminAuditRemainsBestEffort(t *testing.T) {
 
 func TestVoidAdminAuditSkipsMissingRecorder(t *testing.T) {
 	t.Parallel()
-	voidAdminAudit(context.Background(), AIDeps{}, "accounts.export", "", "", nil, "success", 200)
+	voidAdminAudit(context.Background(), nil, "accounts.export", "", "", nil, "success", 200)
 }

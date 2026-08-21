@@ -24,7 +24,7 @@ func TestValidateImportPriceBook(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateImportPriceBook(context.Background(), AIDeps{CatalogDeps: CatalogDeps{PriceBooks: tt.reader}}, tt.priceBook)
+			err := validateImportPriceBook(context.Background(), tt.reader, tt.priceBook)
 			if tt.wantDetail == "" {
 				if err != nil {
 					t.Fatalf("validateImportPriceBook error = %v", err)

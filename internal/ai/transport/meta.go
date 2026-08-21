@@ -121,18 +121,13 @@ type OAuthCredentialWriter interface {
 	Delete(ctx context.Context, credID string) error
 }
 
-// CatalogDeps contains provider, model, price and upstream control-plane
-// collaborators.
+// CatalogDeps contains model, pricing and tenant/commercial control-plane
+// collaborators shared by the remaining AI core routes.
 type CatalogDeps struct {
-	AccountReader      UpstreamAccountReader
-	ModelBindings      UpstreamModelBindingStore
 	ModelCatalog       ModelCatalogReader
-	PriceBooks         PriceBookReader
 	PlatformPriceBooks PlatformPriceBookManager
 	TenantPriceBooks   TenantPriceBookManager
 	PriceBookSync      PriceBookSyncManager
-	Accounts           UpstreamAccountCatalog
-	AccountManager     UpstreamAccountManager
 	UpstreamAccess     UpstreamAccessManager
 	Groups             CommercialGroupCatalog
 	GroupManager       CommercialGroupManager
@@ -357,11 +352,6 @@ type UsageQueryReader interface {
 	UserSummary(ctx context.Context, tenantID, userID, requestSource string) (domain.UserUsageSummary, error)
 }
 
-// RuntimeDeps contains request execution state and runtime policy.
-type RuntimeDeps struct {
-	ProviderSecrets ProviderSecretCodec
-}
-
 // ProviderSecretCodec is the minimal encryption capability needed by HTTP
 // management flows. Raw master key material stays inside its implementation.
 type ProviderSecretCodec interface {
@@ -388,7 +378,6 @@ type IdentityEnrichmentFailureObserver interface {
 type AIDeps struct {
 	IdentityDeps
 	CatalogDeps
-	RuntimeDeps
 	OperationsDeps
 }
 
@@ -399,7 +388,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	management := huma.NewGroup(api)
 	management.UseMiddleware(platformUserAuth(api, auth))
 	registerPriceBooks(management, d)
-	registerUpstreamAccounts(management, d)
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)

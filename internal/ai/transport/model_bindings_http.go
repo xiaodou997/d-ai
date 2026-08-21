@@ -4,7 +4,7 @@ import "github.com/danielgtaylor/huma/v2"
 
 // ModelBindingHTTPDeps is the dependency boundary for account and pool model
 // binding management routes. Discovery, connectivity and transfer workflows
-// keep using their shared ports from the core AI dependencies.
+// compose the same ports in their own vertical HTTP modules.
 type ModelBindingHTTPDeps struct {
 	Auth          HTTPAuthDeps
 	AccountReader UpstreamAccountReader

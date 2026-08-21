@@ -362,11 +362,8 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		},
 		AIHTTPDeps: transport.AIHTTPDeps{
 			Core: transport.AIDeps{
-				AIInfrastructureDeps: transport.AIInfrastructureDeps{
-					ProviderSecrets: providerSecrets,
-					BanChecker:      banChecker,
-				},
 				AIIdentityDeps: transport.AIIdentityDeps{
+					BanChecker:        banChecker,
 					APIKeys:           apiKeySvc,
 					APIKeyWriter:      apiKeySvc,
 					APIKeyLifecycle:   apiKeySvc,
@@ -378,10 +375,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 					WorkspaceImages:   workspaceSvc,
 				},
 				AICatalogDeps: transport.AICatalogDeps{
-					AccountReader:      accountSvc,
-					ModelBindings:      modelBindings,
 					ModelCatalog:       modelCatalog,
-					PriceBooks:         priceBookSvc,
 					PlatformPriceBooks: priceBookSvc,
 					TenantPriceBooks:   priceBookSvc,
 					PriceBookSync:      priceBookSvc,
@@ -392,8 +386,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 					UserBindings:       commercialSvc,
 					LimitPolicies:      commercialSvc,
 					GroupTransfer:      groupTransferSvc,
-					Accounts:           accountSvc,
-					AccountManager:     accountSvc,
 					UpstreamAccess:     upstreamAccessSvc,
 				},
 				AIOperationsDeps: transport.AIOperationsDeps{
@@ -469,6 +461,16 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				AccountHealth:     accountSvc,
 				ModelCapabilities: modelCapabilities,
 				BanChecker:        banChecker,
+			},
+			UpstreamAccounts: transport.AIUpstreamAccountManagementHTTPDeps{
+				Accounts:        accountSvc,
+				AccountManager:  accountSvc,
+				AccountReader:   accountSvc,
+				ProviderSecrets: providerSecrets,
+				ModelBindings:   modelBindings,
+				PriceBooks:      priceBookSvc,
+				AdminAudit:      auditSvc,
+				BanChecker:      banChecker,
 			},
 		},
 		FileStore:          fileStore,

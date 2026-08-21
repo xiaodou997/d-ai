@@ -22,24 +22,25 @@ httpServers.Start / Shutdown
 - `shutdownStack` 记录已成功构造的资源，按构造逆序关闭，并且重复调用安全；因此部分启动失败也会释放已经拿到的基础设施。
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
-- `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、catalog、runtime、operations
-  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统和管理仪表盘 HTTP 已脱离该容器，由独立模块依赖注册。
+- `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、catalog、operations
+  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断和上游账号管理 HTTP 已脱离该容器，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
-  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings` 和 `UpstreamDiagnostics`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
+  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics` 和 `UpstreamAccounts`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
 ## 尚未清零的装配遗留
 
-- `transport.Deps` 仍有具体 PostgreSQL/Redis/业务 service，AI core `AIDeps` 虽已接口化但仍是 service locator；P1-02 后续会按订阅模块模式继续拆分端点组。
+- `transport.Deps` 仍有具体 PostgreSQL/Redis/业务 service，AI core `AIDeps` 虽已接口化但仍是 service locator；账号管理、Provider 密钥、模型绑定、价格簿校验等管理依赖已移出，P1-02 后续会按垂直模块模式继续拆分剩余端点组。
 - AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `AIDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助与工作区仍从 Core 复用同一读端口，具体 `DashboardService` 只在 composition root 构造。
 - 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户、用户和工作区仍从 Core 复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。
-- OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Core 仅保留共享 `ModelBindings` 能力，Serving 和后台刷新器仍由 composition root/运行时持有。
-- 账号/凭证池模型绑定管理已经由独立 `ModelBindingHTTPDeps` 组合账号读取、池读取和 `UpstreamModelBindingStore`；Core 仅继续向发现、连通性和迁移流程提供共享端口。
-- 上游发现与连通性已经由独立 `UpstreamDiagnosticsHTTPDeps` 组合账号读取、模型绑定、密钥解密、HTTP、能力目录和账号健康端口；Core 仅继续向账号迁移、风险和其他共享流程提供剩余端口。
+- OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Serving 和后台刷新器仍由 composition root/运行时持有。
+- 账号/凭证池模型绑定管理已经由独立 `ModelBindingHTTPDeps` 组合账号读取、池读取和 `UpstreamModelBindingStore`；Core 不再注册模型绑定管理路径。
+- 上游发现与连通性已经由独立 `UpstreamDiagnosticsHTTPDeps` 组合账号读取、模型绑定、密钥解密、HTTP、能力目录和账号健康端口；Core 不再注册诊断路径。
+- 上游账号 CRUD 与迁移已经由独立 `UpstreamAccountManagementHTTPDeps` 组合账号目录、管理、密钥、绑定、价格簿和审计端口；Core 不再持有账号管理、Provider 密钥、账号读取、模型绑定和价格簿校验字段。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
 - AI 上游模型绑定、凭证导入和 pool CRUD 查询统一使用 `OAuthPoolReader`；创建、更新、状态变更和删除使用 `OAuthPoolWriter` 与领域级 `CredentialPoolCreate` / `CredentialPoolUpdate` 命令。
@@ -55,12 +56,12 @@ httpServers.Start / Shutdown
 - AI 系统状态端点只接收 `ComponentHealthProbe`；Redis adapter 封装 `PING` 和 go-redis 命令类型，AI Transport 依赖容器不再持有 `*redis.Client`。
 - usage identity enrichment 的 fail-open 告警只依赖 `IdentityEnrichmentFailureObserver`；observability adapter 负责 zap 日志消息与字段，AI Transport 不再持有 `*zap.Logger`。
 - 上游模型发现、连通性检测与绑定校验只依赖密钥读取端口 `UpstreamAccountReader`；`upstreamcontrol.Service` 返回领域级 `AccountSecret`，PostgreSQL adapter 封装账号 sqlc row 映射。
-- 上游账号列表、CRUD 和探测后的状态协调分别通过 `UpstreamAccountCatalog`、`UpstreamAccountManager` 和 `UpstreamAccountHealthWriter` 进入 AI Transport；账号导出显式组合目录、密钥读取和解密端口，导入显式组合目录与管理端口，具体 `upstreamcontrol.Service` 只在 composition root 构造并注入这些能力。
+- 上游账号列表、CRUD 和探测后的状态协调分别通过 `UpstreamAccountCatalog`、`UpstreamAccountManager` 和 `UpstreamAccountHealthWriter` 进入独立 AI HTTP 模块；账号导出显式组合目录、密钥读取和解密端口，导入显式组合目录、管理、绑定、价格簿与审计端口，具体 `upstreamcontrol.Service` 只在 composition root 构造并注入这些能力。
 - 终端用户自助 usage 日志只依赖 `UserUsageLogReader`；`UsageRepo` 封装专用 sqlc 查询的参数和 row 映射，Transport 只接收 `domain.UsageLog`。
 - 账号与分组迁移审计只依赖 `AdminAuditRecorder` 和 `domain.AdminAuditEvent`；`AuditRepo` 封装 sqlc 写入，AI Transport 与顶层 AI 依赖组已不再持有 `*dbgen.Queries`。
 - 上游模型绑定管理、目录导入、账号迁移和连通性测试只依赖 `UpstreamModelBindingStore` 与领域模型；PostgreSQL adapter 封装 scope 隔离、状态优先查询和原子导入事务，Transport 不再直接管理 `ai_upstream_models` 持久化。
 - 租户/用户可用模型、分组有效价格和租户上游资源目录只依赖 `ModelCatalogReader`；PostgreSQL adapter 封装跨分组、资源、模型绑定、租户授权和价格表的聚合查询与 JSONB 映射。
-- AI 系统状态通过 `ComponentHealthProbe` 检查 PostgreSQL 和 Redis，账号迁移价格簿校验依赖 `PriceBookReader`；AI HTTP 模块不再持有 PostgreSQL pool 或诊断 HTTP client 具体类型。
+- AI 系统状态通过 `ComponentHealthProbe` 检查 PostgreSQL 和 Redis，账号迁移价格簿校验依赖 `PriceBookReader`；AI HTTP 模块不再持有 PostgreSQL pool 或诊断 HTTP client 具体类型，价格簿校验只在上游账号管理模块装配。
 - 平台价格表管理、租户可见价格表与文件迁移、LiteLLM 查询和同步分别通过 `PlatformPriceBookManager`、`TenantPriceBookManager`、`PriceBookSyncManager` 进入 AI Transport；具体 `billingcontrol.Service` 只在 composition root 构造并注入这些能力，分组生效价格继续只依赖 `ModelCatalogReader`。
 - 商业控制面通过 `CommercialGroupCatalog`、`CommercialGroupManager`、`CommercialDispatchRuleManager`、`CommercialGroupTargetManager`、`CommercialUserBindingManager`、`CommercialLimitPolicyManager` 六组端口进入 AI Transport；具体 `commercial.Service` 只在 composition root 构造并按能力注入，Serving 运行时仍独立持有其解析能力。
 - API Key 控制面通过 `APIKeyReader`、`APIKeyWriter`、`APIKeyLifecycleManager`、`APIKeySecretManager` 四组端口进入 AI Transport；具体 `identitycontrol.Service` 只在 composition root 构造并按能力注入，已有密钥的明文回显与轮换被隔离在敏感密钥端口，新建端口只返回本次生成的明文。
@@ -82,6 +83,7 @@ httpServers.Start / Shutdown
 - OAuth pool/credential HTTP 已由独立 `OAuthManagementHTTPDeps` 组合池/凭证读写、健康、刷新、目录和绑定端口，并通过 `RegisterOAuthManagement` 注册平台管理员认证分组；Core 不再注册 OAuth pool/credential 管理路径。
 - 账号/凭证池模型绑定 HTTP 已由独立 `ModelBindingHTTPDeps` 组合账号/池读取和绑定存储端口，并通过 `RegisterModelBindings` 注册平台管理员认证分组；Core 不再注册模型绑定管理路径。
 - 上游诊断 HTTP 已由独立 `UpstreamDiagnosticsHTTPDeps` 组合发现、能力推断和连通性测试端口，并通过 `RegisterUpstreamDiagnostics` 注册平台管理员认证分组；Core 不再注册这些诊断路径。
+- 上游账号管理 HTTP 已由独立 `UpstreamAccountManagementHTTPDeps` 组合 CRUD、导入/导出迁移和审计端口，并通过 `RegisterUpstreamAccountManagement` 注册平台管理员认证分组；Core 不再注册 8 条账号管理路径。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

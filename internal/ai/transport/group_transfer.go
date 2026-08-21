@@ -44,7 +44,7 @@ func registerGroupTransfer(api huma.API, d AIDeps) {
 		tenantID := tenantIDFromContext(ctx)
 		bundle, err := d.GroupTransfer.Export(ctx, tenantID, in.Body.GroupIDs)
 		if err != nil {
-			voidAdminAudit(ctx, d, "groups.export", "group_config_bundle", "", map[string]any{
+			voidAdminAudit(ctx, d.AdminAudit, "groups.export", "group_config_bundle", "", map[string]any{
 				"group_ids": in.Body.GroupIDs,
 			}, "failed", 500)
 			return nil, mapServiceError(err)
@@ -53,7 +53,7 @@ func registerGroupTransfer(api huma.API, d AIDeps) {
 		for _, group := range bundle.Groups {
 			names = append(names, group.Name)
 		}
-		voidAdminAudit(ctx, d, "groups.export", "group_config_bundle", bundle.BundleID, map[string]any{
+		voidAdminAudit(ctx, d.AdminAudit, "groups.export", "group_config_bundle", bundle.BundleID, map[string]any{
 			"group_count": len(bundle.Groups),
 			"group_names": names,
 		}, "success", 200)
@@ -93,14 +93,14 @@ func registerGroupTransfer(api huma.API, d AIDeps) {
 		}
 		result, err := d.GroupTransfer.Import(ctx, tenantIDFromContext(ctx), in.Body)
 		if err != nil {
-			voidAdminAudit(ctx, d, "groups.import", "group_config_bundle", in.Body.Bundle.BundleID, groupImportAuditSummary(in.Body, commercial.GroupImportResult{}), "failed", 500)
+			voidAdminAudit(ctx, d.AdminAudit, "groups.import", "group_config_bundle", in.Body.Bundle.BundleID, groupImportAuditSummary(in.Body, commercial.GroupImportResult{}), "failed", 500)
 			return nil, mapServiceError(err)
 		}
 		auditResult := "success"
 		if result.Summary.Success == 0 && result.Summary.Error > 0 {
 			auditResult = "failed"
 		}
-		voidAdminAudit(ctx, d, "groups.import", "group_config_bundle", in.Body.Bundle.BundleID, groupImportAuditSummary(in.Body, result), auditResult, 200)
+		voidAdminAudit(ctx, d.AdminAudit, "groups.import", "group_config_bundle", in.Body.Bundle.BundleID, groupImportAuditSummary(in.Body, result), auditResult, 200)
 		return &groupImportOutput{Body: result}, nil
 	})
 }

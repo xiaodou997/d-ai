@@ -121,7 +121,7 @@ type upstreamAccountImportOutput struct {
 	}
 }
 
-func registerUpstreamAccountTransfer(api huma.API, d AIDeps) {
+func registerUpstreamAccountTransfer(api huma.API, d UpstreamAccountManagementHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-export-upstream-accounts",
 		Method:      http.MethodPost,
@@ -132,13 +132,13 @@ func registerUpstreamAccountTransfer(api huma.API, d AIDeps) {
 	}, func(ctx context.Context, in *upstreamAccountExportInput) (*upstreamAccountExportOutput, error) {
 		out, err := exportUpstreamAccounts(ctx, d, in.Body.AccountIDs, in.Body.IncludeModelBindings)
 		if err != nil {
-			voidAdminAudit(ctx, d, "upstream_accounts.export", "upstream_account", "", map[string]any{
+			voidAdminAudit(ctx, d.AdminAudit, "upstream_accounts.export", "upstream_account", "", map[string]any{
 				"account_ids":            in.Body.AccountIDs,
 				"include_model_bindings": in.Body.IncludeModelBindings,
 			}, "failed", 500)
 			return nil, err
 		}
-		voidAdminAudit(ctx, d, "upstream_accounts.export", "upstream_account", "", map[string]any{
+		voidAdminAudit(ctx, d.AdminAudit, "upstream_accounts.export", "upstream_account", "", map[string]any{
 			"account_ids":            in.Body.AccountIDs,
 			"account_count":          len(out.Body.Accounts),
 			"include_model_bindings": in.Body.IncludeModelBindings,
@@ -173,12 +173,12 @@ func registerUpstreamAccountTransfer(api huma.API, d AIDeps) {
 	}, func(ctx context.Context, in *upstreamAccountImportInput) (*upstreamAccountImportOutput, error) {
 		out, err := importUpstreamAccounts(ctx, d, in.Body)
 		if err != nil {
-			voidAdminAudit(ctx, d, "upstream_accounts.import", "upstream_account", "", map[string]any{
+			voidAdminAudit(ctx, d.AdminAudit, "upstream_accounts.import", "upstream_account", "", map[string]any{
 				"account_count": len(in.Body.Accounts),
 			}, "failed", 500)
 			return nil, err
 		}
-		voidAdminAudit(ctx, d, "upstream_accounts.import", "upstream_account", "", map[string]any{
+		voidAdminAudit(ctx, d.AdminAudit, "upstream_accounts.import", "upstream_account", "", map[string]any{
 			"created_account_ids":       out.Body.CreatedAccountIDs,
 			"created_account_count":     len(out.Body.CreatedAccountIDs),
 			"created_binding_count":     len(out.Body.CreatedModelBindingIDs),
@@ -191,7 +191,7 @@ func registerUpstreamAccountTransfer(api huma.API, d AIDeps) {
 	})
 }
 
-func exportUpstreamAccounts(ctx context.Context, d AIDeps, accountIDs []string, includeBindings bool) (*upstreamAccountExportOutput, error) {
+func exportUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTPDeps, accountIDs []string, includeBindings bool) (*upstreamAccountExportOutput, error) {
 	if d.Accounts == nil || d.AccountReader == nil || d.ProviderSecrets == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("account service or provider secret codec is not configured")
 	}
@@ -259,7 +259,7 @@ type importPreviewResult struct {
 	Summary upstreamAccountImportSummaryDTO
 }
 
-func previewImportUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountImportRequest) (importPreviewResult, error) {
+func previewImportUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTPDeps, req upstreamAccountImportRequest) (importPreviewResult, error) {
 	if d.Accounts == nil {
 		return importPreviewResult{}, httpx.ErrUnavailable.WithDetail("account service is not configured")
 	}
@@ -269,10 +269,10 @@ func previewImportUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAc
 	if err := validateImportStrategies(req); err != nil {
 		return importPreviewResult{}, err
 	}
-	if err := validateImportPriceBook(ctx, d, req.DefaultPriceBookID); err != nil {
+	if err := validateImportPriceBook(ctx, d.PriceBooks, req.DefaultPriceBookID); err != nil {
 		return importPreviewResult{}, err
 	}
-	existingNames, err := existingUpstreamAccountNames(ctx, d)
+	existingNames, err := existingUpstreamAccountNames(ctx, d.Accounts)
 	if err != nil {
 		return importPreviewResult{}, err
 	}
@@ -286,7 +286,7 @@ func previewImportUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAc
 	return result, nil
 }
 
-func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountImportRequest) (*upstreamAccountImportOutput, error) {
+func importUpstreamAccounts(ctx context.Context, d UpstreamAccountManagementHTTPDeps, req upstreamAccountImportRequest) (*upstreamAccountImportOutput, error) {
 	if d.Accounts == nil || d.AccountManager == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("account service is not configured")
 	}
@@ -297,7 +297,7 @@ func importUpstreamAccounts(ctx context.Context, d AIDeps, req upstreamAccountIm
 		return nil, err
 	}
 	out := &upstreamAccountImportOutput{}
-	existingNames, err := existingUpstreamAccountNames(ctx, d)
+	existingNames, err := existingUpstreamAccountNames(ctx, d.Accounts)
 	if err != nil {
 		return nil, err
 	}
@@ -456,8 +456,8 @@ func accumulateImportPreview(summary *upstreamAccountImportSummaryDTO, item upst
 	}
 }
 
-func existingUpstreamAccountNames(ctx context.Context, d AIDeps) (map[string]struct{}, error) {
-	accounts, err := d.Accounts.ListAccounts(ctx)
+func existingUpstreamAccountNames(ctx context.Context, accountsReader UpstreamAccountCatalog) (map[string]struct{}, error) {
+	accounts, err := accountsReader.ListAccounts(ctx)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -468,15 +468,15 @@ func existingUpstreamAccountNames(ctx context.Context, d AIDeps) (map[string]str
 	return out, nil
 }
 
-func validateImportPriceBook(ctx context.Context, d AIDeps, priceBookID string) error {
+func validateImportPriceBook(ctx context.Context, priceBooks PriceBookReader, priceBookID string) error {
 	priceBookID = strings.TrimSpace(priceBookID)
 	if priceBookID == "" {
 		return nil
 	}
-	if d.PriceBooks == nil {
+	if priceBooks == nil {
 		return httpx.ErrUnavailable.WithDetail("price book reader is not configured")
 	}
-	if _, err := d.PriceBooks.GetPriceBook(ctx, priceBookID); err != nil {
+	if _, err := priceBooks.GetPriceBook(ctx, priceBookID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return httpx.ErrBadRequest.WithDetail("default_price_book_id does not exist")
 		}
@@ -575,27 +575,4 @@ func normalizedRawJSONBytes(raw json.RawMessage) []byte {
 		return []byte("{}")
 	}
 	return append([]byte(nil), raw...)
-}
-
-func voidAdminAudit(ctx context.Context, d AIDeps, action, objectType, objectID string, summary map[string]any, result string, httpStatus int32) {
-	if d.AdminAudit == nil {
-		return
-	}
-	raw, err := json.Marshal(summary)
-	if err != nil {
-		raw = []byte("{}")
-	}
-	var status *int32
-	if httpStatus > 0 {
-		status = &httpStatus
-	}
-	_ = d.AdminAudit.Record(ctx, domain.AdminAuditEvent{
-		Actor:          claimsUserID(ctx),
-		Action:         action,
-		ObjectType:     objectType,
-		ObjectID:       objectID,
-		RequestSummary: raw,
-		Result:         result,
-		HttpStatus:     status,
-	})
 }

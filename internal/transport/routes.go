@@ -74,15 +74,9 @@ type OperationsDeps struct {
 	DataCleanup   *cleanuppkg.Service
 }
 
-// AIInfrastructureDeps contains runtime-level infrastructure policies used by
-// AI transport.
-type AIInfrastructureDeps struct {
-	ProviderSecrets aitransport.ProviderSecretCodec
-	BanChecker      aitransport.HumaBanChecker
-}
-
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
+	BanChecker        aitransport.HumaBanChecker
 	APIKeys           aitransport.APIKeyReader
 	APIKeyWriter      aitransport.APIKeyWriter
 	APIKeyLifecycle   aitransport.APIKeyLifecycleManager
@@ -109,10 +103,7 @@ type AISubscriptionHTTPDeps struct {
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
 type AICatalogDeps struct {
-	AccountReader      aitransport.UpstreamAccountReader
-	ModelBindings      aitransport.UpstreamModelBindingStore
 	ModelCatalog       aitransport.ModelCatalogReader
-	PriceBooks         aitransport.PriceBookReader
 	PlatformPriceBooks aitransport.PlatformPriceBookManager
 	TenantPriceBooks   aitransport.TenantPriceBookManager
 	PriceBookSync      aitransport.PriceBookSyncManager
@@ -123,8 +114,6 @@ type AICatalogDeps struct {
 	UserBindings       aitransport.CommercialUserBindingManager
 	LimitPolicies      aitransport.CommercialLimitPolicyManager
 	GroupTransfer      aitransport.GroupTransferManager
-	Accounts           aitransport.UpstreamAccountCatalog
-	AccountManager     aitransport.UpstreamAccountManager
 	UpstreamAccess     aitransport.UpstreamAccessManager
 }
 
@@ -196,6 +185,20 @@ type AIUpstreamDiagnosticsHTTPDeps struct {
 	BanChecker        aitransport.HumaBanChecker
 }
 
+// AIUpstreamAccountManagementHTTPDeps contains the collaborators owned by
+// the independently registered direct upstream-account CRUD and transfer
+// module.
+type AIUpstreamAccountManagementHTTPDeps struct {
+	Accounts        aitransport.UpstreamAccountCatalog
+	AccountManager  aitransport.UpstreamAccountManager
+	AccountReader   aitransport.UpstreamAccountReader
+	ProviderSecrets aitransport.ProviderSecretCodec
+	ModelBindings   aitransport.UpstreamModelBindingStore
+	PriceBooks      aitransport.PriceBookReader
+	AdminAudit      aitransport.AdminAuditRecorder
+	BanChecker      aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -221,7 +224,6 @@ type AIRiskControlHTTPDeps struct {
 // AI transport module. It is intentionally separate from Deps so a role that
 // only serves platform endpoints cannot accidentally receive AI services.
 type AIDeps struct {
-	AIInfrastructureDeps
 	AIIdentityDeps
 	AICatalogDeps
 	AIOperationsDeps
@@ -240,6 +242,7 @@ type AIHTTPDeps struct {
 	OAuthManagement     AIOAuthManagementHTTPDeps
 	ModelBindings       AIModelBindingHTTPDeps
 	UpstreamDiagnostics AIUpstreamDiagnosticsHTTPDeps
+	UpstreamAccounts    AIUpstreamAccountManagementHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -284,6 +287,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterOAuthManagement(api, buildOAuthManagementHTTPDeps(m.platform, m.deps.OAuthManagement))
 	aitransport.RegisterModelBindings(api, buildModelBindingHTTPDeps(m.platform, m.deps.ModelBindings))
 	aitransport.RegisterUpstreamDiagnostics(api, buildUpstreamDiagnosticsHTTPDeps(m.platform, m.deps.UpstreamDiagnostics))
+	aitransport.RegisterUpstreamAccountManagement(api, buildUpstreamAccountManagementHTTPDeps(m.platform, m.deps.UpstreamAccounts))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -350,10 +354,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			WorkspaceImages:   d.WorkspaceImages,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
-			AccountReader:      d.AccountReader,
-			ModelBindings:      d.ModelBindings,
 			ModelCatalog:       d.ModelCatalog,
-			PriceBooks:         d.PriceBooks,
 			PlatformPriceBooks: d.PlatformPriceBooks,
 			TenantPriceBooks:   d.TenantPriceBooks,
 			PriceBookSync:      d.PriceBookSync,
@@ -364,12 +365,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			UserBindings:       d.UserBindings,
 			LimitPolicies:      d.LimitPolicies,
 			GroupTransfer:      d.GroupTransfer,
-			Accounts:           d.Accounts,
-			AccountManager:     d.AccountManager,
 			UpstreamAccess:     d.UpstreamAccess,
-		},
-		RuntimeDeps: aitransport.RuntimeDeps{
-			ProviderSecrets: d.ProviderSecrets,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
 			DashboardQueries:           d.DashboardQueries,
@@ -384,6 +380,23 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		aiDeps.TenantEndUsers = identity
 	}
 	return aiDeps
+}
+
+func buildUpstreamAccountManagementHTTPDeps(platform Deps, d AIUpstreamAccountManagementHTTPDeps) aitransport.UpstreamAccountManagementHTTPDeps {
+	return aitransport.UpstreamAccountManagementHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		Accounts:        d.Accounts,
+		AccountManager:  d.AccountManager,
+		AccountReader:   d.AccountReader,
+		ProviderSecrets: d.ProviderSecrets,
+		ModelBindings:   d.ModelBindings,
+		PriceBooks:      d.PriceBooks,
+		AdminAudit:      d.AdminAudit,
+	}
 }
 
 func buildSubscriptionHTTPDeps(platform Deps, d AISubscriptionHTTPDeps, identity aiIdentityProvider) aitransport.SubscriptionHTTPDeps {
