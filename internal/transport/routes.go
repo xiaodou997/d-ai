@@ -121,7 +121,7 @@ type AICatalogDeps struct {
 	PriceBooks        aitransport.PriceBookReader
 	PriceBookSvc      *billingcontrol.Service
 	CommercialSvc     *commercial.Service
-	GroupTransferSvc  *commercial.GroupTransferService
+	GroupTransfer     aitransport.GroupTransferManager
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccess    aitransport.UpstreamAccessManager
 }
@@ -266,7 +266,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			PriceBooks:        d.PriceBooks,
 			PriceBookSvc:      d.PriceBookSvc,
 			CommercialSvc:     d.CommercialSvc,
-			GroupTransferSvc:  d.GroupTransferSvc,
+			GroupTransfer:     d.GroupTransfer,
 			AccountSvc:        d.AccountSvc,
 			UpstreamAccess:    d.UpstreamAccess,
 		},

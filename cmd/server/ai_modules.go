@@ -387,7 +387,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				PriceBooks:        priceBookSvc,
 				PriceBookSvc:      priceBookSvc,
 				CommercialSvc:     commercialSvc,
-				GroupTransferSvc:  groupTransferSvc,
+				GroupTransfer:     groupTransferSvc,
 				AccountSvc:        accountSvc,
 				UpstreamAccess:    upstreamAccessSvc,
 			},

@@ -25,7 +25,7 @@ type groupImportOutput struct{ Body commercial.GroupImportResult }
 
 func registerGroupTransfer(api huma.API, d AIDeps) {
 	ready := func() error {
-		if d.GroupTransferSvc == nil {
+		if d.GroupTransfer == nil {
 			return httpx.ErrUnavailable.WithDetail("group transfer service is not configured")
 		}
 		return nil
@@ -42,7 +42,7 @@ func registerGroupTransfer(api huma.API, d AIDeps) {
 			return nil, err
 		}
 		tenantID := tenantIDFromContext(ctx)
-		bundle, err := d.GroupTransferSvc.Export(ctx, tenantID, in.Body.GroupIDs)
+		bundle, err := d.GroupTransfer.Export(ctx, tenantID, in.Body.GroupIDs)
 		if err != nil {
 			voidAdminAudit(ctx, d, "groups.export", "group_config_bundle", "", map[string]any{
 				"group_ids": in.Body.GroupIDs,
@@ -72,7 +72,7 @@ func registerGroupTransfer(api huma.API, d AIDeps) {
 		if err := ready(); err != nil {
 			return nil, err
 		}
-		preview, err := d.GroupTransferSvc.Preview(ctx, tenantIDFromContext(ctx), in.Body)
+		preview, err := d.GroupTransfer.Preview(ctx, tenantIDFromContext(ctx), in.Body)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -91,7 +91,7 @@ func registerGroupTransfer(api huma.API, d AIDeps) {
 		if err := ready(); err != nil {
 			return nil, err
 		}
-		result, err := d.GroupTransferSvc.Import(ctx, tenantIDFromContext(ctx), in.Body)
+		result, err := d.GroupTransfer.Import(ctx, tenantIDFromContext(ctx), in.Body)
 		if err != nil {
 			voidAdminAudit(ctx, d, "groups.import", "group_config_bundle", in.Body.Bundle.BundleID, groupImportAuditSummary(in.Body, commercial.GroupImportResult{}), "failed", 500)
 			return nil, mapServiceError(err)

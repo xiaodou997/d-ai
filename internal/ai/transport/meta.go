@@ -134,7 +134,7 @@ type CatalogDeps struct {
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccess    UpstreamAccessManager
 	CommercialSvc     *commercial.Service
-	GroupTransferSvc  *commercial.GroupTransferService
+	GroupTransfer     GroupTransferManager
 }
 
 // UpstreamAccessManager is the tenant policy surface required by management
@@ -142,6 +142,14 @@ type CatalogDeps struct {
 type UpstreamAccessManager interface {
 	ListForTenant(ctx context.Context, tenantID string) ([]upstreamaccess.ResourceAccess, error)
 	ReplacePolicies(ctx context.Context, tenantID string, policies []upstreamaccess.TenantResourcePolicy) error
+}
+
+// GroupTransferManager is the complete group configuration transfer workflow
+// used by tenant routes. Persistence and planning stay in the commercial module.
+type GroupTransferManager interface {
+	Export(ctx context.Context, tenantID string, groupIDs []string) (commercial.GroupTransferBundle, error)
+	Preview(ctx context.Context, tenantID string, request commercial.GroupImportRequest) (commercial.GroupImportPreview, error)
+	Import(ctx context.Context, tenantID string, request commercial.GroupImportRequest) (commercial.GroupImportResult, error)
 }
 
 // ClientCatalogResolver is the narrow model-discovery port needed by OAuth

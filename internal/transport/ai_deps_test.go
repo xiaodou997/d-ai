@@ -7,6 +7,7 @@ import (
 
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/clientcatalog"
+	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
@@ -35,6 +36,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
 	upstreamAccess := upstreamaccess.New(nil)
+	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAIDeps(
 		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
@@ -64,6 +66,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				ModelCatalog:      modelCatalog,
 				PriceBooks:        priceBooks,
 				UpstreamAccess:    upstreamAccess,
+				GroupTransfer:     groupTransfer,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
@@ -82,6 +85,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.UpstreamAccess != upstreamAccess {
 		t.Fatal("upstream access manager was not preserved")
+	}
+	if got.GroupTransfer != groupTransfer {
+		t.Fatal("group transfer manager was not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
