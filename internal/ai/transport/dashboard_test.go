@@ -65,7 +65,7 @@ func TestDashboardRoutesUseQueryReader(t *testing.T) {
 		}},
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerDashboard(api, AIDeps{OperationsDeps: OperationsDeps{DashboardQueries: reader}})
+	registerDashboard(api, DashboardHTTPDeps{DashboardQueries: reader})
 
 	window := "tenant_id=tenant-1&user_id=user-1&date_from=2026-08-20T00:00:00Z&date_to=2026-08-21T00:00:00Z"
 
@@ -142,11 +142,38 @@ func TestDashboardRoutesUseQueryReader(t *testing.T) {
 
 func TestDashboardRoutesRequireQueryReader(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerDashboard(api, AIDeps{})
+	registerDashboard(api, DashboardHTTPDeps{})
 
 	recorder := performDashboardRequest(router, "/api/v1/dashboard/summary")
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestDashboardRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	paths := []string{
+		"/api/v1/dashboard/summary",
+		"/api/v1/dashboard/top-models",
+		"/api/v1/dashboard/top-tenants",
+		"/api/v1/dashboard/recent-errors",
+	}
+
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	for _, path := range paths {
+		recorder := performDashboardRequest(coreRouter, path)
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("core AI dashboard route %s status = %d, want %d", path, recorder.Code, http.StatusNotFound)
+		}
+	}
+
+	dashboardRouter, dashboardAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterDashboard(dashboardAPI, DashboardHTTPDeps{})
+	for _, path := range paths {
+		recorder := performDashboardRequest(dashboardRouter, path)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("independent dashboard route %s status = %d, want %d", path, recorder.Code, http.StatusUnauthorized)
+		}
 	}
 }
 

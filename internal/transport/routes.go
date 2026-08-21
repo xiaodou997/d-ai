@@ -155,6 +155,14 @@ type AIAuditLogHTTPDeps struct {
 	BanChecker aitransport.HumaBanChecker
 }
 
+// AIDashboardHTTPDeps contains the collaborators owned by the independently
+// registered management dashboard HTTP module.
+type AIDashboardHTTPDeps struct {
+	DashboardQueries           aitransport.DashboardQueryReader
+	BanChecker                 aitransport.HumaBanChecker
+	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -194,6 +202,7 @@ type AIHTTPDeps struct {
 	RiskControl   AIRiskControlHTTPDeps
 	AuditLog      AIAuditLogHTTPDeps
 	System        AISystemHTTPDeps
+	Dashboard     AIDashboardHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -233,6 +242,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))
 	aitransport.RegisterAuditLog(api, buildAuditLogHTTPDeps(m.platform, m.deps.AuditLog))
 	aitransport.RegisterSystem(api, buildSystemHTTPDeps(m.platform, m.deps.System))
+	aitransport.RegisterDashboard(api, buildDashboardHTTPDeps(m.platform, m.deps.Dashboard, identity))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -407,6 +417,22 @@ func buildSystemHTTPDeps(platform Deps, d AISystemHTTPDeps) aitransport.SystemHT
 		Health:         d.Health,
 		Weights:        d.Weights,
 	}
+}
+
+func buildDashboardHTTPDeps(platform Deps, d AIDashboardHTTPDeps, identity aiIdentityProvider) aitransport.DashboardHTTPDeps {
+	deps := aitransport.DashboardHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		DashboardQueries:           d.DashboardQueries,
+		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
+	}
+	if identity != nil {
+		deps.IdentityProvider = identity
+	}
+	return deps
 }
 
 // RegisterRaw 注册非 JSON 契约的 chi 原生端点。

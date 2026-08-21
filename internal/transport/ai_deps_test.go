@@ -243,6 +243,22 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if system.DatabaseHealth != databaseHealth || system.RedisHealth != redisHealth || system.Health != health || system.Weights != weights {
 		t.Fatal("system dependencies were not preserved")
 	}
+
+	dashboard := buildDashboardHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIDashboardHTTPDeps{
+			DashboardQueries:           dashboardQueries,
+			BanChecker:                 banChecker,
+			IdentityEnrichmentFailures: identityEnrichmentFailures,
+		},
+		identity,
+	)
+	if dashboard.Auth.TokenVerifier != jwt || dashboard.Auth.TokenRevocations != blacklist || dashboard.Auth.BanChecker != banChecker {
+		t.Fatal("dashboard auth dependencies were not preserved")
+	}
+	if dashboard.DashboardQueries != dashboardQueries || dashboard.IdentityProvider != identity || dashboard.IdentityEnrichmentFailures != identityEnrichmentFailures {
+		t.Fatal("dashboard dependencies were not preserved")
+	}
 }
 
 type providerSecretCodecStub struct{}

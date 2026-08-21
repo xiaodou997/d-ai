@@ -86,13 +86,13 @@ func buildIdentityIncludedForRanking(ctx context.Context, d AIDeps, rows []domai
 	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
 }
 
-func buildIdentityIncludedForDashboardTenants(ctx context.Context, d AIDeps, rows []domain.DashboardTopTenant) IdentityIncludedDTO {
+func buildIdentityIncludedForDashboardTenants(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, rows []domain.DashboardTopTenant) IdentityIncludedDTO {
 	tenantIDs := make([]string, 0, len(rows))
 	seenTenants := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
 		tenantIDs = appendUniqueID(tenantIDs, seenTenants, row.TenantID)
 	}
-	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, nil, tenantIDs)
+	return buildIdentityIncluded(ctx, provider, observer, nil, tenantIDs)
 }
 
 func buildIdentityIncludedForLimitPolicies(ctx context.Context, d AIDeps, policies []commercial.LimitPolicy) IdentityIncludedDTO {

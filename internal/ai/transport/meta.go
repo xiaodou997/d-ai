@@ -427,7 +427,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerUpstreamDiscovery(management, d)
 	registerUpstreamAccountTest(management, d)
 	registerUpstreamModelBindings(management, d)
-	registerDashboard(management, d)
 	registerUsage(management, d)
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)

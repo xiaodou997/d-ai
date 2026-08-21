@@ -118,7 +118,7 @@ type dashboardRecentErrorsOutput struct {
 	}
 }
 
-func registerDashboard(api huma.API, d AIDeps) {
+func registerDashboard(api huma.API, d DashboardHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-dashboard-summary",
 		Method:      http.MethodGet,
@@ -204,7 +204,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 			out.Body.Items = append(out.Body.Items, dashboardTopTenantToDTO(tenant))
 		}
 		out.Body.Total = len(out.Body.Items)
-		out.Body.Included = buildIdentityIncludedForDashboardTenants(ctx, d, tenants)
+		out.Body.Included = buildIdentityIncludedForDashboardTenants(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, tenants)
 		return out, nil
 	})
 

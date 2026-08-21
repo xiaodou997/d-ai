@@ -444,6 +444,11 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				Weights:        routeWeightsStore,
 				BanChecker:     banChecker,
 			},
+			Dashboard: transport.AIDashboardHTTPDeps{
+				DashboardQueries:           dashboardSvc,
+				BanChecker:                 banChecker,
+				IdentityEnrichmentFailures: identityEnrichmentFailures,
+			},
 		},
 		FileStore:          fileStore,
 		ImageAssets:        imageAssetSvc,
