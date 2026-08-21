@@ -18,7 +18,65 @@ var (
 	// ErrValidation — input failed business validation. Prefer returning a
 	// *ValidationError so the HTTP layer can surface the offending field.
 	ErrValidation = errors.New("validation failed")
+	// Persistence validation sentinels keep storage-specific SQLSTATE values
+	// outside transport while preserving the established HTTP error classes.
+	ErrReferencedResourceNotFound = errors.New("referenced resource not found")
+	ErrInvalidFieldValue          = errors.New("invalid field value")
+	ErrInvalidInputFormat         = errors.New("invalid input format")
 )
+
+type PersistenceErrorKind string
+
+const (
+	PersistenceNotFound          PersistenceErrorKind = "not_found"
+	PersistenceConflict          PersistenceErrorKind = "conflict"
+	PersistenceReferenceNotFound PersistenceErrorKind = "reference_not_found"
+	PersistenceInvalidField      PersistenceErrorKind = "invalid_field"
+	PersistenceInvalidFormat     PersistenceErrorKind = "invalid_format"
+)
+
+// PersistenceError classifies a database constraint failure without exposing
+// driver types or SQL details to callers. Cause remains available to logs.
+type PersistenceError struct {
+	Kind  PersistenceErrorKind
+	Cause error
+}
+
+func (e *PersistenceError) Error() string {
+	switch e.Kind {
+	case PersistenceNotFound:
+		return ErrNotFound.Error()
+	case PersistenceConflict:
+		return ErrConflict.Error()
+	case PersistenceReferenceNotFound:
+		return ErrReferencedResourceNotFound.Error()
+	case PersistenceInvalidField:
+		return ErrInvalidFieldValue.Error()
+	case PersistenceInvalidFormat:
+		return ErrInvalidInputFormat.Error()
+	default:
+		return "persistence error"
+	}
+}
+
+func (e *PersistenceError) Unwrap() error { return e.Cause }
+
+func (e *PersistenceError) Is(target error) bool {
+	switch e.Kind {
+	case PersistenceNotFound:
+		return target == ErrNotFound
+	case PersistenceConflict:
+		return target == ErrConflict
+	case PersistenceReferenceNotFound:
+		return target == ErrReferencedResourceNotFound
+	case PersistenceInvalidField:
+		return target == ErrInvalidFieldValue
+	case PersistenceInvalidFormat:
+		return target == ErrInvalidInputFormat
+	default:
+		return false
+	}
+}
 
 // ValidationError carries a specific business-validation failure. It satisfies
 // errors.Is(err, ErrValidation) so callers can branch on the sentinel while the

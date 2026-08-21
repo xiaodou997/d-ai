@@ -3,12 +3,11 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/libs/go/server"
@@ -222,7 +221,7 @@ func TestGetPoolCredentialScopedUsesSummaryReader(t *testing.T) {
 func TestGetPoolCredentialScopedRejectsWrongPool(t *testing.T) {
 	reader := credentialReaderStub{summary: &domain.OAuthCredentialSummary{ID: "cred-1", PoolID: "pool-2"}}
 
-	if _, err := getPoolCredentialScoped(context.Background(), reader, "pool-1", "cred-1"); err != pgx.ErrNoRows {
-		t.Fatalf("getPoolCredentialScoped() error = %v, want pgx.ErrNoRows", err)
+	if _, err := getPoolCredentialScoped(context.Background(), reader, "pool-1", "cred-1"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("getPoolCredentialScoped() error = %v, want domain.ErrNotFound", err)
 	}
 }

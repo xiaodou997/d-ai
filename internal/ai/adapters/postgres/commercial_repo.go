@@ -33,7 +33,7 @@ const (
 // being silently faked.
 type CommercialRepo struct {
 	q               *dbgen.Queries
-	pool            *pgxpool.Pool
+	pool            *translatingPool
 	group           *GroupRepo
 	limit           *LimitRepo
 	weights         *RouteWeightsStore
@@ -50,7 +50,7 @@ func (r *CommercialRepo) WithRuntimeResolver(resolver *coreruntime.Resolver) *Co
 func NewCommercialRepo(q *dbgen.Queries, pool *pgxpool.Pool) *CommercialRepo {
 	return &CommercialRepo{
 		q:       q,
-		pool:    pool,
+		pool:    newTranslatingPool(pool),
 		group:   NewGroupRepo(q, pool),
 		limit:   NewLimitRepo(q),
 		weights: NewRouteWeightsStore(pool),
@@ -73,7 +73,7 @@ func (r *CommercialRepo) CreateGroup(ctx context.Context, tenantID string, in co
 	if err := validateVisibleActivePriceBook(ctx, tx, tenantID, priceBookID, "", name); err != nil {
 		return commercial.Group{}, err
 	}
-	item, err := r.q.WithTx(tx).CreateGroup(ctx, dbgen.CreateGroupParams{
+	item, err := queriesWithTx(tx).CreateGroup(ctx, dbgen.CreateGroupParams{
 		TenantID:                tenantID,
 		Name:                    name,
 		Description:             in.Description,
@@ -144,7 +144,7 @@ func (r *CommercialRepo) UpdateGroup(ctx context.Context, scope commercial.Tenan
 			return commercial.Group{}, err
 		}
 	}
-	item, err := r.q.WithTx(tx).UpdateGroup(ctx, dbgen.UpdateGroupParams{
+	item, err := queriesWithTx(tx).UpdateGroup(ctx, dbgen.UpdateGroupParams{
 		ID:                      gid,
 		Name:                    name,
 		Description:             in.Description,
@@ -192,7 +192,7 @@ func (r *CommercialRepo) UpdateGroupStatus(ctx context.Context, scope commercial
 			return commercial.Group{}, err
 		}
 	}
-	item, err := r.q.WithTx(tx).UpdateGroupStatus(ctx, dbgen.UpdateGroupStatusParams{ID: gid, Status: nextStatus, TenantID: scope.TenantID})
+	item, err := queriesWithTx(tx).UpdateGroupStatus(ctx, dbgen.UpdateGroupStatusParams{ID: gid, Status: nextStatus, TenantID: scope.TenantID})
 	if err != nil {
 		return commercial.Group{}, err
 	}

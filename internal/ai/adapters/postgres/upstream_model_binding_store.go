@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -13,11 +12,11 @@ import (
 )
 
 type UpstreamModelBindingStore struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewUpstreamModelBindingStore(pool *pgxpool.Pool) *UpstreamModelBindingStore {
-	return &UpstreamModelBindingStore{pool: pool}
+	return &UpstreamModelBindingStore{pool: newTranslatingPool(pool)}
 }
 
 func (s *UpstreamModelBindingStore) List(ctx context.Context, scope domain.UpstreamModelBindingScope) ([]domain.UpstreamModelBinding, error) {
@@ -97,8 +96,9 @@ func (s *UpstreamModelBindingStore) FindByModel(ctx context.Context, scope domai
 		ORDER BY (status = 'active') DESC
 		LIMIT 1
 	`, string(scope.Kind), scope.ID, modelCode).Scan)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.UpstreamModelBinding{}, domain.ErrNotFound
+	err = translatePersistenceError(err)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.UpstreamModelBinding{}, err
 	}
 	if err != nil {
 		return domain.UpstreamModelBinding{}, fmt.Errorf("find upstream model binding: %w", err)
@@ -121,8 +121,9 @@ func (s *UpstreamModelBindingStore) Get(ctx context.Context, scope domain.Upstre
 		FROM ai_upstream_models
 		WHERE id = $1::uuid AND upstream_kind = $2 AND upstream_id = $3::uuid
 	`, bindingID, string(scope.Kind), scope.ID).Scan)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.UpstreamModelBinding{}, domain.ErrNotFound
+	err = translatePersistenceError(err)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.UpstreamModelBinding{}, err
 	}
 	if err != nil {
 		return domain.UpstreamModelBinding{}, fmt.Errorf("get upstream model binding: %w", err)
@@ -151,7 +152,7 @@ func (s *UpstreamModelBindingStore) Create(ctx context.Context, scope domain.Ups
 		write.APIFormat, write.UpstreamModelName, write.Status, nonEmptyBindingConfig(write.ConfigJSON),
 	).Scan)
 	if err != nil {
-		return domain.UpstreamModelBinding{}, fmt.Errorf("create upstream model binding: %w", err)
+		return domain.UpstreamModelBinding{}, fmt.Errorf("create upstream model binding: %w", translatePersistenceError(err))
 	}
 	return item, nil
 }
@@ -181,8 +182,9 @@ func (s *UpstreamModelBindingStore) Update(ctx context.Context, scope domain.Ups
 		bindingID, string(scope.Kind), scope.ID, write.ModelCode, write.CapabilityType,
 		write.APIFormat, write.UpstreamModelName, write.Status, nonEmptyBindingConfig(write.ConfigJSON),
 	).Scan)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.UpstreamModelBinding{}, domain.ErrNotFound
+	err = translatePersistenceError(err)
+	if errors.Is(err, domain.ErrNotFound) {
+		return domain.UpstreamModelBinding{}, err
 	}
 	if err != nil {
 		return domain.UpstreamModelBinding{}, fmt.Errorf("update upstream model binding: %w", err)
@@ -196,7 +198,7 @@ func (s *UpstreamModelBindingStore) Delete(ctx context.Context, scope domain.Ups
 		WHERE id = $1::uuid AND upstream_kind = $2 AND upstream_id = $3::uuid
 	`, bindingID, string(scope.Kind), scope.ID)
 	if err != nil {
-		return fmt.Errorf("delete upstream model binding: %w", err)
+		return fmt.Errorf("delete upstream model binding: %w", translatePersistenceError(err))
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
@@ -220,7 +222,7 @@ func (s *UpstreamModelBindingStore) BatchDelete(ctx context.Context, scope domai
 		  AND id = ANY($3::uuid[])
 	`, string(scope.Kind), scope.ID, ids)
 	if err != nil {
-		return 0, fmt.Errorf("batch delete upstream model bindings: %w", err)
+		return 0, fmt.Errorf("batch delete upstream model bindings: %w", translatePersistenceError(err))
 	}
 	return tag.RowsAffected(), nil
 }
@@ -267,7 +269,7 @@ func (s *UpstreamModelBindingStore) Import(ctx context.Context, scope domain.Ups
 			) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7)
 		`, string(scope.Kind), scope.ID, write.ModelCode, write.CapabilityType,
 			write.APIFormat, write.UpstreamModelName, write.Status); err != nil {
-			return result, fmt.Errorf("insert imported upstream model: %w", err)
+			return result, fmt.Errorf("insert imported upstream model: %w", translatePersistenceError(err))
 		}
 		existing[write.ModelCode] = struct{}{}
 		result.Created = append(result.Created, write.ModelCode)

@@ -38,7 +38,7 @@ const (
 // billing/outbox shortly afterwards. Keeping the account update out of the
 // request transaction is what lets requests for one tenant settle in parallel.
 type UsageLogger struct {
-	pool              *pgxpool.Pool
+	pool              *translatingPool
 	q                 *dbgen.Queries
 	biller            usageBiller
 	apiKeyInvalidator apiKeyCacheInvalidator
@@ -60,8 +60,8 @@ type usageBiller interface {
 
 func NewUsageLogger(pool *pgxpool.Pool, biller usageBiller) *UsageLogger {
 	return &UsageLogger{
-		pool:   pool,
-		q:      dbgen.New(pool),
+		pool:   newTranslatingPool(pool),
+		q:      NewQueries(pool),
 		biller: biller,
 		logger: zap.NewNop(),
 	}
@@ -144,7 +144,7 @@ func (l *UsageLogger) logOnce(ctx context.Context, req *serving.Request, billing
 		return false, fmt.Errorf("begin usage completion: %w", err)
 	}
 	defer tx.Rollback(ctx)
-	qtx := l.q.WithTx(tx)
+	qtx := queriesWithTx(tx)
 
 	if _, err := l.createUsageLog(ctx, qtx, req, billing); errors.Is(err, pgx.ErrNoRows) {
 		// request_id is the completion idempotency key. Duplicate completion must

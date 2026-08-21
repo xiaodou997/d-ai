@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -64,7 +65,7 @@ func loadUpstreamModelBinding(
 		&configJSON,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return upstreamModelBindingRow{}, err
 		}
 		return upstreamModelBindingRow{}, fmt.Errorf("load upstream model binding: %w", err)

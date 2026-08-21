@@ -27,7 +27,6 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/console"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
-	aidb "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/externalmodels"
 	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/gateway"
@@ -87,7 +86,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		appLogger = zap.NewNop()
 	}
 
-	q := aidb.New(pool)
+	q := aiadapters.NewQueries(pool)
 	banChecker := banstate.NewChecker(redisClient)
 	redisHealth := redisadapter.NewHealthProbe(redisClient)
 	databaseHealth := aiadapters.NewHealthProbe(pool)

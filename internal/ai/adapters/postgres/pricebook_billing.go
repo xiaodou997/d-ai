@@ -25,11 +25,11 @@ import (
 type PriceBookBiller struct {
 	svc  *billingcontrol.Service
 	q    *dbgen.Queries
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewPriceBookBiller(svc *billingcontrol.Service, q *dbgen.Queries, pool *pgxpool.Pool) *PriceBookBiller {
-	return &PriceBookBiller{svc: svc, q: q, pool: pool}
+	return &PriceBookBiller{svc: svc, q: q, pool: newTranslatingPool(pool)}
 }
 
 var _ serving.BillingSnapshotResolver = (*PriceBookBiller)(nil)

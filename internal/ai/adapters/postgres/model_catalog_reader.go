@@ -11,11 +11,11 @@ import (
 )
 
 type ModelCatalogReader struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewModelCatalogReader(pool *pgxpool.Pool) *ModelCatalogReader {
-	return &ModelCatalogReader{pool: pool}
+	return &ModelCatalogReader{pool: newTranslatingPool(pool)}
 }
 
 func (r *ModelCatalogReader) ListAvailableModelPrices(ctx context.Context, scope domain.ModelCatalogScope) ([]domain.RoutedModelPrice, error) {

@@ -44,6 +44,9 @@ func TestUpstreamModelBindingStoreCRUDAndScopeIsolation(t *testing.T) {
 	if direct.ID == "" || direct.ModelCode != write.ModelCode || direct.Status != "active" || direct.CreatedAt.IsZero() || direct.UpdatedAt.IsZero() {
 		t.Fatalf("direct binding = %+v", direct)
 	}
+	if _, err := store.Create(ctx, directScope, write); !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("Create(duplicate) error = %v, want conflict", err)
+	}
 	poolBinding, err := store.Create(ctx, poolScope, write)
 	if err != nil {
 		t.Fatalf("Create(pool): %v", err)

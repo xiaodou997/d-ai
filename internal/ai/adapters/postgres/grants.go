@@ -17,11 +17,11 @@ import (
 //	用户可见 = 分组默认开放 ∪ ai_user_groups 显式例外
 //	key 绑定 = 若 Subject.GroupID 非空则只保留该分组
 type GroupAccessReader struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewGroupAccessReader(pool *pgxpool.Pool) *GroupAccessReader {
-	return &GroupAccessReader{pool: pool}
+	return &GroupAccessReader{pool: newTranslatingPool(pool)}
 }
 
 func (c *GroupAccessReader) AccessibleGroupIDsForSubject(ctx context.Context, subject *coreidentity.Subject) ([]string, error) {

@@ -13,11 +13,11 @@ import (
 )
 
 type UpstreamAccessRepo struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewUpstreamAccessRepo(pool *pgxpool.Pool) *UpstreamAccessRepo {
-	return &UpstreamAccessRepo{pool: pool}
+	return &UpstreamAccessRepo{pool: newTranslatingPool(pool)}
 }
 
 var _ upstreamaccess.Repository = (*UpstreamAccessRepo)(nil)

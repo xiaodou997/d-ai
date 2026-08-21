@@ -135,6 +135,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
+- [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -414,6 +415,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 模型绑定边界：管理 CRUD、账号/凭证池模型目录导入、账号迁移导入导出和连通性测试统一依赖 `UpstreamModelBindingStore` 与领域模型；PostgreSQL adapter 持有 scoped 查询和原子导入事务，AI Transport 不再直接读写模型绑定表。
 - 模型目录边界：租户/用户可用模型、分组有效价格和租户可选上游资源统一依赖 `ModelCatalogReader` 与领域投影；PostgreSQL adapter 封装分组授权、资源可见性、价格表和模型绑定的聚合 JOIN 及 JSONB 解码，Transport 只保留 DTO、价格区间和倍率计算。
 - 基础设施边界：系统状态的 PostgreSQL/Redis 检查统一依赖 `ComponentHealthProbe`，账号迁移的价格簿校验依赖 `PriceBookReader`；AI Transport 已清零 `*pgxpool.Pool` 字段、import 和调用，PostgreSQL 连接只留在 composition root 与 adapter。
+- 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
+- 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
-- 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将 PostgreSQL not-found/unique-violation 在 adapter 边界统一翻译为领域错误，移除 AI Transport 错误映射对 `pgx.ErrNoRows` 和 `pgconn.PgError` 的残留依赖。
+- 遗留风险：依赖容器仍保留具体 adapter 类型；AI Transport 仍有 UUID、nullable 和 numeric DTO 转换依赖 `pgtype`；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 用领域/标准值类型替换 AI Transport 中剩余的 `pgtype.UUID`、`pgtype.Text`、`pgtype.Timestamptz`、`pgtype.Numeric` 和 `pgtype.Int4`，清零 HTTP 层对 pgx 模块的依赖。

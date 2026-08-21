@@ -17,11 +17,11 @@ import (
 // previous handler did the same — these aggregates are not in the sqlc set).
 type UsageRepo struct {
 	q    *dbgen.Queries
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewUsageRepo(q *dbgen.Queries, pool *pgxpool.Pool) *UsageRepo {
-	return &UsageRepo{q: q, pool: pool}
+	return &UsageRepo{q: q, pool: newTranslatingPool(pool)}
 }
 
 var _ observabilitycontrol.UsageRepository = (*UsageRepo)(nil)
@@ -139,7 +139,7 @@ func (r *UsageRepo) GetLogDetail(ctx context.Context, requestID string) (domain.
 	} else if detail.EndpointID != "" {
 		detail.SelectedUpstreamTargetType = "account"
 	}
-	auditRec, err := NewAuditStore(r.pool).GetByRequestID(ctx, requestID)
+	auditRec, err := NewAuditStore(r.pool.Pool).GetByRequestID(ctx, requestID)
 	if err != nil {
 		return domain.UsageLogDetail{}, err
 	}

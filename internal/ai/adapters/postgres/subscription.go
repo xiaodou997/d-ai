@@ -17,11 +17,11 @@ import (
 // SubscriptionRepo 是订阅领域的 postgres 适配器（sqlc + finalize 事务）。
 type SubscriptionRepo struct {
 	q    *dbgen.Queries
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewSubscriptionRepo(q *dbgen.Queries, pool *pgxpool.Pool) *SubscriptionRepo {
-	return &SubscriptionRepo{q: q, pool: pool}
+	return &SubscriptionRepo{q: q, pool: newTranslatingPool(pool)}
 }
 
 var _ subscription.Repo = (*SubscriptionRepo)(nil)
@@ -316,7 +316,7 @@ func (r *SubscriptionRepo) CreatePlan(ctx context.Context, p subscription.Create
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	q := r.q.WithTx(tx)
+	q := queriesWithTx(tx)
 	sortOrder, err := q.NextPlanSortOrder(ctx, p.TenantID)
 	if err != nil {
 		return nil, err
@@ -409,7 +409,7 @@ func (r *SubscriptionRepo) UpdatePlanByTenant(ctx context.Context, p subscriptio
 		return false, err
 	}
 	defer tx.Rollback(ctx)
-	q := r.q.WithTx(tx)
+	q := queriesWithTx(tx)
 
 	n, err := q.UpdatePlanByTenant(ctx, dbgen.UpdatePlanByTenantParams{
 		ID:                 mustParseUUID(p.ID),
@@ -779,7 +779,7 @@ func (r *SubscriptionRepo) EvaluatePlansForUser(ctx context.Context, tenantID, u
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	q := r.q.WithTx(tx)
+	q := queriesWithTx(tx)
 	if err := q.LockUserPurchaseSerial(ctx, purchaseUserLockKey(tenantID, userID)); err != nil {
 		return nil, err
 	}
@@ -817,7 +817,7 @@ func (r *SubscriptionRepo) ReservePurchase(ctx context.Context, orderNo string, 
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	q := r.q.WithTx(tx)
+	q := queriesWithTx(tx)
 	if err := q.LockUserPurchaseSerial(ctx, purchaseUserLockKey(p.TenantID, p.UserID)); err != nil {
 		return nil, err
 	}
@@ -967,7 +967,7 @@ func (r *SubscriptionRepo) acquireAdvisoryLock(ctx context.Context, key string) 
 		err = conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, key).Scan(&acquired)
 		if err != nil {
 			conn.Release()
-			return nil, err
+			return nil, translatePersistenceError(err)
 		}
 		if acquired {
 			return func() {
@@ -999,7 +999,7 @@ func (r *SubscriptionRepo) MarkOrderFailed(ctx context.Context, id, reason strin
 		return false, err
 	}
 	defer tx.Rollback(ctx)
-	q := r.q.WithTx(tx)
+	q := queriesWithTx(tx)
 	order, err := q.GetOrderByID(ctx, mustParseUUID(id))
 	if err != nil {
 		return false, err
@@ -1129,7 +1129,7 @@ func (r *SubscriptionRepo) FinalizeOrder(ctx context.Context, order *subscriptio
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	q := r.q.WithTx(tx)
+	q := queriesWithTx(tx)
 
 	cur, err := q.GetOrderByID(ctx, mustParseUUID(order.ID))
 	if err != nil {

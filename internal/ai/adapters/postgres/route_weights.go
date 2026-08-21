@@ -28,7 +28,7 @@ type cachedWeights struct {
 // RouteWeightsStore loads and persists ai_route_score_weights rows.
 // It satisfies serving.ScoreWeightsSource via EffectiveWeightsFor().
 type RouteWeightsStore struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 
 	mu    sync.RWMutex
 	cache map[string]cachedWeights
@@ -37,7 +37,7 @@ type RouteWeightsStore struct {
 // NewRouteWeightsStore creates a store backed by pool.
 func NewRouteWeightsStore(pool *pgxpool.Pool) *RouteWeightsStore {
 	return &RouteWeightsStore{
-		pool:  pool,
+		pool:  newTranslatingPool(pool),
 		cache: make(map[string]cachedWeights),
 	}
 }

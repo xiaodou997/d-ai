@@ -294,12 +294,12 @@ func (s *RouteInspector) ModelSupportsClientProtocolInGroups(
 // RouteInspector answers control-plane route capability and preview queries.
 // Runtime candidate planning belongs exclusively to core/runtime.Resolver.
 type RouteInspector struct {
-	pool          *pgxpool.Pool
+	pool          *translatingPool
 	bridgeSupport corebridge.SupportMatrix
 }
 
 func NewRouteInspector(pool *pgxpool.Pool) *RouteInspector {
-	return &RouteInspector{pool: pool}
+	return &RouteInspector{pool: newTranslatingPool(pool)}
 }
 
 func (s *RouteInspector) WithBridgeSupport(support corebridge.SupportMatrix) *RouteInspector {

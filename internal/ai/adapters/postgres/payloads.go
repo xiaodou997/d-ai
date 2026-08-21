@@ -15,12 +15,12 @@ import (
 
 // AuditStore implements audit.Store backed by PostgreSQL.
 type AuditStore struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 // NewAuditStore creates an AuditStore backed by pool.
 func NewAuditStore(pool *pgxpool.Pool) *AuditStore {
-	return &AuditStore{pool: pool}
+	return &AuditStore{pool: newTranslatingPool(pool)}
 }
 
 const insertPayloadSQL = `

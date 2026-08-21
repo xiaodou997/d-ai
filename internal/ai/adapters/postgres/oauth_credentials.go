@@ -19,12 +19,12 @@ import (
 
 // OAuthCredentialStore handles credential pool operations.
 type OAuthCredentialStore struct {
-	pool      *pgxpool.Pool
+	pool      *translatingPool
 	masterKey string
 }
 
 func NewOAuthCredentialStore(pool *pgxpool.Pool, masterKey string) *OAuthCredentialStore {
-	return &OAuthCredentialStore{pool: pool, masterKey: masterKey}
+	return &OAuthCredentialStore{pool: newTranslatingPool(pool), masterKey: masterKey}
 }
 
 // ============================================================================
@@ -620,7 +620,7 @@ func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in dom
 		tokenType, in.Scope, pgExpiry, metaRaw, weight,
 	).Scan(&id)
 	if err != nil {
-		return "", fmt.Errorf("insert oauth credential: %w", err)
+		return "", fmt.Errorf("insert oauth credential: %w", translatePersistenceError(err))
 	}
 	return id, nil
 }
@@ -743,7 +743,7 @@ func (s *OAuthCredentialStore) GetByID(ctx context.Context, credID string) (*OAu
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, pgx.ErrNoRows
+		return nil, domain.ErrNotFound
 	}
 	return &rows[0], nil
 }

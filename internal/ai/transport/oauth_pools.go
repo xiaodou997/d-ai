@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/ai/clientcatalog"
 	"xiaodou/dai/internal/ai/clientruntime"
@@ -851,7 +850,7 @@ func getPoolCredentialScoped(ctx context.Context, reader OAuthCredentialReader, 
 		return nil, err
 	}
 	if row.PoolID != poolID {
-		return nil, pgx.ErrNoRows
+		return nil, domain.ErrNotFound
 	}
 	return row, nil
 }

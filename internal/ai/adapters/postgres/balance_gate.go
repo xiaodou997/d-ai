@@ -14,11 +14,11 @@ import (
 // gate. It holds no query of its own: reading a balance any other way is what
 // the ledger package exists to prevent.
 type RuntimeBalanceResolver struct {
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewRuntimeBalanceResolver(pool *pgxpool.Pool) *RuntimeBalanceResolver {
-	return &RuntimeBalanceResolver{pool: pool}
+	return &RuntimeBalanceResolver{pool: newTranslatingPool(pool)}
 }
 
 var _ serving.AccountBalanceResolver = (*RuntimeBalanceResolver)(nil)

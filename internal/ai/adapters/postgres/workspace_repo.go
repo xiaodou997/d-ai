@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -18,14 +19,14 @@ import (
 )
 
 type WorkspaceRepo struct {
-	pool           *pgxpool.Pool
+	pool           *translatingPool
 	grantChecker   *GroupAccessReader
 	routeInspector *RouteInspector
 }
 
 func NewWorkspaceRepo(pool *pgxpool.Pool, grantChecker *GroupAccessReader, routeInspector *RouteInspector) *WorkspaceRepo {
 	return &WorkspaceRepo{
-		pool:           pool,
+		pool:           newTranslatingPool(pool),
 		grantChecker:   grantChecker,
 		routeInspector: routeInspector,
 	}
@@ -92,7 +93,7 @@ func (r *WorkspaceRepo) GetChatSession(ctx context.Context, owner workspace.Owne
 	`, sessionID, owner.TenantID, ownerTypeFromScope(owner.Scope), ownerUserID(owner))
 	item, err := scanWorkspaceChatSession(row.Scan)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return workspace.ChatSession{}, domain.ErrNotFound
 		}
 		return workspace.ChatSession{}, err
@@ -271,7 +272,7 @@ func (r *WorkspaceRepo) CreateChatMessage(ctx context.Context, owner workspace.O
 		RETURNING id::text`,
 		sessionID, owner.TenantID, string(owner.Scope), ownerUserID(owner), string(input.Role), input.Content, surfaceValue, routeRaw, errorRaw,
 	).Scan(&messageID)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return "", domain.ErrNotFound
 	}
 	if err != nil {

@@ -13,11 +13,11 @@ import (
 // AccountRepo implements upstreamcontrol.Repository (上游账号) on top of sqlc.
 type AccountRepo struct {
 	q    *dbgen.Queries
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewAccountRepo(q *dbgen.Queries, pool *pgxpool.Pool) *AccountRepo {
-	return &AccountRepo{q: q, pool: pool}
+	return &AccountRepo{q: q, pool: newTranslatingPool(pool)}
 }
 
 var _ upstreamcontrol.Repository = (*AccountRepo)(nil)
@@ -38,7 +38,7 @@ func (r *AccountRepo) CreateAccount(ctx context.Context, e upstreamcontrol.Accou
 	}
 	defer tx.Rollback(ctx)
 
-	qtx := r.q.WithTx(tx)
+	qtx := queriesWithTx(tx)
 	row, err := qtx.CreateUpstreamAccount(ctx, dbgen.CreateUpstreamAccountParams{
 		Name:              e.Name,
 		TenantDisplayName: e.TenantDisplayName,
@@ -152,7 +152,7 @@ func (r *AccountRepo) UpdateAccount(ctx context.Context, e upstreamcontrol.Accou
 	}
 	defer tx.Rollback(ctx)
 
-	qtx := r.q.WithTx(tx)
+	qtx := queriesWithTx(tx)
 	row, err := qtx.UpdateUpstreamAccount(ctx, dbgen.UpdateUpstreamAccountParams{
 		ID:                aid,
 		Name:              e.Name,

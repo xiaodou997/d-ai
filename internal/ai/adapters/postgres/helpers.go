@@ -9,7 +9,8 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	dbgen "xiaodou/dai/internal/ai/db/gen"
 )
 
 // numericToFloat converts a pgtype.Numeric to float64 (0 for NULL/invalid).
@@ -171,7 +172,7 @@ func nonNilStrings(s []string) []string {
 	return s
 }
 
-func existsByID(ctx context.Context, pool *pgxpool.Pool, table string, id any) (bool, error) {
+func existsByID(ctx context.Context, pool dbgen.DBTX, table string, id any) (bool, error) {
 	query := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM %s WHERE id = $1)", table)
 	var exists bool
 	if err := pool.QueryRow(ctx, query, id).Scan(&exists); err != nil {
@@ -180,7 +181,7 @@ func existsByID(ctx context.Context, pool *pgxpool.Pool, table string, id any) (
 	return exists, nil
 }
 
-func countOne(ctx context.Context, pool *pgxpool.Pool, query string, args ...any) (int, error) {
+func countOne(ctx context.Context, pool dbgen.DBTX, query string, args ...any) (int, error) {
 	var n int
 	if err := pool.QueryRow(ctx, query, args...).Scan(&n); err != nil {
 		return 0, err

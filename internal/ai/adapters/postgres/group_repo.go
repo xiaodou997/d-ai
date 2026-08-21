@@ -18,11 +18,11 @@ import (
 // GroupRepo is the legacy-backed postgres adapter for commercial group storage.
 type GroupRepo struct {
 	q    *dbgen.Queries
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewGroupRepo(q *dbgen.Queries, pool *pgxpool.Pool) *GroupRepo {
-	return &GroupRepo{q: q, pool: pool}
+	return &GroupRepo{q: q, pool: newTranslatingPool(pool)}
 }
 
 func (r *GroupRepo) PriceBookExists(ctx context.Context, id string) (bool, error) {

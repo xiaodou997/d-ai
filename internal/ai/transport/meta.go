@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"xiaodou/dai/internal/ai/billingcontrol"
 	"xiaodou/dai/internal/ai/clientcatalog"
@@ -324,7 +322,7 @@ func mapServiceError(err error) error {
 		return httpx.ErrBadRequest.WithDetail(detail).WithCause(err)
 	case errors.Is(err, domain.ErrValidation):
 		return httpx.ErrBadRequest.WithDetail(err.Error()).WithCause(err)
-	case errors.Is(err, domain.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, domain.ErrNotFound):
 		return httpx.ErrNotFound.WithDetail("resource not found").WithCause(err)
 	case errors.Is(err, domain.ErrConflict):
 		detail := "resource already exists"
@@ -334,6 +332,12 @@ func mapServiceError(err error) error {
 		return httpx.ErrConflict.WithDetail(detail).WithCause(err)
 	case errors.Is(err, domain.ErrForbidden):
 		return httpx.ErrForbidden.WithDetail("forbidden").WithCause(err)
+	case errors.Is(err, domain.ErrReferencedResourceNotFound):
+		return httpx.ErrBadRequest.WithDetail("referenced resource not found").WithCause(err)
+	case errors.Is(err, domain.ErrInvalidFieldValue):
+		return httpx.ErrBadRequest.WithDetail("invalid field value").WithCause(err)
+	case errors.Is(err, domain.ErrInvalidInputFormat):
+		return httpx.ErrBadRequest.WithDetail("invalid input format").WithCause(err)
 	case errors.Is(err, commercial.ErrNoAccessibleGroup), errors.Is(err, coreruntime.ErrNoAllowedGroup):
 		return httpx.ErrForbidden.WithDetail("no group is accessible to this caller").WithCause(err)
 	case errors.Is(err, commercial.ErrClientSurfaceNotAllowed):
@@ -344,20 +348,6 @@ func mapServiceError(err error) error {
 			WithCause(err)
 	case isInvalidUUIDError(err):
 		return httpx.ErrBadRequest.WithDetail("invalid UUID").WithCause(err)
-	}
-
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case "23505":
-			return httpx.ErrConflict.WithDetail("resource already exists").WithCause(err)
-		case "23503":
-			return httpx.ErrBadRequest.WithDetail("referenced resource not found").WithCause(err)
-		case "23514":
-			return httpx.ErrBadRequest.WithDetail("invalid field value").WithCause(err)
-		case "22P02":
-			return httpx.ErrBadRequest.WithDetail("invalid input format").WithCause(err)
-		}
 	}
 
 	return httpx.ErrInternal.WithCause(err)

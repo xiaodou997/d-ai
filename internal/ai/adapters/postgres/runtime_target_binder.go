@@ -27,7 +27,7 @@ import (
 // no longer consulted by the binder itself.
 type RuntimeTargetBinder struct {
 	q             *dbgen.Queries
-	pool          *pgxpool.Pool
+	pool          *translatingPool
 	poolStore     *OAuthCredentialStore
 	bridgeSupport corebridge.SupportMatrix
 	masterKey     string
@@ -36,7 +36,7 @@ type RuntimeTargetBinder struct {
 func NewRuntimeTargetBinder(q *dbgen.Queries, pool *pgxpool.Pool, masterKey string) *RuntimeTargetBinder {
 	return &RuntimeTargetBinder{
 		q:             q,
-		pool:          pool,
+		pool:          newTranslatingPool(pool),
 		poolStore:     NewOAuthCredentialStore(pool, masterKey),
 		bridgeSupport: normalizeBridgeSupport(nil),
 		masterKey:     masterKey,
@@ -74,7 +74,7 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 	}
 	row, err := b.q.GetUpstreamAccount(ctx, accountID)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionTargetNotFound, "upstream account not found")
 		}
 		return coreupstream.RuntimeBinding{}, err
@@ -90,7 +90,7 @@ func (b *RuntimeTargetBinder) bindDirectUpstream(
 	support := normalizeBridgeSupport(b.bridgeSupport)
 	binding, err := loadUpstreamModelBinding(ctx, b.pool, upstreamKindDirect, uuidToString(row.ID), req.ResolvedModelID, runtimecompat.CapabilityFromCore(req.Capability))
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionModelBindingMissing, fmt.Sprintf("no active binding for model %q", req.ResolvedModelID))
 		}
 		return coreupstream.RuntimeBinding{}, err
@@ -201,7 +201,7 @@ func (b *RuntimeTargetBinder) bindOAuthPool(
 ) (coreupstream.RuntimeBinding, error) {
 	pool, err := b.poolStore.GetPool(ctx, req.TargetID)
 	if err != nil {
-		if err == domain.ErrNotFound {
+		if errors.Is(err, domain.ErrNotFound) {
 			return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionTargetNotFound, "oauth pool not found")
 		}
 		return coreupstream.RuntimeBinding{}, err
@@ -217,7 +217,7 @@ func (b *RuntimeTargetBinder) bindOAuthPool(
 	support := normalizeBridgeSupport(b.bridgeSupport)
 	binding, err := loadUpstreamModelBinding(ctx, b.pool, upstreamKindPool, pool.ID, req.ResolvedModelID, runtimecompat.CapabilityFromCore(req.Capability))
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionModelBindingMissing, fmt.Sprintf("no active binding for model %q", req.ResolvedModelID))
 		}
 		return coreupstream.RuntimeBinding{}, err
@@ -282,7 +282,7 @@ func (b *RuntimeTargetBinder) bindOAuthPool(
 	}, nil
 }
 
-func loadRuntimeCostPer1k(ctx context.Context, pool *pgxpool.Pool, priceBookID, modelCode, capability string, multiplier float64) (float64, error) {
+func loadRuntimeCostPer1k(ctx context.Context, pool dbgen.DBTX, priceBookID, modelCode, capability string, multiplier float64) (float64, error) {
 	if priceBookID == "" || modelCode == "" {
 		return 0, nil
 	}

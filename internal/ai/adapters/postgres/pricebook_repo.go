@@ -20,11 +20,11 @@ import (
 // resolution prices are stored as JSON arrays of {resolution, price(USD)}.
 type PriceBookRepo struct {
 	q    *dbgen.Queries
-	pool *pgxpool.Pool
+	pool *translatingPool
 }
 
 func NewPriceBookRepo(q *dbgen.Queries, pool *pgxpool.Pool) *PriceBookRepo {
-	return &PriceBookRepo{q: q, pool: pool}
+	return &PriceBookRepo{q: q, pool: newTranslatingPool(pool)}
 }
 
 var _ billingcontrol.Repository = (*PriceBookRepo)(nil)
@@ -110,7 +110,7 @@ func (r *PriceBookRepo) UpdatePriceBook(ctx context.Context, id, name, descripti
 			return domain.PriceBook{}, err
 		}
 	}
-	row, err := r.q.WithTx(tx).UpdatePriceBook(ctx, dbgen.UpdatePriceBookParams{
+	row, err := queriesWithTx(tx).UpdatePriceBook(ctx, dbgen.UpdatePriceBookParams{
 		ID: uid, Name: name, Description: description, Status: status,
 	})
 	if err != nil {
@@ -181,7 +181,7 @@ func (r *PriceBookRepo) UpsertEntry(ctx context.Context, e domain.PriceBookEntry
 		return domain.PriceBookEntry{}, err
 	}
 	defer tx.Rollback(ctx)
-	qtx := r.q.WithTx(tx)
+	qtx := queriesWithTx(tx)
 	row, err := qtx.UpsertPriceBookEntry(ctx, dbgen.UpsertPriceBookEntryParams{
 		PriceBookID:       bid,
 		ModelCode:         e.ModelCode,
@@ -220,7 +220,7 @@ func (r *PriceBookRepo) ImportEntry(ctx context.Context, e domain.PriceBookEntry
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if err := r.q.WithTx(tx).ImportLiteLLMEntry(ctx, dbgen.ImportLiteLLMEntryParams{
+	if err := queriesWithTx(tx).ImportLiteLLMEntry(ctx, dbgen.ImportLiteLLMEntryParams{
 		PriceBookID:     bid,
 		ModelCode:       e.ModelCode,
 		CapabilityType:  e.CapabilityType,
@@ -285,7 +285,7 @@ func (r *PriceBookRepo) DeleteEntry(ctx context.Context, priceBookID, modelCode,
 	if err := priceEntryReferenceConflicts(ctx, tx, bid, modelCode, capabilityType); err != nil {
 		return err
 	}
-	if err := r.q.WithTx(tx).DeletePriceBookEntry(ctx, dbgen.DeletePriceBookEntryParams{PriceBookID: bid, ModelCode: modelCode, CapabilityType: capabilityType}); err != nil {
+	if err := queriesWithTx(tx).DeletePriceBookEntry(ctx, dbgen.DeletePriceBookEntryParams{PriceBookID: bid, ModelCode: modelCode, CapabilityType: capabilityType}); err != nil {
 		return err
 	}
 	if err := bumpPriceBookRevision(ctx, tx, bid); err != nil {
