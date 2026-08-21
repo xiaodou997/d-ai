@@ -23,19 +23,6 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// InfrastructureDeps contains process-level capabilities shared by AI HTTP
-// handlers. Concrete clients remain owned by composition and adapters.
-type InfrastructureDeps struct {
-	HTTPClient HTTPDoer
-}
-
-// HTTPDoer is the only outbound HTTP capability required by AI transport.
-// Connection pooling, redirects and transport-level timeouts remain owned by
-// the concrete client constructed at the composition root.
-type HTTPDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
 // IdentityDeps contains authentication, API key and workspace identity
 // collaborators used by AI routes.
 type IdentityDeps struct {
@@ -137,7 +124,6 @@ type OAuthCredentialWriter interface {
 // CatalogDeps contains provider, model, price and upstream control-plane
 // collaborators.
 type CatalogDeps struct {
-	ModelCapabilities  ModelCapabilityResolver
 	AccountReader      UpstreamAccountReader
 	ModelBindings      UpstreamModelBindingStore
 	ModelCatalog       ModelCatalogReader
@@ -147,7 +133,6 @@ type CatalogDeps struct {
 	PriceBookSync      PriceBookSyncManager
 	Accounts           UpstreamAccountCatalog
 	AccountManager     UpstreamAccountManager
-	AccountHealth      UpstreamAccountHealthWriter
 	UpstreamAccess     UpstreamAccessManager
 	Groups             CommercialGroupCatalog
 	GroupManager       CommercialGroupManager
@@ -401,7 +386,6 @@ type IdentityEnrichmentFailureObserver interface {
 
 // AIDeps groups the explicit dependencies required by AI HTTP registration.
 type AIDeps struct {
-	InfrastructureDeps
 	IdentityDeps
 	CatalogDeps
 	RuntimeDeps
@@ -416,8 +400,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	management.UseMiddleware(platformUserAuth(api, auth))
 	registerPriceBooks(management, d)
 	registerUpstreamAccounts(management, d)
-	registerUpstreamDiscovery(management, d)
-	registerUpstreamAccountTest(management, d)
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)

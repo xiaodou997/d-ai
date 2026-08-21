@@ -194,9 +194,7 @@ func TestLoadUpstreamTestBindingUsesDomainStore(t *testing.T) {
 		ConfigJSON:        []byte(`{"image_generation":{"stream_mode":"force_stream","upstream_response_format":"b64_json"}}`),
 	}}
 
-	got, err := loadUpstreamTestBinding(context.Background(), AIDeps{
-		CatalogDeps: CatalogDeps{ModelBindings: store},
-	}, accountID, "image-model")
+	got, err := loadUpstreamTestBinding(context.Background(), store, accountID, "image-model")
 	if err != nil {
 		t.Fatalf("loadUpstreamTestBinding() error = %v", err)
 	}

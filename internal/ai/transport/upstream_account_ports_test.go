@@ -238,16 +238,15 @@ func TestUpstreamAccountTransferComposesCatalogReaderAndManager(t *testing.T) {
 
 func TestReconcileUpstreamAccountStatusUsesHealthWriter(t *testing.T) {
 	stub := &upstreamAccountPortsStub{}
-	d := AIDeps{CatalogDeps: CatalogDeps{AccountHealth: stub}}
 
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), d, "recovered", domain.UpstreamAccountStatusInvalid, upstreamTestResult{OK: true}); err != nil {
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, "recovered", domain.UpstreamAccountStatusInvalid, upstreamTestResult{OK: true}); err != nil {
 		t.Fatalf("reconcile recovered account: %v", err)
 	}
 	if stub.statusID != "recovered" || stub.status != domain.UpstreamAccountStatusActive {
 		t.Fatalf("recovered command = id %q status %q", stub.statusID, stub.status)
 	}
 
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), d, "rejected", domain.UpstreamAccountStatusActive, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, "rejected", domain.UpstreamAccountStatusActive, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
 		t.Fatalf("reconcile rejected account: %v", err)
 	}
 	if stub.invalidID != "rejected" || !strings.Contains(stub.invalidReason, "401") {
@@ -256,7 +255,7 @@ func TestReconcileUpstreamAccountStatusUsesHealthWriter(t *testing.T) {
 
 	stub.statusID = ""
 	stub.invalidID = ""
-	if err := reconcileUpstreamAccountTestStatus(t.Context(), d, "disabled", domain.UpstreamAccountStatusDisabled, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
+	if err := reconcileUpstreamAccountTestStatus(t.Context(), stub, "disabled", domain.UpstreamAccountStatusDisabled, upstreamTestResult{HTTPStatus: http.StatusUnauthorized}); err != nil {
 		t.Fatalf("reconcile disabled account: %v", err)
 	}
 	if stub.statusID != "" || stub.invalidID != "" {

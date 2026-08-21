@@ -66,7 +66,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		AIDeps{
 			AIInfrastructureDeps: AIInfrastructureDeps{
 				ProviderSecrets: providerSecrets,
-				AIHTTPClient:    httpClient,
 			},
 			AIIdentityDeps: AIIdentityDeps{
 				APIKeys:           apiKeyPorts,
@@ -80,11 +79,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				WorkspaceImages:   workspacePorts,
 			},
 			AICatalogDeps: AICatalogDeps{
-				ModelCapabilities:  modelCapabilities,
 				AccountReader:      accountReader,
 				Accounts:           accountPorts,
 				AccountManager:     accountPorts,
-				AccountHealth:      accountPorts,
 				ModelBindings:      modelBindings,
 				ModelCatalog:       modelCatalog,
 				PriceBooks:         priceBooks,
@@ -117,7 +114,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.WorkspaceOverview != workspacePorts || got.WorkspaceModels != workspacePorts || got.WorkspaceSessions != workspacePorts || got.WorkspaceManager != workspacePorts || got.WorkspaceImages != workspacePorts {
 		t.Fatal("workspace capability ports were not preserved")
 	}
-	if got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
+	if got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.PlatformPriceBooks != priceBookPorts || got.TenantPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
@@ -126,7 +123,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.Groups != commercialPorts || got.GroupManager != commercialPorts || got.DispatchRules != commercialPorts || got.GroupTargets != commercialPorts || got.UserBindings != commercialPorts || got.LimitPolicies != commercialPorts {
 		t.Fatal("commercial control-plane ports were not preserved")
 	}
-	if got.Accounts != accountPorts || got.AccountManager != accountPorts || got.AccountHealth != accountPorts {
+	if got.Accounts != accountPorts || got.AccountManager != accountPorts {
 		t.Fatal("upstream account ports were not preserved")
 	}
 	if got.UpstreamAccess != upstreamAccess {
@@ -135,8 +132,8 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.GroupTransfer != groupTransfer {
 		t.Fatal("group transfer manager was not preserved")
 	}
-	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
-		t.Fatal("upstream management dependencies were not preserved")
+	if got.ProviderSecrets != providerSecrets {
+		t.Fatal("provider secret dependency was not preserved")
 	}
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("observability dependencies were not preserved")
@@ -301,6 +298,25 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if modelBindingsHTTP.AccountReader != accountReader || modelBindingsHTTP.PoolReader != oauth || modelBindingsHTTP.ModelBindings != modelBindings {
 		t.Fatal("model-binding dependencies were not preserved")
+	}
+
+	diagnostics := buildUpstreamDiagnosticsHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIUpstreamDiagnosticsHTTPDeps{
+			AccountReader:     accountReader,
+			ModelBindings:     modelBindings,
+			ProviderSecrets:   providerSecrets,
+			HTTPClient:        httpClient,
+			AccountHealth:     accountPorts,
+			ModelCapabilities: modelCapabilities,
+			BanChecker:        banChecker,
+		},
+	)
+	if diagnostics.Auth.TokenVerifier != jwt || diagnostics.Auth.TokenRevocations != blacklist || diagnostics.Auth.BanChecker != banChecker {
+		t.Fatal("upstream diagnostics auth dependencies were not preserved")
+	}
+	if diagnostics.AccountReader != accountReader || diagnostics.ModelBindings != modelBindings || diagnostics.ProviderSecrets != providerSecrets || diagnostics.HTTPClient != httpClient || diagnostics.AccountHealth != accountPorts || diagnostics.ModelCapabilities != modelCapabilities {
+		t.Fatal("upstream diagnostics dependencies were not preserved")
 	}
 }
 

@@ -71,7 +71,7 @@ type inferModelCapabilityOutput struct {
 
 // ---- Register ----
 
-func registerUpstreamDiscovery(api huma.API, d AIDeps) {
+func registerUpstreamDiscovery(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-fetch-account-upstream-models",
 		Method:      http.MethodGet,

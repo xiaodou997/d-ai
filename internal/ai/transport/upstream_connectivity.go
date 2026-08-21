@@ -74,7 +74,7 @@ type upstreamTestBinding struct {
 	ImagePolicy    imageGenerationBindingPolicy
 }
 
-func registerUpstreamAccountTest(api huma.API, d AIDeps) {
+func registerUpstreamAccountTest(api huma.API, d UpstreamDiagnosticsHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID:  "ai-test-account-upstream",
 		Method:       http.MethodPost,
@@ -103,7 +103,7 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, httpx.ErrInternal.WithDetail("failed to decrypt api key")
 		}
-		binding, err := loadUpstreamTestBinding(ctx, d, in.AccountID, modelCode)
+		binding, err := loadUpstreamTestBinding(ctx, d.ModelBindings, in.AccountID, modelCode)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +130,7 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 			ImageUpstreamResponseFormat: binding.ImagePolicy.UpstreamResponseFormat,
 			Timeouts:                    domain.DefaultRouteTimeouts(domain.CapabilityType(binding.CapabilityType)),
 		})
-		if err := reconcileUpstreamAccountTestStatus(ctx, d, in.AccountID, account.Status, result); err != nil {
+		if err := reconcileUpstreamAccountTestStatus(ctx, d.AccountHealth, in.AccountID, account.Status, result); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &upstreamAccountTestOutput{}
@@ -156,26 +156,26 @@ func registerUpstreamAccountTest(api huma.API, d AIDeps) {
 	})
 }
 
-func reconcileUpstreamAccountTestStatus(ctx context.Context, d AIDeps, accountID, currentStatus string, result upstreamTestResult) error {
-	if d.AccountHealth == nil || currentStatus == domain.UpstreamAccountStatusDisabled {
+func reconcileUpstreamAccountTestStatus(ctx context.Context, health UpstreamAccountHealthWriter, accountID, currentStatus string, result upstreamTestResult) error {
+	if health == nil || currentStatus == domain.UpstreamAccountStatusDisabled {
 		return nil
 	}
 	if result.OK && currentStatus == domain.UpstreamAccountStatusInvalid {
-		_, err := d.AccountHealth.UpdateAccountStatus(ctx, accountID, domain.UpstreamAccountStatusActive)
+		_, err := health.UpdateAccountStatus(ctx, accountID, domain.UpstreamAccountStatusActive)
 		return err
 	}
 	if result.HTTPStatus == http.StatusUnauthorized || result.HTTPStatus == http.StatusForbidden {
-		_, err := d.AccountHealth.MarkAccountInvalid(ctx, accountID, fmt.Sprintf("connectivity test: upstream returned HTTP %d", result.HTTPStatus))
+		_, err := health.MarkAccountInvalid(ctx, accountID, fmt.Sprintf("connectivity test: upstream returned HTTP %d", result.HTTPStatus))
 		return err
 	}
 	return nil
 }
 
-func loadUpstreamTestBinding(ctx context.Context, d AIDeps, accountID, modelCode string) (upstreamTestBinding, error) {
-	if d.ModelBindings == nil {
+func loadUpstreamTestBinding(ctx context.Context, store UpstreamModelBindingStore, accountID, modelCode string) (upstreamTestBinding, error) {
+	if store == nil {
 		return upstreamTestBinding{}, httpx.ErrUnavailable.WithDetail("model binding store is not configured")
 	}
-	binding, err := d.ModelBindings.FindByModel(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: accountID}, modelCode)
+	binding, err := store.FindByModel(ctx, domain.UpstreamModelBindingScope{Kind: domain.UpstreamKindDirect, ID: accountID}, modelCode)
 	if err != nil {
 		return upstreamTestBinding{}, mapServiceError(err)
 	}

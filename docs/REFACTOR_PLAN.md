@@ -157,6 +157,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 管理端用量查询七个端点提取为独立 `UsageHTTPDeps` / `RegisterUsage` 纵向模块；租户、用户和工作区继续共享 Core 中的 `UsageQueryReader` / `UserUsageLogReader`，管理日志与用户排行的身份补全能力单独装配。
 - [x] OAuth 凭证池与凭证管理端点提取为独立 `OAuthManagementHTTPDeps` / `RegisterOAuthManagement` 纵向模块；Core 仅保留共享模型绑定能力，Serving 与后台 token refresh 不进入该 HTTP 依赖容器。
 - [x] 账号与凭证池模型绑定管理端点提取为独立 `ModelBindingHTTPDeps` / `RegisterModelBindings` 纵向模块；绑定 helper 改为显式接收账号/池读端口与 `UpstreamModelBindingStore`，发现、连通性和迁移流程继续复用 Core 端口。
+- [x] 上游模型发现、能力推断与账号连通性测试提取为独立 `UpstreamDiagnosticsHTTPDeps` / `RegisterUpstreamDiagnostics` 纵向模块；`HTTPDoer`、`ModelCapabilityResolver` 和账号健康协调端口不再进入 Core。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -448,6 +449,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 用量 HTTP 模块：`UsageHTTPDeps` 独立组合管理端 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；`RegisterUsage` 自行注册平台管理员认证分组。租户、用户和工作区仍从 Core 使用共享查询端口，契约测试覆盖七条管理路径的 core 404 与独立模块认证。
 - OAuth 管理 HTTP 模块：`OAuthManagementHTTPDeps` 独立组合池/凭证读写、池健康、手动刷新、模型目录和模型绑定端口，以及 `HTTPAuthDeps`；`RegisterOAuthManagement` 自行注册平台管理员认证分组。Core 仅继续承载账号发现、连通性和迁移等共享路径，契约测试覆盖 13 条池/凭证管理路径的 core 404 与独立模块认证。
 - 模型绑定 HTTP 模块：`ModelBindingHTTPDeps` 独立组合账号读取、池读取、模型绑定存储和 `HTTPAuthDeps`；`RegisterModelBindings` 自行注册平台管理员认证分组。Core 仍承载上游发现、连通性、迁移等共享流程，契约测试覆盖 10 条账号/池绑定路径的 core 404 与独立模块认证。
+- 上游诊断 HTTP 模块：`UpstreamDiagnosticsHTTPDeps` 独立组合账号读取、模型绑定、密钥解密、`HTTPDoer`、账号健康协调、模型能力目录和 `HTTPAuthDeps`；`RegisterUpstreamDiagnostics` 自行注册平台管理员认证分组。契约测试覆盖发现、导入、能力推断和连通性测试四条路径的 core 404 与独立模块认证。
 - 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。
@@ -460,5 +462,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
 - 风控 HTTP 模块：`RiskControlHTTPDeps` 独立组合四组业务端口、`HTTPAuthDeps` 与 `ProviderSecretCodec`；`RegisterRiskControl` 自行注册平台管理员认证分组。契约测试确认 core 不注册风控路径、独立模块执行认证，配置更新路由只把明文 API key 交给 codec 并向存储端传递密文。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
-- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理和模型绑定路由已脱离 `AIDeps`，其余 AI core 路由仍共享巨型接口型 service locator；顶层平台 `OperationsDeps` 仍保留多项具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 提取上游模型发现与账号连通性管理 HTTP 模块；保留账号迁移、Serving 和运行时健康协调复用的共享端口，继续收敛上游控制面注册入口。
+- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定和上游诊断路由已脱离 `AIDeps`，其余 AI core 路由仍共享巨型接口型 service locator；顶层平台 `OperationsDeps` 仍保留多项具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 提取上游账号 CRUD 与迁移管理 HTTP 模块；保留迁移审计、价格校验和 Serving 所需的共享应用端口，继续收敛上游控制面注册入口。

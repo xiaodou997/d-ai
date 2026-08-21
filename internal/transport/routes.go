@@ -78,7 +78,6 @@ type OperationsDeps struct {
 // AI transport.
 type AIInfrastructureDeps struct {
 	ProviderSecrets aitransport.ProviderSecretCodec
-	AIHTTPClient    aitransport.HTTPDoer
 	BanChecker      aitransport.HumaBanChecker
 }
 
@@ -110,7 +109,6 @@ type AISubscriptionHTTPDeps struct {
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
 type AICatalogDeps struct {
-	ModelCapabilities  aitransport.ModelCapabilityResolver
 	AccountReader      aitransport.UpstreamAccountReader
 	ModelBindings      aitransport.UpstreamModelBindingStore
 	ModelCatalog       aitransport.ModelCatalogReader
@@ -127,7 +125,6 @@ type AICatalogDeps struct {
 	GroupTransfer      aitransport.GroupTransferManager
 	Accounts           aitransport.UpstreamAccountCatalog
 	AccountManager     aitransport.UpstreamAccountManager
-	AccountHealth      aitransport.UpstreamAccountHealthWriter
 	UpstreamAccess     aitransport.UpstreamAccessManager
 }
 
@@ -187,6 +184,18 @@ type AIModelBindingHTTPDeps struct {
 	BanChecker    aitransport.HumaBanChecker
 }
 
+// AIUpstreamDiagnosticsHTTPDeps contains the collaborators owned by the
+// independently registered upstream discovery and connectivity HTTP module.
+type AIUpstreamDiagnosticsHTTPDeps struct {
+	AccountReader     aitransport.UpstreamAccountReader
+	ModelBindings     aitransport.UpstreamModelBindingStore
+	ProviderSecrets   aitransport.ProviderSecretCodec
+	HTTPClient        aitransport.HTTPDoer
+	AccountHealth     aitransport.UpstreamAccountHealthWriter
+	ModelCapabilities aitransport.ModelCapabilityResolver
+	BanChecker        aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -221,15 +230,16 @@ type AIDeps struct {
 // AIHTTPDeps is a composition-only collection of independently registered AI
 // route modules. Handlers receive the narrower module dependency type.
 type AIHTTPDeps struct {
-	Core            AIDeps
-	Subscriptions   AISubscriptionHTTPDeps
-	RiskControl     AIRiskControlHTTPDeps
-	AuditLog        AIAuditLogHTTPDeps
-	System          AISystemHTTPDeps
-	Dashboard       AIDashboardHTTPDeps
-	Usage           AIUsageHTTPDeps
-	OAuthManagement AIOAuthManagementHTTPDeps
-	ModelBindings   AIModelBindingHTTPDeps
+	Core                AIDeps
+	Subscriptions       AISubscriptionHTTPDeps
+	RiskControl         AIRiskControlHTTPDeps
+	AuditLog            AIAuditLogHTTPDeps
+	System              AISystemHTTPDeps
+	Dashboard           AIDashboardHTTPDeps
+	Usage               AIUsageHTTPDeps
+	OAuthManagement     AIOAuthManagementHTTPDeps
+	ModelBindings       AIModelBindingHTTPDeps
+	UpstreamDiagnostics AIUpstreamDiagnosticsHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -273,6 +283,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterUsage(api, buildUsageHTTPDeps(m.platform, m.deps.Usage, identity))
 	aitransport.RegisterOAuthManagement(api, buildOAuthManagementHTTPDeps(m.platform, m.deps.OAuthManagement))
 	aitransport.RegisterModelBindings(api, buildModelBindingHTTPDeps(m.platform, m.deps.ModelBindings))
+	aitransport.RegisterUpstreamDiagnostics(api, buildUpstreamDiagnosticsHTTPDeps(m.platform, m.deps.UpstreamDiagnostics))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -324,9 +335,6 @@ func registerPublicPlane(api huma.API, d Deps) {
 
 func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
 	aiDeps := aitransport.AIDeps{
-		InfrastructureDeps: aitransport.InfrastructureDeps{
-			HTTPClient: d.AIHTTPClient,
-		},
 		IdentityDeps: aitransport.IdentityDeps{
 			TokenVerifier:     platform.JWT,
 			TokenRevocations:  platform.Blacklist,
@@ -342,7 +350,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			WorkspaceImages:   d.WorkspaceImages,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
-			ModelCapabilities:  d.ModelCapabilities,
 			AccountReader:      d.AccountReader,
 			ModelBindings:      d.ModelBindings,
 			ModelCatalog:       d.ModelCatalog,
@@ -359,7 +366,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			GroupTransfer:      d.GroupTransfer,
 			Accounts:           d.Accounts,
 			AccountManager:     d.AccountManager,
-			AccountHealth:      d.AccountHealth,
 			UpstreamAccess:     d.UpstreamAccess,
 		},
 		RuntimeDeps: aitransport.RuntimeDeps{
@@ -502,6 +508,22 @@ func buildModelBindingHTTPDeps(platform Deps, d AIModelBindingHTTPDeps) aitransp
 		AccountReader: d.AccountReader,
 		PoolReader:    d.PoolReader,
 		ModelBindings: d.ModelBindings,
+	}
+}
+
+func buildUpstreamDiagnosticsHTTPDeps(platform Deps, d AIUpstreamDiagnosticsHTTPDeps) aitransport.UpstreamDiagnosticsHTTPDeps {
+	return aitransport.UpstreamDiagnosticsHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		AccountReader:     d.AccountReader,
+		ModelBindings:     d.ModelBindings,
+		ProviderSecrets:   d.ProviderSecrets,
+		HTTPClient:        d.HTTPClient,
+		AccountHealth:     d.AccountHealth,
+		ModelCapabilities: d.ModelCapabilities,
 	}
 }
 
