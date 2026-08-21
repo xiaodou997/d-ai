@@ -127,14 +127,14 @@ func registerDashboard(api huma.API, d AIDeps) {
 		Description: "返回 AI 网关仪表盘核心统计，支持精确的 [start, end) 时间窗口；未传时默认近 24 小时。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *dashboardFilterInput) (*dashboardSummaryOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		filter, err := dashboardFilterFromInput(in.TenantID, in.UserID, in.DateFrom, in.DateTo)
 		if err != nil {
 			return nil, err
 		}
-		summary, err := d.DashboardSvc.Summary(ctx, filter)
+		summary, err := d.DashboardQueries.Summary(ctx, filter)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -151,7 +151,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 		Description: "返回按使用量排序的模型排行，支持精确的 [start, end) 时间窗口；未传时默认近 24 小时。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *dashboardTopModelsInput) (*dashboardTopModelsOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		filter, err := dashboardFilterFromInput(in.TenantID, in.UserID, in.DateFrom, in.DateTo)
@@ -162,7 +162,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		models, err := d.DashboardSvc.TopModels(ctx, filter, limit)
+		models, err := d.DashboardQueries.TopModels(ctx, filter, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -183,7 +183,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 		Description: "返回按使用量排序的租户排行，支持精确的 [start, end) 时间窗口；未传时默认近 24 小时。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *dashboardTopTenantsInput) (*dashboardTopTenantsOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		filter, err := dashboardFilterFromInput(in.TenantID, in.UserID, in.DateFrom, in.DateTo)
@@ -194,7 +194,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		tenants, err := d.DashboardSvc.TopTenants(ctx, filter, limit)
+		tenants, err := d.DashboardQueries.TopTenants(ctx, filter, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -216,7 +216,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 		Description: "返回近期失败请求，支持精确的 [start, end) 时间窗口；未传时默认近 24 小时。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *dashboardRecentErrorsInput) (*dashboardRecentErrorsOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		filter, err := dashboardFilterFromInput(in.TenantID, in.UserID, in.DateFrom, in.DateTo)
@@ -227,7 +227,7 @@ func registerDashboard(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		errs, err := d.DashboardSvc.RecentErrors(ctx, filter, limit)
+		errs, err := d.DashboardQueries.RecentErrors(ctx, filter, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

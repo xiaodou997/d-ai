@@ -217,6 +217,15 @@ type AdminAuditLogReader interface {
 	List(ctx context.Context, limit int32) ([]domain.AuditLog, error)
 }
 
+// DashboardQueryReader is the aggregate analytics projection shared by
+// management, tenant self-service and workspace overview routes.
+type DashboardQueryReader interface {
+	Summary(ctx context.Context, filter domain.DashboardFilter) (domain.DashboardSummary, error)
+	TopModels(ctx context.Context, filter domain.DashboardFilter, limit int32) ([]domain.DashboardTopModel, error)
+	TopTenants(ctx context.Context, filter domain.DashboardFilter, limit int32) ([]domain.DashboardTopTenant, error)
+	RecentErrors(ctx context.Context, filter domain.DashboardFilter, limit int32) ([]domain.DashboardRecentError, error)
+}
+
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
@@ -241,7 +250,7 @@ type ScoreWeightsStore interface {
 
 // OperationsDeps contains dashboards, audit and risk-control collaborators.
 type OperationsDeps struct {
-	DashboardSvc               *observabilitycontrol.DashboardService
+	DashboardQueries           DashboardQueryReader
 	UsageSvc                   *observabilitycontrol.UsageService
 	UserUsageLogs              UserUsageLogReader
 	AuditLogs                  AdminAuditLogReader

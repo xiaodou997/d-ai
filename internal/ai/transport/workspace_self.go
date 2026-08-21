@@ -281,7 +281,7 @@ func registerScopedWorkspaceResourceReads(api huma.API, d AIDeps, scope identity
 }
 
 func buildTenantWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOverviewInput) (*tenantWorkspaceOverviewOutput, error) {
-	if d.DashboardSvc == nil {
+	if d.DashboardQueries == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, identity.ScopeTenant)
@@ -521,7 +521,7 @@ func workspaceLogsAndSummary(ctx context.Context, d AIDeps, owner workspace.Owne
 		}
 		return page.Records, workspaceSummaryFromUser(summary), nil
 	}
-	summaryRows, err := d.DashboardSvc.Summary(ctx, domain.DashboardFilter{
+	summaryRows, err := d.DashboardQueries.Summary(ctx, domain.DashboardFilter{
 		TenantID: owner.TenantID,
 	})
 	if err != nil {

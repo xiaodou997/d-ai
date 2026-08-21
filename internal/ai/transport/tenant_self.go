@@ -301,7 +301,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 返回本租户维度的仪表盘核心统计，支持精确的 [start, end) 时间窗口。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *tenantSelfDashboardInput) (*dashboardSummaryOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -312,7 +312,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		summary, err := d.DashboardSvc.Summary(ctx, filter)
+		summary, err := d.DashboardQueries.Summary(ctx, filter)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -329,7 +329,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 返回本租户维度按使用量排序的模型排行，支持精确的 [start, end) 时间窗口。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *tenantSelfDashboardListInput) (*dashboardTopModelsOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -344,7 +344,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		models, err := d.DashboardSvc.TopModels(ctx, filter, limit)
+		models, err := d.DashboardQueries.TopModels(ctx, filter, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -365,7 +365,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 		Description: "按当前租户 token 返回本租户维度的近期失败请求，支持精确的 [start, end) 时间窗口。",
 		Tags:        []string{"dashboard"},
 	}, func(ctx context.Context, in *tenantSelfDashboardListInput) (*dashboardRecentErrorsOutput, error) {
-		if d.DashboardSvc == nil {
+		if d.DashboardQueries == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -380,7 +380,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		errs, err := d.DashboardSvc.RecentErrors(ctx, filter, limit)
+		errs, err := d.DashboardQueries.RecentErrors(ctx, filter, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

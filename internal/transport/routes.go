@@ -128,7 +128,7 @@ type AICatalogDeps struct {
 
 // AIOperationsDeps contains AI-side dashboards, audit and risk-control collaborators.
 type AIOperationsDeps struct {
-	DashboardSvc               *observabilitycontrol.DashboardService
+	DashboardQueries           aitransport.DashboardQueryReader
 	UsageSvc                   *observabilitycontrol.UsageService
 	UserUsageLogs              aitransport.UserUsageLogReader
 	AuditLogs                  aitransport.AdminAuditLogReader
@@ -276,7 +276,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			ProviderSecrets: d.ProviderSecrets,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
-			DashboardSvc:               d.DashboardSvc,
+			DashboardQueries:           d.DashboardQueries,
 			UsageSvc:                   d.UsageSvc,
 			UserUsageLogs:              d.UserUsageLogs,
 			AuditLogs:                  d.AuditLogs,

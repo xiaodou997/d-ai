@@ -60,6 +60,7 @@ httpServers.Start / Shutdown
 - 租户上游访问策略通过 `UpstreamAccessManager` 最小端口进入 AI Transport；具体 `upstreamaccess.Service` 只在 composition root 构造，顶层 Transport 的兼容装配也仅转发该端口。
 - 分组配置导出、预检和导入通过 `GroupTransferManager` 最小端口进入 AI Transport；具体 `commercial.GroupTransferService` 只在 composition root 构造，顶层 Transport 也仅转发该端口。
 - 管理审计列表通过 `AdminAuditLogReader` 进入 AI Transport，并与 `AdminAuditRecorder` 写端口分离；具体 `observabilitycontrol.AuditService` 只在 composition root 同时装配到两个端口。
+- 管理端、租户端和工作区仪表盘查询统一通过 `DashboardQueryReader` 进入 AI Transport；具体 `observabilitycontrol.DashboardService` 只在 composition root 构造并注入该读端口。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

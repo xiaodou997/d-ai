@@ -33,6 +33,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	modelCatalog := &modelCatalogReaderStub{}
 	priceBooks := &priceBookReaderStub{}
 	userUsageLogs := &userUsageLogReaderStub{}
+	dashboardQueries := &dashboardQueryReaderStub{}
 	auditLogs := &adminAuditLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
@@ -72,6 +73,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				UserUsageLogs:              userUsageLogs,
+				DashboardQueries:           dashboardQueries,
 				AuditLogs:                  auditLogs,
 				AdminAudit:                 adminAudit,
 			},
@@ -102,6 +104,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.UserUsageLogs != userUsageLogs {
 		t.Fatal("user usage log reader was not preserved")
+	}
+	if got.DashboardQueries != dashboardQueries {
+		t.Fatal("dashboard query reader was not preserved")
 	}
 	if got.AuditLogs != auditLogs {
 		t.Fatal("admin audit log reader was not preserved")
@@ -146,6 +151,24 @@ func (*upstreamAccountReaderStub) GetAccountSecret(context.Context, string) (ups
 type userUsageLogReaderStub struct{}
 
 func (*userUsageLogReaderStub) ListUserLogs(context.Context, string, string, string, int32) ([]domain.UsageLog, error) {
+	return nil, nil
+}
+
+type dashboardQueryReaderStub struct{}
+
+func (*dashboardQueryReaderStub) Summary(context.Context, domain.DashboardFilter) (domain.DashboardSummary, error) {
+	return domain.DashboardSummary{}, nil
+}
+
+func (*dashboardQueryReaderStub) TopModels(context.Context, domain.DashboardFilter, int32) ([]domain.DashboardTopModel, error) {
+	return nil, nil
+}
+
+func (*dashboardQueryReaderStub) TopTenants(context.Context, domain.DashboardFilter, int32) ([]domain.DashboardTopTenant, error) {
+	return nil, nil
+}
+
+func (*dashboardQueryReaderStub) RecentErrors(context.Context, domain.DashboardFilter, int32) ([]domain.DashboardRecentError, error) {
 	return nil, nil
 }
 
