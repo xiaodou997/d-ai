@@ -436,7 +436,7 @@ type dailyTrendOutput struct {
 	}
 }
 
-func registerUsage(api huma.API, d AIDeps) {
+func registerUsage(api huma.API, d UsageHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-daily-trend",
 		Method:      http.MethodGet,
@@ -496,7 +496,7 @@ func registerUsage(api huma.API, d AIDeps) {
 		for _, record := range page.Records {
 			out.Body.Records = append(out.Body.Records, usageLogToDTO(record))
 		}
-		out.Body.Included = buildIdentityIncludedForLogs(ctx, d, page.Records)
+		out.Body.Included = buildIdentityIncludedForLogs(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, page.Records)
 		return out, nil
 	})
 
@@ -639,7 +639,7 @@ func registerUsage(api huma.API, d AIDeps) {
 			out.Body.Items = append(out.Body.Items, usageUserRankingRowToDTO(row))
 		}
 		out.Body.Total = len(out.Body.Items)
-		out.Body.Included = buildIdentityIncludedForRanking(ctx, d, rows)
+		out.Body.Included = buildIdentityIncludedForRanking(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, rows)
 		return out, nil
 	})
 }

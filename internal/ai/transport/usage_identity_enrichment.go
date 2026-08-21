@@ -38,7 +38,7 @@ func emptyIdentityIncluded() IdentityIncludedDTO {
 	}
 }
 
-func buildIdentityIncludedForLogs(ctx context.Context, d AIDeps, records []domain.UsageLog) IdentityIncludedDTO {
+func buildIdentityIncludedForLogs(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, records []domain.UsageLog) IdentityIncludedDTO {
 	userIDs := make([]string, 0, len(records))
 	tenantIDs := make([]string, 0, len(records))
 	seenUsers := make(map[string]struct{}, len(records))
@@ -59,10 +59,10 @@ func buildIdentityIncludedForLogs(ctx context.Context, d AIDeps, records []domai
 		}
 	}
 
-	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
+	return buildIdentityIncluded(ctx, provider, observer, userIDs, tenantIDs)
 }
 
-func buildIdentityIncludedForRanking(ctx context.Context, d AIDeps, rows []domain.UsageUserRankingRow) IdentityIncludedDTO {
+func buildIdentityIncludedForRanking(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, rows []domain.UsageUserRankingRow) IdentityIncludedDTO {
 	userIDs := make([]string, 0, len(rows))
 	tenantIDs := make([]string, 0, len(rows))
 	seenUsers := make(map[string]struct{}, len(rows))
@@ -83,7 +83,7 @@ func buildIdentityIncludedForRanking(ctx context.Context, d AIDeps, rows []domai
 		}
 	}
 
-	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, userIDs, tenantIDs)
+	return buildIdentityIncluded(ctx, provider, observer, userIDs, tenantIDs)
 }
 
 func buildIdentityIncludedForDashboardTenants(ctx context.Context, provider IdentityProvider, observer IdentityEnrichmentFailureObserver, rows []domain.DashboardTopTenant) IdentityIncludedDTO {

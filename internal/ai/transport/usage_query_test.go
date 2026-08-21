@@ -99,7 +99,7 @@ func TestUsageRoutesUseQueryReader(t *testing.T) {
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	deps := AIDeps{OperationsDeps: OperationsDeps{UsageQueries: reader}}
-	registerUsage(api, deps)
+	registerUsage(api, UsageHTTPDeps{UsageQueries: reader})
 	registerUserSelfUsage(api, deps)
 
 	window := "date_from=2026-08-20T00:00:00Z&date_to=2026-08-21T00:00:00Z"
@@ -212,10 +212,40 @@ func TestUsageRoutesUseQueryReader(t *testing.T) {
 
 func TestUsageRoutesRequireQueryReader(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerUsage(api, AIDeps{})
+	registerUsage(api, UsageHTTPDeps{})
 
 	recorder := performUsageRequest(router, "/api/v1/usage-logs")
 	requireUsageStatus(t, recorder, http.StatusServiceUnavailable)
+}
+
+func TestUsageRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	paths := []string{
+		"/api/v1/analytics/daily-trend",
+		"/api/v1/usage-logs",
+		"/api/v1/usage-logs/request-1",
+		"/api/v1/usage-summary",
+		"/api/v1/usage-unit-summary",
+		"/api/v1/usage-upstream-summary",
+		"/api/v1/usage-ranking/users",
+	}
+
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	for _, path := range paths {
+		recorder := performUsageRequest(coreRouter, path)
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("core AI usage route %s status = %d, want %d", path, recorder.Code, http.StatusNotFound)
+		}
+	}
+
+	usageRouter, usageAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterUsage(usageAPI, UsageHTTPDeps{})
+	for _, path := range paths {
+		recorder := performUsageRequest(usageRouter, path)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("independent usage route %s status = %d, want %d", path, recorder.Code, http.StatusUnauthorized)
+		}
+	}
 }
 
 func performUsageRequest(handler http.Handler, path string) *httptest.ResponseRecorder {

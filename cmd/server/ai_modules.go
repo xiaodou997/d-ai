@@ -449,6 +449,11 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				BanChecker:                 banChecker,
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 			},
+			Usage: transport.AIUsageHTTPDeps{
+				UsageQueries:               usageSvc,
+				BanChecker:                 banChecker,
+				IdentityEnrichmentFailures: identityEnrichmentFailures,
+			},
 		},
 		FileStore:          fileStore,
 		ImageAssets:        imageAssetSvc,

@@ -259,6 +259,22 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if dashboard.DashboardQueries != dashboardQueries || dashboard.IdentityProvider != identity || dashboard.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("dashboard dependencies were not preserved")
 	}
+
+	usage := buildUsageHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIUsageHTTPDeps{
+			UsageQueries:               usageQueries,
+			BanChecker:                 banChecker,
+			IdentityEnrichmentFailures: identityEnrichmentFailures,
+		},
+		identity,
+	)
+	if usage.Auth.TokenVerifier != jwt || usage.Auth.TokenRevocations != blacklist || usage.Auth.BanChecker != banChecker {
+		t.Fatal("usage auth dependencies were not preserved")
+	}
+	if usage.UsageQueries != usageQueries || usage.IdentityProvider != identity || usage.IdentityEnrichmentFailures != identityEnrichmentFailures {
+		t.Fatal("usage dependencies were not preserved")
+	}
 }
 
 type providerSecretCodecStub struct{}

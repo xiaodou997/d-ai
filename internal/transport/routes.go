@@ -163,6 +163,14 @@ type AIDashboardHTTPDeps struct {
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
+// AIUsageHTTPDeps contains the collaborators owned by the independently
+// registered management usage HTTP module.
+type AIUsageHTTPDeps struct {
+	UsageQueries               aitransport.UsageQueryReader
+	BanChecker                 aitransport.HumaBanChecker
+	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -203,6 +211,7 @@ type AIHTTPDeps struct {
 	AuditLog      AIAuditLogHTTPDeps
 	System        AISystemHTTPDeps
 	Dashboard     AIDashboardHTTPDeps
+	Usage         AIUsageHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -243,6 +252,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterAuditLog(api, buildAuditLogHTTPDeps(m.platform, m.deps.AuditLog))
 	aitransport.RegisterSystem(api, buildSystemHTTPDeps(m.platform, m.deps.System))
 	aitransport.RegisterDashboard(api, buildDashboardHTTPDeps(m.platform, m.deps.Dashboard, identity))
+	aitransport.RegisterUsage(api, buildUsageHTTPDeps(m.platform, m.deps.Usage, identity))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -427,6 +437,22 @@ func buildDashboardHTTPDeps(platform Deps, d AIDashboardHTTPDeps, identity aiIde
 			BanChecker:       d.BanChecker,
 		},
 		DashboardQueries:           d.DashboardQueries,
+		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
+	}
+	if identity != nil {
+		deps.IdentityProvider = identity
+	}
+	return deps
+}
+
+func buildUsageHTTPDeps(platform Deps, d AIUsageHTTPDeps, identity aiIdentityProvider) aitransport.UsageHTTPDeps {
+	deps := aitransport.UsageHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		UsageQueries:               d.UsageQueries,
 		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 	}
 	if identity != nil {
