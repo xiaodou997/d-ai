@@ -136,6 +136,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
+- [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -417,6 +418,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 基础设施边界：系统状态的 PostgreSQL/Redis 检查统一依赖 `ComponentHealthProbe`，账号迁移的价格簿校验依赖 `PriceBookReader`；AI Transport 已清零 `*pgxpool.Pool` 字段、import 和调用，PostgreSQL 连接只留在 composition root 与 adapter。
 - 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
+- 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。
+- 依赖门禁：删除 7 条 AI Transport 和 2 条主 Transport 已失效的基础设施例外，并补充规则测试；后续重新引入 pgx、Redis、sqlc 或 adapter 依赖会直接导致 `cmd/checkdeps` 失败。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
-- 遗留风险：依赖容器仍保留具体 adapter 类型；AI Transport 仍有 UUID、nullable 和 numeric DTO 转换依赖 `pgtype`；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 用领域/标准值类型替换 AI Transport 中剩余的 `pgtype.UUID`、`pgtype.Text`、`pgtype.Timestamptz`、`pgtype.Numeric` 和 `pgtype.Int4`，清零 HTTP 层对 pgx 模块的依赖。
+- 遗留风险：`AIDeps` 仍保留多个具体业务 service，容器本身仍是 service locator；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 将只使用 `ListForTenant` / `ReplacePolicies` 的具体 `*upstreamaccess.Service` 替换为最小 `UpstreamAccessManager` 端口，继续缩小 `AIDeps`。

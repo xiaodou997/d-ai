@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"xiaodou/dai/internal/ai/domain"
@@ -11,6 +12,42 @@ type poolReaderStub struct {
 	poolID string
 	pool   *domain.CredentialPool
 	pools  []domain.CredentialPool
+}
+
+func TestNormalizeBatchDeleteBindingIDs(t *testing.T) {
+	ids, err := normalizeBatchDeleteBindingIDs([]string{
+		" 10000000-0000-0000-0000-0000000000AB ",
+		"100000000000000000000000000000ab",
+		"20000000-0000-0000-0000-000000000002",
+	})
+	if err != nil {
+		t.Fatalf("normalizeBatchDeleteBindingIDs(): %v", err)
+	}
+	want := []string{
+		"10000000-0000-0000-0000-0000000000ab",
+		"20000000-0000-0000-0000-000000000002",
+	}
+	if len(ids) != len(want) {
+		t.Fatalf("IDs = %v, want %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("IDs = %v, want %v", ids, want)
+		}
+	}
+}
+
+func TestNormalizeBatchDeleteBindingIDsRejectsInvalidInput(t *testing.T) {
+	tests := [][]string{
+		nil,
+		{"not-a-uuid"},
+		{"urn:uuid:10000000-0000-0000-0000-000000000001"},
+	}
+	for _, values := range tests {
+		if _, err := normalizeBatchDeleteBindingIDs(values); !errors.Is(err, domain.ErrValidation) {
+			t.Fatalf("normalizeBatchDeleteBindingIDs(%v) error = %v, want validation error", values, err)
+		}
+	}
 }
 
 type modelBindingStoreStub struct {

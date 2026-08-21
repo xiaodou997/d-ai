@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/moneyfmt"
@@ -993,13 +992,6 @@ func userUsageSummaryToDTO(summary domain.UserUsageSummary) userUsageSummaryDTO 
 		TotalUserChargedUSD:   moneyfmt.MicroToUSD(summary.TotalUserChargedMicro),
 		AvgLatencyMs:          summary.AvgLatencyMs,
 	}
-}
-
-func int4ToPtr(value pgtype.Int4) *int32 {
-	if !value.Valid {
-		return nil
-	}
-	return &value.Int32
 }
 
 func billingStatusLabel(status string) string {

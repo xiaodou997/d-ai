@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
 
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/libs/go/httpx"
@@ -442,17 +443,17 @@ func normalizeBatchDeleteBindingIDs(rawIDs []string) ([]string, error) {
 	}
 
 	ids := make([]string, 0, len(rawIDs))
-	seen := make(map[[16]byte]struct{}, len(rawIDs))
+	seen := make(map[uuid.UUID]struct{}, len(rawIDs))
 	for _, rawID := range rawIDs {
 		id, err := parseTransportUUID(strings.TrimSpace(rawID))
 		if err != nil {
 			return nil, domain.NewValidationError("binding_ids", "must contain valid UUIDs")
 		}
-		if _, exists := seen[id.Bytes]; exists {
+		if _, exists := seen[id]; exists {
 			continue
 		}
-		seen[id.Bytes] = struct{}{}
-		ids = append(ids, uuidToString(id))
+		seen[id] = struct{}{}
+		ids = append(ids, id.String())
 	}
 	return ids, nil
 }

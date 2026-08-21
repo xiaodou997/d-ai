@@ -34,3 +34,23 @@ func TestDependencyRulesRejectInfrastructureFromInnerLayers(t *testing.T) {
 	}
 	t.Fatal("inner-layer rule not registered")
 }
+
+func TestDependencyRulesRejectInfrastructureFromAITransport(t *testing.T) {
+	for _, rule := range dependencyRules() {
+		if rule.Name != "transport-must-not-import-infrastructure" {
+			continue
+		}
+		from := modulePrefix + "ai/transport"
+		for _, dependency := range []string{
+			"github.com/jackc/pgx/v5",
+			"github.com/jackc/pgx/v5/pgtype",
+			"github.com/redis/go-redis/v9",
+		} {
+			if !rule.Match(from, dependency) {
+				t.Fatalf("AI transport -> %s must be rejected", dependency)
+			}
+		}
+		return
+	}
+	t.Fatal("transport infrastructure rule not registered")
+}

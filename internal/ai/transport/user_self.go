@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/libs/go/httpx"
@@ -538,12 +537,4 @@ func registerUserSelfUsage(api huma.API, d AIDeps) {
 		out.Body = userUsageSummaryToDTO(summary)
 		return out, nil
 	})
-}
-
-func transportNumericToFloat(n pgtype.Numeric) float64 {
-	if !n.Valid {
-		return 0
-	}
-	f, _ := n.Float64Value()
-	return f.Float64
 }

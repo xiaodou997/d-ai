@@ -55,11 +55,11 @@ cmd/server (composition root) -> all modules and adapters
 
 ## 当前历史例外
 
-当前 `internal/transport` 和 `internal/ai/transport` 仍然存在直接数据库/Redis 依赖，且主
-transport 中仍有遗留 SQL。所有已知的包级越界都在例外台账登记，并由门禁冻结；新增边缘不会
-因为“暂时方便”自动获得许可。例外的删除顺序是：
+`internal/ai/transport` 已清零 PostgreSQL、Redis、sqlc 和 adapter 包的直接依赖；
+`internal/transport` 仍有直接数据库/Redis 依赖和遗留 SQL。剩余包级越界都在例外台账登记，
+并由门禁冻结；新增边缘不会因为“暂时方便”自动获得许可。例外的删除顺序是：
 
-1. P1-02 拆掉 `transport.Deps` / `AIDeps` 中的基础设施 service locator。
+1. P1-02 继续把 `transport.Deps` / `AIDeps` 中的具体业务 service 替换为最小端口。
 2. P1-03 将权限、事务和 SQL 迁移到各域 application service/query service。
 3. P1-07 用数据库角色、领域 schema 或等价权限隔离验证表所有权。
 
