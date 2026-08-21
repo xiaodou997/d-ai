@@ -160,6 +160,12 @@ type UpstreamAccountReader interface {
 	GetAccountSecret(ctx context.Context, id string) (upstreamcontrol.AccountSecret, error)
 }
 
+// UserUsageLogReader exposes the current user's scoped usage projection while
+// keeping generated query parameters and rows inside the persistence adapter.
+type UserUsageLogReader interface {
+	ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error)
+}
+
 // RuntimeDeps contains request execution state and runtime policy.
 type RuntimeDeps struct {
 	Health          routing.HealthTracker
@@ -186,6 +192,7 @@ type ScoreWeightsStore interface {
 type OperationsDeps struct {
 	DashboardSvc               *observabilitycontrol.DashboardService
 	UsageSvc                   *observabilitycontrol.UsageService
+	UserUsageLogs              UserUsageLogReader
 	AuditSvc                   *observabilitycontrol.AuditService
 	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 	// 风控中心（内容安全审核）。四者始终一起装配，nil 只会发生在测试里未注入的场景。

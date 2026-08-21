@@ -12,6 +12,9 @@ import (
 type usageRepoStub struct {
 	gotLimit     int32
 	gotOffset    int32
+	gotTenantID  string
+	gotUserID    string
+	gotSource    string
 	gotDateFrom  *time.Time
 	gotDateTo    *time.Time
 	total        int64
@@ -33,6 +36,10 @@ func (m *usageRepoStub) StatsFor(ctx context.Context, f domain.UsageFilter) (dom
 }
 func (m *usageRepoStub) ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) ([]domain.UsageLog, error) {
 	m.gotLimit, m.gotOffset = limit, offset
+	return m.logs, m.listErr
+}
+func (m *usageRepoStub) ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error) {
+	m.gotTenantID, m.gotUserID, m.gotSource, m.gotLimit = tenantID, userID, requestSource, limit
 	return m.logs, m.listErr
 }
 func (m *usageRepoStub) GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error) {
@@ -118,6 +125,22 @@ func TestUsageListLogsListErrorPropagates(t *testing.T) {
 	svc := NewUsageService(&usageRepoStub{listErr: errors.New("boom")})
 	if _, err := svc.ListLogs(context.Background(), domain.UsageFilter{}, 20, 0); err == nil {
 		t.Fatal("want list error")
+	}
+}
+
+func TestUsageListUserLogsPassThroughsScope(t *testing.T) {
+	repo := &usageRepoStub{logs: []domain.UsageLog{{ID: "log-1"}}}
+	svc := NewUsageService(repo)
+
+	logs, err := svc.ListUserLogs(context.Background(), "tenant-1", "user-1", "workspace", 37)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.gotTenantID != "tenant-1" || repo.gotUserID != "user-1" || repo.gotSource != "workspace" || repo.gotLimit != 37 {
+		t.Fatalf("scope = tenant %q user %q source %q limit %d", repo.gotTenantID, repo.gotUserID, repo.gotSource, repo.gotLimit)
+	}
+	if len(logs) != 1 || logs[0].ID != "log-1" {
+		t.Fatalf("logs = %+v, want one log", logs)
 	}
 }
 

@@ -129,6 +129,7 @@ type AICatalogDeps struct {
 type AIOperationsDeps struct {
 	DashboardSvc               *observabilitycontrol.DashboardService
 	UsageSvc                   *observabilitycontrol.UsageService
+	UserUsageLogs              aitransport.UserUsageLogReader
 	AuditSvc                   *observabilitycontrol.AuditService
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 	RiskControlConfigSvc       *riskcontrol.ConfigService
@@ -273,6 +274,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		OperationsDeps: aitransport.OperationsDeps{
 			DashboardSvc:               d.DashboardSvc,
 			UsageSvc:                   d.UsageSvc,
+			UserUsageLogs:              d.UserUsageLogs,
 			AuditSvc:                   d.AuditSvc,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 			RiskControlConfigSvc:       d.RiskControlConfigSvc,

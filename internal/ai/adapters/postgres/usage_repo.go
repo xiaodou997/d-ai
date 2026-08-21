@@ -110,6 +110,23 @@ func (r *UsageRepo) ListLogs(ctx context.Context, f domain.UsageFilter, limit, o
 	return out, nil
 }
 
+func (r *UsageRepo) ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error) {
+	rows, err := r.q.ListUsageLogsByTenantUser(ctx, dbgen.ListUsageLogsByTenantUserParams{
+		TenantID:      tenantID,
+		UserID:        akText(userID),
+		Limit:         limit,
+		RequestSource: akText(requestSource),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.UsageLog, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, usageLogFromUserRow(row))
+	}
+	return out, nil
+}
+
 func (r *UsageRepo) GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error) {
 	row, err := r.q.GetUsageLogByRequestID(ctx, requestID)
 	if err != nil {
@@ -511,6 +528,45 @@ func usageLogFromRow(row dbgen.ListUsageLogsRow) domain.UsageLog {
 		TokenUsageSource:                   row.TokenUsageSource,
 		BillingSource:                      row.BillingSource,
 		CreatedAt:                          row.CreatedAt.Time,
+	}
+}
+
+func usageLogFromUserRow(row dbgen.ListUsageLogsByTenantUserRow) domain.UsageLog {
+	return domain.UsageLog{
+		ID:                              uuidToString(row.ID),
+		RequestID:                       row.RequestID,
+		TraceID:                         row.TraceID.String,
+		TenantID:                        row.TenantID,
+		UserID:                          row.UserID.String,
+		RequestSource:                   row.RequestSource,
+		GroupID:                         uuidToString(row.GroupID),
+		GroupNameSnapshot:               row.GroupNameSnapshot,
+		EffectiveUserMultiplierSnapshot: numericToFloat(row.EffectiveUserMultiplierSnapshot),
+		BillingGroupLabelSnapshot:       row.BillingGroupLabelSnapshot,
+		ModelCode:                       row.ModelCode,
+		Stream:                          row.Stream,
+		PromptTokens:                    row.PromptTokens,
+		CompletionTokens:                row.CompletionTokens,
+		CacheWriteTokens:                row.CacheWriteTokens,
+		CacheReadTokens:                 row.CacheReadTokens,
+		ReasoningTokens:                 row.ReasoningTokens,
+		ReasoningEffort:                 row.ReasoningEffort.String,
+		TotalTokens:                     row.TotalTokens,
+		BillableUnitType:                row.BillableUnitType,
+		BillableUnits:                   row.BillableUnits,
+		UserPayableMicro:                row.UserPayable,
+		UserChargedMicro:                row.UserCharged,
+		ServiceTier:                     row.ServiceTier,
+		BillingStatus:                   row.BillingStatus,
+		RefundStatus:                    row.RefundStatus,
+		BillingSource:                   row.BillingSource,
+		RequestStatus:                   row.RequestStatus,
+		HTTPStatus:                      akInt4StrPtr(row.HttpStatus),
+		LatencyMs:                       akInt4StrPtr(row.LatencyMs),
+		FirstTokenLatencyMs:             akInt4StrPtr(row.FirstTokenLatencyMs),
+		ErrorCode:                       row.ErrorCode.String,
+		ErrorMessage:                    row.ErrorMessage.String,
+		CreatedAt:                       row.CreatedAt.Time,
 	}
 }
 

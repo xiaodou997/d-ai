@@ -26,6 +26,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	blacklist := &auth.BlacklistService{}
 	providerSecrets := &providerSecretCodecStub{}
 	accountReader := &upstreamAccountReaderStub{}
+	userUsageLogs := &userUsageLogReaderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
 
 	got := buildAIDeps(
@@ -54,6 +55,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
+				UserUsageLogs:              userUsageLogs,
 			},
 		},
 		nil,
@@ -73,6 +75,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("observability dependencies were not preserved")
+	}
+	if got.UserUsageLogs != userUsageLogs {
+		t.Fatal("user usage log reader was not preserved")
 	}
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")
@@ -106,4 +111,10 @@ type upstreamAccountReaderStub struct{}
 
 func (*upstreamAccountReaderStub) GetAccountSecret(context.Context, string) (upstreamcontrol.AccountSecret, error) {
 	return upstreamcontrol.AccountSecret{}, nil
+}
+
+type userUsageLogReaderStub struct{}
+
+func (*userUsageLogReaderStub) ListUserLogs(context.Context, string, string, string, int32) ([]domain.UsageLog, error) {
+	return nil, nil
 }

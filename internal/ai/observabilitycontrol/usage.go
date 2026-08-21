@@ -18,6 +18,7 @@ type UsageRepository interface {
 	CountLogs(ctx context.Context, f domain.UsageFilter) (int64, error)
 	StatsFor(ctx context.Context, f domain.UsageFilter) (domain.UsageStats, error)
 	ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) ([]domain.UsageLog, error)
+	ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error)
 	GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error)
 	Summary(ctx context.Context, f SummaryFilter) ([]domain.UsageSummaryRow, error)
 	UnitSummary(ctx context.Context, f SummaryFilter) ([]domain.UsageUnitSummaryRow, error)
@@ -78,6 +79,10 @@ func (s *UsageService) ListLogs(ctx context.Context, f domain.UsageFilter, limit
 
 func (s *UsageService) GetLogDetail(ctx context.Context, requestID string) (domain.UsageLogDetail, error) {
 	return s.repo.GetLogDetail(ctx, requestID)
+}
+
+func (s *UsageService) ListUserLogs(ctx context.Context, tenantID, userID, requestSource string, limit int32) ([]domain.UsageLog, error) {
+	return s.repo.ListUserLogs(ctx, tenantID, userID, requestSource, limit)
 }
 
 func (s *UsageService) Summary(ctx context.Context, f SummaryFilter) ([]domain.UsageSummaryRow, error) {

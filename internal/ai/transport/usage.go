@@ -9,7 +9,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/moneyfmt"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
@@ -945,17 +944,17 @@ func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 	}
 }
 
-func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow) userUsageLogDTO {
+func userUsageLogToDTO(row domain.UsageLog) userUsageLogDTO {
 	return userUsageLogDTO{
-		ID:                              uuidToString(row.ID),
+		ID:                              row.ID,
 		RequestID:                       row.RequestID,
-		TraceID:                         textToStringPtr(row.TraceID),
+		TraceID:                         stringPtrOrNil(row.TraceID),
 		TenantID:                        row.TenantID,
-		UserID:                          textToStringPtr(row.UserID),
+		UserID:                          stringPtrOrNil(row.UserID),
 		RequestSource:                   row.RequestSource,
-		GroupID:                         uuidToString(row.GroupID),
+		GroupID:                         row.GroupID,
 		GroupNameSnapshot:               row.GroupNameSnapshot,
-		EffectiveUserMultiplierSnapshot: transportNumericToFloat(row.EffectiveUserMultiplierSnapshot),
+		EffectiveUserMultiplierSnapshot: row.EffectiveUserMultiplierSnapshot,
 		BillingGroupLabelSnapshot:       row.BillingGroupLabelSnapshot,
 		ModelCode:                       row.ModelCode,
 		Stream:                          row.Stream,
@@ -964,22 +963,22 @@ func userUsageLogToDTO(row dbgen.ListUsageLogsByTenantUserRow) userUsageLogDTO {
 		CacheWriteTokens:                row.CacheWriteTokens,
 		CacheReadTokens:                 row.CacheReadTokens,
 		ReasoningTokens:                 row.ReasoningTokens,
-		ReasoningEffort:                 textToStringPtr(row.ReasoningEffort),
+		ReasoningEffort:                 stringPtrOrNil(row.ReasoningEffort),
 		TotalTokens:                     row.TotalTokens,
 		BillableUnitType:                row.BillableUnitType,
 		BillableUnits:                   row.BillableUnits,
-		UserChargedUSD:                  moneyfmt.MicroToUSD(row.UserCharged),
+		UserChargedUSD:                  moneyfmt.MicroToUSD(row.UserChargedMicro),
 		ServiceTier:                     row.ServiceTier,
 		BillingStatus:                   row.BillingStatus,
 		RefundStatus:                    row.RefundStatus,
 		BillingSource:                   billingSourceOrDefault(row.BillingSource),
 		RequestStatus:                   row.RequestStatus,
-		HTTPStatus:                      int4ToPtr(row.HttpStatus),
-		LatencyMs:                       int4ToPtr(row.LatencyMs),
-		FirstTokenLatencyMs:             int4ToPtr(row.FirstTokenLatencyMs),
-		ErrorCode:                       textToStringPtr(row.ErrorCode),
-		ErrorMessage:                    textToStringPtr(row.ErrorMessage),
-		CreatedAt:                       timestamptzToMillisPtr(row.CreatedAt),
+		HTTPStatus:                      row.HTTPStatus,
+		LatencyMs:                       row.LatencyMs,
+		FirstTokenLatencyMs:             row.FirstTokenLatencyMs,
+		ErrorCode:                       stringPtrOrNil(row.ErrorCode),
+		ErrorMessage:                    stringPtrOrNil(row.ErrorMessage),
+		CreatedAt:                       timeToMillisPtr(row.CreatedAt),
 	}
 }
 
@@ -994,13 +993,6 @@ func userUsageSummaryToDTO(summary domain.UserUsageSummary) userUsageSummaryDTO 
 		TotalUserChargedUSD:   moneyfmt.MicroToUSD(summary.TotalUserChargedMicro),
 		AvgLatencyMs:          summary.AvgLatencyMs,
 	}
-}
-
-func stringToText(value string) pgtype.Text {
-	if value == "" {
-		return pgtype.Text{}
-	}
-	return pgtype.Text{String: value, Valid: true}
 }
 
 func int4ToPtr(value pgtype.Int4) *int32 {

@@ -409,6 +409,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 健康检查边界：AI 系统状态端点通过 `ComponentHealthProbe` 检查 Redis，go-redis 的 `Ping` 命令类型封装在 Redis adapter；AI Transport 基础设施容器不再持有具体 `*redis.Client`。
 - 可观测性边界：usage identity enrichment 失败通过 `IdentityEnrichmentFailureObserver` 上报，zap 消息与字段映射封装在 observability adapter；AI Transport 不再持有具体 `*zap.Logger`，失败时继续返回空补全结果。
 - 账号读取边界：模型发现、模型导入、连通性检测和绑定校验通过 `UpstreamAccountReader` 获取 `upstreamcontrol.AccountSecret`；PostgreSQL adapter 负责映射 ciphertext、BaseURL、headers、协议与状态，AI Transport 不再接收上游账号 sqlc row。
+- 用户用量读取边界：终端用户自助日志通过 `UserUsageLogReader` 读取 `domain.UsageLog`；专用查询的租户/用户/request source 参数构造与 sqlc row 映射封装进 `UsageRepo`，保持原过滤、倒序和 limit 语义，AI Transport 不再直接执行该查询。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck` 和 `git diff --check` 通过。
 - 遗留风险：依赖容器仍保留具体 adapter 类型；部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 将用户自助 usage 日志的 sqlc 查询参数与行收敛为领域级查询端口，继续缩小 AI Transport 的 `*dbgen.Queries` 使用面。
+- 下一候选项：P1-02 将账号迁移流程的审计写入收敛为领域事件写入端口，移除 AI Transport 最后一处 `*dbgen.Queries` 使用及其基础设施依赖字段。

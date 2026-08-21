@@ -389,6 +389,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			AIOperationsDeps: transport.AIOperationsDeps{
 				DashboardSvc:               dashboardSvc,
 				UsageSvc:                   usageSvc,
+				UserUsageLogs:              usageSvc,
 				AuditSvc:                   auditSvc,
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				RiskControlConfigSvc:       riskControlConfigSvc,

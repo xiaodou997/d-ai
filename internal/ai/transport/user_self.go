@@ -18,7 +18,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"xiaodou/dai/internal/ai/commercial"
-	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -490,8 +489,8 @@ func registerUserSelfUsage(api huma.API, d AIDeps) {
 		Description: "按当前用户 token 返回本用户的用量日志。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *userSelfUsageLogsInput) (*userUsageLogsOutput, error) {
-		if d.Queries == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("queries dependency is not configured")
+		if d.UserUsageLogs == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("user usage log reader is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		userID := userIDFromContext(ctx)
@@ -502,12 +501,7 @@ func registerUserSelfUsage(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		rows, err := d.Queries.ListUsageLogsByTenantUser(ctx, dbgen.ListUsageLogsByTenantUserParams{
-			TenantID:      tenantID,
-			UserID:        pgtype.Text{String: userID, Valid: true},
-			Limit:         limit,
-			RequestSource: stringToText(in.RequestSource),
-		})
+		rows, err := d.UserUsageLogs.ListUserLogs(ctx, tenantID, userID, in.RequestSource, limit)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
