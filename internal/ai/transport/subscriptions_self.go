@@ -50,7 +50,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		Description: "返回当前用户所属租户已上架（on_sale）的订阅套餐。价格和额度单位为 micro-USD。",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subSelfListInput) (*subPublicPlanListOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlans == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -58,7 +58,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		plans, total, err := d.Subscriptions.ListPlansForUser(ctx, subscription.PlanFilter{
+		plans, total, err := d.SubscriptionPlans.ListPlansForUser(ctx, subscription.PlanFilter{
 			TenantID: tenantID, OnSaleOnly: true, Limit: in.Limit, Offset: in.Offset,
 		}, userID)
 		if err != nil {
@@ -82,7 +82,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		Tags:          []string{"subscriptions"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *subSelfCreateOrderInput) (*subPurchaseOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPurchases == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -96,7 +96,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		if in.IdempotencyKey == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("Idempotency-Key header is required")
 		}
-		order, sub, err := d.Subscriptions.Purchase(ctx, subscription.PurchaseParams{
+		order, sub, err := d.SubscriptionPurchases.Purchase(ctx, subscription.PurchaseParams{
 			TenantID: tenantID, UserID: userID, PlanID: in.Body.PlanID, IdempotencyKey: in.IdempotencyKey,
 		})
 		out := &subPurchaseOutput{}
@@ -115,7 +115,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		out.Status = http.StatusCreated
 		out.Body.Order = &odto
 		if sub != nil {
-			sdto := subscriptionsToDTO(ctx, d, []subscription.Subscription{*sub}, time.Now())[0]
+			sdto := subscriptionsToDTO(ctx, d.SubscriptionGroupNames, []subscription.Subscription{*sub}, time.Now())[0]
 			out.Body.Subscription = &sdto
 		}
 		return out, nil
@@ -128,7 +128,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助订阅订单列表",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subSelfListInput) (*subOrderListOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionOrders == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -136,7 +136,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		orders, total, err := d.Subscriptions.ListOrders(ctx, subscription.OrderFilter{
+		orders, total, err := d.SubscriptionOrders.ListOrders(ctx, subscription.OrderFilter{
 			TenantID: tenantID, UserID: userID, Limit: in.Limit, Offset: in.Offset,
 		})
 		if err != nil {
@@ -158,7 +158,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助订阅订单详情（轮询用）",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subSelfOrderIDInput) (*subOrderOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionOrders == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -166,7 +166,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		if tenantID == "" || userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id and user id are required")
 		}
-		order, err := d.Subscriptions.GetOrder(ctx, in.OrderID)
+		order, err := d.SubscriptionOrders.GetOrder(ctx, in.OrderID)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
@@ -199,7 +199,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
-		items := subscriptionsToDTO(ctx, d, subs, time.Now())
+		items := subscriptionsToDTO(ctx, d.SubscriptionGroupNames, subs, time.Now())
 		page, size := subPageMeta(in.Limit, in.Offset)
 		out := &subscriptionListOutput{Body: NewControlPage(items, total, page, size, emptyIdentityIncluded())}
 		return out, nil
@@ -227,7 +227,7 @@ func registerUserSelfSubscriptions(api huma.API, d AIDeps) {
 		}
 		out := &subscriptionNullableOutput{}
 		if sub != nil {
-			dto := subscriptionsToDTO(ctx, d, []subscription.Subscription{*sub}, time.Now())[0]
+			dto := subscriptionsToDTO(ctx, d.SubscriptionGroupNames, []subscription.Subscription{*sub}, time.Now())[0]
 			out.Body = &dto
 		}
 		return out, nil

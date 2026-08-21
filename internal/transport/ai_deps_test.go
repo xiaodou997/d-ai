@@ -14,6 +14,7 @@ import (
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
+	"xiaodou/dai/internal/ai/subscription"
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
@@ -53,6 +54,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	commercialPorts := commercial.NewService(nil)
 	apiKeyPorts := identitycontrol.New(nil, nil, nil, nil)
 	workspacePorts := workspace.NewService(nil)
+	subscriptionPorts := subscription.NewService(nil, nil, nil)
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAIDeps(
@@ -83,6 +85,14 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				WorkspaceSessions: workspacePorts,
 				WorkspaceManager:  workspacePorts,
 				WorkspaceImages:   workspacePorts,
+			},
+			AIBillingDeps: AIBillingDeps{
+				SubscriptionPlans:      subscriptionPorts,
+				SubscriptionPlanWriter: subscriptionPorts,
+				SubscriptionPurchases:  subscriptionPorts,
+				Subscriptions:          subscriptionPorts,
+				SubscriptionOrders:     subscriptionPorts,
+				SubscriptionGroupNames: subscriptionPorts,
 			},
 			AICatalogDeps: AICatalogDeps{
 				ClientCatalog:      catalog,
@@ -130,6 +140,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.WorkspaceOverview != workspacePorts || got.WorkspaceModels != workspacePorts || got.WorkspaceSessions != workspacePorts || got.WorkspaceManager != workspacePorts || got.WorkspaceImages != workspacePorts {
 		t.Fatal("workspace capability ports were not preserved")
+	}
+	if got.SubscriptionPlans != subscriptionPorts || got.SubscriptionPlanWriter != subscriptionPorts || got.SubscriptionPurchases != subscriptionPorts || got.Subscriptions != subscriptionPorts || got.SubscriptionOrders != subscriptionPorts || got.SubscriptionGroupNames != subscriptionPorts {
+		t.Fatal("subscription capability ports were not preserved")
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")

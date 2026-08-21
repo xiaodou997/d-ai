@@ -405,14 +405,14 @@ func subscriptionToDTO(s subscription.Subscription, now time.Time, groupNames ma
 }
 
 // subscriptionsToDTO 批量转换：先汇总所有快照分组 id 一次解析名字，再逐条建 DTO。
-func subscriptionsToDTO(ctx context.Context, d AIDeps, subs []subscription.Subscription, now time.Time) []subscriptionDTO {
+func subscriptionsToDTO(ctx context.Context, groupNames SubscriptionGroupNameResolver, subs []subscription.Subscription, now time.Time) []subscriptionDTO {
 	idset := make(map[string]struct{})
 	for i := range subs {
 		for gid := range subs[i].GroupQuotaDebitMultipliers {
 			idset[gid] = struct{}{}
 		}
 	}
-	names := resolveGroupNames(ctx, d, idset)
+	names := resolveGroupNames(ctx, groupNames, idset)
 	items := make([]subscriptionDTO, 0, len(subs))
 	for i := range subs {
 		items = append(items, subscriptionToDTO(subs[i], now, names))
@@ -421,15 +421,15 @@ func subscriptionsToDTO(ctx context.Context, d AIDeps, subs []subscription.Subsc
 }
 
 // resolveGroupNames 批量解析分组名（空集或服务缺失时返回空 map，不阻断）。
-func resolveGroupNames(ctx context.Context, d AIDeps, idset map[string]struct{}) map[string]string {
-	if len(idset) == 0 || d.Subscriptions == nil {
+func resolveGroupNames(ctx context.Context, resolver SubscriptionGroupNameResolver, idset map[string]struct{}) map[string]string {
+	if len(idset) == 0 || resolver == nil {
 		return map[string]string{}
 	}
 	ids := make([]string, 0, len(idset))
 	for id := range idset {
 		ids = append(ids, id)
 	}
-	names, err := d.Subscriptions.GroupNames(ctx, ids)
+	names, err := resolver.GroupNames(ctx, ids)
 	if err != nil {
 		return map[string]string{}
 	}

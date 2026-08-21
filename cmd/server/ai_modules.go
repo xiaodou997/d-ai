@@ -389,7 +389,12 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				WorkspaceImages:   workspaceSvc,
 			},
 			AIBillingDeps: transport.AIBillingDeps{
-				Subscriptions: subsSvc,
+				SubscriptionPlans:      subsSvc,
+				SubscriptionPlanWriter: subsSvc,
+				SubscriptionPurchases:  subsSvc,
+				Subscriptions:          subsSvc,
+				SubscriptionOrders:     subsSvc,
+				SubscriptionGroupNames: subsSvc,
 			},
 			AICatalogDeps: transport.AICatalogDeps{
 				ClientCatalog:      poolModelCatalog,

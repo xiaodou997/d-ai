@@ -60,6 +60,7 @@ httpServers.Start / Shutdown
 - 商业控制面通过 `CommercialGroupCatalog`、`CommercialGroupManager`、`CommercialDispatchRuleManager`、`CommercialGroupTargetManager`、`CommercialUserBindingManager`、`CommercialLimitPolicyManager` 六组端口进入 AI Transport；具体 `commercial.Service` 只在 composition root 构造并按能力注入，Serving 运行时仍独立持有其解析能力。
 - API Key 控制面通过 `APIKeyReader`、`APIKeyWriter`、`APIKeyLifecycleManager`、`APIKeySecretManager` 四组端口进入 AI Transport；具体 `identitycontrol.Service` 只在 composition root 构造并按能力注入，已有密钥的明文回显与轮换被隔离在敏感密钥端口，新建端口只返回本次生成的明文。
 - AI 工作台通过 `OverviewReader`、`ChatModelReader`、`ChatSessionReader`、`ChatSessionManager`、`ChatMessageManager`、`ImageJobReader` 六组共享端口进入 Huma Transport 和 Console；具体 `workspace.Service` 只在 composition root 构造并按入口所需能力注入。
+- 订阅控制面通过 `SubscriptionPlanCatalog`、`SubscriptionPlanManager`、`SubscriptionPurchaser`、`SubscriptionReader`、`SubscriptionOrderReader`、`SubscriptionGroupNameResolver` 六组端口进入 AI Transport；Serving 继续使用独立的准入/扣费端口，具体 `subscription.Service` 只在 composition root 构造并按能力注入。
 - PostgreSQL adapter 通过统一 DBTX/pool/transaction 包装器将缺失行与已知约束错误翻译为领域错误；AI Transport 的错误映射不再依赖 `pgx.ErrNoRows` 或 `pgconn.PgError`，未知数据库和连接错误仍按内部错误处理。
 - AI Transport 的 UUID 输入使用通用值类型校验，nullable/numeric/time 转换已由领域投影或标准值承担；该包已清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接 import，对应依赖例外已删除。
 - 租户上游访问策略通过 `UpstreamAccessManager` 最小端口进入 AI Transport；具体 `upstreamaccess.Service` 只在 composition root 构造，顶层 Transport 的兼容装配也仅转发该端口。

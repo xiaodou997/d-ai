@@ -23,7 +23,6 @@ import (
 	// AI 域
 	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/routing"
-	"xiaodou/dai/internal/ai/subscription"
 	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/workspace"
 )
@@ -109,7 +108,12 @@ type AIIdentityDeps struct {
 
 // AIBillingDeps contains AI-side subscription and billing collaborators.
 type AIBillingDeps struct {
-	Subscriptions *subscription.Service
+	SubscriptionPlans      aitransport.SubscriptionPlanCatalog
+	SubscriptionPlanWriter aitransport.SubscriptionPlanManager
+	SubscriptionPurchases  aitransport.SubscriptionPurchaser
+	Subscriptions          aitransport.SubscriptionReader
+	SubscriptionOrders     aitransport.SubscriptionOrderReader
+	SubscriptionGroupNames aitransport.SubscriptionGroupNameResolver
 }
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
@@ -272,7 +276,12 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			WorkspaceImages:   d.WorkspaceImages,
 		},
 		BillingDeps: aitransport.BillingDeps{
-			Subscriptions: d.Subscriptions,
+			SubscriptionPlans:      d.SubscriptionPlans,
+			SubscriptionPlanWriter: d.SubscriptionPlanWriter,
+			SubscriptionPurchases:  d.SubscriptionPurchases,
+			Subscriptions:          d.Subscriptions,
+			SubscriptionOrders:     d.SubscriptionOrders,
+			SubscriptionGroupNames: d.SubscriptionGroupNames,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
 			ClientCatalog:      d.ClientCatalog,

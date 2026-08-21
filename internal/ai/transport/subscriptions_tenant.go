@@ -134,14 +134,14 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "租户自助订阅套餐列表",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantListPlansInput) (*subPlanListOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlans == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		plans, total, err := d.Subscriptions.ListPlans(ctx, subscription.PlanFilter{
+		plans, total, err := d.SubscriptionPlans.ListPlans(ctx, subscription.PlanFilter{
 			TenantID: tenantID, Status: in.Status, Limit: in.Limit, Offset: in.Offset,
 		})
 		if err != nil {
@@ -164,7 +164,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Tags:          []string{"subscriptions"},
 		DefaultStatus: http.StatusCreated,
 	}, func(ctx context.Context, in *subTenantCreatePlanInput) (*subPlanOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlanWriter == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -172,7 +172,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		plan, err := d.Subscriptions.CreatePlan(ctx, subscription.CreatePlanParams{
+		plan, err := d.SubscriptionPlanWriter.CreatePlan(ctx, subscription.CreatePlanParams{
 			TenantID:           tenantID,
 			Name:               in.Body.Name,
 			Description:        in.Body.Description,
@@ -200,14 +200,14 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "租户批量调整套餐展示顺序",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantPlanReorderInput) (*struct{}, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlanWriter == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		if err := d.Subscriptions.ReorderPlans(ctx, tenantID, in.Body.PlanIDs); err != nil {
+		if err := d.SubscriptionPlanWriter.ReorderPlans(ctx, tenantID, in.Body.PlanIDs); err != nil {
 			return nil, mapSubscriptionError(err)
 		}
 		return &struct{}{}, nil
@@ -220,14 +220,14 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "租户订阅套餐详情",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantPlanIDInput) (*subPlanOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlans == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		plan, err := d.Subscriptions.GetPlan(ctx, in.PlanID)
+		plan, err := d.SubscriptionPlans.GetPlan(ctx, in.PlanID)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
@@ -244,21 +244,21 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "租户查看套餐购买政策修订历史",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantPlanIDInput) (*subPurchasePolicyRevisionListOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlans == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		plan, err := d.Subscriptions.GetPlan(ctx, in.PlanID)
+		plan, err := d.SubscriptionPlans.GetPlan(ctx, in.PlanID)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
 		if plan.TenantID != tenantID {
 			return nil, httpx.ErrNotFound.WithDetail("套餐不存在")
 		}
-		revisions, err := d.Subscriptions.ListPurchasePolicyRevisions(ctx, in.PlanID)
+		revisions, err := d.SubscriptionPlans.ListPurchasePolicyRevisions(ctx, in.PlanID)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
@@ -277,7 +277,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Description: "编辑只影响后续新购，已售订阅持有下单时的快照不受影响。",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantUpdatePlanInput) (*subPlanOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlanWriter == nil || d.SubscriptionPlans == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
@@ -285,7 +285,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
 		userID := userIDFromContext(ctx)
-		ok, err := d.Subscriptions.UpdatePlan(ctx, subscription.UpdatePlanParams{
+		ok, err := d.SubscriptionPlanWriter.UpdatePlan(ctx, subscription.UpdatePlanParams{
 			ID:                 in.PlanID,
 			TenantID:           tenantID,
 			Name:               in.Body.Name,
@@ -307,7 +307,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		if !ok {
 			return nil, httpx.ErrNotFound.WithDetail("套餐不存在或不属于当前租户")
 		}
-		plan, err := d.Subscriptions.GetPlan(ctx, in.PlanID)
+		plan, err := d.SubscriptionPlans.GetPlan(ctx, in.PlanID)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
@@ -322,21 +322,21 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Description: "目标状态只能是 on_sale / off_sale。",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantPlanStatusInput) (*subPlanOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionPlanWriter == nil || d.SubscriptionPlans == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		ok, err := d.Subscriptions.SetPlanStatus(ctx, in.PlanID, tenantID, in.Body.Status)
+		ok, err := d.SubscriptionPlanWriter.SetPlanStatus(ctx, in.PlanID, tenantID, in.Body.Status)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
 		if !ok {
 			return nil, httpx.ErrNotFound.WithDetail("套餐不存在或不属于当前租户")
 		}
-		plan, err := d.Subscriptions.GetPlan(ctx, in.PlanID)
+		plan, err := d.SubscriptionPlans.GetPlan(ctx, in.PlanID)
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
@@ -363,7 +363,7 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, mapSubscriptionError(err)
 		}
-		items := subscriptionsToDTO(ctx, d, subs, time.Now())
+		items := subscriptionsToDTO(ctx, d.SubscriptionGroupNames, subs, time.Now())
 		page, size := subPageMeta(in.Limit, in.Offset)
 		included := buildIdentityIncludedForSubscriptions(ctx, d, subs)
 		return &subscriptionListOutput{Body: NewControlPage(items, total, page, size, included)}, nil
@@ -376,14 +376,14 @@ func registerTenantSelfSubscriptions(api huma.API, d AIDeps) {
 		Summary:     "租户下终端用户订阅订单列表",
 		Tags:        []string{"subscriptions"},
 	}, func(ctx context.Context, in *subTenantListOrdersInput) (*subOrderListOutput, error) {
-		if d.Subscriptions == nil {
+		if d.SubscriptionOrders == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("subscription service is not configured")
 		}
 		tenantID := tenantIDFromContext(ctx)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("tenant id is required")
 		}
-		orders, total, err := d.Subscriptions.ListOrders(ctx, subscription.OrderFilter{
+		orders, total, err := d.SubscriptionOrders.ListOrders(ctx, subscription.OrderFilter{
 			TenantID: tenantID, UserID: in.UserID, Status: in.Status, Limit: in.Limit, Offset: in.Offset,
 		})
 		if err != nil {
