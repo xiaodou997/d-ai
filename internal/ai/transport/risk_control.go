@@ -208,10 +208,10 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Summary:     "风控中心配置",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, _ *struct{}) (*riskControlConfigOutput, error) {
-		if d.RiskControlConfigSvc == nil {
+		if d.RiskControlConfig == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("risk control service is not configured")
 		}
-		cfg, err := d.RiskControlConfigSvc.Get(ctx)
+		cfg, err := d.RiskControlConfig.Get(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -226,10 +226,10 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Summary:     "更新风控中心配置",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, in *updateRiskControlConfigInput) (*riskControlConfigOutput, error) {
-		if d.RiskControlConfigSvc == nil {
+		if d.RiskControlConfig == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("risk control service is not configured")
 		}
-		current, err := d.RiskControlConfigSvc.Get(ctx)
+		current, err := d.RiskControlConfig.Get(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -237,7 +237,7 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		if err != nil {
 			return nil, err
 		}
-		if err := d.RiskControlConfigSvc.Update(ctx, cfg); err != nil {
+		if err := d.RiskControlConfig.Update(ctx, cfg); err != nil {
 			return nil, mapServiceError(err)
 		}
 		out := &riskControlConfigOutput{Body: riskControlConfigToDTO(cfg)}
@@ -251,18 +251,18 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Summary:     "测试风控检测（关键词 + 审核 API），不落库",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, in *testRiskControlInput) (*testRiskControlOutput, error) {
-		if d.RiskControlConfigSvc == nil || d.RiskControlChecker == nil {
+		if d.RiskControlConfig == nil || d.RiskControlDetector == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("risk control service is not configured")
 		}
 		text := strings.TrimSpace(in.Body.Text)
 		if text == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("text is required")
 		}
-		cfg, err := d.RiskControlConfigSvc.Get(ctx)
+		cfg, err := d.RiskControlConfig.Get(ctx)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		det := d.RiskControlChecker.Detect(ctx, cfg, text)
+		det := d.RiskControlDetector.Detect(ctx, cfg, text)
 		out := &testRiskControlOutput{}
 		out.Body.Flagged = det.Flagged
 		out.Body.MatchedKeyword = stringPtrOrNil(det.MatchedKeyword)
@@ -282,7 +282,7 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Summary:     "风控审核日志列表",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, in *riskControlLogsInput) (*riskControlLogsOutput, error) {
-		if d.RiskControlLogSvc == nil {
+		if d.RiskControlLogs == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("risk control service is not configured")
 		}
 		dateFrom, dateTo, err := parseOptionalRFC3339Window(in.DateFrom, in.DateTo)
@@ -299,7 +299,7 @@ func registerRiskControl(api huma.API, d AIDeps) {
 			DateFrom: dateFrom,
 			DateTo:   dateTo,
 		}
-		page, err := d.RiskControlLogSvc.List(ctx, filter, in.Limit, in.Offset)
+		page, err := d.RiskControlLogs.List(ctx, filter, in.Limit, in.Offset)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -320,10 +320,10 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Description: "内容违规累计命中达到阈值时生成的人工待办；处置只更新事件状态，不修改账号/租户状态。",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, in *riskEventsInput) (*riskEventsOutput, error) {
-		if d.RiskControlEventSvc == nil {
+		if d.RiskEvents == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("risk control service is not configured")
 		}
-		page, err := d.RiskControlEventSvc.List(ctx, domain.RiskEventFilter{
+		page, err := d.RiskEvents.List(ctx, domain.RiskEventFilter{
 			Status:   in.Status,
 			TenantID: in.TenantID,
 			UserID:   in.UserID,
@@ -348,11 +348,11 @@ func registerRiskControl(api huma.API, d AIDeps) {
 		Description: "仅更新事件状态；如需封禁用户或租户，请在用户管理中单独操作。",
 		Tags:        []string{"risk-control"},
 	}, func(ctx context.Context, in *resolveRiskEventInput) (*riskEventOutput, error) {
-		if d.RiskControlEventSvc == nil {
+		if d.RiskEvents == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("risk control service is not configured")
 		}
 		actor := strings.TrimSpace(claimsUserID(ctx))
-		ev, err := d.RiskControlEventSvc.Resolve(ctx, in.EventID, in.Body.Status, actor, in.Body.Note)
+		ev, err := d.RiskEvents.Resolve(ctx, in.EventID, in.Body.Status, actor, in.Body.Note)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}

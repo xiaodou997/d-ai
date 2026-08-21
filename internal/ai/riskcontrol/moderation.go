@@ -38,18 +38,9 @@ type CheckInput struct {
 	Text           string
 }
 
-// DetectResult is the pure detection outcome, before any DB writes.
-type DetectResult struct {
-	Flagged           bool
-	MatchedKeyword    string
-	HighestCategory   string
-	HighestScore      *float64
-	CategoryScores    map[string]float64
-	APIError          string
-	UpstreamLatencyMs *int32
-	HitLayer          string // cache | keyword | pinyin | api
-	FromCache         bool   // true when result came from L0 verdict cache
-}
+// DetectResult remains as a compatibility name for the domain detection
+// projection used by serving, workers and management transport.
+type DetectResult = domain.RiskControlDetection
 
 // Checker runs keyword + AI-moderation-API detection and records the
 // outcome. It never mutates account/tenant status: crossing the violation

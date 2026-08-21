@@ -25,7 +25,6 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/identitycontrol"
 	proxypkg "xiaodou/dai/internal/ai/proxy"
-	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
 	aitransport "xiaodou/dai/internal/ai/transport"
@@ -133,10 +132,10 @@ type AIOperationsDeps struct {
 	AuditLogs                  aitransport.AdminAuditLogReader
 	AdminAudit                 aitransport.AdminAuditRecorder
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
-	RiskControlConfigSvc       *riskcontrol.ConfigService
-	RiskControlLogSvc          *riskcontrol.LogService
-	RiskControlEventSvc        *riskcontrol.EventService
-	RiskControlChecker         *riskcontrol.Checker
+	RiskControlConfig          aitransport.RiskControlConfigStore
+	RiskControlDetector        aitransport.RiskControlDetector
+	RiskControlLogs            aitransport.RiskControlLogReader
+	RiskEvents                 aitransport.RiskEventManager
 }
 
 // AIDeps contains the AI control-plane and runtime services exposed by the
@@ -281,10 +280,10 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			AuditLogs:                  d.AuditLogs,
 			AdminAudit:                 d.AdminAudit,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
-			RiskControlConfigSvc:       d.RiskControlConfigSvc,
-			RiskControlLogSvc:          d.RiskControlLogSvc,
-			RiskControlEventSvc:        d.RiskControlEventSvc,
-			RiskControlChecker:         d.RiskControlChecker,
+			RiskControlConfig:          d.RiskControlConfig,
+			RiskControlDetector:        d.RiskControlDetector,
+			RiskControlLogs:            d.RiskControlLogs,
+			RiskEvents:                 d.RiskEvents,
 		},
 	}
 	if identity != nil {

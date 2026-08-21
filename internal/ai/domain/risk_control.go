@@ -178,6 +178,26 @@ type ContentModerationLogFilter struct {
 	DateTo   *time.Time
 }
 
+// RiskControlDetection is the pure moderation outcome before persistence or
+// follow-up event creation.
+type RiskControlDetection struct {
+	Flagged           bool
+	MatchedKeyword    string
+	HighestCategory   string
+	HighestScore      *float64
+	CategoryScores    map[string]float64
+	APIError          string
+	UpstreamLatencyMs *int32
+	HitLayer          string
+	FromCache         bool
+}
+
+// ContentModerationLogPage is a paginated moderation log projection.
+type ContentModerationLogPage struct {
+	Items []ContentModerationLog
+	Total int64
+}
+
 // RiskEvent is a row in ai_risk_events: a human-in-the-loop item generated
 // when violations accumulate past RiskControlConfig.RiskEventThreshold
 // within the rolling window. Risk handling never auto-mutates account status;
@@ -203,4 +223,10 @@ type RiskEventFilter struct {
 	Status   string
 	TenantID string
 	UserID   string
+}
+
+// RiskEventPage is a paginated human-review event projection.
+type RiskEventPage struct {
+	Items []RiskEvent
+	Total int64
 }

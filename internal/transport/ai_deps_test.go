@@ -10,6 +10,7 @@ import (
 	"xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
+	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/ai/upstreamaccess"
@@ -39,6 +40,10 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	auditLogs := &adminAuditLogReaderStub{}
 	adminAudit := &adminAuditRecorderStub{}
 	identityEnrichmentFailures := &identityEnrichmentFailureObserverStub{}
+	riskConfig := riskcontrol.NewConfigService(nil)
+	riskDetector := &riskcontrol.Checker{}
+	riskLogs := riskcontrol.NewLogService(nil)
+	riskEvents := riskcontrol.NewEventService(nil)
 	upstreamAccess := upstreamaccess.New(nil)
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
@@ -79,6 +84,10 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				DashboardQueries:           dashboardQueries,
 				AuditLogs:                  auditLogs,
 				AdminAudit:                 adminAudit,
+				RiskControlConfig:          riskConfig,
+				RiskControlDetector:        riskDetector,
+				RiskControlLogs:            riskLogs,
+				RiskEvents:                 riskEvents,
 			},
 		},
 		nil,
@@ -119,6 +128,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.AdminAudit != adminAudit {
 		t.Fatal("admin audit recorder was not preserved")
+	}
+	if got.RiskControlConfig != riskConfig || got.RiskControlDetector != riskDetector || got.RiskControlLogs != riskLogs || got.RiskEvents != riskEvents {
+		t.Fatal("risk control ports were not preserved")
 	}
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")

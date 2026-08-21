@@ -20,10 +20,7 @@ type EventRepository interface {
 	ResolveEvent(ctx context.Context, id, status, resolvedBy, note string) (domain.RiskEvent, error)
 }
 
-type EventPage struct {
-	Items []domain.RiskEvent
-	Total int64
-}
+type EventPage = domain.RiskEventPage
 
 type EventService struct {
 	repo EventRepository

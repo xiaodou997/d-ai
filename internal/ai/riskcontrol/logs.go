@@ -20,10 +20,7 @@ type LogRepository interface {
 	CountFlaggedSince(ctx context.Context, userID string, since time.Time) (int64, error)
 }
 
-type LogPage struct {
-	Items []domain.ContentModerationLog
-	Total int64
-}
+type LogPage = domain.ContentModerationLogPage
 
 type LogService struct {
 	repo LogRepository
