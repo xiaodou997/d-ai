@@ -25,7 +25,7 @@ import (
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/subscription"
 	aitransport "xiaodou/dai/internal/ai/transport"
-	workspacesvc "xiaodou/dai/internal/ai/workspace"
+	"xiaodou/dai/internal/ai/workspace"
 )
 
 // InfrastructureDeps contains process-wide clients shared by transport
@@ -100,7 +100,11 @@ type AIIdentityDeps struct {
 	APIKeyWriter      aitransport.APIKeyWriter
 	APIKeyLifecycle   aitransport.APIKeyLifecycleManager
 	APIKeySecrets     aitransport.APIKeySecretManager
-	WorkspaceSvc      *workspacesvc.Service
+	WorkspaceOverview workspace.OverviewReader
+	WorkspaceModels   workspace.ChatModelReader
+	WorkspaceSessions workspace.ChatSessionReader
+	WorkspaceManager  workspace.ChatSessionManager
+	WorkspaceImages   workspace.ImageJobReader
 }
 
 // AIBillingDeps contains AI-side subscription and billing collaborators.
@@ -261,7 +265,11 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			APIKeyWriter:      d.APIKeyWriter,
 			APIKeyLifecycle:   d.APIKeyLifecycle,
 			APIKeySecrets:     d.APIKeySecrets,
-			WorkspaceSvc:      d.WorkspaceSvc,
+			WorkspaceOverview: d.WorkspaceOverview,
+			WorkspaceModels:   d.WorkspaceModels,
+			WorkspaceSessions: d.WorkspaceSessions,
+			WorkspaceManager:  d.WorkspaceManager,
+			WorkspaceImages:   d.WorkspaceImages,
 		},
 		BillingDeps: aitransport.BillingDeps{
 			Subscriptions: d.Subscriptions,

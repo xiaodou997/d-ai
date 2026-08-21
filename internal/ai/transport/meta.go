@@ -22,7 +22,7 @@ import (
 	"xiaodou/dai/internal/ai/subscription"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
-	workspacesvc "xiaodou/dai/internal/ai/workspace"
+	"xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -61,7 +61,11 @@ type IdentityDeps struct {
 	APIKeyWriter      APIKeyWriter
 	APIKeyLifecycle   APIKeyLifecycleManager
 	APIKeySecrets     APIKeySecretManager
-	WorkspaceSvc      *workspacesvc.Service
+	WorkspaceOverview workspace.OverviewReader
+	WorkspaceModels   workspace.ChatModelReader
+	WorkspaceSessions workspace.ChatSessionReader
+	WorkspaceManager  workspace.ChatSessionManager
+	WorkspaceImages   workspace.ImageJobReader
 	IdentityProvider  IdentityProvider
 	TokenVerifier     TokenVerifier
 	TokenRevocations  TokenRevocationChecker

@@ -23,7 +23,7 @@ import (
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/imageassets"
 	"xiaodou/dai/internal/ai/tokenrefresh"
-	workspacesvc "xiaodou/dai/internal/ai/workspace"
+	"xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/config"
 )
@@ -59,28 +59,40 @@ type Deps struct {
 	APIKeyCache    *apikey.Cache
 	Gateway        *gateway.Gateway // runtime plane, driven by web runtime chat/image
 	GrantChecker   *pgadapter.GroupAccessReader
-	WorkspaceSvc   *workspacesvc.Service
-	ImageAssets    *imageassets.Service
-	FileStore      *filestore.Service
-	AsyncTasks     config.AsyncTaskConfig
+
+	WorkspaceModels   workspace.ChatModelReader
+	WorkspaceSessions workspace.ChatSessionReader
+	WorkspaceManager  workspace.ChatSessionManager
+	WorkspaceMessages workspace.ChatMessageManager
+	WorkspaceImages   workspace.ImageJobReader
+
+	ImageAssets *imageassets.Service
+	FileStore   *filestore.Service
+	AsyncTasks  config.AsyncTaskConfig
 }
 
 // Console serves the web runtime endpoints.
 type Console struct {
-	postgres        *pgxpool.Pool
-	redis           *redis.Client
-	logger          *zap.Logger
-	queries         *dbgen.Queries
-	tokenVerifier   TokenVerifier
-	banChecker      BanChecker
-	httpClient      *http.Client
-	oauthCreds      *pgadapter.OAuthCredentialStore
-	tokenRefresher  *tokenrefresh.Refresher
-	routeInspector  *pgadapter.RouteInspector
-	apiKeyCache     *apikey.Cache
-	gateway         runtimeGateway
-	grantChecker    *pgadapter.GroupAccessReader
-	workspaceSvc    *workspacesvc.Service
+	postgres       *pgxpool.Pool
+	redis          *redis.Client
+	logger         *zap.Logger
+	queries        *dbgen.Queries
+	tokenVerifier  TokenVerifier
+	banChecker     BanChecker
+	httpClient     *http.Client
+	oauthCreds     *pgadapter.OAuthCredentialStore
+	tokenRefresher *tokenrefresh.Refresher
+	routeInspector *pgadapter.RouteInspector
+	apiKeyCache    *apikey.Cache
+	gateway        runtimeGateway
+	grantChecker   *pgadapter.GroupAccessReader
+
+	workspaceModels   workspace.ChatModelReader
+	workspaceSessions workspace.ChatSessionReader
+	workspaceManager  workspace.ChatSessionManager
+	workspaceMessages workspace.ChatMessageManager
+	workspaceImages   workspace.ImageJobReader
+
 	imageAssets     *imageassets.Service
 	fileStore       *filestore.Service
 	asyncTaskConfig config.AsyncTaskConfig
@@ -92,20 +104,26 @@ func New(deps Deps) *Console {
 		panic("console: logger is required")
 	}
 	c := &Console{
-		postgres:        deps.Postgres,
-		redis:           deps.Redis,
-		logger:          deps.Logger,
-		queries:         deps.Queries,
-		tokenVerifier:   deps.TokenVerifier,
-		banChecker:      deps.BanChecker,
-		httpClient:      deps.HTTPClient,
-		oauthCreds:      deps.OAuthCreds,
-		tokenRefresher:  deps.TokenRefresher,
-		routeInspector:  deps.RouteInspector,
-		apiKeyCache:     deps.APIKeyCache,
-		gateway:         deps.Gateway,
-		grantChecker:    deps.GrantChecker,
-		workspaceSvc:    deps.WorkspaceSvc,
+		postgres:       deps.Postgres,
+		redis:          deps.Redis,
+		logger:         deps.Logger,
+		queries:        deps.Queries,
+		tokenVerifier:  deps.TokenVerifier,
+		banChecker:     deps.BanChecker,
+		httpClient:     deps.HTTPClient,
+		oauthCreds:     deps.OAuthCreds,
+		tokenRefresher: deps.TokenRefresher,
+		routeInspector: deps.RouteInspector,
+		apiKeyCache:    deps.APIKeyCache,
+		gateway:        deps.Gateway,
+		grantChecker:   deps.GrantChecker,
+
+		workspaceModels:   deps.WorkspaceModels,
+		workspaceSessions: deps.WorkspaceSessions,
+		workspaceManager:  deps.WorkspaceManager,
+		workspaceMessages: deps.WorkspaceMessages,
+		workspaceImages:   deps.WorkspaceImages,
+
 		imageAssets:     deps.ImageAssets,
 		fileStore:       deps.FileStore,
 		asyncTaskConfig: deps.AsyncTasks,

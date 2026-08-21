@@ -332,7 +332,7 @@ func buildUserWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOver
 }
 
 func buildWorkspaceOverview[T any](ctx context.Context, d AIDeps, owner workspace.Owner, in *workspaceOverviewInput, render func([]domain.UsageLog, workspaceUsageSummaryDTO, []workspace.ChatSession, []workspace.ImageJob) *T) (*T, error) {
-	if d.WorkspaceSvc == nil || d.UsageQueries == nil {
+	if d.WorkspaceOverview == nil || d.UsageQueries == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace dependencies are not configured")
 	}
 	logLimit, err := workspaceLogLimitFromInput(in.LogLimit)
@@ -343,7 +343,7 @@ func buildWorkspaceOverview[T any](ctx context.Context, d AIDeps, owner workspac
 	if err != nil {
 		return nil, err
 	}
-	overview, err := d.WorkspaceSvc.Overview(ctx, owner, itemLimit)
+	overview, err := d.WorkspaceOverview.Overview(ctx, owner, itemLimit)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -356,14 +356,14 @@ func buildWorkspaceOverview[T any](ctx context.Context, d AIDeps, owner workspac
 }
 
 func buildWorkspaceChatModels(ctx context.Context, d AIDeps, scope identity.Scope) (*workspaceChatModelsOutput, error) {
-	if d.WorkspaceSvc == nil {
+	if d.WorkspaceModels == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	items, err := d.WorkspaceSvc.ListChatModels(ctx, owner)
+	items, err := d.WorkspaceModels.ListChatModels(ctx, owner)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -377,7 +377,7 @@ func buildWorkspaceChatModels(ctx context.Context, d AIDeps, scope identity.Scop
 }
 
 func buildWorkspaceChatSessions(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceItemsInput) (*workspaceChatSessionsOutput, error) {
-	if d.WorkspaceSvc == nil {
+	if d.WorkspaceSessions == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, scope)
@@ -388,7 +388,7 @@ func buildWorkspaceChatSessions(ctx context.Context, d AIDeps, scope identity.Sc
 	if err != nil {
 		return nil, err
 	}
-	items, err := d.WorkspaceSvc.ListChatSessions(ctx, owner, limit)
+	items, err := d.WorkspaceSessions.ListChatSessions(ctx, owner, limit)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -402,7 +402,7 @@ func buildWorkspaceChatSessions(ctx context.Context, d AIDeps, scope identity.Sc
 }
 
 func buildWorkspaceChatSessionDetail(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceSessionDetailInput) (*workspaceChatSessionDetailOutput, error) {
-	if d.WorkspaceSvc == nil {
+	if d.WorkspaceSessions == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, scope)
@@ -410,11 +410,11 @@ func buildWorkspaceChatSessionDetail(ctx context.Context, d AIDeps, scope identi
 		return nil, err
 	}
 	sessionID := in.SessionID
-	session, err := d.WorkspaceSvc.GetChatSession(ctx, owner, sessionID)
+	session, err := d.WorkspaceSessions.GetChatSession(ctx, owner, sessionID)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
-	messages, err := d.WorkspaceSvc.ListChatMessages(ctx, owner, sessionID)
+	messages, err := d.WorkspaceSessions.ListChatMessages(ctx, owner, sessionID)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}
@@ -428,14 +428,14 @@ func buildWorkspaceChatSessionDetail(ctx context.Context, d AIDeps, scope identi
 }
 
 func buildWorkspaceChatSessionCreate(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceChatSessionCreateInput) (*workspaceChatSessionOutput, error) {
-	if d.WorkspaceSvc == nil {
+	if d.WorkspaceManager == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	session, err := d.WorkspaceSvc.CreateChatSession(ctx, owner, workspace.CreateChatSessionInput{
+	session, err := d.WorkspaceManager.CreateChatSession(ctx, owner, workspace.CreateChatSessionInput{
 		ModelCode: in.Body.ModelCode,
 		GroupID:   in.Body.GroupID,
 		Title:     in.Body.Title,
@@ -449,14 +449,14 @@ func buildWorkspaceChatSessionCreate(ctx context.Context, d AIDeps, scope identi
 }
 
 func buildWorkspaceChatSessionDelete(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceSessionDetailInput) (*workspaceDeleteOutput, error) {
-	if d.WorkspaceSvc == nil {
+	if d.WorkspaceManager == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	if err := d.WorkspaceSvc.DeleteChatSession(ctx, owner, in.SessionID); err != nil {
+	if err := d.WorkspaceManager.DeleteChatSession(ctx, owner, in.SessionID); err != nil {
 		return nil, mapServiceError(err)
 	}
 	out := &workspaceDeleteOutput{}
@@ -465,7 +465,7 @@ func buildWorkspaceChatSessionDelete(ctx context.Context, d AIDeps, scope identi
 }
 
 func buildWorkspaceImageJobs(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceItemsInput) (*workspaceImageJobsOutput, error) {
-	if d.WorkspaceSvc == nil {
+	if d.WorkspaceImages == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
 	owner, err := workspaceOwnerFromContext(ctx, scope)
@@ -476,7 +476,7 @@ func buildWorkspaceImageJobs(ctx context.Context, d AIDeps, scope identity.Scope
 	if err != nil {
 		return nil, err
 	}
-	items, err := d.WorkspaceSvc.ListImageJobs(ctx, owner, limit)
+	items, err := d.WorkspaceImages.ListImageJobs(ctx, owner, limit)
 	if err != nil {
 		return nil, mapServiceError(err)
 	}

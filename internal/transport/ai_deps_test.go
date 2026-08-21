@@ -17,6 +17,7 @@ import (
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
+	"xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/internal/auth"
 )
 
@@ -51,6 +52,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	upstreamAccess := upstreamaccess.New(nil)
 	commercialPorts := commercial.NewService(nil)
 	apiKeyPorts := identitycontrol.New(nil, nil, nil, nil)
+	workspacePorts := workspace.NewService(nil)
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAIDeps(
@@ -76,6 +78,11 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				APIKeyWriter:      apiKeyPorts,
 				APIKeyLifecycle:   apiKeyPorts,
 				APIKeySecrets:     apiKeyPorts,
+				WorkspaceOverview: workspacePorts,
+				WorkspaceModels:   workspacePorts,
+				WorkspaceSessions: workspacePorts,
+				WorkspaceManager:  workspacePorts,
+				WorkspaceImages:   workspacePorts,
 			},
 			AICatalogDeps: AICatalogDeps{
 				ClientCatalog:      catalog,
@@ -120,6 +127,9 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.APIKeys != apiKeyPorts || got.APIKeyWriter != apiKeyPorts || got.APIKeyLifecycle != apiKeyPorts || got.APIKeySecrets != apiKeyPorts {
 		t.Fatal("API key capability ports were not preserved")
+	}
+	if got.WorkspaceOverview != workspacePorts || got.WorkspaceModels != workspacePorts || got.WorkspaceSessions != workspacePorts || got.WorkspaceManager != workspacePorts || got.WorkspaceImages != workspacePorts {
+		t.Fatal("workspace capability ports were not preserved")
 	}
 	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")

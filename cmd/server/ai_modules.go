@@ -313,10 +313,16 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		APIKeyCache:    apiKeyCache,
 		Gateway:        runtimeGateway,
 		GrantChecker:   grantChecker,
-		WorkspaceSvc:   workspaceSvc,
-		ImageAssets:    imageAssetSvc,
-		FileStore:      fileStore,
-		AsyncTasks:     cfg.AsyncTasks,
+
+		WorkspaceModels:   workspaceSvc,
+		WorkspaceSessions: workspaceSvc,
+		WorkspaceManager:  workspaceSvc,
+		WorkspaceMessages: workspaceSvc,
+		WorkspaceImages:   workspaceSvc,
+
+		ImageAssets: imageAssetSvc,
+		FileStore:   fileStore,
+		AsyncTasks:  cfg.AsyncTasks,
 	})
 	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
 
@@ -376,7 +382,11 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				APIKeyWriter:      apiKeySvc,
 				APIKeyLifecycle:   apiKeySvc,
 				APIKeySecrets:     apiKeySvc,
-				WorkspaceSvc:      workspaceSvc,
+				WorkspaceOverview: workspaceSvc,
+				WorkspaceModels:   workspaceSvc,
+				WorkspaceSessions: workspaceSvc,
+				WorkspaceManager:  workspaceSvc,
+				WorkspaceImages:   workspaceSvc,
 			},
 			AIBillingDeps: transport.AIBillingDeps{
 				Subscriptions: subsSvc,

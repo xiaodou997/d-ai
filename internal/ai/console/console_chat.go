@@ -154,7 +154,7 @@ func (s *Console) startConsoleChatStreamPersistence(
 	protocol domain.UpstreamProtocol,
 	capture *captureResponseWriter,
 ) *consoleChatStreamPersistence {
-	messageID, err := s.workspaceSvc.CreateChatMessage(requestCtx, owner, sessionID, workspace.ChatMessageWriteInput{
+	messageID, err := s.workspaceMessages.CreateChatMessage(requestCtx, owner, sessionID, workspace.ChatMessageWriteInput{
 		Role:          workspace.MessageRoleAssistant,
 		ClientSurface: workspace.SurfaceFromProtocol(string(protocol)),
 		StreamStatus:  workspace.ChatStreamStatusStreaming,
@@ -215,7 +215,7 @@ func (p *consoleChatStreamPersistence) persistContent() {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(p.requestCtx), 3*time.Second)
 	defer cancel()
-	if err := p.console.workspaceSvc.UpdateChatMessageContent(ctx, p.owner, p.messageID, content); err != nil {
+	if err := p.console.workspaceMessages.UpdateChatMessageContent(ctx, p.owner, p.messageID, content); err != nil {
 		p.console.logger.Warn("runtime chat: persist assistant content failed", zap.Error(err), zap.String("session_id", p.sessionID))
 	}
 }
@@ -229,7 +229,7 @@ func (p *consoleChatStreamPersistence) close(routeID string) {
 	if p.requestCtx.Err() != nil {
 		streamStatus = workspace.ChatStreamStatusInterrupted
 	}
-	if err := p.console.workspaceSvc.UpdateChatMessageRoute(ctx, p.owner, p.messageID, workspace.ChatMessageRouteUpdate{
+	if err := p.console.workspaceMessages.UpdateChatMessageRoute(ctx, p.owner, p.messageID, workspace.ChatMessageRouteUpdate{
 		ClientSurface: workspace.SurfaceFromProtocol(string(p.protocol)),
 		RouteID:       routeID,
 		StreamStatus:  streamStatus,
@@ -243,11 +243,11 @@ func (s *Console) handleConsoleChatModels(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if s.workspaceSvc == nil {
+	if s.workspaceModels == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
 		return
 	}
-	models, err := s.workspaceSvc.ListChatModels(r.Context(), workspace.Owner{
+	models, err := s.workspaceModels.ListChatModels(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,
@@ -271,11 +271,11 @@ func (s *Console) handleConsoleChatListSessions(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	if s.workspaceSvc == nil {
+	if s.workspaceSessions == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
 		return
 	}
-	sessions, err := s.workspaceSvc.ListChatSessions(r.Context(), workspace.Owner{
+	sessions, err := s.workspaceSessions.ListChatSessions(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,
@@ -296,7 +296,7 @@ func (s *Console) handleConsoleChatCreateSession(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	if s.workspaceSvc == nil {
+	if s.workspaceManager == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
 		return
 	}
@@ -304,7 +304,7 @@ func (s *Console) handleConsoleChatCreateSession(w http.ResponseWriter, r *http.
 	if !decodeAdminJSON(w, r, &req) {
 		return
 	}
-	session, err := s.workspaceSvc.CreateChatSession(r.Context(), workspace.Owner{
+	session, err := s.workspaceManager.CreateChatSession(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,
@@ -343,12 +343,12 @@ func (s *Console) handleConsoleChatDeleteSession(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	if s.workspaceSvc == nil {
+	if s.workspaceManager == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
 		return
 	}
 	sessionID := chi.URLParam(r, "sessionID")
-	if err := s.workspaceSvc.DeleteChatSession(r.Context(), workspace.Owner{
+	if err := s.workspaceManager.DeleteChatSession(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,
@@ -362,6 +362,10 @@ func (s *Console) handleConsoleChatDeleteSession(w http.ResponseWriter, r *http.
 func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request) {
 	subject, ok := s.consoleRuntimeSubject(w, r)
 	if !ok {
+		return
+	}
+	if s.workspaceSessions == nil || s.workspaceMessages == nil {
+		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace chat dependencies are not configured")
 		return
 	}
 	sessionID := chi.URLParam(r, "sessionID")
@@ -415,7 +419,7 @@ func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request
 
 	userText := lastUserText(req.Messages)
 	if userText != "" {
-		if _, err := s.workspaceSvc.CreateChatMessage(r.Context(), owner, sessionID, workspace.ChatMessageWriteInput{Role: workspace.MessageRoleUser, Content: userText}); err != nil {
+		if _, err := s.workspaceMessages.CreateChatMessage(r.Context(), owner, sessionID, workspace.ChatMessageWriteInput{Role: workspace.MessageRoleUser, Content: userText}); err != nil {
 			s.logger.Warn("runtime chat: persist user message failed", zap.Error(err), zap.String("session_id", sessionID))
 		}
 	}
@@ -446,7 +450,7 @@ func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
 	defer cancel()
-	if err := s.workspaceSvc.UpdateChatSessionRoute(ctx, owner, sessionID, workspace.SurfaceFromProtocol(string(protocol)), routeID); err != nil {
+	if err := s.workspaceMessages.UpdateChatSessionRoute(ctx, owner, sessionID, workspace.SurfaceFromProtocol(string(protocol)), routeID); err != nil {
 		s.logger.Warn("runtime chat: persist session route failed", zap.Error(err), zap.String("session_id", sessionID))
 	}
 }
@@ -732,11 +736,11 @@ func replaceLastUserText(messages []consoleChatMessage, content string) []consol
 }
 
 func (s *Console) loadConsoleChatSession(w http.ResponseWriter, r *http.Request, subject *coreidentity.Subject, sessionID string) (consoleChatSessionDTO, bool) {
-	if s.workspaceSvc == nil {
+	if s.workspaceSessions == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
 		return consoleChatSessionDTO{}, false
 	}
-	session, err := s.workspaceSvc.GetChatSession(r.Context(), workspace.Owner{
+	session, err := s.workspaceSessions.GetChatSession(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,
@@ -821,10 +825,10 @@ func intFromAny(value any) (int, bool) {
 }
 
 func (s *Console) listConsoleChatMessages(r *http.Request, subject *coreidentity.Subject, sessionID string) ([]consoleChatMessageDTO, error) {
-	if s.workspaceSvc == nil {
+	if s.workspaceSessions == nil {
 		return nil, fmt.Errorf("workspace service is not configured")
 	}
-	messages, err := s.workspaceSvc.ListChatMessages(r.Context(), workspace.Owner{
+	messages, err := s.workspaceSessions.ListChatMessages(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,

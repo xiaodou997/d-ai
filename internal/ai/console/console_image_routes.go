@@ -99,11 +99,11 @@ func (s *Console) handleConsoleImageListJobs(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	if s.workspaceSvc == nil {
+	if s.workspaceImages == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
 		return
 	}
-	jobs, err := s.workspaceSvc.ListImageJobs(r.Context(), workspace.Owner{
+	jobs, err := s.workspaceImages.ListImageJobs(r.Context(), workspace.Owner{
 		Scope:    subject.Scope,
 		TenantID: subject.TenantID,
 		UserID:   subject.UserID,
