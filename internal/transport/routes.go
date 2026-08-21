@@ -84,13 +84,7 @@ type AIInfrastructureDeps struct {
 
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
-	CredentialCreator aitransport.OAuthCredentialCreator
-	CredentialReader  aitransport.OAuthCredentialReader
-	CredentialWriter  aitransport.OAuthCredentialWriter
 	PoolReader        aitransport.OAuthPoolReader
-	PoolWriter        aitransport.OAuthPoolWriter
-	PoolHealthReader  aitransport.OAuthPoolHealthReader
-	TokenRefresher    aitransport.OAuthTokenRefresher
 	APIKeys           aitransport.APIKeyReader
 	APIKeyWriter      aitransport.APIKeyWriter
 	APIKeyLifecycle   aitransport.APIKeyLifecycleManager
@@ -117,7 +111,6 @@ type AISubscriptionHTTPDeps struct {
 
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
 type AICatalogDeps struct {
-	ClientCatalog      aitransport.ClientCatalogResolver
 	ModelCapabilities  aitransport.ModelCapabilityResolver
 	AccountReader      aitransport.UpstreamAccountReader
 	ModelBindings      aitransport.UpstreamModelBindingStore
@@ -171,6 +164,21 @@ type AIUsageHTTPDeps struct {
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
+// AIOAuthManagementHTTPDeps contains the collaborators owned by the
+// independently registered OAuth pool and credential management module.
+type AIOAuthManagementHTTPDeps struct {
+	CredentialCreator aitransport.OAuthCredentialCreator
+	CredentialReader  aitransport.OAuthCredentialReader
+	CredentialWriter  aitransport.OAuthCredentialWriter
+	PoolReader        aitransport.OAuthPoolReader
+	PoolWriter        aitransport.OAuthPoolWriter
+	PoolHealthReader  aitransport.OAuthPoolHealthReader
+	TokenRefresher    aitransport.OAuthTokenRefresher
+	ClientCatalog     aitransport.ClientCatalogResolver
+	ModelBindings     aitransport.UpstreamModelBindingStore
+	BanChecker        aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -205,13 +213,14 @@ type AIDeps struct {
 // AIHTTPDeps is a composition-only collection of independently registered AI
 // route modules. Handlers receive the narrower module dependency type.
 type AIHTTPDeps struct {
-	Core          AIDeps
-	Subscriptions AISubscriptionHTTPDeps
-	RiskControl   AIRiskControlHTTPDeps
-	AuditLog      AIAuditLogHTTPDeps
-	System        AISystemHTTPDeps
-	Dashboard     AIDashboardHTTPDeps
-	Usage         AIUsageHTTPDeps
+	Core            AIDeps
+	Subscriptions   AISubscriptionHTTPDeps
+	RiskControl     AIRiskControlHTTPDeps
+	AuditLog        AIAuditLogHTTPDeps
+	System          AISystemHTTPDeps
+	Dashboard       AIDashboardHTTPDeps
+	Usage           AIUsageHTTPDeps
+	OAuthManagement AIOAuthManagementHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -253,6 +262,7 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterSystem(api, buildSystemHTTPDeps(m.platform, m.deps.System))
 	aitransport.RegisterDashboard(api, buildDashboardHTTPDeps(m.platform, m.deps.Dashboard, identity))
 	aitransport.RegisterUsage(api, buildUsageHTTPDeps(m.platform, m.deps.Usage, identity))
+	aitransport.RegisterOAuthManagement(api, buildOAuthManagementHTTPDeps(m.platform, m.deps.OAuthManagement))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -308,13 +318,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			HTTPClient: d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
-			CredentialCreator: d.CredentialCreator,
-			CredentialReader:  d.CredentialReader,
-			CredentialWriter:  d.CredentialWriter,
 			PoolReader:        d.PoolReader,
-			PoolWriter:        d.PoolWriter,
-			PoolHealthReader:  d.PoolHealthReader,
-			TokenRefresher:    d.TokenRefresher,
 			TokenVerifier:     platform.JWT,
 			TokenRevocations:  platform.Blacklist,
 			BanChecker:        d.BanChecker,
@@ -329,7 +333,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			WorkspaceImages:   d.WorkspaceImages,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
-			ClientCatalog:      d.ClientCatalog,
 			ModelCapabilities:  d.ModelCapabilities,
 			AccountReader:      d.AccountReader,
 			ModelBindings:      d.ModelBindings,
@@ -459,6 +462,25 @@ func buildUsageHTTPDeps(platform Deps, d AIUsageHTTPDeps, identity aiIdentityPro
 		deps.IdentityProvider = identity
 	}
 	return deps
+}
+
+func buildOAuthManagementHTTPDeps(platform Deps, d AIOAuthManagementHTTPDeps) aitransport.OAuthManagementHTTPDeps {
+	return aitransport.OAuthManagementHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		CredentialCreator: d.CredentialCreator,
+		CredentialReader:  d.CredentialReader,
+		CredentialWriter:  d.CredentialWriter,
+		PoolReader:        d.PoolReader,
+		PoolWriter:        d.PoolWriter,
+		PoolHealthReader:  d.PoolHealthReader,
+		TokenRefresher:    d.TokenRefresher,
+		ClientCatalog:     d.ClientCatalog,
+		ModelBindings:     d.ModelBindings,
+	}
 }
 
 // RegisterRaw 注册非 JSON 契约的 chi 原生端点。

@@ -217,7 +217,7 @@ type oauthPoolHealthOutput struct {
 	}
 }
 
-func registerOAuthPools(api huma.API, d AIDeps) {
+func registerOAuthPools(api huma.API, d OAuthManagementHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-credential-pools",
 		Method:      http.MethodGet,
@@ -810,7 +810,7 @@ func poolCredentialAuthMetadata(req poolCredentialWriteRequest) map[string]any {
 	return meta
 }
 
-func importPoolCredential(ctx context.Context, d AIDeps, poolID string, req poolCredentialWriteRequest) (*domain.OAuthCredentialSummary, error) {
+func importPoolCredential(ctx context.Context, d OAuthManagementHTTPDeps, poolID string, req poolCredentialWriteRequest) (*domain.OAuthCredentialSummary, error) {
 	providerType := strings.TrimSpace(req.ProviderType)
 	if providerType == "" {
 		pool, err := d.PoolReader.GetPool(ctx, poolID)
@@ -896,7 +896,7 @@ func oauthPoolHealthToDTO(row domain.OAuthPoolHealthSummary) oauthPoolHealthDTO 
 	}
 }
 
-func resolvePoolModelCatalog(ctx context.Context, d AIDeps, pool domain.CredentialPool) clientcatalog.Result {
+func resolvePoolModelCatalog(ctx context.Context, d OAuthManagementHTTPDeps, pool domain.CredentialPool) clientcatalog.Result {
 	if d.ClientCatalog != nil {
 		return d.ClientCatalog.Resolve(ctx, pool)
 	}

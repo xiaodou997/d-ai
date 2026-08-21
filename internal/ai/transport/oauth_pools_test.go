@@ -76,12 +76,10 @@ func TestImportPoolCredentialUsesDedicatedCreatorPort(t *testing.T) {
 		FixedProviderType: domain.FixedProviderCodex,
 	}}
 
-	got, err := importPoolCredential(context.Background(), AIDeps{
-		IdentityDeps: IdentityDeps{
-			CredentialCreator: creator,
-			CredentialReader:  reader,
-			PoolReader:        poolReader,
-		},
+	got, err := importPoolCredential(context.Background(), OAuthManagementHTTPDeps{
+		CredentialCreator: creator,
+		CredentialReader:  reader,
+		PoolReader:        poolReader,
 	}, "pool-1", poolCredentialWriteRequest{
 		Name:        " Imported account ",
 		AccessToken: " access-token ",
@@ -112,10 +110,10 @@ func TestCreateCredentialPoolUsesDedicatedPoolPorts(t *testing.T) {
 	}}
 	writer := &poolWriterStub{id: "pool-1"}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerOAuthPools(api, AIDeps{IdentityDeps: IdentityDeps{
+	registerOAuthPools(api, OAuthManagementHTTPDeps{
 		PoolReader: reader,
 		PoolWriter: writer,
-	}})
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/credential-pools", strings.NewReader(`{
 		"name":" Port pool ",
@@ -147,7 +145,7 @@ func TestOAuthPoolHealthUsesDedicatedReaderPort(t *testing.T) {
 		Invalid:           1,
 	}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerOAuthPools(api, AIDeps{IdentityDeps: IdentityDeps{PoolHealthReader: reader}})
+	registerOAuthPools(api, OAuthManagementHTTPDeps{PoolHealthReader: reader})
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/oauth-pool-health", nil))
@@ -172,6 +170,52 @@ func TestOAuthPoolHealthUsesDedicatedReaderPort(t *testing.T) {
 	if item.PoolID != "pool-1" || item.FixedProviderType != string(domain.FixedProviderCodex) || item.Active != 2 {
 		t.Fatalf("health item = %#v", item)
 	}
+}
+
+func TestOAuthManagementRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/credential-pools"},
+		{method: http.MethodPost, path: "/api/v1/credential-pools"},
+		{method: http.MethodPatch, path: "/api/v1/credential-pools/pool-1"},
+		{method: http.MethodPatch, path: "/api/v1/credential-pools/pool-1/status"},
+		{method: http.MethodDelete, path: "/api/v1/credential-pools/pool-1"},
+		{method: http.MethodGet, path: "/api/v1/credential-pools/pool-1/credentials"},
+		{method: http.MethodPost, path: "/api/v1/credential-pools/pool-1/credentials"},
+		{method: http.MethodPatch, path: "/api/v1/credential-pools/pool-1/credentials/cred-1"},
+		{method: http.MethodPost, path: "/api/v1/credential-pools/pool-1/credentials/cred-1/refresh"},
+		{method: http.MethodDelete, path: "/api/v1/credential-pools/pool-1/credentials/cred-1"},
+		{method: http.MethodGet, path: "/api/v1/credential-pools/pool-1/available-models"},
+		{method: http.MethodPost, path: "/api/v1/credential-pools/pool-1/import-available-models"},
+		{method: http.MethodGet, path: "/api/v1/oauth-pool-health"},
+	}
+
+	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterAICore(coreAPI, AIDeps{})
+	for _, route := range routes {
+		recorder := performOAuthManagementRequest(coreRouter, route.method, route.path)
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("core AI OAuth route %s %s status = %d, want %d", route.method, route.path, recorder.Code, http.StatusNotFound)
+		}
+	}
+
+	oauthRouter, oauthAPI := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterOAuthManagement(oauthAPI, OAuthManagementHTTPDeps{})
+	for _, route := range routes {
+		recorder := performOAuthManagementRequest(oauthRouter, route.method, route.path)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("independent OAuth route %s %s status = %d, want %d", route.method, route.path, recorder.Code, http.StatusUnauthorized)
+		}
+	}
+}
+
+func performOAuthManagementRequest(handler http.Handler, method, path string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, path, nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
 }
 
 func TestPoolCredentialSummaryToDTOAllowsOnlyKnownIdentityMetadata(t *testing.T) {

@@ -69,13 +69,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				AIHTTPClient:    httpClient,
 			},
 			AIIdentityDeps: AIIdentityDeps{
-				CredentialCreator: oauth,
-				CredentialReader:  oauth,
-				CredentialWriter:  oauth,
 				PoolReader:        oauth,
-				PoolWriter:        oauth,
-				PoolHealthReader:  oauth,
-				TokenRefresher:    refresher,
 				APIKeys:           apiKeyPorts,
 				APIKeyWriter:      apiKeyPorts,
 				APIKeyLifecycle:   apiKeyPorts,
@@ -87,7 +81,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				WorkspaceImages:   workspacePorts,
 			},
 			AICatalogDeps: AICatalogDeps{
-				ClientCatalog:      catalog,
 				ModelCapabilities:  modelCapabilities,
 				AccountReader:      accountReader,
 				Accounts:           accountPorts,
@@ -119,8 +112,8 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		nil,
 	)
 
-	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
-		t.Fatal("OAuth management dependencies were not preserved")
+	if got.PoolReader != oauth {
+		t.Fatal("shared OAuth pool reader was not preserved")
 	}
 	if got.APIKeys != apiKeyPorts || got.APIKeyWriter != apiKeyPorts || got.APIKeyLifecycle != apiKeyPorts || got.APIKeySecrets != apiKeyPorts {
 		t.Fatal("API key capability ports were not preserved")
@@ -128,7 +121,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.WorkspaceOverview != workspacePorts || got.WorkspaceModels != workspacePorts || got.WorkspaceSessions != workspacePorts || got.WorkspaceManager != workspacePorts || got.WorkspaceImages != workspacePorts {
 		t.Fatal("workspace capability ports were not preserved")
 	}
-	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
+	if got.ModelCapabilities != modelCapabilities || got.AccountReader != accountReader || got.ModelBindings != modelBindings || got.ModelCatalog != modelCatalog || got.PriceBooks != priceBooks {
 		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.PlatformPriceBooks != priceBookPorts || got.TenantPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
@@ -274,6 +267,28 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if usage.UsageQueries != usageQueries || usage.IdentityProvider != identity || usage.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("usage dependencies were not preserved")
+	}
+
+	oauthManagement := buildOAuthManagementHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIOAuthManagementHTTPDeps{
+			CredentialCreator: oauth,
+			CredentialReader:  oauth,
+			CredentialWriter:  oauth,
+			PoolReader:        oauth,
+			PoolWriter:        oauth,
+			PoolHealthReader:  oauth,
+			TokenRefresher:    refresher,
+			ClientCatalog:     catalog,
+			ModelBindings:     modelBindings,
+			BanChecker:        banChecker,
+		},
+	)
+	if oauthManagement.Auth.TokenVerifier != jwt || oauthManagement.Auth.TokenRevocations != blacklist || oauthManagement.Auth.BanChecker != banChecker {
+		t.Fatal("OAuth management auth dependencies were not preserved")
+	}
+	if oauthManagement.CredentialCreator != oauth || oauthManagement.CredentialReader != oauth || oauthManagement.CredentialWriter != oauth || oauthManagement.PoolReader != oauth || oauthManagement.PoolWriter != oauth || oauthManagement.PoolHealthReader != oauth || oauthManagement.TokenRefresher != refresher || oauthManagement.ClientCatalog != catalog || oauthManagement.ModelBindings != modelBindings {
+		t.Fatal("OAuth management dependencies were not preserved")
 	}
 }
 

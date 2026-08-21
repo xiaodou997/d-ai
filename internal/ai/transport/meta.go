@@ -39,13 +39,7 @@ type HTTPDoer interface {
 // IdentityDeps contains authentication, API key and workspace identity
 // collaborators used by AI routes.
 type IdentityDeps struct {
-	CredentialCreator OAuthCredentialCreator
-	CredentialReader  OAuthCredentialReader
-	CredentialWriter  OAuthCredentialWriter
 	PoolReader        OAuthPoolReader
-	PoolWriter        OAuthPoolWriter
-	PoolHealthReader  OAuthPoolHealthReader
-	TokenRefresher    OAuthTokenRefresher
 	APIKeys           APIKeyReader
 	APIKeyWriter      APIKeyWriter
 	APIKeyLifecycle   APIKeyLifecycleManager
@@ -144,7 +138,6 @@ type OAuthCredentialWriter interface {
 // CatalogDeps contains provider, model, price and upstream control-plane
 // collaborators.
 type CatalogDeps struct {
-	ClientCatalog      ClientCatalogResolver
 	ModelCapabilities  ModelCapabilityResolver
 	AccountReader      UpstreamAccountReader
 	ModelBindings      UpstreamModelBindingStore
@@ -430,7 +423,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerLimits(management, d)
 	registerTenantUpstreamAccess(management, d)
 	registerAPIKeys(management, d)
-	registerOAuthPools(management, d)
 	tenant := huma.NewGroup(api)
 	tenant.UseMiddleware(tenantUserAuth(api, auth))
 	registerGroups(tenant, d)
