@@ -360,6 +360,21 @@ type OAuthCredential struct {
 	CooldownUntil *time.Time
 }
 
+// OAuthCredentialCreate carries the secret-bearing input needed to import a
+// credential. It is a command model, not a management response model.
+type OAuthCredentialCreate struct {
+	Name         string
+	ProviderType FixedProviderType
+	Email        string
+	AccessToken  string
+	RefreshToken string
+	TokenType    string
+	Scope        string
+	ExpiresAt    *time.Time
+	AuthMetadata map[string]any
+	Weight       int
+}
+
 // OAuthCredentialSummary is the non-secret read model exposed to management
 // and transport layers. It deliberately omits access/refresh token
 // ciphertexts while retaining the health and audit fields used by the pool

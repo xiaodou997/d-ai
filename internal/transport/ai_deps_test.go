@@ -30,11 +30,12 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				Weights:         weights,
 			},
 			AIIdentityDeps: AIIdentityDeps{
-				OAuth:            oauth,
-				CredentialReader: oauth,
-				CredentialWriter: oauth,
-				PoolReader:       oauth,
-				TokenRefresher:   refresher,
+				OAuth:             oauth,
+				CredentialCreator: oauth,
+				CredentialReader:  oauth,
+				CredentialWriter:  oauth,
+				PoolReader:        oauth,
+				TokenRefresher:    refresher,
 			},
 			AICatalogDeps: AICatalogDeps{
 				ClientCatalog: catalog,
@@ -43,7 +44,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		nil,
 	)
 
-	if got.OAuth != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
+	if got.OAuth != oauth || got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
 		t.Fatal("OAuth management dependencies were not preserved")
 	}
 	if got.SecretMasterKey != "secret-master-key" || got.HTTPClient != httpClient {

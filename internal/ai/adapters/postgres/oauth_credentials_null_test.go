@@ -34,9 +34,9 @@ func TestOAuthCredentialReadsTolerateNullTextColumns(t *testing.T) {
 	}
 
 	// No refresh token, no email, no scope.
-	credentialID, err := store.Create(ctx, poolID, OAuthCredentialInput{
+	credentialID, err := store.Create(ctx, poolID, domain.OAuthCredentialCreate{
 		Name:         "no-refresh-token",
-		ProviderType: string(domain.FixedProviderCodex),
+		ProviderType: domain.FixedProviderCodex,
 		AccessToken:  "access-only",
 	})
 	if err != nil {

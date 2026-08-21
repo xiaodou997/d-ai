@@ -382,26 +382,13 @@ func registerOAuthPools(api huma.API, d AIDeps) {
 		Description: "向指定凭证池导入 OAuth credential。响应只返回非敏感展示字段，不返回 access token、refresh token 或密文。",
 		Tags:        []string{"credential-pools"},
 	}, func(ctx context.Context, in *createPoolCredentialInput) (*poolCredentialOutput, error) {
-		if d.OAuth == nil || d.CredentialReader == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("oauth credential store is not configured")
+		if d.CredentialCreator == nil || d.CredentialReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential creator or reader is not configured")
 		}
-		providerType := strings.TrimSpace(in.Body.ProviderType)
-		if providerType == "" {
-			pool, err := d.OAuth.GetPool(ctx, in.PoolID)
-			if err != nil {
-				return nil, mapServiceError(err)
-			}
-			providerType = string(pool.FixedProviderType)
+		if strings.TrimSpace(in.Body.ProviderType) == "" && d.PoolReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("oauth credential pool reader is not configured")
 		}
-		write, err := poolCredentialCreateInput(providerType, in.Body)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-		id, err := d.OAuth.Create(ctx, in.PoolID, write)
-		if err != nil {
-			return nil, mapServiceError(err)
-		}
-		row, err := d.CredentialReader.GetSummaryByID(ctx, id)
+		row, err := importPoolCredential(ctx, d, in.PoolID, in.Body)
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
@@ -798,14 +785,14 @@ func validateFixedProviderType(fixedType string) error {
 	}
 }
 
-func poolCredentialCreateInput(providerType string, req poolCredentialWriteRequest) (pgadapter.OAuthCredentialInput, error) {
+func poolCredentialCreateInput(providerType string, req poolCredentialWriteRequest) (domain.OAuthCredentialCreate, error) {
 	providerType = strings.TrimSpace(providerType)
 	if err := validateFixedProviderType(providerType); err != nil {
-		return pgadapter.OAuthCredentialInput{}, err
+		return domain.OAuthCredentialCreate{}, err
 	}
 	accessToken := strings.TrimSpace(req.AccessToken)
 	if accessToken == "" {
-		return pgadapter.OAuthCredentialInput{}, domain.NewValidationError("access_token", "access_token is required")
+		return domain.OAuthCredentialCreate{}, domain.NewValidationError("access_token", "access_token is required")
 	}
 	name := strings.TrimSpace(req.Name)
 	email := strings.TrimSpace(req.Email)
@@ -818,7 +805,7 @@ func poolCredentialCreateInput(providerType string, req poolCredentialWriteReque
 	weight := 100
 	if req.Weight != nil {
 		if *req.Weight < 0 {
-			return pgadapter.OAuthCredentialInput{}, domain.NewValidationError("weight", "weight must be >= 0")
+			return domain.OAuthCredentialCreate{}, domain.NewValidationError("weight", "weight must be >= 0")
 		}
 		if *req.Weight > 0 {
 			weight = *req.Weight
@@ -829,9 +816,9 @@ func poolCredentialCreateInput(providerType string, req poolCredentialWriteReque
 		t := time.Unix(*req.ExpiresAt, 0).UTC()
 		expiresAt = &t
 	}
-	return pgadapter.OAuthCredentialInput{
+	return domain.OAuthCredentialCreate{
 		Name:         name,
-		ProviderType: providerType,
+		ProviderType: domain.FixedProviderType(providerType),
 		Email:        email,
 		AccessToken:  accessToken,
 		RefreshToken: req.RefreshToken,
@@ -864,6 +851,26 @@ func poolCredentialAuthMetadata(req poolCredentialWriteRequest) map[string]any {
 		return nil
 	}
 	return meta
+}
+
+func importPoolCredential(ctx context.Context, d AIDeps, poolID string, req poolCredentialWriteRequest) (*domain.OAuthCredentialSummary, error) {
+	providerType := strings.TrimSpace(req.ProviderType)
+	if providerType == "" {
+		pool, err := d.PoolReader.GetPool(ctx, poolID)
+		if err != nil {
+			return nil, err
+		}
+		providerType = string(pool.FixedProviderType)
+	}
+	write, err := poolCredentialCreateInput(providerType, req)
+	if err != nil {
+		return nil, err
+	}
+	id, err := d.CredentialCreator.Create(ctx, poolID, write)
+	if err != nil {
+		return nil, err
+	}
+	return d.CredentialReader.GetSummaryByID(ctx, id)
 }
 
 func validatePoolCredentialPatch(req poolCredentialPatchRequest) error {

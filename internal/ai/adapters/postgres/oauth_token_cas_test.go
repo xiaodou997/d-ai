@@ -29,9 +29,9 @@ func TestOAuthCredentialTokenCASRejectsStaleRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePool() error = %v", err)
 	}
-	credentialID, err := store.Create(ctx, poolID, OAuthCredentialInput{
+	credentialID, err := store.Create(ctx, poolID, domain.OAuthCredentialCreate{
 		Name:         "token-cas-credential",
-		ProviderType: string(domain.FixedProviderCodex),
+		ProviderType: domain.FixedProviderCodex,
 		AccessToken:  "access-v1",
 		RefreshToken: "refresh-v1",
 	})
@@ -103,9 +103,9 @@ func TestOAuthCredentialCooldownExcludesAndThenRestoresSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePool() error = %v", err)
 	}
-	credentialID, err := store.Create(ctx, poolID, OAuthCredentialInput{
+	credentialID, err := store.Create(ctx, poolID, domain.OAuthCredentialCreate{
 		Name:         "cooldown-credential",
-		ProviderType: string(domain.FixedProviderCodex),
+		ProviderType: domain.FixedProviderCodex,
 		AccessToken:  "access-v1",
 	})
 	if err != nil {

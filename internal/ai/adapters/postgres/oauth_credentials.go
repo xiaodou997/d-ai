@@ -602,22 +602,8 @@ func (s *OAuthCredentialStore) GetPoolHealthSummary(ctx context.Context) ([]Pool
 // Admin CRUD (credentials within a pool)
 // ============================================================================
 
-// OAuthCredentialInput is used to import a credential into a pool.
-type OAuthCredentialInput struct {
-	Name         string
-	ProviderType string
-	Email        string
-	AccessToken  string
-	RefreshToken string
-	TokenType    string
-	Scope        string
-	ExpiresAt    *time.Time
-	AuthMetadata map[string]any
-	Weight       int
-}
-
 // Create inserts a new credential into the pool.
-func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in OAuthCredentialInput) (string, error) {
+func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in domain.OAuthCredentialCreate) (string, error) {
 	atCipher, err := secret.EncryptProviderKey(s.masterKey, in.AccessToken)
 	if err != nil {
 		return "", fmt.Errorf("encrypt access token: %w", err)
@@ -656,7 +642,7 @@ func (s *OAuthCredentialStore) Create(ctx context.Context, poolID string, in OAu
 			token_type, scope, expires_at, auth_metadata, weight
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		RETURNING id::text`,
-		poolID, in.Name, in.ProviderType, in.Email,
+		poolID, in.Name, string(in.ProviderType), in.Email,
 		atCipher, rtCipher,
 		tokenType, in.Scope, pgExpiry, metaRaw, weight,
 	).Scan(&id)

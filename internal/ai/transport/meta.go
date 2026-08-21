@@ -46,18 +46,25 @@ type InfrastructureDeps struct {
 // IdentityDeps contains authentication, API key and workspace identity
 // collaborators used by AI routes.
 type IdentityDeps struct {
-	OAuth            *pgadapter.OAuthCredentialStore
-	CredentialReader OAuthCredentialReader
-	CredentialWriter OAuthCredentialWriter
-	PoolReader       OAuthPoolReader
-	TokenRefresher   OAuthTokenRefresher
-	APIKeySvc        *identitycontrol.Service
-	WorkspaceSvc     *workspacesvc.Service
-	IdentityProvider IdentityProvider
-	TokenVerifier    TokenVerifier
-	TokenRevocations TokenRevocationChecker
-	BanChecker       HumaBanChecker
-	TenantEndUsers   TenantEndUserVerifier
+	OAuth             *pgadapter.OAuthCredentialStore
+	CredentialCreator OAuthCredentialCreator
+	CredentialReader  OAuthCredentialReader
+	CredentialWriter  OAuthCredentialWriter
+	PoolReader        OAuthPoolReader
+	TokenRefresher    OAuthTokenRefresher
+	APIKeySvc         *identitycontrol.Service
+	WorkspaceSvc      *workspacesvc.Service
+	IdentityProvider  IdentityProvider
+	TokenVerifier     TokenVerifier
+	TokenRevocations  TokenRevocationChecker
+	BanChecker        HumaBanChecker
+	TenantEndUsers    TenantEndUserVerifier
+}
+
+// OAuthCredentialCreator is the secret-bearing write port needed only by the
+// credential import endpoint. Serving and token refresh use separate ports.
+type OAuthCredentialCreator interface {
+	Create(ctx context.Context, poolID string, in domain.OAuthCredentialCreate) (string, error)
 }
 
 // OAuthTokenRefresher is the manual-refresh port needed by credential
@@ -67,15 +74,15 @@ type OAuthTokenRefresher interface {
 	RefreshByID(ctx context.Context, credID string) error
 }
 
-// OAuthPoolReader is the narrow read-only port needed by AI model-binding
-// routes. Pool CRUD remains on the transitional OAuth store until its write
-// port is split out.
+// OAuthPoolReader is the narrow read-only port needed by AI model-binding and
+// credential import routes. Pool CRUD remains on the transitional OAuth store
+// until its write port is split out.
 type OAuthPoolReader interface {
 	GetPool(ctx context.Context, poolID string) (*domain.CredentialPool, error)
 }
 
-// OAuthCredentialReader is the narrow non-secret read port needed by the
-// credential-pool list endpoint. Ciphertexts and write/lifecycle operations
+// OAuthCredentialReader is the narrow non-secret read port needed by
+// credential management endpoints. Ciphertexts and write/lifecycle operations
 // remain inside the transitional OAuth store.
 type OAuthCredentialReader interface {
 	ListForPool(ctx context.Context, poolID string) ([]domain.OAuthCredentialSummary, error)

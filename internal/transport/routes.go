@@ -97,13 +97,14 @@ type AIInfrastructureDeps struct {
 
 // AIIdentityDeps contains AI-side identity and workspace collaborators.
 type AIIdentityDeps struct {
-	OAuth            *pgadapter.OAuthCredentialStore
-	CredentialReader aitransport.OAuthCredentialReader
-	CredentialWriter aitransport.OAuthCredentialWriter
-	PoolReader       aitransport.OAuthPoolReader
-	TokenRefresher   aitransport.OAuthTokenRefresher
-	APIKeySvc        *identitycontrol.Service
-	WorkspaceSvc     *workspacesvc.Service
+	OAuth             *pgadapter.OAuthCredentialStore
+	CredentialCreator aitransport.OAuthCredentialCreator
+	CredentialReader  aitransport.OAuthCredentialReader
+	CredentialWriter  aitransport.OAuthCredentialWriter
+	PoolReader        aitransport.OAuthPoolReader
+	TokenRefresher    aitransport.OAuthTokenRefresher
+	APIKeySvc         *identitycontrol.Service
+	WorkspaceSvc      *workspacesvc.Service
 }
 
 // AIBillingDeps contains AI-side subscription and billing collaborators.
@@ -235,16 +236,17 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			HTTPClient: d.AIHTTPClient,
 		},
 		IdentityDeps: aitransport.IdentityDeps{
-			OAuth:            d.OAuth,
-			CredentialReader: d.CredentialReader,
-			CredentialWriter: d.CredentialWriter,
-			PoolReader:       d.PoolReader,
-			TokenRefresher:   d.TokenRefresher,
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-			APIKeySvc:        d.APIKeySvc,
-			WorkspaceSvc:     d.WorkspaceSvc,
+			OAuth:             d.OAuth,
+			CredentialCreator: d.CredentialCreator,
+			CredentialReader:  d.CredentialReader,
+			CredentialWriter:  d.CredentialWriter,
+			PoolReader:        d.PoolReader,
+			TokenRefresher:    d.TokenRefresher,
+			TokenVerifier:     platform.JWT,
+			TokenRevocations:  platform.Blacklist,
+			BanChecker:        d.BanChecker,
+			APIKeySvc:         d.APIKeySvc,
+			WorkspaceSvc:      d.WorkspaceSvc,
 		},
 		BillingDeps: aitransport.BillingDeps{
 			Subscriptions: d.Subscriptions,
