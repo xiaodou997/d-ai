@@ -28,6 +28,7 @@ import (
 	"xiaodou/dai/internal/ai/console"
 	coreruntime "xiaodou/dai/internal/ai/core/runtime"
 	aidb "xiaodou/dai/internal/ai/db/gen"
+	"xiaodou/dai/internal/ai/externalmodels"
 	"xiaodou/dai/internal/ai/filestore"
 	"xiaodou/dai/internal/ai/gateway"
 	"xiaodou/dai/internal/ai/identitycontrol"
@@ -218,6 +219,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	)
 	poolModelCatalog := clientcatalog.New(oauthCreds, fixedClientRuntime, appLogger)
 	managementHTTPClient := &http.Client{}
+	modelCapabilities := externalmodels.New(redisClient, managementHTTPClient)
 
 	executeStep := &serving.ExecuteStep{
 		Transport:       upstreamHTTPTransport,
@@ -372,6 +374,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			},
 			AICatalogDeps: transport.AICatalogDeps{
 				ClientCatalog:     poolModelCatalog,
+				ModelCapabilities: modelCapabilities,
 				PriceBookSvc:      priceBookSvc,
 				CommercialSvc:     commercialSvc,
 				GroupTransferSvc:  groupTransferSvc,

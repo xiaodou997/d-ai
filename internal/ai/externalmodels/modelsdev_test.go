@@ -26,7 +26,7 @@ const fixturePayload = `{
 	}
 }`
 
-func withFixtureServer(t *testing.T, body string) *http.Client {
+func withFixtureServer(t *testing.T, body string) *Service {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -34,13 +34,11 @@ func withFixtureServer(t *testing.T, body string) *http.Client {
 	}))
 	t.Cleanup(server.Close)
 	t.Setenv(sourceURLEnv, server.URL)
-	// 每个子测试独立注入 fixture，避免复用上一个测试留下的进程内缓存。
-	shared = indexCache{}
-	return server.Client()
+	return New(nil, server.Client())
 }
 
 func TestLookupStructuralCapabilities(t *testing.T) {
-	httpClient := withFixtureServer(t, fixturePayload)
+	resolver := withFixtureServer(t, fixturePayload)
 
 	cases := []struct {
 		name    string
@@ -58,7 +56,7 @@ func TestLookupStructuralCapabilities(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotCap, gotOK := Lookup(t.Context(), nil, httpClient, tc.model)
+			gotCap, gotOK := resolver.Lookup(t.Context(), tc.model)
 			if gotOK != tc.wantOK {
 				t.Fatalf("ok: got %v want %v", gotOK, tc.wantOK)
 			}
@@ -70,10 +68,10 @@ func TestLookupStructuralCapabilities(t *testing.T) {
 }
 
 func TestLookupMatchesProviderPrefixedID(t *testing.T) {
-	httpClient := withFixtureServer(t, fixturePayload)
+	resolver := withFixtureServer(t, fixturePayload)
 	// requesty 下的 "openai/gpt-4o" 应该也能被裸名 "gpt-4o" 命中索引（即便这里因为
 	// 模态无法区分 chat/embedding 而返回 ok=false，也验证了索引构建没有 panic/出错）。
-	if _, ok := Lookup(t.Context(), nil, httpClient, "gpt-4o"); ok {
+	if _, ok := resolver.Lookup(t.Context(), "gpt-4o"); ok {
 		t.Fatalf("gpt-4o modalities are text->text, expected ambiguous (ok=false)")
 	}
 }
@@ -84,9 +82,9 @@ func TestLookupFallsBackWhenSourceUnavailable(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	t.Setenv(sourceURLEnv, server.URL)
-	shared = indexCache{}
+	resolver := New(nil, server.Client())
 
-	cap, ok := Lookup(t.Context(), nil, server.Client(), "gpt-image-2")
+	cap, ok := resolver.Lookup(t.Context(), "gpt-image-2")
 	if ok {
 		t.Fatalf("expected ok=false when source is unavailable, got capability %q", cap)
 	}
@@ -100,11 +98,9 @@ func TestFailureBackoffSkipsRepeatedFetches(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	t.Setenv(sourceURLEnv, server.URL)
-	shared = indexCache{}
-
-	httpClient := server.Client()
+	resolver := New(nil, server.Client())
 	for i := range 5 {
-		if _, ok := Lookup(t.Context(), nil, httpClient, "gpt-image-2"); ok {
+		if _, ok := resolver.Lookup(t.Context(), "gpt-image-2"); ok {
 			t.Fatalf("iteration %d: expected ok=false while source is down", i)
 		}
 	}
@@ -113,10 +109,10 @@ func TestFailureBackoffSkipsRepeatedFetches(t *testing.T) {
 	}
 
 	// 冷却期过后应该重新尝试。
-	shared.mu.Lock()
-	shared.failedUntil = time.Now().Add(-time.Second)
-	shared.mu.Unlock()
-	if _, ok := Lookup(t.Context(), nil, httpClient, "gpt-image-2"); ok {
+	resolver.cache.mu.Lock()
+	resolver.cache.failedUntil = time.Now().Add(-time.Second)
+	resolver.cache.mu.Unlock()
+	if _, ok := resolver.Lookup(t.Context(), "gpt-image-2"); ok {
 		t.Fatalf("expected ok=false on retry, source is still down")
 	}
 	if attempts != 2 {
@@ -133,11 +129,9 @@ func TestIndexCacheReusesWithinTTL(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	t.Setenv(sourceURLEnv, server.URL)
-	shared = indexCache{}
-
-	httpClient := server.Client()
+	resolver := New(nil, server.Client())
 	for i := range 5 {
-		if _, ok := Lookup(t.Context(), nil, httpClient, "gpt-image-2"); !ok {
+		if _, ok := resolver.Lookup(t.Context(), "gpt-image-2"); !ok {
 			t.Fatalf("iteration %d: expected hit", i)
 		}
 	}
@@ -146,10 +140,10 @@ func TestIndexCacheReusesWithinTTL(t *testing.T) {
 	}
 
 	// 手动让缓存过期，验证会重新拉取。
-	shared.mu.Lock()
-	shared.expiresAt = time.Now().Add(-time.Second)
-	shared.mu.Unlock()
-	if _, ok := Lookup(t.Context(), nil, httpClient, "gpt-image-2"); !ok {
+	resolver.cache.mu.Lock()
+	resolver.cache.expiresAt = time.Now().Add(-time.Second)
+	resolver.cache.mu.Unlock()
+	if _, ok := resolver.Lookup(t.Context(), "gpt-image-2"); !ok {
 		t.Fatalf("expected hit after cache expiry refetch")
 	}
 	if hits != 2 {

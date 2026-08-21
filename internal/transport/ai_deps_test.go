@@ -1,11 +1,13 @@
 package transport
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/clientcatalog"
+	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/tokenrefresh"
 	"xiaodou/dai/internal/auth"
@@ -15,6 +17,7 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	oauth := &pgadapter.OAuthCredentialStore{}
 	refresher := &tokenrefresh.Refresher{}
 	catalog := &clientcatalog.Service{}
+	modelCapabilities := &modelCapabilityResolverStub{}
 	httpClient := &httpDoerStub{}
 	health := routing.DefaultInMemoryTracker()
 	weights := &pgadapter.RouteWeightsStore{}
@@ -40,14 +43,18 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				TokenRefresher:    refresher,
 			},
 			AICatalogDeps: AICatalogDeps{
-				ClientCatalog: catalog,
+				ClientCatalog:     catalog,
+				ModelCapabilities: modelCapabilities,
 			},
 		},
 		nil,
 	)
 
-	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher || got.ClientCatalog != catalog {
+	if got.CredentialCreator != oauth || got.CredentialReader != oauth || got.CredentialWriter != oauth || got.PoolReader != oauth || got.PoolWriter != oauth || got.PoolHealthReader != oauth || got.TokenRefresher != refresher {
 		t.Fatal("OAuth management dependencies were not preserved")
+	}
+	if got.ClientCatalog != catalog || got.ModelCapabilities != modelCapabilities {
+		t.Fatal("catalog dependencies were not preserved")
 	}
 	if got.ProviderSecrets != providerSecrets || got.HTTPClient != httpClient {
 		t.Fatal("upstream management dependencies were not preserved")
@@ -68,3 +75,9 @@ func (*providerSecretCodecStub) Decrypt(string) (string, error) { return "", nil
 type httpDoerStub struct{}
 
 func (*httpDoerStub) Do(*http.Request) (*http.Response, error) { return nil, nil }
+
+type modelCapabilityResolverStub struct{}
+
+func (*modelCapabilityResolverStub) Lookup(context.Context, string) (domain.CapabilityType, bool) {
+	return "", false
+}

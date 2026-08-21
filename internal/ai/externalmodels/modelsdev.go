@@ -60,7 +60,18 @@ type HTTPDoer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-var shared indexCache
+// Service resolves model capabilities from the external directory while
+// keeping Redis, outbound HTTP and in-process cache policy behind one boundary.
+type Service struct {
+	redisClient *redis.Client
+	httpClient  HTTPDoer
+	cache       indexCache
+}
+
+// New creates an isolated external model capability resolver.
+func New(redisClient *redis.Client, httpClient HTTPDoer) *Service {
+	return &Service{redisClient: redisClient, httpClient: httpClient}
+}
 
 // indexCache 是进程内的两级缓存：命中窗口内直接复用已解析好的索引，
 // 避免每次调用都重新反序列化 models.dev 那份几 MB 的 JSON。
@@ -72,7 +83,7 @@ type indexCache struct {
 	failedUntil time.Time // 拉取失败后的冷却期截止时间，冷却期内不再重试网络请求
 }
 
-func (c *indexCache) get(ctx context.Context, redisClient *redis.Client, httpClient HTTPDoer) modelIndex {
+func (c *indexCache) get(ctx context.Context, load func(context.Context) ([]byte, error)) modelIndex {
 	c.mu.RLock()
 	if c.index != nil && time.Now().Before(c.expiresAt) {
 		idx := c.index
@@ -90,7 +101,7 @@ func (c *indexCache) get(ctx context.Context, redisClient *redis.Client, httpCli
 		return c.index // 冷却期内直接用旧缓存（可能是 nil），不再发起网络请求
 	}
 
-	raw, err := loadRawPayload(ctx, redisClient, httpClient)
+	raw, err := load(ctx)
 	if err != nil {
 		c.failedUntil = time.Now().Add(failureBackoff)
 		return c.index // 拉取失败：有旧缓存（哪怕已过期）就继续用，没有就返回 nil 交给调用方回退本地启发式
@@ -106,25 +117,26 @@ func (c *indexCache) get(ctx context.Context, redisClient *redis.Client, httpCli
 	return idx
 }
 
-func loadRawPayload(ctx context.Context, redisClient *redis.Client, httpClient HTTPDoer) ([]byte, error) {
-	if redisClient != nil {
-		if raw, err := redisClient.Get(ctx, redisCacheKey).Bytes(); err == nil && len(raw) > 0 {
+func (s *Service) loadRawPayload(ctx context.Context) ([]byte, error) {
+	if s.redisClient != nil {
+		if raw, err := s.redisClient.Get(ctx, redisCacheKey).Bytes(); err == nil && len(raw) > 0 {
 			return raw, nil
 		}
 	}
 
-	raw, err := fetchFromSource(ctx, httpClient)
+	raw, err := s.fetchFromSource(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if redisClient != nil {
-		_ = redisClient.Set(ctx, redisCacheKey, raw, cacheTTL).Err()
+	if s.redisClient != nil {
+		_ = s.redisClient.Set(ctx, redisCacheKey, raw, cacheTTL).Err()
 	}
 	return raw, nil
 }
 
-func fetchFromSource(ctx context.Context, httpClient HTTPDoer) ([]byte, error) {
+func (s *Service) fetchFromSource(ctx context.Context) ([]byte, error) {
+	httpClient := s.httpClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
@@ -219,12 +231,12 @@ func containsStr(list []string, target string) bool {
 // Lookup 按 model_code 查询 models.dev 缓存目录，返回结构化可辨识的能力类型。
 // ok=false 表示未命中，或命中了但模态无法区分 chat/embedding/rerank——
 // 两种情况调用方都应回退到 domain.InferModelCapabilityAndProtocol 的本地启发式。
-func Lookup(ctx context.Context, redisClient *redis.Client, httpClient HTTPDoer, modelCode string) (domain.CapabilityType, bool) {
+func (s *Service) Lookup(ctx context.Context, modelCode string) (domain.CapabilityType, bool) {
 	key := strings.ToLower(strings.TrimSpace(modelCode))
 	if key == "" {
 		return "", false
 	}
-	idx := shared.get(ctx, redisClient, httpClient)
+	idx := s.cache.get(ctx, s.loadRawPayload)
 	if idx == nil {
 		return "", false
 	}

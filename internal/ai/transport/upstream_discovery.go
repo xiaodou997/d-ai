@@ -13,7 +13,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/externalmodels"
 	"xiaodou/dai/internal/ai/upstreamcompat"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -243,11 +242,13 @@ func registerUpstreamDiscovery(api huma.API, d AIDeps) {
 		endpointProtocol := strings.TrimSpace(in.EndpointProtocol)
 
 		out := &inferModelCapabilityOutput{}
-		if capability, ok := externalmodels.Lookup(ctx, d.Redis, d.HTTPClient, modelCode); ok {
-			out.Body.CapabilityType = string(capability)
-			out.Body.APIFormat = string(domain.DefaultProtocolForCapability(capability, modelCode, endpointProtocol))
-			out.Body.Source = "external"
-			return out, nil
+		if d.ModelCapabilities != nil {
+			if capability, ok := d.ModelCapabilities.Lookup(ctx, modelCode); ok {
+				out.Body.CapabilityType = string(capability)
+				out.Body.APIFormat = string(domain.DefaultProtocolForCapability(capability, modelCode, endpointProtocol))
+				out.Body.Source = "external"
+				return out, nil
+			}
 		}
 
 		capability, apiFormat := inferCapabilityAndProtocol(modelCode, endpointProtocol)

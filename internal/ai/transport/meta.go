@@ -128,6 +128,7 @@ type BillingDeps struct {
 // collaborators.
 type CatalogDeps struct {
 	ClientCatalog     ClientCatalogResolver
+	ModelCapabilities ModelCapabilityResolver
 	PriceBookSvc      *billingcontrol.Service
 	AccountSvc        *upstreamcontrol.Service
 	UpstreamAccessSvc *upstreamaccess.Service
@@ -140,6 +141,13 @@ type CatalogDeps struct {
 // clientcatalog implementation owned by composition root.
 type ClientCatalogResolver interface {
 	Resolve(ctx context.Context, pool domain.CredentialPool) clientcatalog.Result
+}
+
+// ModelCapabilityResolver is the read-only capability suggestion port used by
+// upstream model forms. External directory, Redis and cache policy stay in the
+// concrete resolver assembled at the composition root.
+type ModelCapabilityResolver interface {
+	Lookup(ctx context.Context, modelCode string) (domain.CapabilityType, bool)
 }
 
 // RuntimeDeps contains request execution state and runtime policy.

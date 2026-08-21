@@ -115,6 +115,7 @@ type AIBillingDeps struct {
 // AICatalogDeps contains AI-side model, pricing and upstream collaborators.
 type AICatalogDeps struct {
 	ClientCatalog     aitransport.ClientCatalogResolver
+	ModelCapabilities aitransport.ModelCapabilityResolver
 	PriceBookSvc      *billingcontrol.Service
 	CommercialSvc     *commercial.Service
 	GroupTransferSvc  *commercial.GroupTransferService
@@ -254,6 +255,7 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 		},
 		CatalogDeps: aitransport.CatalogDeps{
 			ClientCatalog:     d.ClientCatalog,
+			ModelCapabilities: d.ModelCapabilities,
 			PriceBookSvc:      d.PriceBookSvc,
 			CommercialSvc:     d.CommercialSvc,
 			GroupTransferSvc:  d.GroupTransferSvc,
