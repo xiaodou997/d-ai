@@ -34,7 +34,7 @@ type selfUpsertAPIKeyLimitInput struct {
 	Body     scopedLimitPolicyWriteRequest
 }
 
-func registerTenantSelfLimits(api huma.API, d AIDeps) {
+func registerTenantSelfLimits(api huma.API, d TenantSelfControlHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-self-user-limit-policies",
 		Method:      http.MethodGet,
@@ -92,7 +92,7 @@ func registerTenantSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "租户自助·租户 API 密钥限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), "", d.APIKeys, d.LimitPolicies)
+		return listOwnedAPIKeyPolicies(ctx, tenantIDFromContext(ctx), "", d.APIKeys, d.LimitPolicies)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -134,7 +134,7 @@ func registerUserSelfLimits(api huma.API, d AIDeps) {
 		Summary:     "终端用户自助·个人 API 密钥限流策略列表",
 		Tags:        []string{"limit-policies"},
 	}, func(ctx context.Context, _ *struct{}) (*runtimeLimitPoliciesOutput, error) {
-		return listOwnedAPIKeyPolicies(ctx, d, tenantIDFromContext(ctx), userIDFromContext(ctx), d.APIKeys, d.LimitPolicies)
+		return listOwnedAPIKeyPolicies(ctx, tenantIDFromContext(ctx), userIDFromContext(ctx), d.APIKeys, d.LimitPolicies)
 	})
 
 	huma.Register(api, huma.Operation{
@@ -186,7 +186,7 @@ func singleScopedPolicyResponse(ctx context.Context, policies CommercialLimitPol
 	return out, nil
 }
 
-func listOwnedAPIKeyPolicies(ctx context.Context, d AIDeps, tenantID, userID string, apiKeys APIKeyReader, policies CommercialLimitPolicyManager) (*runtimeLimitPoliciesOutput, error) {
+func listOwnedAPIKeyPolicies(ctx context.Context, tenantID, userID string, apiKeys APIKeyReader, policies CommercialLimitPolicyManager) (*runtimeLimitPoliciesOutput, error) {
 	if apiKeys == nil || policies == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("commercial or api key service is not configured")
 	}

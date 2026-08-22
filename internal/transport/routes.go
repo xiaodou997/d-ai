@@ -215,6 +215,44 @@ type AITenantCatalogHTTPDeps struct {
 	BanChecker       aitransport.HumaBanChecker
 }
 
+// AITenantSelfControlHTTPDeps contains the collaborators owned by the
+// independently registered tenant API-key and limit-policy module.
+type AITenantSelfControlHTTPDeps struct {
+	APIKeys         aitransport.APIKeyReader
+	APIKeyWriter    aitransport.APIKeyWriter
+	APIKeyLifecycle aitransport.APIKeyLifecycleManager
+	APIKeySecrets   aitransport.APIKeySecretManager
+	Groups          aitransport.CommercialGroupCatalog
+	LimitPolicies   aitransport.CommercialLimitPolicyManager
+	BanChecker      aitransport.HumaBanChecker
+}
+
+// AITenantGroupManagementHTTPDeps contains the collaborators owned by the
+// independently registered tenant group and transfer module.
+type AITenantGroupManagementHTTPDeps struct {
+	Groups           aitransport.CommercialGroupCatalog
+	GroupManager     aitransport.CommercialGroupManager
+	DispatchRules    aitransport.CommercialDispatchRuleManager
+	GroupTargets     aitransport.CommercialGroupTargetManager
+	UserBindings     aitransport.CommercialUserBindingManager
+	TenantPriceBooks aitransport.TenantPriceBookManager
+	GroupTransfer    aitransport.GroupTransferManager
+	AdminAudit       aitransport.AdminAuditRecorder
+	BanChecker       aitransport.HumaBanChecker
+}
+
+// AIAPIKeyManagementHTTPDeps contains the collaborators owned by the
+// independently registered platform-admin API-key management module.
+type AIAPIKeyManagementHTTPDeps struct {
+	APIKeys         aitransport.APIKeyReader
+	APIKeyWriter    aitransport.APIKeyWriter
+	APIKeyLifecycle aitransport.APIKeyLifecycleManager
+	APIKeySecrets   aitransport.APIKeySecretManager
+	Groups          aitransport.CommercialGroupCatalog
+	LimitPolicies   aitransport.CommercialLimitPolicyManager
+	BanChecker      aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -261,6 +299,9 @@ type AIHTTPDeps struct {
 	UpstreamAccounts    AIUpstreamAccountManagementHTTPDeps
 	UpstreamAccess      AIUpstreamAccessManagementHTTPDeps
 	TenantCatalog       AITenantCatalogHTTPDeps
+	TenantSelfControl   AITenantSelfControlHTTPDeps
+	TenantGroups        AITenantGroupManagementHTTPDeps
+	APIKeyManagement    AIAPIKeyManagementHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -308,6 +349,9 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterUpstreamAccountManagement(api, buildUpstreamAccountManagementHTTPDeps(m.platform, m.deps.UpstreamAccounts))
 	aitransport.RegisterUpstreamAccessManagement(api, buildUpstreamAccessManagementHTTPDeps(m.platform, m.deps.UpstreamAccess))
 	aitransport.RegisterTenantCatalog(api, buildTenantCatalogHTTPDeps(m.platform, m.deps.TenantCatalog))
+	aitransport.RegisterTenantSelfControl(api, buildTenantSelfControlHTTPDeps(m.platform, m.deps.TenantSelfControl, identity))
+	aitransport.RegisterTenantGroupManagement(api, buildTenantGroupManagementHTTPDeps(m.platform, m.deps.TenantGroups, identity))
+	aitransport.RegisterAPIKeyManagement(api, buildAPIKeyManagementHTTPDeps(m.platform, m.deps.APIKeyManagement))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -396,7 +440,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 	}
 	if identity != nil {
 		aiDeps.IdentityProvider = identity
-		aiDeps.TenantEndUsers = identity
 	}
 	return aiDeps
 }
@@ -440,6 +483,58 @@ func buildTenantCatalogHTTPDeps(platform Deps, d AITenantCatalogHTTPDeps) aitran
 		Groups:           d.Groups,
 		TenantPriceBooks: d.TenantPriceBooks,
 		PriceBookSync:    d.PriceBookSync,
+	}
+}
+
+func buildTenantSelfControlHTTPDeps(platform Deps, d AITenantSelfControlHTTPDeps, identity aiIdentityProvider) aitransport.TenantSelfControlHTTPDeps {
+	return aitransport.TenantSelfControlHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		APIKeys:         d.APIKeys,
+		APIKeyWriter:    d.APIKeyWriter,
+		APIKeyLifecycle: d.APIKeyLifecycle,
+		APIKeySecrets:   d.APIKeySecrets,
+		Groups:          d.Groups,
+		LimitPolicies:   d.LimitPolicies,
+		TenantEndUsers:  identity,
+	}
+}
+
+func buildTenantGroupManagementHTTPDeps(platform Deps, d AITenantGroupManagementHTTPDeps, identity aiIdentityProvider) aitransport.TenantGroupManagementHTTPDeps {
+	return aitransport.TenantGroupManagementHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		Groups:           d.Groups,
+		GroupManager:     d.GroupManager,
+		DispatchRules:    d.DispatchRules,
+		GroupTargets:     d.GroupTargets,
+		UserBindings:     d.UserBindings,
+		TenantEndUsers:   identity,
+		TenantPriceBooks: d.TenantPriceBooks,
+		GroupTransfer:    d.GroupTransfer,
+		AdminAudit:       d.AdminAudit,
+	}
+}
+
+func buildAPIKeyManagementHTTPDeps(platform Deps, d AIAPIKeyManagementHTTPDeps) aitransport.APIKeyManagementHTTPDeps {
+	return aitransport.APIKeyManagementHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		APIKeys:         d.APIKeys,
+		APIKeyWriter:    d.APIKeyWriter,
+		APIKeyLifecycle: d.APIKeyLifecycle,
+		APIKeySecrets:   d.APIKeySecrets,
+		Groups:          d.Groups,
+		LimitPolicies:   d.LimitPolicies,
 	}
 }
 

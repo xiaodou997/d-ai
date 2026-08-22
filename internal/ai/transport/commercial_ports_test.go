@@ -151,21 +151,21 @@ func TestCommercialRoutesUseSeparatedPorts(t *testing.T) {
 		ID: "policy-1", ScopeType: commercial.LimitScopeTenant, ScopeID: "tenant-1", Status: commercial.StatusActive,
 	}}}
 	endUsers := &tenantEndUserVerifierStub{}
-	d := AIDeps{
-		IdentityDeps: IdentityDeps{TenantEndUsers: endUsers},
-		CatalogDeps: CatalogDeps{
-			Groups:        groups,
-			GroupManager:  groupManager,
-			DispatchRules: dispatchRules,
-			GroupTargets:  groupTargets,
-			UserBindings:  userBindings,
-			LimitPolicies: limitPolicies,
-		},
+	d := TenantGroupManagementHTTPDeps{
+		Groups:           groups,
+		GroupManager:     groupManager,
+		DispatchRules:    dispatchRules,
+		GroupTargets:     groupTargets,
+		UserBindings:     userBindings,
+		TenantEndUsers:   endUsers,
+		TenantPriceBooks: nil,
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	registerGroups(api, d)
-	registerLimits(api, d)
+	limitRouter, limitAPI := server.New(server.Options{Title: "test", Version: "test"})
+	registerLimits(limitAPI, AIDeps{CatalogDeps: CatalogDeps{LimitPolicies: limitPolicies}})
 	handler := withCommercialClaims(router, &auth.Claims{TenantID: "tenant-1", UserID: "admin-1"})
+	limitHandler := withCommercialClaims(limitRouter, &auth.Claims{TenantID: "tenant-1", UserID: "admin-1"})
 
 	listRecorder := performCommercialRequest(handler, http.MethodGet, "/api/v1/tenants/me/groups", "")
 	requireCommercialStatus(t, listRecorder, http.StatusOK)
@@ -203,7 +203,7 @@ func TestCommercialRoutesUseSeparatedPorts(t *testing.T) {
 		t.Fatalf("binding scope = tenant %q user %q, verifier tenant %q user %q", userBindings.listTenantID, userBindings.listUserID, endUsers.tenantID, endUsers.userID)
 	}
 
-	requireCommercialStatus(t, performCommercialRequest(handler, http.MethodGet, "/api/v1/limit-policies", ""), http.StatusOK)
+	requireCommercialStatus(t, performCommercialRequest(limitHandler, http.MethodGet, "/api/v1/limit-policies", ""), http.StatusOK)
 	if limitPolicies.listFilter.ScopeType != commercial.LimitScopeTenant {
 		t.Fatalf("limit policy filter = %#v", limitPolicies.listFilter)
 	}
@@ -212,14 +212,14 @@ func TestCommercialRoutesUseSeparatedPorts(t *testing.T) {
 func TestCommercialGroupReadAndWritePortsAreIndependent(t *testing.T) {
 	groups := &commercialGroupCatalogStub{}
 	readRouter, readAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerGroups(readAPI, AIDeps{CatalogDeps: CatalogDeps{Groups: groups}})
+	registerGroups(readAPI, TenantGroupManagementHTTPDeps{Groups: groups})
 	readHandler := withCommercialClaims(readRouter, &auth.Claims{TenantID: "tenant-1"})
 	requireCommercialStatus(t, performCommercialRequest(readHandler, http.MethodGet, "/api/v1/tenants/me/groups", ""), http.StatusOK)
 	requireCommercialStatus(t, performCommercialRequest(readHandler, http.MethodPost, "/api/v1/tenants/me/groups", `{"name":"Created","retail_price_book_id":"price-1"}`), http.StatusServiceUnavailable)
 
 	manager := &commercialGroupManagerStub{}
 	writeRouter, writeAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerGroups(writeAPI, AIDeps{CatalogDeps: CatalogDeps{GroupManager: manager}})
+	registerGroups(writeAPI, TenantGroupManagementHTTPDeps{GroupManager: manager})
 	writeHandler := withCommercialClaims(writeRouter, &auth.Claims{TenantID: "tenant-1"})
 	requireCommercialStatus(t, performCommercialRequest(writeHandler, http.MethodGet, "/api/v1/tenants/me/groups", ""), http.StatusServiceUnavailable)
 	requireCommercialStatus(t, performCommercialRequest(writeHandler, http.MethodPost, "/api/v1/tenants/me/groups", `{"name":"Created","retail_price_book_id":"price-1"}`), http.StatusOK)

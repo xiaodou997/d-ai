@@ -23,7 +23,7 @@ type groupImportPreviewOutput struct{ Body commercial.GroupImportPreview }
 type groupImportInput struct{ Body commercial.GroupImportRequest }
 type groupImportOutput struct{ Body commercial.GroupImportResult }
 
-func registerGroupTransfer(api huma.API, d AIDeps) {
+func registerGroupTransfer(api huma.API, d TenantGroupManagementHTTPDeps) {
 	ready := func() error {
 		if d.GroupTransfer == nil {
 			return httpx.ErrUnavailable.WithDetail("group transfer service is not configured")

@@ -64,7 +64,7 @@ func TestGroupTransferRoutesUseManagerPort(t *testing.T) {
 		},
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerGroupTransfer(api, AIDeps{CatalogDeps: CatalogDeps{GroupTransfer: manager}})
+	registerGroupTransfer(api, TenantGroupManagementHTTPDeps{GroupTransfer: manager})
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), authClaimsContextKey{}, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
 		router.ServeHTTP(w, r.WithContext(ctx))
@@ -112,7 +112,7 @@ func TestGroupTransferRoutesUseManagerPort(t *testing.T) {
 
 func TestGroupTransferRoutesRequireManagerPort(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerGroupTransfer(api, AIDeps{})
+	registerGroupTransfer(api, TenantGroupManagementHTTPDeps{})
 
 	recorder := performGroupTransferRequest(t, router, http.MethodPost, "/api/v1/tenants/me/groups/export", `{"group_ids":["group-1"]}`)
 	if recorder.Code != http.StatusServiceUnavailable {

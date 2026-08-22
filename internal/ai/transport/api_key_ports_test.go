@@ -116,13 +116,11 @@ func TestAPIKeyRoutesUseSeparatedPorts(t *testing.T) {
 	secrets := &apiKeySecretStub{}
 	policies := &commercialLimitPolicyManagerStub{}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerAPIKeys(api, AIDeps{
-		IdentityDeps: IdentityDeps{
-			APIKeys:         reader,
-			APIKeyLifecycle: lifecycle,
-			APIKeySecrets:   secrets,
-		},
-		CatalogDeps: CatalogDeps{LimitPolicies: policies},
+	registerAPIKeys(api, APIKeyManagementHTTPDeps{
+		APIKeys:         reader,
+		APIKeyLifecycle: lifecycle,
+		APIKeySecrets:   secrets,
+		LimitPolicies:   policies,
 	})
 
 	requireCommercialStatus(t, performCommercialRequest(router, http.MethodGet, "/api/v1/tenants/tenant-1/api-keys", ""), http.StatusOK)
@@ -144,10 +142,7 @@ func TestAPIKeyRoutesUseSeparatedPorts(t *testing.T) {
 func TestAPIKeyReadPortDoesNotEnableLifecycleOrSecretOperations(t *testing.T) {
 	reader := &apiKeyReaderStub{tenantKeys: []coreidentity.APIKey{{ID: "key-1", TenantID: "tenant-1", OwnerScope: coreidentity.ScopeTenant}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerAPIKeys(api, AIDeps{
-		IdentityDeps: IdentityDeps{APIKeys: reader},
-		CatalogDeps:  CatalogDeps{LimitPolicies: &commercialLimitPolicyManagerStub{}},
-	})
+	registerAPIKeys(api, APIKeyManagementHTTPDeps{APIKeys: reader, LimitPolicies: &commercialLimitPolicyManagerStub{}})
 
 	requireCommercialStatus(t, performCommercialRequest(router, http.MethodGet, "/api/v1/tenants/tenant-1/api-keys", ""), http.StatusOK)
 	requireCommercialStatus(t, performCommercialRequest(router, http.MethodPatch, "/api/v1/tenants/tenant-1/api-keys/key-1/status", `{"status":"disabled"}`), http.StatusServiceUnavailable)
@@ -162,12 +157,11 @@ func TestAPIKeyCreateCompensatesThroughLifecyclePort(t *testing.T) {
 	lifecycle := &apiKeyLifecycleStub{}
 	groups := &commercialGroupCatalogStub{tenantVisible: []commercial.AccessibleGroup{{Group: commercial.Group{ID: "group-1"}}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerAPIKeys(api, AIDeps{
-		IdentityDeps: IdentityDeps{APIKeyWriter: writer, APIKeyLifecycle: lifecycle},
-		CatalogDeps: CatalogDeps{
-			Groups:        groups,
-			LimitPolicies: &failingAPIKeyLimitPolicies{},
-		},
+	registerAPIKeys(api, APIKeyManagementHTTPDeps{
+		APIKeyWriter:    writer,
+		APIKeyLifecycle: lifecycle,
+		Groups:          groups,
+		LimitPolicies:   &failingAPIKeyLimitPolicies{},
 	})
 
 	recorder := performCommercialRequest(router, http.MethodPost, "/api/v1/tenants/tenant-1/api-keys", `{

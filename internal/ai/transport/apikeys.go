@@ -146,7 +146,7 @@ type apiKeyRevealOutput struct {
 	}
 }
 
-func registerAPIKeys(api huma.API, d AIDeps) {
+func registerAPIKeys(api huma.API, d APIKeyManagementHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-api-keys",
 		Method:      http.MethodGet,
@@ -554,7 +554,7 @@ func registerAPIKeys(api huma.API, d AIDeps) {
 	})
 }
 
-func registerTenantSelfAPIKeys(api huma.API, d AIDeps) {
+func registerTenantSelfAPIKeys(api huma.API, d TenantSelfControlHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-self-api-keys",
 		Method:      http.MethodGet,

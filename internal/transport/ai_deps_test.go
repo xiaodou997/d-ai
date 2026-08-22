@@ -343,6 +343,58 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if tenantCatalog.Auth.TokenVerifier != jwt || tenantCatalog.Auth.TokenRevocations != blacklist || tenantCatalog.Auth.BanChecker != banChecker || tenantCatalog.ModelCatalog != modelCatalog || tenantCatalog.Groups != commercialPorts || tenantCatalog.TenantPriceBooks != priceBookPorts || tenantCatalog.PriceBookSync != priceBookPorts {
 		t.Fatal("tenant catalog dependencies were not preserved")
 	}
+
+	tenantSelfControl := buildTenantSelfControlHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AITenantSelfControlHTTPDeps{
+			APIKeys:         apiKeyPorts,
+			APIKeyWriter:    apiKeyPorts,
+			APIKeyLifecycle: apiKeyPorts,
+			APIKeySecrets:   apiKeyPorts,
+			Groups:          commercialPorts,
+			LimitPolicies:   commercialPorts,
+			BanChecker:      banChecker,
+		},
+		identity,
+	)
+	if tenantSelfControl.Auth.TokenVerifier != jwt || tenantSelfControl.Auth.TokenRevocations != blacklist || tenantSelfControl.Auth.BanChecker != banChecker || tenantSelfControl.APIKeys != apiKeyPorts || tenantSelfControl.APIKeyWriter != apiKeyPorts || tenantSelfControl.APIKeyLifecycle != apiKeyPorts || tenantSelfControl.APIKeySecrets != apiKeyPorts || tenantSelfControl.Groups != commercialPorts || tenantSelfControl.LimitPolicies != commercialPorts || tenantSelfControl.TenantEndUsers != identity {
+		t.Fatal("tenant self-control dependencies were not preserved")
+	}
+
+	tenantGroups := buildTenantGroupManagementHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AITenantGroupManagementHTTPDeps{
+			Groups:           commercialPorts,
+			GroupManager:     commercialPorts,
+			DispatchRules:    commercialPorts,
+			GroupTargets:     commercialPorts,
+			UserBindings:     commercialPorts,
+			TenantPriceBooks: priceBookPorts,
+			GroupTransfer:    groupTransfer,
+			AdminAudit:       adminAudit,
+			BanChecker:       banChecker,
+		},
+		identity,
+	)
+	if tenantGroups.Auth.TokenVerifier != jwt || tenantGroups.Auth.TokenRevocations != blacklist || tenantGroups.Auth.BanChecker != banChecker || tenantGroups.Groups != commercialPorts || tenantGroups.GroupManager != commercialPorts || tenantGroups.DispatchRules != commercialPorts || tenantGroups.GroupTargets != commercialPorts || tenantGroups.UserBindings != commercialPorts || tenantGroups.TenantEndUsers != identity || tenantGroups.TenantPriceBooks != priceBookPorts || tenantGroups.GroupTransfer != groupTransfer || tenantGroups.AdminAudit != adminAudit {
+		t.Fatal("tenant group-management dependencies were not preserved")
+	}
+
+	apiKeyManagement := buildAPIKeyManagementHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIAPIKeyManagementHTTPDeps{
+			APIKeys:         apiKeyPorts,
+			APIKeyWriter:    apiKeyPorts,
+			APIKeyLifecycle: apiKeyPorts,
+			APIKeySecrets:   apiKeyPorts,
+			Groups:          commercialPorts,
+			LimitPolicies:   commercialPorts,
+			BanChecker:      banChecker,
+		},
+	)
+	if apiKeyManagement.Auth.TokenVerifier != jwt || apiKeyManagement.Auth.TokenRevocations != blacklist || apiKeyManagement.Auth.BanChecker != banChecker || apiKeyManagement.APIKeys != apiKeyPorts || apiKeyManagement.APIKeyWriter != apiKeyPorts || apiKeyManagement.APIKeyLifecycle != apiKeyPorts || apiKeyManagement.APIKeySecrets != apiKeyPorts || apiKeyManagement.Groups != commercialPorts || apiKeyManagement.LimitPolicies != commercialPorts {
+		t.Fatal("API-key management dependencies were not preserved")
+	}
 }
 
 type providerSecretCodecStub struct{}

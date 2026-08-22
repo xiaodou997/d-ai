@@ -308,7 +308,7 @@ type deleteUserGroupInput struct {
 	GroupID string `path:"groupID"`
 }
 
-func registerGroups(api huma.API, d AIDeps) {
+func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 	commercialPortReady := func(port any) error {
 		if port == nil {
 			return httpx.ErrUnavailable.WithDetail("commercial service is not configured")
@@ -326,7 +326,7 @@ func registerGroups(api huma.API, d AIDeps) {
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
-			priceBookNames, err := loadPriceBookNameMap(ctx, d, tenantID)
+			priceBookNames, err := loadPriceBookNameMap(ctx, d.TenantPriceBooks, tenantID)
 			if err != nil {
 				return nil, mapServiceError(err)
 			}
@@ -799,11 +799,11 @@ func loadCommercialGroupMap(ctx context.Context, groups CommercialGroupCatalog, 
 	return out, nil
 }
 
-func loadPriceBookNameMap(ctx context.Context, d AIDeps, tenantID string) (map[string]string, error) {
-	if d.TenantPriceBooks == nil {
+func loadPriceBookNameMap(ctx context.Context, priceBooks TenantPriceBookManager, tenantID string) (map[string]string, error) {
+	if priceBooks == nil {
 		return map[string]string{}, nil
 	}
-	items, err := d.TenantPriceBooks.ListVisiblePriceBooks(ctx, tenantID)
+	items, err := priceBooks.ListVisiblePriceBooks(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}

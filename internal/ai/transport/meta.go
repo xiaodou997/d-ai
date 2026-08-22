@@ -39,7 +39,6 @@ type IdentityDeps struct {
 	TokenVerifier     TokenVerifier
 	TokenRevocations  TokenRevocationChecker
 	BanChecker        HumaBanChecker
-	TenantEndUsers    TenantEndUserVerifier
 }
 
 // APIKeyReader exposes only non-secret API key summaries. Ownership checks use
@@ -388,12 +387,8 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	management.UseMiddleware(platformUserAuth(api, auth))
 	registerPriceBooks(management, d)
 	registerLimits(management, d)
-	registerAPIKeys(management, d)
 	tenant := huma.NewGroup(api)
 	tenant.UseMiddleware(tenantUserAuth(api, auth))
-	registerGroups(tenant, d)
-	registerGroupTransfer(tenant, d)
-	registerTenantSelfAPIKeys(tenant, d)
 	registerTenantSelf(tenant, d)
 	registerTenantSelfWorkspace(tenant, d)
 

@@ -1,7 +1,8 @@
 package transport
 
-// tenant_self.go registers the tenant self-service (userType=3) flat Huma
-// endpoints. Every handler derives the tenant scope from the JWT claims
+// tenant_self.go registers the tenant self-service read endpoints (userType=3)
+// for dashboard and usage. API-key and limit-policy controls live in
+// TenantSelfControlHTTPDeps. Every handler derives the tenant scope from JWT claims
 // (tenantIDFromContext) — never from a path/query param — so a tenant can only
 // ever read/write its own resources. These mirror the role-dispatching console
 // envelope routes (handleTenantModelGrantsSelf, handleTenantsMeAPIKeys*,
@@ -76,11 +77,9 @@ type tenantSelfUsageSummaryInput struct {
 	DateTo        string `query:"date_to" doc:"结束时间，RFC3339，按 [start, end) 解释"`
 }
 
-// registerTenantSelf mounts the tenant self-service endpoints under the tenant
-// auth group (tenantUserAuth → userType=3).
+// registerTenantSelf mounts the tenant self-service read endpoints under the
+// tenant auth group (tenantUserAuth → userType=3).
 func registerTenantSelf(api huma.API, d AIDeps) {
-	registerTenantSelfAPIKeyWrites(api, d)
-	registerTenantSelfLimits(api, d)
 	registerTenantSelfDashboard(api, d)
 	registerTenantSelfUsage(api, d)
 }
@@ -89,7 +88,7 @@ func registerTenantSelf(api huma.API, d AIDeps) {
 // /api/v1/tenants/me/api-keys[/...]  (console: handleTenantsMeAPIKeys*)
 // ---------------------------------------------------------------------------
 
-func registerTenantSelfAPIKeyWrites(api huma.API, d AIDeps) {
+func registerTenantSelfAPIKeyWrites(api huma.API, d TenantSelfControlHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID:   "ai-create-tenant-self-api-key",
 		Method:        http.MethodPost,
