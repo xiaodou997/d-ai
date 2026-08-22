@@ -173,7 +173,7 @@ type syncCommonModelsOutput struct {
 	Body billingcontrol.SyncResult
 }
 
-func registerPriceBooks(api huma.API, d AIDeps) {
+func registerPriceBooks(api huma.API, d CoreHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-price-books",
 		Method:      http.MethodGet,

@@ -234,7 +234,7 @@ func TestSubscriptionGroupNameResolutionRemainsOptional(t *testing.T) {
 
 func TestSubscriptionRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	coreResponse := performSubscriptionRequest(coreRouter, http.MethodGet, "/api/v1/users/me/subscription-plans", "", "")
 	if coreResponse.Code != http.StatusNotFound {
 		t.Fatalf("core AI subscription route status = %d, want %d", coreResponse.Code, http.StatusNotFound)

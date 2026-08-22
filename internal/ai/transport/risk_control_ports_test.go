@@ -211,7 +211,7 @@ func TestRiskControlRoutesRequirePorts(t *testing.T) {
 
 func TestRiskControlRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	coreResponse := performRiskControlRequest(coreRouter, http.MethodGet, "/api/v1/risk-control/config", "")
 	if coreResponse.Code != http.StatusNotFound {
 		t.Fatalf("core AI risk-control route status = %d, want %d", coreResponse.Code, http.StatusNotFound)

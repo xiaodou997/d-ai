@@ -361,18 +361,12 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 			},
 		},
 		AIHTTPDeps: transport.AIHTTPDeps{
-			Core: transport.AIDeps{
-				AIIdentityDeps: transport.AIIdentityDeps{
-					BanChecker: banChecker,
-				},
-				AICatalogDeps: transport.AICatalogDeps{
-					PlatformPriceBooks: priceBookSvc,
-					PriceBookSync:      priceBookSvc,
-					LimitPolicies:      commercialSvc,
-				},
-				AIOperationsDeps: transport.AIOperationsDeps{
-					IdentityEnrichmentFailures: identityEnrichmentFailures,
-				},
+			Core: transport.AICoreHTTPDeps{
+				PlatformPriceBooks:         priceBookSvc,
+				PriceBookSync:              priceBookSvc,
+				LimitPolicies:              commercialSvc,
+				BanChecker:                 banChecker,
+				IdentityEnrichmentFailures: identityEnrichmentFailures,
 			},
 			Subscriptions: transport.AISubscriptionHTTPDeps{
 				SubscriptionPlans:          subsSvc,

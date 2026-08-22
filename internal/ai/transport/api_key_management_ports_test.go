@@ -20,7 +20,7 @@ func TestAPIKeyManagementRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	}
 
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	for _, route := range routes {
 		recorder := performAPIKeyManagementRequest(coreRouter, route.method, route.path)
 		if recorder.Code != http.StatusNotFound {

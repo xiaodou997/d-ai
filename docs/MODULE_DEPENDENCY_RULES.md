@@ -59,7 +59,7 @@ cmd/server (composition root) -> all modules and adapters
 `internal/transport` 仍有直接数据库/Redis 依赖和遗留 SQL。剩余包级越界都在例外台账登记，
 并由门禁冻结；新增边缘不会因为“暂时方便”自动获得许可。例外的删除顺序是：
 
-1. P1-02 继续把 `transport.Deps` / `AIDeps` 中的具体业务 service 替换为最小端口。
+1. P1-02 已将 AI Core 收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps` 最小端口；后续治理 `transport.Deps` 中仍残留的具体业务 service。
 2. P1-03 将权限、事务和 SQL 迁移到各域 application service/query service。
 3. P1-07 用数据库角色、领域 schema 或等价权限隔离验证表所有权。
 

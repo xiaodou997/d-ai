@@ -23,7 +23,7 @@ import (
 	"xiaodou/dai/internal/auth"
 )
 
-func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
+func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	oauth := &pgadapter.OAuthCredentialStore{}
 	refresher := &tokenrefresh.Refresher{}
 	catalog := &clientcatalog.Service{}
@@ -61,22 +61,16 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	subscriptionPorts := subscription.NewService(nil, nil, nil)
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
-	got := buildAIDeps(
-		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
-		AIDeps{
-			AIIdentityDeps: AIIdentityDeps{
-				BanChecker: banChecker,
-			},
-			AICatalogDeps: AICatalogDeps{
-				PlatformPriceBooks: priceBookPorts,
-				PriceBookSync:      priceBookPorts,
-				LimitPolicies:      commercialPorts,
-			},
-			AIOperationsDeps: AIOperationsDeps{
-				IdentityEnrichmentFailures: identityEnrichmentFailures,
-			},
+	got := buildAICoreHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AICoreHTTPDeps{
+			PlatformPriceBooks:         priceBookPorts,
+			PriceBookSync:              priceBookPorts,
+			LimitPolicies:              commercialPorts,
+			BanChecker:                 banChecker,
+			IdentityEnrichmentFailures: identityEnrichmentFailures,
 		},
-		nil,
+		identity,
 	)
 
 	if got.PlatformPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
@@ -88,8 +82,8 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("observability dependencies were not preserved")
 	}
-	if got.TokenRevocations != blacklist {
-		t.Fatal("portal token revocation dependency was not preserved")
+	if got.TokenVerifier != jwt || got.TokenRevocations != blacklist || got.IdentityProvider != identity {
+		t.Fatal("core authentication dependencies were not preserved")
 	}
 
 	subscriptions := buildSubscriptionHTTPDeps(

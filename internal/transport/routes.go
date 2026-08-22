@@ -74,12 +74,6 @@ type OperationsDeps struct {
 	DataCleanup   *cleanuppkg.Service
 }
 
-// AIIdentityDeps contains AI-side authentication collaborators for the core
-// platform price and limit routes.
-type AIIdentityDeps struct {
-	BanChecker aitransport.HumaBanChecker
-}
-
 // AISubscriptionHTTPDeps contains the collaborators owned by the independently
 // registered subscription HTTP module.
 type AISubscriptionHTTPDeps struct {
@@ -93,17 +87,13 @@ type AISubscriptionHTTPDeps struct {
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
-// AICatalogDeps contains only the pricing and limit collaborators still owned
-// by the AI core module.
-type AICatalogDeps struct {
-	PlatformPriceBooks aitransport.PlatformPriceBookManager
-	PriceBookSync      aitransport.PriceBookSyncManager
-	LimitPolicies      aitransport.CommercialLimitPolicyManager
-}
-
-// AIOperationsDeps contains the fail-open identity-enrichment observer used by
-// platform limit projections in the core module.
-type AIOperationsDeps struct {
+// AICoreHTTPDeps contains the narrow collaborators owned by the remaining AI
+// core platform price-book and limit-policy routes.
+type AICoreHTTPDeps struct {
+	PlatformPriceBooks         aitransport.PlatformPriceBookManager
+	PriceBookSync              aitransport.PriceBookSyncManager
+	LimitPolicies              aitransport.CommercialLimitPolicyManager
+	BanChecker                 aitransport.HumaBanChecker
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
@@ -299,19 +289,10 @@ type AIRiskControlHTTPDeps struct {
 	BanChecker          aitransport.HumaBanChecker
 }
 
-// AIDeps is the composition-facing compatibility bundle for the remaining AI
-// core control-plane routes. Vertically extracted modules use the narrower
-// bundles on AIHTTPDeps and are not copied into this core container.
-type AIDeps struct {
-	AIIdentityDeps
-	AICatalogDeps
-	AIOperationsDeps
-}
-
 // AIHTTPDeps is a composition-only collection of independently registered AI
 // route modules. Handlers receive the narrower module dependency type.
 type AIHTTPDeps struct {
-	Core                AIDeps
+	Core                AICoreHTTPDeps
 	Subscriptions       AISubscriptionHTTPDeps
 	RiskControl         AIRiskControlHTTPDeps
 	AuditLog            AIAuditLogHTTPDeps
@@ -337,7 +318,7 @@ type AIHTTPDeps struct {
 //
 // The embedded groups preserve the existing d.Field handler access pattern,
 // but composition code must now name the owning group explicitly. AI
-// dependencies are passed separately through AIDeps.
+// dependencies are passed separately through AIHTTPDeps modules.
 type Deps struct {
 	InfrastructureDeps
 	PortalDeps
@@ -365,7 +346,7 @@ type aiIdentityProvider interface {
 
 func (m aiModule) Register(api huma.API) {
 	identity := newAIIdentityAdapter(m.platform.Pool, m.platform.UserService)
-	aitransport.RegisterAICore(api, buildAIDeps(m.platform, m.deps.Core, identity))
+	aitransport.RegisterAICore(api, buildAICoreHTTPDeps(m.platform, m.deps.Core, identity))
 	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
 	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))
 	aitransport.RegisterAuditLog(api, buildAuditLogHTTPDeps(m.platform, m.deps.AuditLog))
@@ -434,21 +415,15 @@ func registerPublicPlane(api huma.API, d Deps) {
 
 }
 
-func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
-	aiDeps := aitransport.AIDeps{
-		IdentityDeps: aitransport.IdentityDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
-		CatalogDeps: aitransport.CatalogDeps{
-			PlatformPriceBooks: d.PlatformPriceBooks,
-			PriceBookSync:      d.PriceBookSync,
-			LimitPolicies:      d.LimitPolicies,
-		},
-		OperationsDeps: aitransport.OperationsDeps{
-			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
-		},
+func buildAICoreHTTPDeps(platform Deps, d AICoreHTTPDeps, identity aiIdentityProvider) aitransport.CoreHTTPDeps {
+	aiDeps := aitransport.CoreHTTPDeps{
+		TokenVerifier:              platform.JWT,
+		TokenRevocations:           platform.Blacklist,
+		BanChecker:                 d.BanChecker,
+		PlatformPriceBooks:         d.PlatformPriceBooks,
+		PriceBookSync:              d.PriceBookSync,
+		LimitPolicies:              d.LimitPolicies,
+		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 	}
 	if identity != nil {
 		aiDeps.IdentityProvider = identity

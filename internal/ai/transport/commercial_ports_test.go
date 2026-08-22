@@ -163,7 +163,7 @@ func TestCommercialRoutesUseSeparatedPorts(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	registerGroups(api, d)
 	limitRouter, limitAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerLimits(limitAPI, AIDeps{CatalogDeps: CatalogDeps{LimitPolicies: limitPolicies}})
+	registerLimits(limitAPI, CoreHTTPDeps{LimitPolicies: limitPolicies})
 	handler := withCommercialClaims(router, &auth.Claims{TenantID: "tenant-1", UserID: "admin-1"})
 	limitHandler := withCommercialClaims(limitRouter, &auth.Claims{TenantID: "tenant-1", UserID: "admin-1"})
 

@@ -229,7 +229,7 @@ func TestUsageRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	}
 
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	for _, path := range paths {
 		recorder := performUsageRequest(coreRouter, path)
 		if recorder.Code != http.StatusNotFound {

@@ -86,7 +86,7 @@ func TestAuditRouteRequiresAdminAuditLogReader(t *testing.T) {
 
 func TestAuditLogRouteRegistersIndependentlyFromCoreAI(t *testing.T) {
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	coreRequest := httptest.NewRequest(http.MethodGet, "/api/v1/audit-logs", nil)
 	coreRecorder := httptest.NewRecorder()
 	coreRouter.ServeHTTP(coreRecorder, coreRequest)

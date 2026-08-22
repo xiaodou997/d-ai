@@ -22,15 +22,6 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// IdentityDeps contains authentication and identity-enrichment collaborators
-// used by the remaining AI core routes.
-type IdentityDeps struct {
-	IdentityProvider IdentityProvider
-	TokenVerifier    TokenVerifier
-	TokenRevocations TokenRevocationChecker
-	BanChecker       HumaBanChecker
-}
-
 // APIKeyReader exposes only non-secret API key summaries. Ownership checks use
 // the same scoped lists so callers cannot probe keys outside their tenant/user.
 type APIKeyReader interface {
@@ -108,15 +99,6 @@ type OAuthCredentialWriter interface {
 	UpdateStatus(ctx context.Context, credID string, status string) error
 	UpdateWeight(ctx context.Context, credID string, weight int) error
 	Delete(ctx context.Context, credID string) error
-}
-
-// CatalogDeps contains only the pricing and limit collaborators still used by
-// the remaining AI core routes. Tenant/user catalog and commercial controls
-// are registered through their own HTTP modules.
-type CatalogDeps struct {
-	PlatformPriceBooks PlatformPriceBookManager
-	PriceBookSync      PriceBookSyncManager
-	LimitPolicies      CommercialLimitPolicyManager
 }
 
 // UpstreamAccessManager is the tenant policy surface required by management
@@ -340,30 +322,30 @@ type ProviderSecretCodec interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
-// OperationsDeps contains the fail-open identity-enrichment observer used by
-// the remaining AI core routes.
-type OperationsDeps struct {
-	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
-}
-
 // IdentityEnrichmentFailureObserver records fail-open identity lookup errors
 // without coupling transport to a logging implementation or field type.
 type IdentityEnrichmentFailureObserver interface {
 	ObserveFailure(kind string, err error)
 }
 
-// AIDeps groups the explicit dependencies required by the remaining AI core
-// HTTP registration. Vertically extracted modules use narrower dependency
-// bundles and register independently.
-type AIDeps struct {
-	IdentityDeps
-	CatalogDeps
-	OperationsDeps
+// CoreHTTPDeps is the complete dependency boundary for the remaining AI core
+// routes: platform price-book management and tenant limit-policy management.
+// All tenant/user catalog, API-key, usage and workspace routes are registered
+// by separate vertical modules.
+type CoreHTTPDeps struct {
+	IdentityProvider           IdentityProvider
+	TokenVerifier              TokenVerifier
+	TokenRevocations           TokenRevocationChecker
+	BanChecker                 HumaBanChecker
+	PlatformPriceBooks         PlatformPriceBookManager
+	PriceBookSync              PriceBookSyncManager
+	LimitPolicies              CommercialLimitPolicyManager
+	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 }
 
 // RegisterAICore registers the shared AI control-plane routes that remain in
 // the core module. Vertically extracted modules register separately.
-func RegisterAICore(api huma.API, d AIDeps) {
+func RegisterAICore(api huma.API, d CoreHTTPDeps) {
 	auth := httpAuthDepsFromAI(d)
 	management := huma.NewGroup(api)
 	management.UseMiddleware(platformUserAuth(api, auth))
@@ -371,7 +353,7 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	registerLimits(management, d)
 }
 
-func httpAuthDepsFromAI(d AIDeps) HTTPAuthDeps {
+func httpAuthDepsFromAI(d CoreHTTPDeps) HTTPAuthDeps {
 	return HTTPAuthDeps{
 		TokenVerifier:    d.TokenVerifier,
 		TokenRevocations: d.TokenRevocations,

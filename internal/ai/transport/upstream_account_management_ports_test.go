@@ -23,7 +23,7 @@ func TestUpstreamAccountManagementRoutesRegisterIndependentlyFromCoreAI(t *testi
 	}
 
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	for _, route := range routes {
 		recorder := performUpstreamAccountRequest(coreRouter, route.method, route.path, "")
 		if recorder.Code != http.StatusNotFound {

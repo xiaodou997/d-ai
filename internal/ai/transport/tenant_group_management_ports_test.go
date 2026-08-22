@@ -41,7 +41,7 @@ func TestTenantGroupManagementRoutesRegisterIndependentlyFromCoreAI(t *testing.T
 	}
 
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	for _, route := range routes {
 		recorder := performTenantGroupManagementRequest(coreRouter, route.method, route.path)
 		if recorder.Code != http.StatusNotFound {

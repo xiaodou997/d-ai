@@ -18,7 +18,7 @@ func TestTenantSelfReadRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	}
 
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})
-	RegisterAICore(coreAPI, AIDeps{})
+	RegisterAICore(coreAPI, CoreHTTPDeps{})
 	for _, path := range routes {
 		recorder := performTenantSelfReadRequest(coreRouter, path)
 		if recorder.Code != http.StatusNotFound {

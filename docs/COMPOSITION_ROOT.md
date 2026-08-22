@@ -22,8 +22,7 @@ httpServers.Start / Shutdown
 - `shutdownStack` 记录已成功构造的资源，按构造逆序关闭，并且重复调用安全；因此部分启动失败也会释放已经拿到的基础设施。
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
-- `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、catalog、operations
-  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 已脱离该容器，由独立模块依赖注册。
+- `transport.Deps` 与 AI Core `CoreHTTPDeps` 已按职责收敛；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 已脱离 Core，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
@@ -33,8 +32,8 @@ httpServers.Start / Shutdown
 
 ## 尚未清零的装配遗留
 
-- `transport.Deps` 仍有具体 PostgreSQL/Redis/业务 service，AI core `AIDeps` 虽已接口化但仍是 service locator；账号管理、Provider 密钥、模型绑定、价格簿校验等管理依赖已移出，P1-02 后续会按垂直模块模式继续拆分剩余端点组。
-- AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `AIDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
+- `transport.Deps` 仍有具体 PostgreSQL/Redis/业务 service；AI Core 已收敛为 `CoreHTTPDeps` 窄端口，账号管理、Provider 密钥、模型绑定、价格簿校验等管理依赖已移出，后续转向 Transport 业务逻辑和平台根容器治理。
+- AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `CoreHTTPDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用查询端口，具体 `DashboardService` 只在 composition root 构造。
 - 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。
 - OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Serving 和后台刷新器仍由 composition root/运行时持有。
@@ -75,7 +74,7 @@ httpServers.Start / Shutdown
 - 商业控制面通过 `CommercialGroupCatalog`、`CommercialGroupManager`、`CommercialDispatchRuleManager`、`CommercialGroupTargetManager`、`CommercialUserBindingManager`、`CommercialLimitPolicyManager` 六组端口进入 AI Transport；具体 `commercial.Service` 只在 composition root 构造并按能力注入，Serving 运行时仍独立持有其解析能力。
 - API Key 控制面通过 `APIKeyReader`、`APIKeyWriter`、`APIKeyLifecycleManager`、`APIKeySecretManager` 四组端口进入 AI Transport；具体 `identitycontrol.Service` 只在 composition root 构造并按能力注入，已有密钥的明文回显与轮换被隔离在敏感密钥端口，新建端口只返回本次生成的明文。
 - AI 工作台通过 `OverviewReader`、`ChatModelReader`、`ChatSessionReader`、`ChatSessionManager`、`ChatMessageManager`、`ImageJobReader` 六组共享端口进入 Huma Transport 和 Console；具体 `workspace.Service` 只在 composition root 构造并按入口所需能力注入。
-- 订阅控制面通过独立 `SubscriptionHTTPDeps` 组合 `SubscriptionPlanCatalog`、`SubscriptionPlanManager`、`SubscriptionPurchaser`、`SubscriptionReader`、`SubscriptionOrderReader`、`SubscriptionGroupNameResolver` 六组端口，并由 `RegisterSubscriptions` 自行注册租户/终端用户认证分组；AI core `AIDeps` 不再接收这些能力。Serving 继续使用独立准入/扣费端口，具体 `subscription.Service` 只在 composition root 构造并按能力注入。
+- 订阅控制面通过独立 `SubscriptionHTTPDeps` 组合 `SubscriptionPlanCatalog`、`SubscriptionPlanManager`、`SubscriptionPurchaser`、`SubscriptionReader`、`SubscriptionOrderReader`、`SubscriptionGroupNameResolver` 六组端口，并由 `RegisterSubscriptions` 自行注册租户/终端用户认证分组；AI Core `CoreHTTPDeps` 不再接收这些能力。Serving 继续使用独立准入/扣费端口，具体 `subscription.Service` 只在 composition root 构造并按能力注入。
 - PostgreSQL adapter 通过统一 DBTX/pool/transaction 包装器将缺失行与已知约束错误翻译为领域错误；AI Transport 的错误映射不再依赖 `pgx.ErrNoRows` 或 `pgconn.PgError`，未知数据库和连接错误仍按内部错误处理。
 - AI Transport 的 UUID 输入使用通用值类型校验，nullable/numeric/time 转换已由领域投影或标准值承担；该包已清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接 import，对应依赖例外已删除。
 - 租户上游访问策略通过 `UpstreamAccessManager` 最小端口进入 AI Transport；具体 `upstreamaccess.Service` 只在 composition root 构造，顶层 Transport 的兼容装配也仅转发该端口。
@@ -84,9 +83,9 @@ httpServers.Start / Shutdown
 - 管理端、租户端和工作区仪表盘查询统一通过 `DashboardQueryReader` 进入 AI Transport；具体 `observabilitycontrol.DashboardService` 只在 composition root 构造并注入该读端口。
 - 管理端、租户端、用户端和工作区用量查询统一通过 `UsageQueryReader` 进入 AI Transport，受限用户日志保留独立 `UserUsageLogReader`；具体 `observabilitycontrol.UsageService` 只在 composition root 构造并分别注入两个读端口。
 - 风控管理路由分别通过 `RiskControlConfigStore`、`RiskControlDetector`、`RiskControlLogReader` 和 `RiskEventManager` 进入 AI Transport；具体 config/log/event service 与 checker 只在 composition root 构造，serving/worker 继续复用 checker。
-- 风控 HTTP 已由独立 `RiskControlHTTPDeps` 组合四组业务端口、`HTTPAuthDeps` 和 `ProviderSecretCodec`，并通过 `RegisterRiskControl` 注册平台管理员认证分组；AI core `AIDeps` 不再接收或注册风控能力。
-- 管理审计读取 HTTP 已由独立 `AuditLogHTTPDeps` 组合 `AdminAuditLogReader` 和 `HTTPAuthDeps`，并通过 `RegisterAuditLog` 注册平台管理员认证分组；AI core `AIDeps` 不再接收或注册读取端口，迁移写入继续使用核心的 `AdminAuditRecorder`。
-- 系统状态与路由权重 HTTP 已由独立 `SystemHTTPDeps` 组合 `HealthTracker`、`ComponentHealthProbe`、`ScoreWeightsStore` 和 `HTTPAuthDeps`，并通过 `RegisterSystem` 注册平台管理员认证分组；AI core `AIDeps` 不再接收或注册系统端点。
+- 风控 HTTP 已由独立 `RiskControlHTTPDeps` 组合四组业务端口、`HTTPAuthDeps` 和 `ProviderSecretCodec`，并通过 `RegisterRiskControl` 注册平台管理员认证分组；AI Core `CoreHTTPDeps` 不再接收或注册风控能力。
+- 管理审计读取 HTTP 已由独立 `AuditLogHTTPDeps` 组合 `AdminAuditLogReader` 和 `HTTPAuthDeps`，并通过 `RegisterAuditLog` 注册平台管理员认证分组；AI Core `CoreHTTPDeps` 不再接收或注册读取端口，迁移写入继续使用独立模块的 `AdminAuditRecorder`。
+- 系统状态与路由权重 HTTP 已由独立 `SystemHTTPDeps` 组合 `HealthTracker`、`ComponentHealthProbe`、`ScoreWeightsStore` 和 `HTTPAuthDeps`，并通过 `RegisterSystem` 注册平台管理员认证分组；AI Core `CoreHTTPDeps` 不再接收或注册系统端点。
 - 管理仪表盘 HTTP 已由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份补全端口和 `HTTPAuthDeps`，并通过 `RegisterDashboard` 注册平台管理员认证分组；租户自助和工作区端点由各自模块显式复用共享查询端口。
 - 管理用量 HTTP 已由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份补全端口和 `HTTPAuthDeps`，并通过 `RegisterUsage` 注册平台管理员认证分组；租户、用户和工作区端点由各自模块显式复用共享查询端口。
 - OAuth pool/credential HTTP 已由独立 `OAuthManagementHTTPDeps` 组合池/凭证读写、健康、刷新、目录和绑定端口，并通过 `RegisterOAuthManagement` 注册平台管理员认证分组；Core 不再注册 OAuth pool/credential 管理路径。

@@ -188,7 +188,7 @@ func TestPlatformPriceBookRoutesUseManagementAndSyncPorts(t *testing.T) {
 	}}}
 	syncer := &priceBookSyncManagerStub{models: []billingcontrol.LiteLLMModelInfo{{ModelCode: "gpt-test", CapabilityType: "chat"}}}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	registerPriceBooks(api, AIDeps{CatalogDeps: CatalogDeps{PlatformPriceBooks: manager, PriceBookSync: syncer}})
+	registerPriceBooks(api, CoreHTTPDeps{PlatformPriceBooks: manager, PriceBookSync: syncer})
 
 	listRecorder := performPriceBookRequest(router, http.MethodGet, "/api/v1/price-books", "")
 	requirePriceBookStatus(t, listRecorder, http.StatusOK)
@@ -258,12 +258,12 @@ func TestTenantPriceBookRoutesUseAuthenticatedTenantAcrossPorts(t *testing.T) {
 
 func TestPriceBookRoutesRequireTheirOwnPorts(t *testing.T) {
 	managerOnlyRouter, managerOnlyAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerPriceBooks(managerOnlyAPI, AIDeps{CatalogDeps: CatalogDeps{PlatformPriceBooks: &platformPriceBookManagerStub{}}})
+	registerPriceBooks(managerOnlyAPI, CoreHTTPDeps{PlatformPriceBooks: &platformPriceBookManagerStub{}})
 	requirePriceBookStatus(t, performPriceBookRequest(managerOnlyRouter, http.MethodGet, "/api/v1/price-books", ""), http.StatusOK)
 	requirePriceBookStatus(t, performPriceBookRequest(managerOnlyRouter, http.MethodGet, "/api/v1/price-books/litellm/models", ""), http.StatusServiceUnavailable)
 
 	syncOnlyRouter, syncOnlyAPI := server.New(server.Options{Title: "test", Version: "test"})
-	registerPriceBooks(syncOnlyAPI, AIDeps{CatalogDeps: CatalogDeps{PriceBookSync: &priceBookSyncManagerStub{}}})
+	registerPriceBooks(syncOnlyAPI, CoreHTTPDeps{PriceBookSync: &priceBookSyncManagerStub{}})
 	requirePriceBookStatus(t, performPriceBookRequest(syncOnlyRouter, http.MethodGet, "/api/v1/price-books", ""), http.StatusServiceUnavailable)
 	requirePriceBookStatus(t, performPriceBookRequest(syncOnlyRouter, http.MethodGet, "/api/v1/price-books/litellm/models", ""), http.StatusOK)
 

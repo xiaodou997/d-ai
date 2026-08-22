@@ -95,7 +95,7 @@ func buildIdentityIncludedForDashboardTenants(ctx context.Context, provider Iden
 	return buildIdentityIncluded(ctx, provider, observer, nil, tenantIDs)
 }
 
-func buildIdentityIncludedForLimitPolicies(ctx context.Context, d AIDeps, policies []commercial.LimitPolicy) IdentityIncludedDTO {
+func buildIdentityIncludedForLimitPolicies(ctx context.Context, d CoreHTTPDeps, policies []commercial.LimitPolicy) IdentityIncludedDTO {
 	tenantIDs := make([]string, 0, len(policies))
 	seenTenants := make(map[string]struct{}, len(policies))
 	for _, policy := range policies {

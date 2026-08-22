@@ -69,7 +69,7 @@ func limitPolicyWriteFromRequest(req limitPolicyWriteRequest) commercial.LimitPo
 	}
 }
 
-func registerLimits(api huma.API, d AIDeps) {
+func registerLimits(api huma.API, d CoreHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-runtime-limit-policies",
 		Method:      http.MethodGet,

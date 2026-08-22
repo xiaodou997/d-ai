@@ -130,7 +130,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-02 拆分 composition root 和巨型依赖容器
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
-- [~] 删除包含几十个字段的 `transport.Deps` / `AIDeps` service locator；平台与 AI 容器已分离并按域分组，具体端口和容器本身仍待拆除。
+- [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
@@ -149,9 +149,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] API Key 按安全摘要查询、创建更新、状态/删除生命周期和敏感密钥回显/轮换拆成四组端口；平台、租户、用户自助与限额路由按需组合能力，AI/顶层 Transport 不再暴露具体 `*identitycontrol.Service`。
 - [x] AI 工作台按概览、模型目录、会话查询、会话管理、运行时消息持久化和图片任务查询拆成六组共享端口；Huma Transport、Console 和顶层装配不再暴露具体 `*workspace.Service`。
 - [x] 订阅控制面按套餐查询、套餐管理、购买事务、订阅查询、订单查询和分组名称解析拆成六组端口；Serving 继续使用独立准入/扣费热路径端口，AI/顶层 Transport 不再暴露具体 `*subscription.Service`。
-- [x] 订阅 HTTP 路由提取为独立 `SubscriptionHTTPDeps` / `RegisterSubscriptions` 纵向模块；通用 `AIDeps` 与 `RegisterAICore` 不再持有或注册订阅能力，认证和身份补全也只接收模块显式依赖。
-- [x] 风控管理路由提取为独立 `RiskControlHTTPDeps` / `RegisterRiskControl` 纵向模块；四组业务端口脱离通用 `AIDeps`，平台管理员认证和风控所需 `ProviderSecretCodec` 改为模块显式注入，Serving/worker 继续复用原实现。
-- [x] 管理审计日志读取提取为独立 `AuditLogHTTPDeps` / `RegisterAuditLog` 纵向模块；只读查询从通用 `AIDeps` 移出，跨域迁移仍通过核心保留的 `AdminAuditRecorder` 写入。
+- [x] 订阅 HTTP 路由提取为独立 `SubscriptionHTTPDeps` / `RegisterSubscriptions` 纵向模块；`CoreHTTPDeps` 与 `RegisterAICore` 不再持有或注册订阅能力，认证和身份补全也只接收模块显式依赖。
+- [x] 风控管理路由提取为独立 `RiskControlHTTPDeps` / `RegisterRiskControl` 纵向模块；四组业务端口脱离 `CoreHTTPDeps`，平台管理员认证和风控所需 `ProviderSecretCodec` 改为模块显式注入，Serving/worker 继续复用原实现。
+- [x] 管理审计日志读取提取为独立 `AuditLogHTTPDeps` / `RegisterAuditLog` 纵向模块；只读查询从 `CoreHTTPDeps` 移出，跨域迁移仍通过独立模块保留的 `AdminAuditRecorder` 写入。
 - [x] 系统状态与路由权重提取为独立 `SystemHTTPDeps` / `RegisterSystem` 纵向模块；`HealthTracker`、`ComponentHealthProbe` 和 `ScoreWeightsStore` 从 Core 运行时依赖组移出，平台管理员认证在模块内完成。
 - [x] 管理端仪表盘四个查询端点提取为独立 `DashboardHTTPDeps` / `RegisterDashboard` 纵向模块；管理端身份补全能力单独装配，租户自助和工作区读取随后由各自模块组合查询端口。
 - [x] 管理端用量查询七个端点提取为独立 `UsageHTTPDeps` / `RegisterUsage` 纵向模块；管理日志与用户排行的身份补全能力单独装配，租户自助和工作区读取随后由各自模块组合查询端口。
@@ -425,7 +425,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 本次变更：新增 `aiModules`，集中装配 AI 控制面、Serving pipeline、Gateway、Console、文件/图片服务和异步任务；`run` 仅保留组合顺序、HTTP 注册和健康检查。
 - 生命周期：价格同步、风险审查、审计、OAuth Token refresh、结算 Outbox 和异步任务由 `aiModules.Start/Stop` 统一启动与关闭，根 context 取消仍负责无独立 Stop 的 worker。
-- 依赖边界：平台 `transport.Deps` 与 AI `transport.AIDeps` 分离，新增 `transport.Module` 并由 AI 模块独立注册路由。
+- 依赖边界：平台 `transport.Deps` 与 AI `AICoreHTTPDeps` 分离，新增 `transport.Module` 并由 AI 模块独立注册路由；AI Transport Core 使用 `CoreHTTPDeps`，垂直模块各自持有窄依赖。
 - 端口收敛：AI 系统端点改用 `ScoreWeightsStore` 最小接口，评分权重 PostgreSQL adapter 留在 composition root。
 - 端口收敛：AI 认证端点改用 `HumaBanChecker`，Ban 状态 Redis adapter 留在 composition root。
 - 端口收敛：OAuth 凭证管理端点改用 `OAuthTokenRefresher`，不再暴露后台刷新器具体类型。
@@ -482,5 +482,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
 - 风控 HTTP 模块：`RiskControlHTTPDeps` 独立组合四组业务端口、`HTTPAuthDeps` 与 `ProviderSecretCodec`；`RegisterRiskControl` 自行注册平台管理员认证分组。契约测试确认 core 不注册风控路径、独立模块执行认证，配置更新路由只把明文 API key 交给 codec 并向存储端传递密文。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
-- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取、workspace、用户自助控制和用户自助读取路由已脱离 `AIDeps`，剩余 AI core 主要是平台价格/限额和少量身份补全观察端口；顶层平台 `OperationsDeps` 仍保留部分具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 收敛平台价格/限额 Core 的窄依赖，并继续清理 `AIDeps` 兼容容器。
+- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取、workspace、用户自助控制和用户自助读取路由均已脱离 `CoreHTTPDeps`，AI Core 只保留平台价格/限额端口；顶层平台 `transport.Deps` 仍保留部分具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-03 收敛 Transport 层权限、事务、状态机和数据库查询逻辑，并继续治理平台根容器。
