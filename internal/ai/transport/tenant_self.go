@@ -4,10 +4,9 @@ package transport
 // for dashboard and usage. API-key and limit-policy controls live in
 // TenantSelfControlHTTPDeps. Every handler derives the tenant scope from JWT claims
 // (tenantIDFromContext) — never from a path/query param — so a tenant can only
-// ever read/write its own resources. These mirror the role-dispatching console
-// envelope routes (handleTenantModelGrantsSelf, handleTenantsMeAPIKeys*,
-// handleTenantsMeUserSellBinding*, handleTenantListUsageLogs, the tenant branch
-// of dashboard summary) but speak the flat Huma contract.
+// ever read its own resources. These mirror the tenant branches of the
+// role-dispatching console dashboard and usage envelope routes while speaking
+// the flat Huma contract.
 
 import (
 	"context"
@@ -79,7 +78,7 @@ type tenantSelfUsageSummaryInput struct {
 
 // registerTenantSelf mounts the tenant self-service read endpoints under the
 // tenant auth group (tenantUserAuth → userType=3).
-func registerTenantSelf(api huma.API, d AIDeps) {
+func registerTenantSelf(api huma.API, d TenantSelfReadHTTPDeps) {
 	registerTenantSelfDashboard(api, d)
 	registerTenantSelfUsage(api, d)
 }
@@ -290,7 +289,7 @@ func registerTenantSelfAPIKeyWrites(api huma.API, d TenantSelfControlHTTPDeps) {
 // dashboard endpoints under management cannot be reused by userType=3.
 // ---------------------------------------------------------------------------
 
-func registerTenantSelfDashboard(api huma.API, d AIDeps) {
+func registerTenantSelfDashboard(api huma.API, d TenantSelfReadHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-tenant-self-dashboard-summary",
 		Method:      http.MethodGet,
@@ -397,7 +396,7 @@ func registerTenantSelfDashboard(api huma.API, d AIDeps) {
 // console handleUsageLogsByRole / handleAdminListUsageSummary.
 // ---------------------------------------------------------------------------
 
-func registerTenantSelfUsage(api huma.API, d AIDeps) {
+func registerTenantSelfUsage(api huma.API, d TenantSelfReadHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-tenant-self-usage-logs",
 		Method:      http.MethodGet,

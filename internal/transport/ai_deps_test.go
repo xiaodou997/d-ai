@@ -65,16 +65,11 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
 		AIDeps{
 			AIIdentityDeps: AIIdentityDeps{
-				BanChecker:        banChecker,
-				APIKeys:           apiKeyPorts,
-				APIKeyWriter:      apiKeyPorts,
-				APIKeyLifecycle:   apiKeyPorts,
-				APIKeySecrets:     apiKeyPorts,
-				WorkspaceOverview: workspacePorts,
-				WorkspaceModels:   workspacePorts,
-				WorkspaceSessions: workspacePorts,
-				WorkspaceManager:  workspacePorts,
-				WorkspaceImages:   workspacePorts,
+				BanChecker:      banChecker,
+				APIKeys:         apiKeyPorts,
+				APIKeyWriter:    apiKeyPorts,
+				APIKeyLifecycle: apiKeyPorts,
+				APIKeySecrets:   apiKeyPorts,
 			},
 			AICatalogDeps: AICatalogDeps{
 				ModelCatalog:       modelCatalog,
@@ -93,7 +88,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
 				UserUsageLogs:              userUsageLogs,
 				UsageQueries:               usageQueries,
-				DashboardQueries:           dashboardQueries,
 				AdminAudit:                 adminAudit,
 			},
 		},
@@ -102,9 +96,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 
 	if got.APIKeys != apiKeyPorts || got.APIKeyWriter != apiKeyPorts || got.APIKeyLifecycle != apiKeyPorts || got.APIKeySecrets != apiKeyPorts {
 		t.Fatal("API key capability ports were not preserved")
-	}
-	if got.WorkspaceOverview != workspacePorts || got.WorkspaceModels != workspacePorts || got.WorkspaceSessions != workspacePorts || got.WorkspaceManager != workspacePorts || got.WorkspaceImages != workspacePorts {
-		t.Fatal("workspace capability ports were not preserved")
 	}
 	if got.ModelCatalog != modelCatalog {
 		t.Fatal("catalog dependencies were not preserved")
@@ -126,9 +117,6 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 	if got.UsageQueries != usageQueries {
 		t.Fatal("usage query reader was not preserved")
-	}
-	if got.DashboardQueries != dashboardQueries {
-		t.Fatal("dashboard query reader was not preserved")
 	}
 	if got.AdminAudit != adminAudit {
 		t.Fatal("admin audit recorder was not preserved")
@@ -394,6 +382,31 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	)
 	if apiKeyManagement.Auth.TokenVerifier != jwt || apiKeyManagement.Auth.TokenRevocations != blacklist || apiKeyManagement.Auth.BanChecker != banChecker || apiKeyManagement.APIKeys != apiKeyPorts || apiKeyManagement.APIKeyWriter != apiKeyPorts || apiKeyManagement.APIKeyLifecycle != apiKeyPorts || apiKeyManagement.APIKeySecrets != apiKeyPorts || apiKeyManagement.Groups != commercialPorts || apiKeyManagement.LimitPolicies != commercialPorts {
 		t.Fatal("API-key management dependencies were not preserved")
+	}
+
+	tenantSelfRead := buildTenantSelfReadHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AITenantSelfReadHTTPDeps{DashboardQueries: dashboardQueries, UsageQueries: usageQueries, BanChecker: banChecker},
+	)
+	if tenantSelfRead.Auth.TokenVerifier != jwt || tenantSelfRead.Auth.TokenRevocations != blacklist || tenantSelfRead.Auth.BanChecker != banChecker || tenantSelfRead.DashboardQueries != dashboardQueries || tenantSelfRead.UsageQueries != usageQueries {
+		t.Fatal("tenant self-read dependencies were not preserved")
+	}
+
+	workspaceHTTP := buildWorkspaceHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIWorkspaceHTTPDeps{
+			WorkspaceOverview: workspacePorts,
+			WorkspaceModels:   workspacePorts,
+			WorkspaceSessions: workspacePorts,
+			WorkspaceManager:  workspacePorts,
+			WorkspaceImages:   workspacePorts,
+			DashboardQueries:  dashboardQueries,
+			UsageQueries:      usageQueries,
+			BanChecker:        banChecker,
+		},
+	)
+	if workspaceHTTP.TenantAuth.TokenVerifier != jwt || workspaceHTTP.UserAuth.TokenRevocations != blacklist || workspaceHTTP.TenantAuth.BanChecker != banChecker || workspaceHTTP.WorkspaceModels != workspacePorts || workspaceHTTP.WorkspaceSessions != workspacePorts || workspaceHTTP.WorkspaceManager != workspacePorts || workspaceHTTP.WorkspaceImages != workspacePorts || workspaceHTTP.DashboardQueries != dashboardQueries || workspaceHTTP.UsageQueries != usageQueries {
+		t.Fatal("workspace HTTP dependencies were not preserved")
 	}
 }
 

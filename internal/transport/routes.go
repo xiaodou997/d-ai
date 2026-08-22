@@ -74,18 +74,13 @@ type OperationsDeps struct {
 	DataCleanup   *cleanuppkg.Service
 }
 
-// AIIdentityDeps contains AI-side identity and workspace collaborators.
+// AIIdentityDeps contains AI-side authentication and API-key collaborators.
 type AIIdentityDeps struct {
-	BanChecker        aitransport.HumaBanChecker
-	APIKeys           aitransport.APIKeyReader
-	APIKeyWriter      aitransport.APIKeyWriter
-	APIKeyLifecycle   aitransport.APIKeyLifecycleManager
-	APIKeySecrets     aitransport.APIKeySecretManager
-	WorkspaceOverview workspace.OverviewReader
-	WorkspaceModels   workspace.ChatModelReader
-	WorkspaceSessions workspace.ChatSessionReader
-	WorkspaceManager  workspace.ChatSessionManager
-	WorkspaceImages   workspace.ImageJobReader
+	BanChecker      aitransport.HumaBanChecker
+	APIKeys         aitransport.APIKeyReader
+	APIKeyWriter    aitransport.APIKeyWriter
+	APIKeyLifecycle aitransport.APIKeyLifecycleManager
+	APIKeySecrets   aitransport.APIKeySecretManager
 }
 
 // AISubscriptionHTTPDeps contains the collaborators owned by the independently
@@ -116,9 +111,8 @@ type AICatalogDeps struct {
 	GroupTransfer      aitransport.GroupTransferManager
 }
 
-// AIOperationsDeps contains AI-side dashboard, usage, audit and enrichment collaborators.
+// AIOperationsDeps contains AI-side usage, audit and enrichment collaborators.
 type AIOperationsDeps struct {
-	DashboardQueries           aitransport.DashboardQueryReader
 	UsageQueries               aitransport.UsageQueryReader
 	UserUsageLogs              aitransport.UserUsageLogReader
 	AdminAudit                 aitransport.AdminAuditRecorder
@@ -253,6 +247,27 @@ type AIAPIKeyManagementHTTPDeps struct {
 	BanChecker      aitransport.HumaBanChecker
 }
 
+// AITenantSelfReadHTTPDeps contains the collaborators owned by the
+// independently registered tenant dashboard and usage read module.
+type AITenantSelfReadHTTPDeps struct {
+	DashboardQueries aitransport.DashboardQueryReader
+	UsageQueries     aitransport.UsageQueryReader
+	BanChecker       aitransport.HumaBanChecker
+}
+
+// AIWorkspaceHTTPDeps contains the collaborators owned by the independently
+// registered tenant and end-user workspace module.
+type AIWorkspaceHTTPDeps struct {
+	WorkspaceOverview workspace.OverviewReader
+	WorkspaceModels   workspace.ChatModelReader
+	WorkspaceSessions workspace.ChatSessionReader
+	WorkspaceManager  workspace.ChatSessionManager
+	WorkspaceImages   workspace.ImageJobReader
+	DashboardQueries  aitransport.DashboardQueryReader
+	UsageQueries      aitransport.UsageQueryReader
+	BanChecker        aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -302,6 +317,8 @@ type AIHTTPDeps struct {
 	TenantSelfControl   AITenantSelfControlHTTPDeps
 	TenantGroups        AITenantGroupManagementHTTPDeps
 	APIKeyManagement    AIAPIKeyManagementHTTPDeps
+	TenantSelfRead      AITenantSelfReadHTTPDeps
+	Workspace           AIWorkspaceHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -352,6 +369,8 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterTenantSelfControl(api, buildTenantSelfControlHTTPDeps(m.platform, m.deps.TenantSelfControl, identity))
 	aitransport.RegisterTenantGroupManagement(api, buildTenantGroupManagementHTTPDeps(m.platform, m.deps.TenantGroups, identity))
 	aitransport.RegisterAPIKeyManagement(api, buildAPIKeyManagementHTTPDeps(m.platform, m.deps.APIKeyManagement))
+	aitransport.RegisterTenantSelfRead(api, buildTenantSelfReadHTTPDeps(m.platform, m.deps.TenantSelfRead))
+	aitransport.RegisterWorkspace(api, buildWorkspaceHTTPDeps(m.platform, m.deps.Workspace))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -404,18 +423,13 @@ func registerPublicPlane(api huma.API, d Deps) {
 func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitransport.AIDeps {
 	aiDeps := aitransport.AIDeps{
 		IdentityDeps: aitransport.IdentityDeps{
-			TokenVerifier:     platform.JWT,
-			TokenRevocations:  platform.Blacklist,
-			BanChecker:        d.BanChecker,
-			APIKeys:           d.APIKeys,
-			APIKeyWriter:      d.APIKeyWriter,
-			APIKeyLifecycle:   d.APIKeyLifecycle,
-			APIKeySecrets:     d.APIKeySecrets,
-			WorkspaceOverview: d.WorkspaceOverview,
-			WorkspaceModels:   d.WorkspaceModels,
-			WorkspaceSessions: d.WorkspaceSessions,
-			WorkspaceManager:  d.WorkspaceManager,
-			WorkspaceImages:   d.WorkspaceImages,
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+			APIKeys:          d.APIKeys,
+			APIKeyWriter:     d.APIKeyWriter,
+			APIKeyLifecycle:  d.APIKeyLifecycle,
+			APIKeySecrets:    d.APIKeySecrets,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
 			ModelCatalog:       d.ModelCatalog,
@@ -431,7 +445,6 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			GroupTransfer:      d.GroupTransfer,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
-			DashboardQueries:           d.DashboardQueries,
 			UsageQueries:               d.UsageQueries,
 			UserUsageLogs:              d.UserUsageLogs,
 			AdminAudit:                 d.AdminAudit,
@@ -535,6 +548,37 @@ func buildAPIKeyManagementHTTPDeps(platform Deps, d AIAPIKeyManagementHTTPDeps) 
 		APIKeySecrets:   d.APIKeySecrets,
 		Groups:          d.Groups,
 		LimitPolicies:   d.LimitPolicies,
+	}
+}
+
+func buildTenantSelfReadHTTPDeps(platform Deps, d AITenantSelfReadHTTPDeps) aitransport.TenantSelfReadHTTPDeps {
+	return aitransport.TenantSelfReadHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		DashboardQueries: d.DashboardQueries,
+		UsageQueries:     d.UsageQueries,
+	}
+}
+
+func buildWorkspaceHTTPDeps(platform Deps, d AIWorkspaceHTTPDeps) aitransport.WorkspaceHTTPDeps {
+	auth := aitransport.HTTPAuthDeps{
+		TokenVerifier:    platform.JWT,
+		TokenRevocations: platform.Blacklist,
+		BanChecker:       d.BanChecker,
+	}
+	return aitransport.WorkspaceHTTPDeps{
+		TenantAuth:        auth,
+		UserAuth:          auth,
+		WorkspaceOverview: d.WorkspaceOverview,
+		WorkspaceModels:   d.WorkspaceModels,
+		WorkspaceSessions: d.WorkspaceSessions,
+		WorkspaceManager:  d.WorkspaceManager,
+		WorkspaceImages:   d.WorkspaceImages,
+		DashboardQueries:  d.DashboardQueries,
+		UsageQueries:      d.UsageQueries,
 	}
 }
 

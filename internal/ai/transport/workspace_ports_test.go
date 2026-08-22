@@ -109,15 +109,13 @@ func TestWorkspaceBuildersUseSeparatedCapabilityPorts(t *testing.T) {
 	manager := &workspaceSessionManagerStub{session: workspace.ChatSession{ID: "session-created"}}
 	images := &workspaceImageReaderStub{jobs: []workspace.ImageJob{{ID: "job-1"}}}
 	usage := &usageQueryReaderStub{}
-	d := AIDeps{
-		IdentityDeps: IdentityDeps{
-			WorkspaceOverview: overview,
-			WorkspaceModels:   models,
-			WorkspaceSessions: sessions,
-			WorkspaceManager:  manager,
-			WorkspaceImages:   images,
-		},
-		OperationsDeps: OperationsDeps{UsageQueries: usage},
+	d := WorkspaceHTTPDeps{
+		WorkspaceOverview: overview,
+		WorkspaceModels:   models,
+		WorkspaceSessions: sessions,
+		WorkspaceManager:  manager,
+		WorkspaceImages:   images,
+		UsageQueries:      usage,
 	}
 
 	if _, err := buildUserWorkspaceOverview(ctx, d, &workspaceOverviewInput{LogLimit: 10, ItemLimit: 5}); err != nil {
@@ -159,7 +157,7 @@ func TestWorkspaceBuildersUseSeparatedCapabilityPorts(t *testing.T) {
 
 func TestWorkspaceModelPortDoesNotEnableSessionQueries(t *testing.T) {
 	ctx := context.WithValue(t.Context(), authClaimsContextKey{}, &auth.Claims{TenantID: "tenant-1", UserID: "user-1"})
-	d := AIDeps{IdentityDeps: IdentityDeps{WorkspaceModels: &workspaceModelReaderStub{}}}
+	d := WorkspaceHTTPDeps{WorkspaceModels: &workspaceModelReaderStub{}}
 	if _, err := buildWorkspaceChatModels(ctx, d, identity.ScopeUser); err != nil {
 		t.Fatalf("model-only query: %v", err)
 	}

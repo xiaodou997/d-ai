@@ -183,7 +183,7 @@ type workspaceDeleteOutput struct {
 	}
 }
 
-func registerTenantSelfWorkspace(api huma.API, d AIDeps) {
+func registerTenantSelfWorkspace(api huma.API, d WorkspaceHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-tenant-self-workspace-overview",
 		Method:      http.MethodGet,
@@ -197,7 +197,7 @@ func registerTenantSelfWorkspace(api huma.API, d AIDeps) {
 	registerScopedWorkspaceResourceReads(api, d, identity.ScopeTenant, "/api/v1/tenants/me/workspace", "租户工作台")
 }
 
-func registerUserSelfWorkspace(api huma.API, d AIDeps) {
+func registerUserSelfWorkspace(api huma.API, d WorkspaceHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-user-self-workspace-overview",
 		Method:      http.MethodGet,
@@ -211,7 +211,7 @@ func registerUserSelfWorkspace(api huma.API, d AIDeps) {
 	registerScopedWorkspaceResourceReads(api, d, identity.ScopeUser, "/api/v1/users/me/workspace", "用户工作台")
 }
 
-func registerScopedWorkspaceResourceReads(api huma.API, d AIDeps, scope identity.Scope, pathBase string, summaryPrefix string) {
+func registerScopedWorkspaceResourceReads(api huma.API, d WorkspaceHTTPDeps, scope identity.Scope, pathBase string, summaryPrefix string) {
 	huma.Register(api, huma.Operation{
 		OperationID: pathBaseToOperationID(pathBase + "/chat/models"),
 		Method:      http.MethodGet,
@@ -280,7 +280,7 @@ func registerScopedWorkspaceResourceReads(api huma.API, d AIDeps, scope identity
 	})
 }
 
-func buildTenantWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOverviewInput) (*tenantWorkspaceOverviewOutput, error) {
+func buildTenantWorkspaceOverview(ctx context.Context, d WorkspaceHTTPDeps, in *workspaceOverviewInput) (*tenantWorkspaceOverviewOutput, error) {
 	if d.DashboardQueries == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("dashboard service is not configured")
 	}
@@ -307,7 +307,7 @@ func buildTenantWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOv
 	})
 }
 
-func buildUserWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOverviewInput) (*userWorkspaceOverviewOutput, error) {
+func buildUserWorkspaceOverview(ctx context.Context, d WorkspaceHTTPDeps, in *workspaceOverviewInput) (*userWorkspaceOverviewOutput, error) {
 	owner, err := workspaceOwnerFromContext(ctx, identity.ScopeUser)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func buildUserWorkspaceOverview(ctx context.Context, d AIDeps, in *workspaceOver
 	})
 }
 
-func buildWorkspaceOverview[T any](ctx context.Context, d AIDeps, owner workspace.Owner, in *workspaceOverviewInput, render func([]domain.UsageLog, workspaceUsageSummaryDTO, []workspace.ChatSession, []workspace.ImageJob) *T) (*T, error) {
+func buildWorkspaceOverview[T any](ctx context.Context, d WorkspaceHTTPDeps, owner workspace.Owner, in *workspaceOverviewInput, render func([]domain.UsageLog, workspaceUsageSummaryDTO, []workspace.ChatSession, []workspace.ImageJob) *T) (*T, error) {
 	if d.WorkspaceOverview == nil || d.UsageQueries == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace dependencies are not configured")
 	}
@@ -355,7 +355,7 @@ func buildWorkspaceOverview[T any](ctx context.Context, d AIDeps, owner workspac
 	return out, nil
 }
 
-func buildWorkspaceChatModels(ctx context.Context, d AIDeps, scope identity.Scope) (*workspaceChatModelsOutput, error) {
+func buildWorkspaceChatModels(ctx context.Context, d WorkspaceHTTPDeps, scope identity.Scope) (*workspaceChatModelsOutput, error) {
 	if d.WorkspaceModels == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
@@ -376,7 +376,7 @@ func buildWorkspaceChatModels(ctx context.Context, d AIDeps, scope identity.Scop
 	return out, nil
 }
 
-func buildWorkspaceChatSessions(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceItemsInput) (*workspaceChatSessionsOutput, error) {
+func buildWorkspaceChatSessions(ctx context.Context, d WorkspaceHTTPDeps, scope identity.Scope, in *workspaceItemsInput) (*workspaceChatSessionsOutput, error) {
 	if d.WorkspaceSessions == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
@@ -401,7 +401,7 @@ func buildWorkspaceChatSessions(ctx context.Context, d AIDeps, scope identity.Sc
 	return out, nil
 }
 
-func buildWorkspaceChatSessionDetail(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceSessionDetailInput) (*workspaceChatSessionDetailOutput, error) {
+func buildWorkspaceChatSessionDetail(ctx context.Context, d WorkspaceHTTPDeps, scope identity.Scope, in *workspaceSessionDetailInput) (*workspaceChatSessionDetailOutput, error) {
 	if d.WorkspaceSessions == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
@@ -427,7 +427,7 @@ func buildWorkspaceChatSessionDetail(ctx context.Context, d AIDeps, scope identi
 	return out, nil
 }
 
-func buildWorkspaceChatSessionCreate(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceChatSessionCreateInput) (*workspaceChatSessionOutput, error) {
+func buildWorkspaceChatSessionCreate(ctx context.Context, d WorkspaceHTTPDeps, scope identity.Scope, in *workspaceChatSessionCreateInput) (*workspaceChatSessionOutput, error) {
 	if d.WorkspaceManager == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
@@ -448,7 +448,7 @@ func buildWorkspaceChatSessionCreate(ctx context.Context, d AIDeps, scope identi
 	return out, nil
 }
 
-func buildWorkspaceChatSessionDelete(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceSessionDetailInput) (*workspaceDeleteOutput, error) {
+func buildWorkspaceChatSessionDelete(ctx context.Context, d WorkspaceHTTPDeps, scope identity.Scope, in *workspaceSessionDetailInput) (*workspaceDeleteOutput, error) {
 	if d.WorkspaceManager == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
@@ -464,7 +464,7 @@ func buildWorkspaceChatSessionDelete(ctx context.Context, d AIDeps, scope identi
 	return out, nil
 }
 
-func buildWorkspaceImageJobs(ctx context.Context, d AIDeps, scope identity.Scope, in *workspaceItemsInput) (*workspaceImageJobsOutput, error) {
+func buildWorkspaceImageJobs(ctx context.Context, d WorkspaceHTTPDeps, scope identity.Scope, in *workspaceItemsInput) (*workspaceImageJobsOutput, error) {
 	if d.WorkspaceImages == nil {
 		return nil, httpx.ErrUnavailable.WithDetail("workspace service is not configured")
 	}
@@ -504,7 +504,7 @@ func workspaceOwnerFromContext(ctx context.Context, scope identity.Scope) (works
 	return owner, nil
 }
 
-func workspaceLogsAndSummary(ctx context.Context, d AIDeps, owner workspace.Owner, requestSource string, limit int32) ([]domain.UsageLog, workspaceUsageSummaryDTO, error) {
+func workspaceLogsAndSummary(ctx context.Context, d WorkspaceHTTPDeps, owner workspace.Owner, requestSource string, limit int32) ([]domain.UsageLog, workspaceUsageSummaryDTO, error) {
 	filter := domain.UsageFilter{
 		TenantID:      owner.TenantID,
 		UserID:        owner.UserID,

@@ -363,16 +363,11 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		AIHTTPDeps: transport.AIHTTPDeps{
 			Core: transport.AIDeps{
 				AIIdentityDeps: transport.AIIdentityDeps{
-					BanChecker:        banChecker,
-					APIKeys:           apiKeySvc,
-					APIKeyWriter:      apiKeySvc,
-					APIKeyLifecycle:   apiKeySvc,
-					APIKeySecrets:     apiKeySvc,
-					WorkspaceOverview: workspaceSvc,
-					WorkspaceModels:   workspaceSvc,
-					WorkspaceSessions: workspaceSvc,
-					WorkspaceManager:  workspaceSvc,
-					WorkspaceImages:   workspaceSvc,
+					BanChecker:      banChecker,
+					APIKeys:         apiKeySvc,
+					APIKeyWriter:    apiKeySvc,
+					APIKeyLifecycle: apiKeySvc,
+					APIKeySecrets:   apiKeySvc,
 				},
 				AICatalogDeps: transport.AICatalogDeps{
 					ModelCatalog:       modelCatalog,
@@ -388,7 +383,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 					GroupTransfer:      groupTransferSvc,
 				},
 				AIOperationsDeps: transport.AIOperationsDeps{
-					DashboardQueries:           dashboardSvc,
 					UsageQueries:               usageSvc,
 					UserUsageLogs:              usageSvc,
 					AdminAudit:                 auditSvc,
@@ -510,6 +504,21 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				Groups:          commercialSvc,
 				LimitPolicies:   commercialSvc,
 				BanChecker:      banChecker,
+			},
+			TenantSelfRead: transport.AITenantSelfReadHTTPDeps{
+				DashboardQueries: dashboardSvc,
+				UsageQueries:     usageSvc,
+				BanChecker:       banChecker,
+			},
+			Workspace: transport.AIWorkspaceHTTPDeps{
+				WorkspaceOverview: workspaceSvc,
+				WorkspaceModels:   workspaceSvc,
+				WorkspaceSessions: workspaceSvc,
+				WorkspaceManager:  workspaceSvc,
+				WorkspaceImages:   workspaceSvc,
+				DashboardQueries:  dashboardSvc,
+				UsageQueries:      usageSvc,
+				BanChecker:        banChecker,
 			},
 		},
 		FileStore:          fileStore,

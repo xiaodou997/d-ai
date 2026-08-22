@@ -19,26 +19,20 @@ import (
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
-	"xiaodou/dai/internal/ai/workspace"
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// IdentityDeps contains authentication, API key and workspace identity
-// collaborators used by AI routes.
+// IdentityDeps contains authentication and API-key collaborators used by the
+// remaining AI core routes.
 type IdentityDeps struct {
-	APIKeys           APIKeyReader
-	APIKeyWriter      APIKeyWriter
-	APIKeyLifecycle   APIKeyLifecycleManager
-	APIKeySecrets     APIKeySecretManager
-	WorkspaceOverview workspace.OverviewReader
-	WorkspaceModels   workspace.ChatModelReader
-	WorkspaceSessions workspace.ChatSessionReader
-	WorkspaceManager  workspace.ChatSessionManager
-	WorkspaceImages   workspace.ImageJobReader
-	IdentityProvider  IdentityProvider
-	TokenVerifier     TokenVerifier
-	TokenRevocations  TokenRevocationChecker
-	BanChecker        HumaBanChecker
+	APIKeys          APIKeyReader
+	APIKeyWriter     APIKeyWriter
+	APIKeyLifecycle  APIKeyLifecycleManager
+	APIKeySecrets    APIKeySecretManager
+	IdentityProvider IdentityProvider
+	TokenVerifier    TokenVerifier
+	TokenRevocations TokenRevocationChecker
+	BanChecker       HumaBanChecker
 }
 
 // APIKeyReader exposes only non-secret API key summaries. Ownership checks use
@@ -357,9 +351,9 @@ type ProviderSecretCodec interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
-// OperationsDeps contains dashboard, usage, audit and enrichment collaborators.
+// OperationsDeps contains usage, audit and enrichment collaborators used by
+// the remaining AI core routes.
 type OperationsDeps struct {
-	DashboardQueries           DashboardQueryReader
 	UsageQueries               UsageQueryReader
 	UserUsageLogs              UserUsageLogReader
 	AdminAudit                 AdminAuditRecorder
@@ -387,15 +381,9 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	management.UseMiddleware(platformUserAuth(api, auth))
 	registerPriceBooks(management, d)
 	registerLimits(management, d)
-	tenant := huma.NewGroup(api)
-	tenant.UseMiddleware(tenantUserAuth(api, auth))
-	registerTenantSelf(tenant, d)
-	registerTenantSelfWorkspace(tenant, d)
-
 	userSelf := huma.NewGroup(api)
 	userSelf.UseMiddleware(endUserAuth(api, auth))
 	registerUserSelf(userSelf, d)
-	registerUserSelfWorkspace(userSelf, d)
 }
 
 func httpAuthDepsFromAI(d AIDeps) HTTPAuthDeps {

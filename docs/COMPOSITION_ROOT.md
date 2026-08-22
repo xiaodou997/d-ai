@@ -23,20 +23,20 @@ httpServers.Start / Shutdown
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
 - `transport.Deps` 和 `ai/transport.AIDeps` 已按 identity、catalog、operations
-  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制和租户分组 HTTP 已脱离该容器，由独立模块依赖注册。
+  责任拆成嵌入式依赖组；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取和 workspace HTTP 已脱离该容器，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
-  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics`、`UpstreamAccounts`、`UpstreamAccess`、`TenantCatalog`、`APIKeyManagement`、`TenantSelfControl` 和 `TenantGroups`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
+  `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics`、`UpstreamAccounts`、`UpstreamAccess`、`TenantCatalog`、`APIKeyManagement`、`TenantSelfControl`、`TenantGroups`、`TenantSelfRead` 和 `Workspace`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
 ## 尚未清零的装配遗留
 
 - `transport.Deps` 仍有具体 PostgreSQL/Redis/业务 service，AI core `AIDeps` 虽已接口化但仍是 service locator；账号管理、Provider 密钥、模型绑定、价格簿校验等管理依赖已移出，P1-02 后续会按垂直模块模式继续拆分剩余端点组。
 - AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `AIDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
-- 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助与工作区仍从 Core 复用同一读端口，具体 `DashboardService` 只在 composition root 构造。
-- 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户、用户和工作区仍从 Core 复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。
+- 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用查询端口，具体 `DashboardService` 只在 composition root 构造。
+- 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。
 - OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Serving 和后台刷新器仍由 composition root/运行时持有。
 - 账号/凭证池模型绑定管理已经由独立 `ModelBindingHTTPDeps` 组合账号读取、池读取和 `UpstreamModelBindingStore`；Core 不再注册模型绑定管理路径。
 - 上游发现与连通性已经由独立 `UpstreamDiagnosticsHTTPDeps` 组合账号读取、模型绑定、密钥解密、HTTP、能力目录和账号健康端口；Core 不再注册诊断路径。
@@ -44,8 +44,10 @@ httpServers.Start / Shutdown
 - 平台租户上游访问策略已经由独立 `UpstreamAccessManagementHTTPDeps` 组合 `UpstreamAccessManager` 和平台管理员认证；Core 不再持有该控制面端口。
 - 租户模型、价格表和上游资源目录已经由独立 `TenantCatalogHTTPDeps` 组合模型目录、分组目录、租户价格表和价格同步端口；Core 不再注册这些租户目录路径。
 - 平台 API key 管理已经由独立 `APIKeyManagementHTTPDeps` 组合 key 读写、生命周期、密钥、分组和限额端口；Core 不再注册动态租户/用户 API key 路径，避免与租户自助 `/tenants/me` 静态路径冲突。
-- 租户自助 API key/限额已经由独立 `TenantSelfControlHTTPDeps` 组合 key、分组、限额和 end-user ownership 端口；Core 仅保留租户自助 dashboard/usage/workspace 读取。
+- 租户自助 API key/限额已经由独立 `TenantSelfControlHTTPDeps` 组合 key、分组、限额和 end-user ownership 端口；Core 不再注册这些租户控制路径。
 - 租户分组控制面已经由独立 `TenantGroupManagementHTTPDeps` 组合分组、调度、上游目标、用户绑定、价格表名称和迁移审计端口；Core 不再注册分组与迁移路径。
+- 租户自助 dashboard/usage 已由独立 `TenantSelfReadHTTPDeps` 组合 dashboard/usage 查询端口；Core 不再持有租户 dashboard 查询字段。
+- Tenant/user workspace 已由独立 `WorkspaceHTTPDeps` 组合 workspace、dashboard 和 usage 端口；Core 不再持有工作台端口，两个认证 scope 在模块内显式注册。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
 - AI 上游模型绑定、凭证导入和 pool CRUD 查询统一使用 `OAuthPoolReader`；创建、更新、状态变更和删除使用 `OAuthPoolWriter` 与领域级 `CredentialPoolCreate` / `CredentialPoolUpdate` 命令。
@@ -94,6 +96,8 @@ httpServers.Start / Shutdown
 - 平台 API key HTTP 已由独立 `APIKeyManagementHTTPDeps` 组合平台代管 key 端口，并通过 `RegisterAPIKeyManagement` 注册平台管理员认证分组；Core 不再注册平台代管 key 路径。
 - 租户自助控制 HTTP 已由独立 `TenantSelfControlHTTPDeps` 组合租户 key/限额端口，并通过 `RegisterTenantSelfControl` 注册租户用户认证分组；Core 不再注册 11 条租户控制路径。
 - 租户分组 HTTP 已由独立 `TenantGroupManagementHTTPDeps` 组合商业控制面和迁移端口，并通过 `RegisterTenantGroupManagement` 注册租户用户认证分组；Core 不再注册 25 条分组/迁移路径。
+- 租户自助读取 HTTP 已由独立 `TenantSelfReadHTTPDeps` 组合 dashboard/usage 端口，并通过 `RegisterTenantSelfRead` 注册租户用户认证分组；Core 不再注册 5 条租户读取路径。
+- Workspace HTTP 已由独立 `WorkspaceHTTPDeps` 组合 tenant/user 工作台端口，并通过 `RegisterWorkspace` 注册两个认证分组；Core 不再注册 14 条工作台路径。
 - 部分后台组件只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；未提供 Stop 的组件依赖根 context 取消，后续逐个补齐可观测状态和等待语义。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
