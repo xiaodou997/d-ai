@@ -98,9 +98,8 @@ func TestUsageRoutesUseQueryReader(t *testing.T) {
 		userSummary:  domain.UserUsageSummary{RequestCount: 8, TotalUserChargedMicro: 7_250_000},
 	}
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
-	deps := AIDeps{OperationsDeps: OperationsDeps{UsageQueries: reader}}
 	registerUsage(api, UsageHTTPDeps{UsageQueries: reader})
-	registerUserSelfUsage(api, deps)
+	registerUserSelfUsage(api, UserSelfReadHTTPDeps{UsageQueries: reader})
 
 	window := "date_from=2026-08-20T00:00:00Z&date_to=2026-08-21T00:00:00Z"
 	trendRecorder := performUsageRequest(router, "/api/v1/analytics/daily-trend?"+window)

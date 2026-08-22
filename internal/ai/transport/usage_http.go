@@ -3,8 +3,8 @@ package transport
 import "github.com/danielgtaylor/huma/v2"
 
 // UsageHTTPDeps is the dependency boundary for management usage query
-// routes. Tenant, end-user and workspace routes continue to receive the
-// shared query ports through the core AI dependencies.
+// routes. Tenant, end-user and workspace routes receive shared query ports
+// through their own explicit modules.
 type UsageHTTPDeps struct {
 	Auth                       HTTPAuthDeps
 	UsageQueries               UsageQueryReader

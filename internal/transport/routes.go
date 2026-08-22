@@ -74,13 +74,10 @@ type OperationsDeps struct {
 	DataCleanup   *cleanuppkg.Service
 }
 
-// AIIdentityDeps contains AI-side authentication and API-key collaborators.
+// AIIdentityDeps contains AI-side authentication collaborators for the core
+// platform price and limit routes.
 type AIIdentityDeps struct {
-	BanChecker      aitransport.HumaBanChecker
-	APIKeys         aitransport.APIKeyReader
-	APIKeyWriter    aitransport.APIKeyWriter
-	APIKeyLifecycle aitransport.APIKeyLifecycleManager
-	APIKeySecrets   aitransport.APIKeySecretManager
+	BanChecker aitransport.HumaBanChecker
 }
 
 // AISubscriptionHTTPDeps contains the collaborators owned by the independently
@@ -96,26 +93,17 @@ type AISubscriptionHTTPDeps struct {
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
-// AICatalogDeps contains AI-side model, pricing and upstream collaborators.
+// AICatalogDeps contains only the pricing and limit collaborators still owned
+// by the AI core module.
 type AICatalogDeps struct {
-	ModelCatalog       aitransport.ModelCatalogReader
 	PlatformPriceBooks aitransport.PlatformPriceBookManager
-	TenantPriceBooks   aitransport.TenantPriceBookManager
 	PriceBookSync      aitransport.PriceBookSyncManager
-	Groups             aitransport.CommercialGroupCatalog
-	GroupManager       aitransport.CommercialGroupManager
-	DispatchRules      aitransport.CommercialDispatchRuleManager
-	GroupTargets       aitransport.CommercialGroupTargetManager
-	UserBindings       aitransport.CommercialUserBindingManager
 	LimitPolicies      aitransport.CommercialLimitPolicyManager
-	GroupTransfer      aitransport.GroupTransferManager
 }
 
-// AIOperationsDeps contains AI-side usage, audit and enrichment collaborators.
+// AIOperationsDeps contains the fail-open identity-enrichment observer used by
+// platform limit projections in the core module.
 type AIOperationsDeps struct {
-	UsageQueries               aitransport.UsageQueryReader
-	UserUsageLogs              aitransport.UserUsageLogReader
-	AdminAudit                 aitransport.AdminAuditRecorder
 	IdentityEnrichmentFailures aitransport.IdentityEnrichmentFailureObserver
 }
 
@@ -268,6 +256,28 @@ type AIWorkspaceHTTPDeps struct {
 	BanChecker        aitransport.HumaBanChecker
 }
 
+// AIUserSelfControlHTTPDeps contains the collaborators owned by the
+// independently registered end-user API-key and limit-policy module.
+type AIUserSelfControlHTTPDeps struct {
+	APIKeys         aitransport.APIKeyReader
+	APIKeyWriter    aitransport.APIKeyWriter
+	APIKeyLifecycle aitransport.APIKeyLifecycleManager
+	APIKeySecrets   aitransport.APIKeySecretManager
+	Groups          aitransport.CommercialGroupCatalog
+	LimitPolicies   aitransport.CommercialLimitPolicyManager
+	BanChecker      aitransport.HumaBanChecker
+}
+
+// AIUserSelfReadHTTPDeps contains the collaborators owned by the
+// independently registered end-user group, model-grant and usage read module.
+type AIUserSelfReadHTTPDeps struct {
+	Groups        aitransport.CommercialGroupCatalog
+	ModelCatalog  aitransport.ModelCatalogReader
+	UserUsageLogs aitransport.UserUsageLogReader
+	UsageQueries  aitransport.UsageQueryReader
+	BanChecker    aitransport.HumaBanChecker
+}
+
 // AISystemHTTPDeps contains the collaborators owned by the independently
 // registered system status and route-weight HTTP module.
 type AISystemHTTPDeps struct {
@@ -289,9 +299,9 @@ type AIRiskControlHTTPDeps struct {
 	BanChecker          aitransport.HumaBanChecker
 }
 
-// AIDeps contains the AI control-plane and runtime services exposed by the
-// AI transport module. It is intentionally separate from Deps so a role that
-// only serves platform endpoints cannot accidentally receive AI services.
+// AIDeps is the composition-facing compatibility bundle for the remaining AI
+// core control-plane routes. Vertically extracted modules use the narrower
+// bundles on AIHTTPDeps and are not copied into this core container.
 type AIDeps struct {
 	AIIdentityDeps
 	AICatalogDeps
@@ -319,6 +329,8 @@ type AIHTTPDeps struct {
 	APIKeyManagement    AIAPIKeyManagementHTTPDeps
 	TenantSelfRead      AITenantSelfReadHTTPDeps
 	Workspace           AIWorkspaceHTTPDeps
+	UserSelfControl     AIUserSelfControlHTTPDeps
+	UserSelfRead        AIUserSelfReadHTTPDeps
 }
 
 // Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
@@ -371,6 +383,8 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterAPIKeyManagement(api, buildAPIKeyManagementHTTPDeps(m.platform, m.deps.APIKeyManagement))
 	aitransport.RegisterTenantSelfRead(api, buildTenantSelfReadHTTPDeps(m.platform, m.deps.TenantSelfRead))
 	aitransport.RegisterWorkspace(api, buildWorkspaceHTTPDeps(m.platform, m.deps.Workspace))
+	aitransport.RegisterUserSelfControl(api, buildUserSelfControlHTTPDeps(m.platform, m.deps.UserSelfControl))
+	aitransport.RegisterUserSelfRead(api, buildUserSelfReadHTTPDeps(m.platform, m.deps.UserSelfRead))
 }
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
@@ -426,28 +440,13 @@ func buildAIDeps(platform Deps, d AIDeps, identity aiIdentityProvider) aitranspo
 			TokenVerifier:    platform.JWT,
 			TokenRevocations: platform.Blacklist,
 			BanChecker:       d.BanChecker,
-			APIKeys:          d.APIKeys,
-			APIKeyWriter:     d.APIKeyWriter,
-			APIKeyLifecycle:  d.APIKeyLifecycle,
-			APIKeySecrets:    d.APIKeySecrets,
 		},
 		CatalogDeps: aitransport.CatalogDeps{
-			ModelCatalog:       d.ModelCatalog,
 			PlatformPriceBooks: d.PlatformPriceBooks,
-			TenantPriceBooks:   d.TenantPriceBooks,
 			PriceBookSync:      d.PriceBookSync,
-			Groups:             d.Groups,
-			GroupManager:       d.GroupManager,
-			DispatchRules:      d.DispatchRules,
-			GroupTargets:       d.GroupTargets,
-			UserBindings:       d.UserBindings,
 			LimitPolicies:      d.LimitPolicies,
-			GroupTransfer:      d.GroupTransfer,
 		},
 		OperationsDeps: aitransport.OperationsDeps{
-			UsageQueries:               d.UsageQueries,
-			UserUsageLogs:              d.UserUsageLogs,
-			AdminAudit:                 d.AdminAudit,
 			IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 		},
 	}
@@ -579,6 +578,36 @@ func buildWorkspaceHTTPDeps(platform Deps, d AIWorkspaceHTTPDeps) aitransport.Wo
 		WorkspaceImages:   d.WorkspaceImages,
 		DashboardQueries:  d.DashboardQueries,
 		UsageQueries:      d.UsageQueries,
+	}
+}
+
+func buildUserSelfControlHTTPDeps(platform Deps, d AIUserSelfControlHTTPDeps) aitransport.UserSelfControlHTTPDeps {
+	return aitransport.UserSelfControlHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		APIKeys:         d.APIKeys,
+		APIKeyWriter:    d.APIKeyWriter,
+		APIKeyLifecycle: d.APIKeyLifecycle,
+		APIKeySecrets:   d.APIKeySecrets,
+		Groups:          d.Groups,
+		LimitPolicies:   d.LimitPolicies,
+	}
+}
+
+func buildUserSelfReadHTTPDeps(platform Deps, d AIUserSelfReadHTTPDeps) aitransport.UserSelfReadHTTPDeps {
+	return aitransport.UserSelfReadHTTPDeps{
+		Auth: aitransport.HTTPAuthDeps{
+			TokenVerifier:    platform.JWT,
+			TokenRevocations: platform.Blacklist,
+			BanChecker:       d.BanChecker,
+		},
+		Groups:        d.Groups,
+		ModelCatalog:  d.ModelCatalog,
+		UserUsageLogs: d.UserUsageLogs,
+		UsageQueries:  d.UsageQueries,
 	}
 }
 

@@ -65,61 +65,28 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		Deps{IdentityDeps: IdentityDeps{Blacklist: blacklist}},
 		AIDeps{
 			AIIdentityDeps: AIIdentityDeps{
-				BanChecker:      banChecker,
-				APIKeys:         apiKeyPorts,
-				APIKeyWriter:    apiKeyPorts,
-				APIKeyLifecycle: apiKeyPorts,
-				APIKeySecrets:   apiKeyPorts,
+				BanChecker: banChecker,
 			},
 			AICatalogDeps: AICatalogDeps{
-				ModelCatalog:       modelCatalog,
 				PlatformPriceBooks: priceBookPorts,
-				TenantPriceBooks:   priceBookPorts,
 				PriceBookSync:      priceBookPorts,
-				Groups:             commercialPorts,
-				GroupManager:       commercialPorts,
-				DispatchRules:      commercialPorts,
-				GroupTargets:       commercialPorts,
-				UserBindings:       commercialPorts,
 				LimitPolicies:      commercialPorts,
-				GroupTransfer:      groupTransfer,
 			},
 			AIOperationsDeps: AIOperationsDeps{
 				IdentityEnrichmentFailures: identityEnrichmentFailures,
-				UserUsageLogs:              userUsageLogs,
-				UsageQueries:               usageQueries,
-				AdminAudit:                 adminAudit,
 			},
 		},
 		nil,
 	)
 
-	if got.APIKeys != apiKeyPorts || got.APIKeyWriter != apiKeyPorts || got.APIKeyLifecycle != apiKeyPorts || got.APIKeySecrets != apiKeyPorts {
-		t.Fatal("API key capability ports were not preserved")
-	}
-	if got.ModelCatalog != modelCatalog {
-		t.Fatal("catalog dependencies were not preserved")
-	}
-	if got.PlatformPriceBooks != priceBookPorts || got.TenantPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
+	if got.PlatformPriceBooks != priceBookPorts || got.PriceBookSync != priceBookPorts {
 		t.Fatal("price book ports were not preserved")
 	}
-	if got.Groups != commercialPorts || got.GroupManager != commercialPorts || got.DispatchRules != commercialPorts || got.GroupTargets != commercialPorts || got.UserBindings != commercialPorts || got.LimitPolicies != commercialPorts {
-		t.Fatal("commercial control-plane ports were not preserved")
-	}
-	if got.GroupTransfer != groupTransfer {
-		t.Fatal("group transfer manager was not preserved")
+	if got.LimitPolicies != commercialPorts {
+		t.Fatal("limit-policy port was not preserved")
 	}
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("observability dependencies were not preserved")
-	}
-	if got.UserUsageLogs != userUsageLogs {
-		t.Fatal("user usage log reader was not preserved")
-	}
-	if got.UsageQueries != usageQueries {
-		t.Fatal("usage query reader was not preserved")
-	}
-	if got.AdminAudit != adminAudit {
-		t.Fatal("admin audit recorder was not preserved")
 	}
 	if got.TokenRevocations != blacklist {
 		t.Fatal("portal token revocation dependency was not preserved")
@@ -407,6 +374,36 @@ func TestBuildAIDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	)
 	if workspaceHTTP.TenantAuth.TokenVerifier != jwt || workspaceHTTP.UserAuth.TokenRevocations != blacklist || workspaceHTTP.TenantAuth.BanChecker != banChecker || workspaceHTTP.WorkspaceModels != workspacePorts || workspaceHTTP.WorkspaceSessions != workspacePorts || workspaceHTTP.WorkspaceManager != workspacePorts || workspaceHTTP.WorkspaceImages != workspacePorts || workspaceHTTP.DashboardQueries != dashboardQueries || workspaceHTTP.UsageQueries != usageQueries {
 		t.Fatal("workspace HTTP dependencies were not preserved")
+	}
+
+	userSelfControl := buildUserSelfControlHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIUserSelfControlHTTPDeps{
+			APIKeys:         apiKeyPorts,
+			APIKeyWriter:    apiKeyPorts,
+			APIKeyLifecycle: apiKeyPorts,
+			APIKeySecrets:   apiKeyPorts,
+			Groups:          commercialPorts,
+			LimitPolicies:   commercialPorts,
+			BanChecker:      banChecker,
+		},
+	)
+	if userSelfControl.Auth.TokenVerifier != jwt || userSelfControl.Auth.TokenRevocations != blacklist || userSelfControl.Auth.BanChecker != banChecker || userSelfControl.APIKeys != apiKeyPorts || userSelfControl.APIKeyWriter != apiKeyPorts || userSelfControl.APIKeyLifecycle != apiKeyPorts || userSelfControl.APIKeySecrets != apiKeyPorts || userSelfControl.Groups != commercialPorts || userSelfControl.LimitPolicies != commercialPorts {
+		t.Fatal("user self-control dependencies were not preserved")
+	}
+
+	userSelfRead := buildUserSelfReadHTTPDeps(
+		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		AIUserSelfReadHTTPDeps{
+			Groups:        commercialPorts,
+			ModelCatalog:  modelCatalog,
+			UserUsageLogs: userUsageLogs,
+			UsageQueries:  usageQueries,
+			BanChecker:    banChecker,
+		},
+	)
+	if userSelfRead.Auth.TokenVerifier != jwt || userSelfRead.Auth.TokenRevocations != blacklist || userSelfRead.Auth.BanChecker != banChecker || userSelfRead.Groups != commercialPorts || userSelfRead.ModelCatalog != modelCatalog || userSelfRead.UserUsageLogs != userUsageLogs || userSelfRead.UsageQueries != usageQueries {
+		t.Fatal("user self-read dependencies were not preserved")
 	}
 }
 

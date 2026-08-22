@@ -22,13 +22,9 @@ import (
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// IdentityDeps contains authentication and API-key collaborators used by the
-// remaining AI core routes.
+// IdentityDeps contains authentication and identity-enrichment collaborators
+// used by the remaining AI core routes.
 type IdentityDeps struct {
-	APIKeys          APIKeyReader
-	APIKeyWriter     APIKeyWriter
-	APIKeyLifecycle  APIKeyLifecycleManager
-	APIKeySecrets    APIKeySecretManager
 	IdentityProvider IdentityProvider
 	TokenVerifier    TokenVerifier
 	TokenRevocations TokenRevocationChecker
@@ -114,20 +110,13 @@ type OAuthCredentialWriter interface {
 	Delete(ctx context.Context, credID string) error
 }
 
-// CatalogDeps contains model, pricing and tenant/commercial control-plane
-// collaborators shared by the remaining AI core routes.
+// CatalogDeps contains only the pricing and limit collaborators still used by
+// the remaining AI core routes. Tenant/user catalog and commercial controls
+// are registered through their own HTTP modules.
 type CatalogDeps struct {
-	ModelCatalog       ModelCatalogReader
 	PlatformPriceBooks PlatformPriceBookManager
-	TenantPriceBooks   TenantPriceBookManager
 	PriceBookSync      PriceBookSyncManager
-	Groups             CommercialGroupCatalog
-	GroupManager       CommercialGroupManager
-	DispatchRules      CommercialDispatchRuleManager
-	GroupTargets       CommercialGroupTargetManager
-	UserBindings       CommercialUserBindingManager
 	LimitPolicies      CommercialLimitPolicyManager
-	GroupTransfer      GroupTransferManager
 }
 
 // UpstreamAccessManager is the tenant policy surface required by management
@@ -351,12 +340,9 @@ type ProviderSecretCodec interface {
 	Decrypt(ciphertext string) (string, error)
 }
 
-// OperationsDeps contains usage, audit and enrichment collaborators used by
+// OperationsDeps contains the fail-open identity-enrichment observer used by
 // the remaining AI core routes.
 type OperationsDeps struct {
-	UsageQueries               UsageQueryReader
-	UserUsageLogs              UserUsageLogReader
-	AdminAudit                 AdminAuditRecorder
 	IdentityEnrichmentFailures IdentityEnrichmentFailureObserver
 }
 
@@ -366,7 +352,9 @@ type IdentityEnrichmentFailureObserver interface {
 	ObserveFailure(kind string, err error)
 }
 
-// AIDeps groups the explicit dependencies required by AI HTTP registration.
+// AIDeps groups the explicit dependencies required by the remaining AI core
+// HTTP registration. Vertically extracted modules use narrower dependency
+// bundles and register independently.
 type AIDeps struct {
 	IdentityDeps
 	CatalogDeps
@@ -381,9 +369,6 @@ func RegisterAICore(api huma.API, d AIDeps) {
 	management.UseMiddleware(platformUserAuth(api, auth))
 	registerPriceBooks(management, d)
 	registerLimits(management, d)
-	userSelf := huma.NewGroup(api)
-	userSelf.UseMiddleware(endUserAuth(api, auth))
-	registerUserSelf(userSelf, d)
 }
 
 func httpAuthDepsFromAI(d AIDeps) HTTPAuthDeps {

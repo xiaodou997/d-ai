@@ -126,7 +126,7 @@ func registerTenantSelfLimits(api huma.API, d TenantSelfControlHTTPDeps) {
 	})
 }
 
-func registerUserSelfLimits(api huma.API, d AIDeps) {
+func registerUserSelfLimits(api huma.API, d UserSelfControlHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-api-key-limit-policies",
 		Method:      http.MethodGet,

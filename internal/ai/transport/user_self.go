@@ -1,13 +1,12 @@
 package transport
 
-// user_self.go registers the end-user self-service (userType=4) flat Huma
-// endpoints. Every handler derives the tenant+user scope from the JWT claims
+// user_self.go contains the end-user self-service (userType=4) flat Huma
+// handlers. Every handler derives the tenant+user scope from JWT claims
 // (tenantIDFromContext / userIDFromContext) — never from a path/query param —
-// so an end user can only ever read/write its own resources. These mirror the
-// role-dispatching console envelope routes (handleUserAPIKeysSelf,
-// handleUsersMeAPIKeys*, handleUserModelGrantsSelf, handleUsersMeEffectivePrices,
-// handleUserUsageLogsSelf, handleUserUsageSummarySelf) but speak the flat Huma
-// contract and bind identity from claims.
+// so an end user can only ever read/write its own resources. Registration is
+// split between UserSelfControlHTTPDeps and UserSelfReadHTTPDeps; both mirror
+// the role-dispatching console envelope routes while speaking the flat Huma
+// contract and binding identity from claims.
 
 import (
 	"context"
@@ -99,17 +98,7 @@ type userGroupEffectivePricesOutput struct {
 	}
 }
 
-// registerUserSelf mounts the end-user self-service endpoints under the end-user
-// auth group (endUserAuth → userType=4).
-func registerUserSelf(api huma.API, d AIDeps) {
-	registerUserSelfGroups(api, d)
-	registerUserSelfAPIKeys(api, d)
-	registerUserSelfModelGrants(api, d)
-	registerUserSelfLimits(api, d)
-	registerUserSelfUsage(api, d)
-}
-
-func registerUserSelfGroups(api huma.API, d AIDeps) {
+func registerUserSelfGroups(api huma.API, d UserSelfReadHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-groups",
 		Method:      http.MethodGet,
@@ -209,7 +198,7 @@ func registerUserSelfGroups(api huma.API, d AIDeps) {
 //   DELETE /api/v1/users/me/api-keys/{apiKeyID}
 // ---------------------------------------------------------------------------
 
-func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
+func registerUserSelfAPIKeys(api huma.API, d UserSelfControlHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-api-keys",
 		Method:      http.MethodGet,
@@ -439,7 +428,7 @@ func registerUserSelfAPIKeys(api huma.API, d AIDeps) {
 // 用户可用的模型 = 当前用户所属租户的 active 模型授权。
 // ---------------------------------------------------------------------------
 
-func registerUserSelfModelGrants(api huma.API, d AIDeps) {
+func registerUserSelfModelGrants(api huma.API, d UserSelfReadHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-model-grants",
 		Method:      http.MethodGet,
@@ -479,7 +468,7 @@ func registerUserSelfModelGrants(api huma.API, d AIDeps) {
 //   GET /api/v1/user-usage-summary
 // ---------------------------------------------------------------------------
 
-func registerUserSelfUsage(api huma.API, d AIDeps) {
+func registerUserSelfUsage(api huma.API, d UserSelfReadHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-usage-logs",
 		Method:      http.MethodGet,

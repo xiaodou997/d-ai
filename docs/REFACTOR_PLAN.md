@@ -166,6 +166,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 租户分组控制面与迁移提取为独立 `TenantGroupManagementHTTPDeps` / `RegisterTenantGroupManagement` 纵向模块；分组、调度、上游目标、用户绑定和审计迁移端口不再由 Core 注册。
 - [x] 租户自助 dashboard/usage 读取提取为独立 `TenantSelfReadHTTPDeps` / `RegisterTenantSelfRead` 纵向模块；Core 不再持有租户 dashboard 查询端口，租户控制和工作台保持独立。
 - [x] 租户与终端用户 workspace 提取为独立 `WorkspaceHTTPDeps` / `RegisterWorkspace` 双认证模块；概览、会话、模型和图片任务端口不再进入 Core，tenant/user scope 仍由 JWT claims 决定。
+- [x] 终端用户 API key 与限额工作流提取为独立 `UserSelfControlHTTPDeps` / `RegisterUserSelfControl` 纵向模块；key ownership、分组可见性和限额端口在模块内组合，Core 不再注册 9 条用户控制路径。
+- [x] 终端用户分组、模型授权和用量读取提取为独立 `UserSelfReadHTTPDeps` / `RegisterUserSelfRead` 纵向模块；JWT claims 绑定用户范围，Core 不再注册 5 条用户读取路径。
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
@@ -466,6 +468,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 租户分组管理 HTTP 模块：`TenantGroupManagementHTTPDeps` 独立组合分组、调度、目标、用户绑定、价格表名称、迁移审计和 `HTTPAuthDeps`；`RegisterTenantGroupManagement` 自行注册租户用户认证分组。Core 不再注册 25 条分组/迁移路径，契约测试覆盖全部路径的 core 404 与独立模块认证。
 - 租户自助读取 HTTP 模块：`TenantSelfReadHTTPDeps` 独立组合 `DashboardQueryReader`、`UsageQueryReader` 和 `HTTPAuthDeps`；`RegisterTenantSelfRead` 自行注册租户用户认证分组。Core 不再注册 5 条租户 dashboard/usage 路径，契约测试覆盖全部路径的 core 404 与独立模块认证。
 - Workspace HTTP 模块：`WorkspaceHTTPDeps` 组合 workspace 概览、模型、会话、会话管理、图片任务、dashboard 和 usage 端口，并由 `RegisterWorkspace` 同时注册 tenant/user 两个认证分组。Core 不再注册 14 条 workspace 路径，契约测试覆盖两种 scope 的 core 404 与独立模块认证。
+- 用户自助控制 HTTP 模块：`UserSelfControlHTTPDeps` 独立组合 API key 读写/生命周期/密钥、分组目录、限额策略和 `HTTPAuthDeps`；`RegisterUserSelfControl` 自行注册终端用户认证分组。Core 不再注册 9 条用户 API key/限额路径，契约测试覆盖全部路径的 core 404 与独立模块认证。
+- 用户自助读取 HTTP 模块：`UserSelfReadHTTPDeps` 独立组合分组目录、模型目录、`UserUsageLogReader`、`UsageQueryReader` 和 `HTTPAuthDeps`；`RegisterUserSelfRead` 自行注册终端用户认证分组。Core 不再注册 5 条用户分组/模型授权/用量路径，契约测试覆盖全部路径的 core 404 与独立模块认证。
 - 错误边界：生产 sqlc、内联 SQL、事务和批处理统一通过 PostgreSQL 翻译器，将 `ErrNoRows`、`23505`、`23503`、`23514`、`22P02` 分类为领域持久化错误；AI Transport 仅按领域错误生成既有 404/409/400 响应，不再 import `pgx` 或 `pgconn` 错误类型。
 - 错误边界测试：覆盖翻译器分类、真实 PostgreSQL 缺失行与唯一约束、模型绑定重复写入，以及 HTTP 状态和 detail 映射；未知 SQLSTATE 和连接故障仍保留原始运维错误并返回 500。
 - 值类型边界：AI Transport 的 UUID 校验与批量 ID 规范化改用通用 UUID 值类型，删除遗留的 `pgtype.UUID/Text/Timestamptz/Numeric/Int4` DTO 辅助函数；HTTP 包已清零整个 pgx 模块、Redis、sqlc 和 PostgreSQL adapter 的直接 import。
@@ -478,5 +482,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
 - 风控 HTTP 模块：`RiskControlHTTPDeps` 独立组合四组业务端口、`HTTPAuthDeps` 与 `ProviderSecretCodec`；`RegisterRiskControl` 自行注册平台管理员认证分组。契约测试确认 core 不注册风控路径、独立模块执行认证，配置更新路由只把明文 API key 交给 codec 并向存储端传递密文。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
-- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取和 workspace 路由已脱离 `AIDeps`，剩余 AI core 主要是平台价格/限额、终端用户自助和共享 usage 读端口；顶层平台 `OperationsDeps` 仍保留部分具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
-- 下一候选项：P1-02 继续收敛终端用户自助 API key、限额、模型授权和 usage 读取模块。
+- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取、workspace、用户自助控制和用户自助读取路由已脱离 `AIDeps`，剩余 AI core 主要是平台价格/限额和少量身份补全观察端口；顶层平台 `OperationsDeps` 仍保留部分具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 下一候选项：P1-02 收敛平台价格/限额 Core 的窄依赖，并继续清理 `AIDeps` 兼容容器。
