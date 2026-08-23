@@ -19,6 +19,7 @@ import (
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	systempkg "xiaodou/dai/internal/system"
 	userpkg "xiaodou/dai/internal/user"
+	userports "xiaodou/dai/internal/user/ports"
 
 	// AI 域
 	proxypkg "xiaodou/dai/internal/ai/proxy"
@@ -47,14 +48,15 @@ type PortalDeps struct {
 
 // IdentityDeps contains account, session, tenant and invitation use cases.
 type IdentityDeps struct {
-	JWT         *auth.JWTService
-	Sessions    *auth.SessionService
-	Activations *auth.ActivationService
-	MFA         *auth.MFAService
-	RecentAuth  *auth.RecentAuthService
-	Blacklist   *auth.BlacklistService
-	UserService *userpkg.UserService
-	Invite      *invitepkg.InviteService
+	JWT           *auth.JWTService
+	Sessions      *auth.SessionService
+	Activations   *auth.ActivationService
+	MFA           *auth.MFAService
+	RecentAuth    *auth.RecentAuthService
+	Blacklist     *auth.BlacklistService
+	UserService   *userpkg.UserService
+	AdminAccounts userports.AdminAccountReader
+	Invite        *invitepkg.InviteService
 }
 
 // BillingDeps contains payment and balance application services.

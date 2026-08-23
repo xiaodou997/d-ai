@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
 	billingdomain "xiaodou/dai/internal/billing"
+	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -158,42 +158,20 @@ func registerAdminUsers(api huma.API, d Deps) {
 }
 
 func (h *adminHandlers) listSystemAdmins(ctx context.Context, in *listSystemAdminsInput) (*adminUserListOutput, error) {
-	where := "user_type = 2"
-	params := []any{}
-	idx := 1
-	if in.Keyword != "" {
-		where += fmt.Sprintf(" AND (username LIKE $%d OR email LIKE $%d)", idx, idx+1)
-		p := "%" + in.Keyword + "%"
-		params = append(params, p, p)
-		idx += 2
-	}
-	var total int64
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_accounts WHERE "+where, params...).Scan(&total)
-
-	offset := (in.Page - 1) * in.Size
-	qp := append(append([]any{}, params...), in.Size, offset)
-	rows, err := h.pool.Query(ctx,
-		fmt.Sprintf("SELECT user_id, username, email, status, credential_state, created_at FROM iam_accounts WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", where, idx, idx+1),
-		qp...)
+	result, err := h.accountRepo.ListSystemAdmins(ctx, in.Keyword, in.Page, in.Size)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	defer rows.Close()
-
-	items := make([]adminUserItem, 0)
-	for rows.Next() {
-		it, err := scanAdminUserRow(rows, func(s string) int {
-			if s == "disabled" {
+	items := make([]adminUserItem, 0, len(result.Records))
+	for _, row := range result.Records {
+		items = append(items, adminUserItemFromRecord(row, func(status string) int {
+			if status == "disabled" {
 				return 2
 			}
 			return 1
-		})
-		if err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		items = append(items, it)
+		}))
 	}
-	return &adminUserListOutput{Body: httpx.NewPage(items, total, in.Page, in.Size)}, nil
+	return &adminUserListOutput{Body: httpx.NewPage(items, result.Total, int(result.Page), int(result.Size))}, nil
 }
 
 func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemAdminInput) (*createUserOutput, error) {
@@ -313,34 +291,15 @@ func (h *adminHandlers) listTenantUsers(ctx context.Context, in *listTenantUsers
 	if in.TenantID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("tenantId 必填")
 	}
-	var total int64
-	offset := (in.Page - 1) * in.Size
-	countSQL := `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3`
-	querySQL := `SELECT user_id, username, email, status, credential_state, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
-	countArgs := []any{in.TenantID}
-	queryArgs := []any{in.TenantID, in.Size, offset}
-	if in.Keyword != "" {
-		kw := "%" + in.Keyword + "%"
-		countSQL = `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2)`
-		querySQL = `SELECT user_id, username, email, status, credential_state, created_at FROM iam_accounts WHERE tenant_id = $1 AND user_type = 3 AND (username ILIKE $2 OR email ILIKE $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`
-		countArgs = []any{in.TenantID, kw}
-		queryArgs = []any{in.TenantID, kw, in.Size, offset}
-	}
-	_ = h.pool.QueryRow(ctx, countSQL, countArgs...).Scan(&total)
-	rows, err := h.pool.Query(ctx, querySQL, queryArgs...)
+	result, err := h.accountRepo.ListTenantUsers(ctx, in.TenantID, in.Keyword, in.Page, in.Size)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	defer rows.Close()
-	items := make([]adminUserItem, 0)
-	for rows.Next() {
-		it, err := scanAdminUserRow(rows, adminUserStatusToInt)
-		if err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		items = append(items, it)
+	items := make([]adminUserItem, 0, len(result.Records))
+	for _, row := range result.Records {
+		items = append(items, adminUserItemFromRecord(row, adminUserStatusToInt))
 	}
-	return &adminUserListOutput{Body: httpx.NewPage(items, total, in.Page, in.Size)}, nil
+	return &adminUserListOutput{Body: httpx.NewPage(items, result.Total, int(result.Page), int(result.Size))}, nil
 }
 
 func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUserInput) (*createUserOutput, error) {
@@ -465,29 +424,21 @@ func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantI
 	return out, nil
 }
 
-// scanAdminUserRow 扫描管理员或租户用户列表的一行。
-// statusToInt 把存储状态映射为前端整型。
-func scanAdminUserRow(rows interface {
-	Scan(...any) error
-}, statusToInt func(string) int) (adminUserItem, error) {
-	var userID, username, status, credentialState string
-	var email *string
-	var createdAt time.Time
-	if err := rows.Scan(&userID, &username, &email, &status, &credentialState, &createdAt); err != nil {
-		return adminUserItem{}, err
-	}
+// adminUserItemFromRecord maps the repository's non-secret projection to the
+// legacy admin DTO while keeping status presentation in the HTTP boundary.
+func adminUserItemFromRecord(row userports.AdminAccountRow, statusToInt func(string) int) adminUserItem {
 	it := adminUserItem{
-		UserID: userID, Username: username,
-		Status: statusToInt(status), CredentialState: credentialState, CreatedTime: millisFromTime(createdAt),
+		UserID: row.UserID, Username: row.Username,
+		Status: statusToInt(row.Status), CredentialState: row.CredentialState, CreatedTime: millisFromTime(row.CreatedAt),
 	}
-	if email != nil {
-		it.Email = *email
+	if row.Email != nil {
+		it.Email = *row.Email
 	}
 	it.StatusText = "正常"
 	if it.Status != 1 {
 		it.StatusText = "停用"
-	} else if credentialState == "pending_activation" {
+	} else if row.CredentialState == "pending_activation" {
 		it.StatusText = "待激活"
 	}
-	return it, nil
+	return it
 }

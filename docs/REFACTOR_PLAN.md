@@ -489,6 +489,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 查询边界闭环：管理 Dashboard 异常扣费告警的 `ai_usage_logs` 查询和行扫描已移入 `internal/system/pg.SystemRepository`；Transport 只负责调用端口、错误映射和 DTO 投影。
 - 租户/终端用户归属读取：`admin_tenant.getTenant` 与 `admin_enduser.checkUserBelongsToTenant` 已移入 `internal/tenant/pg.TenantRepository`，权限 handler 不再直接执行这两类身份查询。
+- 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 回归：新增 canonical schema 集成测试，确认 24 小时窗口、失败状态过滤、空 settlement error 和时间倒序；`internal/transport` 仅保留展示转换。
 - 回归：新增 TenantRepository canonical schema 测试，覆盖租户详情投影、联系人字段、终端用户租户归属和 deleted 用户不可见。
-- 下一候选项：继续迁移 admin tenant/user/end-user 生命周期中的列表查询与创建/更新事务，优先抽取已有领域 repository 可承接的查询。
+- 回归：新增 AdminAccountRepository canonical schema 测试，覆盖管理员关键词、租户范围、分页顺序、状态和凭证状态投影。
+- 下一候选项：继续迁移 admin end-user 列表读取，以及 tenant/user/end-user 创建、更新和状态事务。

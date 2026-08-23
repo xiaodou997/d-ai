@@ -8,6 +8,7 @@ import (
 	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	userports "xiaodou/dai/internal/user/ports"
 )
 
 // adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
@@ -15,6 +16,7 @@ import (
 type adminHandlers struct {
 	pool        *pgxpool.Pool
 	tenantRepo  *tenantpg.TenantRepository
+	accountRepo userports.AdminAccountReader
 	systemRepo  *systempg.SystemRepository
 	deduction   *billingsvc.DeductionService
 	blacklist   *auth.BlacklistService
@@ -38,6 +40,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 	return &adminHandlers{
 		pool:        d.Pool,
 		tenantRepo:  tenantpg.NewTenantRepository(d.Pool),
+		accountRepo: d.AdminAccounts,
 		systemRepo:  systempg.NewSystemRepository(d.Pool),
 		deduction:   d.Deduction,
 		blacklist:   d.Blacklist,

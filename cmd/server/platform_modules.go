@@ -32,14 +32,15 @@ import (
 // It keeps their construction and process-level workers together so the
 // composition root only has to consume a stable dependency bundle.
 type platformModules struct {
-	JWT         *auth.JWTService
-	Sessions    *auth.SessionService
-	Activations *auth.ActivationService
-	MFA         *auth.MFAService
-	RecentAuth  *auth.RecentAuthService
-	Blacklist   *auth.BlacklistService
-	UserService *userpkg.UserService
-	Invite      *invitepkg.InviteService
+	JWT           *auth.JWTService
+	Sessions      *auth.SessionService
+	Activations   *auth.ActivationService
+	MFA           *auth.MFAService
+	RecentAuth    *auth.RecentAuthService
+	Blacklist     *auth.BlacklistService
+	UserService   *userpkg.UserService
+	AdminAccounts *userpg.AdminAccountRepository
+	Invite        *invitepkg.InviteService
 
 	Deduction *billingsvc.DeductionService
 	Payment   *paymentsvc.PaymentService
@@ -99,6 +100,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
+	adminAccountRepo := userpg.NewAdminAccountRepository(pool)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
 	wechatCfgStore := wechat.NewConfigStore(pool)
 	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger)
@@ -116,6 +118,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		RecentAuth:    recentAuthSvc,
 		Blacklist:     blacklist,
 		UserService:   userSvc,
+		AdminAccounts: adminAccountRepo,
 		Invite:        inviteSvc,
 		Deduction:     deductionSvc,
 		Payment:       paymentSvc,
