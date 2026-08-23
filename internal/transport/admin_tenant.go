@@ -260,16 +260,7 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 		return nil, httpx.ErrForbidden.WithDetail("无权查看其他租户信息")
 	}
 
-	var (
-		tenantID, tenantName, status string
-		contactPerson, contactEmail  *string
-		createdAt                    time.Time
-	)
-	err := h.pool.QueryRow(ctx, `
-		SELECT tenant_id, tenant_name, contact_person, contact_email, status,
-		       created_at
-		FROM iam_tenants WHERE tenant_id = $1
-	`, in.ID).Scan(&tenantID, &tenantName, &contactPerson, &contactEmail, &status, &createdAt)
+	details, err := h.tenantRepo.GetTenantDetails(ctx, in.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
@@ -277,18 +268,18 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 
-	statusInt := adminTenantStatusToInt(status)
+	statusInt := adminTenantStatusToInt(details.Status)
 	out := &tenantDetailOutput{}
-	out.Body.TenantID = tenantID
-	out.Body.TenantName = tenantName
+	out.Body.TenantID = details.TenantID
+	out.Body.TenantName = details.TenantName
 	out.Body.Status = statusInt
 	out.Body.StatusDisplay = tenantStatusText(statusInt)
-	out.Body.CreatedTime = createdAt.UnixMilli()
-	if contactPerson != nil {
-		out.Body.ContactPerson = *contactPerson
+	out.Body.CreatedTime = details.CreatedTime
+	if details.ContactPerson != nil {
+		out.Body.ContactPerson = *details.ContactPerson
 	}
-	if contactEmail != nil {
-		out.Body.ContactEmail = *contactEmail
+	if details.ContactEmail != nil {
+		out.Body.ContactEmail = *details.ContactEmail
 	}
 	return out, nil
 }

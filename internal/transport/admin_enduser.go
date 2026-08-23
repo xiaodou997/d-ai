@@ -103,11 +103,7 @@ func registerAdminEndUsers(api huma.API, d Deps) {
 
 // checkUserBelongsToTenant 校验 userID 归属 callerTenantID（空=管理员跳过）。
 func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
-	var tenantID string
-	err := h.pool.QueryRow(ctx, `
-		SELECT COALESCE(tenant_id, '') FROM iam_accounts
-		WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'
-	`, userID).Scan(&tenantID)
+	tenantID, err := h.tenantRepo.GetEndUserTenantID(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return httpx.ErrNotFound.WithDetail("用户不存在")
 	}

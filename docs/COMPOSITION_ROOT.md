@@ -50,6 +50,7 @@ httpServers.Start / Shutdown
 - 终端用户 API key/限额已由独立 `UserSelfControlHTTPDeps` 组合 key、分组和限额端口；Core 不再持有终端用户 key/限额能力。
 - 终端用户分组、模型授权和用量读取已由独立 `UserSelfReadHTTPDeps` 组合分组、模型目录、用户日志和 usage 端口；Core 不再注册终端用户自助读取路径。
 - 管理 Dashboard 异常扣费告警查询已移入 `internal/system/pg.SystemRepository`；HTTP handler 不再直接执行 `ai_usage_logs` SQL，查询窗口、排序和行映射由 repository 负责。
+- 管理租户详情和终端用户归属校验查询已移入 `internal/tenant/pg.TenantRepository`；HTTP handler 不再直接执行对应 `iam_tenants` / `iam_accounts` 读取。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。
 - AI 上游模型绑定、凭证导入和 pool CRUD 查询统一使用 `OAuthPoolReader`；创建、更新、状态变更和删除使用 `OAuthPoolWriter` 与领域级 `CredentialPoolCreate` / `CredentialPoolUpdate` 命令。

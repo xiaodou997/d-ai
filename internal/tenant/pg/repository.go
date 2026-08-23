@@ -39,6 +39,38 @@ func NewTenantRepository(pool *pgxpool.Pool) *TenantRepository {
 	return &TenantRepository{pool: pool}
 }
 
+// GetTenantDetails returns the tenant detail projection used by management
+// routes without exposing the SQL query to HTTP transport.
+func (r *TenantRepository) GetTenantDetails(ctx context.Context, tenantID string) (*TenantDetails, error) {
+	var details TenantDetails
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx, `
+		SELECT tenant_id, tenant_name, contact_person, contact_email, status, created_at
+		FROM iam_tenants
+		WHERE tenant_id = $1
+	`, tenantID).Scan(
+		&details.TenantID, &details.TenantName, &details.ContactPerson,
+		&details.ContactEmail, &details.Status, &createdAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	details.CreatedTime = createdAt.UnixMilli()
+	return &details, nil
+}
+
+// GetEndUserTenantID returns the active tenant ownership used by management
+// permission checks. Deleted end users are intentionally invisible.
+func (r *TenantRepository) GetEndUserTenantID(ctx context.Context, userID string) (string, error) {
+	var tenantID string
+	err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(tenant_id, '')
+		FROM iam_accounts
+		WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'
+	`, userID).Scan(&tenantID)
+	return tenantID, err
+}
+
 type ListTenantsParams struct {
 	Keyword string
 	Status  string // 存储层状态字符串（active/disabled/suspended），空表示不过滤
@@ -54,6 +86,18 @@ type TenantRow struct {
 	CreatedTime   *int64  `json:"createdTime"`
 	BalanceUSD    float64 `json:"balanceUsd"`
 	UserCount     int64   `json:"userCount"`
+}
+
+// TenantDetails is the scoped tenant projection used by admin detail and
+// tenant-self read handlers. It intentionally excludes aggregate balances and
+// user counts from the list projection.
+type TenantDetails struct {
+	TenantID      string
+	TenantName    string
+	ContactPerson *string
+	ContactEmail  *string
+	Status        string
+	CreatedTime   int64
 }
 
 type Tenant struct {
