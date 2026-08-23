@@ -255,18 +255,20 @@ func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInpu
 		return nil, httpx.ErrBadRequest.WithDetail("至少提供一个需要更新的字段")
 	}
 
-	result, err := h.pool.Exec(ctx, `
-		UPDATE iam_accounts
-		SET email = CASE WHEN $1 THEN NULLIF($2, '') ELSE email END,
-		    phone = CASE WHEN $3 THEN NULLIF($4, '') ELSE phone END,
-		    internal_note = CASE WHEN $5 THEN $6 ELSE internal_note END,
-		    updated_at = $7
-		WHERE user_id = $8 AND tenant_id = $9 AND user_type = 4 AND status <> 'deleted'
-	`, emailSet, email, phoneSet, phone, noteSet, internalNote, time.Now().UTC(), in.ID, claims.TenantID)
+	updated, err := h.endUserWriter.UpdateEndUser(ctx, userports.AdminEndUserUpdate{
+		UserID:          in.ID,
+		TenantID:        claims.TenantID,
+		EmailSet:        emailSet,
+		Email:           email,
+		PhoneSet:        phoneSet,
+		Phone:           phone,
+		InternalNoteSet: noteSet,
+		InternalNote:    internalNote,
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if result.RowsAffected() == 0 {
+	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	out := &messageOutput{}
@@ -293,12 +295,11 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 	if err := h.checkUserBelongsToTenant(ctx, in.ID, callerTenantID); err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET status = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 4`, in.Body.Status, now, in.ID)
+	updated, err := h.endUserWriter.UpdateEndUserStatus(ctx, in.ID, in.Body.Status)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if result.RowsAffected() == 0 {
+	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	if h.blacklist != nil {

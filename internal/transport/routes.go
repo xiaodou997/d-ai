@@ -48,16 +48,17 @@ type PortalDeps struct {
 
 // IdentityDeps contains account, session, tenant and invitation use cases.
 type IdentityDeps struct {
-	JWT           *auth.JWTService
-	Sessions      *auth.SessionService
-	Activations   *auth.ActivationService
-	MFA           *auth.MFAService
-	RecentAuth    *auth.RecentAuthService
-	Blacklist     *auth.BlacklistService
-	UserService   *userpkg.UserService
-	AdminAccounts userports.AdminAccountReader
-	AdminEndUsers userports.AdminEndUserReader
-	Invite        *invitepkg.InviteService
+	JWT                *auth.JWTService
+	Sessions           *auth.SessionService
+	Activations        *auth.ActivationService
+	MFA                *auth.MFAService
+	RecentAuth         *auth.RecentAuthService
+	Blacklist          *auth.BlacklistService
+	UserService        *userpkg.UserService
+	AdminAccounts      userports.AdminAccountReader
+	AdminEndUsers      userports.AdminEndUserReader
+	AdminEndUserWriter userports.AdminEndUserWriter
+	Invite             *invitepkg.InviteService
 }
 
 // BillingDeps contains payment and balance application services.

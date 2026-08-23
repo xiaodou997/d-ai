@@ -48,3 +48,24 @@ type AdminEndUserPage struct {
 type AdminEndUserReader interface {
 	ListEndUsers(ctx context.Context, filter AdminEndUserListFilter) (AdminEndUserPage, error)
 }
+
+// AdminEndUserUpdate describes the optional profile fields that may be
+// changed by a tenant-scoped management request. The set flags distinguish an
+// omitted field from an explicit clear.
+type AdminEndUserUpdate struct {
+	UserID          string
+	TenantID        string
+	EmailSet        bool
+	Email           string
+	PhoneSet        bool
+	Phone           string
+	InternalNoteSet bool
+	InternalNote    string
+}
+
+// AdminEndUserWriter owns end-user profile and status mutations. Session
+// blacklist side effects remain at the application/HTTP orchestration layer.
+type AdminEndUserWriter interface {
+	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
+	UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error)
+}

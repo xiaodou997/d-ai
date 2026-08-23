@@ -68,3 +68,78 @@ func TestAdminEndUserRepositoryAppliesScopeFiltersAndBalanceProjection(t *testin
 		t.Fatalf("keyword filter = %#v", keyword)
 	}
 }
+
+func TestAdminEndUserRepositoryUpdatesScopedProfileAndStatus(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	now := time.Date(2026, time.August, 23, 3, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name) VALUES ('tenant-write-a', 'Write Tenant A'), ('tenant-write-b', 'Write Tenant B')
+	`); err != nil {
+		t.Fatalf("seed tenants: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, phone, internal_note, user_type, status, created_at, updated_at)
+		VALUES
+			('end-write-a', 'tenant-write-a', 'write-a', 'hash', 'before@example.com', '100', 'before', 4, 'active', $1, $1),
+			('end-write-deleted', 'tenant-write-a', 'write-deleted', 'hash', 'deleted@example.com', '101', 'deleted', 4, 'deleted', $1, $1),
+			('end-write-b', 'tenant-write-b', 'write-b', 'hash', 'other@example.com', '200', 'other', 4, 'active', $1, $1)
+	`, now); err != nil {
+		t.Fatalf("seed end users: %v", err)
+	}
+
+	repo := NewAdminEndUserRepository(pool)
+	updated, err := repo.UpdateEndUser(ctx, userports.AdminEndUserUpdate{
+		UserID:          "end-write-a",
+		TenantID:        "tenant-write-a",
+		EmailSet:        true,
+		Email:           "after@example.com",
+		PhoneSet:        true,
+		Phone:           "",
+		InternalNoteSet: true,
+		InternalNote:    "after",
+	})
+	if err != nil || !updated {
+		t.Fatalf("UpdateEndUser = updated:%v err:%v", updated, err)
+	}
+	var email, phone, note string
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(email, ''), COALESCE(phone, ''), internal_note
+		FROM iam_accounts WHERE user_id = 'end-write-a'
+	`).Scan(&email, &phone, &note); err != nil {
+		t.Fatalf("read updated end user: %v", err)
+	}
+	if email != "after@example.com" || phone != "" || note != "after" {
+		t.Fatalf("updated profile = email:%q phone:%q note:%q", email, phone, note)
+	}
+
+	updated, err = repo.UpdateEndUser(ctx, userports.AdminEndUserUpdate{UserID: "end-write-a", TenantID: "tenant-write-b", EmailSet: true, Email: "wrong@example.com"})
+	if err != nil || updated {
+		t.Fatalf("cross-tenant UpdateEndUser = updated:%v err:%v", updated, err)
+	}
+	updated, err = repo.UpdateEndUser(ctx, userports.AdminEndUserUpdate{UserID: "end-write-deleted", TenantID: "tenant-write-a", EmailSet: true, Email: "wrong@example.com"})
+	if err != nil || updated {
+		t.Fatalf("deleted UpdateEndUser = updated:%v err:%v", updated, err)
+	}
+
+	updated, err = repo.UpdateEndUserStatus(ctx, "end-write-a", "disabled")
+	if err != nil || !updated {
+		t.Fatalf("UpdateEndUserStatus = updated:%v err:%v", updated, err)
+	}
+	var status string
+	if err := pool.QueryRow(ctx, `SELECT status FROM iam_accounts WHERE user_id = 'end-write-a'`).Scan(&status); err != nil {
+		t.Fatalf("read updated status: %v", err)
+	}
+	if status != "disabled" {
+		t.Fatalf("status = %q, want disabled", status)
+	}
+	updated, err = repo.UpdateEndUserStatus(ctx, "end-write-deleted", "active")
+	if err != nil || updated {
+		t.Fatalf("deleted UpdateEndUserStatus = updated:%v err:%v", updated, err)
+	}
+}

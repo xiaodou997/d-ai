@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	userports "xiaodou/dai/internal/user/ports"
@@ -16,6 +17,39 @@ type AdminEndUserRepository struct {
 
 func NewAdminEndUserRepository(pool *pgxpool.Pool) *AdminEndUserRepository {
 	return &AdminEndUserRepository{pool: pool}
+}
+
+// UpdateEndUser updates only fields explicitly selected by the caller. The
+// tenant and user-type predicates keep the write scoped even if a prior
+// ownership check races with a delete or reassignment attempt.
+func (r *AdminEndUserRepository) UpdateEndUser(ctx context.Context, input userports.AdminEndUserUpdate) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET email = CASE WHEN $1 THEN NULLIF($2, '') ELSE email END,
+		    phone = CASE WHEN $3 THEN NULLIF($4, '') ELSE phone END,
+		    internal_note = CASE WHEN $5 THEN $6 ELSE internal_note END,
+		    updated_at = $7
+		WHERE user_id = $8 AND tenant_id = $9 AND user_type = 4 AND status <> 'deleted'
+	`, input.EmailSet, input.Email, input.PhoneSet, input.Phone, input.InternalNoteSet, input.InternalNote, time.Now().UTC(), input.UserID, input.TenantID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// UpdateEndUserStatus changes an active end-user account state. Deleted
+// accounts are intentionally excluded so a stale request cannot resurrect
+// one that has already been removed from operational views.
+func (r *AdminEndUserRepository) UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET status = $1, updated_at = $2
+		WHERE user_id = $3 AND user_type = 4 AND status <> 'deleted'
+	`, status, time.Now().UTC(), userID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userports.AdminEndUserListFilter) (userports.AdminEndUserPage, error) {
