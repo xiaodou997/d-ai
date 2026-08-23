@@ -40,6 +40,45 @@ func NewSystemRepository(pool *pgxpool.Pool) *SystemRepository {
 	return &SystemRepository{pool: pool}
 }
 
+// FailedTransactionAlertRow is the read projection used by the admin
+// dashboard's recent failed-settlement alert panel.
+type FailedTransactionAlertRow struct {
+	RequestID       string
+	SettlementError string
+	BillingStatus   string
+	CreatedAt       time.Time
+}
+
+// ListFailedTransactionAlerts keeps the dashboard's fixed 24-hour/20-row
+// projection inside the system repository instead of leaking SQL into HTTP
+// transport.
+func (r *SystemRepository) ListFailedTransactionAlerts(ctx context.Context) ([]FailedTransactionAlertRow, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT request_id, COALESCE(settlement_error, ''), billing_status, created_at
+		FROM ai_usage_logs
+		WHERE billing_status = 'failed' AND created_at > now() - interval '24 hours'
+		ORDER BY created_at DESC
+		LIMIT 20
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	alerts := make([]FailedTransactionAlertRow, 0)
+	for rows.Next() {
+		var alert FailedTransactionAlertRow
+		if err := rows.Scan(&alert.RequestID, &alert.SettlementError, &alert.BillingStatus, &alert.CreatedAt); err != nil {
+			return nil, err
+		}
+		alerts = append(alerts, alert)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return alerts, nil
+}
+
 type GlobalStatsRow struct {
 	Currency                string  `json:"currency"`
 	TenantRechargePaidMinor int64   `json:"tenantRechargePaidMinor"`

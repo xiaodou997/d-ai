@@ -171,7 +171,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
-- [ ] 把权限、事务、状态机和数据库查询移出 `internal/transport`。
+- [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，其余用户/租户/支付域继续按边界逐项迁移。
 - [ ] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射。
 - [ ] 用户、租户、支付、充值、公告和清理逐域迁移。
 - [ ] AI 管理 API 按价格、上游、路由、用量、订阅和风控拆分。
@@ -484,3 +484,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
 - 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取、workspace、用户自助控制和用户自助读取路由均已脱离 `CoreHTTPDeps`，AI Core 只保留平台价格/限额端口；顶层平台 `transport.Deps` 仍保留部分具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
 - 下一候选项：P1-03 收敛 Transport 层权限、事务、状态机和数据库查询逻辑，并继续治理平台根容器。
+
+### P1-03（进行中，2026-08-23）
+
+- 首个查询边界闭环：管理 Dashboard 异常扣费告警的 `ai_usage_logs` 查询和行扫描已移入 `internal/system/pg.SystemRepository`；Transport 只负责调用端口、错误映射和 DTO 投影。
+- 回归：新增 canonical schema 集成测试，确认 24 小时窗口、失败状态过滤、空 settlement error 和时间倒序；`internal/transport` 仅保留展示转换。
+- 下一候选项：继续迁移 admin tenant/user/end-user 生命周期中的直接 SQL 与事务，优先抽取已有领域 repository 可承接的查询。

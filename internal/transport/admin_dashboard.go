@@ -95,28 +95,17 @@ func (h *adminHandlers) dashboardAlerts(ctx context.Context, _ *struct{}) (*dash
 	out := &dashboardAlertsOutput{}
 	out.Body.FailedTransactions = []failedTxAlert{}
 
-	rows, err := h.pool.Query(ctx, `
-		SELECT request_id, COALESCE(settlement_error, ''), billing_status, created_at
-		FROM ai_usage_logs
-		WHERE billing_status = 'failed' AND created_at > now() - interval '24 hours'
-		ORDER BY created_at DESC
-		LIMIT 20
-	`)
+	alerts, err := h.systemRepo.ListFailedTransactionAlerts(ctx)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var tx failedTxAlert
-		var createdAt time.Time
-		if err := rows.Scan(&tx.RequestID, &tx.TerminalNote, &tx.Status, &createdAt); err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		tx.CreatedTime = createdAt.UnixMilli()
-		out.Body.FailedTransactions = append(out.Body.FailedTransactions, tx)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+	for _, alert := range alerts {
+		out.Body.FailedTransactions = append(out.Body.FailedTransactions, failedTxAlert{
+			RequestID:    alert.RequestID,
+			TerminalNote: alert.SettlementError,
+			Status:       alert.BillingStatus,
+			CreatedTime:  alert.CreatedAt.UTC().UnixMilli(),
+		})
 	}
 	return out, nil
 }
