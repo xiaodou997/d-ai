@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
 	billingdomain "xiaodou/dai/internal/billing"
+	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -126,103 +126,63 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 	if !isAdminClaims(claims) {
 		tenantID = claims.TenantID
 	}
-
-	where := "WHERE eu.user_type = 4 AND eu.status <> 'deleted'"
-	args := []any{}
-	idx := 1
-	if tenantID != "" {
-		where += fmt.Sprintf(" AND eu.tenant_id = $%d", idx)
-		args = append(args, tenantID)
-		idx++
-	}
-	if in.Keyword != "" {
-		where += fmt.Sprintf(" AND (eu.username LIKE $%d OR eu.email LIKE $%d OR eu.phone LIKE $%d OR eu.internal_note LIKE $%d)", idx, idx, idx, idx)
-		p := "%" + in.Keyword + "%"
-		args = append(args, p)
-		idx++
-	}
-	// V1 终端用户独立搜索条件：租户名 / 用户名 / 状态
-	if in.TenantName != "" {
-		where += fmt.Sprintf(" AND t.tenant_name LIKE $%d", idx)
-		args = append(args, "%"+in.TenantName+"%")
-		idx++
-	}
-	if in.Username != "" {
-		where += fmt.Sprintf(" AND eu.username LIKE $%d", idx)
-		args = append(args, "%"+in.Username+"%")
-		idx++
-	}
-	if in.Status != 0 {
-		where += fmt.Sprintf(" AND eu.status = $%d", idx)
-		args = append(args, adminUserStatusFromInt(in.Status))
-		idx++
-	}
-
-	// COUNT 与数据查询统一带上 iam_tenants 连接，使 tenant_name 过滤可用。
-	from := "FROM iam_accounts eu LEFT JOIN iam_tenants t ON eu.tenant_id = t.tenant_id"
-
-	var total int64
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) "+from+" "+where, args...).Scan(&total)
-
-	size := in.Size
-	if size < 1 || size > 100 {
-		size = 20
-	}
-	offset := (in.Page - 1) * size
-	qargs := append(append([]any{}, args...), size, offset)
-	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
-		SELECT eu.user_id, eu.tenant_id, eu.username, eu.email, eu.phone, eu.internal_note, eu.nickname, eu.avatar,
-		       eu.status, eu.credential_state, eu.last_login_at, eu.created_at,
-		       COALESCE(t.tenant_name, '') AS tenant_name,
-		       COALESCE((SELECT b.balance_micro FROM bill_accounts b WHERE b.account_id = eu.user_id), 0) AS credits
-		%s
-		%s ORDER BY eu.created_at DESC LIMIT $%d OFFSET $%d
-	`, from, where, idx, idx+1), qargs...)
+	result, err := h.endUserRepo.ListEndUsers(ctx, userports.AdminEndUserListFilter{
+		TenantID:   tenantID,
+		TenantName: in.TenantName,
+		Username:   in.Username,
+		Keyword:    in.Keyword,
+		Status:     statusFilterForAdminEndUsers(in.Status),
+		Page:       in.Page,
+		Size:       in.Size,
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	defer rows.Close()
-
-	items := make([]endUserItem, 0)
-	for rows.Next() {
-		var it endUserItem
-		var creditsMicro int64
-		var email, phone, nickname, avatar, tenantName *string
-		var internalNote string
-		var status, credentialState string
-		var lastLogin *time.Time
-		var createdAt time.Time
-		if err := rows.Scan(&it.UserID, &it.TenantID, &it.Username, &email, &phone, &internalNote, &nickname, &avatar,
-			&status, &credentialState, &lastLogin, &createdAt, &tenantName, &creditsMicro); err != nil {
-			continue
-		}
-		it.BalanceUSD = billingdomain.MicroToUSD(creditsMicro)
-		it.Status = adminUserStatusToInt(status)
-		it.CredentialState = credentialState
-		it.CreatedTime = millisFromTime(createdAt)
-		if tenantName != nil {
-			it.TenantName = *tenantName
-		}
-		if email != nil {
-			it.Email = *email
-		}
-		if phone != nil {
-			it.Phone = *phone
-		}
-		it.InternalNote = internalNote
-		if nickname != nil {
-			it.Nickname = *nickname
-		}
-		if avatar != nil {
-			it.Avatar = *avatar
-		}
-		if lastLogin != nil {
-			v := millisFromTime(*lastLogin)
-			it.LastLoginTime = &v
-		}
-		items = append(items, it)
+	items := make([]endUserItem, 0, len(result.Records))
+	for _, row := range result.Records {
+		items = append(items, endUserItemFromRecord(row))
 	}
-	return &endUserListOutput{Body: httpx.NewPage(items, total, in.Page, size)}, nil
+	return &endUserListOutput{Body: httpx.NewPage(items, result.Total, result.Page, result.Size)}, nil
+}
+
+func statusFilterForAdminEndUsers(status int) string {
+	if status == 0 {
+		return ""
+	}
+	return adminUserStatusFromInt(status)
+}
+
+func endUserItemFromRecord(row userports.AdminEndUserRow) endUserItem {
+	item := endUserItem{
+		UserID:          row.UserID,
+		TenantID:        row.TenantID,
+		Username:        row.Username,
+		InternalNote:    row.InternalNote,
+		Status:          adminUserStatusToInt(row.Status),
+		CredentialState: row.CredentialState,
+		BalanceUSD:      billingdomain.MicroToUSD(row.BalanceMicroUSD),
+		CreatedTime:     millisFromTime(row.CreatedAt),
+	}
+	if row.TenantName != nil {
+		item.TenantName = *row.TenantName
+	}
+	if row.Email != nil {
+		item.Email = *row.Email
+	}
+	if row.Phone != nil {
+		item.Phone = *row.Phone
+	}
+	if row.Nickname != nil {
+		item.Nickname = *row.Nickname
+	}
+	if row.Avatar != nil {
+		item.Avatar = *row.Avatar
+	}
+	if row.LastLoginAt != nil {
+		value := millisFromTime(*row.LastLoginAt)
+		item.LastLoginTime = &value
+	}
+	return item
 }
 
 func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInput) (*createEndUserOutput, error) {

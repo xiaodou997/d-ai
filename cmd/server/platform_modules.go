@@ -40,6 +40,7 @@ type platformModules struct {
 	Blacklist     *auth.BlacklistService
 	UserService   *userpkg.UserService
 	AdminAccounts *userpg.AdminAccountRepository
+	AdminEndUsers *userpg.AdminEndUserRepository
 	Invite        *invitepkg.InviteService
 
 	Deduction *billingsvc.DeductionService
@@ -101,6 +102,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool)
+	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
 	wechatCfgStore := wechat.NewConfigStore(pool)
 	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger)
@@ -119,6 +121,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		Blacklist:     blacklist,
 		UserService:   userSvc,
 		AdminAccounts: adminAccountRepo,
+		AdminEndUsers: adminEndUserRepo,
 		Invite:        inviteSvc,
 		Deduction:     deductionSvc,
 		Payment:       paymentSvc,

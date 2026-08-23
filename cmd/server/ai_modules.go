@@ -347,6 +347,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				Blacklist:     platform.Blacklist,
 				UserService:   platform.UserService,
 				AdminAccounts: platform.AdminAccounts,
+				AdminEndUsers: platform.AdminEndUsers,
 				Invite:        platform.Invite,
 			},
 			BillingDeps: transport.BillingDeps{

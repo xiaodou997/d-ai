@@ -17,6 +17,7 @@ type adminHandlers struct {
 	pool        *pgxpool.Pool
 	tenantRepo  *tenantpg.TenantRepository
 	accountRepo userports.AdminAccountReader
+	endUserRepo userports.AdminEndUserReader
 	systemRepo  *systempg.SystemRepository
 	deduction   *billingsvc.DeductionService
 	blacklist   *auth.BlacklistService
@@ -41,6 +42,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		pool:        d.Pool,
 		tenantRepo:  tenantpg.NewTenantRepository(d.Pool),
 		accountRepo: d.AdminAccounts,
+		endUserRepo: d.AdminEndUsers,
 		systemRepo:  systempg.NewSystemRepository(d.Pool),
 		deduction:   d.Deduction,
 		blacklist:   d.Blacklist,
