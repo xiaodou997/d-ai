@@ -14,6 +14,7 @@ import (
 	"xiaodou/dai/internal/billing/ledger"
 	billingpg "xiaodou/dai/internal/billing/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
+	shared "xiaodou/dai/internal/domain"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -264,17 +265,17 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 	if in.Body.Reason == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("reason is required")
 	}
-	// 租户用户只能撤销本租户的 tenant_to_user 充值
-	if claims.UserType == 3 && claims.TenantID != "" {
-		var orderTenantID, orderType string
-		err := h.pool.QueryRow(ctx, `SELECT tenant_id, order_type FROM bill_recharge_orders WHERE order_id = $1`, in.OrderID).Scan(&orderTenantID, &orderType)
-		if err != nil || orderTenantID != claims.TenantID || orderType != billingdomain.OrderTypeTenantToUser {
+	var result *billingsvc.ReverseResult
+	var err error
+	if claims.UserType == 3 {
+		result, err = h.deduction.ReverseTenantOrder(in.OrderID, claims.TenantID, in.Body.Reason, claims.UserID)
+	} else {
+		result, err = h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, claims.UserID)
+	}
+	if err != nil {
+		if errors.Is(err, shared.ErrForbidden) {
 			return nil, httpx.ErrForbidden.WithDetail("只能撤销本租户的用户充值记录")
 		}
-	}
-
-	result, err := h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, claims.UserID)
-	if err != nil {
 		return nil, toProblem(err)
 	}
 	out := &reverseRechargeOutput{}

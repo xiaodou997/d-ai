@@ -130,8 +130,28 @@ type ReverseResult struct {
 }
 
 // ReverseOrder 撤销充值订单。
-// 权限校验由 Handler 层完成（管理员撤 platform_to_tenant，租户用户撤 tenant_to_user）
+//
+// This is the unrestricted port used by platform operators and the completed
+// payment-refund workflow. Tenant-scoped callers must use ReverseTenantOrder
+// so the scope check runs under the same row lock as the state transition.
 func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*ReverseResult, error) {
+	return s.reverseOrder(orderID, "", reason, operatorID)
+}
+
+// ReverseTenantOrder 撤销本租户的一次性用户充值。
+//
+// tenantID is deliberately part of the service command rather than a
+// preflight query in HTTP. The order row is selected FOR UPDATE before its
+// tenant and order type are checked, so an order cannot change scope between
+// authorization and reversal.
+func (s *DeductionService) ReverseTenantOrder(orderID, tenantID, reason, operatorID string) (*ReverseResult, error) {
+	if tenantID == "" {
+		return nil, shared.ErrForbidden
+	}
+	return s.reverseOrder(orderID, tenantID, reason, operatorID)
+}
+
+func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID string) (*ReverseResult, error) {
 	ctx := context.Background()
 
 	tx, err := s.pool.Begin(ctx)
@@ -140,14 +160,17 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 	}
 	defer tx.Rollback(ctx)
 
-	var status, orderType, paymentOrderID string
+	var orderTenantID, status, orderType, paymentOrderID string
 	var creditAmount int64
 	err = tx.QueryRow(ctx, `
-		SELECT status, order_type, COALESCE(payment_order_id, ''), credit_amount
+		SELECT tenant_id, status, order_type, COALESCE(payment_order_id, ''), credit_amount
 		FROM bill_recharge_orders WHERE order_id = $1 FOR UPDATE
-	`, orderID).Scan(&status, &orderType, &paymentOrderID, &creditAmount)
+	`, orderID).Scan(&orderTenantID, &status, &orderType, &paymentOrderID, &creditAmount)
 	if err != nil {
 		return nil, shared.ErrRechargeNotFound
+	}
+	if tenantID != "" && (orderTenantID != tenantID || orderType != billing.OrderTypeTenantToUser) {
+		return nil, shared.ErrForbidden
 	}
 	if status == billing.OrderStatusReversed {
 		return nil, shared.ErrRechargeAlreadyReversed

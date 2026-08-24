@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"xiaodou/dai/internal/billing/ledger"
 	"xiaodou/dai/internal/billing/service"
 	"xiaodou/dai/internal/dbtest"
+	shared "xiaodou/dai/internal/domain"
 )
 
 func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
@@ -163,5 +165,83 @@ func TestReverseOnlineUserCreditRequiresRefundWorkflow(t *testing.T) {
 	}
 	if paymentStatus != "paid" || fulfillmentStatus != "credited" || primaryStatus != "active" || incomeStatus != "active" || userBalance != 600000 || tenantBalance != 900000 || reversedAmount != 0 || lostAmount != 0 {
 		t.Fatalf("states payment/fulfillment/primary/income/user/tenant/reversed/lost = %s/%s/%s/%s/%d/%d/%d/%d", paymentStatus, fulfillmentStatus, primaryStatus, incomeStatus, userBalance, tenantBalance, reversedAmount, lostAmount)
+	}
+}
+
+func TestReverseTenantOrderEnforcesScopeInsideReversalTransaction(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES
+			('tenant_scope_a', 'Scope Tenant A', 'active'),
+			('tenant_scope_b', 'Scope Tenant B', 'active');
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
+		VALUES ('user_scope_a', 'tenant_scope_a', 'scope-user-a', 'x', 4, 'active');
+		INSERT INTO bill_recharge_orders (
+			order_id, order_type, tenant_id, user_id, credit_amount, paid_amount, operator_id
+		) VALUES
+			('ORD_SCOPE_USER', 'tenant_to_user', 'tenant_scope_a', 'user_scope_a', 1000, 0, 'tenant-a'),
+			('ORD_SCOPE_TENANT', 'platform_to_tenant', 'tenant_scope_a', NULL, 1000, 0, 'admin');
+	`); err != nil {
+		t.Fatalf("seed tenant-scoped recharge orders: %v", err)
+	}
+	grantTenantRechargeBalance(t, ctx, pool, "user_scope_a", "tenant_scope_a", "ORD_SCOPE_USER", 1000)
+
+	deduction := service.NewDeductionService(pool, zap.NewNop())
+	if _, err := deduction.ReverseTenantOrder("ORD_SCOPE_USER", "tenant_scope_b", "wrong tenant", "tenant-b"); !errors.Is(err, shared.ErrForbidden) {
+		t.Fatalf("cross-tenant reversal error = %v, want ErrForbidden", err)
+	}
+	if _, err := deduction.ReverseTenantOrder("ORD_SCOPE_TENANT", "tenant_scope_a", "wrong order type", "tenant-a"); !errors.Is(err, shared.ErrForbidden) {
+		t.Fatalf("platform order reversal error = %v, want ErrForbidden", err)
+	}
+
+	var status string
+	var balance int64
+	if err := pool.QueryRow(ctx, `SELECT status FROM bill_recharge_orders WHERE order_id = 'ORD_SCOPE_USER'`).Scan(&status); err != nil {
+		t.Fatalf("read order after forbidden reversal: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_scope_a'`).Scan(&balance); err != nil {
+		t.Fatalf("read balance after forbidden reversal: %v", err)
+	}
+	if status != billing.OrderStatusActive || balance != 1000 {
+		t.Fatalf("forbidden reversal changed order/balance to %s/%d", status, balance)
+	}
+
+	result, err := deduction.ReverseTenantOrder("ORD_SCOPE_USER", "tenant_scope_a", "approved", "tenant-a")
+	if err != nil {
+		t.Fatalf("same-tenant reversal: %v", err)
+	}
+	if result.ReversedCredits != 1000 || result.LostCredits != 0 || result.IsPartial {
+		t.Fatalf("reversal result = %+v", result)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM bill_recharge_orders WHERE order_id = 'ORD_SCOPE_USER'`).Scan(&status); err != nil {
+		t.Fatalf("read reversed order: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_scope_a'`).Scan(&balance); err != nil {
+		t.Fatalf("read reversed balance: %v", err)
+	}
+	if status != billing.OrderStatusReversed || balance != 0 {
+		t.Fatalf("same-tenant reversal state = %s/%d", status, balance)
+	}
+}
+
+func grantTenantRechargeBalance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID, tenantID, orderID string, amount int64) {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin tenant recharge grant: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := ledger.Grant(ctx, tx, ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID}, amount, nil, billing.PackageSourceTenantRecharge, orderID); err != nil {
+		t.Fatalf("grant tenant recharge balance: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit tenant recharge grant: %v", err)
 	}
 }
