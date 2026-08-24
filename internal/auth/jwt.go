@@ -110,7 +110,7 @@ func NewJWTService(cfg config.JWTConfig, database *pgxpool.Pool) *JWTService {
 		s.accessTokenExpiration = 15 * time.Minute
 	}
 
-	if err := s.reloadKeys(); err != nil {
+	if err := s.reloadKeys(context.Background()); err != nil {
 		panic("JWTService: failed to load keys from DB: " + err.Error())
 	}
 
@@ -119,7 +119,7 @@ func NewJWTService(cfg config.JWTConfig, database *pgxpool.Pool) *JWTService {
 		if err := s.generateAndSaveKey(); err != nil {
 			panic("JWTService: failed to generate initial key: " + err.Error())
 		}
-		if err := s.reloadKeys(); err != nil {
+		if err := s.reloadKeys(context.Background()); err != nil {
 			panic("JWTService: failed to reload keys after generation: " + err.Error())
 		}
 	}
@@ -164,8 +164,7 @@ func (s *JWTService) generateAndSaveKey() error {
 
 // reloadKeys 从数据库重新加载 active 和 grace 密钥到内存
 // DB 查询在锁外完成，内存 swap 在写锁内完成，避免 IO 阻塞验签并发
-func (s *JWTService) reloadKeys() error {
-	ctx := context.Background()
+func (s *JWTService) reloadKeys(ctx context.Context) error {
 	rows, err := s.database.Query(ctx, `
 		SELECT kid, private_key, public_key, status
 		FROM auth_signing_keys
@@ -406,14 +405,13 @@ func (s *JWTService) RotateKey() error {
 		return fmt.Errorf("commit rotation: %w", err)
 	}
 
-	return s.reloadKeys()
+	return s.reloadKeys(context.Background())
 }
 
 // RetireExpiredGraceKeys 退役宽限期已过的密钥（由调度器定期调用）
-func (s *JWTService) RetireExpiredGraceKeys() error {
+func (s *JWTService) RetireExpiredGraceKeys(ctx context.Context) error {
 	now := time.Now().UTC()
-	ctx := context.Background()
-	result, err := s.database.Exec(ctx, `
+	_, err := s.database.Exec(ctx, `
 		UPDATE auth_signing_keys
 		SET status = 'retired', retired_at = $1
 		WHERE status = 'grace' AND grace_until IS NOT NULL AND grace_until < $2
@@ -421,11 +419,10 @@ func (s *JWTService) RetireExpiredGraceKeys() error {
 	if err != nil {
 		return err
 	}
-	affected := result.RowsAffected()
-	if affected > 0 {
-		return s.reloadKeys()
-	}
-	return nil
+	// Every replica reloads, including replicas whose UPDATE matched zero rows.
+	// The first replica retires the row in PostgreSQL; the others still need to
+	// evict that key from their local JWKS cache instead of accepting it forever.
+	return s.reloadKeys(ctx)
 }
 
 // GetJWKS 返回当前所有可用公钥的 JWKS 格式（active + grace）

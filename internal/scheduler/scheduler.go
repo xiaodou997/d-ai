@@ -17,7 +17,7 @@ import (
 
 // jwtKeyRetirer 定义 JWT 密钥退役接口，避免循环依赖
 type jwtKeyRetirer interface {
-	RetireExpiredGraceKeys() error
+	RetireExpiredGraceKeys(ctx context.Context) error
 }
 
 // paymentSweeper 定义支付兜底扫描接口，避免循环依赖（实现见 internal/payment/service）。
@@ -343,10 +343,9 @@ func (s *Scheduler) retireExpiredGraceKeys() error {
 	if s.keyRetirer == nil {
 		return &taskSkippedError{reason: "key_retire_not_configured"}
 	}
-	if err := s.keyRetirer.RetireExpiredGraceKeys(); err != nil {
-		return err
-	}
-	return nil
+	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	defer cancel()
+	return s.keyRetirer.RetireExpiredGraceKeys(ctx)
 }
 
 // ==================== 支付兜底 sweep（超时关单 + 在途补偿，设计文档 §4.5） ====================

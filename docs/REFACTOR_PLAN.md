@@ -237,7 +237,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [ ] 结算 Outbox 保持多消费者唯一处理。
 - [ ] 异步任务和 Webhook 保持租约、心跳、回收与 fencing。
 - [ ] 调度任务统一使用 advisory lock、租约或可证明的幂等执行。
-- [ ] JWT key retire、支付补偿、数据清理、文件清理和价格同步逐项验证。
+- [x] JWT key retire 使用数据库条件更新并由每个副本在每轮执行后刷新本地 key cache。
+- [ ] 支付补偿、数据清理、文件清理和价格同步逐项验证。
 - [ ] 禁止依赖进程内内存作为跨副本真相源。
 
 ### P2-03 独立交付 Portal
@@ -504,6 +505,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 提现查询边界：提现列表改用 `payment.WithdrawalListParams`，`PaymentService` 负责状态白名单与输入归一化，adapter 只执行已校验的查询。
 - 调度生命周期边界：支付 cleanup 错误回传 Scheduler 统一观测；Scheduler 防止重复 Start/Stop，停止时等待 worker 退出并可中断 JWT 退役初始等待。
 - 后台任务观测边界：Scheduler 统一记录任务运行/成功/失败/跳过状态并挂载到 `/health`；PaymentService.SweepOnce 聚合单轮错误，避免局部失败被误报为成功。
+- JWT 退役边界：`RetireExpiredGraceKeys(ctx)` 使用带超时的条件更新，并在 UPDATE 影响 0 行时仍 reload keys，避免只有抢到最后一行更新的副本清理本地 grace key、其他副本永久保留旧公钥。
 - 跨副本锁边界：支付 sweep/cleanup 的 advisory lock 由同一物理 PostgreSQL 连接完成获取、执行和释放；任务上下文有 5 分钟硬超时，解锁不受任务超时影响，避免连接池错配和永久占锁。
 - 调度指标边界：Scheduler 暴露任务运行结果、耗时、运行中、连续失败和跳过原因 Prometheus 指标；失败/卡住/持续跨副本跳过可以在管理端 `/metrics` 上做告警，不改变 `/ready` 的基础设施语义。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
@@ -537,4 +539,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增 Scheduler 生命周期测试，覆盖重复启动/停止不 panic 且 worker 可及时退出。
 - 回归：新增 Scheduler 健康快照测试，覆盖失败计数、跨副本 advisory lock 跳过和最近错误投影。
 - 回归：新增 Scheduler PostgreSQL advisory lock 集成测试，确认同一锁连续两轮均可获取，防止连接池跨会话释放回归。
-- 下一候选项：逐项验证 JWT key retire、价格同步等未使用 advisory lock 的后台任务多副本语义，并为需要长任务的 worker 补充租约/心跳与 fencing。
+- 回归：新增 JWT 多副本退役测试，确认一个副本完成 grace key 退役后，另一个 UPDATE 影响 0 行的副本也会刷新 JWKS 缓存。
+- 下一候选项：验证价格同步的多副本幂等与失败重试语义，并为需要长任务的 worker 补充租约/心跳与 fencing。
