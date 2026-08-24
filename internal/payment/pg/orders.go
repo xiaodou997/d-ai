@@ -144,12 +144,20 @@ func UpdateStatusTx(ctx context.Context, tx pgx.Tx, orderID, status, failNote st
 	return err
 }
 
-// UpdateStatus 非事务版本，供 sweep 任务标记 closed/expired（不涉及记账，无需事务）。
-func UpdateStatus(ctx context.Context, pool *pgxpool.Pool, orderID, status, failNote string) error {
-	_, err := pool.Exec(ctx, `
-		UPDATE pay_orders SET status = $1, fail_note = NULLIF($2,''), updated_at = now() WHERE order_id = $3
-	`, status, failNote, orderID)
-	return err
+// UpdateStatusIfCurrent performs the non-payment sweep transition only when
+// the order still has the status observed before the provider call. This is an
+// optimistic state-machine guard: a concurrent callback that already marked
+// the order paid cannot be overwritten by a late close/expire result.
+func UpdateStatusIfCurrent(ctx context.Context, pool *pgxpool.Pool, orderID, expectedStatus, status, failNote string) (bool, error) {
+	result, err := pool.Exec(ctx, `
+		UPDATE pay_orders
+		SET status = $1, fail_note = NULLIF($2, ''), updated_at = now()
+		WHERE order_id = $3 AND status = $4
+	`, status, failNote, orderID, expectedStatus)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == 1, nil
 }
 
 // DeleteStaleClosedOrders removes only closed payment shells that never paid

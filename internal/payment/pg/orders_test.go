@@ -58,3 +58,40 @@ func TestListOrdersIncludesTenantAndUserNames(t *testing.T) {
 		t.Fatalf("payment owner names = %q/%q", orders[0].TenantName, orders[0].Username)
 	}
 }
+
+func TestUpdateStatusIfCurrentDoesNotOverwriteConcurrentPaidTransition(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("payment test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	orderID := "PAY_SWEEP_" + suffix
+	if err := paymentpg.InsertOrder(ctx, pool, &payment.Order{
+		OrderID: orderID, OutTradeNo: "OUT_SWEEP_" + suffix, Scene: payment.SceneTenantTopup,
+		TenantID: "tenant-sweep-transition", TopupMode: "custom", PaymentCurrency: money.CurrencyUSD,
+		PaymentAmountMinor: 100, LedgerCurrency: money.CurrencyUSD, GrossAmountMicroUSD: 1_000_000,
+		CreditedAmountMicroUSD: 1_000_000, Channel: "wechat_native", Status: payment.OrderStatusCreated,
+		ExpiresAt: time.Now().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed sweep transition order: %v", err)
+	}
+
+	updated, err := paymentpg.UpdateStatusIfCurrent(ctx, pool, orderID, payment.OrderStatusCreated, payment.OrderStatusClosed, "")
+	if err != nil || !updated {
+		t.Fatalf("first sweep transition = updated:%v err:%v", updated, err)
+	}
+	updated, err = paymentpg.UpdateStatusIfCurrent(ctx, pool, orderID, payment.OrderStatusCreated, payment.OrderStatusExpired, "late close failure")
+	if err != nil || updated {
+		t.Fatalf("stale sweep transition = updated:%v err:%v", updated, err)
+	}
+	var status, failNote string
+	if err := pool.QueryRow(ctx, `SELECT status, COALESCE(fail_note, '') FROM pay_orders WHERE order_id = $1`, orderID).Scan(&status, &failNote); err != nil {
+		t.Fatalf("read sweep transition order: %v", err)
+	}
+	if status != payment.OrderStatusClosed || failNote != "" {
+		t.Fatalf("stale sweep transition changed order to %s/%q", status, failNote)
+	}
+}

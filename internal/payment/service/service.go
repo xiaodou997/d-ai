@@ -461,13 +461,19 @@ func (s *PaymentService) sweepExpiredOrder(ctx context.Context, o *payment.Order
 		return
 	}
 	if closeErr := s.gateway.Close(ctx, o.OutTradeNo); closeErr != nil {
-		if err := paymentpg.UpdateStatus(ctx, s.pool, o.OrderID, payment.OrderStatusExpired, closeErr.Error()); err != nil {
+		updated, err := paymentpg.UpdateStatusIfCurrent(ctx, s.pool, o.OrderID, o.Status, payment.OrderStatusExpired, closeErr.Error())
+		if err != nil {
 			s.logger.Error("[支付sweep] 标记订单 expired 失败", zap.String("orderId", o.OrderID), zap.Error(err))
+		} else if !updated {
+			s.logger.Info("[支付sweep] 订单状态已变化，跳过 expired 覆盖", zap.String("orderId", o.OrderID), zap.String("observedStatus", o.Status))
 		}
 		return
 	}
-	if err := paymentpg.UpdateStatus(ctx, s.pool, o.OrderID, payment.OrderStatusClosed, ""); err != nil {
+	updated, err := paymentpg.UpdateStatusIfCurrent(ctx, s.pool, o.OrderID, o.Status, payment.OrderStatusClosed, "")
+	if err != nil {
 		s.logger.Error("[支付sweep] 标记订单 closed 失败", zap.String("orderId", o.OrderID), zap.Error(err))
+	} else if !updated {
+		s.logger.Info("[支付sweep] 订单状态已变化，跳过 closed 覆盖", zap.String("orderId", o.OrderID), zap.String("observedStatus", o.Status))
 	}
 }
 

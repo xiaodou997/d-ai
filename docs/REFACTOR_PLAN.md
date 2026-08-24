@@ -500,6 +500,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 支付订单边界：`GrantBalance` 统一约束五类 `order_type` 与额度来源、用户目标和 `payment_order_id` 的组合，阻止在线支付与人工充值参数混用。
 - 支付查询边界：普通支付订单和统一充值列表/详情查询参数下沉到 `payment` domain，`PaymentService` 封装 PostgreSQL adapter；Transport 不再直接依赖 `payment/pg` 查询。
 - 支付状态机边界：管理端同步、手动充值额度冲正和在线退款均通过 `PaymentService` application command 执行；订单类型判断、可操作状态和结果刷新不再由 Transport 编排。
+- Sweep 状态机边界：超时关单/过期迁移改为按扫描时状态条件更新，支付提供商调用与回调并发时不会发生 `paid` 被 `closed/expired` 覆盖。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
@@ -526,4 +527,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增 AuthRepository canonical schema 测试，覆盖认证审计日志过滤、空值投影、时间/ID 稳定排序和分页归一化。
 - 回归：新增 PaymentService canonical schema 测试，覆盖统一充值列表/详情查询和缺失订单错误归一化。
 - 回归：扩展 PaymentService 状态动作测试，覆盖手动订单拒绝同步/退款、人工额度冲正、重复冲正和统一投影刷新。
-- 下一候选项：继续收敛支付 sweep/cleanup 状态机与提现查询边界。
+- 回归：新增支付订单状态迁移测试，覆盖条件更新成功、陈旧 sweep 更新被拒绝和终态保持不变。
+- 下一候选项：继续收敛支付 cleanup 与提现查询边界。

@@ -60,6 +60,7 @@ httpServers.Start / Shutdown
 - `GrantBalance` 保留为支付结算使用的外部事务原语，并统一校验订单类型、额度来源与 `payment_order_id` 的组合，避免人工充值和在线支付生命周期交叉写入。
 - 管理支付订单与统一充值列表/详情查询通过 `PaymentService` application API 暴露，Transport 不再 import `payment/pg` 或传递 adapter 查询参数。
 - 管理充值同步、手动额度冲正和在线退款入口统一由 `PaymentService` 校验订单类型/状态并编排动作，Transport 不再先读投影再自行决定状态机分支。
+- 支付 sweep 的 `closed/expired` 迁移使用 `UpdateStatusIfCurrent` 乐观状态条件，外部支付调用返回后不会覆盖并发回调已提交的 `paid` 状态。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。
