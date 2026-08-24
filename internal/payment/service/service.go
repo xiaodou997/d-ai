@@ -433,14 +433,13 @@ func (s *PaymentService) SweepOnce(ctx context.Context) {
 
 // CleanupClosedOrders removes only stale unpaid payment shells. Paid orders,
 // fulfilled orders and any order with a balance/refund link are retained.
-func (s *PaymentService) CleanupClosedOrders(ctx context.Context) {
+func (s *PaymentService) CleanupClosedOrders(ctx context.Context) error {
 	cutoff := billingdomain.NowUTC().Add(-ClosedOrderRetention)
 	total := 0
 	for {
 		deleted, err := paymentpg.DeleteStaleClosedOrders(ctx, s.pool, cutoff, closedOrderCleanupBatch)
 		if err != nil {
-			s.logger.Error("[支付清理] 删除已关闭未支付订单失败", zap.Error(err))
-			return
+			return fmt.Errorf("删除已关闭未支付订单失败: %w", err)
 		}
 		total += deleted
 		if deleted < closedOrderCleanupBatch {
@@ -450,6 +449,7 @@ func (s *PaymentService) CleanupClosedOrders(ctx context.Context) {
 	if total > 0 {
 		s.logger.Info("[支付清理] 已删除长期未支付订单", zap.Int("orderCount", total), zap.Duration("retention", ClosedOrderRetention))
 	}
+	return nil
 }
 
 func (s *PaymentService) sweepExpiredOrder(ctx context.Context, o *payment.Order) {

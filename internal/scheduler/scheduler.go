@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,7 +22,7 @@ type paymentSweeper interface {
 }
 
 type paymentOrderCleaner interface {
-	CleanupClosedOrders(ctx context.Context)
+	CleanupClosedOrders(ctx context.Context) error
 }
 
 // Scheduler 定时任务调度器
@@ -32,6 +33,10 @@ type Scheduler struct {
 	paymentCleaner paymentOrderCleaner
 	logger         *zap.Logger
 	stopChan       chan struct{}
+	lifecycleMu    sync.Mutex
+	started        bool
+	stopped        bool
+	workers        sync.WaitGroup
 }
 
 // NewScheduler 创建调度器
@@ -49,17 +54,37 @@ func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper p
 
 // Start 启动定时任务
 func (s *Scheduler) Start() {
+	s.lifecycleMu.Lock()
+	if s.started || s.stopped {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.started = true
+	s.workers.Add(4)
+	s.lifecycleMu.Unlock()
+
 	s.logger.Info("Scheduler started")
 
-	go s.runLotExpiryTask()
-	go s.runJWTKeyRetireTask()
-	go s.runPaymentSweepTask()
-	go s.runPaymentCleanupTask()
+	go func() { defer s.workers.Done(); s.runLotExpiryTask() }()
+	go func() { defer s.workers.Done(); s.runJWTKeyRetireTask() }()
+	go func() { defer s.workers.Done(); s.runPaymentSweepTask() }()
+	go func() { defer s.workers.Done(); s.runPaymentCleanupTask() }()
 }
 
 // Stop 停止定时任务
 func (s *Scheduler) Stop() {
+	s.lifecycleMu.Lock()
+	if s.stopped {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.stopped = true
+	started := s.started
 	close(s.stopChan)
+	s.lifecycleMu.Unlock()
+	if started {
+		s.workers.Wait()
+	}
 	s.logger.Info("Scheduler stopped")
 }
 
@@ -128,7 +153,13 @@ func (s *Scheduler) settleExpiredLotBatch(ctx context.Context, now time.Time) (i
 // ==================== JWT 密钥退役 ====================
 
 func (s *Scheduler) runJWTKeyRetireTask() {
-	time.Sleep(5 * time.Minute)
+	timer := time.NewTimer(5 * time.Minute)
+	defer timer.Stop()
+	select {
+	case <-s.stopChan:
+		return
+	case <-timer.C:
+	}
 
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
@@ -214,7 +245,9 @@ func (s *Scheduler) cleanupClosedOrders() {
 		return
 	}
 	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment_cleanup'))`) //nolint
-	s.paymentCleaner.CleanupClosedOrders(ctx)
+	if err := s.paymentCleaner.CleanupClosedOrders(ctx); err != nil {
+		s.logger.Error("[定时任务] 支付订单清理失败", zap.Error(err))
+	}
 }
 
 // RunAllTasks 手动执行所有任务（用于测试）

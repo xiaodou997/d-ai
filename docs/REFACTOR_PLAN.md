@@ -502,6 +502,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 支付状态机边界：管理端同步、手动充值额度冲正和在线退款均通过 `PaymentService` application command 执行；订单类型判断、可操作状态和结果刷新不再由 Transport 编排。
 - Sweep 状态机边界：超时关单/过期迁移改为按扫描时状态条件更新，支付提供商调用与回调并发时不会发生 `paid` 被 `closed/expired` 覆盖。
 - 提现查询边界：提现列表改用 `payment.WithdrawalListParams`，`PaymentService` 负责状态白名单与输入归一化，adapter 只执行已校验的查询。
+- 调度生命周期边界：支付 cleanup 错误回传 Scheduler 统一观测；Scheduler 防止重复 Start/Stop，停止时等待 worker 退出并可中断 JWT 退役初始等待。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
@@ -530,4 +531,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：扩展 PaymentService 状态动作测试，覆盖手动订单拒绝同步/退款、人工额度冲正、重复冲正和统一投影刷新。
 - 回归：新增支付订单状态迁移测试，覆盖条件更新成功、陈旧 sweep 更新被拒绝和终态保持不变。
 - 回归：新增提现列表 application 测试，覆盖状态空白归一化、有效筛选和未知状态拒绝。
-- 下一候选项：继续收敛支付 cleanup 的可观测性与调度生命周期。
+- 回归：新增 Scheduler 生命周期测试，覆盖重复启动/停止不 panic 且 worker 可及时退出。
+- 下一候选项：继续治理后台任务健康状态、失败重试和跨副本调度观测。
