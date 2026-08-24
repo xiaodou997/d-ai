@@ -507,6 +507,9 @@ CREATE TABLE sys_data_cleanup_runs (
     targets      JSONB NOT NULL DEFAULT '[]'::jsonb,
     summary      JSONB NOT NULL DEFAULT '{}'::jsonb,
     error        TEXT,
+    owner_id     TEXT,
+    heartbeat_at TIMESTAMPTZ,
+    lease_until  TIMESTAMPTZ,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     started_at   TIMESTAMPTZ,
     completed_at TIMESTAMPTZ
@@ -518,6 +521,9 @@ CREATE UNIQUE INDEX uq_sys_data_cleanup_active
     WHERE status IN ('queued', 'running');
 CREATE INDEX idx_sys_data_cleanup_runs_created
     ON sys_data_cleanup_runs (created_at DESC);
+CREATE INDEX idx_sys_data_cleanup_runs_lease
+    ON sys_data_cleanup_runs (lease_until)
+    WHERE status IN ('queued', 'running');
 
 CREATE TABLE pay_tenant_settings (
     tenant_id TEXT PRIMARY KEY,
@@ -2273,6 +2279,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 14);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 15);
 
 COMMIT;

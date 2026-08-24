@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,11 +32,14 @@ const (
 	ConfirmationPhrase = "CLEANUP_DATA"
 	policyKey          = "data_cleanup"
 	cleanupRunLimit    = 30
+	cleanupLeaseTTL    = 2 * time.Minute
+	cleanupHeartbeat   = cleanupLeaseTTL / 3
 )
 
 var (
 	ErrAlreadyRunning = errors.New("data cleanup is already running")
 	ErrInvalidTarget  = errors.New("invalid data cleanup target")
+	ErrLeaseLost      = errors.New("data cleanup lease was lost")
 	archiveTableName  = regexp.MustCompile(`^ai_request_payloads_archive_[0-9]{4}_[0-9]{2}$`)
 )
 
@@ -84,16 +88,26 @@ type Run struct {
 }
 
 type Service struct {
-	pool   *pgxpool.Pool
-	logger *zap.Logger
-	root   context.Context
+	pool              *pgxpool.Pool
+	logger            *zap.Logger
+	root              context.Context
+	ownerID           string
+	leaseTTL          time.Duration
+	heartbeatInterval time.Duration
 }
 
 func NewService(pool *pgxpool.Pool, logger *zap.Logger) *Service {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &Service{pool: pool, logger: logger, root: context.Background()}
+	return &Service{
+		pool:              pool,
+		logger:            logger,
+		root:              context.Background(),
+		ownerID:           uuid.NewString(),
+		leaseTTL:          cleanupLeaseTTL,
+		heartbeatInterval: cleanupHeartbeat,
+	}
 }
 
 func DefaultPolicy() Policy {
@@ -265,6 +279,9 @@ func (s *Service) runAutomatic(ctx context.Context) {
 }
 
 func (s *Service) queueRun(trigger string, targets []string, actor string) (Run, error) {
+	if err := s.recoverStaleRuns(context.Background()); err != nil {
+		return Run{}, fmt.Errorf("recover stale cleanup runs: %w", err)
+	}
 	rawTargets, err := json.Marshal(targets)
 	if err != nil {
 		return Run{}, err
@@ -272,11 +289,13 @@ func (s *Service) queueRun(trigger string, targets []string, actor string) (Run,
 	var run Run
 	var rawTargetBytes, rawSummary []byte
 	err = s.pool.QueryRow(context.Background(), `
-		INSERT INTO sys_data_cleanup_runs (trigger, status, requested_by, targets)
-		VALUES ($1, 'queued', NULLIF($2, ''), $3::jsonb)
+		INSERT INTO sys_data_cleanup_runs (
+			trigger, status, requested_by, targets, owner_id, heartbeat_at, lease_until
+		)
+		VALUES ($1, 'queued', NULLIF($2, ''), $3::jsonb, $4, now(), now() + make_interval(secs => $5))
 		RETURNING id, trigger, status, COALESCE(requested_by, ''), targets, summary,
 		          COALESCE(error, ''), created_at, started_at, completed_at
-	`, trigger, actor, rawTargets).Scan(
+	`, trigger, actor, rawTargets, s.ownerID, s.leaseTTL.Seconds()).Scan(
 		&run.ID, &run.Trigger, &run.Status, &run.RequestedBy,
 		&rawTargetBytes, &rawSummary, &run.Error, &run.CreatedAt, &run.StartedAt, &run.CompletedAt,
 	)
@@ -297,35 +316,102 @@ func (s *Service) queueRun(trigger string, targets []string, actor string) (Run,
 }
 
 func (s *Service) execute(ctx context.Context, runID, trigger string, targets []string, actor string) {
+	workCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	started := time.Now().UTC()
-	if _, err := s.pool.Exec(ctx, `
+	claimed, err := s.pool.Exec(workCtx, `
 		UPDATE sys_data_cleanup_runs
-		SET status = 'running', started_at = $2
-		WHERE id = $1 AND status = 'queued'
-	`, runID, started); err != nil {
+		SET status = 'running', started_at = $2, heartbeat_at = $2,
+		    lease_until = $2 + make_interval(secs => $3)
+		WHERE id = $1 AND status = 'queued' AND owner_id = $4 AND lease_until > now()
+	`, runID, started, s.leaseTTL.Seconds(), s.ownerID)
+	if err != nil {
 		s.logger.Error("data cleanup: mark run running failed", zap.String("run_id", runID), zap.Error(err))
-		s.finishRun(context.WithoutCancel(ctx), runID, trigger, actor, targets, nil, err)
 		return
 	}
+	if claimed.RowsAffected() != 1 {
+		s.logger.Info("data cleanup: run lease was not acquired", zap.String("run_id", runID))
+		return
+	}
+	leaseEvents := s.monitorLease(workCtx, cancel, runID)
 
-	policy, err := s.GetPolicy(ctx)
+	policy, err := s.GetPolicy(workCtx)
 	if err != nil {
-		s.finishRun(ctx, runID, trigger, actor, targets, nil, err)
+		cancel()
+		leaseErr := <-leaseEvents
+		if leaseErr != nil {
+			err = errors.Join(err, leaseErr)
+		}
+		s.finishRun(context.WithoutCancel(ctx), runID, trigger, actor, targets, nil, s.ownerID, err)
 		return
 	}
 	summary := make(map[string]int64, len(targets))
 	for _, target := range targets {
-		count, cleanErr := s.cleanTarget(ctx, target, policy)
+		count, cleanErr := s.cleanTarget(workCtx, target, policy)
 		if cleanErr != nil {
-			s.finishRun(ctx, runID, trigger, actor, targets, summary, fmt.Errorf("%s: %w", target, cleanErr))
-			return
+			err = fmt.Errorf("%s: %w", target, cleanErr)
+			break
 		}
 		summary[target] = count
 	}
-	s.finishRun(ctx, runID, trigger, actor, targets, summary, nil)
+	cancel()
+	if leaseErr := <-leaseEvents; leaseErr != nil {
+		if err == nil {
+			err = leaseErr
+		} else {
+			err = errors.Join(err, leaseErr)
+		}
+	}
+	s.finishRun(context.WithoutCancel(ctx), runID, trigger, actor, targets, summary, s.ownerID, err)
 }
 
-func (s *Service) finishRun(ctx context.Context, runID, trigger, actor string, targets []string, summary map[string]int64, runErr error) {
+func (s *Service) monitorLease(ctx context.Context, cancel context.CancelFunc, runID string) <-chan error {
+	events := make(chan error, 1)
+	interval := s.heartbeatInterval
+	if interval <= 0 {
+		interval = cleanupHeartbeat
+	}
+	go func() {
+		defer close(events)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				beatCtx, beatCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				held, err := s.renewLease(beatCtx, runID)
+				beatCancel()
+				if err != nil {
+					events <- fmt.Errorf("cleanup lease heartbeat failed: %w", err)
+					cancel()
+					return
+				}
+				if !held {
+					events <- ErrLeaseLost
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return events
+}
+
+func (s *Service) renewLease(ctx context.Context, runID string) (bool, error) {
+	result, err := s.pool.Exec(ctx, `
+		UPDATE sys_data_cleanup_runs
+		SET heartbeat_at = now(), lease_until = now() + make_interval(secs => $3)
+		WHERE id = $1 AND status = 'running' AND owner_id = $2 AND lease_until > now()
+	`, runID, s.ownerID, s.leaseTTL.Seconds())
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == 1, nil
+}
+
+func (s *Service) finishRun(ctx context.Context, runID, trigger, actor string, targets []string, summary map[string]int64, ownerID string, runErr error) {
 	status := "completed"
 	errorText := ""
 	if runErr != nil {
@@ -334,13 +420,18 @@ func (s *Service) finishRun(ctx context.Context, runID, trigger, actor string, t
 	}
 	rawSummary, _ := json.Marshal(summary)
 	now := time.Now().UTC()
-	_, err := s.pool.Exec(ctx, `
+	result, err := s.pool.Exec(ctx, `
 		UPDATE sys_data_cleanup_runs
-		SET status = $2, summary = $3::jsonb, error = NULLIF($4, ''), completed_at = $5
-		WHERE id = $1
-	`, runID, status, rawSummary, errorText, now)
+		SET status = $2, summary = $3::jsonb, error = NULLIF($4, ''), completed_at = $5,
+		    owner_id = NULL, heartbeat_at = NULL, lease_until = NULL
+		WHERE id = $1 AND status = 'running' AND owner_id = $6
+	`, runID, status, rawSummary, errorText, now, ownerID)
 	if err != nil {
 		s.logger.Error("data cleanup: finish run failed", zap.String("run_id", runID), zap.Error(err))
+		return
+	}
+	if result.RowsAffected() != 1 {
+		s.logger.Warn("data cleanup: terminal write fenced by another owner", zap.String("run_id", runID))
 		return
 	}
 
@@ -649,9 +740,13 @@ func (s *Service) archiveTables(ctx context.Context) ([]string, error) {
 func (s *Service) recoverStaleRuns(ctx context.Context) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE sys_data_cleanup_runs
-		SET status = 'failed', error = 'server restart interrupted cleanup', completed_at = now()
+		SET status = 'failed', error = 'cleanup lease expired', completed_at = now(),
+		    owner_id = NULL, heartbeat_at = NULL, lease_until = NULL
 		WHERE status IN ('queued', 'running')
-		  AND created_at < now() - INTERVAL '10 minutes'
+		  AND (
+			lease_until <= now()
+			OR (lease_until IS NULL AND created_at < now() - INTERVAL '10 minutes')
+		  )
 	`)
 	return err
 }
