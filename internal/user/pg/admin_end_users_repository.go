@@ -121,6 +121,61 @@ func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, userI
 	return userports.ActivationCredentialResult{Token: result.Token, ExpiresIn: result.ExpiresIn}, nil
 }
 
+func (r *AdminEndUserRepository) DeleteEndUser(ctx context.Context, userID string, beforeCommit userports.AdminEndUserDeleteGuard) (userports.AdminEndUserDeleteResult, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return userports.AdminEndUserDeleteResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var status string
+	if err := tx.QueryRow(ctx, `
+		SELECT status FROM iam_accounts
+		WHERE user_id = $1 AND user_type = 4
+		FOR UPDATE
+	`, userID).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return userports.AdminEndUserDeleteResult{}, nil
+		}
+		return userports.AdminEndUserDeleteResult{}, err
+	}
+	if status == "deleted" {
+		return userports.AdminEndUserDeleteResult{}, nil
+	}
+
+	var balanceMicroUSD int64
+	if err := tx.QueryRow(ctx, `
+		SELECT balance_micro FROM bill_accounts WHERE account_id = $1 FOR UPDATE
+	`, userID).Scan(&balanceMicroUSD); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return userports.AdminEndUserDeleteResult{}, err
+	}
+	decision := userports.AdminEndUserDeleteResult{Found: true, BalanceMicroUSD: balanceMicroUSD}
+	if balanceMicroUSD != 0 {
+		return decision, nil
+	}
+	if beforeCommit != nil {
+		if err := beforeCommit(ctx, userID); err != nil {
+			return userports.AdminEndUserDeleteResult{}, &userports.AdminEndUserDeleteGuardError{Cause: err}
+		}
+	}
+	result, err := tx.Exec(ctx, `
+		UPDATE iam_accounts
+		SET status = 'deleted', updated_at = $1
+		WHERE user_id = $2 AND user_type = 4 AND status <> 'deleted'
+	`, time.Now().UTC(), userID)
+	if err != nil {
+		return userports.AdminEndUserDeleteResult{}, err
+	}
+	if result.RowsAffected() != 1 {
+		return userports.AdminEndUserDeleteResult{}, nil
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return userports.AdminEndUserDeleteResult{}, err
+	}
+	decision.Deleted = true
+	return decision, nil
+}
+
 func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userports.AdminEndUserListFilter) (userports.AdminEndUserPage, error) {
 	page := filter.Page
 	if page < 1 {

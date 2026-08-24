@@ -79,6 +79,28 @@ type AdminEndUserCreate struct {
 	ActivationExpiresAt time.Time
 }
 
+// AdminEndUserDeleteResult describes the atomic deletion decision. A found
+// account with a non-zero balance is intentionally not deleted.
+type AdminEndUserDeleteResult struct {
+	Found           bool
+	Deleted         bool
+	BalanceMicroUSD int64
+}
+
+// AdminEndUserDeleteGuard is invoked after the account and balance rows are
+// locked but before the soft-delete update is committed.
+type AdminEndUserDeleteGuard func(ctx context.Context, userID string) error
+
+// AdminEndUserDeleteGuardError marks an external safety guard failure so the
+// HTTP boundary can return an availability error while the DB transaction is
+// rolled back.
+type AdminEndUserDeleteGuardError struct {
+	Cause error
+}
+
+func (e *AdminEndUserDeleteGuardError) Error() string { return "end-user deletion guard failed" }
+func (e *AdminEndUserDeleteGuardError) Unwrap() error { return e.Cause }
+
 // AdminEndUserWriter owns end-user profile and status mutations. Session
 // blacklist side effects remain at the application/HTTP orchestration layer.
 type AdminEndUserWriter interface {
@@ -86,4 +108,5 @@ type AdminEndUserWriter interface {
 	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
 	UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error)
 	ResetEndUserPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
+	DeleteEndUser(ctx context.Context, userID string, beforeCommit AdminEndUserDeleteGuard) (AdminEndUserDeleteResult, error)
 }

@@ -253,18 +253,14 @@ func (h *adminHandlers) resetSystemAdminPassword(ctx context.Context, in *tenant
 }
 
 func (h *adminHandlers) deleteSystemAdmin(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
-	var userType int32
-	if err := h.pool.QueryRow(ctx, "SELECT user_type FROM iam_accounts WHERE user_id = $1 AND user_type IN (1, 2)", in.ID).Scan(&userType); err != nil {
-		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	if userType != 2 {
-		return nil, httpx.ErrForbidden.WithDetail("不允许删除超级管理员")
-	}
-	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_accounts WHERE user_id = $1 AND user_type = 2`, in.ID)
+	result, err := h.accountWriter.DeleteSystemAdmin(ctx, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if deleted.RowsAffected() == 0 {
+	if result.Forbidden {
+		return nil, httpx.ErrForbidden.WithDetail("不允许删除超级管理员")
+	}
+	if !result.Updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	return okSuccess(), nil

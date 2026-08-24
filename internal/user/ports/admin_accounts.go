@@ -69,4 +69,5 @@ type AdminAccountWriter interface {
 	UpdateTenantUserStatus(ctx context.Context, userID, status string) (bool, error)
 	ResetSystemAdminPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
 	ResetTenantUserPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
+	DeleteSystemAdmin(ctx context.Context, userID string) (AdminAccountMutationResult, error)
 }

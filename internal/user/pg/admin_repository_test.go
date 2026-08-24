@@ -185,4 +185,16 @@ func TestAdminAccountRepositoryCreatesAndMutatesLifecycle(t *testing.T) {
 	if err != nil || updated {
 		t.Fatalf("missing tenant status update = updated:%v err:%v", updated, err)
 	}
+	deleted, err := repo.DeleteSystemAdmin(ctx, "system-account-write")
+	if err != nil || !deleted.Updated || deleted.Forbidden {
+		t.Fatalf("DeleteSystemAdmin = %#v err:%v", deleted, err)
+	}
+	rootDelete, err := repo.DeleteSystemAdmin(ctx, "root-account-write")
+	if err != nil || !rootDelete.Forbidden || rootDelete.Updated {
+		t.Fatalf("super-admin DeleteSystemAdmin = %#v err:%v", rootDelete, err)
+	}
+	missingDelete, err := repo.DeleteSystemAdmin(ctx, "missing-account-write-user")
+	if err != nil || missingDelete.Updated || missingDelete.Forbidden {
+		t.Fatalf("missing DeleteSystemAdmin = %#v err:%v", missingDelete, err)
+	}
 }

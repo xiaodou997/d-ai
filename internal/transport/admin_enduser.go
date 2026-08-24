@@ -347,57 +347,27 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	if h.blacklist == nil || !h.blacklist.IsEnabled() {
 		return nil, httpx.ErrUnavailable.WithDetail("删除用户需要可用的会话封禁服务")
 	}
-
-	tx, err := h.pool.Begin(ctx)
+	result, err := h.endUserWriter.DeleteEndUser(ctx, in.ID, func(ctx context.Context, userID string) error {
+		return h.blacklist.BanUser(ctx, userID)
+	})
 	if err != nil {
+		var guardErr *userports.AdminEndUserDeleteGuardError
+		if errors.As(err, &guardErr) {
+			return nil, httpx.ErrUnavailable.WithCause(guardErr.Cause)
+		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	defer tx.Rollback(ctx)
-
-	var status string
-	err = tx.QueryRow(ctx, `
-		SELECT status FROM iam_accounts
-		WHERE user_id = $1 AND user_type = 4
-		FOR UPDATE
-	`, in.ID).Scan(&status)
-	if errors.Is(err, pgx.ErrNoRows) || status == "deleted" {
+	if !result.Found {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-
-	// 一个数字就能表达两条规则：欠费不能删（会赖掉账），有余额也不能删（会吞掉钱）。
-	var balanceMicroUSD int64
-	if err := tx.QueryRow(ctx, `
-		SELECT balance_micro FROM bill_accounts WHERE account_id = $1 FOR UPDATE
-	`, in.ID).Scan(&balanceMicroUSD); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if balanceMicroUSD < 0 {
+	if result.BalanceMicroUSD < 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户仍有未结清欠费，不能删除")
 	}
-	if balanceMicroUSD > 0 {
+	if result.BalanceMicroUSD > 0 {
 		return nil, httpx.ErrConflict.WithDetail("用户仍有可用 USD 余额，不能删除")
 	}
-
-	now := time.Now().UTC()
-	if err := h.blacklist.BanUser(ctx, in.ID); err != nil {
-		return nil, httpx.ErrUnavailable.WithCause(err)
-	}
-	result, err := tx.Exec(ctx, `
-		UPDATE iam_accounts
-		SET status = 'deleted', updated_at = $1
-		WHERE user_id = $2 AND user_type = 4 AND status <> 'deleted'
-	`, now, in.ID)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if result.RowsAffected() == 0 {
+	if !result.Deleted {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	return okSuccess(), nil
 }

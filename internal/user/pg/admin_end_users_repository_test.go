@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -258,5 +259,86 @@ func TestAdminEndUserRepositoryResetsOnlyActiveEndUsers(t *testing.T) {
 	wrongType, err := repo.ResetEndUserPassword(ctx, "tenant-reset-user")
 	if err != nil || wrongType.Token != "" {
 		t.Fatalf("tenant target ResetEndUserPassword = %#v err:%v", wrongType, err)
+	}
+}
+
+func TestAdminEndUserRepositoryDeletesWithBalanceAndGuardInvariants(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	now := time.Date(2026, time.August, 24, 6, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `INSERT INTO iam_tenants (tenant_id, tenant_name) VALUES ('tenant-delete-a', 'Delete Tenant')`); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status, created_at, updated_at)
+		VALUES
+			('end-delete-zero', 'tenant-delete-a', 'end-delete-zero', 'hash', 4, 'active', $1, $1),
+			('end-delete-positive', 'tenant-delete-a', 'end-delete-positive', 'hash', 4, 'active', $1, $1),
+			('end-delete-negative', 'tenant-delete-a', 'end-delete-negative', 'hash', 4, 'active', $1, $1),
+			('end-delete-guard', 'tenant-delete-a', 'end-delete-guard', 'hash', 4, 'active', $1, $1),
+			('end-delete-done', 'tenant-delete-a', 'end-delete-done', 'hash', 4, 'deleted', $1, $1)
+	`, now); err != nil {
+		t.Fatalf("seed end users: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE bill_accounts SET balance_micro = CASE account_id
+		WHEN 'end-delete-positive' THEN 100
+		WHEN 'end-delete-negative' THEN -100
+		ELSE 0 END
+		WHERE account_id IN ('end-delete-zero', 'end-delete-positive', 'end-delete-negative', 'end-delete-guard', 'end-delete-done')`); err != nil {
+		t.Fatalf("seed balances: %v", err)
+	}
+
+	repo := NewAdminEndUserRepository(pool)
+	guardCalls := 0
+	guard := func(_ context.Context, _ string) error {
+		guardCalls++
+		return nil
+	}
+	deleted, err := repo.DeleteEndUser(ctx, "end-delete-zero", guard)
+	if err != nil || !deleted.Found || !deleted.Deleted || deleted.BalanceMicroUSD != 0 || guardCalls != 1 {
+		t.Fatalf("zero-balance delete = %#v guardCalls:%d err:%v", deleted, guardCalls, err)
+	}
+	var status string
+	if err := pool.QueryRow(ctx, `SELECT status FROM iam_accounts WHERE user_id = 'end-delete-zero'`).Scan(&status); err != nil {
+		t.Fatalf("read deleted status: %v", err)
+	}
+	if status != "deleted" {
+		t.Fatalf("deleted status = %q", status)
+	}
+
+	positive, err := repo.DeleteEndUser(ctx, "end-delete-positive", guard)
+	if err != nil || !positive.Found || positive.Deleted || positive.BalanceMicroUSD != 100 || guardCalls != 1 {
+		t.Fatalf("positive-balance delete = %#v guardCalls:%d err:%v", positive, guardCalls, err)
+	}
+	negative, err := repo.DeleteEndUser(ctx, "end-delete-negative", guard)
+	if err != nil || !negative.Found || negative.Deleted || negative.BalanceMicroUSD != -100 || guardCalls != 1 {
+		t.Fatalf("negative-balance delete = %#v guardCalls:%d err:%v", negative, guardCalls, err)
+	}
+
+	guardFailure := errors.New("blacklist unavailable")
+	guardErr, err := repo.DeleteEndUser(ctx, "end-delete-guard", func(context.Context, string) error { return guardFailure })
+	var classified *userports.AdminEndUserDeleteGuardError
+	if err == nil || !errors.As(err, &classified) || !errors.Is(err, guardFailure) || guardErr.Deleted {
+		t.Fatalf("guard failure = result:%#v err:%v classified:%v", guardErr, err, classified)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM iam_accounts WHERE user_id = 'end-delete-guard'`).Scan(&status); err != nil {
+		t.Fatalf("read guard rollback status: %v", err)
+	}
+	if status != "active" {
+		t.Fatalf("guard rollback status = %q", status)
+	}
+
+	missing, err := repo.DeleteEndUser(ctx, "missing-end-delete", guard)
+	if err != nil || missing.Found || missing.Deleted {
+		t.Fatalf("missing delete = %#v err:%v", missing, err)
+	}
+	alreadyDeleted, err := repo.DeleteEndUser(ctx, "end-delete-done", guard)
+	if err != nil || alreadyDeleted.Found || alreadyDeleted.Deleted {
+		t.Fatalf("already-deleted delete = %#v err:%v", alreadyDeleted, err)
 	}
 }

@@ -166,6 +166,27 @@ func (r *AdminAccountRepository) resetPassword(ctx context.Context, userID strin
 	return userports.ActivationCredentialResult{Token: result.Token, ExpiresIn: result.ExpiresIn}, nil
 }
 
+func (r *AdminAccountRepository) DeleteSystemAdmin(ctx context.Context, userID string) (userports.AdminAccountMutationResult, error) {
+	var userType int
+	if err := r.pool.QueryRow(ctx, `
+		SELECT user_type FROM iam_accounts
+		WHERE user_id = $1 AND user_type IN (1, 2)
+	`, userID).Scan(&userType); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return userports.AdminAccountMutationResult{}, nil
+		}
+		return userports.AdminAccountMutationResult{}, err
+	}
+	if userType != 2 {
+		return userports.AdminAccountMutationResult{Forbidden: true}, nil
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM iam_accounts WHERE user_id = $1 AND user_type = 2`, userID)
+	if err != nil {
+		return userports.AdminAccountMutationResult{}, err
+	}
+	return userports.AdminAccountMutationResult{Updated: tag.RowsAffected() == 1}, nil
+}
+
 func (r *AdminAccountRepository) ListSystemAdmins(ctx context.Context, keyword string, page, size int) (userports.AdminAccountPage, error) {
 	return r.list(ctx, 2, "", keyword, page, size)
 }
