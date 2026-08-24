@@ -65,6 +65,7 @@ httpServers.Start / Shutdown
 - 支付 cleanup 失败通过 `error` 返回 Scheduler 统一记录；Scheduler 的后台任务启动/停止具备幂等保护、等待语义，JWT 退役初始延迟可被停止信号中断。
 - Scheduler 通过 `/health` 暴露四类后台任务的运行中、最近成功/失败、连续失败和跨副本锁跳过快照；支付 sweep 将单轮错误回传，按下一周期自动重试。
 - JWT 密钥退役使用带超时的数据库更新；即使某个副本 UPDATE 影响 0 行，也会重新加载 active/grace 集合，及时清除其他副本已退役的本地公钥缓存。
+- LiteLLM 价格导入与常用模型同步按价格表单事务批量执行，价格表行锁串行化同一价格表的副本写入；相同快照只在实际变化时 bump revision，失败整批回滚后可安全重试，手工条目仍受保护。
 - 支付 sweep/cleanup 的 PostgreSQL advisory lock 在同一物理连接上获取、执行和释放，避免 `pgxpool` 跨连接释放造成锁泄漏；支付与额度结算任务统一设有 5 分钟操作超时，解锁使用独立短超时上下文。
 - Scheduler 发布 `dai_scheduler_task_runs_total`、`dai_scheduler_task_duration_seconds`、`dai_scheduler_task_running`、`dai_scheduler_task_consecutive_failures` 和 `dai_scheduler_task_skips_total`，可直接用于失败、卡住和跨副本跳过告警。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。

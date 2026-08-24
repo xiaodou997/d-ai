@@ -238,7 +238,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [ ] 异步任务和 Webhook 保持租约、心跳、回收与 fencing。
 - [ ] 调度任务统一使用 advisory lock、租约或可证明的幂等执行。
 - [x] JWT key retire 使用数据库条件更新并由每个副本在每轮执行后刷新本地 key cache。
-- [ ] 支付补偿、数据清理、文件清理和价格同步逐项验证。
+- [x] LiteLLM 价格导入与常用模型同步按价格表事务批量执行，重复快照不重复 bump revision，失败回滚可重试且不覆盖手工条目。
+- [ ] 支付补偿、数据清理和文件清理逐项验证。
 - [ ] 禁止依赖进程内内存作为跨副本真相源。
 
 ### P2-03 独立交付 Portal
@@ -506,6 +507,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 调度生命周期边界：支付 cleanup 错误回传 Scheduler 统一观测；Scheduler 防止重复 Start/Stop，停止时等待 worker 退出并可中断 JWT 退役初始等待。
 - 后台任务观测边界：Scheduler 统一记录任务运行/成功/失败/跳过状态并挂载到 `/health`；PaymentService.SweepOnce 聚合单轮错误，避免局部失败被误报为成功。
 - JWT 退役边界：`RetireExpiredGraceKeys(ctx)` 使用带超时的条件更新，并在 UPDATE 影响 0 行时仍 reload keys，避免只有抢到最后一行更新的副本清理本地 grace key、其他副本永久保留旧公钥。
+- 价格同步边界：LiteLLM 导入与 common-model sync 收集完整快照后交给 `PriceBookRepo.ImportEntries` 单事务执行；价格表行锁 + 条件 upsert 保证多副本串行、相同快照无变化，事务失败整批回滚后下一次可安全重试，`manually_edited` 条目不会被覆盖。
 - 跨副本锁边界：支付 sweep/cleanup 的 advisory lock 由同一物理 PostgreSQL 连接完成获取、执行和释放；任务上下文有 5 分钟硬超时，解锁不受任务超时影响，避免连接池错配和永久占锁。
 - 调度指标边界：Scheduler 暴露任务运行结果、耗时、运行中、连续失败和跳过原因 Prometheus 指标；失败/卡住/持续跨副本跳过可以在管理端 `/metrics` 上做告警，不改变 `/ready` 的基础设施语义。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
@@ -540,4 +542,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增 Scheduler 健康快照测试，覆盖失败计数、跨副本 advisory lock 跳过和最近错误投影。
 - 回归：新增 Scheduler PostgreSQL advisory lock 集成测试，确认同一锁连续两轮均可获取，防止连接池跨会话释放回归。
 - 回归：新增 JWT 多副本退役测试，确认一个副本完成 grace key 退役后，另一个 UPDATE 影响 0 行的副本也会刷新 JWKS 缓存。
-- 下一候选项：验证价格同步的多副本幂等与失败重试语义，并为需要长任务的 worker 补充租约/心跳与 fencing。
+- 回归：新增价格表导入并发/回滚测试，确认两个副本仅一个有效更新、重复快照不 bump revision、手工条目不被覆盖，失败批次可完整重试。
+- 下一候选项：验证数据清理、文件清理等长任务的租约/心跳、超时回收与 fencing 语义。

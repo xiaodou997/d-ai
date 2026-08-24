@@ -58,6 +58,11 @@ func (r *repositoryStub) ImportEntry(_ context.Context, e domain.PriceBookEntry)
 	return nil
 }
 
+func (r *repositoryStub) ImportEntries(_ context.Context, _ string, entries []domain.PriceBookEntry) (int, error) {
+	r.importedEntries = append(r.importedEntries, entries...)
+	return len(entries), nil
+}
+
 func (r *repositoryStub) GetEntry(context.Context, string, string, string) (domain.PriceBookEntry, error) {
 	return domain.PriceBookEntry{}, nil
 }

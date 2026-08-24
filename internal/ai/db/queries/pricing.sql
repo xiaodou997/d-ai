@@ -82,7 +82,7 @@ RETURNING id, price_book_id, model_code, capability_type,
   audio_tts_per_char, audio_stt_per_minute,
   source, manually_edited, created_at, updated_at;
 
--- name: ImportLiteLLMEntry :exec
+-- name: ImportLiteLLMEntry :execrows
 -- LiteLLM「仅填空」导入：新增条目；已存在且 manually_edited=false 时刷新，手改条目跳过。
 INSERT INTO ai_price_book_entries (
   price_book_id, model_code, capability_type,
@@ -97,7 +97,9 @@ ON CONFLICT (price_book_id, model_code, capability_type) DO UPDATE SET
   token_price_tiers     = EXCLUDED.token_price_tiers,
   source                = 'litellm',
   updated_at            = now()
-WHERE ai_price_book_entries.manually_edited = false;
+WHERE ai_price_book_entries.manually_edited = false
+  AND (ai_price_book_entries.token_price_tiers IS DISTINCT FROM EXCLUDED.token_price_tiers
+       OR ai_price_book_entries.source IS DISTINCT FROM EXCLUDED.source);
 
 -- name: GetPriceBookEntry :one
 -- 运行时按租户可见模型代码和能力类型取价。

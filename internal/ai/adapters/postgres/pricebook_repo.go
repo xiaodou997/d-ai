@@ -207,31 +207,64 @@ func (r *PriceBookRepo) UpsertEntry(ctx context.Context, e domain.PriceBookEntry
 }
 
 func (r *PriceBookRepo) ImportEntry(ctx context.Context, e domain.PriceBookEntry) error {
-	bid, err := akUUID(e.PriceBookID)
+	_, err := r.ImportEntries(ctx, e.PriceBookID, []domain.PriceBookEntry{e})
+	return err
+}
+
+// ImportEntries applies one LiteLLM snapshot atomically. The price-book row is
+// locked for the duration of the transaction, so concurrent replicas serialize
+// on one book; conditional upserts then make the second identical snapshot a
+// no-op instead of bumping revision or rewriting timestamps forever.
+func (r *PriceBookRepo) ImportEntries(ctx context.Context, priceBookID string, entries []domain.PriceBookEntry) (int, error) {
+	bid, err := akUUID(priceBookID)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	tokenPriceTiers, err := encodeTokenPriceTiers(e.TokenPriceTiers)
-	if err != nil {
-		return fmt.Errorf("encode token price tiers: %w", err)
+	if len(entries) == 0 {
+		return 0, nil
 	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback(ctx)
-	if err := queriesWithTx(tx).ImportLiteLLMEntry(ctx, dbgen.ImportLiteLLMEntryParams{
-		PriceBookID:     bid,
-		ModelCode:       e.ModelCode,
-		CapabilityType:  e.CapabilityType,
-		TokenPriceTiers: tokenPriceTiers,
-	}); err != nil {
-		return err
+	var lockedID pgtype.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM ai_price_books WHERE id = $1 FOR UPDATE`, bid).Scan(&lockedID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, domain.ErrNotFound
+		}
+		return 0, err
 	}
-	if err := bumpPriceBookRevision(ctx, tx, bid); err != nil {
-		return err
+
+	changed := 0
+	for _, e := range entries {
+		if e.PriceBookID != priceBookID {
+			return 0, fmt.Errorf("price book entry %q belongs to %q, want %q", e.ModelCode, e.PriceBookID, priceBookID)
+		}
+		tokenPriceTiers, err := encodeTokenPriceTiers(e.TokenPriceTiers)
+		if err != nil {
+			return 0, fmt.Errorf("encode token price tiers for %q: %w", e.ModelCode, err)
+		}
+		rows, err := queriesWithTx(tx).ImportLiteLLMEntry(ctx, dbgen.ImportLiteLLMEntryParams{
+			PriceBookID:     bid,
+			ModelCode:       e.ModelCode,
+			CapabilityType:  e.CapabilityType,
+			TokenPriceTiers: tokenPriceTiers,
+		})
+		if err != nil {
+			return 0, err
+		}
+		changed += int(rows)
 	}
-	return tx.Commit(ctx)
+	if changed > 0 {
+		if err := bumpPriceBookRevision(ctx, tx, bid); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return changed, nil
 }
 
 func (r *PriceBookRepo) GetEntry(ctx context.Context, priceBookID, modelCode, capabilityType string) (domain.PriceBookEntry, error) {

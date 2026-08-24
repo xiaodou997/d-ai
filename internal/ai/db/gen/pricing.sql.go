@@ -159,7 +159,7 @@ func (q *Queries) GetSetting(ctx context.Context, key string) (AiSetting, error)
 	return i, err
 }
 
-const importLiteLLMEntry = `-- name: ImportLiteLLMEntry :exec
+const importLiteLLMEntry = `-- name: ImportLiteLLMEntry :execrows
 INSERT INTO ai_price_book_entries (
   price_book_id, model_code, capability_type,
   token_price_tiers,
@@ -174,6 +174,8 @@ ON CONFLICT (price_book_id, model_code, capability_type) DO UPDATE SET
   source                = 'litellm',
   updated_at            = now()
 WHERE ai_price_book_entries.manually_edited = false
+  AND (ai_price_book_entries.token_price_tiers IS DISTINCT FROM EXCLUDED.token_price_tiers
+       OR ai_price_book_entries.source IS DISTINCT FROM EXCLUDED.source)
 `
 
 type ImportLiteLLMEntryParams struct {
@@ -184,14 +186,17 @@ type ImportLiteLLMEntryParams struct {
 }
 
 // LiteLLM「仅填空」导入：新增条目；已存在且 manually_edited=false 时刷新，手改条目跳过。
-func (q *Queries) ImportLiteLLMEntry(ctx context.Context, arg ImportLiteLLMEntryParams) error {
-	_, err := q.db.Exec(ctx, importLiteLLMEntry,
+func (q *Queries) ImportLiteLLMEntry(ctx context.Context, arg ImportLiteLLMEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, importLiteLLMEntry,
 		arg.PriceBookID,
 		arg.ModelCode,
 		arg.CapabilityType,
 		arg.TokenPriceTiers,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listPriceBookEntries = `-- name: ListPriceBookEntries :many

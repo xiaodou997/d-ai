@@ -172,7 +172,14 @@ func (s *Service) importFromLiteLLM(ctx context.Context, ownerType domain.PriceB
 		return res, err
 	}
 	models := s.llmSource.Snapshot()
-	for name, m := range models {
+	names := make([]string, 0, len(models))
+	for name := range models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	entries := make([]domain.PriceBookEntry, 0, len(names))
+	for _, name := range names {
+		m := models[name]
 		res.Fetched++
 		if name == "sample_spec" {
 			res.Skipped++
@@ -197,11 +204,17 @@ func (s *Service) importFromLiteLLM(ctx context.Context, ownerType domain.PriceB
 			CapabilityType:  capability,
 			TokenPriceTiers: tokenPriceTiersFromLiteLLM(m),
 		}
-		if err := s.repo.ImportEntry(ctx, entry); err != nil {
-			return res, fmt.Errorf("import entry %q: %w", name, err)
-		}
-		res.Imported++
+		entries = append(entries, entry)
 	}
+	if len(entries) == 0 {
+		return res, nil
+	}
+	changed, err := s.repo.ImportEntries(ctx, priceBookID, entries)
+	if err != nil {
+		return res, fmt.Errorf("import LiteLLM entries: %w", err)
+	}
+	res.Imported = changed
+	res.Skipped += len(entries) - changed
 	return res, nil
 }
 
@@ -337,6 +350,7 @@ func (s *Service) syncCommonModels(ctx context.Context, ownerType domain.PriceBo
 		return res, err
 	}
 	data := s.llmSource.Snapshot()
+	entries := make([]domain.PriceBookEntry, 0, len(commonModels))
 	for _, candidates := range commonModels {
 		var hit *LiteLLMModel
 		var hitName string
@@ -362,11 +376,20 @@ func (s *Service) syncCommonModels(ctx context.Context, ownerType domain.PriceBo
 			CapabilityType:  capability,
 			TokenPriceTiers: tokenPriceTiersFromLiteLLM(*hit),
 		}
-		if err := s.repo.ImportEntry(ctx, entry); err != nil {
-			return res, fmt.Errorf("sync %q: %w", hitName, err)
-		}
-		res.Synced++
+		entries = append(entries, entry)
 	}
+	if len(entries) == 0 {
+		return res, nil
+	}
+	// Keep the ordered common-model selection semantics, but apply the whole
+	// snapshot in one repository transaction. The repository's conditional
+	// upsert makes retries and concurrent replicas no-ops when the same LiteLLM
+	// values are already present.
+	changed, err := s.repo.ImportEntries(ctx, priceBookID, entries)
+	if err != nil {
+		return res, fmt.Errorf("sync LiteLLM entries: %w", err)
+	}
+	res.Synced = changed
 	return res, nil
 }
 
