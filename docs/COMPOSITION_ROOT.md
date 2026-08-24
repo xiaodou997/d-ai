@@ -53,6 +53,7 @@ httpServers.Start / Shutdown
 - 管理租户详情和终端用户归属校验查询已移入 `internal/tenant/pg.TenantRepository`；HTTP handler 不再直接执行对应 `iam_tenants` / `iam_accounts` 读取。
 - 租户启停级联事务已移入 `internal/tenant/pg.TenantRepository`，通过 `tenant/ports.AdminTenantStatusWriter` 注入；handler 只负责租户黑名单和恢复用户黑名单同步。
 - 租户创建（含可选初始租户用户/激活令牌）、更新和删除已移入 `tenant/ports.AdminTenantWriter`；composition root 注入带 `ActivationService.Store` 的 `TenantRepository`，handler 不再持有租户生命周期事务。
+- AI 身份适配器的终端用户归属校验复用 `TenantRepository.GetEndUserTenantID`，不再持有连接池或直接查询 `iam_accounts`。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。
 - 三类管理账号密码重置的目标类型校验与凭证结果映射也通过 `AdminAccountWriter.Reset*Password` / `AdminEndUserWriter.ResetEndUserPassword` 注入；`ActivationService.Reset` 仍由用户 adapter 调用，HTTP handler 不再直接查询 `iam_accounts`。

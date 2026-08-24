@@ -2,7 +2,9 @@ package transport
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	aitransport "xiaodou/dai/internal/ai/transport"
@@ -13,7 +15,6 @@ import (
 // aiIdentityAdapter exposes the unified identity domain to AI handlers without
 // another transport protocol or a duplicate identity model.
 type aiIdentityAdapter struct {
-	pool    *pgxpool.Pool
 	users   *userpkg.UserService
 	tenants *tenantpg.TenantRepository
 }
@@ -25,7 +26,7 @@ func newAIIdentityAdapter(pool *pgxpool.Pool, users *userpkg.UserService) *aiIde
 	if pool == nil || users == nil {
 		return nil
 	}
-	return &aiIdentityAdapter{pool: pool, users: users, tenants: tenantpg.NewTenantRepository(pool)}
+	return &aiIdentityAdapter{users: users, tenants: tenantpg.NewTenantRepository(pool)}
 }
 
 func (a *aiIdentityAdapter) BatchGetUsers(ctx context.Context, userIDs []string) (map[string]*aitransport.IdentityUser, error) {
@@ -58,16 +59,14 @@ func (a *aiIdentityAdapter) BatchGetTenants(ctx context.Context, tenantIDs []str
 }
 
 func (a *aiIdentityAdapter) CheckTenantEndUser(ctx context.Context, tenantID, userID string) error {
-	var exists bool
-	if err := a.pool.QueryRow(ctx, `
-		SELECT EXISTS (
-				SELECT 1 FROM iam_accounts
-				WHERE tenant_id = $1 AND user_id = $2 AND user_type = 4 AND status <> 'deleted'
-		)
-	`, tenantID, userID).Scan(&exists); err != nil {
+	ownedTenantID, err := a.tenants.GetEndUserTenantID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return aitransport.ErrEndUserNotFound
+		}
 		return err
 	}
-	if !exists {
+	if ownedTenantID != tenantID {
 		return aitransport.ErrEndUserNotFound
 	}
 	return nil
