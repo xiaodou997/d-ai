@@ -8,7 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/dbtest"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 )
 
 func TestTenantRepoOwnsTenantDetailsAndEndUserOwnershipQueries(t *testing.T) {
@@ -153,5 +155,129 @@ func TestTenantRepositoryCascadesStatusAndReturnsRestoredUsers(t *testing.T) {
 	missing, err := repo.UpdateStatus(ctx, "missing-cascade-tenant", "disabled")
 	if err != nil || missing.Updated {
 		t.Fatalf("missing cascade = %#v err:%v", missing, err)
+	}
+}
+
+func TestTenantRepositoryManagesLifecycleAtomically(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	activation := auth.NewActivationService(pool, time.Hour)
+	repo := NewTenantRepository(pool, activation)
+	credential, err := activation.NewCredential()
+	if err != nil {
+		t.Fatalf("initial credential: %v", err)
+	}
+	if err := repo.CreateTenant(ctx, tenantports.TenantCreateCommand{
+		TenantID:      "tenant-lifecycle",
+		TenantName:    "Lifecycle Tenant",
+		ContactPerson: "Owner",
+		ContactEmail:  "owner@example.com",
+		Status:        "active",
+		InitialUser: &tenantports.TenantInitialUserCreate{
+			UserID:              "tenant-lifecycle-user",
+			Username:            "lifecycle-user",
+			Email:               "user@example.com",
+			PasswordHash:        credential.PasswordHash,
+			ActivationTokenHash: credential.TokenHash,
+			ActivationExpiresAt: credential.ExpiresAt,
+		},
+	}); err != nil {
+		t.Fatalf("CreateTenant with initial user: %v", err)
+	}
+	if err := repo.CreateTenant(ctx, tenantports.TenantCreateCommand{TenantID: "tenant-lifecycle-conflict", TenantName: "Conflict Tenant", Status: "active"}); err != nil {
+		t.Fatalf("CreateTenant conflict fixture: %v", err)
+	}
+
+	var tenantName, tenantStatus string
+	if err := pool.QueryRow(ctx, `SELECT tenant_name, status FROM iam_tenants WHERE tenant_id = 'tenant-lifecycle'`).Scan(&tenantName, &tenantStatus); err != nil {
+		t.Fatalf("read created tenant: %v", err)
+	}
+	if tenantName != "Lifecycle Tenant" || tenantStatus != "active" {
+		t.Fatalf("created tenant = name:%q status:%q", tenantName, tenantStatus)
+	}
+	var userType, tokenCount int
+	if err := pool.QueryRow(ctx, `SELECT user_type FROM iam_accounts WHERE user_id = 'tenant-lifecycle-user'`).Scan(&userType); err != nil {
+		t.Fatalf("read initial user: %v", err)
+	}
+	if userType != 3 {
+		t.Fatalf("initial user type = %d, want 3", userType)
+	}
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM auth_activation_tokens WHERE user_id = 'tenant-lifecycle-user'`).Scan(&tokenCount); err != nil {
+		t.Fatalf("count initial activation token: %v", err)
+	}
+	if tokenCount != 1 {
+		t.Fatalf("initial activation token count = %d, want 1", tokenCount)
+	}
+	rollbackErr := repo.CreateTenant(ctx, tenantports.TenantCreateCommand{
+		TenantID:   "tenant-lifecycle-rollback",
+		TenantName: "Rollback Tenant",
+		Status:     "active",
+		InitialUser: &tenantports.TenantInitialUserCreate{
+			UserID:              "tenant-lifecycle-rollback-user",
+			Username:            "rollback-user",
+			PasswordHash:        credential.PasswordHash,
+			ActivationTokenHash: credential.TokenHash,
+			ActivationExpiresAt: credential.ExpiresAt,
+		},
+	})
+	if rollbackErr == nil {
+		t.Fatal("expected duplicate activation token to roll back tenant creation")
+	}
+	var rollbackCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_tenants WHERE tenant_id = 'tenant-lifecycle-rollback'`).Scan(&rollbackCount); err != nil {
+		t.Fatalf("count rolled-back tenant: %v", err)
+	}
+	if rollbackCount != 0 {
+		t.Fatalf("rolled-back tenant count = %d", rollbackCount)
+	}
+
+	updated, err := repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{
+		TenantID:      "tenant-lifecycle",
+		TenantName:    "Lifecycle Tenant Updated",
+		ContactPerson: "New Owner",
+		ContactEmail:  "new-owner@example.com",
+		Status:        "disabled",
+	})
+	if err != nil || !updated {
+		t.Fatalf("UpdateTenant = updated:%v err:%v", updated, err)
+	}
+	conflictUpdated, err := repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{TenantID: "tenant-lifecycle", TenantName: "Conflict Tenant", Status: "active"})
+	if err == nil || conflictUpdated || !IsTenantNameTaken(err) {
+		t.Fatalf("duplicate-name UpdateTenant = updated:%v err:%v", conflictUpdated, err)
+	}
+	updated, err = repo.UpdateTenant(ctx, tenantports.TenantUpdateCommand{TenantID: "tenant-lifecycle", TenantName: "Lifecycle Tenant Updated", Status: "active"})
+	if err != nil || !updated {
+		t.Fatalf("same-name UpdateTenant = updated:%v err:%v", updated, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT tenant_name, status FROM iam_tenants WHERE tenant_id = 'tenant-lifecycle'`).Scan(&tenantName, &tenantStatus); err != nil {
+		t.Fatalf("read updated tenant: %v", err)
+	}
+	if tenantName != "Lifecycle Tenant Updated" || tenantStatus != "active" {
+		t.Fatalf("updated tenant = name:%q status:%q", tenantName, tenantStatus)
+	}
+
+	if err := repo.CreateTenant(ctx, tenantports.TenantCreateCommand{TenantID: "tenant-lifecycle-free", TenantName: "Free Lifecycle Tenant", Status: "active"}); err != nil {
+		t.Fatalf("CreateTenant without initial user: %v", err)
+	}
+	deleted, err := repo.DeleteTenant(ctx, "tenant-lifecycle-free")
+	if err != nil || !deleted {
+		t.Fatalf("DeleteTenant free = deleted:%v err:%v", deleted, err)
+	}
+	deleted, err = repo.DeleteTenant(ctx, "tenant-lifecycle-conflict")
+	if err != nil || !deleted {
+		t.Fatalf("DeleteTenant conflict fixture = deleted:%v err:%v", deleted, err)
+	}
+	deleted, err = repo.DeleteTenant(ctx, "tenant-lifecycle")
+	if err == nil || deleted || !IsTenantReferenced(err) {
+		t.Fatalf("DeleteTenant referenced = deleted:%v err:%v", deleted, err)
+	}
+	deleted, err = repo.DeleteTenant(ctx, "missing-lifecycle-tenant")
+	if err != nil || deleted {
+		t.Fatalf("DeleteTenant missing = deleted:%v err:%v", deleted, err)
 	}
 }

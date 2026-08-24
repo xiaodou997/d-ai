@@ -34,6 +34,9 @@ func NewPortalBrandingRepository(pool *pgxpool.Pool) *PortalBrandingRepository {
 }
 
 func IsTenantNameTaken(err error) bool {
+	if errors.Is(err, ErrTenantNameTaken) {
+		return true
+	}
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_tenants_tenant_name"
 }

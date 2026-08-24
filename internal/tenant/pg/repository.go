@@ -2,9 +2,12 @@ package pg
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/billing"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 )
@@ -33,13 +36,104 @@ type PaginatedResult[T any] struct {
 }
 
 type TenantRepository struct {
-	pool *pgxpool.Pool
+	pool            *pgxpool.Pool
+	activationStore activationStore
 }
 
 var _ tenantports.AdminTenantStatusWriter = (*TenantRepository)(nil)
+var _ tenantports.AdminTenantWriter = (*TenantRepository)(nil)
 
-func NewTenantRepository(pool *pgxpool.Pool) *TenantRepository {
-	return &TenantRepository{pool: pool}
+type activationStore interface {
+	Store(ctx context.Context, tx pgx.Tx, userID, purpose string, credential auth.ActivationCredential) error
+}
+
+func NewTenantRepository(pool *pgxpool.Pool, activationStores ...activationStore) *TenantRepository {
+	var activationStore activationStore
+	if len(activationStores) > 0 {
+		activationStore = activationStores[0]
+	}
+	return &TenantRepository{pool: pool, activationStore: activationStore}
+}
+
+// CreateTenant atomically creates a tenant and its optional initial tenant
+// user. The activation record is written through the auth capability using
+// the same transaction.
+func (r *TenantRepository) CreateTenant(ctx context.Context, input tenantports.TenantCreateCommand) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, contact_person, contact_email, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $6)
+	`, input.TenantID, input.TenantName, input.ContactPerson, input.ContactEmail, input.Status, now); err != nil {
+		return err
+	}
+	if input.InitialUser != nil {
+		if r.activationStore == nil {
+			return fmt.Errorf("tenant activation store is not configured")
+		}
+		user := input.InitialUser
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, 'pending_activation', $5, 3, 'active', $6, $6)
+		`, user.UserID, input.TenantID, user.Username, user.PasswordHash, user.Email, now); err != nil {
+			return err
+		}
+		if err := r.activationStore.Store(ctx, tx, user.UserID, auth.ActivationPurposeAccount, auth.ActivationCredential{
+			PasswordHash: user.PasswordHash,
+			TokenHash:    user.ActivationTokenHash,
+			ExpiresAt:    user.ActivationExpiresAt,
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *TenantRepository) UpdateTenant(ctx context.Context, input tenantports.TenantUpdateCommand) (bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var count int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*) FROM iam_tenants
+		WHERE tenant_name = $1 AND tenant_id <> $2
+	`, input.TenantName, input.TenantID).Scan(&count); err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return false, fmt.Errorf("tenant name already exists: %w", ErrTenantNameTaken)
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE iam_tenants
+		SET tenant_name = $1, contact_person = $2, contact_email = $3, status = $4, updated_at = $5
+		WHERE tenant_id = $6
+	`, input.TenantName, input.ContactPerson, input.ContactEmail, input.Status, time.Now().UTC(), input.TenantID)
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() != 1 {
+		return false, nil
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *TenantRepository) DeleteTenant(ctx context.Context, tenantID string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // UpdateStatus atomically updates the tenant access state and cascades only

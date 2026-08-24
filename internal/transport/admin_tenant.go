@@ -13,9 +13,9 @@ import (
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
-	billingdomain "xiaodou/dai/internal/billing"
 	util "xiaodou/dai/internal/domain"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -181,71 +181,50 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 	if tenantName == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("租户名称不能为空")
 	}
-	var count int
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_tenants WHERE tenant_name = $1", tenantName).Scan(&count)
-	if count > 0 {
-		return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
-	}
 	initUsername := auth.NormalizeUsername(in.Body.InitUsername)
-	if initUsername != "" {
-		_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, initUsername).Scan(&count)
-		if count > 0 {
-			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
-		}
-	}
-
 	tenantID := "T_" + strings.ToUpper(util.GenerateRandomString(6))
-	now := billingdomain.NowUTC()
 	status := in.Body.Status
 	if status == 0 {
 		status = 1
 	}
-
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO iam_tenants (tenant_id, tenant_name, contact_person, contact_email, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $6)
-	`, tenantID, tenantName, in.Body.ContactPerson, in.Body.ContactEmail, adminStatusFromInt(status), now); err != nil {
-		if tenantpg.IsTenantNameTaken(err) {
-			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
-		}
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-
 	out := &createTenantOutput{}
 	out.Body.TenantID = tenantID
+	command := tenantports.TenantCreateCommand{
+		TenantID:      tenantID,
+		TenantName:    tenantName,
+		ContactPerson: in.Body.ContactPerson,
+		ContactEmail:  in.Body.ContactEmail,
+		Status:        adminStatusFromInt(status),
+	}
 	if initUsername != "" {
 		credential, err := h.activations.NewCredential()
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		initUserID := "TU_" + uuid.New().String()[:24]
-		if _, err := tx.Exec(ctx, `
-					INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
-					VALUES ($1, $2, $3, $4, 'pending_activation', $5, 3, 'active', $6, $6)
-				`, initUserID, tenantID, initUsername, credential.PasswordHash, in.Body.InitEmail, now); err != nil {
-			if authpg.IsUsernameTaken(err) {
-				return nil, httpx.ErrConflict.WithDetail("用户名已存在")
-			}
-			if authpg.IsEmailTaken(err) {
-				return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
-			}
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		if err := h.activations.Store(ctx, tx, initUserID, auth.ActivationPurposeAccount, credential); err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
+		command.InitialUser = &tenantports.TenantInitialUserCreate{
+			UserID:              initUserID,
+			Username:            initUsername,
+			Email:               in.Body.InitEmail,
+			PasswordHash:        credential.PasswordHash,
+			ActivationTokenHash: credential.TokenHash,
+			ActivationExpiresAt: credential.ExpiresAt,
 		}
 		out.Body.InitUserID = initUserID
 		out.Body.InitUsername = initUsername
 		out.Body.ActivationToken = credential.Token
 		out.Body.ActivationExpiresIn = int64(time.Until(credential.ExpiresAt).Seconds())
 	}
-
-	if err := tx.Commit(ctx); err != nil {
+	if err := h.tenantWriter.CreateTenant(ctx, command); err != nil {
+		if tenantpg.IsTenantNameTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
+		}
+		if authpg.IsUsernameTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
+		}
+		if authpg.IsEmailTaken(err) {
+			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	return out, nil
@@ -289,45 +268,34 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 	if tenantName == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("租户名称不能为空")
 	}
-	now := billingdomain.NowUTC()
-	tx, err := h.pool.Begin(ctx)
+	updated, err := h.tenantWriter.UpdateTenant(ctx, tenantports.TenantUpdateCommand{
+		TenantID:      in.ID,
+		TenantName:    tenantName,
+		ContactPerson: in.Body.ContactPerson,
+		ContactEmail:  in.Body.ContactEmail,
+		Status:        adminStatusFromInt(in.Body.Status),
+	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer tx.Rollback(ctx)
-
-	var count int
-	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM iam_tenants WHERE tenant_name = $1 AND tenant_id <> $2`, tenantName, in.ID).Scan(&count); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if count > 0 {
-		return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
-	}
-
-	if _, err := tx.Exec(ctx, `
-		UPDATE iam_tenants SET tenant_name = $1, contact_person = $2, contact_email = $3, status = $4, updated_at = $5
-		WHERE tenant_id = $6
-	`, tenantName, in.Body.ContactPerson, in.Body.ContactEmail, adminStatusFromInt(in.Body.Status), now, in.ID); err != nil {
 		if tenantpg.IsTenantNameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+	if !updated {
+		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 	}
 	return okSuccess(), nil
 }
 
 func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
-	deleted, err := h.pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = $1`, in.ID)
+	deleted, err := h.tenantWriter.DeleteTenant(ctx, in.ID)
 	if err != nil {
 		if tenantpg.IsTenantReferenced(err) {
 			return nil, httpx.ErrConflict.WithDetail("租户仍有关联账号或业务数据，不能删除")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if deleted.RowsAffected() == 0 {
+	if !deleted {
 		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 	}
 	return okSuccess(), nil
