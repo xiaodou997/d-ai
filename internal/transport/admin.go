@@ -28,6 +28,7 @@ type adminHandlers struct {
 	blacklist          *auth.BlacklistService
 	activations        *auth.ActivationService
 	log                *zap.Logger
+	rechargeSvc        *billingsvc.RechargeService
 }
 
 type activationCredentialOutput struct {
@@ -54,6 +55,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		endUserWriter:      d.AdminEndUserWriter,
 		systemRepo:         systempg.NewSystemRepository(d.Pool),
 		deduction:          d.Deduction,
+		rechargeSvc:        d.Recharge,
 		blacklist:          d.Blacklist,
 		activations:        d.Activations,
 		log:                d.Logger,

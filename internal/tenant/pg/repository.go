@@ -227,6 +227,31 @@ func (r *TenantRepository) GetEndUserTenantID(ctx context.Context, userID string
 	return tenantID, err
 }
 
+// LockManualRechargeTarget serializes a manual recharge with tenant/account
+// lifecycle changes. It intentionally checks existence and the active end-user
+// state while holding the same transaction lock used by the billing service;
+// callers must map pgx.ErrNoRows to their request-level validation error.
+func (r *TenantRepository) LockManualRechargeTarget(ctx context.Context, tx pgx.Tx, tenantID, userID string) error {
+	var lockedTenantID string
+	if err := tx.QueryRow(ctx, `
+		SELECT tenant_id
+		FROM iam_tenants
+		WHERE tenant_id = $1
+		FOR UPDATE
+	`, tenantID).Scan(&lockedTenantID); err != nil {
+		return err
+	}
+	if userID == "" {
+		return nil
+	}
+	return tx.QueryRow(ctx, `
+		SELECT tenant_id
+		FROM iam_accounts
+		WHERE user_id = $1 AND tenant_id = $2 AND user_type = 4 AND status = 'active'
+		FOR UPDATE
+	`, userID, lockedTenantID).Scan(&lockedTenantID)
+}
+
 type ListTenantsParams struct {
 	Keyword string
 	Status  string // 存储层状态字符串（active/disabled/suspended），空表示不过滤

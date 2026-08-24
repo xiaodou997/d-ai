@@ -213,34 +213,14 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		return nil, httpx.ErrBadRequest.WithDetail("amountMicroUsd must be positive")
 	}
 
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer tx.Rollback(ctx)
-	if userID != "" {
-		var active bool
-		if err := tx.QueryRow(ctx, `
-			SELECT true FROM iam_accounts
-			WHERE user_id = $1 AND tenant_id = $2 AND user_type = 4 AND status = 'active'
-			FOR UPDATE
-		`, userID, tenantID).Scan(&active); err != nil {
-			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或已删除")
-		}
-	}
-
-	grant, err := billingsvc.GrantBalance(ctx, tx, billingsvc.GrantParams{
+	grant, err := h.rechargeSvc.GrantManual(ctx, billingsvc.GrantParams{
 		OrderType: orderType, TenantID: tenantID, UserID: userID,
 		AmountMicroUSD: in.Body.AmountMicroUSD, PaidAmount: in.Body.PaidAmountMinor,
 		PaymentRef: in.Body.PaymentRef, Note: in.Body.Note, OperatorID: claims.UserID,
 		Source: pkgSource, ExpiresAt: expiresAt,
 	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, toProblem(err)
 	}
 
 	out := &rechargeOutput{}

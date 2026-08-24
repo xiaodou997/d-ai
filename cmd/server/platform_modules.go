@@ -48,6 +48,7 @@ type platformModules struct {
 	Invite        *invitepkg.InviteService
 
 	Deduction *billingsvc.DeductionService
+	Recharge  *billingsvc.RechargeService
 	Payment   *paymentsvc.PaymentService
 
 	Announcements *announcementpkg.Service
@@ -102,11 +103,12 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	mfaSvc := auth.NewMFAService(pool, redisClient)
 	recentAuthSvc := auth.NewRecentAuthService(redisClient)
 
-	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
 	authAccountRepo := authpg.NewAuthRepository(pool)
 	tenantRepo := tenantpg.NewTenantRepository(pool)
+	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
+	rechargeSvc := billingsvc.NewRechargeService(pool, tenantRepo)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
@@ -132,6 +134,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		AdminEndUsers: adminEndUserRepo,
 		Invite:        inviteSvc,
 		Deduction:     deductionSvc,
+		Recharge:      rechargeSvc,
 		Payment:       paymentSvc,
 		Announcements: announcementSvc,
 		Notifications: notificationSvc,

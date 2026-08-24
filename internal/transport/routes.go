@@ -71,6 +71,7 @@ type IdentityDeps struct {
 // BillingDeps contains payment and balance application services.
 type BillingDeps struct {
 	Deduction *billingsvc.DeductionService
+	Recharge  *billingsvc.RechargeService
 	Payment   *paymentsvc.PaymentService
 }
 
