@@ -411,24 +411,33 @@ func (s *PaymentService) HandleNotify(ctx context.Context, r *http.Request) erro
 // ==================== sweep 兜底（供 scheduler 调用） ====================
 
 // SweepOnce 对应设计文档 §4.5：超时关单 + 在途补偿。
-func (s *PaymentService) SweepOnce(ctx context.Context) {
+// It returns all cycle errors so the scheduler can publish task health and
+// retry on the next interval instead of treating a partially failed cycle as
+// successful.
+func (s *PaymentService) SweepOnce(ctx context.Context) error {
 	now := billingdomain.NowUTC()
+	var cycleErrors []error
 
 	expired, err := paymentpg.ListSweepCandidates(ctx, s.pool, now, 100)
 	if err != nil {
-		s.logger.Error("[支付sweep] 查询超时订单失败", zap.Error(err))
+		cycleErrors = append(cycleErrors, fmt.Errorf("查询超时订单失败: %w", err))
 	}
 	for _, o := range expired {
-		s.sweepExpiredOrder(ctx, o)
+		if err := s.sweepExpiredOrder(ctx, o); err != nil {
+			cycleErrors = append(cycleErrors, fmt.Errorf("处理超时订单 %s 失败: %w", o.OrderID, err))
+		}
 	}
 
 	inFlight, err := paymentpg.ListInFlightCandidates(ctx, s.pool, now.Add(-5*time.Minute), now, 100)
 	if err != nil {
-		s.logger.Error("[支付sweep] 查询在途订单失败", zap.Error(err))
+		cycleErrors = append(cycleErrors, fmt.Errorf("查询在途订单失败: %w", err))
 	}
 	for _, o := range inFlight {
-		s.sweepInFlightOrder(ctx, o)
+		if err := s.sweepInFlightOrder(ctx, o); err != nil {
+			cycleErrors = append(cycleErrors, fmt.Errorf("处理在途订单 %s 失败: %w", o.OrderID, err))
+		}
 	}
+	return errors.Join(cycleErrors...)
 }
 
 // CleanupClosedOrders removes only stale unpaid payment shells. Paid orders,
@@ -452,39 +461,49 @@ func (s *PaymentService) CleanupClosedOrders(ctx context.Context) error {
 	return nil
 }
 
-func (s *PaymentService) sweepExpiredOrder(ctx context.Context, o *payment.Order) {
-	result, err := s.gateway.Query(ctx, o.OutTradeNo)
-	if err == nil && result.TradeState == wechat.TradeStateSuccess {
+func (s *PaymentService) sweepExpiredOrder(ctx context.Context, o *payment.Order) error {
+	result, queryErr := s.gateway.Query(ctx, o.OutTradeNo)
+	if queryErr == nil && result != nil && result.TradeState == wechat.TradeStateSuccess {
 		if err := s.Settle(ctx, o.OutTradeNo, result, nil); err != nil {
-			s.logger.Error("[支付sweep] 超时订单补偿入账失败", zap.String("orderId", o.OrderID), zap.Error(err))
+			return fmt.Errorf("补偿入账: %w", err)
 		}
-		return
+		return nil
 	}
 	if closeErr := s.gateway.Close(ctx, o.OutTradeNo); closeErr != nil {
 		updated, err := paymentpg.UpdateStatusIfCurrent(ctx, s.pool, o.OrderID, o.Status, payment.OrderStatusExpired, closeErr.Error())
 		if err != nil {
-			s.logger.Error("[支付sweep] 标记订单 expired 失败", zap.String("orderId", o.OrderID), zap.Error(err))
-		} else if !updated {
-			s.logger.Info("[支付sweep] 订单状态已变化，跳过 expired 覆盖", zap.String("orderId", o.OrderID), zap.String("observedStatus", o.Status))
+			return fmt.Errorf("标记订单 expired: %w", err)
 		}
-		return
+		if !updated {
+			return nil
+		}
+		if queryErr != nil {
+			return errors.Join(queryErr, closeErr)
+		}
+		return closeErr
 	}
 	updated, err := paymentpg.UpdateStatusIfCurrent(ctx, s.pool, o.OrderID, o.Status, payment.OrderStatusClosed, "")
 	if err != nil {
-		s.logger.Error("[支付sweep] 标记订单 closed 失败", zap.String("orderId", o.OrderID), zap.Error(err))
-	} else if !updated {
-		s.logger.Info("[支付sweep] 订单状态已变化，跳过 closed 覆盖", zap.String("orderId", o.OrderID), zap.String("observedStatus", o.Status))
+		return fmt.Errorf("标记订单 closed: %w", err)
 	}
+	if !updated {
+		return nil
+	}
+	return queryErr
 }
 
-func (s *PaymentService) sweepInFlightOrder(ctx context.Context, o *payment.Order) {
+func (s *PaymentService) sweepInFlightOrder(ctx context.Context, o *payment.Order) error {
 	result, err := s.gateway.Query(ctx, o.OutTradeNo)
-	if err != nil || result.TradeState != wechat.TradeStateSuccess {
-		return
+	if err != nil {
+		return fmt.Errorf("查询支付状态: %w", err)
+	}
+	if result == nil || result.TradeState != wechat.TradeStateSuccess {
+		return nil
 	}
 	if err := s.Settle(ctx, o.OutTradeNo, result, nil); err != nil {
-		s.logger.Error("[支付sweep] 在途订单补偿入账失败", zap.String("orderId", o.OrderID), zap.Error(err))
+		return fmt.Errorf("补偿入账: %w", err)
 	}
+	return nil
 }
 
 // ==================== 提现 ====================

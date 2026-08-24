@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -18,12 +20,47 @@ type jwtKeyRetirer interface {
 
 // paymentSweeper 定义支付兜底扫描接口，避免循环依赖（实现见 internal/payment/service）。
 type paymentSweeper interface {
-	SweepOnce(ctx context.Context)
+	SweepOnce(ctx context.Context) error
 }
 
 type paymentOrderCleaner interface {
 	CleanupClosedOrders(ctx context.Context) error
 }
+
+const (
+	TaskLotExpiry      = "lot_expiry"
+	TaskJWTKeyRetire   = "jwt_key_retire"
+	TaskPaymentSweep   = "payment_sweep"
+	TaskPaymentCleanup = "payment_cleanup"
+)
+
+// TaskSnapshot is the operational state of one scheduler task. It is safe to
+// expose directly from the management health endpoint.
+type TaskSnapshot struct {
+	Running             bool       `json:"running"`
+	LastStartedAt       *time.Time `json:"last_started_at,omitempty"`
+	LastFinishedAt      *time.Time `json:"last_finished_at,omitempty"`
+	LastSuccessAt       *time.Time `json:"last_success_at,omitempty"`
+	LastFailureAt       *time.Time `json:"last_failure_at,omitempty"`
+	ConsecutiveFailures int        `json:"consecutive_failures"`
+	LastError           string     `json:"last_error,omitempty"`
+	SkipCount           int        `json:"skip_count"`
+	LastSkippedAt       *time.Time `json:"last_skipped_at,omitempty"`
+	LastSkipReason      string     `json:"last_skip_reason,omitempty"`
+}
+
+// HealthSnapshot is the scheduler-level health projection. A task failure is
+// observable here while HTTP readiness remains governed by infrastructure
+// probes; the next scheduled cycle is the retry mechanism.
+type HealthSnapshot struct {
+	Started bool                    `json:"started"`
+	Stopped bool                    `json:"stopped"`
+	Tasks   map[string]TaskSnapshot `json:"tasks"`
+}
+
+type taskSkippedError struct{ reason string }
+
+func (e *taskSkippedError) Error() string { return "scheduler task skipped: " + e.reason }
 
 // Scheduler 定时任务调度器
 type Scheduler struct {
@@ -37,10 +74,15 @@ type Scheduler struct {
 	started        bool
 	stopped        bool
 	workers        sync.WaitGroup
+	taskMu         sync.RWMutex
+	tasks          map[string]TaskSnapshot
 }
 
 // NewScheduler 创建调度器
 func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper paymentSweeper, logger *zap.Logger) *Scheduler {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	cleaner, _ := paymentSweeper.(paymentOrderCleaner)
 	return &Scheduler{
 		pool:           pool,
@@ -49,7 +91,81 @@ func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper p
 		paymentCleaner: cleaner,
 		logger:         logger,
 		stopChan:       make(chan struct{}),
+		tasks: map[string]TaskSnapshot{
+			TaskLotExpiry: {}, TaskJWTKeyRetire: {},
+			TaskPaymentSweep: {}, TaskPaymentCleanup: {},
+		},
 	}
+}
+
+// Health returns a lock-safe snapshot for diagnostics and management probes.
+func (s *Scheduler) Health() HealthSnapshot {
+	s.lifecycleMu.Lock()
+	started, stopped := s.started, s.stopped
+	s.lifecycleMu.Unlock()
+	s.taskMu.RLock()
+	tasks := make(map[string]TaskSnapshot, len(s.tasks))
+	for name, state := range s.tasks {
+		tasks[name] = state
+	}
+	s.taskMu.RUnlock()
+	return HealthSnapshot{Started: started, Stopped: stopped, Tasks: tasks}
+}
+
+func (s *Scheduler) runTask(name string, task func() error) {
+	s.taskStarted(name)
+	err := task()
+	var skipped *taskSkippedError
+	if errors.As(err, &skipped) {
+		s.taskSkipped(name, skipped.reason)
+		return
+	}
+	s.taskFinished(name, err)
+	if err != nil && s.logger != nil {
+		s.logger.Error("scheduler task failed", zap.String("task", name), zap.Error(err))
+	}
+}
+
+func (s *Scheduler) taskStarted(name string) {
+	now := time.Now().UTC()
+	s.taskMu.Lock()
+	state := s.tasks[name]
+	state.Running = true
+	state.LastStartedAt = &now
+	s.tasks[name] = state
+	s.taskMu.Unlock()
+}
+
+func (s *Scheduler) taskFinished(name string, err error) {
+	now := time.Now().UTC()
+	s.taskMu.Lock()
+	state := s.tasks[name]
+	state.Running = false
+	state.LastFinishedAt = &now
+	if err == nil {
+		state.LastSuccessAt = &now
+		state.ConsecutiveFailures = 0
+		state.LastError = ""
+	} else {
+		state.LastFailureAt = &now
+		state.ConsecutiveFailures++
+		state.LastError = err.Error()
+	}
+	s.tasks[name] = state
+	s.taskMu.Unlock()
+}
+
+func (s *Scheduler) taskSkipped(name, reason string) {
+	now := time.Now().UTC()
+	s.taskMu.Lock()
+	state := s.tasks[name]
+	state.Running = false
+	state.LastFinishedAt = &now
+	state.SkipCount++
+	state.LastSkippedAt = &now
+	state.LastSkipReason = reason
+	s.tasks[name] = state
+	s.taskMu.Unlock()
 }
 
 // Start 启动定时任务
@@ -105,14 +221,14 @@ func (s *Scheduler) runLotExpiryTask() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			s.settleExpiredLots()
+			s.runTask(TaskLotExpiry, s.settleExpiredLots)
 		}
 	}
 }
 
 // settleExpiredLots removes the unspent remainder of every lot whose validity
 // window has closed. Repeating is safe: expired_at is the idempotency anchor.
-func (s *Scheduler) settleExpiredLots() {
+func (s *Scheduler) settleExpiredLots() error {
 	ctx := context.Background()
 	now := domain.NowUTC()
 
@@ -120,8 +236,7 @@ func (s *Scheduler) settleExpiredLots() {
 	for {
 		settled, err := s.settleExpiredLotBatch(ctx, now)
 		if err != nil {
-			s.logger.Error("[定时任务] 结算过期额度批次失败", zap.Error(err))
-			return
+			return fmt.Errorf("结算过期额度批次失败: %w", err)
 		}
 		total += settled
 		if settled < lotExpiryBatch {
@@ -131,6 +246,7 @@ func (s *Scheduler) settleExpiredLots() {
 	if total > 0 {
 		s.logger.Info("[定时任务] 过期额度批次结算完成", zap.Int("lotCount", total))
 	}
+	return nil
 }
 
 func (s *Scheduler) settleExpiredLotBatch(ctx context.Context, now time.Time) (int, error) {
@@ -169,27 +285,25 @@ func (s *Scheduler) runJWTKeyRetireTask() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			s.retireExpiredGraceKeys()
+			s.runTask(TaskJWTKeyRetire, s.retireExpiredGraceKeys)
 		}
 	}
 }
 
-func (s *Scheduler) retireExpiredGraceKeys() {
-	s.logger.Info("[定时任务] 检查 JWT 宽限期密钥退役")
+func (s *Scheduler) retireExpiredGraceKeys() error {
 	if s.keyRetirer == nil {
-		return
+		return &taskSkippedError{reason: "key_retire_not_configured"}
 	}
 	if err := s.keyRetirer.RetireExpiredGraceKeys(); err != nil {
-		s.logger.Error("[定时任务] JWT 密钥退役失败", zap.Error(err))
-	} else {
-		s.logger.Info("[定时任务] JWT 密钥退役检查完成")
+		return err
 	}
+	return nil
 }
 
 // ==================== 支付兜底 sweep（超时关单 + 在途补偿，设计文档 §4.5） ====================
 
 func (s *Scheduler) runPaymentSweepTask() {
-	s.sweepPayments()
+	s.runTask(TaskPaymentSweep, s.sweepPayments)
 
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
@@ -199,30 +313,33 @@ func (s *Scheduler) runPaymentSweepTask() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			s.sweepPayments()
+			s.runTask(TaskPaymentSweep, s.sweepPayments)
 		}
 	}
 }
 
-func (s *Scheduler) sweepPayments() {
+func (s *Scheduler) sweepPayments() error {
 	if s.paymentSweeper == nil {
-		return
+		return &taskSkippedError{reason: "payment_sweep_not_configured"}
 	}
 	ctx := context.Background()
 
 	var locked bool
-	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment'))`).Scan(&locked); err != nil || !locked {
-		return
+	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment'))`).Scan(&locked); err != nil {
+		return fmt.Errorf("acquire payment sweep advisory lock: %w", err)
+	}
+	if !locked {
+		return &taskSkippedError{reason: "payment_sweep_advisory_lock_held"}
 	}
 	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment'))`) //nolint
 
-	s.paymentSweeper.SweepOnce(ctx)
+	return s.paymentSweeper.SweepOnce(ctx)
 }
 
 const closedOrderCleanupInterval = 24 * time.Hour
 
 func (s *Scheduler) runPaymentCleanupTask() {
-	s.cleanupClosedOrders()
+	s.runTask(TaskPaymentCleanup, s.cleanupClosedOrders)
 	ticker := time.NewTicker(closedOrderCleanupInterval)
 	defer ticker.Stop()
 	for {
@@ -230,30 +347,31 @@ func (s *Scheduler) runPaymentCleanupTask() {
 		case <-s.stopChan:
 			return
 		case <-ticker.C:
-			s.cleanupClosedOrders()
+			s.runTask(TaskPaymentCleanup, s.cleanupClosedOrders)
 		}
 	}
 }
 
-func (s *Scheduler) cleanupClosedOrders() {
+func (s *Scheduler) cleanupClosedOrders() error {
 	if s.paymentCleaner == nil {
-		return
+		return &taskSkippedError{reason: "payment_cleanup_not_configured"}
 	}
 	ctx := context.Background()
 	var locked bool
-	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment_cleanup'))`).Scan(&locked); err != nil || !locked {
-		return
+	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment_cleanup'))`).Scan(&locked); err != nil {
+		return fmt.Errorf("acquire payment cleanup advisory lock: %w", err)
+	}
+	if !locked {
+		return &taskSkippedError{reason: "payment_cleanup_advisory_lock_held"}
 	}
 	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment_cleanup'))`) //nolint
-	if err := s.paymentCleaner.CleanupClosedOrders(ctx); err != nil {
-		s.logger.Error("[定时任务] 支付订单清理失败", zap.Error(err))
-	}
+	return s.paymentCleaner.CleanupClosedOrders(ctx)
 }
 
 // RunAllTasks 手动执行所有任务（用于测试）
 func (s *Scheduler) RunAllTasks() {
 	s.logger.Info("手动触发所有定时任务")
-	s.settleExpiredLots()
-	s.sweepPayments()
-	s.cleanupClosedOrders()
+	s.runTask(TaskLotExpiry, s.settleExpiredLots)
+	s.runTask(TaskPaymentSweep, s.sweepPayments)
+	s.runTask(TaskPaymentCleanup, s.cleanupClosedOrders)
 }

@@ -63,6 +63,7 @@ httpServers.Start / Shutdown
 - 支付 sweep 的 `closed/expired` 迁移使用 `UpdateStatusIfCurrent` 乐观状态条件，外部支付调用返回后不会覆盖并发回调已提交的 `paid` 状态。
 - 提现列表通过 `PaymentService.ListWithdrawals` 接收 `WithdrawalListParams`，由 application 层归一化租户/状态/分页并拒绝未知状态，Transport 不再传递裸查询参数。
 - 支付 cleanup 失败通过 `error` 返回 Scheduler 统一记录；Scheduler 的后台任务启动/停止具备幂等保护、等待语义，JWT 退役初始延迟可被停止信号中断。
+- Scheduler 通过 `/health` 暴露四类后台任务的运行中、最近成功/失败、连续失败和跨副本锁跳过快照；支付 sweep 将单轮错误回传，按下一周期自动重试。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。

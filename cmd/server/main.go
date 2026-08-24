@@ -173,7 +173,11 @@ func run() error {
 	healthHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version})
+		var schedulerHealth any = map[string]any{"started": false, "stopped": false, "tasks": map[string]any{}}
+		if platform != nil && platform.sched != nil {
+			schedulerHealth = platform.sched.Health()
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version, "scheduler": schedulerHealth})
 	})
 	readyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
