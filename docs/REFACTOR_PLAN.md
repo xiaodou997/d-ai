@@ -492,9 +492,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 终端用户列表读取：租户范围、租户名/用户名/关键词/状态过滤，以及余额、最后登录和资料投影已移入 `internal/user/pg.AdminEndUserRepository`；权限范围仍由 claims 在 handler 先收窄。
 - 终端用户写入边界：资料更新与启用/停用状态变更已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 接收显式字段更新命令；Transport 不再直接执行这两类 `iam_accounts` UPDATE，黑名单同步仍由 handler 编排。
+- 终端用户创建事务：账号插入和一次性激活令牌写入已移入 `AdminEndUserRepository.CreateEndUser`，由同一事务提交/回滚；handler 只生成凭证、组装命令和映射唯一约束错误。
 - 回归：新增 canonical schema 集成测试，确认 24 小时窗口、失败状态过滤、空 settlement error 和时间倒序；`internal/transport` 仅保留展示转换。
 - 回归：新增 TenantRepository canonical schema 测试，覆盖租户详情投影、联系人字段、终端用户租户归属和 deleted 用户不可见。
 - 回归：新增 AdminAccountRepository canonical schema 测试，覆盖管理员关键词、租户范围、分页顺序、状态和凭证状态投影。
 - 回归：新增 AdminEndUserRepository canonical schema 测试，覆盖租户范围、租户名/状态/关键词过滤、余额和最后登录投影。
 - 回归：新增 AdminEndUserRepository 写入测试，覆盖显式清空字段、租户作用域、deleted 账号保护和状态变更。
-- 下一候选项：继续迁移终端用户创建事务，以及租户用户/系统管理员创建、更新和状态事务。
+- 回归：新增 AdminEndUserRepository 创建测试，覆盖 pending_activation 投影、激活令牌关联和激活写入失败时的账号回滚。
+- 下一候选项：继续迁移租户用户/系统管理员创建、更新和状态事务，以及终端用户删除事务。

@@ -194,40 +194,28 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	var exists int
-	if err := h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&exists); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if exists > 0 {
-		return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
-	}
 	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	userID := "U_" + strings.ToUpper(uuid.NewString()[:24])
-	now := time.Now().UTC()
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, phone, internal_note, user_type, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 'pending_activation', $5, $6, $7, 4, 'active', $8, $8)
-	`, userID, claims.TenantID, username, credential.PasswordHash, in.Body.Email, in.Body.Phone, strings.TrimSpace(in.Body.InternalNote), now); err != nil {
+	if err := h.endUserWriter.CreateEndUser(ctx, userports.AdminEndUserCreate{
+		UserID:              userID,
+		TenantID:            claims.TenantID,
+		Username:            username,
+		Email:               in.Body.Email,
+		Phone:               in.Body.Phone,
+		InternalNote:        strings.TrimSpace(in.Body.InternalNote),
+		PasswordHash:        credential.PasswordHash,
+		ActivationTokenHash: credential.TokenHash,
+		ActivationExpiresAt: credential.ExpiresAt,
+	}); err != nil {
 		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
 		if authpg.IsEmailTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := h.activations.Store(ctx, tx, userID, auth.ActivationPurposeAccount, credential); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createEndUserOutput{}

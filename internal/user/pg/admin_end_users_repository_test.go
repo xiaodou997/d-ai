@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/dbtest"
 	userports "xiaodou/dai/internal/user/ports"
 )
@@ -141,5 +142,76 @@ func TestAdminEndUserRepositoryUpdatesScopedProfileAndStatus(t *testing.T) {
 	updated, err = repo.UpdateEndUserStatus(ctx, "end-write-deleted", "active")
 	if err != nil || updated {
 		t.Fatalf("deleted UpdateEndUserStatus = updated:%v err:%v", updated, err)
+	}
+}
+
+func TestAdminEndUserRepositoryCreatesActivationAtomically(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	if _, err := pool.Exec(ctx, `INSERT INTO iam_tenants (tenant_id, tenant_name) VALUES ('tenant-create-a', 'Create Tenant')`); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	activation := auth.NewActivationService(pool, time.Hour)
+	repo := NewAdminEndUserRepository(pool, activation)
+	credential, err := activation.NewCredential()
+	if err != nil {
+		t.Fatalf("NewCredential: %v", err)
+	}
+	email := "create@example.com"
+	phone := "123"
+	input := userports.AdminEndUserCreate{
+		UserID:              "end-create-a",
+		TenantID:            "tenant-create-a",
+		Username:            "create-a",
+		Email:               &email,
+		Phone:               &phone,
+		InternalNote:        "created",
+		PasswordHash:        credential.PasswordHash,
+		ActivationTokenHash: credential.TokenHash,
+		ActivationExpiresAt: credential.ExpiresAt,
+	}
+	if err := repo.CreateEndUser(ctx, input); err != nil {
+		t.Fatalf("CreateEndUser: %v", err)
+	}
+
+	var credentialState string
+	if err := pool.QueryRow(ctx, `SELECT credential_state FROM iam_accounts WHERE user_id = $1`, input.UserID).Scan(&credentialState); err != nil {
+		t.Fatalf("read created account: %v", err)
+	}
+	if credentialState != "pending_activation" {
+		t.Fatalf("credential state = %q, want pending_activation", credentialState)
+	}
+	var tokenHash []byte
+	var purpose string
+	if err := pool.QueryRow(ctx, `SELECT token_hash, purpose FROM auth_activation_tokens WHERE user_id = $1`, input.UserID).Scan(&tokenHash, &purpose); err != nil {
+		t.Fatalf("read activation token: %v", err)
+	}
+	if string(tokenHash) != string(credential.TokenHash) || purpose != auth.ActivationPurposeAccount {
+		t.Fatalf("activation record = hash:%x purpose:%q", tokenHash, purpose)
+	}
+
+	// Reusing a token hash makes the activation insert fail after the account
+	// insert. The repository must roll the account back with the token write.
+	input.UserID = "end-create-b"
+	input.Username = "create-b"
+	input.Email = nil
+	input.Phone = nil
+	if err := repo.CreateEndUser(ctx, input); err == nil {
+		t.Fatal("expected duplicate activation token error")
+	}
+	var accountCount, tokenCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE user_id = $1`, input.UserID).Scan(&accountCount); err != nil {
+		t.Fatalf("count rolled-back account: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM auth_activation_tokens WHERE user_id = $1`, input.UserID).Scan(&tokenCount); err != nil {
+		t.Fatalf("count rolled-back token: %v", err)
+	}
+	if accountCount != 0 || tokenCount != 0 {
+		t.Fatalf("rollback counts = account:%d token:%d", accountCount, tokenCount)
 	}
 }

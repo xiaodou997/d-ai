@@ -63,9 +63,26 @@ type AdminEndUserUpdate struct {
 	InternalNote    string
 }
 
+// AdminEndUserCreate contains the already-normalized account fields and the
+// one-time credential material prepared by the authentication application
+// service. The repository persists both account and activation records in one
+// transaction.
+type AdminEndUserCreate struct {
+	UserID              string
+	TenantID            string
+	Username            string
+	Email               *string
+	Phone               *string
+	InternalNote        string
+	PasswordHash        string
+	ActivationTokenHash []byte
+	ActivationExpiresAt time.Time
+}
+
 // AdminEndUserWriter owns end-user profile and status mutations. Session
 // blacklist side effects remain at the application/HTTP orchestration layer.
 type AdminEndUserWriter interface {
+	CreateEndUser(ctx context.Context, input AdminEndUserCreate) error
 	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
 	UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error)
 }

@@ -2,21 +2,67 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"xiaodou/dai/internal/auth"
 	userports "xiaodou/dai/internal/user/ports"
 )
 
-// AdminEndUserRepository owns the scoped admin end-user list projection.
-// Mutations remain separate until their transaction boundary is migrated.
-type AdminEndUserRepository struct {
-	pool *pgxpool.Pool
+type activationCredentialStore interface {
+	Store(ctx context.Context, tx pgx.Tx, userID, purpose string, credential auth.ActivationCredential) error
 }
 
-func NewAdminEndUserRepository(pool *pgxpool.Pool) *AdminEndUserRepository {
-	return &AdminEndUserRepository{pool: pool}
+// AdminEndUserRepository owns the scoped admin end-user projections and
+// account mutations. Activation token persistence is delegated to the auth
+// service while this repository retains the surrounding transaction boundary.
+type AdminEndUserRepository struct {
+	pool            *pgxpool.Pool
+	activationStore activationCredentialStore
+}
+
+var _ userports.AdminEndUserReader = (*AdminEndUserRepository)(nil)
+var _ userports.AdminEndUserWriter = (*AdminEndUserRepository)(nil)
+
+func NewAdminEndUserRepository(pool *pgxpool.Pool, activationStores ...activationCredentialStore) *AdminEndUserRepository {
+	var activationStore activationCredentialStore
+	if len(activationStores) > 0 {
+		activationStore = activationStores[0]
+	}
+	return &AdminEndUserRepository{pool: pool, activationStore: activationStore}
+}
+
+// CreateEndUser atomically creates the pending-activation account and its
+// one-time activation record. A failed activation insert rolls the account
+// back so callers never receive an unusable half-created user.
+func (r *AdminEndUserRepository) CreateEndUser(ctx context.Context, input userports.AdminEndUserCreate) error {
+	if r.activationStore == nil {
+		return errors.New("admin end-user activation store is not configured")
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, phone, internal_note, user_type, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'pending_activation', $5, $6, $7, 4, 'active', $8, $8)
+	`, input.UserID, input.TenantID, input.Username, input.PasswordHash, input.Email, input.Phone, input.InternalNote, now); err != nil {
+		return err
+	}
+	if err := r.activationStore.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, auth.ActivationCredential{
+		PasswordHash: input.PasswordHash,
+		TokenHash:    input.ActivationTokenHash,
+		ExpiresAt:    input.ActivationExpiresAt,
+	}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // UpdateEndUser updates only fields explicitly selected by the caller. The
