@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/auth"
+	authports "xiaodou/dai/internal/auth/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
@@ -29,6 +30,7 @@ type adminHandlers struct {
 	activations        *auth.ActivationService
 	log                *zap.Logger
 	rechargeSvc        *billingsvc.RechargeService
+	authAuditReader    authports.AuthAuditLogReader
 }
 
 type activationCredentialOutput struct {
@@ -56,6 +58,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		systemRepo:         systempg.NewSystemRepository(d.Pool),
 		deduction:          d.Deduction,
 		rechargeSvc:        d.Recharge,
+		authAuditReader:    d.AuthAuditLogs,
 		blacklist:          d.Blacklist,
 		activations:        d.Activations,
 		log:                d.Logger,

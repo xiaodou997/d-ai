@@ -87,3 +87,51 @@ func TestAuthRepositoryOwnsProtectedAccountProjectionAndMutations(t *testing.T) 
 		t.Fatalf("CheckTenantActive active = %v err:%v", active, err)
 	}
 }
+
+func TestAuthRepositoryListsAuditLogsWithFiltersAndStablePagination(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	first := time.Date(2026, time.August, 24, 10, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO auth_audit_logs
+			(event_type, principal_type, user_id, decision, reason_code, reason_message, created_at)
+		VALUES
+			('user_login', 'user', 'audit-user-a', 'success', NULL, NULL, $1),
+			('user_login', 'admin', 'audit-admin', 'deny', 'mfa_required', 'MFA required', $2),
+			('token_refresh', 'user', 'audit-user-b', 'error', 'session_missing', 'Session missing', $3),
+			('user_login', 'user', 'audit-user-c', 'deny', 'rate_limited', 'Too many attempts', $4)
+	`, first, first.Add(time.Minute), first.Add(2*time.Minute), first.Add(3*time.Minute)); err != nil {
+		t.Fatalf("seed auth audit logs: %v", err)
+	}
+
+	repo := NewAuthRepository(pool)
+	page, err := repo.ListAuthAuditLogs(ctx, authports.AuthAuditLogFilter{Page: 1, Size: 2})
+	if err != nil {
+		t.Fatalf("list auth audit logs: %v", err)
+	}
+	if page.Total != 4 || page.Page != 1 || page.Size != 2 || len(page.Records) != 2 {
+		t.Fatalf("audit page = %#v", page)
+	}
+	if page.Records[0].EventType != "user_login" || page.Records[0].UserID != "audit-user-c" || page.Records[0].ReasonCode != "rate_limited" {
+		t.Fatalf("latest audit record = %#v", page.Records[0])
+	}
+	page, err = repo.ListAuthAuditLogs(ctx, authports.AuthAuditLogFilter{EventType: "user_login", Decision: "deny", Page: 1, Size: 20})
+	if err != nil {
+		t.Fatalf("list filtered auth audit logs: %v", err)
+	}
+	if page.Total != 2 || len(page.Records) != 2 || page.Records[0].UserID != "audit-user-c" || page.Records[1].UserID != "audit-admin" {
+		t.Fatalf("filtered audit page = %#v", page)
+	}
+	page, err = repo.ListAuthAuditLogs(ctx, authports.AuthAuditLogFilter{Page: 0, Size: 0})
+	if err != nil {
+		t.Fatalf("list normalized auth audit logs: %v", err)
+	}
+	if page.Page != 1 || page.Size != 20 || len(page.Records) != 4 {
+		t.Fatalf("normalized audit page = %#v", page)
+	}
+}

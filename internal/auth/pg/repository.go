@@ -59,9 +59,79 @@ type AuthRepository struct {
 
 var _ authports.AccountReader = (*AuthRepository)(nil)
 var _ authports.AccountWriter = (*AuthRepository)(nil)
+var _ authports.AuthAuditLogReader = (*AuthRepository)(nil)
 
 func NewAuthRepository(pool *pgxpool.Pool) *AuthRepository {
 	return &AuthRepository{pool: pool}
+}
+
+// ListAuthAuditLogs reads the authentication audit projection used by the
+// super-admin management endpoint. Pagination normalization and dynamic
+// filters stay in the persistence adapter; HTTP only maps the result.
+func (r *AuthRepository) ListAuthAuditLogs(ctx context.Context, filter authports.AuthAuditLogFilter) (authports.AuthAuditLogPage, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	size := filter.Size
+	if size < 1 || size > 100 {
+		size = 20
+	}
+
+	where := "WHERE 1=1"
+	args := make([]any, 0, 4)
+	nextArg := 1
+	addFilter := func(column, value string) {
+		if value == "" {
+			return
+		}
+		where += fmt.Sprintf(" AND %s = $%d", column, nextArg)
+		args = append(args, value)
+		nextArg++
+	}
+	addFilter("event_type", filter.EventType)
+	addFilter("principal_type", filter.PrincipalType)
+	addFilter("user_id", filter.UserID)
+	addFilter("decision", filter.Decision)
+
+	var total int64
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM auth_audit_logs "+where, args...).Scan(&total); err != nil {
+		return authports.AuthAuditLogPage{}, err
+	}
+
+	queryArgs := append(append([]any{}, args...), size, (page-1)*size)
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
+		SELECT id, event_type, principal_type, COALESCE(user_id, ''),
+		       decision, COALESCE(reason_code, ''), COALESCE(reason_message, ''), created_at
+		FROM auth_audit_logs %s
+		ORDER BY created_at DESC, id DESC
+		LIMIT $%d OFFSET $%d
+	`, where, nextArg, nextArg+1), queryArgs...)
+	if err != nil {
+		return authports.AuthAuditLogPage{}, err
+	}
+	defer rows.Close()
+
+	result := authports.AuthAuditLogPage{
+		Records: make([]authports.AuthAuditLog, 0),
+		Total:   total,
+		Page:    page,
+		Size:    size,
+	}
+	for rows.Next() {
+		var item authports.AuthAuditLog
+		if err := rows.Scan(
+			&item.ID, &item.EventType, &item.PrincipalType, &item.UserID,
+			&item.Decision, &item.ReasonCode, &item.ReasonMessage, &item.CreatedAt,
+		); err != nil {
+			return authports.AuthAuditLogPage{}, err
+		}
+		result.Records = append(result.Records, item)
+	}
+	if err := rows.Err(); err != nil {
+		return authports.AuthAuditLogPage{}, err
+	}
+	return result, nil
 }
 
 func (r *AuthRepository) GetCurrentUserSnapshot(ctx context.Context, userID string, userType int) (authports.CurrentUserSnapshot, error) {

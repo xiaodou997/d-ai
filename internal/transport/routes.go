@@ -59,6 +59,7 @@ type IdentityDeps struct {
 	UserService        *userpkg.UserService
 	AuthAccountReader  authports.AccountReader
 	AuthAccountWriter  authports.AccountWriter
+	AuthAuditLogs      authports.AuthAuditLogReader
 	TenantStatusWriter tenantports.AdminTenantStatusWriter
 	TenantWriter       tenantports.AdminTenantWriter
 	AdminAccounts      userports.AdminAccountReader

@@ -55,6 +55,7 @@ httpServers.Start / Shutdown
 - 租户创建（含可选初始租户用户/激活令牌）、更新和删除已移入 `tenant/ports.AdminTenantWriter`；composition root 注入带 `ActivationService.Store` 的 `TenantRepository`，handler 不再持有租户生命周期事务。
 - AI 身份适配器的终端用户归属校验复用 `TenantRepository.GetEndUserTenantID`，不再持有连接池或直接查询 `iam_accounts`。
 - 统一认证保护端点通过 composition root 注入 `auth/ports.AccountReader` / `AccountWriter`；`AuthRepository` 负责当前用户快照、密码和资料写入，Transport 不再直接执行账号 SQL。
+- 认证审计日志列表通过 `auth/ports.AuthAuditLogReader` 注入 `AuthRepository`；过滤、计数、稳定排序和分页归一化留在 persistence adapter，管理 Transport 只做 DTO 投影。
 - 管理充值目标的租户存在与终端用户归属校验复用 `TenantRepository`；`RechargeService.GrantManual` 持有目标锁并提交充值订单、额度包和余额变更事务，Transport 不再直接读取 `iam_tenants` / `iam_accounts` 做前置校验。
 - `GrantBalance` 保留为支付结算使用的外部事务原语，并统一校验订单类型、额度来源与 `payment_order_id` 的组合，避免人工充值和在线支付生命周期交叉写入。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。

@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/jackc/pgx/v5"
 
+	authports "xiaodou/dai/internal/auth/ports"
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/ledger"
 	billingpg "xiaodou/dai/internal/billing/pg"
@@ -313,60 +314,28 @@ func (h *adminHandlers) getDebt(ctx context.Context, in *debtStatusInput) (*debt
 }
 
 func (h *adminHandlers) authAuditLogs(ctx context.Context, in *auditLogsInput) (*auditLogsOutput, error) {
-	where := "WHERE 1=1"
-	args := []any{}
-	idx := 1
-	addFilter := func(col, val string) {
-		if val != "" {
-			where += fmt.Sprintf(" AND %s = $%d", col, idx)
-			args = append(args, val)
-			idx++
-		}
+	if h.authAuditReader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("auth audit log service is not configured")
 	}
-	addFilter("event_type", in.EventType)
-	addFilter("principal_type", in.PrincipalType)
-	addFilter("user_id", in.UserID)
-	addFilter("decision", in.Decision)
-
-	var total int64
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM auth_audit_logs "+where, args...).Scan(&total)
-
-	size := in.Size
-	if size < 1 || size > 100 {
-		size = 20
-	}
-	offset := (in.Page - 1) * size
-	qargs := append(append([]any{}, args...), size, offset)
-	rows, err := h.pool.Query(ctx, fmt.Sprintf(`
-		SELECT id, event_type, principal_type, user_id,
-		       decision, reason_code, reason_message, created_at
-		FROM auth_audit_logs %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d
-	`, where, idx, idx+1), qargs...)
+	page, err := h.authAuditReader.ListAuthAuditLogs(ctx, authports.AuthAuditLogFilter{
+		EventType: in.EventType, PrincipalType: in.PrincipalType, UserID: in.UserID, Decision: in.Decision,
+		Page: in.Page, Size: in.Size,
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	defer rows.Close()
-
-	items := make([]auditLogItem, 0)
-	for rows.Next() {
+	items := make([]auditLogItem, 0, len(page.Records))
+	for _, record := range page.Records {
 		var it auditLogItem
-		var userID, reasonCode, reasonMsg *string
-		var createdAt time.Time
-		if err := rows.Scan(&it.ID, &it.EventType, &it.PrincipalType, &userID,
-			&it.Decision, &reasonCode, &reasonMsg, &createdAt); err != nil {
-			continue
-		}
-		it.CreatedAt = millisFromTime(createdAt)
-		if userID != nil {
-			it.UserID = *userID
-		}
-		if reasonCode != nil {
-			it.ReasonCode = *reasonCode
-		}
-		if reasonMsg != nil {
-			it.ReasonMessage = *reasonMsg
-		}
+		it.ID = record.ID
+		it.EventType = record.EventType
+		it.PrincipalType = record.PrincipalType
+		it.UserID = record.UserID
+		it.Decision = record.Decision
+		it.ReasonCode = record.ReasonCode
+		it.ReasonMessage = record.ReasonMessage
+		it.CreatedAt = millisFromTime(record.CreatedAt)
 		items = append(items, it)
 	}
-	return &auditLogsOutput{Body: httpx.NewPage(items, total, in.Page, size)}, nil
+	return &auditLogsOutput{Body: httpx.NewPage(items, page.Total, page.Page, page.Size)}, nil
 }
