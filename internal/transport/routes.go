@@ -18,6 +18,7 @@ import (
 	notificationpkg "xiaodou/dai/internal/notification"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	systempkg "xiaodou/dai/internal/system"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	userpkg "xiaodou/dai/internal/user"
 	userports "xiaodou/dai/internal/user/ports"
 
@@ -55,6 +56,7 @@ type IdentityDeps struct {
 	RecentAuth         *auth.RecentAuthService
 	Blacklist          *auth.BlacklistService
 	UserService        *userpkg.UserService
+	TenantStatusWriter tenantports.AdminTenantStatusWriter
 	AdminAccounts      userports.AdminAccountReader
 	AdminAccountWriter userports.AdminAccountWriter
 	AdminEndUsers      userports.AdminEndUserReader

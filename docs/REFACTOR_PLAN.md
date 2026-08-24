@@ -489,6 +489,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 查询边界闭环：管理 Dashboard 异常扣费告警的 `ai_usage_logs` 查询和行扫描已移入 `internal/system/pg.SystemRepository`；Transport 只负责调用端口、错误映射和 DTO 投影。
 - 租户/终端用户归属读取：`admin_tenant.getTenant` 与 `admin_enduser.checkUserBelongsToTenant` 已移入 `internal/tenant/pg.TenantRepository`，权限 handler 不再直接执行这两类身份查询。
+- 租户状态事务：租户启停、组织用户/终端用户级联状态变更及恢复用户 ID 收集已移入 `internal/tenant/pg.TenantRepository.UpdateStatus`；Transport 只保留黑名单同步和错误映射。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
@@ -498,6 +499,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 终端用户创建事务：账号插入和一次性激活令牌写入已移入 `AdminEndUserRepository.CreateEndUser`，由同一事务提交/回滚；handler 只生成凭证、组装命令和映射唯一约束错误。
 - 回归：新增 canonical schema 集成测试，确认 24 小时窗口、失败状态过滤、空 settlement error 和时间倒序；`internal/transport` 仅保留展示转换。
 - 回归：新增 TenantRepository canonical schema 测试，覆盖租户详情投影、联系人字段、终端用户租户归属和 deleted 用户不可见。
+- 回归：扩展 TenantRepository 状态测试，覆盖 active/disabled/inherited_disabled 级联、跨租户隔离、已禁用/锁定账号保护和恢复用户清单。
 - 回归：新增 AdminAccountRepository canonical schema 测试，覆盖管理员关键词、租户范围、分页顺序、状态和凭证状态投影。
 - 回归：扩展 AdminAccountRepository 写入测试，覆盖两类账号创建、激活令牌关联、超级管理员保护、租户用户状态和资料更新。
 - 回归：扩展账号 repository 重置测试，覆盖三类目标类型隔离、deleted 账号拒绝和一次性凭证结果。
@@ -505,4 +507,4 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增 AdminEndUserRepository canonical schema 测试，覆盖租户范围、租户名/状态/关键词过滤、余额和最后登录投影。
 - 回归：新增 AdminEndUserRepository 写入测试，覆盖显式清空字段、租户作用域、deleted 账号保护和状态变更。
 - 回归：新增 AdminEndUserRepository 创建测试，覆盖 pending_activation 投影、激活令牌关联和激活写入失败时的账号回滚。
-- 下一候选项：继续迁移租户级联状态事务，并清理剩余 admin tenant 生命周期 SQL。
+- 下一候选项：继续迁移租户创建、更新和删除生命周期 SQL。

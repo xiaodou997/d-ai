@@ -334,63 +334,15 @@ func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*s
 }
 
 func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenantStatusInput) (*successOutput, error) {
-	now := billingdomain.NowUTC()
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer tx.Rollback(ctx)
-
 	// 停用/启用只改访问权，不动钱。租户被停用后由 BanChecker 在网关层拦截
 	// （gateway.go:141），余额不需要、也不应该跟着变：过期额度批次现在是一次
 	// 真实的余额扣减，用它当"冻结开关"会真的把租户的钱扣掉，而且启用时无法还原。
-	if in.Body.Status == "disabled" {
-		// 停用：级联停用组织用户和终端用户。
-		stmts := []string{
-			`UPDATE iam_tenants SET status = 'disabled', updated_at = $1 WHERE tenant_id = $2`,
-			`UPDATE iam_accounts SET status = 'inherited_disabled', updated_at = $1 WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'active'`,
-		}
-		for _, s := range stmts {
-			if _, err := tx.Exec(ctx, s, now, in.ID); err != nil {
-				return nil, httpx.ErrInternal.WithCause(err)
-			}
-		}
-	}
-
-	// Collect the user IDs restored to 'active' so we can clear any per-user
-	// ban key BanReconciler may have cascaded for them while the tenant was
-	// disabled (trueBannedUsers() treats 'inherited_disabled' as banned) —
-	// UnbanTenant alone only clears the tenant-level key, not these.
-	var restoredUserIDs []string
-	if in.Body.Status != "disabled" {
-		// 启用：级联恢复，并收集需要清除用户级封禁的账号。
-		if _, err := tx.Exec(ctx, `UPDATE iam_tenants SET status = 'active', updated_at = $1 WHERE tenant_id = $2`, now, in.ID); err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		rows, err := tx.Query(ctx, `
-			UPDATE iam_accounts SET status = 'active', updated_at = $1
-			WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'inherited_disabled'
-			RETURNING user_id
-		`, now, in.ID)
-		if err != nil {
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return nil, httpx.ErrInternal.WithCause(err)
-			}
-			restoredUserIDs = append(restoredUserIDs, id)
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return nil, httpx.ErrInternal.WithCause(err)
-		}
-		rows.Close()
-	}
-	if err := tx.Commit(ctx); err != nil {
+	result, err := h.tenantStatusWriter.UpdateStatus(ctx, in.ID, in.Body.Status)
+	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if !result.Updated {
+		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 	}
 
 	if h.blacklist != nil {
@@ -398,7 +350,7 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 			_ = h.blacklist.BanTenant(ctx, in.ID)
 		} else {
 			_ = h.blacklist.UnbanTenant(ctx, in.ID)
-			for _, id := range restoredUserIDs {
+			for _, id := range result.RestoredUserIDs {
 				_ = h.blacklist.UnbanUser(ctx, id)
 			}
 		}

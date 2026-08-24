@@ -24,6 +24,7 @@ import (
 	"xiaodou/dai/internal/payment/wechat"
 	"xiaodou/dai/internal/scheduler"
 	systempkg "xiaodou/dai/internal/system"
+	tenantpg "xiaodou/dai/internal/tenant/pg"
 	userpkg "xiaodou/dai/internal/user"
 	userpg "xiaodou/dai/internal/user/pg"
 )
@@ -39,6 +40,7 @@ type platformModules struct {
 	RecentAuth    *auth.RecentAuthService
 	Blacklist     *auth.BlacklistService
 	UserService   *userpkg.UserService
+	TenantRepo    *tenantpg.TenantRepository
 	AdminAccounts *userpg.AdminAccountRepository
 	AdminEndUsers *userpg.AdminEndUserRepository
 	Invite        *invitepkg.InviteService
@@ -101,6 +103,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
+	tenantRepo := tenantpg.NewTenantRepository(pool)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
@@ -120,6 +123,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		RecentAuth:    recentAuthSvc,
 		Blacklist:     blacklist,
 		UserService:   userSvc,
+		TenantRepo:    tenantRepo,
 		AdminAccounts: adminAccountRepo,
 		AdminEndUsers: adminEndUserRepo,
 		Invite:        inviteSvc,

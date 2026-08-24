@@ -8,23 +8,25 @@ import (
 	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 )
 
 // adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
 // handler 的逻辑（部分内联 SQL + 已搬 repo），输出强类型 DTO、错误 problem+json。
 type adminHandlers struct {
-	pool          *pgxpool.Pool
-	tenantRepo    *tenantpg.TenantRepository
-	accountRepo   userports.AdminAccountReader
-	accountWriter userports.AdminAccountWriter
-	endUserRepo   userports.AdminEndUserReader
-	endUserWriter userports.AdminEndUserWriter
-	systemRepo    *systempg.SystemRepository
-	deduction     *billingsvc.DeductionService
-	blacklist     *auth.BlacklistService
-	activations   *auth.ActivationService
-	log           *zap.Logger
+	pool               *pgxpool.Pool
+	tenantRepo         *tenantpg.TenantRepository
+	tenantStatusWriter tenantports.AdminTenantStatusWriter
+	accountRepo        userports.AdminAccountReader
+	accountWriter      userports.AdminAccountWriter
+	endUserRepo        userports.AdminEndUserReader
+	endUserWriter      userports.AdminEndUserWriter
+	systemRepo         *systempg.SystemRepository
+	deduction          *billingsvc.DeductionService
+	blacklist          *auth.BlacklistService
+	activations        *auth.ActivationService
+	log                *zap.Logger
 }
 
 type activationCredentialOutput struct {
@@ -41,17 +43,18 @@ func setActivationOutput(out *activationCredentialOutput, result userports.Activ
 
 func newAdminHandlers(d Deps) *adminHandlers {
 	return &adminHandlers{
-		pool:          d.Pool,
-		tenantRepo:    tenantpg.NewTenantRepository(d.Pool),
-		accountRepo:   d.AdminAccounts,
-		accountWriter: d.AdminAccountWriter,
-		endUserRepo:   d.AdminEndUsers,
-		endUserWriter: d.AdminEndUserWriter,
-		systemRepo:    systempg.NewSystemRepository(d.Pool),
-		deduction:     d.Deduction,
-		blacklist:     d.Blacklist,
-		activations:   d.Activations,
-		log:           d.Logger,
+		pool:               d.Pool,
+		tenantRepo:         tenantpg.NewTenantRepository(d.Pool),
+		tenantStatusWriter: d.TenantStatusWriter,
+		accountRepo:        d.AdminAccounts,
+		accountWriter:      d.AdminAccountWriter,
+		endUserRepo:        d.AdminEndUsers,
+		endUserWriter:      d.AdminEndUserWriter,
+		systemRepo:         systempg.NewSystemRepository(d.Pool),
+		deduction:          d.Deduction,
+		blacklist:          d.Blacklist,
+		activations:        d.Activations,
+		log:                d.Logger,
 	}
 }
 

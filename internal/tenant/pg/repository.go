@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/billing"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 )
 
 type Pagination struct {
@@ -35,8 +36,69 @@ type TenantRepository struct {
 	pool *pgxpool.Pool
 }
 
+var _ tenantports.AdminTenantStatusWriter = (*TenantRepository)(nil)
+
 func NewTenantRepository(pool *pgxpool.Pool) *TenantRepository {
 	return &TenantRepository{pool: pool}
+}
+
+// UpdateStatus atomically updates the tenant access state and cascades only
+// the reversible inherited_disabled state to organization/end-user accounts.
+// Redis blacklist synchronization is intentionally left to the caller.
+func (r *TenantRepository) UpdateStatus(ctx context.Context, tenantID, status string) (tenantports.AdminTenantStatusResult, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return tenantports.AdminTenantStatusResult{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	tag, err := tx.Exec(ctx, `
+		UPDATE iam_tenants SET status = $1, updated_at = $2
+		WHERE tenant_id = $3
+	`, status, now, tenantID)
+	if err != nil {
+		return tenantports.AdminTenantStatusResult{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return tenantports.AdminTenantStatusResult{}, nil
+	}
+
+	result := tenantports.AdminTenantStatusResult{Updated: true}
+	if status == "disabled" {
+		if _, err := tx.Exec(ctx, `
+			UPDATE iam_accounts SET status = 'inherited_disabled', updated_at = $1
+			WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'active'
+		`, now, tenantID); err != nil {
+			return tenantports.AdminTenantStatusResult{}, err
+		}
+	} else {
+		rows, err := tx.Query(ctx, `
+			UPDATE iam_accounts SET status = 'active', updated_at = $1
+			WHERE tenant_id = $2 AND user_type IN (3, 4) AND status = 'inherited_disabled'
+			RETURNING user_id
+		`, now, tenantID)
+		if err != nil {
+			return tenantports.AdminTenantStatusResult{}, err
+		}
+		for rows.Next() {
+			var userID string
+			if err := rows.Scan(&userID); err != nil {
+				rows.Close()
+				return tenantports.AdminTenantStatusResult{}, err
+			}
+			result.RestoredUserIDs = append(result.RestoredUserIDs, userID)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return tenantports.AdminTenantStatusResult{}, err
+		}
+		rows.Close()
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return tenantports.AdminTenantStatusResult{}, err
+	}
+	return result, nil
 }
 
 // GetTenantDetails returns the tenant detail projection used by management
