@@ -16,19 +16,19 @@ import (
 // for userType=2/3 accounts. Activation token persistence is delegated to the
 // auth service while this repository retains account transaction boundaries.
 type AdminAccountRepository struct {
-	pool            *pgxpool.Pool
-	activationStore activationCredentialStore
+	pool              *pgxpool.Pool
+	activationService activationService
 }
 
 var _ userports.AdminAccountReader = (*AdminAccountRepository)(nil)
 var _ userports.AdminAccountWriter = (*AdminAccountRepository)(nil)
 
-func NewAdminAccountRepository(pool *pgxpool.Pool, activationStores ...activationCredentialStore) *AdminAccountRepository {
-	var activationStore activationCredentialStore
-	if len(activationStores) > 0 {
-		activationStore = activationStores[0]
+func NewAdminAccountRepository(pool *pgxpool.Pool, activationServices ...activationService) *AdminAccountRepository {
+	var activationService activationService
+	if len(activationServices) > 0 {
+		activationService = activationServices[0]
 	}
-	return &AdminAccountRepository{pool: pool, activationStore: activationStore}
+	return &AdminAccountRepository{pool: pool, activationService: activationService}
 }
 
 // CreateSystemAdmin atomically persists a pending platform-admin account and
@@ -44,7 +44,7 @@ func (r *AdminAccountRepository) CreateTenantUser(ctx context.Context, input use
 }
 
 func (r *AdminAccountRepository) create(ctx context.Context, input userports.AdminAccountCreate, userType int) error {
-	if r.activationStore == nil {
+	if r.activationService == nil {
 		return errors.New("admin account activation store is not configured")
 	}
 	tx, err := r.pool.Begin(ctx)
@@ -69,7 +69,7 @@ func (r *AdminAccountRepository) create(ctx context.Context, input userports.Adm
 	if insertErr != nil {
 		return insertErr
 	}
-	if err := r.activationStore.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, authActivationCredential(input)); err != nil {
+	if err := r.activationService.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, authActivationCredential(input)); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -129,6 +129,41 @@ func (r *AdminAccountRepository) UpdateTenantUser(ctx context.Context, input use
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+func (r *AdminAccountRepository) ResetSystemAdminPassword(ctx context.Context, userID string) (userports.ActivationCredentialResult, error) {
+	return r.resetPassword(ctx, userID, 2)
+}
+
+func (r *AdminAccountRepository) ResetTenantUserPassword(ctx context.Context, userID string) (userports.ActivationCredentialResult, error) {
+	return r.resetPassword(ctx, userID, 3)
+}
+
+func (r *AdminAccountRepository) resetPassword(ctx context.Context, userID string, expectedType int) (userports.ActivationCredentialResult, error) {
+	if r.activationService == nil {
+		return userports.ActivationCredentialResult{}, errors.New("admin account activation service is not configured")
+	}
+	var userType int
+	if err := r.pool.QueryRow(ctx, `
+		SELECT user_type FROM iam_accounts
+		WHERE user_id = $1 AND status <> 'deleted'
+	`, userID).Scan(&userType); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return userports.ActivationCredentialResult{}, nil
+		}
+		return userports.ActivationCredentialResult{}, err
+	}
+	if userType != expectedType {
+		return userports.ActivationCredentialResult{}, nil
+	}
+	result, err := r.activationService.Reset(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return userports.ActivationCredentialResult{}, nil
+	}
+	if err != nil {
+		return userports.ActivationCredentialResult{}, err
+	}
+	return userports.ActivationCredentialResult{Token: result.Token, ExpiresIn: result.ExpiresIn}, nil
 }
 
 func (r *AdminAccountRepository) ListSystemAdmins(ctx context.Context, keyword string, page, size int) (userports.AdminAccountPage, error) {

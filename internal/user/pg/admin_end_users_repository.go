@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/auth"
 	userports "xiaodou/dai/internal/user/ports"
@@ -15,26 +16,26 @@ import (
 // account mutations. Activation token persistence is delegated to the auth
 // service while this repository retains the surrounding transaction boundary.
 type AdminEndUserRepository struct {
-	pool            *pgxpool.Pool
-	activationStore activationCredentialStore
+	pool              *pgxpool.Pool
+	activationService activationService
 }
 
 var _ userports.AdminEndUserReader = (*AdminEndUserRepository)(nil)
 var _ userports.AdminEndUserWriter = (*AdminEndUserRepository)(nil)
 
-func NewAdminEndUserRepository(pool *pgxpool.Pool, activationStores ...activationCredentialStore) *AdminEndUserRepository {
-	var activationStore activationCredentialStore
-	if len(activationStores) > 0 {
-		activationStore = activationStores[0]
+func NewAdminEndUserRepository(pool *pgxpool.Pool, activationServices ...activationService) *AdminEndUserRepository {
+	var activationService activationService
+	if len(activationServices) > 0 {
+		activationService = activationServices[0]
 	}
-	return &AdminEndUserRepository{pool: pool, activationStore: activationStore}
+	return &AdminEndUserRepository{pool: pool, activationService: activationService}
 }
 
 // CreateEndUser atomically creates the pending-activation account and its
 // one-time activation record. A failed activation insert rolls the account
 // back so callers never receive an unusable half-created user.
 func (r *AdminEndUserRepository) CreateEndUser(ctx context.Context, input userports.AdminEndUserCreate) error {
-	if r.activationStore == nil {
+	if r.activationService == nil {
 		return errors.New("admin end-user activation store is not configured")
 	}
 	tx, err := r.pool.Begin(ctx)
@@ -50,7 +51,7 @@ func (r *AdminEndUserRepository) CreateEndUser(ctx context.Context, input userpo
 	`, input.UserID, input.TenantID, input.Username, input.PasswordHash, input.Email, input.Phone, input.InternalNote, now); err != nil {
 		return err
 	}
-	if err := r.activationStore.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, auth.ActivationCredential{
+	if err := r.activationService.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, auth.ActivationCredential{
 		PasswordHash: input.PasswordHash,
 		TokenHash:    input.ActivationTokenHash,
 		ExpiresAt:    input.ActivationExpiresAt,
@@ -91,6 +92,33 @@ func (r *AdminEndUserRepository) UpdateEndUserStatus(ctx context.Context, userID
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, userID string) (userports.ActivationCredentialResult, error) {
+	if r.activationService == nil {
+		return userports.ActivationCredentialResult{}, errors.New("end-user activation service is not configured")
+	}
+	var userType int
+	if err := r.pool.QueryRow(ctx, `
+		SELECT user_type FROM iam_accounts
+		WHERE user_id = $1 AND status <> 'deleted'
+	`, userID).Scan(&userType); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return userports.ActivationCredentialResult{}, nil
+		}
+		return userports.ActivationCredentialResult{}, err
+	}
+	if userType != 4 {
+		return userports.ActivationCredentialResult{}, nil
+	}
+	result, err := r.activationService.Reset(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return userports.ActivationCredentialResult{}, nil
+	}
+	if err != nil {
+		return userports.ActivationCredentialResult{}, err
+	}
+	return userports.ActivationCredentialResult{Token: result.Token, ExpiresIn: result.ExpiresIn}, nil
 }
 
 func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userports.AdminEndUserListFilter) (userports.AdminEndUserPage, error) {

@@ -85,4 +85,5 @@ type AdminEndUserWriter interface {
 	CreateEndUser(ctx context.Context, input AdminEndUserCreate) error
 	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
 	UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error)
+	ResetEndUserPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
 }

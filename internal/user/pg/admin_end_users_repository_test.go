@@ -215,3 +215,48 @@ func TestAdminEndUserRepositoryCreatesActivationAtomically(t *testing.T) {
 		t.Fatalf("rollback counts = account:%d token:%d", accountCount, tokenCount)
 	}
 }
+
+func TestAdminEndUserRepositoryResetsOnlyActiveEndUsers(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	now := time.Date(2026, time.August, 24, 5, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx, `INSERT INTO iam_tenants (tenant_id, tenant_name) VALUES ('tenant-reset-a', 'Reset Tenant')`); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status, created_at, updated_at)
+		VALUES
+			('end-reset-a', 'tenant-reset-a', 'end-reset-a', 'hash', 4, 'active', $1, $1),
+			('end-reset-deleted', 'tenant-reset-a', 'end-reset-deleted', 'hash', 4, 'deleted', $1, $1),
+			('tenant-reset-user', 'tenant-reset-a', 'tenant-reset-user', 'hash', 3, 'active', $1, $1)
+	`, now); err != nil {
+		t.Fatalf("seed reset accounts: %v", err)
+	}
+
+	activation := auth.NewActivationService(pool, time.Hour)
+	repo := NewAdminEndUserRepository(pool, activation)
+	result, err := repo.ResetEndUserPassword(ctx, "end-reset-a")
+	if err != nil || result.Token == "" || result.ExpiresIn <= 0 {
+		t.Fatalf("ResetEndUserPassword = %#v err:%v", result, err)
+	}
+	var credentialState string
+	if err := pool.QueryRow(ctx, `SELECT credential_state FROM iam_accounts WHERE user_id = 'end-reset-a'`).Scan(&credentialState); err != nil {
+		t.Fatalf("read reset state: %v", err)
+	}
+	if credentialState != "pending_activation" {
+		t.Fatalf("credential state = %q, want pending_activation", credentialState)
+	}
+	deleted, err := repo.ResetEndUserPassword(ctx, "end-reset-deleted")
+	if err != nil || deleted.Token != "" {
+		t.Fatalf("deleted ResetEndUserPassword = %#v err:%v", deleted, err)
+	}
+	wrongType, err := repo.ResetEndUserPassword(ctx, "tenant-reset-user")
+	if err != nil || wrongType.Token != "" {
+		t.Fatalf("tenant target ResetEndUserPassword = %#v err:%v", wrongType, err)
+	}
+}

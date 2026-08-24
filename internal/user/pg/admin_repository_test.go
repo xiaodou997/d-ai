@@ -136,6 +136,23 @@ func TestAdminAccountRepositoryCreatesAndMutatesLifecycle(t *testing.T) {
 		t.Fatalf("activation token count = %d, want 2", tokenCount)
 	}
 
+	resetSystem, err := repo.ResetSystemAdminPassword(ctx, "system-account-write")
+	if err != nil || resetSystem.Token == "" || resetSystem.ExpiresIn <= 0 {
+		t.Fatalf("ResetSystemAdminPassword = %#v err:%v", resetSystem, err)
+	}
+	resetTenant, err := repo.ResetTenantUserPassword(ctx, "tenant-account-write-user")
+	if err != nil || resetTenant.Token == "" || resetTenant.ExpiresIn <= 0 {
+		t.Fatalf("ResetTenantUserPassword = %#v err:%v", resetTenant, err)
+	}
+	wrongTypeReset, err := repo.ResetSystemAdminPassword(ctx, "tenant-account-write-user")
+	if err != nil || wrongTypeReset.Token != "" {
+		t.Fatalf("tenant target ResetSystemAdminPassword = %#v err:%v", wrongTypeReset, err)
+	}
+	missingReset, err := repo.ResetTenantUserPassword(ctx, "missing-account-write-user")
+	if err != nil || missingReset.Token != "" {
+		t.Fatalf("missing ResetTenantUserPassword = %#v err:%v", missingReset, err)
+	}
+
 	systemResult, err := repo.UpdateSystemAdmin(ctx, userports.AdminAccountUpdate{UserID: "system-account-write", Email: "system-updated@example.com", Status: "disabled"})
 	if err != nil || !systemResult.Updated || systemResult.Forbidden {
 		t.Fatalf("UpdateSystemAdmin = %#v err:%v", systemResult, err)

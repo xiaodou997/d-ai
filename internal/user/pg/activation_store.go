@@ -13,3 +13,8 @@ import (
 type activationCredentialStore interface {
 	Store(ctx context.Context, tx pgx.Tx, userID, purpose string, credential auth.ActivationCredential) error
 }
+
+type activationService interface {
+	activationCredentialStore
+	Reset(ctx context.Context, userID string) (auth.ActivationResult, error)
+}

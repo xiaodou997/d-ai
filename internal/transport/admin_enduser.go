@@ -314,12 +314,12 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 	if err := h.checkUserBelongsToTenant(ctx, in.ID, callerTenantID); err != nil {
 		return nil, err
 	}
-	result, err := h.activations.Reset(ctx, in.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
+	result, err := h.endUserWriter.ResetEndUserPassword(ctx, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if result.Token == "" {
+		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	if h.blacklist != nil {
 		_ = h.blacklist.LogoutUser(in.ID)

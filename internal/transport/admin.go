@@ -34,7 +34,7 @@ type activationCredentialOutput struct {
 	}
 }
 
-func setActivationOutput(out *activationCredentialOutput, result auth.ActivationResult) {
+func setActivationOutput(out *activationCredentialOutput, result userports.ActivationCredentialResult) {
 	out.Body.ActivationToken = result.Token
 	out.Body.ActivationExpiresIn = result.ExpiresIn
 }

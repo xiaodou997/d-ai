@@ -237,16 +237,12 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 }
 
 func (h *adminHandlers) resetSystemAdminPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
-	var userType int
-	if err := h.pool.QueryRow(ctx, `SELECT user_type FROM iam_accounts WHERE user_id = $1 AND status <> 'deleted'`, in.ID).Scan(&userType); err != nil || userType != 2 {
-		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
-	}
-	result, err := h.activations.Reset(ctx, in.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
-	}
+	result, err := h.accountWriter.ResetSystemAdminPassword(ctx, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if result.Token == "" {
+		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
 	}
 	if h.blacklist != nil {
 		_ = h.blacklist.LogoutUser(in.ID)
@@ -377,24 +373,12 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 }
 
 func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
-	var exists bool
-	if err := h.pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM iam_accounts
-			WHERE user_id = $1 AND user_type = 3 AND status <> 'deleted'
-		)
-	`, in.ID).Scan(&exists); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if !exists {
-		return nil, httpx.ErrNotFound.WithDetail("租户用户不存在")
-	}
-	result, err := h.activations.Reset(ctx, in.ID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
+	result, err := h.accountWriter.ResetTenantUserPassword(ctx, in.ID)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if result.Token == "" {
+		return nil, httpx.ErrNotFound.WithDetail("租户用户不存在")
 	}
 	if h.blacklist != nil {
 		_ = h.blacklist.LogoutUser(in.ID)
