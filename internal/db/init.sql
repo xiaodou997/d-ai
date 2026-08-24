@@ -1622,11 +1622,15 @@ CREATE INDEX idx_ledger_credit_leases_account
     content_type TEXT        NOT NULL,
     size_bytes   BIGINT      NOT NULL CHECK (size_bytes > 0),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at   TIMESTAMPTZ NOT NULL
+    expires_at   TIMESTAMPTZ NOT NULL,
+    cleanup_owner TEXT,
+    cleanup_lease_until TIMESTAMPTZ
   );
 
   CREATE INDEX IF NOT EXISTS idx_file_assets_expires_at
     ON file_assets (expires_at);
+  CREATE INDEX IF NOT EXISTS idx_file_assets_cleanup_lease
+    ON file_assets (expires_at, cleanup_lease_until);
 
   CREATE TABLE IF NOT EXISTS file_access_links (
     token_hash BYTEA       PRIMARY KEY,
@@ -2279,6 +2283,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 15);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 16);
 
 COMMIT;

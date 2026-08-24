@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -43,12 +45,20 @@ func TestPostgresDeleteExpiredRemovesUnexpiredAssetLinks(t *testing.T) {
 	}
 
 	repo := &postgresRepository{pool: pool}
-	keys, deletedLinks, err := repo.deleteExpired(ctx, now, 10)
+	claims, deletedLinks, err := repo.claimExpired(ctx, now, now.Add(time.Minute), 10, "filestore-test-owner")
 	if err != nil {
-		t.Fatalf("deleteExpired: %v", err)
+		t.Fatalf("claimExpired: %v", err)
 	}
-	if len(keys) != 1 || keys[0] != storageKey || deletedLinks != 1 {
-		t.Fatalf("cleanup = keys %v links %d, want [%s] and 1", keys, deletedLinks, storageKey)
+	if len(claims) != 1 || claims[0].storageKey != storageKey || deletedLinks != 0 {
+		t.Fatalf("claims = %+v links %d, want [%s] and 0", claims, deletedLinks, storageKey)
+	}
+	ids := []string{claims[0].id}
+	deletedAssets, finalizedLinks, err := repo.finalizeExpired(ctx, ids, "filestore-test-owner")
+	if err != nil {
+		t.Fatalf("finalizeExpired: %v", err)
+	}
+	if deletedAssets != 1 || finalizedLinks != 1 {
+		t.Fatalf("finalize = assets %d links %d, want 1 and 1", deletedAssets, finalizedLinks)
 	}
 
 	var assetsAfter, linksAfter int
@@ -61,6 +71,114 @@ func TestPostgresDeleteExpiredRemovesUnexpiredAssetLinks(t *testing.T) {
 	}
 	if assetsAfter != 0 || linksAfter != 0 {
 		t.Fatalf("rows after cleanup = assets %d links %d, want both zero", assetsAfter, linksAfter)
+	}
+}
+
+func TestCleanupExpiredSerializesReplicasAndRetainsMetadataOnFileFailure(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := testsupport.OpenAsyncTaskTestPool(ctx, testsupport.AsyncTaskPoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("filestore test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	storageDir := t.TempDir()
+	first, err := New(pool, Config{StorageDir: storageDir})
+	if err != nil {
+		t.Fatalf("new first filestore: %v", err)
+	}
+	second, err := New(pool, Config{StorageDir: storageDir})
+	if err != nil {
+		t.Fatalf("new second filestore: %v", err)
+	}
+	const (
+		assetID    = "00000000-0000-0000-0000-000000000102"
+		storageKey = "replica-cleanup.bin"
+	)
+	filePath := filepath.Join(storageDir, storageKey)
+	if err := os.WriteFile(filePath, []byte("expired"), 0o600); err != nil {
+		t.Fatalf("write expired file: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO file_assets (id, storage_key, content_type, size_bytes, created_at, expires_at)
+		VALUES ($1::uuid, $2, 'application/octet-stream', 7, now() - interval '2 minutes', now() - interval '1 minute')
+	`, assetID, storageKey); err != nil {
+		t.Fatalf("seed expired asset: %v", err)
+	}
+
+	start := make(chan struct{})
+	results := make(chan CleanupResult, 2)
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, store := range []*Service{first, second} {
+		wg.Add(1)
+		go func(store *Service) {
+			defer wg.Done()
+			<-start
+			result, err := store.CleanupExpired(ctx, 10)
+			results <- result
+			errs <- err
+		}(store)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+	close(errs)
+	deletedAssets, deletedFiles := 0, 0
+	for result := range results {
+		deletedAssets += result.DeletedAssets
+		deletedFiles += result.DeletedFiles
+	}
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent file cleanup: %v", err)
+		}
+	}
+	if deletedAssets != 1 || deletedFiles != 1 {
+		t.Fatalf("concurrent cleanup totals = assets:%d files:%d, want 1 and 1", deletedAssets, deletedFiles)
+	}
+	if _, err := os.Stat(filePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expired file stat error = %v, want not exist", err)
+	}
+	var remaining int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM file_assets WHERE id = $1::uuid`, assetID).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 0 {
+		t.Fatalf("expired asset rows = %d, want 0", remaining)
+	}
+
+	const failedAssetID = "00000000-0000-0000-0000-000000000103"
+	blockedPath := filepath.Join(storageDir, "blocked")
+	if err := os.Mkdir(blockedPath, 0o700); err != nil {
+		t.Fatalf("create blocked cleanup directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blockedPath, "keep"), []byte("keep"), 0o600); err != nil {
+		t.Fatalf("seed blocked directory: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO file_assets (id, storage_key, content_type, size_bytes, created_at, expires_at)
+		VALUES ($1::uuid, 'blocked', 'application/octet-stream', 4, now() - interval '2 minutes', now() - interval '1 minute')
+	`, failedAssetID); err != nil {
+		t.Fatalf("seed blocked asset: %v", err)
+	}
+	if _, err := first.CleanupExpired(ctx, 10); err == nil {
+		t.Fatal("cleanup of non-empty directory unexpectedly succeeded")
+	}
+	var owner string
+	if err := pool.QueryRow(ctx, `SELECT COALESCE(cleanup_owner, '') FROM file_assets WHERE id = $1::uuid`, failedAssetID).Scan(&owner); err != nil {
+		t.Fatal(err)
+	}
+	if owner != "" {
+		t.Fatalf("failed cleanup owner = %q, want released", owner)
+	}
+	if err := os.Remove(filepath.Join(blockedPath, "keep")); err != nil {
+		t.Fatalf("remove blocked fixture file: %v", err)
+	}
+	if err := os.Remove(blockedPath); err != nil {
+		t.Fatalf("remove blocked fixture directory: %v", err)
+	}
+	if result, err := first.CleanupExpired(ctx, 10); err != nil || result.DeletedAssets != 1 {
+		t.Fatalf("retry blocked cleanup = %+v err:%v, want one asset", result, err)
 	}
 }
 
@@ -247,7 +365,7 @@ func (r *memoryRepository) assetByLink(_ context.Context, hash []byte, now time.
 	return asset, nil
 }
 
-func (r *memoryRepository) deleteExpired(_ context.Context, now time.Time, limit int) ([]string, int, error) {
+func (r *memoryRepository) claimExpired(_ context.Context, now, leaseUntil time.Time, limit int, owner string) ([]storedAsset, int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	deletedLinks := 0
@@ -257,18 +375,71 @@ func (r *memoryRepository) deleteExpired(_ context.Context, now time.Time, limit
 			deletedLinks++
 		}
 	}
-	keys := make([]string, 0, limit)
+	claims := make([]storedAsset, 0, limit)
 	for id, asset := range r.assets {
-		if len(keys) == limit || asset.expiresAt.After(now) {
+		if len(claims) == limit || asset.expiresAt.After(now) {
 			continue
 		}
-		keys = append(keys, asset.storageKey)
+		if asset.cleanupOwner != "" && asset.cleanupLeaseUntil.After(now) {
+			continue
+		}
+		asset.cleanupOwner = owner
+		asset.cleanupLeaseUntil = leaseUntil
+		r.assets[id] = asset
+		claims = append(claims, asset)
+	}
+	return claims, deletedLinks, nil
+}
+
+func (r *memoryRepository) renewExpired(_ context.Context, ids []string, owner string, leaseUntil time.Time) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := time.Now().UTC()
+	for _, id := range ids {
+		asset, ok := r.assets[id]
+		if !ok || asset.cleanupOwner != owner || !asset.cleanupLeaseUntil.After(now) {
+			return false, nil
+		}
+	}
+	for _, id := range ids {
+		asset := r.assets[id]
+		asset.cleanupLeaseUntil = leaseUntil
+		r.assets[id] = asset
+	}
+	return true, nil
+}
+
+func (r *memoryRepository) releaseExpired(_ context.Context, ids []string, owner string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, id := range ids {
+		asset, ok := r.assets[id]
+		if ok && asset.cleanupOwner == owner {
+			asset.cleanupOwner = ""
+			asset.cleanupLeaseUntil = time.Time{}
+			r.assets[id] = asset
+		}
+	}
+	return nil
+}
+
+func (r *memoryRepository) finalizeExpired(_ context.Context, ids []string, owner string) (int, int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	assetsDeleted, linksDeleted := 0, 0
+	for _, id := range ids {
+		asset, ok := r.assets[id]
+		if !ok || asset.cleanupOwner != owner {
+			continue
+		}
 		delete(r.assets, id)
+		assetsDeleted++
 		for hash, link := range r.links {
 			if link.assetID == id {
 				delete(r.links, hash)
+				linksDeleted++
 			}
 		}
 	}
-	return keys, deletedLinks, nil
+	return assetsDeleted, linksDeleted, nil
 }

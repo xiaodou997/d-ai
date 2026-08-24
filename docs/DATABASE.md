@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `15`。
+- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `16`。
 - 初始化脚本只允许在空 PostgreSQL schema 中执行，不能用于覆盖或修复已有数据库。
 - 应用启动只校验 `dai_schema_metadata.version`，不会执行 DDL 或升级 SQL。
 - `internal/db/changes/` 存放首次发布后的人工升级 SQL。

@@ -67,6 +67,7 @@ httpServers.Start / Shutdown
 - JWT 密钥退役使用带超时的数据库更新；即使某个副本 UPDATE 影响 0 行，也会重新加载 active/grace 集合，及时清除其他副本已退役的本地公钥缓存。
 - LiteLLM 价格导入与常用模型同步按价格表单事务批量执行，价格表行锁串行化同一价格表的副本写入；相同快照只在实际变化时 bump revision，失败整批回滚后可安全重试，手工条目仍受保护。
 - 数据清理运行记录持有 owner、heartbeat 和 lease_until；清理 worker 续租失败会主动取消，终态写入必须匹配 owner，过期租约可被其他副本回收，避免长任务误完成或永久占用活动槽位。
+- FileStore 过期清理先 claim 数据库资产、再删除本地文件、最后按 owner fencing 删除元数据；文件删除失败会释放 claim 保留记录，下一轮可重试，不再出现元数据先删导致的不可恢复孤儿文件。
 - 支付 sweep/cleanup 的 PostgreSQL advisory lock 在同一物理连接上获取、执行和释放，避免 `pgxpool` 跨连接释放造成锁泄漏；支付与额度结算任务统一设有 5 分钟操作超时，解锁使用独立短超时上下文。
 - Scheduler 发布 `dai_scheduler_task_runs_total`、`dai_scheduler_task_duration_seconds`、`dai_scheduler_task_running`、`dai_scheduler_task_consecutive_failures` 和 `dai_scheduler_task_skips_total`，可直接用于失败、卡住和跨副本跳过告警。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。

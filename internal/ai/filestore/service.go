@@ -29,8 +29,10 @@ import (
 )
 
 const (
-	mediaScheme    = "media://"
-	defaultMaxSize = 32 << 20
+	mediaScheme          = "media://"
+	defaultMaxSize       = 32 << 20
+	fileCleanupLeaseTTL  = 2 * time.Minute
+	fileCleanupHeartbeat = fileCleanupLeaseTTL / 3
 )
 
 type Config struct {
@@ -58,13 +60,17 @@ type CleanupResult struct {
 	DeletedFiles  int
 }
 
+var ErrCleanupLeaseLost = errors.New("filestore: cleanup lease was lost")
+
 type storedAsset struct {
-	id          string
-	storageKey  string
-	contentType string
-	sizeBytes   int64
-	createdAt   time.Time
-	expiresAt   time.Time
+	id                string
+	storageKey        string
+	contentType       string
+	sizeBytes         int64
+	createdAt         time.Time
+	expiresAt         time.Time
+	cleanupOwner      string
+	cleanupLeaseUntil time.Time
 }
 
 type repository interface {
@@ -72,15 +78,21 @@ type repository interface {
 	assetByID(context.Context, string) (storedAsset, error)
 	createLink(context.Context, []byte, string, time.Time) error
 	assetByLink(context.Context, []byte, time.Time) (storedAsset, error)
-	deleteExpired(context.Context, time.Time, int) ([]string, int, error)
+	claimExpired(context.Context, time.Time, time.Time, int, string) ([]storedAsset, int, error)
+	renewExpired(context.Context, []string, string, time.Time) (bool, error)
+	releaseExpired(context.Context, []string, string) error
+	finalizeExpired(context.Context, []string, string) (int, int, error)
 }
 
 type Service struct {
-	repo       repository
-	storageDir string
-	assetTTL   time.Duration
-	urlTTL     time.Duration
-	maxBytes   int64
+	repo              repository
+	storageDir        string
+	assetTTL          time.Duration
+	urlTTL            time.Duration
+	maxBytes          int64
+	ownerID           string
+	leaseTTL          time.Duration
+	heartbeatInterval time.Duration
 }
 
 func New(pool *pgxpool.Pool, cfg Config) (*Service, error) {
@@ -114,11 +126,14 @@ func newService(repo repository, cfg Config) (*Service, error) {
 		maxBytes = defaultMaxSize
 	}
 	return &Service{
-		repo:       repo,
-		storageDir: storageDir,
-		assetTTL:   assetTTL,
-		urlTTL:     urlTTL,
-		maxBytes:   maxBytes,
+		repo:              repo,
+		storageDir:        storageDir,
+		assetTTL:          assetTTL,
+		urlTTL:            urlTTL,
+		maxBytes:          maxBytes,
+		ownerID:           uuid.NewString(),
+		leaseTTL:          fileCleanupLeaseTTL,
+		heartbeatInterval: fileCleanupHeartbeat,
 	}, nil
 }
 
@@ -257,19 +272,95 @@ func (s *Service) CleanupExpired(ctx context.Context, limit int) (CleanupResult,
 	if limit <= 0 {
 		limit = 200
 	}
-	keys, deletedLinks, err := s.repo.deleteExpired(ctx, time.Now().UTC(), limit)
+	now := time.Now().UTC()
+	claims, deletedLinks, err := s.repo.claimExpired(ctx, now, now.Add(s.leaseTTL), limit, s.ownerID)
 	if err != nil {
-		return CleanupResult{}, fmt.Errorf("filestore: delete expired metadata: %w", err)
+		return CleanupResult{}, fmt.Errorf("filestore: claim expired metadata: %w", err)
 	}
-	result := CleanupResult{DeletedAssets: len(keys), DeletedLinks: deletedLinks}
-	for _, key := range keys {
-		if err := os.Remove(s.pathFor(key)); err == nil || errors.Is(err, os.ErrNotExist) {
+	result := CleanupResult{DeletedLinks: deletedLinks}
+	ids := make([]string, 0, len(claims))
+	for _, asset := range claims {
+		ids = append(ids, asset.id)
+	}
+	workCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	leaseEvents := s.monitorCleanupLease(workCtx, cancel, ids)
+	for _, asset := range claims {
+		if err := workCtx.Err(); err != nil {
+			_ = s.repo.releaseExpired(context.WithoutCancel(ctx), ids, s.ownerID)
+			leaseErr := <-leaseEvents
+			if leaseErr != nil {
+				err = errors.Join(err, leaseErr)
+			}
+			return result, err
+		}
+		if err := os.Remove(s.pathFor(asset.storageKey)); err == nil || errors.Is(err, os.ErrNotExist) {
 			result.DeletedFiles++
 		} else {
-			return result, fmt.Errorf("filestore: delete expired content: %w", err)
+			cancel()
+			leaseErr := <-leaseEvents
+			_ = s.repo.releaseExpired(context.WithoutCancel(ctx), ids, s.ownerID)
+			cleanupErr := fmt.Errorf("filestore: delete expired content: %w", err)
+			if leaseErr != nil {
+				cleanupErr = errors.Join(cleanupErr, leaseErr)
+			}
+			return result, cleanupErr
 		}
 	}
+	cancel()
+	if leaseErr := <-leaseEvents; leaseErr != nil {
+		_ = s.repo.releaseExpired(context.WithoutCancel(ctx), ids, s.ownerID)
+		return result, leaseErr
+	}
+	deletedAssets, finalizedLinks, err := s.repo.finalizeExpired(context.WithoutCancel(ctx), ids, s.ownerID)
+	if err != nil {
+		_ = s.repo.releaseExpired(context.WithoutCancel(ctx), ids, s.ownerID)
+		return result, fmt.Errorf("filestore: finalize expired metadata: %w", err)
+	}
+	if deletedAssets != len(claims) {
+		return result, ErrCleanupLeaseLost
+	}
+	result.DeletedAssets = deletedAssets
+	result.DeletedLinks += finalizedLinks
 	return result, nil
+}
+
+func (s *Service) monitorCleanupLease(ctx context.Context, cancel context.CancelFunc, ids []string) <-chan error {
+	events := make(chan error, 1)
+	if len(ids) == 0 {
+		close(events)
+		return events
+	}
+	interval := s.heartbeatInterval
+	if interval <= 0 {
+		interval = fileCleanupHeartbeat
+	}
+	go func() {
+		defer close(events)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				beatCtx, beatCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				held, err := s.repo.renewExpired(beatCtx, ids, s.ownerID, time.Now().UTC().Add(s.leaseTTL))
+				beatCancel()
+				if err != nil {
+					events <- fmt.Errorf("filestore: cleanup lease heartbeat failed: %w", err)
+					cancel()
+					return
+				}
+				if !held {
+					events <- ErrCleanupLeaseLost
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return events
 }
 
 // NormalizeImageResponse fulfills serving.ImageResponseNormalizer. Existing
@@ -460,45 +551,133 @@ func (r *postgresRepository) assetByLink(ctx context.Context, hash []byte, now t
 	return asset, err
 }
 
-func (r *postgresRepository) deleteExpired(ctx context.Context, now time.Time, limit int) ([]string, int, error) {
-	tag, err := r.pool.Exec(ctx, `DELETE FROM file_access_links WHERE expires_at <= $1`, now)
+func (r *postgresRepository) claimExpired(ctx context.Context, now, leaseUntil time.Time, limit int, owner string) ([]storedAsset, int, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
-	rows, err := r.pool.Query(ctx, `
-		WITH expired AS MATERIALIZED (
+	defer tx.Rollback(ctx)
+	links, err := tx.Exec(ctx, `DELETE FROM file_access_links WHERE expires_at <= $1`, now)
+	if err != nil {
+		return nil, 0, err
+	}
+	rows, err := tx.Query(ctx, `
+		WITH candidates AS (
 			SELECT id
 			FROM file_assets
 			WHERE expires_at <= $1
-			ORDER BY expires_at ASC
+			  AND (cleanup_owner IS NULL OR cleanup_lease_until <= $1)
+			ORDER BY expires_at ASC, id ASC
 			LIMIT $2
 			FOR UPDATE SKIP LOCKED
-		), deleted_links AS (
-			DELETE FROM file_access_links l
-			USING expired e
-			WHERE l.asset_id = e.id
-			RETURNING l.token_hash
-		), deleted_assets AS (
-			DELETE FROM file_assets a
-			USING expired e
-			WHERE a.id = e.id
-			RETURNING a.storage_key
 		)
-		SELECT storage_key, (SELECT count(*) FROM deleted_links)
-		FROM deleted_assets
-	`, now, limit)
+		UPDATE file_assets a
+		SET cleanup_owner = $3, cleanup_lease_until = $4
+		FROM candidates c
+		WHERE a.id = c.id
+		RETURNING a.id::text, a.storage_key, a.content_type, a.size_bytes, a.created_at, a.expires_at
+	`, now, limit, owner, leaseUntil)
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-	keys := make([]string, 0)
-	deletedAssetLinks := 0
+	claims := make([]storedAsset, 0, limit)
 	for rows.Next() {
-		var key string
-		if err := rows.Scan(&key, &deletedAssetLinks); err != nil {
+		var asset storedAsset
+		if err := rows.Scan(&asset.id, &asset.storageKey, &asset.contentType, &asset.sizeBytes, &asset.createdAt, &asset.expiresAt); err != nil {
 			return nil, 0, err
 		}
-		keys = append(keys, key)
+		claims = append(claims, asset)
 	}
-	return keys, int(tag.RowsAffected()) + deletedAssetLinks, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	rows.Close()
+	if err := tx.Commit(ctx); err != nil {
+		return nil, 0, err
+	}
+	return claims, int(links.RowsAffected()), nil
+}
+
+func (r *postgresRepository) renewExpired(ctx context.Context, ids []string, owner string, leaseUntil time.Time) (bool, error) {
+	if len(ids) == 0 {
+		return true, nil
+	}
+	result, err := r.pool.Exec(ctx, `
+		UPDATE file_assets
+		SET cleanup_lease_until = $3
+		WHERE id::text = ANY($1::text[])
+		  AND cleanup_owner = $2
+		  AND cleanup_lease_until > now()
+	`, ids, owner, leaseUntil)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == int64(len(ids)), nil
+}
+
+func (r *postgresRepository) releaseExpired(ctx context.Context, ids []string, owner string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := r.pool.Exec(ctx, `
+		UPDATE file_assets
+		SET cleanup_owner = NULL, cleanup_lease_until = NULL
+		WHERE id::text = ANY($1::text[]) AND cleanup_owner = $2
+	`, ids, owner)
+	return err
+}
+
+func (r *postgresRepository) finalizeExpired(ctx context.Context, ids []string, owner string) (int, int, error) {
+	if len(ids) == 0 {
+		return 0, 0, nil
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `
+		SELECT id::text
+		FROM file_assets
+		WHERE id::text = ANY($1::text[]) AND cleanup_owner = $2
+		FOR UPDATE
+	`, ids, owner)
+	if err != nil {
+		return 0, 0, err
+	}
+	claimedIDs := make([]string, 0, len(ids))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		claimedIDs = append(claimedIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, 0, err
+	}
+	rows.Close()
+	if len(claimedIDs) == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return 0, 0, err
+		}
+		return 0, 0, nil
+	}
+	links, err := tx.Exec(ctx, `DELETE FROM file_access_links WHERE asset_id::text = ANY($1::text[])`, claimedIDs)
+	if err != nil {
+		return 0, 0, err
+	}
+	assets, err := tx.Exec(ctx, `
+		DELETE FROM file_assets
+		WHERE id::text = ANY($1::text[]) AND cleanup_owner = $2
+	`, claimedIDs, owner)
+	if err != nil {
+		return 0, 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, err
+	}
+	return int(assets.RowsAffected()), int(links.RowsAffected()), nil
 }
