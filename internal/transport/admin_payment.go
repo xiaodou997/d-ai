@@ -408,7 +408,9 @@ func (h *adminPaymentHandlers) listCashLedger(ctx context.Context, in *adminCash
 }
 
 func (h *adminPaymentHandlers) listWithdrawals(ctx context.Context, in *adminWithdrawalsInput) (*adminWithdrawalsOutput, error) {
-	list, total, err := h.svc.ListWithdrawals(ctx, "", in.Status, in.Page, in.Size)
+	list, total, err := h.svc.ListWithdrawals(ctx, payment.WithdrawalListParams{
+		Status: in.Status, Page: in.Page, Size: in.Size,
+	})
 	if err != nil {
 		return nil, toProblem(err)
 	}

@@ -585,8 +585,13 @@ func (s *PaymentService) ListCashLedger(ctx context.Context, tenantID, txnType s
 	return paymentpg.ListCashLedger(ctx, s.pool, tenantID, txnType, page, size)
 }
 
-func (s *PaymentService) ListWithdrawals(ctx context.Context, tenantID, status string, page, size int) ([]*payment.Withdrawal, int64, error) {
-	return paymentpg.ListWithdrawals(ctx, s.pool, tenantID, status, page, size)
+func (s *PaymentService) ListWithdrawals(ctx context.Context, p payment.WithdrawalListParams) ([]*payment.Withdrawal, int64, error) {
+	p.TenantID = strings.TrimSpace(p.TenantID)
+	p.Status = strings.TrimSpace(p.Status)
+	if p.Status != "" && !payment.ValidWithdrawalStatus(p.Status) {
+		return nil, 0, domain.ErrBadRequest
+	}
+	return paymentpg.ListWithdrawals(ctx, s.pool, p.TenantID, p.Status, p.Page, p.Size)
 }
 
 func (s *PaymentService) GetWithdrawal(ctx context.Context, withdrawalID string) (*payment.Withdrawal, error) {

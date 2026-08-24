@@ -55,6 +55,26 @@ const (
 	WithdrawalStatusCancelled = "cancelled"
 )
 
+// WithdrawalListParams is the application-facing filter for withdrawal
+// queries. TenantID is empty for platform-admin views and scoped for tenant
+// views.
+type WithdrawalListParams struct {
+	TenantID string
+	Status   string
+	Page     int
+	Size     int
+}
+
+func ValidWithdrawalStatus(status string) bool {
+	switch status {
+	case WithdrawalStatusPending, WithdrawalStatusApproved, WithdrawalStatusRejected,
+		WithdrawalStatusPaid, WithdrawalStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Order 对应 pay_orders 表。
 type Order struct {
 	ID                     int64
