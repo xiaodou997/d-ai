@@ -12,7 +12,6 @@ import (
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
-	billingdomain "xiaodou/dai/internal/billing"
 	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -179,38 +178,25 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	var count int
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)", username).Scan(&count)
-	if count > 0 {
-		return nil, httpx.ErrConflict.WithDetail("用户名已存在")
-	}
 	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	userID := "SA_" + uuid.New().String()[:24]
-	now := billingdomain.NowUTC()
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
-		VALUES ($1, $2, $3, 'pending_activation', $4, 2, 'active', $5, $5)
-	`, userID, username, credential.PasswordHash, in.Body.Email, now); err != nil {
+	if err := h.accountWriter.CreateSystemAdmin(ctx, userports.AdminAccountCreate{
+		UserID:              userID,
+		Username:            username,
+		Email:               in.Body.Email,
+		PasswordHash:        credential.PasswordHash,
+		ActivationTokenHash: credential.TokenHash,
+		ActivationExpiresAt: credential.ExpiresAt,
+	}); err != nil {
 		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 		}
 		if authpg.IsEmailTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := h.activations.Store(ctx, tx, userID, auth.ActivationPurposeAccount, credential); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createUserOutput{}
@@ -222,25 +208,26 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 }
 
 func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemAdminInput) (*successOutput, error) {
-	var userType int32
-	if err := h.pool.QueryRow(ctx, "SELECT user_type FROM iam_accounts WHERE user_id = $1 AND user_type IN (1, 2)", in.ID).Scan(&userType); err != nil {
-		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	if userType != 2 {
-		return nil, httpx.ErrForbidden.WithDetail("不允许修改超级管理员")
-	}
-	now := billingdomain.NowUTC()
 	status := "active"
 	if in.Body.Status == 2 {
 		status = "disabled"
 	}
-	_, err := h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 2",
-		in.Body.Email, status, now, in.ID)
+	result, err := h.accountWriter.UpdateSystemAdmin(ctx, userports.AdminAccountUpdate{
+		UserID: in.ID,
+		Email:  in.Body.Email,
+		Status: status,
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
+	if result.Forbidden {
+		return nil, httpx.ErrForbidden.WithDetail("不允许修改超级管理员")
+	}
+	if !result.Updated {
+		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
+	}
 	if h.blacklist != nil {
-		if status == "disabled" {
+		if in.Body.Status == 2 {
 			_ = h.blacklist.BanUser(ctx, in.ID)
 		} else {
 			_ = h.blacklist.UnbanUser(ctx, in.ID)
@@ -307,43 +294,32 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	var tenantExists int
-	_ = h.pool.QueryRow(ctx, "SELECT COUNT(*) FROM iam_tenants WHERE tenant_id = $1", in.Body.TenantID).Scan(&tenantExists)
-	if tenantExists == 0 {
-		return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
-	}
-	var exists int
-	_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&exists)
-	if exists > 0 {
-		return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
+	if _, err := h.tenantRepo.GetTenantDetails(ctx, in.Body.TenantID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
+		}
+		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	userID := "TU_" + uuid.New().String()[:24]
-	now := billingdomain.NowUTC()
-	tx, err := h.pool.Begin(ctx)
-	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 'pending_activation', $5, 3, 'active', $6, $6)
-	`, userID, in.Body.TenantID, username, credential.PasswordHash, in.Body.Email, now); err != nil {
+	if err := h.accountWriter.CreateTenantUser(ctx, userports.AdminAccountCreate{
+		UserID:              userID,
+		TenantID:            in.Body.TenantID,
+		Username:            username,
+		Email:               in.Body.Email,
+		PasswordHash:        credential.PasswordHash,
+		ActivationTokenHash: credential.TokenHash,
+		ActivationExpiresAt: credential.ExpiresAt,
+	}); err != nil {
 		if authpg.IsUsernameTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
 		if authpg.IsEmailTaken(err) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := h.activations.Store(ctx, tx, userID, auth.ActivationPurposeAccount, credential); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createUserOutput{}
@@ -355,12 +331,11 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 }
 
 func (h *adminHandlers) updateTenantUserStatus(ctx context.Context, in *statusPathInput) (*successOutput, error) {
-	now := billingdomain.NowUTC()
-	result, err := h.pool.Exec(ctx, `UPDATE iam_accounts SET status = $1, updated_at = $2 WHERE user_id = $3 AND user_type = 3`, in.Body.Status, now, in.ID)
+	updated, err := h.accountWriter.UpdateTenantUserStatus(ctx, in.ID, in.Body.Status)
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if result.RowsAffected() == 0 {
+	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	// 停用立即失效该用户所有 token 并标记封禁；启用时清除封禁标记
@@ -375,15 +350,20 @@ func (h *adminHandlers) updateTenantUserStatus(ctx context.Context, in *statusPa
 }
 
 func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUserInput) (*successOutput, error) {
-	now := billingdomain.NowUTC()
 	status := "active"
 	if in.Body.Status == 2 {
 		status = "disabled"
 	}
-	_, err := h.pool.Exec(ctx, "UPDATE iam_accounts SET email = $1, status = $2, updated_at = $3 WHERE user_id = $4 AND user_type = 3",
-		in.Body.Email, status, now, in.ID)
+	updated, err := h.accountWriter.UpdateTenantUser(ctx, userports.AdminAccountUpdate{
+		UserID: in.ID,
+		Email:  in.Body.Email,
+		Status: status,
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if !updated {
+		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	// 停用时强制下线并标记封禁；启用时清除封禁标记
 	if h.blacklist != nil {

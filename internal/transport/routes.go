@@ -56,6 +56,7 @@ type IdentityDeps struct {
 	Blacklist          *auth.BlacklistService
 	UserService        *userpkg.UserService
 	AdminAccounts      userports.AdminAccountReader
+	AdminAccountWriter userports.AdminAccountWriter
 	AdminEndUsers      userports.AdminEndUserReader
 	AdminEndUserWriter userports.AdminEndUserWriter
 	Invite             *invitepkg.InviteService

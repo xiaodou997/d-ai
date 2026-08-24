@@ -6,15 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/auth"
 	userports "xiaodou/dai/internal/user/ports"
 )
-
-type activationCredentialStore interface {
-	Store(ctx context.Context, tx pgx.Tx, userID, purpose string, credential auth.ActivationCredential) error
-}
 
 // AdminEndUserRepository owns the scoped admin end-user projections and
 // account mutations. Activation token persistence is delegated to the auth

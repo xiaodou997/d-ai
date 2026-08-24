@@ -101,7 +101,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
-	adminAccountRepo := userpg.NewAdminAccountRepository(pool)
+	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
 	wechatCfgStore := wechat.NewConfigStore(pool)

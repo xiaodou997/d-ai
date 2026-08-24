@@ -52,6 +52,7 @@ httpServers.Start / Shutdown
 - 管理 Dashboard 异常扣费告警查询已移入 `internal/system/pg.SystemRepository`；HTTP handler 不再直接执行 `ai_usage_logs` SQL，查询窗口、排序和行映射由 repository 负责。
 - 管理租户详情和终端用户归属校验查询已移入 `internal/tenant/pg.TenantRepository`；HTTP handler 不再直接执行对应 `iam_tenants` / `iam_accounts` 读取。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
+- 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。
 - 终端用户列表查询已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserReader` 注入；HTTP handler 不再直接执行跨租户列表 SQL，只负责 claims scope 和 DTO 映射。
 - 终端用户资料更新与启停状态写入已移入同一 `AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 注入；HTTP handler 只保留租户归属校验、错误映射和会话封禁副作用。
 - 终端用户创建的账号与一次性激活令牌由同一 `AdminEndUserRepository` 事务写入；repository 通过 composition root 注入的 `ActivationService.Store` 复用激活凭证逻辑，HTTP handler 不再持有创建事务。

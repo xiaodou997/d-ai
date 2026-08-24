@@ -17,6 +17,7 @@ type adminHandlers struct {
 	pool          *pgxpool.Pool
 	tenantRepo    *tenantpg.TenantRepository
 	accountRepo   userports.AdminAccountReader
+	accountWriter userports.AdminAccountWriter
 	endUserRepo   userports.AdminEndUserReader
 	endUserWriter userports.AdminEndUserWriter
 	systemRepo    *systempg.SystemRepository
@@ -43,6 +44,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		pool:          d.Pool,
 		tenantRepo:    tenantpg.NewTenantRepository(d.Pool),
 		accountRepo:   d.AdminAccounts,
+		accountWriter: d.AdminAccountWriter,
 		endUserRepo:   d.AdminEndUsers,
 		endUserWriter: d.AdminEndUserWriter,
 		systemRepo:    systempg.NewSystemRepository(d.Pool),
