@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -285,6 +286,13 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	if err != nil {
 		return nil, fmt.Errorf("build async task engine failed: %w", err)
 	}
+	imageAssetSvc.SetTaskRetainer(func(ctx context.Context, taskID string) (bool, error) {
+		_, err := asyncTasks.Inspect(ctx, taskID)
+		if errors.Is(err, asynctask.ErrNotFound) {
+			return false, nil
+		}
+		return err == nil, err
+	})
 
 	runtimeGateway := gateway.New(gateway.Deps{
 		Logger:        appLogger,

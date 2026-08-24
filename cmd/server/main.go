@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"xiaodou/dai/internal/ai/imageassets"
 	"xiaodou/dai/internal/ai/observability/tracing"
 	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/transport"
@@ -134,7 +136,11 @@ func run() error {
 	dataCleanupSvc.Start(ctx)
 
 	// Hourly cleanups
-	go runHourlyCleanup(ctx, func() { imageAssetSvc.CleanupExpired() })
+	go runHourlyCleanup(ctx, func() {
+		if _, err := imageAssetSvc.CleanupExpired(ctx); err != nil && !errors.Is(err, imageassets.ErrCleanupAlreadyRunning) {
+			appLogger.Warn("expired image asset cleanup failed", zap.Error(err))
+		}
+	})
 	go runHourlyCleanup(ctx, func() { fileStore.CleanupExpired(ctx, 500) })
 	go runHourlyCleanup(ctx, func() {
 		if _, err := sessionSvc.DeleteExpired(ctx, 5000); err != nil {

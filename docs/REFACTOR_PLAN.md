@@ -241,7 +241,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] LiteLLM 价格导入与常用模型同步按价格表事务批量执行，重复快照不重复 bump revision，失败回滚可重试且不覆盖手工条目。
 - [x] 数据清理运行增加 owner、heartbeat、lease_until 和终态 fencing，过期租约可回收，长任务不会被固定启动扫描误判为 stale。
 - [x] FileStore 过期资产采用 claim → 文件删除 → owner fencing finalize，两阶段失败可释放 claim 重试，不提前删除数据库元数据。
-- [ ] 支付补偿和本地图片文件清理逐项验证。
+- [x] 本地图片 `_tmp`/`ephemeral` 清理增加共享 storage 文件租约与心跳；task orphan 扫描接入 async task 检查器，未确认的任务目录默认不删。
+- [ ] 支付补偿逐项验证。
 - [ ] 禁止依赖进程内内存作为跨副本真相源。
 
 ### P2-03 独立交付 Portal
@@ -512,6 +513,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 价格同步边界：LiteLLM 导入与 common-model sync 收集完整快照后交给 `PriceBookRepo.ImportEntries` 单事务执行；价格表行锁 + 条件 upsert 保证多副本串行、相同快照无变化，事务失败整批回滚后下一次可安全重试，`manually_edited` 条目不会被覆盖。
 - 数据清理边界：`sys_data_cleanup_runs` 以 owner/heartbeat/lease_until 持有可回收租约；heartbeat 失败或 owner 不匹配会取消工作，`finishRun` 以 owner 条件完成 fencing，schema v15 的 lease 索引支持启动和下次排程回收过期运行。
 - FileStore 清理边界：`file_assets` 以 owner/lease_until claim 过期资产，文件系统删除成功后才 finalize 数据库记录；删除失败释放 claim 保留元数据，schema v16 的租约索引支持崩溃回收，多副本通过 `FOR UPDATE SKIP LOCKED` 只处理一次。
+- 本地图片清理边界：`imageassets.Service.CleanupExpired(ctx)` 以 `.image-cleanup-lease` 协调共享目录副本，heartbeat 丢失即停止；临时/ephemeral 文件按 mtime 清理，task 目录仅由 `TaskRetained` 检查器确认 orphan 后删除，避免误删仍可访问的任务产物。
 - 跨副本锁边界：支付 sweep/cleanup 的 advisory lock 由同一物理 PostgreSQL 连接完成获取、执行和释放；任务上下文有 5 分钟硬超时，解锁不受任务超时影响，避免连接池错配和永久占锁。
 - 调度指标边界：Scheduler 暴露任务运行结果、耗时、运行中、连续失败和跳过原因 Prometheus 指标；失败/卡住/持续跨副本跳过可以在管理端 `/metrics` 上做告警，不改变 `/ready` 的基础设施语义。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
@@ -549,4 +551,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增价格表导入并发/回滚测试，确认两个副本仅一个有效更新、重复快照不 bump revision、手工条目不被覆盖，失败批次可完整重试。
 - 回归：新增数据清理租约测试，确认 heartbeat 续租、接管后旧 owner 的终态写入被 fencing、过期运行可回收并重新排队；新增 schema v15 migration 测试。
 - 回归：新增 FileStore 清理并发/失败测试，确认两个副本只 finalize 一次、文件删除失败时元数据与 claim 保留/释放、下一轮可恢复；新增 schema v16 migration 测试。
-- 下一候选项：验证本地图片文件清理的跨副本语义，并评估共享/本地存储拓扑下的 orphan 扫描与恢复策略。
+- 回归：新增本地图片 orphan/文件租约测试，确认活跃 task 保留、缺失 task 目录可回收、共享租约阻止并发清理且过期租约可接管。
+- 下一候选项：验证支付补偿在长时间 provider 故障下的租约/重试告警，并评估本地存储拓扑的 orphan 指标。

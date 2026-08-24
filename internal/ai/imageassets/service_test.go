@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -285,7 +286,7 @@ func TestCleanupExpiredLeavesTaskAssetsForEngineExpirer(t *testing.T) {
 		}
 	}
 
-	result, err := svc.CleanupExpired()
+	result, err := svc.CleanupExpired(context.Background())
 	if err != nil {
 		t.Fatalf("CleanupExpired: %v", err)
 	}
@@ -305,6 +306,69 @@ func TestCleanupExpiredLeavesTaskAssetsForEngineExpirer(t *testing.T) {
 	}
 	if _, err := os.Stat(taskAsset); !os.IsNotExist(err) {
 		t.Fatalf("task asset still exists after DeleteTaskAssets: %v", err)
+	}
+}
+
+func TestCleanupExpiredScansOrphanTaskAssetsOnlyWithRetainer(t *testing.T) {
+	storageDir := t.TempDir()
+	svc := New(Config{StorageDir: storageDir, Retention: time.Hour}, nil)
+	svc.SetTaskRetainer(func(_ context.Context, taskID string) (bool, error) {
+		return taskID == "live-task", nil
+	})
+	paths := []string{
+		filepath.Join(storageDir, "tasks", "live-task", "0_preview.webp"),
+		filepath.Join(storageDir, "tasks", "orphan-task", "0_preview.webp"),
+		filepath.Join(storageDir, "_tmp", "old-upload.png"),
+		filepath.Join(storageDir, "ephemeral", "old-asset.webp"),
+	}
+	for _, filePath := range paths {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+			t.Fatalf("create image fixture directory: %v", err)
+		}
+		if err := os.WriteFile(filePath, []byte("fixture"), 0o600); err != nil {
+			t.Fatalf("write image fixture: %v", err)
+		}
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	for _, filePath := range paths {
+		if err := os.Chtimes(filePath, old, old); err != nil {
+			t.Fatalf("age image fixture: %v", err)
+		}
+	}
+	result, err := svc.CleanupExpired(context.Background())
+	if err != nil {
+		t.Fatalf("CleanupExpired: %v", err)
+	}
+	if result.DeletedFiles != 3 {
+		t.Fatalf("deleted files = %d, want 3 (temp, ephemeral, orphan task)", result.DeletedFiles)
+	}
+	if _, err := os.Stat(filepath.Join(storageDir, "tasks", "live-task", "0_preview.webp")); err != nil {
+		t.Fatalf("retained task asset removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(storageDir, "tasks", "orphan-task")); !os.IsNotExist(err) {
+		t.Fatalf("orphan task directory still exists: %v", err)
+	}
+}
+
+func TestCleanupExpiredUsesReclaimableFilesystemLease(t *testing.T) {
+	storageDir := t.TempDir()
+	first := New(Config{StorageDir: storageDir}, nil)
+	second := New(Config{StorageDir: storageDir}, nil)
+	release, err := first.acquireCleanupLease(time.Now().UTC())
+	if err != nil {
+		t.Fatalf("acquire first cleanup lease: %v", err)
+	}
+	defer release()
+	if _, err := second.CleanupExpired(context.Background()); !errors.Is(err, ErrCleanupAlreadyRunning) {
+		t.Fatalf("second cleanup error = %v, want ErrCleanupAlreadyRunning", err)
+	}
+
+	leasePath := filepath.Join(storageDir, imageCleanupLeaseName)
+	if err := os.WriteFile(leasePath, []byte(`{"owner":"dead-worker","expires_at":"2000-01-01T00:00:00Z"}`), 0o600); err != nil {
+		t.Fatalf("write expired lease: %v", err)
+	}
+	if _, err := first.acquireCleanupLease(time.Now().UTC()); err != nil {
+		t.Fatalf("reclaim expired cleanup lease: %v", err)
 	}
 }
 

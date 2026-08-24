@@ -29,14 +29,18 @@ import (
 )
 
 const (
-	displayContentType = "image/webp"
-	defaultMaxImage    = 32 << 20
+	displayContentType    = "image/webp"
+	defaultMaxImage       = 32 << 20
+	imageCleanupLeaseTTL  = 2 * time.Minute
+	imageCleanupHeartbeat = imageCleanupLeaseTTL / 3
+	imageCleanupLeaseName = ".image-cleanup-lease"
 )
 
 type Config struct {
 	StorageDir     string
 	Retention      time.Duration
 	PublicBasePath string
+	TaskRetained   func(context.Context, string) (bool, error)
 }
 
 type Service struct {
@@ -45,6 +49,8 @@ type Service struct {
 	retention      time.Duration
 	publicBasePath string
 	maxImageBytes  int64
+	taskRetained   func(context.Context, string) (bool, error)
+	ownerID        string
 }
 
 type Owner struct {
@@ -116,7 +122,25 @@ func New(cfg Config, client *http.Client) *Service {
 		retention:      retention,
 		publicBasePath: basePath,
 		maxImageBytes:  defaultMaxImage,
+		taskRetained:   cfg.TaskRetained,
+		ownerID:        randomCleanupOwner(),
 	}
+}
+
+// SetTaskRetainer connects task-directory cleanup to the durable async-task
+// owner. When it is nil, task assets are left untouched for safety.
+func (s *Service) SetTaskRetainer(retained func(context.Context, string) (bool, error)) {
+	if s != nil {
+		s.taskRetained = retained
+	}
+}
+
+func randomCleanupOwner() string {
+	owner, err := randomToken()
+	if err == nil && owner != "" {
+		return owner
+	}
+	return fmt.Sprintf("image-cleanup-%d", time.Now().UnixNano())
 }
 
 func (s *Service) StoreOpenAIImagesResponse(ctx context.Context, owner Owner, taskID string, body []byte) (StoreResponseResult, error) {
@@ -459,20 +483,154 @@ func (s *Service) DeleteTaskAssets(taskID string) (int, error) {
 	return removeTaskDir(filepath.Join(s.storageDir, "tasks", safePath(taskID)))
 }
 
-func (s *Service) CleanupExpired() (CleanupResult, error) {
+var ErrCleanupAlreadyRunning = errors.New("imageassets: cleanup is already running")
+
+type cleanupLeaseRecord struct {
+	Owner     string    `json:"owner"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+func (s *Service) CleanupExpired(ctx context.Context) (CleanupResult, error) {
 	if s == nil {
 		return CleanupResult{}, nil
 	}
+	release, err := s.acquireCleanupLease(time.Now().UTC())
+	if err != nil {
+		return CleanupResult{}, err
+	}
+	defer release()
+	workCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	leaseEvents := s.monitorCleanupLease(workCtx, cancel)
+	finish := func(result CleanupResult, runErr error) (CleanupResult, error) {
+		cancel()
+		if leaseErr := <-leaseEvents; leaseErr != nil {
+			if runErr == nil {
+				runErr = leaseErr
+			} else {
+				runErr = errors.Join(runErr, leaseErr)
+			}
+		}
+		return result, runErr
+	}
 	result := CleanupResult{}
 	cutoff := time.Now().Add(-s.retention)
-	deletedTemp, err := s.cleanupExpiredTemporaryImages(cutoff)
+	deletedTemp, err := s.cleanupExpiredTemporaryImages(workCtx, cutoff)
 	result.DeletedFiles += deletedTemp
 	if err != nil {
-		return result, err
+		return finish(result, err)
 	}
-	deletedEphemeral, err := s.cleanupExpiredEphemeralImages(cutoff)
+	deletedEphemeral, err := s.cleanupExpiredEphemeralImages(workCtx, cutoff)
 	result.DeletedFiles += deletedEphemeral
-	return result, err
+	if err != nil {
+		return finish(result, err)
+	}
+	deletedTasks, err := s.cleanupExpiredTaskImages(workCtx)
+	result.DeletedFiles += deletedTasks
+	return finish(result, err)
+}
+
+func (s *Service) acquireCleanupLease(now time.Time) (func(), error) {
+	leasePath := filepath.Join(s.storageDir, imageCleanupLeaseName)
+	for attempt := 0; attempt < 2; attempt++ {
+		file, err := os.OpenFile(leasePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			record := cleanupLeaseRecord{Owner: s.ownerID, ExpiresAt: now.Add(imageCleanupLeaseTTL)}
+			encodeErr := json.NewEncoder(file).Encode(record)
+			closeErr := file.Close()
+			if encodeErr != nil || closeErr != nil {
+				_ = os.Remove(leasePath)
+				if encodeErr != nil {
+					return nil, encodeErr
+				}
+				return nil, closeErr
+			}
+			return func() { s.releaseCleanupLease(leasePath) }, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("imageassets: create cleanup lease: %w", err)
+		}
+		raw, readErr := os.ReadFile(leasePath)
+		var record cleanupLeaseRecord
+		if readErr == nil {
+			_ = json.Unmarshal(raw, &record)
+		}
+		if readErr == nil && record.ExpiresAt.After(now) {
+			return nil, ErrCleanupAlreadyRunning
+		}
+		if removeErr := os.Remove(leasePath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return nil, fmt.Errorf("imageassets: reclaim expired cleanup lease: %w", removeErr)
+		}
+	}
+	return nil, ErrCleanupAlreadyRunning
+}
+
+func (s *Service) releaseCleanupLease(leasePath string) {
+	raw, err := os.ReadFile(leasePath)
+	if err != nil {
+		return
+	}
+	var record cleanupLeaseRecord
+	if json.Unmarshal(raw, &record) == nil && record.Owner == s.ownerID {
+		_ = os.Remove(leasePath)
+	}
+}
+
+func (s *Service) monitorCleanupLease(ctx context.Context, cancel context.CancelFunc) <-chan error {
+	events := make(chan error, 1)
+	go func() {
+		defer close(events)
+		ticker := time.NewTicker(imageCleanupHeartbeat)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				held, err := s.renewCleanupLease(time.Now().UTC())
+				if err != nil {
+					events <- err
+					cancel()
+					return
+				}
+				if !held {
+					events <- errors.New("imageassets: cleanup lease was lost")
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return events
+}
+
+func (s *Service) renewCleanupLease(now time.Time) (bool, error) {
+	leasePath := filepath.Join(s.storageDir, imageCleanupLeaseName)
+	raw, err := os.ReadFile(leasePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("imageassets: read cleanup lease: %w", err)
+	}
+	var record cleanupLeaseRecord
+	if err := json.Unmarshal(raw, &record); err != nil || record.Owner != s.ownerID || !record.ExpiresAt.After(now) {
+		return false, nil
+	}
+	file, err := os.OpenFile(leasePath, os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return false, fmt.Errorf("imageassets: renew cleanup lease: %w", err)
+	}
+	record.ExpiresAt = now.Add(imageCleanupLeaseTTL)
+	encodeErr := json.NewEncoder(file).Encode(record)
+	closeErr := file.Close()
+	if encodeErr != nil {
+		return false, encodeErr
+	}
+	if closeErr != nil {
+		return false, closeErr
+	}
+	return true, nil
 }
 
 func (s *Service) imageBytes(ctx context.Context, item responseImageItem) ([]byte, string, error) {
@@ -595,13 +753,16 @@ func (s *Service) readImageResponse(resp *http.Response) ([]byte, string, error)
 	return data, contentType, nil
 }
 
-func (s *Service) cleanupExpiredTemporaryImages(cutoff time.Time) (int, error) {
+func (s *Service) cleanupExpiredTemporaryImages(ctx context.Context, cutoff time.Time) (int, error) {
 	tmpRoot := filepath.Join(s.storageDir, "_tmp")
 	if strings.TrimSpace(tmpRoot) == "" {
 		return 0, nil
 	}
 	deleted := 0
 	err := filepath.WalkDir(tmpRoot, func(path string, entry os.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -634,7 +795,7 @@ func (s *Service) cleanupExpiredTemporaryImages(cutoff time.Time) (int, error) {
 	return deleted, nil
 }
 
-func (s *Service) cleanupExpiredEphemeralImages(cutoff time.Time) (int, error) {
+func (s *Service) cleanupExpiredEphemeralImages(ctx context.Context, cutoff time.Time) (int, error) {
 	root := filepath.Join(s.storageDir, "ephemeral")
 	entries, err := os.ReadDir(root)
 	if os.IsNotExist(err) {
@@ -645,6 +806,9 @@ func (s *Service) cleanupExpiredEphemeralImages(cutoff time.Time) (int, error) {
 	}
 	deleted := 0
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return deleted, err
+		}
 		if entry.IsDir() {
 			continue
 		}
@@ -659,6 +823,42 @@ func (s *Service) cleanupExpiredEphemeralImages(cutoff time.Time) (int, error) {
 			return deleted, err
 		}
 		deleted++
+	}
+	return deleted, nil
+}
+
+func (s *Service) cleanupExpiredTaskImages(ctx context.Context) (int, error) {
+	if s.taskRetained == nil {
+		return 0, nil
+	}
+	root := filepath.Join(s.storageDir, "tasks")
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	deleted := 0
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return deleted, err
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		retained, err := s.taskRetained(ctx, entry.Name())
+		if err != nil {
+			return deleted, fmt.Errorf("check task %q: %w", entry.Name(), err)
+		}
+		if retained {
+			continue
+		}
+		count, err := removeTaskDir(filepath.Join(root, entry.Name()))
+		deleted += count
+		if err != nil {
+			return deleted, fmt.Errorf("remove orphan task %q: %w", entry.Name(), err)
+		}
 	}
 	return deleted, nil
 }
