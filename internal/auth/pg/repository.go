@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	authports "xiaodou/dai/internal/auth/ports"
 )
 
 // IsUsernameTaken reports whether err is a unique violation on the normalized username index.
@@ -56,8 +57,68 @@ type AuthRepository struct {
 	pool *pgxpool.Pool
 }
 
+var _ authports.AccountReader = (*AuthRepository)(nil)
+var _ authports.AccountWriter = (*AuthRepository)(nil)
+
 func NewAuthRepository(pool *pgxpool.Pool) *AuthRepository {
 	return &AuthRepository{pool: pool}
+}
+
+func (r *AuthRepository) GetCurrentUserSnapshot(ctx context.Context, userID string, userType int) (authports.CurrentUserSnapshot, error) {
+	var snapshot authports.CurrentUserSnapshot
+	err := r.pool.QueryRow(ctx, `
+		SELECT u.user_id, u.username, u.user_type, COALESCE(u.tenant_id, ''),
+		       COALESCE(t.tenant_name, ''), u.mfa_enabled, u.status
+		FROM iam_accounts u
+		LEFT JOIN iam_tenants t ON t.tenant_id = u.tenant_id
+		WHERE u.user_id = $1 AND u.user_type = $2
+	`, userID, userType).Scan(
+		&snapshot.UserID, &snapshot.Username, &snapshot.UserType, &snapshot.TenantID,
+		&snapshot.TenantName, &snapshot.MFAEnabled, &snapshot.Status,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return authports.CurrentUserSnapshot{}, authports.ErrAccountNotFound
+	}
+	return snapshot, err
+}
+
+func (r *AuthRepository) GetPasswordHash(ctx context.Context, userID string, userType int) (string, error) {
+	var hash string
+	err := r.pool.QueryRow(ctx, `
+		SELECT password_hash FROM iam_accounts
+		WHERE user_id = $1 AND user_type = $2 AND status <> 'deleted'
+	`, userID, userType).Scan(&hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", authports.ErrAccountNotFound
+	}
+	return hash, err
+}
+
+func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, userType int, passwordHash string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2
+		WHERE user_id = $3 AND user_type = $4 AND status <> 'deleted'
+	`, passwordHash, time.Now().UTC(), userID, userType)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (r *AuthRepository) UpdateProfile(ctx context.Context, input authports.ProfileUpdate) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET username = CASE WHEN $1 THEN $2 ELSE username END,
+		    email = CASE WHEN $3 THEN NULLIF($4, '') ELSE email END,
+		    credential_version = credential_version + 1,
+		    updated_at = $5
+		WHERE user_id = $6 AND user_type = $7 AND status <> 'deleted'
+	`, input.UsernameSet, input.Username, input.EmailSet, input.Email, time.Now().UTC(), input.UserID, input.UserType)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // PortalUserForLogin is the account record resolved by the unified Portal.

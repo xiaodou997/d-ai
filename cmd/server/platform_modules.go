@@ -13,6 +13,7 @@ import (
 	announcementpkg "xiaodou/dai/internal/announcement"
 	announcementpg "xiaodou/dai/internal/announcement/pg"
 	"xiaodou/dai/internal/auth"
+	authpg "xiaodou/dai/internal/auth/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/clientsecret"
@@ -40,6 +41,7 @@ type platformModules struct {
 	RecentAuth    *auth.RecentAuthService
 	Blacklist     *auth.BlacklistService
 	UserService   *userpkg.UserService
+	AuthAccounts  *authpg.AuthRepository
 	TenantRepo    *tenantpg.TenantRepository
 	AdminAccounts *userpg.AdminAccountRepository
 	AdminEndUsers *userpg.AdminEndUserRepository
@@ -103,6 +105,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
+	authAccountRepo := authpg.NewAuthRepository(pool)
 	tenantRepo := tenantpg.NewTenantRepository(pool)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
@@ -123,6 +126,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		RecentAuth:    recentAuthSvc,
 		Blacklist:     blacklist,
 		UserService:   userSvc,
+		AuthAccounts:  authAccountRepo,
 		TenantRepo:    tenantRepo,
 		AdminAccounts: adminAccountRepo,
 		AdminEndUsers: adminEndUserRepo,

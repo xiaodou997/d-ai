@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
+	authports "xiaodou/dai/internal/auth/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -121,10 +121,17 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if claims == nil {
 			return nil, httpx.ErrUnauthorized
 		}
-		var hash string
-		if qerr := d.Pool.QueryRow(ctx, `
-				SELECT password_hash FROM iam_accounts WHERE user_id = $1 AND user_type = $2
-			`, claims.UserID, claims.UserType).Scan(&hash); qerr != nil {
+		if d.AuthAccountReader == nil || d.AuthAccountWriter == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("账号服务不可用")
+		}
+		hash, qerr := d.AuthAccountReader.GetPasswordHash(ctx, claims.UserID, claims.UserType)
+		if qerr != nil {
+			if errors.Is(qerr, authports.ErrAccountNotFound) {
+				return nil, httpx.ErrNotFound.WithDetail("用户不存在")
+			}
+			return nil, httpx.ErrInternal.WithCause(qerr)
+		}
+		if hash == "" {
 			return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
 		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Body.OldPassword)) != nil {
@@ -137,13 +144,12 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if herr != nil {
 			return nil, httpx.ErrInternal.WithCause(herr)
 		}
-		if _, uerr := d.Pool.Exec(ctx, `
-					UPDATE iam_accounts
-					SET password_hash = $1, credential_version = credential_version + 1, updated_at = $2
-				WHERE user_id = $3 AND user_type = $4
-			`, string(newHash), time.Now().UTC(), claims.UserID, claims.UserType,
-		); uerr != nil {
+		updated, uerr := d.AuthAccountWriter.UpdatePassword(ctx, claims.UserID, claims.UserType, string(newHash))
+		if uerr != nil {
 			return nil, httpx.ErrInternal.WithCause(uerr)
+		}
+		if !updated {
+			return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
 		// 数据库触发器撤销全部 refresh session；Redis 立即拒绝现存 access token。
 		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ID != "" {
@@ -168,6 +174,9 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if claims == nil {
 			return nil, httpx.ErrUnauthorized
 		}
+		if d.AuthAccountWriter == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("账号服务不可用")
+		}
 		if claims.UserType != 3 && claims.UserType != 4 {
 			return nil, httpx.ErrForbidden.WithDetail("仅租户用户和终端用户可修改用户名或邮箱")
 		}
@@ -184,16 +193,6 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 			if username == "" {
 				return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 			}
-			var count int
-			if err := d.Pool.QueryRow(ctx, `
-				SELECT COUNT(*) FROM iam_accounts
-				WHERE lower(username) = lower($1) AND user_id <> $2
-			`, username, claims.UserID).Scan(&count); err != nil {
-				return nil, httpx.ErrInternal.WithCause(err)
-			}
-			if count > 0 {
-				return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
-			}
 		}
 
 		email := ""
@@ -203,27 +202,15 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 				if !strings.Contains(email, "@") {
 					return nil, httpx.ErrBadRequest.WithDetail("邮箱格式不正确")
 				}
-				var count int
-				if err := d.Pool.QueryRow(ctx, `
-					SELECT COUNT(*) FROM iam_accounts
-					WHERE email IS NOT NULL AND lower(email) = lower($1) AND user_id <> $2
-				`, email, claims.UserID).Scan(&count); err != nil {
-					return nil, httpx.ErrInternal.WithCause(err)
-				}
-				if count > 0 {
-					return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
-				}
 			}
 		}
 
-		if _, err := d.Pool.Exec(ctx, `
-			UPDATE iam_accounts
-				SET username = CASE WHEN $1 THEN $2 ELSE username END,
-				    email = CASE WHEN $3 THEN NULLIF($4, '') ELSE email END,
-				    credential_version = credential_version + 1,
-				    updated_at = $5
-			WHERE user_id = $6 AND user_type = $7
-		`, usernameSet, username, emailSet, email, time.Now().UTC(), claims.UserID, claims.UserType); err != nil {
+		updated, err := d.AuthAccountWriter.UpdateProfile(ctx, authports.ProfileUpdate{
+			UserID: claims.UserID, UserType: claims.UserType,
+			UsernameSet: usernameSet, Username: username,
+			EmailSet: emailSet, Email: email,
+		})
+		if err != nil {
 			if authpg.IsUsernameTaken(err) {
 				return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 			}
@@ -231,6 +218,9 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 				return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 			}
 			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		if !updated {
+			return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
 
 		// 用户名变更后旧 token 中的 claim 已过期，强制重新登录
@@ -361,6 +351,9 @@ type currentUserSnapshot struct {
 }
 
 func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
+	if d.AuthAccountReader == nil {
+		return currentUserSnapshot{}, httpx.ErrUnavailable.WithDetail("账号服务不可用")
+	}
 	snapshot, err := queryCurrentUserSnapshot(ctx, d, claims)
 	if err != nil {
 		return currentUserSnapshot{}, err
@@ -369,9 +362,8 @@ func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (
 		return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("账户已被禁用，请重新登录")
 	}
 
-	repo := authpg.NewAuthRepository(d.Pool)
 	if snapshot.userType == 3 || snapshot.userType == 4 {
-		active, err := repo.CheckTenantActive(ctx, snapshot.tenantID)
+		active, err := d.AuthAccountReader.CheckTenantActive(ctx, snapshot.tenantID)
 		if err != nil {
 			return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
 		}
@@ -386,27 +378,17 @@ func queryCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) 
 	if claims.UserType < 1 || claims.UserType > 4 {
 		return currentUserSnapshot{}, httpx.ErrBadRequest.WithDetail("无效的用户类型")
 	}
-	var snapshot currentUserSnapshot
-	err := d.Pool.QueryRow(ctx, `
-		SELECT u.user_id, u.username, u.user_type, COALESCE(u.tenant_id, ''),
-		       COALESCE(t.tenant_name, ''), u.mfa_enabled, u.status
-		FROM iam_accounts u
-		LEFT JOIN iam_tenants t ON t.tenant_id = u.tenant_id
-		WHERE u.user_id = $1 AND u.user_type = $2
-	`, claims.UserID, claims.UserType).Scan(
-		&snapshot.userID,
-		&snapshot.username,
-		&snapshot.userType,
-		&snapshot.tenantID,
-		&snapshot.tenantName,
-		&snapshot.mfaEnabled,
-		&snapshot.status,
-	)
+	projected, err := d.AuthAccountReader.GetCurrentUserSnapshot(ctx, claims.UserID, claims.UserType)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, authports.ErrAccountNotFound) {
 			return currentUserSnapshot{}, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
 		return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
+	}
+	snapshot := currentUserSnapshot{
+		userID: projected.UserID, username: projected.Username, userType: projected.UserType,
+		tenantID: projected.TenantID, tenantName: projected.TenantName,
+		mfaEnabled: projected.MFAEnabled, status: projected.Status,
 	}
 	if claims.TenantID != "" && snapshot.tenantID != "" && claims.TenantID != snapshot.tenantID {
 		return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("账户信息已变更，请重新登录")

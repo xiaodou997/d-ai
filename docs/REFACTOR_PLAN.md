@@ -492,6 +492,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 租户状态事务：租户启停、组织用户/终端用户级联状态变更及恢复用户 ID 收集已移入 `internal/tenant/pg.TenantRepository.UpdateStatus`；Transport 只保留黑名单同步和错误映射。
 - 租户生命周期写入：租户创建（含初始用户激活凭证）、更新和删除已移入 `internal/tenant/pg.TenantRepository`，通过 `tenant/ports.AdminTenantWriter` 注入；handler 只负责输入归一化、凭证输出和错误映射。
 - AI 身份边界：`aiIdentityAdapter.CheckTenantEndUser` 改用 `TenantRepository.GetEndUserTenantID`，Transport 不再为终端用户归属校验执行内联 SQL。
+- 认证账号边界：`/api/auth/me`、密码修改和用户名/邮箱更新通过 `auth/ports.AccountReader` / `AccountWriter` 调用 `AuthRepository`，唯一约束与 deleted 账号保护留在 persistence adapter。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
@@ -504,6 +505,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：扩展 TenantRepository 状态测试，覆盖 active/disabled/inherited_disabled 级联、跨租户隔离、已禁用/锁定账号保护和恢复用户清单。
 - 回归：新增 TenantRepository 生命周期测试，覆盖初始用户激活关联、更新提交、无引用删除和有引用删除保护。
 - 回归：新增 AI identity scope 测试，覆盖跨租户和 deleted 终端用户拒绝。
+- 回归：新增 AuthRepository 账号投影/写入测试，覆盖快照、密码更新、唯一约束、deleted 保护和租户状态读取。
 - 回归：新增 AdminAccountRepository canonical schema 测试，覆盖管理员关键词、租户范围、分页顺序、状态和凭证状态投影。
 - 回归：扩展 AdminAccountRepository 写入测试，覆盖两类账号创建、激活令牌关联、超级管理员保护、租户用户状态和资料更新。
 - 回归：扩展账号 repository 重置测试，覆盖三类目标类型隔离、deleted 账号拒绝和一次性凭证结果。
@@ -511,4 +513,4 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增 AdminEndUserRepository canonical schema 测试，覆盖租户范围、租户名/状态/关键词过滤、余额和最后登录投影。
 - 回归：新增 AdminEndUserRepository 写入测试，覆盖显式清空字段、租户作用域、deleted 账号保护和状态变更。
 - 回归：新增 AdminEndUserRepository 创建测试，覆盖 pending_activation 投影、激活令牌关联和激活写入失败时的账号回滚。
-- 下一候选项：迁移统一认证资料/密码端点的账号读取与更新，随后进入支付/充值生命周期事务迁移。
+- 下一候选项：清理认证快照之外的剩余身份直读，再进入支付/充值生命周期事务迁移。
