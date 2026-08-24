@@ -2,11 +2,13 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/jackc/pgx/v5"
 
 	billingdomain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/ledger"
@@ -175,16 +177,24 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("租户充值时 tenantId 必填")
 		}
-		var exists int
-		if err := h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_tenants WHERE tenant_id = $1`, tenantID).Scan(&exists); err != nil || exists == 0 {
+		if _, err := h.tenantRepo.GetTenantDetails(ctx, tenantID); err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, httpx.ErrInternal.WithCause(err)
+			}
 			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
 		}
 	} else {
 		if in.Body.UserID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户充值时 userId 必填")
 		}
-		var userTenantID string
-		if err := h.pool.QueryRow(ctx, `SELECT tenant_id FROM iam_accounts WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'`, in.Body.UserID).Scan(&userTenantID); err != nil || userTenantID == "" {
+		userTenantID, err := h.tenantRepo.GetEndUserTenantID(ctx, in.Body.UserID)
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, httpx.ErrInternal.WithCause(err)
+			}
+			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
+		}
+		if userTenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
 		}
 		if userType == 3 && loginTenantID != "" && loginTenantID != userTenantID {
