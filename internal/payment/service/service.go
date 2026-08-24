@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -153,8 +155,31 @@ func (s *PaymentService) GetOrder(ctx context.Context, orderID string) (*payment
 	return o, nil
 }
 
-func (s *PaymentService) ListOrders(ctx context.Context, p paymentpg.ListOrdersParams) ([]*payment.Order, int64, error) {
-	return paymentpg.ListOrders(ctx, s.pool, p)
+func (s *PaymentService) ListOrders(ctx context.Context, p payment.ListOrdersParams) ([]*payment.Order, int64, error) {
+	return paymentpg.ListOrders(ctx, s.pool, paymentpg.ListOrdersParams{
+		Scene: p.Scene, Status: p.Status, TenantID: p.TenantID, UserID: p.UserID, Page: p.Page, Size: p.Size,
+	})
+}
+
+// ListAdminRechargeOrders returns the unified online/manual recharge
+// projection through the payment application boundary.
+func (s *PaymentService) ListAdminRechargeOrders(ctx context.Context, p payment.ListAdminRechargeOrdersParams) ([]payment.AdminRechargeOrder, int64, error) {
+	return paymentpg.ListAdminRechargeOrders(ctx, s.pool, paymentpg.ListAdminRechargeOrdersParams{
+		Keyword: p.Keyword, Method: p.Method, TargetType: p.TargetType,
+		PaymentStatus: p.PaymentStatus, FulfillmentStatus: p.FulfillmentStatus,
+		RefundStatus: p.RefundStatus, TimeFrom: p.TimeFrom, TimeTo: p.TimeTo,
+		Page: p.Page, Size: p.Size,
+	})
+}
+
+// GetAdminRechargeOrder reads one unified recharge projection. Missing rows
+// are normalized here so HTTP does not need to know pgx error details.
+func (s *PaymentService) GetAdminRechargeOrder(ctx context.Context, orderID string) (*payment.AdminRechargeOrder, error) {
+	item, err := paymentpg.GetAdminRechargeOrder(ctx, s.pool, orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrPaymentOrderNotFound
+	}
+	return item, err
 }
 
 // ==================== 回调核销 ====================

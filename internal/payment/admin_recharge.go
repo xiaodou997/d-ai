@@ -1,5 +1,33 @@
 package payment
 
+import "time"
+
+// ListOrdersParams is the application-facing filter for payment-order lists.
+// The PostgreSQL adapter owns its SQL-specific equivalent.
+type ListOrdersParams struct {
+	Scene    string
+	Status   string
+	TenantID string
+	UserID   string
+	Page     int
+	Size     int
+}
+
+// ListAdminRechargeOrdersParams is the application-facing filter for the
+// unified online/manual recharge management projection.
+type ListAdminRechargeOrdersParams struct {
+	Keyword           string
+	Method            string
+	TargetType        string
+	PaymentStatus     string
+	FulfillmentStatus string
+	RefundStatus      string
+	TimeFrom          *time.Time
+	TimeTo            *time.Time
+	Page              int
+	Size              int
+}
+
 // AdminRechargeOrder is the management projection of one recharge business
 // action. Online orders are rooted at pay_orders; manual orders are rooted at
 // bill_recharge_orders.

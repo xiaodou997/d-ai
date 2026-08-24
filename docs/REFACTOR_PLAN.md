@@ -498,6 +498,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 反向充值边界：租户用户的 `tenant_id` / `order_type` 校验已移入 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只选择 scoped/unscoped port 并映射领域错误。
 - 充值生命周期边界：人工充值改由 `RechargeService.GrantManual` 持有事务并调用 `TenantRepository.LockManualRechargeTarget`；`GrantBalance` 仅作为支付结算复用的外部事务原语。
 - 支付订单边界：`GrantBalance` 统一约束五类 `order_type` 与额度来源、用户目标和 `payment_order_id` 的组合，阻止在线支付与人工充值参数混用。
+- 支付查询边界：普通支付订单和统一充值列表/详情查询参数下沉到 `payment` domain，`PaymentService` 封装 PostgreSQL adapter；Transport 不再直接依赖 `payment/pg` 查询。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
@@ -522,4 +523,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增反向充值租户范围测试，覆盖跨租户订单、错误 `order_type` 拒绝、事务回滚以及本租户订单成功撤销。
 - 回归：新增 RechargeService canonical schema 测试，覆盖人工充值事务提交、停用用户锁定拒绝、余额不变和支付/人工订单参数边界。
 - 回归：新增 AuthRepository canonical schema 测试，覆盖认证审计日志过滤、空值投影、时间/ID 稳定排序和分页归一化。
-- 下一候选项：继续治理支付查询/状态机的 Transport 边界。
+- 回归：新增 PaymentService canonical schema 测试，覆盖统一充值列表/详情查询和缺失订单错误归一化。
+- 下一候选项：下沉管理充值同步、手动冲正和退款流程的状态判断与事务编排。

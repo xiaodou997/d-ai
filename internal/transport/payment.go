@@ -9,7 +9,6 @@ import (
 
 	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
-	paymentpg "xiaodou/dai/internal/payment/pg"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -247,7 +246,7 @@ func (h *paymentHandlers) listOrders(ctx context.Context, in *listTopupOrdersInp
 	if !ok {
 		return nil, httpx.ErrForbidden
 	}
-	list, total, err := h.svc.ListOrders(ctx, paymentpg.ListOrdersParams{
+	list, total, err := h.svc.ListOrders(ctx, payment.ListOrdersParams{
 		Scene: scene, Status: in.Status, TenantID: tenantID, UserID: userID, Page: in.Page, Size: in.Size,
 	})
 	if err != nil {

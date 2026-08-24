@@ -58,6 +58,7 @@ httpServers.Start / Shutdown
 - 认证审计日志列表通过 `auth/ports.AuthAuditLogReader` 注入 `AuthRepository`；过滤、计数、稳定排序和分页归一化留在 persistence adapter，管理 Transport 只做 DTO 投影。
 - 管理充值目标的租户存在与终端用户归属校验复用 `TenantRepository`；`RechargeService.GrantManual` 持有目标锁并提交充值订单、额度包和余额变更事务，Transport 不再直接读取 `iam_tenants` / `iam_accounts` 做前置校验。
 - `GrantBalance` 保留为支付结算使用的外部事务原语，并统一校验订单类型、额度来源与 `payment_order_id` 的组合，避免人工充值和在线支付生命周期交叉写入。
+- 管理支付订单与统一充值列表/详情查询通过 `PaymentService` application API 暴露，Transport 不再 import `payment/pg` 或传递 adapter 查询参数。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。
