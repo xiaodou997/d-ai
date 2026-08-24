@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	domain "xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/ledger"
@@ -32,6 +34,35 @@ const (
 	TaskJWTKeyRetire   = "jwt_key_retire"
 	TaskPaymentSweep   = "payment_sweep"
 	TaskPaymentCleanup = "payment_cleanup"
+
+	// Payment and ledger workers must not keep a database session (or an
+	// upstream request) forever. The advisory lock is released in a fresh
+	// short-lived context even when the operation context has timed out.
+	schedulerTaskTimeout  = 5 * time.Minute
+	advisoryUnlockTimeout = 5 * time.Second
+)
+
+var (
+	schedulerTaskRuns = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "dai_scheduler_task_runs_total",
+		Help: "Scheduler task executions by task name and outcome.",
+	}, []string{"task", "outcome"})
+	schedulerTaskDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "dai_scheduler_task_duration_seconds",
+		Help: "Scheduler task execution duration in seconds.",
+	}, []string{"task"})
+	schedulerTaskRunning = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "dai_scheduler_task_running",
+		Help: "One while a scheduler task is executing.",
+	}, []string{"task"})
+	schedulerTaskFailures = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "dai_scheduler_task_consecutive_failures",
+		Help: "Consecutive failures observed for a scheduler task.",
+	}, []string{"task"})
+	schedulerTaskSkips = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "dai_scheduler_task_skips_total",
+		Help: "Scheduler task executions skipped, grouped by bounded reason.",
+	}, []string{"task", "reason"})
 )
 
 // TaskSnapshot is the operational state of one scheduler task. It is safe to
@@ -113,16 +144,27 @@ func (s *Scheduler) Health() HealthSnapshot {
 }
 
 func (s *Scheduler) runTask(name string, task func() error) {
+	startedAt := time.Now()
+	outcome := "success"
+	defer func() {
+		schedulerTaskRuns.WithLabelValues(name, outcome).Inc()
+		schedulerTaskDuration.WithLabelValues(name).Observe(time.Since(startedAt).Seconds())
+	}()
+
 	s.taskStarted(name)
 	err := task()
 	var skipped *taskSkippedError
 	if errors.As(err, &skipped) {
+		outcome = "skipped"
 		s.taskSkipped(name, skipped.reason)
 		return
 	}
 	s.taskFinished(name, err)
-	if err != nil && s.logger != nil {
-		s.logger.Error("scheduler task failed", zap.String("task", name), zap.Error(err))
+	if err != nil {
+		outcome = "failure"
+		if s.logger != nil {
+			s.logger.Error("scheduler task failed", zap.String("task", name), zap.Error(err))
+		}
 	}
 }
 
@@ -134,6 +176,7 @@ func (s *Scheduler) taskStarted(name string) {
 	state.LastStartedAt = &now
 	s.tasks[name] = state
 	s.taskMu.Unlock()
+	schedulerTaskRunning.WithLabelValues(name).Inc()
 }
 
 func (s *Scheduler) taskFinished(name string, err error) {
@@ -153,6 +196,8 @@ func (s *Scheduler) taskFinished(name string, err error) {
 	}
 	s.tasks[name] = state
 	s.taskMu.Unlock()
+	schedulerTaskRunning.WithLabelValues(name).Dec()
+	schedulerTaskFailures.WithLabelValues(name).Set(float64(state.ConsecutiveFailures))
 }
 
 func (s *Scheduler) taskSkipped(name, reason string) {
@@ -166,6 +211,9 @@ func (s *Scheduler) taskSkipped(name, reason string) {
 	state.LastSkipReason = reason
 	s.tasks[name] = state
 	s.taskMu.Unlock()
+	schedulerTaskRunning.WithLabelValues(name).Dec()
+	schedulerTaskSkips.WithLabelValues(name, reason).Inc()
+	schedulerTaskFailures.WithLabelValues(name).Set(float64(state.ConsecutiveFailures))
 }
 
 // Start 启动定时任务
@@ -229,7 +277,8 @@ func (s *Scheduler) runLotExpiryTask() {
 // settleExpiredLots removes the unspent remainder of every lot whose validity
 // window has closed. Repeating is safe: expired_at is the idempotency anchor.
 func (s *Scheduler) settleExpiredLots() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	defer cancel()
 	now := domain.NowUTC()
 
 	total := 0
@@ -322,18 +371,9 @@ func (s *Scheduler) sweepPayments() error {
 	if s.paymentSweeper == nil {
 		return &taskSkippedError{reason: "payment_sweep_not_configured"}
 	}
-	ctx := context.Background()
-
-	var locked bool
-	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment'))`).Scan(&locked); err != nil {
-		return fmt.Errorf("acquire payment sweep advisory lock: %w", err)
-	}
-	if !locked {
-		return &taskSkippedError{reason: "payment_sweep_advisory_lock_held"}
-	}
-	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment'))`) //nolint
-
-	return s.paymentSweeper.SweepOnce(ctx)
+	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	defer cancel()
+	return s.withAdvisoryLock(ctx, "dai_scheduler_payment", "payment_sweep_advisory_lock_held", s.paymentSweeper.SweepOnce)
 }
 
 const closedOrderCleanupInterval = 24 * time.Hour
@@ -356,16 +396,52 @@ func (s *Scheduler) cleanupClosedOrders() error {
 	if s.paymentCleaner == nil {
 		return &taskSkippedError{reason: "payment_cleanup_not_configured"}
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	defer cancel()
+	return s.withAdvisoryLock(ctx, "dai_scheduler_payment_cleanup", "payment_cleanup_advisory_lock_held", s.paymentCleaner.CleanupClosedOrders)
+}
+
+// withAdvisoryLock pins acquisition, execution, and release to one physical
+// PostgreSQL connection. pg_advisory_lock is session-scoped; using pool.QueryRow
+// for acquisition and pool.Exec for release can silently hand those operations
+// to different sessions and leak the lock until the first session is recycled.
+func (s *Scheduler) withAdvisoryLock(ctx context.Context, key, skipReason string, task func(context.Context) error) (err error) {
+	if s.pool == nil {
+		return errors.New("scheduler database pool is not configured")
+	}
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire scheduler database connection: %w", err)
+	}
+	defer conn.Release()
+
 	var locked bool
-	if err := s.pool.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext('dai_scheduler_payment_cleanup'))`).Scan(&locked); err != nil {
-		return fmt.Errorf("acquire payment cleanup advisory lock: %w", err)
+	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, key).Scan(&locked); err != nil {
+		return fmt.Errorf("acquire %s: %w", key, err)
 	}
 	if !locked {
-		return &taskSkippedError{reason: "payment_cleanup_advisory_lock_held"}
+		return &taskSkippedError{reason: skipReason}
 	}
-	defer s.pool.Exec(ctx, `SELECT pg_advisory_unlock(hashtext('dai_scheduler_payment_cleanup'))`) //nolint
-	return s.paymentCleaner.CleanupClosedOrders(ctx)
+
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), advisoryUnlockTimeout)
+		defer cancel()
+		var unlocked bool
+		unlockErr := conn.QueryRow(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1))`, key).Scan(&unlocked)
+		if unlockErr == nil && !unlocked {
+			unlockErr = errors.New("database reported advisory lock was not held")
+		}
+		if unlockErr != nil {
+			unlockErr = fmt.Errorf("release %s: %w", key, unlockErr)
+			if err == nil {
+				err = unlockErr
+			} else {
+				err = errors.Join(err, unlockErr)
+			}
+		}
+	}()
+
+	return task(ctx)
 }
 
 // RunAllTasks 手动执行所有任务（用于测试）

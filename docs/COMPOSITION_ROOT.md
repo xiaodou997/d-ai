@@ -64,6 +64,8 @@ httpServers.Start / Shutdown
 - 提现列表通过 `PaymentService.ListWithdrawals` 接收 `WithdrawalListParams`，由 application 层归一化租户/状态/分页并拒绝未知状态，Transport 不再传递裸查询参数。
 - 支付 cleanup 失败通过 `error` 返回 Scheduler 统一记录；Scheduler 的后台任务启动/停止具备幂等保护、等待语义，JWT 退役初始延迟可被停止信号中断。
 - Scheduler 通过 `/health` 暴露四类后台任务的运行中、最近成功/失败、连续失败和跨副本锁跳过快照；支付 sweep 将单轮错误回传，按下一周期自动重试。
+- 支付 sweep/cleanup 的 PostgreSQL advisory lock 在同一物理连接上获取、执行和释放，避免 `pgxpool` 跨连接释放造成锁泄漏；支付与额度结算任务统一设有 5 分钟操作超时，解锁使用独立短超时上下文。
+- Scheduler 发布 `dai_scheduler_task_runs_total`、`dai_scheduler_task_duration_seconds`、`dai_scheduler_task_running`、`dai_scheduler_task_consecutive_failures` 和 `dai_scheduler_task_skips_total`，可直接用于失败、卡住和跨副本跳过告警。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。

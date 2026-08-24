@@ -504,6 +504,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 提现查询边界：提现列表改用 `payment.WithdrawalListParams`，`PaymentService` 负责状态白名单与输入归一化，adapter 只执行已校验的查询。
 - 调度生命周期边界：支付 cleanup 错误回传 Scheduler 统一观测；Scheduler 防止重复 Start/Stop，停止时等待 worker 退出并可中断 JWT 退役初始等待。
 - 后台任务观测边界：Scheduler 统一记录任务运行/成功/失败/跳过状态并挂载到 `/health`；PaymentService.SweepOnce 聚合单轮错误，避免局部失败被误报为成功。
+- 跨副本锁边界：支付 sweep/cleanup 的 advisory lock 由同一物理 PostgreSQL 连接完成获取、执行和释放；任务上下文有 5 分钟硬超时，解锁不受任务超时影响，避免连接池错配和永久占锁。
+- 调度指标边界：Scheduler 暴露任务运行结果、耗时、运行中、连续失败和跳过原因 Prometheus 指标；失败/卡住/持续跨副本跳过可以在管理端 `/metrics` 上做告警，不改变 `/ready` 的基础设施语义。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
 - 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
@@ -534,4 +536,5 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增提现列表 application 测试，覆盖状态空白归一化、有效筛选和未知状态拒绝。
 - 回归：新增 Scheduler 生命周期测试，覆盖重复启动/停止不 panic 且 worker 可及时退出。
 - 回归：新增 Scheduler 健康快照测试，覆盖失败计数、跨副本 advisory lock 跳过和最近错误投影。
-- 下一候选项：继续治理后台任务跨副本锁的租约/超时与指标告警。
+- 回归：新增 Scheduler PostgreSQL advisory lock 集成测试，确认同一锁连续两轮均可获取，防止连接池跨会话释放回归。
+- 下一候选项：逐项验证 JWT key retire、价格同步等未使用 advisory lock 的后台任务多副本语义，并为需要长任务的 worker 补充租约/心跳与 fencing。
