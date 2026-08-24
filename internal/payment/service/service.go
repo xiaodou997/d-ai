@@ -36,20 +36,26 @@ const (
 
 // PaymentService 是 payment 域的唯一编排入口。
 type PaymentService struct {
-	pool     *pgxpool.Pool
-	settings *payment.SettingsStore
-	cfgStore *wechat.ConfigStore
-	gateway  wechat.Gateway
-	logger   *zap.Logger
+	pool      *pgxpool.Pool
+	settings  *payment.SettingsStore
+	cfgStore  *wechat.ConfigStore
+	gateway   wechat.Gateway
+	logger    *zap.Logger
+	deduction *billingsvc.DeductionService
 }
 
-func New(pool *pgxpool.Pool, gateway wechat.Gateway, cfgStore *wechat.ConfigStore, logger *zap.Logger) *PaymentService {
+func New(pool *pgxpool.Pool, gateway wechat.Gateway, cfgStore *wechat.ConfigStore, logger *zap.Logger, deductions ...*billingsvc.DeductionService) *PaymentService {
+	var deduction *billingsvc.DeductionService
+	if len(deductions) > 0 {
+		deduction = deductions[0]
+	}
 	return &PaymentService{
-		pool:     pool,
-		settings: payment.NewSettingsStore(pool),
-		cfgStore: cfgStore,
-		gateway:  gateway,
-		logger:   logger,
+		pool:      pool,
+		settings:  payment.NewSettingsStore(pool),
+		cfgStore:  cfgStore,
+		gateway:   gateway,
+		logger:    logger,
+		deduction: deduction,
 	}
 }
 
@@ -180,6 +186,73 @@ func (s *PaymentService) GetAdminRechargeOrder(ctx context.Context, orderID stri
 		return nil, domain.ErrPaymentOrderNotFound
 	}
 	return item, err
+}
+
+// SyncAdminRechargeOrder synchronizes only an online recharge projection. The
+// method check lives beside the payment state machine instead of in HTTP.
+func (s *PaymentService) SyncAdminRechargeOrder(ctx context.Context, orderID string) (*payment.AdminRechargeOrder, error) {
+	item, err := s.GetAdminRechargeOrder(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if item.Method != "online" {
+		return nil, rechargeActionBadRequest("手动充值不需要同步支付状态")
+	}
+	if _, err := s.SyncOrder(ctx, item.OrderID); err != nil {
+		return nil, err
+	}
+	return s.GetAdminRechargeOrder(ctx, item.OrderID)
+}
+
+// ReverseManualRechargeCredit reverses only an active manual recharge. The
+// deduction service takes the balance-order row lock, so a concurrent reverse
+// cannot pass the state check twice.
+func (s *PaymentService) ReverseManualRechargeCredit(ctx context.Context, orderID, reason, operatorID string) (*payment.AdminRechargeOrder, error) {
+	reason = strings.TrimSpace(reason)
+	operatorID = strings.TrimSpace(operatorID)
+	if reason == "" || operatorID == "" {
+		return nil, rechargeActionBadRequest("撤回原因和操作人不能为空")
+	}
+	item, err := s.GetAdminRechargeOrder(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if item.Method != "manual" {
+		return nil, rechargeActionBadRequest("在线充值必须在退款完成后执行整单冲正")
+	}
+	if item.BalanceOrderID == "" || item.FulfillmentStatus != payment.FulfillmentStatusCredited {
+		return nil, domain.ErrRechargeNotReversible
+	}
+	deduction := s.deduction
+	if deduction == nil {
+		deduction = billingsvc.NewDeductionService(s.pool, s.logger)
+	}
+	if _, err := deduction.ReverseOrder(item.BalanceOrderID, reason, operatorID); err != nil {
+		return nil, err
+	}
+	return s.GetAdminRechargeOrder(ctx, item.OrderID)
+}
+
+// RecordAdminRechargeRefund validates that the management order is online,
+// then delegates the locked refund transaction and returns the refreshed
+// unified projection.
+func (s *PaymentService) RecordAdminRechargeRefund(ctx context.Context, orderID string, p RecordCompletedRefundParams) (*payment.AdminRechargeOrder, error) {
+	item, err := s.GetAdminRechargeOrder(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if item.Method != "online" {
+		return nil, rechargeActionBadRequest("手动充值没有支付退款流程")
+	}
+	p.PaymentOrderID = item.OrderID
+	if _, err := s.RecordCompletedRefund(ctx, p); err != nil {
+		return nil, err
+	}
+	return s.GetAdminRechargeOrder(ctx, item.OrderID)
+}
+
+func rechargeActionBadRequest(detail string) error {
+	return domain.NewErrorWithDetail(domain.ErrBadRequest.Code, domain.ErrBadRequest.Message, detail)
 }
 
 // ==================== 回调核销 ====================

@@ -3,13 +3,10 @@ package transport
 import (
 	"context"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
-	billingsvc "xiaodou/dai/internal/billing/service"
-	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/internal/payment/wechat"
@@ -19,11 +16,10 @@ import (
 // adminPaymentHandlers 承载管理端支付配置、订单和提现端点（type 1,2）。
 type adminPaymentHandlers struct {
 	*paymentHandlers
-	deduction *billingsvc.DeductionService
 }
 
 func newAdminPaymentHandlers(d Deps) *adminPaymentHandlers {
-	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d), deduction: d.Deduction}
+	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d)}
 }
 
 // ---- DTO：平台充值/提现规则 ----
@@ -339,17 +335,11 @@ func (h *adminPaymentHandlers) getRechargeOrder(ctx context.Context, in *adminRe
 }
 
 func (h *adminPaymentHandlers) syncRechargeOrder(ctx context.Context, in *adminRechargeOrderInput) (*adminRechargeOrderOutput, error) {
-	item, err := h.svc.GetAdminRechargeOrder(ctx, in.OrderID)
+	item, err := h.svc.SyncAdminRechargeOrder(ctx, in.OrderID)
 	if err != nil {
 		return nil, toProblem(err)
 	}
-	if item.Method != "online" {
-		return nil, httpx.ErrBadRequest.WithDetail("手动充值不需要同步支付状态")
-	}
-	if _, err := h.svc.SyncOrder(ctx, item.OrderID); err != nil {
-		return nil, toProblem(err)
-	}
-	return h.getRechargeOrder(ctx, in)
+	return &adminRechargeOrderOutput{Body: *item}, nil
 }
 
 func (h *adminPaymentHandlers) reverseRechargeOrderCredit(ctx context.Context, in *reverseAdminRechargeOrderInput) (*adminRechargeOrderOutput, error) {
@@ -357,24 +347,11 @@ func (h *adminPaymentHandlers) reverseRechargeOrderCredit(ctx context.Context, i
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	item, err := h.svc.GetAdminRechargeOrder(ctx, in.OrderID)
+	item, err := h.svc.ReverseManualRechargeCredit(ctx, in.OrderID, in.Body.Reason, claims.UserID)
 	if err != nil {
 		return nil, toProblem(err)
 	}
-	if item.BalanceOrderID == "" || item.FulfillmentStatus != payment.FulfillmentStatusCredited {
-		return nil, toProblem(domain.ErrRechargeNotReversible)
-	}
-	if item.Method != "manual" {
-		return nil, httpx.ErrBadRequest.WithDetail("在线充值必须在退款完成后执行整单冲正")
-	}
-	reason := strings.TrimSpace(in.Body.Reason)
-	if reason == "" {
-		return nil, httpx.ErrBadRequest.WithDetail("撤回原因不能为空")
-	}
-	if _, err := h.deduction.ReverseOrder(item.BalanceOrderID, reason, claims.UserID); err != nil {
-		return nil, toProblem(err)
-	}
-	return h.getRechargeOrder(ctx, &adminRechargeOrderInput{OrderID: item.OrderID})
+	return &adminRechargeOrderOutput{Body: *item}, nil
 }
 
 func (h *adminPaymentHandlers) recordCompletedRechargeRefund(ctx context.Context, in *recordCompletedRefundInput) (*adminRechargeOrderOutput, error) {
@@ -382,22 +359,15 @@ func (h *adminPaymentHandlers) recordCompletedRechargeRefund(ctx context.Context
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	item, err := h.svc.GetAdminRechargeOrder(ctx, in.OrderID)
+	item, err := h.svc.RecordAdminRechargeRefund(ctx, in.OrderID, paymentsvc.RecordCompletedRefundParams{
+		Method: in.Body.Method, RefundReference: in.Body.RefundReference,
+		ChannelRefundID: in.Body.ChannelRefundID, RefundedAt: time.UnixMilli(in.Body.RefundedAt).UTC(),
+		Reason: in.Body.Reason, Note: in.Body.Note, OperatorID: claims.UserID,
+	})
 	if err != nil {
 		return nil, toProblem(err)
 	}
-	if item.Method != "online" {
-		return nil, httpx.ErrBadRequest.WithDetail("手动充值没有支付退款流程")
-	}
-	if _, err := h.svc.RecordCompletedRefund(ctx, paymentsvc.RecordCompletedRefundParams{
-		PaymentOrderID: item.OrderID,
-		Method:         in.Body.Method, RefundReference: in.Body.RefundReference,
-		ChannelRefundID: in.Body.ChannelRefundID, RefundedAt: time.UnixMilli(in.Body.RefundedAt).UTC(),
-		Reason: in.Body.Reason, Note: in.Body.Note, OperatorID: claims.UserID,
-	}); err != nil {
-		return nil, toProblem(err)
-	}
-	return h.getRechargeOrder(ctx, &adminRechargeOrderInput{OrderID: item.OrderID})
+	return &adminRechargeOrderOutput{Body: *item}, nil
 }
 
 func (h *adminPaymentHandlers) syncOrder(ctx context.Context, in *syncOrderInput) (*topupOrderStatusOutput, error) {

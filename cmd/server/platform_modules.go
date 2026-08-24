@@ -113,7 +113,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
 	wechatCfgStore := wechat.NewConfigStore(pool)
-	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger)
+	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger, deductionSvc)
 	announcementSvc := announcementpkg.NewService(announcementpg.NewRepository(pool))
 	moduleSvc := systempkg.NewService(pool)
 	proxySvc := proxy.NewService(pool, moduleSvc)
