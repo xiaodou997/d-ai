@@ -504,6 +504,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 租户自助边界：当前租户用户、邀请码 CRUD 和三类租户分析统一通过 `tenant/ports.TenantSelfService`；`tenant.SelfService` 负责邀请码生成与唯一冲突重试，Transport 不再构造 `TenantRepo` 或识别数据库错误。
 - 账户查询边界：账户余额、充值记录和账户统计统一通过 `billing/ports.AccountQueryReader` 与 `billing/service.AccountQueryService`；余额/充值查询使用请求 context，Transport 不再构造 `billing/pg.AccountRepository`。
 - 债务查询边界：管理端账户债务改用同一 `AccountQueryReader` 余额投影，Transport 不再直接读取 `billing/ledger` 或重复计算账户服务状态。
+- 租户管理读边界：租户列表/详情、终端用户归属和 AI identity 租户补全统一通过 `tenant/ports.AdminTenantReader`，Transport 不再构造 `tenant/pg.TenantRepository`。
 - 充值目标边界：管理充值的租户存在和终端用户归属前置校验复用 `TenantRepository`；账务事务中的用户 `FOR UPDATE` 校验保持在充值工作流内，避免跨连接破坏资金一致性。
 - 反向充值边界：租户用户的 `tenant_id` / `order_type` 校验已移入 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只选择 scoped/unscoped port 并映射领域错误。
 - 充值生命周期边界：人工充值改由 `RechargeService.GrantManual` 持有事务并调用 `TenantRepository.LockManualRechargeTarget`；`GrantBalance` 仅作为支付结算复用的外部事务原语。
@@ -583,7 +584,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 基础设施边界：`billing/pg.AccountRepository` 实现账户查询端口，保留账本余额投影和 SQL JOIN；所有查询改为接收请求 context，不再隐式创建 `context.Background()`。
 - HTTP：账户余额、充值记录和账户统计路由只依赖 `AccountQueryReader`，Transport 保留用户类型范围、DTO 时间转换和领域错误映射。
 - 管理债务边界：`/api/v1/admin/debts/{owner_type}/{id}` 与 Portal 账户余额复用同一余额投影，统一 debt/service-state 语义并清除 Transport 的 ledger 依赖。
+- 租户管理读边界：新增 `AdminTenantReader` 查询投影，管理列表/详情、充值目标校验、终端用户越权校验和 AI identity 共享同一端口；PostgreSQL adapter 负责缺失租户/用户和外键引用错误翻译。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
-- 遗留风险：`internal/transport` 仍保留管理财务/充值写入路径的 billing adapter 例外；下一切片处理认证旧 handler 与账户写入边界。
+- 遗留风险：`internal/transport` 仍保留管理财务/充值写入路径及认证旧 handler 的 adapter 例外；租户管理读写和 AI identity 已通过 tenant ports 装配，下一切片处理认证旧 handler 与账户写入边界。
 - 下一候选项：P1-03 迁移剩余管理财务/充值查询与写入到 billing application command/query ports，再清理 `billing/pg` 例外。

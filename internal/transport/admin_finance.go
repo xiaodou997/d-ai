@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5"
 
 	authports "xiaodou/dai/internal/auth/ports"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	shared "xiaodou/dai/internal/domain"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -178,8 +178,11 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("租户充值时 tenantId 必填")
 		}
-		if _, err := h.tenantRepo.GetTenantDetails(ctx, tenantID); err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
+		if h.tenantReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
+		}
+		if _, err := h.tenantReader.GetTenantDetails(ctx, tenantID); err != nil {
+			if !errors.Is(err, tenantports.ErrTenantNotFound) {
 				return nil, httpx.ErrInternal.WithCause(err)
 			}
 			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
@@ -188,9 +191,12 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		if in.Body.UserID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户充值时 userId 必填")
 		}
-		userTenantID, err := h.tenantRepo.GetEndUserTenantID(ctx, in.Body.UserID)
+		if h.tenantReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
+		}
+		userTenantID, err := h.tenantReader.GetEndUserTenantID(ctx, in.Body.UserID)
 		if err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
+			if !errors.Is(err, tenantports.ErrTenantEndUserNotFound) {
 				return nil, httpx.ErrInternal.WithCause(err)
 			}
 			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")

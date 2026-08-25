@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrTenantNotFound  = tenantports.ErrTenantNotFound
-	ErrTenantNameTaken = tenantports.ErrTenantNameTaken
+	ErrTenantNotFound   = tenantports.ErrTenantNotFound
+	ErrTenantNameTaken  = tenantports.ErrTenantNameTaken
+	ErrTenantReferenced = tenantports.ErrTenantReferenced
 )
 
 // PortalBranding remains an adapter-level alias for callers that still import
@@ -41,6 +42,9 @@ func IsTenantNameTaken(err error) bool {
 }
 
 func IsTenantReferenced(err error) bool {
+	if errors.Is(err, ErrTenantReferenced) {
+		return true
+	}
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23503"
 }

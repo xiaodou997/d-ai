@@ -8,10 +8,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -286,8 +285,11 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	if _, err := h.tenantRepo.GetTenantDetails(ctx, in.Body.TenantID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	if h.tenantReader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
+	}
+	if _, err := h.tenantReader.GetTenantDetails(ctx, in.Body.TenantID); err != nil {
+		if errors.Is(err, tenantports.ErrTenantNotFound) {
 			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)

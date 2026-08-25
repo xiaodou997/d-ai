@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/dbtest"
 	tenantports "xiaodou/dai/internal/tenant/ports"
@@ -54,8 +52,8 @@ func TestTenantRepoOwnsTenantDetailsAndEndUserOwnershipQueries(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE iam_accounts SET status = 'deleted' WHERE user_id = 'end-user-repo'`); err != nil {
 		t.Fatalf("soft-delete end user: %v", err)
 	}
-	if _, err := repo.GetEndUserTenantID(ctx, "end-user-repo"); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("deleted end-user lookup error = %v, want pgx.ErrNoRows", err)
+	if _, err := repo.GetEndUserTenantID(ctx, "end-user-repo"); !errors.Is(err, tenantports.ErrTenantEndUserNotFound) {
+		t.Fatalf("deleted end-user lookup error = %v, want tenant end-user not found", err)
 	}
 }
 

@@ -9,11 +9,11 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
 	billingdomain "xiaodou/dai/internal/billing"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -103,8 +103,11 @@ func registerAdminEndUsers(api huma.API, d Deps) {
 
 // checkUserBelongsToTenant 校验 userID 归属 callerTenantID（空=管理员跳过）。
 func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
-	tenantID, err := h.tenantRepo.GetEndUserTenantID(ctx, userID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if h.tenantReader == nil {
+		return httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
+	}
+	tenantID, err := h.tenantReader.GetEndUserTenantID(ctx, userID)
+	if errors.Is(err, tenantports.ErrTenantEndUserNotFound) {
 		return httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	if err != nil {

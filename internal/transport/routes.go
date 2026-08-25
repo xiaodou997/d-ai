@@ -63,6 +63,7 @@ type IdentityDeps struct {
 	AuthAuditLogs        authports.AuthAuditLogReader
 	TenantStatusWriter   tenantports.AdminTenantStatusWriter
 	TenantWriter         tenantports.AdminTenantWriter
+	TenantReader         tenantports.AdminTenantReader
 	TenantBrandingReader tenantports.PortalBrandingReader
 	TenantBrandingWriter tenantports.PortalBrandingWriter
 	TenantSelf           tenantports.TenantSelfService
@@ -363,7 +364,7 @@ type aiIdentityProvider interface {
 }
 
 func (m aiModule) Register(api huma.API) {
-	identity := newAIIdentityAdapter(m.platform.Pool, m.platform.UserService)
+	identity := newAIIdentityAdapter(m.platform.TenantReader, m.platform.UserService)
 	aitransport.RegisterAICore(api, buildAICoreHTTPDeps(m.platform, m.deps.Core, identity))
 	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
 	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))

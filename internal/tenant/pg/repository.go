@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -42,6 +43,7 @@ type TenantRepository struct {
 
 var _ tenantports.AdminTenantStatusWriter = (*TenantRepository)(nil)
 var _ tenantports.AdminTenantWriter = (*TenantRepository)(nil)
+var _ tenantports.AdminTenantReader = (*TenantRepository)(nil)
 
 type activationStore interface {
 	Store(ctx context.Context, tx pgx.Tx, userID, purpose string, credential auth.ActivationCredential) error
@@ -131,6 +133,9 @@ func (r *TenantRepository) UpdateTenant(ctx context.Context, input tenantports.T
 func (r *TenantRepository) DeleteTenant(ctx context.Context, tenantID string) (bool, error) {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM iam_tenants WHERE tenant_id = $1`, tenantID)
 	if err != nil {
+		if IsTenantReferenced(err) {
+			return false, tenantports.ErrTenantReferenced
+		}
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
@@ -197,8 +202,8 @@ func (r *TenantRepository) UpdateStatus(ctx context.Context, tenantID, status st
 
 // GetTenantDetails returns the tenant detail projection used by management
 // routes without exposing the SQL query to HTTP transport.
-func (r *TenantRepository) GetTenantDetails(ctx context.Context, tenantID string) (*TenantDetails, error) {
-	var details TenantDetails
+func (r *TenantRepository) GetTenantDetails(ctx context.Context, tenantID string) (*tenantports.TenantDetails, error) {
+	var details tenantports.TenantDetails
 	var createdAt time.Time
 	err := r.pool.QueryRow(ctx, `
 		SELECT tenant_id, tenant_name, contact_person, contact_email, status, created_at
@@ -208,6 +213,9 @@ func (r *TenantRepository) GetTenantDetails(ctx context.Context, tenantID string
 		&details.TenantID, &details.TenantName, &details.ContactPerson,
 		&details.ContactEmail, &details.Status, &createdAt,
 	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, tenantports.ErrTenantNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +232,9 @@ func (r *TenantRepository) GetEndUserTenantID(ctx context.Context, userID string
 		FROM iam_accounts
 		WHERE user_id = $1 AND user_type = 4 AND status <> 'deleted'
 	`, userID).Scan(&tenantID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", tenantports.ErrTenantEndUserNotFound
+	}
 	return tenantID, err
 }
 
@@ -252,43 +263,15 @@ func (r *TenantRepository) LockManualRechargeTarget(ctx context.Context, tx pgx.
 	`, userID, lockedTenantID).Scan(&lockedTenantID)
 }
 
-type ListTenantsParams struct {
-	Keyword string
-	Status  string // 存储层状态字符串（active/disabled/suspended），空表示不过滤
-	Pagination
-}
+// Legacy aliases keep adapter callers source-compatible while new callers use
+// tenant/ports projections directly.
+type ListTenantsParams = tenantports.TenantListQuery
+type TenantRow = tenantports.TenantListItem
+type TenantDetails = tenantports.TenantDetails
+type Tenant = tenantports.TenantSummary
 
-type TenantRow struct {
-	TenantID      string  `json:"tenantId"`
-	TenantName    string  `json:"tenantName"`
-	ContactPerson *string `json:"contactPerson"`
-	ContactEmail  *string `json:"contactEmail"`
-	Status        *string `json:"status"`
-	CreatedTime   *int64  `json:"createdTime"`
-	BalanceUSD    float64 `json:"balanceUsd"`
-	UserCount     int64   `json:"userCount"`
-}
-
-// TenantDetails is the scoped tenant projection used by admin detail and
-// tenant-self read handlers. It intentionally excludes aggregate balances and
-// user counts from the list projection.
-type TenantDetails struct {
-	TenantID      string
-	TenantName    string
-	ContactPerson *string
-	ContactEmail  *string
-	Status        string
-	CreatedTime   int64
-}
-
-type Tenant struct {
-	TenantID   string  `json:"tenantId"`
-	TenantName string  `json:"tenantName"`
-	Status     *string `json:"status,omitempty"`
-}
-
-func (r *TenantRepository) List(ctx context.Context, params ListTenantsParams) (PaginatedResult[TenantRow], error) {
-	var result PaginatedResult[TenantRow]
+func (r *TenantRepository) List(ctx context.Context, params tenantports.TenantListQuery) (tenantports.TenantListPage, error) {
+	var result tenantports.TenantListPage
 	result.Page = params.Page
 	result.Size = params.Size
 
@@ -326,7 +309,7 @@ func (r *TenantRepository) List(ctx context.Context, params ListTenantsParams) (
 	defer rows.Close()
 
 	for rows.Next() {
-		var row TenantRow
+		var row tenantports.TenantListItem
 		var creditsMicro int64
 		var createdAt time.Time
 		if err := rows.Scan(
@@ -343,9 +326,9 @@ func (r *TenantRepository) List(ctx context.Context, params ListTenantsParams) (
 	return result, rows.Err()
 }
 
-func (r *TenantRepository) GetByTenantIDs(ctx context.Context, tenantIDs []string) ([]*Tenant, error) {
+func (r *TenantRepository) GetByTenantIDs(ctx context.Context, tenantIDs []string) ([]*tenantports.TenantSummary, error) {
 	if len(tenantIDs) == 0 {
-		return []*Tenant{}, nil
+		return []*tenantports.TenantSummary{}, nil
 	}
 
 	rows, err := r.pool.Query(ctx, `
@@ -358,9 +341,9 @@ func (r *TenantRepository) GetByTenantIDs(ctx context.Context, tenantIDs []strin
 	}
 	defer rows.Close()
 
-	var tenants []*Tenant
+	var tenants []*tenantports.TenantSummary
 	for rows.Next() {
-		var t Tenant
+		var t tenantports.TenantSummary
 		if err := rows.Scan(&t.TenantID, &t.TenantName, &t.Status); err != nil {
 			return nil, err
 		}

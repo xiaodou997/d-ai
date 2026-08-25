@@ -9,12 +9,10 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
 	util "xiaodou/dai/internal/domain"
-	tenantpg "xiaodou/dai/internal/tenant/pg"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -138,14 +136,22 @@ func registerAdminTenants(api huma.API, d Deps) {
 }
 
 func (h *adminHandlers) listTenants(ctx context.Context, in *tenantListInput) (*tenantListOutput, error) {
+	if h.tenantReader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
+	}
 	var statusFilter string
 	if in.Status != 0 {
 		statusFilter = adminStatusFromInt(in.Status)
 	}
-	result, err := h.tenantRepo.List(ctx, tenantpg.ListTenantsParams{
-		Keyword:    in.Keyword,
-		Status:     statusFilter,
-		Pagination: tenantpg.NewPagination(int64(in.Page), int64(in.Size)),
+	page, size := in.Page, in.Size
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = 10
+	}
+	result, err := h.tenantReader.List(ctx, tenantports.TenantListQuery{
+		Keyword: in.Keyword, Status: statusFilter, Page: int64(page), Size: int64(size), Offset: int64((page - 1) * size),
 	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -216,7 +222,7 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 		out.Body.ActivationExpiresIn = int64(time.Until(credential.ExpiresAt).Seconds())
 	}
 	if err := h.tenantWriter.CreateTenant(ctx, command); err != nil {
-		if tenantpg.IsTenantNameTaken(err) {
+		if errors.Is(err, tenantports.ErrTenantNameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 		}
 		if authpg.IsUsernameTaken(err) {
@@ -239,9 +245,12 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 		return nil, httpx.ErrForbidden.WithDetail("无权查看其他租户信息")
 	}
 
-	details, err := h.tenantRepo.GetTenantDetails(ctx, in.ID)
+	if h.tenantReader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
+	}
+	details, err := h.tenantReader.GetTenantDetails(ctx, in.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, tenantports.ErrTenantNotFound) {
 			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -276,7 +285,7 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 		Status:        adminStatusFromInt(in.Body.Status),
 	})
 	if err != nil {
-		if tenantpg.IsTenantNameTaken(err) {
+		if errors.Is(err, tenantports.ErrTenantNameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -290,7 +299,7 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
 	deleted, err := h.tenantWriter.DeleteTenant(ctx, in.ID)
 	if err != nil {
-		if tenantpg.IsTenantReferenced(err) {
+		if errors.Is(err, tenantports.ErrTenantReferenced) {
 			return nil, httpx.ErrConflict.WithDetail("租户仍有关联账号或业务数据，不能删除")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)

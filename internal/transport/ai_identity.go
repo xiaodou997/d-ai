@@ -4,11 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	aitransport "xiaodou/dai/internal/ai/transport"
-	tenantpg "xiaodou/dai/internal/tenant/pg"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	userpkg "xiaodou/dai/internal/user"
 )
 
@@ -16,17 +13,17 @@ import (
 // another transport protocol or a duplicate identity model.
 type aiIdentityAdapter struct {
 	users   *userpkg.UserService
-	tenants *tenantpg.TenantRepository
+	tenants tenantports.AdminTenantReader
 }
 
 var _ aitransport.IdentityProvider = (*aiIdentityAdapter)(nil)
 var _ aitransport.TenantEndUserVerifier = (*aiIdentityAdapter)(nil)
 
-func newAIIdentityAdapter(pool *pgxpool.Pool, users *userpkg.UserService) *aiIdentityAdapter {
-	if pool == nil || users == nil {
+func newAIIdentityAdapter(tenants tenantports.AdminTenantReader, users *userpkg.UserService) *aiIdentityAdapter {
+	if tenants == nil || users == nil {
 		return nil
 	}
-	return &aiIdentityAdapter{users: users, tenants: tenantpg.NewTenantRepository(pool)}
+	return &aiIdentityAdapter{users: users, tenants: tenants}
 }
 
 func (a *aiIdentityAdapter) BatchGetUsers(ctx context.Context, userIDs []string) (map[string]*aitransport.IdentityUser, error) {
@@ -61,7 +58,7 @@ func (a *aiIdentityAdapter) BatchGetTenants(ctx context.Context, tenantIDs []str
 func (a *aiIdentityAdapter) CheckTenantEndUser(ctx context.Context, tenantID, userID string) error {
 	ownedTenantID, err := a.tenants.GetEndUserTenantID(ctx, userID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, tenantports.ErrTenantEndUserNotFound) {
 			return aitransport.ErrEndUserNotFound
 		}
 		return err
