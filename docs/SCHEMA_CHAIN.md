@@ -12,14 +12,14 @@ This is a generated review artifact. `init.sql` is the complete empty-database b
 
 | Target | File | Source | Transaction | Source guard | Advisory lock | Test | SQL rollback | SHA-256 |
 | ---: | --- | ---: | :---: | :---: | :---: | :---: | :---: | --- |
-| v2 | `0002_20260811_unify_login_identifier.sql` | v1 | yes | yes | yes | no | no | `f24fe99246fe` |
-| v3 | `0003_20260817_signed_balance_ledger.sql` | v2 | yes | yes | yes | no | yes | `42314508a78c` |
+| v2 | `0002_20260811_unify_login_identifier.sql` | v1 | yes | yes | yes | yes | no | `f24fe99246fe` |
+| v3 | `0003_20260817_signed_balance_ledger.sql` | v2 | yes | yes | yes | yes | yes | `42314508a78c` |
 | v4 | `0004_20260817_repair_user_topup_tenant_income.sql` | v3 | yes | yes | yes | yes | no | `5ee2ad6dc1db` |
 | v5 | `0005_20260818_unify_recharge_order_management.sql` | v4 | yes | yes | yes | yes | no | `b92b1338328e` |
 | v6 | `0006_20260818_refund_recharge_reversal.sql` | v5 | yes | yes | yes | yes | no | `0205230ae528` |
 | v7 | `0007_20260818_cleanup_closed_payment_orders.sql` | v6 | yes | yes | yes | yes | no | `32937fc522b3` |
 | v8 | `0008_20260818_remove_bill_events.sql` | v7 | yes | yes | yes | yes | no | `8b2d9dc2ab8b` |
-| v9 | `0009_20260818_system_modules.sql` | v8 | yes | yes | yes | no | no | `59128b8196db` |
+| v9 | `0009_20260818_system_modules.sql` | v8 | yes | yes | yes | yes | no | `59128b8196db` |
 | v10 | `0010_20260819_data_cleanup.sql` | v9 | yes | yes | yes | yes | no | `aa0fcdcc9662` |
 | v11 | `0011_20260820_auth_sessions.sql` | v10 | yes | yes | no | yes | no | `0eec4402eb04` |
 | v12 | `0012_20260820_account_activation.sql` | v11 | yes | yes | no | yes | no | `b5d10811b2ad` |
