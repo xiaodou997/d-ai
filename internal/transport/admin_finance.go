@@ -12,8 +12,7 @@ import (
 
 	authports "xiaodou/dai/internal/auth/ports"
 	billingdomain "xiaodou/dai/internal/billing"
-	"xiaodou/dai/internal/billing/ledger"
-	billingpg "xiaodou/dai/internal/billing/pg"
+	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	shared "xiaodou/dai/internal/domain"
 	"xiaodou/dai/libs/go/httpx"
@@ -297,19 +296,24 @@ func (h *adminHandlers) refundUsage(ctx context.Context, in *usageRefundInput) (
 // it is what a balance below zero means, so this reads the same number the
 // admission gate reads instead of a parallel column that could disagree.
 func (h *adminHandlers) getDebt(ctx context.Context, in *debtStatusInput) (*debtStatusOutput, error) {
-	kind := ledger.KindUser
-	if in.OwnerType == "tenant" {
-		kind = ledger.KindTenant
+	if h.accountQueries == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("账户查询服务不可用")
 	}
-	balance, err := ledger.Balance(ctx, h.pool, ledger.Ref{Kind: kind, ID: in.AccountID})
+	var balance *billingports.BalanceResponse
+	var err error
+	if in.OwnerType == "tenant" {
+		balance, err = h.accountQueries.GetTenantBalance(ctx, in.AccountID, false)
+	} else {
+		balance, err = h.accountQueries.GetUserBalance(ctx, in.AccountID, false)
+	}
 	if err != nil {
 		return nil, httpx.ErrBadRequest.WithDetail("账户不存在")
 	}
 	out := &debtStatusOutput{}
 	out.Body.OwnerType = in.OwnerType
 	out.Body.AccountID = in.AccountID
-	out.Body.OutstandingDebtMicroUSD = max(-balance, 0)
-	out.Body.ServiceState = billingpg.AccountServiceState(balance)
+	out.Body.OutstandingDebtMicroUSD = balance.OutstandingDebtMicroUSD
+	out.Body.ServiceState = balance.ServiceState
 	return out, nil
 }
 

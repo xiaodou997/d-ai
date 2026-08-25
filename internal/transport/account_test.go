@@ -24,13 +24,13 @@ type accountQueryStub struct {
 func (s *accountQueryStub) GetTenantBalance(_ context.Context, tenantID string, detail bool) (*billingports.BalanceResponse, error) {
 	s.tenantBalanceID = tenantID
 	s.balanceDetail = detail
-	return &billingports.BalanceResponse{Currency: "USD"}, s.balanceErr
+	return &billingports.BalanceResponse{Currency: "USD", OutstandingDebtMicroUSD: 42, ServiceState: "blocked_debt"}, s.balanceErr
 }
 
 func (s *accountQueryStub) GetUserBalance(_ context.Context, userID string, detail bool) (*billingports.BalanceResponse, error) {
 	s.userBalanceID = userID
 	s.balanceDetail = detail
-	return &billingports.BalanceResponse{Currency: "USD"}, s.balanceErr
+	return &billingports.BalanceResponse{Currency: "USD", OutstandingDebtMicroUSD: 42, ServiceState: "blocked_debt"}, s.balanceErr
 }
 
 func (s *accountQueryStub) ListRechargeRecords(_ context.Context, query billingports.RechargeRecordsQuery) ([]billingports.RechargeRecordRow, int64, error) {
@@ -87,5 +87,14 @@ func TestAccountQueryErrorsMapToHTTPErrors(t *testing.T) {
 	}
 	if _, err := newAccountHandlers(nil).stats(accountClaims(1), &accountStatsInput{AccountID: "tenant-1"}); err == nil || err.Error() != "Service Unavailable: 账户查询服务不可用" {
 		t.Fatalf("unavailable error = %v", err)
+	}
+}
+
+func TestAdminDebtUsesAccountQueryPort(t *testing.T) {
+	queries := &accountQueryStub{}
+	h := &adminHandlers{accountQueries: queries}
+	out, err := h.getDebt(context.Background(), &debtStatusInput{OwnerType: "tenant", AccountID: "tenant-1"})
+	if err != nil || out.Body.OutstandingDebtMicroUSD != 42 || out.Body.ServiceState != "blocked_debt" || queries.tenantBalanceID != "tenant-1" {
+		t.Fatalf("admin debt = %#v, query = %#v, error = %v", out, queries, err)
 	}
 }

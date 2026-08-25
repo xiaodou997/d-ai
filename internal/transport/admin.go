@@ -1,11 +1,11 @@
 package transport
 
 import (
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
+	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	systempg "xiaodou/dai/internal/system/pg"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
@@ -16,7 +16,6 @@ import (
 // adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
 // handler 的逻辑（部分内联 SQL + 已搬 repo），输出强类型 DTO、错误 problem+json。
 type adminHandlers struct {
-	pool               *pgxpool.Pool
 	tenantRepo         *tenantpg.TenantRepository
 	tenantStatusWriter tenantports.AdminTenantStatusWriter
 	tenantWriter       tenantports.AdminTenantWriter
@@ -26,6 +25,7 @@ type adminHandlers struct {
 	endUserWriter      userports.AdminEndUserWriter
 	systemRepo         *systempg.SystemRepository
 	deduction          *billingsvc.DeductionService
+	accountQueries     billingports.AccountQueryReader
 	blacklist          *auth.BlacklistService
 	activations        *auth.ActivationService
 	log                *zap.Logger
@@ -47,7 +47,6 @@ func setActivationOutput(out *activationCredentialOutput, result userports.Activ
 
 func newAdminHandlers(d Deps) *adminHandlers {
 	return &adminHandlers{
-		pool:               d.Pool,
 		tenantRepo:         tenantpg.NewTenantRepository(d.Pool),
 		tenantStatusWriter: d.TenantStatusWriter,
 		tenantWriter:       d.TenantWriter,
@@ -57,6 +56,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		endUserWriter:      d.AdminEndUserWriter,
 		systemRepo:         systempg.NewSystemRepository(d.Pool),
 		deduction:          d.Deduction,
+		accountQueries:     d.AccountQueries,
 		rechargeSvc:        d.Recharge,
 		authAuditReader:    d.AuthAuditLogs,
 		blacklist:          d.Blacklist,

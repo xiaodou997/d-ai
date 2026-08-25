@@ -50,7 +50,7 @@ func TestEndUserScopeAlwaysValidatesTargetTypeAndTenant(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
-	h := &adminHandlers{pool: pool, tenantRepo: tenantpg.NewTenantRepository(pool)}
+	h := &adminHandlers{tenantRepo: tenantpg.NewTenantRepository(pool)}
 
 	if err := h.checkUserBelongsToTenant(ctx, "scope-user", ""); err != nil {
 		t.Fatalf("admin target validation: %v", err)

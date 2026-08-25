@@ -3,7 +3,6 @@
 # Format: <from> -> <to> | owner / removal target | why it still exists
 
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/auth/pg | P1-03 / move identity queries to application services | legacy login and account handlers construct repositories
-xiaodou/dai/internal/transport -> xiaodou/dai/internal/billing/ledger | P1-03 / expose billing query/command ports | one admin balance endpoint calls the ledger directly
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/billing/pg | P1-03 / expose billing application services only | legacy finance/payment-write handlers remain; account query routes use billing ports
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/invite/pg | P1-03 / move invite persistence behind application services | legacy invitation handler constructs a repository
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/payment/pg | P1-03 / move payment persistence behind application services | legacy payment and finance handlers construct repositories
