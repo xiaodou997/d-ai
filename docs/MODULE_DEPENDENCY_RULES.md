@@ -56,7 +56,7 @@ cmd/server (composition root) -> all modules and adapters
 ## 当前历史例外
 
 `internal/ai/transport` 已清零 PostgreSQL、Redis、sqlc 和 adapter 包的直接依赖；
-`internal/transport` 的租户自助、账户查询、管理债务、登录/最近认证主流程、账号唯一性错误映射、公开邀请路径、系统仪表盘查询、账务/支付路径和认证限速已清零对应业务 adapter/基础设施依赖；剩余越界应由新的门禁直接阻止。
+`internal/transport` 的租户自助、账户查询、管理债务、登录/最近认证主流程、账号唯一性错误映射、公开邀请路径、系统仪表盘查询、账务/支付路径和认证限速已清零对应业务 adapter/基础设施依赖；当前例外台账为空，新的越界应由门禁直接阻止。
 并由门禁冻结；新增边缘不会因为“暂时方便”自动获得许可。例外的删除顺序是：
 
 1. P1-02 已将 AI Core 收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps` 最小端口；后续治理 `transport.Deps` 中仍残留的具体业务 service。

@@ -122,7 +122,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 规划 `identity`、`billing`、`catalog`、`runtime`、`operations` 模块责任。
 - [x] 定义每个模块的 `domain`、`application`、`ports`、`adapters` 目标边界。
-- [~] Transport 只依赖 application command/query，不直接访问数据库；当前遗留越界已冻结并登记，P1-03 负责清零。
+- [x] Transport 只依赖 application command/query，不直接访问数据库；业务 adapter 和基础设施直接依赖已由 `cmd/checkdeps` 门禁清零。
 - [~] 禁止模块绕过公开端口写入其他模块表；包级依赖已门禁，数据库角色和表所有权在 P1-07 完成。
 - [x] 使用 `cmd/checkdeps` 依赖检查器并接入 Make/CI，阻止未登记的反向依赖。
 - [x] 在 `docs/MODULE_DEPENDENCY_RULES.md` 和例外台账记录允许的跨模块事务及历史例外。
@@ -172,9 +172,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-03 收敛 HTTP 层业务逻辑
 
 - [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，其余用户/租户/支付域继续按边界逐项迁移。
-- [ ] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射。
-- [ ] 用户、租户、支付、充值、公告和清理逐域迁移。
-- [ ] AI 管理 API 按价格、上游、路由、用量、订阅和风控拆分。
+- [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
+- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，公告与少量 legacy 编排仍待收敛。
+- [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [ ] 将 Transport 层关键路径覆盖率提升到可执行门槛。
 
 ### P1-04 拆分超大 Go 文件和清理兼容遗留
@@ -593,5 +593,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 认证限速基础设施边界：登录、激活、MFA、MFA 确认和最近认证限速器统一由 composition root 通过 `auth.RateLimiters` 构造并注入；Transport 不再导入 `pgxpool`/Redis，也不再暴露 `InfrastructureDeps.Pool/Redis`，未装配时使用 fail-closed 的空客户端限速器。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
-- 遗留风险：`internal/transport` 仍保留管理财务/充值写入路径及认证旧 handler 的 adapter 例外；租户管理读写和 AI identity 已通过 tenant ports 装配，下一切片处理认证旧 handler 与账户写入边界。
-- 下一候选项：P1-03 继续迁移管理财务/充值写入到 billing application command ports，并清理 `billing/pg` 例外。
+- 遗留风险：P1-03 仍有部分 handler 保留黑名单/通知等副作用编排，管理财务与公告/清理路径需要继续抽取 command port；数据库 schema 所有权、统一 capability 授权和浏览器 E2E 尚未建立。
+- 下一候选项：同步完成 P1-02 的运行角色/生命周期装配项后，进入 P1-05 capability/policy 授权模型。
+
+### P1-03（基线同步，2026-08-25）
+
+- 已完成边界：租户品牌、自助、管理读写和 AI identity；账户余额/充值/债务查询；支付订单、充值、退款、提现与补偿状态机；用户/终端用户管理 repository；认证登录、审计、唯一性错误；公开邀请；系统仪表盘查询。
+- 基础设施收敛：Transport 已移除 `auth/pg`、`invite/pg`、`system/pg`、`billing/pg`、`payment/pg`、`pgxpool`、Redis 直接依赖；认证限速器由 composition root 通过 `auth.RateLimiters` 注入。
+- 门禁状态：`go run ./cmd/checkdeps` 报告 dependency direction clean，历史例外台账已清空。
+- 回归状态：相关 auth、tenant、user、invite、system、billing、payment、transport 和 server 测试，以及 `go vet ./...`、`go build ./...`、`bun run ensure:api` 已通过。
+- 剩余范围：Transport 仍需收敛少量黑名单/通知副作用和 legacy 编排；P1-03 的覆盖率门槛尚未定义并接入 CI。
