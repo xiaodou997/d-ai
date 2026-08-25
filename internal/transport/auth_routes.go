@@ -11,7 +11,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
-	authpg "xiaodou/dai/internal/auth/pg"
 	authports "xiaodou/dai/internal/auth/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -211,10 +210,10 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 			EmailSet: emailSet, Email: email,
 		})
 		if err != nil {
-			if authpg.IsUsernameTaken(err) {
+			if errors.Is(err, authports.ErrUsernameTaken) {
 				return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 			}
-			if authpg.IsEmailTaken(err) {
+			if errors.Is(err, authports.ErrEmailTaken) {
 				return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 			}
 			return nil, httpx.ErrInternal.WithCause(err)

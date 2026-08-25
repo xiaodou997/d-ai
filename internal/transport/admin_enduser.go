@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"xiaodou/dai/internal/auth"
-	authpg "xiaodou/dai/internal/auth/pg"
+	authports "xiaodou/dai/internal/auth/ports"
 	billingdomain "xiaodou/dai/internal/billing"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
@@ -213,10 +213,10 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 		ActivationTokenHash: credential.TokenHash,
 		ActivationExpiresAt: credential.ExpiresAt,
 	}); err != nil {
-		if authpg.IsUsernameTaken(err) {
+		if errors.Is(err, authports.ErrUsernameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
-		if authpg.IsEmailTaken(err) {
+		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)

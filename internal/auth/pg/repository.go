@@ -15,12 +15,18 @@ import (
 
 // IsUsernameTaken reports whether err is a unique violation on the normalized username index.
 func IsUsernameTaken(err error) bool {
+	if errors.Is(err, authports.ErrUsernameTaken) {
+		return true
+	}
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_accounts_username_normalized"
 }
 
 // IsEmailTaken reports whether err is a unique violation on the normalized email index.
 func IsEmailTaken(err error) bool {
+	if errors.Is(err, authports.ErrEmailTaken) {
+		return true
+	}
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_accounts_email_normalized"
 }
@@ -163,9 +169,22 @@ func (r *AuthRepository) UpdatePassword(ctx context.Context, userID string, user
 		WHERE user_id = $3 AND user_type = $4 AND status <> 'deleted'
 	`, passwordHash, time.Now().UTC(), userID, userType)
 	if err != nil {
-		return false, err
+		return false, translateAccountConstraint(err)
 	}
 	return tag.RowsAffected() == 1, nil
+}
+
+func translateAccountConstraint(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		switch pgErr.ConstraintName {
+		case "ux_iam_accounts_username_normalized":
+			return authports.ErrUsernameTaken
+		case "ux_iam_accounts_email_normalized":
+			return authports.ErrEmailTaken
+		}
+	}
+	return err
 }
 
 func (r *AuthRepository) UpdateProfile(ctx context.Context, input authports.ProfileUpdate) (bool, error) {
@@ -178,7 +197,7 @@ func (r *AuthRepository) UpdateProfile(ctx context.Context, input authports.Prof
 		WHERE user_id = $6 AND user_type = $7 AND status <> 'deleted'
 	`, input.UsernameSet, input.Username, input.EmailSet, input.Email, time.Now().UTC(), input.UserID, input.UserType)
 	if err != nil {
-		return false, err
+		return false, translateAccountConstraint(err)
 	}
 	return tag.RowsAffected() == 1, nil
 }

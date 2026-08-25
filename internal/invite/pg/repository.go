@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	authports "xiaodou/dai/internal/auth/ports"
 )
 
 var (
@@ -249,7 +251,7 @@ func (r *InviteRepository) RegisterEndUser(ctx context.Context, input EndUserReg
 			INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, email, phone, user_type, status, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, 4, 'active', $7, $7)
 	`, input.UserID, input.TenantID, input.Username, input.PasswordHash, input.Email, input.Phone, now); err != nil {
-		return fmt.Errorf("create end user: %w", err)
+		return fmt.Errorf("create end user: %w", translateAccountConstraint(err))
 	}
 
 	result, err := tx.Exec(ctx, `
@@ -278,6 +280,19 @@ func (r *InviteRepository) RegisterEndUser(ctx context.Context, input EndUserReg
 		return fmt.Errorf("commit end-user registration: %w", err)
 	}
 	return nil
+}
+
+func translateAccountConstraint(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		switch pgErr.ConstraintName {
+		case "ux_iam_accounts_username_normalized":
+			return authports.ErrUsernameTaken
+		case "ux_iam_accounts_email_normalized":
+			return authports.ErrEmailTaken
+		}
+	}
+	return err
 }
 
 func inviteCodeStatusToInt(status string) int {

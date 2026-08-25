@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"xiaodou/dai/internal/auth"
-	authpg "xiaodou/dai/internal/auth/pg"
+	authports "xiaodou/dai/internal/auth/ports"
 	shared "xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/invite/pg"
 
@@ -242,10 +242,10 @@ func (s *InviteService) RegisterUser(ctx context.Context, code, username, passwo
 		if errors.Is(err, pg.ErrInvitationCodeUnavailable) {
 			return nil, ErrInvitationCodeUnavailable
 		}
-		if authpg.IsUsernameTaken(err) {
+		if errors.Is(err, authports.ErrUsernameTaken) {
 			return nil, ErrUsernameExists
 		}
-		if authpg.IsEmailTaken(err) {
+		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, ErrEmailExists
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)

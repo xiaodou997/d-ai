@@ -49,7 +49,7 @@ func (r *AdminEndUserRepository) CreateEndUser(ctx context.Context, input userpo
 		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, phone, internal_note, user_type, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, 'pending_activation', $5, $6, $7, 4, 'active', $8, $8)
 	`, input.UserID, input.TenantID, input.Username, input.PasswordHash, input.Email, input.Phone, input.InternalNote, now); err != nil {
-		return err
+		return translateAccountConstraint(err)
 	}
 	if err := r.activationService.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, auth.ActivationCredential{
 		PasswordHash: input.PasswordHash,
@@ -74,7 +74,7 @@ func (r *AdminEndUserRepository) UpdateEndUser(ctx context.Context, input userpo
 		WHERE user_id = $8 AND tenant_id = $9 AND user_type = 4 AND status <> 'deleted'
 	`, input.EmailSet, input.Email, input.PhoneSet, input.Phone, input.InternalNoteSet, input.InternalNote, time.Now().UTC(), input.UserID, input.TenantID)
 	if err != nil {
-		return false, err
+		return false, translateAccountConstraint(err)
 	}
 	return tag.RowsAffected() == 1, nil
 }

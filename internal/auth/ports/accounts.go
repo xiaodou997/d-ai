@@ -7,6 +7,8 @@ import (
 )
 
 var ErrAccountNotFound = errors.New("account not found")
+var ErrUsernameTaken = errors.New("username already exists")
+var ErrEmailTaken = errors.New("email already exists")
 
 // CurrentUserSnapshot is the non-secret account projection returned by the
 // authenticated /me endpoint.

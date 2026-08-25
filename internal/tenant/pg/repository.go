@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/auth"
+	authports "xiaodou/dai/internal/auth/ports"
 	"xiaodou/dai/internal/billing"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 )
@@ -83,7 +85,7 @@ func (r *TenantRepository) CreateTenant(ctx context.Context, input tenantports.T
 			INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, credential_state, email, user_type, status, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, 'pending_activation', $5, 3, 'active', $6, $6)
 		`, user.UserID, input.TenantID, user.Username, user.PasswordHash, user.Email, now); err != nil {
-			return err
+			return translateAccountConstraint(err)
 		}
 		if err := r.activationStore.Store(ctx, tx, user.UserID, auth.ActivationPurposeAccount, auth.ActivationCredential{
 			PasswordHash: user.PasswordHash,
@@ -94,6 +96,19 @@ func (r *TenantRepository) CreateTenant(ctx context.Context, input tenantports.T
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func translateAccountConstraint(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		switch pgErr.ConstraintName {
+		case "ux_iam_accounts_username_normalized":
+			return authports.ErrUsernameTaken
+		case "ux_iam_accounts_email_normalized":
+			return authports.ErrEmailTaken
+		}
+	}
+	return err
 }
 
 func (r *TenantRepository) UpdateTenant(ctx context.Context, input tenantports.TenantUpdateCommand) (bool, error) {

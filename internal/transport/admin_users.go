@@ -9,7 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"xiaodou/dai/internal/auth"
-	authpg "xiaodou/dai/internal/auth/pg"
+	authports "xiaodou/dai/internal/auth/ports"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
@@ -190,10 +190,10 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 		ActivationTokenHash: credential.TokenHash,
 		ActivationExpiresAt: credential.ExpiresAt,
 	}); err != nil {
-		if authpg.IsUsernameTaken(err) {
+		if errors.Is(err, authports.ErrUsernameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 		}
-		if authpg.IsEmailTaken(err) {
+		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -308,10 +308,10 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 		ActivationTokenHash: credential.TokenHash,
 		ActivationExpiresAt: credential.ExpiresAt,
 	}); err != nil {
-		if authpg.IsUsernameTaken(err) {
+		if errors.Is(err, authports.ErrUsernameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已被占用，请换一个")
 		}
-		if authpg.IsEmailTaken(err) {
+		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)

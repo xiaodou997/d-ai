@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"xiaodou/dai/internal/auth"
-	authpg "xiaodou/dai/internal/auth/pg"
+	authports "xiaodou/dai/internal/auth/ports"
 	util "xiaodou/dai/internal/domain"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
@@ -225,10 +225,10 @@ func (h *adminHandlers) createTenant(ctx context.Context, in *createTenantInput)
 		if errors.Is(err, tenantports.ErrTenantNameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("租户名称已存在")
 		}
-		if authpg.IsUsernameTaken(err) {
+		if errors.Is(err, authports.ErrUsernameTaken) {
 			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
 		}
-		if authpg.IsEmailTaken(err) {
+		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)

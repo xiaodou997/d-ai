@@ -67,7 +67,7 @@ func (r *AdminAccountRepository) create(ctx context.Context, input userports.Adm
 		`, input.UserID, input.TenantID, input.Username, input.PasswordHash, input.Email, now)
 	}
 	if insertErr != nil {
-		return insertErr
+		return translateAccountConstraint(insertErr)
 	}
 	if err := r.activationService.Store(ctx, tx, input.UserID, auth.ActivationPurposeAccount, authActivationCredential(input)); err != nil {
 		return err
@@ -104,7 +104,7 @@ func (r *AdminAccountRepository) UpdateSystemAdmin(ctx context.Context, input us
 		WHERE user_id = $4 AND user_type = 2
 	`, input.Email, input.Status, time.Now().UTC(), input.UserID)
 	if err != nil {
-		return userports.AdminAccountMutationResult{}, err
+		return userports.AdminAccountMutationResult{}, translateAccountConstraint(err)
 	}
 	return userports.AdminAccountMutationResult{Updated: tag.RowsAffected() == 1}, nil
 }
@@ -115,7 +115,7 @@ func (r *AdminAccountRepository) UpdateTenantUserStatus(ctx context.Context, use
 		WHERE user_id = $3 AND user_type = 3
 	`, status, time.Now().UTC(), userID)
 	if err != nil {
-		return false, err
+		return false, translateAccountConstraint(err)
 	}
 	return tag.RowsAffected() == 1, nil
 }
@@ -126,7 +126,7 @@ func (r *AdminAccountRepository) UpdateTenantUser(ctx context.Context, input use
 		WHERE user_id = $4 AND user_type = 3
 	`, input.Email, input.Status, time.Now().UTC(), input.UserID)
 	if err != nil {
-		return false, err
+		return false, translateAccountConstraint(err)
 	}
 	return tag.RowsAffected() == 1, nil
 }
