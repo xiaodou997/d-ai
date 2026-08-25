@@ -7,13 +7,14 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/libs/go/httpx"
 )
 
-// paymentHandlers 承载用户和租户的 USD 在线充值端点。scene 由 userType 决定，
+// paymentHandlers 承载用户和租户的 USD 在线充值端点。scene 由 capability 决定，
 // 不接受调用方指定。
 type paymentHandlers struct {
 	svc *paymentsvc.PaymentService
@@ -36,14 +37,14 @@ func sceneAndScopeFromClaims(ctx context.Context) (scene, tenantID, userID strin
 	if claims == nil {
 		return "", "", "", false
 	}
-	switch claims.UserType {
-	case 4:
-		return payment.SceneUserTopup, claims.TenantID, claims.UserID, true
-	case 3:
-		return payment.SceneTenantTopup, claims.TenantID, "", true
-	default:
-		return "", "", "", false
+	actor := actorFromClaims(claims)
+	if actor.Has(auth.CapabilityCustomerSelf) {
+		return payment.SceneUserTopup, actor.TenantID, actor.UserID, true
 	}
+	if actor.Has(auth.CapabilityTenantSelf) {
+		return payment.SceneTenantTopup, actor.TenantID, "", true
+	}
+	return "", "", "", false
 }
 
 // ---- DTO ----
@@ -149,10 +150,10 @@ func orderToItem(o *payment.Order) topupOrderItem {
 	}
 }
 
-// registerPayment 注册在线充值下单/查单端点（userAuth + requireUserType(3,4)）。
+// registerPayment 注册在线充值下单/查单端点（租户用户或终端用户）。
 func registerPayment(api huma.API, d Deps) {
 	h := newPaymentHandlers(d)
-	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3, 4)}
+	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireAnyCapability(api, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "payment-topup-config", Method: http.MethodGet, Path: "/api/v1/payments/topup-config",
 		Summary: "USD 在线充值配置", Tags: []string{"payment"}, Middlewares: authed}, h.topupConfig)

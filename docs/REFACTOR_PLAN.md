@@ -602,6 +602,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 资源 ownership 迁移：新增 `Actor.CanAccessTenant` / `CanAccessUser`，终端用户管理、租户详情、管理充值目标和用户/租户支付订单访问统一按 actor tenant scope 校验；跨租户和客户越权由领域 helper 测试覆盖。
 - 账户授权迁移：余额、充值记录和账户统计路由改用 capability 组合；租户/终端用户范围覆盖通过 `Actor` 的 tenant/user scope 计算，管理员仍保留显式账户查询能力。
 - 公告/通知授权迁移：公告收件箱、已读操作和通知列表使用全角色 capability，平台公告管理/通知发送使用 `CapabilityPlatformAdmin`，租户公告管理使用 `CapabilityTenantSelf`；handler 通过 `Actor` 组装领域 principal，保留 service 的收件人和发布者 ownership 校验。
+- 自助入口授权迁移：模块状态、租户现金和在线支付入口已改用 `CapabilityPlatformAdmin`、`CapabilityTenantSelf`、`CapabilityCustomerSelf`；支付场景选择也由 actor capability 决定，未授权角色不会进入下单/查单流程。
 - 结算 outbox 生命周期：`billing/outbox.Consumer` 使用独立 worker context，Stop 会停止 claim 新批次并等待当前数据库事务/批次完成；重复 Run/Stop 和停止后启动均安全。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。

@@ -6,6 +6,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/libs/go/httpx"
@@ -62,7 +63,7 @@ type updateTenantPaymentSettingsInput struct {
 // registerTenantCash 注册租户统一额度端点（type=3 限本租户）。
 func registerTenantCash(api huma.API, d Deps) {
 	h := newTenantCashHandlers(d)
-	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3)}
+	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-balance", Method: http.MethodGet, Path: "/api/v1/tenant/balance",
 		Summary: "租户 USD 额度余额", Tags: []string{"tenant-balance"}, Middlewares: tenantOnly}, h.getAccount)

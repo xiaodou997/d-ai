@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/ai/privacy"
+	"xiaodou/dai/internal/auth"
 	systempkg "xiaodou/dai/internal/system"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -53,7 +54,7 @@ type previewPIIConfigOutput struct {
 }
 
 func registerModules(api huma.API, d Deps) {
-	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1, 2)}
+	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-list-modules",
