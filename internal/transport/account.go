@@ -8,6 +8,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingports "xiaodou/dai/internal/billing/ports"
 	"xiaodou/dai/internal/domain"
@@ -63,7 +64,10 @@ type accountStatsOutput struct {
 // registerAccount 注册账户自助端点（RequireAuthenticated：1/2/3/4）。
 func registerAccount(api huma.API, d Deps) {
 	h := newAccountHandlers(d.AccountQueries)
-	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1, 2, 3, 4)}
+	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireAnyCapability(api,
+		auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin,
+		auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf,
+	)}
 
 	huma.Register(api, huma.Operation{OperationID: "account-balance", Method: http.MethodGet, Path: "/api/v1/account/balance",
 		Summary: "账户余额", Tags: []string{"account"}, Middlewares: authed}, h.balance)
@@ -78,12 +82,12 @@ func (h *accountHandlers) balance(ctx context.Context, in *accountBalanceInput) 
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
+	actor := actorFromClaims(claims)
 	packageType, accountID := in.AccountType, in.AccountID
-	switch claims.UserType {
-	case 3:
-		packageType, accountID = 1, claims.TenantID
-	case 4:
-		packageType, accountID = 2, claims.UserID
+	if actor.Has(auth.CapabilityTenantSelf) {
+		packageType, accountID = 1, actor.TenantID
+	} else if actor.Has(auth.CapabilityCustomerSelf) {
+		packageType, accountID = 2, actor.UserID
 	}
 	if accountID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少账户 ID")
@@ -125,11 +129,11 @@ func (h *accountHandlers) rechargeRecords(ctx context.Context, in *rechargeRecor
 		t := time.UnixMilli(in.TimeTo).UTC()
 		timeTo = &t
 	}
-	switch claims.UserType {
-	case 3:
-		tenantID = claims.TenantID
-	case 4:
-		tenantID, userID, orderTypes = claims.TenantID, claims.UserID, billingdomain.UserRechargeOrderTypes
+	actor := actorFromClaims(claims)
+	if actor.Has(auth.CapabilityTenantSelf) {
+		tenantID = actor.TenantID
+	} else if actor.Has(auth.CapabilityCustomerSelf) {
+		tenantID, userID, orderTypes = actor.TenantID, actor.UserID, billingdomain.UserRechargeOrderTypes
 	}
 	page, size := normalizePage(in.Page, in.Size)
 	list, total, err := h.queries.ListRechargeRecords(ctx, billingports.RechargeRecordsQuery{
@@ -147,12 +151,13 @@ func (h *accountHandlers) stats(ctx context.Context, in *accountStatsInput) (*ac
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if claims.UserType == 4 {
+	actor := actorFromClaims(claims)
+	if actor.Has(auth.CapabilityCustomerSelf) {
 		return nil, httpx.ErrForbidden.WithDetail("终端用户不支持查询账户统计")
 	}
 	tenantID := in.AccountID
-	if claims.UserType == 3 {
-		tenantID = claims.TenantID
+	if actor.Has(auth.CapabilityTenantSelf) {
+		tenantID = actor.TenantID
 	}
 	if tenantID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少 accountId 参数")
