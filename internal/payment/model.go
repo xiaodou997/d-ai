@@ -109,6 +109,10 @@ type Order struct {
 	ExpiresAt              time.Time
 	BalanceOrderID         string
 	FailNote               string
+	SweepAttempts          int
+	SweepNextAttemptAt     *time.Time
+	SweepLastAttemptAt     *time.Time
+	SweepLastError         string
 	CreatedAt              time.Time
 	UpdatedAt              time.Time
 }

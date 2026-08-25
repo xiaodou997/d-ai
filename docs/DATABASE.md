@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `16`。
+- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `17`。
 - 初始化脚本只允许在空 PostgreSQL schema 中执行，不能用于覆盖或修复已有数据库。
 - 应用启动只校验 `dai_schema_metadata.version`，不会执行 DDL 或升级 SQL。
 - `internal/db/changes/` 存放首次发布后的人工升级 SQL。
@@ -133,6 +133,18 @@ release/
 
 应用版本与数据库版本不一致时会拒绝启动；它不会自动修复，也不能通过直接修改
 `dai_schema_metadata.version` 跳过升级。
+
+### 支付补偿退避
+
+schema v17 为 `pay_orders` 增加 `sweep_attempts`、`sweep_next_attempt_at`、
+`sweep_last_attempt_at` 和 `sweep_last_error`。支付 provider 或补偿入账失败会按
+1 分钟起步、指数增长、最多 1 小时的退避写入下一次尝试时间；非终态的
+`USERPAYING/NOTPAY` 查单结果使用 5 分钟延后但不增加失败次数。成功入账或关单会清理
+这些字段。这样 scheduler 的 5 分钟任务超时和 advisory lock 只负责单轮执行租约，订单
+重试节奏由数据库持久化，进程重启或副本切换不会把 provider 故障放大为每分钟请求。
+
+升级已有数据库时执行 `internal/db/changes/0017_20260824_payment_sweep_backoff.sql`；
+不要直接修改 schema 版本号跳过该脚本。
 
 ## 统一账号模型
 

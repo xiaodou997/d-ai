@@ -50,15 +50,18 @@ func SetCodeURL(ctx context.Context, pool *pgxpool.Pool, orderID, codeURL string
 // MarkOrderFailed 下单调用微信失败时把订单标记为 closed，附失败备注。
 func MarkOrderFailed(ctx context.Context, pool *pgxpool.Pool, orderID, note string) error {
 	_, err := pool.Exec(ctx, `
-		UPDATE pay_orders SET status = $1, fail_note = $2, updated_at = now() WHERE order_id = $3
+		UPDATE pay_orders SET status = $1, fail_note = $2,
+		       sweep_attempts = 0, sweep_next_attempt_at = NULL,
+		       sweep_last_attempt_at = NULL, sweep_last_error = NULL,
+		       updated_at = now() WHERE order_id = $3
 	`, payment.OrderStatusClosed, note, orderID)
 	return err
 }
 
 func scanOrder(row pgx.Row) (*payment.Order, error) {
 	var o payment.Order
-	var userID, packageID, packageName, packageBadge, codeURL, transactionID, balanceOrderID, failNote *string
-	var paidAt, balanceExpiresAt *time.Time
+	var userID, packageID, packageName, packageBadge, codeURL, transactionID, balanceOrderID, failNote, sweepLastError *string
+	var paidAt, balanceExpiresAt, sweepNextAttemptAt, sweepLastAttemptAt *time.Time
 	err := row.Scan(
 		&o.ID, &o.OrderID, &o.OutTradeNo, &o.Scene, &o.TenantID, &userID,
 		&o.TopupMode, &packageID, &packageName, &packageBadge,
@@ -66,7 +69,8 @@ func scanOrder(row pgx.Row) (*payment.Order, error) {
 		&o.FeeRateBp, &o.FeeAmountMicroUSD, &o.GiftAmountMicroUSD, &o.CreditedAmountMicroUSD,
 		&o.TenantIncomeMicroUSD, &balanceExpiresAt,
 		&o.Channel, &codeURL, &transactionID, &o.Status, &o.FulfillmentStatus, &o.RefundStatus, &paidAt, &o.ExpiresAt,
-		&balanceOrderID, &failNote, &o.CreatedAt, &o.UpdatedAt,
+		&balanceOrderID, &failNote, &o.SweepAttempts, &sweepNextAttemptAt, &sweepLastAttemptAt, &sweepLastError,
+		&o.CreatedAt, &o.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -95,8 +99,13 @@ func scanOrder(row pgx.Row) (*payment.Order, error) {
 	if failNote != nil {
 		o.FailNote = *failNote
 	}
+	if sweepLastError != nil {
+		o.SweepLastError = *sweepLastError
+	}
 	o.PaidAt = paidAt
 	o.BalanceExpiresAt = balanceExpiresAt
+	o.SweepNextAttemptAt = sweepNextAttemptAt
+	o.SweepLastAttemptAt = sweepLastAttemptAt
 	return &o, nil
 }
 
@@ -106,7 +115,8 @@ const orderColumns = `
 	payment_currency, payment_amount_minor, ledger_currency, gross_amount_micro_usd, fee_rate_bp,
 	fee_amount_micro_usd, gift_amount_micro_usd, credited_amount_micro_usd, tenant_income_micro_usd, balance_expires_at,
 	channel, code_url, transaction_id, status, fulfillment_status, refund_status, paid_at, expires_at,
-	balance_order_id, fail_note, created_at, updated_at`
+	balance_order_id, fail_note, sweep_attempts, sweep_next_attempt_at, sweep_last_attempt_at, sweep_last_error,
+	created_at, updated_at`
 
 // GetOrderByID 按 order_id 查询（不加锁，供只读端点使用）。
 func GetOrderByID(ctx context.Context, pool *pgxpool.Pool, orderID string) (*payment.Order, error) {
@@ -129,7 +139,10 @@ func GetOrderByOutTradeNoForUpdate(ctx context.Context, tx pgx.Tx, outTradeNo st
 func MarkPaidTx(ctx context.Context, tx pgx.Tx, orderID, transactionID, balanceOrderID string, notifyRaw []byte) error {
 	_, err := tx.Exec(ctx, `
 		UPDATE pay_orders SET status = $1, fulfillment_status = $2, transaction_id = $3, balance_order_id = $4,
-		       paid_at = now(), notify_raw = $5, updated_at = now()
+		       paid_at = now(), notify_raw = $5,
+		       sweep_attempts = 0, sweep_next_attempt_at = NULL,
+		       sweep_last_attempt_at = NULL, sweep_last_error = NULL,
+		       updated_at = now()
 		WHERE order_id = $6
 	`, payment.OrderStatusPaid, payment.FulfillmentStatusCredited, transactionID, balanceOrderID, notifyRaw, orderID)
 	return err
@@ -138,7 +151,12 @@ func MarkPaidTx(ctx context.Context, tx pgx.Tx, orderID, transactionID, balanceO
 // UpdateStatusTx 事务内更新订单状态（paying/closed/expired），可选写入失败备注。
 func UpdateStatusTx(ctx context.Context, tx pgx.Tx, orderID, status, failNote string, notifyRaw []byte) error {
 	_, err := tx.Exec(ctx, `
-		UPDATE pay_orders SET status = $1, fail_note = NULLIF($2,''), notify_raw = COALESCE($3, notify_raw), updated_at = now()
+		UPDATE pay_orders SET status = $1, fail_note = NULLIF($2,''), notify_raw = COALESCE($3, notify_raw),
+		       sweep_attempts = CASE WHEN $1 IN ('closed', 'paid') THEN 0 ELSE sweep_attempts END,
+		       sweep_next_attempt_at = CASE WHEN $1 IN ('closed', 'paid') THEN NULL ELSE sweep_next_attempt_at END,
+		       sweep_last_attempt_at = CASE WHEN $1 IN ('closed', 'paid') THEN NULL ELSE sweep_last_attempt_at END,
+		       sweep_last_error = CASE WHEN $1 IN ('closed', 'paid') THEN NULL ELSE sweep_last_error END,
+		       updated_at = now()
 		WHERE order_id = $4
 	`, status, failNote, notifyRaw, orderID)
 	return err
@@ -151,9 +169,53 @@ func UpdateStatusTx(ctx context.Context, tx pgx.Tx, orderID, status, failNote st
 func UpdateStatusIfCurrent(ctx context.Context, pool *pgxpool.Pool, orderID, expectedStatus, status, failNote string) (bool, error) {
 	result, err := pool.Exec(ctx, `
 		UPDATE pay_orders
-		SET status = $1, fail_note = NULLIF($2, ''), updated_at = now()
+		SET status = $1, fail_note = NULLIF($2, ''),
+		    sweep_attempts = CASE WHEN $1 IN ('closed', 'paid') THEN 0 ELSE sweep_attempts END,
+		    sweep_next_attempt_at = CASE WHEN $1 IN ('closed', 'paid') THEN NULL ELSE sweep_next_attempt_at END,
+		    sweep_last_attempt_at = CASE WHEN $1 IN ('closed', 'paid') THEN NULL ELSE sweep_last_attempt_at END,
+		    sweep_last_error = CASE WHEN $1 IN ('closed', 'paid') THEN NULL ELSE sweep_last_error END,
+		    updated_at = now()
 		WHERE order_id = $3 AND status = $4
 	`, status, failNote, orderID, expectedStatus)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == 1, nil
+}
+
+// RecordSweepFailureIfCurrent persists a provider/settlement failure and
+// schedules the next attempt only when the order still has the status observed
+// before the external call. The conditional transition prevents a late sweep
+// result from overwriting a concurrent payment callback.
+func RecordSweepFailureIfCurrent(ctx context.Context, pool *pgxpool.Pool, orderID, expectedStatus, status string, nextAttemptAt time.Time, lastError string) (bool, error) {
+	result, err := pool.Exec(ctx, `
+		UPDATE pay_orders
+		SET status = $1,
+		    sweep_attempts = sweep_attempts + 1,
+		    sweep_next_attempt_at = $2,
+		    sweep_last_attempt_at = now(),
+		    sweep_last_error = NULLIF($3, ''),
+		    fail_note = CASE WHEN $1 = 'expired' THEN NULLIF($3, '') ELSE fail_note END,
+		    updated_at = now()
+		WHERE order_id = $4 AND status = $5
+	`, status, nextAttemptAt, lastError, orderID, expectedStatus)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == 1, nil
+}
+
+// ScheduleSweepRetryIfCurrent throttles a non-terminal provider response
+// (for example USERPAYING) without counting it as a failure.
+func ScheduleSweepRetryIfCurrent(ctx context.Context, pool *pgxpool.Pool, orderID, expectedStatus string, nextAttemptAt time.Time) (bool, error) {
+	result, err := pool.Exec(ctx, `
+		UPDATE pay_orders
+		SET sweep_next_attempt_at = $1,
+		    sweep_last_attempt_at = now(),
+		    sweep_last_error = NULL,
+		    updated_at = now()
+		WHERE order_id = $2 AND status = $3
+	`, nextAttemptAt, orderID, expectedStatus)
 	if err != nil {
 		return false, err
 	}
@@ -213,10 +275,13 @@ func DeleteStaleClosedOrders(ctx context.Context, pool *pgxpool.Pool, before tim
 // 是为了让"Close 失败→标记 expired"之后仍能被下一轮 sweep 重新 Query+Close（设计文档 §4.5
 // "失败置 expired，下轮重试关单"）——若不重新纳入候选集，Close 失败会让订单永久停在 expired，
 // 即便用户其实已经支付成功（Query 瞬时错误导致误判为未支付）也再无重试机会。
+// sweep_next_attempt_at makes provider failures durable across scheduler
+// cycles and process restarts instead of retrying every minute forever.
 func ListSweepCandidates(ctx context.Context, pool *pgxpool.Pool, now time.Time, limit int) ([]*payment.Order, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT `+orderColumns+` FROM pay_orders
 		WHERE status IN ($1, $2, $3) AND expires_at < $4
+		  AND (sweep_next_attempt_at IS NULL OR sweep_next_attempt_at <= $4)
 		ORDER BY expires_at ASC LIMIT $5
 	`, payment.OrderStatusCreated, payment.OrderStatusPaying, payment.OrderStatusExpired, now, limit)
 	if err != nil {
@@ -242,6 +307,7 @@ func ListInFlightCandidates(ctx context.Context, pool *pgxpool.Pool, createdBefo
 	rows, err := pool.Query(ctx, `
 		SELECT `+orderColumns+` FROM pay_orders
 		WHERE status IN ($1, $2) AND created_at < $3 AND expires_at > $4
+		  AND (sweep_next_attempt_at IS NULL OR sweep_next_attempt_at <= $4)
 		ORDER BY created_at ASC LIMIT $5
 	`, payment.OrderStatusCreated, payment.OrderStatusPaying, createdBefore, now, limit)
 	if err != nil {

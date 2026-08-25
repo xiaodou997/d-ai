@@ -61,9 +61,11 @@ httpServers.Start / Shutdown
 - 管理支付订单与统一充值列表/详情查询通过 `PaymentService` application API 暴露，Transport 不再 import `payment/pg` 或传递 adapter 查询参数。
 - 管理充值同步、手动额度冲正和在线退款入口统一由 `PaymentService` 校验订单类型/状态并编排动作，Transport 不再先读投影再自行决定状态机分支。
 - 支付 sweep 的 `closed/expired` 迁移使用 `UpdateStatusIfCurrent` 乐观状态条件，外部支付调用返回后不会覆盖并发回调已提交的 `paid` 状态。
+- 支付 sweep 的 provider/入账失败写入 `pay_orders.sweep_attempts`、`sweep_last_error` 和 `sweep_next_attempt_at`；指数退避上限 1 小时，重启和多副本不会恢复成每分钟重试。
+- 支付 sweep 对 `USERPAYING/NOTPAY` 结果只更新下次查单时间，不虚增失败次数；入账成功或关单会清空重试状态，过期订单仍由状态条件更新保护。
 - 提现列表通过 `PaymentService.ListWithdrawals` 接收 `WithdrawalListParams`，由 application 层归一化租户/状态/分页并拒绝未知状态，Transport 不再传递裸查询参数。
 - 支付 cleanup 失败通过 `error` 返回 Scheduler 统一记录；Scheduler 的后台任务启动/停止具备幂等保护、等待语义，JWT 退役初始延迟可被停止信号中断。
-- Scheduler 通过 `/health` 暴露四类后台任务的运行中、最近成功/失败、连续失败和跨副本锁跳过快照；支付 sweep 将单轮错误回传，按下一周期自动重试。
+- Scheduler 通过 `/health` 暴露四类后台任务的运行中、最近成功/失败、连续失败和跨副本锁跳过快照；支付 sweep 将单轮错误回传，订单级退避状态负责跨周期/重启重试，`sweep_last_error` 可用于故障告警与人工对账。
 - JWT 密钥退役使用带超时的数据库更新；即使某个副本 UPDATE 影响 0 行，也会重新加载 active/grace 集合，及时清除其他副本已退役的本地公钥缓存。
 - LiteLLM 价格导入与常用模型同步按价格表单事务批量执行，价格表行锁串行化同一价格表的副本写入；相同快照只在实际变化时 bump revision，失败整批回滚后可安全重试，手工条目仍受保护。
 - 数据清理运行记录持有 owner、heartbeat 和 lease_until；清理 worker 续租失败会主动取消，终态写入必须匹配 owner，过期租约可被其他副本回收，避免长任务误完成或永久占用活动槽位。

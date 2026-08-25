@@ -32,6 +32,11 @@ const (
 	// investigation and reconciliation before physical cleanup.
 	ClosedOrderRetention    = 30 * 24 * time.Hour
 	closedOrderCleanupBatch = 500
+
+	sweepFailureRetryBase  = time.Minute
+	sweepFailureRetryMax   = time.Hour
+	sweepPendingRetryDelay = 5 * time.Minute
+	sweepErrorMessageLimit = 2048
 )
 
 // PaymentService 是 payment 域的唯一编排入口。
@@ -465,22 +470,31 @@ func (s *PaymentService) sweepExpiredOrder(ctx context.Context, o *payment.Order
 	result, queryErr := s.gateway.Query(ctx, o.OutTradeNo)
 	if queryErr == nil && result != nil && result.TradeState == wechat.TradeStateSuccess {
 		if err := s.Settle(ctx, o.OutTradeNo, result, nil); err != nil {
-			return fmt.Errorf("补偿入账: %w", err)
+			cause := fmt.Errorf("补偿入账: %w", err)
+			updated, recordErr := s.recordSweepFailure(ctx, o, o.Status, cause)
+			if recordErr != nil {
+				return errors.Join(cause, fmt.Errorf("记录 sweep 失败: %w", recordErr))
+			}
+			if !updated {
+				return nil
+			}
+			return cause
 		}
 		return nil
 	}
 	if closeErr := s.gateway.Close(ctx, o.OutTradeNo); closeErr != nil {
-		updated, err := paymentpg.UpdateStatusIfCurrent(ctx, s.pool, o.OrderID, o.Status, payment.OrderStatusExpired, closeErr.Error())
+		cause := closeErr
+		if queryErr != nil {
+			cause = errors.Join(queryErr, closeErr)
+		}
+		updated, err := s.recordSweepFailure(ctx, o, payment.OrderStatusExpired, cause)
 		if err != nil {
-			return fmt.Errorf("标记订单 expired: %w", err)
+			return fmt.Errorf("记录订单 sweep 失败: %w", err)
 		}
 		if !updated {
 			return nil
 		}
-		if queryErr != nil {
-			return errors.Join(queryErr, closeErr)
-		}
-		return closeErr
+		return cause
 	}
 	updated, err := paymentpg.UpdateStatusIfCurrent(ctx, s.pool, o.OrderID, o.Status, payment.OrderStatusClosed, "")
 	if err != nil {
@@ -495,15 +509,69 @@ func (s *PaymentService) sweepExpiredOrder(ctx context.Context, o *payment.Order
 func (s *PaymentService) sweepInFlightOrder(ctx context.Context, o *payment.Order) error {
 	result, err := s.gateway.Query(ctx, o.OutTradeNo)
 	if err != nil {
-		return fmt.Errorf("查询支付状态: %w", err)
+		cause := fmt.Errorf("查询支付状态: %w", err)
+		updated, recordErr := s.recordSweepFailure(ctx, o, o.Status, cause)
+		if recordErr != nil {
+			return errors.Join(cause, fmt.Errorf("记录 sweep 失败: %w", recordErr))
+		}
+		if !updated {
+			return nil
+		}
+		return cause
 	}
 	if result == nil || result.TradeState != wechat.TradeStateSuccess {
+		updated, scheduleErr := s.scheduleSweepRetry(ctx, o)
+		if scheduleErr != nil {
+			return fmt.Errorf("安排下次支付查单失败: %w", scheduleErr)
+		}
+		if !updated {
+			return nil
+		}
 		return nil
 	}
 	if err := s.Settle(ctx, o.OutTradeNo, result, nil); err != nil {
-		return fmt.Errorf("补偿入账: %w", err)
+		cause := fmt.Errorf("补偿入账: %w", err)
+		updated, recordErr := s.recordSweepFailure(ctx, o, o.Status, cause)
+		if recordErr != nil {
+			return errors.Join(cause, fmt.Errorf("记录 sweep 失败: %w", recordErr))
+		}
+		if !updated {
+			return nil
+		}
+		return cause
 	}
 	return nil
+}
+
+func (s *PaymentService) recordSweepFailure(ctx context.Context, o *payment.Order, nextStatus string, cause error) (bool, error) {
+	attempt := o.SweepAttempts + 1
+	nextAttemptAt := billingdomain.NowUTC().Add(sweepFailureRetryDelay(attempt))
+	return paymentpg.RecordSweepFailureIfCurrent(
+		ctx, s.pool, o.OrderID, o.Status, nextStatus, nextAttemptAt,
+		truncateForAudit(strings.TrimSpace(cause.Error()), sweepErrorMessageLimit),
+	)
+}
+
+func (s *PaymentService) scheduleSweepRetry(ctx context.Context, o *payment.Order) (bool, error) {
+	nextAttemptAt := billingdomain.NowUTC().Add(sweepPendingRetryDelay)
+	return paymentpg.ScheduleSweepRetryIfCurrent(ctx, s.pool, o.OrderID, o.Status, nextAttemptAt)
+}
+
+func sweepFailureRetryDelay(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	delay := sweepFailureRetryBase
+	for i := 1; i < attempt && delay < sweepFailureRetryMax; i++ {
+		if delay > sweepFailureRetryMax/2 {
+			return sweepFailureRetryMax
+		}
+		delay *= 2
+	}
+	if delay > sweepFailureRetryMax {
+		return sweepFailureRetryMax
+	}
+	return delay
 }
 
 // ==================== 提现 ====================

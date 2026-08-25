@@ -366,6 +366,10 @@ CREATE TABLE pay_orders (
     expires_at TIMESTAMPTZ NOT NULL,
     balance_order_id TEXT,
     fail_note TEXT,
+    sweep_attempts INTEGER NOT NULL DEFAULT 0 CHECK (sweep_attempts >= 0),
+    sweep_next_attempt_at TIMESTAMPTZ,
+    sweep_last_attempt_at TIMESTAMPTZ,
+    sweep_last_error TEXT,
     notify_raw JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -395,7 +399,9 @@ CREATE INDEX idx_bill_recharge_orders_payment_order ON bill_recharge_orders (pay
     WHERE payment_order_id IS NOT NULL;
 
 CREATE UNIQUE INDEX uq_pay_orders_txn ON pay_orders (transaction_id) WHERE transaction_id IS NOT NULL;
-CREATE INDEX idx_pay_orders_sweep ON pay_orders (status, expires_at) WHERE status IN ('created', 'paying');
+CREATE INDEX idx_pay_orders_sweep
+    ON pay_orders (status, sweep_next_attempt_at, expires_at)
+    WHERE status IN ('created', 'paying', 'expired');
 CREATE INDEX idx_pay_orders_closed_cleanup ON pay_orders (updated_at)
     WHERE status = 'closed' AND fulfillment_status = 'pending';
 CREATE INDEX idx_pay_orders_tenant ON pay_orders (tenant_id, created_at DESC);
@@ -2283,6 +2289,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 16);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 17);
 
 COMMIT;

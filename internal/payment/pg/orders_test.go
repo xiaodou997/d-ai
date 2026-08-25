@@ -95,3 +95,69 @@ func TestUpdateStatusIfCurrentDoesNotOverwriteConcurrentPaidTransition(t *testin
 		t.Fatalf("stale sweep transition changed order to %s/%q", status, failNote)
 	}
 }
+
+func TestSweepRetryStatePersistsBackoffAndFencesStaleResults(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("payment test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	orderID := "PAY_SWEEP_BACKOFF_" + suffix
+	if err := paymentpg.InsertOrder(ctx, pool, &payment.Order{
+		OrderID: orderID, OutTradeNo: "OUT_SWEEP_BACKOFF_" + suffix, Scene: payment.SceneTenantTopup,
+		TenantID: "tenant-sweep-backoff", TopupMode: "custom", PaymentCurrency: money.CurrencyUSD,
+		PaymentAmountMinor: 100, LedgerCurrency: money.CurrencyUSD, GrossAmountMicroUSD: 1_000_000,
+		CreditedAmountMicroUSD: 1_000_000, Channel: "wechat_native", Status: payment.OrderStatusCreated,
+		ExpiresAt: time.Now().UTC().Add(-time.Minute),
+	}); err != nil {
+		t.Fatalf("seed sweep backoff order: %v", err)
+	}
+
+	now := time.Now().UTC()
+	next := now.Add(10 * time.Minute)
+	updated, err := paymentpg.RecordSweepFailureIfCurrent(ctx, pool, orderID, payment.OrderStatusCreated, payment.OrderStatusExpired, next, "wechat unavailable")
+	if err != nil || !updated {
+		t.Fatalf("record sweep failure = updated:%v err:%v", updated, err)
+	}
+	order, err := paymentpg.GetOrderByID(ctx, pool, orderID)
+	if err != nil {
+		t.Fatalf("read sweep backoff order: %v", err)
+	}
+	if order.Status != payment.OrderStatusExpired || order.SweepAttempts != 1 || order.SweepNextAttemptAt == nil || order.SweepLastAttemptAt == nil || order.SweepLastError != "wechat unavailable" {
+		t.Fatalf("sweep retry state = status:%s attempts:%d next:%v last:%v error:%q", order.Status, order.SweepAttempts, order.SweepNextAttemptAt, order.SweepLastAttemptAt, order.SweepLastError)
+	}
+
+	candidates, err := paymentpg.ListSweepCandidates(ctx, pool, now, 10)
+	if err != nil {
+		t.Fatalf("list deferred sweep candidates: %v", err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("deferred candidates = %d, want 0", len(candidates))
+	}
+	candidates, err = paymentpg.ListSweepCandidates(ctx, pool, next.Add(time.Second), 10)
+	if err != nil {
+		t.Fatalf("list due sweep candidates: %v", err)
+	}
+	if len(candidates) != 1 || candidates[0].SweepAttempts != 1 {
+		t.Fatalf("due candidates = %+v, want one attempt 1", candidates)
+	}
+
+	updated, err = paymentpg.RecordSweepFailureIfCurrent(ctx, pool, orderID, payment.OrderStatusCreated, payment.OrderStatusExpired, next.Add(time.Hour), "stale result")
+	if err != nil || updated {
+		t.Fatalf("stale sweep failure = updated:%v err:%v", updated, err)
+	}
+	updated, err = paymentpg.UpdateStatusIfCurrent(ctx, pool, orderID, payment.OrderStatusExpired, payment.OrderStatusClosed, "")
+	if err != nil || !updated {
+		t.Fatalf("close retry order = updated:%v err:%v", updated, err)
+	}
+	order, err = paymentpg.GetOrderByID(ctx, pool, orderID)
+	if err != nil {
+		t.Fatalf("read closed sweep order: %v", err)
+	}
+	if order.SweepAttempts != 0 || order.SweepNextAttemptAt != nil || order.SweepLastAttemptAt != nil || order.SweepLastError != "" {
+		t.Fatalf("closed order retained retry state = %+v", order)
+	}
+}
