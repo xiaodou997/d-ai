@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -168,11 +167,47 @@ func requireUserType(api huma.API, allowed ...int) func(huma.Context, func(huma.
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
 			return
 		}
-		if slices.Contains(allowed, claims.UserType) {
+		for _, userType := range allowed {
+			if claims.UserType == userType {
+				next(ctx)
+				return
+			}
+		}
+		_ = huma.WriteErr(api, ctx, http.StatusForbidden, "权限不足")
+	}
+}
+
+// requireCapability enforces a normalized backend capability while retaining
+// requireUserType for routes whose legacy contract intentionally distinguishes
+// super-admin from platform-admin.
+func requireCapability(api huma.API, capability auth.Capability) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		claims, ok := ctx.Context().Value(userClaimsCtxKey).(*auth.Claims)
+		if !ok || claims == nil {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
+			return
+		}
+		actor := auth.Actor{UserID: claims.UserID, TenantID: claims.TenantID, UserType: claims.UserType}
+		if actor.Has(capability) {
 			next(ctx)
 			return
 		}
 		_ = huma.WriteErr(api, ctx, http.StatusForbidden, "权限不足")
+	}
+}
+
+func capabilityForUserType(userType int) auth.Capability {
+	switch userType {
+	case 1:
+		return auth.CapabilitySuperAdmin
+	case 2:
+		return auth.CapabilityPlatformAdmin
+	case 3:
+		return auth.CapabilityTenantSelf
+	case 4:
+		return auth.CapabilityCustomerSelf
+	default:
+		return "unknown"
 	}
 }
 

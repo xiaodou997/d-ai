@@ -189,6 +189,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-05 强化授权模型
 
 - [ ] 将散落的 `userType` 判断集中为后端 capability/policy 授权。
+- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已建立 `auth.Actor` / `Capability` 和 `requireCapability`，租户自助与品牌端点已迁移，管理、支付和客户端点仍待迁移。
 - [ ] Portal 菜单 capability 只用于展示，后端始终执行最终授权。
 - [ ] 建立 actor、tenant scope、resource ownership 的统一类型。
 - [ ] 为 312 个 OpenAPI operation 生成或维护授权矩阵。
@@ -596,6 +597,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - AI worker 生命周期：`riskcontrol.Worker` 由 `aiModules` 持有独立 worker context，支持幂等 Start/Stop、停止后不再启动，并在 Stop 时等待 moderation worker 退出；空装配 `Start(nil)` 保持兼容。
 - 审计 worker 生命周期：`audit.Worker` 使用独立 worker context，Stop 会取消轮询并等待当前 delivery 完成 Complete 或 Retry，避免 shutdown 时遗留已领取但未处理的 inbox lease。
 - OAuth 刷新 worker 生命周期：`tokenrefresh.Refresher` 使用独立 worker context，Stop 会取消刷新请求并等待当前 provider 调用与凭证持久化完成；重复 Start/Stop 和停止后启动均安全。
+- 授权模型基础：新增 `auth.Actor`、`auth.Capability` 和 Transport `requireCapability`，统一表达角色与 tenant scope；租户自助/品牌读写已改用 capability，保留 `requireUserType` 兼容未迁移路由。
 - 结算 outbox 生命周期：`billing/outbox.Consumer` 使用独立 worker context，Stop 会停止 claim 新批次并等待当前数据库事务/批次完成；重复 Run/Stop 和停止后启动均安全。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。

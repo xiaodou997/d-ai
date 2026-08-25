@@ -10,6 +10,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/internal/weborigin"
 	"xiaodou/dai/libs/go/httpx"
@@ -125,7 +126,7 @@ type userConsumptionOutput struct {
 // registerTenantSelf 注册租户自助端点（requireUserType(3)）。
 func registerTenantSelf(api huma.API, d Deps) {
 	h := newTenantSelfHandlers(d.TenantSelf)
-	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3)}
+	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",
 		Summary: "当前租户用户信息", Tags: []string{"tenant-self"}, Middlewares: tenantOnly}, h.me)

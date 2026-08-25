@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 
+	"xiaodou/dai/internal/auth"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -66,8 +67,8 @@ type updateTenantFaviconInput struct {
 func registerTenantBranding(api huma.API, d Deps) {
 	h := newTenantBrandingHandlers(d.TenantBrandingReader, d.TenantBrandingWriter)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	tenantOnly := huma.Middlewares{ua, requireUserType(api, 3)}
-	customerOnly := huma.Middlewares{ua, requireUserType(api, 4)}
+	tenantOnly := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf)}
+	customerOnly := huma.Middlewares{ua, requireCapability(api, auth.CapabilityCustomerSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-get-branding", Method: http.MethodGet, Path: "/api/v1/tenant/branding",
 		Summary: "当前租户名称与用户门户品牌", Tags: []string{"tenant-branding"}, Middlewares: tenantOnly}, h.getTenantBranding)
