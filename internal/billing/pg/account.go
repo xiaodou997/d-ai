@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/billing"
 	"xiaodou/dai/internal/billing/ledger"
+	billingports "xiaodou/dai/internal/billing/ports"
 	"xiaodou/dai/internal/domain"
 )
 
@@ -16,32 +17,16 @@ type AccountRepository struct {
 	pool *pgxpool.Pool
 }
 
+var _ billingports.AccountQueryReader = (*AccountRepository)(nil)
+
 func NewAccountRepository(pool *pgxpool.Pool) *AccountRepository {
 	return &AccountRepository{pool: pool}
 }
 
-// BalanceResponse 账户余额响应
-type BalanceResponse struct {
-	Currency                string              `json:"currency"`
-	TotalUSD                float64             `json:"totalUsd"`
-	UsedUSD                 float64             `json:"usedUsd"`
-	RemainingUSD            float64             `json:"remainingUsd"`
-	AvailableUSD            float64             `json:"availableUsd"`
-	PermanentUSD            float64             `json:"permanentUsd"`
-	TimedUSD                float64             `json:"timedUsd"`
-	OutstandingDebtMicroUSD int64               `json:"outstandingDebtMicroUsd"`
-	ServiceState            string              `json:"serviceState"`
-	BalanceLots             []AccountBalanceLot `json:"balanceLots,omitempty"`
-}
-
-type AccountBalanceLot struct {
-	BalanceLotID string     `json:"balanceLotId"`
-	TotalUSD     float64    `json:"totalUsd"`
-	RemainingUSD float64    `json:"remainingUsd"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
-	Source       string     `json:"source"`
-}
+// BalanceResponse and AccountBalanceLot remain adapter-level aliases for
+// compatibility. New callers should use billing/ports projections.
+type BalanceResponse = billingports.BalanceResponse
+type AccountBalanceLot = billingports.AccountBalanceLot
 
 func (r *AccountRepository) listBalanceLots(ctx context.Context, accountID string) ([]AccountBalanceLot, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -72,12 +57,12 @@ func (r *AccountRepository) listBalanceLots(ctx context.Context, accountID strin
 	return list, rows.Err()
 }
 
-func (r *AccountRepository) GetTenantBalance(tenantID string, detail bool) (*BalanceResponse, error) {
-	return r.getBalance(ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID}, detail)
+func (r *AccountRepository) GetTenantBalance(ctx context.Context, tenantID string, detail bool) (*BalanceResponse, error) {
+	return r.getBalance(ctx, ledger.Ref{Kind: ledger.KindTenant, ID: tenantID, TenantID: tenantID}, detail)
 }
 
-func (r *AccountRepository) GetUserBalance(userID string, detail bool) (*BalanceResponse, error) {
-	return r.getBalance(ledger.Ref{Kind: ledger.KindUser, ID: userID}, detail)
+func (r *AccountRepository) GetUserBalance(ctx context.Context, userID string, detail bool) (*BalanceResponse, error) {
+	return r.getBalance(ctx, ledger.Ref{Kind: ledger.KindUser, ID: userID}, detail)
 }
 
 // getBalance projects the account's signed balance onto the response shape the
@@ -88,9 +73,7 @@ func (r *AccountRepository) GetUserBalance(userID string, detail bool) (*Balance
 // stored columns that could disagree: exactly one of them is non-zero. Lot
 // totals are attribution only — the balance is what the admission gate reads,
 // and it is read here through the same function the gate uses.
-func (r *AccountRepository) getBalance(ref ledger.Ref, detail bool) (*BalanceResponse, error) {
-	ctx := context.Background()
-
+func (r *AccountRepository) getBalance(ctx context.Context, ref ledger.Ref, detail bool) (*BalanceResponse, error) {
 	balance, err := ledger.Balance(ctx, r.pool, ref)
 	if err != nil {
 		if errors.Is(err, ledger.ErrAccountNotFound) {
@@ -144,32 +127,11 @@ func AccountServiceState(balanceMicro int64) string {
 	return "blocked_debt"
 }
 
-// RechargeRecordRow 充值记录行
-type RechargeRecordRow struct {
-	OrderID         string  `json:"orderId"`
-	OrderType       string  `json:"orderType"`
-	PaidAmountMinor int64   `json:"paidAmountMinor"`
-	AmountUSD       float64 `json:"amountUsd"`
-	Status          string  `json:"status"`
-	Note            string  `json:"note"`
-	UserID          string  `json:"userId"`
-	Username        string  `json:"username"`
-	TenantName      string  `json:"tenantName"`
-	CreatedTime     *int64  `json:"createdTime"`
-}
+// RechargeRecordRow and AccountStatsResult remain adapter-level aliases for
+// compatibility. New callers should use billing/ports projections.
+type RechargeRecordRow = billingports.RechargeRecordRow
 
-func (r *AccountRepository) ListRechargeRecords(
-	tenantID string,
-	userID string,
-	tenantName string,
-	username string,
-	orderTypes []string,
-	timeFrom *time.Time,
-	timeTo *time.Time,
-	page int,
-	size int,
-) ([]RechargeRecordRow, int64, error) {
-	ctx := context.Background()
+func (r *AccountRepository) ListRechargeRecords(ctx context.Context, query billingports.RechargeRecordsQuery) ([]RechargeRecordRow, int64, error) {
 
 	base := `
 		FROM bill_recharge_orders r
@@ -180,39 +142,39 @@ func (r *AccountRepository) ListRechargeRecords(
 	var args []any
 	argIdx := 1
 
-	if tenantID != "" {
+	if query.TenantID != "" {
 		base += fmt.Sprintf(" AND r.tenant_id = $%d", argIdx)
-		args = append(args, tenantID)
+		args = append(args, query.TenantID)
 		argIdx++
 	}
-	if userID != "" {
+	if query.UserID != "" {
 		base += fmt.Sprintf(" AND r.user_id = $%d", argIdx)
-		args = append(args, userID)
+		args = append(args, query.UserID)
 		argIdx++
 	}
-	if len(orderTypes) > 0 {
+	if len(query.OrderTypes) > 0 {
 		base += fmt.Sprintf(" AND r.order_type = ANY($%d)", argIdx)
-		args = append(args, orderTypes)
+		args = append(args, query.OrderTypes)
 		argIdx++
 	}
-	if tenantName != "" {
+	if query.TenantName != "" {
 		base += fmt.Sprintf(" AND t.tenant_name LIKE $%d", argIdx)
-		args = append(args, "%"+tenantName+"%")
+		args = append(args, "%"+query.TenantName+"%")
 		argIdx++
 	}
-	if username != "" {
+	if query.Username != "" {
 		base += fmt.Sprintf(" AND eu.username LIKE $%d", argIdx)
-		args = append(args, "%"+username+"%")
+		args = append(args, "%"+query.Username+"%")
 		argIdx++
 	}
-	if timeFrom != nil {
+	if query.TimeFrom != nil {
 		base += fmt.Sprintf(" AND r.created_at >= $%d", argIdx)
-		args = append(args, *timeFrom)
+		args = append(args, *query.TimeFrom)
 		argIdx++
 	}
-	if timeTo != nil {
+	if query.TimeTo != nil {
 		base += fmt.Sprintf(" AND r.created_at < $%d", argIdx)
-		args = append(args, *timeTo)
+		args = append(args, *query.TimeTo)
 		argIdx++
 	}
 
@@ -227,7 +189,7 @@ func (r *AccountRepository) ListRechargeRecords(
 		argIdx, argIdx+1,
 	)
 
-	queryArgs := append(args, int32(size), int32((page-1)*size))
+	queryArgs := append(args, int32(query.Size), int32((query.Page-1)*query.Size))
 	rows, err := r.pool.Query(ctx, selectSQL, queryArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("查询充值记录失败: %w", err)
@@ -253,15 +215,10 @@ func (r *AccountRepository) ListRechargeRecords(
 	return list, total, nil
 }
 
-// AccountStatsResult 账户统计结果
-type AccountStatsResult struct {
-	EndUserCount     int64   `json:"endUserCount"`
-	InviteCodeCount  int64   `json:"inviteCodeCount"`
-	UserDeductionUSD float64 `json:"userDeductionUsd"`
-}
+// AccountStatsResult remains an adapter-level alias for compatibility.
+type AccountStatsResult = billingports.AccountStatsResult
 
-func (r *AccountRepository) GetAccountStats(tenantID string) (*AccountStatsResult, error) {
-	ctx := context.Background()
+func (r *AccountRepository) GetAccountStats(ctx context.Context, tenantID string) (*AccountStatsResult, error) {
 	var result AccountStatsResult
 	var userDeductionMicro int64
 	err := r.pool.QueryRow(ctx, `

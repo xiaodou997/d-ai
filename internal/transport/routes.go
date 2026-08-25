@@ -12,6 +12,7 @@ import (
 	announcementpkg "xiaodou/dai/internal/announcement"
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
+	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/config"
@@ -74,9 +75,10 @@ type IdentityDeps struct {
 
 // BillingDeps contains payment and balance application services.
 type BillingDeps struct {
-	Deduction *billingsvc.DeductionService
-	Recharge  *billingsvc.RechargeService
-	Payment   *paymentsvc.PaymentService
+	AccountQueries billingports.AccountQueryReader
+	Deduction      *billingsvc.DeductionService
+	Recharge       *billingsvc.RechargeService
+	Payment        *paymentsvc.PaymentService
 }
 
 // OperationsDeps contains platform operations, notification and cleanup

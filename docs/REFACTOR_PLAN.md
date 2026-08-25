@@ -502,6 +502,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 认证审计读取边界：`/api/v1/auth-audit-logs` 通过 `auth/ports.AuthAuditLogReader` 调用 `AuthRepository.ListAuthAuditLogs`；过滤、计数、分页和稳定排序不再由 Transport 拼接 SQL。
 - 租户门户品牌边界：门户名称、站点名称和 favicon 读写统一通过 `tenant/ports.PortalBrandingReader` / `PortalBrandingWriter`；PostgreSQL 事务、租户名称唯一约束和二进制投影留在 `tenant/pg`，Huma 与原生 favicon Transport 不再依赖 `pgxpool` 或 `tenant/pg`。
 - 租户自助边界：当前租户用户、邀请码 CRUD 和三类租户分析统一通过 `tenant/ports.TenantSelfService`；`tenant.SelfService` 负责邀请码生成与唯一冲突重试，Transport 不再构造 `TenantRepo` 或识别数据库错误。
+- 账户查询边界：账户余额、充值记录和账户统计统一通过 `billing/ports.AccountQueryReader` 与 `billing/service.AccountQueryService`；余额/充值查询使用请求 context，Transport 不再构造 `billing/pg.AccountRepository`。
 - 充值目标边界：管理充值的租户存在和终端用户归属前置校验复用 `TenantRepository`；账务事务中的用户 `FOR UPDATE` 校验保持在充值工作流内，避免跨连接破坏资金一致性。
 - 反向充值边界：租户用户的 `tenant_id` / `order_type` 校验已移入 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只选择 scoped/unscoped port 并映射领域错误。
 - 充值生命周期边界：人工充值改由 `RechargeService.GrantManual` 持有事务并调用 `TenantRepository.LockManualRechargeTarget`；`GrantBalance` 仅作为支付结算复用的外部事务原语。
@@ -577,6 +578,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 租户自助边界：新增 `tenant.SelfService` 应用服务和 `TenantSelfService` 端口，聚合当前用户、邀请码 CRUD、租户概览、应用消耗和用户排行查询；邀请生成/唯一冲突重试从 Handler 移入应用层，持久化 adapter 仅翻译唯一约束。
 - HTTP：租户自助路由只依赖 `TenantSelfService`，邀请码注册 URL 作为 Transport DTO 投影生成；认证、claims 租户范围和错误映射保留在 HTTP 层。
 - 回归：新增应用服务冲突重试/非冲突失败/能力缺失测试、Transport 端口注入与租户范围命令测试，以及唯一约束翻译测试。
-- 验证：`go test ./internal/transport ./internal/tenant/... ./cmd/server`、`go test ./internal/transport -run 'TestTenantSelf'` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
-- 遗留风险：`internal/transport` 仍保留账户余额、充值和部分旧管理 handler 的 adapter 例外；AI identity 和管理租户路由仍通过独立旧 adapter，后续继续拆分最小读端口。
-- 下一候选项：P1-03 迁移账户余额/充值查询到 billing application/query ports，再清理剩余 `billing/pg` 直接构造。
+- 账户查询边界：新增 `billing/ports.AccountQueryReader` 与 `billing/service.AccountQueryService`，余额、充值记录和统计查询统一经过应用读端口；充值筛选参数收敛为 `RechargeRecordsQuery`，分页归一化由 application service 负责。
+- 基础设施边界：`billing/pg.AccountRepository` 实现账户查询端口，保留账本余额投影和 SQL JOIN；所有查询改为接收请求 context，不再隐式创建 `context.Background()`。
+- HTTP：账户余额、充值记录和账户统计路由只依赖 `AccountQueryReader`，Transport 保留用户类型范围、DTO 时间转换和领域错误映射。
+- 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
+- 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
+- 遗留风险：`internal/transport` 仍保留管理财务/充值写入路径的 billing adapter 例外；下一切片处理认证旧 handler 与账户写入边界。
+- 下一候选项：P1-03 迁移剩余管理财务/充值查询与写入到 billing application command/query ports，再清理 `billing/pg` 例外。

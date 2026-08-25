@@ -14,6 +14,7 @@ import (
 	announcementpg "xiaodou/dai/internal/announcement/pg"
 	"xiaodou/dai/internal/auth"
 	authpg "xiaodou/dai/internal/auth/pg"
+	billingpg "xiaodou/dai/internal/billing/pg"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/clientsecret"
@@ -50,9 +51,10 @@ type platformModules struct {
 	AdminEndUsers  *userpg.AdminEndUserRepository
 	Invite         *invitepkg.InviteService
 
-	Deduction *billingsvc.DeductionService
-	Recharge  *billingsvc.RechargeService
-	Payment   *paymentsvc.PaymentService
+	Deduction      *billingsvc.DeductionService
+	Recharge       *billingsvc.RechargeService
+	Payment        *paymentsvc.PaymentService
+	AccountQueries *billingsvc.AccountQueryService
 
 	Announcements *announcementpkg.Service
 	Notifications *notificationpkg.Service
@@ -113,6 +115,8 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	tenantBrandingRepo := tenantpg.NewPortalBrandingRepository(pool)
 	tenantSelfRepo := tenantpg.NewTenantRepo(pool)
 	tenantSelfSvc := tenantpkg.NewSelfService(tenantSelfRepo, tenantSelfRepo)
+	accountRepo := billingpg.NewAccountRepository(pool)
+	accountQueries := billingsvc.NewAccountQueryService(accountRepo)
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	rechargeSvc := billingsvc.NewRechargeService(pool, tenantRepo)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
@@ -144,6 +148,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		Deduction:      deductionSvc,
 		Recharge:       rechargeSvc,
 		Payment:        paymentSvc,
+		AccountQueries: accountQueries,
 		Announcements:  announcementSvc,
 		Notifications:  notificationSvc,
 		Modules:        moduleSvc,

@@ -369,9 +369,10 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				Invite:               platform.Invite,
 			},
 			BillingDeps: transport.BillingDeps{
-				Deduction: platform.Deduction,
-				Recharge:  platform.Recharge,
-				Payment:   platform.Payment,
+				AccountQueries: platform.AccountQueries,
+				Deduction:      platform.Deduction,
+				Recharge:       platform.Recharge,
+				Payment:        platform.Payment,
 			},
 			OperationsDeps: transport.OperationsDeps{
 				Announcements: platform.Announcements,

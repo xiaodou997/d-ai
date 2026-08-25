@@ -2,15 +2,14 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	billingdomain "xiaodou/dai/internal/billing"
-	billingpg "xiaodou/dai/internal/billing/pg"
+	billingports "xiaodou/dai/internal/billing/ports"
 	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -18,12 +17,11 @@ import (
 // accountHandlers 承载 /api/v1/account 账户自助端点（任意已登录用户；按 userType
 // 在 handler 层覆盖查询范围：租户用户限本租户、终端用户限本人）。
 type accountHandlers struct {
-	repo *billingpg.AccountRepository
-	log  *zap.Logger
+	queries billingports.AccountQueryReader
 }
 
-func newAccountHandlers(pool *pgxpool.Pool, log *zap.Logger) *accountHandlers {
-	return &accountHandlers{repo: billingpg.NewAccountRepository(pool), log: log}
+func newAccountHandlers(queries billingports.AccountQueryReader) *accountHandlers {
+	return &accountHandlers{queries: queries}
 }
 
 // ---- DTO ----
@@ -35,7 +33,7 @@ type accountBalanceInput struct {
 }
 
 type accountBalanceOutput struct {
-	Body *billingpg.BalanceResponse
+	Body *billingports.BalanceResponse
 }
 
 type rechargeRecordsInput struct {
@@ -51,7 +49,7 @@ type rechargeRecordsInput struct {
 }
 
 type rechargeRecordsOutput struct {
-	Body httpx.Page[billingpg.RechargeRecordRow]
+	Body httpx.Page[billingports.RechargeRecordRow]
 }
 
 type accountStatsInput struct {
@@ -59,12 +57,12 @@ type accountStatsInput struct {
 }
 
 type accountStatsOutput struct {
-	Body *billingpg.AccountStatsResult
+	Body *billingports.AccountStatsResult
 }
 
 // registerAccount 注册账户自助端点（RequireAuthenticated：1/2/3/4）。
 func registerAccount(api huma.API, d Deps) {
-	h := newAccountHandlers(d.Pool, d.Logger)
+	h := newAccountHandlers(d.AccountQueries)
 	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1, 2, 3, 4)}
 
 	huma.Register(api, huma.Operation{OperationID: "account-balance", Method: http.MethodGet, Path: "/api/v1/account/balance",
@@ -90,19 +88,19 @@ func (h *accountHandlers) balance(ctx context.Context, in *accountBalanceInput) 
 	if accountID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少账户 ID")
 	}
+	if h.queries == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("账户查询服务不可用")
+	}
 
-	var res *billingpg.BalanceResponse
+	var res *billingports.BalanceResponse
 	var err error
 	if packageType == 1 {
-		res, err = h.repo.GetTenantBalance(accountID, in.Detail)
+		res, err = h.queries.GetTenantBalance(ctx, accountID, in.Detail)
 	} else {
-		res, err = h.repo.GetUserBalance(accountID, in.Detail)
+		res, err = h.queries.GetUserBalance(ctx, accountID, in.Detail)
 	}
 	if err != nil {
-		if domain.IsNotFoundError(err) {
-			return nil, httpx.ErrNotFound.WithDetail("账户不存在")
-		}
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, accountQueryHTTPError(err)
 	}
 	return &accountBalanceOutput{Body: res}, nil
 }
@@ -111,6 +109,9 @@ func (h *accountHandlers) rechargeRecords(ctx context.Context, in *rechargeRecor
 	claims := userClaimsFromCtx(ctx)
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
+	}
+	if h.queries == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("账户查询服务不可用")
 	}
 	tenantID, userID := in.TenantID, in.UserID
 	orderTypes := orderTypesFromRechargeType(in.RechargeType)
@@ -131,9 +132,12 @@ func (h *accountHandlers) rechargeRecords(ctx context.Context, in *rechargeRecor
 		tenantID, userID, orderTypes = claims.TenantID, claims.UserID, billingdomain.UserRechargeOrderTypes
 	}
 	page, size := normalizePage(in.Page, in.Size)
-	list, total, err := h.repo.ListRechargeRecords(tenantID, userID, in.TenantName, in.Username, orderTypes, timeFrom, timeTo, page, size)
+	list, total, err := h.queries.ListRechargeRecords(ctx, billingports.RechargeRecordsQuery{
+		TenantID: tenantID, UserID: userID, TenantName: in.TenantName, Username: in.Username,
+		OrderTypes: orderTypes, TimeFrom: timeFrom, TimeTo: timeTo, Page: page, Size: size,
+	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, accountQueryHTTPError(err)
 	}
 	return &rechargeRecordsOutput{Body: httpx.NewPage(list, total, page, size)}, nil
 }
@@ -153,11 +157,25 @@ func (h *accountHandlers) stats(ctx context.Context, in *accountStatsInput) (*ac
 	if tenantID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少 accountId 参数")
 	}
-	stats, err := h.repo.GetAccountStats(tenantID)
+	if h.queries == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("账户查询服务不可用")
+	}
+	stats, err := h.queries.GetAccountStats(ctx, tenantID)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, accountQueryHTTPError(err)
 	}
 	return &accountStatsOutput{Body: stats}, nil
+}
+
+func accountQueryHTTPError(err error) error {
+	switch {
+	case errors.Is(err, billingports.ErrAccountQueryUnavailable):
+		return httpx.ErrUnavailable.WithDetail("账户查询服务不可用")
+	case domain.IsNotFoundError(err):
+		return httpx.ErrNotFound.WithDetail("账户不存在")
+	default:
+		return httpx.ErrInternal.WithCause(err)
+	}
 }
 
 func orderTypesFromRechargeType(param string) []string {
