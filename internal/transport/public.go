@@ -9,13 +9,12 @@ import (
 
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/config"
-	invitepkg "xiaodou/dai/internal/invite"
-	invitepg "xiaodou/dai/internal/invite/pg"
+	inviteports "xiaodou/dai/internal/invite/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
 type publicHandlers struct {
-	invite *invitepkg.InviteService
+	invite inviteports.PublicService
 	legal  config.LegalConfig
 }
 
@@ -32,15 +31,15 @@ type publicInvitationInput struct {
 
 type publicInvitationOutput struct {
 	Body struct {
-		Code             string                           `json:"code"`
-		TenantName       string                           `json:"tenantName"`
-		CustomerSiteName string                           `json:"customerSiteName"`
-		FaviconPath      string                           `json:"faviconPath,omitempty"`
-		Description      string                           `json:"description"`
-		ExpireTime       *int64                           `json:"expiresAt,omitempty"`
-		Status           invitepkg.PublicInvitationStatus `json:"status"`
-		CanRegister      bool                             `json:"canRegister"`
-		Message          string                           `json:"message"`
+		Code             string                             `json:"code"`
+		TenantName       string                             `json:"tenantName"`
+		CustomerSiteName string                             `json:"customerSiteName"`
+		FaviconPath      string                             `json:"faviconPath,omitempty"`
+		Description      string                             `json:"description"`
+		ExpireTime       *int64                             `json:"expiresAt,omitempty"`
+		Status           inviteports.PublicInvitationStatus `json:"status"`
+		CanRegister      bool                               `json:"canRegister"`
+		Message          string                             `json:"message"`
 		Legal            struct {
 			TermsURL       string `json:"termsUrl"`
 			TermsVersion   string `json:"termsVersion"`
@@ -96,7 +95,7 @@ func registerPublic(api huma.API, d Deps) {
 func (h *publicHandlers) getInvitation(ctx context.Context, in *publicInvitationInput) (*publicInvitationOutput, error) {
 	view, err := h.invite.DescribePublicInvitation(ctx, in.Code)
 	if err != nil {
-		if errors.Is(err, invitepkg.ErrInvalidInvitationCodeFormat) {
+		if errors.Is(err, inviteports.ErrInvalidInvitationCodeFormat) {
 			return nil, httpx.ErrBadRequest.WithDetail("邀请码格式无效")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -126,27 +125,27 @@ func (h *publicHandlers) registerInvitation(ctx context.Context, in *publicRegis
 		return nil, httpx.ErrBadRequest.WithDetail("请重新阅读并同意最新服务条款和隐私政策")
 	}
 
-	user, err := h.invite.RegisterUser(ctx, in.Code, in.Body.Username, in.Body.Password, in.Body.Email, in.Body.Phone, invitepkg.LegalAcceptance{
+	user, err := h.invite.RegisterUser(ctx, in.Code, in.Body.Username, in.Body.Password, in.Body.Email, in.Body.Phone, inviteports.LegalAcceptance{
 		TermsVersion:   in.Body.TermsVersion,
 		PrivacyVersion: in.Body.PrivacyVersion,
 	})
 	if err != nil {
 		switch {
-		case errors.Is(err, invitepkg.ErrUsernameExists):
+		case errors.Is(err, inviteports.ErrUsernameExists):
 			return nil, httpx.ErrConflict.WithDetail("用户名已存在")
-		case errors.Is(err, invitepkg.ErrEmailExists):
+		case errors.Is(err, inviteports.ErrEmailExists):
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
-		case errors.Is(err, invitepkg.ErrInvalidUsername):
+		case errors.Is(err, inviteports.ErrInvalidUsername):
 			return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
-		case errors.Is(err, invitepkg.ErrInvalidInvitationCodeFormat):
+		case errors.Is(err, inviteports.ErrInvalidInvitationCodeFormat):
 			return nil, httpx.ErrBadRequest.WithDetail("邀请码格式无效")
-		case errors.Is(err, invitepkg.ErrLegalAcceptanceRequired):
+		case errors.Is(err, inviteports.ErrLegalAcceptanceRequired):
 			return nil, httpx.ErrBadRequest.WithDetail("请同意服务条款和隐私政策")
 		case errors.Is(err, auth.ErrWeakPassword):
 			return nil, httpx.ErrBadRequest.WithDetail(auth.CurrentPasswordPolicy().Description)
-		case errors.Is(err, invitepg.ErrInvitationCodeNotFound):
+		case errors.Is(err, inviteports.ErrInvitationCodeNotFound):
 			return nil, httpx.ErrConflict.WithDetail("邀请码不存在")
-		case errors.Is(err, invitepkg.ErrInvitationCodeUnavailable):
+		case errors.Is(err, inviteports.ErrInvitationCodeUnavailable):
 			return nil, httpx.ErrConflict.WithDetail("邀请码不可用")
 		default:
 			return nil, httpx.ErrInternal.WithCause(err)

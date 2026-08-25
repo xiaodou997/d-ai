@@ -10,11 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	authports "xiaodou/dai/internal/auth/ports"
+	inviteports "xiaodou/dai/internal/invite/ports"
 )
 
 var (
-	ErrInvitationCodeNotFound    = errors.New("invitation code not found")
-	ErrInvitationCodeUnavailable = errors.New("invitation code unavailable")
+	ErrInvitationCodeNotFound    = inviteports.ErrInvitationCodeNotFound
+	ErrInvitationCodeUnavailable = inviteports.ErrInvitationCodeUnavailable
 )
 
 // InvitationCode 邀请码实体

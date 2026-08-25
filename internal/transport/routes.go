@@ -16,7 +16,7 @@ import (
 	billingsvc "xiaodou/dai/internal/billing/service"
 	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/config"
-	invitepkg "xiaodou/dai/internal/invite"
+	inviteports "xiaodou/dai/internal/invite/ports"
 	notificationpkg "xiaodou/dai/internal/notification"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	systempkg "xiaodou/dai/internal/system"
@@ -73,7 +73,7 @@ type IdentityDeps struct {
 	AdminAccountWriter   userports.AdminAccountWriter
 	AdminEndUsers        userports.AdminEndUserReader
 	AdminEndUserWriter   userports.AdminEndUserWriter
-	Invite               *invitepkg.InviteService
+	Invite               inviteports.PublicService
 }
 
 // BillingDeps contains payment and balance application services.

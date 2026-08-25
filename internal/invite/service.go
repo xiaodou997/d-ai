@@ -12,6 +12,7 @@ import (
 	authports "xiaodou/dai/internal/auth/ports"
 	shared "xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/invite/pg"
+	inviteports "xiaodou/dai/internal/invite/ports"
 
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
@@ -34,48 +35,28 @@ type InviteService struct {
 	logger *zap.Logger
 }
 
-type PublicInvitationStatus string
+type PublicInvitationStatus = inviteports.PublicInvitationStatus
+type PublicInvitationView = inviteports.PublicInvitationView
+type RegisteredEndUser = inviteports.RegisteredEndUser
+type LegalAcceptance = inviteports.LegalAcceptance
 
 const (
-	PublicInvitationStatusActive   PublicInvitationStatus = "active"
-	PublicInvitationStatusExpired  PublicInvitationStatus = "expired"
-	PublicInvitationStatusDisabled PublicInvitationStatus = "disabled"
-	PublicInvitationStatusUsedUp   PublicInvitationStatus = "used_up"
-	PublicInvitationStatusNotFound PublicInvitationStatus = "not_found"
+	PublicInvitationStatusActive   = inviteports.PublicInvitationStatusActive
+	PublicInvitationStatusExpired  = inviteports.PublicInvitationStatusExpired
+	PublicInvitationStatusDisabled = inviteports.PublicInvitationStatusDisabled
+	PublicInvitationStatusUsedUp   = inviteports.PublicInvitationStatusUsedUp
+	PublicInvitationStatusNotFound = inviteports.PublicInvitationStatusNotFound
 )
 
-type PublicInvitationView struct {
-	Code             string
-	TenantID         string
-	TenantName       string
-	CustomerSiteName string
-	FaviconVersion   int64
-	Description      string
-	ExpireTime       *int64
-	Status           PublicInvitationStatus
-	CanRegister      bool
-	Message          string
-}
-
-type RegisteredEndUser struct {
-	UserID   string
-	Username string
-	TenantID string
-	UserType int
-}
-
-type LegalAcceptance struct {
-	TermsVersion   string
-	PrivacyVersion string
-}
-
 var invitationCodePattern = regexp.MustCompile(`^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$`)
-var ErrInvalidInvitationCodeFormat = errors.New("invalid invitation code format")
-var ErrInvitationCodeUnavailable = errors.New("invitation code is invalid, expired, or exhausted")
-var ErrUsernameExists = errors.New("username already exists")
-var ErrEmailExists = errors.New("email already exists")
-var ErrInvalidUsername = errors.New("invalid username")
-var ErrLegalAcceptanceRequired = errors.New("current legal documents must be accepted")
+var ErrInvalidInvitationCodeFormat = inviteports.ErrInvalidInvitationCodeFormat
+var ErrInvitationCodeUnavailable = inviteports.ErrInvitationCodeUnavailable
+var ErrUsernameExists = inviteports.ErrUsernameExists
+var ErrEmailExists = inviteports.ErrEmailExists
+var ErrInvalidUsername = inviteports.ErrInvalidUsername
+var ErrLegalAcceptanceRequired = inviteports.ErrLegalAcceptanceRequired
+
+var _ inviteports.PublicService = (*InviteService)(nil)
 
 func NewInviteService(repo inviteRepository, logger *zap.Logger) *InviteService {
 	return &InviteService{repo: repo, logger: logger}
@@ -88,8 +69,8 @@ func (s *InviteService) ValidateCode(ctx context.Context, code string) (*pg.Invi
 	}
 	ic, err := s.repo.GetByCode(normalizedCode)
 	if err != nil {
-		if errors.Is(err, pg.ErrInvitationCodeNotFound) {
-			return nil, pg.ErrInvitationCodeNotFound
+		if errors.Is(err, inviteports.ErrInvitationCodeNotFound) {
+			return nil, inviteports.ErrInvitationCodeNotFound
 		}
 		return nil, fmt.Errorf("load invitation code: %w", err)
 	}
@@ -107,7 +88,7 @@ func (s *InviteService) DescribePublicInvitation(ctx context.Context, code strin
 
 	ic, err := s.repo.GetByCode(normalizedCode)
 	if err != nil {
-		if errors.Is(err, pg.ErrInvitationCodeNotFound) {
+		if errors.Is(err, inviteports.ErrInvitationCodeNotFound) {
 			return &PublicInvitationView{
 				Code:        normalizedCode,
 				Status:      PublicInvitationStatusNotFound,
@@ -239,7 +220,7 @@ func (s *InviteService) RegisterUser(ctx context.Context, code, username, passwo
 			{DocumentKey: "privacy", Version: legal.PrivacyVersion},
 		},
 	}); err != nil {
-		if errors.Is(err, pg.ErrInvitationCodeUnavailable) {
+		if errors.Is(err, inviteports.ErrInvitationCodeUnavailable) {
 			return nil, ErrInvitationCodeUnavailable
 		}
 		if errors.Is(err, authports.ErrUsernameTaken) {
