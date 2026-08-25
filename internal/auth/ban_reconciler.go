@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,11 +20,15 @@ import (
 // either direction (a ban that should exist but doesn't, or a stale ban that
 // should have been cleared) self-heals without operator intervention.
 type BanReconciler struct {
-	pool     *pgxpool.Pool
-	redis    *redis.Client
-	logger   *zap.Logger
-	interval time.Duration
-	stopChan chan struct{}
+	pool        *pgxpool.Pool
+	redis       *redis.Client
+	logger      *zap.Logger
+	interval    time.Duration
+	stopChan    chan struct{}
+	lifecycleMu sync.Mutex
+	started     bool
+	stopped     bool
+	wg          sync.WaitGroup
 }
 
 // NewBanReconciler constructs a reconciler. interval <= 0 defaults to 5 minutes.
@@ -43,13 +48,38 @@ func (r *BanReconciler) Start() {
 	if r.redis == nil || r.pool == nil {
 		return
 	}
+	r.lifecycleMu.Lock()
+	if r.started || r.stopped {
+		r.lifecycleMu.Unlock()
+		return
+	}
+	r.started = true
+	r.wg.Add(1)
+	r.lifecycleMu.Unlock()
 	r.logger.Info("ban reconciler started", zap.Duration("interval", r.interval))
-	go r.run()
+	go func() {
+		defer r.wg.Done()
+		r.run()
+	}()
 }
 
 // Stop signals the reconcile loop to exit.
 func (r *BanReconciler) Stop() {
-	close(r.stopChan)
+	r.lifecycleMu.Lock()
+	if r.stopped {
+		r.lifecycleMu.Unlock()
+		return
+	}
+	r.stopped = true
+	started := r.started
+	if started {
+		close(r.stopChan)
+	}
+	r.lifecycleMu.Unlock()
+	if !started {
+		return
+	}
+	r.wg.Wait()
 }
 
 func (r *BanReconciler) run() {
