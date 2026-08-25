@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	notificationpkg "xiaodou/dai/internal/notification"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -36,14 +37,14 @@ func registerNotifications(api huma.API, d Deps) {
 		return
 	}
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	allUsers := huma.Middlewares{ua, requireUserType(api, 1, 2, 3, 4)}
-	admins := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
+	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 	huma.Register(api, huma.Operation{OperationID: "list-my-notifications", Method: http.MethodGet, Path: "/api/v1/notifications", Summary: "我的通知", Tags: []string{"notifications"}, Middlewares: allUsers}, func(ctx context.Context, in *notificationListInput) (*notificationsOutput, error) {
-		claims := userClaimsFromCtx(ctx)
-		if claims == nil {
-			return nil, httpx.ErrUnauthorized
+		actor, err := notificationActor(ctx)
+		if err != nil {
+			return nil, err
 		}
-		items, err := d.Notifications.ListForUser(ctx, claims.UserID, claims.UserType, claims.TenantID, in.Limit)
+		items, err := d.Notifications.ListForUser(ctx, actor.UserID, actor.UserType, actor.TenantID, in.Limit)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
@@ -67,4 +68,12 @@ func registerNotifications(api huma.API, d Deps) {
 		}
 		return &notificationOutput{Body: item}, nil
 	})
+}
+
+func notificationActor(ctx context.Context) (auth.Actor, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return auth.Actor{}, httpx.ErrUnauthorized
+	}
+	return actorFromClaims(claims), nil
 }

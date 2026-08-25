@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/announcement"
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -137,9 +138,9 @@ type announcementRecipientsOutput struct {
 func registerAnnouncements(api huma.API, d Deps) {
 	h := &announcementHandlers{service: d.Announcements}
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	allUsers := huma.Middlewares{ua, requireUserType(api, 1, 2, 3, 4)}
-	admins := huma.Middlewares{ua, requireUserType(api, 1, 2)}
-	tenants := huma.Middlewares{ua, requireUserType(api, 3)}
+	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
+	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
+	tenants := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "list-my-announcements", Method: http.MethodGet, Path: "/api/v1/announcements", Summary: "当前用户公告", Tags: []string{"announcements"}, Middlewares: allUsers}, h.listInbox)
 	huma.Register(api, huma.Operation{OperationID: "get-my-announcement", Method: http.MethodGet, Path: "/api/v1/announcements/{id}", Summary: "当前用户公告详情", Tags: []string{"announcements"}, Middlewares: allUsers}, h.getVisible)
@@ -167,7 +168,8 @@ func (h *announcementHandlers) listInbox(ctx context.Context, in *listInboxInput
 	if claims == nil || h.service == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	page, err := h.service.ListInbox(ctx, announcement.Principal{UserType: claims.UserType, UserID: claims.UserID, TenantID: claims.TenantID}, announcement.InboxQuery{
+	actor := actorFromClaims(claims)
+	page, err := h.service.ListInbox(ctx, announcement.Principal{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, announcement.InboxQuery{
 		Page: in.Page, Size: in.Size, UnreadOnly: in.UnreadOnly, DisplayMode: announcement.DisplayMode(in.DisplayMode),
 	})
 	if err != nil {
@@ -187,7 +189,8 @@ func (h *announcementHandlers) getVisible(ctx context.Context, in *announcementP
 	if claims == nil || h.service == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	item, err := h.service.GetVisible(ctx, announcement.Principal{UserType: claims.UserType, UserID: claims.UserID, TenantID: claims.TenantID}, in.ID)
+	actor := actorFromClaims(claims)
+	item, err := h.service.GetVisible(ctx, announcement.Principal{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, in.ID)
 	if err != nil {
 		return nil, announcementHTTPError(err)
 	}
@@ -199,7 +202,8 @@ func (h *announcementHandlers) markRead(ctx context.Context, in *announcementPat
 	if claims == nil || h.service == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.service.MarkRead(ctx, announcement.Principal{UserType: claims.UserType, UserID: claims.UserID, TenantID: claims.TenantID}, in.ID); err != nil {
+	actor := actorFromClaims(claims)
+	if err := h.service.MarkRead(ctx, announcement.Principal{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, in.ID); err != nil {
 		return nil, announcementHTTPError(err)
 	}
 	out := &messageOutput{}
@@ -332,7 +336,8 @@ func announcementActor(ctx context.Context) (announcement.Actor, error) {
 	if claims == nil {
 		return announcement.Actor{}, httpx.ErrUnauthorized
 	}
-	return announcement.Actor{UserType: claims.UserType, UserID: claims.UserID, TenantID: claims.TenantID}, nil
+	actor := actorFromClaims(claims)
+	return announcement.Actor{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, nil
 }
 
 func announcementDraftInput(body announcementDraftBody) announcement.DraftInput {
