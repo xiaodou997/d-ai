@@ -196,6 +196,24 @@ func requireCapability(api huma.API, capability auth.Capability) func(huma.Conte
 	}
 }
 
+func requireAnyCapability(api huma.API, capabilities ...auth.Capability) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		claims, ok := ctx.Context().Value(userClaimsCtxKey).(*auth.Claims)
+		if !ok || claims == nil {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
+			return
+		}
+		actor := auth.Actor{UserID: claims.UserID, TenantID: claims.TenantID, UserType: claims.UserType}
+		for _, capability := range capabilities {
+			if actor.Has(capability) {
+				next(ctx)
+				return
+			}
+		}
+		_ = huma.WriteErr(api, ctx, http.StatusForbidden, "权限不足")
+	}
+}
+
 func capabilityForUserType(userType int) auth.Capability {
 	switch userType {
 	case 1:

@@ -100,9 +100,9 @@ type updateTenantStatusInput struct {
 func registerAdminTenants(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
-	sysUserSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2), requireRecentAuth(api, d.RecentAuth)}
+	sysUserSensitive := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-list-tenants", Method: http.MethodGet, Path: "/api/v1/tenants",

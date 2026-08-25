@@ -125,10 +125,10 @@ func adminUserStatusFromInt(status int) string {
 func registerAdminUsers(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	superAdmin := huma.Middlewares{ua, requireUserType(api, 1)}
-	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
-	superAdminSensitive := huma.Middlewares{ua, requireUserType(api, 1), requireRecentAuth(api, d.RecentAuth)}
-	sysUserSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2), requireRecentAuth(api, d.RecentAuth)}
+	superAdmin := huma.Middlewares{ua, requireCapability(api, auth.CapabilitySuperAdmin)}
+	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
+	superAdminSensitive := huma.Middlewares{ua, requireCapability(api, auth.CapabilitySuperAdmin), requireRecentAuth(api, d.RecentAuth)}
+	sysUserSensitive := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin), requireRecentAuth(api, d.RecentAuth)}
 
 	// 系统管理员
 	huma.Register(api, huma.Operation{OperationID: "admin-list-system-admins", Method: http.MethodGet, Path: "/api/v1/system-admins",

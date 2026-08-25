@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingports "xiaodou/dai/internal/billing/ports"
@@ -135,10 +136,10 @@ func orderTypeFromPackageType(packageType int) (string, error) {
 func registerAdminFinance(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
-	superAdmin := huma.Middlewares{ua, requireUserType(api, 1)}
-	sysUserSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2), requireRecentAuth(api, d.RecentAuth)}
-	sysOrTenantSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2, 3), requireRecentAuth(api, d.RecentAuth)}
+	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
+	superAdmin := huma.Middlewares{ua, requireCapability(api, auth.CapabilitySuperAdmin)}
+	sysUserSensitive := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin), requireRecentAuth(api, d.RecentAuth)}
+	sysOrTenantSensitive := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-recharge", Method: http.MethodPost, Path: "/api/v1/recharges",
 		Summary: "充值（租户/用户）", Tags: []string{"admin-finance"}, Middlewares: sysOrTenantSensitive, DefaultStatus: http.StatusCreated}, h.recharge)

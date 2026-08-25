@@ -8,6 +8,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	billingdomain "xiaodou/dai/internal/billing"
 	systemports "xiaodou/dai/internal/system/ports"
 	"xiaodou/dai/libs/go/httpx"
@@ -79,7 +80,7 @@ type globalStatsOutput struct {
 func registerAdminDashboard(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-dashboard-alerts", Method: http.MethodGet, Path: "/api/v1/dashboard/alerts",
 		Summary: "Dashboard 告警（异常扣费）", Tags: []string{"admin-dashboard"}, Middlewares: sysUser}, h.dashboardAlerts)

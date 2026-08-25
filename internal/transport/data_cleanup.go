@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -25,7 +26,7 @@ type dataCleanupRunInput struct {
 }
 
 func registerDataCleanup(api huma.API, d Deps) {
-	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1, 2)}
+	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-get-data-cleanup-policy",

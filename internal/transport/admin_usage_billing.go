@@ -6,6 +6,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	billingdomain "xiaodou/dai/internal/billing"
 	billingsvc "xiaodou/dai/internal/billing/service"
 )
@@ -31,7 +32,7 @@ type batchUsageOpOutput struct {
 func registerAdminUsageBilling(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-batch-refund-usage", Method: http.MethodPost, Path: "/api/v1/ai/usage/batch-refund",
 		Summary: "批量退款 AI 使用记录", Tags: []string{"admin-usage"}, Middlewares: sysUser}, h.batchRefundUsage)

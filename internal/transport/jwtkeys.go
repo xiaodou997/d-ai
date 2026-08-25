@@ -20,7 +20,7 @@ type jwtKeysOutput struct {
 // registerJWTKeys 注册 JWT 签名密钥管理端点（仅超管 requireUserType(1)）。
 func registerJWTKeys(api huma.API, d Deps) {
 	jwtSvc := d.JWT
-	superAdmin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 1)}
+	superAdmin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilitySuperAdmin)}
 
 	huma.Register(api, huma.Operation{OperationID: "list-jwt-keys", Method: http.MethodGet, Path: "/api/v1/jwt-keys",
 		Summary: "JWT 签名密钥列表", Tags: []string{"jwt-keys"}, Middlewares: superAdmin},

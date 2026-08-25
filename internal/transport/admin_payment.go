@@ -7,6 +7,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/internal/payment/wechat"
@@ -194,7 +195,7 @@ func withdrawalToItem(w *payment.Withdrawal) withdrawalItem {
 func registerAdminPayment(api huma.API, d Deps) {
 	h := newAdminPaymentHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysUser := huma.Middlewares{ua, requireUserType(api, 1, 2)}
+	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-get-payment-settings", Method: http.MethodGet, Path: "/api/v1/admin/payment-settings",
 		Summary: "平台充值与提现规则", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.getGlobalSettings)
