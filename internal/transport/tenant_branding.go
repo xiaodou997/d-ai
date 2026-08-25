@@ -14,9 +14,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
-	tenantpg "xiaodou/dai/internal/tenant/pg"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -28,11 +27,12 @@ const (
 )
 
 type tenantBrandingHandlers struct {
-	repo *tenantpg.PortalBrandingRepository
+	reader tenantports.PortalBrandingReader
+	writer tenantports.PortalBrandingWriter
 }
 
-func newTenantBrandingHandlers(pool *pgxpool.Pool) *tenantBrandingHandlers {
-	return &tenantBrandingHandlers{repo: tenantpg.NewPortalBrandingRepository(pool)}
+func newTenantBrandingHandlers(reader tenantports.PortalBrandingReader, writer tenantports.PortalBrandingWriter) *tenantBrandingHandlers {
+	return &tenantBrandingHandlers{reader: reader, writer: writer}
 }
 
 type tenantBrandingOutput struct {
@@ -64,7 +64,7 @@ type updateTenantFaviconInput struct {
 }
 
 func registerTenantBranding(api huma.API, d Deps) {
-	h := newTenantBrandingHandlers(d.Pool)
+	h := newTenantBrandingHandlers(d.TenantBrandingReader, d.TenantBrandingWriter)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	tenantOnly := huma.Middlewares{ua, requireUserType(api, 3)}
 	customerOnly := huma.Middlewares{ua, requireUserType(api, 4)}
@@ -82,7 +82,7 @@ func registerTenantBranding(api huma.API, d Deps) {
 }
 
 func registerTenantBrandingRaw(mux *chi.Mux, d Deps) {
-	h := newTenantBrandingHandlers(d.Pool)
+	h := newTenantBrandingHandlers(d.TenantBrandingReader, nil)
 	mux.Get("/api/v1/public/tenant-brands/{tenantId}/favicon", h.serveFavicon)
 }
 
@@ -91,7 +91,10 @@ func (h *tenantBrandingHandlers) getTenantBranding(ctx context.Context, _ *struc
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	branding, err := h.repo.Get(ctx, claims.TenantID)
+	if h.reader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户品牌服务不可用")
+	}
+	branding, err := h.reader.Get(ctx, claims.TenantID)
 	if err != nil {
 		return nil, tenantBrandingHTTPError(err)
 	}
@@ -103,6 +106,9 @@ func (h *tenantBrandingHandlers) updateTenantBranding(ctx context.Context, in *u
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
+	if h.writer == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户品牌服务不可用")
+	}
 	tenantName, err := normalizeTenantBrandName(in.Body.TenantName, "租户名称", false)
 	if err != nil {
 		return nil, err
@@ -111,7 +117,7 @@ func (h *tenantBrandingHandlers) updateTenantBranding(ctx context.Context, in *u
 	if err != nil {
 		return nil, err
 	}
-	branding, err := h.repo.UpdateSettings(ctx, claims.TenantID, tenantName, siteName)
+	branding, err := h.writer.UpdateSettings(ctx, claims.TenantID, tenantName, siteName)
 	if err != nil {
 		return nil, tenantBrandingHTTPError(err)
 	}
@@ -123,11 +129,14 @@ func (h *tenantBrandingHandlers) updateTenantFavicon(ctx context.Context, in *up
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
+	if h.writer == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户品牌服务不可用")
+	}
 	faviconPNG, err := decodeTenantFavicon(in.Body.DataURL)
 	if err != nil {
 		return nil, httpx.ErrBadRequest.WithDetail(err.Error())
 	}
-	branding, err := h.repo.UpdateFavicon(ctx, claims.TenantID, faviconPNG)
+	branding, err := h.writer.UpdateFavicon(ctx, claims.TenantID, faviconPNG)
 	if err != nil {
 		return nil, tenantBrandingHTTPError(err)
 	}
@@ -139,7 +148,10 @@ func (h *tenantBrandingHandlers) deleteTenantFavicon(ctx context.Context, _ *str
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	branding, err := h.repo.ClearFavicon(ctx, claims.TenantID)
+	if h.writer == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户品牌服务不可用")
+	}
+	branding, err := h.writer.ClearFavicon(ctx, claims.TenantID)
 	if err != nil {
 		return nil, tenantBrandingHTTPError(err)
 	}
@@ -151,7 +163,10 @@ func (h *tenantBrandingHandlers) getCustomerPortalBrand(ctx context.Context, _ *
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	branding, err := h.repo.Get(ctx, claims.TenantID)
+	if h.reader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户品牌服务不可用")
+	}
+	branding, err := h.reader.Get(ctx, claims.TenantID)
 	if err != nil {
 		return nil, tenantBrandingHTTPError(err)
 	}
@@ -167,7 +182,11 @@ func (h *tenantBrandingHandlers) serveFavicon(w http.ResponseWriter, r *http.Req
 		http.NotFound(w, r)
 		return
 	}
-	branding, err := h.repo.Get(r.Context(), tenantID)
+	if h.reader == nil {
+		http.NotFound(w, r)
+		return
+	}
+	branding, err := h.reader.Get(r.Context(), tenantID)
 	if err != nil || len(branding.FaviconPNG) == 0 {
 		http.NotFound(w, r)
 		return
@@ -182,7 +201,7 @@ func (h *tenantBrandingHandlers) serveFavicon(w http.ResponseWriter, r *http.Req
 	http.ServeContent(w, r, "favicon.png", modifiedAt, bytes.NewReader(branding.FaviconPNG))
 }
 
-func tenantBrandingResponse(branding *tenantpg.PortalBranding) *tenantBrandingOutput {
+func tenantBrandingResponse(branding *tenantports.PortalBranding) *tenantBrandingOutput {
 	out := &tenantBrandingOutput{}
 	out.Body.TenantName = branding.TenantName
 	out.Body.CustomerSiteName = branding.CustomerSiteName
@@ -190,7 +209,7 @@ func tenantBrandingResponse(branding *tenantpg.PortalBranding) *tenantBrandingOu
 	return out
 }
 
-func tenantFaviconPath(branding *tenantpg.PortalBranding) string {
+func tenantFaviconPath(branding *tenantports.PortalBranding) string {
 	if branding == nil || len(branding.FaviconPNG) == 0 || branding.FaviconUpdatedAt == nil {
 		return ""
 	}
@@ -201,7 +220,7 @@ func publicTenantFaviconPath(tenantID string, version int64) string {
 	return fmt.Sprintf("/api/v1/public/tenant-brands/%s/favicon?v=%d", url.PathEscape(tenantID), version)
 }
 
-func effectiveCustomerSiteName(branding *tenantpg.PortalBranding) string {
+func effectiveCustomerSiteName(branding *tenantports.PortalBranding) string {
 	if strings.TrimSpace(branding.CustomerSiteName) != "" {
 		return branding.CustomerSiteName
 	}
@@ -247,9 +266,9 @@ func decodeTenantFavicon(dataURL string) ([]byte, error) {
 
 func tenantBrandingHTTPError(err error) error {
 	switch {
-	case errors.Is(err, tenantpg.ErrTenantNotFound):
+	case errors.Is(err, tenantports.ErrTenantNotFound):
 		return httpx.ErrNotFound.WithDetail("租户不存在")
-	case errors.Is(err, tenantpg.ErrTenantNameTaken):
+	case errors.Is(err, tenantports.ErrTenantNameTaken):
 		return httpx.ErrConflict.WithDetail("租户名称已存在")
 	default:
 		return httpx.ErrInternal.WithCause(err)

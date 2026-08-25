@@ -50,23 +50,25 @@ type PortalDeps struct {
 
 // IdentityDeps contains account, session, tenant and invitation use cases.
 type IdentityDeps struct {
-	JWT                *auth.JWTService
-	Sessions           *auth.SessionService
-	Activations        *auth.ActivationService
-	MFA                *auth.MFAService
-	RecentAuth         *auth.RecentAuthService
-	Blacklist          *auth.BlacklistService
-	UserService        *userpkg.UserService
-	AuthAccountReader  authports.AccountReader
-	AuthAccountWriter  authports.AccountWriter
-	AuthAuditLogs      authports.AuthAuditLogReader
-	TenantStatusWriter tenantports.AdminTenantStatusWriter
-	TenantWriter       tenantports.AdminTenantWriter
-	AdminAccounts      userports.AdminAccountReader
-	AdminAccountWriter userports.AdminAccountWriter
-	AdminEndUsers      userports.AdminEndUserReader
-	AdminEndUserWriter userports.AdminEndUserWriter
-	Invite             *invitepkg.InviteService
+	JWT                  *auth.JWTService
+	Sessions             *auth.SessionService
+	Activations          *auth.ActivationService
+	MFA                  *auth.MFAService
+	RecentAuth           *auth.RecentAuthService
+	Blacklist            *auth.BlacklistService
+	UserService          *userpkg.UserService
+	AuthAccountReader    authports.AccountReader
+	AuthAccountWriter    authports.AccountWriter
+	AuthAuditLogs        authports.AuthAuditLogReader
+	TenantStatusWriter   tenantports.AdminTenantStatusWriter
+	TenantWriter         tenantports.AdminTenantWriter
+	TenantBrandingReader tenantports.PortalBrandingReader
+	TenantBrandingWriter tenantports.PortalBrandingWriter
+	AdminAccounts        userports.AdminAccountReader
+	AdminAccountWriter   userports.AdminAccountWriter
+	AdminEndUsers        userports.AdminEndUserReader
+	AdminEndUserWriter   userports.AdminEndUserWriter
+	Invite               *invitepkg.InviteService
 }
 
 // BillingDeps contains payment and balance application services.

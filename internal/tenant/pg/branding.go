@@ -8,26 +8,25 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 )
 
 var (
-	ErrTenantNotFound  = errors.New("tenant not found")
-	ErrTenantNameTaken = errors.New("tenant name taken")
+	ErrTenantNotFound  = tenantports.ErrTenantNotFound
+	ErrTenantNameTaken = tenantports.ErrTenantNameTaken
 )
 
-// PortalBranding is the tenant-owned presentation configuration for the customer portal.
-// CustomerSiteName is intentionally separate from the tenant's business identity.
-type PortalBranding struct {
-	TenantID         string
-	TenantName       string
-	CustomerSiteName string
-	FaviconPNG       []byte
-	FaviconUpdatedAt *time.Time
-}
+// PortalBranding remains an adapter-level alias for callers that still import
+// the PostgreSQL package. New boundaries should use tenant/ports directly.
+type PortalBranding = tenantports.PortalBranding
 
 type PortalBrandingRepository struct {
 	pool *pgxpool.Pool
 }
+
+var _ tenantports.PortalBrandingStore = (*PortalBrandingRepository)(nil)
+var _ tenantports.PortalBrandingReader = (*PortalBrandingRepository)(nil)
+var _ tenantports.PortalBrandingWriter = (*PortalBrandingRepository)(nil)
 
 func NewPortalBrandingRepository(pool *pgxpool.Pool) *PortalBrandingRepository {
 	return &PortalBrandingRepository{pool: pool}

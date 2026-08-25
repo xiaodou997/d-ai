@@ -500,6 +500,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - AI 身份边界：`aiIdentityAdapter.CheckTenantEndUser` 改用 `TenantRepository.GetEndUserTenantID`，Transport 不再为终端用户归属校验执行内联 SQL。
 - 认证账号边界：`/api/auth/me`、密码修改和用户名/邮箱更新通过 `auth/ports.AccountReader` / `AccountWriter` 调用 `AuthRepository`，唯一约束与 deleted 账号保护留在 persistence adapter。
 - 认证审计读取边界：`/api/v1/auth-audit-logs` 通过 `auth/ports.AuthAuditLogReader` 调用 `AuthRepository.ListAuthAuditLogs`；过滤、计数、分页和稳定排序不再由 Transport 拼接 SQL。
+- 租户门户品牌边界：门户名称、站点名称和 favicon 读写统一通过 `tenant/ports.PortalBrandingReader` / `PortalBrandingWriter`；PostgreSQL 事务、租户名称唯一约束和二进制投影留在 `tenant/pg`，Huma 与原生 favicon Transport 不再依赖 `pgxpool` 或 `tenant/pg`。
 - 充值目标边界：管理充值的租户存在和终端用户归属前置校验复用 `TenantRepository`；账务事务中的用户 `FOR UPDATE` 校验保持在充值工作流内，避免跨连接破坏资金一致性。
 - 反向充值边界：租户用户的 `tenant_id` / `order_type` 校验已移入 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只选择 scoped/unscoped port 并映射领域错误。
 - 充值生命周期边界：人工充值改由 `RechargeService.GrantManual` 持有事务并调用 `TenantRepository.LockManualRechargeTarget`；`GrantBalance` 仅作为支付结算复用的外部事务原语。
@@ -565,3 +566,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 验证：新增 schema v17/v18 migration、PostgreSQL retry state/fencing、service provider failure、backoff 和 retry stats 单测；`go test ./internal/payment/...`、`go test ./internal/db/...`、`go vet ./internal/payment/... ./internal/db/...` 通过。
 - 遗留风险：当前指标是全局低基数聚合，不按租户或订单暴露；单笔异常仍需通过管理端同步动作和审计/对账流程处理。
 - 下一候选项：P1-03 继续清零 Transport 领域越界，并评估支付按渠道维度的对账指标。
+
+### P1-03（继续，2026-08-25）
+
+- 状态：完成租户门户品牌垂直切片，继续推进 Transport 业务边界收敛。
+- 端口：新增 `tenant/ports.PortalBrandingReader` / `PortalBrandingWriter` 与领域投影，品牌读写和错误语义由租户端口承接；PostgreSQL adapter 保留唯一名检查、设置更新事务和 favicon 持久化。
+- HTTP：租户品牌 Huma 路由与公开 favicon 路由只接收最小读写端口，Transport 仅处理 claims、DTO/图片输入校验、响应投影和 404/409/503 映射。
+- 回归：新增端口注入、租户作用域命令、错误映射和公开 favicon 响应测试；adapter 通过编译期接口断言保持实现完整。
+- 验证：`go test ./internal/transport ./internal/tenant/... ./cmd/server`、`go test ./internal/transport -run 'TestTenantBranding'` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
+- 遗留风险：`internal/transport` 仍保留账户、邀请、租户自助分析及部分旧管理 handler 的 adapter 例外；下一切片应迁移租户自助邀请/查询，再处理账户余额查询。
+- 下一候选项：P1-03 迁移租户自助邀请与租户用户读取到 `tenant/ports`，随后清理 `TenantRepo` 在 Transport 的剩余直接构造。
