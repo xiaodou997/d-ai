@@ -2,6 +2,7 @@ package riskcontrol
 
 import (
 	"context"
+	"sync"
 
 	"go.uber.org/zap"
 
@@ -28,9 +29,14 @@ type WorkerTask struct {
 // in observe mode is best-effort audit, never a source of request latency
 // or backpressure.
 type Worker struct {
-	checker *Checker
-	ch      chan WorkerTask
-	logger  *zap.Logger
+	checker     *Checker
+	ch          chan WorkerTask
+	logger      *zap.Logger
+	lifecycleMu sync.Mutex
+	started     bool
+	stopped     bool
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 }
 
 func NewWorker(checker *Checker, logger *zap.Logger) *Worker {
@@ -40,11 +46,47 @@ func NewWorker(checker *Checker, logger *zap.Logger) *Worker {
 // Start launches workerCount goroutines draining the queue until ctx is
 // cancelled (server shutdown). workerCount <= 0 uses defaultWorkerCount.
 func (w *Worker) Start(ctx context.Context, workerCount int) {
+	w.lifecycleMu.Lock()
+	if w.started || w.stopped {
+		w.lifecycleMu.Unlock()
+		return
+	}
+	w.started = true
+	workerCtx, cancel := context.WithCancel(ctx)
+	w.cancel = cancel
+	w.lifecycleMu.Unlock()
 	if workerCount <= 0 {
 		workerCount = defaultWorkerCount
 	}
+	w.wg.Add(workerCount)
 	for range workerCount {
-		go w.run(ctx)
+		go func() {
+			defer w.wg.Done()
+			w.run(workerCtx)
+		}()
+	}
+}
+
+// Stop cancels workers and waits for them to observe cancellation.
+func (w *Worker) Stop(ctx context.Context) {
+	w.lifecycleMu.Lock()
+	if w.stopped {
+		w.lifecycleMu.Unlock()
+		return
+	}
+	w.stopped = true
+	started := w.started
+	cancel := w.cancel
+	w.lifecycleMu.Unlock()
+	if !started {
+		return
+	}
+	cancel()
+	done := make(chan struct{})
+	go func() { w.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 

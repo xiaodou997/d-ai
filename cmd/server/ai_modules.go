@@ -72,6 +72,8 @@ type aiModules struct {
 	refresher          *tokenrefresh.Refresher
 	settlementConsumer *billingoutbox.Consumer
 	logger             *zap.Logger
+	workerCtx          context.Context
+	workerCancel       context.CancelFunc
 	startOnce          sync.Once
 	stopOnce           sync.Once
 }
@@ -560,12 +562,16 @@ func (m *aiModules) Start(ctx context.Context) {
 	if m == nil {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	m.startOnce.Do(func() {
+		m.workerCtx, m.workerCancel = context.WithCancel(ctx)
 		if m.priceBookSvc != nil {
 			m.priceBookSvc.Start(ctx)
 		}
 		if m.riskControlWorker != nil {
-			m.riskControlWorker.Start(ctx, 0)
+			m.riskControlWorker.Start(m.workerCtx, 0)
 		}
 		if m.auditWorker != nil {
 			m.auditWorker.Start(ctx)
@@ -590,6 +596,12 @@ func (m *aiModules) Stop(ctx context.Context) {
 		return
 	}
 	m.stopOnce.Do(func() {
+		if m.workerCancel != nil {
+			m.workerCancel()
+		}
+		if m.riskControlWorker != nil {
+			m.riskControlWorker.Stop(ctx)
+		}
 		if m.AsyncTasks != nil {
 			m.AsyncTasks.Stop(ctx)
 		}
