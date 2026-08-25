@@ -577,7 +577,7 @@ func (m *aiModules) Start(ctx context.Context) {
 			m.auditWorker.Start(m.workerCtx)
 		}
 		if m.refresher != nil {
-			go m.refresher.Start(ctx)
+			m.refresher.Start(m.workerCtx)
 			if m.logger != nil {
 				m.logger.Info("oauth token refresher started")
 			}
@@ -604,6 +604,9 @@ func (m *aiModules) Stop(ctx context.Context) {
 		}
 		if m.auditWorker != nil {
 			m.auditWorker.Stop(ctx)
+		}
+		if m.refresher != nil {
+			m.refresher.Stop(ctx)
 		}
 		if m.AsyncTasks != nil {
 			m.AsyncTasks.Stop(ctx)

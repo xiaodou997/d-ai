@@ -15,6 +15,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
@@ -130,6 +131,11 @@ type Refresher struct {
 	interval        time.Duration
 	window          time.Duration // refresh credentials expiring within this window
 	providerConfigs map[domain.FixedProviderType]providerConfig
+	lifecycleMu     sync.Mutex
+	started         bool
+	stopped         bool
+	cancel          context.CancelFunc
+	wg              sync.WaitGroup
 }
 
 // New creates a Refresher that checks every interval and refreshes credentials
@@ -147,6 +153,63 @@ func New(store *pgadapter.OAuthCredentialStore, logger *zap.Logger) *Refresher {
 
 // Start runs the refresh loop until ctx is cancelled.
 func (r *Refresher) Start(ctx context.Context) {
+	if r == nil || r.store == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.lifecycleMu.Lock()
+	if r.started || r.stopped {
+		r.lifecycleMu.Unlock()
+		return
+	}
+	r.started = true
+	workerCtx, cancel := context.WithCancel(ctx)
+	r.cancel = cancel
+	r.wg.Add(1)
+	r.lifecycleMu.Unlock()
+	go func() { defer r.wg.Done(); r.run(workerCtx) }()
+}
+
+// Stop cancels the refresh loop and waits for an in-flight provider request
+// and its persistence decision to finish.
+func (r *Refresher) Stop(ctx context.Context) {
+	if r == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.lifecycleMu.Lock()
+	if r.stopped {
+		started := r.started
+		r.lifecycleMu.Unlock()
+		if started {
+			r.wait(ctx)
+		}
+		return
+	}
+	r.stopped = true
+	started, cancel := r.started, r.cancel
+	r.lifecycleMu.Unlock()
+	if !started {
+		return
+	}
+	cancel()
+	r.wait(ctx)
+}
+
+func (r *Refresher) wait(ctx context.Context) {
+	done := make(chan struct{})
+	go func() { r.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+func (r *Refresher) run(ctx context.Context) {
 	// Run once immediately so restarts pick up near-expired tokens right away.
 	r.runOnce(ctx)
 
