@@ -192,7 +192,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已建立 `auth.Actor` / `Capability` 和 `requireCapability`，租户自助与品牌端点已迁移，管理、支付和客户端点仍待迁移。
 - [ ] Portal 菜单 capability 只用于展示，后端始终执行最终授权。
 - [ ] 建立 actor、tenant scope、resource ownership 的统一类型。
-- [ ] 为 312 个 OpenAPI operation 生成或维护授权矩阵。
+- [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
 - [ ] 增加跨租户、越权、对象枚举和角色降级测试。
 
 ## P1：数据库与资金数据治理
@@ -605,6 +605,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 自助入口授权迁移：模块状态、租户现金和在线支付入口已改用 `CapabilityPlatformAdmin`、`CapabilityTenantSelf`、`CapabilityCustomerSelf`；支付场景选择也由 actor capability 决定，未授权角色不会进入下单/查单流程。
 - 授权遗留清理：Transport 已删除未使用的 `requireUserType` 兼容 middleware；认证资料、MFA 注册/确认和租户状态检查改用 actor capability/tenant-scope helper，JWT userType 数值只保留为 claims 数据完整性校验。
 - 授权遗留清理：管理反向充值也改用 `CapabilityTenantSelf` 选择 scoped/unscoped command；Transport 中剩余 userType 读取仅用于持久化投影和 claims 完整性校验，不再承担路由授权判断。
+- 授权矩阵：以 `contracts/openapi.yaml` 为唯一 operation 输入，`docs/AUTHORIZATION_MATRIX.md` 逐条列出 318 个 operation 的 policy、capability/auth mode 和 ownership；`go run ./cmd/checkauthz` 负责覆盖率、重复 operationId、未分类规则和文档 freshness。
 - 结算 outbox 生命周期：`billing/outbox.Consumer` 使用独立 worker context，Stop 会停止 claim 新批次并等待当前数据库事务/批次完成；重复 Run/Stop 和停止后启动均安全。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。

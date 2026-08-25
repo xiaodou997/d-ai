@@ -74,6 +74,11 @@ jobs:
           go run ./cmd/openapi
           git diff --exit-code contracts/openapi.yaml
 
+      - name: Authorization matrix is current
+        run: |
+          go run ./cmd/checkauthz
+          git diff --exit-code docs/AUTHORIZATION_MATRIX.md
+
   frontend:
     name: Portal
     runs-on: ubuntu-latest

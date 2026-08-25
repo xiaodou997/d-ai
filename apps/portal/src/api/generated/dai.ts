@@ -6278,11 +6278,11 @@ export interface components {
             /** Format: int64 */
             tenantWithdrawFeeBp: number;
         };
-        GlobalStatsRow: {
+        GlobalStats: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/GlobalStatsRow.json
+             * @example https://example.com/schemas/GlobalStats.json
              */
             readonly $schema?: string;
             /** Format: int64 */
@@ -6874,27 +6874,6 @@ export interface components {
             name: string;
             version: string;
         };
-        InviteCodeItem: {
-            code: string;
-            createdBy: string;
-            /** Format: int64 */
-            createdTime: number;
-            description: string;
-            /** Format: int64 */
-            expireTime?: number;
-            /** Format: int64 */
-            id: number;
-            /** Format: int64 */
-            maxUses: number;
-            registrationUrl?: string;
-            /** Format: int64 */
-            status: number;
-            tenantId: string;
-            /** Format: int64 */
-            updatedTime: number;
-            /** Format: int64 */
-            usedCount: number;
-        };
         JWKSKey: {
             alg: string;
             e: string;
@@ -7291,21 +7270,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        PageInviteCodeItem: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/PageInviteCodeItem.json
-             */
-            readonly $schema?: string;
-            items: components["schemas"]["InviteCodeItem"][] | null;
-            /** Format: int64 */
-            page: number;
-            /** Format: int64 */
-            size: number;
-            /** Format: int64 */
-            total: number;
-        };
         PageRechargeRecordRow: {
             /**
              * Format: uri
@@ -7314,6 +7278,21 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["RechargeRecordRow"][] | null;
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        PageTenantInvitationItemOutput: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PageTenantInvitationItemOutput.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["TenantInvitationItemOutput"][] | null;
             /** Format: int64 */
             page: number;
             /** Format: int64 */
@@ -8868,6 +8847,27 @@ export interface components {
             retail_price_book_id: string;
             /** Format: int64 */
             total: number;
+        };
+        TenantInvitationItemOutput: {
+            code: string;
+            createdBy: string;
+            /** Format: int64 */
+            createdTime: number;
+            description: string;
+            /** Format: int64 */
+            expireTime?: number;
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            maxUses: number;
+            registrationUrl?: string;
+            /** Format: int64 */
+            status: number;
+            tenantId: string;
+            /** Format: int64 */
+            updatedTime: number;
+            /** Format: int64 */
+            usedCount: number;
         };
         TenantListItem: {
             /** Format: double */
@@ -13084,7 +13084,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GlobalStatsRow"];
+                    "application/json": components["schemas"]["GlobalStats"];
                 };
             };
             /** @description Error */
@@ -14142,7 +14142,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageInviteCodeItem"];
+                    "application/json": components["schemas"]["PageTenantInvitationItemOutput"];
                 };
             };
             /** @description Error */
