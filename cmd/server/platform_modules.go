@@ -26,6 +26,7 @@ import (
 	"xiaodou/dai/internal/payment/wechat"
 	"xiaodou/dai/internal/scheduler"
 	systempkg "xiaodou/dai/internal/system"
+	systempg "xiaodou/dai/internal/system/pg"
 	tenantpkg "xiaodou/dai/internal/tenant"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
 	userpkg "xiaodou/dai/internal/user"
@@ -59,6 +60,7 @@ type platformModules struct {
 	Announcements *announcementpkg.Service
 	Notifications *notificationpkg.Service
 	Modules       *systempkg.Service
+	Dashboard     *systempg.SystemRepository
 	ProxyNodes    *proxy.Service
 	DataCleanup   *cleanuppkg.Service
 
@@ -126,6 +128,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger, deductionSvc)
 	announcementSvc := announcementpkg.NewService(announcementpg.NewRepository(pool))
 	moduleSvc := systempkg.NewService(pool)
+	dashboardRepo := systempg.NewSystemRepository(pool)
 	proxySvc := proxy.NewService(pool, moduleSvc)
 	notificationSvc := notificationpkg.NewService(pool)
 	dataCleanupSvc := cleanuppkg.NewService(pool, appLogger)
@@ -152,6 +155,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		Announcements:  announcementSvc,
 		Notifications:  notificationSvc,
 		Modules:        moduleSvc,
+		Dashboard:      dashboardRepo,
 		ProxyNodes:     proxySvc,
 		DataCleanup:    dataCleanupSvc,
 		banReconciler:  auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),

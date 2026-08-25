@@ -7,7 +7,7 @@ import (
 	authports "xiaodou/dai/internal/auth/ports"
 	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
-	systempg "xiaodou/dai/internal/system/pg"
+	systemports "xiaodou/dai/internal/system/ports"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 )
@@ -22,7 +22,7 @@ type adminHandlers struct {
 	accountWriter      userports.AdminAccountWriter
 	endUserRepo        userports.AdminEndUserReader
 	endUserWriter      userports.AdminEndUserWriter
-	systemRepo         *systempg.SystemRepository
+	systemRepo         systemports.AdminDashboardReader
 	deduction          *billingsvc.DeductionService
 	accountQueries     billingports.AccountQueryReader
 	blacklist          *auth.BlacklistService
@@ -53,7 +53,7 @@ func newAdminHandlers(d Deps) *adminHandlers {
 		accountWriter:      d.AdminAccountWriter,
 		endUserRepo:        d.AdminEndUsers,
 		endUserWriter:      d.AdminEndUserWriter,
-		systemRepo:         systempg.NewSystemRepository(d.Pool),
+		systemRepo:         d.Dashboard,
 		deduction:          d.Deduction,
 		accountQueries:     d.AccountQueries,
 		rechargeSvc:        d.Recharge,

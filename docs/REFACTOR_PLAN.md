@@ -588,6 +588,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 登录认证边界：登录账号投影、租户限速维度、租户状态检查、最后登录时间更新和认证审计写入统一通过 `auth/ports.LoginReader` / `AuthAuditRecorder`；登录、MFA、刷新和最近认证 handler 不再构造 `auth/pg.AuthRepository`，凭证查询与审计序列化留在 persistence adapter。`auth/pg` 例外仅剩资料/管理账号路径的唯一性错误兼容。
 - 唯一性错误边界：用户名/邮箱唯一约束由 `auth/ports.ErrUsernameTaken` / `ErrEmailTaken` 表达，auth、user、tenant、invite PostgreSQL adapter 在边界处统一翻译；资料、管理员账号、终端用户、租户初始用户和公开注册 handler/service 只使用 `errors.Is`，Transport 不再导入 `auth/pg`。
 - 公开邀请边界：邀请码缺失/不可用、格式、注册和公开邀请投影统一通过 `invite/ports.PublicService` 与 `invite/ports` 错误契约注入；Transport 不再依赖 `invite` 实现包或 `invite/pg`，邀请查询、注册事务和法律接受记录留在 InviteService/adapter。
+- 系统仪表盘查询边界：异常结算告警、全局统计、消费趋势和资源统计统一通过 `system/ports.AdminDashboardReader` 注入；Transport 只负责时间窗口、筛选参数和 DTO 投影，`SystemRepository` 负责 SQL、金额转换和扫描。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
 - 遗留风险：`internal/transport` 仍保留管理财务/充值写入路径及认证旧 handler 的 adapter 例外；租户管理读写和 AI identity 已通过 tenant ports 装配，下一切片处理认证旧 handler 与账户写入边界。

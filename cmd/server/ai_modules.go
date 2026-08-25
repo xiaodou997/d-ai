@@ -381,6 +381,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				Announcements: platform.Announcements,
 				Notifications: platform.Notifications,
 				Modules:       platform.Modules,
+				Dashboard:     platform.Dashboard,
 				ProxyNodes:    platform.ProxyNodes,
 				DataCleanup:   platform.DataCleanup,
 			},

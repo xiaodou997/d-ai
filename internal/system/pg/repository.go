@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/billing"
+	systemports "xiaodou/dai/internal/system/ports"
 )
 
 // Pagination 分页参数
@@ -36,6 +37,8 @@ type SystemRepository struct {
 	pool *pgxpool.Pool
 }
 
+var _ systemports.AdminDashboardReader = (*SystemRepository)(nil)
+
 func NewSystemRepository(pool *pgxpool.Pool) *SystemRepository {
 	return &SystemRepository{pool: pool}
 }
@@ -49,10 +52,16 @@ type FailedTransactionAlertRow struct {
 	CreatedAt       time.Time
 }
 
+type GlobalStatsRow = systemports.GlobalStats
+type ConsumptionTrendRow = systemports.ConsumptionTrendPoint
+type GetConsumptionTrendParams = systemports.ConsumptionTrendQuery
+type ResourceStatisticsRow = systemports.ResourceStatistic
+type GetResourceStatisticsParams = systemports.ResourceStatisticsQuery
+
 // ListFailedTransactionAlerts keeps the dashboard's fixed 24-hour/20-row
 // projection inside the system repository instead of leaking SQL into HTTP
 // transport.
-func (r *SystemRepository) ListFailedTransactionAlerts(ctx context.Context) ([]FailedTransactionAlertRow, error) {
+func (r *SystemRepository) ListFailedTransactionAlerts(ctx context.Context) ([]systemports.FailedTransactionAlert, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT request_id, COALESCE(settlement_error, ''), billing_status, created_at
 		FROM ai_usage_logs
@@ -65,9 +74,9 @@ func (r *SystemRepository) ListFailedTransactionAlerts(ctx context.Context) ([]F
 	}
 	defer rows.Close()
 
-	alerts := make([]FailedTransactionAlertRow, 0)
+	alerts := make([]systemports.FailedTransactionAlert, 0)
 	for rows.Next() {
-		var alert FailedTransactionAlertRow
+		var alert systemports.FailedTransactionAlert
 		if err := rows.Scan(&alert.RequestID, &alert.SettlementError, &alert.BillingStatus, &alert.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -79,20 +88,8 @@ func (r *SystemRepository) ListFailedTransactionAlerts(ctx context.Context) ([]F
 	return alerts, nil
 }
 
-type GlobalStatsRow struct {
-	Currency                string  `json:"currency"`
-	TenantRechargePaidMinor int64   `json:"tenantRechargePaidMinor"`
-	TenantRechargeAmountUSD float64 `json:"tenantRechargeAmountUsd"`
-	ActiveTenants           int64   `json:"activeTenants"`
-	TenantTotalBalanceUSD   float64 `json:"tenantTotalBalanceUsd"`
-	UserRechargePaidMinor   int64   `json:"userRechargePaidMinor"`
-	UserRechargeAmountUSD   float64 `json:"userRechargeAmountUsd"`
-	NewUsers                int64   `json:"newUsers"`
-	UserTotalBalanceUSD     float64 `json:"userTotalBalanceUsd"`
-}
-
-func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo *time.Time) (GlobalStatsRow, error) {
-	var row GlobalStatsRow
+func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo *time.Time) (systemports.GlobalStats, error) {
+	var row systemports.GlobalStats
 	var tenantRechargeMicro, tenantTotalMicro, userRechargeMicro, userTotalMicro int64
 	err := r.pool.QueryRow(ctx, `
 		SELECT
@@ -118,19 +115,7 @@ func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo 
 	return row, err
 }
 
-type ConsumptionTrendRow struct {
-	Day   time.Time `json:"day"`
-	Total float64   `json:"total"`
-}
-
-type GetConsumptionTrendParams struct {
-	TimeFrom    *time.Time
-	TimeTo      *time.Time
-	TenantID    *string
-	AccountType *int64
-}
-
-func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params GetConsumptionTrendParams) ([]ConsumptionTrendRow, error) {
+func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params systemports.ConsumptionTrendQuery) ([]systemports.ConsumptionTrendPoint, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT date_trunc('day', created_at) AS day_bucket,
 		       SUM(COALESCE(tenant_payable, 0) + COALESCE(user_charged, 0)) AS total
@@ -148,9 +133,9 @@ func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params GetCo
 		return nil, err
 	}
 	defer rows.Close()
-	var list []ConsumptionTrendRow
+	var list []systemports.ConsumptionTrendPoint
 	for rows.Next() {
-		var r ConsumptionTrendRow
+		var r systemports.ConsumptionTrendPoint
 		var totalMicro int64
 		if err := rows.Scan(&r.Day, &totalMicro); err != nil {
 			return nil, err
@@ -161,19 +146,7 @@ func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params GetCo
 	return list, rows.Err()
 }
 
-type ResourceStatisticsRow struct {
-	ClientID   string  `json:"clientId"`
-	ClientName string  `json:"clientName"`
-	Total      float64 `json:"total"`
-}
-
-type GetResourceStatisticsParams struct {
-	TimeFrom *time.Time
-	TimeTo   *time.Time
-	TenantID *string
-}
-
-func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params GetResourceStatisticsParams) ([]ResourceStatisticsRow, error) {
+func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params systemports.ResourceStatisticsQuery) ([]systemports.ResourceStatistic, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT COALESCE(dt.request_source, '') AS client_id,
 		       COALESCE(NULLIF(dt.request_source, ''), 'D-AI') AS client_name,
@@ -189,9 +162,9 @@ func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params Get
 		return nil, err
 	}
 	defer rows.Close()
-	var list []ResourceStatisticsRow
+	var list []systemports.ResourceStatistic
 	for rows.Next() {
-		var row ResourceStatisticsRow
+		var row systemports.ResourceStatistic
 		var totalMicro int64
 		if err := rows.Scan(&row.ClientID, &row.ClientName, &totalMicro); err != nil {
 			return nil, err

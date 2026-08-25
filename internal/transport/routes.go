@@ -20,6 +20,7 @@ import (
 	notificationpkg "xiaodou/dai/internal/notification"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	systempkg "xiaodou/dai/internal/system"
+	systemports "xiaodou/dai/internal/system/ports"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	userpkg "xiaodou/dai/internal/user"
 	userports "xiaodou/dai/internal/user/ports"
@@ -91,6 +92,7 @@ type OperationsDeps struct {
 	Announcements *announcementpkg.Service
 	Notifications *notificationpkg.Service
 	Modules       *systempkg.Service
+	Dashboard     systemports.AdminDashboardReader
 	ProxyNodes    *proxypkg.Service
 	DataCleanup   *cleanuppkg.Service
 }

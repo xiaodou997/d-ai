@@ -9,7 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	billingdomain "xiaodou/dai/internal/billing"
-	systempg "xiaodou/dai/internal/system/pg"
+	systemports "xiaodou/dai/internal/system/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -72,7 +72,7 @@ type globalStatsInput struct {
 }
 
 type globalStatsOutput struct {
-	Body systempg.GlobalStatsRow
+	Body systemports.GlobalStats
 }
 
 // registerAdminDashboard 注册 dashboard 与分析端点。
@@ -116,7 +116,7 @@ func (h *adminHandlers) consumptionTrend(ctx context.Context, in *trendInput) (*
 		return nil, err
 	}
 	timeFrom, timeTo = applyDefaultAdminAnalyticsWindow(timeFrom, timeTo, 7*24*time.Hour)
-	params := systempg.GetConsumptionTrendParams{TimeFrom: timeFrom, TimeTo: timeTo}
+	params := systemports.ConsumptionTrendQuery{TimeFrom: timeFrom, TimeTo: timeTo}
 	if in.TenantID != "" {
 		params.TenantID = &in.TenantID
 	}
@@ -145,7 +145,7 @@ func (h *adminHandlers) resourceStatistics(ctx context.Context, in *resourceStat
 		return nil, err
 	}
 	timeFrom, timeTo = applyDefaultAdminAnalyticsWindow(timeFrom, timeTo, 7*24*time.Hour)
-	params := systempg.GetResourceStatisticsParams{TimeFrom: timeFrom, TimeTo: timeTo}
+	params := systemports.ResourceStatisticsQuery{TimeFrom: timeFrom, TimeTo: timeTo}
 	if in.TenantID != "" {
 		params.TenantID = &in.TenantID
 	}
