@@ -37,20 +37,21 @@ import (
 // It keeps their construction and process-level workers together so the
 // composition root only has to consume a stable dependency bundle.
 type platformModules struct {
-	JWT            *auth.JWTService
-	Sessions       *auth.SessionService
-	Activations    *auth.ActivationService
-	MFA            *auth.MFAService
-	RecentAuth     *auth.RecentAuthService
-	Blacklist      *auth.BlacklistService
-	UserService    *userpkg.UserService
-	AuthAccounts   *authpg.AuthRepository
-	TenantRepo     *tenantpg.TenantRepository
-	TenantBranding *tenantpg.PortalBrandingRepository
-	TenantSelf     *tenantpkg.SelfService
-	AdminAccounts  *userpg.AdminAccountRepository
-	AdminEndUsers  *userpg.AdminEndUserRepository
-	Invite         *invitepkg.InviteService
+	JWT              *auth.JWTService
+	Sessions         *auth.SessionService
+	Activations      *auth.ActivationService
+	MFA              *auth.MFAService
+	RecentAuth       *auth.RecentAuthService
+	Blacklist        *auth.BlacklistService
+	UserService      *userpkg.UserService
+	AuthAccounts     *authpg.AuthRepository
+	AuthRateLimiters *auth.RateLimiters
+	TenantRepo       *tenantpg.TenantRepository
+	TenantBranding   *tenantpg.PortalBrandingRepository
+	TenantSelf       *tenantpkg.SelfService
+	AdminAccounts    *userpg.AdminAccountRepository
+	AdminEndUsers    *userpg.AdminEndUserRepository
+	Invite           *invitepkg.InviteService
 
 	Deduction      *billingsvc.DeductionService
 	Recharge       *billingsvc.RechargeService
@@ -113,6 +114,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	userRepo := userpg.NewUserRepository(pool)
 	userSvc := userpkg.NewUserService(userRepo, blacklist, appLogger)
 	authAccountRepo := authpg.NewAuthRepository(pool)
+	authRateLimiters := auth.NewRateLimiters(redisClient)
 	tenantRepo := tenantpg.NewTenantRepository(pool)
 	tenantBrandingRepo := tenantpg.NewPortalBrandingRepository(pool)
 	tenantSelfRepo := tenantpg.NewTenantRepo(pool)
@@ -134,32 +136,33 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	dataCleanupSvc := cleanuppkg.NewService(pool, appLogger)
 
 	return &platformModules{
-		JWT:            jwtSvc,
-		Sessions:       sessionSvc,
-		Activations:    activationSvc,
-		MFA:            mfaSvc,
-		RecentAuth:     recentAuthSvc,
-		Blacklist:      blacklist,
-		UserService:    userSvc,
-		AuthAccounts:   authAccountRepo,
-		TenantRepo:     tenantRepo,
-		TenantBranding: tenantBrandingRepo,
-		TenantSelf:     tenantSelfSvc,
-		AdminAccounts:  adminAccountRepo,
-		AdminEndUsers:  adminEndUserRepo,
-		Invite:         inviteSvc,
-		Deduction:      deductionSvc,
-		Recharge:       rechargeSvc,
-		Payment:        paymentSvc,
-		AccountQueries: accountQueries,
-		Announcements:  announcementSvc,
-		Notifications:  notificationSvc,
-		Modules:        moduleSvc,
-		Dashboard:      dashboardRepo,
-		ProxyNodes:     proxySvc,
-		DataCleanup:    dataCleanupSvc,
-		banReconciler:  auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),
-		sched:          scheduler.NewScheduler(pool, jwtSvc, paymentSvc, appLogger),
+		JWT:              jwtSvc,
+		Sessions:         sessionSvc,
+		Activations:      activationSvc,
+		MFA:              mfaSvc,
+		RecentAuth:       recentAuthSvc,
+		Blacklist:        blacklist,
+		UserService:      userSvc,
+		AuthAccounts:     authAccountRepo,
+		AuthRateLimiters: authRateLimiters,
+		TenantRepo:       tenantRepo,
+		TenantBranding:   tenantBrandingRepo,
+		TenantSelf:       tenantSelfSvc,
+		AdminAccounts:    adminAccountRepo,
+		AdminEndUsers:    adminEndUserRepo,
+		Invite:           inviteSvc,
+		Deduction:        deductionSvc,
+		Recharge:         rechargeSvc,
+		Payment:          paymentSvc,
+		AccountQueries:   accountQueries,
+		Announcements:    announcementSvc,
+		Notifications:    notificationSvc,
+		Modules:          moduleSvc,
+		Dashboard:        dashboardRepo,
+		ProxyNodes:       proxySvc,
+		DataCleanup:      dataCleanupSvc,
+		banReconciler:    auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),
+		sched:            scheduler.NewScheduler(pool, jwtSvc, paymentSvc, appLogger),
 	}, nil
 }
 

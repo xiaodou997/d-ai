@@ -338,8 +338,6 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		Deps: transport.Deps{
 			InfrastructureDeps: transport.InfrastructureDeps{
 				Version: version,
-				Pool:    pool,
-				Redis:   redisClient,
 				Logger:  appLogger,
 			},
 			PortalDeps: transport.PortalDeps{
@@ -359,6 +357,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				AuthLoginReader:      platform.AuthAccounts,
 				AuthAuditWriter:      platform.AuthAccounts,
 				AuthAuditLogs:        platform.AuthAccounts,
+				AuthRateLimiters:     platform.AuthRateLimiters,
 				TenantStatusWriter:   platform.TenantRepo,
 				TenantWriter:         platform.TenantRepo,
 				TenantReader:         platform.TenantRepo,

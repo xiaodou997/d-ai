@@ -30,6 +30,23 @@ type LoginRateLimiter struct {
 	prefix string
 }
 
+// RateLimiters groups authentication abuse-control scopes for composition-root injection.
+type RateLimiters struct {
+	Login      *LoginRateLimiter
+	Activation *LoginRateLimiter
+	MFA        *LoginRateLimiter
+	MFAConfirm *LoginRateLimiter
+	RecentAuth *LoginRateLimiter
+}
+
+func NewRateLimiters(redisClient *redis.Client) *RateLimiters {
+	return &RateLimiters{
+		Login: NewLoginRateLimiter(redisClient), Activation: NewScopedRateLimiter(redisClient, "dai:auth:activation:"),
+		MFA: NewScopedRateLimiter(redisClient, "dai:auth:mfa:"), MFAConfirm: NewScopedRateLimiter(redisClient, "dai:auth:mfa-confirm:"),
+		RecentAuth: NewScopedRateLimiter(redisClient, "dai:auth:recent-auth:"),
+	}
+}
+
 const (
 	rateLimitFailureWindow = 15 * time.Minute
 	rateLimitThreshold     = 5

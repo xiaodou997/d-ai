@@ -84,6 +84,10 @@ type authHandlers struct {
 }
 
 func newAuthHandlers(d Deps) *authHandlers {
+	rateLimiters := d.AuthRateLimiters
+	if rateLimiters == nil {
+		rateLimiters = auth.NewRateLimiters(nil)
+	}
 	return &authHandlers{
 		loginReader:       d.AuthLoginReader,
 		auditWriter:       d.AuthAuditWriter,
@@ -91,9 +95,9 @@ func newAuthHandlers(d Deps) *authHandlers {
 		activations:       d.Activations,
 		mfa:               d.MFA,
 		recentAuth:        d.RecentAuth,
-		limiter:           auth.NewLoginRateLimiter(d.Redis),
-		activationLimiter: auth.NewScopedRateLimiter(d.Redis, "dai:auth:activation:"),
-		mfaLimiter:        auth.NewScopedRateLimiter(d.Redis, "dai:auth:mfa:"),
+		limiter:           rateLimiters.Login,
+		activationLimiter: rateLimiters.Activation,
+		mfaLimiter:        rateLimiters.MFA,
 		secureCookies:     d.SecureCookies,
 		log:               d.Logger,
 	}

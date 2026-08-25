@@ -5,8 +5,6 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	announcementpkg "xiaodou/dai/internal/announcement"
@@ -37,8 +35,6 @@ import (
 // these clients with ports when the legacy SQL handlers are migrated.
 type InfrastructureDeps struct {
 	Version string
-	Pool    *pgxpool.Pool
-	Redis   *redis.Client
 	Logger  *zap.Logger
 }
 
@@ -64,6 +60,7 @@ type IdentityDeps struct {
 	AuthLoginReader      authports.LoginReader
 	AuthAuditWriter      authports.AuthAuditRecorder
 	AuthAuditLogs        authports.AuthAuditLogReader
+	AuthRateLimiters     *auth.RateLimiters
 	TenantStatusWriter   tenantports.AdminTenantStatusWriter
 	TenantWriter         tenantports.AdminTenantWriter
 	TenantReader         tenantports.AdminTenantReader

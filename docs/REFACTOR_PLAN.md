@@ -590,6 +590,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 公开邀请边界：邀请码缺失/不可用、格式、注册和公开邀请投影统一通过 `invite/ports.PublicService` 与 `invite/ports` 错误契约注入；Transport 不再依赖 `invite` 实现包或 `invite/pg`，邀请查询、注册事务和法律接受记录留在 InviteService/adapter。
 - 系统仪表盘查询边界：异常结算告警、全局统计、消费趋势和资源统计统一通过 `system/ports.AdminDashboardReader` 注入；Transport 只负责时间窗口、筛选参数和 DTO 投影，`SystemRepository` 负责 SQL、金额转换和扫描。
 - 账务/支付依赖清理：复核确认 Transport 的账户查询、充值、支付订单、回调、退款、提现和租户现金路径均已通过 `billing/service`、`billing/ports` 或 `payment/service` 间接调用，未再直接导入 `billing/pg` / `payment/pg`；删除两条过期依赖例外，后续重点转向基础设施字段从根容器下沉。
+- 认证限速基础设施边界：登录、激活、MFA、MFA 确认和最近认证限速器统一由 composition root 通过 `auth.RateLimiters` 构造并注入；Transport 不再导入 `pgxpool`/Redis，也不再暴露 `InfrastructureDeps.Pool/Redis`，未装配时使用 fail-closed 的空客户端限速器。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
 - 遗留风险：`internal/transport` 仍保留管理财务/充值写入路径及认证旧 handler 的 adapter 例外；租户管理读写和 AI identity 已通过 tenant ports 装配，下一切片处理认证旧 handler 与账户写入边界。

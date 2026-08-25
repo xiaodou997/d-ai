@@ -50,8 +50,12 @@ type messageOutput struct {
 func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 	recent := append(append(huma.Middlewares{}, mw...), requestClientMetadata(api))
 	logoutMiddleware := append(append(huma.Middlewares{}, mw...), requireSameOrigin(api))
-	mfaConfirmLimiter := auth.NewScopedRateLimiter(d.Redis, "dai:auth:mfa-confirm:")
-	recentAuthLimiter := auth.NewScopedRateLimiter(d.Redis, "dai:auth:recent-auth:")
+	rateLimiters := d.AuthRateLimiters
+	if rateLimiters == nil {
+		rateLimiters = auth.NewRateLimiters(nil)
+	}
+	mfaConfirmLimiter := rateLimiters.MFAConfirm
+	recentAuthLimiter := rateLimiters.RecentAuth
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-current-user",
 		Method:      http.MethodGet,
