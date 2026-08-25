@@ -158,10 +158,9 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	userType := claims.UserType
-	loginTenantID := claims.TenantID
+	actor := actorFromClaims(claims)
 
-	if userType == 3 && in.Body.PackageType != 2 {
+	if actor.Has(auth.CapabilityTenantSelf) && in.Body.PackageType != 2 {
 		return nil, httpx.ErrForbidden.WithDetail("租户用户只能进行用户充值")
 	}
 	orderType, err := orderTypeFromPackageType(in.Body.PackageType)
@@ -172,7 +171,7 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 
 	var tenantID, userID string
 	if orderType == billingdomain.OrderTypePlatformToTenant {
-		if userType != 1 && userType != 2 {
+		if !actor.Has(auth.CapabilityPlatformAdmin) {
 			return nil, httpx.ErrForbidden.WithDetail("只有平台管理员才能进行租户充值")
 		}
 		tenantID = in.Body.TenantID
@@ -205,7 +204,7 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		if userTenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
 		}
-		if userType == 3 && loginTenantID != "" && loginTenantID != userTenantID {
+		if !actor.CanAccessTenant(userTenantID) {
 			return nil, httpx.ErrForbidden.WithDetail("只能为本租户用户充值")
 		}
 		tenantID = userTenantID

@@ -101,7 +101,7 @@ func registerAdminTenants(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
-	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
+	sysOrTenant := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf)}
 	sysUserSensitive := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{
@@ -241,7 +241,7 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if !isAdminClaims(claims) && claims.TenantID != in.ID {
+	if !actorFromClaims(claims).CanAccessTenant(in.ID) {
 		return nil, httpx.ErrForbidden.WithDetail("无权查看其他租户信息")
 	}
 

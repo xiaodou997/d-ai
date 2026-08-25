@@ -32,3 +32,28 @@ func (a Actor) Has(capability Capability) bool {
 		return false
 	}
 }
+
+// CanAccessTenant applies the resource scope carried by an actor. Platform
+// administrators are global; tenant-scoped actors may only access their own
+// non-empty tenant.
+func (a Actor) CanAccessTenant(tenantID string) bool {
+	if tenantID == "" {
+		return false
+	}
+	if a.Has(CapabilityPlatformAdmin) {
+		return true
+	}
+	return (a.Has(CapabilityTenantSelf) || a.Has(CapabilityCustomerSelf)) && a.TenantID == tenantID
+}
+
+// CanAccessUser extends tenant scope with customer ownership. Tenant users
+// can access users within their tenant; customers can access only themselves.
+func (a Actor) CanAccessUser(tenantID, userID string) bool {
+	if !a.CanAccessTenant(tenantID) {
+		return false
+	}
+	if a.UserType == 4 {
+		return userID != "" && a.UserID == userID
+	}
+	return true
+}

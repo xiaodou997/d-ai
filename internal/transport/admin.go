@@ -66,7 +66,14 @@ func newAdminHandlers(d Deps) *adminHandlers {
 
 // isAdminClaims 判断是否系统管理员（userType 1 超管 / 2 平台管理员）。
 func isAdminClaims(c *auth.Claims) bool {
-	return c != nil && (c.UserType == 1 || c.UserType == 2)
+	return c != nil && actorFromClaims(c).Has(auth.CapabilityPlatformAdmin)
+}
+
+func actorFromClaims(c *auth.Claims) auth.Actor {
+	if c == nil {
+		return auth.Actor{}
+	}
+	return auth.Actor{UserID: c.UserID, TenantID: c.TenantID, UserType: c.UserType}
 }
 
 // userIDOf 安全取出 Claims 的 UserID（nil 返回空串）。

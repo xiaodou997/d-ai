@@ -83,9 +83,9 @@ type createEndUserOutput struct {
 func registerAdminEndUsers(api huma.API, d Deps) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
-	sysOrTenant := huma.Middlewares{ua, requireUserType(api, 1, 2, 3)}
-	sysOrTenantSensitive := huma.Middlewares{ua, requireUserType(api, 1, 2, 3), requireRecentAuth(api, d.RecentAuth)}
-	tenantOnlySensitive := huma.Middlewares{ua, requireUserType(api, 3), requireRecentAuth(api, d.RecentAuth)}
+	sysOrTenant := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf)}
+	sysOrTenantSensitive := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf), requireRecentAuth(api, d.RecentAuth)}
+	tenantOnlySensitive := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf), requireRecentAuth(api, d.RecentAuth)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-end-users", Method: http.MethodGet, Path: "/api/v1/users",
 		Summary: "终端用户列表", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenant}, h.listEndUsers)
@@ -101,8 +101,8 @@ func registerAdminEndUsers(api huma.API, d Deps) {
 		Summary: "删除终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenantSensitive}, h.deleteEndUser)
 }
 
-// checkUserBelongsToTenant 校验 userID 归属 callerTenantID（空=管理员跳过）。
-func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
+// checkUserBelongsToActor verifies resource tenant scope before a mutation.
+func (h *adminHandlers) checkUserBelongsToActor(ctx context.Context, userID string, actor auth.Actor) error {
 	if h.tenantReader == nil {
 		return httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
 	}
@@ -113,10 +113,20 @@ func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, ca
 	if err != nil {
 		return httpx.ErrInternal.WithCause(err)
 	}
-	if callerTenantID != "" && tenantID != callerTenantID {
+	if !actor.CanAccessTenant(tenantID) {
 		return httpx.ErrForbidden.WithDetail("无权操作")
 	}
 	return nil
+}
+
+// checkUserBelongsToTenant keeps the test/legacy helper contract while routing
+// all new callers through the normalized actor scope check.
+func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
+	actor := auth.Actor{UserType: 2, TenantID: callerTenantID}
+	if callerTenantID != "" {
+		actor.UserType = 3
+	}
+	return h.checkUserBelongsToActor(ctx, userID, actor)
 }
 
 func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput) (*endUserListOutput, error) {
@@ -126,8 +136,8 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 	}
 	// 租户用户强制本租户；管理员用查询参数
 	tenantID := in.TenantID
-	if !isAdminClaims(claims) {
-		tenantID = claims.TenantID
+	if !actorFromClaims(claims).Has(auth.CapabilityPlatformAdmin) {
+		tenantID = actorFromClaims(claims).TenantID
 	}
 	result, err := h.endUserRepo.ListEndUsers(ctx, userports.AdminEndUserListFilter{
 		TenantID:   tenantID,
@@ -235,7 +245,7 @@ func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInpu
 	if claims == nil || claims.TenantID == "" {
 		return nil, httpx.ErrForbidden.WithDetail("需要租户用户身份")
 	}
-	if err := h.checkUserBelongsToTenant(ctx, in.ID, claims.TenantID); err != nil {
+	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
 		return nil, err
 	}
 
@@ -279,11 +289,7 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	callerTenantID := ""
-	if !isAdminClaims(claims) {
-		callerTenantID = claims.TenantID
-	}
-	if err := h.checkUserBelongsToTenant(ctx, in.ID, callerTenantID); err != nil {
+	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
 		return nil, err
 	}
 	updated, err := h.endUserWriter.UpdateEndUserStatus(ctx, in.ID, in.Body.Status)
@@ -310,11 +316,7 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	callerTenantID := ""
-	if !isAdminClaims(claims) {
-		callerTenantID = claims.TenantID
-	}
-	if err := h.checkUserBelongsToTenant(ctx, in.ID, callerTenantID); err != nil {
+	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
 		return nil, err
 	}
 	result, err := h.endUserWriter.ResetEndUserPassword(ctx, in.ID)
@@ -340,11 +342,7 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	callerTenantID := ""
-	if !isAdminClaims(claims) {
-		callerTenantID = claims.TenantID
-	}
-	if err := h.checkUserBelongsToTenant(ctx, in.ID, callerTenantID); err != nil {
+	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
 		return nil, err
 	}
 	if h.blacklist == nil || !h.blacklist.IsEnabled() {

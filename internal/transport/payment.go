@@ -213,7 +213,7 @@ func (h *paymentHandlers) createOrder(ctx context.Context, in *createTopupOrderI
 }
 
 func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) (*topupOrderStatusOutput, error) {
-	_, tenantID, userID, ok := sceneAndScopeFromClaims(ctx)
+	_, _, _, ok := sceneAndScopeFromClaims(ctx)
 	if !ok {
 		return nil, httpx.ErrForbidden
 	}
@@ -221,7 +221,7 @@ func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) 
 	if err != nil {
 		return nil, toProblem(err)
 	}
-	if order.TenantID != tenantID || (userID != "" && order.UserID != userID) {
+	if !actorFromClaims(userClaimsFromCtx(ctx)).CanAccessUser(order.TenantID, order.UserID) {
 		return nil, domain.ErrPaymentOrderNotFound
 	}
 	out := &topupOrderStatusOutput{}
