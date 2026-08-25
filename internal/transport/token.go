@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"xiaodou/dai/internal/auth"
-	authpg "xiaodou/dai/internal/auth/pg"
+	authports "xiaodou/dai/internal/auth/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -70,7 +70,8 @@ func clearRefreshCookie(secure bool) http.Cookie {
 
 // authHandlers handles unified Portal credentials and session refresh.
 type authHandlers struct {
-	repo              *authpg.AuthRepository
+	loginReader       authports.LoginReader
+	auditWriter       authports.AuthAuditRecorder
 	sessions          *auth.SessionService
 	activations       *auth.ActivationService
 	mfa               *auth.MFAService
@@ -84,7 +85,8 @@ type authHandlers struct {
 
 func newAuthHandlers(d Deps) *authHandlers {
 	return &authHandlers{
-		repo:              authpg.NewAuthRepository(d.Pool),
+		loginReader:       d.AuthLoginReader,
+		auditWriter:       d.AuthAuditWriter,
 		sessions:          d.Sessions,
 		activations:       d.Activations,
 		mfa:               d.MFA,
@@ -154,7 +156,10 @@ type loginPrincipal struct {
 }
 
 func (h *authHandlers) authenticateUser(ctx context.Context, username, password string) (loginPrincipal, *httpx.AppError) {
-	u, err := h.repo.GetPortalUserForLogin(ctx, username)
+	if h.loginReader == nil {
+		return loginPrincipal{}, httpx.ErrUnavailable.WithDetail("登录服务不可用")
+	}
+	u, err := h.loginReader.GetPortalUserForLogin(ctx, username)
 	if err != nil || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
 		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
@@ -165,7 +170,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
 	if u.UserType >= 3 {
-		active, err := h.repo.CheckTenantActive(ctx, u.TenantID)
+		active, err := h.loginReader.CheckTenantActive(ctx, u.TenantID)
 		if err != nil {
 			return loginPrincipal{}, httpx.ErrInternal.WithCause(err)
 		}
@@ -174,7 +179,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 		}
 	}
 
-	_ = h.repo.UpdateLoginTime(ctx, u.UserID, nowUTC())
+	_ = h.loginReader.UpdateLoginTime(ctx, u.UserID, nowUTC())
 
 	return loginPrincipal{
 		UserID:            u.UserID,
@@ -267,24 +272,27 @@ func (h *authHandlers) activateAccount(ctx context.Context, input *activateAccou
 
 func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authTokenOutput, error) {
 	username := strings.TrimSpace(input.Body.Username)
-	dimensions := auth.LoginRateDimensions{Account: strings.ToLower(username), IP: requestClientIP(ctx), Tenant: h.repo.LookupTenantForLogin(ctx, username)}
+	if h.loginReader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("登录服务不可用")
+	}
+	dimensions := auth.LoginRateDimensions{Account: strings.ToLower(username), IP: requestClientIP(ctx), Tenant: h.loginReader.LookupTenantForLogin(ctx, username)}
 	decision, err := h.limiter.Check(ctx, dimensions)
 	if err != nil {
-		h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录限速服务不可用"})
+		h.audit(ctx, authports.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录限速服务不可用"})
 		return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
 	}
 	if !decision.Allowed {
-		h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "deny", ReasonCode: "login_rate_limited", ReasonMessage: "登录尝试触发限速"})
+		h.audit(ctx, authports.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "deny", ReasonCode: "login_rate_limited", ReasonMessage: "登录尝试触发限速"})
 		return nil, httpx.ErrTooManyReqs.WithDetail("登录尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
 	}
 	p, appErr := h.authenticateUser(ctx, username, input.Body.Password)
 	if appErr != nil {
 		retryAfter, rateErr := h.limiter.RecordFailure(ctx, dimensions)
 		if rateErr != nil {
-			h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录失败计数不可用"})
+			h.audit(ctx, authports.AuditEvent{EventType: "user_login", PrincipalType: "user", Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录失败计数不可用"})
 			return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
 		}
-		h.audit(ctx, authpg.AuditEvent{
+		h.audit(ctx, authports.AuditEvent{
 			EventType: "user_login", PrincipalType: "user", Decision: "deny",
 			ReasonCode: appErr.Code, ReasonMessage: appErr.Detail,
 			Metadata: map[string]any{"username": username},
@@ -296,7 +304,7 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 	}
 	dimensions.Tenant = p.TenantID
 	if err := h.limiter.Reset(ctx, dimensions); err != nil {
-		h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID, Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录成功后无法清理限速状态"})
+		h.audit(ctx, authports.AuditEvent{EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID, Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录成功后无法清理限速状态"})
 		return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
 	}
 	if p.UserType <= 2 && p.MFAEnabled {
@@ -305,7 +313,7 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 		}
 		challenge, err := h.mfa.CreateChallenge(ctx, auth.Principal{UserID: p.UserID, Username: p.Username, TenantID: p.TenantID, UserType: p.UserType, UserTypeDisplay: p.UserTypeDisplay, CredentialVersion: p.CredentialVersion})
 		if err != nil {
-			h.audit(ctx, authpg.AuditEvent{EventType: "user_login", PrincipalType: "admin", UserID: p.UserID, Decision: "error", ReasonCode: "mfa_challenge_failed", ReasonMessage: "创建 MFA 挑战失败"})
+			h.audit(ctx, authports.AuditEvent{EventType: "user_login", PrincipalType: "admin", UserID: p.UserID, Decision: "error", ReasonCode: "mfa_challenge_failed", ReasonMessage: "创建 MFA 挑战失败"})
 			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
 		}
 		return &authTokenOutput{Body: authTokenResponse{MFARequired: true, MFAChallengeToken: challenge}}, nil
@@ -320,13 +328,13 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 	})
 	if err != nil {
 		h.log.Error("generate token pair failed", principalLogFields(p.UserID, p.TenantID, zap.Error(err))...)
-		h.audit(ctx, authpg.AuditEvent{
+		h.audit(ctx, authports.AuditEvent{
 			EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID,
 			Decision: "error", ReasonCode: "token_generation_failed", ReasonMessage: "生成登录凭证失败",
 		})
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	h.audit(ctx, authpg.AuditEvent{
+	h.audit(ctx, authports.AuditEvent{
 		EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID,
 		Decision: "success", Metadata: map[string]any{"username": p.Username, "userType": p.UserType},
 	})
@@ -357,7 +365,7 @@ func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*a
 		if rateErr != nil {
 			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务暂不可用，请稍后重试")
 		}
-		h.audit(ctx, authpg.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", Decision: "deny", ReasonCode: "invalid_mfa_code", ReasonMessage: "MFA 验证失败"})
+		h.audit(ctx, authports.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", Decision: "deny", ReasonCode: "invalid_mfa_code", ReasonMessage: "MFA 验证失败"})
 		if retryAfter > 0 {
 			return nil, httpx.ErrTooManyReqs.WithDetail("MFA 尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(retryAfter)})
 		}
@@ -376,7 +384,7 @@ func (h *authHandlers) verifyMFA(ctx context.Context, input *mfaVerifyInput) (*a
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	h.audit(ctx, authpg.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", UserID: principal.UserID, Decision: "success"})
+	h.audit(ctx, authports.AuditEvent{EventType: "mfa_verify", PrincipalType: "admin", UserID: principal.UserID, Decision: "success"})
 	return &authTokenOutput{
 		SetCookie: []http.Cookie{refreshCookie(pair.RefreshToken, pair.RefreshExpiresIn, h.secureCookies)},
 		Body:      authTokenResponse{AccessToken: pair.AccessToken, ExpiresIn: pair.ExpiresIn, RefreshExpiresIn: pair.RefreshExpiresIn},
@@ -389,7 +397,7 @@ func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authT
 		return nil, httpx.ErrUnauthorized.WithDetail("Refresh Token 缺失或已过期")
 	}
 	pair, principal, err := h.sessions.Rotate(ctx, refreshToken)
-	auditBase := authpg.AuditEvent{
+	auditBase := authports.AuditEvent{
 		EventType: "token_refresh", PrincipalType: principalType(principal.UserType),
 		UserID: principal.UserID,
 	}
@@ -423,9 +431,12 @@ func principalType(userType int) string {
 	return "user"
 }
 
-func (h *authHandlers) audit(ctx context.Context, event authpg.AuditEvent) {
+func (h *authHandlers) audit(ctx context.Context, event authports.AuditEvent) {
 	event.RequestID = middleware.GetReqID(ctx)
-	if err := h.repo.RecordAuditEvent(ctx, event); err != nil {
+	if h.auditWriter == nil {
+		return
+	}
+	if err := h.auditWriter.RecordAuditEvent(ctx, event); err != nil {
 		h.log.Warn("record auth audit event failed", zap.String("event_type", event.EventType), zap.Error(err))
 	}
 }

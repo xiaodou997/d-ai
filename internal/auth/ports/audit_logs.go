@@ -41,3 +41,21 @@ type AuthAuditLogPage struct {
 type AuthAuditLogReader interface {
 	ListAuthAuditLogs(ctx context.Context, filter AuthAuditLogFilter) (AuthAuditLogPage, error)
 }
+
+// AuditEvent is the write-side authentication audit contract. Metadata is
+// serialized by the persistence adapter so transport remains storage-agnostic.
+type AuditEvent struct {
+	EventType     string
+	PrincipalType string
+	UserID        string
+	JTI           string
+	RequestID     string
+	Decision      string
+	ReasonCode    string
+	ReasonMessage string
+	Metadata      map[string]any
+}
+
+type AuthAuditRecorder interface {
+	RecordAuditEvent(ctx context.Context, event AuditEvent) error
+}

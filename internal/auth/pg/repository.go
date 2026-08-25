@@ -25,17 +25,7 @@ func IsEmailTaken(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "ux_iam_accounts_email_normalized"
 }
 
-type AuditEvent struct {
-	EventType     string
-	PrincipalType string
-	UserID        string
-	JTI           string
-	RequestID     string
-	Decision      string
-	ReasonCode    string
-	ReasonMessage string
-	Metadata      map[string]any
-}
+type AuditEvent = authports.AuditEvent
 
 func (r *AuthRepository) RecordAuditEvent(ctx context.Context, event AuditEvent) error {
 	metadata, err := json.Marshal(event.Metadata)
@@ -60,6 +50,8 @@ type AuthRepository struct {
 var _ authports.AccountReader = (*AuthRepository)(nil)
 var _ authports.AccountWriter = (*AuthRepository)(nil)
 var _ authports.AuthAuditLogReader = (*AuthRepository)(nil)
+var _ authports.LoginReader = (*AuthRepository)(nil)
+var _ authports.AuthAuditRecorder = (*AuthRepository)(nil)
 
 func NewAuthRepository(pool *pgxpool.Pool) *AuthRepository {
 	return &AuthRepository{pool: pool}
@@ -192,17 +184,7 @@ func (r *AuthRepository) UpdateProfile(ctx context.Context, input authports.Prof
 }
 
 // PortalUserForLogin is the account record resolved by the unified Portal.
-type PortalUserForLogin struct {
-	UserID            string
-	TenantID          string
-	Username          string
-	PasswordHash      string
-	UserType          int
-	Status            string
-	CredentialVersion int64
-	CredentialState   string
-	MFAEnabled        bool
-}
+type PortalUserForLogin = authports.LoginAccount
 
 func (r *AuthRepository) UpdateLoginTime(ctx context.Context, userID string, loginTime time.Time) error {
 	_, err := r.pool.Exec(ctx, `

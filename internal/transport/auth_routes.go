@@ -305,7 +305,10 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if !decision.Allowed {
 			return nil, httpx.ErrTooManyReqs.WithDetail("重新认证尝试过于频繁，请稍后再试").WithMeta(map[string]any{"retryAfter": auth.RetryAfterSeconds(decision.RetryAfter)})
 		}
-		u, err := authpg.NewAuthRepository(d.Pool).GetPortalUserForLogin(ctx, claims.Username)
+		if d.AuthLoginReader == nil {
+			return nil, httpx.ErrUnavailable.WithDetail("重新认证服务不可用，请稍后重试")
+		}
+		u, err := d.AuthLoginReader.GetPortalUserForLogin(ctx, claims.Username)
 		if err != nil || bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(in.Body.Password)) != nil {
 			retryAfter, rateErr := recentAuthLimiter.RecordFailure(ctx, dimensions)
 			if rateErr != nil {
