@@ -2,26 +2,21 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"xiaodou/dai/internal/billing"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 )
 
-// TenantUser 租户用户实体
-type TenantUser struct {
-	UserID        string
-	TenantID      string
-	Username      string
-	Email         string
-	Phone         string
-	Status        int
-	LastLoginTime *int64
-	CreatedTime   int64
-}
+// TenantUser remains an adapter-level alias for legacy callers. New
+// application boundaries should use tenant/ports directly.
+type TenantUser = tenantports.TenantUser
 
 // EndUserItem 终端用户列表条目
 type EndUserItem struct {
@@ -34,21 +29,8 @@ type EndUserItem struct {
 	CreatedTime int64  `json:"createdTime"`
 }
 
-// InviteCodeItem 邀请码列表条目
-type InviteCodeItem struct {
-	ID              int64  `json:"id"`
-	Code            string `json:"code"`
-	RegistrationURL string `json:"registrationUrl,omitempty"`
-	TenantID        string `json:"tenantId"`
-	CreatedBy       string `json:"createdBy"`
-	Description     string `json:"description"`
-	MaxUses         int    `json:"maxUses"`
-	UsedCount       int    `json:"usedCount"`
-	Status          int    `json:"status"`
-	ExpireTime      *int64 `json:"expireTime,omitempty"`
-	CreatedTime     int64  `json:"createdTime"`
-	UpdatedTime     int64  `json:"updatedTime"`
-}
+// InviteCodeItem remains an adapter-level alias for legacy callers.
+type InviteCodeItem = tenantports.InviteCodeItem
 
 // RechargeItem 充值记录条目
 type RechargeItem struct {
@@ -68,6 +50,9 @@ type RechargeItem struct {
 type TenantRepo struct {
 	pool *pgxpool.Pool
 }
+
+var _ tenantports.TenantSelfReader = (*TenantRepo)(nil)
+var _ tenantports.TenantInvitationWriter = (*TenantRepo)(nil)
 
 // NewTenantRepo 创建 TenantRepo 实例
 func NewTenantRepo(pool *pgxpool.Pool) *TenantRepo {
@@ -89,7 +74,7 @@ func (r *TenantRepo) GetByTenantAndUsername(ctx context.Context, tenantID, usern
 		&u.Email, &u.Phone, &status, &lastLoginAt,
 	)
 	if err == pgx.ErrNoRows {
-		return nil, "", fmt.Errorf("user not found")
+		return nil, "", tenantports.ErrTenantUserNotFound
 	}
 	if err != nil {
 		return nil, "", err
@@ -115,7 +100,7 @@ func (r *TenantRepo) GetByUserID(ctx context.Context, userID string) (*TenantUse
 		&u.Email, &u.Phone, &status, &lastLoginAt, &createdAt,
 	)
 	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("user not found")
+		return nil, tenantports.ErrTenantUserNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -258,7 +243,19 @@ func (r *TenantRepo) CreateInvitationCode(ctx context.Context, code, tenantID, c
 		INSERT INTO iam_invitation_codes (code, tenant_id, created_by, description, max_uses, used_count, status, expires_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, 0, 'active', $6, $7, $8)
 	`, code, tenantID, createdBy, description, maxUses, expiresAt, now, now)
+	if IsInvitationCodeTaken(err) {
+		return tenantports.ErrInvitationCodeTaken
+	}
 	return err
+}
+
+// IsInvitationCodeTaken reports whether an invitation insert collided with
+// the unique code constraint. This operation has no other unique input, so a
+// PostgreSQL unique violation is safe to translate into a retryable domain
+// error.
+func IsInvitationCodeTaken(err error) bool {
+	var pgErr *pgconn.PgError
+	return err != nil && errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // UpdateInvitationCode 更新邀请码状态和描述（需验证 tenant_id）
@@ -339,33 +336,11 @@ func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, p
 	return list, total, rows.Err()
 }
 
-// TenantOverviewStats 扩展的租户统计数据（含用户 USD 余额和活跃用户）
-type TenantOverviewStats struct {
-	EndUserCount             int64   `json:"endUserCount"`
-	InviteCodeCount          int64   `json:"inviteCodeCount"`
-	UserDeductionUSD         float64 `json:"userDeductionUsd"`
-	UserTotalBalanceUSD      float64 `json:"userTotalBalanceUsd"`
-	ActiveUserCount          int64   `json:"activeUserCount"`
-	UserConsumptionCount     int64   `json:"userConsumptionCount"`
-	SettlementIncomeMicroUSD int64   `json:"settlementIncomeMicroUsd"`
-}
-
-// ClientConsumptionItem APP 消耗统计条目
-type ClientConsumptionItem struct {
-	ClientID   string  `json:"clientId"`
-	ClientName string  `json:"clientName"`
-	AmountUSD  float64 `json:"amountUsd"`
-	Percentage string  `json:"percentage"`
-}
-
-// UserConsumptionItem 用户消费贡献排行条目。
-type UserConsumptionItem struct {
-	UserID           string  `json:"userId"`
-	Username         string  `json:"username"`
-	AmountUSD        float64 `json:"amountUsd"`
-	TransactionCount int64   `json:"transactionCount"`
-	Percentage       string  `json:"percentage"`
-}
+// TenantOverviewStats, ClientConsumptionItem and UserConsumptionItem remain
+// adapter-level aliases for legacy callers.
+type TenantOverviewStats = tenantports.TenantOverviewStats
+type ClientConsumptionItem = tenantports.ClientConsumptionItem
+type UserConsumptionItem = tenantports.UserConsumptionItem
 
 // GetTenantOverviewStats 获取扩展的租户统计数据。
 // timeFrom/timeTo 仅作用于行为指标；存量指标保持全量口径。

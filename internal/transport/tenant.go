@@ -2,45 +2,26 @@ package transport
 
 import (
 	"context"
-	"crypto/rand"
-	"math/big"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
-	tenantpg "xiaodou/dai/internal/tenant/pg"
+	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/internal/weborigin"
 	"xiaodou/dai/libs/go/httpx"
 )
 
-const inviteCharset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
-func generateInviteCode() string {
-	code := make([]byte, 8)
-	n := big.NewInt(int64(len(inviteCharset)))
-	for i := range code {
-		x, _ := rand.Int(rand.Reader, n)
-		code[i] = inviteCharset[x.Int64()]
-	}
-	return string(code)
-}
-
 // tenantSelfHandlers 承载 /api/v1 租户自助端点（仅租户用户 userType=3，限本租户）。
 type tenantSelfHandlers struct {
-	repo *tenantpg.TenantRepo
-	log  *zap.Logger
+	service tenantports.TenantSelfService
 }
 
-func newTenantSelfHandlers(pool *pgxpool.Pool, log *zap.Logger) *tenantSelfHandlers {
-	return &tenantSelfHandlers{
-		repo: tenantpg.NewTenantRepo(pool),
-		log:  log,
-	}
+func newTenantSelfHandlers(service tenantports.TenantSelfService) *tenantSelfHandlers {
+	return &tenantSelfHandlers{service: service}
 }
 
 // ---- DTO ----
@@ -64,7 +45,22 @@ type listInvitationsInput struct {
 }
 
 type invitationsListOutput struct {
-	Body httpx.Page[tenantpg.InviteCodeItem]
+	Body httpx.Page[tenantInvitationItemOutput]
+}
+
+type tenantInvitationItemOutput struct {
+	ID              int64  `json:"id"`
+	Code            string `json:"code"`
+	RegistrationURL string `json:"registrationUrl,omitempty"`
+	TenantID        string `json:"tenantId"`
+	CreatedBy       string `json:"createdBy"`
+	Description     string `json:"description"`
+	MaxUses         int    `json:"maxUses"`
+	UsedCount       int    `json:"usedCount"`
+	Status          int    `json:"status"`
+	ExpireTime      *int64 `json:"expireTime,omitempty"`
+	CreatedTime     int64  `json:"createdTime"`
+	UpdatedTime     int64  `json:"updatedTime"`
 }
 
 type createInvitationInput struct {
@@ -99,7 +95,7 @@ type invitationIDInput struct {
 }
 
 type overviewOutput struct {
-	Body *tenantpg.TenantOverviewStats
+	Body *tenantports.TenantOverviewStats
 }
 
 type overviewInput struct {
@@ -113,7 +109,7 @@ type clientConsumptionInput struct {
 }
 
 type clientConsumptionOutput struct {
-	Body []tenantpg.ClientConsumptionItem
+	Body []tenantports.ClientConsumptionItem
 }
 
 type userConsumptionInput struct {
@@ -123,12 +119,12 @@ type userConsumptionInput struct {
 }
 
 type userConsumptionOutput struct {
-	Body []tenantpg.UserConsumptionItem
+	Body []tenantports.UserConsumptionItem
 }
 
 // registerTenantSelf 注册租户自助端点（requireUserType(3)）。
 func registerTenantSelf(api huma.API, d Deps) {
-	h := newTenantSelfHandlers(d.Pool, d.Logger)
+	h := newTenantSelfHandlers(d.TenantSelf)
 	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireUserType(api, 3)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",
@@ -154,9 +150,13 @@ func (h *tenantSelfHandlers) me(ctx context.Context, _ *struct{}) (*meOutput, er
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	user, err := h.repo.GetByUserID(ctx, claims.UserID)
+	service, err := h.requireService()
 	if err != nil {
-		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
+		return nil, err
+	}
+	user, err := service.GetByUserID(ctx, claims.UserID)
+	if err != nil {
+		return nil, tenantSelfHTTPError(err)
 	}
 	out := &meOutput{}
 	out.Body.UserID = user.UserID
@@ -175,15 +175,20 @@ func (h *tenantSelfHandlers) listInvitations(ctx context.Context, in *listInvita
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	page, size := normalizePage(in.Page, in.Size)
-	list, total, err := h.repo.ListInvitationCodes(ctx, claims.TenantID, page, size)
+	service, err := h.requireService()
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, err
 	}
+	page, size := normalizePage(in.Page, in.Size)
+	list, total, err := service.ListInvitationCodes(ctx, claims.TenantID, page, size)
+	if err != nil {
+		return nil, tenantSelfHTTPError(err)
+	}
+	items := make([]tenantInvitationItemOutput, 0, len(list))
 	for i := range list {
-		list[i].RegistrationURL = invitationRegistrationURL(ctx, list[i].Code)
+		items = append(items, tenantInvitationResponse(ctx, list[i]))
 	}
-	return &invitationsListOutput{Body: httpx.NewPage(list, total, page, size)}, nil
+	return &invitationsListOutput{Body: httpx.NewPage(items, total, page, size)}, nil
 }
 
 func (h *tenantSelfHandlers) createInvitation(ctx context.Context, in *createInvitationInput) (*createInvitationOutput, error) {
@@ -191,28 +196,27 @@ func (h *tenantSelfHandlers) createInvitation(ctx context.Context, in *createInv
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	code := generateInviteCode()
-	var err error
-	for i := 0; i < 5; i++ {
-		err = h.repo.CreateInvitationCode(ctx, code, claims.TenantID, claims.UserID, in.Body.Description, in.Body.MaxUses, in.Body.ExpireTime)
-		if err == nil {
-			break
-		}
-		if !strings.Contains(err.Error(), "UNIQUE") && !strings.Contains(err.Error(), "duplicate") {
-			break
-		}
-		code = generateInviteCode()
-	}
+	service, err := h.requireService()
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, err
+	}
+	item, err := service.CreateInvitation(ctx, tenantports.InvitationCreateCommand{
+		TenantID:    claims.TenantID,
+		CreatedBy:   claims.UserID,
+		Description: in.Body.Description,
+		MaxUses:     in.Body.MaxUses,
+		ExpireTime:  in.Body.ExpireTime,
+	})
+	if err != nil {
+		return nil, tenantSelfHTTPError(err)
 	}
 	out := &createInvitationOutput{}
-	out.Body.Code = code
-	out.Body.RegistrationURL = invitationRegistrationURL(ctx, code)
-	out.Body.TenantID = claims.TenantID
-	out.Body.Description = in.Body.Description
-	out.Body.MaxUses = in.Body.MaxUses
-	out.Body.ExpireTime = in.Body.ExpireTime
+	out.Body.Code = item.Code
+	out.Body.RegistrationURL = invitationRegistrationURL(ctx, item.Code)
+	out.Body.TenantID = item.TenantID
+	out.Body.Description = item.Description
+	out.Body.MaxUses = item.MaxUses
+	out.Body.ExpireTime = item.ExpireTime
 	return out, nil
 }
 
@@ -221,8 +225,17 @@ func (h *tenantSelfHandlers) updateInvitation(ctx context.Context, in *updateInv
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.repo.UpdateInvitationCode(ctx, in.ID, claims.TenantID, in.Body.Status, in.Body.Description); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+	service, err := h.requireService()
+	if err != nil {
+		return nil, err
+	}
+	if err := service.UpdateInvitation(ctx, tenantports.InvitationUpdateCommand{
+		ID:          in.ID,
+		TenantID:    claims.TenantID,
+		Status:      in.Body.Status,
+		Description: in.Body.Description,
+	}); err != nil {
+		return nil, tenantSelfHTTPError(err)
 	}
 	return okSuccess(), nil
 }
@@ -232,8 +245,12 @@ func (h *tenantSelfHandlers) deleteInvitation(ctx context.Context, in *invitatio
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.repo.DeleteInvitationCode(ctx, in.ID, claims.TenantID); err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+	service, err := h.requireService()
+	if err != nil {
+		return nil, err
+	}
+	if err := service.DeleteInvitation(ctx, in.ID, claims.TenantID); err != nil {
+		return nil, tenantSelfHTTPError(err)
 	}
 	return okSuccess(), nil
 }
@@ -243,13 +260,17 @@ func (h *tenantSelfHandlers) analyticsOverview(ctx context.Context, in *overview
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
+	service, err := h.requireService()
+	if err != nil {
+		return nil, err
+	}
 	timeFrom, timeTo, err := parseAnalyticsWindow(in.TimeFrom, in.TimeTo)
 	if err != nil {
 		return nil, err
 	}
-	stats, err := h.repo.GetTenantOverviewStats(ctx, claims.TenantID, timeFrom, timeTo)
+	stats, err := service.GetTenantOverviewStats(ctx, claims.TenantID, timeFrom, timeTo)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, tenantSelfHTTPError(err)
 	}
 	return &overviewOutput{Body: stats}, nil
 }
@@ -259,13 +280,17 @@ func (h *tenantSelfHandlers) clientConsumption(ctx context.Context, in *clientCo
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
+	service, err := h.requireService()
+	if err != nil {
+		return nil, err
+	}
 	timeFrom, timeTo, err := parseAnalyticsWindow(in.TimeFrom, in.TimeTo)
 	if err != nil {
 		return nil, err
 	}
-	list, err := h.repo.GetClientConsumption(ctx, claims.TenantID, timeFrom, timeTo)
+	list, err := service.GetClientConsumption(ctx, claims.TenantID, timeFrom, timeTo)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, tenantSelfHTTPError(err)
 	}
 	return &clientConsumptionOutput{Body: list}, nil
 }
@@ -275,15 +300,56 @@ func (h *tenantSelfHandlers) userConsumption(ctx context.Context, in *userConsum
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
+	service, err := h.requireService()
+	if err != nil {
+		return nil, err
+	}
 	timeFrom, timeTo, err := parseAnalyticsWindow(in.TimeFrom, in.TimeTo)
 	if err != nil {
 		return nil, err
 	}
-	list, err := h.repo.GetUserConsumptionRanking(ctx, claims.TenantID, timeFrom, timeTo, in.Limit)
+	list, err := service.GetUserConsumptionRanking(ctx, claims.TenantID, timeFrom, timeTo, in.Limit)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, tenantSelfHTTPError(err)
 	}
 	return &userConsumptionOutput{Body: list}, nil
+}
+
+func (h *tenantSelfHandlers) requireService() (tenantports.TenantSelfService, error) {
+	if h == nil || h.service == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户自助服务不可用")
+	}
+	return h.service, nil
+}
+
+func tenantSelfHTTPError(err error) error {
+	switch {
+	case errors.Is(err, tenantports.ErrTenantUserNotFound):
+		return httpx.ErrNotFound.WithDetail("用户不存在")
+	case errors.Is(err, tenantports.ErrSelfServiceUnavailable):
+		return httpx.ErrUnavailable.WithDetail("租户自助服务不可用")
+	case errors.Is(err, tenantports.ErrInvitationCodeTaken):
+		return httpx.ErrConflict.WithDetail("邀请码生成冲突，请重试")
+	default:
+		return httpx.ErrInternal.WithCause(err)
+	}
+}
+
+func tenantInvitationResponse(ctx context.Context, item tenantports.InviteCodeItem) tenantInvitationItemOutput {
+	return tenantInvitationItemOutput{
+		ID:              item.ID,
+		Code:            item.Code,
+		RegistrationURL: invitationRegistrationURL(ctx, item.Code),
+		TenantID:        item.TenantID,
+		CreatedBy:       item.CreatedBy,
+		Description:     item.Description,
+		MaxUses:         item.MaxUses,
+		UsedCount:       item.UsedCount,
+		Status:          item.Status,
+		ExpireTime:      item.ExpireTime,
+		CreatedTime:     item.CreatedTime,
+		UpdatedTime:     item.UpdatedTime,
+	}
 }
 
 func parseAnalyticsWindow(timeFromValue, timeToValue int64) (*time.Time, *time.Time, error) {

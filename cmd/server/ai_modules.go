@@ -361,6 +361,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 				TenantWriter:         platform.TenantRepo,
 				TenantBrandingReader: platform.TenantBranding,
 				TenantBrandingWriter: platform.TenantBranding,
+				TenantSelf:           platform.TenantSelf,
 				AdminAccounts:        platform.AdminAccounts,
 				AdminAccountWriter:   platform.AdminAccounts,
 				AdminEndUsers:        platform.AdminEndUsers,

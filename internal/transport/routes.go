@@ -64,6 +64,7 @@ type IdentityDeps struct {
 	TenantWriter         tenantports.AdminTenantWriter
 	TenantBrandingReader tenantports.PortalBrandingReader
 	TenantBrandingWriter tenantports.PortalBrandingWriter
+	TenantSelf           tenantports.TenantSelfService
 	AdminAccounts        userports.AdminAccountReader
 	AdminAccountWriter   userports.AdminAccountWriter
 	AdminEndUsers        userports.AdminEndUserReader

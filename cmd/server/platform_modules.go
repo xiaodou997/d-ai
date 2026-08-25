@@ -25,6 +25,7 @@ import (
 	"xiaodou/dai/internal/payment/wechat"
 	"xiaodou/dai/internal/scheduler"
 	systempkg "xiaodou/dai/internal/system"
+	tenantpkg "xiaodou/dai/internal/tenant"
 	tenantpg "xiaodou/dai/internal/tenant/pg"
 	userpkg "xiaodou/dai/internal/user"
 	userpg "xiaodou/dai/internal/user/pg"
@@ -44,6 +45,7 @@ type platformModules struct {
 	AuthAccounts   *authpg.AuthRepository
 	TenantRepo     *tenantpg.TenantRepository
 	TenantBranding *tenantpg.PortalBrandingRepository
+	TenantSelf     *tenantpkg.SelfService
 	AdminAccounts  *userpg.AdminAccountRepository
 	AdminEndUsers  *userpg.AdminEndUserRepository
 	Invite         *invitepkg.InviteService
@@ -109,6 +111,8 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	authAccountRepo := authpg.NewAuthRepository(pool)
 	tenantRepo := tenantpg.NewTenantRepository(pool)
 	tenantBrandingRepo := tenantpg.NewPortalBrandingRepository(pool)
+	tenantSelfRepo := tenantpg.NewTenantRepo(pool)
+	tenantSelfSvc := tenantpkg.NewSelfService(tenantSelfRepo, tenantSelfRepo)
 	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
 	rechargeSvc := billingsvc.NewRechargeService(pool, tenantRepo)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
@@ -133,6 +137,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		AuthAccounts:   authAccountRepo,
 		TenantRepo:     tenantRepo,
 		TenantBranding: tenantBrandingRepo,
+		TenantSelf:     tenantSelfSvc,
 		AdminAccounts:  adminAccountRepo,
 		AdminEndUsers:  adminEndUserRepo,
 		Invite:         inviteSvc,

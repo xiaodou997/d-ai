@@ -8,7 +8,7 @@ xiaodou/dai/internal/transport -> xiaodou/dai/internal/billing/pg | P1-03 / expo
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/invite/pg | P1-03 / move invite persistence behind application services | legacy invitation handler constructs a repository
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/payment/pg | P1-03 / move payment persistence behind application services | legacy payment and finance handlers construct repositories
 xiaodou/dai/internal/transport -> xiaodou/dai/internal/system/pg | P1-03 / expose operations queries only | legacy admin handler constructs a repository
-xiaodou/dai/internal/transport -> xiaodou/dai/internal/tenant/pg | P1-03 / move tenant persistence behind application services | legacy admin/self-service handlers remain; portal branding was migrated to tenant/ports
+xiaodou/dai/internal/transport -> xiaodou/dai/internal/tenant/pg | P1-03 / move tenant persistence behind application services | legacy admin handlers and AI identity adapter remain; self-service and portal branding use tenant ports
 xiaodou/dai/internal/transport -> github.com/jackc/pgx/v5 | P1-03 / remove pgx from handlers | direct SQL, transaction and error mapping remain in legacy handlers
 xiaodou/dai/internal/transport -> github.com/jackc/pgx/v5/pgxpool | P1-03 / remove pool from handlers | the current Deps container exposes the database pool
 xiaodou/dai/internal/transport -> github.com/redis/go-redis/v9 | P1-03 / move rate limits and cache behind ports | the current Deps container exposes the Redis client
