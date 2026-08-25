@@ -199,12 +199,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-06 统一迁移链和 schema 真相源
 
-- [ ] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行。
-- [ ] 不允许应用服务启动时隐式执行生产迁移。
-- [ ] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构。
-- [ ] 每个迁移在空库和前一 schema 版本副本上验证。
+- [~] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；当前以 `internal/db/changes/` 规范和 `cmd/checkschema` 结构门禁承接，暂不引入运行时迁移依赖。
+- [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
+- [~] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；当前门禁校验 `init.sql`、`ExpectedSchemaVersion` 与 v1→v18 链一致，完整空库重放仍待发布环境执行。
+- [~] 每个迁移在空库和前一 schema 版本副本上验证；当前门禁校验事务、来源版本 guard 和目标版本更新，0002、0003、0009 的专项数据库测试仍待补齐。
 - [ ] 为缺少专项测试的 0002、0003、0009 补迁移测试。
-- [ ] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本。
+- [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [ ] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤。
 
 ### P1-07 建立数据库领域所有权

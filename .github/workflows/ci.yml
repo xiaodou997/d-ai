@@ -79,6 +79,11 @@ jobs:
           go run ./cmd/checkauthz
           git diff --exit-code docs/AUTHORIZATION_MATRIX.md
 
+      - name: Schema migration chain is current
+        run: |
+          go run ./cmd/checkschema
+          git diff --exit-code docs/SCHEMA_CHAIN.md
+
   frontend:
     name: Portal
     runs-on: ubuntu-latest

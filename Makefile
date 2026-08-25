@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema help
 
 # ---- 本地开发 ----
 
@@ -131,6 +131,9 @@ check-module-deps: ## 校验 Go 模块依赖方向和已登记历史例外
 
 check-authz: ## 校验 OpenAPI operation 的 capability 授权矩阵覆盖率
 	GOCACHE="$(CURDIR)/.cache/go-build" go run ./cmd/checkauthz
+
+check-schema: ## 校验数据库完整基线与 forward-only 迁移链
+	GOCACHE="$(CURDIR)/.cache/go-build" go run ./cmd/checkschema
 
 help: ## 显示帮助
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
