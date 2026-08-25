@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -115,6 +116,11 @@ type Consumer struct {
 	interval    time.Duration
 	batchSize   int
 	maxAttempts int
+	lifecycleMu sync.Mutex
+	started     bool
+	stopped     bool
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 }
 
 func NewConsumer(pool *pgxpool.Pool, logger *zap.Logger) *Consumer {
@@ -136,6 +142,60 @@ func (c *Consumer) Run(ctx context.Context) {
 	if c == nil || c.pool == nil {
 		return
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	c.lifecycleMu.Lock()
+	if c.started || c.stopped {
+		c.lifecycleMu.Unlock()
+		return
+	}
+	c.started = true
+	workerCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+	c.wg.Add(1)
+	c.lifecycleMu.Unlock()
+	defer c.wg.Done()
+	c.run(workerCtx)
+}
+
+// Stop cancels polling and waits for the current transaction/batch to finish.
+func (c *Consumer) Stop(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	c.lifecycleMu.Lock()
+	if c.stopped {
+		started := c.started
+		c.lifecycleMu.Unlock()
+		if started {
+			c.wait(ctx)
+		}
+		return
+	}
+	c.stopped = true
+	started, cancel := c.started, c.cancel
+	c.lifecycleMu.Unlock()
+	if !started {
+		return
+	}
+	cancel()
+	c.wait(ctx)
+}
+
+func (c *Consumer) wait(ctx context.Context) {
+	done := make(chan struct{})
+	go func() { c.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+func (c *Consumer) run(ctx context.Context) {
 	timer := time.NewTimer(c.interval)
 	defer timer.Stop()
 	for ctx.Err() == nil {

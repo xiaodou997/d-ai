@@ -133,7 +133,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker 和 OAuth 刷新 worker 已补齐幂等 Start/Stop 和等待退出，结算 worker 仍待补齐可等待 Stop/Health。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker 和结算 outbox consumer 已补齐幂等 Start/Stop 和等待退出，Health 统一投影和少量无 Stop worker 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
@@ -596,6 +596,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - AI worker 生命周期：`riskcontrol.Worker` 由 `aiModules` 持有独立 worker context，支持幂等 Start/Stop、停止后不再启动，并在 Stop 时等待 moderation worker 退出；空装配 `Start(nil)` 保持兼容。
 - 审计 worker 生命周期：`audit.Worker` 使用独立 worker context，Stop 会取消轮询并等待当前 delivery 完成 Complete 或 Retry，避免 shutdown 时遗留已领取但未处理的 inbox lease。
 - OAuth 刷新 worker 生命周期：`tokenrefresh.Refresher` 使用独立 worker context，Stop 会取消刷新请求并等待当前 provider 调用与凭证持久化完成；重复 Start/Stop 和停止后启动均安全。
+- 结算 outbox 生命周期：`billing/outbox.Consumer` 使用独立 worker context，Stop 会停止 claim 新批次并等待当前数据库事务/批次完成；重复 Run/Stop 和停止后启动均安全。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。
 - 遗留风险：P1-03 仍有部分 handler 保留黑名单/通知等副作用编排，管理财务与公告/清理路径需要继续抽取 command port；数据库 schema 所有权、统一 capability 授权和浏览器 E2E 尚未建立。

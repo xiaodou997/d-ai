@@ -586,7 +586,7 @@ func (m *aiModules) Start(ctx context.Context) {
 			m.AsyncTasks.Start(ctx)
 		}
 		if m.settlementConsumer != nil {
-			go m.settlementConsumer.Run(ctx)
+			go m.settlementConsumer.Run(m.workerCtx)
 		}
 	})
 }
@@ -607,6 +607,9 @@ func (m *aiModules) Stop(ctx context.Context) {
 		}
 		if m.refresher != nil {
 			m.refresher.Stop(ctx)
+		}
+		if m.settlementConsumer != nil {
+			m.settlementConsumer.Stop(ctx)
 		}
 		if m.AsyncTasks != nil {
 			m.AsyncTasks.Stop(ctx)
