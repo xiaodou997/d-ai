@@ -574,7 +574,7 @@ func (m *aiModules) Start(ctx context.Context) {
 			m.riskControlWorker.Start(m.workerCtx, 0)
 		}
 		if m.auditWorker != nil {
-			m.auditWorker.Start(ctx)
+			m.auditWorker.Start(m.workerCtx)
 		}
 		if m.refresher != nil {
 			go m.refresher.Start(ctx)
@@ -601,6 +601,9 @@ func (m *aiModules) Stop(ctx context.Context) {
 		}
 		if m.riskControlWorker != nil {
 			m.riskControlWorker.Stop(ctx)
+		}
+		if m.auditWorker != nil {
+			m.auditWorker.Stop(ctx)
 		}
 		if m.AsyncTasks != nil {
 			m.AsyncTasks.Stop(ctx)

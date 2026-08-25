@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -88,10 +89,15 @@ type BlobPutter interface {
 // process-local channel: accepted payloads survive restarts and each item is
 // leased with FOR UPDATE SKIP LOCKED so multiple instances can drain safely.
 type Worker struct {
-	store     Store
-	blobStore BlobPutter // optional; nil = skip media extraction
-	opts      WorkerOptions
-	workerID  string
+	store       Store
+	blobStore   BlobPutter // optional; nil = skip media extraction
+	opts        WorkerOptions
+	workerID    string
+	lifecycleMu sync.Mutex
+	started     bool
+	stopped     bool
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
 }
 
 type WorkerOptions struct {
@@ -134,7 +140,57 @@ func (w *Worker) Start(ctx context.Context) {
 	if w == nil || w.store == nil {
 		return
 	}
-	go w.run(ctx)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	w.lifecycleMu.Lock()
+	if w.started || w.stopped {
+		w.lifecycleMu.Unlock()
+		return
+	}
+	w.started = true
+	workerCtx, cancel := context.WithCancel(ctx)
+	w.cancel = cancel
+	w.wg.Add(1)
+	w.lifecycleMu.Unlock()
+	go func() { defer w.wg.Done(); w.run(workerCtx) }()
+}
+
+// Stop cancels polling and waits for any in-flight delivery to complete or
+// schedule its durable retry decision before shutdown continues.
+func (w *Worker) Stop(ctx context.Context) {
+	if w == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	w.lifecycleMu.Lock()
+	if w.stopped {
+		started := w.started
+		w.lifecycleMu.Unlock()
+		if started {
+			w.wait(ctx)
+		}
+		return
+	}
+	w.stopped = true
+	started, cancel := w.started, w.cancel
+	w.lifecycleMu.Unlock()
+	if !started {
+		return
+	}
+	cancel()
+	w.wait(ctx)
+}
+
+func (w *Worker) wait(ctx context.Context) {
+	done := make(chan struct{})
+	go func() { w.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 func (w *Worker) run(ctx context.Context) {
