@@ -17,7 +17,7 @@ type jwtKeysOutput struct {
 	}
 }
 
-// registerJWTKeys 注册 JWT 签名密钥管理端点（仅超管 requireUserType(1)）。
+// registerJWTKeys 注册 JWT 签名密钥管理端点（仅 super_admin capability）。
 func registerJWTKeys(api huma.API, d Deps) {
 	jwtSvc := d.JWT
 	superAdmin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilitySuperAdmin)}

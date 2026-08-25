@@ -44,3 +44,12 @@ func TestActorResourceOwnershipRejectsCrossTenantAccess(t *testing.T) {
 		t.Fatal("platform admin should be global")
 	}
 }
+
+func TestActorTenantScopeRequirement(t *testing.T) {
+	if (Actor{UserType: 1}).RequiresTenantScope() || (Actor{UserType: 2}).RequiresTenantScope() {
+		t.Fatal("administrative actors must not require a tenant scope")
+	}
+	if !(Actor{UserType: 3}).RequiresTenantScope() || !(Actor{UserType: 4}).RequiresTenantScope() {
+		t.Fatal("tenant and customer actors must require a tenant scope")
+	}
+}

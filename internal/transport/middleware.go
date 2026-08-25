@@ -158,28 +158,8 @@ func isUserAccessClaims(claims *auth.Claims) bool {
 	return claims != nil && claims.PrincipalType == "user" && claims.TokenUse == "access" && claims.SessionID != ""
 }
 
-// requireUserType 要求当前用户类型在 allowed 内，否则 403。须挂在 userAuth 之后。
-// 用户类型：1 超管 / 2 平台管理员 / 3 租户用户 / 4 终端用户。
-func requireUserType(api huma.API, allowed ...int) func(huma.Context, func(huma.Context)) {
-	return func(ctx huma.Context, next func(huma.Context)) {
-		claims, ok := ctx.Context().Value(userClaimsCtxKey).(*auth.Claims)
-		if !ok || claims == nil {
-			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
-			return
-		}
-		for _, userType := range allowed {
-			if claims.UserType == userType {
-				next(ctx)
-				return
-			}
-		}
-		_ = huma.WriteErr(api, ctx, http.StatusForbidden, "权限不足")
-	}
-}
-
-// requireCapability enforces a normalized backend capability while retaining
-// requireUserType for routes whose legacy contract intentionally distinguishes
-// super-admin from platform-admin.
+// requireCapability enforces a normalized backend capability. Capability
+// checks are the only route authorization primitive.
 func requireCapability(api huma.API, capability auth.Capability) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		claims, ok := ctx.Context().Value(userClaimsCtxKey).(*auth.Claims)
@@ -211,21 +191,6 @@ func requireAnyCapability(api huma.API, capabilities ...auth.Capability) func(hu
 			}
 		}
 		_ = huma.WriteErr(api, ctx, http.StatusForbidden, "权限不足")
-	}
-}
-
-func capabilityForUserType(userType int) auth.Capability {
-	switch userType {
-	case 1:
-		return auth.CapabilitySuperAdmin
-	case 2:
-		return auth.CapabilityPlatformAdmin
-	case 3:
-		return auth.CapabilityTenantSelf
-	case 4:
-		return auth.CapabilityCustomerSelf
-	default:
-		return "unknown"
 	}
 }
 

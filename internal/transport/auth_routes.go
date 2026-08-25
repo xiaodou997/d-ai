@@ -180,7 +180,8 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 		if d.AuthAccountWriter == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("账号服务不可用")
 		}
-		if claims.UserType != 3 && claims.UserType != 4 {
+		actor := actorFromClaims(claims)
+		if !actor.Has(auth.CapabilityTenantSelf) && !actor.Has(auth.CapabilityCustomerSelf) {
 			return nil, httpx.ErrForbidden.WithDetail("仅租户用户和终端用户可修改用户名或邮箱")
 		}
 
@@ -239,7 +240,7 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 
 	huma.Register(api, huma.Operation{OperationID: "auth-mfa-enroll", Method: http.MethodPost, Path: "/api/auth/mfa/enroll", Summary: "注册管理员 MFA", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, _ *struct{}) (*mfaEnrollmentOutput, error) {
 		claims := userClaimsFromCtx(ctx)
-		if claims == nil || (claims.UserType != 1 && claims.UserType != 2) {
+		if claims == nil || !actorFromClaims(claims).Has(auth.CapabilityPlatformAdmin) {
 			return nil, httpx.ErrForbidden.WithDetail("仅平台管理员可注册 MFA")
 		}
 		if d.MFA == nil {
@@ -257,7 +258,7 @@ func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
 
 	huma.Register(api, huma.Operation{OperationID: "auth-mfa-confirm", Method: http.MethodPost, Path: "/api/auth/mfa/confirm", Summary: "确认管理员 MFA", Tags: []string{"auth"}, Middlewares: recent}, func(ctx context.Context, in *mfaCodeInput) (*messageOutput, error) {
 		claims := userClaimsFromCtx(ctx)
-		if claims == nil || (claims.UserType != 1 && claims.UserType != 2) {
+		if claims == nil || !actorFromClaims(claims).Has(auth.CapabilityPlatformAdmin) {
 			return nil, httpx.ErrForbidden.WithDetail("仅平台管理员可确认 MFA")
 		}
 		if d.MFA == nil {
@@ -368,7 +369,7 @@ func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (
 		return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("账户已被禁用，请重新登录")
 	}
 
-	if snapshot.userType == 3 || snapshot.userType == 4 {
+	if (auth.Actor{UserType: snapshot.userType, TenantID: snapshot.tenantID}).RequiresTenantScope() {
 		active, err := d.AuthAccountReader.CheckTenantActive(ctx, snapshot.tenantID)
 		if err != nil {
 			return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)

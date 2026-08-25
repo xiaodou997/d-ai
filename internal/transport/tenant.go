@@ -123,7 +123,7 @@ type userConsumptionOutput struct {
 	Body []tenantports.UserConsumptionItem
 }
 
-// registerTenantSelf 注册租户自助端点（requireUserType(3)）。
+// registerTenantSelf 注册租户自助端点（tenant_self capability）。
 func registerTenantSelf(api huma.API, d Deps) {
 	h := newTenantSelfHandlers(d.TenantSelf)
 	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}

@@ -253,10 +253,11 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 	}
 	var result *billingsvc.ReverseResult
 	var err error
-	if claims.UserType == 3 {
-		result, err = h.deduction.ReverseTenantOrder(in.OrderID, claims.TenantID, in.Body.Reason, claims.UserID)
+	actor := actorFromClaims(claims)
+	if actor.Has(auth.CapabilityTenantSelf) {
+		result, err = h.deduction.ReverseTenantOrder(in.OrderID, actor.TenantID, in.Body.Reason, actor.UserID)
 	} else {
-		result, err = h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, claims.UserID)
+		result, err = h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, actor.UserID)
 	}
 	if err != nil {
 		if errors.Is(err, shared.ErrForbidden) {

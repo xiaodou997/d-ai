@@ -18,6 +18,10 @@ type Actor struct {
 	UserType int
 }
 
+func (a Actor) RequiresTenantScope() bool {
+	return a.UserType == 3 || a.UserType == 4
+}
+
 func (a Actor) Has(capability Capability) bool {
 	switch capability {
 	case CapabilitySuperAdmin:
