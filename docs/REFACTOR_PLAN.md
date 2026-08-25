@@ -1,6 +1,6 @@
 # D-AI 重构与优化清单
 
-更新日期：2026-08-24
+更新日期：2026-08-25
 
 ## 目标与原则
 
@@ -243,7 +243,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] FileStore 过期资产采用 claim → 文件删除 → owner fencing finalize，两阶段失败可释放 claim 重试，不提前删除数据库元数据。
 - [x] 本地图片 `_tmp`/`ephemeral` 清理增加共享 storage 文件租约与心跳；task orphan 扫描接入 async task 检查器，未确认的任务目录默认不删。
 - [x] 支付补偿使用 advisory lock 执行单轮任务，并以订单级持久化退避、失败计数和状态 fencing 处理 provider 长时间故障。
-- [ ] 增加支付 retry backlog、最老失败时长指标和告警 runbook，避免仅依赖单轮 scheduler 错误或人工查询 `sweep_last_error`。
+- [x] 增加支付 retry backlog、最老失败时长指标和告警 runbook，避免仅依赖单轮 scheduler 错误或人工查询 `sweep_last_error`。
 - [ ] 禁止依赖进程内内存作为跨副本真相源。
 
 ### P2-03 独立交付 Portal
@@ -555,12 +555,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：新增本地图片 orphan/文件租约测试，确认活跃 task 保留、缺失 task 目录可回收、共享租约阻止并发清理且过期租约可接管。
 - 下一候选项：P2-02 支付补偿的 provider 故障退避、重试告警与多副本验收。
 
-### P2-02 支付补偿（2026-08-24）
+### P2-02 支付补偿（2026-08-24—2026-08-25）
 
 - 状态：完成本轮 provider 故障退避与重试语义改造。
-- 持久化：schema v17 为 `pay_orders` 增加 sweep 失败次数、最后尝试时间、最后错误和下一次尝试时间；候选查询跨进程重启继续遵守数据库中的重试窗口。
+- 持久化：schema v17 为 `pay_orders` 增加 sweep 失败次数、最后尝试时间、最后错误和下一次尝试时间；schema v18 增加 retry 健康统计部分索引；候选查询跨进程重启继续遵守数据库中的重试窗口。
 - 退避：provider 查询、关单和补偿入账失败按 1 分钟起步指数退避，最大 1 小时；`USERPAYING/NOTPAY` 仅延后 5 分钟查单，不虚增失败次数。
 - 并发：所有失败记录、延后查单、过期迁移和终态清理均按观察到的订单状态条件更新；回调已经入账时，迟到的 sweep 结果不会覆盖 `paid`。
-- 验证：新增 schema v17 migration、PostgreSQL retry state/fencing、service provider failure 和 backoff 单测；`go test ./internal/payment/...`、`go test ./internal/db/...`、`go vet ./internal/payment/... ./internal/db/...` 通过。
-- 遗留风险：当前告警仍复用 Scheduler 任务错误与数据库 `sweep_last_error`，尚未提供按租户/订单的专用监控面板；下一步应补充 retry backlog/最老失败时长指标和 runbook。
-- 下一候选项：P1-03 继续清零 Transport 领域越界，同时补支付 retry backlog 指标与运维告警。
+- 观测：新增 retry 订单数、到期重试数、最老失败时长和统计查询失败指标；告警阈值、只读排查 SQL、恢复确认和禁止手工改状态流程见 `docs/PAYMENT_SWEEP_RUNBOOK.md`。
+- 验证：新增 schema v17/v18 migration、PostgreSQL retry state/fencing、service provider failure、backoff 和 retry stats 单测；`go test ./internal/payment/...`、`go test ./internal/db/...`、`go vet ./internal/payment/... ./internal/db/...` 通过。
+- 遗留风险：当前指标是全局低基数聚合，不按租户或订单暴露；单笔异常仍需通过管理端同步动作和审计/对账流程处理。
+- 下一候选项：P1-03 继续清零 Transport 领域越界，并评估支付按渠道维度的对账指标。

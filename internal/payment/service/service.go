@@ -442,6 +442,9 @@ func (s *PaymentService) SweepOnce(ctx context.Context) error {
 			cycleErrors = append(cycleErrors, fmt.Errorf("处理在途订单 %s 失败: %w", o.OrderID, err))
 		}
 	}
+	if err := s.publishSweepRetryHealth(ctx); err != nil {
+		cycleErrors = append(cycleErrors, fmt.Errorf("读取支付重试指标失败: %w", err))
+	}
 	return errors.Join(cycleErrors...)
 }
 

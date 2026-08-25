@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"xiaodou/dai/internal/dbtest"
 	"xiaodou/dai/internal/money"
 	"xiaodou/dai/internal/payment"
@@ -91,5 +93,17 @@ func TestSweepInFlightPersistsProviderFailure(t *testing.T) {
 	}
 	if order.Status != payment.OrderStatusCreated || order.SweepAttempts != 1 || order.SweepNextAttemptAt == nil || order.SweepLastError == "" {
 		t.Fatalf("persisted sweep failure = %+v", order)
+	}
+	if err := svc.publishSweepRetryHealth(ctx); err != nil {
+		t.Fatalf("publish sweep retry health: %v", err)
+	}
+	if got := testutil.ToFloat64(paymentSweepRetryOrders); got != 1 {
+		t.Fatalf("retry order metric = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(paymentSweepDueRetryOrders); got != 0 {
+		t.Fatalf("due retry metric = %v, want 0 before backoff", got)
+	}
+	if got := testutil.ToFloat64(paymentSweepOldestRetrySeconds); got <= 0 {
+		t.Fatalf("oldest retry metric = %v, want positive", got)
 	}
 }

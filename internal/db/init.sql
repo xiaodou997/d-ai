@@ -402,6 +402,9 @@ CREATE UNIQUE INDEX uq_pay_orders_txn ON pay_orders (transaction_id) WHERE trans
 CREATE INDEX idx_pay_orders_sweep
     ON pay_orders (status, sweep_next_attempt_at, expires_at)
     WHERE status IN ('created', 'paying', 'expired');
+CREATE INDEX idx_pay_orders_sweep_retry_health
+    ON pay_orders (sweep_last_attempt_at)
+    WHERE status IN ('created', 'paying', 'expired') AND sweep_attempts > 0;
 CREATE INDEX idx_pay_orders_closed_cleanup ON pay_orders (updated_at)
     WHERE status = 'closed' AND fulfillment_status = 'pending';
 CREATE INDEX idx_pay_orders_tenant ON pay_orders (tenant_id, created_at DESC);
@@ -2289,6 +2292,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 17);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 18);
 
 COMMIT;

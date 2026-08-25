@@ -18,6 +18,7 @@ func TestMigration0017AddsPaymentSweepBackoffColumns(t *testing.T) {
 
 	if _, err := pool.Exec(ctx, `
 		UPDATE dai_schema_metadata SET version = 16 WHERE singleton = TRUE;
+		DROP INDEX IF EXISTS idx_pay_orders_sweep_retry_health;
 		ALTER TABLE pay_orders
 			DROP COLUMN IF EXISTS sweep_attempts,
 			DROP COLUMN IF EXISTS sweep_next_attempt_at,

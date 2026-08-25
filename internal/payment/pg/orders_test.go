@@ -129,6 +129,13 @@ func TestSweepRetryStatePersistsBackoffAndFencesStaleResults(t *testing.T) {
 	if order.Status != payment.OrderStatusExpired || order.SweepAttempts != 1 || order.SweepNextAttemptAt == nil || order.SweepLastAttemptAt == nil || order.SweepLastError != "wechat unavailable" {
 		t.Fatalf("sweep retry state = status:%s attempts:%d next:%v last:%v error:%q", order.Status, order.SweepAttempts, order.SweepNextAttemptAt, order.SweepLastAttemptAt, order.SweepLastError)
 	}
+	stats, err := paymentpg.GetSweepRetryStats(ctx, pool, next)
+	if err != nil {
+		t.Fatalf("read sweep retry stats: %v", err)
+	}
+	if stats.RetryOrders != 1 || stats.DueRetryOrders != 1 || stats.OldestRetrySeconds <= 0 {
+		t.Fatalf("sweep retry stats = %+v", stats)
+	}
 
 	candidates, err := paymentpg.ListSweepCandidates(ctx, pool, now, 10)
 	if err != nil {
@@ -159,5 +166,12 @@ func TestSweepRetryStatePersistsBackoffAndFencesStaleResults(t *testing.T) {
 	}
 	if order.SweepAttempts != 0 || order.SweepNextAttemptAt != nil || order.SweepLastAttemptAt != nil || order.SweepLastError != "" {
 		t.Fatalf("closed order retained retry state = %+v", order)
+	}
+	stats, err = paymentpg.GetSweepRetryStats(ctx, pool, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("read cleared sweep retry stats: %v", err)
+	}
+	if stats.RetryOrders != 0 || stats.DueRetryOrders != 0 || stats.OldestRetrySeconds != 0 {
+		t.Fatalf("cleared sweep retry stats = %+v", stats)
 	}
 }
