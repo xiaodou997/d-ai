@@ -11,7 +11,6 @@ import (
 	"xiaodou/dai/internal/ai/core/catalog"
 	"xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/core/surface"
-	"xiaodou/dai/internal/ai/core/upstream"
 	coreupstream "xiaodou/dai/internal/ai/core/upstream"
 )
 
@@ -224,10 +223,10 @@ func (s *targetBinderStub) ResolveRuntimeBinding(_ context.Context, req coreupst
 		return coreupstream.RuntimeBinding{}, err
 	}
 	return coreupstream.RuntimeBinding{
-		Upstream: upstream.Upstream{
+		Upstream: coreupstream.Upstream{
 			ID: req.TargetID,
 		},
-		ModelBinding: upstream.ModelBinding{
+		ModelBinding: coreupstream.ModelBinding{
 			ModelID: req.ResolvedModelID,
 		},
 	}, nil
