@@ -93,14 +93,14 @@ func (r *SystemRepository) GetGlobalStats(ctx context.Context, timeFrom, timeTo 
 	var tenantRechargeMicro, tenantTotalMicro, userRechargeMicro, userTotalMicro int64
 	err := r.pool.QueryRow(ctx, `
 		SELECT
-		  COALESCE((SELECT SUM(paid_amount) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
-		  COALESCE((SELECT SUM(credit_amount) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
-		  (SELECT COUNT(*) FROM iam_tenants WHERE status = 'active')::bigint,
-		  COALESCE((SELECT SUM(GREATEST(balance_micro, 0)) FROM bill_accounts WHERE account_kind = 1), 0)::bigint,
-		  COALESCE((SELECT SUM(paid_amount) FROM bill_recharge_orders WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
-		  COALESCE((SELECT SUM(credit_amount) FROM bill_recharge_orders WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
-			  (SELECT COUNT(*) FROM iam_accounts WHERE user_type = 4 AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz))::bigint,
-		  COALESCE((SELECT SUM(GREATEST(balance_micro, 0)) FROM bill_accounts WHERE account_kind = 2), 0)::bigint
+		  COALESCE((SELECT SUM(paid_amount) FROM system_recharge_projection WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
+		  COALESCE((SELECT SUM(credit_amount) FROM system_recharge_projection WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
+		  (SELECT COUNT(*) FROM system_identity_projection WHERE entity_kind = 'tenant' AND status = 'active')::bigint,
+		  COALESCE((SELECT SUM(GREATEST(balance_micro, 0)) FROM system_balance_projection WHERE account_kind = 1), 0)::bigint,
+		  COALESCE((SELECT SUM(paid_amount) FROM system_recharge_projection WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
+		  COALESCE((SELECT SUM(credit_amount) FROM system_recharge_projection WHERE order_type IN ('tenant_to_user', 'online_user_topup') AND status = 'active' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)), 0)::bigint,
+		  (SELECT COUNT(*) FROM system_identity_projection WHERE entity_kind = 'user' AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz) AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz))::bigint,
+		  COALESCE((SELECT SUM(GREATEST(balance_micro, 0)) FROM system_balance_projection WHERE account_kind = 2), 0)::bigint
 	`, timeFrom, timeTo).Scan(
 		&row.TenantRechargePaidMinor, &tenantRechargeMicro,
 		&row.ActiveTenants, &tenantTotalMicro,
@@ -119,7 +119,7 @@ func (r *SystemRepository) GetConsumptionTrend(ctx context.Context, params syste
 	rows, err := r.pool.Query(ctx, `
 		SELECT date_trunc('day', created_at) AS day_bucket,
 		       SUM(COALESCE(tenant_payable, 0) + COALESCE(user_charged, 0)) AS total
-		FROM ai_usage_logs
+		FROM system_usage_projection
 		WHERE billing_status = 'settled'
 		  AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz)
 		  AND ($2::timestamptz IS NULL OR created_at < $2::timestamptz)
@@ -151,7 +151,7 @@ func (r *SystemRepository) GetResourceStatistics(ctx context.Context, params sys
 		SELECT COALESCE(dt.request_source, '') AS client_id,
 		       COALESCE(NULLIF(dt.request_source, ''), 'D-AI') AS client_name,
 		       SUM(COALESCE(dt.tenant_payable, 0) + COALESCE(dt.user_charged, 0)) AS total
-		FROM ai_usage_logs dt
+		FROM system_usage_projection dt
 		WHERE dt.billing_status = 'settled'
 		  AND ($1::timestamptz IS NULL OR dt.created_at >= $1::timestamptz)
 		  AND ($2::timestamptz IS NULL OR dt.created_at < $2::timestamptz)

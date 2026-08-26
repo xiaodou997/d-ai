@@ -17,12 +17,14 @@ revoke/ownership 变更。
 `payment_order_party_projection` 与 `payment_admin_recharge_order_projection` 只读视图；租户管理与
 分析使用 `tenant_management_projection`、`tenant_self_overview_projection` 与
 `tenant_usage_projection`，管理员终端用户列表使用 `user_admin_end_user_projection`。
-billing/payment 三类视图 owner 转给 billing role，租户/用户三类视图 owner 转给 runtime role，
+billing/payment 三类视图 owner 转给 billing role，租户/用户/运营的
+`system_recharge_projection`、`system_identity_projection`、`system_balance_projection` 和
+`system_usage_projection` 视图 owner 转给 runtime role，
 避免报表查询直接依赖对方领域表。
 
 ## Apply
 
-先确认目标库已完成 schema v22（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
+先确认目标库已完成 schema v23（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
 billing DSN 后，以数据库 owner/superuser 执行：
 
 ```bash
@@ -38,7 +40,7 @@ deploy/production/apply_db_ownership.sh
 ## Contract probe
 
 ```bash
-SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v22_test?sslmode=disable' \
+SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v23_test?sslmode=disable' \
   bash scripts/check_db_ownership.sh
 ```
 

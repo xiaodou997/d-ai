@@ -61,7 +61,11 @@ BEGIN
         'tenant_management_projection',
         'tenant_self_overview_projection',
         'tenant_usage_projection',
-        'user_admin_end_user_projection'
+        'user_admin_end_user_projection',
+        'system_recharge_projection',
+        'system_identity_projection',
+        'system_balance_projection',
+        'system_usage_projection'
     ] LOOP
         IF to_regclass(format('%I.%I', target_schema, view_name)) IS NULL THEN
             RAISE EXCEPTION 'ownership contract view %.% does not exist', target_schema, view_name;
@@ -108,7 +112,11 @@ GRANT SELECT ON TABLE
     tenant_management_projection,
     tenant_self_overview_projection,
     tenant_usage_projection,
-    user_admin_end_user_projection
+    user_admin_end_user_projection,
+    system_recharge_projection,
+    system_identity_projection,
+    system_balance_projection,
+    system_usage_projection
 TO :"runtime_role", :"billing_role";
 REVOKE INSERT, UPDATE, DELETE ON TABLE
     billing_recharge_order_projection,
@@ -117,7 +125,11 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE
     tenant_management_projection,
     tenant_self_overview_projection,
     tenant_usage_projection,
-    user_admin_end_user_projection
+    user_admin_end_user_projection,
+    system_recharge_projection,
+    system_identity_projection,
+    system_balance_projection,
+    system_usage_projection
 FROM :"runtime_role", :"billing_role";
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE
@@ -165,5 +177,9 @@ ALTER VIEW tenant_management_projection OWNER TO :"runtime_role";
 ALTER VIEW tenant_self_overview_projection OWNER TO :"runtime_role";
 ALTER VIEW tenant_usage_projection OWNER TO :"runtime_role";
 ALTER VIEW user_admin_end_user_projection OWNER TO :"runtime_role";
+ALTER VIEW system_recharge_projection OWNER TO :"runtime_role";
+ALTER VIEW system_identity_projection OWNER TO :"runtime_role";
+ALTER VIEW system_balance_projection OWNER TO :"runtime_role";
+ALTER VIEW system_usage_projection OWNER TO :"runtime_role";
 
 COMMIT;

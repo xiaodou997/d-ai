@@ -2419,6 +2419,42 @@ LEFT JOIN bill_accounts b ON b.account_id = eu.user_id
 WHERE eu.user_type = 4
   AND eu.status <> 'deleted';
 
+CREATE VIEW system_recharge_projection AS
+SELECT order_type,
+       paid_amount,
+       credit_amount,
+       status,
+       created_at
+FROM bill_recharge_orders;
+
+CREATE VIEW system_identity_projection AS
+SELECT 'tenant'::text AS entity_kind,
+       tenant_id AS entity_id,
+       status,
+       created_at
+FROM iam_tenants
+UNION ALL
+SELECT 'user'::text AS entity_kind,
+       user_id AS entity_id,
+       status,
+       created_at
+FROM iam_accounts
+WHERE user_type = 4;
+
+CREATE VIEW system_balance_projection AS
+SELECT account_kind,
+       balance_micro
+FROM bill_accounts;
+
+CREATE VIEW system_usage_projection AS
+SELECT tenant_id,
+       request_source,
+       billing_status,
+       created_at,
+       tenant_payable,
+       user_charged
+FROM ai_usage_logs;
+
 -- Required system defaults
 INSERT INTO sys_settings (key, value)
 VALUES (
@@ -2465,6 +2501,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 22);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 23);
 
 COMMIT;

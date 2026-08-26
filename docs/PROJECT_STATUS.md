@@ -9,8 +9,8 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 ## 已完成
 
 - 身份、权限、计费和 AI 能力运行在同一个 Go 进程、PostgreSQL 数据库和二进制入口中。
-- 数据库使用 `internal/db/init.sql` schema v22 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
-- `internal/db/changes/` 保存 v1→v22 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
+- 数据库使用 `internal/db/init.sql` schema v23 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
+- `internal/db/changes/` 保存 v1→v23 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
 - `make dev` 负责本地配置、PostgreSQL、Redis、空库初始化和后端启动，不升级已有数据库。
 - Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。
 - API facade、领域类型、请求适配器、鉴权、shell、DsUI 和 billing 能力均在 `apps/portal/src` 内通过清晰目录边界组织。
@@ -29,7 +29,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 | Portal 平台层 | `apps/portal/src/platform` | 环境、鉴权、路由、shell 和公共工作区 |
 | Portal 设计系统 | `apps/portal/src/shared/ui` | token、DsUI 组件和布局 |
 | Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
-| 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v22 新库基线、v1→v22 forward-only 人工变更和结构门禁 |
+| 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v23 新库基线、v1→v23 forward-only 人工变更和结构门禁 |
 
 ## 当前剩余任务
 
