@@ -62,6 +62,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Transport coverage gate
+        run: bash scripts/check_transport_coverage.sh
+
       - name: Assert database tests were not skipped
         run: |
           go test ./internal/billing/... ./internal/ai/adapters/postgres/... -v 2>&1 | tee /tmp/db-tests.log

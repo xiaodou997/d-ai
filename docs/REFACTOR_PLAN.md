@@ -176,7 +176,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
 - [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，公告与少量 legacy 编排仍待收敛。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
-- [ ] 将 Transport 层关键路径覆盖率提升到可执行门槛。
+- [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
 ### P1-04 拆分超大 Go 文件和清理兼容遗留
 
@@ -668,3 +668,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 认证策略：登录租户状态门禁、管理员 MFA 分支和认证审计 principal 分类改用 `auth.Actor.RequiresTenantScope` / `CapabilityPlatformAdmin`，移除 Transport 中最后几处基于数值范围的安全判断。
 - 回归：新增登录角色策略矩阵，覆盖四类合法角色、未知角色、租户 scope、管理员审计分类和 MFA 分支；Transport 全量测试与 `go vet` 通过。
 - 结论：P1-05 capability/policy 授权迁移项完成；剩余 `userType` 仅为数据库兼容投影、响应展示或 claims 数据完整性校验。
+
+### P1-03（Transport 覆盖率门禁，2026-08-26）
+
+- 基线：`go test ./internal/transport -covermode=atomic` 当前覆盖率为 10.4%，未再把“测试命令成功”误当成关键路径覆盖证明。
+- 门禁：新增 `scripts/check_transport_coverage.sh`，解析真实 `go test` 覆盖率并以 10.0% 作为可执行的非回退下限；`TRANSPORT_COVERAGE_MIN` 可在后续测试补齐后直接抬高。
+- 接入：Makefile 新增 `check-transport-coverage`，GitHub Actions 后端 job 在完整 Go 测试后执行同一脚本，避免本地与 CI 使用不同口径。
+- 验证：脚本、Make target、CI YAML 语法和 Transport 测试通过；`go tool cover` 在当前受限环境的缓存读取异常不影响门禁，因为脚本只读取 `go test` 的权威汇总输出。
