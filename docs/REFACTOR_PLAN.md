@@ -188,8 +188,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-05 强化授权模型
 
-- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已迁移租户自助/品牌、平台管理、财务、支付、仪表盘、清理、代理节点、JWT key 和公告，通知及少量账户/终端用户展示逻辑仍需清理。
-- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；`auth.Actor` / `Capability` / `requireCapability` 已覆盖主要管理、支付、公告和自助端点，通知及少量兼容展示路径仍待迁移。
+- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已迁移租户自助/品牌、平台管理、财务、支付、仪表盘、清理、代理节点、JWT key、公告和通知，少量账户/终端用户展示逻辑仍需清理。
+- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；`auth.Actor` / `Capability` / `requireCapability` 已覆盖主要管理、支付、公告、通知和自助端点，仍需清理兼容展示路径。
 - [x] Portal 菜单和路由 capability 只用于展示/导航提示；后端通过 operation middleware 和 capability/policy 矩阵执行最终授权，并有服务端拒绝回归测试。
 - [x] 建立统一的 `auth.Actor`、`TenantScope`、`UserID`/`TenantID` 和 `ResourceOwnership` 类型；Transport 从 claims 统一构造 actor，租户、终端用户、租户详情和支付订单 ownership 均通过同一 typed reference 校验。
 - [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
@@ -654,4 +654,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：公告 `Actor/Principal` 改用共享 `auth.UserID`、`auth.TenantID`、`auth.UserType`，通过 `AuthorizationActor`/`Has` 调用统一 capability policy；数据库中的 `actor_user_type` 和收件人 user type 仍保留为持久化投影。
 - 业务策略：公告创建、编辑、管理列表和收件箱 principal 校验不再直接比较裸数字角色；平台管理员、租户用户和终端用户的 capability/scope 语义集中由 `auth.Actor` 决定。
 - 回归：新增公告 capability 矩阵，覆盖管理员、租户、终端用户、缺少 tenant scope 和未知角色；公告 service/pg、Transport 全量测试与依赖门禁通过。
-- 遗留范围：通知 service 及少量账户/终端用户 DTO 仍使用数据库兼容的 `userType` 字段，后续只清理授权判断，不改历史数据格式。
+- 遗留范围：少量账户/终端用户 DTO 仍使用数据库兼容的 `userType` 字段，后续只清理授权判断，不改历史数据格式。
+
+### P1-05（通知授权迁移，2026-08-26）
+
+- 查询边界：通知列表改为 `ListForActor(ctx, auth.Actor, limit)`，service 内部统一验证 actor capability、用户身份和 tenant scope，再绑定 recipient/user type/tenant 查询参数。
+- 防越权：调用方不再能通过裸三元组查询其他用户或租户通知；无用户、未知角色和错误 scope 在 service 层 fail-closed，Transport 将其映射为 403。
+- 回归：新增真实 PostgreSQL 通知 scope 测试，覆盖同租户、跨租户、其他用户、全局通知、错误角色和缺失身份；Transport 全量回归通过。
+- 遗留范围：通知投递记录中的 `recipient_user_type` 仍是数据库兼容投影，不作为调用方授权输入。

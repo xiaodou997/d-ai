@@ -44,8 +44,11 @@ func registerNotifications(api huma.API, d Deps) {
 		if err != nil {
 			return nil, err
 		}
-		items, err := d.Notifications.ListForUser(ctx, string(actor.UserID), int(actor.UserType), string(actor.TenantID), in.Limit)
+		items, err := d.Notifications.ListForActor(ctx, actor, in.Limit)
 		if err != nil {
+			if errors.Is(err, notificationpkg.ErrInvalidActor) {
+				return nil, httpx.ErrForbidden
+			}
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		return &notificationsOutput{Body: items}, nil

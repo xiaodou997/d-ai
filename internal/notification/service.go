@@ -13,11 +13,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"xiaodou/dai/internal/auth"
 )
 
 var (
 	ErrInvalidChannel = errors.New("notification channel is invalid")
 	ErrInvalidInput   = errors.New("notification input is invalid")
+	ErrInvalidActor   = errors.New("notification actor is invalid")
 )
 
 type Input struct {
@@ -98,7 +101,17 @@ func (s *Service) SendWebhook(ctx context.Context, input Input) (Delivery, error
 	return s.markSent(ctx, delivery.ID)
 }
 
-func (s *Service) ListForUser(ctx context.Context, userID string, userType int, tenantID string, limit int) ([]Delivery, error) {
+// ListForActor returns only notifications addressed to the authenticated
+// actor. Authorization is repeated here so callers cannot accidentally widen
+// the query by passing an arbitrary user/tenant tuple.
+func (s *Service) ListForActor(ctx context.Context, actor auth.Actor, limit int) ([]Delivery, error) {
+	if actor.UserID == "" || (!actor.Has(auth.CapabilitySuperAdmin) &&
+		!actor.Has(auth.CapabilityPlatformAdmin) &&
+		!actor.Has(auth.CapabilityTenantSelf) &&
+		!actor.Has(auth.CapabilityCustomerSelf)) {
+		return nil, ErrInvalidActor
+	}
+	userID, userType, tenantID := string(actor.UserID), int(actor.UserType), string(actor.TenantID)
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
