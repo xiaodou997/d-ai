@@ -180,7 +180,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-04 拆分超大 Go 文件和清理兼容遗留
 
-- [~] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选分层、sticky、credential 选择和物理 target 失效已移入 `execute_candidates.go`，其余 relay 职责继续拆分。
+- [~] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选分层与 upstream attempt 生命周期已分别移入 `execute_candidates.go` / `execute_attempt.go`，其余 relay 职责继续拆分。
 - [ ] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织。
 - [ ] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference。
 - [ ] 删除已不再注册的旧 Console handler 和 legacy bridge helper。
@@ -682,3 +682,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 行为：未改变候选排序、sticky 首选、credential fallback、健康 lease 或失败耗尽语义。
 - 验证：`go test ./internal/ai/serving -count=1` 通过（受限环境需允许既有 `httptest` 本地监听）。
 - 遗留范围：上游 attempt/transport、sync/stream relay 和 image response 仍待移出主文件。
+
+### P1-04（Serving upstream attempt 拆分，2026-08-26）
+
+- 文件边界：`execute_attempt.go` 独立承载 client runtime/HTTP transport invocation、deadline controller、concurrency slot、结果分类、credential swap、health/sticky 结果处理和 failover decision；主文件不再持有单次 upstream attempt 实现。
+- 行为：保持 timeout cause、2xx precommit/postcommit、credential invalidate/cooldown、direct account invalidation、inflight/latency 统计和 slot release 语义不变。
+- 验证：`go test ./internal/ai/serving -count=1` 通过（受限环境需允许既有 `httptest` 本地监听）。
+- 遗留范围：sync/stream protocol relay、image response 和低层 SSE helper 仍待独立文件化。
