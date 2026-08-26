@@ -64,11 +64,6 @@ func newAdminHandlers(d Deps) *adminHandlers {
 	}
 }
 
-// isAdminClaims 判断是否系统管理员（userType 1 超管 / 2 平台管理员）。
-func isAdminClaims(c *auth.Claims) bool {
-	return c != nil && actorFromClaims(c).Has(auth.CapabilityPlatformAdmin)
-}
-
 func actorFromClaims(c *auth.Claims) auth.Actor {
 	return auth.ActorFromClaims(c)
 }

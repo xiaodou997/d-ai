@@ -1,10 +1,6 @@
 package transport
 
-import (
-	"xiaodou/dai/internal/auth"
-
-	"go.uber.org/zap"
-)
+import "go.uber.org/zap"
 
 func principalLogFields(userID, tenantID string, extra ...zap.Field) []zap.Field {
 	fields := make([]zap.Field, 0, len(extra)+2)
@@ -16,11 +12,4 @@ func principalLogFields(userID, tenantID string, extra ...zap.Field) []zap.Field
 	}
 	fields = append(fields, extra...)
 	return fields
-}
-
-func claimsLogFields(claims *auth.Claims, extra ...zap.Field) []zap.Field {
-	if claims == nil {
-		return extra
-	}
-	return principalLogFields(claims.UserID, claims.TenantID, extra...)
 }

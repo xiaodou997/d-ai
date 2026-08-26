@@ -182,7 +182,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
 - [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
-- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/clientruntime`、`internal/ai/console`、`internal/ai/core/runtime`、`internal/ai/domain`、`internal/ai/formats`、`internal/ai/gateway`、`internal/ai/serving`、`internal/ai/transport`、`internal/payment/wechat` 与 `internal/tenant/pg` 诊断，其他包仍待分批处理。
+- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/clientruntime`、`internal/ai/console`、`internal/ai/core/runtime`、`internal/ai/domain`、`internal/ai/formats`、`internal/ai/gateway`、`internal/ai/serving`、`internal/ai/transport`、`internal/payment/wechat`、`internal/tenant/pg` 与 `internal/transport` 诊断，其他包仍待分批处理。
 - [x] 删除已不再注册的旧 Console handler 和 legacy bridge helper；保留当前 `/runtime/v1` 已注册路由及其运行时兼容桥接。
 - [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
 
@@ -828,3 +828,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：删除租户概览行为查询在最后一个可选 `time_to` 参数之后不会再使用的 `argIdx++`，保持动态 SQL 占位符和参数顺序不变。
 - 验证：`staticcheck ./internal/tenant/pg` 零诊断，tenant/pg 测试、`go vet` 和差异检查通过。
+
+### P1-04（Transport auth/log helper cleanup，2026-08-26）
+
+- 清理：删除未被调用的 `isAdminClaims` 与 `claimsLogFields`，保留实际使用的 actor 解析和 principal 日志字段构建路径。
+- 验证：`staticcheck ./internal/transport` 零诊断，Transport 测试、`go vet` 和差异检查通过；全仓 `internal/...` staticcheck 已清零。
