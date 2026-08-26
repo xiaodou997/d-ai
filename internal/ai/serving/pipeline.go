@@ -196,18 +196,6 @@ func runtimeSubjectUsesAPIKeyQuota(subject *coreidentity.Subject) bool {
 	return subject != nil && subject.AuthMethod == coreidentity.AuthMethodAPIKey && subject.APIKeyID != ""
 }
 
-func runtimeSubjectLegacyOwnerType(subject *coreidentity.Subject) domain.OwnerType {
-	if subject == nil {
-		return domain.OwnerTenant
-	}
-	switch subject.Scope {
-	case coreidentity.ScopeUser:
-		return domain.OwnerUser
-	default:
-		return domain.OwnerTenant
-	}
-}
-
 func runtimeSubjectStickyKey(subject *coreidentity.Subject) string {
 	if subject == nil {
 		return ""

@@ -102,12 +102,6 @@ func hasRoutingStats(stats map[string]routing.RouteStats) bool {
 	return false
 }
 
-func (s *MultiDimScorer) pickMultiDim(ctx context.Context, scoring RouteScoringContext, eligible []*domain.RouteCandidate) *domain.RouteCandidate {
-	stats := s.Stats.Snapshot(ctx, candidateRouteIDs(eligible))
-	c, _ := s.pickMultiDimWithScore(ctx, scoring, eligible, stats)
-	return c
-}
-
 func (s *MultiDimScorer) pickMultiDimWithScore(ctx context.Context, scoring RouteScoringContext, eligible []*domain.RouteCandidate, stats map[string]routing.RouteStats) (*domain.RouteCandidate, float64) {
 	scores := s.normalizedCandidateScores(ctx, scoring, eligible, stats)
 	return softmaxSampleWithScore(eligible, scores)
