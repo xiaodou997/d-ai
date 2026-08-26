@@ -788,3 +788,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除 `groups.go` 中没有注册入口或调用方的 linked-group 查询 DTO，以及未接入当前 API 的 provider family 双向转换 helper；现有分组、目标和 dispatch DTO/路由保持不变。
 - 验证：Transport 测试、`go vet` 通过；该文件的五个 U1000 已消除，剩余 transport 诊断集中在 self limit/subscription/tenant group/usage helper 和一处切片追加建议。
+
+### P1-04（Transport self limit DTO cleanup，2026-08-26）
+
+- 清理：删除未被任何注册 handler 使用的 `selfAPIKeyLimitInput`；保留实际用于租户和终端用户 API key 限额写入的 `selfUpsertAPIKeyLimitInput`。
+- 验证：Transport 测试、`go vet` 通过，`selfAPIKeyLimitInput` 的 U1000 已消除；剩余 transport 诊断继续按 subscriptions、tenant groups、usage helper 分批处理。

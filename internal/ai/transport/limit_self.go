@@ -25,10 +25,6 @@ type tenantSelfUpsertUserLimitInput struct {
 	Body   scopedLimitPolicyWriteRequest
 }
 
-type selfAPIKeyLimitInput struct {
-	APIKeyID string `path:"apiKeyID"`
-}
-
 type selfUpsertAPIKeyLimitInput struct {
 	APIKeyID string `path:"apiKeyID"`
 	Body     scopedLimitPolicyWriteRequest
