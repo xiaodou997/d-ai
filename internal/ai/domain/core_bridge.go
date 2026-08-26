@@ -147,11 +147,3 @@ func (p RuntimeLimitPolicy) ToCore() commercial.LimitPolicy {
 		UpdatedAt:        p.UpdatedAt,
 	}
 }
-
-func int32PtrToIntPtr(v *int32) *int {
-	if v == nil {
-		return nil
-	}
-	out := int(*v)
-	return &out
-}
