@@ -71,6 +71,9 @@ jobs:
             exit 1
           fi
 
+      - name: Billing invariant lifecycle suite
+        run: go test ./internal/billing/invariants -count=1 -v
+
       - name: OpenAPI contract is current
         run: |
           go run ./cmd/openapi

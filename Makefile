@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-ownership help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-ownership help
 
 # ---- 本地开发 ----
 
@@ -98,6 +98,12 @@ test: test-db-up ## 运行 Go 测试（含数据库集成测试）
 
 test-unit: ## 只跑不需要外部依赖的测试（数据库测试会 skip）
 	go test ./...
+
+test-billing-invariants: test-db-up ## 运行统一资金不变量生命周期测试
+	DAI_TEST_DATABASE_URL="$(TEST_DATABASE_URL)" \
+	DAI_TEST_DATABASE_STRICT=1 \
+	GOCACHE="$(CURDIR)/.cache/go-build" \
+	go test ./internal/billing/invariants -count=1 -v
 
 test-db-up: ## 准备测试用 PostgreSQL/Redis 和 dai_test 库
 	docker compose up -d --wait postgres redis

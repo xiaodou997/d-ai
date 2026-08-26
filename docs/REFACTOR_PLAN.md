@@ -217,7 +217,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-08 持续验证资金不变量
 
-- [ ] 将余额、批次、充值、退款、订阅和 AI 结算不变量形成统一测试套件。
+- [~] 将余额、批次、充值、退款、订阅和 AI 结算不变量形成统一测试套件；新增只读 `billing/invariants.Check` 与真实 PostgreSQL 生命周期测试，覆盖充值→扣费→过期→撤销→退款→订阅→Outbox。
 - [ ] 增加随机并发和属性测试，覆盖充值、扣费、过期、撤销与退款交错。
 - [ ] 增加定期线上对账任务和差异告警。
 - [ ] 为 Outbox 积压和 parked row 定义处理手册。

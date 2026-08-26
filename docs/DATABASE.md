@@ -33,6 +33,9 @@
 
 - **只能通过 `internal/billing/ledger` 读写余额。** 任何地方再出现自行 SUM 额度包
   或读欠费列的 SQL，就是把第二个真相源引了回来。
+- `internal/billing/invariants.Check` 是统一只读资金核查入口，检查账户余额与活跃批次守恒、批次状态、
+  充值撤销、Outbox/用量链接、退款冲正、订阅订单和订阅额度边界。它既可在真实 PostgreSQL 测试中运行，
+  也可由后续对账任务在一个事务快照中调用。
 - `bill_credit_lots` 记录每笔充值的来源和有效期，是**分摊明细，不是余额**。
   不变量：`SUM(未过期未撤销批次的 granted - consumed) = GREATEST(balance_micro, 0)`。
 - 批次状态不落库，全部可推导：`expired_at` / `revoked_at` / `consumed >= granted`。
