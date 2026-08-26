@@ -112,6 +112,19 @@ jobs:
           fi
           grep -q 'DB_ROLE_PROVISION_CONFIRM=APPLY' /tmp/db-role-provision-gate.log
 
+      - name: Database ownership cutover helper is valid
+        run: |
+          bash -n deploy/production/cutover_db_ownership.sh
+          deploy/production/cutover_db_ownership.sh --help >/dev/null
+          if DB_OWNERSHIP_CUTOVER_ADMIN_DATABASE_URL=postgres://invalid.example/dai \
+             DB_OWNERSHIP_CUTOVER_RUNTIME_DATABASE_URL=postgres://invalid.example/dai \
+             DB_OWNERSHIP_CUTOVER_BILLING_DATABASE_URL=postgres://invalid.example/dai \
+             deploy/production/cutover_db_ownership.sh apply >/tmp/db-ownership-cutover-gate.log 2>&1; then
+            echo "::error::database ownership cutover ran without explicit confirmation"
+            exit 1
+          fi
+          grep -q 'DB_OWNERSHIP_CUTOVER_CONFIRM=APPLY' /tmp/db-ownership-cutover-gate.log
+
       - name: Replay full schema migration chain
         env:
           SCHEMA_REPLAY_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable

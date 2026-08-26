@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership-cutover check-db-ownership help
 
 # ---- 本地开发 ----
 
@@ -69,6 +69,7 @@ database-artifacts: ## 将初始化、人工升级和回滚 SQL 复制到发布�
 	cp internal/db/ownership.sql $(DB_RELEASE_DIR)/ownership.sql
 	cp deploy/production/apply_db_ownership.sh $(DB_RELEASE_DIR)/apply_db_ownership.sh
 	cp deploy/production/provision_db_roles.sh $(DB_RELEASE_DIR)/provision_db_roles.sh
+	cp deploy/production/cutover_db_ownership.sh $(DB_RELEASE_DIR)/cutover_db_ownership.sh
 
 legal-artifacts: ## 将开源许可、第三方通知和商标政策复制到发布目录
 	mkdir -p $(BUILD_DIR)
@@ -157,6 +158,17 @@ check-db-role-provision: ## 校验生产数据库角色 provisioning 脚本入�
 	deploy/production/provision_db_roles.sh --help >/dev/null
 	@if DB_ROLE_PROVISION_DATABASE_URL=postgres://invalid.example/dai deploy/production/provision_db_roles.sh apply >/dev/null 2>&1; then \
 		echo "ERROR: role provisioning ran without explicit confirmation"; \
+		exit 1; \
+	fi
+
+check-db-ownership-cutover: ## 校验生产数据库 ownership 切换脚本入口和确认门禁
+	bash -n deploy/production/cutover_db_ownership.sh
+	deploy/production/cutover_db_ownership.sh --help >/dev/null
+	@if DB_OWNERSHIP_CUTOVER_ADMIN_DATABASE_URL=postgres://invalid.example/dai \
+		DB_OWNERSHIP_CUTOVER_RUNTIME_DATABASE_URL=postgres://invalid.example/dai \
+		DB_OWNERSHIP_CUTOVER_BILLING_DATABASE_URL=postgres://invalid.example/dai \
+		deploy/production/cutover_db_ownership.sh apply >/dev/null 2>&1; then \
+		echo "ERROR: ownership cutover ran without explicit confirmation"; \
 		exit 1; \
 	fi
 

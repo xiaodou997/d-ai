@@ -210,7 +210,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-07 建立数据库领域所有权
 
 - [x] 从全 `public` schema 迁移到领域 schema，或用独立数据库角色实现等价隔离；`internal/db/ownership.sql` 固化 runtime/billing 角色契约，composition root 已支持独立 `DAI_BILLING_DATABASE_URL`。
-- [~] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，生产角色 provisioning 已脚本化，维护窗口切换仍待完成。
+- [x] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，角色 provisioning 与维护窗口切换均已脚本化并要求显式确认。
 - [x] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置；runtime 仅保留账务读取和 `bill_charge_outbox` 的 `INSERT`，billing pool 承担结算/支付/订阅扣费写路径。
 - [x] 跨域读取通过视图、只读端口或显式 query service；billing/payment、租户管理/分析、管理员终端用户与运营仪表盘核心聚合均已迁移到只读视图，相关查询不再直接跨域联表。
 - [x] CI 检查应用角色的最小权限和越权失败行为；`scripts/check_db_ownership.sh` 验证 runtime 账本写入失败、outbox 入队成功和 billing 角色写入成功。
@@ -847,9 +847,16 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-07（Database role provisioning，2026-08-27）
 
 - 工具：新增 `deploy/production/provision_db_roles.sh`，支持只读 `preflight` 与显式 `DB_ROLE_PROVISION_CONFIRM=APPLY` 的 `apply`；从 secret-manager 环境读取两组密码，不把密码放入命令行参数或发布附件。
-- 安全：创建/轮换 `dai` 与 `dai_billing` LOGIN 角色时固定为 NOINHERIT、NOSUPERUSER、NOCREATEDB、NOCREATEROLE、NOREPLICATION、NOBYPASSRLS，并拒绝占位符、相同密码和既有角色成员关系；脚本只授予数据库 CONNECT，不提前授予表权限。
+- 安全：创建/轮换 `dai` 与 `dai_billing` LOGIN 角色时固定为 NOINHERIT、NOSUPERUSER、NOCREATEDB、NOCREATEROLE、NOREPLICATION、NOBYPASSRLS，并拒绝占位符、空白字符、少于 32 个字符、相同密码和既有角色成员关系；脚本只授予数据库 CONNECT，不提前授予表权限。
 - 接入：生产数据库发布附件、Make 检查目标和 CI 确认门禁均已接入；ownership/revoke 仍由后续维护窗口切换步骤执行。
 - 验证：脚本 `bash -n`、帮助入口、Make `check-db-role-provision` 通过。
+
+### P1-07（Database ownership maintenance cutover，2026-08-27）
+
+- 工具：新增 `deploy/production/cutover_db_ownership.sh`，提供 `preflight/apply/verify` 三阶段；`apply` 同时要求 `DB_OWNERSHIP_CUTOVER_CONFIRM=APPLY` 与 `DB_OWNERSHIP_CUTOVER_WINDOW=OPEN`，并在调用 ownership SQL 前再次确认无其他数据库 client session。
+- 校验：切换前验证 admin/runtime/billing 三个 DSN 的实际角色和目标数据库一致，角色为 LOGIN/NOINHERIT 最小权限且无成员关系；切换后验证 runtime 投影视图读取、outbox INSERT 和 billing 账本写权限，支持可选 readiness URL。
+- 接入：发布附件、Make、CI 和 `docs/DATABASE_OWNERSHIP.md` 已改为优先使用 wrapper；应用停止、单实例启动和 readiness 观察顺序固化在维护窗口手册中。
+- 验证：wrapper/ownership 脚本 `bash -n`、帮助入口、确认门禁和差异检查通过。
 
 ### P1-04（Split behavior regression coverage，2026-08-27）
 

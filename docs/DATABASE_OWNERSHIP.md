@@ -13,7 +13,8 @@ D-AI 仍使用单 PostgreSQL 数据库，但生产运行时不应继续使用超
 `DAI_BILLING_DATABASE_URL`；应用完成连接切换并验证 billing role 可用后，才在生产库执行
 revoke/ownership 变更。角色创建或轮换使用发布附件中的
 `provision_db_roles.sh`，脚本会将两个角色固定为 LOGIN、NOINHERIT、NOSUPERUSER、
-NOCREATEDB、NOCREATEROLE、NOREPLICATION、NOBYPASSRLS，并拒绝占位符或相同密码。
+NOCREATEDB、NOCREATEROLE、NOREPLICATION、NOBYPASSRLS，并拒绝占位符、空白字符、
+少于 32 个字符或相同密码。
 
 账务和支付管理列表使用 `billing_recharge_order_projection`、
 `payment_order_party_projection` 与 `payment_admin_recharge_order_projection` 只读视图；租户管理与
@@ -38,17 +39,23 @@ export DB_ROLE_PROVISION_CONFIRM=APPLY
 deploy/production/provision_db_roles.sh apply
 ```
 
-角色连接验证通过后，仍在同一维护窗口执行 ownership/revoke 契约：
+角色连接验证通过后，停止所有应用实例，在同一维护窗口执行 ownership/revoke 切换：
 
 ```bash
-export SCHEMA_OWNERSHIP_DATABASE_URL='postgres://dai-admin:${PASSWORD}@db.example/dai?sslmode=require'
-export SCHEMA_OWNERSHIP_RUNTIME_ROLE=dai
-export SCHEMA_OWNERSHIP_BILLING_ROLE=dai_billing
-export SCHEMA_OWNERSHIP_CONFIRM=APPLY
-deploy/production/apply_db_ownership.sh
+export DB_OWNERSHIP_CUTOVER_ADMIN_DATABASE_URL='postgres://dai-admin:${PASSWORD}@db.example/dai?sslmode=require'
+export DB_OWNERSHIP_CUTOVER_RUNTIME_DATABASE_URL='postgres://dai:${RUNTIME_PASSWORD}@db.example/dai?sslmode=require'
+export DB_OWNERSHIP_CUTOVER_BILLING_DATABASE_URL='postgres://dai_billing:${BILLING_PASSWORD}@db.example/dai?sslmode=require'
+export DB_OWNERSHIP_CUTOVER_CONFIRM=APPLY
+export DB_OWNERSHIP_CUTOVER_WINDOW=OPEN
+deploy/production/cutover_db_ownership.sh preflight
+deploy/production/cutover_db_ownership.sh apply
+
+# 启动新版本单实例后执行；health URL 可由 secret manager/部署环境注入
+export DB_OWNERSHIP_CUTOVER_HEALTH_URL='https://portal.example.com/ready'
+deploy/production/cutover_db_ownership.sh verify
 ```
 
-发布附件包含 `ownership.sql`、`provision_db_roles.sh` 和 `apply_db_ownership.sh`。provisioning 只创建/轮换运行角色和数据库 CONNECT 权限，不授予表权限；ownership 脚本会拒绝缺少角色、schema 或账务表的数据库，并在同一事务中撤销 runtime 账务 DML、授予 billing DML、转移账务表 owner。
+发布附件包含 `ownership.sql`、`provision_db_roles.sh`、`apply_db_ownership.sh` 和 `cutover_db_ownership.sh`。provisioning 只创建/轮换运行角色和数据库 CONNECT 权限，不授予表权限；cutover wrapper 会验证三个 DSN 的实际角色、数据库一致性、最小角色属性和无活动会话，再调用 ownership 脚本在同一事务中撤销 runtime 账务 DML、授予 billing DML、转移账务表 owner。直接调用 `apply_db_ownership.sh` 仅用于 CI 探针或已获 DBA 审批的低层操作。
 
 ## Contract probe
 

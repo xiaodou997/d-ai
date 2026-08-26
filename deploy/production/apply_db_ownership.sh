@@ -26,8 +26,12 @@ database_url=${SCHEMA_OWNERSHIP_DATABASE_URL:-${DAI_DATABASE_URL:-}}
 schema_name=${SCHEMA_OWNERSHIP_SCHEMA:-public}
 runtime_role=${SCHEMA_OWNERSHIP_RUNTIME_ROLE:-dai}
 billing_role=${SCHEMA_OWNERSHIP_BILLING_ROLE:-dai_billing}
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 ownership_sql=${SCHEMA_OWNERSHIP_SQL:-$project_dir/internal/db/ownership.sql}
+if [[ -z "${SCHEMA_OWNERSHIP_SQL:-}" && ! -f "$ownership_sql" && -f "$script_dir/ownership.sql" ]]; then
+  ownership_sql=$script_dir/ownership.sql
+fi
 
 [[ "${SCHEMA_OWNERSHIP_CONFIRM:-}" == "APPLY" ]] || {
   echo "db-ownership: set SCHEMA_OWNERSHIP_CONFIRM=APPLY" >&2
