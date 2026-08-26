@@ -454,9 +454,7 @@ func registerUserSelfModelGrants(api huma.API, d UserSelfReadHTTPDeps) {
 		}
 		out := &userAvailableModelsOutput{}
 		out.Body.Items = make([]userAvailableModelDTO, 0, len(rows))
-		for _, row := range rows {
-			out.Body.Items = append(out.Body.Items, row)
-		}
+		out.Body.Items = append(out.Body.Items, rows...)
 		out.Body.Total = len(out.Body.Items)
 		return out, nil
 	})
