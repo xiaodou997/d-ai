@@ -793,3 +793,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除未被任何注册 handler 使用的 `selfAPIKeyLimitInput`；保留实际用于租户和终端用户 API key 限额写入的 `selfUpsertAPIKeyLimitInput`。
 - 验证：Transport 测试、`go vet` 通过，`selfAPIKeyLimitInput` 的 U1000 已消除；剩余 transport 诊断继续按 subscriptions、tenant groups、usage helper 分批处理。
+
+### P1-04（Transport subscription output cleanup，2026-08-26）
+
+- 清理：删除没有任何 handler 返回或测试引用的 `subscriptionOutput`，保留分页列表和可空订阅响应使用的专用输出类型。
+- 验证：Transport 测试、`go vet` 通过，`subscriptionOutput` 的 U1000 已消除；剩余 transport 诊断集中在 tenant group/usage helper 和一处切片追加建议。

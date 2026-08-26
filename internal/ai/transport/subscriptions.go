@@ -519,10 +519,6 @@ type subPlanOutput struct {
 	Body subPlanDTO
 }
 
-type subscriptionOutput struct {
-	Body subscriptionDTO
-}
-
 type subscriptionNullableOutput struct {
 	Body *subscriptionDTO
 }
