@@ -180,7 +180,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-04 拆分超大 Go 文件和清理兼容遗留
 
-- [ ] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责。
+- [~] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选分层、sticky、credential 选择和物理 target 失效已移入 `execute_candidates.go`，其余 relay 职责继续拆分。
 - [ ] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织。
 - [ ] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference。
 - [ ] 删除已不再注册的旧 Console handler 和 legacy bridge helper。
@@ -675,3 +675,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 门禁：新增 `scripts/check_transport_coverage.sh`，解析真实 `go test` 覆盖率并以 10.0% 作为可执行的非回退下限；`TRANSPORT_COVERAGE_MIN` 可在后续测试补齐后直接抬高。
 - 接入：Makefile 新增 `check-transport-coverage`，GitHub Actions 后端 job 在完整 Go 测试后执行同一脚本，避免本地与 CI 使用不同口径。
 - 验证：脚本、Make target、CI YAML 语法和 Transport 测试通过；`go tool cover` 在当前受限环境的缓存读取异常不影响门禁，因为脚本只读取 `go test` 的权威汇总输出。
+
+### P1-04（Serving 候选选择拆分，2026-08-26）
+
+- 文件边界：`execute_candidates.go` 独立承载 sticky affinity、group/priority/conversion 分层、动态 scorer、OAuth pool credential 选择、健康探针和 physical target exhaustion；`execute.go` 保留执行编排与共享契约。
+- 行为：未改变候选排序、sticky 首选、credential fallback、健康 lease 或失败耗尽语义。
+- 验证：`go test ./internal/ai/serving -count=1` 通过（受限环境需允许既有 `httptest` 本地监听）。
+- 遗留范围：上游 attempt/transport、sync/stream relay 和 image response 仍待移出主文件。
