@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/audit"
 	"xiaodou/dai/internal/billing/ledger"
 	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
@@ -97,6 +98,25 @@ func (s *PaymentService) RecordCompletedRefund(ctx context.Context, p RecordComp
 	if err := validateRefundGrants(order, grants); err != nil {
 		return nil, err
 	}
+	grantSnapshot := make([]map[string]any, 0, len(grants))
+	for _, grant := range grants {
+		grantSnapshot = append(grantSnapshot, map[string]any{
+			"order_id": grant.OrderID, "order_type": grant.OrderType,
+			"tenant_id": grant.TenantID, "user_id": grant.UserID,
+			"credit_micro": grant.CreditMicro, "status": grant.Status,
+		})
+	}
+	beforeState, err := audit.Snapshot(map[string]any{
+		"payment_order_id": order.OrderID, "status": order.Status,
+		"fulfillment_status": order.FulfillmentStatus, "refund_status": order.RefundStatus,
+		"balance_order_id":          order.BalanceOrderID,
+		"credited_amount_micro_usd": order.CreditedAmountMicroUSD,
+		"tenant_income_micro_usd":   order.TenantIncomeMicroUSD,
+		"grants":                    grantSnapshot,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	now := time.Now().UTC()
 	refund := &payment.Refund{
@@ -121,6 +141,7 @@ func (s *PaymentService) RecordCompletedRefund(ctx context.Context, p RecordComp
 		return nil, err
 	}
 
+	effectSnapshot := make([]map[string]any, 0, len(grants))
 	for _, grant := range grants {
 		accountID := grant.UserID
 		if accountID == "" {
@@ -156,6 +177,13 @@ func (s *PaymentService) RecordCompletedRefund(ctx context.Context, p RecordComp
 		if err := paymentpg.InsertRefundReversalEffectTx(ctx, tx, reversalEffect); err != nil {
 			return nil, err
 		}
+		effectSnapshot = append(effectSnapshot, map[string]any{
+			"recharge_order_id": grant.OrderID, "account_id": accountID,
+			"credit_micro": effect.CreditMicro, "available_reclaimed_micro": effect.AvailableReclaimedMicro,
+			"non_available_debit_micro": effect.NonAvailableDebitMicro,
+			"expired_micro":             effect.ExpiredMicro, "account_debit_micro": effect.AccountDebitMicro,
+			"balance_after_micro": effect.BalanceAfterMicro,
+		})
 		if grant.OrderType == billing.OrderTypeUserTopupIncome {
 			entry := &payment.CashLedgerEntry{
 				TxnID: "CSH_" + uuid.New().String()[:24], TenantID: grant.TenantID,
@@ -174,6 +202,24 @@ func (s *PaymentService) RecordCompletedRefund(ctx context.Context, p RecordComp
 		WHERE order_id = $2
 	`, now, order.OrderID); err != nil {
 		return nil, fmt.Errorf("更新退款订单状态失败: %w", err)
+	}
+	afterState, err := audit.Snapshot(map[string]any{
+		"payment_order_id": order.OrderID, "status": order.Status,
+		"fulfillment_status": payment.FulfillmentStatusReversed, "refund_status": payment.RefundStatusRefunded,
+		"refund_id": refund.RefundID, "refund_reference": refund.RefundReference,
+		"refund_amount_minor": refund.RefundAmountMinor, "effects": effectSnapshot,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := audit.Append(ctx, tx, audit.Event{
+		RepairID: audit.NewRepairID(), Action: "payment_refund",
+		IdempotencyKey: "payment-refund:" + order.OrderID,
+		TargetType:     "pay_orders", TargetID: order.OrderID,
+		OperatorID: p.OperatorID, Reason: p.Reason,
+		BeforeState: beforeState, AfterState: afterState,
+	}); err != nil {
+		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -123,6 +124,27 @@ func TestRecordCompletedRefundReversesUserAndTenantIncomeExactlyOnce(t *testing.
 	}
 	if effects != 2 || reversedOrders != 2 || cashEntries != 1 || cashAmount != -900000 || cashBalance != -300000 {
 		t.Fatalf("effects/orders/cash/amount/balance = %d/%d/%d/%d/%d", effects, reversedOrders, cashEntries, cashAmount, cashBalance)
+	}
+	var repairAction, repairKey string
+	var beforeState, afterState []byte
+	if err := pool.QueryRow(ctx, `
+		SELECT action, idempotency_key, before_state, after_state FROM bill_repair_audits
+		WHERE target_type = 'pay_orders' AND target_id = 'PAY_REFUND'
+	`).Scan(&repairAction, &repairKey, &beforeState, &afterState); err != nil {
+		t.Fatalf("read payment repair evidence: %v", err)
+	}
+	if repairAction != "payment_refund" || repairKey != "payment-refund:PAY_REFUND" {
+		t.Fatalf("payment repair evidence = %s/%s", repairAction, repairKey)
+	}
+	var before, after map[string]any
+	if err := json.Unmarshal(beforeState, &before); err != nil {
+		t.Fatalf("decode payment repair before state: %v", err)
+	}
+	if err := json.Unmarshal(afterState, &after); err != nil {
+		t.Fatalf("decode payment repair after state: %v", err)
+	}
+	if before["refund_status"] != "none" || after["refund_status"] != "refunded" {
+		t.Fatalf("payment repair before/after state = %#v -> %#v", before, after)
 	}
 	detail, err := paymentpg.GetAdminRechargeOrder(ctx, pool, "PAY_REFUND")
 	if err != nil {

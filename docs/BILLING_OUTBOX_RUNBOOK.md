@@ -120,9 +120,10 @@ ORDER BY query_start;
 
 ## 受控单行 requeue
 
-没有根因修复和 incident ID 时不要执行。以下模板要求 parked 状态、usage 状态和
-`attempts` 同时匹配，并在同一事务内恢复两行；把 `<REQUEST_ID>` 和 `<INCIDENT_ID>`
-替换为经过审批的值，不能使用通配符：
+没有根因修复和 incident ID 时不要执行。schema v24 提供的
+`bill_requeue_parked_outbox` 函数要求 parked 状态、usage 状态和 `attempts` 同时匹配，
+并在同一事务内恢复两行、写入不可变审计证据；把 `<REQUEST_ID>`、`<REPAIR_ID>`、
+`<INCIDENT_ID>`、`<OPERATOR_ID>` 和 `<REASON>` 替换为经过审批的值，不能使用通配符：
 
 ```sql
 BEGIN;
@@ -134,27 +135,11 @@ JOIN ai_usage_logs u ON u.request_id = o.request_id
 WHERE o.request_id = '<REQUEST_ID>'
 FOR UPDATE;
 
--- 只有 failed + usage.failed 才允许回到 pending；request_id 不变
-WITH requeued AS (
-  UPDATE bill_charge_outbox o
-  SET status = 'pending',
-      attempts = 0,
-      last_error = 'manual requeue <INCIDENT_ID>',
-      settled_at = NULL
-  FROM ai_usage_logs u
-  WHERE o.request_id = '<REQUEST_ID>'
-    AND u.request_id = o.request_id
-    AND o.status = 'failed'
-    AND o.attempts >= 10
-    AND u.billing_status = 'failed'
-  RETURNING o.request_id
-)
-UPDATE ai_usage_logs u
-SET billing_status = 'pending',
-    settlement_error = NULL,
-    settled_at = NULL
-FROM requeued r
-WHERE u.request_id = r.request_id;
+-- 只有 failed + usage.failed 才允许回到 pending；request_id 不变。
+-- 返回值是不可变 bill_repair_audits.repair_id；同一幂等键重试会返回原 repair_id。
+SELECT bill_requeue_parked_outbox(
+  '<REQUEST_ID>', '<REPAIR_ID>', 'outbox-requeue:<REQUEST_ID>:<INCIDENT_ID>',
+  '<OPERATOR_ID>', '<REASON>');
 
 -- 必须看到同一 request_id 的两行都是 pending 后再提交
 SELECT o.request_id, o.status, o.attempts,
@@ -167,8 +152,8 @@ COMMIT;
 ```
 
 如果任一前置状态不匹配、usage 不存在、账户仍不存在或金额无法解释，执行 `ROLLBACK`
-并升级，不得强行把行改成 `done`。本模板的 incident ID 必须同时写入外部不可变
-运维审计记录；数据库内资金修复审计表/命令完成前，不允许批量自动 requeue。
+并升级，不得强行把行改成 `done`。函数会把 incident ID 作为幂等键的一部分写入数据库内
+不可变审计记录；仍应同步保留外部运维事件，且不允许批量自动 requeue。
 
 ## 恢复验收与禁止事项
 

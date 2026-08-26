@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -72,6 +73,27 @@ func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
 	}
 	if refundStatus != "refunded" || reason != "operator correction" || operator != "admin-refund" || refundedAt == nil {
 		t.Fatalf("usage refund audit = %s/%s/%s/%v", refundStatus, reason, operator, refundedAt)
+	}
+	var repairAction, repairKey string
+	var beforeState, afterState []byte
+	var before, after map[string]any
+	if err := pool.QueryRow(ctx, `
+		SELECT action, idempotency_key, before_state, after_state FROM bill_repair_audits
+		WHERE target_type = 'ai_usage_logs' AND target_id = 'req-refund'
+	`).Scan(&repairAction, &repairKey, &beforeState, &afterState); err != nil {
+		t.Fatalf("read usage repair evidence: %v", err)
+	}
+	if repairAction != "usage_refund" || repairKey != "usage-refund:req-refund" {
+		t.Fatalf("usage repair evidence = %s/%s", repairAction, repairKey)
+	}
+	if err := json.Unmarshal(beforeState, &before); err != nil {
+		t.Fatalf("decode usage repair before state: %v", err)
+	}
+	if err := json.Unmarshal(afterState, &after); err != nil {
+		t.Fatalf("decode usage repair after state: %v", err)
+	}
+	if before["refund_status"] != "none" || after["refund_status"] != "refunded" {
+		t.Fatalf("usage repair before/after state = %#v -> %#v", before, after)
 	}
 
 	if err := deduction.RefundUsage("req-refund", "duplicate", "admin-refund"); err == nil {
@@ -228,6 +250,27 @@ func TestReverseTenantOrderEnforcesScopeInsideReversalTransaction(t *testing.T) 
 	}
 	if status != billing.OrderStatusReversed || balance != 0 {
 		t.Fatalf("same-tenant reversal state = %s/%d", status, balance)
+	}
+	var repairAction, repairKey string
+	var beforeState, afterState []byte
+	var before, after map[string]any
+	if err := pool.QueryRow(ctx, `
+		SELECT action, idempotency_key, before_state, after_state FROM bill_repair_audits
+		WHERE target_type = 'bill_recharge_orders' AND target_id = 'ORD_SCOPE_USER'
+	`).Scan(&repairAction, &repairKey, &beforeState, &afterState); err != nil {
+		t.Fatalf("read recharge repair evidence: %v", err)
+	}
+	if repairAction != "recharge_reversal" || repairKey != "recharge-reversal:ORD_SCOPE_USER" {
+		t.Fatalf("recharge repair evidence = %s/%s", repairAction, repairKey)
+	}
+	if err := json.Unmarshal(beforeState, &before); err != nil {
+		t.Fatalf("decode recharge repair before state: %v", err)
+	}
+	if err := json.Unmarshal(afterState, &after); err != nil {
+		t.Fatalf("decode recharge repair after state: %v", err)
+	}
+	if before["status"] != "active" || after["status"] != "reversed" {
+		t.Fatalf("recharge repair before/after state = %#v -> %#v", before, after)
 	}
 }
 

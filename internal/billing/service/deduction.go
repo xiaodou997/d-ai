@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/audit"
 	"xiaodou/dai/internal/billing/ledger"
 	shared "xiaodou/dai/internal/domain"
 
@@ -77,6 +79,14 @@ func (s *DeductionService) RefundUsage(requestID, reason, operatorID string) err
 	if tenantCredits <= 0 && userCredits <= 0 {
 		return fmt.Errorf("usage has no refundable charge")
 	}
+	beforeState, err := audit.Snapshot(map[string]any{
+		"request_id": requestID, "tenant_id": tenantID, "user_id": userID,
+		"billing_status": billingStatus, "refund_status": refundStatus,
+		"tenant_payable": tenantCredits, "user_charged": userCredits,
+	})
+	if err != nil {
+		return err
+	}
 
 	now := billing.NowUTC()
 
@@ -106,6 +116,24 @@ func (s *DeductionService) RefundUsage(requestID, reason, operatorID string) err
 		    refunded_at = $3
 		WHERE request_id = $4
 	`, reason, operatorID, now, requestID); err != nil {
+		return err
+	}
+	afterState, err := audit.Snapshot(map[string]any{
+		"request_id": requestID, "tenant_id": tenantID, "user_id": userID,
+		"billing_status": billingStatus, "refund_status": "refunded",
+		"tenant_payable": tenantCredits, "user_charged": userCredits,
+		"refund_reason": reason, "refund_operator_id": operatorID,
+	})
+	if err != nil {
+		return err
+	}
+	if err := audit.Append(ctx, tx, audit.Event{
+		RepairID: audit.NewRepairID(), Action: "usage_refund",
+		IdempotencyKey: "usage-refund:" + requestID,
+		TargetType:     "ai_usage_logs", TargetID: requestID,
+		OperatorID: operatorID, Reason: reason,
+		BeforeState: beforeState, AfterState: afterState,
+	}); err != nil {
 		return err
 	}
 
@@ -161,11 +189,16 @@ func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID st
 	defer tx.Rollback(ctx)
 
 	var orderTenantID, status, orderType, paymentOrderID string
-	var creditAmount int64
+	var creditAmount, reversedAmount, lostAmount int64
+	var reversedAt *time.Time
+	var reversedBy, reversalReason string
 	err = tx.QueryRow(ctx, `
-		SELECT tenant_id, status, order_type, COALESCE(payment_order_id, ''), credit_amount
+		SELECT tenant_id, status, order_type, COALESCE(payment_order_id, ''), credit_amount,
+		       reversed_amount_micro, lost_amount_micro, reversed_at,
+		       COALESCE(reversed_by, ''), COALESCE(reversal_reason, '')
 		FROM bill_recharge_orders WHERE order_id = $1 FOR UPDATE
-	`, orderID).Scan(&orderTenantID, &status, &orderType, &paymentOrderID, &creditAmount)
+	`, orderID).Scan(&orderTenantID, &status, &orderType, &paymentOrderID, &creditAmount,
+		&reversedAmount, &lostAmount, &reversedAt, &reversedBy, &reversalReason)
 	if err != nil {
 		return nil, shared.ErrRechargeNotFound
 	}
@@ -186,6 +219,16 @@ func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID st
 	// also reverses tenant income and writes the cash-ledger correction.
 	if paymentOrderID != "" {
 		return nil, shared.ErrRechargeNotReversible
+	}
+	beforeState, err := audit.Snapshot(map[string]any{
+		"order_id": orderID, "tenant_id": orderTenantID, "order_type": orderType,
+		"payment_order_id": paymentOrderID, "status": status,
+		"credit_amount": creditAmount, "reversed_amount_micro": reversedAmount,
+		"lost_amount_micro": lostAmount, "reversed_at": reversedAt,
+		"reversed_by": reversedBy, "reversal_reason": reversalReason,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	revocation, err := ledger.RevokeOrderLots(ctx, tx, orderID)
@@ -210,6 +253,25 @@ func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID st
 	fulfillmentStatus := "reversed"
 	if lostMicro > 0 {
 		fulfillmentStatus = "partially_reversed"
+	}
+	afterState, err := audit.Snapshot(map[string]any{
+		"order_id": orderID, "tenant_id": orderTenantID, "order_type": orderType,
+		"payment_order_id": paymentOrderID, "status": billing.OrderStatusReversed,
+		"credit_amount": creditAmount, "reversed_amount_micro": revocation.ReclaimedMicro,
+		"lost_amount_micro": lostMicro, "fulfillment_status": fulfillmentStatus,
+		"reversed_by": operatorID, "reversal_reason": reason,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := audit.Append(ctx, tx, audit.Event{
+		RepairID: audit.NewRepairID(), Action: "recharge_reversal",
+		IdempotencyKey: "recharge-reversal:" + orderID,
+		TargetType:     "bill_recharge_orders", TargetID: orderID,
+		OperatorID: operatorID, Reason: reason,
+		BeforeState: beforeState, AfterState: afterState,
+	}); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {

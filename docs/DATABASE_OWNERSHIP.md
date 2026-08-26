@@ -24,7 +24,7 @@ billing/payment 三类视图 owner 转给 billing role，租户/用户/运营的
 
 ## Apply
 
-先确认目标库已完成 schema v23（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
+先确认目标库已完成 schema v24（包含上述只读视图和不可变资金修复审计表）升级；在维护窗口、应用已经配置并验证
 billing DSN 后，以数据库 owner/superuser 执行：
 
 ```bash
@@ -40,7 +40,7 @@ deploy/production/apply_db_ownership.sh
 ## Contract probe
 
 ```bash
-SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v23_test?sslmode=disable' \
+SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v24_test?sslmode=disable' \
   bash scripts/check_db_ownership.sh
 ```
 
@@ -50,6 +50,8 @@ SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_
 - runtime 可以在用量事务中插入 `bill_charge_outbox`；
 - billing role 可以写入并更新 `bill_accounts`；
 - billing role 可以读取 `ai_usage_logs`、`ai_sub_orders` 和 `ai_sub_subscriptions`，供结算与资金不变量对账使用；
+- billing role 只能向 `bill_repair_audits` 插入修复证据，数据库触发器拒绝修改或删除历史记录；
+- billing role 可执行 `bill_requeue_parked_outbox(...)`，函数只接受状态/金额/账户均匹配的单行 parked 修复并以原 `request_id` 幂等；
 - billing role 可以读取账务/支付投影视图，但读取无关 AI catalog 表失败；
 - runtime role 可以读取租户与管理员终端用户投影视图；
 - 账务表 owner 和 grant/revoke 契约可重复执行。

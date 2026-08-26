@@ -201,8 +201,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；`deploy/production/schema_release.sh` 负责备份、连续脚本执行和逐步版本确认，不引入运行时迁移依赖。
 - [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
-- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v23，并将最终 schema-only dump 与 `init.sql` 比较。
-- [x] 每个迁移在空库和前一 schema 版本副本上验证；22 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v23 全链重放并逐步校验版本。
+- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v24，并将最终 schema-only dump 与 `init.sql` 比较。
+- [x] 每个迁移在空库和前一 schema 版本副本上验证；23 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v24 全链重放并逐步校验版本。
 - [x] 为缺少专项测试的 0002、0003、0009 补迁移测试；测试覆盖来源版本、关键结构、数据转换和约束行为。
 - [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [x] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤；`deploy/production/schema_release.sh` 显式执行并记录备份/哈希/版本，`docs/SCHEMA_RELEASE_RUNBOOK.md` 固化停流量、readiness、兼容窗口和恢复步骤。
@@ -221,7 +221,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 增加固定种子随机并发属性测试与并发幂等测试，覆盖充值、扣费、过期、撤销与退款交错；统一账本写路径为「账户→批次」锁顺序，消除反向锁死。
 - [x] 增加定期线上对账任务和差异告警；Scheduler 使用 Repeatable Read 只读快照与跨副本 advisory lock，发布 Prometheus 差异指标，`docs/DATABASE.md` 固化告警阈值与禁止绕过账本的恢复边界。
 - [x] 为 Outbox 积压和 parked row 定义处理手册；`docs/BILLING_OUTBOX_RUNBOOK.md` 固化状态语义、只读排查、单行受控 requeue、验收和禁止操作。
-- [ ] 所有资金修复必须保留不可变审计证据和幂等键。
+- [x] 所有资金修复必须保留不可变审计证据和幂等键；schema v24 的 `bill_repair_audits` 以触发器拒绝修改/删除，退款、充值撤销和 parked requeue 在同一事务写入 before/after 快照并以唯一幂等键防重。
 
 ## P2：运行角色与部署拓扑
 

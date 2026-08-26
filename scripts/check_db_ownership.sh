@@ -90,6 +90,68 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
 psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -v schema_name="$schema_name" -v billing_role="$billing_role" \
   -c "SET ROLE \"$billing_role\";
+      INSERT INTO \"$schema_name\".bill_repair_audits
+        (repair_id, action, idempotency_key, target_type, target_id,
+         operator_id, reason, before_state, after_state)
+      VALUES ('ownership-repair', 'usage_refund', 'ownership-repair-key',
+              'probe', 'ownership-probe', 'ownership-test', 'probe', '{}', '{}');
+      SELECT count(*) FROM \"$schema_name\".bill_repair_audits;"
+
+if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      UPDATE \"$schema_name\".bill_repair_audits SET reason = 'tampered';" \
+  >"$tmp_dir/audit-update-denied.log" 2>&1; then
+  echo "db-ownership: billing role unexpectedly updated immutable repair audit" >&2
+  cat "$tmp_dir/audit-update-denied.log" >&2
+  exit 1
+fi
+
+if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      DELETE FROM \"$schema_name\".bill_repair_audits;" \
+  >"$tmp_dir/audit-delete-denied.log" 2>&1; then
+  echo "db-ownership: billing role unexpectedly deleted immutable repair audit" >&2
+  cat "$tmp_dir/audit-delete-denied.log" >&2
+  exit 1
+fi
+
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" \
+  -c "SET search_path TO \"$schema_name\";
+      INSERT INTO \"$schema_name\".iam_tenants (tenant_id, tenant_name, status)
+        VALUES ('ownership-requeue-tenant', 'Ownership Requeue Tenant', 'active');
+      INSERT INTO \"$schema_name\".iam_accounts
+        (user_id, tenant_id, username, password_hash, user_type, status)
+        VALUES ('ownership-requeue-user', 'ownership-requeue-tenant', 'ownership-requeue-user', 'hash', 4, 'active');
+      INSERT INTO \"$schema_name\".bill_accounts (account_id, account_kind, tenant_id)
+        VALUES ('ownership-requeue-tenant', 1, 'ownership-requeue-tenant'),
+               ('ownership-requeue-user', 2, 'ownership-requeue-tenant')
+        ON CONFLICT (account_id) DO NOTHING;
+      INSERT INTO \"$schema_name\".ai_usage_logs
+        (request_id, key_owner_type, auth_method, request_source, tenant_id, user_id,
+         model_code, billable_unit_type, tenant_payable, user_payable, user_charged,
+         billing_status, request_status, client_protocol, billing_source)
+        VALUES ('ownership-requeue-request', 'user', 'jwt', 'ownership-probe',
+                'ownership-requeue-tenant', 'ownership-requeue-user', 'probe-model', 'token',
+                10, 5, 5, 'failed', 'success', 'openai_chat', 'payg');
+      INSERT INTO \"$schema_name\".bill_charge_outbox
+        (request_id, tenant_id, user_id, tenant_micro, user_micro, status, attempts, last_error)
+        VALUES ('ownership-requeue-request', 'ownership-requeue-tenant', 'ownership-requeue-user',
+                10, 5, 'failed', 10, 'probe');"
+
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      SET search_path TO \"$schema_name\";
+      SELECT \"$schema_name\".bill_requeue_parked_outbox(
+        'ownership-requeue-request', 'ownership-requeue-repair',
+        'outbox-requeue:ownership-requeue-request:probe', 'ownership-test', 'probe repair');"
+
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
       SELECT count(*) FROM \"$schema_name\".ai_sub_subscriptions;"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
@@ -117,4 +179,4 @@ if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   exit 1
 fi
 
-echo "db-ownership: runtime read/insert, billing ledger/view read/write passed; runtime ledger update and billing catalog read denied"
+echo "db-ownership: runtime read/insert, billing ledger/view/audit insert passed; immutable audit update/delete, runtime ledger update and billing catalog read denied"

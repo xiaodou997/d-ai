@@ -41,6 +41,7 @@ BEGIN
         'bill_charge_outbox',
         'bill_recharge_orders',
         'bill_refund_reversal_effects',
+        'bill_repair_audits',
         'pay_orders',
         'pay_refunds',
         'pay_cash_ledger',
@@ -90,6 +91,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     bill_charge_outbox,
     bill_recharge_orders,
     bill_refund_reversal_effects,
+    bill_repair_audits,
     pay_orders,
     pay_refunds,
     pay_cash_ledger,
@@ -99,6 +101,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     ledger_credit_leases
 TO :"billing_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"billing_role";
+
+GRANT SELECT, INSERT ON TABLE bill_repair_audits TO :"billing_role";
 
 -- Billing transactions lock identity rows and settle runtime facts. These are
 -- explicit transaction exceptions; reporting joins use the read-only views
@@ -139,6 +143,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE
     bill_charge_outbox,
     bill_recharge_orders,
     bill_refund_reversal_effects,
+    bill_repair_audits,
     pay_orders,
     pay_refunds,
     pay_cash_ledger,
@@ -147,6 +152,7 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE
     pay_wechat_config,
     ledger_credit_leases
 FROM :"runtime_role";
+REVOKE UPDATE, DELETE ON TABLE bill_repair_audits FROM :"runtime_role", :"billing_role";
 
 -- The gateway records a usage fact and its durable settlement intent in one
 -- transaction. It may enqueue, but only billing may consume or mutate it.
@@ -160,6 +166,7 @@ ALTER TABLE bill_credit_lots OWNER TO :"billing_role";
 ALTER TABLE bill_charge_outbox OWNER TO :"billing_role";
 ALTER TABLE bill_recharge_orders OWNER TO :"billing_role";
 ALTER TABLE bill_refund_reversal_effects OWNER TO :"billing_role";
+ALTER TABLE bill_repair_audits OWNER TO :"billing_role";
 ALTER TABLE pay_orders OWNER TO :"billing_role";
 ALTER TABLE pay_refunds OWNER TO :"billing_role";
 ALTER TABLE pay_cash_ledger OWNER TO :"billing_role";
@@ -167,6 +174,14 @@ ALTER TABLE pay_withdrawals OWNER TO :"billing_role";
 ALTER TABLE pay_tenant_settings OWNER TO :"billing_role";
 ALTER TABLE pay_wechat_config OWNER TO :"billing_role";
 ALTER TABLE ledger_credit_leases OWNER TO :"billing_role";
+
+ALTER FUNCTION bill_repair_audits_immutable() OWNER TO :"billing_role";
+ALTER FUNCTION bill_requeue_parked_outbox(TEXT, TEXT, TEXT, TEXT, TEXT) OWNER TO :"billing_role";
+ALTER FUNCTION bill_repair_audits_immutable() SET search_path TO :"schema_name", pg_catalog;
+ALTER FUNCTION bill_requeue_parked_outbox(TEXT, TEXT, TEXT, TEXT, TEXT) SET search_path TO :"schema_name", pg_catalog;
+REVOKE ALL ON FUNCTION bill_repair_audits_immutable() FROM PUBLIC;
+REVOKE ALL ON FUNCTION bill_requeue_parked_outbox(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION bill_requeue_parked_outbox(TEXT, TEXT, TEXT, TEXT, TEXT) TO :"billing_role";
 
 -- The views run with their owner's privileges. Keep the owner aligned with
 -- the billing role so transferring the source-table owners cannot make a

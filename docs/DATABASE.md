@@ -44,6 +44,8 @@
   `time() - dai_billing_reconciliation_last_run_timestamp_seconds > 1800`（对账停滞），以及
   `dai_scheduler_task_consecutive_failures{task="billing_reconciliation"} > 0`（任务失败）。差异只允许通过
   保留审计证据的修复流程处理，禁止直接改余额或批次绕过账本。
+- 退款、充值撤销和 parked outbox requeue 都必须在资金事务内写入 `bill_repair_audits`；`repair_id` 与
+  `idempotency_key` 唯一，before/after 快照不可变，重复请求只能复用原幂等结果，不能生成第二次资金变更。
 - `bill_credit_lots` 记录每笔充值的来源和有效期，是**分摊明细，不是余额**。
   不变量：`SUM(未过期未撤销批次的 granted - consumed) = GREATEST(balance_micro, 0)`。
 - 批次状态不落库，全部可推导：`expired_at` / `revoked_at` / `consumed >= granted`。
@@ -154,7 +156,7 @@ release/
 
 schema v17 为 `pay_orders` 增加 `sweep_attempts`、`sweep_next_attempt_at`、
 `sweep_last_attempt_at` 和 `sweep_last_error`，schema v18 为重试健康统计增加部分索引，
-schema v19 修复历史 v1→v18 链遗漏的 `ai_usage_logs.billing_status` 索引，schema v20 增加 billing/payment 跨域只读投影视图，schema v21 增加租户管理与分析只读投影视图，schema v22 增加管理员终端用户只读投影视图，schema v23 增加运营仪表盘只读投影视图。
+schema v19 修复历史 v1→v18 链遗漏的 `ai_usage_logs.billing_status` 索引，schema v20 增加 billing/payment 跨域只读投影视图，schema v21 增加租户管理与分析只读投影视图，schema v22 增加管理员终端用户只读投影视图，schema v23 增加运营仪表盘只读投影视图，schema v24 增加不可变资金修复审计与 parked outbox 受控 requeue 函数。
 支付 provider 或补偿入账失败会按
 1 分钟起步、指数增长、最多 1 小时的退避写入下一次尝试时间；非终态的
 `USERPAYING/NOTPAY` 查单结果使用 5 分钟延后但不增加失败次数。成功入账或关单会清理
@@ -167,7 +169,8 @@ schema v19 修复历史 v1→v18 链遗漏的 `ai_usage_logs.billing_status` 索
 `internal/db/changes/0020_20260826_cross_domain_read_models.sql` 和
 `internal/db/changes/0021_20260826_tenant_read_models.sql` 和
 `internal/db/changes/0022_20260826_user_read_models.sql` 和
-`internal/db/changes/0023_20260826_system_read_models.sql`；不要直接修改
+`internal/db/changes/0023_20260826_system_read_models.sql` 和
+`internal/db/changes/0024_20260826_billing_repair_audits.sql`；不要直接修改
 schema 版本号跳过脚本。
 
 ## 统一账号模型
