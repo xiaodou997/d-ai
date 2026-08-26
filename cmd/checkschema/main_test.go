@@ -24,7 +24,7 @@ func TestCurrentSchemaChainIsContinuous(t *testing.T) {
 	}
 }
 
-func TestMigrationInventoryIdentifiesCoverageGaps(t *testing.T) {
+func TestMigrationInventoryReportsTestAndRollbackCoverage(t *testing.T) {
 	migrations, err := readMigrations("../../internal/db/changes", "../../internal/db/rollback")
 	if err != nil {
 		t.Fatal(err)
@@ -33,12 +33,7 @@ func TestMigrationInventoryIdentifiesCoverageGaps(t *testing.T) {
 	for _, item := range migrations {
 		byNumber[item.Number] = item
 	}
-	for _, number := range []int{2, 3, 9} {
-		if byNumber[number].HasTest {
-			t.Errorf("migration %04d unexpectedly reports a dedicated test", number)
-		}
-	}
-	for _, number := range []int{4, 15, 18} {
+	for _, number := range []int{2, 3, 4, 9, 15, 18} {
 		if !byNumber[number].HasTest {
 			t.Errorf("migration %04d should report its dedicated test", number)
 		}

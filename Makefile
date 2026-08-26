@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release help
 
 # ---- 本地开发 ----
 
@@ -65,6 +65,7 @@ database-artifacts: ## 将初始化、人工升级和回滚 SQL 复制到发布�
 	cp internal/db/init.sql $(DB_RELEASE_DIR)/init.sql
 	cp -R internal/db/changes $(DB_RELEASE_DIR)/
 	cp -R internal/db/rollback $(DB_RELEASE_DIR)/
+	cp deploy/production/schema_release.sh $(DB_RELEASE_DIR)/schema_release.sh
 
 legal-artifacts: ## 将开源许可、第三方通知和商标政策复制到发布目录
 	mkdir -p $(BUILD_DIR)
@@ -134,6 +135,10 @@ check-authz: ## 校验 OpenAPI operation 的 capability 授权矩阵覆盖率
 
 check-schema: ## 校验数据库完整基线与 forward-only 迁移链
 	GOCACHE="$(CURDIR)/.cache/go-build" go run ./cmd/checkschema
+
+check-schema-release: check-schema ## 校验发布期 schema 脚本语法和帮助入口
+	bash -n deploy/production/schema_release.sh
+	deploy/production/schema_release.sh --help >/dev/null
 
 help: ## 显示帮助
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'

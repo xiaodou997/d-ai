@@ -103,12 +103,15 @@ release/
 ├── dai
 └── sql/
     ├── init.sql
-    └── changes/
+    ├── changes/
+    ├── rollback/
+    └── schema_release.sh
 ```
 
 首次部署时，数据库管理员使用 `psql`、DBeaver、DataGrip 或其他 PostgreSQL
 连接工具，在空 schema 中执行 `release/sql/init.sql`。应用随后以只具备运行期所需
-权限的账号启动。
+权限的账号启动。需要升级已有库时，使用同一发布附件中的
+`release/sql/schema_release.sh`，详见 [`docs/SCHEMA_RELEASE_RUNBOOK.md`](SCHEMA_RELEASE_RUNBOOK.md)。
 
 ## 首次发布后的结构变更
 

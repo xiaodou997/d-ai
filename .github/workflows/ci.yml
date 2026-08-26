@@ -84,6 +84,16 @@ jobs:
           go run ./cmd/checkschema
           git diff --exit-code docs/SCHEMA_CHAIN.md
 
+      - name: Schema release helper is valid
+        run: |
+          bash -n deploy/production/schema_release.sh
+          deploy/production/schema_release.sh --help >/dev/null
+          if deploy/production/schema_release.sh migrate >/tmp/schema-release-gate.log 2>&1; then
+            echo "::error::schema release helper migrated without explicit confirmation"
+            exit 1
+          fi
+          grep -q 'SCHEMA_RELEASE_CONFIRM=APPLY' /tmp/schema-release-gate.log
+
   frontend:
     name: Portal
     runs-on: ubuntu-latest
