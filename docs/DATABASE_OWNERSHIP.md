@@ -49,6 +49,7 @@ SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_
 - runtime 可以读取账务投影，但更新 `bill_accounts` 失败；
 - runtime 可以在用量事务中插入 `bill_charge_outbox`；
 - billing role 可以写入并更新 `bill_accounts`；
+- billing role 可以读取 `ai_usage_logs`、`ai_sub_orders` 和 `ai_sub_subscriptions`，供结算与资金不变量对账使用；
 - billing role 可以读取账务/支付投影视图，但读取无关 AI catalog 表失败；
 - runtime role 可以读取租户与管理员终端用户投影视图；
 - 账务表 owner 和 grant/revoke 契约可重复执行。

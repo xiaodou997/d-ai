@@ -88,6 +88,11 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
       SELECT count(*) FROM \"$schema_name\".billing_recharge_order_projection;"
 
 psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      SELECT count(*) FROM \"$schema_name\".ai_sub_subscriptions;"
+
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
   -c "SET ROLE \"$runtime_role\";
       SELECT count(*) FROM \"$schema_name\".tenant_management_projection;"

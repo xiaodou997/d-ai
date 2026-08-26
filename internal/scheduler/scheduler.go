@@ -7,11 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	domain "xiaodou/dai/internal/billing"
+	"xiaodou/dai/internal/billing/invariants"
 	"xiaodou/dai/internal/billing/ledger"
 )
 
@@ -30,10 +32,11 @@ type paymentOrderCleaner interface {
 }
 
 const (
-	TaskLotExpiry      = "lot_expiry"
-	TaskJWTKeyRetire   = "jwt_key_retire"
-	TaskPaymentSweep   = "payment_sweep"
-	TaskPaymentCleanup = "payment_cleanup"
+	TaskLotExpiry             = "lot_expiry"
+	TaskBillingReconciliation = "billing_reconciliation"
+	TaskJWTKeyRetire          = "jwt_key_retire"
+	TaskPaymentSweep          = "payment_sweep"
+	TaskPaymentCleanup        = "payment_cleanup"
 
 	// Payment and ledger workers must not keep a database session (or an
 	// upstream request) forever. The advisory lock is released in a fresh
@@ -124,7 +127,8 @@ func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper p
 		stopChan:       make(chan struct{}),
 		tasks: map[string]TaskSnapshot{
 			TaskLotExpiry: {}, TaskJWTKeyRetire: {},
-			TaskPaymentSweep: {}, TaskPaymentCleanup: {},
+			TaskBillingReconciliation: {},
+			TaskPaymentSweep:          {}, TaskPaymentCleanup: {},
 		},
 	}
 }
@@ -224,15 +228,77 @@ func (s *Scheduler) Start() {
 		return
 	}
 	s.started = true
-	s.workers.Add(4)
+	s.workers.Add(5)
 	s.lifecycleMu.Unlock()
 
 	s.logger.Info("Scheduler started")
 
 	go func() { defer s.workers.Done(); s.runLotExpiryTask() }()
+	go func() { defer s.workers.Done(); s.runBillingReconciliationTask() }()
 	go func() { defer s.workers.Done(); s.runJWTKeyRetireTask() }()
 	go func() { defer s.workers.Done(); s.runPaymentSweepTask() }()
 	go func() { defer s.workers.Done(); s.runPaymentCleanupTask() }()
+}
+
+// ==================== 资金不变量对账 ====================
+
+// The checker is a full read-only scan, so it runs less often than the hot
+// path and is protected by a transaction-scoped advisory lock. Every replica
+// can schedule it, but only one replica performs the expensive snapshot.
+const billingReconciliationInterval = 15 * time.Minute
+
+func (s *Scheduler) runBillingReconciliationTask() {
+	s.runTask(TaskBillingReconciliation, s.reconcileBilling)
+	ticker := time.NewTicker(billingReconciliationInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-ticker.C:
+			s.runTask(TaskBillingReconciliation, s.reconcileBilling)
+		}
+	}
+}
+
+func (s *Scheduler) reconcileBilling() error {
+	if s.pool == nil {
+		return &taskSkippedError{reason: "billing_reconciliation_not_configured"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	defer cancel()
+
+	// RepeatableRead makes all seven invariant queries observe one MVCC
+	// snapshot. The xact-scoped lock uses the same transaction, so a second
+	// replica can skip without holding a session lock across pool connections.
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return fmt.Errorf("begin billing reconciliation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var locked bool
+	if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock(hashtext($1))`, "dai_scheduler_billing_reconciliation").Scan(&locked); err != nil {
+		return fmt.Errorf("acquire billing reconciliation lock: %w", err)
+	}
+	if !locked {
+		return &taskSkippedError{reason: "billing_reconciliation_lock_held"}
+	}
+
+	report, err := invariants.Check(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("run billing reconciliation: %w", err)
+	}
+	if !report.Healthy() {
+		publishBillingReconciliationMetrics(report, time.Now().UTC())
+		return fmt.Errorf("billing reconciliation found %d invariant violations: %w", len(report.Violations), report.Err())
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit billing reconciliation snapshot: %w", err)
+	}
+	publishBillingReconciliationMetrics(report, time.Now().UTC())
+	return nil
 }
 
 // Stop 停止定时任务
@@ -447,6 +513,7 @@ func (s *Scheduler) withAdvisoryLock(ctx context.Context, key, skipReason string
 func (s *Scheduler) RunAllTasks() {
 	s.logger.Info("手动触发所有定时任务")
 	s.runTask(TaskLotExpiry, s.settleExpiredLots)
+	s.runTask(TaskBillingReconciliation, s.reconcileBilling)
 	s.runTask(TaskPaymentSweep, s.sweepPayments)
 	s.runTask(TaskPaymentCleanup, s.cleanupClosedOrders)
 }

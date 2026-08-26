@@ -38,6 +38,12 @@
   也可由后续对账任务在一个事务快照中调用。
 - 账本写路径统一遵循「先锁 `bill_accounts`，再锁 `bill_credit_lots`」的顺序；充值、扣费、过期、撤销和退款
   即使并发交错也不会形成反向锁等待。固定种子的随机并发属性测试会持续验证这一约定。
+- Scheduler 每 15 分钟在 Repeatable Read 只读快照中运行 `billing/invariants.Check`，并用事务级 advisory lock
+  保证多副本只执行一份。管理 `/metrics` 的最低告警组合为：
+  `dai_billing_reconciliation_violations > 0`（发现差异）、
+  `time() - dai_billing_reconciliation_last_run_timestamp_seconds > 1800`（对账停滞），以及
+  `dai_scheduler_task_consecutive_failures{task="billing_reconciliation"} > 0`（任务失败）。差异只允许通过
+  保留审计证据的修复流程处理，禁止直接改余额或批次绕过账本。
 - `bill_credit_lots` 记录每笔充值的来源和有效期，是**分摊明细，不是余额**。
   不变量：`SUM(未过期未撤销批次的 granted - consumed) = GREATEST(balance_micro, 0)`。
 - 批次状态不落库，全部可推导：`expired_at` / `revoked_at` / `consumed >= granted`。

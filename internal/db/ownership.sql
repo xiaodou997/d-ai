@@ -105,6 +105,7 @@ GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"billi
 -- below instead of broad control-plane table grants.
 GRANT SELECT ON TABLE iam_accounts, iam_tenants TO :"billing_role";
 GRANT SELECT, UPDATE ON TABLE ai_usage_logs, ai_sub_orders TO :"billing_role";
+GRANT SELECT ON TABLE ai_sub_subscriptions TO :"billing_role";
 GRANT SELECT ON TABLE
     billing_recharge_order_projection,
     payment_order_party_projection,
