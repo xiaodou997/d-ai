@@ -803,3 +803,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除没有调用方的 `decodeUSDResolutionsInto` 及其唯一依赖的 JSON import；保留当前生效价格 DTO 的排序与倍率计算路径。
 - 验证：Transport 测试、`go vet` 通过，`decodeUSDResolutionsInto` 的 U1000 已消除；剩余 transport 诊断集中在 identity enrichment 和一处切片追加建议。
+
+### P1-04（Transport subscription identity helper cleanup，2026-08-26）
+
+- 清理：删除没有任何订阅路由调用的 `buildIdentityIncludedForSubPlans`；保留实际用于订阅列表和订单列表的 identity enrichment，避免维护未注册的套餐路径。
+- 验证：Transport 测试、`go vet` 通过，`buildIdentityIncludedForSubPlans` 的 U1000 已消除；当前 transport 仅剩 `user_self.go` 的切片追加建议。

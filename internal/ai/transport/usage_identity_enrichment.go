@@ -107,15 +107,6 @@ func buildIdentityIncludedForLimitPolicies(ctx context.Context, d CoreHTTPDeps, 
 	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, nil, tenantIDs)
 }
 
-func buildIdentityIncludedForSubPlans(ctx context.Context, d SubscriptionHTTPDeps, plans []subscription.Plan) IdentityIncludedDTO {
-	tenantIDs := make([]string, 0, len(plans))
-	seenTenants := make(map[string]struct{}, len(plans))
-	for _, plan := range plans {
-		tenantIDs = appendUniqueID(tenantIDs, seenTenants, plan.TenantID)
-	}
-	return buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures, nil, tenantIDs)
-}
-
 func buildIdentityIncludedForSubscriptions(ctx context.Context, d SubscriptionHTTPDeps, subs []subscription.Subscription) IdentityIncludedDTO {
 	userIDs := make([]string, 0, len(subs))
 	tenantIDs := make([]string, 0, len(subs))
