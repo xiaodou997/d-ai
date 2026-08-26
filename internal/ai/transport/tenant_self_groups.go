@@ -4,7 +4,6 @@ package transport
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 
 	"xiaodou/dai/internal/ai/commercial"
@@ -116,17 +115,4 @@ func resolutionUSDPrices(prices []domain.ResolutionUSDPrice, factor float64) []t
 		return out[i].Resolution < out[j].Resolution
 	})
 	return out
-}
-
-func decodeUSDResolutionsInto(raw []byte, target *[]domain.ResolutionUSDPrice) error {
-	if len(raw) == 0 {
-		*target = nil
-		return nil
-	}
-	var prices []domain.ResolutionUSDPrice
-	if err := json.Unmarshal(raw, &prices); err != nil {
-		return err
-	}
-	*target = prices
-	return nil
 }

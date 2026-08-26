@@ -798,3 +798,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除没有任何 handler 返回或测试引用的 `subscriptionOutput`，保留分页列表和可空订阅响应使用的专用输出类型。
 - 验证：Transport 测试、`go vet` 通过，`subscriptionOutput` 的 U1000 已消除；剩余 transport 诊断集中在 tenant group/usage helper 和一处切片追加建议。
+
+### P1-04（Transport tenant group pricing helper cleanup，2026-08-26）
+
+- 清理：删除没有调用方的 `decodeUSDResolutionsInto` 及其唯一依赖的 JSON import；保留当前生效价格 DTO 的排序与倍率计算路径。
+- 验证：Transport 测试、`go vet` 通过，`decodeUSDResolutionsInto` 的 U1000 已消除；剩余 transport 诊断集中在 identity enrichment 和一处切片追加建议。
