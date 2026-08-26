@@ -28,6 +28,11 @@ func ReverseGrantForRefund(ctx context.Context, tx pgx.Tx, accountID, rechargeOr
 	if accountID == "" || rechargeOrderID == "" || creditMicro <= 0 {
 		return result, fmt.Errorf("refund reversal requires account, recharge order and positive credit")
 	}
+	// Match Charge, Grant and ordinary reversal: hold the account before any
+	// lot lock so a refund cannot deadlock a concurrent settlement.
+	if err := lockAccounts(ctx, tx, []string{accountID}); err != nil {
+		return result, fmt.Errorf("lock refund account %s: %w", accountID, err)
+	}
 
 	rows, err := tx.Query(ctx, `
 		SELECT granted_micro, LEAST(consumed_micro, granted_micro), expired_at,

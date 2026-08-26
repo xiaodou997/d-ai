@@ -303,6 +303,17 @@ func RevokeOrderLots(ctx context.Context, tx Execer, rechargeOrderID string) (Re
 	if rechargeOrderID == "" {
 		return out, fmt.Errorf("revoke requires a recharge order id")
 	}
+	// Every balance mutation takes the account row before a credit-lot row.
+	// Reversal used to do this in the opposite order, which deadlocked with a
+	// concurrent Charge: Charge held the account while waiting for the lot,
+	// while reversal held the lot while waiting for the account.
+	accountIDs, err := activeOrderAccountIDs(ctx, tx, rechargeOrderID)
+	if err != nil {
+		return out, fmt.Errorf("load accounts for order %s: %w", rechargeOrderID, err)
+	}
+	if err := lockAccounts(ctx, tx, accountIDs); err != nil {
+		return out, fmt.Errorf("lock accounts for order %s: %w", rechargeOrderID, err)
+	}
 	rows, err := tx.Query(ctx, `
 		SELECT lot_id, account_id, granted_micro, consumed_micro
 		FROM bill_credit_lots
@@ -372,6 +383,17 @@ func ExpireDueLots(ctx context.Context, tx Execer, now time.Time, limit int) (in
 	if limit <= 0 {
 		limit = 500
 	}
+	// Lock accounts before claiming lots so expiry follows the same lock order
+	// as Charge, Grant and reversal. The candidate query is intentionally
+	// unlocked; once the account rows are locked, all ledger writers are fenced
+	// while the due lots are claimed below.
+	accountIDs, err := dueLotAccountIDs(ctx, tx, now, limit)
+	if err != nil {
+		return 0, fmt.Errorf("load due lot accounts: %w", err)
+	}
+	if err := lockAccounts(ctx, tx, accountIDs); err != nil {
+		return 0, fmt.Errorf("lock due lot accounts: %w", err)
+	}
 	rows, err := tx.Query(ctx, `
 		SELECT lot_id, account_id, granted_micro - consumed_micro
 		FROM bill_credit_lots
@@ -379,10 +401,11 @@ func ExpireDueLots(ctx context.Context, tx Execer, now time.Time, limit int) (in
 		  AND revoked_at IS NULL
 		  AND expires_at IS NOT NULL
 		  AND expires_at <= $1
+		  AND account_id = ANY($3::text[])
 		ORDER BY expires_at
 		LIMIT $2
 		FOR UPDATE SKIP LOCKED
-	`, now, limit)
+	`, now, limit, accountIDs)
 	if err != nil {
 		return 0, fmt.Errorf("load due lots: %w", err)
 	}
@@ -424,6 +447,71 @@ func ExpireDueLots(ctx context.Context, tx Execer, now time.Time, limit int) (in
 		}
 	}
 	return len(due), nil
+}
+
+// activeOrderAccountIDs returns the accounts whose active lots belong to one
+// recharge order. A normal order has one account, but sorting the set keeps the
+// lock order deterministic if legacy data ever contains more than one.
+func activeOrderAccountIDs(ctx context.Context, tx Querier, rechargeOrderID string) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT DISTINCT account_id
+		FROM bill_credit_lots
+		WHERE recharge_order_id = $1 AND revoked_at IS NULL AND expired_at IS NULL
+		ORDER BY account_id
+	`, rechargeOrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAccountIDs(rows)
+}
+
+func dueLotAccountIDs(ctx context.Context, tx Querier, now time.Time, limit int) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT DISTINCT account_id
+		FROM bill_credit_lots
+		WHERE expired_at IS NULL
+		  AND revoked_at IS NULL
+		  AND expires_at IS NOT NULL
+		  AND expires_at <= $1
+		ORDER BY account_id
+		LIMIT $2
+	`, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAccountIDs(rows)
+}
+
+func scanAccountIDs(rows pgx.Rows) ([]string, error) {
+	var accountIDs []string
+	for rows.Next() {
+		var accountID string
+		if err := rows.Scan(&accountID); err != nil {
+			return nil, err
+		}
+		accountIDs = append(accountIDs, accountID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return accountIDs, nil
+}
+
+func lockAccounts(ctx context.Context, tx Querier, accountIDs []string) error {
+	for _, accountID := range accountIDs {
+		var lockedID string
+		if err := tx.QueryRow(ctx, `
+			SELECT account_id FROM bill_accounts WHERE account_id = $1 FOR UPDATE
+		`, accountID).Scan(&lockedID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("%w: %s", ErrAccountNotFound, accountID)
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // consumeLots attributes a charge to lots in FIFO order (soonest expiry first,
