@@ -257,9 +257,7 @@ func validateChain(baseline, expected int, migrations []migration) error {
 		if migration.To != migration.From+1 {
 			return fmt.Errorf("%s: migration must advance exactly one version (%d -> %d)", migration.Filename, migration.From, migration.To)
 		}
-		if index == 0 {
-			previous = migration.From
-		} else if migration.From != previous {
+		if index > 0 && migration.From != previous {
 			return fmt.Errorf("%s: chain gap or overlap; expected source v%d, found v%d", migration.Filename, previous, migration.From)
 		}
 		if !migration.HasTransaction {

@@ -833,3 +833,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除未被调用的 `isAdminClaims` 与 `claimsLogFields`，保留实际使用的 actor 解析和 principal 日志字段构建路径。
 - 验证：`staticcheck ./internal/transport` 零诊断，Transport 测试、`go vet` 和差异检查通过；全仓 `internal/...` staticcheck 已清零。
+
+### P1-04（Schema checker chain validation cleanup，2026-08-26）
+
+- 修复：将迁移链首项的重复 `previous = migration.From` 赋值改为仅从第二项开始校验来源版本，保持链断裂/重叠错误判断和最终版本校验不变。
+- 验证：`staticcheck ./cmd/checkschema` 零诊断，checkschema 测试、`go vet` 和差异检查通过；全仓 staticcheck 仅剩 `cmd/server/ai_modules_test.go` 的 4 处 nil context 建议。
