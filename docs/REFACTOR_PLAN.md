@@ -180,7 +180,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-04 拆分超大 Go 文件和清理兼容遗留
 
-- [~] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt 和 sync/stream relay 已分别移入独立文件，图片 relay 与低层公共 helper 仍待拆分。
+- [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
 - [ ] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织。
 - [ ] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference。
 - [ ] 删除已不再注册的旧 Console handler 和 legacy bridge helper。
@@ -696,3 +696,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 行为：保持首帧提交、空流 failover、SSE preamble、idle/max-duration timeout、usage/audit 提取、PII restore、client disconnect 和协议错误帧语义不变。
 - 验证：`go test ./internal/ai/serving -count=1`、`go vet ./internal/ai/serving` 通过（受限环境需允许既有 `httptest` 本地监听）。
 - 遗留范围：图片 response relay、图片 client stream commit 与低层通用 SSE/egress helper 仍待独立文件化。
+
+### P1-04（Serving image relay 拆分，2026-08-26）
+
+- 文件边界：`execute_image.go` 承载图片上游 body 聚合、provider→client 转换、OpenAI 图片响应归一化、同步 JSON 提交和 client-facing SSE 提交；主文件不再承载图片 response 状态机。
+- 行为：保持 upstream SSE 聚合、200 error-body failover、图片 usage/audit、PII/egress sanitize、URL/Base64 normalize、stream first-byte 和写失败语义不变。
+- 验证：`go test ./internal/ai/serving -count=1`、`go vet ./internal/ai/serving` 通过（受限环境需允许既有 `httptest` 本地监听）。
+- 结果：`execute.go` 已从 2,350 行降至 818 行；候选、attempt、stream 和 image 四类职责均有独立文件，后续仅需大型 PostgreSQL Repository 与 staticcheck/legacy 清理。
