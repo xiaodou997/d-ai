@@ -62,17 +62,3 @@ func openaiEffortToClaudeOutput(effort string) string {
 		return ""
 	}
 }
-
-// openaiEffortToGeminiLevel 把 OpenAI reasoning_effort 映射为 Gemini thinking level。
-func openaiEffortToGeminiLevel(effort string) string {
-	switch strings.ToLower(strings.TrimSpace(effort)) {
-	case "low":
-		return "low"
-	case "medium":
-		return "medium"
-	case "high", "xhigh", "max":
-		return "high"
-	default:
-		return ""
-	}
-}
