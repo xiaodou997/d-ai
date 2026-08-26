@@ -87,13 +87,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	pool, redisClient := infra.pool, infra.redis
+	pool, billingPool, redisClient := infra.pool, infra.billingPool, infra.redis
 	// Dependencies are registered immediately after construction. Any later
 	// module assembly error therefore releases them before run() returns.
 	shutdowns.Add("postgres", func(context.Context) error {
 		pool.Close()
 		return nil
 	})
+	if billingPool != pool {
+		shutdowns.Add("billing postgres", func(context.Context) error {
+			billingPool.Close()
+			return nil
+		})
+	}
 	shutdowns.Add("redis", func(context.Context) error {
 		return redisClient.Close()
 	})
@@ -102,7 +108,7 @@ func run() error {
 	// 2. 平台身份与计费域装配
 	// ──────────────────────────────────────────────────────
 
-	platform, err := buildPlatformModules(cfg, pool, redisClient, appLogger)
+	platform, err := buildPlatformModules(cfg, pool, billingPool, redisClient, appLogger)
 	if err != nil {
 		return fmt.Errorf("build platform modules failed: %w", err)
 	}
@@ -119,7 +125,7 @@ func run() error {
 	// 3. AI 域服务装配
 	// ──────────────────────────────────────────────────────
 
-	ai, err := buildAIModules(cfg, pool, redisClient, appLogger, platform)
+	ai, err := buildAIModules(cfg, pool, billingPool, redisClient, appLogger, platform)
 	if err != nil {
 		return fmt.Errorf("build AI modules failed: %w", err)
 	}
@@ -192,6 +198,13 @@ func run() error {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "component": "postgres"})
 			return
+		}
+		if billingPool != pool {
+			if err := billingPool.Ping(r.Context()); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "error", "component": "billing_postgres"})
+				return
+			}
 		}
 		if err := redisClient.Ping(r.Context()).Err(); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)

@@ -44,6 +44,8 @@ BEGIN
         'pay_refunds',
         'pay_cash_ledger',
         'pay_withdrawals',
+        'pay_tenant_settings',
+        'pay_wechat_config',
         'ledger_credit_leases'
     ] LOOP
         IF to_regclass(format('%I.%I', target_schema, table_name)) IS NULL THEN
@@ -63,6 +65,11 @@ SET search_path TO :"schema_name";
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA :"schema_name" TO :"runtime_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"runtime_role";
 
+-- Billing transactions lock/annotate identity and usage rows while updating
+-- financial facts, so the billing connection gets read access to every table;
+-- its write surface is still limited to the explicit financial list below.
+GRANT SELECT ON ALL TABLES IN SCHEMA :"schema_name" TO :"billing_role";
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     bill_accounts,
     bill_credit_lots,
@@ -73,9 +80,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     pay_refunds,
     pay_cash_ledger,
     pay_withdrawals,
+    pay_tenant_settings,
+    pay_wechat_config,
     ledger_credit_leases
 TO :"billing_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"billing_role";
+
+-- Runtime owns the fact creation for usage/subscription orders; billing owns
+-- the settlement/refund state transitions in those same rows.
+GRANT SELECT, UPDATE ON TABLE ai_usage_logs, ai_sub_orders TO :"billing_role";
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE
     bill_accounts,
@@ -87,6 +100,8 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE
     pay_refunds,
     pay_cash_ledger,
     pay_withdrawals,
+    pay_tenant_settings,
+    pay_wechat_config,
     ledger_credit_leases
 FROM :"runtime_role";
 
@@ -106,6 +121,8 @@ ALTER TABLE pay_orders OWNER TO :"billing_role";
 ALTER TABLE pay_refunds OWNER TO :"billing_role";
 ALTER TABLE pay_cash_ledger OWNER TO :"billing_role";
 ALTER TABLE pay_withdrawals OWNER TO :"billing_role";
+ALTER TABLE pay_tenant_settings OWNER TO :"billing_role";
+ALTER TABLE pay_wechat_config OWNER TO :"billing_role";
 ALTER TABLE ledger_credit_leases OWNER TO :"billing_role";
 
 COMMIT;

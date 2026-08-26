@@ -20,6 +20,8 @@ server:
 
 database:
   url: postgres://postgres:postgres@localhost:15432/dai?sslmode=disable
+  # Optional outside production; production must use a separate billing role.
+  billing_url: ""
 
 redis:
   addr: 127.0.0.1:16379

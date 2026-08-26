@@ -65,6 +65,7 @@ type ServerConfig struct {
 type DatabaseConfig struct {
 	URL             string        `mapstructure:"url"`
 	DSN             string        `mapstructure:"dsn"`
+	BillingURL      string        `mapstructure:"billing_url"`
 	MaxConns        int32         `mapstructure:"max_conns"`
 	MinConns        int32         `mapstructure:"min_conns"`
 	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
@@ -160,6 +161,7 @@ func Load() (*Config, error) {
 
 	// 默认值 —— 数据库（统一用 URL，兼容 DSN）
 	v.SetDefault("database.url", "postgres://postgres:postgres@localhost:5432/dai?sslmode=disable")
+	v.SetDefault("database.billing_url", "")
 	v.SetDefault("database.max_conns", 20)
 	v.SetDefault("database.min_conns", 2)
 	v.SetDefault("database.max_conn_lifetime", "1h")
@@ -257,6 +259,7 @@ func bindEnvs(v *viper.Viper) {
 		"DAI_TRUSTED_PROXY_CIDRS":                   "server.trusted_proxy_cidrs",
 		"DAI_DATABASE_URL":                          "database.url",
 		"DAI_DATABASE_DSN":                          "database.dsn",
+		"DAI_BILLING_DATABASE_URL":                  "database.billing_url",
 		"DAI_DB_MAX_CONNS":                          "database.max_conns",
 		"DAI_DB_MIN_CONNS":                          "database.min_conns",
 		"DAI_DB_MAX_CONN_LIFETIME":                  "database.max_conn_lifetime",
@@ -326,6 +329,9 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("DAI_DATABASE_DSN"); v != "" {
 		cfg.Database.DSN = v
 	}
+	if v := os.Getenv("DAI_BILLING_DATABASE_URL"); v != "" {
+		cfg.Database.BillingURL = v
+	}
 	if v := os.Getenv("DAI_REDIS_ADDR"); v != "" {
 		cfg.Redis.Addr = v
 	}
@@ -361,6 +367,9 @@ func validate(cfg *Config) error {
 	}
 	if dbConn == "" {
 		return fmt.Errorf("database.url or database.dsn is required")
+	}
+	if cfg.App.Env == "production" && strings.TrimSpace(cfg.Database.BillingURL) == "" {
+		return fmt.Errorf("database.billing_url is required in production")
 	}
 
 	// Redis 必填
@@ -450,4 +459,14 @@ func (c *DatabaseConfig) DSNString() string {
 		return c.URL
 	}
 	return c.DSN
+}
+
+// BillingDSNString returns the dedicated billing connection when configured.
+// Development/test environments may omit it and intentionally share the main
+// pool until the deployment has provisioned the billing role.
+func (c *DatabaseConfig) BillingDSNString() string {
+	if strings.TrimSpace(c.BillingURL) != "" {
+		return c.BillingURL
+	}
+	return c.DSNString()
 }

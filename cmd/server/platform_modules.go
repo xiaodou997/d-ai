@@ -93,7 +93,7 @@ func configureSecretKeyring(cfg *config.Config) error {
 	return nil
 }
 
-func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.Client, appLogger *zap.Logger) (*platformModules, error) {
+func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, appLogger *zap.Logger) (*platformModules, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration is required")
 	}
@@ -102,6 +102,9 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	}
 	if appLogger == nil {
 		appLogger = zap.NewNop()
+	}
+	if billingPool == nil {
+		billingPool = pool
 	}
 
 	jwtSvc := auth.NewJWTService(cfg.JWT, pool)
@@ -121,13 +124,13 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 	tenantSelfSvc := tenantpkg.NewSelfService(tenantSelfRepo, tenantSelfRepo)
 	accountRepo := billingpg.NewAccountRepository(pool)
 	accountQueries := billingsvc.NewAccountQueryService(accountRepo)
-	deductionSvc := billingsvc.NewDeductionService(pool, appLogger)
-	rechargeSvc := billingsvc.NewRechargeService(pool, tenantRepo)
+	deductionSvc := billingsvc.NewDeductionService(billingPool, appLogger)
+	rechargeSvc := billingsvc.NewRechargeService(billingPool, tenantRepo)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
-	wechatCfgStore := wechat.NewConfigStore(pool)
-	paymentSvc := paymentsvc.New(pool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger, deductionSvc)
+	wechatCfgStore := wechat.NewConfigStore(billingPool)
+	paymentSvc := paymentsvc.New(billingPool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger, deductionSvc)
 	announcementSvc := announcementpkg.NewService(announcementpg.NewRepository(pool))
 	moduleSvc := systempkg.NewService(pool)
 	dashboardRepo := systempg.NewSystemRepository(pool)
@@ -162,7 +165,7 @@ func buildPlatformModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *r
 		ProxyNodes:       proxySvc,
 		DataCleanup:      dataCleanupSvc,
 		banReconciler:    auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),
-		sched:            scheduler.NewScheduler(pool, jwtSvc, paymentSvc, appLogger),
+		sched:            scheduler.NewScheduler(billingPool, jwtSvc, paymentSvc, appLogger),
 	}, nil
 }
 

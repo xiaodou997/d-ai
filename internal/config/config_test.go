@@ -83,6 +83,27 @@ func TestLoadRequiresPublicBaseURLInProduction(t *testing.T) {
 	}
 }
 
+func TestLoadRequiresBillingDatabaseURLInProduction(t *testing.T) {
+	setRequiredEnvironment(t, "production")
+	t.Setenv("DAI_SECURITY_SECRET_MASTER_KEY", "production-secret")
+	t.Setenv("DAI_BILLING_DATABASE_URL", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load succeeded without the production billing database URL")
+	}
+}
+
+func TestBillingDSNStringFallsBackOutsideProduction(t *testing.T) {
+	database := DatabaseConfig{URL: "postgres://runtime"}
+	if got := database.BillingDSNString(); got != database.URL {
+		t.Fatalf("billing DSN fallback = %q, want %q", got, database.URL)
+	}
+	database.BillingURL = "postgres://billing"
+	if got := database.BillingDSNString(); got != database.BillingURL {
+		t.Fatalf("billing DSN = %q, want %q", got, database.BillingURL)
+	}
+}
+
 func TestLoadParsesTrustedProxyCIDRs(t *testing.T) {
 	setRequiredEnvironment(t, "development")
 	t.Setenv("DAI_PUBLIC_BASE_URL", "https://dai.example.test/")
@@ -114,6 +135,7 @@ func setRequiredEnvironment(t *testing.T, appEnv string) {
 	t.Helper()
 	t.Setenv("DAI_APP_ENV", appEnv)
 	t.Setenv("DAI_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/dai?sslmode=disable")
+	t.Setenv("DAI_BILLING_DATABASE_URL", "postgres://dai_billing:billing@localhost:5432/dai?sslmode=disable")
 	t.Setenv("DAI_REDIS_ADDR", "127.0.0.1:6379")
 	if appEnv == "production" {
 		t.Setenv("DAI_PUBLIC_BASE_URL", "https://dai.example.test")

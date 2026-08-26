@@ -78,7 +78,7 @@ type aiModules struct {
 	stopOnce           sync.Once
 }
 
-func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.Client, appLogger *zap.Logger, platform *platformModules) (*aiModules, error) {
+func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, appLogger *zap.Logger, platform *platformModules) (*aiModules, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration is required")
 	}
@@ -87,6 +87,9 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 	}
 	if appLogger == nil {
 		appLogger = zap.NewNop()
+	}
+	if billingPool == nil {
+		billingPool = pool
 	}
 
 	q := aiadapters.NewQueries(pool)
@@ -142,7 +145,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		StoreImageBlobs: cfg.Audit.StoreImageBlobs,
 	})
 
-	purchaser := subscription.NewBillingPurchaser(pool, "dai")
+	purchaser := subscription.NewBillingPurchaser(billingPool, "dai")
 	subsSvc := subscription.NewService(aiadapters.NewSubscriptionRepo(q, pool), purchaser, appLogger)
 
 	workspaceRepo := aiadapters.NewWorkspaceRepo(pool, aiadapters.NewGroupAccessReader(pool), aiadapters.NewRouteInspector(pool))
@@ -553,7 +556,7 @@ func buildAIModules(cfg *config.Config, pool *pgxpool.Pool, redisClient *redis.C
 		riskControlWorker:  riskControlWorker,
 		auditWorker:        auditWorker,
 		refresher:          refresher,
-		settlementConsumer: billingoutbox.NewConsumer(pool, appLogger),
+		settlementConsumer: billingoutbox.NewConsumer(billingPool, appLogger),
 		logger:             appLogger,
 	}, nil
 }

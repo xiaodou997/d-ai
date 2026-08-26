@@ -25,6 +25,8 @@ httpServers.Start / Shutdown
 - `transport.Deps` 与 AI Core `CoreHTTPDeps` 已按职责收敛；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 已脱离 Core，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
+- `openInfrastructure` 在生产按 `DAI_BILLING_DATABASE_URL` 打开独立 billing pool；账务、支付、订阅扣费和
+  outbox 结算使用 billing pool，未配置时仅在非生产环境回退到主 pool，避免把权限切换误带入开发环境。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
