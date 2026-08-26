@@ -309,10 +309,9 @@ func (r *TenantRepository) List(ctx context.Context, params tenantports.TenantLi
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT t.tenant_id, t.tenant_name, t.contact_person, t.contact_email, t.status, t.created_at,
-		       COALESCE(b.balance_micro, 0)::bigint AS credits,
-		       (SELECT COUNT(*) FROM iam_accounts u WHERE u.tenant_id = t.tenant_id AND u.user_type = 4 AND u.status NOT IN ('locked', 'inherited_disabled', 'deleted'))::bigint AS user_count
-		FROM iam_tenants t
-		LEFT JOIN bill_accounts b ON b.account_id = t.tenant_id
+		       t.balance_micro AS credits,
+		       t.user_count
+		FROM tenant_management_projection t
 		WHERE ($1::text IS NULL OR t.tenant_name LIKE $1::text OR t.contact_person LIKE $1::text OR t.contact_email LIKE $1::text)
 		  AND ($4::text IS NULL OR t.status = $4::text)
 		ORDER BY t.created_at DESC

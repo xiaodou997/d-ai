@@ -14,13 +14,14 @@ D-AI 仍使用单 PostgreSQL 数据库，但生产运行时不应继续使用超
 revoke/ownership 变更。
 
 账务和支付管理列表使用 `billing_recharge_order_projection`、
-`payment_order_party_projection` 与 `payment_admin_recharge_order_projection` 只读视图；三类视图
-owner 均转给 billing role，billing role 仅保留账务表、结算所需 runtime fact、充值目标身份锁和
-这些投影视图的读取权限。
+`payment_order_party_projection` 与 `payment_admin_recharge_order_projection` 只读视图；租户管理与
+分析使用 `tenant_management_projection`、`tenant_self_overview_projection` 与
+`tenant_usage_projection`。billing/payment 三类视图 owner 转给 billing role，租户三类视图 owner
+转给 runtime role，避免报表查询直接依赖对方领域表。
 
 ## Apply
 
-先确认目标库已完成 schema v20（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
+先确认目标库已完成 schema v21（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
 billing DSN 后，以数据库 owner/superuser 执行：
 
 ```bash
@@ -36,7 +37,7 @@ deploy/production/apply_db_ownership.sh
 ## Contract probe
 
 ```bash
-SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v20_test?sslmode=disable' \
+SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v21_test?sslmode=disable' \
   bash scripts/check_db_ownership.sh
 ```
 

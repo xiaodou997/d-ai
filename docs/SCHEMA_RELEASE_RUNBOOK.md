@@ -68,7 +68,7 @@ deploy/production/schema_release.sh verify
 bash -n deploy/production/schema_release.sh
 deploy/production/schema_release.sh --help
 go run ./cmd/checkschema
-SCHEMA_REPLAY_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v20_test?sslmode=disable' \
+SCHEMA_REPLAY_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v21_test?sslmode=disable' \
   bash scripts/replay_schema_chain.sh
 ```
 

@@ -348,21 +348,18 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 	stats := &TenantOverviewStats{}
 	var userTotalMicro, userDeductionMicro int64
 
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4 AND status <> 'deleted'`, tenantID).Scan(&stats.EndUserCount); err != nil {
-		return nil, err
-	}
-	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&stats.InviteCodeCount); err != nil {
-		return nil, err
-	}
 	if err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(GREATEST(balance_micro, 0)), 0)
-		FROM bill_accounts WHERE account_kind = 2 AND tenant_id = $1
-	`, tenantID).Scan(&userTotalMicro); err != nil {
-		return nil, err
+		SELECT end_user_count, invite_code_count, user_total_balance_micro
+		FROM tenant_self_overview_projection
+		WHERE tenant_id = $1
+	`, tenantID).Scan(&stats.EndUserCount, &stats.InviteCodeCount, &userTotalMicro); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return nil, err
+		}
 	}
 
 	behaviorBase := `
-		FROM ai_usage_logs
+		FROM tenant_usage_projection
 		WHERE tenant_id = $1
 		  AND billing_status = 'settled'
 	`
@@ -425,19 +422,18 @@ func (r *TenantRepo) GetUserConsumptionRanking(ctx context.Context, tenantID str
 	query := `
 		SELECT
 			e.user_id,
-			COALESCE(NULLIF(u.username, ''), '已删除用户') AS username,
+			e.username,
 			SUM(COALESCE(e.user_charged, 0)) AS credits,
 			COUNT(*) AS transaction_count,
 			SUM(SUM(COALESCE(e.user_charged, 0))) OVER () AS total_credits
-		FROM ai_usage_logs e
-			LEFT JOIN iam_accounts u ON u.user_id = e.user_id AND u.user_type = 4
+		FROM tenant_usage_projection e
 		WHERE e.tenant_id = $1
 		  AND e.billing_status = 'settled'
 		  AND e.user_id IS NOT NULL
 		  AND COALESCE(e.user_charged, 0) > 0
 		  AND ($2::timestamptz IS NULL OR e.created_at >= $2::timestamptz)
 		  AND ($3::timestamptz IS NULL OR e.created_at < $3::timestamptz)
-		GROUP BY e.user_id, u.username
+		GROUP BY e.user_id, e.username
 		ORDER BY credits DESC, transaction_count DESC, e.user_id
 		LIMIT $4
 	`
@@ -472,7 +468,7 @@ func (r *TenantRepo) GetClientConsumption(ctx context.Context, tenantID string, 
 				COALESCE(dt.request_source, '') AS client_id,
 				COALESCE(NULLIF(dt.request_source, ''), 'D-AI') AS client_name,
 				SUM(COALESCE(dt.user_charged, 0)) AS credits
-			FROM ai_usage_logs dt
+			FROM tenant_usage_projection dt
 			WHERE dt.tenant_id = $1 AND dt.billing_status = 'settled'
 			  AND ($2::timestamptz IS NULL OR dt.created_at >= $2::timestamptz)
 			  AND ($3::timestamptz IS NULL OR dt.created_at < $3::timestamptz)

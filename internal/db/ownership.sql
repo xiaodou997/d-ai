@@ -57,7 +57,10 @@ BEGIN
     FOREACH view_name IN ARRAY ARRAY[
         'billing_recharge_order_projection',
         'payment_order_party_projection',
-        'payment_admin_recharge_order_projection'
+        'payment_admin_recharge_order_projection',
+        'tenant_management_projection',
+        'tenant_self_overview_projection',
+        'tenant_usage_projection'
     ] LOOP
         IF to_regclass(format('%I.%I', target_schema, view_name)) IS NULL THEN
             RAISE EXCEPTION 'ownership contract view %.% does not exist', target_schema, view_name;
@@ -100,12 +103,18 @@ GRANT SELECT, UPDATE ON TABLE ai_usage_logs, ai_sub_orders TO :"billing_role";
 GRANT SELECT ON TABLE
     billing_recharge_order_projection,
     payment_order_party_projection,
-    payment_admin_recharge_order_projection
+    payment_admin_recharge_order_projection,
+    tenant_management_projection,
+    tenant_self_overview_projection,
+    tenant_usage_projection
 TO :"runtime_role", :"billing_role";
 REVOKE INSERT, UPDATE, DELETE ON TABLE
     billing_recharge_order_projection,
     payment_order_party_projection,
-    payment_admin_recharge_order_projection
+    payment_admin_recharge_order_projection,
+    tenant_management_projection,
+    tenant_self_overview_projection,
+    tenant_usage_projection
 FROM :"runtime_role", :"billing_role";
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE
@@ -149,5 +158,8 @@ ALTER TABLE ledger_credit_leases OWNER TO :"billing_role";
 ALTER VIEW billing_recharge_order_projection OWNER TO :"billing_role";
 ALTER VIEW payment_order_party_projection OWNER TO :"billing_role";
 ALTER VIEW payment_admin_recharge_order_projection OWNER TO :"billing_role";
+ALTER VIEW tenant_management_projection OWNER TO :"runtime_role";
+ALTER VIEW tenant_self_overview_projection OWNER TO :"runtime_role";
+ALTER VIEW tenant_usage_projection OWNER TO :"runtime_role";
 
 COMMIT;
