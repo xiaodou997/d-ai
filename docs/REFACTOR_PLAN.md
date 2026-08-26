@@ -190,7 +190,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已建立 capability 内核并迁移租户自助/品牌、平台管理、财务、支付、仪表盘、清理、代理节点和 JWT key 路由，公告/通知/账户/终端用户细粒度 ownership 仍待迁移。
 - [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已建立 `auth.Actor` / `Capability` 和 `requireCapability`，租户自助与品牌端点已迁移，管理、支付和客户端点仍待迁移。
-- [ ] Portal 菜单 capability 只用于展示，后端始终执行最终授权。
+- [x] Portal 菜单和路由 capability 只用于展示/导航提示；后端通过 operation middleware 和 capability/policy 矩阵执行最终授权，并有服务端拒绝回归测试。
 - [ ] 建立 actor、tenant scope、resource ownership 的统一类型。
 - [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
 - [~] 增加跨租户、越权、对象枚举和角色降级测试；现有领域/Transport 测试覆盖跨租户、越权和对象枚举，JWT 会话已补充角色与租户范围变更后的旧 token 失效回归，仍需继续扩展端到端角色矩阵。
@@ -626,4 +626,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 刷新语义：refresh token 仍从数据库读取最新账号角色与租户归属，成功轮换后签发新 scope；旧 access token 失效不影响可控的会话恢复路径。
 - 回归：新增 `TestRoleAndTenantScopeChangesInvalidateExistingAccessToken`，覆盖平台管理员降为租户、租户范围迁移、旧 token fail-closed、刷新后的 claims 与新 scope；既有跨租户、越权和对象枚举测试继续作为授权矩阵基础。
 - 验证：`go test ./internal/auth -count=1`、定向会话回归和 `git diff --check` 通过。
-- 遗留范围：仍需补充覆盖所有 Portal operation 的端到端角色降级/对象枚举矩阵，并将菜单 capability 仅作为展示约束固化到前端验收。
+- 遗留范围：仍需补充覆盖所有 Portal operation 的端到端角色降级/对象枚举矩阵。
+
+### P1-05（授权边界，2026-08-26）
+
+- Portal 边界：`PortalCapability` 仅作为菜单过滤和前端路由提示，不再被描述为安全授权来源；路由守卫只负责阻止错误页面跳转。
+- 后端边界：新增 Huma middleware 回归，验证 super admin/platform admin 可通过平台 capability，租户、终端用户、未知角色和无 claims 均在 handler 执行前被拒绝。
+- 验证：`go test ./internal/transport -run 'TestCapabilityMiddlewareEnforcesServerSideAuthorization|TestIsUserAccessClaims'`、Portal capability/router 测试、`bun run typecheck` 和 `git diff --check` 通过。

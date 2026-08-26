@@ -31,6 +31,8 @@ export function routeAllowedForUserType(
   userType: number,
   hasCapability?: (userType: number, capability: string) => boolean
 ): boolean {
+  // This guard only prevents a confusing client-side route transition. The
+  // backend middleware remains the security boundary for every API operation.
   return route.matched.every((record) => {
     const capability = record.meta.capability;
     if (typeof capability === "string" && hasCapability && !hasCapability(userType, capability)) {

@@ -34,6 +34,9 @@ export type PortalCapability =
   | "profile.tenant"
   | "profile.customer";
 
+// Portal capabilities are a presentation taxonomy for navigation and route
+// hints. They are never an authorization decision; every API operation must
+// enforce its backend capability/policy independently.
 const capabilityUserTypes: Record<PortalCapability, readonly PortalUserType[]> = {
   "admin.overview": [1, 2],
   "admin.organization": [1, 2],
