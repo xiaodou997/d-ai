@@ -100,14 +100,6 @@ func limitFromRow(row dbgen.AiRuntimeLimitPolicy) domain.RuntimeLimitPolicy {
 
 // ---- nullable int4 / text pointer <-> pgtype helpers (shared across domains) ----
 
-func akTextStrPtr(t pgtype.Text) *string {
-	if !t.Valid {
-		return nil
-	}
-	v := t.String
-	return &v
-}
-
 func akInt4Ptr(v *int32) pgtype.Int4 {
 	if v == nil {
 		return pgtype.Int4{}

@@ -3,14 +3,12 @@ package postgres
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	commercial "xiaodou/dai/internal/ai/commercial"
-	"xiaodou/dai/internal/ai/core/surface"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 )
@@ -536,10 +534,6 @@ func (r *GroupRepo) UpsertUserGroup(ctx context.Context, w commercial.UserGroupB
 		CreatedAt:              row.CreatedAt.Time,
 		UpdatedAt:              row.UpdatedAt.Time,
 	}, nil
-}
-
-func commercialSurfaceID(raw string) surface.ID {
-	return surface.ID(strings.TrimSpace(raw))
 }
 
 func (r *GroupRepo) ListUserGroups(ctx context.Context, tenantID, userID string) ([]domain.UserGroup, error) {

@@ -268,15 +268,6 @@ func pricedMicro(u domain.TokenUsage, e domain.PriceBookEntry, multiplier float6
 	).CostMicro
 }
 
-// priceUSD computes the raw USD cost of one call.
-func priceUSD(u domain.TokenUsage, e domain.PriceBookEntry) float64 {
-	breakdown, err := priceBreakdown(u, e)
-	if err != nil {
-		return 0
-	}
-	return breakdown.TotalUSD
-}
-
 func priceBreakdown(u domain.TokenUsage, e domain.PriceBookEntry) (priceLineBreakdown, error) {
 	if u.ImageCount > 0 {
 		price := lookupImageUSD(e.ImagePrices, e.ImageDefaultPrice, u.ImageResolution)

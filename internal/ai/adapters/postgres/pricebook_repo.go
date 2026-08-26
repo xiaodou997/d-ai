@@ -88,8 +88,7 @@ func (r *PriceBookRepo) UpdatePriceBook(ctx context.Context, id, name, descripti
 		return domain.PriceBook{}, err
 	}
 	defer tx.Rollback(ctx)
-	groups, err := lockGroupsForPriceBook(ctx, tx, uid)
-	if err != nil {
+	if _, err := lockGroupsForPriceBook(ctx, tx, uid); err != nil {
 		return domain.PriceBook{}, err
 	}
 	var lockedID string
@@ -102,7 +101,7 @@ func (r *PriceBookRepo) UpdatePriceBook(ctx context.Context, id, name, descripti
 	if status == "disabled" {
 		// Re-read after locking the price book to include a group created while
 		// this transaction waited for an earlier price-book reader.
-		groups, err = lockGroupsForPriceBook(ctx, tx, uid)
+		groups, err := lockGroupsForPriceBook(ctx, tx, uid)
 		if err != nil {
 			return domain.PriceBook{}, err
 		}

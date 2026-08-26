@@ -135,41 +135,12 @@ func unmarshalStringMap(b []byte) map[string]string {
 	return m
 }
 
-// marshalStringMap encodes a map[string]string to a JSONB []byte (NOT NULL → '{}').
-func marshalStringMap(m map[string]string) []byte {
-	if len(m) == 0 {
-		return []byte("{}")
-	}
-	b, err := json.Marshal(m)
-	if err != nil || len(b) == 0 {
-		return []byte("{}")
-	}
-	return b
-}
-
 // int32PtrToInt4 converts a *int32 to pgtype.Int4 (null when nil).
 func int32PtrToInt4(v *int32) pgtype.Int4 {
 	if v == nil {
 		return pgtype.Int4{}
 	}
 	return pgtype.Int4{Int32: *v, Valid: true}
-}
-
-// int4ToInt32Ptr converts a pgtype.Int4 to *int32 (nil when invalid).
-func int4ToInt32Ptr(v pgtype.Int4) *int32 {
-	if !v.Valid {
-		return nil
-	}
-	n := v.Int32
-	return &n
-}
-
-// nonNilStrings returns a non-nil slice so pgx encodes an empty TEXT[] '{}' (not NULL).
-func nonNilStrings(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }
 
 func existsByID(ctx context.Context, pool dbgen.DBTX, table string, id any) (bool, error) {

@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	corebridge "xiaodou/dai/internal/ai/core/bridge"
-	"xiaodou/dai/internal/ai/core/catalog"
 	coreupstream "xiaodou/dai/internal/ai/core/upstream"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
@@ -364,13 +363,6 @@ func directUpstreamToCore(row dbgen.AiUpstreamAccount) coreupstream.Upstream {
 		CreatedAt:        row.CreatedAt.Time,
 		UpdatedAt:        row.UpdatedAt.Time,
 	}
-}
-
-func dispatchAcceptsProviderFamily(expected catalog.ProviderFamily, family coreupstream.ProviderFamily) bool {
-	if expected == "" {
-		return true
-	}
-	return expected == catalog.ProviderFamily(family)
 }
 
 func upstreamProviderFamilyFromFixedProvider(provider domain.FixedProviderType) coreupstream.ProviderFamily {

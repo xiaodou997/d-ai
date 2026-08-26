@@ -175,16 +175,7 @@ func purchasePolicyCreateParams(planID string, policy subscription.PurchasePolic
 
 func purchasePolicyUpdateParams(planID string, policy subscription.PurchasePolicy) dbgen.UpdatePlanPurchasePolicyParams {
 	create := purchasePolicyCreateParams(planID, policy)
-	return dbgen.UpdatePlanPurchasePolicyParams{
-		PlanID:               create.PlanID,
-		LifetimeMaxPurchases: create.LifetimeMaxPurchases,
-		PeriodType:           create.PeriodType,
-		PeriodMaxPurchases:   create.PeriodMaxPurchases,
-		RollingWindowHours:   create.RollingWindowHours,
-		CalendarUnit:         create.CalendarUnit,
-		CalendarTimezone:     create.CalendarTimezone,
-		AllowAdvancePurchase: create.AllowAdvancePurchase,
-	}
+	return dbgen.UpdatePlanPurchasePolicyParams(create)
 }
 
 func insertPurchasePolicyRevision(ctx context.Context, q *dbgen.Queries, planID, changedBy string, policy subscription.PurchasePolicy) error {

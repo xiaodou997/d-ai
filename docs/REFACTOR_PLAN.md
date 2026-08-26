@@ -182,7 +182,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
 - [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
-- [ ] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference。
+- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres` 诊断，其他包仍待分批处理。
 - [ ] 删除已不再注册的旧 Console handler 和 legacy bridge helper。
 - [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
 
@@ -710,3 +710,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 行为：保留 group/target/dispatch/binding/limit/routing 的 SQL、事务、错误翻译和 `commercial.Repository` 编译期契约；仅调整文件边界与 import 依赖。
 - 验证：PostgreSQL adapter 编译、commercial/dispatch/target/price/usage 相关集成测试和 `go vet` 通过；既有数据库测试未改变。
 - 结果：主文件降至构造/根契约，最大业务文件约 429 行，后续继续处理 staticcheck 报告和 legacy Console bridge。
+
+### P1-04（PostgreSQL staticcheck 清理，2026-08-26）
+
+- 工具链：安装 staticcheck 2026.2.1（v0.8.1）以匹配当前 Go 1.27 export data；旧版工具的 export-data version 2 不再作为诊断依据。
+- 清理：删除 PostgreSQL adapter 中已无调用的转换/helper 函数，修复 `pricebook_repo` 无效赋值、重复 upstream import 和 subscription 参数转换诊断。
+- 验证：`staticcheck ./internal/ai/adapters/postgres` 零诊断，adapter 编译、关键回归测试、`go vet` 和 `checkdeps` 通过。
+- 遗留范围：其他 internal 包仍有 staticcheck U1000/SA/S1016/ST 诊断；旧 Console handler/legacy bridge 将单独清理，避免把行为变更与工具修复混在一起。

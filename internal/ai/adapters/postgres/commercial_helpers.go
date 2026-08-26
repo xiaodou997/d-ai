@@ -8,7 +8,6 @@ import (
 	commercial "xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/core/catalog"
 	"xiaodou/dai/internal/ai/core/routing"
-	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
 )
 
@@ -53,22 +52,6 @@ func groupTargetDetailToCommercial(item domain.GroupTargetDetail) commercial.Gro
 		Available:         item.Available,
 		UnavailableReason: item.UnavailableReason,
 	}
-}
-
-func dispatchRuleToCommercial(item domain.GroupModelDispatchRule) (commercial.DispatchRule, error) {
-	return commercial.DispatchRule{
-		ID:            item.ID,
-		GroupID:       item.GroupID,
-		ClientSurface: surface.ID(item.ClientSurface),
-		MatchType:     commercial.DispatchMatchType(item.MatchType),
-		MatchValue:    item.MatchValue,
-		TargetModelID: item.TargetModelCode,
-		Priority:      int(item.Priority),
-		Status:        commercial.Status(item.Status),
-		Notes:         item.Notes,
-		CreatedAt:     item.CreatedAt,
-		UpdatedAt:     item.UpdatedAt,
-	}, nil
 }
 
 func legacyUserBindingToCommercial(item domain.UserGroup) commercial.UserGroupBinding {

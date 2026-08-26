@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"xiaodou/dai/internal/ai/core/upstream"
 	coreupstream "xiaodou/dai/internal/ai/core/upstream"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/secret"
@@ -14,13 +13,13 @@ import (
 func TestUpstreamProviderFamilyFromProtocol(t *testing.T) {
 	cases := []struct {
 		protocol domain.UpstreamProtocol
-		want     upstream.ProviderFamily
+		want     coreupstream.ProviderFamily
 	}{
-		{protocol: domain.ProtocolOpenAIChat, want: upstream.ProviderFamilyOpenAICompatible},
-		{protocol: domain.ProtocolOpenAIResponses, want: upstream.ProviderFamilyOpenAICompatible},
-		{protocol: domain.ProtocolAnthropicMessages, want: upstream.ProviderFamilyAnthropic},
-		{protocol: domain.ProtocolGeminiGenerate, want: upstream.ProviderFamilyGoogle},
-		{protocol: domain.ProtocolGeminiEmbeddings, want: upstream.ProviderFamilyGoogle},
+		{protocol: domain.ProtocolOpenAIChat, want: coreupstream.ProviderFamilyOpenAICompatible},
+		{protocol: domain.ProtocolOpenAIResponses, want: coreupstream.ProviderFamilyOpenAICompatible},
+		{protocol: domain.ProtocolAnthropicMessages, want: coreupstream.ProviderFamilyAnthropic},
+		{protocol: domain.ProtocolGeminiGenerate, want: coreupstream.ProviderFamilyGoogle},
+		{protocol: domain.ProtocolGeminiEmbeddings, want: coreupstream.ProviderFamilyGoogle},
 	}
 
 	for _, tc := range cases {

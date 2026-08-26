@@ -62,17 +62,6 @@ func candidateSupportedProtocols(row routeRow) []domain.UpstreamProtocol {
 	return nil
 }
 
-func protocolFamily(p domain.UpstreamProtocol) string {
-	switch p {
-	case domain.ProtocolAnthropicMessages:
-		return string(domain.EndpointProtocolAnthropic)
-	case domain.ProtocolGeminiGenerate, domain.ProtocolGeminiEmbeddings:
-		return string(domain.EndpointProtocolGemini)
-	default:
-		return string(domain.EndpointProtocolOpenAICompatible)
-	}
-}
-
 func capabilityTypeFromProtocol(protocol domain.UpstreamProtocol) domain.CapabilityType {
 	switch protocol {
 	case domain.ProtocolOpenAIEmbeddings, domain.ProtocolGeminiEmbeddings:
