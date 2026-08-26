@@ -181,7 +181,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-04 拆分超大 Go 文件和清理兼容遗留
 
 - [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
-- [ ] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织。
+- [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
 - [ ] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference。
 - [ ] 删除已不再注册的旧 Console handler 和 legacy bridge helper。
 - [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
@@ -703,3 +703,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 行为：保持 upstream SSE 聚合、200 error-body failover、图片 usage/audit、PII/egress sanitize、URL/Base64 normalize、stream first-byte 和写失败语义不变。
 - 验证：`go test ./internal/ai/serving -count=1`、`go vet ./internal/ai/serving` 通过（受限环境需允许既有 `httptest` 本地监听）。
 - 结果：`execute.go` 已从 2,350 行降至 818 行；候选、attempt、stream 和 image 四类职责均有独立文件，后续仅需大型 PostgreSQL Repository 与 staticcheck/legacy 清理。
+
+### P1-04（Commercial PostgreSQL adapter 拆分，2026-08-26）
+
+- 文件边界：将 1,444 行 `commercial_repo.go` 拆为 `commercial_groups.go`、`commercial_targets.go`、`commercial_dispatch.go`、`commercial_bindings.go` 和 `commercial_helpers.go`；每个文件按聚合/use case 承载同一 `CommercialRepo` 的方法，避免引入包装对象或改变注入类型。
+- 行为：保留 group/target/dispatch/binding/limit/routing 的 SQL、事务、错误翻译和 `commercial.Repository` 编译期契约；仅调整文件边界与 import 依赖。
+- 验证：PostgreSQL adapter 编译、commercial/dispatch/target/price/usage 相关集成测试和 `go vet` 通过；既有数据库测试未改变。
+- 结果：主文件降至构造/根契约，最大业务文件约 429 行，后续继续处理 staticcheck 报告和 legacy Console bridge。
