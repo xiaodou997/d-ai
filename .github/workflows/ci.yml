@@ -102,6 +102,16 @@ jobs:
           fi
           grep -q 'SCHEMA_RELEASE_CONFIRM=APPLY' /tmp/schema-release-gate.log
 
+      - name: Database role provisioning helper is valid
+        run: |
+          bash -n deploy/production/provision_db_roles.sh
+          deploy/production/provision_db_roles.sh --help >/dev/null
+          if DB_ROLE_PROVISION_DATABASE_URL=postgres://invalid.example/dai deploy/production/provision_db_roles.sh apply >/tmp/db-role-provision-gate.log 2>&1; then
+            echo "::error::database role provisioning ran without explicit confirmation"
+            exit 1
+          fi
+          grep -q 'DB_ROLE_PROVISION_CONFIRM=APPLY' /tmp/db-role-provision-gate.log
+
       - name: Replay full schema migration chain
         env:
           SCHEMA_REPLAY_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable

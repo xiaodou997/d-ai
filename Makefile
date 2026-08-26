@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-ownership help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership help
 
 # ---- 本地开发 ----
 
@@ -68,6 +68,7 @@ database-artifacts: ## 将初始化、人工升级和回滚 SQL 复制到发布�
 	cp deploy/production/schema_release.sh $(DB_RELEASE_DIR)/schema_release.sh
 	cp internal/db/ownership.sql $(DB_RELEASE_DIR)/ownership.sql
 	cp deploy/production/apply_db_ownership.sh $(DB_RELEASE_DIR)/apply_db_ownership.sh
+	cp deploy/production/provision_db_roles.sh $(DB_RELEASE_DIR)/provision_db_roles.sh
 
 legal-artifacts: ## 将开源许可、第三方通知和商标政策复制到发布目录
 	mkdir -p $(BUILD_DIR)
@@ -150,6 +151,14 @@ check-schema: ## 校验数据库完整基线与 forward-only 迁移链
 check-schema-release: check-schema ## 校验发布期 schema 脚本语法和帮助入口
 	bash -n deploy/production/schema_release.sh
 	deploy/production/schema_release.sh --help >/dev/null
+
+check-db-role-provision: ## 校验生产数据库角色 provisioning 脚本入口和确认门禁
+	bash -n deploy/production/provision_db_roles.sh
+	deploy/production/provision_db_roles.sh --help >/dev/null
+	@if DB_ROLE_PROVISION_DATABASE_URL=postgres://invalid.example/dai deploy/production/provision_db_roles.sh apply >/dev/null 2>&1; then \
+		echo "ERROR: role provisioning ran without explicit confirmation"; \
+		exit 1; \
+	fi
 
 replay-schema-chain: check-schema ## 在临时 PostgreSQL schema 中重放 v1 到当前基线
 	bash scripts/replay_schema_chain.sh

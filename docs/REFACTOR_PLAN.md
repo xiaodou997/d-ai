@@ -210,7 +210,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-07 建立数据库领域所有权
 
 - [x] 从全 `public` schema 迁移到领域 schema，或用独立数据库角色实现等价隔离；`internal/db/ownership.sql` 固化 runtime/billing 角色契约，composition root 已支持独立 `DAI_BILLING_DATABASE_URL`。
-- [~] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，生产角色 provisioning 与维护窗口切换仍待完成。
+- [~] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，生产角色 provisioning 已脚本化，维护窗口切换仍待完成。
 - [x] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置；runtime 仅保留账务读取和 `bill_charge_outbox` 的 `INSERT`，billing pool 承担结算/支付/订阅扣费写路径。
 - [x] 跨域读取通过视图、只读端口或显式 query service；billing/payment、租户管理/分析、管理员终端用户与运营仪表盘核心聚合均已迁移到只读视图，相关查询不再直接跨域联表。
 - [x] CI 检查应用角色的最小权限和越权失败行为；`scripts/check_db_ownership.sh` 验证 runtime 账本写入失败、outbox 入队成功和 billing 角色写入成功。
@@ -843,6 +843,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：生命周期幂等测试使用 `context.Background()` 替代 nil context，明确传入合法上下文，不改变 `Start`/`Stop` 双调用的测试意图。
 - 验证：`staticcheck ./cmd/server` 零诊断，cmd/server 测试、`go vet` 和全仓 `staticcheck ./...` 通过。
+
+### P1-07（Database role provisioning，2026-08-27）
+
+- 工具：新增 `deploy/production/provision_db_roles.sh`，支持只读 `preflight` 与显式 `DB_ROLE_PROVISION_CONFIRM=APPLY` 的 `apply`；从 secret-manager 环境读取两组密码，不把密码放入命令行参数或发布附件。
+- 安全：创建/轮换 `dai` 与 `dai_billing` LOGIN 角色时固定为 NOINHERIT、NOSUPERUSER、NOCREATEDB、NOCREATEROLE、NOREPLICATION、NOBYPASSRLS，并拒绝占位符、相同密码和既有角色成员关系；脚本只授予数据库 CONNECT，不提前授予表权限。
+- 接入：生产数据库发布附件、Make 检查目标和 CI 确认门禁均已接入；ownership/revoke 仍由后续维护窗口切换步骤执行。
+- 验证：脚本 `bash -n`、帮助入口、Make `check-db-role-provision` 通过。
 
 ### P1-04（Split behavior regression coverage，2026-08-27）
 
