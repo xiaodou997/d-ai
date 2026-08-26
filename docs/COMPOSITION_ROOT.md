@@ -76,6 +76,7 @@ httpServers.Start / Shutdown
 - 支付 sweep/cleanup 的 PostgreSQL advisory lock 在同一物理连接上获取、执行和释放，避免 `pgxpool` 跨连接释放造成锁泄漏；支付与额度结算任务统一设有 5 分钟操作超时，解锁使用独立短超时上下文。
 - Scheduler 发布 `dai_scheduler_task_runs_total`、`dai_scheduler_task_duration_seconds`、`dai_scheduler_task_running`、`dai_scheduler_task_consecutive_failures` 和 `dai_scheduler_task_skips_total`，可直接用于失败、卡住和跨副本跳过告警。
 - Scheduler 每 15 分钟执行一次 billing 不变量对账：使用 Repeatable Read 只读快照和事务级 advisory lock，发布 `dai_billing_reconciliation_violations`、按不变量分类的差异数以及最近运行/健康时间戳。
+- Outbox 积压与 parked row 的排查、单行 requeue 和禁止操作见 `docs/BILLING_OUTBOX_RUNBOOK.md`；恢复必须保留原 `request_id` 并先修复根因。
 - 支付 sweep 额外发布 retry 总量、到期重试量、最老失败时长和统计读取失败指标；排查顺序与 PromQL 告警阈值记录在 `docs/PAYMENT_SWEEP_RUNBOOK.md`。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。

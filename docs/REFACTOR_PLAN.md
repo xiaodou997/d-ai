@@ -220,7 +220,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 将余额、批次、充值、退款、订阅和 AI 结算不变量形成统一测试套件；新增只读 `billing/invariants.Check` 与真实 PostgreSQL 生命周期测试，覆盖充值→扣费→过期→撤销→退款→订阅→Outbox。
 - [x] 增加固定种子随机并发属性测试与并发幂等测试，覆盖充值、扣费、过期、撤销与退款交错；统一账本写路径为「账户→批次」锁顺序，消除反向锁死。
 - [x] 增加定期线上对账任务和差异告警；Scheduler 使用 Repeatable Read 只读快照与跨副本 advisory lock，发布 Prometheus 差异指标，`docs/DATABASE.md` 固化告警阈值与禁止绕过账本的恢复边界。
-- [ ] 为 Outbox 积压和 parked row 定义处理手册。
+- [x] 为 Outbox 积压和 parked row 定义处理手册；`docs/BILLING_OUTBOX_RUNBOOK.md` 固化状态语义、只读排查、单行受控 requeue、验收和禁止操作。
 - [ ] 所有资金修复必须保留不可变审计证据和幂等键。
 
 ## P2：运行角色与部署拓扑

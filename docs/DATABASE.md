@@ -56,7 +56,8 @@
 AI 运行时的扣费不直接改余额：请求结束时把扣费意图和 `ai_usage_logs` 写在**同一个
 事务**里（`bill_charge_outbox`），由 `internal/billing/outbox` 的后台消费者用
 `FOR UPDATE SKIP LOCKED` 落账。用量记录存在就意味着这笔钱一定会被扣到，同时同一租户
-的并发请求不再因为账户行锁而串行结算。
+的并发请求不再因为账户行锁而串行结算。积压和 parked row 的处理边界见
+`docs/BILLING_OUTBOX_RUNBOOK.md`，禁止删除队列行或绕过原始 `request_id` 重放。
 
 ### 透支的边界
 
