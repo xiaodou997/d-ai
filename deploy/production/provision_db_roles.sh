@@ -115,6 +115,14 @@ esac
 case "$billing_password" in
   replace-with-*|change-me*|password) fail "billing role password is a placeholder" ;;
 esac
+for password_label in runtime billing; do
+  password_value=$runtime_password
+  if [[ "$password_label" == "billing" ]]; then
+    password_value=$billing_password
+  fi
+  [[ "${#password_value}" -ge 32 ]] || fail "$password_label role password must be at least 32 characters"
+  [[ "$password_value" != *[[:space:]]* ]] || fail "$password_label role password must not contain whitespace"
+done
 command -v psql >/dev/null 2>&1 || fail "required command not found: psql"
 
 membership_count=$(psql_query "
