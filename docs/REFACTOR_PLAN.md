@@ -193,7 +193,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [ ] Portal 菜单 capability 只用于展示，后端始终执行最终授权。
 - [ ] 建立 actor、tenant scope、resource ownership 的统一类型。
 - [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
-- [ ] 增加跨租户、越权、对象枚举和角色降级测试。
+- [~] 增加跨租户、越权、对象枚举和角色降级测试；现有领域/Transport 测试覆盖跨租户、越权和对象枚举，JWT 会话已补充角色与租户范围变更后的旧 token 失效回归，仍需继续扩展端到端角色矩阵。
 
 ## P1：数据库与资金数据治理
 
@@ -619,3 +619,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 门禁状态：`go run ./cmd/checkdeps` 报告 dependency direction clean，历史例外台账已清空。
 - 回归状态：相关 auth、tenant、user、invite、system、billing、payment、transport 和 server 测试，以及 `go vet ./...`、`go build ./...`、`bun run ensure:api` 已通过。
 - 剩余范围：Transport 仍需收敛少量黑名单/通知副作用和 legacy 编排；P1-03 的覆盖率门槛尚未定义并接入 CI。
+
+### P1-05（继续，2026-08-26）
+
+- 会话授权边界：access token 的数据库会话校验现在同时绑定当前账号的 `user_type` 和 `tenant_id`；角色降级、角色变更或租户迁移后，旧 token 立即失效，不会继续携带过期 capability 或 tenant scope。
+- 刷新语义：refresh token 仍从数据库读取最新账号角色与租户归属，成功轮换后签发新 scope；旧 access token 失效不影响可控的会话恢复路径。
+- 回归：新增 `TestRoleAndTenantScopeChangesInvalidateExistingAccessToken`，覆盖平台管理员降为租户、租户范围迁移、旧 token fail-closed、刷新后的 claims 与新 scope；既有跨租户、越权和对象枚举测试继续作为授权矩阵基础。
+- 验证：`go test ./internal/auth -count=1`、定向会话回归和 `git diff --check` 通过。
+- 遗留范围：仍需补充覆盖所有 Portal operation 的端到端角色降级/对象枚举矩阵，并将菜单 capability 仅作为展示约束固化到前端验收。

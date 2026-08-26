@@ -211,6 +211,83 @@ func TestTenantDisableAndAccountDeleteRejectRefresh(t *testing.T) {
 	}
 }
 
+func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name)
+		VALUES ('auth-role-change-tenant', 'Role Change Tenant'),
+		       ('auth-scope-change-tenant', 'Scope Change Tenant')
+	`); err != nil {
+		t.Fatal(err)
+	}
+	principal := seedSessionAccount(t, ctx, pool, "role-change")
+	service := newTestSessionService(pool)
+	pair, err := service.Create(ctx, principal)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A role change also changes the required tenant scope. The old token must
+	// fail closed instead of retaining its former platform-admin capability.
+	if _, err := pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET user_type = 3, tenant_id = 'auth-role-change-tenant'
+		WHERE user_id = $1
+	`, principal.UserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.jwt.ParseToken(pair.AccessToken); !errors.Is(err, ErrSessionInactive) {
+		t.Fatalf("access token after role/scope change = %v, want ErrSessionInactive", err)
+	}
+
+	rotated, refreshedPrincipal, err := service.Rotate(ctx, pair.RefreshToken)
+	if err != nil {
+		t.Fatalf("refresh after role/scope change: %v", err)
+	}
+	if refreshedPrincipal.UserType != 3 || refreshedPrincipal.TenantID != "auth-role-change-tenant" {
+		t.Fatalf("refreshed principal = %#v, want tenant-scoped role", refreshedPrincipal)
+	}
+	claims, err := service.jwt.ParseToken(rotated.AccessToken)
+	if err != nil {
+		t.Fatalf("refreshed access token should be valid: %v", err)
+	}
+	if claims.UserType != 3 || claims.TenantID != "auth-role-change-tenant" {
+		t.Fatalf("refreshed claims = %#v, want current role/scope", claims)
+	}
+
+	// Moving an already tenant-scoped account must invalidate the token even
+	// when its role is unchanged, otherwise the old tenant scope remains usable.
+	if _, err := pool.Exec(ctx, `
+		UPDATE iam_accounts
+		SET tenant_id = 'auth-scope-change-tenant'
+		WHERE user_id = $1
+	`, principal.UserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.jwt.ParseToken(rotated.AccessToken); !errors.Is(err, ErrSessionInactive) {
+		t.Fatalf("access token after tenant scope change = %v, want ErrSessionInactive", err)
+	}
+	rotatedAgain, refreshedPrincipal, err := service.Rotate(ctx, rotated.RefreshToken)
+	if err != nil {
+		t.Fatalf("refresh after tenant scope change: %v", err)
+	}
+	if refreshedPrincipal.UserType != 3 || refreshedPrincipal.TenantID != "auth-scope-change-tenant" {
+		t.Fatalf("principal after tenant scope change = %#v, want new tenant", refreshedPrincipal)
+	}
+	claims, err = service.jwt.ParseToken(rotatedAgain.AccessToken)
+	if err != nil {
+		t.Fatalf("access token after tenant scope refresh should be valid: %v", err)
+	}
+	if claims.TenantID != "auth-scope-change-tenant" {
+		t.Fatalf("claims after tenant scope refresh = %#v, want new tenant", claims)
+	}
+}
+
 func newTestSessionService(pool *pgxpool.Pool) *SessionService {
 	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
 		panic(err)
