@@ -79,6 +79,26 @@ func TestActiveGroupTierExhaustsHigherRankBeforeFallback(t *testing.T) {
 	}
 }
 
+func TestCandidateSplitExhaustsAllRoutesForOnePhysicalTarget(t *testing.T) {
+	req := &Request{
+		Candidates: []*domain.RouteCandidate{
+			{RouteID: "route-a1", EndpointID: "account-a"},
+			{RouteID: "route-a2", EndpointID: "account-a"},
+			{RouteID: "route-b1", EndpointID: "account-b"},
+		},
+		UsedCandidates: map[string]bool{},
+	}
+
+	exhaustPhysicalTarget(req, req.Candidates[0])
+
+	if !req.UsedCandidates["route-a1"] || !req.UsedCandidates["route-a2"] {
+		t.Fatalf("routes sharing account-a were not exhausted: %#v", req.UsedCandidates)
+	}
+	if req.UsedCandidates["route-b1"] {
+		t.Fatalf("unrelated account-b route was exhausted: %#v", req.UsedCandidates)
+	}
+}
+
 func TestPickCandidateKeepsTargetPriorityAheadOfConversionPreference(t *testing.T) {
 	req := &Request{
 		Candidates: []*domain.RouteCandidate{

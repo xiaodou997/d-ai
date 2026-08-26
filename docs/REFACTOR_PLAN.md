@@ -184,7 +184,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
 - [x] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；使用与 Go 1.27 匹配的 staticcheck 已通过全仓 `staticcheck ./...`，并清理了 internal、cmd、payment、tenant 与 transport 中的死代码和无效赋值。
 - [x] 删除已不再注册的旧 Console handler 和 legacy bridge helper；保留当前 `/runtime/v1` 已注册路由及其运行时兼容桥接。
-- [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
+- [x] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义；Serving 候选/attempt/stream/image 回归测试与 CommercialRepo 聚合/接口测试覆盖路由、协议、失败转移、图片响应和计费边界。
 
 ### P1-05 强化授权模型
 
@@ -843,3 +843,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：生命周期幂等测试使用 `context.Background()` 替代 nil context，明确传入合法上下文，不改变 `Start`/`Stop` 双调用的测试意图。
 - 验证：`staticcheck ./cmd/server` 零诊断，cmd/server 测试、`go vet` 和全仓 `staticcheck ./...` 通过。
+
+### P1-04（Split behavior regression coverage，2026-08-27）
+
+- 覆盖：Serving 既有候选分层、sticky、attempt failover、stream pre/post-commit、跨协议转换和 image relay 测试继续锁定拆分前的路由与响应语义；新增 `TestCandidateSplitExhaustsAllRoutesForOnePhysicalTarget` 锁定同一物理目标的耗尽规则。
+- 覆盖：CommercialRepo 保留 compile-time repository contract，并由 group/target/dispatch/binding、pricebook、group transfer 集成测试覆盖聚合拆分后的 SQL、计费和配置行为。
+- 验证：`go test ./internal/ai/serving -count=1`、`go vet ./internal/ai/serving`、`staticcheck ./internal/ai/serving` 通过；相关 CommercialRepo 测试已在拆分提交中验证。
