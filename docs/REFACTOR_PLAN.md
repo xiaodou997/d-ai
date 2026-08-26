@@ -768,3 +768,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：在 Gemini 图片数量校验中直接对配置节点做类型断言，避免先读取后立即覆盖的无效 `ok` 赋值；缺失或非对象配置仍按原逻辑跳过。
 - 验证：gateway 测试、`go vet` 通过，staticcheck SA4006 已消除；该包剩余两个独立的 U1000/S1016 诊断待后续处理。
+
+### P1-04（Gateway OpenAPI test helper cleanup，2026-08-26）
+
+- 清理：删除 `openapi_test.go` 中没有任何调用方的 `assertSchemaProperties` 测试 helper；保留当前实际使用的 schema enum 断言。
+- 验证：gateway 测试、`go vet` 通过，staticcheck U1000 已消除；该包仅剩 `tasks_http.go` 的 S1016 诊断待后续处理。

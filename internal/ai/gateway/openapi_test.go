@@ -94,19 +94,3 @@ func schemaEnumContains(schema *huma.Schema, want string) bool {
 	}
 	return false
 }
-
-func assertSchemaProperties(t *testing.T, schema *huma.Schema, expected ...string) {
-	t.Helper()
-	propertyCount := len(schema.Properties)
-	if schema.Properties["$schema"] != nil {
-		propertyCount--
-	}
-	if propertyCount != len(expected) {
-		t.Fatalf("schema properties = %v, want exactly %v", schema.Properties, expected)
-	}
-	for _, name := range expected {
-		if schema.Properties[name] == nil {
-			t.Fatalf("schema property %q missing", name)
-		}
-	}
-}
