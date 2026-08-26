@@ -258,9 +258,9 @@ func (g *gateway) realClient(ctx context.Context, cfg *MerchantConfig) (*core.Cl
 
 	var client *core.Client
 	if normalizeVerifyMode(cfg.VerifyMode) == VerifyModePublicKey {
-		publicKey, err := utils.LoadPublicKey(formatPEM(cfg.WechatPublicKey, "PUBLIC KEY"))
-		if err != nil {
-			return nil, fmt.Errorf("解析微信支付公钥失败: %w", err)
+		publicKey, loadErr := utils.LoadPublicKey(formatPEM(cfg.WechatPublicKey, "PUBLIC KEY"))
+		if loadErr != nil {
+			return nil, fmt.Errorf("解析微信支付公钥失败: %w", loadErr)
 		}
 		client, err = core.NewClient(ctx,
 			option.WithMerchantCredential(cfg.MchID, cfg.MchCertSerialNo, privateKey),
