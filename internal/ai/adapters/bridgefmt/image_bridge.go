@@ -119,20 +119,6 @@ func convertImageRequestDetailed(env corebridge.RequestEnvelope, body []byte) ([
 	}
 }
 
-func convertImageResponse(env corebridge.ResponseEnvelope, body []byte) ([]byte, error) {
-	if !isImageCapability(env.Capability) {
-		return nil, fmt.Errorf("bridgefmt: unsupported image capability %q", env.Capability)
-	}
-	switch {
-	case env.Source == surface.GeminiImages && env.Target == surface.OpenAIImages:
-		return buildOpenAIImageResponseFromGemini(env, body)
-	case env.Source == surface.OpenAIImages && env.Target == surface.GeminiImages:
-		return buildGeminiImageResponseFromOpenAI(env, body)
-	default:
-		return nil, fmt.Errorf("bridgefmt: unsupported image bridge %q -> %q", env.Source, env.Target)
-	}
-}
-
 func (r *Runtime) BridgeImageStream(req *serving.Request, rawBody []byte) (corebridge.ImageStreamResult, error) {
 	if req == nil || req.Candidate == nil {
 		return corebridge.ImageStreamResult{}, fmt.Errorf("bridgefmt: missing image stream request")
@@ -288,9 +274,7 @@ func aggregateGeminiImageStreamBody(_ *serving.Request, rawBody []byte) ([]byte,
 	if text != "" {
 		parts = append(parts, map[string]any{"text": text})
 	}
-	for _, image := range images {
-		parts = append(parts, image)
-	}
+	parts = append(parts, images...)
 	out := map[string]any{
 		"candidates": []any{
 			map[string]any{
@@ -383,17 +367,6 @@ func parseSSEBlock(block string) (string, []byte, bool) {
 		return event, nil, false
 	}
 	return event, []byte(data), true
-}
-
-func encodeJSONSSE(event string, payload any) ([]byte, error) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(event) == "" {
-		return []byte("data: " + string(body) + "\n\n"), nil
-	}
-	return []byte("event: " + strings.TrimSpace(event) + "\ndata: " + string(body) + "\n\n"), nil
 }
 
 func buildGeminiImageRequestFromOpenAI(env corebridge.RequestEnvelope, body []byte) ([]byte, error) {
@@ -1043,31 +1016,6 @@ func textFromAny(value any) string {
 	return text
 }
 
-func intFromAny(value any) int {
-	switch typed := value.(type) {
-	case int:
-		return typed
-	case int32:
-		return int(typed)
-	case int64:
-		return int(typed)
-	case float64:
-		return int(typed)
-	case json.Number:
-		if n, err := typed.Int64(); err == nil {
-			return int(n)
-		}
-	case string:
-		return intFromString(typed)
-	}
-	return 0
-}
-
-func intFromString(value string) int {
-	n, _ := strconv.Atoi(strings.TrimSpace(value))
-	return n
-}
-
 func uintFromAny(value any) uint64 {
 	switch typed := value.(type) {
 	case uint:
@@ -1096,34 +1044,6 @@ func uintFromAny(value any) uint64 {
 		}
 	case string:
 		if n, err := strconv.ParseUint(strings.TrimSpace(typed), 10, 64); err == nil {
-			return n
-		}
-	}
-	return 0
-}
-
-func int64FromAny(value any) int64 {
-	switch typed := value.(type) {
-	case int:
-		return int64(typed)
-	case int32:
-		return int64(typed)
-	case int64:
-		return typed
-	case uint:
-		return int64(typed)
-	case uint32:
-		return int64(typed)
-	case uint64:
-		return int64(typed)
-	case float64:
-		return int64(typed)
-	case json.Number:
-		if n, err := typed.Int64(); err == nil {
-			return n
-		}
-	case string:
-		if n, err := strconv.ParseInt(strings.TrimSpace(typed), 10, 64); err == nil {
 			return n
 		}
 	}
