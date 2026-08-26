@@ -82,4 +82,19 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
       UPDATE \"$schema_name\".bill_accounts
         SET balance_micro = 7 WHERE account_id = 'ownership-billing';"
 
-echo "db-ownership: runtime read/insert and billing ledger write passed; runtime ledger update denied"
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      SELECT count(*) FROM \"$schema_name\".billing_recharge_order_projection;"
+
+if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v billing_role="$billing_role" \
+  -c "SET ROLE \"$billing_role\";
+      SELECT count(*) FROM \"$schema_name\".ai_groups;" \
+  >"$tmp_dir/billing-denied.log" 2>&1; then
+  echo "db-ownership: billing role unexpectedly read an unrelated catalog table" >&2
+  cat "$tmp_dir/billing-denied.log" >&2
+  exit 1
+fi
+
+echo "db-ownership: runtime read/insert, billing ledger/view read/write passed; runtime ledger update and billing catalog read denied"

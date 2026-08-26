@@ -23,6 +23,7 @@ DECLARE
     runtime_name  TEXT := current_setting('dai.ownership.runtime_role');
     billing_name  TEXT := current_setting('dai.ownership.billing_role');
     table_name    TEXT;
+    view_name     TEXT;
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = runtime_name) THEN
         RAISE EXCEPTION 'runtime role % does not exist', runtime_name;
@@ -52,6 +53,16 @@ BEGIN
             RAISE EXCEPTION 'ownership contract table %.% does not exist', target_schema, table_name;
         END IF;
     END LOOP;
+
+    FOREACH view_name IN ARRAY ARRAY[
+        'billing_recharge_order_projection',
+        'payment_order_party_projection',
+        'payment_admin_recharge_order_projection'
+    ] LOOP
+        IF to_regclass(format('%I.%I', target_schema, view_name)) IS NULL THEN
+            RAISE EXCEPTION 'ownership contract view %.% does not exist', target_schema, view_name;
+        END IF;
+    END LOOP;
 END
 $$;
 
@@ -64,11 +75,6 @@ SET search_path TO :"schema_name";
 -- facts. The ledger/workflow tables below are removed from its DML surface.
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA :"schema_name" TO :"runtime_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"runtime_role";
-
--- Billing transactions lock/annotate identity and usage rows while updating
--- financial facts, so the billing connection gets read access to every table;
--- its write surface is still limited to the explicit financial list below.
-GRANT SELECT ON ALL TABLES IN SCHEMA :"schema_name" TO :"billing_role";
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     bill_accounts,
@@ -86,9 +92,21 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
 TO :"billing_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"billing_role";
 
--- Runtime owns the fact creation for usage/subscription orders; billing owns
--- the settlement/refund state transitions in those same rows.
+-- Billing transactions lock identity rows and settle runtime facts. These are
+-- explicit transaction exceptions; reporting joins use the read-only views
+-- below instead of broad control-plane table grants.
+GRANT SELECT ON TABLE iam_accounts, iam_tenants TO :"billing_role";
 GRANT SELECT, UPDATE ON TABLE ai_usage_logs, ai_sub_orders TO :"billing_role";
+GRANT SELECT ON TABLE
+    billing_recharge_order_projection,
+    payment_order_party_projection,
+    payment_admin_recharge_order_projection
+TO :"runtime_role", :"billing_role";
+REVOKE INSERT, UPDATE, DELETE ON TABLE
+    billing_recharge_order_projection,
+    payment_order_party_projection,
+    payment_admin_recharge_order_projection
+FROM :"runtime_role", :"billing_role";
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE
     bill_accounts,
@@ -124,5 +142,12 @@ ALTER TABLE pay_withdrawals OWNER TO :"billing_role";
 ALTER TABLE pay_tenant_settings OWNER TO :"billing_role";
 ALTER TABLE pay_wechat_config OWNER TO :"billing_role";
 ALTER TABLE ledger_credit_leases OWNER TO :"billing_role";
+
+-- The views run with their owner's privileges. Keep the owner aligned with
+-- the billing role so transferring the source-table owners cannot make a
+-- production read model fail after the migration account disconnects.
+ALTER VIEW billing_recharge_order_projection OWNER TO :"billing_role";
+ALTER VIEW payment_order_party_projection OWNER TO :"billing_role";
+ALTER VIEW payment_admin_recharge_order_projection OWNER TO :"billing_role";
 
 COMMIT;

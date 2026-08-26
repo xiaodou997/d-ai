@@ -13,9 +13,15 @@ D-AI 仍使用单 PostgreSQL 数据库，但生产运行时不应继续使用超
 `DAI_BILLING_DATABASE_URL`；应用完成连接切换并验证 billing role 可用后，才在生产库执行
 revoke/ownership 变更。
 
+账务和支付管理列表使用 `billing_recharge_order_projection`、
+`payment_order_party_projection` 与 `payment_admin_recharge_order_projection` 只读视图；三类视图
+owner 均转给 billing role，billing role 仅保留账务表、结算所需 runtime fact、充值目标身份锁和
+这些投影视图的读取权限。
+
 ## Apply
 
-在维护窗口、应用已经配置并验证 billing DSN 后，以数据库 owner/superuser 执行：
+先确认目标库已完成 schema v20（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
+billing DSN 后，以数据库 owner/superuser 执行：
 
 ```bash
 export SCHEMA_OWNERSHIP_DATABASE_URL='postgres://dai-admin:${PASSWORD}@db.example/dai?sslmode=require'
@@ -30,7 +36,7 @@ deploy/production/apply_db_ownership.sh
 ## Contract probe
 
 ```bash
-SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v19_test?sslmode=disable' \
+SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v20_test?sslmode=disable' \
   bash scripts/check_db_ownership.sh
 ```
 
@@ -39,6 +45,7 @@ SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_
 - runtime 可以读取账务投影，但更新 `bill_accounts` 失败；
 - runtime 可以在用量事务中插入 `bill_charge_outbox`；
 - billing role 可以写入并更新 `bill_accounts`；
+- billing role 可以读取账务/支付投影视图，但读取无关 AI catalog 表失败；
 - 账务表 owner 和 grant/revoke 契约可重复执行。
 
 该探针已纳入 CI。composition root 已通过 `DAI_BILLING_DATABASE_URL` 装配独立 billing pool，

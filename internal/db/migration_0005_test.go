@@ -17,6 +17,9 @@ func TestMigration0005LinksRechargeOrdersAndSeparatesFulfillmentStatus(t *testin
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
+		DROP VIEW payment_admin_recharge_order_projection;
+		DROP VIEW payment_order_party_projection;
+		DROP VIEW billing_recharge_order_projection;
 		DROP TABLE bill_refund_reversal_effects;
 		DROP TABLE pay_refunds;
 		ALTER TABLE pay_orders DROP COLUMN refund_status;

@@ -134,9 +134,7 @@ type RechargeRecordRow = billingports.RechargeRecordRow
 func (r *AccountRepository) ListRechargeRecords(ctx context.Context, query billingports.RechargeRecordsQuery) ([]RechargeRecordRow, int64, error) {
 
 	base := `
-		FROM bill_recharge_orders r
-		LEFT JOIN iam_accounts eu ON eu.user_id = r.user_id AND eu.user_type = 4
-		LEFT JOIN iam_tenants t ON t.tenant_id = r.tenant_id
+		FROM billing_recharge_order_projection r
 		WHERE 1=1`
 
 	var args []any
@@ -158,12 +156,12 @@ func (r *AccountRepository) ListRechargeRecords(ctx context.Context, query billi
 		argIdx++
 	}
 	if query.TenantName != "" {
-		base += fmt.Sprintf(" AND t.tenant_name LIKE $%d", argIdx)
+		base += fmt.Sprintf(" AND r.tenant_name LIKE $%d", argIdx)
 		args = append(args, "%"+query.TenantName+"%")
 		argIdx++
 	}
 	if query.Username != "" {
-		base += fmt.Sprintf(" AND eu.username LIKE $%d", argIdx)
+		base += fmt.Sprintf(" AND r.username LIKE $%d", argIdx)
 		args = append(args, "%"+query.Username+"%")
 		argIdx++
 	}
@@ -184,7 +182,7 @@ func (r *AccountRepository) ListRechargeRecords(ctx context.Context, query billi
 	}
 
 	selectSQL := fmt.Sprintf(
-		`SELECT r.order_id, r.order_type, r.paid_amount, r.credit_amount, r.status, COALESCE(r.note,''), COALESCE(r.user_id,''), COALESCE(eu.username,''), COALESCE(t.tenant_name,''), r.created_at `+
+		`SELECT r.order_id, r.order_type, r.paid_amount, r.credit_amount, r.status, r.note, r.user_id, r.username, r.tenant_name, r.created_at `+
 			base+` ORDER BY r.created_at DESC LIMIT $%d OFFSET $%d`,
 		argIdx, argIdx+1,
 	)

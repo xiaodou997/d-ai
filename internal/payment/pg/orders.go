@@ -411,11 +411,9 @@ func loadOrderPartyNames(ctx context.Context, pool *pgxpool.Pool, orders []*paym
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT o.order_id, COALESCE(t.tenant_name, ''), COALESCE(u.username, '')
-		FROM pay_orders o
-		LEFT JOIN iam_tenants t ON t.tenant_id = o.tenant_id
-		LEFT JOIN iam_accounts u ON u.user_id = o.user_id AND u.user_type = 4
-		WHERE o.order_id = ANY($1)
+		SELECT order_id, tenant_name, username
+		FROM payment_order_party_projection
+		WHERE order_id = ANY($1)
 	`, orderIDs)
 	if err != nil {
 		return fmt.Errorf("查询支付订单主体名称失败: %w", err)
