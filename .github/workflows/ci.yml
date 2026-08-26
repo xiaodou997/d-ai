@@ -101,6 +101,11 @@ jobs:
           SCHEMA_REPLAY_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable
         run: bash scripts/replay_schema_chain.sh
 
+      - name: Database ownership probe
+        env:
+          SCHEMA_OWNERSHIP_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable
+        run: bash scripts/check_db_ownership.sh
+
   frontend:
     name: Portal
     runs-on: ubuntu-latest

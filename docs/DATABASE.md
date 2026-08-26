@@ -7,6 +7,7 @@
 - 应用启动只校验 `dai_schema_metadata.version`，不会执行 DDL 或升级 SQL。
 - `internal/db/changes/` 存放首次发布后的人工升级 SQL。
 - 结构调整必须直接更新完整基线并保持 `internal/db/schema.go` 中的期望版本一致。
+- 运行角色与账务表所有权契约见 [`docs/DATABASE_OWNERSHIP.md`](DATABASE_OWNERSHIP.md)；当前单连接应用切换 billing pool 前，不得在生产库执行 revoke/owner 变更。
 
 已有数据库必须从当前版本开始，按编号连续执行 `internal/db/changes/` 中的升级脚本；
 不能通过直接修改版本号跳过升级。不需要保留数据的本地开发库可以使用

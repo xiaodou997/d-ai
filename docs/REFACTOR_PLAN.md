@@ -209,11 +209,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-07 建立数据库领域所有权
 
-- [ ] 从全 `public` schema 迁移到领域 schema，或用独立数据库角色实现等价隔离。
-- [ ] 账本表只允许 billing 模块角色写入。
-- [ ] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置。
+- [~] 从全 `public` schema 迁移到领域 schema，或用独立数据库角色实现等价隔离；`internal/db/ownership.sql` 先建立 runtime/billing 角色契约，运行时 billing pool 接入仍待下一项。
+- [~] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，生产连接切换仍待完成。
+- [~] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置；契约仅保留 runtime 对 `bill_charge_outbox` 的 `INSERT`，代码连接隔离待完成。
 - [ ] 跨域读取通过视图、只读端口或显式 query service。
-- [ ] CI 检查应用角色的最小权限和越权失败行为。
+- [x] CI 检查应用角色的最小权限和越权失败行为；`scripts/check_db_ownership.sh` 验证 runtime 账本写入失败、outbox 入队成功和 billing 角色写入成功。
 
 ### P1-08 持续验证资金不变量
 
