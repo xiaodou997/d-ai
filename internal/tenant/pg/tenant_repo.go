@@ -373,7 +373,6 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 	if timeTo != nil {
 		behaviorBase += fmt.Sprintf(" AND created_at < $%d", argIdx)
 		behaviorArgs = append(behaviorArgs, *timeTo)
-		argIdx++
 	}
 
 	if err := r.pool.QueryRow(ctx, `
