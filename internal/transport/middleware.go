@@ -167,7 +167,7 @@ func requireCapability(api huma.API, capability auth.Capability) func(huma.Conte
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
 			return
 		}
-		actor := auth.Actor{UserID: claims.UserID, TenantID: claims.TenantID, UserType: claims.UserType}
+		actor := auth.ActorFromClaims(claims)
 		if actor.Has(capability) {
 			next(ctx)
 			return
@@ -183,7 +183,7 @@ func requireAnyCapability(api huma.API, capabilities ...auth.Capability) func(hu
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "未认证")
 			return
 		}
-		actor := auth.Actor{UserID: claims.UserID, TenantID: claims.TenantID, UserType: claims.UserType}
+		actor := auth.ActorFromClaims(claims)
 		for _, capability := range capabilities {
 			if actor.Has(capability) {
 				next(ctx)

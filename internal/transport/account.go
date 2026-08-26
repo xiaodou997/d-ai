@@ -85,9 +85,9 @@ func (h *accountHandlers) balance(ctx context.Context, in *accountBalanceInput) 
 	actor := actorFromClaims(claims)
 	packageType, accountID := in.AccountType, in.AccountID
 	if actor.Has(auth.CapabilityTenantSelf) {
-		packageType, accountID = 1, actor.TenantID
+		packageType, accountID = 1, string(actor.TenantID)
 	} else if actor.Has(auth.CapabilityCustomerSelf) {
-		packageType, accountID = 2, actor.UserID
+		packageType, accountID = 2, string(actor.UserID)
 	}
 	if accountID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少账户 ID")
@@ -131,9 +131,9 @@ func (h *accountHandlers) rechargeRecords(ctx context.Context, in *rechargeRecor
 	}
 	actor := actorFromClaims(claims)
 	if actor.Has(auth.CapabilityTenantSelf) {
-		tenantID = actor.TenantID
+		tenantID = string(actor.TenantID)
 	} else if actor.Has(auth.CapabilityCustomerSelf) {
-		tenantID, userID, orderTypes = actor.TenantID, actor.UserID, billingdomain.UserRechargeOrderTypes
+		tenantID, userID, orderTypes = string(actor.TenantID), string(actor.UserID), billingdomain.UserRechargeOrderTypes
 	}
 	page, size := normalizePage(in.Page, in.Size)
 	list, total, err := h.queries.ListRechargeRecords(ctx, billingports.RechargeRecordsQuery{
@@ -157,7 +157,7 @@ func (h *accountHandlers) stats(ctx context.Context, in *accountStatsInput) (*ac
 	}
 	tenantID := in.AccountID
 	if actor.Has(auth.CapabilityTenantSelf) {
-		tenantID = actor.TenantID
+		tenantID = string(actor.TenantID)
 	}
 	if tenantID == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("缺少 accountId 参数")

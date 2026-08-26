@@ -53,3 +53,31 @@ func TestActorTenantScopeRequirement(t *testing.T) {
 		t.Fatal("tenant and customer actors must require a tenant scope")
 	}
 }
+
+func TestActorUsesTypedScopeAndOwnershipReferences(t *testing.T) {
+	actor := NewActor("tenant-user", "tenant-a", int(UserTypeTenant))
+	if actor.Scope().IsGlobal() || !actor.Scope().Allows(TenantID("tenant-a")) || actor.Scope().Allows(TenantID("tenant-b")) {
+		t.Fatalf("tenant scope = %#v, want only tenant-a", actor.Scope())
+	}
+	if got := actor.Ownership(); got != (ResourceOwnership{TenantID: TenantID("tenant-a"), UserID: UserID("tenant-user")}) {
+		t.Fatalf("actor ownership = %#v", got)
+	}
+	if !actor.Owns(NewResourceOwnership("tenant-a", "end-user")) || actor.Owns(NewResourceOwnership("tenant-b", "end-user")) {
+		t.Fatal("tenant actor ownership crossed tenant boundary")
+	}
+
+	global := NewActor("admin", "", int(UserTypePlatformAdmin))
+	if !global.Scope().IsGlobal() || !global.Owns(NewResourceOwnership("tenant-b", "end-user")) {
+		t.Fatal("global platform actor did not own a global resource reference")
+	}
+	if NewResourceOwnership("", "user").IsUserResource() || NewResourceOwnership("tenant-a", "").IsUserResource() {
+		t.Fatal("invalid resource ownership reference was accepted")
+	}
+}
+
+func TestActorFromClaimsPreservesInvalidRoleWithoutWraparound(t *testing.T) {
+	actor := ActorFromClaims(&Claims{UserID: "malformed", TenantID: "tenant-a", UserType: 257})
+	if actor.UserType != UserType(257) || actor.Has(CapabilitySuperAdmin) || actor.Has(CapabilityPlatformAdmin) {
+		t.Fatalf("malformed role was normalized to a privileged role: %#v", actor)
+	}
+}

@@ -39,10 +39,10 @@ func sceneAndScopeFromClaims(ctx context.Context) (scene, tenantID, userID strin
 	}
 	actor := actorFromClaims(claims)
 	if actor.Has(auth.CapabilityCustomerSelf) {
-		return payment.SceneUserTopup, actor.TenantID, actor.UserID, true
+		return payment.SceneUserTopup, string(actor.TenantID), string(actor.UserID), true
 	}
 	if actor.Has(auth.CapabilityTenantSelf) {
-		return payment.SceneTenantTopup, actor.TenantID, "", true
+		return payment.SceneTenantTopup, string(actor.TenantID), "", true
 	}
 	return "", "", "", false
 }
@@ -222,7 +222,7 @@ func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) 
 	if err != nil {
 		return nil, toProblem(err)
 	}
-	if !actorFromClaims(userClaimsFromCtx(ctx)).CanAccessUser(order.TenantID, order.UserID) {
+	if !actorFromClaims(userClaimsFromCtx(ctx)).Owns(auth.NewResourceOwnership(order.TenantID, order.UserID)) {
 		return nil, domain.ErrPaymentOrderNotFound
 	}
 	out := &topupOrderStatusOutput{}

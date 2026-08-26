@@ -369,7 +369,7 @@ func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (
 		return currentUserSnapshot{}, httpx.ErrForbidden.WithDetail("账户已被禁用，请重新登录")
 	}
 
-	if (auth.Actor{UserType: snapshot.userType, TenantID: snapshot.tenantID}).RequiresTenantScope() {
+	if auth.NewActor("", snapshot.tenantID, snapshot.userType).RequiresTenantScope() {
 		active, err := d.AuthAccountReader.CheckTenantActive(ctx, snapshot.tenantID)
 		if err != nil {
 			return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)

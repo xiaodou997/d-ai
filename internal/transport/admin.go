@@ -70,10 +70,7 @@ func isAdminClaims(c *auth.Claims) bool {
 }
 
 func actorFromClaims(c *auth.Claims) auth.Actor {
-	if c == nil {
-		return auth.Actor{}
-	}
-	return auth.Actor{UserID: c.UserID, TenantID: c.TenantID, UserType: c.UserType}
+	return auth.ActorFromClaims(c)
 }
 
 // userIDOf 安全取出 Claims 的 UserID（nil 返回空串）。

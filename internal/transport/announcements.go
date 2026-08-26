@@ -169,7 +169,7 @@ func (h *announcementHandlers) listInbox(ctx context.Context, in *listInboxInput
 		return nil, httpx.ErrUnauthorized
 	}
 	actor := actorFromClaims(claims)
-	page, err := h.service.ListInbox(ctx, announcement.Principal{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, announcement.InboxQuery{
+	page, err := h.service.ListInbox(ctx, announcement.Principal{UserType: int(actor.UserType), UserID: string(actor.UserID), TenantID: string(actor.TenantID)}, announcement.InboxQuery{
 		Page: in.Page, Size: in.Size, UnreadOnly: in.UnreadOnly, DisplayMode: announcement.DisplayMode(in.DisplayMode),
 	})
 	if err != nil {
@@ -190,7 +190,7 @@ func (h *announcementHandlers) getVisible(ctx context.Context, in *announcementP
 		return nil, httpx.ErrUnauthorized
 	}
 	actor := actorFromClaims(claims)
-	item, err := h.service.GetVisible(ctx, announcement.Principal{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, in.ID)
+	item, err := h.service.GetVisible(ctx, announcement.Principal{UserType: int(actor.UserType), UserID: string(actor.UserID), TenantID: string(actor.TenantID)}, in.ID)
 	if err != nil {
 		return nil, announcementHTTPError(err)
 	}
@@ -203,7 +203,7 @@ func (h *announcementHandlers) markRead(ctx context.Context, in *announcementPat
 		return nil, httpx.ErrUnauthorized
 	}
 	actor := actorFromClaims(claims)
-	if err := h.service.MarkRead(ctx, announcement.Principal{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, in.ID); err != nil {
+	if err := h.service.MarkRead(ctx, announcement.Principal{UserType: int(actor.UserType), UserID: string(actor.UserID), TenantID: string(actor.TenantID)}, in.ID); err != nil {
 		return nil, announcementHTTPError(err)
 	}
 	out := &messageOutput{}
@@ -337,7 +337,7 @@ func announcementActor(ctx context.Context) (announcement.Actor, error) {
 		return announcement.Actor{}, httpx.ErrUnauthorized
 	}
 	actor := actorFromClaims(claims)
-	return announcement.Actor{UserType: actor.UserType, UserID: actor.UserID, TenantID: actor.TenantID}, nil
+	return announcement.Actor{UserType: int(actor.UserType), UserID: string(actor.UserID), TenantID: string(actor.TenantID)}, nil
 }
 
 func announcementDraftInput(body announcementDraftBody) announcement.DraftInput {

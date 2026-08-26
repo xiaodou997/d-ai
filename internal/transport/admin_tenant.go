@@ -241,7 +241,7 @@ func (h *adminHandlers) getTenant(ctx context.Context, in *tenantIDInput) (*tena
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if !actorFromClaims(claims).CanAccessTenant(in.ID) {
+	if !actorFromClaims(claims).Owns(auth.NewResourceOwnership(in.ID, "")) {
 		return nil, httpx.ErrForbidden.WithDetail("无权查看其他租户信息")
 	}
 

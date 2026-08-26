@@ -204,7 +204,7 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		if userTenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
 		}
-		if !actor.CanAccessTenant(userTenantID) {
+		if !actor.Owns(auth.NewResourceOwnership(userTenantID, "")) {
 			return nil, httpx.ErrForbidden.WithDetail("只能为本租户用户充值")
 		}
 		tenantID = userTenantID
@@ -255,9 +255,9 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 	var err error
 	actor := actorFromClaims(claims)
 	if actor.Has(auth.CapabilityTenantSelf) {
-		result, err = h.deduction.ReverseTenantOrder(in.OrderID, actor.TenantID, in.Body.Reason, actor.UserID)
+		result, err = h.deduction.ReverseTenantOrder(in.OrderID, string(actor.TenantID), in.Body.Reason, string(actor.UserID))
 	} else {
-		result, err = h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, actor.UserID)
+		result, err = h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, string(actor.UserID))
 	}
 	if err != nil {
 		if errors.Is(err, shared.ErrForbidden) {

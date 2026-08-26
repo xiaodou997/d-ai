@@ -113,7 +113,7 @@ func (h *adminHandlers) checkUserBelongsToActor(ctx context.Context, userID stri
 	if err != nil {
 		return httpx.ErrInternal.WithCause(err)
 	}
-	if !actor.CanAccessTenant(tenantID) {
+	if !actor.Owns(auth.NewResourceOwnership(tenantID, "")) {
 		return httpx.ErrForbidden.WithDetail("无权操作")
 	}
 	return nil
@@ -122,9 +122,9 @@ func (h *adminHandlers) checkUserBelongsToActor(ctx context.Context, userID stri
 // checkUserBelongsToTenant keeps the test/legacy helper contract while routing
 // all new callers through the normalized actor scope check.
 func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
-	actor := auth.Actor{UserType: 2, TenantID: callerTenantID}
+	actor := auth.NewActor("", callerTenantID, 2)
 	if callerTenantID != "" {
-		actor.UserType = 3
+		actor.UserType = auth.UserTypeTenant
 	}
 	return h.checkUserBelongsToActor(ctx, userID, actor)
 }
@@ -137,7 +137,7 @@ func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput)
 	// 租户用户强制本租户；管理员用查询参数
 	tenantID := in.TenantID
 	if !actorFromClaims(claims).Has(auth.CapabilityPlatformAdmin) {
-		tenantID = actorFromClaims(claims).TenantID
+		tenantID = string(actorFromClaims(claims).TenantID)
 	}
 	result, err := h.endUserRepo.ListEndUsers(ctx, userports.AdminEndUserListFilter{
 		TenantID:   tenantID,
