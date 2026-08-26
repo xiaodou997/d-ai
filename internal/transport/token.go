@@ -173,7 +173,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 	if u.CredentialState != "active" {
 		return loginPrincipal{}, httpx.ErrUnauthorized.WithDetail("用户名/邮箱或密码错误")
 	}
-	if u.UserType >= 3 {
+	if auth.NewActor(u.UserID, u.TenantID, u.UserType).RequiresTenantScope() {
 		active, err := h.loginReader.CheckTenantActive(ctx, u.TenantID)
 		if err != nil {
 			return loginPrincipal{}, httpx.ErrInternal.WithCause(err)
@@ -311,7 +311,7 @@ func (h *authHandlers) login(ctx context.Context, input *loginInput) (*authToken
 		h.audit(ctx, authports.AuditEvent{EventType: "user_login", PrincipalType: principalType(p.UserType), UserID: p.UserID, Decision: "error", ReasonCode: "login_rate_limiter_unavailable", ReasonMessage: "登录成功后无法清理限速状态"})
 		return nil, httpx.ErrUnavailable.WithDetail("登录服务暂不可用，请稍后重试")
 	}
-	if p.UserType <= 2 && p.MFAEnabled {
+	if requiresAdministrativeMFA(p) {
 		if h.mfa == nil {
 			return nil, httpx.ErrUnavailable.WithDetail("MFA 服务不可用")
 		}
@@ -428,8 +428,12 @@ func (h *authHandlers) refresh(ctx context.Context, input *refreshInput) (*authT
 	}, nil
 }
 
+func requiresAdministrativeMFA(principal loginPrincipal) bool {
+	return principal.MFAEnabled && auth.NewActor(principal.UserID, principal.TenantID, principal.UserType).Has(auth.CapabilityPlatformAdmin)
+}
+
 func principalType(userType int) string {
-	if userType == 1 || userType == 2 {
+	if auth.NewActor("", "", userType).Has(auth.CapabilityPlatformAdmin) {
 		return "admin"
 	}
 	return "user"

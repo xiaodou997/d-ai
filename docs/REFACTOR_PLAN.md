@@ -188,8 +188,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-05 强化授权模型
 
-- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；已迁移租户自助/品牌、平台管理、财务、支付、仪表盘、清理、代理节点、JWT key、公告和通知，少量账户/终端用户展示逻辑仍需清理。
-- [~] 将散落的 `userType` 判断集中为后端 capability/policy 授权；`auth.Actor` / `Capability` / `requireCapability` 已覆盖主要管理、支付、公告、通知和自助端点，仍需清理兼容展示路径。
+- [x] 将散落的 `userType` 判断集中为后端 capability/policy 授权；管理、财务、支付、仪表盘、清理、代理节点、JWT key、公告、通知和自助端点均已由共享 capability/policy 决策，剩余 userType 仅用于持久化/展示/claims 完整性。
+- [x] 将散落的 `userType` 判断集中为后端 capability/policy 授权；`auth.Actor` / `Capability` / `requireCapability` 已覆盖主要 HTTP 与应用策略，登录租户状态、管理员 MFA 和审计 principal 分类也已收敛到同一 Actor policy。
 - [x] Portal 菜单和路由 capability 只用于展示/导航提示；后端通过 operation middleware 和 capability/policy 矩阵执行最终授权，并有服务端拒绝回归测试。
 - [x] 建立统一的 `auth.Actor`、`TenantScope`、`UserID`/`TenantID` 和 `ResourceOwnership` 类型；Transport 从 claims 统一构造 actor，租户、终端用户、租户详情和支付订单 ownership 均通过同一 typed reference 校验。
 - [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
@@ -662,3 +662,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 防越权：调用方不再能通过裸三元组查询其他用户或租户通知；无用户、未知角色和错误 scope 在 service 层 fail-closed，Transport 将其映射为 403。
 - 回归：新增真实 PostgreSQL 通知 scope 测试，覆盖同租户、跨租户、其他用户、全局通知、错误角色和缺失身份；Transport 全量回归通过。
 - 遗留范围：通知投递记录中的 `recipient_user_type` 仍是数据库兼容投影，不作为调用方授权输入。
+
+### P1-05（登录策略清理，2026-08-26）
+
+- 认证策略：登录租户状态门禁、管理员 MFA 分支和认证审计 principal 分类改用 `auth.Actor.RequiresTenantScope` / `CapabilityPlatformAdmin`，移除 Transport 中最后几处基于数值范围的安全判断。
+- 回归：新增登录角色策略矩阵，覆盖四类合法角色、未知角色、租户 scope、管理员审计分类和 MFA 分支；Transport 全量测试与 `go vet` 通过。
+- 结论：P1-05 capability/policy 授权迁移项完成；剩余 `userType` 仅为数据库兼容投影、响应展示或 claims 数据完整性校验。
