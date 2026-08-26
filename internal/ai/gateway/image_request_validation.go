@@ -212,8 +212,7 @@ func sanitizeGeminiImageCount(body []byte) ([]byte, error) {
 		return body, nil
 	}
 	for _, key := range []string{"generationConfig", "generation_config"} {
-		value, ok := doc[key]
-		config, ok := value.(map[string]any)
+		config, ok := doc[key].(map[string]any)
 		if !ok {
 			continue
 		}

@@ -763,3 +763,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除未被任何格式转换路径调用的 `openaiEffortToGeminiLevel` 与 `sortedKeys`，同时移除随之失效的排序 import；保留当前 OpenAI、Claude、Gemini reasoning effort 映射链。
 - 验证：`staticcheck ./internal/ai/formats` 零诊断，`go vet ./internal/ai/formats` 和 `go test ./internal/ai/formats -count=1` 通过。
+
+### P1-04（Gateway image validation assignment cleanup，2026-08-26）
+
+- 修复：在 Gemini 图片数量校验中直接对配置节点做类型断言，避免先读取后立即覆盖的无效 `ok` 赋值；缺失或非对象配置仍按原逻辑跳过。
+- 验证：gateway 测试、`go vet` 通过，staticcheck SA4006 已消除；该包剩余两个独立的 U1000/S1016 诊断待后续处理。
