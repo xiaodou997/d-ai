@@ -43,10 +43,6 @@ func platformUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma
 	return userAuth(api, d, map[int]bool{1: true, 2: true}, "platform user required")
 }
 
-func platformOrTenantUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
-	return userAuth(api, d, map[int]bool{1: true, 2: true, 3: true}, "platform or tenant user required")
-}
-
 func tenantUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
 	return userAuth(api, d, map[int]bool{3: true}, "tenant user required")
 }

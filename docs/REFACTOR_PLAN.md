@@ -778,3 +778,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：将 `RuntimeAuth` 直接转换为同构的 `taskCaller`，消除手工结构体复制和 staticcheck S1016；任务认证上下文及 subject 传递保持不变。
 - 验证：`staticcheck ./internal/ai/gateway` 零诊断，`go vet ./internal/ai/gateway` 和 `go test ./internal/ai/gateway -count=1` 通过。
+
+### P1-04（Transport auth legacy cleanup，2026-08-26）
+
+- 清理：删除没有任何路由注册或调用方的 `platformOrTenantUserAuth`；保留平台、租户和终端用户各自实际使用的认证 middleware。
+- 验证：Transport 测试、`go vet` 通过，`platformOrTenantUserAuth` 的 U1000 已消除；其余 transport staticcheck 诊断继续按聚合分批处理。
