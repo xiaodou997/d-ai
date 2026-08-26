@@ -186,7 +186,7 @@ func (s *Gateway) withTaskAuth(
 			writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key.", "invalid_api_key", "invalid_api_key")
 			return
 		}
-		next(w, r, taskCaller{Subject: auth.Subject})
+		next(w, r, taskCaller(auth))
 	})).ServeHTTP(w, r)
 }
 

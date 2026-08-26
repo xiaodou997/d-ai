@@ -182,7 +182,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
 - [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
-- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/clientruntime`、`internal/ai/console`、`internal/ai/core/runtime`、`internal/ai/domain`、`internal/ai/formats` 与 `internal/ai/serving` 诊断，其他包仍待分批处理。
+- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/clientruntime`、`internal/ai/console`、`internal/ai/core/runtime`、`internal/ai/domain`、`internal/ai/formats`、`internal/ai/gateway` 与 `internal/ai/serving` 诊断，其他包仍待分批处理。
 - [x] 删除已不再注册的旧 Console handler 和 legacy bridge helper；保留当前 `/runtime/v1` 已注册路由及其运行时兼容桥接。
 - [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
 
@@ -773,3 +773,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除 `openapi_test.go` 中没有任何调用方的 `assertSchemaProperties` 测试 helper；保留当前实际使用的 schema enum 断言。
 - 验证：gateway 测试、`go vet` 通过，staticcheck U1000 已消除；该包仅剩 `tasks_http.go` 的 S1016 诊断待后续处理。
+
+### P1-04（Gateway task caller conversion cleanup，2026-08-26）
+
+- 修复：将 `RuntimeAuth` 直接转换为同构的 `taskCaller`，消除手工结构体复制和 staticcheck S1016；任务认证上下文及 subject 传递保持不变。
+- 验证：`staticcheck ./internal/ai/gateway` 零诊断，`go vet ./internal/ai/gateway` 和 `go test ./internal/ai/gateway -count=1` 通过。
