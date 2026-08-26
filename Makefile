@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-frontend typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain help
 
 # ---- 本地开发 ----
 
@@ -139,6 +139,9 @@ check-schema: ## 校验数据库完整基线与 forward-only 迁移链
 check-schema-release: check-schema ## 校验发布期 schema 脚本语法和帮助入口
 	bash -n deploy/production/schema_release.sh
 	deploy/production/schema_release.sh --help >/dev/null
+
+replay-schema-chain: check-schema ## 在临时 PostgreSQL schema 中重放 v1 到当前基线
+	bash scripts/replay_schema_chain.sh
 
 help: ## 显示帮助
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'

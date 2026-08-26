@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	initPath       = "internal/db/init.sql"
-	changesPath    = "internal/db/changes"
-	rollbackPath   = "internal/db/rollback"
-	docsPath       = "docs/SCHEMA_CHAIN.md"
-	filenameRegexp = `^(\d{4})_(\d{8})_([a-z0-9][a-z0-9_]*)\.sql$`
+	initPath                 = "internal/db/init.sql"
+	changesPath              = "internal/db/changes"
+	rollbackPath             = "internal/db/rollback"
+	docsPath                 = "docs/SCHEMA_CHAIN.md"
+	filenameRegexp           = `^(\d{4})_(\d{8})_([a-z0-9][a-z0-9_]*)\.sql$`
+	historicalBaselineCommit = "54135ad"
 )
 
 var (
@@ -286,6 +287,7 @@ func renderDocument(baseline int, migrations []migration) string {
 	b.WriteString("# Schema migration chain\n\n")
 	fmt.Fprintf(&b, "Baseline: `internal/db/init.sql` v**%d**<br>\nRuntime contract: `internal/db/schema.go` v**%d**<br>\nBaseline SHA-256: `%s`<br>\nForward chain: **v%d → v%d**, %d migrations, no gaps\n\n", baseline, db.ExpectedSchemaVersion, baselineHash, migrations[0].From, baseline, len(migrations))
 	b.WriteString("This is a generated review artifact. `init.sql` is the complete empty-database baseline; `changes/` is the forward-only upgrade chain for existing databases. The application only verifies the metadata version and never executes these scripts. Release automation must apply the required SQL explicitly, with backup and recovery controls.\n\n")
+	fmt.Fprintf(&b, "Replay provenance: immutable v1 baseline commit `%s`; the earlier pre-release snapshot is not used because unversioned billing changes landed before the forward chain began.\n\n", historicalBaselineCommit)
 	b.WriteString("## Migration inventory\n\n")
 	b.WriteString("| Target | File | Source | Transaction | Source guard | Advisory lock | Test | SQL rollback | SHA-256 |\n| ---: | --- | ---: | :---: | :---: | :---: | :---: | :---: | --- |\n")
 	for _, migration := range migrations {
@@ -293,7 +295,7 @@ func renderDocument(baseline int, migrations []migration) string {
 	}
 	b.WriteString("\n`Test` means a matching `internal/db/migration_NNNN_test.go` exists. `SQL rollback` only reports a checked-in rollback script; forward-only migrations without one must use a verified database backup for recovery.\n\n")
 	b.WriteString("## Release invariants\n\n")
-	b.WriteString("- Apply scripts in ascending target-version order; never edit an already released script or jump by changing `dai_schema_metadata.version`.\n- Validate the target database backup, migration result, and application compatibility before restoring traffic.\n- A new migration must update `init.sql`, `internal/db/schema.go`, and this generated inventory in the same change.\n- `go run ./cmd/checkschema` is the structural gate; empty-baseline replay and previous-version integration tests remain release validation work.\n")
+	b.WriteString("- Apply scripts in ascending target-version order; never edit an already released script or jump by changing `dai_schema_metadata.version`.\n- Validate the target database backup, migration result, and application compatibility before restoring traffic.\n- A new migration must update `init.sql`, `internal/db/schema.go`, and this generated inventory in the same change.\n- `go run ./cmd/checkschema` is the structural gate; `scripts/replay_schema_chain.sh` replays the immutable v1 Git baseline from commit `" + historicalBaselineCommit + "` and compares the final schema-only dump with `init.sql`.\n")
 	return b.String()
 }
 

@@ -2292,6 +2292,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 18);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 19);
 
 COMMIT;

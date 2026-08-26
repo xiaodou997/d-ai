@@ -42,6 +42,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -93,6 +95,11 @@ jobs:
             exit 1
           fi
           grep -q 'SCHEMA_RELEASE_CONFIRM=APPLY' /tmp/schema-release-gate.log
+
+      - name: Replay full schema migration chain
+        env:
+          SCHEMA_REPLAY_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable
+        run: bash scripts/replay_schema_chain.sh
 
   frontend:
     name: Portal

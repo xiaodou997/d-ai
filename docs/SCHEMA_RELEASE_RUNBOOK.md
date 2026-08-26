@@ -68,6 +68,8 @@ deploy/production/schema_release.sh verify
 bash -n deploy/production/schema_release.sh
 deploy/production/schema_release.sh --help
 go run ./cmd/checkschema
+SCHEMA_REPLAY_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v19_test?sslmode=disable' \
+  bash scripts/replay_schema_chain.sh
 ```
 
 真实数据库 rehearsal 必须使用临时 PostgreSQL 实例和临时备份目录，不能把生产 URL

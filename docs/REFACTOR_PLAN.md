@@ -199,10 +199,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-06 统一迁移链和 schema 真相源
 
-- [~] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；当前以 `internal/db/changes/` 规范和 `cmd/checkschema` 结构门禁承接，暂不引入运行时迁移依赖。
+- [x] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；`deploy/production/schema_release.sh` 负责备份、连续脚本执行和逐步版本确认，不引入运行时迁移依赖。
 - [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
-- [~] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；当前门禁校验 `init.sql`、`ExpectedSchemaVersion` 与 v1→v18 链一致，完整空库重放仍待发布环境执行。
-- [~] 每个迁移在空库和前一 schema 版本副本上验证；17 个迁移现在都有真实 PostgreSQL 专项测试，空库全链重放和发布环境副本验证仍待补齐。
+- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v19，并将最终 schema-only dump 与 `init.sql` 比较。
+- [x] 每个迁移在空库和前一 schema 版本副本上验证；18 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v19 全链重放并逐步校验版本。
 - [x] 为缺少专项测试的 0002、0003、0009 补迁移测试；测试覆盖来源版本、关键结构、数据转换和约束行为。
 - [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [x] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤；`deploy/production/schema_release.sh` 显式执行并记录备份/哈希/版本，`docs/SCHEMA_RELEASE_RUNBOOK.md` 固化停流量、readiness、兼容窗口和恢复步骤。
