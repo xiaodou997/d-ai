@@ -136,32 +136,6 @@ func consoleImageInputFromRequest(operation string, req consoleImageGenerateRequ
 	return input, nil
 }
 
-func (s *Console) prepareConsoleImageGeneration(
-	ctx context.Context,
-	subject *coreidentity.Subject,
-	req consoleImageGenerateRequest,
-	autoStream bool,
-) (consoleImageResolution, error) {
-	input, err := consoleImageInputFromRequest("generation", req, imageedit.Request{})
-	if err != nil {
-		return consoleImageResolution{}, err
-	}
-	return s.resolveConsoleImage(ctx, subject, input, autoStream)
-}
-
-func (s *Console) prepareConsoleImageEditTask(
-	ctx context.Context,
-	subject *coreidentity.Subject,
-	req consoleImageGenerateRequest,
-	autoStream bool,
-) (consoleImageResolution, error) {
-	input, err := consoleImageInputFromRequest("edit", req, imageedit.Request{})
-	if err != nil {
-		return consoleImageResolution{}, err
-	}
-	return s.resolveConsoleImage(ctx, subject, input, autoStream)
-}
-
 // resolve is the task execution path: persisted, redacted input in; one
 // synthesized runtime call out. Submit uses the same resolver through
 // resolveConsoleImage and discards Replay, forcing every worker to rebuild it.

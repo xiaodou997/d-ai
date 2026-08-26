@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,19 +29,6 @@ var consoleChatProtocolOrder = []domain.UpstreamProtocol{
 	domain.ProtocolGeminiGenerate,
 }
 
-type consoleChatModelDTO struct {
-	GroupID                 string   `json:"group_id"`
-	GroupName               string   `json:"group_name"`
-	EffectiveUserMultiplier float64  `json:"effective_user_multiplier"`
-	BillingGroupLabel       string   `json:"billing_group_label"`
-	ModelCode               string   `json:"model_code"`
-	CapabilityType          string   `json:"capability_type"`
-	DefaultAPIFormat        string   `json:"default_api_format"`
-	AvailableAPIFormats     []string `json:"available_api_formats"`
-	SupportsStream          bool     `json:"supports_stream"`
-	Status                  string   `json:"status"`
-}
-
 type consoleChatSessionDTO struct {
 	ID                string `json:"id"`
 	Title             string `json:"title"`
@@ -55,28 +41,6 @@ type consoleChatSessionDTO struct {
 	Status            string `json:"status"`
 	CreatedAt         int64  `json:"created_at"`
 	UpdatedAt         int64  `json:"updated_at"`
-}
-
-type consoleChatMessageDTO struct {
-	ID        string         `json:"id"`
-	Role      string         `json:"role"`
-	Content   string         `json:"content"`
-	Protocol  string         `json:"protocol,omitempty"`
-	RouteID   string         `json:"route_id,omitempty"`
-	Usage     map[string]any `json:"usage,omitempty"`
-	Error     map[string]any `json:"error,omitempty"`
-	CreatedAt int64          `json:"created_at"`
-}
-
-type consoleChatSessionDetailDTO struct {
-	Session  consoleChatSessionDTO   `json:"session"`
-	Messages []consoleChatMessageDTO `json:"messages"`
-}
-
-type createConsoleChatSessionRequest struct {
-	ModelCode string `json:"model_code"`
-	GroupID   string `json:"group_id"`
-	Title     string `json:"title"`
 }
 
 type consoleChatMessage struct {
@@ -236,127 +200,6 @@ func (p *consoleChatStreamPersistence) close(routeID string) {
 	}); err != nil {
 		p.console.logger.Warn("runtime chat: persist assistant route failed", zap.Error(err), zap.String("session_id", p.sessionID))
 	}
-}
-
-func (s *Console) handleConsoleChatModels(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	if s.workspaceModels == nil {
-		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
-		return
-	}
-	models, err := s.workspaceModels.ListChatModels(r.Context(), workspace.Owner{
-		Scope:    subject.Scope,
-		TenantID: subject.TenantID,
-		UserID:   subject.UserID,
-	})
-	if err != nil {
-		s.logger.Error("runtime chat models: list workspace models failed",
-			consoleSubjectLogFields(r, subject, zap.Error(err))...,
-		)
-		writeDBErr(w, err)
-		return
-	}
-	out := make([]consoleChatModelDTO, 0, len(models))
-	for _, model := range models {
-		out = append(out, workspaceChatModelToConsoleDTO(model))
-	}
-	writeOK(w, out)
-}
-
-func (s *Console) handleConsoleChatListSessions(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	if s.workspaceSessions == nil {
-		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
-		return
-	}
-	sessions, err := s.workspaceSessions.ListChatSessions(r.Context(), workspace.Owner{
-		Scope:    subject.Scope,
-		TenantID: subject.TenantID,
-		UserID:   subject.UserID,
-	}, 100)
-	if err != nil {
-		writeDBErr(w, err)
-		return
-	}
-	out := make([]consoleChatSessionDTO, 0, len(sessions))
-	for _, session := range sessions {
-		out = append(out, workspaceChatSessionToConsoleDTO(session))
-	}
-	writeOK(w, out)
-}
-
-func (s *Console) handleConsoleChatCreateSession(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	if s.workspaceManager == nil {
-		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
-		return
-	}
-	var req createConsoleChatSessionRequest
-	if !decodeAdminJSON(w, r, &req) {
-		return
-	}
-	session, err := s.workspaceManager.CreateChatSession(r.Context(), workspace.Owner{
-		Scope:    subject.Scope,
-		TenantID: subject.TenantID,
-		UserID:   subject.UserID,
-	}, workspace.CreateChatSessionInput{
-		ModelCode: req.ModelCode,
-		GroupID:   req.GroupID,
-		Title:     req.Title,
-	})
-	if err != nil {
-		s.writeServiceErr(w, r, err)
-		return
-	}
-	writeOK(w, workspaceChatSessionToConsoleDTO(session))
-}
-
-func (s *Console) handleConsoleChatGetSession(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	sessionID := chi.URLParam(r, "sessionID")
-	session, ok := s.loadConsoleChatSession(w, r, subject, sessionID)
-	if !ok {
-		return
-	}
-	msgs, err := s.listConsoleChatMessages(r, subject, sessionID)
-	if err != nil {
-		writeDBErr(w, err)
-		return
-	}
-	writeOK(w, consoleChatSessionDetailDTO{Session: session, Messages: msgs})
-}
-
-func (s *Console) handleConsoleChatDeleteSession(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	if s.workspaceManager == nil {
-		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
-		return
-	}
-	sessionID := chi.URLParam(r, "sessionID")
-	if err := s.workspaceManager.DeleteChatSession(r.Context(), workspace.Owner{
-		Scope:    subject.Scope,
-		TenantID: subject.TenantID,
-		UserID:   subject.UserID,
-	}, sessionID); err != nil {
-		s.writeServiceErr(w, r, err)
-		return
-	}
-	writeOK(w, nil)
 }
 
 func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request) {
@@ -592,21 +435,6 @@ func (s *Console) chooseConsoleChatProtocol(r *http.Request, subject *coreidenti
 	return protocols[0], nil
 }
 
-func workspaceChatModelToConsoleDTO(model workspace.ChatModel) consoleChatModelDTO {
-	return consoleChatModelDTO{
-		GroupID:                 model.GroupID,
-		GroupName:               model.GroupName,
-		EffectiveUserMultiplier: model.EffectiveUserMultiplier,
-		BillingGroupLabel:       model.BillingGroupLabel,
-		ModelCode:               model.ModelCode,
-		CapabilityType:          model.CapabilityType,
-		DefaultAPIFormat:        model.DefaultProtocol,
-		AvailableAPIFormats:     append([]string{}, model.AvailableProtocols...),
-		SupportsStream:          model.SupportsStream,
-		Status:                  model.Status,
-	}
-}
-
 func buildConsoleProtocolBody(protocol domain.UpstreamProtocol, modelCode string, messages []consoleChatMessage, maxTokens int) ([]byte, string, error) {
 	switch protocol {
 	case domain.ProtocolOpenAIChat:
@@ -724,17 +552,6 @@ func lastUserText(messages []consoleChatMessage) string {
 	return ""
 }
 
-func replaceLastUserText(messages []consoleChatMessage, content string) []consoleChatMessage {
-	out := append([]consoleChatMessage(nil), messages...)
-	for index := len(out) - 1; index >= 0; index-- {
-		if out[index].Role == "user" {
-			out[index].Content = content
-			break
-		}
-	}
-	return out
-}
-
 func (s *Console) loadConsoleChatSession(w http.ResponseWriter, r *http.Request, subject *coreidentity.Subject, sessionID string) (consoleChatSessionDTO, bool) {
 	if s.workspaceSessions == nil {
 		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
@@ -753,95 +570,12 @@ func (s *Console) loadConsoleChatSession(w http.ResponseWriter, r *http.Request,
 	return dto, true
 }
 
-func prependConsoleSystemMessage(messages []consoleChatMessage, systemText string) []consoleChatMessage {
-	systemText = strings.TrimSpace(systemText)
-	if systemText == "" {
-		return messages
-	}
-	out := make([]consoleChatMessage, 0, len(messages)+1)
-	out = append(out, consoleChatMessage{Role: "system", Content: systemText})
-	out = append(out, messages...)
-	return out
-}
-
 // Console defaults for direct-model chat sessions. Max output is not a
 // user-facing control — the model decides — but a sane cap is still required by
 // upstreams such as Anthropic Messages, so we keep one here.
 const (
 	consoleDefaultMaxTokens = 2048
 )
-
-func effectiveConsoleMaxTokens(req *int) int {
-	if req != nil && *req > 0 {
-		return *req
-	}
-	return consoleDefaultMaxTokens
-}
-
-func numberFromAny(value any) (float64, bool) {
-	switch v := value.(type) {
-	case float64:
-		return v, true
-	case float32:
-		return float64(v), true
-	case int:
-		return float64(v), true
-	case int32:
-		return float64(v), true
-	case int64:
-		return float64(v), true
-	case json.Number:
-		f, err := v.Float64()
-		return f, err == nil
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
-		return f, err == nil
-	default:
-		return 0, false
-	}
-}
-
-func intFromAny(value any) (int, bool) {
-	switch v := value.(type) {
-	case int:
-		return v, true
-	case int32:
-		return int(v), true
-	case int64:
-		return int(v), true
-	case float64:
-		return int(v), true
-	case float32:
-		return int(v), true
-	case json.Number:
-		i, err := v.Int64()
-		return int(i), err == nil
-	case string:
-		i, err := strconv.Atoi(strings.TrimSpace(v))
-		return i, err == nil
-	default:
-		return 0, false
-	}
-}
-
-func (s *Console) listConsoleChatMessages(r *http.Request, subject *coreidentity.Subject, sessionID string) ([]consoleChatMessageDTO, error) {
-	if s.workspaceSessions == nil {
-		return nil, fmt.Errorf("workspace service is not configured")
-	}
-	messages, err := s.workspaceSessions.ListChatMessages(r.Context(), workspace.Owner{
-		Scope:    subject.Scope,
-		TenantID: subject.TenantID,
-		UserID:   subject.UserID,
-	}, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]consoleChatMessageDTO, 0, len(messages))
-	for _, message := range messages {
-		out = append(out, workspaceChatMessageToConsoleDTO(message))
-	}
-	return out, nil
-}
 
 func workspaceChatSessionToConsoleDTO(session workspace.ChatSession) consoleChatSessionDTO {
 	return consoleChatSessionDTO{
@@ -856,19 +590,6 @@ func workspaceChatSessionToConsoleDTO(session workspace.ChatSession) consoleChat
 		Status:            session.Status,
 		CreatedAt:         session.CreatedAt.UnixMilli(),
 		UpdatedAt:         session.UpdatedAt.UnixMilli(),
-	}
-}
-
-func workspaceChatMessageToConsoleDTO(message workspace.ChatMessage) consoleChatMessageDTO {
-	return consoleChatMessageDTO{
-		ID:        message.ID,
-		Role:      message.Role,
-		Content:   message.Content,
-		Protocol:  message.Protocol,
-		RouteID:   message.RouteID,
-		Usage:     message.Usage,
-		Error:     message.Error,
-		CreatedAt: message.CreatedAt.UnixMilli(),
 	}
 }
 

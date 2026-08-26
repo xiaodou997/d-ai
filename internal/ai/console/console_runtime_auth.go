@@ -101,13 +101,3 @@ func (s *Console) consoleRuntimeSubject(w http.ResponseWriter, r *http.Request) 
 		UserID:        userID,
 	}, true
 }
-
-func consoleSubjectOwnerType(subject *coreidentity.Subject) domain.OwnerType {
-	if subject == nil {
-		return domain.OwnerTenant
-	}
-	if subject.Scope == coreidentity.ScopeUser {
-		return domain.OwnerUser
-	}
-	return domain.OwnerTenant
-}

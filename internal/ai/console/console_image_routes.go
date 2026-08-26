@@ -1,18 +1,14 @@
 package console
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"go.uber.org/zap"
 
 	coreidentity "xiaodou/dai/internal/ai/core/identity"
 	"xiaodou/dai/internal/ai/domain"
-	"xiaodou/dai/internal/ai/workspace"
 )
 
 type consoleImageModelDTO struct {
@@ -92,33 +88,6 @@ func (s *Console) handleConsoleImageModels(w http.ResponseWriter, r *http.Reques
 		})
 	}
 	writeOK(w, out)
-}
-
-func (s *Console) handleConsoleImageListJobs(w http.ResponseWriter, r *http.Request) {
-	subject, ok := s.consoleRuntimeSubject(w, r)
-	if !ok {
-		return
-	}
-	if s.workspaceImages == nil {
-		writeErr(w, http.StatusServiceUnavailable, BizErrInternal, "workspace service is not configured")
-		return
-	}
-	jobs, err := s.workspaceImages.ListImageJobs(r.Context(), workspace.Owner{
-		Scope:    subject.Scope,
-		TenantID: subject.TenantID,
-		UserID:   subject.UserID,
-	}, 50)
-	if err != nil {
-		writeDBErr(w, err)
-		return
-	}
-	items := make([]consoleImageJobDTO, 0, len(jobs))
-	for _, job := range jobs {
-		item := workspaceImageJobToConsoleDTO(job)
-		s.refreshConsoleImageAssetURLs(r.Context(), item.Assets)
-		items = append(items, item)
-	}
-	writeOK(w, items)
 }
 
 func writeConsoleImagePrepareErr(w http.ResponseWriter, err error) {
@@ -224,120 +193,4 @@ func (s *Console) consoleGrantedImageModels(r *http.Request, subject *coreidenti
 
 func consoleImageBillingGroupLabel(groupName string, multiplier float64) string {
 	return fmt.Sprintf("%s · %.4gx", groupName, multiplier)
-}
-
-func workspaceImageJobToConsoleDTO(job workspace.ImageJob) consoleImageJobDTO {
-	dto := consoleImageJobDTO{
-		ID:                   job.ID,
-		Operation:            job.Operation,
-		ModelCode:            job.ModelCode,
-		Prompt:               job.Prompt,
-		Status:               job.Status,
-		StoragePolicy:        job.StoragePolicy,
-		RawImageRetained:     job.RawImageRetained,
-		Size:                 job.Size,
-		Quality:              job.Quality,
-		Style:                job.Style,
-		ResponseFormat:       job.ResponseFormat,
-		RequestedOutputCount: job.RequestedOutputCount,
-		CallerChargeUSD:      domain.MicroToUSD(job.CallerChargeMicro),
-		ImageCount:           job.ImageCount,
-		InlineCount:          job.InlineCount,
-		URLCount:             job.URLCount,
-		RevisedPrompts:       job.RevisedPrompts,
-		Assets:               workspaceImageAssetsToConsoleDTO(job.Assets),
-		ErrorMessage:         job.ErrorMessage,
-		CreatedAt:            job.CreatedAt.UnixMilli(),
-	}
-	if job.CompletedAt != nil {
-		completedAt := job.CompletedAt.UnixMilli()
-		dto.CompletedAt = &completedAt
-	}
-	return dto
-}
-
-func workspaceImageAssetsToConsoleDTO(items []workspace.ImageAsset) []consoleImageTaskAssetDTO {
-	if len(items) == 0 {
-		return nil
-	}
-	out := make([]consoleImageTaskAssetDTO, 0, len(items))
-	for _, item := range items {
-		if strings.TrimSpace(item.PreviewURL) == "" && strings.TrimSpace(item.DisplayURL) == "" && strings.TrimSpace(item.OriginalURL) == "" {
-			continue
-		}
-		out = append(out, consoleImageTaskAssetDTO{
-			ID:                  item.ID,
-			Index:               item.Index,
-			PreviewURL:          item.PreviewURL,
-			DisplayURL:          item.DisplayURL,
-			OriginalURL:         item.OriginalURL,
-			OriginalContentType: item.OriginalContentType,
-			OriginalSizeBytes:   item.OriginalSizeBytes,
-			PreviewContentType:  item.PreviewContentType,
-			PreviewSizeBytes:    item.PreviewSizeBytes,
-			Width:               item.Width,
-			Height:              item.Height,
-			ExpiresAt:           item.ExpiresAt,
-		})
-	}
-	return out
-}
-
-func millisFromEpochSecondsPtr(v *int64) *int64 {
-	if v == nil {
-		return nil
-	}
-	out := *v * 1000
-	return &out
-}
-
-func decodeStringSlice(raw []byte) []string {
-	if len(raw) == 0 {
-		return []string{}
-	}
-	var out []string
-	if err := json.Unmarshal(raw, &out); err != nil || out == nil {
-		return []string{}
-	}
-	return out
-}
-
-func decodeJSONObject(raw []byte) map[string]any {
-	if len(raw) == 0 {
-		return map[string]any{}
-	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil || out == nil {
-		return map[string]any{}
-	}
-	return out
-}
-
-func copyHeaders(dst, src http.Header) {
-	for key, values := range src {
-		dst.Del(key)
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-}
-
-func copyConsoleRuntimeHeaders(dst, src http.Header) {
-	for key, values := range src {
-		if strings.EqualFold(key, "Content-Length") {
-			continue
-		}
-		dst.Del(key)
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-}
-
-func parsePositiveInt(raw string, fallback int) int {
-	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-	return parsed
 }
