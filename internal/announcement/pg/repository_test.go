@@ -42,25 +42,25 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 	})
 
 	service := announcement.NewService(announcementpg.NewRepository(pool))
-	created, err := service.CreateDraft(ctx, announcement.Actor{UserType: 1, UserID: "SA_" + suffix}, announcement.DraftInput{
+	created, err := service.CreateDraft(ctx, announcement.NewActor("SA_"+suffix, "", 1), announcement.DraftInput{
 		Title: "租户 A 升级", ContentMarkdown: "升级内容",
 		Audiences: []announcement.AudienceRule{{Kind: announcement.AudienceEndUser, ScopeType: announcement.AudienceScopeTenant, TenantID: tenantA}},
 	})
 	if err != nil {
 		t.Fatalf("CreateDraft() error = %v", err)
 	}
-	if _, err := service.Publish(ctx, announcement.Actor{UserType: 1, UserID: "SA_" + suffix}, created.ID); err != nil {
+	if _, err := service.Publish(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
 
-	inboxA, err := service.ListInbox(ctx, announcement.Principal{UserType: 4, UserID: userA, TenantID: tenantA}, announcement.InboxQuery{Page: 1, Size: 20})
+	inboxA, err := service.ListInbox(ctx, announcement.NewActor(userA, tenantA, 4), announcement.InboxQuery{Page: 1, Size: 20})
 	if err != nil {
 		t.Fatalf("ListInbox(A) error = %v", err)
 	}
 	if len(inboxA.Items) != 1 || inboxA.UnreadCount != 1 || inboxA.Items[0].Announcement.ID != created.ID {
 		t.Fatalf("ListInbox(A) = %#v, want one unread announcement", inboxA)
 	}
-	inboxB, err := service.ListInbox(ctx, announcement.Principal{UserType: 4, UserID: userB, TenantID: tenantB}, announcement.InboxQuery{Page: 1, Size: 20})
+	inboxB, err := service.ListInbox(ctx, announcement.NewActor(userB, tenantB, 4), announcement.InboxQuery{Page: 1, Size: 20})
 	if err != nil {
 		t.Fatalf("ListInbox(B) error = %v", err)
 	}
@@ -68,7 +68,7 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 		t.Fatalf("ListInbox(B) = %#v, want empty", inboxB)
 	}
 
-	principalA := announcement.Principal{UserType: 4, UserID: userA, TenantID: tenantA}
+	principalA := announcement.NewActor(userA, tenantA, 4)
 	if err := service.MarkRead(ctx, principalA, created.ID); err != nil {
 		t.Fatalf("MarkRead() error = %v", err)
 	}
@@ -82,14 +82,14 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 	if inboxA.UnreadCount != 0 || inboxA.Items[0].ReadAt == nil {
 		t.Fatalf("ListInbox(A after read) = %#v, want read receipt", inboxA)
 	}
-	stats, err := service.GetStats(ctx, announcement.Actor{UserType: 1, UserID: "SA_" + suffix}, created.ID)
+	stats, err := service.GetStats(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID)
 	if err != nil {
 		t.Fatalf("GetStats() error = %v", err)
 	}
 	if stats.AudienceSizeAtPublish != 1 || stats.CurrentAudienceSize != 1 || stats.ReadCount != 1 {
 		t.Fatalf("GetStats() = %#v, want audience/read counts 1", stats)
 	}
-	if _, err := service.Archive(ctx, announcement.Actor{UserType: 1, UserID: "SA_" + suffix}, created.ID); err != nil {
+	if _, err := service.Archive(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID); err != nil {
 		t.Fatalf("Archive() error = %v", err)
 	}
 	inboxA, err = service.ListInbox(ctx, principalA, announcement.InboxQuery{Page: 1, Size: 20})

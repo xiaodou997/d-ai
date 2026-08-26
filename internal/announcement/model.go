@@ -1,6 +1,10 @@
 package announcement
 
-import "time"
+import (
+	"time"
+
+	"xiaodou/dai/internal/auth"
+)
 
 type PublisherType string
 
@@ -58,12 +62,26 @@ const (
 )
 
 type Actor struct {
-	UserType int
-	UserID   string
-	TenantID string
+	UserType auth.UserType
+	UserID   auth.UserID
+	TenantID auth.TenantID
 }
 
 type Principal = Actor
+
+func NewActor(userID, tenantID string, userType int) Actor {
+	return Actor{UserType: auth.UserType(userType), UserID: auth.UserID(userID), TenantID: auth.TenantID(tenantID)}
+}
+
+// AuthorizationActor bridges the announcement application model to the
+// shared authorization policy without duplicating role/scope rules here.
+func (a Actor) AuthorizationActor() auth.Actor {
+	return auth.NewActor(string(a.UserID), string(a.TenantID), int(a.UserType))
+}
+
+func (a Actor) Has(capability auth.Capability) bool {
+	return a.AuthorizationActor().Has(capability)
+}
 
 type AudienceRule struct {
 	Kind      AudienceKind

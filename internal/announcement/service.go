@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"xiaodou/dai/internal/auth"
 )
 
 var (
@@ -110,7 +112,7 @@ func (s *Service) ListManaged(ctx context.Context, actor Actor, query ManageQuer
 	if s.manager == nil {
 		return ManagedPage{}, ErrUnavailable
 	}
-	if actor.UserType != 1 && actor.UserType != 2 && actor.UserType != 3 {
+	if !actor.Has(auth.CapabilityPlatformAdmin) && !actor.Has(auth.CapabilityTenantSelf) {
 		return ManagedPage{}, ErrForbidden
 	}
 	if query.Page < 1 {
@@ -201,20 +203,14 @@ func (s *Service) GetVisible(ctx context.Context, principal Principal, id string
 }
 
 func validatePrincipal(principal Principal) error {
-	if strings.TrimSpace(principal.UserID) == "" {
+	if strings.TrimSpace(string(principal.UserID)) == "" {
 		return ErrForbidden
 	}
-	switch principal.UserType {
-	case 1, 2:
+	actor := principal.AuthorizationActor()
+	if actor.Has(auth.CapabilityPlatformAdmin) || actor.Has(auth.CapabilityTenantSelf) || actor.Has(auth.CapabilityCustomerSelf) {
 		return nil
-	case 3, 4:
-		if strings.TrimSpace(principal.TenantID) == "" {
-			return ErrForbidden
-		}
-		return nil
-	default:
-		return ErrForbidden
 	}
+	return ErrForbidden
 }
 
 func (s *Service) CreateDraft(ctx context.Context, actor Actor, input DraftInput) (Announcement, error) {
@@ -244,35 +240,34 @@ func (s *Service) CreateDraft(ctx context.Context, actor Actor, input DraftInput
 		Status:            StatusDraft,
 		StartsAt:          input.StartsAt,
 		EndsAt:            input.EndsAt,
-		CreatedBy:         actor.UserID,
-		CreatedByUserType: actor.UserType,
-		UpdatedBy:         actor.UserID,
+		CreatedBy:         string(actor.UserID),
+		CreatedByUserType: int(actor.UserType),
+		UpdatedBy:         string(actor.UserID),
 		Audiences:         append([]AudienceRule(nil), input.Audiences...),
 	}
 
-	switch actor.UserType {
-	case 1, 2:
+	switch {
+	case actor.Has(auth.CapabilityPlatformAdmin):
 		item.PublisherType = PublisherPlatform
 		audiences, err := normalizePlatformAudiences(input.Audiences)
 		if err != nil {
 			return Announcement{}, err
 		}
 		item.Audiences = audiences
-	case 3:
-		if strings.TrimSpace(actor.TenantID) == "" {
+	case actor.Has(auth.CapabilityTenantSelf):
+		if strings.TrimSpace(string(actor.TenantID)) == "" {
 			return Announcement{}, ErrForbidden
 		}
 		item.PublisherType = PublisherTenant
-		item.PublisherTenantID = actor.TenantID
+		item.PublisherTenantID = string(actor.TenantID)
 		item.Audiences = []AudienceRule{{
 			Kind:      AudienceEndUser,
 			ScopeType: AudienceScopeTenant,
-			TenantID:  actor.TenantID,
+			TenantID:  string(actor.TenantID),
 		}}
 	default:
 		return Announcement{}, ErrForbidden
 	}
-
 	return s.repo.CreateDraft(ctx, item)
 }
 
@@ -305,7 +300,7 @@ func (s *Service) UpdateDraft(ctx context.Context, actor Actor, id string, input
 	if err != nil {
 		return Announcement{}, err
 	}
-	updated.UpdatedBy = actor.UserID
+	updated.UpdatedBy = string(actor.UserID)
 	return s.updater.UpdateDraft(ctx, actor, updated)
 }
 
@@ -326,12 +321,12 @@ func applyDraftInput(actor Actor, item Announcement, input DraftInput) (Announce
 		return Announcement{}, err
 	}
 	audiences := append([]AudienceRule(nil), input.Audiences...)
-	if actor.UserType == 3 {
-		if actor.TenantID == "" || item.PublisherType != PublisherTenant || item.PublisherTenantID != actor.TenantID {
+	if actor.Has(auth.CapabilityTenantSelf) {
+		if actor.TenantID == "" || item.PublisherType != PublisherTenant || item.PublisherTenantID != string(actor.TenantID) {
 			return Announcement{}, ErrForbidden
 		}
-		audiences = []AudienceRule{{Kind: AudienceEndUser, ScopeType: AudienceScopeTenant, TenantID: actor.TenantID}}
-	} else if actor.UserType == 1 || actor.UserType == 2 {
+		audiences = []AudienceRule{{Kind: AudienceEndUser, ScopeType: AudienceScopeTenant, TenantID: string(actor.TenantID)}}
+	} else if actor.Has(auth.CapabilityPlatformAdmin) {
 		audiences, err = normalizePlatformAudiences(audiences)
 		if err != nil {
 			return Announcement{}, err

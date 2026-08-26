@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"xiaodou/dai/internal/announcement"
+	"xiaodou/dai/internal/auth"
 )
 
 type Repository struct {
@@ -44,7 +45,7 @@ func (r *Repository) CreateDraft(ctx context.Context, item announcement.Announce
 		return announcement.Announcement{}, err
 	}
 	if err := insertAudit(ctx, tx, item.ID, "created", announcement.Actor{
-		UserType: item.CreatedByUserType, UserID: item.CreatedBy, TenantID: item.PublisherTenantID,
+		UserType: auth.UserType(item.CreatedByUserType), UserID: auth.UserID(item.CreatedBy), TenantID: auth.TenantID(item.PublisherTenantID),
 	}); err != nil {
 		return announcement.Announcement{}, err
 	}
@@ -83,7 +84,7 @@ func (r *Repository) UpdateDraft(ctx context.Context, actor announcement.Actor, 
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
-	args = append(args, item.Title, item.ContentMarkdown, item.Category, item.Severity, item.DisplayMode, item.StartsAt, item.EndsAt, actor.UserID)
+	args = append(args, item.Title, item.ContentMarkdown, item.Category, item.Severity, item.DisplayMode, item.StartsAt, item.EndsAt, string(actor.UserID))
 	base := len(args) - 7
 	query := fmt.Sprintf(`UPDATE ann_announcements SET
 		title=$%d, content_markdown=$%d, category=$%d, severity=$%d, display_mode=$%d,
@@ -152,7 +153,7 @@ func (r *Repository) Publish(ctx context.Context, actor announcement.Actor, id s
 		SET status='published', published_at=$2, audience_size_at_publish=$3, updated_by=$4, updated_at=$2
 		WHERE announcement_id=$1 AND status='draft'
 		RETURNING published_at, audience_size_at_publish, updated_at
-	`, id, now, audienceSize, actor.UserID).Scan(&item.PublishedAt, &item.AudienceSizeAtPublish, &item.UpdatedAt)
+	`, id, now, audienceSize, string(actor.UserID)).Scan(&item.PublishedAt, &item.AudienceSizeAtPublish, &item.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return announcement.Announcement{}, announcement.ErrInvalidTransition
 	}
@@ -166,13 +167,13 @@ func (r *Repository) Publish(ctx context.Context, actor announcement.Actor, id s
 		return announcement.Announcement{}, err
 	}
 	item.Status = announcement.StatusPublished
-	item.UpdatedBy = actor.UserID
+	item.UpdatedBy = string(actor.UserID)
 	item.Audiences, err = r.listAudiences(ctx, id)
 	return item, err
 }
 
 func (r *Repository) ListInbox(ctx context.Context, principal announcement.Principal, query announcement.InboxQuery) (announcement.InboxPage, error) {
-	kind, err := audienceKind(principal.UserType)
+	kind, err := audienceKind(int(principal.UserType))
 	if err != nil {
 		return announcement.InboxPage{}, err
 	}
@@ -184,7 +185,7 @@ func (r *Repository) ListInbox(ctx context.Context, principal announcement.Princ
 			WHERE aa.announcement_id=a.announcement_id AND aa.audience_kind=$1
 			  AND (aa.scope_type='all' OR (aa.scope_type='tenant' AND aa.tenant_id=$2))
 		)`
-	args := []any{kind, principal.TenantID, principal.UserType, principal.UserID}
+	args := []any{kind, string(principal.TenantID), int(principal.UserType), string(principal.UserID)}
 	if query.UnreadOnly {
 		where += ` AND r.read_at IS NULL`
 	}
@@ -226,7 +227,7 @@ func (r *Repository) ListInbox(ctx context.Context, principal announcement.Princ
 }
 
 func (r *Repository) MarkRead(ctx context.Context, principal announcement.Principal, id string, now time.Time) error {
-	kind, err := audienceKind(principal.UserType)
+	kind, err := audienceKind(int(principal.UserType))
 	if err != nil {
 		return err
 	}
@@ -246,7 +247,7 @@ func (r *Repository) MarkRead(ctx context.Context, principal announcement.Princi
 		ON CONFLICT (announcement_id, user_type, user_id)
 		DO UPDATE SET read_at=ann_receipts.read_at
 		RETURNING 1
-	`, id, principal.UserType, principal.UserID, principal.TenantID, now, kind).Scan(&marked)
+	`, id, int(principal.UserType), string(principal.UserID), string(principal.TenantID), now, kind).Scan(&marked)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return announcement.ErrNotFound
 	}
@@ -254,7 +255,7 @@ func (r *Repository) MarkRead(ctx context.Context, principal announcement.Princi
 }
 
 func (r *Repository) GetVisible(ctx context.Context, principal announcement.Principal, id string) (announcement.InboxItem, error) {
-	kind, err := audienceKind(principal.UserType)
+	kind, err := audienceKind(int(principal.UserType))
 	if err != nil {
 		return announcement.InboxItem{}, err
 	}
@@ -266,7 +267,7 @@ func (r *Repository) GetVisible(ctx context.Context, principal announcement.Prin
 		  AND EXISTS (
 			SELECT 1 FROM ann_audiences aa WHERE aa.announcement_id=a.announcement_id
 			AND aa.audience_kind=$1 AND (aa.scope_type='all' OR (aa.scope_type='tenant' AND aa.tenant_id=$2))
-		  )`, kind, principal.TenantID, principal.UserType, principal.UserID, id)
+		  )`, kind, string(principal.TenantID), int(principal.UserType), string(principal.UserID), id)
 	item, readAt, err := scanInbox(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return announcement.InboxItem{}, announcement.ErrNotFound
@@ -287,7 +288,7 @@ func (r *Repository) Archive(ctx context.Context, actor announcement.Actor, id s
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
-	args = append(args, now, actor.UserID)
+	args = append(args, now, string(actor.UserID))
 	query := fmt.Sprintf(`UPDATE ann_announcements
 		SET status='archived', archived_at=$%d, updated_by=$%d, updated_at=$%d
 		WHERE %s AND status='published'`, len(args)-1, len(args), len(args)-1, where)
@@ -452,7 +453,7 @@ func insertAudit(ctx context.Context, tx pgx.Tx, id, event string, actor announc
 		INSERT INTO ann_audit_events
 			(announcement_id, event_type, actor_user_type, actor_user_id, actor_tenant_id)
 		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
-	`, id, event, actor.UserType, actor.UserID, actor.TenantID)
+	`, id, event, int(actor.UserType), string(actor.UserID), string(actor.TenantID))
 	if err != nil {
 		return fmt.Errorf("insert announcement audit: %w", err)
 	}
@@ -500,31 +501,29 @@ func (r *Repository) listAudiences(ctx context.Context, id string) ([]announceme
 }
 
 func managedWhere(actor announcement.Actor, id string) (string, []any, error) {
-	switch actor.UserType {
-	case 1, 2:
+	if actor.Has(auth.CapabilityPlatformAdmin) {
 		return "announcement_id=$1 AND publisher_type='platform'", []any{id}, nil
-	case 3:
+	}
+	if actor.Has(auth.CapabilityTenantSelf) {
 		if actor.TenantID == "" {
 			return "", nil, announcement.ErrForbidden
 		}
-		return "announcement_id=$1 AND publisher_type='tenant' AND publisher_tenant_id=$2", []any{id, actor.TenantID}, nil
-	default:
-		return "", nil, announcement.ErrForbidden
+		return "announcement_id=$1 AND publisher_type='tenant' AND publisher_tenant_id=$2", []any{id, string(actor.TenantID)}, nil
 	}
+	return "", nil, announcement.ErrForbidden
 }
 
 func managedListWhere(actor announcement.Actor) (string, []any, error) {
-	switch actor.UserType {
-	case 1, 2:
+	if actor.Has(auth.CapabilityPlatformAdmin) {
 		return "publisher_type='platform'", nil, nil
-	case 3:
+	}
+	if actor.Has(auth.CapabilityTenantSelf) {
 		if actor.TenantID == "" {
 			return "", nil, announcement.ErrForbidden
 		}
-		return "publisher_type='tenant' AND publisher_tenant_id=$1", []any{actor.TenantID}, nil
-	default:
-		return "", nil, announcement.ErrForbidden
+		return "publisher_type='tenant' AND publisher_tenant_id=$1", []any{string(actor.TenantID)}, nil
 	}
+	return "", nil, announcement.ErrForbidden
 }
 
 func audienceKind(userType int) (announcement.AudienceKind, error) {

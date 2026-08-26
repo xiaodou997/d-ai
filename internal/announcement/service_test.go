@@ -128,6 +128,36 @@ func TestCreateDraftTenantForcesOwnEndUsersAudience(t *testing.T) {
 	}
 }
 
+func TestAnnouncementAuthorizationUsesSharedCapabilities(t *testing.T) {
+	tests := []struct {
+		name      string
+		actor     Actor
+		wantValid bool
+	}{
+		{name: "super admin", actor: NewActor("sa", "", 1), wantValid: true},
+		{name: "platform admin", actor: NewActor("pa", "", 2), wantValid: true},
+		{name: "tenant", actor: NewActor("tu", "tenant-a", 3), wantValid: true},
+		{name: "customer", actor: NewActor("u", "tenant-a", 4), wantValid: true},
+		{name: "tenant without scope", actor: NewActor("tu", "", 3)},
+		{name: "customer without scope", actor: NewActor("u", "", 4)},
+		{name: "unknown role", actor: NewActor("x", "tenant-a", 99)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validatePrincipal(tt.actor); (err == nil) != tt.wantValid {
+				t.Fatalf("validatePrincipal(%#v) = %v, want valid=%v", tt.actor, err, tt.wantValid)
+			}
+		})
+	}
+
+	service := NewService(&createDraftRepository{})
+	if _, err := service.CreateDraft(context.Background(), NewActor("u", "tenant-a", 4), DraftInput{
+		Title: "customer cannot publish", ContentMarkdown: "content",
+	}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("customer CreateDraft() error = %v, want %v", err, ErrForbidden)
+	}
+}
+
 func TestPublishedAnnouncementCannotBeEdited(t *testing.T) {
 	repo := &lifecycleRepository{item: Announcement{
 		ID: "ANN_1", PublisherType: PublisherPlatform, Status: StatusDraft,
