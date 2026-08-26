@@ -217,7 +217,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-08 持续验证资金不变量
 
-- [~] 将余额、批次、充值、退款、订阅和 AI 结算不变量形成统一测试套件；新增只读 `billing/invariants.Check` 与真实 PostgreSQL 生命周期测试，覆盖充值→扣费→过期→撤销→退款→订阅→Outbox。
+- [x] 将余额、批次、充值、退款、订阅和 AI 结算不变量形成统一测试套件；只读 `billing/invariants.Check`、真实 PostgreSQL 生命周期测试和每阶段 7 项检查断言已覆盖充值→扣费→过期→撤销→退款→订阅→Outbox。
 - [x] 增加固定种子随机并发属性测试与并发幂等测试，覆盖充值、扣费、过期、撤销与退款交错；统一账本写路径为「账户→批次」锁顺序，消除反向锁死。
 - [x] 增加定期线上对账任务和差异告警；Scheduler 使用 Repeatable Read 只读快照与跨副本 advisory lock，发布 Prometheus 差异指标，`docs/DATABASE.md` 固化告警阈值与禁止绕过账本的恢复边界。
 - [x] 为 Outbox 积压和 parked row 定义处理手册；`docs/BILLING_OUTBOX_RUNBOOK.md` 固化状态语义、只读排查、单行受控 requeue、验收和禁止操作。
@@ -857,6 +857,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 校验：切换前验证 admin/runtime/billing 三个 DSN 的实际角色和目标数据库一致，角色为 LOGIN/NOINHERIT 最小权限且无成员关系；切换后验证 runtime 投影视图读取、outbox INSERT 和 billing 账本写权限，支持可选 readiness URL。
 - 接入：发布附件、Make、CI 和 `docs/DATABASE_OWNERSHIP.md` 已改为优先使用 wrapper；应用停止、单实例启动和 readiness 观察顺序固化在维护窗口手册中。
 - 验证：wrapper/ownership 脚本 `bash -n`、帮助入口、确认门禁和差异检查通过。
+
+### P1-08（Unified invariant suite completion，2026-08-27）
+
+- 契约：生命周期测试的每个健康阶段现在都断言 `billing/invariants.Check` 执行完整 7 项检查，避免新增检查函数后测试仍然静默漏跑。
+- 覆盖：真实 PostgreSQL 流程继续覆盖余额/批次守恒、批次状态、充值撤销、Outbox/用量链接、退款冲正、订阅订单和订阅额度边界；随机并发、幂等、Scheduler 对账和 repair audit 已由同一阶段的既有测试覆盖。
+- 验证：`go test ./internal/billing/invariants -count=1`、`go vet ./internal/billing/invariants`、`staticcheck ./internal/billing/invariants` 通过。
 
 ### P1-04（Split behavior regression coverage，2026-08-27）
 

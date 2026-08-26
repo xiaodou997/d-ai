@@ -73,6 +73,9 @@ func TestMoneyInvariantSuiteCoversCrossModuleLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s invariant query: %v", stage, err)
 		}
+		if report.InvariantsChecked != 7 {
+			t.Fatalf("%s checked %d invariants, want 7", stage, report.InvariantsChecked)
+		}
 		if err := report.Err(); err != nil {
 			t.Fatalf("%s invariants: %v (report=%+v)", stage, err, report)
 		}
