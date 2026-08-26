@@ -81,3 +81,93 @@ func TestActorFromClaimsPreservesInvalidRoleWithoutWraparound(t *testing.T) {
 		t.Fatalf("malformed role was normalized to a privileged role: %#v", actor)
 	}
 }
+
+func TestActorAuthorizationMatrix(t *testing.T) {
+	tenantA := NewResourceOwnership("tenant-a", "")
+	tenantB := NewResourceOwnership("tenant-b", "")
+	userA := NewResourceOwnership("tenant-a", "user-a")
+	userB := NewResourceOwnership("tenant-a", "user-b")
+	userOtherTenant := NewResourceOwnership("tenant-b", "user-b")
+	invalid := NewResourceOwnership("", "user-a")
+
+	tests := []struct {
+		name         string
+		actor        Actor
+		capabilities map[Capability]bool
+		ownership    map[string]bool
+	}{
+		{
+			name:  "super admin",
+			actor: NewActor("sa", "", int(UserTypeSuperAdmin)),
+			capabilities: map[Capability]bool{
+				CapabilitySuperAdmin: true, CapabilityPlatformAdmin: true,
+				CapabilityTenantSelf: false, CapabilityCustomerSelf: false,
+			},
+			ownership: map[string]bool{"tenant-a": true, "tenant-b": true, "user-a": true, "user-b": true, "other-user": true, "invalid": false},
+		},
+		{
+			name:  "platform admin",
+			actor: NewActor("pa", "", int(UserTypePlatformAdmin)),
+			capabilities: map[Capability]bool{
+				CapabilitySuperAdmin: false, CapabilityPlatformAdmin: true,
+				CapabilityTenantSelf: false, CapabilityCustomerSelf: false,
+			},
+			ownership: map[string]bool{"tenant-a": true, "tenant-b": true, "user-a": true, "user-b": true, "other-user": true, "invalid": false},
+		},
+		{
+			name:  "tenant user",
+			actor: NewActor("tu", "tenant-a", int(UserTypeTenant)),
+			capabilities: map[Capability]bool{
+				CapabilitySuperAdmin: false, CapabilityPlatformAdmin: false,
+				CapabilityTenantSelf: true, CapabilityCustomerSelf: false,
+			},
+			ownership: map[string]bool{"tenant-a": true, "tenant-b": false, "user-a": true, "user-b": true, "other-user": false, "invalid": false},
+		},
+		{
+			name:  "customer",
+			actor: NewActor("user-a", "tenant-a", int(UserTypeCustomer)),
+			capabilities: map[Capability]bool{
+				CapabilitySuperAdmin: false, CapabilityPlatformAdmin: false,
+				CapabilityTenantSelf: false, CapabilityCustomerSelf: true,
+			},
+			ownership: map[string]bool{"tenant-a": false, "tenant-b": false, "user-a": true, "user-b": false, "other-user": false, "invalid": false},
+		},
+		{
+			name:  "missing tenant scope",
+			actor: NewActor("scoped", "", int(UserTypeCustomer)),
+			capabilities: map[Capability]bool{
+				CapabilitySuperAdmin: false, CapabilityPlatformAdmin: false,
+				CapabilityTenantSelf: false, CapabilityCustomerSelf: false,
+			},
+			ownership: map[string]bool{"tenant-a": false, "tenant-b": false, "user-a": false, "user-b": false, "other-user": false, "invalid": false},
+		},
+		{
+			name:  "unknown role",
+			actor: NewActor("unknown", "tenant-a", 99),
+			capabilities: map[Capability]bool{
+				CapabilitySuperAdmin: false, CapabilityPlatformAdmin: false,
+				CapabilityTenantSelf: false, CapabilityCustomerSelf: false,
+			},
+			ownership: map[string]bool{"tenant-a": false, "tenant-b": false, "user-a": false, "user-b": false, "other-user": false, "invalid": false},
+		},
+	}
+	resources := map[string]ResourceOwnership{
+		"tenant-a": tenantA, "tenant-b": tenantB, "user-a": userA,
+		"user-b": userB, "other-user": userOtherTenant, "invalid": invalid,
+	}
+	capabilities := []Capability{CapabilitySuperAdmin, CapabilityPlatformAdmin, CapabilityTenantSelf, CapabilityCustomerSelf}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, capability := range capabilities {
+				if got := tt.actor.Has(capability); got != tt.capabilities[capability] {
+					t.Errorf("Has(%q) = %v, want %v", capability, got, tt.capabilities[capability])
+				}
+			}
+			for name, resource := range resources {
+				if got := tt.actor.Owns(resource); got != tt.ownership[name] {
+					t.Errorf("Owns(%s) = %v, want %v", name, got, tt.ownership[name])
+				}
+			}
+		})
+	}
+}

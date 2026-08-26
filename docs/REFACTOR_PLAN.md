@@ -193,7 +193,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] Portal 菜单和路由 capability 只用于展示/导航提示；后端通过 operation middleware 和 capability/policy 矩阵执行最终授权，并有服务端拒绝回归测试。
 - [x] 建立统一的 `auth.Actor`、`TenantScope`、`UserID`/`TenantID` 和 `ResourceOwnership` 类型；Transport 从 claims 统一构造 actor，租户、终端用户、租户详情和支付订单 ownership 均通过同一 typed reference 校验。
 - [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
-- [~] 增加跨租户、越权、对象枚举和角色降级测试；现有领域/Transport 测试覆盖跨租户、越权和对象枚举，JWT 会话已补充角色与租户范围变更后的旧 token 失效回归，仍需继续扩展端到端角色矩阵。
+- [x] 增加跨租户、越权、对象枚举和角色降级测试；授权核心已覆盖四类角色、缺失/未知角色、租户/用户 ownership 组合，Transport middleware、AI identity、终端用户、异步任务、账务和会话集成测试覆盖拒绝与对象不可枚举语义。
 
 ## P1：数据库与资金数据治理
 
@@ -641,3 +641,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - fail-closed：未知角色不会被数值转换环节包裹成特权角色；缺少租户或用户的非法资源引用直接拒绝。
 - 回归：新增 typed scope、tenant/user ownership、全局管理员访问和 malformed role 不溢出测试；认证与 Transport 全量回归通过。
 - 遗留范围：AI runtime 的 API-key `identity.Scope` 仍描述认证入口语义，不与 Portal actor role 混用；后续端到端授权矩阵继续复用本类型边界。
+
+### P1-05（授权矩阵回归，2026-08-26）
+
+- 矩阵：新增 `TestActorAuthorizationMatrix`，逐一验证 super admin、platform admin、tenant、customer、缺失租户和未知角色对四类 capability 及租户/用户/跨租户/非法 ownership reference 的结果。
+- 集成覆盖：保留并串联 Transport middleware 的服务端拒绝、JWT 角色/租户变更失效、AI identity 跨租户拒绝、终端用户对象 scope、异步任务对象不可枚举和账务跨租户撤销测试。
+- fail-closed：customer 不能把 tenant control-plane resource 当作自己的 ownership；未知角色和不完整资源引用均拒绝。
+- 验证：`go test ./internal/auth ./internal/transport -count=1`、`go vet ./internal/auth ./internal/transport` 和 `git diff --check` 通过。

@@ -139,7 +139,10 @@ func (a Actor) Owns(resource ResourceOwnership) bool {
 		return false
 	}
 	if resource.UserID == "" {
-		return a.CanAccessTenant(resource.TenantID)
+		// A customer may be scoped to a tenant for their own user resources,
+		// but does not own the tenant control-plane resource itself.
+		return a.Has(CapabilityPlatformAdmin) ||
+			(a.Has(CapabilityTenantSelf) && a.Scope().Allows(resource.TenantID))
 	}
 	return a.CanAccessUser(resource.TenantID, resource.UserID)
 }
