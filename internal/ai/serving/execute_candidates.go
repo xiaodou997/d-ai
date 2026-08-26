@@ -22,39 +22,37 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 		req.ModelCode = candidate.ModelCode
 		return candidate, 0
 	}
-	for {
-		// GroupRank and target Priority are hard failover boundaries. Protocol
-		// conversion preference and dynamic scoring apply only among peers in the
-		// active target-priority tier.
-		tier := activeBucketTier(
-			activePriorityTier(
-				activeGroupTier(req.Candidates, req.UsedCandidates),
-				req.UsedCandidates,
-			),
+	// GroupRank and target Priority are hard failover boundaries. Protocol
+	// conversion preference and dynamic scoring apply only among peers in the
+	// active target-priority tier.
+	tier := activeBucketTier(
+		activePriorityTier(
+			activeGroupTier(req.Candidates, req.UsedCandidates),
 			req.UsedCandidates,
-		)
-		if len(tier) == 0 {
-			return nil, 0
-		}
-		var cand *domain.RouteCandidate
-		var score float64
-		scoring := RouteScoringContext{}
-		if subject := req.RuntimeSubject(); subject != nil {
-			scoring.TenantID = subject.TenantID
-		}
-		if sp, ok := s.Scorer.(ScoringPicker); ok {
-			cand, score = sp.PickWithScore(ctx, scoring, tier, req.UsedCandidates)
-		} else if s.Scorer != nil {
-			cand = s.Scorer.Pick(ctx, scoring, tier, req.UsedCandidates)
-		} else {
-			cand = tier[0]
-		}
-		if cand == nil {
-			return nil, 0
-		}
-		req.ModelCode = cand.ModelCode
-		return cand, score
+		),
+		req.UsedCandidates,
+	)
+	if len(tier) == 0 {
+		return nil, 0
 	}
+	var cand *domain.RouteCandidate
+	var score float64
+	scoring := RouteScoringContext{}
+	if subject := req.RuntimeSubject(); subject != nil {
+		scoring.TenantID = subject.TenantID
+	}
+	if sp, ok := s.Scorer.(ScoringPicker); ok {
+		cand, score = sp.PickWithScore(ctx, scoring, tier, req.UsedCandidates)
+	} else if s.Scorer != nil {
+		cand = s.Scorer.Pick(ctx, scoring, tier, req.UsedCandidates)
+	} else {
+		cand = tier[0]
+	}
+	if cand == nil {
+		return nil, 0
+	}
+	req.ModelCode = cand.ModelCode
+	return cand, score
 }
 
 // selectPoolCredential resolves the OAuth credential for a pool route. On the

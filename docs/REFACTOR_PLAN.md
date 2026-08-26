@@ -723,3 +723,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 清理：删除未在当前路由表注册的 Console chat models/list/create/get/delete handlers、旧会话 DTO，以及未注册的 image job list/legacy DTO bridge helper；移除随之失效的空错误和 DTO helper 文件。
 - 边界：保留 `console.go` 当前 `/runtime/v1` 注册的模型、任务、资产和流式消息路由，以及仍被运行时兼容层使用的 bridge helper，未改变对外路由契约。
 - 验证：`staticcheck ./internal/ai/console` 零诊断；`go test ./internal/ai/console -count=1` 与 `go vet ./internal/ai/console` 通过。
+
+### P1-04（Serving candidate control-flow cleanup，2026-08-26）
+
+- 修复：删除 `ExecuteStep.pickCandidate` 中每次都会立即返回的无条件循环，消除 staticcheck SA4004，同时保持 sticky、分层候选和动态评分的选择顺序不变。
+- 验证：`go test ./internal/ai/serving -count=1` 与 `go vet ./internal/ai/serving` 通过；该模块剩余诊断仅为待后续处理的两个 U1000 legacy helper。
