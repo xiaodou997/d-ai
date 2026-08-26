@@ -182,7 +182,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
 - [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
-- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/clientruntime`、`internal/ai/console`、`internal/ai/core/runtime`、`internal/ai/domain`、`internal/ai/formats`、`internal/ai/gateway`、`internal/ai/serving`、`internal/ai/transport`、`internal/payment/wechat`、`internal/tenant/pg` 与 `internal/transport` 诊断，其他包仍待分批处理。
+- [x] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；使用与 Go 1.27 匹配的 staticcheck 已通过全仓 `staticcheck ./...`，并清理了 internal、cmd、payment、tenant 与 transport 中的死代码和无效赋值。
 - [x] 删除已不再注册的旧 Console handler 和 legacy bridge helper；保留当前 `/runtime/v1` 已注册路由及其运行时兼容桥接。
 - [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
 
@@ -303,7 +303,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P3-02 建立静态分析和格式门禁
 
-- [ ] 修复当前 staticcheck 报告。
+- [x] 修复当前 staticcheck 报告；全仓 `staticcheck ./...` 已通过。
 - [ ] 升级并配置兼容当前 Go 版本的 golangci-lint。
 - [ ] 增加前端 ESLint 或等价规则，禁止未受控 `any`、硬编码颜色和非法依赖。
 - [ ] 将格式化、lint、vet、typecheck 和测试加入 CI。
@@ -333,7 +333,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `bun run typecheck`
 - [x] `bun run test`：64 个测试文件、214 个测试通过
 - [x] `bun run ensure:api`
-- [ ] `staticcheck ./...`：当前存在潜在 nil dereference、无效赋值和遗留死代码
+- [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
 - [ ] 前端依赖审计：当前 registry 的 audit API 返回 404
 - [ ] 浏览器级端到端验收尚未建立
@@ -838,3 +838,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：将迁移链首项的重复 `previous = migration.From` 赋值改为仅从第二项开始校验来源版本，保持链断裂/重叠错误判断和最终版本校验不变。
 - 验证：`staticcheck ./cmd/checkschema` 零诊断，checkschema 测试、`go vet` 和差异检查通过；全仓 staticcheck 仅剩 `cmd/server/ai_modules_test.go` 的 4 处 nil context 建议。
+
+### P1-04（Server lifecycle test context cleanup，2026-08-26）
+
+- 修复：生命周期幂等测试使用 `context.Background()` 替代 nil context，明确传入合法上下文，不改变 `Start`/`Stop` 双调用的测试意图。
+- 验证：`staticcheck ./cmd/server` 零诊断，cmd/server 测试、`go vet` 和全仓 `staticcheck ./...` 通过。
