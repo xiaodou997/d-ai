@@ -28,7 +28,7 @@ func (antigravityProfileV1016) supports(protocol domain.UpstreamProtocol) bool {
 
 func (antigravityProfileV1016) prepare(in Invocation) (*WireRequest, error) {
 	if in.Protocol != domain.ProtocolGeminiGenerate {
-		return nil, fmt.Errorf("Antigravity profile requires %q, got %q", domain.ProtocolGeminiGenerate, in.Protocol)
+		return nil, fmt.Errorf("antigravity profile requires %q, got %q", domain.ProtocolGeminiGenerate, in.Protocol)
 	}
 	body, sessionID, err := applyAntigravityContract(in)
 	if err != nil {
@@ -78,7 +78,7 @@ func applyAntigravityContract(in Invocation) ([]byte, string, error) {
 
 	project := firstMetadataString(in.Credential.Metadata, antigravityProjectPaths...)
 	if project == "" {
-		return nil, "", fmt.Errorf("Antigravity credential metadata requires a project ID")
+		return nil, "", fmt.Errorf("antigravity credential metadata requires a project ID")
 	}
 	requestID := firstString(source, "requestId")
 	if requestID == "" {
@@ -89,7 +89,7 @@ func applyAntigravityContract(in Invocation) ([]byte, string, error) {
 	}
 	model := strings.TrimSpace(in.Model)
 	if model == "" {
-		return nil, "", fmt.Errorf("Antigravity request requires a model")
+		return nil, "", fmt.Errorf("antigravity request requires a model")
 	}
 	userAgent := firstString(source, "userAgent")
 	if userAgent == "" {

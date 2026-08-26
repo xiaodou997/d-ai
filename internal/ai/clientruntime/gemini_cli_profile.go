@@ -104,7 +104,7 @@ func decodeGeminiEnvelopeSource(body []byte) (map[string]any, map[string]any, er
 		return nil, nil, fmt.Errorf("decode Gemini request: %w", err)
 	}
 	if source == nil {
-		return nil, nil, fmt.Errorf("Gemini request body must be an object")
+		return nil, nil, fmt.Errorf("gemini request body must be an object")
 	}
 	inner := source
 	if existing, ok := source["request"].(map[string]any); ok {
@@ -115,7 +115,7 @@ func decodeGeminiEnvelopeSource(body []byte) (map[string]any, map[string]any, er
 		inner = cloneAnyMap(source)
 	}
 	if _, hasContents := inner["contents"]; !hasContents {
-		return nil, nil, fmt.Errorf("Gemini request requires contents")
+		return nil, nil, fmt.Errorf("gemini request requires contents")
 	}
 	return source, inner, nil
 }

@@ -182,7 +182,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 拆分 `internal/ai/serving/execute.go` 的候选选择、传输、流式响应和图片响应职责；候选、upstream attempt、sync/stream relay 和 image relay 已分别移入独立文件，主文件仅保留执行编排及共享 helper。
 - [x] 拆分大型 PostgreSQL Repository，按聚合或 use case 组织；`CommercialRepo` 已按 groups/dispatch/targets/bindings/helpers 拆为同包垂直 adapter 文件，构造和 repository port 保持不变。
-- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/console` 与 `internal/ai/serving` 诊断，其他包仍待分批处理。
+- [~] 清理 staticcheck 报告的死代码、无效赋值和潜在 nil dereference；已用与 Go 1.27 匹配的 staticcheck 清零 `internal/ai/adapters/postgres`、`internal/ai/adapters/bridgefmt`、`internal/ai/billingcontrol`、`internal/ai/clientruntime`、`internal/ai/console` 与 `internal/ai/serving` 诊断，其他包仍待分批处理。
 - [x] 删除已不再注册的旧 Console handler 和 legacy bridge helper；保留当前 `/runtime/v1` 已注册路由及其运行时兼容桥接。
 - [ ] 为关键拆分建立行为等价测试，避免顺手改变计费和路由语义。
 
@@ -743,3 +743,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除从未接入价格簿写入或同步流程的 `maxMultiplier` 与 `validateMultiplier`；保留实际使用的价格、token tier 和分辨率校验，避免维护一套不会生效的倍率上限。
 - 验证：`staticcheck ./internal/ai/billingcontrol` 零诊断，`go vet ./internal/ai/billingcontrol` 和 `go test ./internal/ai/billingcontrol -count=1` 通过。
+
+### P1-04（Client runtime error wording cleanup，2026-08-26）
+
+- 修复：将 Antigravity/Gemini client runtime 中以产品名开头的内部 error 文本改为小写开头，符合 Go error 约定；不改变 provider revision、请求 envelope 或协议字段。
+- 验证：`staticcheck ./internal/ai/clientruntime` 零诊断，`go vet ./internal/ai/clientruntime` 和 `go test ./internal/ai/clientruntime -count=1` 通过。
