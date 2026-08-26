@@ -813,3 +813,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 修复：将用户可用模型列表中逐项追加的机械循环改为一次切片追加，保留空列表为非 nil 空切片的响应语义。
 - 验证：`staticcheck ./internal/ai/transport` 零诊断，`go vet ./internal/ai/transport` 和 `go test ./internal/ai/transport -count=1` 通过。
+
+### P1-04（WeChat config SQL index cleanup，2026-08-26）
+
+- 修复：删除微信配置更新 SQL 中最后一个可选字段之后不会再被读取的 `nextIdx++`，保持前序可选字段的参数编号逻辑不变。
+- 验证：微信支付模块测试、`go vet` 通过，config.go 的 SA4006 已消除；gateway.go 的独立赋值诊断待后续处理。

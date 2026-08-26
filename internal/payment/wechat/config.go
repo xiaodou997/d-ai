@@ -239,7 +239,6 @@ func (s *ConfigStore) Update(ctx context.Context, in UpdateInput, operatorID str
 	if in.WechatPublicKey != nil {
 		publicKeyClause = fmt.Sprintf(", wechat_public_key = NULLIF($%d,'')", nextIdx)
 		args = append(args, strings.TrimSpace(*in.WechatPublicKey))
-		nextIdx++
 	}
 
 	setSQL += privateKeyEncClause + apiv3EncClause + publicKeyIDClause + publicKeyClause + " WHERE id = 1"
