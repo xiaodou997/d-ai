@@ -22,6 +22,7 @@ func TestMigration0003ConsolidatesSignedBalanceAndDropsLegacyModel(t *testing.T)
 	// foreign key to bill_accounts, then use the checked-in 0003 rollback as a
 	// faithful v3 -> v2 fixture instead of duplicating the old schema by hand.
 	if _, err := pool.Exec(ctx, `
+		DROP VIEW user_admin_end_user_projection;
 		DROP VIEW tenant_usage_projection;
 		DROP VIEW tenant_self_overview_projection;
 		DROP VIEW tenant_management_projection;

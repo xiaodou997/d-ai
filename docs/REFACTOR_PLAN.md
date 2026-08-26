@@ -201,8 +201,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；`deploy/production/schema_release.sh` 负责备份、连续脚本执行和逐步版本确认，不引入运行时迁移依赖。
 - [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
-- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v21，并将最终 schema-only dump 与 `init.sql` 比较。
-- [x] 每个迁移在空库和前一 schema 版本副本上验证；20 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v21 全链重放并逐步校验版本。
+- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v22，并将最终 schema-only dump 与 `init.sql` 比较。
+- [x] 每个迁移在空库和前一 schema 版本副本上验证；21 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v22 全链重放并逐步校验版本。
 - [x] 为缺少专项测试的 0002、0003、0009 补迁移测试；测试覆盖来源版本、关键结构、数据转换和约束行为。
 - [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [x] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤；`deploy/production/schema_release.sh` 显式执行并记录备份/哈希/版本，`docs/SCHEMA_RELEASE_RUNBOOK.md` 固化停流量、readiness、兼容窗口和恢复步骤。
@@ -212,7 +212,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 从全 `public` schema 迁移到领域 schema，或用独立数据库角色实现等价隔离；`internal/db/ownership.sql` 固化 runtime/billing 角色契约，composition root 已支持独立 `DAI_BILLING_DATABASE_URL`。
 - [~] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，生产角色 provisioning 与维护窗口切换仍待完成。
 - [x] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置；runtime 仅保留账务读取和 `bill_charge_outbox` 的 `INSERT`，billing pool 承担结算/支付/订阅扣费写路径。
-- [~] 跨域读取通过视图、只读端口或显式 query service；billing/payment 与租户管理/分析投影已迁移到只读视图，剩余用户/运营聚合继续收敛。
+- [~] 跨域读取通过视图、只读端口或显式 query service；billing/payment、租户管理/分析与管理员终端用户投影已迁移到只读视图，剩余运营聚合继续收敛。
 - [x] CI 检查应用角色的最小权限和越权失败行为；`scripts/check_db_ownership.sh` 验证 runtime 账本写入失败、outbox 入队成功和 billing 角色写入成功。
 
 ### P1-08 持续验证资金不变量

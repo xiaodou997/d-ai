@@ -17,6 +17,7 @@ func TestMigration0012AddsAccountActivation(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
+		DROP VIEW user_admin_end_user_projection;
 		DROP TABLE auth_activation_tokens;
 		ALTER TABLE iam_accounts DROP COLUMN credential_state;
 		UPDATE dai_schema_metadata SET version = 11 WHERE singleton = TRUE;

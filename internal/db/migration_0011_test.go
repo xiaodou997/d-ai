@@ -17,6 +17,7 @@ func TestMigration0011AddsStatefulAuthSessions(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
+		DROP VIEW user_admin_end_user_projection;
 		DROP TABLE auth_activation_tokens;
 		ALTER TABLE iam_accounts DROP COLUMN credential_state;
 		ALTER TABLE iam_accounts DROP COLUMN mfa_secret_encrypted, DROP COLUMN mfa_enabled, DROP COLUMN mfa_enrolled_at;
@@ -71,6 +72,7 @@ func TestMigration0011RejectsMissingSchemaMetadata(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
+		DROP VIEW user_admin_end_user_projection;
 		DROP TABLE auth_activation_tokens;
 		ALTER TABLE iam_accounts DROP COLUMN credential_state;
 		ALTER TABLE iam_accounts DROP COLUMN mfa_secret_encrypted, DROP COLUMN mfa_enabled, DROP COLUMN mfa_enrolled_at;

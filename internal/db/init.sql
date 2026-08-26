@@ -2398,6 +2398,27 @@ SELECT e.tenant_id,
 FROM ai_usage_logs e
 LEFT JOIN iam_accounts u ON u.user_id = e.user_id AND u.user_type = 4;
 
+CREATE VIEW user_admin_end_user_projection AS
+SELECT eu.user_id,
+       eu.tenant_id,
+       eu.username,
+       eu.email,
+       eu.phone,
+       eu.internal_note,
+       eu.nickname,
+       eu.avatar,
+       eu.status,
+       eu.credential_state,
+       eu.last_login_at,
+       eu.created_at,
+       COALESCE(t.tenant_name, '') AS tenant_name,
+       COALESCE(b.balance_micro, 0)::bigint AS balance_micro
+FROM iam_accounts eu
+LEFT JOIN iam_tenants t ON eu.tenant_id = t.tenant_id
+LEFT JOIN bill_accounts b ON b.account_id = eu.user_id
+WHERE eu.user_type = 4
+  AND eu.status <> 'deleted';
+
 -- Required system defaults
 INSERT INTO sys_settings (key, value)
 VALUES (
@@ -2444,6 +2465,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 21);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 22);
 
 COMMIT;

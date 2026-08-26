@@ -16,12 +16,13 @@ revoke/ownership 变更。
 账务和支付管理列表使用 `billing_recharge_order_projection`、
 `payment_order_party_projection` 与 `payment_admin_recharge_order_projection` 只读视图；租户管理与
 分析使用 `tenant_management_projection`、`tenant_self_overview_projection` 与
-`tenant_usage_projection`。billing/payment 三类视图 owner 转给 billing role，租户三类视图 owner
-转给 runtime role，避免报表查询直接依赖对方领域表。
+`tenant_usage_projection`，管理员终端用户列表使用 `user_admin_end_user_projection`。
+billing/payment 三类视图 owner 转给 billing role，租户/用户三类视图 owner 转给 runtime role，
+避免报表查询直接依赖对方领域表。
 
 ## Apply
 
-先确认目标库已完成 schema v21（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
+先确认目标库已完成 schema v22（包含上述只读视图）升级；在维护窗口、应用已经配置并验证
 billing DSN 后，以数据库 owner/superuser 执行：
 
 ```bash
@@ -37,7 +38,7 @@ deploy/production/apply_db_ownership.sh
 ## Contract probe
 
 ```bash
-SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v21_test?sslmode=disable' \
+SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v22_test?sslmode=disable' \
   bash scripts/check_db_ownership.sh
 ```
 
@@ -47,6 +48,7 @@ SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_
 - runtime 可以在用量事务中插入 `bill_charge_outbox`；
 - billing role 可以写入并更新 `bill_accounts`；
 - billing role 可以读取账务/支付投影视图，但读取无关 AI catalog 表失败；
+- runtime role 可以读取租户与管理员终端用户投影视图；
 - 账务表 owner 和 grant/revoke 契约可重复执行。
 
 该探针已纳入 CI。composition root 已通过 `DAI_BILLING_DATABASE_URL` 装配独立 billing pool，

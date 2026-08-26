@@ -186,7 +186,7 @@ func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userpo
 		size = 20
 	}
 
-	where := "WHERE eu.user_type = 4 AND eu.status <> 'deleted'"
+	where := "WHERE 1=1"
 	args := []any{}
 	idx := 1
 	if filter.TenantID != "" {
@@ -200,7 +200,7 @@ func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userpo
 		idx++
 	}
 	if filter.TenantName != "" {
-		where += fmt.Sprintf(" AND t.tenant_name LIKE $%d", idx)
+		where += fmt.Sprintf(" AND eu.tenant_name LIKE $%d", idx)
 		args = append(args, "%"+filter.TenantName+"%")
 		idx++
 	}
@@ -215,7 +215,7 @@ func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userpo
 		idx++
 	}
 
-	from := "FROM iam_accounts eu LEFT JOIN iam_tenants t ON eu.tenant_id = t.tenant_id"
+	from := "FROM user_admin_end_user_projection eu"
 	var total int64
 	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) "+from+" "+where, args...).Scan(&total); err != nil {
 		return userports.AdminEndUserPage{}, err
@@ -226,8 +226,8 @@ func (r *AdminEndUserRepository) ListEndUsers(ctx context.Context, filter userpo
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT eu.user_id, eu.tenant_id, eu.username, eu.email, eu.phone, eu.internal_note, eu.nickname, eu.avatar,
 		       eu.status, eu.credential_state, eu.last_login_at, eu.created_at,
-		       COALESCE(t.tenant_name, '') AS tenant_name,
-		       COALESCE((SELECT b.balance_micro FROM bill_accounts b WHERE b.account_id = eu.user_id), 0) AS credits
+		       eu.tenant_name,
+		       eu.balance_micro AS credits
 		%s
 		%s ORDER BY eu.created_at DESC LIMIT $%d OFFSET $%d
 	`, from, where, idx, idx+1), queryArgs...)

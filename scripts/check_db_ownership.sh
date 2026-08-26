@@ -92,6 +92,11 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -c "SET ROLE \"$runtime_role\";
       SELECT count(*) FROM \"$schema_name\".tenant_management_projection;"
 
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
+  -c "SET ROLE \"$runtime_role\";
+      SELECT count(*) FROM \"$schema_name\".user_admin_end_user_projection;"
+
 if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -v schema_name="$schema_name" -v billing_role="$billing_role" \
   -c "SET ROLE \"$billing_role\";
