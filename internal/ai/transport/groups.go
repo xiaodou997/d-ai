@@ -260,27 +260,6 @@ type deleteGroupTargetInput struct {
 	BindingID string `path:"bindingID"`
 }
 
-// 反查：按上游目标查关联了哪些分组
-type linkedGroupsByTargetInput struct {
-	TargetKind string `query:"target_kind" doc:"direct_upstream|oauth_pool"`
-	TargetID   string `query:"target_id"`
-}
-
-type linkedGroupItemDTO struct {
-	GroupID                    string  `json:"group_id"`
-	GroupName                  string  `json:"group_name,omitempty"`
-	GroupDefaultUserMultiplier float64 `json:"group_default_user_multiplier,omitempty"`
-	Priority                   int32   `json:"priority"`
-	Status                     string  `json:"status"`
-}
-
-type linkedGroupsOutput struct {
-	Body struct {
-		Items []linkedGroupItemDTO `json:"items"`
-		Total int                  `json:"total"`
-	}
-}
-
 type userGroupDTO struct {
 	GroupID                string   `json:"group_id"`
 	GroupName              string   `json:"group_name,omitempty"`
@@ -871,29 +850,11 @@ func tenantGroupScope(ctx context.Context, groupID string) commercial.TenantGrou
 	return commercial.TenantGroupScope{TenantID: tenantIDFromContext(ctx), GroupID: groupID}
 }
 
-func providerFamilyToAPI(family string) string {
-	switch family {
-	case "google":
-		return "gemini"
-	default:
-		return family
-	}
-}
-
 func int32OrDefault(v *int32, fallback int32) int32 {
 	if v == nil {
 		return fallback
 	}
 	return *v
-}
-
-func providerFamilyFromAPI(family string) string {
-	switch family {
-	case "gemini":
-		return "google"
-	default:
-		return family
-	}
 }
 
 func groupTargetToDTO(item commercial.GroupTargetDetail) groupTargetDTO {

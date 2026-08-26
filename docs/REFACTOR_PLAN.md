@@ -783,3 +783,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 清理：删除没有任何路由注册或调用方的 `platformOrTenantUserAuth`；保留平台、租户和终端用户各自实际使用的认证 middleware。
 - 验证：Transport 测试、`go vet` 通过，`platformOrTenantUserAuth` 的 U1000 已消除；其余 transport staticcheck 诊断继续按聚合分批处理。
+
+### P1-04（Transport groups legacy DTO cleanup，2026-08-26）
+
+- 清理：删除 `groups.go` 中没有注册入口或调用方的 linked-group 查询 DTO，以及未接入当前 API 的 provider family 双向转换 helper；现有分组、目标和 dispatch DTO/路由保持不变。
+- 验证：Transport 测试、`go vet` 通过；该文件的五个 U1000 已消除，剩余 transport 诊断集中在 self limit/subscription/tenant group/usage helper 和一处切片追加建议。
