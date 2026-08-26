@@ -11,7 +11,6 @@ import (
 )
 
 const maxPricePerToken = 1.0
-const maxMultiplier = 10000.0
 
 // Service implements price book and sell binding business logic.
 type Service struct {
@@ -320,16 +319,6 @@ func validateImagePriceTiers(prices []domain.ResolutionUSDPrice) error {
 		if err := validatePrice("image_prices", price.Price); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func validateMultiplier(field string, v float64) error {
-	if v < 0 || math.IsInf(v, 0) || math.IsNaN(v) {
-		return domain.NewValidationError(field, "must be a non-negative number")
-	}
-	if v > maxMultiplier {
-		return domain.NewValidationError(field, "multiplier exceeds maximum")
 	}
 	return nil
 }
