@@ -23,9 +23,14 @@ func main() {
 		Title:   "D-AI",
 		Version: contractVersion,
 	})
-	transport.Register(api, transport.Deps{
-		InfrastructureDeps: transport.InfrastructureDeps{Version: contractVersion},
-	}, transport.AIHTTPDeps{})
+	transport.Register(api,
+		transport.NewMetaModule(contractVersion, nil),
+		transport.NewPlatformIdentityModule(transport.PlatformIdentityModuleDeps{}),
+		transport.NewPlatformAdminModule(transport.PlatformAdminModuleDeps{}),
+		transport.NewPlatformBillingModule(transport.PlatformBillingModuleDeps{}),
+		transport.NewPlatformOperationsModule(transport.PlatformOperationsModuleDeps{}),
+		transport.NewAIModule(transport.AIPlatformModuleDeps{}, transport.AIHTTPDeps{}),
+	)
 	// Runtime gateway endpoints are native chi routes, so their schemas are
 	// added explicitly to the same Huma document.
 	gateway.RegisterOpenAPI(api)

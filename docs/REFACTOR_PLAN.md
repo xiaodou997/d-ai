@@ -130,7 +130,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-02 拆分 composition root 和巨型依赖容器
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
-- [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 路由与 raw 路由已改用窄依赖，平台 Transport 投影已回到 composition root，兼容聚合契约仍待拆除。
+- [x] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台路由改由 `transport.Module` 和模块专属依赖类型注册，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 与 raw 路由均使用窄依赖。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
@@ -433,7 +433,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 本次变更：新增 `aiModules`，集中装配 AI 控制面、Serving pipeline、Gateway、Console、文件/图片服务和异步任务；`run` 仅保留组合顺序、HTTP 注册和健康检查。
 - 生命周期：价格同步、风险审查、审计、OAuth Token refresh、结算 Outbox 和异步任务由 `aiModules.Start/Stop` 统一启动与关闭，根 context 取消仍负责无独立 Stop 的 worker。
-- 依赖边界：平台 `transport.Deps` 与 AI `AICoreHTTPDeps` 分离，新增 `transport.Module` 并由 AI 模块独立注册路由；AI Transport Core 使用 `CoreHTTPDeps`，垂直模块各自持有窄依赖。
+- 依赖边界：平台路由模块与 AI `AICoreHTTPDeps` 分离，新增 `transport.Module` 并由 composition root 显式注册；AI Transport Core 使用 `CoreHTTPDeps`，垂直模块各自持有窄依赖。
 - 端口收敛：AI 系统端点改用 `ScoreWeightsStore` 最小接口，评分权重 PostgreSQL adapter 留在 composition root。
 - 端口收敛：AI 认证端点改用 `HumaBanChecker`，Ban 状态 Redis adapter 留在 composition root。
 - 端口收敛：OAuth 凭证管理端点改用 `OAuthTokenRefresher`，不再暴露后台刷新器具体类型。
@@ -490,7 +490,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 风控边界：配置读写、不落库检测、审核日志分页和风险事件处置分别通过 `RiskControlConfigStore` / `RiskControlDetector` / `RiskControlLogReader` / `RiskEventManager`；检测与分页结果已迁入 domain，control 包保留类型别名兼容 serving/worker。路由测试覆盖六类接口、配置密文保留、检测输入、日志/事件过滤、处置 actor 和四组未装配 503。
 - 风控 HTTP 模块：`RiskControlHTTPDeps` 独立组合四组业务端口、`HTTPAuthDeps` 与 `ProviderSecretCodec`；`RegisterRiskControl` 自行注册平台管理员认证分组。契约测试确认 core 不注册风控路径、独立模块执行认证，配置更新路由只把明文 API key 交给 codec 并向存储端传递密文。
 - 验证：`go test ./...`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps`、`bun run ensure:api`、`bun run typecheck`、`bun run test` 和 `git diff --check` 通过。
-- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取、workspace、用户自助控制和用户自助读取路由均已脱离 `CoreHTTPDeps`，AI Core 只保留平台价格/限额端口；顶层平台 `transport.Deps` 仍保留部分具体 service，部分 worker 只有 context 取消，没有可等待的 `Stop/Health` 接口。
+- 遗留风险：订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户分组、租户自助读取、workspace、用户自助控制和用户自助读取路由均已脱离 `CoreHTTPDeps`，AI Core 只保留平台价格/限额端口；平台 concrete service 仍由单进程 composition root 持有，运行角色拆分和少量 worker 生命周期边界仍待继续治理。
 - 下一候选项：P1-03 收敛 Transport 层权限、事务、状态机和数据库查询逻辑，并继续治理平台根容器。
 
 ### P1-03（进行中，2026-08-23）
@@ -975,9 +975,15 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-02（Platform transport assembly ownership，2026-08-27）
 
-- 装配：从 `aiModules` 移除平台 `transport.Deps` 字段及构造逻辑，新增 composition-root `buildPlatformTransportDeps`，由平台服务统一投影身份、账务和运营路由依赖。
+- 装配：从 `aiModules` 移除平台路由依赖字段及构造逻辑，新增 composition-root `buildPlatformTransportModules`，由平台服务分别投影身份、账务和运营路由模块。
 - 边界：`aiModules` 只保留 AI HTTP 依赖和运行时 owner，避免 AI 生命周期容器持有平台路由服务；下一步继续删除 `transport.Register` 的兼容聚合入口。
 - 回归：新增平台依赖投影的 production/cfg nil 契约测试；`go test ./cmd/server ./internal/transport -count=1`、`go build ./...`、`go vet` 和差异检查通过。
+
+### P1-02（Explicit transport module registration contract，2026-08-27）
+
+- API：删除 `transport.Deps` 聚合类型，`transport.Register` 改为接收显式 `Module` 列表；平台身份、管理员、账务、运营和 AI 模块通过公开构造函数及模块专属依赖类型创建。
+- 装配：`cmd/server` 与 `cmd/openapi` 均按固定顺序注册模块，Transport 不再负责从跨域 service locator 组装平台依赖；`AIHTTPDeps` 继续只承载 AI 控制面 HTTP 能力。
+- 回归：扩展 OpenAPI module surface contract 覆盖新注册入口；`go test ./internal/transport ./cmd/server ./cmd/openapi -count=1`、`go build ./...`、`go vet` 和 `checkdeps` 通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 

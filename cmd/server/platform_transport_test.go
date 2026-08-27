@@ -5,32 +5,34 @@ import (
 
 	"go.uber.org/zap"
 
-	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/config"
+	"xiaodou/dai/internal/transport"
 )
 
-func TestBuildPlatformTransportDepsKeepsCompositionRootOwnership(t *testing.T) {
-	jwt := &auth.JWTService{}
-	blacklist := &auth.BlacklistService{}
-	platform := &platformModules{JWT: jwt, Blacklist: blacklist}
+func TestBuildPlatformTransportModulesKeepsCompositionRootOwnership(t *testing.T) {
+	platform := &platformModules{}
 	cfg := &config.Config{App: config.AppConfig{Env: "production"}, Legal: config.LegalConfig{TermsVersion: "terms-v2", PrivacyVersion: "privacy-v2"}}
 	logger := zap.NewNop()
 
-	deps := buildPlatformTransportDeps("test-version", cfg, platform, logger)
-	if deps.Version != "test-version" || deps.Logger != logger {
-		t.Fatalf("infrastructure deps = %+v", deps.InfrastructureDeps)
+	modules := buildPlatformTransportModules("test-version", cfg, platform, transport.AIHTTPDeps{}, logger)
+	if len(modules) != 6 {
+		t.Fatalf("platform module count = %d, want 6", len(modules))
 	}
-	if !deps.SecureCookies || deps.Legal != cfg.Legal {
-		t.Fatalf("portal deps = %+v", deps.PortalDeps)
-	}
-	if deps.JWT != jwt || deps.Blacklist != blacklist {
-		t.Fatalf("identity auth deps = jwt:%p blacklist:%p", deps.JWT, deps.Blacklist)
+	for i, module := range modules {
+		if module == nil {
+			t.Fatalf("platform module %d is nil", i)
+		}
 	}
 }
 
-func TestBuildPlatformTransportDepsHandlesNilCompositionInputs(t *testing.T) {
-	deps := buildPlatformTransportDeps("dev", nil, nil, nil)
-	if deps.Version != "dev" || deps.Logger == nil || deps.SecureCookies {
-		t.Fatalf("nil composition projection = %+v", deps)
+func TestBuildPlatformTransportModulesHandlesNilCompositionInputs(t *testing.T) {
+	modules := buildPlatformTransportModules("dev", nil, nil, transport.AIHTTPDeps{}, nil)
+	if len(modules) != 6 {
+		t.Fatalf("nil composition module count = %d, want 6", len(modules))
+	}
+	for i, module := range modules {
+		if module == nil {
+			t.Fatalf("nil composition module %d is nil", i)
+		}
 	}
 }

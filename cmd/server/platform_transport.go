@@ -7,68 +7,111 @@ import (
 	"xiaodou/dai/internal/transport"
 )
 
-// buildPlatformTransportDeps is the composition-root projection from concrete
-// platform services to the route registration contract. Keeping this mapping
-// here prevents aiModules from owning or forwarding platform HTTP dependencies.
-func buildPlatformTransportDeps(version string, cfg *config.Config, platform *platformModules, logger *zap.Logger) transport.Deps {
+// buildPlatformTransportModules projects concrete platform services into
+// independently constructible route modules. Keeping this mapping here means
+// neither aiModules nor transport needs a cross-domain service locator.
+func buildPlatformTransportModules(version string, cfg *config.Config, platform *platformModules, ai transport.AIHTTPDeps, logger *zap.Logger) []transport.Module {
 	if cfg == nil {
 		cfg = &config.Config{}
 	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	deps := transport.Deps{
-		InfrastructureDeps: transport.InfrastructureDeps{
-			Version: version,
-			Logger:  logger,
-		},
-		PortalDeps: transport.PortalDeps{
-			SecureCookies: cfg.App.Env == "production",
-			Legal:         cfg.Legal,
-		},
-	}
 	if platform == nil {
-		return deps
+		platform = &platformModules{}
 	}
-	deps.IdentityDeps = transport.IdentityDeps{
-		JWT:                  platform.JWT,
-		Sessions:             platform.Sessions,
-		Activations:          platform.Activations,
-		MFA:                  platform.MFA,
-		RecentAuth:           platform.RecentAuth,
-		Blacklist:            platform.Blacklist,
-		IdentityReader:       platform.UserService,
-		AuthAccountReader:    platform.AuthAccounts,
-		AuthAccountWriter:    platform.AuthAccounts,
-		AuthLoginReader:      platform.AuthAccounts,
-		AuthAuditWriter:      platform.AuthAccounts,
-		AuthAuditLogs:        platform.AuthAccounts,
-		AuthRateLimiters:     platform.AuthRateLimiters,
-		TenantStatusWriter:   platform.TenantRepo,
-		TenantWriter:         platform.TenantRepo,
-		TenantReader:         platform.TenantRepo,
-		TenantBrandingReader: platform.TenantBranding,
-		TenantBrandingWriter: platform.TenantBranding,
-		TenantSelf:           platform.TenantSelf,
-		AdminAccounts:        platform.AdminAccounts,
-		AdminAccountWriter:   platform.AdminAccounts,
-		AdminEndUsers:        platform.AdminEndUsers,
-		AdminEndUserWriter:   platform.AdminEndUsers,
-		Invite:               platform.Invite,
+	platformAuth := transport.PlatformAuthDeps{JWT: platform.JWT, Blacklist: platform.Blacklist}
+	adminAuth := transport.AdminRouteAuthDeps{PlatformAuthDeps: platformAuth, RecentAuth: platform.RecentAuth}
+	return []transport.Module{
+		transport.NewMetaModule(version, platform.JWT),
+		transport.NewPlatformIdentityModule(transport.PlatformIdentityModuleDeps{
+			Auth: transport.AuthModuleDeps{
+				PlatformAuthDeps:  platformAuth,
+				SecureCookies:     cfg.App.Env == "production",
+				Sessions:          platform.Sessions,
+				Activations:       platform.Activations,
+				MFA:               platform.MFA,
+				RecentAuth:        platform.RecentAuth,
+				AuthRateLimiters:  platform.AuthRateLimiters,
+				AuthAccountReader: platform.AuthAccounts,
+				AuthAccountWriter: platform.AuthAccounts,
+				AuthLoginReader:   platform.AuthAccounts,
+				AuthAuditWriter:   platform.AuthAccounts,
+				Logger:            logger,
+			},
+			Account: transport.AccountModuleDeps{
+				PlatformAuthDeps: platformAuth,
+				Queries:          platform.AccountQueries,
+			},
+			Tenant: transport.TenantSelfModuleDeps{
+				PlatformAuthDeps: platformAuth,
+				Service:          platform.TenantSelf,
+			},
+			Branding: transport.TenantBrandingModuleDeps{
+				PlatformAuthDeps: platformAuth,
+				Reader:           platform.TenantBranding,
+				Writer:           platform.TenantBranding,
+			},
+			Public:  transport.PublicModuleDeps{Invite: platform.Invite, Legal: cfg.Legal},
+			JWTKeys: transport.JWTKeysModuleDeps{PlatformAuthDeps: platformAuth},
+		}),
+		transport.NewPlatformAdminModule(transport.PlatformAdminModuleDeps{
+			Tenants: transport.AdminTenantModuleDeps{
+				AdminRouteAuthDeps: adminAuth,
+				TenantReader:       platform.TenantRepo,
+				TenantStatusWriter: platform.TenantRepo,
+				TenantWriter:       platform.TenantRepo,
+				Activations:        platform.Activations,
+			},
+			Users: transport.AdminUsersModuleDeps{
+				AdminRouteAuthDeps: adminAuth,
+				TenantReader:       platform.TenantRepo,
+				AdminAccounts:      platform.AdminAccounts,
+				AdminAccountWriter: platform.AdminAccounts,
+				Activations:        platform.Activations,
+			},
+			Finance: transport.AdminFinanceModuleDeps{
+				AdminRouteAuthDeps: adminAuth,
+				TenantReader:       platform.TenantRepo,
+				Deduction:          platform.Deduction,
+				AccountQueries:     platform.AccountQueries,
+				Recharge:           platform.Recharge,
+				AuthAuditLogs:      platform.AuthAccounts,
+			},
+			UsageBilling: transport.AdminUsageBillingModuleDeps{
+				AdminRouteAuthDeps: adminAuth,
+				Deduction:          platform.Deduction,
+			},
+			Dashboard: transport.AdminDashboardModuleDeps{
+				AdminRouteAuthDeps: adminAuth,
+				Dashboard:          platform.Dashboard,
+			},
+			EndUsers: transport.AdminEndUsersModuleDeps{
+				AdminRouteAuthDeps: adminAuth,
+				TenantReader:       platform.TenantRepo,
+				AdminEndUsers:      platform.AdminEndUsers,
+				AdminEndUserWriter: platform.AdminEndUsers,
+				Activations:        platform.Activations,
+			},
+		}),
+		transport.NewPlatformBillingModule(transport.PlatformBillingModuleDeps{
+			Payment: transport.PaymentModuleDeps{
+				PlatformAuthDeps: platformAuth,
+				Service:          platform.Payment,
+				Logger:           logger,
+			},
+		}),
+		transport.NewPlatformOperationsModule(transport.PlatformOperationsModuleDeps{
+			Announcements: transport.AnnouncementModuleDeps{PlatformAuthDeps: platformAuth, Service: platform.Announcements},
+			Notifications: transport.NotificationModuleDeps{PlatformAuthDeps: platformAuth, Service: platform.Notifications},
+			System:        transport.SystemModuleDeps{PlatformAuthDeps: platformAuth, Service: platform.Modules},
+			DataCleanup:   transport.DataCleanupModuleDeps{PlatformAuthDeps: platformAuth, Service: platform.DataCleanup},
+			ProxyNodes:    transport.ProxyNodesModuleDeps{PlatformAuthDeps: platformAuth, Service: platform.ProxyNodes},
+		}),
+		transport.NewAIModule(transport.AIPlatformModuleDeps{
+			PlatformAuthDeps: platformAuth,
+			TenantReader:     platform.TenantRepo,
+			IdentityReader:   platform.UserService,
+		}, ai),
 	}
-	deps.BillingDeps = transport.BillingDeps{
-		AccountQueries: platform.AccountQueries,
-		Deduction:      platform.Deduction,
-		Recharge:       platform.Recharge,
-		Payment:        platform.Payment,
-	}
-	deps.OperationsDeps = transport.OperationsDeps{
-		Announcements: platform.Announcements,
-		Notifications: platform.Notifications,
-		Modules:       platform.Modules,
-		Dashboard:     platform.Dashboard,
-		ProxyNodes:    platform.ProxyNodes,
-		DataCleanup:   platform.DataCleanup,
-	}
-	return deps
 }

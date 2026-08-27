@@ -22,34 +22,34 @@ httpServers.Start / Shutdown
 - `shutdownStack` 记录已成功构造的资源，按构造逆序关闭，并且重复调用安全；因此部分启动失败也会释放已经拿到的基础设施。
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时，Start/Shutdown 具备幂等保护并等待监听 goroutine 退出。
 - 异步任务引擎已经登记到生命周期栈；Engine 自持有 worker context，Stop 会取消并等待 worker/reaper/webhook 循环，再释放 Redis/PostgreSQL，并提供最小 Health 快照。
-- `transport.Deps` 与 AI Core `CoreHTTPDeps` 已按职责收敛；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 已脱离 Core，由独立模块依赖注册。
+- 平台 Transport 依赖已按模块显式投影，AI Core 使用 `CoreHTTPDeps`；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 均由独立模块注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler
   的启动/停止；`run` 只保留平台依赖别名和跨域 wiring。
 - `openInfrastructure` 在生产按 `DAI_BILLING_DATABASE_URL` 打开独立 billing pool；账务、支付、订阅扣费和
   outbox 结算使用 billing pool，未配置时仅在非生产环境回退到主 pool，避免把权限切换误带入开发环境。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务，LiteLLM 远程刷新在 Stop 时会取消并等待退出。
-- 平台 Transport 依赖投影已移出 `aiModules`，由 composition root 的 `buildPlatformTransportDeps` 从具体平台服务组装；AI 模块只暴露 AI HTTP 依赖和运行时路由 owner。
+- 平台 Transport 依赖投影已移出 `aiModules`，由 composition root 的 `buildPlatformTransportModules` 从具体平台服务组装；AI 模块只暴露 AI HTTP 依赖和运行时路由 owner。
 - 平台 HTTP 路由现在与 AI 路由一样通过 `transport.Module` 注册；identity、billing、operations 和管理员模块已逐步改用显式依赖，剩余聚合依赖继续收敛。
 - 元数据与 JWKS 已由最小 `metaModule` 注册，仅接收版本字符串和 JWT 服务；平台主模块不再作为完整依赖容器参与路由注册。
-- chi 原生路由现在接收独立 `transport.RawDeps`，微信回调只依赖支付服务/日志，公开 favicon 只依赖品牌读端口；`RegisterRaw` 不再接收完整平台 `Deps`。
+- chi 原生路由现在接收独立 `transport.RawDeps`，微信回调只依赖支付服务/日志，公开 favicon 只依赖品牌读端口；`RegisterRaw` 不再接收平台聚合容器。
 - AI 身份补全现在只接收 `user/ports.IdentityUserReader` 的非敏感用户投影；具体 `UserService` 与 PostgreSQL 用户模型留在用户域和 composition root，Transport 不再依赖它们。
 - 运营 HTTP 路由已从平台主模块拆成显式 `platformOperationsModule`，公告、通知、系统模块、数据清理和代理节点只接收各自服务及统一平台认证依赖；其余管理聚合路由仍待继续拆分。
 - 计费 HTTP 路由已从平台主模块拆成显式 `platformBillingModule`，在线充值、租户额度、管理支付和微信回调共享仅支付服务与平台认证/日志依赖；充值/管理聚合编排仍待继续收敛。
 - 身份自助与公开路由已拆成显式 `platformIdentityModule`，账户查询、租户自助、门户品牌和公开邀请只接收各自端口及平台认证/法律配置；管理员账号业务编排和认证状态写入仍待继续收敛。
-- 认证路由已在身份模块内使用独立 `authModule` 依赖，登录/刷新/激活、MFA、近期认证、`/me`、登出和改密不再接收完整平台 `Deps`；管理员账号与 JWT key 管理仍待后续提取。
+- 认证路由已在身份模块内使用独立 `authModule` 依赖，登录/刷新/激活、MFA、近期认证、`/me`、登出和改密不再接收平台路由聚合容器；管理员账号与 JWT key 管理仍待后续提取。
 - JWT key 列表与轮换已加入身份模块的 `jwtKeysModule`，只接收 JWT/黑名单认证依赖；管理员账号、财务和仪表盘的 handler 业务编排仍待继续收敛。
 - 管理员租户、账号、终端用户、财务、仪表盘和用量路由已集中到 `platformAdminModule` 下的六个显式子模块，各自只接收所属端口与认证依赖；平台主模块不再直接注册这组管理路由。
-- AI 纵向路由模块不再持有完整平台 `Deps`，统一改用仅含 JWT/黑名单、租户读取和用户投影的 `aiPlatformDeps`；平台身份、账务和运营服务不会随 AI Transport 容器传递。
+- AI 纵向路由模块不再持有平台路由聚合容器，统一改用仅含 JWT/黑名单、租户读取和用户投影的 `aiPlatformDeps`；平台身份、账务和运营服务不会随 AI Transport 容器传递。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；自动清理与 HTTP 触发的手动清理共享可取消 context 和等待计数，停止时先取消并等待所有清理执行，再释放数据库依赖。
 - 四个小时级清理任务（图片、文件、会话、激活凭证）现在由 `periodicWorker` 统一持有子 context，首次执行、每小时执行和 Stop 等待都登记在 shutdown stack 中。
 - composition root 维护统一的 `lifecycleHealth` 投影；`/health.components` 暴露基础设施、平台/AI 模块、异步任务、后台清理任务和公共/管理监听器的 started/stopped 状态，同时保留 Scheduler 任务快照。真实 PostgreSQL/Redis 连通性仍只由 `/ready` 判定。
-- Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
+- Transport 已将平台路由模块与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
   `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics`、`UpstreamAccounts`、`UpstreamAccess`、`TenantCatalog`、`APIKeyManagement`、`TenantSelfControl`、`TenantGroups`、`TenantSelfRead`、`Workspace`、`UserSelfControl` 和 `UserSelfRead`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
 ## 尚未清零的装配遗留
 
-- `transport.Deps` 仍有具体 PostgreSQL/Redis/业务 service；AI Core 已收敛为 `CoreHTTPDeps` 窄端口，账号管理、Provider 密钥、模型绑定、价格簿校验等管理依赖已移出，后续转向 Transport 业务逻辑和平台根容器治理。
+- 平台路由不再暴露 `transport.Deps` service locator，改由 `transport.Module` 与模块专属依赖类型注册；平台 concrete service 仍只由 composition root 持有，后续转向 Transport 业务逻辑和运行角色治理。
 - AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `CoreHTTPDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
 - 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用查询端口，具体 `DashboardService` 只在 composition root 构造。
 - 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。

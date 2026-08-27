@@ -9,16 +9,13 @@ import (
 
 func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 	_, api := humatest.New(t)
-	modules := []Module{
-		metaModule{},
-		platformIdentityModule{},
-		platformAdminModule{},
-		platformBillingModule{},
-		platformOperationsModule{},
-	}
-	for _, module := range modules {
-		module.Register(api)
-	}
+	Register(api,
+		NewMetaModule("test", nil),
+		NewPlatformIdentityModule(PlatformIdentityModuleDeps{}),
+		NewPlatformAdminModule(PlatformAdminModuleDeps{}),
+		NewPlatformBillingModule(PlatformBillingModuleDeps{}),
+		NewPlatformOperationsModule(PlatformOperationsModuleDeps{}),
+	)
 
 	paths := api.OpenAPI().Paths
 	for _, route := range []struct {

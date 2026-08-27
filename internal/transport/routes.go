@@ -29,71 +29,6 @@ import (
 	"xiaodou/dai/internal/ai/workspace"
 )
 
-// InfrastructureDeps contains process-wide clients shared by transport
-// adapters. It is kept as a named group so the composition root can replace
-// these clients with ports when the legacy SQL handlers are migrated.
-type InfrastructureDeps struct {
-	Version string
-	Logger  *zap.Logger
-}
-
-// PortalDeps contains transport policy and public-facing configuration.
-type PortalDeps struct {
-	// SecureCookies enables the Secure attribute for browser session cookies.
-	// Development HTTP deployments may disable it; production wiring always enables it.
-	SecureCookies bool
-	Legal         config.LegalConfig
-}
-
-// IdentityDeps contains account, session, tenant, invitation and identity
-// projection use cases.
-type IdentityDeps struct {
-	JWT                  *auth.JWTService
-	Sessions             *auth.SessionService
-	Activations          *auth.ActivationService
-	MFA                  *auth.MFAService
-	RecentAuth           *auth.RecentAuthService
-	Blacklist            *auth.BlacklistService
-	IdentityReader       userports.IdentityUserReader
-	AuthAccountReader    authports.AccountReader
-	AuthAccountWriter    authports.AccountWriter
-	AuthLoginReader      authports.LoginReader
-	AuthAuditWriter      authports.AuthAuditRecorder
-	AuthAuditLogs        authports.AuthAuditLogReader
-	AuthRateLimiters     *auth.RateLimiters
-	TenantStatusWriter   tenantports.AdminTenantStatusWriter
-	TenantWriter         tenantports.AdminTenantWriter
-	TenantReader         tenantports.AdminTenantReader
-	TenantBrandingReader tenantports.PortalBrandingReader
-	TenantBrandingWriter tenantports.PortalBrandingWriter
-	TenantSelf           tenantports.TenantSelfService
-	AdminAccounts        userports.AdminAccountReader
-	AdminAccountWriter   userports.AdminAccountWriter
-	AdminEndUsers        userports.AdminEndUserReader
-	AdminEndUserWriter   userports.AdminEndUserWriter
-	Invite               inviteports.PublicService
-}
-
-// BillingDeps contains payment and balance application services.
-type BillingDeps struct {
-	AccountQueries billingports.AccountQueryReader
-	Deduction      *billingsvc.DeductionService
-	Recharge       *billingsvc.RechargeService
-	Payment        *paymentsvc.PaymentService
-}
-
-// OperationsDeps contains platform operations, notification and cleanup
-// services. These are kept separate from identity and billing so future role
-// binaries can omit them without changing transport signatures.
-type OperationsDeps struct {
-	Announcements *announcementpkg.Service
-	Notifications *notificationpkg.Service
-	Modules       *systempkg.Service
-	Dashboard     systemports.AdminDashboardReader
-	ProxyNodes    *proxypkg.Service
-	DataCleanup   *cleanuppkg.Service
-}
-
 // AISubscriptionHTTPDeps contains the collaborators owned by the independently
 // registered subscription HTTP module.
 type AISubscriptionHTTPDeps struct {
@@ -332,19 +267,6 @@ type AIHTTPDeps struct {
 	Workspace           AIWorkspaceHTTPDeps
 	UserSelfControl     AIUserSelfControlHTTPDeps
 	UserSelfRead        AIUserSelfReadHTTPDeps
-}
-
-// Deps 汇集平台 transport 层注册端点所需的显式领域依赖组。
-//
-// The embedded groups preserve the existing d.Field handler access pattern,
-// but composition code must now name the owning group explicitly. AI
-// dependencies are passed separately through AIHTTPDeps modules.
-type Deps struct {
-	InfrastructureDeps
-	PortalDeps
-	IdentityDeps
-	BillingDeps
-	OperationsDeps
 }
 
 // Module is a transport route module. Each module owns one explicit
@@ -598,98 +520,14 @@ func (m aiModule) Register(api huma.API) {
 	aitransport.RegisterUserSelfRead(api, buildUserSelfReadHTTPDeps(m.platform, m.deps.UserSelfRead))
 }
 
-// Register 在 Huma API 上注册平台端点和显式 AI 模块。
-func Register(api huma.API, d Deps, ai AIHTTPDeps) {
-	adminAuth := adminRouteAuth{
-		platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
-		RecentAuth:       d.RecentAuth,
-	}
-	modules := []Module{
-		metaModule{version: d.Version, jwt: d.JWT},
-		platformIdentityModule{
-			auth: authModule{
-				platformAuthDeps:  platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
-				SecureCookies:     d.SecureCookies,
-				Sessions:          d.Sessions,
-				Activations:       d.Activations,
-				MFA:               d.MFA,
-				RecentAuth:        d.RecentAuth,
-				AuthRateLimiters:  d.AuthRateLimiters,
-				AuthAccountReader: d.AuthAccountReader,
-				AuthAccountWriter: d.AuthAccountWriter,
-				AuthLoginReader:   d.AuthLoginReader,
-				AuthAuditWriter:   d.AuthAuditWriter,
-				Logger:            d.Logger,
-			},
-			account: accountModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, queries: d.AccountQueries},
-			tenant:  tenantSelfModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.TenantSelf},
-			branding: tenantBrandingModule{
-				auth:   platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
-				reader: d.TenantBrandingReader,
-				writer: d.TenantBrandingWriter,
-			},
-			public:  publicModule{invite: d.Invite, legal: d.Legal},
-			jwtKeys: jwtKeysModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}},
-		},
-		platformAdminModule{
-			tenants: adminTenantModule{
-				adminRouteAuth:     adminAuth,
-				TenantReader:       d.TenantReader,
-				TenantStatusWriter: d.TenantStatusWriter,
-				TenantWriter:       d.TenantWriter,
-				Activations:        d.Activations,
-			},
-			users: adminUsersModule{
-				adminRouteAuth:     adminAuth,
-				TenantReader:       d.TenantReader,
-				AdminAccounts:      d.AdminAccounts,
-				AdminAccountWriter: d.AdminAccountWriter,
-				Activations:        d.Activations,
-			},
-			finance: adminFinanceModule{
-				adminRouteAuth: adminAuth,
-				TenantReader:   d.TenantReader,
-				Deduction:      d.Deduction,
-				AccountQueries: d.AccountQueries,
-				Recharge:       d.Recharge,
-				AuthAuditLogs:  d.AuthAuditLogs,
-			},
-			usageBilling: adminUsageBillingModule{
-				adminRouteAuth: adminAuth,
-				Deduction:      d.Deduction,
-			},
-			dashboard: adminDashboardModule{
-				adminRouteAuth: adminAuth,
-				Dashboard:      d.Dashboard,
-			},
-			endUsers: adminEndUsersModule{
-				adminRouteAuth:     adminAuth,
-				TenantReader:       d.TenantReader,
-				AdminEndUsers:      d.AdminEndUsers,
-				AdminEndUserWriter: d.AdminEndUserWriter,
-				Activations:        d.Activations,
-			},
-		},
-		platformBillingModule{payment: paymentModule{
-			auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
-			service: d.Payment,
-			logger:  d.Logger,
-		}},
-		platformOperationsModule{
-			announcements: announcementModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Announcements},
-			notifications: notificationModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Notifications},
-			system:        systemModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Modules},
-			dataCleanup:   dataCleanupModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.DataCleanup},
-			proxyNodes:    proxyNodesModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.ProxyNodes},
-		},
-		aiModule{platform: aiPlatformDeps{
-			platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
-			TenantReader:     d.TenantReader,
-			IdentityReader:   d.IdentityReader,
-		}, deps: ai},
-	}
+// Register attaches explicitly constructed modules to a Huma API. The
+// composition root owns dependency assembly; this function intentionally does
+// not accept a cross-domain service locator.
+func Register(api huma.API, modules ...Module) {
 	for _, module := range modules {
-		module.Register(api)
+		if module != nil {
+			module.Register(api)
+		}
 	}
 }
 

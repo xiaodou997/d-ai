@@ -216,7 +216,7 @@ func run() error {
 		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
 
-	transport.Register(api, buildPlatformTransportDeps(version, cfg, platform, appLogger), ai.AIHTTPDeps)
+	transport.Register(api, buildPlatformTransportModules(version, cfg, platform, ai.AIHTTPDeps, appLogger)...)
 	transport.RegisterRaw(router, transport.RawDeps{
 		Payment:              platform.Payment,
 		TenantBrandingReader: platform.TenantBranding,
