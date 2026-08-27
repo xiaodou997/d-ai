@@ -77,7 +77,7 @@ type globalStatsOutput struct {
 }
 
 // registerAdminDashboard 注册 dashboard 与分析端点。
-func registerAdminDashboard(api huma.API, d Deps) {
+func registerAdminDashboard(api huma.API, d adminModule) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}

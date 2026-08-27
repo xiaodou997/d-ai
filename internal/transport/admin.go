@@ -44,7 +44,7 @@ func setActivationOutput(out *activationCredentialOutput, result userports.Activ
 	out.Body.ActivationExpiresIn = result.ExpiresIn
 }
 
-func newAdminHandlers(d Deps) *adminHandlers {
+func newAdminHandlers(d adminModule) *adminHandlers {
 	return &adminHandlers{
 		tenantReader:       d.TenantReader,
 		tenantStatusWriter: d.TenantStatusWriter,

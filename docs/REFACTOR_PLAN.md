@@ -130,7 +130,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-02 拆分 composition root 和巨型依赖容器
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
-- [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
+- [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，identity/计费/运营/管理员路由已逐步提取，平台根容器和剩余管理聚合仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations 与 payment 已提取最小依赖，管理员身份聚合仍需继续拆分。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
@@ -930,6 +930,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：JWT key 列表与轮换路由改为仅接收 JWT 服务和黑名单认证依赖，不再从完整 `transport.Deps` 读取平台其他服务。
 - 装配：`jwtKeysModule` 并入 `platformIdentityModule`，保持超级管理员 capability 和既有 operation/path 不变。
 - 回归：OpenAPI module surface contract 增加 JWT key 代表路径；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（Platform admin transport module split，2026-08-27）
+
+- 依赖：管理员租户、系统/租户账号、终端用户、充值/退款、仪表盘和批量用量退款路由改为显式 `adminModule`，只接收管理员端口、账务 application service、激活凭证、黑名单和近期认证依赖。
+- 装配：新增 `platformAdminModule` 并从平台主模块移除六组管理员注册调用；`adminHandlers` 共享的状态/ownership 编排保持不变，后续可继续按 use case 拆成更小 command/query 端口。
+- 回归：OpenAPI module surface contract 增加系统管理员代表路径，既有管理员授权和数据库集成测试继续复用；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 

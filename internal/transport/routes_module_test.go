@@ -11,6 +11,7 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 	modules := []Module{
 		platformModule{deps: Deps{}},
 		platformIdentityModule{},
+		platformAdminModule{},
 		platformBillingModule{},
 		platformOperationsModule{},
 	}
@@ -28,6 +29,7 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 		{path: "/api/auth/login", name: "auth login", post: true},
 		{path: "/api/v1/jwt-keys", name: "JWT key management", get: true},
 		{path: "/api/v1/tenants", name: "tenant management", get: true, post: true},
+		{path: "/api/v1/system-admins", name: "admin accounts", get: true, post: true},
 		{path: "/api/v1/payments/topup-orders", name: "payment", post: true},
 		{path: "/api/v1/admin/modules", name: "operations", get: true},
 	} {

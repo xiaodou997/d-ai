@@ -122,7 +122,7 @@ func adminUserStatusFromInt(status int) string {
 }
 
 // registerAdminUsers 注册系统管理员（仅超管）与租户组织用户（系统管理员）端点。
-func registerAdminUsers(api huma.API, d Deps) {
+func registerAdminUsers(api huma.API, d adminModule) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	superAdmin := huma.Middlewares{ua, requireCapability(api, auth.CapabilitySuperAdmin)}

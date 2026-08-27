@@ -455,6 +455,30 @@ type platformIdentityModule struct {
 	jwtKeys  jwtKeysModule
 }
 
+type adminModule struct {
+	platformAuthDeps
+	RecentAuth *auth.RecentAuthService
+
+	TenantReader       tenantports.AdminTenantReader
+	TenantStatusWriter tenantports.AdminTenantStatusWriter
+	TenantWriter       tenantports.AdminTenantWriter
+	AdminAccounts      userports.AdminAccountReader
+	AdminAccountWriter userports.AdminAccountWriter
+	AdminEndUsers      userports.AdminEndUserReader
+	AdminEndUserWriter userports.AdminEndUserWriter
+	Dashboard          systemports.AdminDashboardReader
+	Deduction          *billingsvc.DeductionService
+	AccountQueries     billingports.AccountQueryReader
+	Recharge           *billingsvc.RechargeService
+	AuthAuditLogs      authports.AuthAuditLogReader
+	Activations        *auth.ActivationService
+	Logger             *zap.Logger
+}
+
+type platformAdminModule struct {
+	deps adminModule
+}
+
 type aiModule struct {
 	platform Deps
 	deps     AIHTTPDeps
@@ -464,11 +488,11 @@ var _ Module = platformModule{}
 var _ Module = platformOperationsModule{}
 var _ Module = platformBillingModule{}
 var _ Module = platformIdentityModule{}
+var _ Module = platformAdminModule{}
 var _ Module = aiModule{}
 
 func (m platformModule) Register(api huma.API) {
 	registerMeta(api, m.deps)
-	registerPublicPlane(api, m.deps)
 }
 
 func (m platformOperationsModule) Register(api huma.API) {
@@ -493,6 +517,15 @@ func (m platformIdentityModule) Register(api huma.API) {
 	registerTenantBranding(api, m.branding)
 	registerPublic(api, m.public)
 	registerJWTKeys(api, m.jwtKeys)
+}
+
+func (m platformAdminModule) Register(api huma.API) {
+	registerAdminTenants(api, m.deps)
+	registerAdminUsers(api, m.deps)
+	registerAdminFinance(api, m.deps)
+	registerAdminUsageBilling(api, m.deps)
+	registerAdminDashboard(api, m.deps)
+	registerAdminEndUsers(api, m.deps)
 }
 
 type aiIdentityProvider interface {
@@ -553,6 +586,24 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 			public:  publicModule{invite: d.Invite, legal: d.Legal},
 			jwtKeys: jwtKeysModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}},
 		},
+		platformAdminModule{deps: adminModule{
+			platformAuthDeps:   platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+			RecentAuth:         d.RecentAuth,
+			TenantReader:       d.TenantReader,
+			TenantStatusWriter: d.TenantStatusWriter,
+			TenantWriter:       d.TenantWriter,
+			AdminAccounts:      d.AdminAccounts,
+			AdminAccountWriter: d.AdminAccountWriter,
+			AdminEndUsers:      d.AdminEndUsers,
+			AdminEndUserWriter: d.AdminEndUserWriter,
+			Dashboard:          d.Dashboard,
+			Deduction:          d.Deduction,
+			AccountQueries:     d.AccountQueries,
+			Recharge:           d.Recharge,
+			AuthAuditLogs:      d.AuthAuditLogs,
+			Activations:        d.Activations,
+			Logger:             d.Logger,
+		}},
 		platformBillingModule{payment: paymentModule{
 			auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
 			service: d.Payment,
@@ -575,17 +626,6 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 func registerMeta(api huma.API, d Deps) {
 	registerInfo(api, d.Version)
 	registerJWKS(api, d.JWT)
-}
-
-func registerPublicPlane(api huma.API, d Deps) {
-	// 管理资源端点（/api/v1，用户 JWT + 类型守卫）
-	registerAdminTenants(api, d)
-	registerAdminUsers(api, d)
-	registerAdminFinance(api, d)
-	registerAdminUsageBilling(api, d)
-	registerAdminDashboard(api, d)
-	registerAdminEndUsers(api, d)
-	// 公开端点由 platformIdentityModule 注册。
 }
 
 func buildAICoreHTTPDeps(platform Deps, d AICoreHTTPDeps, identity aiIdentityProvider) aitransport.CoreHTTPDeps {

@@ -97,7 +97,7 @@ type updateTenantStatusInput struct {
 }
 
 // registerAdminTenants 注册 /api/v1/tenants 租户 CRUD。
-func registerAdminTenants(api huma.API, d Deps) {
+func registerAdminTenants(api huma.API, d adminModule) {
 	h := newAdminHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
