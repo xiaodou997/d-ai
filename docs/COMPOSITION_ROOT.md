@@ -191,3 +191,5 @@ HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台
 数据清理 HTTP 通过 `DataCleanupHTTPService` 窄端口接收策略、预览和运行 command/query；具体 cleanup service 仅由组合根持有。
 
 代理节点 HTTP 通过 `ProxyNodesHTTPService` 窄端口接收管理 command/query；代理选路能力继续由 AI runtime 在组合根内独立持有。
+
+支付自助订单查询通过 application 层 `GetOrderForScope` 完成 tenant/user ownership 校验，Transport 不再在读取后执行跨域资源归属判断。

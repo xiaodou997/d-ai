@@ -166,6 +166,24 @@ func (s *PaymentService) GetOrder(ctx context.Context, orderID string) (*payment
 	return o, nil
 }
 
+// GetOrderForScope combines order lookup with the caller's tenant/user scope.
+// Keeping this check in the payment application boundary prevents HTTP
+// handlers from deciding ownership after reading an unrestricted order.
+func (s *PaymentService) GetOrderForScope(ctx context.Context, orderID, tenantID, userID string) (*payment.Order, error) {
+	o, err := s.GetOrder(ctx, orderID)
+	if err != nil || !orderOwnedByScope(o, tenantID, userID) {
+		return nil, domain.ErrPaymentOrderNotFound
+	}
+	return o, nil
+}
+
+func orderOwnedByScope(order *payment.Order, tenantID, userID string) bool {
+	if order == nil || tenantID == "" || order.TenantID != tenantID {
+		return false
+	}
+	return userID == "" || order.UserID == userID
+}
+
 func (s *PaymentService) ListOrders(ctx context.Context, p payment.ListOrdersParams) ([]*payment.Order, int64, error) {
 	return paymentpg.ListOrders(ctx, s.pool, paymentpg.ListOrdersParams{
 		Scene: p.Scene, Status: p.Status, TenantID: p.TenantID, UserID: p.UserID, Page: p.Page, Size: p.Size,

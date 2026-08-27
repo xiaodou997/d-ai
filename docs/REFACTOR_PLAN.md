@@ -1250,3 +1250,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：代理节点 HTTP 模块改为依赖 `ProxyNodesHTTPService` 窄端口，仅暴露列表、写入和删除 command/query；运行时选路的 `SelectProxy` 能力不再泄漏到 Transport。
 - 语义：节点参数校验、404/400/500 错误映射和管理员权限保持不变。
 - 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-03（Move payment order scope check into application service，2026-08-27）
+
+- 边界：新增 `PaymentService.GetOrderForScope`，在支付 application 层合并订单读取与 tenant/user ownership 校验；自助 HTTP handler 不再读取订单后自行判断归属。
+- 语义：跨租户、跨用户和缺失订单统一返回 `ErrPaymentOrderNotFound`，租户级充值订单允许 tenant scope，用户级订单必须匹配 user scope；后台管理/同步流程继续使用无 scope 的 `GetOrder`。
+- 回归：新增 order scope 单元测试；payment service、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。

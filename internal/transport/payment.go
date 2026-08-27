@@ -8,7 +8,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/auth"
-	"xiaodou/dai/internal/domain"
 	"xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/libs/go/httpx"
@@ -218,12 +217,13 @@ func (h *paymentHandlers) getOrder(ctx context.Context, in *getTopupOrderInput) 
 	if !ok {
 		return nil, httpx.ErrForbidden
 	}
-	order, err := h.svc.GetOrder(ctx, in.OrderID)
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	order, err := h.svc.GetOrderForScope(ctx, in.OrderID, claims.TenantID, claims.UserID)
 	if err != nil {
 		return nil, toProblem(err)
-	}
-	if !actorFromClaims(userClaimsFromCtx(ctx)).Owns(auth.NewResourceOwnership(order.TenantID, order.UserID)) {
-		return nil, domain.ErrPaymentOrderNotFound
 	}
 	out := &topupOrderStatusOutput{}
 	out.Body.OrderID = order.OrderID
