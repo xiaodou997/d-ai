@@ -178,6 +178,13 @@ type PaymentCashHTTPService interface {
 	UpdateTenantPaymentSettings(context.Context, string, *paymentpkg.TenantSettings, string) error
 }
 
+type PaymentTopupHTTPService interface {
+	GetTopupConfigView(context.Context, string, string) (*paymentsvc.TopupConfigView, error)
+	CreateTopupOrder(context.Context, paymentsvc.CreateTopupOrderParams) (*paymentpkg.Order, error)
+	GetOrderForScope(context.Context, string, string, string) (*paymentpkg.Order, error)
+	ListOrders(context.Context, paymentpkg.ListOrdersParams) ([]*paymentpkg.Order, int64, error)
+}
+
 // PlatformBillingModuleDeps groups the platform billing route module.
 type PlatformBillingModuleDeps struct {
 	Payment PaymentModuleDeps
@@ -370,6 +377,7 @@ func NewPlatformBillingModule(d PlatformBillingModuleDeps) Module {
 		auth:    platformAuthDeps{JWT: d.Payment.JWT, Blacklist: d.Payment.Blacklist},
 		service: d.Payment.Service,
 		cash:    d.Payment.Service,
+		topup:   d.Payment.Service,
 		logger:  d.Payment.Logger,
 	}}
 }

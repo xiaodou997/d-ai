@@ -17,10 +17,11 @@ import (
 // adminPaymentHandlers 承载管理端支付配置、订单和提现端点（type 1,2）。
 type adminPaymentHandlers struct {
 	*paymentHandlers
+	svc *paymentsvc.PaymentService
 }
 
 func newAdminPaymentHandlers(d paymentModule) *adminPaymentHandlers {
-	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d)}
+	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d), svc: d.service}
 }
 
 // ---- DTO：平台充值/提现规则 ----

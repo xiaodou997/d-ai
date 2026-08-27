@@ -333,6 +333,7 @@ type paymentModule struct {
 	auth    platformAuthDeps
 	service *paymentsvc.PaymentService
 	cash    PaymentCashHTTPService
+	topup   PaymentTopupHTTPService
 	logger  *zap.Logger
 }
 

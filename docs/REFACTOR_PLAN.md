@@ -1268,3 +1268,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：租户余额/流水/充值设置端点改为依赖 `PaymentCashHTTPService`，不再接收包含订单、提现和管理支付能力的完整 `PaymentService`。
 - 边界：租户 scope 仍由 JWT claims 提取，额度查询与设置更新由 payment application service 执行，Transport 只负责 DTO 转换和错误映射。
 - 回归：payment、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。
+
+### P1-03（Narrow self-service top-up HTTP port，2026-08-27）
+
+- 依赖：在线充值配置、下单、查单和列表端点改为依赖 `PaymentTopupHTTPService`，不再与管理支付配置、提现和人工充值能力共享同一 handler service 字段。
+- 边界：订单归属继续由 application 层 `GetOrderForScope` 校验；管理员支付 handler 保留独立管理 service，避免权限模型混用。
+- 回归：payment、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。

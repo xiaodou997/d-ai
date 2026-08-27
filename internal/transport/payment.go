@@ -16,11 +16,11 @@ import (
 // paymentHandlers 承载用户和租户的 USD 在线充值端点。scene 由 capability 决定，
 // 不接受调用方指定。
 type paymentHandlers struct {
-	svc *paymentsvc.PaymentService
+	svc PaymentTopupHTTPService
 }
 
 func newPaymentHandlers(d paymentModule) *paymentHandlers {
-	return &paymentHandlers{svc: d.service}
+	return &paymentHandlers{svc: d.topup}
 }
 
 func millisFromTimePtr(t *time.Time) *int64 {
