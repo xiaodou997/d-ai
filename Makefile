@@ -11,8 +11,11 @@ LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMM
 
 # ---- 本地开发 ----
 
-dev: dev-setup ## 准备依赖并启动后端
-	go run ./cmd/server
+dev: dev-setup ## 准备依赖并启动 all 角色后端
+	go run ./cmd/server all
+
+dev-role: dev-setup ## 按 ROLE 启动后端角色（ROLE=all|control-api|gateway|worker）
+	go run ./cmd/server $(or $(ROLE),all)
 
 dev-setup: dev-seed ## 初始化本地配置、依赖、数据库和开发账号
 	@test -f config.yaml || cp config.example.yaml config.yaml

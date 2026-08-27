@@ -15,6 +15,11 @@ transport and HTTP route registration
 httpServers.Start / Shutdown
 ```
 
+P2-01 在同一组合根上增加运行角色参数：`dai all`（默认）、`dai control-api`、`dai gateway`
+和 `dai worker`。角色只启用对应的 HTTP surface 与后台生命周期；详见
+[`docs/RUNTIME_ROLES.md`](RUNTIME_ROLES.md)。所有角色仍复用统一配置、schema 校验和管理探针，
+但 `worker` 不创建公共监听，`control-api`/`gateway` 不启动后台任务。
+
 ## 已落地的边界
 
 - `openInfrastructure` 只负责数据库、Redis 连通性和 schema 版本校验，不构造业务模块。

@@ -34,13 +34,25 @@ var frontendFS embed.FS
 var version = "dev"
 
 func main() {
-	if err := run(); err != nil {
+	role, err := parseRuntimeRole(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "D-AI startup failed: %v\n", err)
+		os.Exit(2)
+	}
+	if err := runRole(role); err != nil {
 		fmt.Fprintf(os.Stderr, "D-AI startup failed: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
+	return runRole(runtimeRoleAll)
+}
+
+func runRole(role runtimeRole) error {
+	if err := role.Validate(); err != nil {
+		return err
+	}
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
@@ -121,7 +133,7 @@ func run() error {
 	// 2. 平台身份与计费域装配
 	// ──────────────────────────────────────────────────────
 
-	platformRole, err := assemblePlatformRuntimeRole(ctx, cfg, pool, billingPool, redisClient, appLogger, shutdowns, lifecycle)
+	platformRole, err := assemblePlatformRuntimeRole(ctx, cfg, pool, billingPool, redisClient, appLogger, shutdowns, lifecycle, role)
 	if err != nil {
 		return fmt.Errorf("build platform modules failed: %w", err)
 	}
@@ -134,7 +146,7 @@ func run() error {
 	// 3. AI 域服务装配
 	// ──────────────────────────────────────────────────────
 
-	aiRole, err := assembleAIRuntimeRole(ctx, cfg, pool, billingPool, redisClient, appLogger, platformRole, shutdowns, lifecycle)
+	aiRole, err := assembleAIRuntimeRole(ctx, cfg, pool, billingPool, redisClient, appLogger, platformRole, shutdowns, lifecycle, role)
 	if err != nil {
 		return fmt.Errorf("build AI modules failed: %w", err)
 	}
@@ -144,35 +156,39 @@ func run() error {
 	runtimeGateway := ai.RuntimeGateway
 	mgmtConsole := ai.ManagementConsole
 
-	dataCleanupSvc.Start(ctx)
-	shutdowns.Add("data cleanup", func(ctx context.Context) error {
-		dataCleanupSvc.Stop(ctx)
-		lifecycle.MarkStopped(healthDataCleanup)
-		return nil
-	})
-	lifecycle.MarkStarted(healthDataCleanup)
+	if role.HasWorkers() {
+		dataCleanupSvc.Start(ctx)
+		shutdowns.Add("data cleanup", func(ctx context.Context) error {
+			dataCleanupSvc.Stop(ctx)
+			lifecycle.MarkStopped(healthDataCleanup)
+			return nil
+		})
+		lifecycle.MarkStarted(healthDataCleanup)
+	}
 
 	// Hourly cleanups
-	imageCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
-		if _, err := imageAssetSvc.CleanupExpired(cleanupCtx); err != nil && !errors.Is(err, imageassets.ErrCleanupAlreadyRunning) {
-			appLogger.Warn("expired image asset cleanup failed", zap.Error(err))
-		}
-	})
-	registerPeriodicWorker(shutdowns, lifecycle, "hourly image cleanup", healthHourlyImage, imageCleanupWorker)
-	fileCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) { fileStore.CleanupExpired(cleanupCtx, 500) })
-	registerPeriodicWorker(shutdowns, lifecycle, "hourly file cleanup", healthHourlyFile, fileCleanupWorker)
-	authSessionCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
-		if _, err := sessionSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
-			appLogger.Warn("expired auth session cleanup failed", zap.Error(err))
-		}
-	})
-	registerPeriodicWorker(shutdowns, lifecycle, "hourly auth session cleanup", healthHourlyAuthSession, authSessionCleanupWorker)
-	activationCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
-		if _, err := activationSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
-			appLogger.Warn("expired activation credential cleanup failed", zap.Error(err))
-		}
-	})
-	registerPeriodicWorker(shutdowns, lifecycle, "hourly activation cleanup", healthHourlyActivation, activationCleanupWorker)
+	if role.HasWorkers() {
+		imageCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+			if _, err := imageAssetSvc.CleanupExpired(cleanupCtx); err != nil && !errors.Is(err, imageassets.ErrCleanupAlreadyRunning) {
+				appLogger.Warn("expired image asset cleanup failed", zap.Error(err))
+			}
+		})
+		registerPeriodicWorker(shutdowns, lifecycle, "hourly image cleanup", healthHourlyImage, imageCleanupWorker)
+		fileCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) { fileStore.CleanupExpired(cleanupCtx, 500) })
+		registerPeriodicWorker(shutdowns, lifecycle, "hourly file cleanup", healthHourlyFile, fileCleanupWorker)
+		authSessionCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+			if _, err := sessionSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
+				appLogger.Warn("expired auth session cleanup failed", zap.Error(err))
+			}
+		})
+		registerPeriodicWorker(shutdowns, lifecycle, "hourly auth session cleanup", healthHourlyAuthSession, authSessionCleanupWorker)
+		activationCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+			if _, err := activationSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
+				appLogger.Warn("expired activation credential cleanup failed", zap.Error(err))
+			}
+		})
+		registerPeriodicWorker(shutdowns, lifecycle, "hourly activation cleanup", healthHourlyActivation, activationCleanupWorker)
+	}
 
 	// ──────────────────────────────────────────────────────
 	// 4. 统一 Transport 装配
@@ -186,17 +202,23 @@ func run() error {
 		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
 
-	transport.Register(api, buildPlatformTransportModules(version, cfg, platform, ai.AIHTTPDeps, appLogger)...)
-	transport.RegisterRaw(router, transport.RawDeps{
-		Payment:              platform.Payment,
-		TenantBrandingReader: platform.TenantBranding,
-		Logger:               appLogger,
-	})
+	if role.HasControlAPI() {
+		transport.Register(api, buildPlatformTransportModules(version, cfg, platform, ai.AIHTTPDeps, appLogger)...)
+	}
+	if role.HasControlAPI() {
+		transport.RegisterRaw(router, transport.RawDeps{
+			Payment:              platform.Payment,
+			TenantBrandingReader: platform.TenantBranding,
+			Logger:               appLogger,
+		})
+	}
 
 	// AI gateway + console + fileStore 路由
-	fileStore.Routes(router)
-	runtimeGateway.Routes(router)
-	mgmtConsole.Routes(router)
+	if role.HasGateway() {
+		fileStore.Routes(router)
+		runtimeGateway.Routes(router)
+		mgmtConsole.Routes(router)
+	}
 
 	// 健康检查
 	healthHandler := newHealthHandler(version, func() any {
@@ -237,6 +259,7 @@ func run() error {
 	managementMux.Handle("/metrics", ai.MetricsHandler)
 	managementMux.Handle("/health", healthHandler)
 	managementMux.Handle("/ready", readyHandler)
+	managementMux.Handle("/healthz", healthHandler)
 
 	// ──────────────────────────────────────────────────────
 	// 5. 前端静态文件 embed
@@ -254,8 +277,12 @@ func run() error {
 
 	addr := cfg.Server.Addr
 
+	publicAddr := ""
+	if role.HasControlAPI() || role.HasGateway() {
+		publicAddr = addr
+	}
 	httpRuntime := newHTTPServers(httpServerOptions{
-		PublicAddr:        addr,
+		PublicAddr:        publicAddr,
 		ManagementAddr:    strings.TrimSpace(cfg.Server.ManagementAddr),
 		PublicHandler:     weborigin.Middleware(router, originResolver),
 		ManagementHandler: server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux))),

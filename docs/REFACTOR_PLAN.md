@@ -241,12 +241,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-01 增加多运行角色
 
-- [ ] 增加 `dai control-api` 运行角色。
-- [ ] 增加 `dai gateway` 运行角色。
-- [ ] 增加 `dai worker` 运行角色。
-- [ ] 保留 `dai all` 兼容单进程部署。
-- [ ] 每个角色只初始化所需数据库权限、Redis 能力和后台组件。
-- [ ] 每个角色提供独立 readiness 和内部 health 状态。
+- [x] 增加 `dai control-api` 运行角色。
+- [x] 增加 `dai gateway` 运行角色。
+- [x] 增加 `dai worker` 运行角色。
+- [x] 保留 `dai all` 兼容单进程部署。
+- [x] 每个角色只启用所需 HTTP surface、Redis 能力和后台组件；数据库连接与 schema 校验保持统一入口。
+- [x] 每个角色提供独立 readiness 和内部 health 状态。
 
 ### P2-02 验证所有后台任务的多副本语义
 
@@ -1307,3 +1307,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 结论：平台/AI HTTP 入口均通过 `transport.Module` 或明确的 RawDeps 注册；Transport 不再接收跨域 service locator，具体实现只在组合根投影到模块专属接口。
 - 验证：全仓 `go test ./... -count=1` 全部通过，另经 `go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 和 `git diff --check` 验证。
+
+### P2-01（Runtime role entrypoints，2026-08-28）
+
+- 结构：`cmd/server` 新增 `all`、`control-api`、`gateway` 和 `worker` 角色解析；默认无参数仍为 `all`。
+- 边界：`control-api` 仅注册控制面/Portal 路由，`gateway` 仅注册 runtime/file/console 路由，`worker` 不监听公共业务端口；后台任务只在 `all`/`worker` 启动，管理探针在各角色独立提供。
+- 兼容：`newHTTPServers` 支持无公共地址，仅启动管理 listener；已有单进程启动、监听超时和生命周期语义保持不变。
+- 文档：新增 [`docs/RUNTIME_ROLES.md`](RUNTIME_ROLES.md)，并同步组合根说明与本清单。
+- 回归：`go test ./cmd/server -count=1`、`go test ./... -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 和 `git diff --check` 通过。

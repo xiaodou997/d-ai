@@ -87,6 +87,7 @@ type aiModules struct {
 	started            bool
 	stopped            bool
 	startOnce          sync.Once
+	disableGateway     bool
 }
 
 type aiPlatformDeps struct {
@@ -601,7 +602,7 @@ func (m *aiModules) Start(ctx context.Context) {
 		workerCtx := m.workerCtx
 		m.started = true
 		m.lifecycleMu.Unlock()
-		if m.RuntimeGateway != nil {
+		if !m.disableGateway && m.RuntimeGateway != nil {
 			m.RuntimeGateway.Start()
 		}
 		if m.priceBookSvc != nil {

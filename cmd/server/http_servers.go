@@ -40,8 +40,9 @@ func newHTTPServers(opts httpServerOptions) *httpServers {
 	if opts.Logger == nil {
 		opts.Logger = zap.NewNop()
 	}
-	servers := &httpServers{
-		public: &http.Server{
+	servers := &httpServers{logger: opts.Logger, version: opts.Version}
+	if opts.PublicAddr != "" {
+		servers.public = &http.Server{
 			Addr:              opts.PublicAddr,
 			Handler:           opts.PublicHandler,
 			ReadHeaderTimeout: 10 * time.Second,
@@ -52,9 +53,7 @@ func newHTTPServers(opts httpServerOptions) *httpServers {
 			WriteTimeout:   0,
 			IdleTimeout:    opts.IdleTimeout,
 			MaxHeaderBytes: opts.MaxHeaderBytes,
-		},
-		logger:  opts.Logger,
-		version: opts.Version,
+		}
 	}
 	if opts.ManagementAddr != "" {
 		servers.management = &http.Server{
@@ -83,7 +82,9 @@ func (s *httpServers) Start(stop context.CancelFunc) {
 		return
 	}
 	s.started = true
-	s.publicDone = make(chan struct{})
+	if s.public != nil {
+		s.publicDone = make(chan struct{})
+	}
 	if s.management != nil {
 		s.managementDone = make(chan struct{})
 	}
@@ -106,6 +107,9 @@ func (s *httpServers) Start(stop context.CancelFunc) {
 				stop()
 			}
 		}()
+	}
+	if public == nil {
+		return
 	}
 	go func() {
 		defer close(publicDone)

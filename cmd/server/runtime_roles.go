@@ -23,12 +23,14 @@ type platformRuntimeRole struct {
 	dataCleanup *cleanup.Service
 }
 
-func assemblePlatformRuntimeRole(ctx context.Context, cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, logger *zap.Logger, shutdowns *shutdownStack, lifecycle *lifecycleHealth) (*platformRuntimeRole, error) {
+func assemblePlatformRuntimeRole(ctx context.Context, cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, logger *zap.Logger, shutdowns *shutdownStack, lifecycle *lifecycleHealth, role runtimeRole) (*platformRuntimeRole, error) {
 	modules, err := buildPlatformModules(cfg, pool, billingPool, redisClient, logger)
 	if err != nil {
 		return nil, err
 	}
-	modules.Start(ctx)
+	if role.HasWorkers() {
+		modules.Start(ctx)
+	}
 	shutdowns.Add("platform modules", func(ctx context.Context) error {
 		if err := modules.Stop(ctx); err != nil {
 			return err
@@ -42,12 +44,14 @@ func assemblePlatformRuntimeRole(ctx context.Context, cfg *config.Config, pool, 
 		}
 		return nil
 	})
-	lifecycle.MarkStarted(healthPlatformModules)
-	if modules.banReconciler != nil {
-		lifecycle.MarkStarted(healthBanReconciler)
-	}
-	if modules.sched != nil {
-		lifecycle.MarkStarted(healthScheduler)
+	if role.HasWorkers() {
+		lifecycle.MarkStarted(healthPlatformModules)
+		if modules.banReconciler != nil {
+			lifecycle.MarkStarted(healthBanReconciler)
+		}
+		if modules.sched != nil {
+			lifecycle.MarkStarted(healthScheduler)
+		}
 	}
 	return &platformRuntimeRole{
 		modules:     modules,
@@ -64,7 +68,7 @@ type aiRuntimeRole struct {
 	modules *aiModules
 }
 
-func assembleAIRuntimeRole(ctx context.Context, cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, logger *zap.Logger, platform *platformRuntimeRole, shutdowns *shutdownStack, lifecycle *lifecycleHealth) (*aiRuntimeRole, error) {
+func assembleAIRuntimeRole(ctx context.Context, cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, logger *zap.Logger, platform *platformRuntimeRole, shutdowns *shutdownStack, lifecycle *lifecycleHealth, role runtimeRole) (*aiRuntimeRole, error) {
 	if platform == nil || platform.modules == nil {
 		return nil, fmt.Errorf("platform runtime role is required")
 	}
@@ -74,7 +78,10 @@ func assembleAIRuntimeRole(ctx context.Context, cfg *config.Config, pool, billin
 	if err != nil {
 		return nil, err
 	}
-	modules.Start(ctx)
+	modules.disableGateway = !role.HasGateway()
+	if role.HasWorkers() || role.HasGateway() {
+		modules.Start(ctx)
+	}
 	shutdowns.Add("AI modules", func(ctx context.Context) error {
 		if err := modules.Stop(ctx); err != nil {
 			return err
@@ -88,11 +95,13 @@ func assembleAIRuntimeRole(ctx context.Context, cfg *config.Config, pool, billin
 		}
 		return nil
 	})
-	lifecycle.MarkStarted(healthAIModules)
-	if modules.RuntimeGateway != nil && modules.RuntimeGateway.Health().Started {
+	if role.HasWorkers() || role.HasGateway() {
+		lifecycle.MarkStarted(healthAIModules)
+	}
+	if role.HasGateway() && modules.RuntimeGateway != nil && modules.RuntimeGateway.Health().Started {
 		lifecycle.MarkStarted(healthRuntimeGateway)
 	}
-	if modules.AsyncTasks != nil {
+	if role.HasWorkers() && modules.AsyncTasks != nil {
 		lifecycle.MarkStarted(healthAsyncTasks)
 	}
 	return &aiRuntimeRole{modules: modules}, nil
