@@ -98,10 +98,10 @@ type AdminRouteAuthDeps struct {
 // AdminTenantModuleDeps contains administrator tenant-management routes.
 type AdminTenantModuleDeps struct {
 	AdminRouteAuthDeps
-	TenantReader       tenantports.AdminTenantReader
-	TenantStatusWriter tenantports.AdminTenantStatusWriter
-	TenantWriter       tenantports.AdminTenantWriter
-	Activations        *auth.ActivationService
+	TenantReader    tenantports.AdminTenantReader
+	TenantLifecycle tenantports.AdminTenantLifecycle
+	TenantWriter    tenantports.AdminTenantWriter
+	Activations     *auth.ActivationService
 }
 
 // AdminUsersModuleDeps contains system-admin and tenant-user management
@@ -270,11 +270,11 @@ func toAdminRouteAuth(d AdminRouteAuthDeps) adminRouteAuth {
 func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 	return platformAdminModule{
 		tenants: adminTenantModule{
-			adminRouteAuth:     toAdminRouteAuth(d.Tenants.AdminRouteAuthDeps),
-			TenantReader:       d.Tenants.TenantReader,
-			TenantStatusWriter: d.Tenants.TenantStatusWriter,
-			TenantWriter:       d.Tenants.TenantWriter,
-			Activations:        d.Tenants.Activations,
+			adminRouteAuth:  toAdminRouteAuth(d.Tenants.AdminRouteAuthDeps),
+			TenantReader:    d.Tenants.TenantReader,
+			TenantLifecycle: d.Tenants.TenantLifecycle,
+			TenantWriter:    d.Tenants.TenantWriter,
+			Activations:     d.Tenants.Activations,
 		},
 		users: adminUsersModule{
 			adminRouteAuth:     toAdminRouteAuth(d.Users.AdminRouteAuthDeps),

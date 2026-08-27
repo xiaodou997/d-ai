@@ -17,21 +17,21 @@ import (
 // adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
 // handler 的逻辑（部分内联 SQL + 已搬 repo），输出强类型 DTO、错误 problem+json。
 type adminHandlers struct {
-	tenantReader       tenantports.AdminTenantReader
-	tenantStatusWriter tenantports.AdminTenantStatusWriter
-	tenantWriter       tenantports.AdminTenantWriter
-	accountRepo        userports.AdminAccountReader
-	accountWriter      userports.AdminAccountWriter
-	accountLifecycle   userports.AdminAccountLifecycle
-	endUserRepo        userports.AdminEndUserReader
-	endUserWriter      userports.AdminEndUserWriter
-	systemRepo         systemports.AdminDashboardReader
-	deduction          *billingsvc.DeductionService
-	accountQueries     billingports.AccountQueryReader
-	security           authports.AccountSecurityWriter
-	activations        *auth.ActivationService
-	rechargeSvc        *billingsvc.RechargeService
-	authAuditReader    authports.AuthAuditLogReader
+	tenantReader     tenantports.AdminTenantReader
+	tenantLifecycle  tenantports.AdminTenantLifecycle
+	tenantWriter     tenantports.AdminTenantWriter
+	accountRepo      userports.AdminAccountReader
+	accountWriter    userports.AdminAccountWriter
+	accountLifecycle userports.AdminAccountLifecycle
+	endUserRepo      userports.AdminEndUserReader
+	endUserWriter    userports.AdminEndUserWriter
+	systemRepo       systemports.AdminDashboardReader
+	deduction        *billingsvc.DeductionService
+	accountQueries   billingports.AccountQueryReader
+	security         authports.AccountSecurityWriter
+	activations      *auth.ActivationService
+	rechargeSvc      *billingsvc.RechargeService
+	authAuditReader  authports.AuthAuditLogReader
 }
 
 type activationCredentialOutput struct {
@@ -48,11 +48,10 @@ func setActivationOutput(out *activationCredentialOutput, result userports.Activ
 
 func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 	return &adminHandlers{
-		tenantReader:       d.TenantReader,
-		tenantStatusWriter: d.TenantStatusWriter,
-		tenantWriter:       d.TenantWriter,
-		security:           d.Security,
-		activations:        d.Activations,
+		tenantReader:    d.TenantReader,
+		tenantLifecycle: d.TenantLifecycle,
+		tenantWriter:    d.TenantWriter,
+		activations:     d.Activations,
 	}
 }
 
@@ -123,18 +122,16 @@ func (h *adminHandlers) invalidateUserSessions(ctx context.Context, userID strin
 	return nil
 }
 
-func (h *adminHandlers) syncTenantSecurity(ctx context.Context, tenantID, status string, restoredUserIDs []string) error {
-	if h.security == nil {
-		return nil
-	}
-	if err := h.security.SyncTenantStatus(ctx, tenantID, status, restoredUserIDs); err != nil {
-		return httpx.ErrUnavailable.WithCause(err)
-	}
-	return nil
-}
-
 func adminAccountLifecycleError(err error) error {
 	var securityErr *userports.AdminAccountSecurityError
+	if errors.As(err, &securityErr) {
+		return httpx.ErrUnavailable.WithCause(securityErr.Cause)
+	}
+	return httpx.ErrInternal.WithCause(err)
+}
+
+func adminTenantLifecycleError(err error) error {
+	var securityErr *tenantports.AdminTenantSecurityError
 	if errors.As(err, &securityErr) {
 		return httpx.ErrUnavailable.WithCause(securityErr.Cause)
 	}

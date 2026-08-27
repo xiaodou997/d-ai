@@ -79,7 +79,8 @@ httpServers.Start / Shutdown
 - 终端用户分组、模型授权和用量读取已由独立 `UserSelfReadHTTPDeps` 组合分组、模型目录、用户日志和 usage 端口；Core 不再注册终端用户自助读取路径。
 - 管理 Dashboard 异常扣费告警查询已移入 `internal/system/pg.SystemRepository`；HTTP handler 不再直接执行 `ai_usage_logs` SQL，查询窗口、排序和行映射由 repository 负责。
 - 管理租户详情查询已移入 `internal/tenant/pg.TenantRepository`；终端用户 mutation 的 tenant scope 现在随 command 下沉到 `AdminEndUserRepository`，HTTP handler 不再执行锁外 `iam_accounts` 归属预检。
-- 租户启停级联事务已移入 `internal/tenant/pg.TenantRepository`，通过 `tenant/ports.AdminTenantStatusWriter` 注入；handler 只负责租户黑名单和恢复用户黑名单同步。
+- 租户启停级联事务已移入 `internal/tenant/pg.TenantRepository`，通过 `tenant/ports.AdminTenantStatusWriter` 由 lifecycle service 调用；handler 不再直接负责租户黑名单和恢复用户黑名单同步。
+- 租户启停的级联写入与 Redis 租户/恢复用户投影现在由 `tenant.AdminTenantLifecycleService` 编排；Transport 只接收 lifecycle port，安全投影失败可独立重试。
 - 租户创建（含可选初始租户用户/激活令牌）、更新和删除已移入 `tenant/ports.AdminTenantWriter`；composition root 注入带 `ActivationService.Store` 的 `TenantRepository`，handler 不再持有租户生命周期事务。
 - AI 身份适配器的终端用户归属校验复用 `TenantRepository.GetEndUserTenantID`，不再持有连接池或直接查询 `iam_accounts`。
 - 统一认证保护端点通过 composition root 注入 `auth/ports.AccountReader` / `AccountWriter`；`AuthRepository` 负责当前用户快照、密码和资料写入，Transport 不再直接执行账号 SQL。

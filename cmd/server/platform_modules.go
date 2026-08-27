@@ -50,6 +50,7 @@ type platformModules struct {
 	AuthAccounts          *authpg.AuthRepository
 	AuthRateLimiters      *auth.RateLimiters
 	TenantRepo            *tenantpg.TenantRepository
+	TenantLifecycle       *tenantpkg.AdminTenantLifecycleService
 	TenantBranding        *tenantpg.PortalBrandingRepository
 	TenantSelf            *tenantpkg.SelfService
 	AdminAccounts         *userpg.AdminAccountRepository
@@ -134,6 +135,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	accountQueries := billingsvc.NewAccountQueryService(accountRepo)
 	deductionSvc := billingsvc.NewDeductionService(billingPool, appLogger)
 	rechargeSvc := billingsvc.NewRechargeService(billingPool, tenantRepo)
+	tenantLifecycle := tenantpkg.NewAdminTenantLifecycleService(tenantRepo, security)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	adminAccountLifecycle := userpkg.NewAdminAccountLifecycleService(adminAccountRepo, security)
@@ -159,6 +161,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 		AuthAccounts:          authAccountRepo,
 		AuthRateLimiters:      authRateLimiters,
 		TenantRepo:            tenantRepo,
+		TenantLifecycle:       tenantLifecycle,
 		TenantBranding:        tenantBrandingRepo,
 		TenantSelf:            tenantSelfSvc,
 		AdminAccounts:         adminAccountRepo,

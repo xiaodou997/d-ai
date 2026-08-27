@@ -314,16 +314,15 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 	// 停用/启用只改访问权，不动钱。租户被停用后由 BanChecker 在网关层拦截
 	// （gateway.go:141），余额不需要、也不应该跟着变：过期额度批次现在是一次
 	// 真实的余额扣减，用它当"冻结开关"会真的把租户的钱扣掉，而且启用时无法还原。
-	result, err := h.tenantStatusWriter.UpdateStatus(ctx, in.ID, in.Body.Status)
+	if h.tenantLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户状态服务不可用")
+	}
+	result, err := h.tenantLifecycle.UpdateStatus(ctx, in.ID, in.Body.Status)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminTenantLifecycleError(err)
 	}
 	if !result.Updated {
 		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
-	}
-
-	if err := h.syncTenantSecurity(ctx, in.ID, in.Body.Status, result.RestoredUserIDs); err != nil {
-		return nil, err
 	}
 
 	return okSuccess(), nil

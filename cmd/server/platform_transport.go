@@ -60,7 +60,7 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 			Tenants: transport.AdminTenantModuleDeps{
 				AdminRouteAuthDeps: adminAuth,
 				TenantReader:       platform.TenantRepo,
-				TenantStatusWriter: platform.TenantRepo,
+				TenantLifecycle:    platform.TenantLifecycle,
 				TenantWriter:       platform.TenantRepo,
 				Activations:        platform.Activations,
 			},

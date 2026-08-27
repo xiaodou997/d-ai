@@ -12,10 +12,26 @@ type AdminTenantStatusResult struct {
 	RestoredUserIDs []string
 }
 
+// AdminTenantSecurityError marks a committed tenant status transition whose
+// post-commit ban projection failed. The transition itself is durable and the
+// security command can be retried independently.
+type AdminTenantSecurityError struct {
+	Cause error
+}
+
+func (e *AdminTenantSecurityError) Error() string { return "admin tenant security sync failed" }
+func (e *AdminTenantSecurityError) Unwrap() error { return e.Cause }
+
 // AdminTenantStatusWriter owns the tenant status transaction and account
 // cascade. Redis blacklist synchronization is coordinated by the separate
 // auth security command after the transaction commits.
 type AdminTenantStatusWriter interface {
+	UpdateStatus(ctx context.Context, tenantID, status string) (AdminTenantStatusResult, error)
+}
+
+// AdminTenantLifecycle coordinates tenant persistence with the security
+// projection after a status transition commits.
+type AdminTenantLifecycle interface {
 	UpdateStatus(ctx context.Context, tenantID, status string) (AdminTenantStatusResult, error)
 }
 

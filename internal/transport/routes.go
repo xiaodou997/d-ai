@@ -393,10 +393,10 @@ type adminRouteAuth struct {
 
 type adminTenantModule struct {
 	adminRouteAuth
-	TenantReader       tenantports.AdminTenantReader
-	TenantStatusWriter tenantports.AdminTenantStatusWriter
-	TenantWriter       tenantports.AdminTenantWriter
-	Activations        *auth.ActivationService
+	TenantReader    tenantports.AdminTenantReader
+	TenantLifecycle tenantports.AdminTenantLifecycle
+	TenantWriter    tenantports.AdminTenantWriter
+	Activations     *auth.ActivationService
 }
 
 type adminUsersModule struct {
