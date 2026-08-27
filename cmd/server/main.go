@@ -67,6 +67,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	shutdownTracing := tracing.Init(ctx)
 	shutdowns := &shutdownStack{}
+	lifecycle := newLifecycleHealth()
 	defer func() {
 		// Cancel first so context-owned workers stop before their database and
 		// cache dependencies are released by the stack.
@@ -90,18 +91,30 @@ func run() error {
 	pool, billingPool, redisClient := infra.pool, infra.billingPool, infra.redis
 	// Dependencies are registered immediately after construction. Any later
 	// module assembly error therefore releases them before run() returns.
+	lifecycle.MarkStarted(healthPostgres)
+	lifecycle.MarkStarted(healthBillingPostgres)
+	lifecycle.MarkStarted(healthRedis)
 	shutdowns.Add("postgres", func(context.Context) error {
 		pool.Close()
+		lifecycle.MarkStopped(healthPostgres)
+		if billingPool == pool {
+			lifecycle.MarkStopped(healthBillingPostgres)
+		}
 		return nil
 	})
 	if billingPool != pool {
 		shutdowns.Add("billing postgres", func(context.Context) error {
 			billingPool.Close()
+			lifecycle.MarkStopped(healthBillingPostgres)
 			return nil
 		})
 	}
 	shutdowns.Add("redis", func(context.Context) error {
-		return redisClient.Close()
+		err := redisClient.Close()
+		if err == nil {
+			lifecycle.MarkStopped(healthRedis)
+		}
+		return err
 	})
 
 	// ──────────────────────────────────────────────────────
@@ -115,8 +128,22 @@ func run() error {
 	platform.Start()
 	shutdowns.Add("platform modules", func(context.Context) error {
 		platform.Stop()
+		lifecycle.MarkStopped(healthPlatformModules)
+		if platform.banReconciler != nil {
+			lifecycle.MarkStopped(healthBanReconciler)
+		}
+		if platform.sched != nil {
+			lifecycle.MarkStopped(healthScheduler)
+		}
 		return nil
 	})
+	lifecycle.MarkStarted(healthPlatformModules)
+	if platform.banReconciler != nil {
+		lifecycle.MarkStarted(healthBanReconciler)
+	}
+	if platform.sched != nil {
+		lifecycle.MarkStarted(healthScheduler)
+	}
 	sessionSvc := platform.Sessions
 	activationSvc := platform.Activations
 	dataCleanupSvc := platform.DataCleanup
@@ -132,8 +159,10 @@ func run() error {
 	ai.Start(ctx)
 	shutdowns.Add("AI modules", func(ctx context.Context) error {
 		ai.Stop(ctx)
+		lifecycle.MarkStopped(healthAIModules)
 		return nil
 	})
+	lifecycle.MarkStarted(healthAIModules)
 	fileStore := ai.FileStore
 	imageAssetSvc := ai.ImageAssets
 	runtimeGateway := ai.RuntimeGateway
@@ -142,26 +171,32 @@ func run() error {
 	dataCleanupSvc.Start(ctx)
 	shutdowns.Add("data cleanup", func(ctx context.Context) error {
 		dataCleanupSvc.Stop(ctx)
+		lifecycle.MarkStopped(healthDataCleanup)
 		return nil
 	})
+	lifecycle.MarkStarted(healthDataCleanup)
 
 	// Hourly cleanups
-	shutdowns.Add("hourly image cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+	imageCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
 		if _, err := imageAssetSvc.CleanupExpired(cleanupCtx); err != nil && !errors.Is(err, imageassets.ErrCleanupAlreadyRunning) {
 			appLogger.Warn("expired image asset cleanup failed", zap.Error(err))
 		}
-	}).Stop)
-	shutdowns.Add("hourly file cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) { fileStore.CleanupExpired(cleanupCtx, 500) }).Stop)
-	shutdowns.Add("hourly auth session cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+	})
+	registerPeriodicWorker(shutdowns, lifecycle, "hourly image cleanup", healthHourlyImage, imageCleanupWorker)
+	fileCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) { fileStore.CleanupExpired(cleanupCtx, 500) })
+	registerPeriodicWorker(shutdowns, lifecycle, "hourly file cleanup", healthHourlyFile, fileCleanupWorker)
+	authSessionCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
 		if _, err := sessionSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
 			appLogger.Warn("expired auth session cleanup failed", zap.Error(err))
 		}
-	}).Stop)
-	shutdowns.Add("hourly activation cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+	})
+	registerPeriodicWorker(shutdowns, lifecycle, "hourly auth session cleanup", healthHourlyAuthSession, authSessionCleanupWorker)
+	activationCleanupWorker := startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
 		if _, err := activationSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
 			appLogger.Warn("expired activation credential cleanup failed", zap.Error(err))
 		}
-	}).Stop)
+	})
+	registerPeriodicWorker(shutdowns, lifecycle, "hourly activation cleanup", healthHourlyActivation, activationCleanupWorker)
 
 	// ──────────────────────────────────────────────────────
 	// 4. 统一 Transport 装配
@@ -186,15 +221,12 @@ func run() error {
 	mgmtConsole.Routes(router)
 
 	// 健康检查
-	healthHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		var schedulerHealth any = map[string]any{"started": false, "stopped": false, "tasks": map[string]any{}}
+	healthHandler := newHealthHandler(version, func() any {
 		if platform != nil && platform.sched != nil {
-			schedulerHealth = platform.sched.Health()
+			return platform.sched.Health()
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version, "scheduler": schedulerHealth})
-	})
+		return nil
+	}, lifecycle)
 	readyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -256,12 +288,21 @@ func run() error {
 		Version:           version,
 	})
 	httpRuntime.Start(stop)
+	lifecycle.MarkStarted(healthHTTPPublic)
+	if httpRuntime.management != nil {
+		lifecycle.MarkStarted(healthHTTPManagement)
+	}
 
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpRuntime.Shutdown(shutdownCtx); err != nil {
 		appLogger.Warn("HTTP listener shutdown incomplete", zap.Error(err))
+	} else {
+		lifecycle.MarkStopped(healthHTTPPublic)
+		if httpRuntime.management != nil {
+			lifecycle.MarkStopped(healthHTTPManagement)
+		}
 	}
 	appLogger.Info("server shutdown complete")
 	return nil

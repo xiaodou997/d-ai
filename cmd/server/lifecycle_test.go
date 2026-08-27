@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
@@ -53,6 +57,68 @@ func TestShutdownStackJoinsErrorsAndRejectsLateResources(t *testing.T) {
 	})
 	if want := []string{"second", "first"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("close calls = %v, want %v", got, want)
+	}
+}
+
+func TestLifecycleHealthSnapshotIsolatedAndIdempotent(t *testing.T) {
+	lifecycle := newLifecycleHealth()
+	lifecycle.MarkStarted("worker")
+	lifecycle.MarkStarted("worker")
+
+	snapshot := lifecycle.Snapshot()
+	if got, want := snapshot["worker"], (componentHealth{Started: true}); got != want {
+		t.Fatalf("started component = %+v, want %+v", got, want)
+	}
+
+	// Mutating a returned snapshot must not race with or alter the registry.
+	snapshot["worker"] = componentHealth{Stopped: true}
+	if got := lifecycle.Snapshot()["worker"]; got != (componentHealth{Started: true}) {
+		t.Fatalf("registry was mutated through snapshot: %+v", got)
+	}
+
+	lifecycle.MarkStopped("worker")
+	lifecycle.MarkStopped("worker")
+	if got, want := lifecycle.Snapshot()["worker"], (componentHealth{Started: true, Stopped: true}); got != want {
+		t.Fatalf("stopped component = %+v, want %+v", got, want)
+	}
+}
+
+func TestHealthHandlerProjectsComponentsAndKeepsSchedulerCompatibility(t *testing.T) {
+	lifecycle := newLifecycleHealth()
+	lifecycle.MarkStarted(healthPostgres)
+	lifecycle.MarkStarted(healthAIModules)
+
+	handler := newHealthHandler("test-version", func() any {
+		return map[string]any{"started": true, "stopped": false, "tasks": map[string]any{"sweep": map[string]any{"running": true}}}
+	}, lifecycle)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", recorder.Code)
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cache-control = %q, want no-store", got)
+	}
+	var response struct {
+		Status     string                     `json:"status"`
+		Version    string                     `json:"version"`
+		Scheduler  map[string]any             `json:"scheduler"`
+		Components map[string]componentHealth `json:"components"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(recorder.Body.Bytes())).Decode(&response); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if response.Status != "ok" || response.Version != "test-version" {
+		t.Fatalf("response identity = status %q version %q", response.Status, response.Version)
+	}
+	if response.Scheduler["started"] != true {
+		t.Fatalf("scheduler compatibility field = %#v", response.Scheduler)
+	}
+	if got := response.Components[healthPostgres]; got != (componentHealth{Started: true}) {
+		t.Fatalf("postgres health = %+v", got)
+	}
+	if got := response.Components[healthAIModules]; got != (componentHealth{Started: true}) {
+		t.Fatalf("AI health = %+v", got)
 	}
 }
 

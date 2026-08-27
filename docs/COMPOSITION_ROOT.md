@@ -31,6 +31,7 @@ httpServers.Start / Shutdown
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；停止时先取消自动清理，再释放其数据库依赖。
 - 四个小时级清理任务（图片、文件、会话、激活凭证）现在由 `periodicWorker` 统一持有子 context，首次执行、每小时执行和 Stop 等待都登记在 shutdown stack 中。
+- composition root 维护统一的 `lifecycleHealth` 投影；`/health.components` 暴露基础设施、平台/AI 模块、后台清理任务和公共/管理监听器的 started/stopped 状态，同时保留 Scheduler 任务快照。真实 PostgreSQL/Redis 连通性仍只由 `/ready` 判定。
 - Transport 已将平台 `Deps` 与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
   `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics`、`UpstreamAccounts`、`UpstreamAccess`、`TenantCatalog`、`APIKeyManagement`、`TenantSelfControl`、`TenantGroups`、`TenantSelfRead`、`Workspace`、`UserSelfControl` 和 `UserSelfRead`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
@@ -140,6 +141,6 @@ httpServers.Start / Shutdown
 - Workspace HTTP 已由独立 `WorkspaceHTTPDeps` 组合 tenant/user 工作台端口，并通过 `RegisterWorkspace` 注册两个认证分组；Core 不再注册 14 条工作台路径。
 - 用户自助控制 HTTP 已由独立 `UserSelfControlHTTPDeps` 组合 API key、分组、限额和 `HTTPAuthDeps`，并通过 `RegisterUserSelfControl` 注册终端用户认证分组；Core 不再注册 9 条用户 key/限额路径。
 - 用户自助读取 HTTP 已由独立 `UserSelfReadHTTPDeps` 组合分组、模型目录、用户日志、usage 和 `HTTPAuthDeps`，并通过 `RegisterUserSelfRead` 注册终端用户认证分组；Core 不再注册 5 条用户读取路径。
-- 部分后台组件仍只有 `Start(ctx)` 或 `Start/Stop`，尚未统一为 `Start/Stop/Health` 接口；后续继续补齐统一可观测状态，当前已不再有未登记的小时级清理 goroutine。
+- 部分后台组件仍只有 `Start(ctx)` 或 `Start/Stop`，尚未提供自身故障级 `Health`/指标接口；当前 root 级生命周期状态已统一投影到 `/health.components`，且不再有未登记的小时级清理 goroutine。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

@@ -132,8 +132,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、data cleanup 和小时级清理任务已补齐幂等停止与等待退出，Health 统一投影仍待补齐。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，根级生命周期投影已接入 `/health`，组件自身探针仍待补齐。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、data cleanup 和小时级清理任务已补齐幂等停止与等待退出，`/health.components` 已统一暴露生命周期状态，故障级 Health 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
@@ -875,6 +875,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：新增 `periodicWorker`，为图片、文件、认证会话和激活凭证四个小时级任务提供独立可取消 context、幂等 Stop 和退出等待；清理函数接收 worker context，停止时可中断正在进行的数据库/文件操作。
 - 装配：main 不再直接启动裸 goroutine，四个 worker 的 Stop 函数均登记到 shutdown stack，且在资源释放前按逆序等待完成。
 - 验证：新增首次执行、重复 Stop 和 in-flight cleanup 超时/再次等待测试；cmd/server 测试、`go vet`、`staticcheck` 和差异检查通过。
+
+### P1-02（Unified lifecycle health projection，2026-08-27）
+
+- 投影：新增 composition-root `lifecycleHealth` 注册表，统一记录 PostgreSQL（含 billing 逻辑池）、Redis、平台模块、Ban reconciler、Scheduler、AI 模块、data cleanup、四个小时级清理 worker 和公共/管理监听器的 started/stopped 状态。
+- 接口：`/health` 新增 `components` 对象并保留原有 `scheduler` 详细快照；组件状态不包含 DSN、Provider 或错误内部细节，`/ready` 继续执行 PostgreSQL/Redis 真实连通性探活。
+- 装配：所有资源在成功启动后登记，关闭回调完成后标记 stopped；小时级 worker 通过统一注册函数接入 shutdown stack，超时关闭不会被误报为已停止。
+- 回归：新增生命周期快照隔离、幂等标记和 health JSON 兼容性测试；`go test ./cmd/server -count=1`、`go vet ./cmd/server` 和差异检查通过。
 
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 
