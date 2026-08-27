@@ -40,7 +40,7 @@ func registerAdminUsageBilling(api huma.API, d adminUsageBillingModule) {
 
 func (h *adminHandlers) batchRefundUsage(ctx context.Context, in *batchRefundUsageInput) (*batchUsageOpOutput, error) {
 	claims := userClaimsFromCtx(ctx)
-	res := h.deduction.BatchRefundUsage(in.Body.RequestIDs, in.Body.Reason, userIDOf(claims))
+	res := h.deduction.BatchRefundUsage(ctx, in.Body.RequestIDs, in.Body.Reason, userIDOf(claims))
 	return batchUsageResult(res), nil
 }
 

@@ -98,6 +98,7 @@ httpServers.Start / Shutdown
 - Outbox 积压与 parked row 的排查、单行 requeue 和禁止操作见 `docs/BILLING_OUTBOX_RUNBOOK.md`；恢复必须保留原 `request_id` 并先修复根因。
 - 支付 sweep 额外发布 retry 总量、到期重试量、最老失败时长和统计读取失败指标；排查顺序与 PromQL 告警阈值记录在 `docs/PAYMENT_SWEEP_RUNBOOK.md`。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
+- 运营账务 command 的 context 由 HTTP/payment application 一路传入 `DeductionService`；退款、充值撤销和批量退款不再创建脱离请求的 `context.Background()` 数据库操作，取消时批量处理会停止剩余项目。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。
 - 三类管理账号密码重置的目标类型校验与凭证结果映射也通过 `AdminAccountWriter.Reset*Password` / `AdminEndUserWriter.ResetEndUserPassword` 注入；`ActivationService.Reset` 仍由用户 adapter 调用，HTTP handler 不再直接查询 `iam_accounts`。

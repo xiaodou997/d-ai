@@ -175,6 +175,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，其余用户/租户/支付域继续按边界逐项迁移。
 - [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
 - [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，公告与少量 legacy 编排仍待收敛。
+- [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1032,3 +1033,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 覆盖：Serving 既有候选分层、sticky、attempt failover、stream pre/post-commit、跨协议转换和 image relay 测试继续锁定拆分前的路由与响应语义；新增 `TestCandidateSplitExhaustsAllRoutesForOnePhysicalTarget` 锁定同一物理目标的耗尽规则。
 - 覆盖：CommercialRepo 保留 compile-time repository contract，并由 group/target/dispatch/binding、pricebook、group transfer 集成测试覆盖聚合拆分后的 SQL、计费和配置行为。
 - 验证：`go test ./internal/ai/serving -count=1`、`go vet ./internal/ai/serving`、`staticcheck ./internal/ai/serving` 通过；相关 CommercialRepo 测试已在拆分提交中验证。
+
+### P1-03（Billing command context propagation，2026-08-27）
+
+- 边界：`DeductionService` 的用量退款、充值撤销和批量退款 command 统一接收调用方 context；Transport 与 PaymentService 不再让账务操作隐式创建 `context.Background()`。
+- 取消语义：数据库查询、锁、账本写入、审计和提交沿用同一 context；批量退款检测取消并停止处理剩余请求，查询取消不会再被误映射为“记录不存在”。
+- 回归：新增取消 context 的退款、撤销和批量命令测试；定向 billing/payment/transport 编译测试、gofmt 与差异检查通过。

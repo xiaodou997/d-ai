@@ -232,7 +232,7 @@ func (s *PaymentService) ReverseManualRechargeCredit(ctx context.Context, orderI
 	if deduction == nil {
 		deduction = billingsvc.NewDeductionService(s.pool, s.logger)
 	}
-	if _, err := deduction.ReverseOrder(item.BalanceOrderID, reason, operatorID); err != nil {
+	if _, err := deduction.ReverseOrder(ctx, item.BalanceOrderID, reason, operatorID); err != nil {
 		return nil, err
 	}
 	return s.GetAdminRechargeOrder(ctx, item.OrderID)

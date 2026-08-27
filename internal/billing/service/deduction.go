@@ -48,9 +48,7 @@ func NewDeductionService(pool *pgxpool.Pool, logger *zap.Logger) *DeductionServi
 //
 // 退款就是把钱加回账户。账户余额是有符号的，所以「欠费的账户退款只清欠、不退现」
 // 这条规则不需要任何代码来实现 —— 加法本身就是这个语义。
-func (s *DeductionService) RefundUsage(requestID, reason, operatorID string) error {
-	ctx := context.Background()
-
+func (s *DeductionService) RefundUsage(ctx context.Context, requestID, reason, operatorID string) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -68,6 +66,9 @@ func (s *DeductionService) RefundUsage(requestID, reason, operatorID string) err
 		FOR UPDATE
 	`, requestID).Scan(&tenantID, &userID, &tenantCredits, &userCredits, &billingStatus, &refundStatus)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return shared.ErrUsageNotFound
 	}
 	if billingStatus != "settled" {
@@ -162,8 +163,8 @@ type ReverseResult struct {
 // This is the unrestricted port used by platform operators and the completed
 // payment-refund workflow. Tenant-scoped callers must use ReverseTenantOrder
 // so the scope check runs under the same row lock as the state transition.
-func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*ReverseResult, error) {
-	return s.reverseOrder(orderID, "", reason, operatorID)
+func (s *DeductionService) ReverseOrder(ctx context.Context, orderID, reason, operatorID string) (*ReverseResult, error) {
+	return s.reverseOrder(ctx, orderID, "", reason, operatorID)
 }
 
 // ReverseTenantOrder 撤销本租户的一次性用户充值。
@@ -172,16 +173,14 @@ func (s *DeductionService) ReverseOrder(orderID, reason, operatorID string) (*Re
 // preflight query in HTTP. The order row is selected FOR UPDATE before its
 // tenant and order type are checked, so an order cannot change scope between
 // authorization and reversal.
-func (s *DeductionService) ReverseTenantOrder(orderID, tenantID, reason, operatorID string) (*ReverseResult, error) {
+func (s *DeductionService) ReverseTenantOrder(ctx context.Context, orderID, tenantID, reason, operatorID string) (*ReverseResult, error) {
 	if tenantID == "" {
 		return nil, shared.ErrForbidden
 	}
-	return s.reverseOrder(orderID, tenantID, reason, operatorID)
+	return s.reverseOrder(ctx, orderID, tenantID, reason, operatorID)
 }
 
-func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID string) (*ReverseResult, error) {
-	ctx := context.Background()
-
+func (s *DeductionService) reverseOrder(ctx context.Context, orderID, tenantID, reason, operatorID string) (*ReverseResult, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -200,6 +199,9 @@ func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID st
 	`, orderID).Scan(&orderTenantID, &status, &orderType, &paymentOrderID, &creditAmount,
 		&reversedAmount, &lostAmount, &reversedAt, &reversedBy, &reversalReason)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, shared.ErrRechargeNotFound
 	}
 	if tenantID != "" && (orderTenantID != tenantID || orderType != billing.OrderTypeTenantToUser) {
@@ -303,7 +305,7 @@ func (s *DeductionService) reverseOrder(orderID, tenantID, reason, operatorID st
 	}, nil
 }
 
-func (s *DeductionService) BatchRefundUsage(requestIDs []string, reason, operatorID string) BatchOpResult {
+func (s *DeductionService) BatchRefundUsage(ctx context.Context, requestIDs []string, reason, operatorID string) BatchOpResult {
 	if len(requestIDs) > 100 {
 		requestIDs = requestIDs[:100]
 	}
@@ -313,15 +315,32 @@ func (s *DeductionService) BatchRefundUsage(requestIDs []string, reason, operato
 		Failed:    make([]BatchOpError, 0),
 	}
 
-	for _, requestID := range requestIDs {
+	for i, requestID := range requestIDs {
+		if err := ctx.Err(); err != nil {
+			for _, pendingID := range requestIDs[i:] {
+				result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: err.Error()})
+			}
+			break
+		}
 		// 读取原始金额用于汇总（RefundUsage 内部会校验状态）。
 		var tenantCredits, userCredits int64
-		_ = s.pool.QueryRow(context.Background(), `
+		if err := s.pool.QueryRow(ctx, `
 			SELECT tenant_payable, user_charged FROM ai_usage_logs WHERE request_id = $1
-		`, requestID).Scan(&tenantCredits, &userCredits)
+		`, requestID).Scan(&tenantCredits, &userCredits); err != nil && ctx.Err() != nil {
+			for _, pendingID := range requestIDs[i:] {
+				result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: ctx.Err().Error()})
+			}
+			break
+		}
 
-		if err := s.RefundUsage(requestID, reason, operatorID); err != nil {
+		if err := s.RefundUsage(ctx, requestID, reason, operatorID); err != nil {
 			result.Failed = append(result.Failed, BatchOpError{RequestID: requestID, Reason: err.Error()})
+			if ctx.Err() != nil {
+				for _, pendingID := range requestIDs[i+1:] {
+					result.Failed = append(result.Failed, BatchOpError{RequestID: pendingID, Reason: ctx.Err().Error()})
+				}
+				break
+			}
 			continue
 		}
 

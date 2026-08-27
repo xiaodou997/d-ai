@@ -17,6 +17,35 @@ import (
 	shared "xiaodou/dai/internal/domain"
 )
 
+func TestDeductionCommandsHonorCanceledContext(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	deduction := service.NewDeductionService(pool, zap.NewNop())
+
+	if err := deduction.RefundUsage(canceled, "missing", "canceled", "test"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled usage refund error = %v, want context.Canceled", err)
+	}
+	if _, err := deduction.ReverseOrder(canceled, "missing", "canceled", "test"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled recharge reversal error = %v, want context.Canceled", err)
+	}
+	result := deduction.BatchRefundUsage(canceled, []string{"one", "two"}, "canceled", "test")
+	if len(result.Succeeded) != 0 || len(result.Failed) != 2 {
+		t.Fatalf("canceled batch result = %+v, want two failures and no successes", result)
+	}
+	for _, failure := range result.Failed {
+		if failure.Reason != context.Canceled.Error() {
+			t.Fatalf("canceled batch failure = %+v, want context canceled", failure)
+		}
+	}
+}
+
 func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
@@ -48,7 +77,7 @@ func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
 	grantRefundBalance(t, ctx, pool, ledger.Ref{Kind: ledger.KindUser, ID: "user_refund", TenantID: "tenant_refund"}, 2000)
 
 	deduction := service.NewDeductionService(pool, zap.NewNop())
-	if err := deduction.RefundUsage("req-refund", "operator correction", "admin-refund"); err != nil {
+	if err := deduction.RefundUsage(ctx, "req-refund", "operator correction", "admin-refund"); err != nil {
 		t.Fatalf("refund usage: %v", err)
 	}
 
@@ -96,7 +125,7 @@ func TestRefundUsageCreditsAccountsOnceAndAuditsUsage(t *testing.T) {
 		t.Fatalf("usage repair before/after state = %#v -> %#v", before, after)
 	}
 
-	if err := deduction.RefundUsage("req-refund", "duplicate", "admin-refund"); err == nil {
+	if err := deduction.RefundUsage(ctx, "req-refund", "duplicate", "admin-refund"); err == nil {
 		t.Fatal("duplicate usage refund succeeded")
 	}
 	if err := pool.QueryRow(ctx, `SELECT balance_micro FROM bill_accounts WHERE account_id = 'user_refund'`).Scan(&userBalance); err != nil {
@@ -161,7 +190,7 @@ func TestReverseOnlineUserCreditRequiresRefundWorkflow(t *testing.T) {
 		t.Fatalf("seed online recharge: %v", err)
 	}
 
-	if _, err := service.NewDeductionService(pool, zap.NewNop()).ReverseOrder("ORD_REVERSE_USER", "risk review", "admin-1"); err == nil {
+	if _, err := service.NewDeductionService(pool, zap.NewNop()).ReverseOrder(ctx, "ORD_REVERSE_USER", "risk review", "admin-1"); err == nil {
 		t.Fatal("online recharge was reversed without completed refund workflow")
 	}
 
@@ -216,10 +245,10 @@ func TestReverseTenantOrderEnforcesScopeInsideReversalTransaction(t *testing.T) 
 	grantTenantRechargeBalance(t, ctx, pool, "user_scope_a", "tenant_scope_a", "ORD_SCOPE_USER", 1000)
 
 	deduction := service.NewDeductionService(pool, zap.NewNop())
-	if _, err := deduction.ReverseTenantOrder("ORD_SCOPE_USER", "tenant_scope_b", "wrong tenant", "tenant-b"); !errors.Is(err, shared.ErrForbidden) {
+	if _, err := deduction.ReverseTenantOrder(ctx, "ORD_SCOPE_USER", "tenant_scope_b", "wrong tenant", "tenant-b"); !errors.Is(err, shared.ErrForbidden) {
 		t.Fatalf("cross-tenant reversal error = %v, want ErrForbidden", err)
 	}
-	if _, err := deduction.ReverseTenantOrder("ORD_SCOPE_TENANT", "tenant_scope_a", "wrong order type", "tenant-a"); !errors.Is(err, shared.ErrForbidden) {
+	if _, err := deduction.ReverseTenantOrder(ctx, "ORD_SCOPE_TENANT", "tenant_scope_a", "wrong order type", "tenant-a"); !errors.Is(err, shared.ErrForbidden) {
 		t.Fatalf("platform order reversal error = %v, want ErrForbidden", err)
 	}
 
@@ -235,7 +264,7 @@ func TestReverseTenantOrderEnforcesScopeInsideReversalTransaction(t *testing.T) 
 		t.Fatalf("forbidden reversal changed order/balance to %s/%d", status, balance)
 	}
 
-	result, err := deduction.ReverseTenantOrder("ORD_SCOPE_USER", "tenant_scope_a", "approved", "tenant-a")
+	result, err := deduction.ReverseTenantOrder(ctx, "ORD_SCOPE_USER", "tenant_scope_a", "approved", "tenant-a")
 	if err != nil {
 		t.Fatalf("same-tenant reversal: %v", err)
 	}

@@ -64,8 +64,8 @@ func TestRandomConcurrentBillingProperty(t *testing.T) {
 		orderID := fmt.Sprintf("PROP_REVOKE_%02d", i)
 		operations = append(operations, propertyOperation{
 			name: "revoke/" + orderID,
-			run: func(context.Context) error {
-				_, err := billingservice.NewDeductionService(pool, zap.NewNop()).ReverseOrder(orderID, "property schedule", "property-test")
+			run: func(ctx context.Context) error {
+				_, err := billingservice.NewDeductionService(pool, zap.NewNop()).ReverseOrder(ctx, orderID, "property schedule", "property-test")
 				return err
 			},
 		})
@@ -100,8 +100,8 @@ func TestRandomConcurrentBillingProperty(t *testing.T) {
 		requestID := fmt.Sprintf("PROP_REFUND_%02d", i)
 		operations = append(operations, propertyOperation{
 			name: "refund/" + requestID,
-			run: func(context.Context) error {
-				return billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(requestID, "property refund", "property-test")
+			run: func(ctx context.Context) error {
+				return billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(ctx, requestID, "property refund", "property-test")
 			},
 		})
 	}
@@ -202,12 +202,12 @@ func TestConcurrentFinancialCommandsAreIdempotent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			results <- commandResult{kind: "refund", err: billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage("IDEMP_USAGE", "idempotent refund", "property-test")}
+			results <- commandResult{kind: "refund", err: billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(ctx, "IDEMP_USAGE", "idempotent refund", "property-test")}
 		}()
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := billingservice.NewDeductionService(pool, zap.NewNop()).ReverseOrder("IDEMP_ORDER", "idempotent reversal", "property-test")
+			_, err := billingservice.NewDeductionService(pool, zap.NewNop()).ReverseOrder(ctx, "IDEMP_ORDER", "idempotent reversal", "property-test")
 			results <- commandResult{kind: "reversal", err: err}
 		}()
 	}

@@ -114,7 +114,7 @@ func TestMoneyInvariantSuiteCoversCrossModuleLifecycle(t *testing.T) {
 	}
 	checkHealthy("after charge")
 
-	if _, err := billingservice.NewDeductionService(pool, zap.NewNop()).ReverseOrder("INV_USER_ORDER", "invariant reversal", "invariant-test"); err != nil {
+	if _, err := billingservice.NewDeductionService(pool, zap.NewNop()).ReverseOrder(ctx, "INV_USER_ORDER", "invariant reversal", "invariant-test"); err != nil {
 		t.Fatalf("reverse recharge: %v", err)
 	}
 	checkHealthy("after recharge reversal")
@@ -130,7 +130,7 @@ func TestMoneyInvariantSuiteCoversCrossModuleLifecycle(t *testing.T) {
 	`, tenantID, userID); err != nil {
 		t.Fatalf("seed refundable usage: %v", err)
 	}
-	if err := billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage("INV_REFUND_USAGE", "invariant refund", "invariant-test"); err != nil {
+	if err := billingservice.NewDeductionService(pool, zap.NewNop()).RefundUsage(ctx, "INV_REFUND_USAGE", "invariant refund", "invariant-test"); err != nil {
 		t.Fatalf("refund usage: %v", err)
 	}
 	checkHealthy("after usage refund")

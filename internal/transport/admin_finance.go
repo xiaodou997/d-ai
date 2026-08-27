@@ -255,9 +255,9 @@ func (h *adminHandlers) reverseRecharge(ctx context.Context, in *reverseRecharge
 	var err error
 	actor := actorFromClaims(claims)
 	if actor.Has(auth.CapabilityTenantSelf) {
-		result, err = h.deduction.ReverseTenantOrder(in.OrderID, string(actor.TenantID), in.Body.Reason, string(actor.UserID))
+		result, err = h.deduction.ReverseTenantOrder(ctx, in.OrderID, string(actor.TenantID), in.Body.Reason, string(actor.UserID))
 	} else {
-		result, err = h.deduction.ReverseOrder(in.OrderID, in.Body.Reason, string(actor.UserID))
+		result, err = h.deduction.ReverseOrder(ctx, in.OrderID, in.Body.Reason, string(actor.UserID))
 	}
 	if err != nil {
 		if errors.Is(err, shared.ErrForbidden) {
@@ -291,7 +291,7 @@ func (h *adminHandlers) refundUsage(ctx context.Context, in *usageRefundInput) (
 	if reason == "" {
 		reason = "管理员手动退款"
 	}
-	if err := h.deduction.RefundUsage(in.Body.RequestID, reason, claims.UserID); err != nil {
+	if err := h.deduction.RefundUsage(ctx, in.Body.RequestID, reason, claims.UserID); err != nil {
 		return nil, toProblem(err)
 	}
 	out := &messageOutput{}
