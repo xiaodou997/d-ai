@@ -25,7 +25,7 @@ func registerJWTKeys(api huma.API, d jwtKeysModule) {
 	huma.Register(api, huma.Operation{OperationID: "list-jwt-keys", Method: http.MethodGet, Path: "/api/v1/jwt-keys",
 		Summary: "JWT 签名密钥列表", Tags: []string{"jwt-keys"}, Middlewares: superAdmin},
 		func(ctx context.Context, _ *struct{}) (*jwtKeysOutput, error) {
-			keys, err := jwtSvc.ListKeys()
+			keys, err := jwtSvc.ListKeys(ctx)
 			if err != nil {
 				return nil, httpx.ErrInternal.WithCause(err)
 			}
@@ -38,7 +38,7 @@ func registerJWTKeys(api huma.API, d jwtKeysModule) {
 	huma.Register(api, huma.Operation{OperationID: "rotate-jwt-key", Method: http.MethodPost, Path: "/api/v1/jwt-keys/rotate",
 		Summary: "轮换 JWT 签名密钥", Tags: []string{"jwt-keys"}, Middlewares: superAdmin},
 		func(ctx context.Context, _ *struct{}) (*messageOutput, error) {
-			if err := jwtSvc.RotateKey(); err != nil {
+			if err := jwtSvc.RotateKey(ctx); err != nil {
 				return nil, httpx.ErrInternal.WithCause(err)
 			}
 			out := &messageOutput{}

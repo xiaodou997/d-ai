@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ func TestRetireExpiredGraceKeysReloadsEveryReplica(t *testing.T) {
 
 	cfg := config.JWTConfig{Expiration: 15 * time.Minute, RefreshExpiration: time.Hour, Issuer: "dai-jwt-retire-test"}
 	first := NewJWTService(cfg, pool)
-	if err := first.RotateKey(); err != nil {
+	if err := first.RotateKey(ctx); err != nil {
 		t.Fatalf("rotate signing key: %v", err)
 	}
 	second := NewJWTService(cfg, pool)
@@ -56,5 +57,27 @@ func TestRetireExpiredGraceKeysReloadsEveryReplica(t *testing.T) {
 	}
 	if retired != 1 {
 		t.Fatalf("retired signing keys = %d, want 1", retired)
+	}
+}
+
+func TestJWTKeyManagementHonorsCanceledContext(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("JWT test database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewJWTService(config.JWTConfig{Expiration: 15 * time.Minute, RefreshExpiration: time.Hour, Issuer: "dai-jwt-key-context"}, pool)
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := service.ListKeys(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ListKeys() error = %v, want context.Canceled", err)
+	}
+	if err := service.RotateKey(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("RotateKey() error = %v, want context.Canceled", err)
 	}
 }

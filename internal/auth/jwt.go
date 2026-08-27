@@ -355,7 +355,10 @@ func (s *JWTService) validateAccessSession(ctx context.Context, claims *Claims) 
 
 // RotateKey 密钥轮换：生成新密钥，旧 active 密钥进入 24 小时宽限期
 // 整个过程在一个事务中完成
-func (s *JWTService) RotateKey() error {
+func (s *JWTService) RotateKey(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return fmt.Errorf("generate RSA key: %w", err)
@@ -378,7 +381,6 @@ func (s *JWTService) RotateKey() error {
 	now := time.Now().UTC()
 	graceUntil := now.Add(24 * time.Hour)
 
-	ctx := context.Background()
 	tx, err := s.database.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -408,7 +410,7 @@ func (s *JWTService) RotateKey() error {
 		return fmt.Errorf("commit rotation: %w", err)
 	}
 
-	return s.reloadKeys(context.Background())
+	return s.reloadKeys(ctx)
 }
 
 // RetireExpiredGraceKeys 退役宽限期已过的密钥（由调度器定期调用）
@@ -449,8 +451,7 @@ func (s *JWTService) GetJWKS() *JWKSResponse {
 }
 
 // ListKeys 列出所有密钥信息（管理员用）
-func (s *JWTService) ListKeys() ([]KeyInfo, error) {
-	ctx := context.Background()
+func (s *JWTService) ListKeys(ctx context.Context) ([]KeyInfo, error) {
 	rows, err := s.database.Query(ctx, `
 		SELECT id, kid, status, created_at, grace_until, retired_at
 		FROM auth_signing_keys

@@ -185,6 +185,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 用户身份查询与状态更新统一透传调用方 context；`UserService` 不再丢弃请求取消信号，PostgreSQL UserRepository 的读写均使用传入 context。
 - [x] 邀请码公开查询、邀请码管理、用户名唯一性检查和邀请注册统一透传调用方 context；InviteService/InviteRepository 不再为请求路径隐式创建 `context.Background()`。
 - [x] JWT access token 的 session 校验统一透传请求 context；平台、AI Transport 和 Console middleware 不再让取消的请求继续使用独立 `context.Background()` 查询会话。
+- [x] JWT signing key 列表与轮换 command 统一接收请求 context；管理端取消请求会停止密钥查询/事务，轮换前不会继续生成无用 RSA 密钥。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1102,3 +1103,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 上下文：`JWTService.ParseToken` 接收调用方 context，access token 的实时 session 查询使用同一取消/超时链；平台 Huma、AI Huma 和 Console 原生入口均传递请求 context。
 - 契约：更新 `TokenVerifier` 接口及实现，保持 token 签名、claims、黑名单和租户/账号状态校验语义不变，仅改变数据库查询的取消边界。
 - 回归：新增真实 PostgreSQL 取消查询测试；auth、transport、AI transport/Console 定向测试与 race、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-03（JWT key management context propagation，2026-08-27）
+
+- 上下文：JWT key 列表查询与轮换事务改为接收管理请求 context；轮换在 context 已取消时先返回，不生成无用 RSA 密钥，提交后的 key reload 继续沿用调用链。
+- 边界：`/api/v1/jwt-keys` 的 Transport 只转发 context，未改变超级管理员授权、RS256 key 状态转换和 24 小时 grace 语义。
+- 回归：新增真实 PostgreSQL 下 `ListKeys`/`RotateKey` 取消测试；auth/transport 定向测试、race、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。
