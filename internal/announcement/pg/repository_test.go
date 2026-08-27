@@ -3,6 +3,7 @@ package pg_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -98,6 +99,12 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 	}
 	if len(inboxA.Items) != 0 || inboxA.UnreadCount != 0 {
 		t.Fatalf("ListInbox(A after archive) = %#v, want empty", inboxA)
+	}
+	if err := service.DeleteDraft(ctx, announcement.NewActor("SA_"+suffix, "", 1), "missing-announcement"); !errors.Is(err, announcement.ErrNotFound) {
+		t.Fatalf("DeleteDraft(missing) error = %v, want ErrNotFound", err)
+	}
+	if _, err := service.Archive(ctx, announcement.NewActor("SA_"+suffix, "", 1), "missing-announcement"); !errors.Is(err, announcement.ErrNotFound) {
+		t.Fatalf("Archive(missing) error = %v, want ErrNotFound", err)
 	}
 }
 

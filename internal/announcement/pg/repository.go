@@ -288,6 +288,13 @@ func (r *Repository) Archive(ctx context.Context, actor announcement.Actor, id s
 	if err != nil {
 		return announcement.Announcement{}, err
 	}
+	status, err := lockManagedStatus(ctx, tx, where, args)
+	if err != nil {
+		return announcement.Announcement{}, err
+	}
+	if status != announcement.StatusPublished {
+		return announcement.Announcement{}, announcement.ErrInvalidTransition
+	}
 	args = append(args, now, string(actor.UserID))
 	query := fmt.Sprintf(`UPDATE ann_announcements
 		SET status='archived', archived_at=$%d, updated_by=$%d, updated_at=$%d
@@ -337,6 +344,13 @@ func (r *Repository) DeleteDraft(ctx context.Context, actor announcement.Actor, 
 	where, args, err := managedWhere(actor, id)
 	if err != nil {
 		return err
+	}
+	status, err := lockManagedStatus(ctx, tx, where, args)
+	if err != nil {
+		return err
+	}
+	if status != announcement.StatusDraft {
+		return announcement.ErrInvalidTransition
 	}
 	result, err := tx.Exec(ctx, "DELETE FROM ann_announcements WHERE "+where+" AND status='draft'", args...)
 	if err != nil {
@@ -511,6 +525,18 @@ func managedWhere(actor announcement.Actor, id string) (string, []any, error) {
 		return "announcement_id=$1 AND publisher_type='tenant' AND publisher_tenant_id=$2", []any{id, string(actor.TenantID)}, nil
 	}
 	return "", nil, announcement.ErrForbidden
+}
+
+func lockManagedStatus(ctx context.Context, tx pgx.Tx, where string, args []any) (announcement.Status, error) {
+	var status announcement.Status
+	err := tx.QueryRow(ctx, "SELECT status FROM ann_announcements WHERE "+where+" FOR UPDATE", args...).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", announcement.ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return status, nil
 }
 
 func managedListWhere(actor announcement.Actor) (string, []any, error) {

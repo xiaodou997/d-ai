@@ -177,7 +177,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，其余用户/租户/支付域继续按边界逐项迁移。
 - [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务、终端用户 tenant scope 和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
-- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，公告与少量 legacy 编排仍待收敛。
+- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入、公告状态事务和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
 - [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
@@ -1169,3 +1169,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - HTTP：移除 `TenantRepository.GetEndUserTenantID` 的锁外归属预检，删除 `AdminEndUsersModuleDeps` 的无关 `TenantReader` 依赖；Transport 只提取 claims scope、调用 writer 和映射结果。
 - 一致性：状态/重置/删除与最终写入共享同一 scope 条件，避免检查后租户归属变化或删除竞态导致越权操作；删除仍在余额锁和安全 guard 之后提交。
 - 回归：新增 repository 跨租户状态、重置和删除拒绝测试，以及 scope 投影测试；user/pg、Transport、server 定向测试和差异检查通过。
+
+### P1-03（Announcement transition transaction boundary，2026-08-27）
+
+- 边界：公告发布、下线和草稿删除的状态读取与条件写入统一由 PostgreSQL repository 在同一事务/行锁内完成；Service 不再执行锁外 `GetManaged` 后再决定状态机分支。
+- 语义：缺失公告仍返回 `ErrNotFound`，状态不匹配仍返回 `ErrInvalidTransition`，并发状态变更不会因两次读写产生错误覆盖。
+- 回归：新增 repository 缺失目标错误回归，并将 Service 测试调整为验证状态转换由 writer 负责；announcement、Transport、server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。

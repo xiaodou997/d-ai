@@ -68,8 +68,22 @@ type lifecycleRepository struct {
 	deleteCalls int
 }
 
+type transitionOnlyRepository struct {
+	createDraftRepository
+	item Announcement
+}
+
+func (r *transitionOnlyRepository) Publish(_ context.Context, _ Actor, _ string, now time.Time) (Announcement, error) {
+	r.item.Status = StatusPublished
+	r.item.PublishedAt = &now
+	return r.item, nil
+}
+
 func (r *lifecycleRepository) DeleteDraft(_ context.Context, _ Actor, _ string) error {
 	r.deleteCalls++
+	if r.item.Status != StatusDraft {
+		return ErrInvalidTransition
+	}
 	return nil
 }
 
@@ -181,7 +195,15 @@ func TestPublishedAnnouncementCannotBeEdited(t *testing.T) {
 	if err := service.DeleteDraft(context.Background(), actor, "ANN_1"); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("DeleteDraft() error = %v, want %v", err, ErrInvalidTransition)
 	}
-	if repo.deleteCalls != 0 {
-		t.Fatalf("DeleteDraft repository calls = %d, want 0", repo.deleteCalls)
+	if repo.deleteCalls != 1 {
+		t.Fatalf("DeleteDraft repository calls = %d, want 1", repo.deleteCalls)
+	}
+}
+
+func TestPublishDoesNotRequireManagedReader(t *testing.T) {
+	repo := &transitionOnlyRepository{item: Announcement{ID: "ANN_1", Status: StatusDraft}}
+	service := NewService(repo)
+	if _, err := service.Publish(context.Background(), Actor{UserType: 1, UserID: "SA_ROOT"}, repo.item.ID); err != nil {
+		t.Fatalf("Publish() error = %v", err)
 	}
 }

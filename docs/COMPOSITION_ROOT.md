@@ -87,6 +87,7 @@ httpServers.Start / Shutdown
 - 管理充值目标的租户存在与终端用户归属校验复用 `TenantRepository`；`RechargeService.GrantManual` 持有目标锁并提交充值订单、额度包和余额变更事务，Transport 不再直接读取 `iam_tenants` / `iam_accounts` 做前置校验。
 - `GrantBalance` 保留为支付结算使用的外部事务原语，并统一校验订单类型、额度来源与 `payment_order_id` 的组合，避免人工充值和在线支付生命周期交叉写入。
 - 管理支付订单与统一充值列表/详情查询通过 `PaymentService` application API 暴露，Transport 不再 import `payment/pg` 或传递 adapter 查询参数。
+- 公告发布、下线和草稿删除的状态前置检查已下沉到公告 PostgreSQL 事务；Service 不再先读公告再决定是否写入，状态转换在行锁内保持原子。
 - 管理充值同步、手动额度冲正和在线退款入口统一由 `PaymentService` 校验订单类型/状态并编排动作，Transport 不再先读投影再自行决定状态机分支。
 - 支付 sweep 的 `closed/expired` 迁移使用 `UpdateStatusIfCurrent` 乐观状态条件，外部支付调用返回后不会覆盖并发回调已提交的 `paid` 状态。
 - 支付 sweep 的 provider/入账失败写入 `pay_orders.sweep_attempts`、`sweep_last_error` 和 `sweep_next_attempt_at`；指数退避上限 1 小时，重启和多副本不会恢复成每分钟重试。

@@ -95,15 +95,8 @@ func (s *Service) GetManaged(ctx context.Context, actor Actor, id string) (Annou
 }
 
 func (s *Service) DeleteDraft(ctx context.Context, actor Actor, id string) error {
-	if s.reader == nil || s.deleter == nil {
+	if s.deleter == nil {
 		return ErrUnavailable
-	}
-	item, err := s.reader.GetManaged(ctx, actor, id)
-	if err != nil {
-		return err
-	}
-	if item.Status != StatusDraft {
-		return ErrInvalidTransition
 	}
 	return s.deleter.DeleteDraft(ctx, actor, id)
 }
@@ -140,15 +133,8 @@ func (s *Service) ListRecipients(ctx context.Context, actor Actor, id string, qu
 }
 
 func (s *Service) Archive(ctx context.Context, actor Actor, id string) (Announcement, error) {
-	if s.reader == nil || s.archiver == nil {
+	if s.archiver == nil {
 		return Announcement{}, ErrUnavailable
-	}
-	item, err := s.reader.GetManaged(ctx, actor, id)
-	if err != nil {
-		return Announcement{}, err
-	}
-	if item.Status != StatusPublished {
-		return Announcement{}, ErrInvalidTransition
 	}
 	return s.archiver.Archive(ctx, actor, id, time.Now().UTC())
 }
@@ -272,15 +258,8 @@ func (s *Service) CreateDraft(ctx context.Context, actor Actor, input DraftInput
 }
 
 func (s *Service) Publish(ctx context.Context, actor Actor, id string) (Announcement, error) {
-	if s.reader == nil || s.publisher == nil {
+	if s.publisher == nil {
 		return Announcement{}, ErrUnavailable
-	}
-	item, err := s.reader.GetManaged(ctx, actor, id)
-	if err != nil {
-		return Announcement{}, err
-	}
-	if item.Status != StatusDraft {
-		return Announcement{}, ErrInvalidTransition
 	}
 	return s.publisher.Publish(ctx, actor, id, time.Now().UTC())
 }
