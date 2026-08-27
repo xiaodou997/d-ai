@@ -354,9 +354,21 @@ type Module interface {
 	Register(api huma.API)
 }
 
+type platformModule struct {
+	deps Deps
+}
+
 type aiModule struct {
 	platform Deps
 	deps     AIHTTPDeps
+}
+
+var _ Module = platformModule{}
+var _ Module = aiModule{}
+
+func (m platformModule) Register(api huma.API) {
+	registerMeta(api, m.deps)
+	registerPublicPlane(api, m.deps)
 }
 
 type aiIdentityProvider interface {
@@ -390,9 +402,10 @@ func (m aiModule) Register(api huma.API) {
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
 func Register(api huma.API, d Deps, ai AIHTTPDeps) {
-	registerMeta(api, d)
-	registerPublicPlane(api, d)
-	modules := []Module{aiModule{platform: d, deps: ai}}
+	modules := []Module{
+		platformModule{deps: d},
+		aiModule{platform: d, deps: ai},
+	}
 	for _, module := range modules {
 		module.Register(api)
 	}

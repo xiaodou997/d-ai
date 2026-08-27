@@ -131,7 +131,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
-- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
+- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，平台域仍需继续按 identity/billing/operations 提取最小依赖。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，根级生命周期投影已接入 `/health`，组件自身探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、data cleanup 和小时级清理任务已补齐幂等停止与等待退出，`/health.components` 已统一暴露生命周期状态，故障级 Health 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
@@ -894,6 +894,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：`httpServers` 增加幂等 Start、关闭状态和公共/管理监听 goroutine 的完成通道；`Shutdown` 在调用标准库关闭后继续等待两个监听循环退出，并支持超时后再次用更长上下文等待。
 - 故障：监听启动失败仍触发根 context 取消，监听 goroutine 无论正常关闭还是异常返回都会关闭完成通道，避免启动失败路径遗留不可观测 goroutine。
 - 回归：增加双监听器重复 Start、Shutdown 等待和重复 Shutdown 测试；`go test ./cmd/server -count=1`、HTTP 生命周期 race 测试、`go vet` 和差异检查通过。
+
+### P1-02（Platform transport module registration，2026-08-27）
+
+- 装配：新增 `platformModule` 实现 `transport.Module`，平台元数据、认证、身份、账务和运营路由与 AI 纵向模块统一由模块列表注册；保留 `transport.Register` 入口和既有 operation/path 契约。
+- 边界：本次只改变注册拓扑，不伪装完成依赖缩减；平台模块暂时接收已经按 Infrastructure/Portal/Identity/Billing/Operations 分组的 `Deps`，后续再逐组提取最小 HTTP 端口。
+- 回归：新增平台模块 OpenAPI surface contract，确认认证、租户、支付和运营代表路径均由模块注册；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
 
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 
