@@ -11,7 +11,6 @@ import (
 	authports "xiaodou/dai/internal/auth/ports"
 	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
-	cleanuppkg "xiaodou/dai/internal/cleanup"
 	"xiaodou/dai/internal/config"
 	inviteports "xiaodou/dai/internal/invite/ports"
 	notificationpkg "xiaodou/dai/internal/notification"
@@ -323,7 +322,7 @@ type systemModule struct {
 
 type dataCleanupModule struct {
 	auth    platformAuthDeps
-	service *cleanuppkg.Service
+	service DataCleanupHTTPService
 }
 
 type proxyNodesModule struct {

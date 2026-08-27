@@ -216,7 +216,15 @@ type SystemHTTPService interface {
 // DataCleanupModuleDeps contains data-cleanup routes.
 type DataCleanupModuleDeps struct {
 	PlatformAuthDeps
-	Service *cleanuppkg.Service
+	Service DataCleanupHTTPService
+}
+
+type DataCleanupHTTPService interface {
+	GetPolicy(context.Context) (cleanuppkg.Policy, error)
+	UpdatePolicy(context.Context, cleanuppkg.Policy, string) (cleanuppkg.Policy, error)
+	Preview(context.Context) (cleanuppkg.Preview, error)
+	ListRuns(context.Context) ([]cleanuppkg.Run, error)
+	StartManual([]string, string) (cleanuppkg.Run, error)
 }
 
 // ProxyNodesModuleDeps contains proxy-node routes.
