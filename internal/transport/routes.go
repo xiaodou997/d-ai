@@ -462,28 +462,61 @@ type platformIdentityModule struct {
 	jwtKeys  jwtKeysModule
 }
 
-type adminModule struct {
+type adminRouteAuth struct {
 	platformAuthDeps
 	RecentAuth *auth.RecentAuthService
+}
 
+type adminTenantModule struct {
+	adminRouteAuth
 	TenantReader       tenantports.AdminTenantReader
 	TenantStatusWriter tenantports.AdminTenantStatusWriter
 	TenantWriter       tenantports.AdminTenantWriter
+	Activations        *auth.ActivationService
+}
+
+type adminUsersModule struct {
+	adminRouteAuth
+	TenantReader       tenantports.AdminTenantReader
 	AdminAccounts      userports.AdminAccountReader
 	AdminAccountWriter userports.AdminAccountWriter
+	Activations        *auth.ActivationService
+}
+
+type adminFinanceModule struct {
+	adminRouteAuth
+	TenantReader   tenantports.AdminTenantReader
+	Deduction      *billingsvc.DeductionService
+	AccountQueries billingports.AccountQueryReader
+	Recharge       *billingsvc.RechargeService
+	AuthAuditLogs  authports.AuthAuditLogReader
+}
+
+type adminUsageBillingModule struct {
+	adminRouteAuth
+	Deduction *billingsvc.DeductionService
+}
+
+type adminDashboardModule struct {
+	adminRouteAuth
+	Dashboard systemports.AdminDashboardReader
+}
+
+type adminEndUsersModule struct {
+	adminRouteAuth
+	TenantReader       tenantports.AdminTenantReader
 	AdminEndUsers      userports.AdminEndUserReader
 	AdminEndUserWriter userports.AdminEndUserWriter
-	Dashboard          systemports.AdminDashboardReader
-	Deduction          *billingsvc.DeductionService
-	AccountQueries     billingports.AccountQueryReader
-	Recharge           *billingsvc.RechargeService
-	AuthAuditLogs      authports.AuthAuditLogReader
 	Activations        *auth.ActivationService
-	Logger             *zap.Logger
 }
 
 type platformAdminModule struct {
-	deps adminModule
+	tenants      adminTenantModule
+	users        adminUsersModule
+	finance      adminFinanceModule
+	usageBilling adminUsageBillingModule
+	dashboard    adminDashboardModule
+	endUsers     adminEndUsersModule
 }
 
 type aiModule struct {
@@ -528,12 +561,12 @@ func (m platformIdentityModule) Register(api huma.API) {
 }
 
 func (m platformAdminModule) Register(api huma.API) {
-	registerAdminTenants(api, m.deps)
-	registerAdminUsers(api, m.deps)
-	registerAdminFinance(api, m.deps)
-	registerAdminUsageBilling(api, m.deps)
-	registerAdminDashboard(api, m.deps)
-	registerAdminEndUsers(api, m.deps)
+	registerAdminTenants(api, m.tenants)
+	registerAdminUsers(api, m.users)
+	registerAdminFinance(api, m.finance)
+	registerAdminUsageBilling(api, m.usageBilling)
+	registerAdminDashboard(api, m.dashboard)
+	registerAdminEndUsers(api, m.endUsers)
 }
 
 type aiIdentityProvider interface {
@@ -567,6 +600,10 @@ func (m aiModule) Register(api huma.API) {
 
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
 func Register(api huma.API, d Deps, ai AIHTTPDeps) {
+	adminAuth := adminRouteAuth{
+		platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+		RecentAuth:       d.RecentAuth,
+	}
 	modules := []Module{
 		metaModule{version: d.Version, jwt: d.JWT},
 		platformIdentityModule{
@@ -594,24 +631,45 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 			public:  publicModule{invite: d.Invite, legal: d.Legal},
 			jwtKeys: jwtKeysModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}},
 		},
-		platformAdminModule{deps: adminModule{
-			platformAuthDeps:   platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
-			RecentAuth:         d.RecentAuth,
-			TenantReader:       d.TenantReader,
-			TenantStatusWriter: d.TenantStatusWriter,
-			TenantWriter:       d.TenantWriter,
-			AdminAccounts:      d.AdminAccounts,
-			AdminAccountWriter: d.AdminAccountWriter,
-			AdminEndUsers:      d.AdminEndUsers,
-			AdminEndUserWriter: d.AdminEndUserWriter,
-			Dashboard:          d.Dashboard,
-			Deduction:          d.Deduction,
-			AccountQueries:     d.AccountQueries,
-			Recharge:           d.Recharge,
-			AuthAuditLogs:      d.AuthAuditLogs,
-			Activations:        d.Activations,
-			Logger:             d.Logger,
-		}},
+		platformAdminModule{
+			tenants: adminTenantModule{
+				adminRouteAuth:     adminAuth,
+				TenantReader:       d.TenantReader,
+				TenantStatusWriter: d.TenantStatusWriter,
+				TenantWriter:       d.TenantWriter,
+				Activations:        d.Activations,
+			},
+			users: adminUsersModule{
+				adminRouteAuth:     adminAuth,
+				TenantReader:       d.TenantReader,
+				AdminAccounts:      d.AdminAccounts,
+				AdminAccountWriter: d.AdminAccountWriter,
+				Activations:        d.Activations,
+			},
+			finance: adminFinanceModule{
+				adminRouteAuth: adminAuth,
+				TenantReader:   d.TenantReader,
+				Deduction:      d.Deduction,
+				AccountQueries: d.AccountQueries,
+				Recharge:       d.Recharge,
+				AuthAuditLogs:  d.AuthAuditLogs,
+			},
+			usageBilling: adminUsageBillingModule{
+				adminRouteAuth: adminAuth,
+				Deduction:      d.Deduction,
+			},
+			dashboard: adminDashboardModule{
+				adminRouteAuth: adminAuth,
+				Dashboard:      d.Dashboard,
+			},
+			endUsers: adminEndUsersModule{
+				adminRouteAuth:     adminAuth,
+				TenantReader:       d.TenantReader,
+				AdminEndUsers:      d.AdminEndUsers,
+				AdminEndUserWriter: d.AdminEndUserWriter,
+				Activations:        d.Activations,
+			},
+		},
 		platformBillingModule{payment: paymentModule{
 			auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
 			service: d.Payment,

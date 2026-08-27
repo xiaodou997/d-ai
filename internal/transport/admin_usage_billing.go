@@ -29,8 +29,8 @@ type batchUsageOpOutput struct {
 	}
 }
 
-func registerAdminUsageBilling(api huma.API, d adminModule) {
-	h := newAdminHandlers(d)
+func registerAdminUsageBilling(api huma.API, d adminUsageBillingModule) {
+	h := newAdminUsageBillingHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 

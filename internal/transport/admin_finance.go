@@ -133,8 +133,8 @@ func orderTypeFromPackageType(packageType int) (string, error) {
 }
 
 // registerAdminFinance 注册充值/撤销/退款/债务/审计日志端点。
-func registerAdminFinance(api huma.API, d adminModule) {
-	h := newAdminHandlers(d)
+func registerAdminFinance(api huma.API, d adminFinanceModule) {
+	h := newAdminFinanceHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 	superAdmin := huma.Middlewares{ua, requireCapability(api, auth.CapabilitySuperAdmin)}

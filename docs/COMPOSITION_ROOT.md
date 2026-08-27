@@ -38,7 +38,7 @@ httpServers.Start / Shutdown
 - 身份自助与公开路由已拆成显式 `platformIdentityModule`，账户查询、租户自助、门户品牌和公开邀请只接收各自端口及平台认证/法律配置；管理员账号聚合和认证状态写入仍待继续拆分。
 - 认证路由已在身份模块内使用独立 `authModule` 依赖，登录/刷新/激活、MFA、近期认证、`/me`、登出和改密不再接收完整平台 `Deps`；管理员账号与 JWT key 管理仍待后续提取。
 - JWT key 列表与轮换已加入身份模块的 `jwtKeysModule`，只接收 JWT/黑名单认证依赖；管理员账号和财务/仪表盘聚合仍待继续拆分。
-- 管理员租户、账号、终端用户、财务、仪表盘和用量路由已集中到 `platformAdminModule`，通过显式管理员端口组装 `adminHandlers`；平台主模块不再直接注册这组管理路由。
+- 管理员租户、账号、终端用户、财务、仪表盘和用量路由已集中到 `platformAdminModule` 下的六个显式子模块，各自只接收所属端口与认证依赖；平台主模块不再直接注册这组管理路由。
 - AI 纵向路由模块不再持有完整平台 `Deps`，统一改用仅含 JWT/黑名单、租户读取和用户投影的 `aiPlatformDeps`；平台身份、账务和运营服务不会随 AI Transport 容器传递。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；停止时先取消自动清理，再释放其数据库依赖。
 - 四个小时级清理任务（图片、文件、会话、激活凭证）现在由 `periodicWorker` 统一持有子 context，首次执行、每小时执行和 Stop 等待都登记在 shutdown stack 中。

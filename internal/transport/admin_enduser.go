@@ -80,8 +80,8 @@ type createEndUserOutput struct {
 }
 
 // registerAdminEndUsers 注册终端用户管理（系统管理员跨租户 / 租户用户限本租户）。
-func registerAdminEndUsers(api huma.API, d adminModule) {
-	h := newAdminHandlers(d)
+func registerAdminEndUsers(api huma.API, d adminEndUsersModule) {
+	h := newAdminEndUsersHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysOrTenant := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf)}
 	sysOrTenantSensitive := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf), requireRecentAuth(api, d.RecentAuth)}

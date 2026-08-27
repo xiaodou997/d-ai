@@ -1,8 +1,6 @@
 package transport
 
 import (
-	"go.uber.org/zap"
-
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
 	billingports "xiaodou/dai/internal/billing/ports"
@@ -27,7 +25,6 @@ type adminHandlers struct {
 	accountQueries     billingports.AccountQueryReader
 	blacklist          *auth.BlacklistService
 	activations        *auth.ActivationService
-	log                *zap.Logger
 	rechargeSvc        *billingsvc.RechargeService
 	authAuditReader    authports.AuthAuditLogReader
 }
@@ -44,23 +41,51 @@ func setActivationOutput(out *activationCredentialOutput, result userports.Activ
 	out.Body.ActivationExpiresIn = result.ExpiresIn
 }
 
-func newAdminHandlers(d adminModule) *adminHandlers {
+func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 	return &adminHandlers{
 		tenantReader:       d.TenantReader,
 		tenantStatusWriter: d.TenantStatusWriter,
 		tenantWriter:       d.TenantWriter,
-		accountRepo:        d.AdminAccounts,
-		accountWriter:      d.AdminAccountWriter,
-		endUserRepo:        d.AdminEndUsers,
-		endUserWriter:      d.AdminEndUserWriter,
-		systemRepo:         d.Dashboard,
-		deduction:          d.Deduction,
-		accountQueries:     d.AccountQueries,
-		rechargeSvc:        d.Recharge,
-		authAuditReader:    d.AuthAuditLogs,
 		blacklist:          d.Blacklist,
 		activations:        d.Activations,
-		log:                d.Logger,
+	}
+}
+
+func newAdminUsersHandlers(d adminUsersModule) *adminHandlers {
+	return &adminHandlers{
+		tenantReader:  d.TenantReader,
+		accountRepo:   d.AdminAccounts,
+		accountWriter: d.AdminAccountWriter,
+		blacklist:     d.Blacklist,
+		activations:   d.Activations,
+	}
+}
+
+func newAdminFinanceHandlers(d adminFinanceModule) *adminHandlers {
+	return &adminHandlers{
+		tenantReader:    d.TenantReader,
+		deduction:       d.Deduction,
+		accountQueries:  d.AccountQueries,
+		rechargeSvc:     d.Recharge,
+		authAuditReader: d.AuthAuditLogs,
+	}
+}
+
+func newAdminUsageBillingHandlers(d adminUsageBillingModule) *adminHandlers {
+	return &adminHandlers{deduction: d.Deduction}
+}
+
+func newAdminDashboardHandlers(d adminDashboardModule) *adminHandlers {
+	return &adminHandlers{systemRepo: d.Dashboard}
+}
+
+func newAdminEndUsersHandlers(d adminEndUsersModule) *adminHandlers {
+	return &adminHandlers{
+		tenantReader:  d.TenantReader,
+		endUserRepo:   d.AdminEndUsers,
+		endUserWriter: d.AdminEndUserWriter,
+		blacklist:     d.Blacklist,
+		activations:   d.Activations,
 	}
 }
 
