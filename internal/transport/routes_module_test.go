@@ -8,8 +8,13 @@ import (
 
 func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 	_, api := humatest.New(t)
-	var module Module = platformModule{deps: Deps{}}
-	module.Register(api)
+	modules := []Module{
+		platformModule{deps: Deps{}},
+		platformOperationsModule{},
+	}
+	for _, module := range modules {
+		module.Register(api)
+	}
 
 	paths := api.OpenAPI().Paths
 	for _, route := range []struct {

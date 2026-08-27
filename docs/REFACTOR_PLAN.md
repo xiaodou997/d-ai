@@ -901,6 +901,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：本次只改变注册拓扑，不伪装完成依赖缩减；平台模块暂时接收已经按 Infrastructure/Portal/Identity/Billing/Operations 分组的 `Deps`，后续再逐组提取最小 HTTP 端口。
 - 回归：新增平台模块 OpenAPI surface contract，确认认证、租户、支付和运营代表路径均由模块注册；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
 
+### P1-02（Operations transport module split，2026-08-27）
+
+- 依赖：公告、通知、系统模块、数据清理和代理节点路由改为各自接收服务实例与平台认证依赖，不再从完整 `transport.Deps` 读取运营服务。
+- 装配：新增 `platformOperationsModule`，由统一 `transport.Module` 列表注册五类运营路由；平台主模块继续承载尚未拆出的管理聚合，既有 operation/path 保持不变。
+- 回归：扩展 OpenAPI module surface contract，确认运营代表路径仍被注册；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
 - 生命周期：`asynctask.Engine` 现在自持有 worker context，Start/Stop 幂等且 Stop-before-Start 会阻止后续启动；停止时先取消 worker、webhook 和 reaper 循环，再执行租约释放。

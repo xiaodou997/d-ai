@@ -25,8 +25,8 @@ type dataCleanupRunInput struct {
 	}
 }
 
-func registerDataCleanup(api huma.API, d Deps) {
-	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
+func registerDataCleanup(api huma.API, d dataCleanupModule) {
+	admin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-get-data-cleanup-policy",
@@ -36,7 +36,7 @@ func registerDataCleanup(api huma.API, d Deps) {
 		Tags:        []string{"data-cleanup"},
 		Middlewares: admin,
 	}, func(ctx context.Context, _ *struct{}) (*dataCleanupPolicyOutput, error) {
-		policy, err := d.DataCleanup.GetPolicy(ctx)
+		policy, err := d.service.GetPolicy(ctx)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
@@ -51,7 +51,7 @@ func registerDataCleanup(api huma.API, d Deps) {
 		Tags:        []string{"data-cleanup"},
 		Middlewares: admin,
 	}, func(ctx context.Context, in *dataCleanupPolicyInput) (*dataCleanupPolicyOutput, error) {
-		policy, err := d.DataCleanup.UpdatePolicy(ctx, in.Body, actorID(ctx))
+		policy, err := d.service.UpdatePolicy(ctx, in.Body, actorID(ctx))
 		if err != nil {
 			return nil, httpx.ErrBadRequest.WithDetail(err.Error())
 		}
@@ -66,7 +66,7 @@ func registerDataCleanup(api huma.API, d Deps) {
 		Tags:        []string{"data-cleanup"},
 		Middlewares: admin,
 	}, func(ctx context.Context, _ *struct{}) (*dataCleanupPreviewOutput, error) {
-		preview, err := d.DataCleanup.Preview(ctx)
+		preview, err := d.service.Preview(ctx)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
@@ -81,7 +81,7 @@ func registerDataCleanup(api huma.API, d Deps) {
 		Tags:        []string{"data-cleanup"},
 		Middlewares: admin,
 	}, func(ctx context.Context, _ *struct{}) (*dataCleanupRunsOutput, error) {
-		runs, err := d.DataCleanup.ListRuns(ctx)
+		runs, err := d.service.ListRuns(ctx)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
@@ -100,7 +100,7 @@ func registerDataCleanup(api huma.API, d Deps) {
 		if in.Body.Confirmation != cleanuppkg.ConfirmationPhrase {
 			return nil, httpx.ErrBadRequest.WithDetail("请输入正确的确认短语：" + cleanuppkg.ConfirmationPhrase)
 		}
-		run, err := d.DataCleanup.StartManual(in.Body.Targets, actorID(ctx))
+		run, err := d.service.StartManual(in.Body.Targets, actorID(ctx))
 		if errors.Is(err, cleanuppkg.ErrAlreadyRunning) {
 			return nil, httpx.ErrConflict.WithDetail("已有数据清理任务正在执行")
 		}

@@ -53,8 +53,8 @@ type previewPIIConfigOutput struct {
 	}
 }
 
-func registerModules(api huma.API, d Deps) {
-	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
+func registerModules(api huma.API, d systemModule) {
+	admin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-list-modules",
@@ -64,7 +64,7 @@ func registerModules(api huma.API, d Deps) {
 		Tags:        []string{"modules"},
 		Middlewares: admin,
 	}, func(ctx context.Context, _ *struct{}) (*moduleStatusesOutput, error) {
-		items, err := d.Modules.List(ctx)
+		items, err := d.service.List(ctx)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
@@ -79,7 +79,7 @@ func registerModules(api huma.API, d Deps) {
 		Tags:        []string{"modules"},
 		Middlewares: admin,
 	}, func(ctx context.Context, _ *struct{}) (*piiConfigOutput, error) {
-		config, err := d.Modules.GetPIIConfig(ctx)
+		config, err := d.service.GetPIIConfig(ctx)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
@@ -109,7 +109,7 @@ func registerModules(api huma.API, d Deps) {
 		if claims := userClaimsFromCtx(ctx); claims != nil {
 			actor = claims.UserID
 		}
-		config, err := d.Modules.UpdatePIIConfig(ctx, in.Body, actor)
+		config, err := d.service.UpdatePIIConfig(ctx, in.Body, actor)
 		if errors.Is(err, systempkg.ErrModuleConfigInvalid) {
 			return nil, httpx.ErrBadRequest.WithDetail(err.Error())
 		}
@@ -148,7 +148,7 @@ func registerModules(api huma.API, d Deps) {
 		Tags:        []string{"modules"},
 		Middlewares: admin,
 	}, func(ctx context.Context, in *moduleNameInput) (*moduleStatusOutput, error) {
-		item, err := d.Modules.Get(ctx, in.Name)
+		item, err := d.service.Get(ctx, in.Name)
 		if errors.Is(err, systempkg.ErrUnknownModule) {
 			return nil, httpx.ErrNotFound.WithDetail("模块不存在")
 		}
@@ -171,7 +171,7 @@ func registerModules(api huma.API, d Deps) {
 		if claims != nil {
 			actor = claims.UserID
 		}
-		item, err := d.Modules.SetEnabled(ctx, in.Name, in.Body.Enabled, actor)
+		item, err := d.service.SetEnabled(ctx, in.Name, in.Body.Enabled, actor)
 		if errors.Is(err, systempkg.ErrUnknownModule) {
 			return nil, httpx.ErrNotFound.WithDetail("模块不存在")
 		}

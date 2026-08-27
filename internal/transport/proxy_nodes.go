@@ -32,24 +32,24 @@ type proxyNodeUpdateInput struct {
 	Body proxyNodeBody
 }
 
-func registerProxyNodes(api huma.API, d Deps) {
-	admin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
+func registerProxyNodes(api huma.API, d proxyNodesModule) {
+	admin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
 	huma.Register(api, huma.Operation{OperationID: "admin-list-proxy-nodes", Method: http.MethodGet, Path: "/api/v1/admin/proxy-nodes", Summary: "代理出口节点", Tags: []string{"proxy-nodes"}, Middlewares: admin}, func(ctx context.Context, _ *struct{}) (*proxyNodesOutput, error) {
-		items, err := d.ProxyNodes.List(ctx)
+		items, err := d.service.List(ctx)
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
 		return &proxyNodesOutput{Body: items}, nil
 	})
 	huma.Register(api, huma.Operation{OperationID: "admin-create-proxy-node", Method: http.MethodPost, Path: "/api/v1/admin/proxy-nodes", Summary: "创建代理出口节点", Tags: []string{"proxy-nodes"}, Middlewares: admin, DefaultStatus: http.StatusCreated}, func(ctx context.Context, in *proxyNodeInput) (*proxyNodeOutput, error) {
-		item, err := d.ProxyNodes.Upsert(ctx, "", proxyInput(in.Body), actorID(ctx))
+		item, err := d.service.Upsert(ctx, "", proxyInput(in.Body), actorID(ctx))
 		if err != nil {
 			return nil, proxyNodeHTTPError(err)
 		}
 		return &proxyNodeOutput{Body: item}, nil
 	})
 	huma.Register(api, huma.Operation{OperationID: "admin-update-proxy-node", Method: http.MethodPut, Path: "/api/v1/admin/proxy-nodes/{id}", Summary: "更新代理出口节点", Tags: []string{"proxy-nodes"}, Middlewares: admin}, func(ctx context.Context, in *proxyNodeUpdateInput) (*proxyNodeOutput, error) {
-		item, err := d.ProxyNodes.Upsert(ctx, in.ID, proxyInput(in.Body), actorID(ctx))
+		item, err := d.service.Upsert(ctx, in.ID, proxyInput(in.Body), actorID(ctx))
 		if errors.Is(err, proxypkg.ErrNotFound) {
 			return nil, httpx.ErrNotFound
 		}
@@ -59,7 +59,7 @@ func registerProxyNodes(api huma.API, d Deps) {
 		return &proxyNodeOutput{Body: item}, nil
 	})
 	huma.Register(api, huma.Operation{OperationID: "admin-delete-proxy-node", Method: http.MethodDelete, Path: "/api/v1/admin/proxy-nodes/{id}", Summary: "删除代理出口节点", Tags: []string{"proxy-nodes"}, Middlewares: admin}, func(ctx context.Context, in *proxyNodePathInput) (*messageOutput, error) {
-		if err := d.ProxyNodes.Delete(ctx, in.ID); errors.Is(err, proxypkg.ErrNotFound) {
+		if err := d.service.Delete(ctx, in.ID); errors.Is(err, proxypkg.ErrNotFound) {
 			return nil, httpx.ErrNotFound
 		} else if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)

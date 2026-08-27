@@ -135,9 +135,9 @@ type announcementRecipientsOutput struct {
 	Body httpx.Page[announcementRecipientOutput]
 }
 
-func registerAnnouncements(api huma.API, d Deps) {
-	h := &announcementHandlers{service: d.Announcements}
-	ua := userAuth(api, d.JWT, d.Blacklist)
+func registerAnnouncements(api huma.API, d announcementModule) {
+	h := &announcementHandlers{service: d.service}
+	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 	tenants := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf)}

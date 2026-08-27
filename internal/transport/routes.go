@@ -358,17 +358,64 @@ type platformModule struct {
 	deps Deps
 }
 
+type platformAuthDeps struct {
+	JWT       *auth.JWTService
+	Blacklist *auth.BlacklistService
+}
+
+type announcementModule struct {
+	auth    platformAuthDeps
+	service *announcementpkg.Service
+}
+
+type notificationModule struct {
+	auth    platformAuthDeps
+	service *notificationpkg.Service
+}
+
+type systemModule struct {
+	auth    platformAuthDeps
+	service *systempkg.Service
+}
+
+type dataCleanupModule struct {
+	auth    platformAuthDeps
+	service *cleanuppkg.Service
+}
+
+type proxyNodesModule struct {
+	auth    platformAuthDeps
+	service *proxypkg.Service
+}
+
+type platformOperationsModule struct {
+	announcements announcementModule
+	notifications notificationModule
+	system        systemModule
+	dataCleanup   dataCleanupModule
+	proxyNodes    proxyNodesModule
+}
+
 type aiModule struct {
 	platform Deps
 	deps     AIHTTPDeps
 }
 
 var _ Module = platformModule{}
+var _ Module = platformOperationsModule{}
 var _ Module = aiModule{}
 
 func (m platformModule) Register(api huma.API) {
 	registerMeta(api, m.deps)
 	registerPublicPlane(api, m.deps)
+}
+
+func (m platformOperationsModule) Register(api huma.API) {
+	registerAnnouncements(api, m.announcements)
+	registerNotifications(api, m.notifications)
+	registerModules(api, m.system)
+	registerDataCleanup(api, m.dataCleanup)
+	registerProxyNodes(api, m.proxyNodes)
 }
 
 type aiIdentityProvider interface {
@@ -404,6 +451,13 @@ func (m aiModule) Register(api huma.API) {
 func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	modules := []Module{
 		platformModule{deps: d},
+		platformOperationsModule{
+			announcements: announcementModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Announcements},
+			notifications: notificationModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Notifications},
+			system:        systemModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Modules},
+			dataCleanup:   dataCleanupModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.DataCleanup},
+			proxyNodes:    proxyNodesModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.ProxyNodes},
+		},
 		aiModule{platform: d, deps: ai},
 	}
 	for _, module := range modules {
@@ -437,12 +491,6 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerPayment(api, d)
 	registerTenantCash(api, d)
 	registerAdminPayment(api, d)
-	registerAnnouncements(api, d)
-	registerProxyNodes(api, d)
-	registerNotifications(api, d)
-	registerModules(api, d)
-	registerDataCleanup(api, d)
-
 	// 公开端点（无认证）
 	registerPublic(api, d)
 

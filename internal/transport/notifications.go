@@ -32,11 +32,11 @@ type notificationSendInput struct {
 }
 type notificationOutput struct{ Body notificationpkg.Delivery }
 
-func registerNotifications(api huma.API, d Deps) {
-	if d.Notifications == nil {
+func registerNotifications(api huma.API, d notificationModule) {
+	if d.service == nil {
 		return
 	}
-	ua := userAuth(api, d.JWT, d.Blacklist)
+	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 	huma.Register(api, huma.Operation{OperationID: "list-my-notifications", Method: http.MethodGet, Path: "/api/v1/notifications", Summary: "我的通知", Tags: []string{"notifications"}, Middlewares: allUsers}, func(ctx context.Context, in *notificationListInput) (*notificationsOutput, error) {
@@ -44,7 +44,7 @@ func registerNotifications(api huma.API, d Deps) {
 		if err != nil {
 			return nil, err
 		}
-		items, err := d.Notifications.ListForActor(ctx, actor, in.Limit)
+		items, err := d.service.ListForActor(ctx, actor, in.Limit)
 		if err != nil {
 			if errors.Is(err, notificationpkg.ErrInvalidActor) {
 				return nil, httpx.ErrForbidden
@@ -59,9 +59,9 @@ func registerNotifications(api huma.API, d Deps) {
 		var item notificationpkg.Delivery
 		var err error
 		if body.Channel == "webhook" {
-			item, err = d.Notifications.SendWebhook(ctx, input)
+			item, err = d.service.SendWebhook(ctx, input)
 		} else {
-			item, err = d.Notifications.CreateInApp(ctx, input)
+			item, err = d.service.CreateInApp(ctx, input)
 		}
 		if errors.Is(err, notificationpkg.ErrInvalidChannel) || errors.Is(err, notificationpkg.ErrInvalidInput) {
 			return nil, httpx.ErrBadRequest.WithCause(err)
