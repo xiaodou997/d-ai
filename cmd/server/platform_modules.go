@@ -39,22 +39,23 @@ import (
 // It keeps their construction and process-level workers together so the
 // composition root only has to consume a stable dependency bundle.
 type platformModules struct {
-	JWT              *auth.JWTService
-	Sessions         *auth.SessionService
-	Activations      *auth.ActivationService
-	MFA              *auth.MFAService
-	RecentAuth       *auth.RecentAuthService
-	Blacklist        *auth.BlacklistService
-	Security         *auth.AccountSecurityService
-	UserService      *userpkg.UserService
-	AuthAccounts     *authpg.AuthRepository
-	AuthRateLimiters *auth.RateLimiters
-	TenantRepo       *tenantpg.TenantRepository
-	TenantBranding   *tenantpg.PortalBrandingRepository
-	TenantSelf       *tenantpkg.SelfService
-	AdminAccounts    *userpg.AdminAccountRepository
-	AdminEndUsers    *userpg.AdminEndUserRepository
-	Invite           *invitepkg.InviteService
+	JWT                   *auth.JWTService
+	Sessions              *auth.SessionService
+	Activations           *auth.ActivationService
+	MFA                   *auth.MFAService
+	RecentAuth            *auth.RecentAuthService
+	Blacklist             *auth.BlacklistService
+	Security              *auth.AccountSecurityService
+	UserService           *userpkg.UserService
+	AuthAccounts          *authpg.AuthRepository
+	AuthRateLimiters      *auth.RateLimiters
+	TenantRepo            *tenantpg.TenantRepository
+	TenantBranding        *tenantpg.PortalBrandingRepository
+	TenantSelf            *tenantpkg.SelfService
+	AdminAccounts         *userpg.AdminAccountRepository
+	AdminAccountLifecycle *userpkg.AdminAccountLifecycleService
+	AdminEndUsers         *userpg.AdminEndUserRepository
+	Invite                *invitepkg.InviteService
 
 	Deduction      *billingsvc.DeductionService
 	Recharge       *billingsvc.RechargeService
@@ -135,6 +136,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	rechargeSvc := billingsvc.NewRechargeService(billingPool, tenantRepo)
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
+	adminAccountLifecycle := userpkg.NewAdminAccountLifecycleService(adminAccountRepo, security)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
 	wechatCfgStore := wechat.NewConfigStore(billingPool)
 	paymentSvc := paymentsvc.New(billingPool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger, deductionSvc)
@@ -146,34 +148,35 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	dataCleanupSvc := cleanuppkg.NewService(pool, appLogger)
 
 	return &platformModules{
-		JWT:              jwtSvc,
-		Sessions:         sessionSvc,
-		Activations:      activationSvc,
-		MFA:              mfaSvc,
-		RecentAuth:       recentAuthSvc,
-		Blacklist:        blacklist,
-		Security:         security,
-		UserService:      userSvc,
-		AuthAccounts:     authAccountRepo,
-		AuthRateLimiters: authRateLimiters,
-		TenantRepo:       tenantRepo,
-		TenantBranding:   tenantBrandingRepo,
-		TenantSelf:       tenantSelfSvc,
-		AdminAccounts:    adminAccountRepo,
-		AdminEndUsers:    adminEndUserRepo,
-		Invite:           inviteSvc,
-		Deduction:        deductionSvc,
-		Recharge:         rechargeSvc,
-		Payment:          paymentSvc,
-		AccountQueries:   accountQueries,
-		Announcements:    announcementSvc,
-		Notifications:    notificationSvc,
-		Modules:          moduleSvc,
-		Dashboard:        dashboardRepo,
-		ProxyNodes:       proxySvc,
-		DataCleanup:      dataCleanupSvc,
-		banReconciler:    auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),
-		sched:            scheduler.NewScheduler(billingPool, jwtSvc, paymentSvc, appLogger),
+		JWT:                   jwtSvc,
+		Sessions:              sessionSvc,
+		Activations:           activationSvc,
+		MFA:                   mfaSvc,
+		RecentAuth:            recentAuthSvc,
+		Blacklist:             blacklist,
+		Security:              security,
+		UserService:           userSvc,
+		AuthAccounts:          authAccountRepo,
+		AuthRateLimiters:      authRateLimiters,
+		TenantRepo:            tenantRepo,
+		TenantBranding:        tenantBrandingRepo,
+		TenantSelf:            tenantSelfSvc,
+		AdminAccounts:         adminAccountRepo,
+		AdminAccountLifecycle: adminAccountLifecycle,
+		AdminEndUsers:         adminEndUserRepo,
+		Invite:                inviteSvc,
+		Deduction:             deductionSvc,
+		Recharge:              rechargeSvc,
+		Payment:               paymentSvc,
+		AccountQueries:        accountQueries,
+		Announcements:         announcementSvc,
+		Notifications:         notificationSvc,
+		Modules:               moduleSvc,
+		Dashboard:             dashboardRepo,
+		ProxyNodes:            proxySvc,
+		DataCleanup:           dataCleanupSvc,
+		banReconciler:         auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),
+		sched:                 scheduler.NewScheduler(billingPool, jwtSvc, paymentSvc, appLogger),
 	}, nil
 }
 

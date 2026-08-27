@@ -110,6 +110,7 @@ type AdminUsersModuleDeps struct {
 	AdminRouteAuthDeps
 	AdminAccounts      userports.AdminAccountReader
 	AdminAccountWriter userports.AdminAccountWriter
+	AccountLifecycle   userports.AdminAccountLifecycle
 	Activations        *auth.ActivationService
 }
 
@@ -279,6 +280,7 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 			adminRouteAuth:     toAdminRouteAuth(d.Users.AdminRouteAuthDeps),
 			AdminAccounts:      d.Users.AdminAccounts,
 			AdminAccountWriter: d.Users.AdminAccountWriter,
+			AccountLifecycle:   d.Users.AccountLifecycle,
 			Activations:        d.Users.Activations,
 		},
 		finance: adminFinanceModule{

@@ -68,6 +68,7 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 				AdminRouteAuthDeps: adminAuth,
 				AdminAccounts:      platform.AdminAccounts,
 				AdminAccountWriter: platform.AdminAccounts,
+				AccountLifecycle:   platform.AdminAccountLifecycle,
 				Activations:        platform.Activations,
 			},
 			Finance: transport.AdminFinanceModuleDeps{

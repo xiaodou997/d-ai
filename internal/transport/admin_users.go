@@ -206,17 +206,20 @@ func (h *adminHandlers) createSystemAdmin(ctx context.Context, in *createSystemA
 }
 
 func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemAdminInput) (*successOutput, error) {
+	if h.accountLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("管理员账号服务不可用")
+	}
 	status := "active"
 	if in.Body.Status == 2 {
 		status = "disabled"
 	}
-	result, err := h.accountWriter.UpdateSystemAdmin(ctx, userports.AdminAccountUpdate{
+	result, err := h.accountLifecycle.UpdateSystemAdmin(ctx, userports.AdminAccountUpdate{
 		UserID: in.ID,
 		Email:  in.Body.Email,
 		Status: status,
 	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminAccountLifecycleError(err)
 	}
 	if result.Forbidden {
 		return nil, httpx.ErrForbidden.WithDetail("不允许修改超级管理员")
@@ -224,22 +227,19 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 	if !result.Updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
-	if err := h.syncUserSecurity(ctx, in.ID, status); err != nil {
-		return nil, err
-	}
 	return okSuccess(), nil
 }
 
 func (h *adminHandlers) resetSystemAdminPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
-	result, err := h.accountWriter.ResetSystemAdminPassword(ctx, in.ID)
+	if h.accountLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("管理员账号服务不可用")
+	}
+	result, err := h.accountLifecycle.ResetSystemAdminPassword(ctx, in.ID)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminAccountLifecycleError(err)
 	}
 	if result.Token == "" {
 		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
-	}
-	if err := h.invalidateUserSessions(ctx, in.ID); err != nil {
-		return nil, err
 	}
 	out := &activationCredentialOutput{}
 	setActivationOutput(out, result)
@@ -314,53 +314,51 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 }
 
 func (h *adminHandlers) updateTenantUserStatus(ctx context.Context, in *statusPathInput) (*successOutput, error) {
-	updated, err := h.accountWriter.UpdateTenantUserStatus(ctx, in.ID, in.Body.Status)
+	if h.accountLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("管理员账号服务不可用")
+	}
+	updated, err := h.accountLifecycle.UpdateTenantUserStatus(ctx, in.ID, in.Body.Status)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminAccountLifecycleError(err)
 	}
 	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	// 停用立即失效该用户所有 token 并标记封禁；启用时清除封禁标记
-	if err := h.syncUserSecurity(ctx, in.ID, in.Body.Status); err != nil {
-		return nil, err
 	}
 	return okSuccess(), nil
 }
 
 func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUserInput) (*successOutput, error) {
+	if h.accountLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("管理员账号服务不可用")
+	}
 	status := "active"
 	if in.Body.Status == 2 {
 		status = "disabled"
 	}
-	updated, err := h.accountWriter.UpdateTenantUser(ctx, userports.AdminAccountUpdate{
+	updated, err := h.accountLifecycle.UpdateTenantUser(ctx, userports.AdminAccountUpdate{
 		UserID: in.ID,
 		Email:  in.Body.Email,
 		Status: status,
 	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminAccountLifecycleError(err)
 	}
 	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	// 停用时强制下线并标记封禁；启用时清除封禁标记
-	if err := h.syncUserSecurity(ctx, in.ID, status); err != nil {
-		return nil, err
 	}
 	return okSuccess(), nil
 }
 
 func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantIDInput) (*activationCredentialOutput, error) {
-	result, err := h.accountWriter.ResetTenantUserPassword(ctx, in.ID)
+	if h.accountLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("管理员账号服务不可用")
+	}
+	result, err := h.accountLifecycle.ResetTenantUserPassword(ctx, in.ID)
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminAccountLifecycleError(err)
 	}
 	if result.Token == "" {
 		return nil, httpx.ErrNotFound.WithDetail("租户用户不存在")
-	}
-	if err := h.invalidateUserSessions(ctx, in.ID); err != nil {
-		return nil, err
 	}
 	out := &activationCredentialOutput{}
 	setActivationOutput(out, result)

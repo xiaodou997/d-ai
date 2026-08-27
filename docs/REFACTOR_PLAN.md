@@ -176,8 +176,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-03 收敛 HTTP 层业务逻辑
 
 - [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，其余用户/租户/支付域继续按边界逐项迁移。
-- [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务、终端用户 tenant scope 和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
-- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入、公告状态事务和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，少量 legacy 编排仍待收敛。
+- [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务、终端用户 tenant scope、公告状态机和管理员账号安全副作用已下沉，仍有租户/终端用户安全同步等少量跨域编排待收敛。
+- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入、公告状态事务、管理员账号安全编排和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
 - [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
@@ -1175,3 +1175,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：公告发布、下线和草稿删除的状态读取与条件写入统一由 PostgreSQL repository 在同一事务/行锁内完成；Service 不再执行锁外 `GetManaged` 后再决定状态机分支。
 - 语义：缺失公告仍返回 `ErrNotFound`，状态不匹配仍返回 `ErrInvalidTransition`，并发状态变更不会因两次读写产生错误覆盖。
 - 回归：新增 repository 缺失目标错误回归，并将 Service 测试调整为验证状态转换由 writer 负责；announcement、Transport、server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-03（Admin account security orchestration，2026-08-27）
+
+- 边界：新增 `user.AdminAccountLifecycleService` 与 `user/ports.AdminAccountLifecycle`，统一管理员/租户用户资料状态更新、启停和密码重置后的安全投影；Transport 不再直接串联账号 writer 与 `AccountSecurityWriter`。
+- 语义：数据库写入成功后才执行 ban/session 投影；安全投影失败返回可识别的 `AdminAccountSecurityError`，调用方可重试幂等 command，不重复账号写入。
+- 装配：composition root 构造 lifecycle service 并注入管理员账号模块，模块仍保留创建/列表所需的最小账号端口。
+- 回归：新增 context 透传、状态同步、会话失效和安全错误包装测试；user/Transport/server 定向测试、`go vet`、`go build`、`checkdeps` 和差异检查通过。

@@ -403,6 +403,7 @@ type adminUsersModule struct {
 	adminRouteAuth
 	AdminAccounts      userports.AdminAccountReader
 	AdminAccountWriter userports.AdminAccountWriter
+	AccountLifecycle   userports.AdminAccountLifecycle
 	Activations        *auth.ActivationService
 }
 

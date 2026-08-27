@@ -60,6 +60,16 @@ type AdminAccountMutationResult struct {
 	Forbidden bool
 }
 
+// AdminAccountSecurityError marks a committed account mutation whose
+// post-commit security projection could not be synchronized. Callers can
+// retry the idempotent security command without repeating the database write.
+type AdminAccountSecurityError struct {
+	Cause error
+}
+
+func (e *AdminAccountSecurityError) Error() string { return "admin account security sync failed" }
+func (e *AdminAccountSecurityError) Unwrap() error { return e.Cause }
+
 // AdminAccountReader exposes only the read projections needed by management
 // list endpoints; SQL and persistence details remain in the adapter.
 type AdminAccountReader interface {
@@ -79,4 +89,15 @@ type AdminAccountWriter interface {
 	ResetSystemAdminPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
 	ResetTenantUserPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
 	DeleteSystemAdmin(ctx context.Context, userID string) (AdminAccountMutationResult, error)
+}
+
+// AdminAccountLifecycle coordinates account persistence with the separate
+// security projection. Transport receives one application command instead of
+// deciding when to issue Redis ban/session side effects.
+type AdminAccountLifecycle interface {
+	UpdateSystemAdmin(ctx context.Context, input AdminAccountUpdate) (AdminAccountMutationResult, error)
+	UpdateTenantUser(ctx context.Context, input AdminAccountUpdate) (bool, error)
+	UpdateTenantUserStatus(ctx context.Context, userID, status string) (bool, error)
+	ResetSystemAdminPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
+	ResetTenantUserPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
 }

@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
@@ -21,6 +22,7 @@ type adminHandlers struct {
 	tenantWriter       tenantports.AdminTenantWriter
 	accountRepo        userports.AdminAccountReader
 	accountWriter      userports.AdminAccountWriter
+	accountLifecycle   userports.AdminAccountLifecycle
 	endUserRepo        userports.AdminEndUserReader
 	endUserWriter      userports.AdminEndUserWriter
 	systemRepo         systemports.AdminDashboardReader
@@ -56,10 +58,10 @@ func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 
 func newAdminUsersHandlers(d adminUsersModule) *adminHandlers {
 	return &adminHandlers{
-		accountRepo:   d.AdminAccounts,
-		accountWriter: d.AdminAccountWriter,
-		security:      d.Security,
-		activations:   d.Activations,
+		accountRepo:      d.AdminAccounts,
+		accountWriter:    d.AdminAccountWriter,
+		accountLifecycle: d.AccountLifecycle,
+		activations:      d.Activations,
 	}
 }
 
@@ -129,6 +131,14 @@ func (h *adminHandlers) syncTenantSecurity(ctx context.Context, tenantID, status
 		return httpx.ErrUnavailable.WithCause(err)
 	}
 	return nil
+}
+
+func adminAccountLifecycleError(err error) error {
+	var securityErr *userports.AdminAccountSecurityError
+	if errors.As(err, &securityErr) {
+		return httpx.ErrUnavailable.WithCause(securityErr.Cause)
+	}
+	return httpx.ErrInternal.WithCause(err)
 }
 
 // adminStatusFromInt 把前端整型状态映射为存储字符串。
