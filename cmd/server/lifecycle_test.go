@@ -48,15 +48,49 @@ func TestShutdownStackJoinsErrorsAndRejectsLateResources(t *testing.T) {
 		got = append(got, "second")
 		return secondErr
 	})
-	if err := stack.Close(context.Background()); !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
-		t.Fatalf("Close() error = %v, want both close errors", err)
+	if err := stack.Close(context.Background()); !errors.Is(err, secondErr) || errors.Is(err, firstErr) {
+		t.Fatalf("Close() error = %v, want only the first blocking dependency error", err)
 	}
 	stack.Add("late", func(context.Context) error {
 		got = append(got, "late")
 		return nil
 	})
-	if want := []string{"second", "first"}; !reflect.DeepEqual(got, want) {
+	if want := []string{"second"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("close calls = %v, want %v", got, want)
+	}
+}
+
+func TestShutdownStackRetriesFromFirstFailedDependency(t *testing.T) {
+	var calls []string
+	attempts := 0
+	stack := shutdownStack{}
+	stack.Add("database", func(context.Context) error {
+		calls = append(calls, "database")
+		return nil
+	})
+	stack.Add("worker", func(context.Context) error {
+		calls = append(calls, "worker")
+		attempts++
+		if attempts == 1 {
+			return context.DeadlineExceeded
+		}
+		return nil
+	})
+
+	if err := stack.Close(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("first Close error = %v, want deadline exceeded", err)
+	}
+	if want := []string{"worker"}; !reflect.DeepEqual(calls, want) {
+		t.Fatalf("first close calls = %v, want %v", calls, want)
+	}
+	if err := stack.Close(context.Background()); err != nil {
+		t.Fatalf("retry Close error = %v", err)
+	}
+	if want := []string{"worker", "worker", "database"}; !reflect.DeepEqual(calls, want) {
+		t.Fatalf("retry close calls = %v, want %v", calls, want)
+	}
+	if err := stack.Close(context.Background()); err != nil {
+		t.Fatalf("third Close error = %v", err)
 	}
 }
 

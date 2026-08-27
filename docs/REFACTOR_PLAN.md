@@ -1202,3 +1202,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：风险控制、审计 inbox、OAuth token refresh 和结算 outbox worker 的 `Stop(ctx)` 统一返回调用方 deadline 错误；重复 Stop 在首次超时后继续等待。
 - 聚合：`aiModules.Stop(ctx)` 汇总所有 worker/component 关闭错误，composition root 的 shutdown stack 能识别关闭不完整并保留后续重试机会。
 - 回归：worker 停止接口、AI 聚合关闭和既有生命周期测试通过；授权模式下 riskcontrol/audit/tokenrefresh/outbox/server 测试、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-02（Shutdown stack dependency fencing，2026-08-27）
+
+- 关闭顺序：`shutdownStack` 在逆序关闭时遇到第一个错误立即短路，保留失败项及所有尚未关闭的底层资源；只有整条依赖链成功才标记 stack closed。
+- 重试：后续 `Close(ctx)` 会从失败项重新执行，支持使用更长 deadline 收敛；关闭调用通过独立互斥保护，避免并发 Stop 重复释放同一资源。
+- 回归：新增失败依赖短路、二次重试和最终释放顺序测试；server 生命周期测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。

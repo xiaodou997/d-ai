@@ -17,6 +17,7 @@ import (
 // from both the normal shutdown path and a partial-startup error path.
 type shutdownStack struct {
 	mu      sync.Mutex
+	closeMu sync.Mutex
 	entries []shutdownEntry
 	closed  bool
 }
@@ -213,6 +214,8 @@ func (s *shutdownStack) Add(name string, closeFn func(context.Context) error) {
 	if closeFn == nil {
 		return
 	}
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -222,21 +225,38 @@ func (s *shutdownStack) Add(name string, closeFn func(context.Context) error) {
 }
 
 func (s *shutdownStack) Close(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return nil
 	}
-	s.closed = true
 	entries := append([]shutdownEntry(nil), s.entries...)
 	s.mu.Unlock()
 
 	var errs []error
+	remaining := entries
 	for i := len(entries) - 1; i >= 0; i-- {
 		entry := entries[i]
 		if err := entry.close(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("close %s: %w", entry.name, err))
+			// A lower-level dependency must not be released while a dependent
+			// component is still alive. Keep this entry and all older entries
+			// registered so a later Close call can retry with a fresh deadline.
+			remaining = entries[:i+1]
+			break
 		}
+		remaining = entries[:i]
 	}
+	s.mu.Lock()
+	s.entries = remaining
+	if len(errs) == 0 {
+		s.closed = true
+	}
+	s.mu.Unlock()
 	return errors.Join(errs...)
 }
