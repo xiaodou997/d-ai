@@ -3,6 +3,7 @@ package clientruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -501,6 +502,59 @@ func TestRuntimeCoalescesConcurrentCredentialRefresh(t *testing.T) {
 	}
 	if refreshCalls.Load() != 1 {
 		t.Fatalf("refresh calls = %d, want 1", refreshCalls.Load())
+	}
+}
+
+func TestRuntimeStopCancelsInFlightCredentialRefresh(t *testing.T) {
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	release := make(chan struct{})
+	runtime := New(transportFunc(func(_ context.Context, req *WireRequest) (*WireResponse, error) {
+		if req.Headers["Authorization"] == "Bearer old-token" {
+			return response(http.StatusUnauthorized, "{}"), nil
+		}
+		return response(http.StatusOK, "{}"), nil
+	}), refresherFunc(func(ctx context.Context, _ string) (Credential, error) {
+		close(started)
+		<-ctx.Done()
+		close(canceled)
+		<-release
+		return Credential{}, ctx.Err()
+	}))
+	runtime.Start(context.Background())
+	invokeDone := make(chan error, 1)
+	go func() {
+		exchange, err := runtime.Invoke(context.Background(), baseInvocation())
+		if exchange != nil && exchange.Response != nil && exchange.Response.Body != nil {
+			exchange.Response.Body.Close()
+		}
+		invokeDone <- err
+	}()
+	<-started
+
+	shortCtx, shortCancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err := runtime.Stop(shortCtx)
+	shortCancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		close(release)
+		t.Fatalf("short Stop() error = %v, want context.DeadlineExceeded", err)
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		close(release)
+		t.Fatal("in-flight refresh did not receive cancellation")
+	}
+	close(release)
+	if err := runtime.Stop(context.Background()); err != nil {
+		t.Fatalf("second Stop() error = %v", err)
+	}
+	if err := <-invokeDone; err != nil {
+		t.Fatalf("Invoke() after refresh cancellation = %v", err)
+	}
+	health := runtime.Health()
+	if !health.Started || !health.Stopped {
+		t.Fatalf("health after Stop = %+v", health)
 	}
 }
 

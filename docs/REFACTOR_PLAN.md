@@ -187,6 +187,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] JWT access token 的 session 校验统一透传请求 context；平台、AI Transport 和 Console middleware 不再让取消的请求继续使用独立 `context.Background()` 查询会话。
 - [x] JWT signing key 列表与轮换 command 统一接收请求 context；管理端取消请求会停止密钥查询/事务，轮换前不会继续生成无用 RSA 密钥。
 - [x] OAuth pool 模型 catalog 的 singleflight discovery 由 catalog owner 登记、取消和等待；请求取消仍可共享已有加载，但 AI 模块停止前不会遗留 provider/数据库访问 goroutine。
+- [x] Fixed-provider client runtime 的 credential refresh singleflight 由 Runtime owner 登记、取消和等待；请求取消仍保留共享刷新语义，AI 模块停止前不会遗留 OAuth 刷新访问。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1116,3 +1117,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：`clientcatalog.Service` 为 `singleflight.DoChan` 背后的 provider discovery 增加 owner-managed active load、可取消 context、WaitGroup 和幂等 `Start/Stop/Health`；Stop 会 fencing 新加载并等待既有 selector/inspector 调用退出。
 - 语义：请求取消仍返回 stale/fallback 且不破坏共享 discovery；进程停止会取消脱离请求的加载，`aiModules` 在释放 OAuth/数据库依赖前完成 catalog 收尾。
 - 回归：新增 Stop 等待、Stop-before-Start、owner context 取消和 catalog 装配生命周期测试；clientcatalog/server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。一次全仓回归仅复现既有 `migration_0019` OID 与支付 sweep 指标测试的环境/时序 flake，均与本改动无关。
+
+### P1-02（Client runtime credential refresh lifecycle，2026-08-27）
+
+- 生命周期：`clientruntime.Runtime` 为 401 触发的 shared credential refresh 增加 owner-managed active refresh、可取消 context、WaitGroup 和幂等 `Start/Stop/Health`；Stop 会 fencing 新刷新并等待既有 refresher 调用退出。
+- 语义：同一 credential 的并发刷新仍由 singleflight 合并，请求取消只结束当前 caller，不取消共享刷新；owner context 或 AI 模块 Stop 会取消脱离请求的刷新。
+- 回归：新增 refresh Stop 等待和取消测试，并验证 `aiModules` 的 Runtime/ Catalog 停止顺序；clientruntime/clientcatalog/server 定向测试、race、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。

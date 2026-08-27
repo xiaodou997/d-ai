@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/clientcatalog"
+	"xiaodou/dai/internal/ai/clientruntime"
 	"xiaodou/dai/internal/ai/gateway"
 )
 
@@ -43,5 +44,19 @@ func TestAIModulesOwnsClientCatalogLifecycle(t *testing.T) {
 	modules.Stop(context.Background())
 	if health := catalog.Health(); !health.Started || !health.Stopped {
 		t.Fatalf("client catalog health after Stop = %+v", health)
+	}
+}
+
+func TestAIModulesOwnsClientRuntimeLifecycle(t *testing.T) {
+	runtime := clientruntime.New(nil, nil)
+	modules := &aiModules{clientRuntime: runtime}
+
+	modules.Start(context.Background())
+	if health := runtime.Health(); !health.Started || health.Stopped {
+		t.Fatalf("client runtime health after Start = %+v", health)
+	}
+	modules.Stop(context.Background())
+	if health := runtime.Health(); !health.Started || !health.Stopped {
+		t.Fatalf("client runtime health after Stop = %+v", health)
 	}
 }

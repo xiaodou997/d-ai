@@ -67,6 +67,7 @@ type aiModules struct {
 	AsyncTasks        *asynctask.Engine
 
 	priceBookSvc       *billingcontrol.Service
+	clientRuntime      *clientruntime.Runtime
 	clientCatalog      *clientcatalog.Service
 	runtimeBinder      *coreruntime.CachedBindingResolver
 	subscriptionSvc    *subscription.Service
@@ -506,6 +507,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		MetricsHandler:     aimetrics.Handler(),
 		AsyncTasks:         asyncTasks,
 		priceBookSvc:       priceBookSvc,
+		clientRuntime:      fixedClientRuntime,
 		clientCatalog:      poolModelCatalog,
 		runtimeBinder:      runtimeBinder,
 		subscriptionSvc:    subsSvc,
@@ -531,6 +533,9 @@ func (m *aiModules) Start(ctx context.Context) {
 		}
 		if m.priceBookSvc != nil {
 			m.priceBookSvc.Start(ctx)
+		}
+		if m.clientRuntime != nil {
+			m.clientRuntime.Start(m.workerCtx)
 		}
 		if m.clientCatalog != nil {
 			m.clientCatalog.Start(m.workerCtx)
@@ -573,6 +578,11 @@ func (m *aiModules) Stop(ctx context.Context) {
 		if m.clientCatalog != nil {
 			if err := m.clientCatalog.Stop(ctx); err != nil && m.logger != nil {
 				m.logger.Warn("client catalog shutdown incomplete", zap.Error(err))
+			}
+		}
+		if m.clientRuntime != nil {
+			if err := m.clientRuntime.Stop(ctx); err != nil && m.logger != nil {
+				m.logger.Warn("client runtime shutdown incomplete", zap.Error(err))
 			}
 		}
 		if m.RuntimeGateway != nil {
