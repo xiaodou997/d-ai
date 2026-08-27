@@ -54,10 +54,10 @@ import (
 )
 
 // aiModules owns the AI control-plane services, runtime pipeline, and workers.
-// Its public surface is intentionally limited to the assembled transport
-// dependencies and the route owners consumed by the composition root.
+// Its public surface is intentionally limited to AI HTTP dependencies and the
+// route owners consumed by the composition root; platform route wiring stays
+// in the composition root.
 type aiModules struct {
-	Deps              transport.Deps
 	AIHTTPDeps        transport.AIHTTPDeps
 	FileStore         *filestore.Service
 	ImageAssets       *imageassets.Service
@@ -340,56 +340,6 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
 
 	return &aiModules{
-		Deps: transport.Deps{
-			InfrastructureDeps: transport.InfrastructureDeps{
-				Version: version,
-				Logger:  appLogger,
-			},
-			PortalDeps: transport.PortalDeps{
-				SecureCookies: cfg.App.Env == "production",
-				Legal:         cfg.Legal,
-			},
-			IdentityDeps: transport.IdentityDeps{
-				JWT:                  platform.JWT,
-				Sessions:             platform.Sessions,
-				Activations:          platform.Activations,
-				MFA:                  platform.MFA,
-				RecentAuth:           platform.RecentAuth,
-				Blacklist:            platform.Blacklist,
-				IdentityReader:       platform.UserService,
-				AuthAccountReader:    platform.AuthAccounts,
-				AuthAccountWriter:    platform.AuthAccounts,
-				AuthLoginReader:      platform.AuthAccounts,
-				AuthAuditWriter:      platform.AuthAccounts,
-				AuthAuditLogs:        platform.AuthAccounts,
-				AuthRateLimiters:     platform.AuthRateLimiters,
-				TenantStatusWriter:   platform.TenantRepo,
-				TenantWriter:         platform.TenantRepo,
-				TenantReader:         platform.TenantRepo,
-				TenantBrandingReader: platform.TenantBranding,
-				TenantBrandingWriter: platform.TenantBranding,
-				TenantSelf:           platform.TenantSelf,
-				AdminAccounts:        platform.AdminAccounts,
-				AdminAccountWriter:   platform.AdminAccounts,
-				AdminEndUsers:        platform.AdminEndUsers,
-				AdminEndUserWriter:   platform.AdminEndUsers,
-				Invite:               platform.Invite,
-			},
-			BillingDeps: transport.BillingDeps{
-				AccountQueries: platform.AccountQueries,
-				Deduction:      platform.Deduction,
-				Recharge:       platform.Recharge,
-				Payment:        platform.Payment,
-			},
-			OperationsDeps: transport.OperationsDeps{
-				Announcements: platform.Announcements,
-				Notifications: platform.Notifications,
-				Modules:       platform.Modules,
-				Dashboard:     platform.Dashboard,
-				ProxyNodes:    platform.ProxyNodes,
-				DataCleanup:   platform.DataCleanup,
-			},
-		},
 		AIHTTPDeps: transport.AIHTTPDeps{
 			Core: transport.AICoreHTTPDeps{
 				PlatformPriceBooks:         priceBookSvc,

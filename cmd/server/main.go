@@ -208,8 +208,6 @@ func run() error {
 	// 4. 统一 Transport 装配
 	// ──────────────────────────────────────────────────────
 
-	deps := ai.Deps
-
 	router, api := server.New(server.Options{
 		Title:        "D-AI",
 		Version:      version,
@@ -218,7 +216,7 @@ func run() error {
 		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
 
-	transport.Register(api, deps, ai.AIHTTPDeps)
+	transport.Register(api, buildPlatformTransportDeps(version, cfg, platform, appLogger), ai.AIHTTPDeps)
 	transport.RegisterRaw(router, transport.RawDeps{
 		Payment:              platform.Payment,
 		TenantBrandingReader: platform.TenantBranding,

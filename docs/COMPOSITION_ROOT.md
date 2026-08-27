@@ -29,6 +29,7 @@ httpServers.Start / Shutdown
   outbox 结算使用 billing pool，未配置时仅在非生产环境回退到主 pool，避免把权限切换误带入开发环境。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务，LiteLLM 远程刷新在 Stop 时会取消并等待退出。
+- 平台 Transport 依赖投影已移出 `aiModules`，由 composition root 的 `buildPlatformTransportDeps` 从具体平台服务组装；AI 模块只暴露 AI HTTP 依赖和运行时路由 owner。
 - 平台 HTTP 路由现在与 AI 路由一样通过 `transport.Module` 注册；identity、billing、operations 和管理员模块已逐步改用显式依赖，剩余聚合依赖继续收敛。
 - 元数据与 JWKS 已由最小 `metaModule` 注册，仅接收版本字符串和 JWT 服务；平台主模块不再作为完整依赖容器参与路由注册。
 - chi 原生路由现在接收独立 `transport.RawDeps`，微信回调只依赖支付服务/日志，公开 favicon 只依赖品牌读端口；`RegisterRaw` 不再接收完整平台 `Deps`。

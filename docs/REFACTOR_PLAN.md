@@ -130,7 +130,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-02 拆分 composition root 和巨型依赖容器
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
-- [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 路由与 raw 路由已改用窄依赖，平台根容器和剩余管理聚合仍待拆除。
+- [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 路由与 raw 路由已改用窄依赖，平台 Transport 投影已回到 composition root，兼容聚合契约仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
@@ -972,6 +972,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：`cleanup.Service.StartManual` 的脱离请求执行现在挂接服务级可取消 context，并登记到 manual run wait group；`Stop` 会同时取消自动 worker 与手动执行，避免关闭数据库后仍有清理 goroutine 访问依赖。
 - 并发：手动 run 入队使用可取消 context，停止竞态不会留下未被等待的后台执行；服务停止后拒绝新的手动清理请求。
 - 回归：新增手动执行取消、Stop 等待和停止后拒绝测试；`go test ./internal/cleanup -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（Platform transport assembly ownership，2026-08-27）
+
+- 装配：从 `aiModules` 移除平台 `transport.Deps` 字段及构造逻辑，新增 composition-root `buildPlatformTransportDeps`，由平台服务统一投影身份、账务和运营路由依赖。
+- 边界：`aiModules` 只保留 AI HTTP 依赖和运行时 owner，避免 AI 生命周期容器持有平台路由服务；下一步继续删除 `transport.Register` 的兼容聚合入口。
+- 回归：新增平台依赖投影的 production/cfg nil 契约测试；`go test ./cmd/server ./internal/transport -count=1`、`go build ./...`、`go vet` 和差异检查通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
