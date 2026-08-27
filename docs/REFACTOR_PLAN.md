@@ -132,8 +132,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [x] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台路由改由 `transport.Module` 和模块专属依赖类型注册，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 与 raw 路由均使用窄依赖。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
+- [x] 后台组件统一实现 Start/Stop/Health 生命周期；数据库、Redis、平台 worker、AI worker、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务均已接入统一关闭路径与生命周期 Health，队列故障级指标继续由各自观测面提供。
 - [x] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器均已登记并具备等待语义，剩余请求级 goroutine 由各自 owner 收尾。
 - [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
 - [x] Console 流式消息持久化 goroutine 由请求级 owner 使用 defer、`sync.Once` 和 `WaitGroup` 管理；正常完成持久化最终路由，panic/异常退出标记中断并等待退出，不再遗留请求外 goroutine。
