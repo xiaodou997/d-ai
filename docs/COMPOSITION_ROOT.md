@@ -23,7 +23,7 @@ httpServers.Start / Shutdown
 - `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时，Start/Shutdown 具备幂等保护并等待监听 goroutine 退出。
 - 异步任务引擎已经登记到生命周期栈；Engine 自持有 worker context，Stop 会取消并等待 worker/reaper/webhook 循环，再释放 Redis/PostgreSQL，并提供最小 Health 快照。
 - 异步任务执行中的租约心跳 goroutine 现在使用可取消的限时上下文，并在单次任务返回前等待退出；Engine Stop 不会在心跳仍访问存储时释放数据库依赖。
-- Runtime API Key 的 `last_used_at` best-effort 写入继承请求取消并限制为 2 秒，不再用永久 `context.Background()` 访问数据库。
+- Runtime API Key 的 `last_used_at` best-effort 写入由 Gateway 自持有并继承请求取消，单次最多 2 秒；Gateway Stop 会 fencing 并等待 in-flight 写入，不再遗留访问已释放数据库池的 goroutine。
 - Runtime binding cache miss 加载现在由 `CachedBindingResolver` 自持有的 context/WaitGroup 管理，并由 `aiModules` 启动和停止；关闭时不会遗留脱离请求的配置读取。
 - 订阅 janitor 现在由 `subscription.Service` 提供幂等 `Start/Stop/Health`，并纳入 `aiModules` 生命周期；订阅订单补偿不再是未登记的阻塞循环。
 - 平台 Transport 依赖已按模块显式投影，AI Core 使用 `CoreHTTPDeps`；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 均由独立模块注册。

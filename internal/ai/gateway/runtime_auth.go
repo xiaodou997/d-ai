@@ -73,12 +73,11 @@ func (s *Gateway) runtimeAuth(next http.Handler) http.Handler {
 
 		keyID := row.ID
 		// Last-used telemetry is best effort, but it must not outlive the
-		// request indefinitely or keep a released database pool busy.
-		go func() {
-			touchCtx, cancel := context.WithTimeout(r.Context(), runtimeAuthTouchTimeout)
-			defer cancel()
-			_ = s.queries.TouchLastUsedAt(touchCtx, keyID)
-		}()
+		// request indefinitely or keep a released database pool busy. Gateway
+		// owns and fences the detached write so Stop can wait for it.
+		if s.authToucher != nil {
+			s.authToucher.Enqueue(r.Context(), keyID)
+		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

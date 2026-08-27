@@ -135,6 +135,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
+- [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
 - [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
@@ -1060,3 +1061,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：`ManualRechargeTargetLocker` 改为在账务事务内返回锁定后的 tenant ID；平台管理员的用户充值可省略 `tenantId`，服务在锁定用户/租户后生成最终充值目标。
 - HTTP：删除管理充值对 `TenantRepository.GetTenantDetails` / `GetEndUserTenantID` 的锁外预检；租户用户仍由 claims tenant scope 约束，最终目标状态由同一事务再次校验。
 - 回归：新增平台用户充值目标解析测试；billing、tenant、transport、server 定向测试、`go vet`、`go build` 和 `checkdeps` 通过。
+
+### P1-02（Runtime Gateway telemetry lifecycle，2026-08-27）
+
+- 生命周期：Runtime Gateway 新增 owner-managed auth telemetry，`Start` 允许请求触发 `last_used_at` 写入，`Stop` 先 fencing、取消 in-flight context，再等待所有写入退出。
+- 装配：`aiModules` 将 Gateway 纳入统一 Start/Stop；HTTP listener 关闭后才释放 AI/数据库依赖，重复 Stop 和 Stop 超时后再次等待均安全。
+- 回归：新增 telemetry Stop 等待、超时、取消和禁止新写入 race 测试；`go test ./internal/ai/gateway ./cmd/server`、`go test -race`、`go vet`、`go build` 和 `checkdeps` 通过。

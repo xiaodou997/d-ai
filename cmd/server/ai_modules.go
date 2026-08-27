@@ -524,6 +524,9 @@ func (m *aiModules) Start(ctx context.Context) {
 	}
 	m.startOnce.Do(func() {
 		m.workerCtx, m.workerCancel = context.WithCancel(ctx)
+		if m.RuntimeGateway != nil {
+			m.RuntimeGateway.Start()
+		}
 		if m.priceBookSvc != nil {
 			m.priceBookSvc.Start(ctx)
 		}
@@ -561,6 +564,11 @@ func (m *aiModules) Stop(ctx context.Context) {
 	m.stopOnce.Do(func() {
 		if m.workerCancel != nil {
 			m.workerCancel()
+		}
+		if m.RuntimeGateway != nil {
+			if err := m.RuntimeGateway.Stop(ctx); err != nil && m.logger != nil {
+				m.logger.Warn("runtime gateway shutdown incomplete", zap.Error(err))
+			}
 		}
 		if m.runtimeBinder != nil {
 			if err := m.runtimeBinder.Stop(ctx); err != nil && m.logger != nil {

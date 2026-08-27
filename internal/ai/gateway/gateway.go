@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -19,6 +20,7 @@ import (
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 	"xiaodou/dai/internal/ai/domain"
 	"xiaodou/dai/internal/ai/serving"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 // BanChecker reports whether a user or tenant is currently banned/disabled in
@@ -48,6 +50,7 @@ type Gateway struct {
 	logger        *zap.Logger
 	postgres      *pgxpool.Pool
 	queries       *dbgen.Queries
+	authToucher   *runtimeAuthToucher
 	pipeline      *serving.Pipeline
 	apiKeyCache   *apikey.Cache
 	banChecker    BanChecker
@@ -60,10 +63,15 @@ func New(deps Deps) *Gateway {
 	if deps.Logger == nil {
 		panic("gateway: logger is required")
 	}
+	var touch func(context.Context, pgtype.UUID) error
+	if deps.Queries != nil {
+		touch = deps.Queries.TouchLastUsedAt
+	}
 	return &Gateway{
 		logger:        deps.Logger,
 		postgres:      deps.Postgres,
 		queries:       deps.Queries,
+		authToucher:   newRuntimeAuthToucher(touch),
 		pipeline:      deps.Pipeline,
 		apiKeyCache:   deps.APIKeyCache,
 		banChecker:    deps.BanChecker,
@@ -71,6 +79,33 @@ func New(deps Deps) *Gateway {
 		asyncTasks:    deps.AsyncTasks,
 		taskAdmission: deps.TaskAdmission,
 	}
+}
+
+// Start enables Gateway-owned request telemetry. Runtime routes may be
+// registered before Start, but touches are accepted only after the process
+// lifecycle has declared the gateway running.
+func (s *Gateway) Start() {
+	if s == nil || s.authToucher == nil {
+		return
+	}
+	s.authToucher.Start()
+}
+
+// Stop fences and waits for Gateway-owned request telemetry before its
+// PostgreSQL dependency is released.
+func (s *Gateway) Stop(ctx context.Context) error {
+	if s == nil || s.authToucher == nil {
+		return nil
+	}
+	return s.authToucher.Stop(ctx)
+}
+
+// Health reports the runtime telemetry lifecycle state.
+func (s *Gateway) Health() lifecycle.HealthSnapshot {
+	if s == nil || s.authToucher == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	return s.authToucher.Health()
 }
 
 // Routes registers the runtime endpoints on r. The runtimeAuth middleware
