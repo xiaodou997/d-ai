@@ -83,7 +83,7 @@ type authHandlers struct {
 	log               *zap.Logger
 }
 
-func newAuthHandlers(d Deps) *authHandlers {
+func newAuthHandlers(d authModule) *authHandlers {
 	rateLimiters := d.AuthRateLimiters
 	if rateLimiters == nil {
 		rateLimiters = auth.NewRateLimiters(nil)
@@ -196,7 +196,7 @@ func (h *authHandlers) authenticateUser(ctx context.Context, username, password 
 	}, nil
 }
 
-func registerAuthPublic(api huma.API, d Deps) {
+func registerAuthPublic(api huma.API, d authModule) {
 	h := newAuthHandlers(d)
 	huma.Register(api, huma.Operation{
 		OperationID: "auth-login",

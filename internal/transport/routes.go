@@ -363,6 +363,21 @@ type platformAuthDeps struct {
 	Blacklist *auth.BlacklistService
 }
 
+type authModule struct {
+	platformAuthDeps
+	SecureCookies     bool
+	Sessions          *auth.SessionService
+	Activations       *auth.ActivationService
+	MFA               *auth.MFAService
+	RecentAuth        *auth.RecentAuthService
+	AuthRateLimiters  *auth.RateLimiters
+	AuthAccountReader authports.AccountReader
+	AuthAccountWriter authports.AccountWriter
+	AuthLoginReader   authports.LoginReader
+	AuthAuditWriter   authports.AuthAuditRecorder
+	Logger            *zap.Logger
+}
+
 type announcementModule struct {
 	auth    platformAuthDeps
 	service *announcementpkg.Service
@@ -428,6 +443,7 @@ type platformBillingModule struct {
 }
 
 type platformIdentityModule struct {
+	auth     authModule
 	account  accountModule
 	tenant   tenantSelfModule
 	branding tenantBrandingModule
@@ -465,6 +481,8 @@ func (m platformBillingModule) Register(api huma.API) {
 }
 
 func (m platformIdentityModule) Register(api huma.API) {
+	registerAuthPublic(api, m.auth)
+	registerAuthProtected(api, m.auth, huma.Middlewares{userAuth(api, m.auth.JWT, m.auth.Blacklist)})
 	registerAccount(api, m.account)
 	registerTenantSelf(api, m.tenant)
 	registerTenantBranding(api, m.branding)
@@ -505,6 +523,20 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	modules := []Module{
 		platformModule{deps: d},
 		platformIdentityModule{
+			auth: authModule{
+				platformAuthDeps:  platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+				SecureCookies:     d.SecureCookies,
+				Sessions:          d.Sessions,
+				Activations:       d.Activations,
+				MFA:               d.MFA,
+				RecentAuth:        d.RecentAuth,
+				AuthRateLimiters:  d.AuthRateLimiters,
+				AuthAccountReader: d.AuthAccountReader,
+				AuthAccountWriter: d.AuthAccountWriter,
+				AuthLoginReader:   d.AuthLoginReader,
+				AuthAuditWriter:   d.AuthAuditWriter,
+				Logger:            d.Logger,
+			},
 			account: accountModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, queries: d.AccountQueries},
 			tenant:  tenantSelfModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.TenantSelf},
 			branding: tenantBrandingModule{
@@ -539,12 +571,6 @@ func registerMeta(api huma.API, d Deps) {
 }
 
 func registerPublicPlane(api huma.API, d Deps) {
-	registerAuthPublic(api, d)
-
-	// Portal 账号端点（用户 JWT + 黑名单）
-	usrAuth := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist)}
-	registerAuthProtected(api, d, usrAuth)
-
 	// 管理资源端点（/api/v1，用户 JWT + 类型守卫）
 	registerAdminTenants(api, d)
 	registerAdminUsers(api, d)

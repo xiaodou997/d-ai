@@ -47,7 +47,7 @@ type messageOutput struct {
 }
 
 // registerAuthProtected 注册统一 Portal 的登录后账号端点。
-func registerAuthProtected(api huma.API, d Deps, mw huma.Middlewares) {
+func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 	recent := append(append(huma.Middlewares{}, mw...), requestClientMetadata(api))
 	logoutMiddleware := append(append(huma.Middlewares{}, mw...), requireSameOrigin(api))
 	rateLimiters := d.AuthRateLimiters
@@ -357,7 +357,7 @@ type currentUserSnapshot struct {
 	status     string
 }
 
-func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
+func loadCurrentUserSnapshot(ctx context.Context, d authModule, claims *auth.Claims) (currentUserSnapshot, error) {
 	if d.AuthAccountReader == nil {
 		return currentUserSnapshot{}, httpx.ErrUnavailable.WithDetail("账号服务不可用")
 	}
@@ -381,7 +381,7 @@ func loadCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (
 	return snapshot, nil
 }
 
-func queryCurrentUserSnapshot(ctx context.Context, d Deps, claims *auth.Claims) (currentUserSnapshot, error) {
+func queryCurrentUserSnapshot(ctx context.Context, d authModule, claims *auth.Claims) (currentUserSnapshot, error) {
 	if claims.UserType < 1 || claims.UserType > 4 {
 		return currentUserSnapshot{}, httpx.ErrBadRequest.WithDetail("无效的用户类型")
 	}
