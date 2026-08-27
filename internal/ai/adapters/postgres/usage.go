@@ -110,7 +110,7 @@ func (l *UsageLogger) Log(ctx context.Context, req *serving.Request) error {
 		completed, err := l.logOnce(ctx, req, billing)
 		if err == nil {
 			if completed {
-				l.invalidateAPIKeyCache(req.RuntimeSubject())
+				l.invalidateAPIKeyCache(ctx, req.RuntimeSubject())
 			}
 			return nil
 		}
@@ -205,11 +205,14 @@ func (l *UsageLogger) reconcileAsyncTaskCharge(ctx context.Context, tx pgx.Tx, r
 	return nil
 }
 
-func (l *UsageLogger) invalidateAPIKeyCache(subject *coreidentity.Subject) {
+func (l *UsageLogger) invalidateAPIKeyCache(ctx context.Context, subject *coreidentity.Subject) {
 	if l.apiKeyInvalidator == nil || subject == nil || subject.APIKeyID == "" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := l.apiKeyInvalidator.DelByID(ctx, subject.APIKeyID); err != nil {
 		l.logger.Warn("invalidate API key quota cache failed", zap.String("api_key_id", subject.APIKeyID), zap.Error(err))
