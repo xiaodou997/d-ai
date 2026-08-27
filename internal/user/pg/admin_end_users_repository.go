@@ -82,19 +82,20 @@ func (r *AdminEndUserRepository) UpdateEndUser(ctx context.Context, input userpo
 // UpdateEndUserStatus changes an active end-user account state. Deleted
 // accounts are intentionally excluded so a stale request cannot resurrect
 // one that has already been removed from operational views.
-func (r *AdminEndUserRepository) UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error) {
+func (r *AdminEndUserRepository) UpdateEndUserStatus(ctx context.Context, input userports.AdminEndUserStatusUpdate) (bool, error) {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE iam_accounts
 		SET status = $1, updated_at = $2
 		WHERE user_id = $3 AND user_type = 4 AND status <> 'deleted'
-	`, status, time.Now().UTC(), userID)
+		  AND ($4 = '' OR tenant_id = $4)
+	`, input.Status, time.Now().UTC(), input.UserID, input.TenantID)
 	if err != nil {
 		return false, err
 	}
 	return tag.RowsAffected() == 1, nil
 }
 
-func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, userID string) (userports.ActivationCredentialResult, error) {
+func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, input userports.AdminEndUserPasswordReset) (userports.ActivationCredentialResult, error) {
 	if r.activationService == nil {
 		return userports.ActivationCredentialResult{}, errors.New("end-user activation service is not configured")
 	}
@@ -102,7 +103,8 @@ func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, userI
 	if err := r.pool.QueryRow(ctx, `
 		SELECT user_type FROM iam_accounts
 		WHERE user_id = $1 AND status <> 'deleted'
-	`, userID).Scan(&userType); err != nil {
+		  AND ($2 = '' OR tenant_id = $2)
+	`, input.UserID, input.TenantID).Scan(&userType); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return userports.ActivationCredentialResult{}, nil
 		}
@@ -111,7 +113,7 @@ func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, userI
 	if userType != 4 {
 		return userports.ActivationCredentialResult{}, nil
 	}
-	result, err := r.activationService.Reset(ctx, userID)
+	result, err := r.activationService.Reset(ctx, input.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return userports.ActivationCredentialResult{}, nil
 	}
@@ -121,7 +123,7 @@ func (r *AdminEndUserRepository) ResetEndUserPassword(ctx context.Context, userI
 	return userports.ActivationCredentialResult{Token: result.Token, ExpiresIn: result.ExpiresIn}, nil
 }
 
-func (r *AdminEndUserRepository) DeleteEndUser(ctx context.Context, userID string, beforeCommit userports.AdminEndUserDeleteGuard) (userports.AdminEndUserDeleteResult, error) {
+func (r *AdminEndUserRepository) DeleteEndUser(ctx context.Context, input userports.AdminEndUserDeleteCommand) (userports.AdminEndUserDeleteResult, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return userports.AdminEndUserDeleteResult{}, err
@@ -132,8 +134,9 @@ func (r *AdminEndUserRepository) DeleteEndUser(ctx context.Context, userID strin
 	if err := tx.QueryRow(ctx, `
 		SELECT status FROM iam_accounts
 		WHERE user_id = $1 AND user_type = 4
+		  AND ($2 = '' OR tenant_id = $2)
 		FOR UPDATE
-	`, userID).Scan(&status); err != nil {
+	`, input.UserID, input.TenantID).Scan(&status); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return userports.AdminEndUserDeleteResult{}, nil
 		}
@@ -146,15 +149,15 @@ func (r *AdminEndUserRepository) DeleteEndUser(ctx context.Context, userID strin
 	var balanceMicroUSD int64
 	if err := tx.QueryRow(ctx, `
 		SELECT balance_micro FROM bill_accounts WHERE account_id = $1 FOR UPDATE
-	`, userID).Scan(&balanceMicroUSD); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	`, input.UserID).Scan(&balanceMicroUSD); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return userports.AdminEndUserDeleteResult{}, err
 	}
 	decision := userports.AdminEndUserDeleteResult{Found: true, BalanceMicroUSD: balanceMicroUSD}
 	if balanceMicroUSD != 0 {
 		return decision, nil
 	}
-	if beforeCommit != nil {
-		if err := beforeCommit(ctx, userID); err != nil {
+	if input.BeforeCommit != nil {
+		if err := input.BeforeCommit(ctx, input.UserID); err != nil {
 			return userports.AdminEndUserDeleteResult{}, &userports.AdminEndUserDeleteGuardError{Cause: err}
 		}
 	}
@@ -162,7 +165,8 @@ func (r *AdminEndUserRepository) DeleteEndUser(ctx context.Context, userID strin
 		UPDATE iam_accounts
 		SET status = 'deleted', updated_at = $1
 		WHERE user_id = $2 AND user_type = 4 AND status <> 'deleted'
-	`, time.Now().UTC(), userID)
+		  AND ($3 = '' OR tenant_id = $3)
+	`, time.Now().UTC(), input.UserID, input.TenantID)
 	if err != nil {
 		return userports.AdminEndUserDeleteResult{}, err
 	}

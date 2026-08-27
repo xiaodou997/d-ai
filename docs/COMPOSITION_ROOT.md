@@ -78,7 +78,7 @@ httpServers.Start / Shutdown
 - 终端用户 API key/限额已由独立 `UserSelfControlHTTPDeps` 组合 key、分组和限额端口；Core 不再持有终端用户 key/限额能力。
 - 终端用户分组、模型授权和用量读取已由独立 `UserSelfReadHTTPDeps` 组合分组、模型目录、用户日志和 usage 端口；Core 不再注册终端用户自助读取路径。
 - 管理 Dashboard 异常扣费告警查询已移入 `internal/system/pg.SystemRepository`；HTTP handler 不再直接执行 `ai_usage_logs` SQL，查询窗口、排序和行映射由 repository 负责。
-- 管理租户详情和终端用户归属校验查询已移入 `internal/tenant/pg.TenantRepository`；HTTP handler 不再直接执行对应 `iam_tenants` / `iam_accounts` 读取。
+- 管理租户详情查询已移入 `internal/tenant/pg.TenantRepository`；终端用户 mutation 的 tenant scope 现在随 command 下沉到 `AdminEndUserRepository`，HTTP handler 不再执行锁外 `iam_accounts` 归属预检。
 - 租户启停级联事务已移入 `internal/tenant/pg.TenantRepository`，通过 `tenant/ports.AdminTenantStatusWriter` 注入；handler 只负责租户黑名单和恢复用户黑名单同步。
 - 租户创建（含可选初始租户用户/激活令牌）、更新和删除已移入 `tenant/ports.AdminTenantWriter`；composition root 注入带 `ActivationService.Store` 的 `TenantRepository`，handler 不再持有租户生命周期事务。
 - AI 身份适配器的终端用户归属校验复用 `TenantRepository.GetEndUserTenantID`，不再持有连接池或直接查询 `iam_accounts`。
@@ -113,7 +113,7 @@ httpServers.Start / Shutdown
 - 三类管理账号密码重置的目标类型校验与凭证结果映射也通过 `AdminAccountWriter.Reset*Password` / `AdminEndUserWriter.ResetEndUserPassword` 注入；`ActivationService.Reset` 仍由用户 adapter 调用，HTTP handler 不再直接查询 `iam_accounts`，会话失效通过 `AccountSecurityWriter` command 完成。
 - 系统管理员删除和终端用户删除事务分别由 `AdminAccountWriter.DeleteSystemAdmin` 与 `AdminEndUserWriter.DeleteEndUser` 持有；终端用户删除在余额行锁后执行 `AccountSecurityWriter` ban guard，失败会回滚数据库状态。
 - 终端用户列表查询已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserReader` 注入；HTTP handler 不再直接执行跨租户列表 SQL，只负责 claims scope 和 DTO 映射。
-- 终端用户资料更新与启停状态写入已移入同一 `AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 注入；HTTP handler 只保留租户归属校验、错误映射和 `AccountSecurityWriter` 调用。
+- 终端用户资料更新、启停、重置和删除已移入同一 `AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 注入；tenant scope 由 SQL 写入谓词保证，HTTP handler 只保留 claims scope、错误映射和 `AccountSecurityWriter` 调用。
 - 终端用户创建的账号与一次性激活令牌由同一 `AdminEndUserRepository` 事务写入；repository 通过 composition root 注入的 `ActivationService.Store` 复用激活凭证逻辑，HTTP handler 不再持有创建事务。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。

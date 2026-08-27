@@ -13,7 +13,6 @@ import (
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
 	billingdomain "xiaodou/dai/internal/billing"
-	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -99,34 +98,6 @@ func registerAdminEndUsers(api huma.API, d adminEndUsersModule) {
 		Summary: "重置终端用户密码", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenantSensitive}, h.resetEndUserPassword)
 	huma.Register(api, huma.Operation{OperationID: "admin-delete-end-user", Method: http.MethodDelete, Path: "/api/v1/users/{id}",
 		Summary: "删除终端用户", Tags: []string{"admin-end-users"}, Middlewares: sysOrTenantSensitive}, h.deleteEndUser)
-}
-
-// checkUserBelongsToActor verifies resource tenant scope before a mutation.
-func (h *adminHandlers) checkUserBelongsToActor(ctx context.Context, userID string, actor auth.Actor) error {
-	if h.tenantReader == nil {
-		return httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
-	}
-	tenantID, err := h.tenantReader.GetEndUserTenantID(ctx, userID)
-	if errors.Is(err, tenantports.ErrTenantEndUserNotFound) {
-		return httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	if err != nil {
-		return httpx.ErrInternal.WithCause(err)
-	}
-	if !actor.Owns(auth.NewResourceOwnership(tenantID, "")) {
-		return httpx.ErrForbidden.WithDetail("无权操作")
-	}
-	return nil
-}
-
-// checkUserBelongsToTenant keeps the test/legacy helper contract while routing
-// all new callers through the normalized actor scope check.
-func (h *adminHandlers) checkUserBelongsToTenant(ctx context.Context, userID, callerTenantID string) error {
-	actor := auth.NewActor("", callerTenantID, 2)
-	if callerTenantID != "" {
-		actor.UserType = auth.UserTypeTenant
-	}
-	return h.checkUserBelongsToActor(ctx, userID, actor)
 }
 
 func (h *adminHandlers) listEndUsers(ctx context.Context, in *listEndUsersInput) (*endUserListOutput, error) {
@@ -248,10 +219,6 @@ func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInpu
 	if claims == nil || claims.TenantID == "" {
 		return nil, httpx.ErrForbidden.WithDetail("需要租户用户身份")
 	}
-	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
-		return nil, err
-	}
-
 	emailSet, email := normalizedOptionalText(in.Body.Email)
 	phoneSet, phone := normalizedOptionalText(in.Body.Phone)
 	noteSet, internalNote := normalizedOptionalText(in.Body.InternalNote)
@@ -292,10 +259,9 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
-		return nil, err
-	}
-	updated, err := h.endUserWriter.UpdateEndUserStatus(ctx, in.ID, in.Body.Status)
+	updated, err := h.endUserWriter.UpdateEndUserStatus(ctx, userports.AdminEndUserStatusUpdate{
+		UserID: in.ID, TenantID: adminEndUserTenantScope(actorFromClaims(claims)), Status: in.Body.Status,
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -315,10 +281,9 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
-		return nil, err
-	}
-	result, err := h.endUserWriter.ResetEndUserPassword(ctx, in.ID)
+	result, err := h.endUserWriter.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{
+		UserID: in.ID, TenantID: adminEndUserTenantScope(actorFromClaims(claims)),
+	})
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
@@ -341,14 +306,15 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
-		return nil, err
-	}
 	if h.security == nil || !h.security.IsEnabled() {
 		return nil, httpx.ErrUnavailable.WithDetail("删除用户需要可用的会话封禁服务")
 	}
-	result, err := h.endUserWriter.DeleteEndUser(ctx, in.ID, func(ctx context.Context, userID string) error {
-		return h.security.BanUser(ctx, userID)
+	result, err := h.endUserWriter.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{
+		UserID:   in.ID,
+		TenantID: adminEndUserTenantScope(actorFromClaims(claims)),
+		BeforeCommit: func(ctx context.Context, userID string) error {
+			return h.security.BanUser(ctx, userID)
+		},
 	})
 	if err != nil {
 		var guardErr *userports.AdminEndUserDeleteGuardError
@@ -370,4 +336,14 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	return okSuccess(), nil
+}
+
+// adminEndUserTenantScope returns the tenant predicate for a mutation. A
+// platform administrator has global scope; tenant users must carry their
+// claim into the repository so ownership is enforced by the write itself.
+func adminEndUserTenantScope(actor auth.Actor) string {
+	if actor.Has(auth.CapabilityPlatformAdmin) {
+		return ""
+	}
+	return string(actor.TenantID)
 }

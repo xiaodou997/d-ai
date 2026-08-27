@@ -426,7 +426,6 @@ type adminDashboardModule struct {
 
 type adminEndUsersModule struct {
 	adminRouteAuth
-	TenantReader       tenantports.AdminTenantReader
 	AdminEndUsers      userports.AdminEndUserReader
 	AdminEndUserWriter userports.AdminEndUserWriter
 	Activations        *auth.ActivationService

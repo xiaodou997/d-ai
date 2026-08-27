@@ -129,7 +129,7 @@ func TestAdminEndUserRepositoryUpdatesScopedProfileAndStatus(t *testing.T) {
 		t.Fatalf("deleted UpdateEndUser = updated:%v err:%v", updated, err)
 	}
 
-	updated, err = repo.UpdateEndUserStatus(ctx, "end-write-a", "disabled")
+	updated, err = repo.UpdateEndUserStatus(ctx, userports.AdminEndUserStatusUpdate{UserID: "end-write-a", TenantID: "tenant-write-a", Status: "disabled"})
 	if err != nil || !updated {
 		t.Fatalf("UpdateEndUserStatus = updated:%v err:%v", updated, err)
 	}
@@ -140,9 +140,13 @@ func TestAdminEndUserRepositoryUpdatesScopedProfileAndStatus(t *testing.T) {
 	if status != "disabled" {
 		t.Fatalf("status = %q, want disabled", status)
 	}
-	updated, err = repo.UpdateEndUserStatus(ctx, "end-write-deleted", "active")
+	updated, err = repo.UpdateEndUserStatus(ctx, userports.AdminEndUserStatusUpdate{UserID: "end-write-deleted", TenantID: "tenant-write-a", Status: "active"})
 	if err != nil || updated {
 		t.Fatalf("deleted UpdateEndUserStatus = updated:%v err:%v", updated, err)
+	}
+	updated, err = repo.UpdateEndUserStatus(ctx, userports.AdminEndUserStatusUpdate{UserID: "end-write-a", TenantID: "tenant-write-b", Status: "active"})
+	if err != nil || updated {
+		t.Fatalf("cross-tenant UpdateEndUserStatus = updated:%v err:%v", updated, err)
 	}
 }
 
@@ -241,7 +245,7 @@ func TestAdminEndUserRepositoryResetsOnlyActiveEndUsers(t *testing.T) {
 
 	activation := auth.NewActivationService(pool, time.Hour)
 	repo := NewAdminEndUserRepository(pool, activation)
-	result, err := repo.ResetEndUserPassword(ctx, "end-reset-a")
+	result, err := repo.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{UserID: "end-reset-a", TenantID: "tenant-reset-a"})
 	if err != nil || result.Token == "" || result.ExpiresIn <= 0 {
 		t.Fatalf("ResetEndUserPassword = %#v err:%v", result, err)
 	}
@@ -252,13 +256,17 @@ func TestAdminEndUserRepositoryResetsOnlyActiveEndUsers(t *testing.T) {
 	if credentialState != "pending_activation" {
 		t.Fatalf("credential state = %q, want pending_activation", credentialState)
 	}
-	deleted, err := repo.ResetEndUserPassword(ctx, "end-reset-deleted")
+	deleted, err := repo.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{UserID: "end-reset-deleted", TenantID: "tenant-reset-a"})
 	if err != nil || deleted.Token != "" {
 		t.Fatalf("deleted ResetEndUserPassword = %#v err:%v", deleted, err)
 	}
-	wrongType, err := repo.ResetEndUserPassword(ctx, "tenant-reset-user")
+	wrongType, err := repo.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{UserID: "tenant-reset-user", TenantID: "tenant-reset-a"})
 	if err != nil || wrongType.Token != "" {
 		t.Fatalf("tenant target ResetEndUserPassword = %#v err:%v", wrongType, err)
+	}
+	crossTenant, err := repo.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{UserID: "end-reset-a", TenantID: "other-tenant"})
+	if err != nil || crossTenant.Token != "" {
+		t.Fatalf("cross-tenant ResetEndUserPassword = %#v err:%v", crossTenant, err)
 	}
 }
 
@@ -299,7 +307,7 @@ func TestAdminEndUserRepositoryDeletesWithBalanceAndGuardInvariants(t *testing.T
 		guardCalls++
 		return nil
 	}
-	deleted, err := repo.DeleteEndUser(ctx, "end-delete-zero", guard)
+	deleted, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "end-delete-zero", TenantID: "tenant-delete-a", BeforeCommit: guard})
 	if err != nil || !deleted.Found || !deleted.Deleted || deleted.BalanceMicroUSD != 0 || guardCalls != 1 {
 		t.Fatalf("zero-balance delete = %#v guardCalls:%d err:%v", deleted, guardCalls, err)
 	}
@@ -311,17 +319,17 @@ func TestAdminEndUserRepositoryDeletesWithBalanceAndGuardInvariants(t *testing.T
 		t.Fatalf("deleted status = %q", status)
 	}
 
-	positive, err := repo.DeleteEndUser(ctx, "end-delete-positive", guard)
+	positive, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "end-delete-positive", TenantID: "tenant-delete-a", BeforeCommit: guard})
 	if err != nil || !positive.Found || positive.Deleted || positive.BalanceMicroUSD != 100 || guardCalls != 1 {
 		t.Fatalf("positive-balance delete = %#v guardCalls:%d err:%v", positive, guardCalls, err)
 	}
-	negative, err := repo.DeleteEndUser(ctx, "end-delete-negative", guard)
+	negative, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "end-delete-negative", TenantID: "tenant-delete-a", BeforeCommit: guard})
 	if err != nil || !negative.Found || negative.Deleted || negative.BalanceMicroUSD != -100 || guardCalls != 1 {
 		t.Fatalf("negative-balance delete = %#v guardCalls:%d err:%v", negative, guardCalls, err)
 	}
 
 	guardFailure := errors.New("blacklist unavailable")
-	guardErr, err := repo.DeleteEndUser(ctx, "end-delete-guard", func(context.Context, string) error { return guardFailure })
+	guardErr, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "end-delete-guard", TenantID: "tenant-delete-a", BeforeCommit: func(context.Context, string) error { return guardFailure }})
 	var classified *userports.AdminEndUserDeleteGuardError
 	if err == nil || !errors.As(err, &classified) || !errors.Is(err, guardFailure) || guardErr.Deleted {
 		t.Fatalf("guard failure = result:%#v err:%v classified:%v", guardErr, err, classified)
@@ -333,12 +341,16 @@ func TestAdminEndUserRepositoryDeletesWithBalanceAndGuardInvariants(t *testing.T
 		t.Fatalf("guard rollback status = %q", status)
 	}
 
-	missing, err := repo.DeleteEndUser(ctx, "missing-end-delete", guard)
+	missing, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "missing-end-delete", TenantID: "tenant-delete-a", BeforeCommit: guard})
 	if err != nil || missing.Found || missing.Deleted {
 		t.Fatalf("missing delete = %#v err:%v", missing, err)
 	}
-	alreadyDeleted, err := repo.DeleteEndUser(ctx, "end-delete-done", guard)
+	alreadyDeleted, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "end-delete-done", TenantID: "tenant-delete-a", BeforeCommit: guard})
 	if err != nil || alreadyDeleted.Found || alreadyDeleted.Deleted {
 		t.Fatalf("already-deleted delete = %#v err:%v", alreadyDeleted, err)
+	}
+	crossTenant, err := repo.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{UserID: "end-delete-guard", TenantID: "other-tenant", BeforeCommit: guard})
+	if err != nil || crossTenant.Found || crossTenant.Deleted {
+		t.Fatalf("cross-tenant delete = %#v err:%v", crossTenant, err)
 	}
 }

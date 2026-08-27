@@ -87,7 +87,6 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 			},
 			EndUsers: transport.AdminEndUsersModuleDeps{
 				AdminRouteAuthDeps: adminAuth,
-				TenantReader:       platform.TenantRepo,
 				AdminEndUsers:      platform.AdminEndUsers,
 				AdminEndUserWriter: platform.AdminEndUsers,
 				Activations:        platform.Activations,

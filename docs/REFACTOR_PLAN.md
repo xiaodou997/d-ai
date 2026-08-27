@@ -176,7 +176,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P1-03 收敛 HTTP 层业务逻辑
 
 - [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，其余用户/租户/支付域继续按边界逐项迁移。
-- [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
+- [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务、终端用户 tenant scope 和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
 - [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，公告与少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
@@ -1162,3 +1162,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：BanReconciler 的周期校准循环由平台 worker context 驱动，Redis SCAN/写入和 PostgreSQL 真相查询会在关闭时收到取消信号。
 - 关闭：`Stop(ctx)` 支持调用方 deadline 与超时后重试等待；平台模块继续在 scheduler 后停止 reconciler，并汇总关闭错误，避免数据库/Redis 释放前遗留校准 goroutine。
 - 回归：新增 Stop-before-Start 和短 deadline 重试测试；auth/cmd-server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-03（End-user mutation ownership boundary，2026-08-27）
+
+- 边界：终端用户资料、状态、密码重置和删除 command 均携带 actor 的 tenant scope；非空 scope 在 `AdminEndUserRepository` 的 UPDATE/SELECT/FOR UPDATE 谓词内执行，跨租户目标统一表现为不存在。
+- HTTP：移除 `TenantRepository.GetEndUserTenantID` 的锁外归属预检，删除 `AdminEndUsersModuleDeps` 的无关 `TenantReader` 依赖；Transport 只提取 claims scope、调用 writer 和映射结果。
+- 一致性：状态/重置/删除与最终写入共享同一 scope 条件，避免检查后租户归属变化或删除竞态导致越权操作；删除仍在余额锁和安全 guard 之后提交。
+- 回归：新增 repository 跨租户状态、重置和删除拒绝测试，以及 scope 投影测试；user/pg、Transport、server 定向测试和差异检查通过。

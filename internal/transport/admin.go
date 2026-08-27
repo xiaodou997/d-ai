@@ -82,7 +82,6 @@ func newAdminDashboardHandlers(d adminDashboardModule) *adminHandlers {
 
 func newAdminEndUsersHandlers(d adminEndUsersModule) *adminHandlers {
 	return &adminHandlers{
-		tenantReader:  d.TenantReader,
 		endUserRepo:   d.AdminEndUsers,
 		endUserWriter: d.AdminEndUserWriter,
 		security:      d.Security,

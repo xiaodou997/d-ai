@@ -138,7 +138,6 @@ type AdminDashboardModuleDeps struct {
 // AdminEndUsersModuleDeps contains administrator end-user management routes.
 type AdminEndUsersModuleDeps struct {
 	AdminRouteAuthDeps
-	TenantReader       tenantports.AdminTenantReader
 	AdminEndUsers      userports.AdminEndUserReader
 	AdminEndUserWriter userports.AdminEndUserWriter
 	Activations        *auth.ActivationService
@@ -299,7 +298,6 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 		},
 		endUsers: adminEndUsersModule{
 			adminRouteAuth:     toAdminRouteAuth(d.EndUsers.AdminRouteAuthDeps),
-			TenantReader:       d.EndUsers.TenantReader,
 			AdminEndUsers:      d.EndUsers.AdminEndUsers,
 			AdminEndUserWriter: d.EndUsers.AdminEndUserWriter,
 			Activations:        d.EndUsers.Activations,

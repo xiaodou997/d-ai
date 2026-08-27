@@ -79,6 +79,23 @@ type AdminEndUserCreate struct {
 	ActivationExpiresAt time.Time
 }
 
+// AdminEndUserStatusUpdate carries the actor tenant scope into a status
+// mutation. An empty TenantID is the explicit global scope used by platform
+// administrators; a non-empty value makes the write tenant-scoped in SQL.
+type AdminEndUserStatusUpdate struct {
+	UserID   string
+	TenantID string
+	Status   string
+}
+
+// AdminEndUserPasswordReset carries the actor tenant scope into a password
+// reset. The repository treats a cross-tenant target as not found so object
+// ownership is not enumerable through the management API.
+type AdminEndUserPasswordReset struct {
+	UserID   string
+	TenantID string
+}
+
 // AdminEndUserDeleteResult describes the atomic deletion decision. A found
 // account with a non-zero balance is intentionally not deleted.
 type AdminEndUserDeleteResult struct {
@@ -101,12 +118,20 @@ type AdminEndUserDeleteGuardError struct {
 func (e *AdminEndUserDeleteGuardError) Error() string { return "end-user deletion guard failed" }
 func (e *AdminEndUserDeleteGuardError) Unwrap() error { return e.Cause }
 
+// AdminEndUserDeleteCommand carries the actor tenant scope and the optional
+// pre-commit security guard into one atomic deletion command.
+type AdminEndUserDeleteCommand struct {
+	UserID       string
+	TenantID     string
+	BeforeCommit AdminEndUserDeleteGuard
+}
+
 // AdminEndUserWriter owns end-user profile and status mutations. Session and
 // blacklist effects are coordinated by the separate auth security command.
 type AdminEndUserWriter interface {
 	CreateEndUser(ctx context.Context, input AdminEndUserCreate) error
 	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
-	UpdateEndUserStatus(ctx context.Context, userID, status string) (bool, error)
-	ResetEndUserPassword(ctx context.Context, userID string) (ActivationCredentialResult, error)
-	DeleteEndUser(ctx context.Context, userID string, beforeCommit AdminEndUserDeleteGuard) (AdminEndUserDeleteResult, error)
+	UpdateEndUserStatus(ctx context.Context, input AdminEndUserStatusUpdate) (bool, error)
+	ResetEndUserPassword(ctx context.Context, input AdminEndUserPasswordReset) (ActivationCredentialResult, error)
+	DeleteEndUser(ctx context.Context, input AdminEndUserDeleteCommand) (AdminEndUserDeleteResult, error)
 }
