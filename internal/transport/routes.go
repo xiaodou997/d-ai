@@ -332,6 +332,7 @@ type proxyNodesModule struct {
 type paymentModule struct {
 	auth    platformAuthDeps
 	service *paymentsvc.PaymentService
+	cash    PaymentCashHTTPService
 	logger  *zap.Logger
 }
 

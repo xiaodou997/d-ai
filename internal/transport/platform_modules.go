@@ -2,8 +2,9 @@ package transport
 
 import (
 	"context"
-	"go.uber.org/zap"
 	"net/http"
+
+	"go.uber.org/zap"
 
 	proxypkg "xiaodou/dai/internal/ai/proxy"
 	announcementpkg "xiaodou/dai/internal/announcement"
@@ -15,6 +16,7 @@ import (
 	"xiaodou/dai/internal/config"
 	inviteports "xiaodou/dai/internal/invite/ports"
 	notificationpkg "xiaodou/dai/internal/notification"
+	paymentpkg "xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
 	systempkg "xiaodou/dai/internal/system"
 	systemports "xiaodou/dai/internal/system/ports"
@@ -167,6 +169,13 @@ type PaymentModuleDeps struct {
 
 type PaymentNotifyService interface {
 	HandleNotify(context.Context, *http.Request) error
+}
+
+type PaymentCashHTTPService interface {
+	GetBalanceAccount(context.Context, string) (*paymentpkg.BalanceAccount, error)
+	ListCashLedger(context.Context, string, string, int, int) ([]*paymentpkg.CashLedgerEntry, int64, error)
+	GetTenantPaymentSettings(context.Context, string) (*paymentpkg.TenantSettings, error)
+	UpdateTenantPaymentSettings(context.Context, string, *paymentpkg.TenantSettings, string) error
 }
 
 // PlatformBillingModuleDeps groups the platform billing route module.
@@ -360,6 +369,7 @@ func NewPlatformBillingModule(d PlatformBillingModuleDeps) Module {
 	return platformBillingModule{payment: paymentModule{
 		auth:    platformAuthDeps{JWT: d.Payment.JWT, Blacklist: d.Payment.Blacklist},
 		service: d.Payment.Service,
+		cash:    d.Payment.Service,
 		logger:  d.Payment.Logger,
 	}}
 }

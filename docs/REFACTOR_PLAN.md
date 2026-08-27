@@ -1262,3 +1262,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：微信回调 Raw 路由改为只接收 `PaymentNotifyService.HandleNotify`，不再复用包含充值、租户现金和管理支付能力的完整 `paymentModule`。
 - 边界：回调验签/结算仍由 payment application service 负责，Transport 仅保留原始请求体限制、日志和微信响应格式。
 - 回归：payment notification、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。
+
+### P1-03（Narrow tenant cash HTTP port，2026-08-27）
+
+- 依赖：租户余额/流水/充值设置端点改为依赖 `PaymentCashHTTPService`，不再接收包含订单、提现和管理支付能力的完整 `PaymentService`。
+- 边界：租户 scope 仍由 JWT claims 提取，额度查询与设置更新由 payment application service 执行，Transport 只负责 DTO 转换和错误映射。
+- 回归：payment、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。

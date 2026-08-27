@@ -8,17 +8,16 @@ import (
 
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/payment"
-	paymentsvc "xiaodou/dai/internal/payment/service"
 	"xiaodou/dai/libs/go/httpx"
 )
 
 // tenantCashHandlers 承载租户统一 USD 额度余额和额度明细端点（type=3 限本租户）。
 type tenantCashHandlers struct {
-	svc *paymentsvc.PaymentService
+	svc PaymentCashHTTPService
 }
 
 func newTenantCashHandlers(d paymentModule) *tenantCashHandlers {
-	return &tenantCashHandlers{svc: d.service}
+	return &tenantCashHandlers{svc: d.cash}
 }
 
 // ---- DTO ----
