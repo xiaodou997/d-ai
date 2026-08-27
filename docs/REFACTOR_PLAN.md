@@ -123,7 +123,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 规划 `identity`、`billing`、`catalog`、`runtime`、`operations` 模块责任。
 - [x] 定义每个模块的 `domain`、`application`、`ports`、`adapters` 目标边界。
 - [x] Transport 只依赖 application command/query，不直接访问数据库；业务 adapter 和基础设施直接依赖已由 `cmd/checkdeps` 门禁清零。
-- [~] 禁止模块绕过公开端口写入其他模块表；包级依赖已门禁，数据库角色和表所有权在 P1-07 完成。
+- [x] 禁止模块绕过公开端口写入其他模块表；包级依赖由 `cmd/checkdeps` 门禁，数据库角色、表 owner、grant/revoke 和切换窗口由 P1-07 ownership 契约锁定。
 - [x] 使用 `cmd/checkdeps` 依赖检查器并接入 Make/CI，阻止未登记的反向依赖。
 - [x] 在 `docs/MODULE_DEPENDENCY_RULES.md` 和例外台账记录允许的跨模块事务及历史例外。
 
@@ -863,6 +863,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 契约：生命周期测试的每个健康阶段现在都断言 `billing/invariants.Check` 执行完整 7 项检查，避免新增检查函数后测试仍然静默漏跑。
 - 覆盖：真实 PostgreSQL 流程继续覆盖余额/批次守恒、批次状态、充值撤销、Outbox/用量链接、退款冲正、订阅订单和订阅额度边界；随机并发、幂等、Scheduler 对账和 repair audit 已由同一阶段的既有测试覆盖。
 - 验证：`go test ./internal/billing/invariants -count=1`、`go vet ./internal/billing/invariants`、`staticcheck ./internal/billing/invariants` 通过。
+
+### P1-01（Database cross-module write boundary completion，2026-08-27）
+
+- 边界：`cmd/checkdeps` 报告 dependency direction clean；runtime/billing 数据库角色与 ownership/revoke 契约已禁止 runtime 直接写账本，并由 outbox 仅保留结算意图 INSERT 例外。
+- 验证：依赖门禁、ownership probe、角色 provisioning 和维护窗口 cutover wrapper 均已接入 Make/CI，P1-01 的数据库写入边界条件完成闭环。
 
 ### P1-04（Split behavior regression coverage，2026-08-27）
 
