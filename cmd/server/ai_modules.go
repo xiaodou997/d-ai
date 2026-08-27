@@ -67,6 +67,7 @@ type aiModules struct {
 	AsyncTasks        *asynctask.Engine
 
 	priceBookSvc       *billingcontrol.Service
+	runtimeBinder      *coreruntime.CachedBindingResolver
 	riskControlWorker  *riskcontrol.Worker
 	auditWorker        *audit.Worker
 	refresher          *tokenrefresh.Refresher
@@ -503,6 +504,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		MetricsHandler:     aimetrics.Handler(),
 		AsyncTasks:         asyncTasks,
 		priceBookSvc:       priceBookSvc,
+		runtimeBinder:      runtimeBinder,
 		riskControlWorker:  riskControlWorker,
 		auditWorker:        auditWorker,
 		refresher:          refresher,
@@ -522,6 +524,9 @@ func (m *aiModules) Start(ctx context.Context) {
 		m.workerCtx, m.workerCancel = context.WithCancel(ctx)
 		if m.priceBookSvc != nil {
 			m.priceBookSvc.Start(ctx)
+		}
+		if m.runtimeBinder != nil {
+			m.runtimeBinder.Start(m.workerCtx)
 		}
 		if m.riskControlWorker != nil {
 			m.riskControlWorker.Start(m.workerCtx, 0)
@@ -551,6 +556,11 @@ func (m *aiModules) Stop(ctx context.Context) {
 	m.stopOnce.Do(func() {
 		if m.workerCancel != nil {
 			m.workerCancel()
+		}
+		if m.runtimeBinder != nil {
+			if err := m.runtimeBinder.Stop(ctx); err != nil && m.logger != nil {
+				m.logger.Warn("runtime binding resolver shutdown incomplete", zap.Error(err))
+			}
 		}
 		if m.riskControlWorker != nil {
 			m.riskControlWorker.Stop(ctx)

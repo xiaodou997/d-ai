@@ -133,7 +133,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台路由改由 `transport.Module` 和模块专属依赖类型注册，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 与 raw 路由均使用窄依赖。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、runtime binding cache、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
@@ -996,6 +996,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：Runtime API Key 的 `last_used_at` best-effort 更新不再脱离请求 context，后台写入最多运行 2 秒并会随请求/服务器关闭取消，避免残留数据库 goroutine。
 - 行为：鉴权成功与下游请求路径保持不变，telemetry 写入失败仍不影响请求响应。
 - 回归：`go test ./internal/ai/gateway -count=1`、`go vet ./internal/ai/gateway` 和差异检查通过。
+
+### P1-02（Runtime binding cache lifecycle，2026-08-27）
+
+- 生命周期：`CachedBindingResolver` 为共享 cache-miss 加载增加 Start/Stop/Health，所有 detached load 由 resolver WaitGroup 登记，并在 Stop 时取消、等待后再释放 AI 运行时依赖。
+- 装配：`aiModules` 持有并管理 runtime binder 的启动/停止，生产请求不再触发无主的 `WithoutCancel` 配置读取；请求级等待/并发合并语义保持不变。
+- 回归：新增 resolver 停止取消、Stop-before-Start 和健康状态测试；`go test ./internal/ai/core/runtime ./cmd/server -count=1`、race 定向测试、`go build`、`go vet` 和 `checkdeps` 通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 

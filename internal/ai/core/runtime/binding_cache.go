@@ -6,6 +6,7 @@ import (
 	"time"
 
 	coreupstream "xiaodou/dai/internal/ai/core/upstream"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const (
@@ -62,7 +63,17 @@ type CachedBindingResolver struct {
 	mu       sync.Mutex
 	entries  map[coreupstream.RuntimeBindingRequest]bindingCacheEntry
 	inflight map[coreupstream.RuntimeBindingRequest]*bindingCall
+
+	lifecycleMu sync.Mutex
+	root        context.Context
+	cancel      context.CancelFunc
+	stopParent  func() bool
+	started     bool
+	stopped     bool
+	loadWG      sync.WaitGroup
 }
+
+var _ lifecycle.Component = (*CachedBindingResolver)(nil)
 
 func NewCachedBindingResolver(source coreupstream.RuntimeBindingResolver, options BindingResolverOptions) *CachedBindingResolver {
 	if options.TTL <= 0 {
@@ -77,6 +88,7 @@ func NewCachedBindingResolver(source coreupstream.RuntimeBindingResolver, option
 	if options.LoadTimeout <= 0 {
 		options.LoadTimeout = defaultBindingLoadTimeout
 	}
+	root, cancel := context.WithCancel(context.Background())
 	return &CachedBindingResolver{
 		source:         source,
 		ttl:            options.TTL,
@@ -87,12 +99,92 @@ func NewCachedBindingResolver(source coreupstream.RuntimeBindingResolver, option
 		authorizer:     options.Authorizer,
 		entries:        make(map[coreupstream.RuntimeBindingRequest]bindingCacheEntry),
 		inflight:       make(map[coreupstream.RuntimeBindingRequest]*bindingCall),
+		root:           root,
+		cancel:         cancel,
 	}
+}
+
+// Start binds detached cache-miss loads to the process lifecycle. Requests
+// still wait on their own context, while the shared load is cancelled by Stop
+// instead of continuing against released runtime dependencies.
+func (r *CachedBindingResolver) Start(ctx context.Context) {
+	if r == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.lifecycleMu.Lock()
+	if r.started || r.stopped {
+		r.lifecycleMu.Unlock()
+		return
+	}
+	if r.root == nil {
+		r.root, r.cancel = context.WithCancel(context.Background())
+	}
+	r.started = true
+	if r.cancel != nil {
+		r.stopParent = context.AfterFunc(ctx, r.cancel)
+	}
+	r.lifecycleMu.Unlock()
+}
+
+// Stop cancels all detached cache-miss loads and waits for them to finish.
+// A later call may continue waiting after an earlier deadline expires.
+func (r *CachedBindingResolver) Stop(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	r.lifecycleMu.Lock()
+	if !r.stopped {
+		r.stopped = true
+	}
+	cancel := r.cancel
+	stopParent := r.stopParent
+	r.stopParent = nil
+	r.lifecycleMu.Unlock()
+	if stopParent != nil {
+		stopParent()
+	}
+	if cancel != nil {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		r.loadWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (r *CachedBindingResolver) Health() lifecycle.HealthSnapshot {
+	if r == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	r.lifecycleMu.Lock()
+	started, stopped := r.started, r.stopped
+	r.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (r *CachedBindingResolver) ResolveRuntimeBinding(ctx context.Context, req coreupstream.RuntimeBindingRequest) (coreupstream.RuntimeBinding, error) {
 	if r == nil || r.source == nil {
 		return coreupstream.RuntimeBinding{}, coreupstream.NewRuntimeBindingRejection(coreupstream.BindingRejectionBindingInvalid, "binding resolver is unavailable")
+	}
+	r.lifecycleMu.Lock()
+	stopped := r.stopped
+	r.lifecycleMu.Unlock()
+	if stopped {
+		return coreupstream.RuntimeBinding{}, context.Canceled
 	}
 	if err := context.Cause(ctx); err != nil {
 		return coreupstream.RuntimeBinding{}, err
@@ -125,11 +217,17 @@ func (r *CachedBindingResolver) ResolveRuntimeBinding(ctx context.Context, req c
 	call := &bindingCall{done: make(chan struct{})}
 	r.inflight[req] = call
 	r.mu.Unlock()
-	loadCtx, cancelLoad := context.WithTimeout(context.WithoutCancel(ctx), r.loadTimeout)
-	go func() {
-		defer cancelLoad()
-		r.resolveCacheMiss(loadCtx, req, call)
-	}()
+	loadRoot, ok := r.reserveLoad()
+	if !ok {
+		r.finishCacheMiss(req, call, coreupstream.RuntimeBinding{}, context.Canceled)
+	} else {
+		loadCtx, cancelLoad := context.WithTimeout(loadRoot, r.loadTimeout)
+		go func() {
+			defer r.loadWG.Done()
+			defer cancelLoad()
+			r.resolveCacheMiss(loadCtx, req, call)
+		}()
+	}
 	select {
 	case <-ctx.Done():
 		return coreupstream.RuntimeBinding{}, context.Cause(ctx)
@@ -140,6 +238,23 @@ func (r *CachedBindingResolver) ResolveRuntimeBinding(ctx context.Context, req c
 
 func (r *CachedBindingResolver) resolveCacheMiss(ctx context.Context, req coreupstream.RuntimeBindingRequest, call *bindingCall) {
 	binding, err := r.source.ResolveRuntimeBinding(ctx, req)
+	r.finishCacheMiss(req, call, binding, err)
+}
+
+func (r *CachedBindingResolver) reserveLoad() (context.Context, bool) {
+	r.lifecycleMu.Lock()
+	defer r.lifecycleMu.Unlock()
+	if r.stopped {
+		return nil, false
+	}
+	if r.root == nil {
+		r.root, r.cancel = context.WithCancel(context.Background())
+	}
+	r.loadWG.Add(1)
+	return r.root, true
+}
+
+func (r *CachedBindingResolver) finishCacheMiss(req coreupstream.RuntimeBindingRequest, call *bindingCall, binding coreupstream.RuntimeBinding, err error) {
 	r.mu.Lock()
 	call.binding = cloneRuntimeBinding(binding)
 	call.err = err
