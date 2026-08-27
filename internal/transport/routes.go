@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
-	announcementpkg "xiaodou/dai/internal/announcement"
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
 	billingports "xiaodou/dai/internal/billing/ports"
@@ -310,7 +309,7 @@ type authModule struct {
 
 type announcementModule struct {
 	auth    platformAuthDeps
-	service *announcementpkg.Service
+	service AnnouncementHTTPService
 }
 
 type notificationModule struct {

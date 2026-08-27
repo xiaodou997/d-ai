@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"go.uber.org/zap"
 
 	proxypkg "xiaodou/dai/internal/ai/proxy"
@@ -171,7 +172,25 @@ type PlatformBillingModuleDeps struct {
 // AnnouncementModuleDeps contains announcement routes.
 type AnnouncementModuleDeps struct {
 	PlatformAuthDeps
-	Service *announcementpkg.Service
+	Service AnnouncementHTTPService
+}
+
+// AnnouncementHTTPService is the narrow application surface consumed by
+// announcement HTTP handlers. The concrete service remains owned by the
+// composition root and is not exposed through transport module wiring.
+type AnnouncementHTTPService interface {
+	GetManaged(context.Context, announcementpkg.Actor, string) (announcementpkg.Announcement, error)
+	DeleteDraft(context.Context, announcementpkg.Actor, string) error
+	ListManaged(context.Context, announcementpkg.Actor, announcementpkg.ManageQuery) (announcementpkg.ManagedPage, error)
+	ListRecipients(context.Context, announcementpkg.Actor, string, announcementpkg.RecipientQuery) (announcementpkg.RecipientPage, error)
+	Archive(context.Context, announcementpkg.Actor, string) (announcementpkg.Announcement, error)
+	GetStats(context.Context, announcementpkg.Actor, string) (announcementpkg.Stats, error)
+	ListInbox(context.Context, announcementpkg.Principal, announcementpkg.InboxQuery) (announcementpkg.InboxPage, error)
+	MarkRead(context.Context, announcementpkg.Principal, string) error
+	GetVisible(context.Context, announcementpkg.Principal, string) (announcementpkg.InboxItem, error)
+	CreateDraft(context.Context, announcementpkg.Actor, announcementpkg.DraftInput) (announcementpkg.Announcement, error)
+	Publish(context.Context, announcementpkg.Actor, string) (announcementpkg.Announcement, error)
+	UpdateDraft(context.Context, announcementpkg.Actor, string, announcementpkg.DraftInput) (announcementpkg.Announcement, error)
 }
 
 // NotificationModuleDeps contains notification routes.

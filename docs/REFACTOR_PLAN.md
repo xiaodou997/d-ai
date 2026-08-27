@@ -1226,3 +1226,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 关闭链：公共与管理 HTTP listener 在启动后立即登记到 `shutdownStack`，正常信号退出与启动失败都沿统一逆序关闭路径执行。
 - 语义：HTTP 关闭完成后才标记 listener stopped；重复关闭由 stack 幂等处理，避免主流程维护独立的第二套 listener shutdown。
 - 回归：`go test ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-03（Narrow announcement HTTP service port，2026-08-27）
+
+- 依赖：公告 Transport 改为依赖 `AnnouncementHTTPService` 最小 application 端口，具体 `*announcement.Service` 不再出现在 HTTP handler/module 字段中。
+- 语义：查询、收件箱、草稿和状态转换方法保持原有错误与 DTO 映射，组合根仍负责将具体服务投影到该端口。
+- 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。

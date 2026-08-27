@@ -15,7 +15,7 @@ import (
 )
 
 type announcementHandlers struct {
-	service *announcement.Service
+	service AnnouncementHTTPService
 }
 
 type announcementPathInput struct {
