@@ -16,7 +16,6 @@ import (
 	inviteports "xiaodou/dai/internal/invite/ports"
 	notificationpkg "xiaodou/dai/internal/notification"
 	paymentsvc "xiaodou/dai/internal/payment/service"
-	systempkg "xiaodou/dai/internal/system"
 	systemports "xiaodou/dai/internal/system/ports"
 	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
@@ -319,7 +318,7 @@ type notificationModule struct {
 
 type systemModule struct {
 	auth    platformAuthDeps
-	service *systempkg.Service
+	service SystemHTTPService
 }
 
 type dataCleanupModule struct {

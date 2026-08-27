@@ -1232,3 +1232,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：公告 Transport 改为依赖 `AnnouncementHTTPService` 最小 application 端口，具体 `*announcement.Service` 不再出现在 HTTP handler/module 字段中。
 - 语义：查询、收件箱、草稿和状态转换方法保持原有错误与 DTO 映射，组合根仍负责将具体服务投影到该端口。
 - 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-03（Narrow system-module HTTP service port，2026-08-27）
+
+- 依赖：系统模块 Transport 改为依赖 `SystemHTTPService` 最小 application 端口，具体 `*system.Service` 不再出现在 HTTP handler/module 字段中。
+- 语义：模块状态、PII 配置读取/更新和启停端点保持原有错误映射与权限中间件，组合根继续负责具体服务装配。
+- 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。

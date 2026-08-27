@@ -202,7 +202,15 @@ type NotificationModuleDeps struct {
 // SystemModuleDeps contains system-module routes.
 type SystemModuleDeps struct {
 	PlatformAuthDeps
-	Service *systempkg.Service
+	Service SystemHTTPService
+}
+
+type SystemHTTPService interface {
+	List(context.Context) ([]systempkg.Status, error)
+	Get(context.Context, string) (systempkg.Status, error)
+	SetEnabled(context.Context, string, bool, string) (systempkg.Status, error)
+	GetPIIConfig(context.Context) (systempkg.PIIConfig, error)
+	UpdatePIIConfig(context.Context, systempkg.PIIConfig, string) (systempkg.PIIConfig, error)
 }
 
 // DataCleanupModuleDeps contains data-cleanup routes.
