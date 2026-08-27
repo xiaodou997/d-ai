@@ -243,6 +243,72 @@ func TestLiteLLMSourceKeepsLastSuccessAfterRefreshFailure(t *testing.T) {
 	}
 }
 
+func TestLiteLLMSourceStopCancelsRefreshAndPreventsRestart(t *testing.T) {
+	release := make(chan struct{})
+	fetcher := newSequenceFetcher(fetchStep{release: release})
+	source := newLiteLLMPriceSource(fetcher, time.Minute, time.Second)
+	source.Start(context.Background())
+	select {
+	case <-fetcher.started:
+	case <-time.After(time.Second):
+		t.Fatal("initial LiteLLM refresh did not start")
+	}
+
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := source.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	select {
+	case <-fetcher.finished:
+	case <-time.After(time.Second):
+		t.Fatal("canceled LiteLLM refresh did not finish")
+	}
+
+	calls := fetcher.callCount()
+	_ = source.Snapshot()
+	if got := fetcher.callCount(); got != calls {
+		t.Fatalf("refresh restarted after Stop(): calls=%d, want %d", got, calls)
+	}
+	if err := source.Stop(stopCtx); err != nil {
+		t.Fatalf("second Stop() error = %v", err)
+	}
+}
+
+type blockingLiteLLMFetcher struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (f *blockingLiteLLMFetcher) Fetch(context.Context) (map[string]LiteLLMModel, error) {
+	close(f.started)
+	<-f.release
+	return nil, nil
+}
+
+func TestLiteLLMSourceStopCanWaitAgainAfterDeadline(t *testing.T) {
+	fetcher := &blockingLiteLLMFetcher{started: make(chan struct{}), release: make(chan struct{})}
+	source := newLiteLLMPriceSource(fetcher, time.Minute, time.Second)
+	source.Start(context.Background())
+	select {
+	case <-fetcher.started:
+	case <-time.After(time.Second):
+		t.Fatal("blocking LiteLLM refresh did not start")
+	}
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := source.Stop(shortCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("short Stop() error = %v, want deadline exceeded", err)
+	}
+	close(fetcher.release)
+	longCtx, longCancel := context.WithTimeout(context.Background(), time.Second)
+	defer longCancel()
+	if err := source.Stop(longCtx); err != nil {
+		t.Fatalf("long Stop() error = %v", err)
+	}
+}
+
 func waitForLiteLLMModel(t *testing.T, source *liteLLMPriceSource, modelCode string) {
 	t.Helper()
 	eventually(t, func() bool {

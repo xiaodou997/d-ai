@@ -28,7 +28,19 @@ func New(repo Repository, fetcher LiteLLMFetcher) *Service {
 // Start begins the non-blocking LiteLLM price cache warmup. The supplied
 // context controls in-flight background refreshes during service shutdown.
 func (s *Service) Start(ctx context.Context) {
+	if s == nil || s.llmSource == nil {
+		return
+	}
 	s.llmSource.Start(ctx)
+}
+
+// Stop cancels and waits for any in-flight LiteLLM refresh before the service
+// is released by the composition root.
+func (s *Service) Stop(ctx context.Context) error {
+	if s == nil || s.llmSource == nil {
+		return nil
+	}
+	return s.llmSource.Stop(ctx)
 }
 
 func (s *Service) CreatePriceBook(ctx context.Context, name, description string) (domain.PriceBook, error) {

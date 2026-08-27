@@ -28,7 +28,7 @@ httpServers.Start / Shutdown
 - `openInfrastructure` 在生产按 `DAI_BILLING_DATABASE_URL` 打开独立 billing pool；账务、支付、订阅扣费和
   outbox 结算使用 billing pool，未配置时仅在非生产环境回退到主 pool，避免把权限切换误带入开发环境。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
-  `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务。
+  `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务，LiteLLM 远程刷新在 Stop 时会取消并等待退出。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；停止时先取消自动清理，再释放其数据库依赖。
 - 四个小时级清理任务（图片、文件、会话、激活凭证）现在由 `periodicWorker` 统一持有子 context，首次执行、每小时执行和 Stop 等待都登记在 shutdown stack 中。
 - composition root 维护统一的 `lifecycleHealth` 投影；`/health.components` 暴露基础设施、平台/AI 模块、后台清理任务和公共/管理监听器的 started/stopped 状态，同时保留 Scheduler 任务快照。真实 PostgreSQL/Redis 连通性仍只由 `/ready` 判定。

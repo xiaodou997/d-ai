@@ -617,6 +617,11 @@ func (m *aiModules) Stop(ctx context.Context) {
 		if m.AsyncTasks != nil {
 			m.AsyncTasks.Stop(ctx)
 		}
+		if m.priceBookSvc != nil {
+			if err := m.priceBookSvc.Stop(ctx); err != nil && m.logger != nil {
+				m.logger.Warn("LiteLLM price refresh shutdown incomplete", zap.Error(err))
+			}
+		}
 	})
 }
 

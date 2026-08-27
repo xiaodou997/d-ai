@@ -883,6 +883,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 装配：所有资源在成功启动后登记，关闭回调完成后标记 stopped；小时级 worker 通过统一注册函数接入 shutdown stack，超时关闭不会被误报为已停止。
 - 回归：新增生命周期快照隔离、幂等标记和 health JSON 兼容性测试；`go test ./cmd/server -count=1`、`go vet ./cmd/server` 和差异检查通过。
 
+### P1-02（LiteLLM refresh lifecycle，2026-08-27）
+
+- 生命周期：`liteLLMPriceSource` 现在拥有独立的可取消刷新上下文、启动/停止状态和 in-flight refresh 等待通道；重复 Stop 安全，停止后不会重新触发远程刷新。
+- 装配：`billingcontrol.Service.Stop` 暴露最小关闭入口，`aiModules.Stop` 在释放其他 AI worker 时同步取消并等待 LiteLLM 价格刷新，避免根 context 取消后遗留网络 goroutine。
+- 回归：新增刷新取消、停止后禁止重启以及首个 Stop 超时后可用更长上下文再次等待的测试；`go test ./internal/ai/billingcontrol -count=1`、`go test ./cmd/server -count=1`、`go vet` 和差异检查通过。
+
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 
 - 边界：`cmd/checkdeps` 报告 dependency direction clean；runtime/billing 数据库角色与 ownership/revoke 契约已禁止 runtime 直接写账本，并由 outbox 仅保留结算意图 INSERT 例外。
