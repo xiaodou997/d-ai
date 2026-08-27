@@ -132,7 +132,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，平台域仍需继续按 identity/billing/operations 提取最小依赖。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，根级生命周期投影已接入 `/health`，组件自身探针仍待补齐。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、data cleanup 和小时级清理任务已补齐幂等停止与等待退出，`/health.components` 已统一暴露生命周期状态，故障级 Health 仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
@@ -878,7 +878,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-02（Unified lifecycle health projection，2026-08-27）
 
-- 投影：新增 composition-root `lifecycleHealth` 注册表，统一记录 PostgreSQL（含 billing 逻辑池）、Redis、平台模块、Ban reconciler、Scheduler、AI 模块、data cleanup、四个小时级清理 worker 和公共/管理监听器的 started/stopped 状态。
+- 投影：新增 composition-root `lifecycleHealth` 注册表，统一记录 PostgreSQL（含 billing 逻辑池）、Redis、平台模块、Ban reconciler、Scheduler、AI 模块、异步任务、data cleanup、四个小时级清理 worker 和公共/管理监听器的 started/stopped 状态。
 - 接口：`/health` 新增 `components` 对象并保留原有 `scheduler` 详细快照；组件状态不包含 DSN、Provider 或错误内部细节，`/ready` 继续执行 PostgreSQL/Redis 真实连通性探活。
 - 装配：所有资源在成功启动后登记，关闭回调完成后标记 stopped；小时级 worker 通过统一注册函数接入 shutdown stack，超时关闭不会被误报为已停止。
 - 回归：新增生命周期快照隔离、幂等标记和 health JSON 兼容性测试；`go test ./cmd/server -count=1`、`go vet ./cmd/server` 和差异检查通过。
@@ -900,6 +900,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 装配：新增 `platformModule` 实现 `transport.Module`，平台元数据、认证、身份、账务和运营路由与 AI 纵向模块统一由模块列表注册；保留 `transport.Register` 入口和既有 operation/path 契约。
 - 边界：本次只改变注册拓扑，不伪装完成依赖缩减；平台模块暂时接收已经按 Infrastructure/Portal/Identity/Billing/Operations 分组的 `Deps`，后续再逐组提取最小 HTTP 端口。
 - 回归：新增平台模块 OpenAPI surface contract，确认认证、租户、支付和运营代表路径均由模块注册；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（Async task engine lifecycle，2026-08-27）
+
+- 生命周期：`asynctask.Engine` 现在自持有 worker context，Start/Stop 幂等且 Stop-before-Start 会阻止后续启动；停止时先取消 worker、webhook 和 reaper 循环，再执行租约释放。
+- 等待：Stop 支持超时返回并可由后续更长上下文继续等待，成功释放任务/投递后不会重复执行释放 SQL；调用方会记录关闭不完整告警。
+- 观测：新增 `HealthSnapshot`，暴露 started/stopped 生命周期状态，不将队列内容或内部错误细节混入健康响应。
+- 回归：新增 Stop-before-Start 与 Health 测试；`go test ./internal/ai/asynctask -run '^TestEngineHealthAndStopBeforeStart$'`、`go vet` 和差异检查通过（完整包测试受限于当前环境 httptest IPv6 监听权限）。
 
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 

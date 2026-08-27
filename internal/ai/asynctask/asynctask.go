@@ -2,6 +2,7 @@ package asynctask
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -127,8 +128,21 @@ type Engine struct {
 	cancelMu sync.Mutex
 	cancels  map[string]context.CancelFunc
 
-	startOnce sync.Once
-	wg        sync.WaitGroup
+	lifecycleMu  sync.Mutex
+	started      bool
+	stopped      bool
+	workerCancel context.CancelFunc
+	released     bool
+	stopMu       sync.Mutex
+	wg           sync.WaitGroup
+}
+
+// HealthSnapshot is the lifecycle projection for the async task workers. It
+// intentionally reports process state only; queue depth and task failures are
+// exposed by task metrics and durable task views.
+type HealthSnapshot struct {
+	Started bool `json:"started"`
+	Stopped bool `json:"stopped"`
 }
 
 // New builds an Engine. Register handlers on it, then call Start.
@@ -184,54 +198,119 @@ func (e *Engine) Register(taskType string, h Handler, opts Options) {
 // found only by an expired lease, which cannot mistake a live task for a dead
 // one.
 func (e *Engine) Start(ctx context.Context) {
-	e.startOnce.Do(func() {
-		e.registry.freeze()
-		types := e.registry.types()
-		if len(types) == 0 {
-			e.logger.Info("async task engine started with no registered types; task workers not launched")
-		} else {
-			e.logger.Info("async task engine started",
-				zap.String("worker_id", e.workerID),
-				zap.Int("workers", e.cfg.Workers),
-				zap.Strings("task_types", types),
-				zap.Duration("lease_ttl", e.cfg.LeaseTTL),
-			)
-			for range e.cfg.Workers {
-				e.wg.Go(func() { e.workerLoop(ctx) })
-			}
+	if e == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	e.lifecycleMu.Lock()
+	if e.started || e.stopped {
+		e.lifecycleMu.Unlock()
+		return
+	}
+	e.started = true
+	workerCtx, cancel := context.WithCancel(ctx)
+	e.workerCancel = cancel
+	e.registry.freeze()
+	types := e.registry.types()
+	if len(types) == 0 {
+		e.logger.Info("async task engine started with no registered types; task workers not launched")
+	} else {
+		e.logger.Info("async task engine started",
+			zap.String("worker_id", e.workerID),
+			zap.Int("workers", e.cfg.Workers),
+			zap.Strings("task_types", types),
+			zap.Duration("lease_ttl", e.cfg.LeaseTTL),
+		)
+		for range e.cfg.Workers {
+			e.wg.Go(func() { e.workerLoop(workerCtx) })
 		}
-		for range e.cfg.WebhookWorkers {
-			e.wg.Go(func() { e.webhookWorkerLoop(ctx) })
-		}
-		e.wg.Go(func() { e.reaperLoop(ctx) })
-	})
+	}
+	for range e.cfg.WebhookWorkers {
+		e.wg.Go(func() { e.webhookWorkerLoop(workerCtx) })
+	}
+	e.wg.Go(func() { e.reaperLoop(workerCtx) })
+	e.lifecycleMu.Unlock()
 }
 
 // Stop waits for workers to finish, then hands their in-progress tasks back so
 // another instance can pick them up without waiting out the lease.
-//
-// Callers should cancel the Start context first; Stop's own context only bounds
-// the release query.
-func (e *Engine) Stop(ctx context.Context) {
-	e.wg.Wait()
-	released, err := e.store.releaseWorker(ctx, e.workerID)
+// Stop owns worker cancellation and supports a later retry with a longer
+// context if the first wait deadline expires.
+func (e *Engine) Stop(ctx context.Context) error {
+	if e == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	e.stopMu.Lock()
+	defer e.stopMu.Unlock()
+
+	e.lifecycleMu.Lock()
+	e.stopped = true
+	started := e.started
+	cancel := e.workerCancel
+	released := e.released
+	e.lifecycleMu.Unlock()
+	if !started {
+		return nil
+	}
+	if cancel != nil {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		e.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if released {
+		return nil
+	}
+
+	var errs []error
+	releasedTasks, err := e.store.releaseWorker(ctx, e.workerID)
 	if err != nil {
 		e.logger.Warn("async task engine: releasing worker tasks failed",
 			zap.String("worker_id", e.workerID), zap.Error(err))
-	} else if released > 0 {
+		errs = append(errs, err)
+	} else if releasedTasks > 0 {
 		e.logger.Info("async task engine: returned in-progress tasks to the queue",
-			zap.String("worker_id", e.workerID), zap.Int64("count", released))
+			zap.String("worker_id", e.workerID), zap.Int64("count", releasedTasks))
 	}
 	deliveries, err := e.store.releaseDeliveries(ctx, e.workerID)
 	if err != nil {
 		e.logger.Warn("async task engine: releasing webhook deliveries failed",
 			zap.String("worker_id", e.workerID), zap.Error(err))
-		return
-	}
-	if deliveries > 0 {
+		errs = append(errs, err)
+	} else if deliveries > 0 {
 		e.logger.Info("async task engine: returned webhook deliveries to the queue",
 			zap.String("worker_id", e.workerID), zap.Int64("count", deliveries))
 	}
+	if len(errs) == 0 {
+		e.lifecycleMu.Lock()
+		e.released = true
+		e.lifecycleMu.Unlock()
+	}
+	return errors.Join(errs...)
+}
+
+// Health returns a lock-safe snapshot for the composition-root health
+// projection and role-specific management probes.
+func (e *Engine) Health() HealthSnapshot {
+	if e == nil {
+		return HealthSnapshot{}
+	}
+	e.lifecycleMu.Lock()
+	started, stopped := e.started, e.stopped
+	e.lifecycleMu.Unlock()
+	return HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 // signal nudges a local worker. Non-blocking: a full buffer means workers are

@@ -615,7 +615,9 @@ func (m *aiModules) Stop(ctx context.Context) {
 			m.settlementConsumer.Stop(ctx)
 		}
 		if m.AsyncTasks != nil {
-			m.AsyncTasks.Stop(ctx)
+			if err := m.AsyncTasks.Stop(ctx); err != nil && m.logger != nil {
+				m.logger.Warn("async task engine shutdown incomplete", zap.Error(err))
+			}
 		}
 		if m.priceBookSvc != nil {
 			if err := m.priceBookSvc.Stop(ctx); err != nil && m.logger != nil {

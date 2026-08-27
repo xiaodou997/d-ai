@@ -160,9 +160,15 @@ func run() error {
 	shutdowns.Add("AI modules", func(ctx context.Context) error {
 		ai.Stop(ctx)
 		lifecycle.MarkStopped(healthAIModules)
+		if ai.AsyncTasks != nil {
+			lifecycle.MarkStopped(healthAsyncTasks)
+		}
 		return nil
 	})
 	lifecycle.MarkStarted(healthAIModules)
+	if ai.AsyncTasks != nil {
+		lifecycle.MarkStarted(healthAsyncTasks)
+	}
 	fileStore := ai.FileStore
 	imageAssetSvc := ai.ImageAssets
 	runtimeGateway := ai.RuntimeGateway
