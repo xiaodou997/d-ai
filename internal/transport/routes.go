@@ -947,15 +947,23 @@ func buildUpstreamDiagnosticsHTTPDeps(platform aiPlatformDeps, d AIUpstreamDiagn
 	}
 }
 
+// RawDeps contains only the collaborators needed by chi-native endpoints.
+// These routes intentionally bypass Huma for signature-preserving callbacks
+// and binary responses, so they must not receive the full platform container.
+type RawDeps struct {
+	Payment              *paymentsvc.PaymentService
+	TenantBrandingReader tenantports.PortalBrandingReader
+	Logger               *zap.Logger
+}
+
 // RegisterRaw 注册非 JSON 契约的 chi 原生端点。
-func RegisterRaw(mux *chi.Mux, d Deps) {
+func RegisterRaw(mux *chi.Mux, d RawDeps) {
 	RegisterPublicRaw(mux, d)
 }
 
-func RegisterPublicRaw(mux *chi.Mux, d Deps) {
+func RegisterPublicRaw(mux *chi.Mux, d RawDeps) {
 	// 微信支付回调（无认证，验签即鉴权）
 	notifyHandler := newPaymentNotifyHandlers(paymentModule{
-		auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
 		service: d.Payment,
 		logger:  d.Logger,
 	})

@@ -219,7 +219,11 @@ func run() error {
 	})
 
 	transport.Register(api, deps, ai.AIHTTPDeps)
-	transport.RegisterRaw(router, deps)
+	transport.RegisterRaw(router, transport.RawDeps{
+		Payment:              platform.Payment,
+		TenantBrandingReader: platform.TenantBranding,
+		Logger:               appLogger,
+	})
 
 	// AI gateway + console + fileStore 路由
 	fileStore.Routes(router)

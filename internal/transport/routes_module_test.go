@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2/humatest"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
@@ -43,6 +44,24 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 		}
 		if route.post && item.Post == nil {
 			t.Fatalf("%s route %q has no POST operation", route.name, route.path)
+		}
+	}
+}
+
+func TestRawModuleRegistersOnlyRawRouteDependencies(t *testing.T) {
+	mux := chi.NewRouter()
+	RegisterRaw(mux, RawDeps{})
+
+	routes := map[string]bool{}
+	for _, route := range mux.Routes() {
+		routes[route.Pattern] = true
+	}
+	for _, pattern := range []string{
+		"/api/v1/payments/wechat/notify",
+		"/api/v1/public/tenant-brands/{tenantId}/favicon",
+	} {
+		if !routes[pattern] {
+			t.Fatalf("raw route %q was not registered", pattern)
 		}
 	}
 }
