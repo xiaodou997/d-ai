@@ -80,8 +80,7 @@ func NewInviteRepository(pool *pgxpool.Pool) *InviteRepository {
 }
 
 // GetByCode 根据邀请码获取记录
-func (r *InviteRepository) GetByCode(code string) (*InvitationCode, error) {
-	ctx := context.Background()
+func (r *InviteRepository) GetByCode(ctx context.Context, code string) (*InvitationCode, error) {
 	ic := &InvitationCode{}
 	var status string
 	var description *string
@@ -111,8 +110,7 @@ func (r *InviteRepository) GetByCode(code string) (*InvitationCode, error) {
 	return ic, nil
 }
 
-func (r *InviteRepository) GetTenantPublicBrand(tenantID string) (*TenantPublicBrand, error) {
-	ctx := context.Background()
+func (r *InviteRepository) GetTenantPublicBrand(ctx context.Context, tenantID string) (*TenantPublicBrand, error) {
 	brand := &TenantPublicBrand{}
 	err := r.pool.QueryRow(ctx, `
 		SELECT t.tenant_name, COALESCE(b.customer_site_name, ''), b.favicon_updated_at
@@ -130,8 +128,7 @@ func (r *InviteRepository) GetTenantPublicBrand(tenantID string) (*TenantPublicB
 }
 
 // GetByTenantID 查询租户邀请码列表
-func (r *InviteRepository) GetByTenantID(tenantID string, page, size int) ([]*InvitationCode, int64, error) {
-	ctx := context.Background()
+func (r *InviteRepository) GetByTenantID(ctx context.Context, tenantID string, page, size int) ([]*InvitationCode, int64, error) {
 	var total int64
 	r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1`, tenantID).Scan(&total)
 
@@ -173,8 +170,7 @@ func (r *InviteRepository) GetByTenantID(tenantID string, page, size int) ([]*In
 }
 
 // Create 创建邀请码
-func (r *InviteRepository) Create(ic *InvitationCode) error {
-	ctx := context.Background()
+func (r *InviteRepository) Create(ctx context.Context, ic *InvitationCode) error {
 	now := time.Now().UTC()
 	var expiresAt *time.Time
 	if ic.ExpireTime != nil {
@@ -195,11 +191,10 @@ func (r *InviteRepository) Create(ic *InvitationCode) error {
 }
 
 // Update 更新邀请码
-func (r *InviteRepository) Update(id int64, updates map[string]any) error {
+func (r *InviteRepository) Update(ctx context.Context, id int64, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
 	}
-	ctx := context.Background()
 	updates["updated_at"] = time.Now().UTC()
 
 	setClause := ""
@@ -220,15 +215,13 @@ func (r *InviteRepository) Update(id int64, updates map[string]any) error {
 }
 
 // Delete 删除邀请码
-func (r *InviteRepository) Delete(id int64) error {
-	ctx := context.Background()
+func (r *InviteRepository) Delete(ctx context.Context, id int64) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM iam_invitation_codes WHERE id = $1`, id)
 	return err
 }
 
 // CheckEndUserUsernameExists 检查终端用户名是否已存在
-func (r *InviteRepository) CheckEndUserUsernameExists(username string) (bool, error) {
-	ctx := context.Background()
+func (r *InviteRepository) CheckEndUserUsernameExists(ctx context.Context, username string) (bool, error) {
 	var count int64
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE lower(username) = lower($1)`, username).Scan(&count)
 	if err != nil {

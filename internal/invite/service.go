@@ -19,13 +19,13 @@ import (
 )
 
 type inviteRepository interface {
-	GetByCode(code string) (*pg.InvitationCode, error)
-	GetTenantPublicBrand(tenantID string) (*pg.TenantPublicBrand, error)
-	GetByTenantID(tenantID string, page, size int) ([]*pg.InvitationCode, int64, error)
-	Create(ic *pg.InvitationCode) error
-	Update(id int64, updates map[string]any) error
-	Delete(id int64) error
-	CheckEndUserUsernameExists(username string) (bool, error)
+	GetByCode(ctx context.Context, code string) (*pg.InvitationCode, error)
+	GetTenantPublicBrand(ctx context.Context, tenantID string) (*pg.TenantPublicBrand, error)
+	GetByTenantID(ctx context.Context, tenantID string, page, size int) ([]*pg.InvitationCode, int64, error)
+	Create(ctx context.Context, ic *pg.InvitationCode) error
+	Update(ctx context.Context, id int64, updates map[string]any) error
+	Delete(ctx context.Context, id int64) error
+	CheckEndUserUsernameExists(ctx context.Context, username string) (bool, error)
 	RegisterEndUser(ctx context.Context, input pg.EndUserRegistration) error
 }
 
@@ -67,7 +67,7 @@ func (s *InviteService) ValidateCode(ctx context.Context, code string) (*pg.Invi
 	if err != nil {
 		return nil, err
 	}
-	ic, err := s.repo.GetByCode(normalizedCode)
+	ic, err := s.repo.GetByCode(ctx, normalizedCode)
 	if err != nil {
 		if errors.Is(err, inviteports.ErrInvitationCodeNotFound) {
 			return nil, inviteports.ErrInvitationCodeNotFound
@@ -86,7 +86,7 @@ func (s *InviteService) DescribePublicInvitation(ctx context.Context, code strin
 		return nil, err
 	}
 
-	ic, err := s.repo.GetByCode(normalizedCode)
+	ic, err := s.repo.GetByCode(ctx, normalizedCode)
 	if err != nil {
 		if errors.Is(err, inviteports.ErrInvitationCodeNotFound) {
 			return &PublicInvitationView{
@@ -99,7 +99,7 @@ func (s *InviteService) DescribePublicInvitation(ctx context.Context, code strin
 		return nil, fmt.Errorf("load invitation code: %w", err)
 	}
 
-	brand, err := s.repo.GetTenantPublicBrand(ic.TenantID)
+	brand, err := s.repo.GetTenantPublicBrand(ctx, ic.TenantID)
 	if err != nil {
 		return nil, fmt.Errorf("load tenant public brand: %w", err)
 	}
@@ -140,7 +140,7 @@ func (s *InviteService) DescribePublicInvitation(ctx context.Context, code strin
 }
 
 func (s *InviteService) ListCodes(ctx context.Context, tenantID string, page, size int) ([]*pg.InvitationCode, int64, error) {
-	return s.repo.GetByTenantID(tenantID, page, size)
+	return s.repo.GetByTenantID(ctx, tenantID, page, size)
 }
 
 func (s *InviteService) CreateCode(ctx context.Context, tenantID, createdBy, description string, maxUses int, expireTime *int64) (*pg.InvitationCode, error) {
@@ -153,7 +153,7 @@ func (s *InviteService) CreateCode(ctx context.Context, tenantID, createdBy, des
 		MaxUses:     maxUses,
 		ExpireTime:  expireTime,
 	}
-	if err := s.repo.Create(ic); err != nil {
+	if err := s.repo.Create(ctx, ic); err != nil {
 		return nil, fmt.Errorf("failed to create invitation code: %w", err)
 	}
 	s.logger.Info("Invitation code created", zap.String("code", code), zap.String("tenantId", tenantID))
@@ -161,11 +161,11 @@ func (s *InviteService) CreateCode(ctx context.Context, tenantID, createdBy, des
 }
 
 func (s *InviteService) UpdateCode(ctx context.Context, id int64, updates map[string]any) error {
-	return s.repo.Update(id, updates)
+	return s.repo.Update(ctx, id, updates)
 }
 
 func (s *InviteService) DeleteCode(ctx context.Context, id int64) error {
-	return s.repo.Delete(id)
+	return s.repo.Delete(ctx, id)
 }
 
 func (s *InviteService) RegisterUser(ctx context.Context, code, username, password string, email, phone *string, legal LegalAcceptance) (*RegisteredEndUser, error) {
@@ -189,7 +189,7 @@ func (s *InviteService) RegisterUser(ctx context.Context, code, username, passwo
 		return nil, err
 	}
 
-	exists, err := s.repo.CheckEndUserUsernameExists(normalizedUsername)
+	exists, err := s.repo.CheckEndUserUsernameExists(ctx, normalizedUsername)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check username uniqueness: %w", err)
 	}

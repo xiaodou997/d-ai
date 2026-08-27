@@ -12,55 +12,55 @@ import (
 )
 
 type inviteRepoStub struct {
-	getByCodeFn                  func(string) (*pg.InvitationCode, error)
-	getTenantPublicBrandFn       func(string) (*pg.TenantPublicBrand, error)
-	getByTenantIDFn              func(string, int, int) ([]*pg.InvitationCode, int64, error)
-	createFn                     func(*pg.InvitationCode) error
-	updateFn                     func(int64, map[string]any) error
-	deleteFn                     func(int64) error
+	getByCodeFn                  func(context.Context, string) (*pg.InvitationCode, error)
+	getTenantPublicBrandFn       func(context.Context, string) (*pg.TenantPublicBrand, error)
+	getByTenantIDFn              func(context.Context, string, int, int) ([]*pg.InvitationCode, int64, error)
+	createFn                     func(context.Context, *pg.InvitationCode) error
+	updateFn                     func(context.Context, int64, map[string]any) error
+	deleteFn                     func(context.Context, int64) error
 	incrUsedCountFn              func(string) error
-	checkEndUserUsernameExistsFn func(string) (bool, error)
+	checkEndUserUsernameExistsFn func(context.Context, string) (bool, error)
 	createEndUserFn              func(string, string, string, string, *string, *string) error
 	registerEndUserFn            func(context.Context, pg.EndUserRegistration) error
 }
 
-func (s *inviteRepoStub) GetByCode(code string) (*pg.InvitationCode, error) {
-	return s.getByCodeFn(code)
+func (s *inviteRepoStub) GetByCode(ctx context.Context, code string) (*pg.InvitationCode, error) {
+	return s.getByCodeFn(ctx, code)
 }
 
-func (s *inviteRepoStub) GetTenantPublicBrand(tenantID string) (*pg.TenantPublicBrand, error) {
+func (s *inviteRepoStub) GetTenantPublicBrand(ctx context.Context, tenantID string) (*pg.TenantPublicBrand, error) {
 	if s.getTenantPublicBrandFn == nil {
 		return &pg.TenantPublicBrand{}, nil
 	}
-	return s.getTenantPublicBrandFn(tenantID)
+	return s.getTenantPublicBrandFn(ctx, tenantID)
 }
 
-func (s *inviteRepoStub) GetByTenantID(tenantID string, page, size int) ([]*pg.InvitationCode, int64, error) {
+func (s *inviteRepoStub) GetByTenantID(ctx context.Context, tenantID string, page, size int) ([]*pg.InvitationCode, int64, error) {
 	if s.getByTenantIDFn == nil {
 		return nil, 0, nil
 	}
-	return s.getByTenantIDFn(tenantID, page, size)
+	return s.getByTenantIDFn(ctx, tenantID, page, size)
 }
 
-func (s *inviteRepoStub) Create(ic *pg.InvitationCode) error {
+func (s *inviteRepoStub) Create(ctx context.Context, ic *pg.InvitationCode) error {
 	if s.createFn == nil {
 		return nil
 	}
-	return s.createFn(ic)
+	return s.createFn(ctx, ic)
 }
 
-func (s *inviteRepoStub) Update(id int64, updates map[string]any) error {
+func (s *inviteRepoStub) Update(ctx context.Context, id int64, updates map[string]any) error {
 	if s.updateFn == nil {
 		return nil
 	}
-	return s.updateFn(id, updates)
+	return s.updateFn(ctx, id, updates)
 }
 
-func (s *inviteRepoStub) Delete(id int64) error {
+func (s *inviteRepoStub) Delete(ctx context.Context, id int64) error {
 	if s.deleteFn == nil {
 		return nil
 	}
-	return s.deleteFn(id)
+	return s.deleteFn(ctx, id)
 }
 
 func (s *inviteRepoStub) IncrUsedCount(code string) error {
@@ -70,11 +70,11 @@ func (s *inviteRepoStub) IncrUsedCount(code string) error {
 	return s.incrUsedCountFn(code)
 }
 
-func (s *inviteRepoStub) CheckEndUserUsernameExists(username string) (bool, error) {
+func (s *inviteRepoStub) CheckEndUserUsernameExists(ctx context.Context, username string) (bool, error) {
 	if s.checkEndUserUsernameExistsFn == nil {
 		return false, nil
 	}
-	return s.checkEndUserUsernameExistsFn(username)
+	return s.checkEndUserUsernameExistsFn(ctx, username)
 }
 
 func (s *inviteRepoStub) CreateEndUser(tenantID, userID, username, passwordHash string, email, phone *string) error {
@@ -94,7 +94,7 @@ func (s *inviteRepoStub) RegisterEndUser(ctx context.Context, input pg.EndUserRe
 func TestValidateCodeNormalizesInputBeforeLookup(t *testing.T) {
 	var received string
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			received = code
 			return &pg.InvitationCode{Code: code, Status: 1}, nil
 		},
@@ -115,7 +115,7 @@ func TestValidateCodeNormalizesInputBeforeLookup(t *testing.T) {
 
 func TestValidateCodePreservesRepositoryErrors(t *testing.T) {
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			return nil, errors.New("db timeout")
 		},
 	}
@@ -133,9 +133,80 @@ func TestValidateCodePreservesRepositoryErrors(t *testing.T) {
 	}
 }
 
+func TestInviteServicePropagatesRequestContextToRepository(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var readCtx, brandCtx, createCtx, updateCtx, deleteCtx, usernameCtx context.Context
+	repo := &inviteRepoStub{
+		getByCodeFn: func(got context.Context, _ string) (*pg.InvitationCode, error) {
+			readCtx = got
+			return &pg.InvitationCode{Code: "S6JUMXVH", TenantID: "T_1", Status: 1}, nil
+		},
+		getTenantPublicBrandFn: func(got context.Context, _ string) (*pg.TenantPublicBrand, error) {
+			brandCtx = got
+			return nil, context.Canceled
+		},
+		createFn: func(got context.Context, _ *pg.InvitationCode) error {
+			createCtx = got
+			return context.Canceled
+		},
+		updateFn: func(got context.Context, _ int64, _ map[string]any) error {
+			updateCtx = got
+			return context.Canceled
+		},
+		deleteFn: func(got context.Context, _ int64) error {
+			deleteCtx = got
+			return context.Canceled
+		},
+		checkEndUserUsernameExistsFn: func(got context.Context, _ string) (bool, error) {
+			usernameCtx = got
+			return false, context.Canceled
+		},
+	}
+	service := NewInviteService(repo, zap.NewNop())
+
+	if _, err := service.DescribePublicInvitation(ctx, "S6JUMXVH"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("DescribePublicInvitation() error = %v, want context.Canceled", err)
+	}
+	if readCtx != ctx || brandCtx != ctx {
+		t.Fatal("DescribePublicInvitation() did not pass the request context to the repository")
+	}
+
+	if _, err := service.CreateCode(ctx, "T_1", "admin-1", "", 1, nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CreateCode() error = %v, want context.Canceled", err)
+	}
+	if createCtx != ctx {
+		t.Fatal("CreateCode() did not pass the request context to the repository")
+	}
+
+	if err := service.UpdateCode(ctx, 1, map[string]any{"status": "disabled"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("UpdateCode() error = %v, want context.Canceled", err)
+	}
+	if updateCtx != ctx {
+		t.Fatal("UpdateCode() did not pass the request context to the repository")
+	}
+
+	if err := service.DeleteCode(ctx, 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("DeleteCode() error = %v, want context.Canceled", err)
+	}
+	if deleteCtx != ctx {
+		t.Fatal("DeleteCode() did not pass the request context to the repository")
+	}
+
+	// Registration reaches the username uniqueness query only after the
+	// invitation lookup succeeds; the same request context must cross that
+	// boundary as well.
+	if _, err := service.RegisterUser(ctx, "S6JUMXVH", "alice", "Correct-Horse-47", nil, nil, LegalAcceptance{TermsVersion: "v1", PrivacyVersion: "v1"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("RegisterUser() error = %v, want context.Canceled", err)
+	}
+	if usernameCtx != ctx {
+		t.Fatal("RegisterUser() did not pass the request context to the repository")
+	}
+}
+
 func TestValidateCodeReturnsNotFoundForMissingCode(t *testing.T) {
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			return nil, pg.ErrInvitationCodeNotFound
 		},
 	}
@@ -149,7 +220,7 @@ func TestValidateCodeReturnsNotFoundForMissingCode(t *testing.T) {
 
 func TestValidateCodeRejectsInvalidFormat(t *testing.T) {
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			t.Fatalf("repository should not be called for invalid code %q", code)
 			return nil, nil
 		},
@@ -196,10 +267,10 @@ func TestDescribePublicInvitationMapsStatuses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &inviteRepoStub{
-				getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+				getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 					return tt.record, nil
 				},
-				getTenantPublicBrandFn: func(tenantID string) (*pg.TenantPublicBrand, error) {
+				getTenantPublicBrandFn: func(_ context.Context, tenantID string) (*pg.TenantPublicBrand, error) {
 					return &pg.TenantPublicBrand{TenantName: "Tenant One"}, nil
 				},
 			}
@@ -227,7 +298,7 @@ func TestDescribePublicInvitationMapsStatuses(t *testing.T) {
 
 func TestDescribePublicInvitationReturnsNotFoundView(t *testing.T) {
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			return nil, pg.ErrInvitationCodeNotFound
 		},
 	}
@@ -248,7 +319,7 @@ func TestDescribePublicInvitationReturnsNotFoundView(t *testing.T) {
 func TestRegisterUserReturnsRegisteredUser(t *testing.T) {
 	email := "user@example.com"
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			return &pg.InvitationCode{Code: code, TenantID: "T_1", Status: 1}, nil
 		},
 		registerEndUserFn: func(_ context.Context, input pg.EndUserRegistration) error {
@@ -285,7 +356,7 @@ func TestRegisterUserReturnsRegisteredUser(t *testing.T) {
 
 func TestRegisterUserRejectsBlankUsername(t *testing.T) {
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			return &pg.InvitationCode{Code: code, TenantID: "T_1", Status: 1}, nil
 		},
 	}
@@ -301,7 +372,7 @@ func TestRegisterUserRejectsBlankUsername(t *testing.T) {
 
 func TestRegisterUserRequiresBothCurrentLegalDocumentVersions(t *testing.T) {
 	repo := &inviteRepoStub{
-		getByCodeFn: func(code string) (*pg.InvitationCode, error) {
+		getByCodeFn: func(_ context.Context, code string) (*pg.InvitationCode, error) {
 			return &pg.InvitationCode{Code: code, TenantID: "T_1", Status: 1}, nil
 		},
 	}

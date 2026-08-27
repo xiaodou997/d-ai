@@ -183,6 +183,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
 - [x] 管理充值目标归属与存在性统一由 `RechargeService.GrantManual` 在同一账务事务锁内解析/校验；Transport 不再通过 `TenantRepository` 做锁外预检，平台管理员可在用户充值时省略 `tenantId`。
 - [x] 用户身份查询与状态更新统一透传调用方 context；`UserService` 不再丢弃请求取消信号，PostgreSQL UserRepository 的读写均使用传入 context。
+- [x] 邀请码公开查询、邀请码管理、用户名唯一性检查和邀请注册统一透传调用方 context；InviteService/InviteRepository 不再为请求路径隐式创建 `context.Background()`。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1088,3 +1089,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 上下文：`UserService` 的用户查询、批量身份投影、资料更新和封禁状态写入现在将调用方 context 传递到 PostgreSQL adapter；取消的 HTTP/AI 请求不会继续使用无界 `context.Background()` 查询。
 - 边界：`UserService` 通过最小 repository 接口依赖持久化能力，保持身份投影端口不泄漏 PostgreSQL 实现，同时让取消语义可被单元测试锁定。
 - 回归：新增 service context 透传测试；`go test ./internal/user ./internal/user/pg ./internal/transport ./cmd/server -count=1`、race、`go vet` 和差异检查通过。
+
+### P1-03（Invitation repository context propagation，2026-08-27）
+
+- 上下文：邀请码查询、租户品牌读取、列表统计、创建/更新/删除、用户名唯一性检查和邀请注册均接收并使用调用方 context；公开邀请 HTTP 请求取消后不会继续使用无界数据库操作。
+- 边界：`InviteService` 的 repository contract 显式携带 context，注册事务继续使用同一 context，未改变邀请码状态校验、密码策略和法律文件记录语义。
+- 回归：新增邀请服务读写/注册 context 透传测试；`go test ./internal/invite ./internal/invite/pg ./internal/transport ./cmd/server -count=1`、race、`go vet` 和差异检查通过。
