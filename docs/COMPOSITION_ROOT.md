@@ -31,6 +31,7 @@ httpServers.Start / Shutdown
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务，LiteLLM 远程刷新在 Stop 时会取消并等待退出。
 - 平台 HTTP 路由现在与 AI 路由一样通过 `transport.Module` 注册；平台模块暂时复用分组后的 `transport.Deps`，后续按 identity/billing/operations 角色继续缩小依赖。
 - 运营 HTTP 路由已从平台主模块拆成显式 `platformOperationsModule`，公告、通知、系统模块、数据清理和代理节点只接收各自服务及统一平台认证依赖；其余管理聚合路由仍待继续拆分。
+- 计费 HTTP 路由已从平台主模块拆成显式 `platformBillingModule`，在线充值、租户额度、管理支付和微信回调共享仅支付服务与平台认证/日志依赖；充值/管理聚合编排仍待继续收敛。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；停止时先取消自动清理，再释放其数据库依赖。
 - 四个小时级清理任务（图片、文件、会话、激活凭证）现在由 `periodicWorker` 统一持有子 context，首次执行、每小时执行和 Stop 等待都登记在 shutdown stack 中。
 - composition root 维护统一的 `lifecycleHealth` 投影；`/health.components` 暴露基础设施、平台/AI 模块、异步任务、后台清理任务和公共/管理监听器的 started/stopped 状态，同时保留 Scheduler 任务快照。真实 PostgreSQL/Redis 连通性仍只由 `/ready` 判定。

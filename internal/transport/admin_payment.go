@@ -19,7 +19,7 @@ type adminPaymentHandlers struct {
 	*paymentHandlers
 }
 
-func newAdminPaymentHandlers(d Deps) *adminPaymentHandlers {
+func newAdminPaymentHandlers(d paymentModule) *adminPaymentHandlers {
 	return &adminPaymentHandlers{paymentHandlers: newPaymentHandlers(d)}
 }
 
@@ -192,9 +192,9 @@ func withdrawalToItem(w *payment.Withdrawal) withdrawalItem {
 }
 
 // registerAdminPayment 注册管理端支付相关端点（type 1,2）。
-func registerAdminPayment(api huma.API, d Deps) {
+func registerAdminPayment(api huma.API, d paymentModule) {
 	h := newAdminPaymentHandlers(d)
-	ua := userAuth(api, d.JWT, d.Blacklist)
+	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 
 	huma.Register(api, huma.Operation{OperationID: "admin-get-payment-settings", Method: http.MethodGet, Path: "/api/v1/admin/payment-settings",

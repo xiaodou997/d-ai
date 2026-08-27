@@ -20,8 +20,8 @@ type paymentHandlers struct {
 	svc *paymentsvc.PaymentService
 }
 
-func newPaymentHandlers(d Deps) *paymentHandlers {
-	return &paymentHandlers{svc: d.Payment}
+func newPaymentHandlers(d paymentModule) *paymentHandlers {
+	return &paymentHandlers{svc: d.service}
 }
 
 func millisFromTimePtr(t *time.Time) *int64 {
@@ -151,9 +151,9 @@ func orderToItem(o *payment.Order) topupOrderItem {
 }
 
 // registerPayment 注册在线充值下单/查单端点（租户用户或终端用户）。
-func registerPayment(api huma.API, d Deps) {
+func registerPayment(api huma.API, d paymentModule) {
 	h := newPaymentHandlers(d)
-	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireAnyCapability(api, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
+	authed := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireAnyCapability(api, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "payment-topup-config", Method: http.MethodGet, Path: "/api/v1/payments/topup-config",
 		Summary: "USD 在线充值配置", Tags: []string{"payment"}, Middlewares: authed}, h.topupConfig)

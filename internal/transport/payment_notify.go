@@ -18,8 +18,8 @@ type paymentNotifyHandlers struct {
 
 const maxWechatNotifyBodySize = 1 << 20
 
-func newPaymentNotifyHandlers(d Deps) *paymentNotifyHandlers {
-	return &paymentNotifyHandlers{svc: d.Payment, log: d.Logger}
+func newPaymentNotifyHandlers(d paymentModule) *paymentNotifyHandlers {
+	return &paymentNotifyHandlers{svc: d.service, log: d.logger}
 }
 
 // wechatNotify 处理 POST /api/v1/payments/wechat/notify。成功回微信规范 JSON；失败回 500

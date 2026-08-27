@@ -388,12 +388,22 @@ type proxyNodesModule struct {
 	service *proxypkg.Service
 }
 
+type paymentModule struct {
+	auth    platformAuthDeps
+	service *paymentsvc.PaymentService
+	logger  *zap.Logger
+}
+
 type platformOperationsModule struct {
 	announcements announcementModule
 	notifications notificationModule
 	system        systemModule
 	dataCleanup   dataCleanupModule
 	proxyNodes    proxyNodesModule
+}
+
+type platformBillingModule struct {
+	payment paymentModule
 }
 
 type aiModule struct {
@@ -403,6 +413,7 @@ type aiModule struct {
 
 var _ Module = platformModule{}
 var _ Module = platformOperationsModule{}
+var _ Module = platformBillingModule{}
 var _ Module = aiModule{}
 
 func (m platformModule) Register(api huma.API) {
@@ -416,6 +427,12 @@ func (m platformOperationsModule) Register(api huma.API) {
 	registerModules(api, m.system)
 	registerDataCleanup(api, m.dataCleanup)
 	registerProxyNodes(api, m.proxyNodes)
+}
+
+func (m platformBillingModule) Register(api huma.API) {
+	registerPayment(api, m.payment)
+	registerTenantCash(api, m.payment)
+	registerAdminPayment(api, m.payment)
 }
 
 type aiIdentityProvider interface {
@@ -451,6 +468,11 @@ func (m aiModule) Register(api huma.API) {
 func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	modules := []Module{
 		platformModule{deps: d},
+		platformBillingModule{payment: paymentModule{
+			auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+			service: d.Payment,
+			logger:  d.Logger,
+		}},
 		platformOperationsModule{
 			announcements: announcementModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Announcements},
 			notifications: notificationModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.Notifications},
@@ -488,9 +510,6 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerTenantSelf(api, d)
 	registerTenantBranding(api, d)
 	registerJWTKeys(api, d)
-	registerPayment(api, d)
-	registerTenantCash(api, d)
-	registerAdminPayment(api, d)
 	// 公开端点（无认证）
 	registerPublic(api, d)
 
@@ -815,7 +834,11 @@ func RegisterRaw(mux *chi.Mux, d Deps) {
 
 func RegisterPublicRaw(mux *chi.Mux, d Deps) {
 	// 微信支付回调（无认证，验签即鉴权）
-	notifyHandler := newPaymentNotifyHandlers(d)
+	notifyHandler := newPaymentNotifyHandlers(paymentModule{
+		auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+		service: d.Payment,
+		logger:  d.Logger,
+	})
 	mux.Post("/api/v1/payments/wechat/notify", notifyHandler.wechatNotify)
 	registerTenantBrandingRaw(mux, d)
 }

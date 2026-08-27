@@ -17,8 +17,8 @@ type tenantCashHandlers struct {
 	svc *paymentsvc.PaymentService
 }
 
-func newTenantCashHandlers(d Deps) *tenantCashHandlers {
-	return &tenantCashHandlers{svc: d.Payment}
+func newTenantCashHandlers(d paymentModule) *tenantCashHandlers {
+	return &tenantCashHandlers{svc: d.service}
 }
 
 // ---- DTO ----
@@ -61,9 +61,9 @@ type updateTenantPaymentSettingsInput struct {
 }
 
 // registerTenantCash 注册租户统一额度端点（type=3 限本租户）。
-func registerTenantCash(api huma.API, d Deps) {
+func registerTenantCash(api huma.API, d paymentModule) {
 	h := newTenantCashHandlers(d)
-	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
+	tenantOnly := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-balance", Method: http.MethodGet, Path: "/api/v1/tenant/balance",
 		Summary: "租户 USD 额度余额", Tags: []string{"tenant-balance"}, Middlewares: tenantOnly}, h.getAccount)
