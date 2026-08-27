@@ -429,6 +429,7 @@ type adminEndUsersModule struct {
 	adminRouteAuth
 	AdminEndUsers      userports.AdminEndUserReader
 	AdminEndUserWriter userports.AdminEndUserWriter
+	EndUserLifecycle   userports.AdminEndUserLifecycle
 	Activations        *auth.ActivationService
 }
 

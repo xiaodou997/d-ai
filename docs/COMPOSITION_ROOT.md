@@ -117,6 +117,7 @@ httpServers.Start / Shutdown
 - 系统管理员删除和终端用户删除事务分别由 `AdminAccountWriter.DeleteSystemAdmin` 与 `AdminEndUserWriter.DeleteEndUser` 持有；终端用户删除在余额行锁后执行 `AccountSecurityWriter` ban guard，失败会回滚数据库状态。
 - 终端用户列表查询已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserReader` 注入；HTTP handler 不再直接执行跨租户列表 SQL，只负责 claims scope 和 DTO 映射。
 - 终端用户资料更新、启停、重置和删除已移入同一 `AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 注入；tenant scope 由 SQL 写入谓词保证，HTTP handler 只保留 claims scope、错误映射和 `AccountSecurityWriter` 调用。
+- 终端用户启停、密码重置和删除后的安全投影现在由 `user.AdminEndUserLifecycleService` 编排；终端用户管理 HTTP 模块只接收 lifecycle port，删除时的 ban guard 也由 application service 注入。
 - 终端用户创建的账号与一次性激活令牌由同一 `AdminEndUserRepository` 事务写入；repository 通过 composition root 注入的 `ActivationService.Store` 复用激活凭证逻辑，HTTP handler 不再持有创建事务。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。

@@ -126,10 +126,28 @@ type AdminEndUserDeleteCommand struct {
 	BeforeCommit AdminEndUserDeleteGuard
 }
 
+// AdminEndUserSecurityError marks a committed end-user mutation whose
+// post-commit security projection failed and can be retried independently.
+type AdminEndUserSecurityError struct {
+	Cause error
+}
+
+func (e *AdminEndUserSecurityError) Error() string { return "admin end-user security sync failed" }
+func (e *AdminEndUserSecurityError) Unwrap() error { return e.Cause }
+
 // AdminEndUserWriter owns end-user profile and status mutations. Session and
 // blacklist effects are coordinated by the separate auth security command.
 type AdminEndUserWriter interface {
 	CreateEndUser(ctx context.Context, input AdminEndUserCreate) error
+	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
+	UpdateEndUserStatus(ctx context.Context, input AdminEndUserStatusUpdate) (bool, error)
+	ResetEndUserPassword(ctx context.Context, input AdminEndUserPasswordReset) (ActivationCredentialResult, error)
+	DeleteEndUser(ctx context.Context, input AdminEndUserDeleteCommand) (AdminEndUserDeleteResult, error)
+}
+
+// AdminEndUserLifecycle coordinates persistence and account security effects
+// for end-user status, password, and deletion commands.
+type AdminEndUserLifecycle interface {
 	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)
 	UpdateEndUserStatus(ctx context.Context, input AdminEndUserStatusUpdate) (bool, error)
 	ResetEndUserPassword(ctx context.Context, input AdminEndUserPasswordReset) (ActivationCredentialResult, error)

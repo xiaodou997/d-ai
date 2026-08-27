@@ -25,6 +25,7 @@ type adminHandlers struct {
 	accountLifecycle userports.AdminAccountLifecycle
 	endUserRepo      userports.AdminEndUserReader
 	endUserWriter    userports.AdminEndUserWriter
+	endUserLifecycle userports.AdminEndUserLifecycle
 	systemRepo       systemports.AdminDashboardReader
 	deduction        *billingsvc.DeductionService
 	accountQueries   billingports.AccountQueryReader
@@ -83,10 +84,10 @@ func newAdminDashboardHandlers(d adminDashboardModule) *adminHandlers {
 
 func newAdminEndUsersHandlers(d adminEndUsersModule) *adminHandlers {
 	return &adminHandlers{
-		endUserRepo:   d.AdminEndUsers,
-		endUserWriter: d.AdminEndUserWriter,
-		security:      d.Security,
-		activations:   d.Activations,
+		endUserRepo:      d.AdminEndUsers,
+		endUserWriter:    d.AdminEndUserWriter,
+		endUserLifecycle: d.EndUserLifecycle,
+		activations:      d.Activations,
 	}
 }
 
@@ -132,6 +133,14 @@ func adminAccountLifecycleError(err error) error {
 
 func adminTenantLifecycleError(err error) error {
 	var securityErr *tenantports.AdminTenantSecurityError
+	if errors.As(err, &securityErr) {
+		return httpx.ErrUnavailable.WithCause(securityErr.Cause)
+	}
+	return httpx.ErrInternal.WithCause(err)
+}
+
+func adminEndUserLifecycleError(err error) error {
+	var securityErr *userports.AdminEndUserSecurityError
 	if errors.As(err, &securityErr) {
 		return httpx.ErrUnavailable.WithCause(securityErr.Cause)
 	}

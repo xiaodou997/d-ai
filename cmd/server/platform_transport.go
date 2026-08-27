@@ -90,6 +90,7 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 				AdminRouteAuthDeps: adminAuth,
 				AdminEndUsers:      platform.AdminEndUsers,
 				AdminEndUserWriter: platform.AdminEndUsers,
+				EndUserLifecycle:   platform.AdminEndUserLifecycle,
 				Activations:        platform.Activations,
 			},
 		}),

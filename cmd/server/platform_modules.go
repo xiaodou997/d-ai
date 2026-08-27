@@ -56,6 +56,7 @@ type platformModules struct {
 	AdminAccounts         *userpg.AdminAccountRepository
 	AdminAccountLifecycle *userpkg.AdminAccountLifecycleService
 	AdminEndUsers         *userpg.AdminEndUserRepository
+	AdminEndUserLifecycle *userpkg.AdminEndUserLifecycleService
 	Invite                *invitepkg.InviteService
 
 	Deduction      *billingsvc.DeductionService
@@ -139,6 +140,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	adminAccountRepo := userpg.NewAdminAccountRepository(pool, activationSvc)
 	adminEndUserRepo := userpg.NewAdminEndUserRepository(pool, activationSvc)
 	adminAccountLifecycle := userpkg.NewAdminAccountLifecycleService(adminAccountRepo, security)
+	adminEndUserLifecycle := userpkg.NewAdminEndUserLifecycleService(adminEndUserRepo, security)
 	inviteSvc := invitepkg.NewInviteService(invitepg.NewInviteRepository(pool), appLogger)
 	wechatCfgStore := wechat.NewConfigStore(billingPool)
 	paymentSvc := paymentsvc.New(billingPool, wechat.NewGateway(wechatCfgStore), wechatCfgStore, appLogger, deductionSvc)
@@ -167,6 +169,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 		AdminAccounts:         adminAccountRepo,
 		AdminAccountLifecycle: adminAccountLifecycle,
 		AdminEndUsers:         adminEndUserRepo,
+		AdminEndUserLifecycle: adminEndUserLifecycle,
 		Invite:                inviteSvc,
 		Deduction:             deductionSvc,
 		Recharge:              rechargeSvc,

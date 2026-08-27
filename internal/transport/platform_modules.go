@@ -141,6 +141,7 @@ type AdminEndUsersModuleDeps struct {
 	AdminRouteAuthDeps
 	AdminEndUsers      userports.AdminEndUserReader
 	AdminEndUserWriter userports.AdminEndUserWriter
+	EndUserLifecycle   userports.AdminEndUserLifecycle
 	Activations        *auth.ActivationService
 }
 
@@ -302,6 +303,7 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 			adminRouteAuth:     toAdminRouteAuth(d.EndUsers.AdminRouteAuthDeps),
 			AdminEndUsers:      d.EndUsers.AdminEndUsers,
 			AdminEndUserWriter: d.EndUsers.AdminEndUserWriter,
+			EndUserLifecycle:   d.EndUsers.EndUserLifecycle,
 			Activations:        d.EndUsers.Activations,
 		},
 	}

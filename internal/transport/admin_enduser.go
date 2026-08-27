@@ -226,7 +226,10 @@ func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInpu
 		return nil, httpx.ErrBadRequest.WithDetail("至少提供一个需要更新的字段")
 	}
 
-	updated, err := h.endUserWriter.UpdateEndUser(ctx, userports.AdminEndUserUpdate{
+	if h.endUserLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("终端用户服务不可用")
+	}
+	updated, err := h.endUserLifecycle.UpdateEndUser(ctx, userports.AdminEndUserUpdate{
 		UserID:          in.ID,
 		TenantID:        claims.TenantID,
 		EmailSet:        emailSet,
@@ -237,7 +240,7 @@ func (h *adminHandlers) updateEndUser(ctx context.Context, in *updateEndUserInpu
 		InternalNote:    internalNote,
 	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminEndUserLifecycleError(err)
 	}
 	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
@@ -259,17 +262,17 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	updated, err := h.endUserWriter.UpdateEndUserStatus(ctx, userports.AdminEndUserStatusUpdate{
+	if h.endUserLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("终端用户服务不可用")
+	}
+	updated, err := h.endUserLifecycle.UpdateEndUserStatus(ctx, userports.AdminEndUserStatusUpdate{
 		UserID: in.ID, TenantID: adminEndUserTenantScope(actorFromClaims(claims)), Status: in.Body.Status,
 	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminEndUserLifecycleError(err)
 	}
 	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	if err := h.syncUserSecurity(ctx, in.ID, in.Body.Status); err != nil {
-		return nil, err
 	}
 	out := &messageOutput{}
 	out.Body.Message = "用户状态已更新"
@@ -281,17 +284,17 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	result, err := h.endUserWriter.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{
+	if h.endUserLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("终端用户服务不可用")
+	}
+	result, err := h.endUserLifecycle.ResetEndUserPassword(ctx, userports.AdminEndUserPasswordReset{
 		UserID: in.ID, TenantID: adminEndUserTenantScope(actorFromClaims(claims)),
 	})
 	if err != nil {
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminEndUserLifecycleError(err)
 	}
 	if result.Token == "" {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
-	}
-	if err := h.invalidateUserSessions(ctx, in.ID); err != nil {
-		return nil, err
 	}
 	out := &activationCredentialOutput{}
 	setActivationOutput(out, result)
@@ -306,22 +309,15 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	if claims == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if h.security == nil || !h.security.IsEnabled() {
-		return nil, httpx.ErrUnavailable.WithDetail("删除用户需要可用的会话封禁服务")
+	if h.endUserLifecycle == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("终端用户服务不可用")
 	}
-	result, err := h.endUserWriter.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{
+	result, err := h.endUserLifecycle.DeleteEndUser(ctx, userports.AdminEndUserDeleteCommand{
 		UserID:   in.ID,
 		TenantID: adminEndUserTenantScope(actorFromClaims(claims)),
-		BeforeCommit: func(ctx context.Context, userID string) error {
-			return h.security.BanUser(ctx, userID)
-		},
 	})
 	if err != nil {
-		var guardErr *userports.AdminEndUserDeleteGuardError
-		if errors.As(err, &guardErr) {
-			return nil, httpx.ErrUnavailable.WithCause(guardErr.Cause)
-		}
-		return nil, httpx.ErrInternal.WithCause(err)
+		return nil, adminEndUserLifecycleError(err)
 	}
 	if !result.Found {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
