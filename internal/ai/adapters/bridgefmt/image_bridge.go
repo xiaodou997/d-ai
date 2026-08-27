@@ -459,7 +459,7 @@ func buildOpenAIImageRequestFromGemini(env corebridge.RequestEnvelope, body []by
 	}
 
 	if action == "edit" {
-		body, contentType, err := buildOpenAIImageEditRequest(contentParts, env.TargetModel, generationConfig, count, requestImageEditTransport(env))
+		body, contentType, err := buildOpenAIImageEditRequest(bridgeRequestContext(env), contentParts, env.TargetModel, generationConfig, count, requestImageEditTransport(env))
 		if err != nil {
 			return nil, "", "", err
 		}
@@ -669,7 +669,7 @@ func unsupportedImageRequestOptionError(message string) error {
 	}
 }
 
-func buildOpenAIImageEditRequest(parts []map[string]any, model string, generationConfig map[string]any, count int, transport string) ([]byte, string, error) {
+func buildOpenAIImageEditRequest(ctx context.Context, parts []map[string]any, model string, generationConfig map[string]any, count int, transport string) ([]byte, string, error) {
 	prompt := ""
 	images := make([]map[string]string, 0, len(parts))
 	for _, part := range parts {
@@ -702,11 +702,18 @@ func buildOpenAIImageEditRequest(parts []map[string]any, model string, generatio
 	if err != nil {
 		return nil, "", err
 	}
-	encoded, err := imageedit.Encode(context.Background(), request, transport)
+	encoded, err := imageedit.Encode(ctx, request, transport)
 	if err != nil {
 		return nil, "", err
 	}
 	return encoded.Body, encoded.ContentType, nil
+}
+
+func bridgeRequestContext(env corebridge.RequestEnvelope) context.Context {
+	if env.Context != nil {
+		return env.Context
+	}
+	return context.Background()
 }
 
 func openAIImagePartToGemini(image openAIImagePart) map[string]any {

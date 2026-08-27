@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"time"
 
 	"xiaodou/dai/internal/ai/core/catalog"
@@ -19,6 +20,7 @@ const (
 // RequestEnvelope carries normalized metadata needed by a bridge without
 // pulling in the legacy runtime request type.
 type RequestEnvelope struct {
+	Context     context.Context
 	Capability  catalog.Capability
 	Kind        IRKind
 	ClientModel string

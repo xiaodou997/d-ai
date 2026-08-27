@@ -2,6 +2,7 @@ package bridgefmt
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime"
@@ -270,6 +271,7 @@ func (r *Runtime) StreamErrorFrame(req *serving.Request, code, msg string) []byt
 func requestEnvelope(req *serving.Request) corebridge.RequestEnvelope {
 	capability := runtimecompat.CapabilityToCore(req.CapabilityType)
 	return corebridge.RequestEnvelope{
+		Context:     requestContext(req),
 		Capability:  capability,
 		Kind:        bridgeKindForCapability(capability),
 		ClientModel: req.PublicModel(),
@@ -284,6 +286,13 @@ func requestEnvelope(req *serving.Request) corebridge.RequestEnvelope {
 		},
 		Stream: req.UpstreamStream(),
 	}
+}
+
+func requestContext(req *serving.Request) context.Context {
+	if req != nil && req.Envelope != nil && req.Envelope.R != nil {
+		return req.Envelope.R.Context()
+	}
+	return context.Background()
 }
 
 func responseEnvelope(req *serving.Request) corebridge.ResponseEnvelope {

@@ -2,6 +2,7 @@ package bridgefmt
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -570,6 +571,30 @@ func TestPrepareRequestBridgesGeminiImageEditUsingJSONTransport(t *testing.T) {
 	}
 	if len(payload.Images) != 1 || payload.Images[0].ImageURL != "data:image/png;base64,aGVsbG8=" {
 		t.Fatalf("images = %#v", payload.Images)
+	}
+}
+
+func TestPrepareRequestPropagatesCanceledContextToGeminiImageEditMaterialization(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	body := []byte(`{"generationConfig":{"responseModalities":["TEXT","IMAGE"]},"contents":[{"role":"user","parts":[{"text":"edit this"},{"fileData":{"mimeType":"image/png","fileUri":"https://example.com/input.png"}}]}]}`)
+	httpReq := httptest.NewRequest("POST", "/v1beta/models/imagen-4:generateContent", bytes.NewReader(body)).WithContext(ctx)
+	httpReq.Header.Set("Content-Type", "application/json")
+	req := &serving.Request{
+		ClientProtocol: domain.ProtocolGeminiGenerate,
+		ClientPath:     "/v1beta/models/imagen-4:generateContent",
+		CapabilityType: domain.CapabilityImage,
+		Candidate: &domain.RouteCandidate{
+			Protocol:           domain.ProtocolOpenAIImages,
+			UpstreamModel:      "gpt-image-1",
+			ImageEditTransport: domain.ImageEditTransportMultipart,
+		},
+		Envelope: &serving.RequestEnvelope{R: httpReq},
+	}
+
+	_, err := NewRuntime().PrepareRequest(req, body)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PrepareRequest() error = %v, want context.Canceled", err)
 	}
 }
 

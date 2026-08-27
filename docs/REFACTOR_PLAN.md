@@ -186,6 +186,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 邀请码公开查询、邀请码管理、用户名唯一性检查和邀请注册统一透传调用方 context；InviteService/InviteRepository 不再为请求路径隐式创建 `context.Background()`。
 - [x] JWT access token 的 session 校验统一透传请求 context；平台、AI Transport 和 Console middleware 不再让取消的请求继续使用独立 `context.Background()` 查询会话。
 - [x] JWT signing key 列表与轮换 command 统一接收请求 context；管理端取消请求会停止密钥查询/事务，轮换前不会继续生成无用 RSA 密钥。
+- [x] 图片桥接的远程输入 materialization 统一透传请求 context；Gemini→OpenAI image edit 不再在请求取消后使用隐式 `context.Background()` 下载输入图。
 - [x] OAuth pool 模型 catalog 的 singleflight discovery 由 catalog owner 登记、取消和等待；请求取消仍可共享已有加载，但 AI 模块停止前不会遗留 provider/数据库访问 goroutine。
 - [x] Fixed-provider client runtime 的 credential refresh singleflight 由 Runtime owner 登记、取消和等待；请求取消仍保留共享刷新语义，AI 模块停止前不会遗留 OAuth 刷新访问。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
@@ -1111,6 +1112,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 上下文：JWT key 列表查询与轮换事务改为接收管理请求 context；轮换在 context 已取消时先返回，不生成无用 RSA 密钥，提交后的 key reload 继续沿用调用链。
 - 边界：`/api/v1/jwt-keys` 的 Transport 只转发 context，未改变超级管理员授权、RS256 key 状态转换和 24 小时 grace 语义。
 - 回归：新增真实 PostgreSQL 下 `ListKeys`/`RotateKey` 取消测试；auth/transport 定向测试、race、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-03（Image bridge context propagation，2026-08-27）
+
+- 上下文：`corebridge.RequestEnvelope` 携带请求 context，bridgefmt 在 Gemini→OpenAI image edit 的 multipart materialization 中将其传递给 `imageedit.Encode` 和远程图片下载。
+- 行为：请求取消会中止输入图下载并返回取消错误；无请求 envelope 的离线转换仍使用受控默认 context，不改变已有协议、SSRF 和图片格式校验。
+- 回归：新增取消请求的远程输入图测试；core bridge、bridgefmt、serving、gateway 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。
 
 ### P1-02（Client catalog discovery lifecycle，2026-08-27）
 
