@@ -6,20 +6,20 @@ import (
 
 	aitransport "xiaodou/dai/internal/ai/transport"
 	tenantports "xiaodou/dai/internal/tenant/ports"
-	userpkg "xiaodou/dai/internal/user"
+	userports "xiaodou/dai/internal/user/ports"
 )
 
 // aiIdentityAdapter exposes the unified identity domain to AI handlers without
 // another transport protocol or a duplicate identity model.
 type aiIdentityAdapter struct {
-	users   *userpkg.UserService
+	users   userports.IdentityUserReader
 	tenants tenantports.AdminTenantReader
 }
 
 var _ aitransport.IdentityProvider = (*aiIdentityAdapter)(nil)
 var _ aitransport.TenantEndUserVerifier = (*aiIdentityAdapter)(nil)
 
-func newAIIdentityAdapter(tenants tenantports.AdminTenantReader, users *userpkg.UserService) *aiIdentityAdapter {
+func newAIIdentityAdapter(tenants tenantports.AdminTenantReader, users userports.IdentityUserReader) *aiIdentityAdapter {
 	if tenants == nil || users == nil {
 		return nil
 	}
@@ -27,7 +27,7 @@ func newAIIdentityAdapter(tenants tenantports.AdminTenantReader, users *userpkg.
 }
 
 func (a *aiIdentityAdapter) BatchGetUsers(ctx context.Context, userIDs []string) (map[string]*aitransport.IdentityUser, error) {
-	users, err := a.users.BatchGetUsers(ctx, userIDs)
+	users, err := a.users.BatchGetIdentityUsers(ctx, userIDs)
 	if err != nil {
 		return nil, err
 	}

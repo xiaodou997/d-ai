@@ -131,7 +131,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 路由与 raw 路由已改用窄依赖，平台根容器和剩余管理聚合仍待拆除。
-- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations 与 payment 已提取最小依赖，管理员身份聚合仍需继续拆分。
+- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment 与 AI identity user port 已提取最小依赖，管理员身份聚合仍需继续拆分。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
@@ -954,6 +954,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：chi 原生微信回调与公开 favicon 路由改用独立 `RawDeps`，分别只接收支付服务/日志和品牌读端口；`RegisterRaw` 不再传递完整平台 `Deps`。
 - 契约：保留签名验签所需的原始 request body、微信回调响应和公开 favicon 路径，不将 raw 路由错误地迁回 Huma JSON 注册链。
 - 回归：新增 raw route pattern contract，确认两条非 JSON 路由仍被注册；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（AI identity user port，2026-08-27）
+
+- 依赖：AI 身份适配器改为接收 `user/ports.IdentityUserReader`，用户域只向跨域补全暴露非敏感身份投影，不再把具体 `UserService` 或 PostgreSQL 用户模型带入 Transport。
+- 装配：`UserService` 通过 `BatchGetIdentityUsers` 实现用户身份端口，`transport.IdentityDeps` / `aiPlatformDeps` 仅保存该端口；原有租户归属校验和 AI identity provider 契约保持不变。
+- 回归：新增用户投影映射与错误传播测试；`go test ./internal/user ./internal/transport ./cmd/server -count=1`、`go vet` 和差异检查通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 

@@ -7,6 +7,7 @@ import (
 
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/internal/user/pg"
+	userports "xiaodou/dai/internal/user/ports"
 )
 
 // UserService 用户服务
@@ -20,6 +21,8 @@ func NewUserService(repo *pg.UserRepository, blacklist *auth.BlacklistService, l
 	return &UserService{repo: repo, blacklist: blacklist, logger: logger}
 }
 
+var _ userports.IdentityUserReader = (*UserService)(nil)
+
 func (s *UserService) GetUser(_ context.Context, userID string) (*pg.User, error) {
 	return s.repo.GetByUserID(userID)
 }
@@ -32,6 +35,23 @@ func (s *UserService) BatchGetUsers(_ context.Context, userIDs []string) (map[st
 	result := make(map[string]*pg.User, len(users))
 	for _, u := range users {
 		result[u.UserID] = u
+	}
+	return result, nil
+}
+
+// BatchGetIdentityUsers returns only the stable, non-secret projection needed
+// by cross-domain identity enrichment.
+func (s *UserService) BatchGetIdentityUsers(ctx context.Context, userIDs []string) (map[string]userports.IdentityUser, error) {
+	users, err := s.BatchGetUsers(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]userports.IdentityUser, len(users))
+	for id, user := range users {
+		result[id] = userports.IdentityUser{
+			UserID: user.UserID, TenantID: user.TenantID, Username: user.Username,
+			Email: user.Email, Nickname: user.Nickname, Avatar: user.Avatar,
+		}
 	}
 	return result, nil
 }

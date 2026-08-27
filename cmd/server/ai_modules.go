@@ -356,7 +356,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				MFA:                  platform.MFA,
 				RecentAuth:           platform.RecentAuth,
 				Blacklist:            platform.Blacklist,
-				UserService:          platform.UserService,
+				IdentityReader:       platform.UserService,
 				AuthAccountReader:    platform.AuthAccounts,
 				AuthAccountWriter:    platform.AuthAccounts,
 				AuthLoginReader:      platform.AuthAccounts,

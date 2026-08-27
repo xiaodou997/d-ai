@@ -20,7 +20,6 @@ import (
 	systempkg "xiaodou/dai/internal/system"
 	systemports "xiaodou/dai/internal/system/ports"
 	tenantports "xiaodou/dai/internal/tenant/ports"
-	userpkg "xiaodou/dai/internal/user"
 	userports "xiaodou/dai/internal/user/ports"
 
 	// AI 域
@@ -46,7 +45,8 @@ type PortalDeps struct {
 	Legal         config.LegalConfig
 }
 
-// IdentityDeps contains account, session, tenant and invitation use cases.
+// IdentityDeps contains account, session, tenant, invitation and identity
+// projection use cases.
 type IdentityDeps struct {
 	JWT                  *auth.JWTService
 	Sessions             *auth.SessionService
@@ -54,7 +54,7 @@ type IdentityDeps struct {
 	MFA                  *auth.MFAService
 	RecentAuth           *auth.RecentAuthService
 	Blacklist            *auth.BlacklistService
-	UserService          *userpkg.UserService
+	IdentityReader       userports.IdentityUserReader
 	AuthAccountReader    authports.AccountReader
 	AuthAccountWriter    authports.AccountWriter
 	AuthLoginReader      authports.LoginReader
@@ -366,8 +366,8 @@ type platformAuthDeps struct {
 
 type aiPlatformDeps struct {
 	platformAuthDeps
-	TenantReader tenantports.AdminTenantReader
-	UserService  *userpkg.UserService
+	TenantReader   tenantports.AdminTenantReader
+	IdentityReader userports.IdentityUserReader
 }
 
 type authModule struct {
@@ -542,7 +542,7 @@ type aiIdentityProvider interface {
 }
 
 func (m aiModule) Register(api huma.API) {
-	identity := newAIIdentityAdapter(m.platform.TenantReader, m.platform.UserService)
+	identity := newAIIdentityAdapter(m.platform.TenantReader, m.platform.IdentityReader)
 	aitransport.RegisterAICore(api, buildAICoreHTTPDeps(m.platform, m.deps.Core, identity))
 	aitransport.RegisterSubscriptions(api, buildSubscriptionHTTPDeps(m.platform, m.deps.Subscriptions, identity))
 	aitransport.RegisterRiskControl(api, buildRiskControlHTTPDeps(m.platform, m.deps.RiskControl))
@@ -627,7 +627,7 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 		aiModule{platform: aiPlatformDeps{
 			platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
 			TenantReader:     d.TenantReader,
-			UserService:      d.UserService,
+			IdentityReader:   d.IdentityReader,
 		}, deps: ai},
 	}
 	for _, module := range modules {
