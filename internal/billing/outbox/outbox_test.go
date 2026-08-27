@@ -166,6 +166,68 @@ func TestDuplicateEnqueueChargesOnce(t *testing.T) {
 	}
 }
 
+// Two independent consumers must be able to drain the same queue without
+// charging a row twice. The claim lock is PostgreSQL state, not an in-process
+// mutex, so this also exercises the multi-replica deployment contract.
+func TestConcurrentConsumersSettleEachChargeOnce(t *testing.T) {
+	pool, ctx := openOutboxPool(t)
+	tenantID, userID := seedTenantAndUser(t, ctx, pool)
+	grant(t, ctx, pool, ledger.Ref{Kind: ledger.KindUser, ID: userID, TenantID: tenantID}, 1_000_000)
+
+	const charges = 24
+	for i := 0; i < charges; i++ {
+		enqueue(t, ctx, pool, outbox.Charge{
+			RequestID: fmt.Sprintf("req-concurrent-%02d", i), TenantID: tenantID, UserID: userID, UserMicro: 100,
+		})
+	}
+
+	consumers := []*outbox.Consumer{outbox.NewConsumer(pool, nil), outbox.NewConsumer(pool, nil)}
+	results := make(chan struct {
+		n   int
+		err error
+	}, len(consumers))
+	start := make(chan struct{})
+	for _, consumer := range consumers {
+		go func(c *outbox.Consumer) {
+			<-start
+			n, err := c.DrainOnce(ctx)
+			results <- struct {
+				n   int
+				err error
+			}{n: n, err: err}
+		}(consumer)
+	}
+	close(start)
+
+	claimed := 0
+	for range consumers {
+		result := <-results
+		if result.err != nil {
+			t.Fatalf("concurrent drain: %v", result.err)
+		}
+		claimed += result.n
+	}
+	if claimed != charges {
+		t.Fatalf("claimed rows = %d, want %d across two consumers", claimed, charges)
+	}
+	if got := balance(t, ctx, pool, userID); got != 1_000_000-charges*100 {
+		t.Fatalf("balance = %d, want one settlement per row", got)
+	}
+	var pending, done, failed int
+	if err := pool.QueryRow(ctx, `
+		SELECT
+			COUNT(*) FILTER (WHERE status = 'pending'),
+			COUNT(*) FILTER (WHERE status = 'done'),
+			COUNT(*) FILTER (WHERE status = 'failed')
+		FROM bill_charge_outbox
+	`).Scan(&pending, &done, &failed); err != nil {
+		t.Fatalf("read concurrent outbox state: %v", err)
+	}
+	if pending != 0 || done != charges || failed != 0 {
+		t.Fatalf("outbox state = pending:%d done:%d failed:%d", pending, done, failed)
+	}
+}
+
 // Settlement records a cost that was already incurred, so a suspended or
 // deleted account still owes it. The old code refused here, which rolled back
 // the usage row along with the charge and lost both.

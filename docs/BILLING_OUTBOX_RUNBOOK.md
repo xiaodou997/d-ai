@@ -17,6 +17,17 @@ savepoint 里把用量从 `pending` 推进到 `settled`。因此，排查和恢�
 尚未收回。`request_id` 唯一约束和 outbox/usage 的同事务写入保证重试不会产生第二笔
 扣费。
 
+## 多副本消费者保证
+
+每个 `worker` 副本都可以运行一个 outbox consumer。消费者使用
+`SELECT ... FOR UPDATE SKIP LOCKED` 在 PostgreSQL 中领取 `pending` 行；领取、账本扣费、
+用量状态更新和 outbox=`done` 状态提交在同一事务内完成。因此并发副本不会重复处理同一行，
+也不会因为队首坏数据阻塞后续行。`request_id` 唯一约束是第二道幂等保护，不能用进程内锁替代。
+
+发布或扩容后，应使用两条独立 worker 实例并发执行一次 drain smoke，确认每条 request_id
+最终只有一个 `done` 行、账户余额只减少一次；相关回归测试为
+`TestConcurrentConsumersSettleEachChargeOnce`。
+
 ## 指标与告警
 
 指标从管理监听的 `/metrics` 暴露（默认 `http://127.0.0.1:19642/metrics`）：

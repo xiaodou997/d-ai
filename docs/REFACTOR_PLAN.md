@@ -250,7 +250,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-02 验证所有后台任务的多副本语义
 
-- [ ] 结算 Outbox 保持多消费者唯一处理。
+- [x] 结算 Outbox 保持多消费者唯一处理；消费者使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，并发回归测试验证每条 request_id 只落账一次。
 - [ ] 异步任务和 Webhook 保持租约、心跳、回收与 fencing。
 - [ ] 调度任务统一使用 advisory lock、租约或可证明的幂等执行。
 - [x] JWT key retire 使用数据库条件更新并由每个副本在每轮执行后刷新本地 key cache。
