@@ -62,7 +62,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAICoreHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AICoreHTTPDeps{
 			PlatformPriceBooks:         priceBookPorts,
 			PriceBookSync:              priceBookPorts,
@@ -87,7 +87,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	subscriptions := buildSubscriptionHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AISubscriptionHTTPDeps{
 			SubscriptionPlans:          subscriptionPorts,
 			SubscriptionPlanWriter:     subscriptionPorts,
@@ -114,7 +114,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	riskControl := buildRiskControlHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIRiskControlHTTPDeps{
 			ProviderSecrets:     providerSecrets,
 			RiskControlConfig:   riskConfig,
@@ -132,7 +132,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	auditLog := buildAuditLogHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIAuditLogHTTPDeps{
 			AuditLogs:  auditLogs,
 			BanChecker: banChecker,
@@ -146,7 +146,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	system := buildSystemHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AISystemHTTPDeps{
 			DatabaseHealth: databaseHealth,
 			RedisHealth:    redisHealth,
@@ -163,7 +163,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	dashboard := buildDashboardHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIDashboardHTTPDeps{
 			DashboardQueries:           dashboardQueries,
 			BanChecker:                 banChecker,
@@ -179,7 +179,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	usage := buildUsageHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIUsageHTTPDeps{
 			UsageQueries:               usageQueries,
 			BanChecker:                 banChecker,
@@ -195,7 +195,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	oauthManagement := buildOAuthManagementHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIOAuthManagementHTTPDeps{
 			CredentialCreator: oauth,
 			CredentialReader:  oauth,
@@ -217,7 +217,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	modelBindingsHTTP := buildModelBindingHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIModelBindingHTTPDeps{
 			AccountReader: accountReader,
 			PoolReader:    oauth,
@@ -233,7 +233,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	diagnostics := buildUpstreamDiagnosticsHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIUpstreamDiagnosticsHTTPDeps{
 			AccountReader:     accountReader,
 			ModelBindings:     modelBindings,
@@ -252,7 +252,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	accountManagement := buildUpstreamAccountManagementHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIUpstreamAccountManagementHTTPDeps{
 			Accounts:        accountPorts,
 			AccountManager:  accountPorts,
@@ -272,7 +272,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	upstreamAccessHTTP := buildUpstreamAccessManagementHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIUpstreamAccessManagementHTTPDeps{UpstreamAccess: upstreamAccess, BanChecker: banChecker},
 	)
 	if upstreamAccessHTTP.Auth.TokenVerifier != jwt || upstreamAccessHTTP.Auth.TokenRevocations != blacklist || upstreamAccessHTTP.Auth.BanChecker != banChecker || upstreamAccessHTTP.UpstreamAccess != upstreamAccess {
@@ -280,7 +280,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	tenantCatalog := buildTenantCatalogHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AITenantCatalogHTTPDeps{
 			ModelCatalog:     modelCatalog,
 			Groups:           commercialPorts,
@@ -294,7 +294,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	tenantSelfControl := buildTenantSelfControlHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AITenantSelfControlHTTPDeps{
 			APIKeys:         apiKeyPorts,
 			APIKeyWriter:    apiKeyPorts,
@@ -311,7 +311,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	tenantGroups := buildTenantGroupManagementHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AITenantGroupManagementHTTPDeps{
 			Groups:           commercialPorts,
 			GroupManager:     commercialPorts,
@@ -330,7 +330,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	apiKeyManagement := buildAPIKeyManagementHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIAPIKeyManagementHTTPDeps{
 			APIKeys:         apiKeyPorts,
 			APIKeyWriter:    apiKeyPorts,
@@ -346,7 +346,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	tenantSelfRead := buildTenantSelfReadHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AITenantSelfReadHTTPDeps{DashboardQueries: dashboardQueries, UsageQueries: usageQueries, BanChecker: banChecker},
 	)
 	if tenantSelfRead.Auth.TokenVerifier != jwt || tenantSelfRead.Auth.TokenRevocations != blacklist || tenantSelfRead.Auth.BanChecker != banChecker || tenantSelfRead.DashboardQueries != dashboardQueries || tenantSelfRead.UsageQueries != usageQueries {
@@ -354,7 +354,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	workspaceHTTP := buildWorkspaceHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIWorkspaceHTTPDeps{
 			WorkspaceOverview: workspacePorts,
 			WorkspaceModels:   workspacePorts,
@@ -371,7 +371,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	userSelfControl := buildUserSelfControlHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIUserSelfControlHTTPDeps{
 			APIKeys:         apiKeyPorts,
 			APIKeyWriter:    apiKeyPorts,
@@ -387,7 +387,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	}
 
 	userSelfRead := buildUserSelfReadHTTPDeps(
-		Deps{IdentityDeps: IdentityDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
 		AIUserSelfReadHTTPDeps{
 			Groups:        commercialPorts,
 			ModelCatalog:  modelCatalog,

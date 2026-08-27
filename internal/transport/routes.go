@@ -363,6 +363,12 @@ type platformAuthDeps struct {
 	Blacklist *auth.BlacklistService
 }
 
+type aiPlatformDeps struct {
+	platformAuthDeps
+	TenantReader tenantports.AdminTenantReader
+	UserService  *userpkg.UserService
+}
+
 type authModule struct {
 	platformAuthDeps
 	SecureCookies     bool
@@ -480,7 +486,7 @@ type platformAdminModule struct {
 }
 
 type aiModule struct {
-	platform Deps
+	platform aiPlatformDeps
 	deps     AIHTTPDeps
 }
 
@@ -616,7 +622,11 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 			dataCleanup:   dataCleanupModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.DataCleanup},
 			proxyNodes:    proxyNodesModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.ProxyNodes},
 		},
-		aiModule{platform: d, deps: ai},
+		aiModule{platform: aiPlatformDeps{
+			platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+			TenantReader:     d.TenantReader,
+			UserService:      d.UserService,
+		}, deps: ai},
 	}
 	for _, module := range modules {
 		module.Register(api)
@@ -628,7 +638,7 @@ func registerMeta(api huma.API, d Deps) {
 	registerJWKS(api, d.JWT)
 }
 
-func buildAICoreHTTPDeps(platform Deps, d AICoreHTTPDeps, identity aiIdentityProvider) aitransport.CoreHTTPDeps {
+func buildAICoreHTTPDeps(platform aiPlatformDeps, d AICoreHTTPDeps, identity aiIdentityProvider) aitransport.CoreHTTPDeps {
 	aiDeps := aitransport.CoreHTTPDeps{
 		TokenVerifier:              platform.JWT,
 		TokenRevocations:           platform.Blacklist,
@@ -644,7 +654,7 @@ func buildAICoreHTTPDeps(platform Deps, d AICoreHTTPDeps, identity aiIdentityPro
 	return aiDeps
 }
 
-func buildUpstreamAccountManagementHTTPDeps(platform Deps, d AIUpstreamAccountManagementHTTPDeps) aitransport.UpstreamAccountManagementHTTPDeps {
+func buildUpstreamAccountManagementHTTPDeps(platform aiPlatformDeps, d AIUpstreamAccountManagementHTTPDeps) aitransport.UpstreamAccountManagementHTTPDeps {
 	return aitransport.UpstreamAccountManagementHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -661,7 +671,7 @@ func buildUpstreamAccountManagementHTTPDeps(platform Deps, d AIUpstreamAccountMa
 	}
 }
 
-func buildUpstreamAccessManagementHTTPDeps(platform Deps, d AIUpstreamAccessManagementHTTPDeps) aitransport.UpstreamAccessManagementHTTPDeps {
+func buildUpstreamAccessManagementHTTPDeps(platform aiPlatformDeps, d AIUpstreamAccessManagementHTTPDeps) aitransport.UpstreamAccessManagementHTTPDeps {
 	return aitransport.UpstreamAccessManagementHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -672,7 +682,7 @@ func buildUpstreamAccessManagementHTTPDeps(platform Deps, d AIUpstreamAccessMana
 	}
 }
 
-func buildTenantCatalogHTTPDeps(platform Deps, d AITenantCatalogHTTPDeps) aitransport.TenantCatalogHTTPDeps {
+func buildTenantCatalogHTTPDeps(platform aiPlatformDeps, d AITenantCatalogHTTPDeps) aitransport.TenantCatalogHTTPDeps {
 	return aitransport.TenantCatalogHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -686,7 +696,7 @@ func buildTenantCatalogHTTPDeps(platform Deps, d AITenantCatalogHTTPDeps) aitran
 	}
 }
 
-func buildTenantSelfControlHTTPDeps(platform Deps, d AITenantSelfControlHTTPDeps, identity aiIdentityProvider) aitransport.TenantSelfControlHTTPDeps {
+func buildTenantSelfControlHTTPDeps(platform aiPlatformDeps, d AITenantSelfControlHTTPDeps, identity aiIdentityProvider) aitransport.TenantSelfControlHTTPDeps {
 	return aitransport.TenantSelfControlHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -703,7 +713,7 @@ func buildTenantSelfControlHTTPDeps(platform Deps, d AITenantSelfControlHTTPDeps
 	}
 }
 
-func buildTenantGroupManagementHTTPDeps(platform Deps, d AITenantGroupManagementHTTPDeps, identity aiIdentityProvider) aitransport.TenantGroupManagementHTTPDeps {
+func buildTenantGroupManagementHTTPDeps(platform aiPlatformDeps, d AITenantGroupManagementHTTPDeps, identity aiIdentityProvider) aitransport.TenantGroupManagementHTTPDeps {
 	return aitransport.TenantGroupManagementHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -722,7 +732,7 @@ func buildTenantGroupManagementHTTPDeps(platform Deps, d AITenantGroupManagement
 	}
 }
 
-func buildAPIKeyManagementHTTPDeps(platform Deps, d AIAPIKeyManagementHTTPDeps) aitransport.APIKeyManagementHTTPDeps {
+func buildAPIKeyManagementHTTPDeps(platform aiPlatformDeps, d AIAPIKeyManagementHTTPDeps) aitransport.APIKeyManagementHTTPDeps {
 	return aitransport.APIKeyManagementHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -738,7 +748,7 @@ func buildAPIKeyManagementHTTPDeps(platform Deps, d AIAPIKeyManagementHTTPDeps) 
 	}
 }
 
-func buildTenantSelfReadHTTPDeps(platform Deps, d AITenantSelfReadHTTPDeps) aitransport.TenantSelfReadHTTPDeps {
+func buildTenantSelfReadHTTPDeps(platform aiPlatformDeps, d AITenantSelfReadHTTPDeps) aitransport.TenantSelfReadHTTPDeps {
 	return aitransport.TenantSelfReadHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -750,7 +760,7 @@ func buildTenantSelfReadHTTPDeps(platform Deps, d AITenantSelfReadHTTPDeps) aitr
 	}
 }
 
-func buildWorkspaceHTTPDeps(platform Deps, d AIWorkspaceHTTPDeps) aitransport.WorkspaceHTTPDeps {
+func buildWorkspaceHTTPDeps(platform aiPlatformDeps, d AIWorkspaceHTTPDeps) aitransport.WorkspaceHTTPDeps {
 	auth := aitransport.HTTPAuthDeps{
 		TokenVerifier:    platform.JWT,
 		TokenRevocations: platform.Blacklist,
@@ -769,7 +779,7 @@ func buildWorkspaceHTTPDeps(platform Deps, d AIWorkspaceHTTPDeps) aitransport.Wo
 	}
 }
 
-func buildUserSelfControlHTTPDeps(platform Deps, d AIUserSelfControlHTTPDeps) aitransport.UserSelfControlHTTPDeps {
+func buildUserSelfControlHTTPDeps(platform aiPlatformDeps, d AIUserSelfControlHTTPDeps) aitransport.UserSelfControlHTTPDeps {
 	return aitransport.UserSelfControlHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -785,7 +795,7 @@ func buildUserSelfControlHTTPDeps(platform Deps, d AIUserSelfControlHTTPDeps) ai
 	}
 }
 
-func buildUserSelfReadHTTPDeps(platform Deps, d AIUserSelfReadHTTPDeps) aitransport.UserSelfReadHTTPDeps {
+func buildUserSelfReadHTTPDeps(platform aiPlatformDeps, d AIUserSelfReadHTTPDeps) aitransport.UserSelfReadHTTPDeps {
 	return aitransport.UserSelfReadHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -799,7 +809,7 @@ func buildUserSelfReadHTTPDeps(platform Deps, d AIUserSelfReadHTTPDeps) aitransp
 	}
 }
 
-func buildSubscriptionHTTPDeps(platform Deps, d AISubscriptionHTTPDeps, identity aiIdentityProvider) aitransport.SubscriptionHTTPDeps {
+func buildSubscriptionHTTPDeps(platform aiPlatformDeps, d AISubscriptionHTTPDeps, identity aiIdentityProvider) aitransport.SubscriptionHTTPDeps {
 	deps := aitransport.SubscriptionHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -820,7 +830,7 @@ func buildSubscriptionHTTPDeps(platform Deps, d AISubscriptionHTTPDeps, identity
 	return deps
 }
 
-func buildRiskControlHTTPDeps(platform Deps, d AIRiskControlHTTPDeps) aitransport.RiskControlHTTPDeps {
+func buildRiskControlHTTPDeps(platform aiPlatformDeps, d AIRiskControlHTTPDeps) aitransport.RiskControlHTTPDeps {
 	return aitransport.RiskControlHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -835,7 +845,7 @@ func buildRiskControlHTTPDeps(platform Deps, d AIRiskControlHTTPDeps) aitranspor
 	}
 }
 
-func buildAuditLogHTTPDeps(platform Deps, d AIAuditLogHTTPDeps) aitransport.AuditLogHTTPDeps {
+func buildAuditLogHTTPDeps(platform aiPlatformDeps, d AIAuditLogHTTPDeps) aitransport.AuditLogHTTPDeps {
 	return aitransport.AuditLogHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -846,7 +856,7 @@ func buildAuditLogHTTPDeps(platform Deps, d AIAuditLogHTTPDeps) aitransport.Audi
 	}
 }
 
-func buildSystemHTTPDeps(platform Deps, d AISystemHTTPDeps) aitransport.SystemHTTPDeps {
+func buildSystemHTTPDeps(platform aiPlatformDeps, d AISystemHTTPDeps) aitransport.SystemHTTPDeps {
 	return aitransport.SystemHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -860,7 +870,7 @@ func buildSystemHTTPDeps(platform Deps, d AISystemHTTPDeps) aitransport.SystemHT
 	}
 }
 
-func buildDashboardHTTPDeps(platform Deps, d AIDashboardHTTPDeps, identity aiIdentityProvider) aitransport.DashboardHTTPDeps {
+func buildDashboardHTTPDeps(platform aiPlatformDeps, d AIDashboardHTTPDeps, identity aiIdentityProvider) aitransport.DashboardHTTPDeps {
 	deps := aitransport.DashboardHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -876,7 +886,7 @@ func buildDashboardHTTPDeps(platform Deps, d AIDashboardHTTPDeps, identity aiIde
 	return deps
 }
 
-func buildUsageHTTPDeps(platform Deps, d AIUsageHTTPDeps, identity aiIdentityProvider) aitransport.UsageHTTPDeps {
+func buildUsageHTTPDeps(platform aiPlatformDeps, d AIUsageHTTPDeps, identity aiIdentityProvider) aitransport.UsageHTTPDeps {
 	deps := aitransport.UsageHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -892,7 +902,7 @@ func buildUsageHTTPDeps(platform Deps, d AIUsageHTTPDeps, identity aiIdentityPro
 	return deps
 }
 
-func buildOAuthManagementHTTPDeps(platform Deps, d AIOAuthManagementHTTPDeps) aitransport.OAuthManagementHTTPDeps {
+func buildOAuthManagementHTTPDeps(platform aiPlatformDeps, d AIOAuthManagementHTTPDeps) aitransport.OAuthManagementHTTPDeps {
 	return aitransport.OAuthManagementHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -911,7 +921,7 @@ func buildOAuthManagementHTTPDeps(platform Deps, d AIOAuthManagementHTTPDeps) ai
 	}
 }
 
-func buildModelBindingHTTPDeps(platform Deps, d AIModelBindingHTTPDeps) aitransport.ModelBindingHTTPDeps {
+func buildModelBindingHTTPDeps(platform aiPlatformDeps, d AIModelBindingHTTPDeps) aitransport.ModelBindingHTTPDeps {
 	return aitransport.ModelBindingHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
@@ -924,7 +934,7 @@ func buildModelBindingHTTPDeps(platform Deps, d AIModelBindingHTTPDeps) aitransp
 	}
 }
 
-func buildUpstreamDiagnosticsHTTPDeps(platform Deps, d AIUpstreamDiagnosticsHTTPDeps) aitransport.UpstreamDiagnosticsHTTPDeps {
+func buildUpstreamDiagnosticsHTTPDeps(platform aiPlatformDeps, d AIUpstreamDiagnosticsHTTPDeps) aitransport.UpstreamDiagnosticsHTTPDeps {
 	return aitransport.UpstreamDiagnosticsHTTPDeps{
 		Auth: aitransport.HTTPAuthDeps{
 			TokenVerifier:    platform.JWT,
