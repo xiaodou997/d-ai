@@ -175,9 +175,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
-- [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，其余用户/租户/支付域继续按边界逐项迁移。
+- [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，其余用户/租户/支付域继续按边界逐项迁移。
 - [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
-- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，公告与少量 legacy 编排仍待收敛。
+- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，公告与少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
 - [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
@@ -1137,3 +1137,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：`clientruntime.Runtime` 为 401 触发的 shared credential refresh 增加 owner-managed active refresh、可取消 context、WaitGroup 和幂等 `Start/Stop/Health`；Stop 会 fencing 新刷新并等待既有 refresher 调用退出。
 - 语义：同一 credential 的并发刷新仍由 singleflight 合并，请求取消只结束当前 caller，不取消共享刷新；owner context 或 AI 模块 Stop 会取消脱离请求的刷新。
 - 回归：新增 refresh Stop 等待和取消测试，并验证 `aiModules` 的 Runtime/ Catalog 停止顺序；clientruntime/clientcatalog/server 定向测试、race、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-03（Admin account tenant transaction boundary，2026-08-27）
+
+- 边界：管理员创建租户用户不再先调用 `TenantReader.GetTenantDetails` 做锁外预检；账号与激活凭证继续由 `AdminAccountRepository` 在同一事务内写入。
+- 错误：`iam_accounts.tenant_id` 外键冲突翻译为 `user/ports.ErrTenantNotFound`，系统管理员/终端用户创建入口分别映射为明确的 400 错误；缺失租户不会留下账号或激活令牌。
+- 装配：`AdminUsersModuleDeps` 和 `adminUsersModule` 删除不再需要的 `TenantReader` 依赖，Transport 只接收账号读写端口。
+- 回归：新增缺失租户原子回滚集成测试；用户/Transport 定向测试、全仓 `go test ./...`（支付 sweep 指标测试出现既有时序 flake）、`go vet`、`go build`、`checkdeps` 和差异检查通过。

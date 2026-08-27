@@ -2,7 +2,15 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+var (
+	// ErrTenantNotFound means an account mutation referenced a tenant that is
+	// no longer present. The account adapter exposes this persistence boundary
+	// error without importing the tenant domain package.
+	ErrTenantNotFound = errors.New("tenant not found")
 )
 
 // AdminAccountRow is the non-secret account projection consumed by admin

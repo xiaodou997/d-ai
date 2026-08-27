@@ -229,6 +229,9 @@ func (h *adminHandlers) createEndUser(ctx context.Context, in *createEndUserInpu
 		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
 		}
+		if errors.Is(err, userports.ErrTenantNotFound) {
+			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在或已失效")
+		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
 	out := &createEndUserOutput{}

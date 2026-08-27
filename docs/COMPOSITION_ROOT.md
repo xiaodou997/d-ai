@@ -106,6 +106,7 @@ httpServers.Start / Shutdown
 - 账号和租户状态、密码重置、资料变更及登出的 Redis token/ban 副作用统一经 `auth/ports.AccountSecurityWriter`；Transport 只传递 claims、状态结果和请求 context，具体黑名单写入由 auth application service 负责。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
 - 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步改由 `auth/ports.AccountSecurityWriter` command 负责。
+- 管理员租户用户创建不再依赖 Transport 的锁外租户预检；`AdminAccountRepository` 在账号事务内依赖 `iam_accounts.tenant_id` 外键，并将缺失租户翻译为 `user/ports.ErrTenantNotFound`，避免租户删除/创建竞态留下错误的半创建流程。
 - 三类管理账号密码重置的目标类型校验与凭证结果映射也通过 `AdminAccountWriter.Reset*Password` / `AdminEndUserWriter.ResetEndUserPassword` 注入；`ActivationService.Reset` 仍由用户 adapter 调用，HTTP handler 不再直接查询 `iam_accounts`，会话失效通过 `AccountSecurityWriter` command 完成。
 - 系统管理员删除和终端用户删除事务分别由 `AdminAccountWriter.DeleteSystemAdmin` 与 `AdminEndUserWriter.DeleteEndUser` 持有；终端用户删除在余额行锁后执行 `AccountSecurityWriter` ban guard，失败会回滚数据库状态。
 - 终端用户列表查询已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserReader` 注入；HTTP handler 不再直接执行跨租户列表 SQL，只负责 claims scope 和 DTO 映射。

@@ -56,7 +56,6 @@ func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 
 func newAdminUsersHandlers(d adminUsersModule) *adminHandlers {
 	return &adminHandlers{
-		tenantReader:  d.TenantReader,
 		accountRepo:   d.AdminAccounts,
 		accountWriter: d.AdminAccountWriter,
 		security:      d.Security,

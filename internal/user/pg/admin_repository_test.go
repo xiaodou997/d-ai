@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -9,6 +10,44 @@ import (
 	"xiaodou/dai/internal/dbtest"
 	userports "xiaodou/dai/internal/user/ports"
 )
+
+func TestAdminAccountRepositoryRejectsMissingTenantAtomically(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	activation := auth.NewActivationService(pool, time.Hour)
+	repo := NewAdminAccountRepository(pool, activation)
+	err = repo.CreateTenantUser(ctx, userports.AdminAccountCreate{
+		UserID:              "missing-tenant-account",
+		TenantID:            "missing-tenant",
+		Username:            "missing-tenant-account",
+		PasswordHash:        "hash",
+		ActivationTokenHash: []byte("token-hash"),
+		ActivationExpiresAt: time.Now().Add(time.Hour),
+	})
+	if !errors.Is(err, userports.ErrTenantNotFound) {
+		t.Fatalf("CreateTenantUser error = %v, want ErrTenantNotFound", err)
+	}
+
+	var accountCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE user_id = 'missing-tenant-account'`).Scan(&accountCount); err != nil {
+		t.Fatalf("count account: %v", err)
+	}
+	if accountCount != 0 {
+		t.Fatalf("missing tenant account count = %d, want 0", accountCount)
+	}
+	var tokenCount int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM auth_activation_tokens WHERE user_id = 'missing-tenant-account'`).Scan(&tokenCount); err != nil {
+		t.Fatalf("count activation token: %v", err)
+	}
+	if tokenCount != 0 {
+		t.Fatalf("missing tenant activation token count = %d, want 0", tokenCount)
+	}
+}
 
 func TestAdminAccountRepositoryListsSystemAndTenantUsers(t *testing.T) {
 	ctx := context.Background()

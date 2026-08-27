@@ -108,7 +108,6 @@ type AdminTenantModuleDeps struct {
 // routes.
 type AdminUsersModuleDeps struct {
 	AdminRouteAuthDeps
-	TenantReader       tenantports.AdminTenantReader
 	AdminAccounts      userports.AdminAccountReader
 	AdminAccountWriter userports.AdminAccountWriter
 	Activations        *auth.ActivationService
@@ -279,7 +278,6 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 		},
 		users: adminUsersModule{
 			adminRouteAuth:     toAdminRouteAuth(d.Users.AdminRouteAuthDeps),
-			TenantReader:       d.Users.TenantReader,
 			AdminAccounts:      d.Users.AdminAccounts,
 			AdminAccountWriter: d.Users.AdminAccountWriter,
 			Activations:        d.Users.Activations,

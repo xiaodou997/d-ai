@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
-	tenantports "xiaodou/dai/internal/tenant/ports"
 	userports "xiaodou/dai/internal/user/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
@@ -281,15 +280,6 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 	if username == "" {
 		return nil, httpx.ErrBadRequest.WithDetail("用户名不能为空")
 	}
-	if h.tenantReader == nil {
-		return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
-	}
-	if _, err := h.tenantReader.GetTenantDetails(ctx, in.Body.TenantID); err != nil {
-		if errors.Is(err, tenantports.ErrTenantNotFound) {
-			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
-		}
-		return nil, httpx.ErrInternal.WithCause(err)
-	}
 	credential, err := h.activations.NewCredential()
 	if err != nil {
 		return nil, httpx.ErrInternal.WithCause(err)
@@ -309,6 +299,9 @@ func (h *adminHandlers) createTenantUser(ctx context.Context, in *createTenantUs
 		}
 		if errors.Is(err, authports.ErrEmailTaken) {
 			return nil, httpx.ErrConflict.WithDetail("邮箱已被使用")
+		}
+		if errors.Is(err, userports.ErrTenantNotFound) {
+			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}

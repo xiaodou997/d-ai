@@ -401,7 +401,6 @@ type adminTenantModule struct {
 
 type adminUsersModule struct {
 	adminRouteAuth
-	TenantReader       tenantports.AdminTenantReader
 	AdminAccounts      userports.AdminAccountReader
 	AdminAccountWriter userports.AdminAccountWriter
 	Activations        *auth.ActivationService
