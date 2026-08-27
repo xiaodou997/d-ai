@@ -1284,3 +1284,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 审计：复查 `internal/transport` 生产代码，已无事务 API、PostgreSQL/Redis/sqlc 直接调用或跨域安全副作用编排；认证中间件与模块窄端口仅保留组合根注入的基础设施/应用接口。
 - 结论：P1-03 三项域迁移清单完成，后续新增业务必须沿现有 application port/repository 边界进入，避免回流 handler。
+
+### P1 阶段收尾审计（2026-08-27）
+
+- 已完成：P1-01 全部条目、P1-03 全部条目，以及 P1-02 的统一生命周期、关闭栈、HTTP listener 登记、运行角色装配契约和 Transport surface contract。
+- 剩余：P1-02 仅保留 `run()` 的高层角色拆分与少量基础设施/健康探针治理。这些属于结构性重构，不再拆成无独立验收价值的小提交；下一项应以 `compositionRoot`/`runtimeRole` 明确边界并配套启动失败集成测试。
+- 验证基线：最近提交均通过相关定向测试、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与 `git diff --check`；全仓测试中的既有 PostgreSQL migration OID 与支付 sweep 时序 flake 仍需独立环境治理。
