@@ -86,7 +86,11 @@ func (w *Worker) Stop(ctx context.Context) {
 	}
 	w.lifecycleMu.Lock()
 	if w.stopped {
+		started := w.started
 		w.lifecycleMu.Unlock()
+		if started {
+			w.wait(ctx)
+		}
 		return
 	}
 	w.stopped = true
@@ -97,6 +101,10 @@ func (w *Worker) Stop(ctx context.Context) {
 		return
 	}
 	cancel()
+	w.wait(ctx)
+}
+
+func (w *Worker) wait(ctx context.Context) {
 	done := make(chan struct{})
 	go func() { w.wg.Wait(); close(done) }()
 	select {

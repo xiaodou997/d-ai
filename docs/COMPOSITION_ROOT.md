@@ -27,6 +27,7 @@ httpServers.Start / Shutdown
 - Runtime binding cache miss 加载现在由 `CachedBindingResolver` 自持有的 context/WaitGroup 管理，并由 `aiModules` 启动和停止；关闭时不会遗留脱离请求的配置读取。
 - OAuth pool 模型 catalog 的 singleflight discovery 现在由 `clientcatalog.Service` 自持有的 active-load registry 管理；请求取消不破坏共享加载，`aiModules.Stop` 会取消并等待 provider inspection 后再释放 OAuth/数据库依赖。
 - Fixed-provider client runtime 的 401 credential refresh 现在由 `clientruntime.Runtime` 自持有的 active-refresh registry 管理；请求取消不破坏共享刷新，`aiModules.Stop` 先停止 catalog、再停止 runtime，最后才释放 OAuth/数据库依赖。
+- `aiModules.Stop` 现在由 owner 串行执行并允许在短超时后再次等待；Stop-before-Start 会永久封存模块，风险控制 worker 的重复 Stop 也会继续等待在途任务，避免关闭超时后留下无法收敛的后台 goroutine。
 - 图片桥接的请求 envelope 携带原始请求 context，远程输入图 materialization 遵循请求取消；离线/合成 bridge 调用才回退到有限默认 context。
 - 订阅 janitor 现在由 `subscription.Service` 提供幂等 `Start/Stop/Health`，并纳入 `aiModules` 生命周期；订阅订单补偿不再是未登记的阻塞循环。
 - 平台 Transport 依赖已按模块显式投影，AI Core 使用 `CoreHTTPDeps`；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 均由独立模块注册。

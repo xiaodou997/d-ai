@@ -1144,3 +1144,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 错误：`iam_accounts.tenant_id` 外键冲突翻译为 `user/ports.ErrTenantNotFound`，系统管理员/终端用户创建入口分别映射为明确的 400 错误；缺失租户不会留下账号或激活令牌。
 - 装配：`AdminUsersModuleDeps` 和 `adminUsersModule` 删除不再需要的 `TenantReader` 依赖，Transport 只接收账号读写端口。
 - 回归：新增缺失租户原子回滚集成测试；用户/Transport 定向测试、全仓 `go test ./...`（支付 sweep 指标测试出现既有时序 flake）、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-02（AI modules shutdown retry fencing，2026-08-27）
+
+- 生命周期：`aiModules` 移除不可重试的 `stopOnce`，由 owner 状态与停止互斥锁管理 Start/Stop；短超时后再次 Stop 会继续等待所有已登记组件，Stop-before-Start 会阻止后续启动。
+- 组件：风险控制 worker 的重复 Stop 现在也会继续等待在途任务，和 catalog/runtime、gateway、订阅、异步任务等组件的可重试等待语义保持一致。
+- 回归：新增真实阻塞 credential refresh 的聚合停止竞态测试，并执行 race 定向测试；`cmd/server` 与风险控制 worker 生命周期测试通过。风险控制完整包测试受当前环境 IPv6 `httptest` 监听权限限制。
