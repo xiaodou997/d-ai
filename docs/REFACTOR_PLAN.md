@@ -175,7 +175,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
-- [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，其余用户/租户/支付域继续按边界逐项迁移。
+- [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，管理员账号/租户/终端用户安全编排已下沉，其余少量 legacy 逻辑继续按边界逐项迁移。
 - [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务、终端用户 tenant scope、公告状态机、管理员账号、租户和终端用户安全副作用已下沉，仍有少量 legacy 编排待收敛。
 - [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入、公告状态事务、管理员账号/租户/终端用户安全编排和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
@@ -1214,3 +1214,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 装配契约：`buildPlatformModules` 与 `buildAIModules` 返回前分别校验运行角色所需的请求路径 owner、后台 worker、生命周期组件和关闭依赖；缺失项按稳定名称聚合为启动错误。
 - 失败语义：nil 或部分构造的 bundle 不再进入 Transport 注册、后台启动或 shutdown stack；错误发生在组合根边界，避免运行中出现 nil handler 或未登记 goroutine。
 - 回归：新增平台/AI 不完整装配及 nil bundle 测试；`go test ./cmd/server -count=1` 通过。
+
+### P1-03（Remove obsolete admin security helpers，2026-08-27）
+
+- 边界：删除 `internal/transport/admin.go` 中已由管理员账号/终端用户 lifecycle application service 取代的 `AccountSecurityWriter` 字段及安全编排 helper，避免 HTTP 层保留不可达的跨域副作用入口。
+- 依赖：管理员 handler 仅保留真实使用的审计读端口和各域 lifecycle/reader/writer 端口，组合根依赖图进一步收窄。
+- 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。

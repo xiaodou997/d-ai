@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 
 	"xiaodou/dai/internal/auth"
@@ -29,7 +28,6 @@ type adminHandlers struct {
 	systemRepo       systemports.AdminDashboardReader
 	deduction        *billingsvc.DeductionService
 	accountQueries   billingports.AccountQueryReader
-	security         authports.AccountSecurityWriter
 	activations      *auth.ActivationService
 	rechargeSvc      *billingsvc.RechargeService
 	authAuditReader  authports.AuthAuditLogReader
@@ -101,26 +99,6 @@ func userIDOf(c *auth.Claims) string {
 		return ""
 	}
 	return c.UserID
-}
-
-func (h *adminHandlers) syncUserSecurity(ctx context.Context, userID, status string) error {
-	if h.security == nil {
-		return nil
-	}
-	if err := h.security.SyncUserStatus(ctx, userID, status); err != nil {
-		return httpx.ErrUnavailable.WithCause(err)
-	}
-	return nil
-}
-
-func (h *adminHandlers) invalidateUserSessions(ctx context.Context, userID string) error {
-	if h.security == nil {
-		return nil
-	}
-	if err := h.security.InvalidateUserSessions(ctx, userID); err != nil {
-		return httpx.ErrUnavailable.WithCause(err)
-	}
-	return nil
 }
 
 func adminAccountLifecycleError(err error) error {

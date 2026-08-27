@@ -179,3 +179,5 @@ httpServers.Start / Shutdown
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
 
 平台与 AI builder 在返回运行角色 bundle 前执行必需依赖契约校验；校验失败会阻止 HTTP 注册和后台 worker 启动。对应的缺失依赖回归测试位于 `cmd/server/platform_modules_test.go` 与 `cmd/server/ai_modules_test.go`，不依赖真实数据库或 Redis。
+
+管理员 HTTP handler 不再持有或编排 `AccountSecurityWriter`；账号、租户与终端用户的安全副作用统一由 lifecycle application service 在组合根装配，Transport 只接收对应最小端口。
