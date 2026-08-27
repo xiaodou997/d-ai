@@ -131,7 +131,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、平台/AI 运行角色、HTTP 和后台生命周期均已抽出，`run()` 仅保留顺序编排。
 - [x] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台路由改由 `transport.Module` 和模块专属依赖类型注册，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 与 raw 路由均使用窄依赖。
-- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
+- [x] 每个模块提供最小的 Register/Module 接口和显式依赖；`transport.Module` 已覆盖平台/AI 路由，平台身份、管理员、支付、运营、raw 回调及 AI 各纵向模块均通过显式依赖 bundle 注册，AI builder 仅接收 `aiPlatformDeps` 投影。
 - [x] 后台组件统一实现 Start/Stop/Health 生命周期；数据库、Redis、平台 worker、AI worker、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务均已接入统一关闭路径与生命周期 Health，队列故障级指标继续由各自观测面提供。
 - [x] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器均已登记并具备等待语义，剩余请求级 goroutine 由各自 owner 收尾。
 - [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
@@ -1302,3 +1302,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：`buildAIModules` 不再接收完整 `platformModules` 容器，改为显式 `aiPlatformDeps`，仅包含 JWT、代理节点和模块门禁三个真实依赖。
 - 边界：AI 运行角色装配继续由 `aiRuntimeRole` 负责从平台角色投影依赖，避免 AI builder 反向了解平台身份、账务和运营服务。
 - 回归：`go test ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-02（Module interface governance completion，2026-08-27）
+
+- 结论：平台/AI HTTP 入口均通过 `transport.Module` 或明确的 RawDeps 注册；Transport 不再接收跨域 service locator，具体实现只在组合根投影到模块专属接口。
+- 验证：全仓 `go test ./... -count=1` 全部通过，另经 `go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 和 `git diff --check` 验证。
