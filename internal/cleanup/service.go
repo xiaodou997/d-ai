@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -94,6 +95,13 @@ type Service struct {
 	ownerID           string
 	leaseTTL          time.Duration
 	heartbeatInterval time.Duration
+
+	mu           sync.RWMutex
+	workerCancel context.CancelFunc
+	workerDone   chan struct{}
+	stopped      bool
+	startOnce    sync.Once
+	stopOnce     sync.Once
 }
 
 func NewService(pool *pgxpool.Pool, logger *zap.Logger) *Service {
@@ -139,24 +147,77 @@ func AllTargets() []string {
 }
 
 func (s *Service) Start(ctx context.Context) {
-	s.root = ctx
-	go func() {
-		if err := s.recoverStaleRuns(ctx); err != nil {
-			s.logger.Warn("data cleanup: recover stale runs failed", zap.Error(err))
+	if s == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.startOnce.Do(func() {
+		workerCtx, cancel := context.WithCancel(ctx)
+		done := make(chan struct{})
+		s.mu.Lock()
+		if s.stopped {
+			s.mu.Unlock()
+			cancel()
+			return
 		}
-		s.runAutomatic(ctx)
+		s.root = ctx
+		s.workerCancel = cancel
+		s.workerDone = done
+		s.mu.Unlock()
 
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				s.runAutomatic(ctx)
+		go func() {
+			defer close(done)
+			if err := s.recoverStaleRuns(workerCtx); err != nil {
+				s.logger.Warn("data cleanup: recover stale runs failed", zap.Error(err))
 			}
+			s.runAutomatic(workerCtx)
+
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-workerCtx.Done():
+					return
+				case <-ticker.C:
+					s.runAutomatic(workerCtx)
+				}
+			}
+		}()
+	})
+}
+
+// Stop cancels the automatic cleanup worker and waits for it to leave the
+// database path. It is safe to call more than once; a short first deadline
+// does not prevent a later caller from waiting with a longer one.
+func (s *Service) Stop(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.stopOnce.Do(func() {
+		s.mu.Lock()
+		s.stopped = true
+		cancel := s.workerCancel
+		s.mu.Unlock()
+		if cancel != nil {
+			cancel()
 		}
-	}()
+	})
+
+	s.mu.RLock()
+	done := s.workerDone
+	s.mu.RUnlock()
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 func (s *Service) GetPolicy(ctx context.Context) (Policy, error) {
@@ -229,7 +290,13 @@ func (s *Service) StartManual(targets []string, actor string) (Run, error) {
 	if err != nil {
 		return Run{}, err
 	}
-	go s.execute(context.WithoutCancel(s.root), run.ID, "manual", targets, actor)
+	s.mu.RLock()
+	root := s.root
+	s.mu.RUnlock()
+	if root == nil {
+		root = context.Background()
+	}
+	go s.execute(context.WithoutCancel(root), run.ID, "manual", targets, actor)
 	return run, nil
 }
 

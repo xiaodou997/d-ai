@@ -133,7 +133,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，Health 与部分无 Stop worker 仍待补齐。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker 和结算 outbox consumer 已补齐幂等 Start/Stop 和等待退出，Health 统一投影和少量无 Stop worker 仍待补齐。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer 和 data cleanup 已补齐幂等 Start/Stop 与等待退出，Health 统一投影和小时级 context-owned 清理仍待补齐。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
@@ -863,6 +863,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 契约：生命周期测试的每个健康阶段现在都断言 `billing/invariants.Check` 执行完整 7 项检查，避免新增检查函数后测试仍然静默漏跑。
 - 覆盖：真实 PostgreSQL 流程继续覆盖余额/批次守恒、批次状态、充值撤销、Outbox/用量链接、退款冲正、订阅订单和订阅额度边界；随机并发、幂等、Scheduler 对账和 repair audit 已由同一阶段的既有测试覆盖。
 - 验证：`go test ./internal/billing/invariants -count=1`、`go vet ./internal/billing/invariants`、`staticcheck ./internal/billing/invariants` 通过。
+
+### P1-02（Data cleanup worker lifecycle，2026-08-27）
+
+- 生命周期：`cleanup.Service` 现在使用独立 worker context，`Start`/`Stop` 幂等，Stop 会取消自动清理并等待数据库 worker 退出；Stop 先于 Start 时不会再启动后台任务。
+- 装配：`cmd/server/run` 将 data cleanup 注册到 shutdown stack，保证它在 PostgreSQL 连接池释放前退出。
+- 验证：新增 cleanup lifecycle 单元测试；`go test ./internal/cleanup -count=1`、`go vet ./internal/cleanup`、`staticcheck ./internal/cleanup` 和 cmd/server 生命周期定向测试通过。
 
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 

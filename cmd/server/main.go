@@ -140,6 +140,10 @@ func run() error {
 	mgmtConsole := ai.ManagementConsole
 
 	dataCleanupSvc.Start(ctx)
+	shutdowns.Add("data cleanup", func(ctx context.Context) error {
+		dataCleanupSvc.Stop(ctx)
+		return nil
+	})
 
 	// Hourly cleanups
 	go runHourlyCleanup(ctx, func() {
