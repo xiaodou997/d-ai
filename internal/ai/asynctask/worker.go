@@ -56,7 +56,6 @@ func (e *Engine) runClaimed(parent context.Context, claimed claimedTask) {
 	// The run context is detached from the poll loop only by cancellation
 	// scope, not lifetime: shutdown must still interrupt in-flight work.
 	runCtx, cancel := context.WithCancel(parent)
-	defer cancel()
 
 	e.registerCancel(claimed.ID, cancel)
 	defer e.unregisterCancel(claimed.ID)
@@ -66,13 +65,21 @@ func (e *Engine) runClaimed(parent context.Context, claimed claimedTask) {
 	// worker must stop.
 	beat := time.NewTicker(e.cfg.LeaseTTL / 3)
 	defer beat.Stop()
+	heartbeatDone := make(chan struct{})
+	defer func() {
+		cancel()
+		<-heartbeatDone
+	}()
 	go func() {
+		defer close(heartbeatDone)
 		for {
 			select {
 			case <-runCtx.Done():
 				return
 			case <-beat.C:
-				held, err := e.store.heartbeat(context.WithoutCancel(runCtx), claimed.ID, e.workerID, e.cfg.LeaseTTL)
+				heartbeatCtx, heartbeatCancel := context.WithTimeout(runCtx, 5*time.Second)
+				held, err := e.store.heartbeat(heartbeatCtx, claimed.ID, e.workerID, e.cfg.LeaseTTL)
+				heartbeatCancel()
 				if err != nil {
 					e.logger.Warn("async task: heartbeat failed",
 						zap.String("task_id", claimed.ID), zap.Error(err))

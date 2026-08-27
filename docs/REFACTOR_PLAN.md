@@ -985,6 +985,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 装配：`cmd/server` 与 `cmd/openapi` 均按固定顺序注册模块，Transport 不再负责从跨域 service locator 组装平台依赖；`AIHTTPDeps` 继续只承载 AI 控制面 HTTP 能力。
 - 回归：扩展 OpenAPI module surface contract 覆盖新注册入口；`go test ./internal/transport ./cmd/server ./cmd/openapi -count=1`、`go build ./...`、`go vet` 和 `checkdeps` 通过。
 
+### P1-02（Async task heartbeat lifecycle fencing，2026-08-27）
+
+- 生命周期：异步任务单次执行的租约心跳 goroutine 现在由 `runClaimed` 持有完成信号，任务退出时先取消并等待心跳结束，避免 Engine worker 计数归零后仍访问存储。
+- 超时：心跳数据库调用改用继承任务取消的 5 秒超时 context，不再通过 `WithoutCancel` 绕过关闭信号；租约续期失败/丢失的既有停止语义保持不变。
+- 回归：异步任务取消、生命周期和心跳相关测试通过；`go test -race ./internal/ai/asynctask -run '^TestEngine(CancelStopsRunningTask|HealthAndStopBeforeStart)$' -count=1`、`go vet` 和差异检查通过（完整包 httptest 受当前本地监听权限限制）。
+
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
 - 生命周期：`asynctask.Engine` 现在自持有 worker context，Start/Stop 幂等且 Stop-before-Start 会阻止后续启动；停止时先取消 worker、webhook 和 reaper 循环，再执行租约释放。
