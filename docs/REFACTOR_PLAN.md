@@ -137,6 +137,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
+- [x] 组合根新增全量 Transport surface contract，验证 metadata、identity、admin、billing、operations 和 AI 六组模块在同一注册列表中均有代表路由。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
 - [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
 - [x] 租户上游访问策略端点只依赖 `UpstreamAccessManager` 最小端口，AI/顶层 Transport 依赖容器不再暴露具体 `*upstreamaccess.Service`。
@@ -1067,3 +1068,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：Runtime Gateway 新增 owner-managed auth telemetry，`Start` 允许请求触发 `last_used_at` 写入，`Stop` 先 fencing、取消 in-flight context，再等待所有写入退出。
 - 装配：`aiModules` 将 Gateway 纳入统一 Start/Stop；HTTP listener 关闭后才释放 AI/数据库依赖，重复 Stop 和 Stop 超时后再次等待均安全。
 - 回归：新增 telemetry Stop 等待、超时、取消和禁止新写入 race 测试，并将 Runtime Gateway 状态接入 `/health.components`；`go test ./internal/ai/gateway ./cmd/server`、`go test -race`、`go vet`、`go build` 和 `checkdeps` 通过。
+
+### P1-02（Composition transport assembly contract，2026-08-27）
+
+- 装配：新增组合根级 OpenAPI surface contract，直接验证 `buildPlatformTransportModules` 生成的六个显式模块都注册了 metadata、identity、admin、billing、operations 和 AI 路由代表。
+- 防漂移：模块数量与单个模块测试之外，契约现在能发现组合根遗漏整组模块或错误注册顺序导致的 surface 缺失。
+- 回归：`go test ./cmd/server ./internal/transport`、`go vet`、`go build`、`checkdeps` 和 `git diff --check` 通过。
