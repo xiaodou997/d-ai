@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"go.uber.org/zap"
+	"net/http"
 
 	proxypkg "xiaodou/dai/internal/ai/proxy"
 	announcementpkg "xiaodou/dai/internal/announcement"
@@ -162,6 +163,10 @@ type PaymentModuleDeps struct {
 	PlatformAuthDeps
 	Service *paymentsvc.PaymentService
 	Logger  *zap.Logger
+}
+
+type PaymentNotifyService interface {
+	HandleNotify(context.Context, *http.Request) error
 }
 
 // PlatformBillingModuleDeps groups the platform billing route module.

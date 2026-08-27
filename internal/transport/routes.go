@@ -844,7 +844,7 @@ func buildUpstreamDiagnosticsHTTPDeps(platform aiPlatformDeps, d AIUpstreamDiagn
 // These routes intentionally bypass Huma for signature-preserving callbacks
 // and binary responses, so they must not receive the full platform container.
 type RawDeps struct {
-	Payment              *paymentsvc.PaymentService
+	Payment              PaymentNotifyService
 	TenantBrandingReader tenantports.PortalBrandingReader
 	Logger               *zap.Logger
 }
@@ -856,10 +856,7 @@ func RegisterRaw(mux *chi.Mux, d RawDeps) {
 
 func RegisterPublicRaw(mux *chi.Mux, d RawDeps) {
 	// 微信支付回调（无认证，验签即鉴权）
-	notifyHandler := newPaymentNotifyHandlers(paymentModule{
-		service: d.Payment,
-		logger:  d.Logger,
-	})
+	notifyHandler := newPaymentNotifyHandlers(d.Payment, d.Logger)
 	mux.Post("/api/v1/payments/wechat/notify", notifyHandler.wechatNotify)
 	registerTenantBrandingRaw(mux, tenantBrandingModule{reader: d.TenantBrandingReader})
 }

@@ -193,3 +193,5 @@ HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台
 代理节点 HTTP 通过 `ProxyNodesHTTPService` 窄端口接收管理 command/query；代理选路能力继续由 AI runtime 在组合根内独立持有。
 
 支付自助订单查询通过 application 层 `GetOrderForScope` 完成 tenant/user ownership 校验，Transport 不再在读取后执行跨域资源归属判断。
+
+微信支付回调通过独立 `PaymentNotifyService` 注入 Raw 路由，避免将完整支付服务容器暴露给无认证的签名回调入口。

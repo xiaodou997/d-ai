@@ -1256,3 +1256,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：新增 `PaymentService.GetOrderForScope`，在支付 application 层合并订单读取与 tenant/user ownership 校验；自助 HTTP handler 不再读取订单后自行判断归属。
 - 语义：跨租户、跨用户和缺失订单统一返回 `ErrPaymentOrderNotFound`，租户级充值订单允许 tenant scope，用户级订单必须匹配 user scope；后台管理/同步流程继续使用无 scope 的 `GetOrder`。
 - 回归：新增 order scope 单元测试；payment service、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。
+
+### P1-03（Isolate payment notification HTTP port，2026-08-27）
+
+- 依赖：微信回调 Raw 路由改为只接收 `PaymentNotifyService.HandleNotify`，不再复用包含充值、租户现金和管理支付能力的完整 `paymentModule`。
+- 边界：回调验签/结算仍由 payment application service 负责，Transport 仅保留原始请求体限制、日志和微信响应格式。
+- 回归：payment notification、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。
