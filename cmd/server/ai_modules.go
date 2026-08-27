@@ -68,6 +68,7 @@ type aiModules struct {
 
 	priceBookSvc       *billingcontrol.Service
 	runtimeBinder      *coreruntime.CachedBindingResolver
+	subscriptionSvc    *subscription.Service
 	riskControlWorker  *riskcontrol.Worker
 	auditWorker        *audit.Worker
 	refresher          *tokenrefresh.Refresher
@@ -505,6 +506,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		AsyncTasks:         asyncTasks,
 		priceBookSvc:       priceBookSvc,
 		runtimeBinder:      runtimeBinder,
+		subscriptionSvc:    subsSvc,
 		riskControlWorker:  riskControlWorker,
 		auditWorker:        auditWorker,
 		refresher:          refresher,
@@ -527,6 +529,9 @@ func (m *aiModules) Start(ctx context.Context) {
 		}
 		if m.runtimeBinder != nil {
 			m.runtimeBinder.Start(m.workerCtx)
+		}
+		if m.subscriptionSvc != nil {
+			m.subscriptionSvc.Start(m.workerCtx)
 		}
 		if m.riskControlWorker != nil {
 			m.riskControlWorker.Start(m.workerCtx, 0)
@@ -560,6 +565,11 @@ func (m *aiModules) Stop(ctx context.Context) {
 		if m.runtimeBinder != nil {
 			if err := m.runtimeBinder.Stop(ctx); err != nil && m.logger != nil {
 				m.logger.Warn("runtime binding resolver shutdown incomplete", zap.Error(err))
+			}
+		}
+		if m.subscriptionSvc != nil {
+			if err := m.subscriptionSvc.Stop(ctx); err != nil && m.logger != nil {
+				m.logger.Warn("subscription janitor shutdown incomplete", zap.Error(err))
 			}
 		}
 		if m.riskControlWorker != nil {

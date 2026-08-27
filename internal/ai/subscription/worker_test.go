@@ -3,6 +3,7 @@ package subscription
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -61,5 +62,40 @@ func TestReconcileOrderUsesImmutableOrderSnapshotWithoutPlanLookup(t *testing.T)
 	}
 	if purchaser.request.IdempotencyKey != "ai-sub-SUB_snapshot" || purchaser.request.UserMicro != 123 {
 		t.Fatalf("unexpected debit replay: %+v", purchaser.request)
+	}
+}
+
+func TestSubscriptionJanitorLifecycleIsIdempotent(t *testing.T) {
+	service := NewService(nil, nil, zap.NewNop())
+	service.Start(context.Background())
+	service.Start(context.Background())
+	if got := service.Health(); !got.Started || got.Stopped {
+		t.Fatalf("running subscription health = %+v", got)
+	}
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := service.Stop(shortCtx); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if err := service.Stop(shortCtx); err != nil {
+		t.Fatalf("second Stop() error = %v", err)
+	}
+	if got := service.Health(); !got.Stopped {
+		t.Fatalf("stopped subscription health = %+v", got)
+	}
+}
+
+func TestSubscriptionJanitorCannotStartAfterStop(t *testing.T) {
+	service := NewService(nil, nil, zap.NewNop())
+	if err := service.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() before Start error = %v", err)
+	}
+	service.Start(context.Background())
+	if got := service.Health(); got.Started || !got.Stopped {
+		t.Fatalf("subscription health after stop-before-start = %+v", got)
+	}
+	if err := service.Stop(context.Background()); err != nil {
+		t.Fatalf("repeated Stop error = %v", err)
 	}
 }

@@ -5,9 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const defaultMaxQueue = 2
@@ -25,7 +28,15 @@ type Service struct {
 	purchaser Purchaser
 	logger    *zap.Logger
 	maxQueue  int
+
+	lifecycleMu  sync.Mutex
+	workerDone   chan struct{}
+	workerCancel context.CancelFunc
+	started      bool
+	stopped      bool
 }
+
+var _ lifecycle.Component = (*Service)(nil)
 
 // NewService 构造订阅服务。maxQueue 为排队订阅上限（不含 active），默认 2。
 func NewService(repo Repo, purchaser Purchaser, logger *zap.Logger, opts ...func(*Service)) *Service {
@@ -44,6 +55,73 @@ func NewService(repo Repo, purchaser Purchaser, logger *zap.Logger, opts ...func
 
 // WithMaxQueue 覆盖排队上限。
 func WithMaxQueue(n int) func(*Service) { return func(s *Service) { s.maxQueue = n } }
+
+// Start launches the subscription janitor under a service-owned context.
+// Calling Start more than once, or after Stop, is a no-op.
+func (s *Service) Start(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.lifecycleMu.Lock()
+	if s.started || s.stopped {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	s.started = true
+	s.workerCancel = cancel
+	s.workerDone = make(chan struct{})
+	done := s.workerDone
+	s.lifecycleMu.Unlock()
+	go func() {
+		defer close(done)
+		s.RunJanitor(workerCtx)
+	}()
+}
+
+// Stop cancels the janitor and waits for it to leave the subscription
+// repository. A later call can continue waiting after an earlier deadline.
+func (s *Service) Stop(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.lifecycleMu.Lock()
+	if !s.stopped {
+		s.stopped = true
+	}
+	cancel := s.workerCancel
+	done := s.workerDone
+	s.lifecycleMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (s *Service) Health() lifecycle.HealthSnapshot {
+	if s == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	s.lifecycleMu.Lock()
+	started, stopped := s.started, s.stopped
+	s.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
+}
 
 // ---- 热路径 ----
 
