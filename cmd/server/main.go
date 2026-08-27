@@ -125,9 +125,12 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("build platform modules failed: %w", err)
 	}
-	platform.Start()
-	shutdowns.Add("platform modules", func(context.Context) error {
-		platform.Stop()
+	platform.Start(ctx)
+	shutdowns.Add("platform modules", func(ctx context.Context) error {
+		err := platform.Stop(ctx)
+		if err != nil {
+			return err
+		}
 		lifecycle.MarkStopped(healthPlatformModules)
 		if platform.banReconciler != nil {
 			lifecycle.MarkStopped(healthBanReconciler)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -16,6 +17,56 @@ func TestSchedulerStartStopIsIdempotent(t *testing.T) {
 	s.Start()
 	s.Stop()
 	s.Stop()
+}
+
+func TestSchedulerCannotStartAfterStop(t *testing.T) {
+	s := NewScheduler(nil, nil, nil, zap.NewNop())
+	if err := s.Stop(); err != nil {
+		t.Fatalf("Stop before Start: %v", err)
+	}
+	s.Start()
+	if health := s.Health(); health.Started || !health.Stopped {
+		t.Fatalf("scheduler health after stop-before-start = %+v", health)
+	}
+}
+
+func TestSchedulerStopCanRetryAfterDeadline(t *testing.T) {
+	s := NewScheduler(nil, nil, nil, zap.NewNop())
+	release := make(chan struct{})
+	s.lifecycleMu.Lock()
+	s.started = true
+	s.workerCtx, s.workerCancel = context.WithCancel(context.Background())
+	s.workers.Add(1)
+	s.lifecycleMu.Unlock()
+	go func() {
+		<-release
+		s.workers.Done()
+	}()
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	if err := s.Stop(shortCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("first Stop error = %v, want deadline exceeded", err)
+	}
+	cancel()
+
+	retryDone := make(chan struct{})
+	go func() {
+		if err := s.Stop(context.Background()); err != nil {
+			t.Errorf("retry Stop: %v", err)
+		}
+		close(retryDone)
+	}()
+	select {
+	case <-retryDone:
+		t.Fatal("retry Stop returned before worker exited")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-retryDone:
+	case <-time.After(time.Second):
+		t.Fatal("retry Stop did not finish after worker exited")
+	}
 }
 
 func TestSchedulerHealthTracksFailureAndCrossReplicaSkip(t *testing.T) {

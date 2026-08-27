@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -68,8 +70,11 @@ type platformModules struct {
 
 	banReconciler *auth.BanReconciler
 	sched         *scheduler.Scheduler
+	lifecycleMu   sync.Mutex
+	stopMu        sync.Mutex
+	started       bool
+	stopped       bool
 	startOnce     sync.Once
-	stopOnce      sync.Once
 }
 
 func configureSecretKeyring(cfg *config.Config) error {
@@ -172,30 +177,65 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	}, nil
 }
 
-func (m *platformModules) Start() {
+func (m *platformModules) Start(ctxs ...context.Context) {
 	if m == nil {
 		return
 	}
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
+	}
 	m.startOnce.Do(func() {
+		m.stopMu.Lock()
+		defer m.stopMu.Unlock()
+		m.lifecycleMu.Lock()
+		if m.stopped {
+			m.lifecycleMu.Unlock()
+			return
+		}
+		m.started = true
+		m.lifecycleMu.Unlock()
 		if m.banReconciler != nil {
 			m.banReconciler.Start()
 		}
 		if m.sched != nil {
-			m.sched.Start()
+			m.sched.Start(ctx)
 		}
 	})
 }
 
-func (m *platformModules) Stop() {
+func (m *platformModules) Stop(ctxs ...context.Context) error {
 	if m == nil {
-		return
+		return nil
 	}
-	m.stopOnce.Do(func() {
-		if m.sched != nil {
-			m.sched.Stop()
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
+	}
+	m.stopMu.Lock()
+	defer m.stopMu.Unlock()
+
+	m.lifecycleMu.Lock()
+	if !m.stopped {
+		m.stopped = true
+	}
+	started := m.started
+	m.lifecycleMu.Unlock()
+	if !started {
+		return nil
+	}
+
+	var errs []error
+	if m.sched != nil {
+		if err := m.sched.Stop(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("stop scheduler: %w", err))
 		}
-		if m.banReconciler != nil {
-			m.banReconciler.Stop()
-		}
-	})
+	}
+	if m.banReconciler != nil {
+		m.banReconciler.Stop()
+	}
+	if err := errors.Join(errs...); err != nil {
+		return err
+	}
+	return nil
 }

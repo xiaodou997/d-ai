@@ -105,8 +105,12 @@ type Scheduler struct {
 	logger         *zap.Logger
 	stopChan       chan struct{}
 	lifecycleMu    sync.Mutex
+	stopMu         sync.Mutex
 	started        bool
 	stopped        bool
+	stopClosed     bool
+	workerCtx      context.Context
+	workerCancel   context.CancelFunc
 	workers        sync.WaitGroup
 	taskMu         sync.RWMutex
 	tasks          map[string]TaskSnapshot
@@ -131,6 +135,22 @@ func NewScheduler(pool *pgxpool.Pool, keyRetirer jwtKeyRetirer, paymentSweeper p
 			TaskPaymentSweep:          {}, TaskPaymentCleanup: {},
 		},
 	}
+}
+
+// taskContext returns the scheduler-owned context for one task invocation.
+// Manual RunAllTasks calls made before Start retain a bounded standalone
+// context, while process-owned workers are cancelled as part of Stop.
+func (s *Scheduler) taskContext() context.Context {
+	if s == nil {
+		return context.Background()
+	}
+	s.lifecycleMu.Lock()
+	ctx := s.workerCtx
+	s.lifecycleMu.Unlock()
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
 }
 
 // Health returns a lock-safe snapshot for diagnostics and management probes.
@@ -221,13 +241,21 @@ func (s *Scheduler) taskSkipped(name, reason string) {
 }
 
 // Start 启动定时任务
-func (s *Scheduler) Start() {
+func (s *Scheduler) Start(ctxs ...context.Context) {
+	if s == nil {
+		return
+	}
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
+	}
 	s.lifecycleMu.Lock()
 	if s.started || s.stopped {
 		s.lifecycleMu.Unlock()
 		return
 	}
 	s.started = true
+	s.workerCtx, s.workerCancel = context.WithCancel(ctx)
 	s.workers.Add(5)
 	s.lifecycleMu.Unlock()
 
@@ -249,11 +277,14 @@ const billingReconciliationInterval = 15 * time.Minute
 
 func (s *Scheduler) runBillingReconciliationTask() {
 	s.runTask(TaskBillingReconciliation, s.reconcileBilling)
+	ctx := s.taskContext()
 	ticker := time.NewTicker(billingReconciliationInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-s.stopChan:
+			return
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			s.runTask(TaskBillingReconciliation, s.reconcileBilling)
@@ -265,7 +296,7 @@ func (s *Scheduler) reconcileBilling() error {
 	if s.pool == nil {
 		return &taskSkippedError{reason: "billing_reconciliation_not_configured"}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	ctx, cancel := context.WithTimeout(s.taskContext(), schedulerTaskTimeout)
 	defer cancel()
 
 	// RepeatableRead makes all seven invariant queries observe one MVCC
@@ -302,20 +333,56 @@ func (s *Scheduler) reconcileBilling() error {
 }
 
 // Stop 停止定时任务
-func (s *Scheduler) Stop() {
+func (s *Scheduler) Stop(ctxs ...context.Context) error {
+	if s == nil {
+		return nil
+	}
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
+	}
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
+
 	s.lifecycleMu.Lock()
-	if s.stopped {
-		s.lifecycleMu.Unlock()
-		return
+	if !s.stopped {
+		s.stopped = true
 	}
-	s.stopped = true
 	started := s.started
-	close(s.stopChan)
+	cancel := s.workerCancel
+	stopChan := s.stopChan
 	s.lifecycleMu.Unlock()
-	if started {
-		s.workers.Wait()
+	if !started {
+		return nil
 	}
-	s.logger.Info("Scheduler stopped")
+	if cancel != nil {
+		cancel()
+	}
+	if stopChan != nil {
+		s.lifecycleMu.Lock()
+		// Only the first Stop closes the channel; subsequent calls are retries
+		// that continue waiting with a fresh caller deadline.
+		firstStop := !s.stopClosed
+		if firstStop {
+			s.stopClosed = true
+		}
+		s.lifecycleMu.Unlock()
+		if firstStop {
+			close(stopChan)
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		s.workers.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		s.logger.Info("Scheduler stopped")
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // ==================== 额度批次过期结算 ====================
@@ -328,11 +395,14 @@ const lotExpiryInterval = 5 * time.Minute
 const lotExpiryBatch = 500
 
 func (s *Scheduler) runLotExpiryTask() {
+	ctx := s.taskContext()
 	ticker := time.NewTicker(lotExpiryInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-s.stopChan:
+			return
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			s.runTask(TaskLotExpiry, s.settleExpiredLots)
@@ -343,7 +413,7 @@ func (s *Scheduler) runLotExpiryTask() {
 // settleExpiredLots removes the unspent remainder of every lot whose validity
 // window has closed. Repeating is safe: expired_at is the idempotency anchor.
 func (s *Scheduler) settleExpiredLots() error {
-	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	ctx, cancel := context.WithTimeout(s.taskContext(), schedulerTaskTimeout)
 	defer cancel()
 	now := domain.NowUTC()
 
@@ -384,10 +454,13 @@ func (s *Scheduler) settleExpiredLotBatch(ctx context.Context, now time.Time) (i
 // ==================== JWT 密钥退役 ====================
 
 func (s *Scheduler) runJWTKeyRetireTask() {
+	ctx := s.taskContext()
 	timer := time.NewTimer(5 * time.Minute)
 	defer timer.Stop()
 	select {
 	case <-s.stopChan:
+		return
+	case <-ctx.Done():
 		return
 	case <-timer.C:
 	}
@@ -399,6 +472,8 @@ func (s *Scheduler) runJWTKeyRetireTask() {
 		select {
 		case <-s.stopChan:
 			return
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			s.runTask(TaskJWTKeyRetire, s.retireExpiredGraceKeys)
 		}
@@ -409,7 +484,7 @@ func (s *Scheduler) retireExpiredGraceKeys() error {
 	if s.keyRetirer == nil {
 		return &taskSkippedError{reason: "key_retire_not_configured"}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	ctx, cancel := context.WithTimeout(s.taskContext(), schedulerTaskTimeout)
 	defer cancel()
 	return s.keyRetirer.RetireExpiredGraceKeys(ctx)
 }
@@ -418,6 +493,7 @@ func (s *Scheduler) retireExpiredGraceKeys() error {
 
 func (s *Scheduler) runPaymentSweepTask() {
 	s.runTask(TaskPaymentSweep, s.sweepPayments)
+	ctx := s.taskContext()
 
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
@@ -425,6 +501,8 @@ func (s *Scheduler) runPaymentSweepTask() {
 	for {
 		select {
 		case <-s.stopChan:
+			return
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			s.runTask(TaskPaymentSweep, s.sweepPayments)
@@ -436,7 +514,7 @@ func (s *Scheduler) sweepPayments() error {
 	if s.paymentSweeper == nil {
 		return &taskSkippedError{reason: "payment_sweep_not_configured"}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	ctx, cancel := context.WithTimeout(s.taskContext(), schedulerTaskTimeout)
 	defer cancel()
 	return s.withAdvisoryLock(ctx, "dai_scheduler_payment", "payment_sweep_advisory_lock_held", s.paymentSweeper.SweepOnce)
 }
@@ -445,11 +523,14 @@ const closedOrderCleanupInterval = 24 * time.Hour
 
 func (s *Scheduler) runPaymentCleanupTask() {
 	s.runTask(TaskPaymentCleanup, s.cleanupClosedOrders)
+	ctx := s.taskContext()
 	ticker := time.NewTicker(closedOrderCleanupInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-s.stopChan:
+			return
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			s.runTask(TaskPaymentCleanup, s.cleanupClosedOrders)
@@ -461,7 +542,7 @@ func (s *Scheduler) cleanupClosedOrders() error {
 	if s.paymentCleaner == nil {
 		return &taskSkippedError{reason: "payment_cleanup_not_configured"}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), schedulerTaskTimeout)
+	ctx, cancel := context.WithTimeout(s.taskContext(), schedulerTaskTimeout)
 	defer cancel()
 	return s.withAdvisoryLock(ctx, "dai_scheduler_payment_cleanup", "payment_cleanup_advisory_lock_held", s.paymentCleaner.CleanupClosedOrders)
 }
