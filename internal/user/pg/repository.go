@@ -55,11 +55,11 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	return &UserRepository{pool: pool}
 }
 
-func (r *UserRepository) GetByUserID(userID string) (*User, error) {
+func (r *UserRepository) GetByUserID(ctx context.Context, userID string) (*User, error) {
 	var u User
 	var status string
 	var createdAt time.Time
-	err := r.pool.QueryRow(context.Background(), `
+	err := r.pool.QueryRow(ctx, `
 		SELECT user_id, tenant_id, username, email, nickname, avatar, status, created_at
 		FROM iam_accounts WHERE user_id = $1 AND user_type = 4
 	`, userID).Scan(&u.UserID, &u.TenantID, &u.Username, &u.Email, &u.Nickname, &u.Avatar, &status, &createdAt)
@@ -72,12 +72,12 @@ func (r *UserRepository) GetByUserID(userID string) (*User, error) {
 	return &u, nil
 }
 
-func (r *UserRepository) GetByUserIDs(userIDs []string) ([]*User, error) {
+func (r *UserRepository) GetByUserIDs(ctx context.Context, userIDs []string) ([]*User, error) {
 	if len(userIDs) == 0 {
 		return []*User{}, nil
 	}
 
-	rows, err := r.pool.Query(context.Background(), `
+	rows, err := r.pool.Query(ctx, `
 		SELECT user_id, tenant_id, username, email, nickname, avatar, status, created_at
 		FROM iam_accounts WHERE user_id = ANY($1) AND user_type = 4
 	`, userIDs)
@@ -102,7 +102,7 @@ func (r *UserRepository) GetByUserIDs(userIDs []string) ([]*User, error) {
 	return users, nil
 }
 
-func (r *UserRepository) Update(userID string, data map[string]any) error {
+func (r *UserRepository) Update(ctx context.Context, userID string, data map[string]any) error {
 	if len(data) == 0 {
 		return nil
 	}
@@ -121,7 +121,7 @@ func (r *UserRepository) Update(userID string, data map[string]any) error {
 	sql += fmt.Sprintf(" WHERE user_id = $%d AND user_type = 4", i)
 	args = append(args, userID)
 
-	_, err := r.pool.Exec(context.Background(), sql, args...)
+	_, err := r.pool.Exec(ctx, sql, args...)
 	return err
 }
 

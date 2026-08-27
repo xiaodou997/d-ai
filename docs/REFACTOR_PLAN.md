@@ -182,6 +182,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
 - [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
 - [x] 管理充值目标归属与存在性统一由 `RechargeService.GrantManual` 在同一账务事务锁内解析/校验；Transport 不再通过 `TenantRepository` 做锁外预检，平台管理员可在用户充值时省略 `tenantId`。
+- [x] 用户身份查询与状态更新统一透传调用方 context；`UserService` 不再丢弃请求取消信号，PostgreSQL UserRepository 的读写均使用传入 context。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1081,3 +1082,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：Console 流式 assistant message persistence 现在由请求级 owner 的 defer 统一关闭，`sync.Once` 防止正常与异常路径重复收尾；panic、请求取消或提前退出会标记 `interrupted`，正常返回才标记 `completed`。
 - 等待：关闭流程先发出 done 信号、等待持久化 goroutine，再使用独立短超时上下文完成最终会话路由更新；数据库池释放前不会遗留该请求的消息写入。
 - 回归：新增关闭幂等与中断状态测试；Console/Gateway/server 定向测试、race 测试、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-03（User repository context propagation，2026-08-27）
+
+- 上下文：`UserService` 的用户查询、批量身份投影、资料更新和封禁状态写入现在将调用方 context 传递到 PostgreSQL adapter；取消的 HTTP/AI 请求不会继续使用无界 `context.Background()` 查询。
+- 边界：`UserService` 通过最小 repository 接口依赖持久化能力，保持身份投影端口不泄漏 PostgreSQL 实现，同时让取消语义可被单元测试锁定。
+- 回归：新增 service context 透传测试；`go test ./internal/user ./internal/user/pg ./internal/transport ./cmd/server -count=1`、race、`go vet` 和差异检查通过。

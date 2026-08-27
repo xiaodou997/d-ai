@@ -10,25 +10,31 @@ import (
 	userports "xiaodou/dai/internal/user/ports"
 )
 
+type repository interface {
+	GetByUserID(ctx context.Context, userID string) (*pg.User, error)
+	GetByUserIDs(ctx context.Context, userIDs []string) ([]*pg.User, error)
+	Update(ctx context.Context, userID string, data map[string]any) error
+}
+
 // UserService 用户服务
 type UserService struct {
-	repo      *pg.UserRepository
+	repo      repository
 	blacklist *auth.BlacklistService
 	logger    *zap.Logger
 }
 
-func NewUserService(repo *pg.UserRepository, blacklist *auth.BlacklistService, logger *zap.Logger) *UserService {
+func NewUserService(repo repository, blacklist *auth.BlacklistService, logger *zap.Logger) *UserService {
 	return &UserService{repo: repo, blacklist: blacklist, logger: logger}
 }
 
 var _ userports.IdentityUserReader = (*UserService)(nil)
 
-func (s *UserService) GetUser(_ context.Context, userID string) (*pg.User, error) {
-	return s.repo.GetByUserID(userID)
+func (s *UserService) GetUser(ctx context.Context, userID string) (*pg.User, error) {
+	return s.repo.GetByUserID(ctx, userID)
 }
 
-func (s *UserService) BatchGetUsers(_ context.Context, userIDs []string) (map[string]*pg.User, error) {
-	users, err := s.repo.GetByUserIDs(userIDs)
+func (s *UserService) BatchGetUsers(ctx context.Context, userIDs []string) (map[string]*pg.User, error) {
+	users, err := s.repo.GetByUserIDs(ctx, userIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -56,12 +62,12 @@ func (s *UserService) BatchGetIdentityUsers(ctx context.Context, userIDs []strin
 	return result, nil
 }
 
-func (s *UserService) UpdateUser(_ context.Context, userID string, data map[string]any) error {
-	return s.repo.Update(userID, data)
+func (s *UserService) UpdateUser(ctx context.Context, userID string, data map[string]any) error {
+	return s.repo.Update(ctx, userID, data)
 }
 
 func (s *UserService) BanUser(ctx context.Context, userID string) error {
-	if err := s.repo.Update(userID, map[string]any{"status": 3}); err != nil {
+	if err := s.repo.Update(ctx, userID, map[string]any{"status": 3}); err != nil {
 		return err
 	}
 	if s.blacklist != nil {
@@ -73,7 +79,7 @@ func (s *UserService) BanUser(ctx context.Context, userID string) error {
 }
 
 func (s *UserService) UnbanUser(ctx context.Context, userID string) error {
-	if err := s.repo.Update(userID, map[string]any{"status": 1}); err != nil {
+	if err := s.repo.Update(ctx, userID, map[string]any{"status": 1}); err != nil {
 		return err
 	}
 	if s.blacklist != nil {
