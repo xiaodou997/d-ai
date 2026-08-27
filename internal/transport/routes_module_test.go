@@ -26,6 +26,7 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 		post bool
 	}{
 		{path: "/api/auth/login", name: "auth login", post: true},
+		{path: "/api/v1/jwt-keys", name: "JWT key management", get: true},
 		{path: "/api/v1/tenants", name: "tenant management", get: true, post: true},
 		{path: "/api/v1/payments/topup-orders", name: "payment", post: true},
 		{path: "/api/v1/admin/modules", name: "operations", get: true},

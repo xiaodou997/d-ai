@@ -430,6 +430,10 @@ type publicModule struct {
 	legal  config.LegalConfig
 }
 
+type jwtKeysModule struct {
+	auth platformAuthDeps
+}
+
 type platformOperationsModule struct {
 	announcements announcementModule
 	notifications notificationModule
@@ -448,6 +452,7 @@ type platformIdentityModule struct {
 	tenant   tenantSelfModule
 	branding tenantBrandingModule
 	public   publicModule
+	jwtKeys  jwtKeysModule
 }
 
 type aiModule struct {
@@ -487,6 +492,7 @@ func (m platformIdentityModule) Register(api huma.API) {
 	registerTenantSelf(api, m.tenant)
 	registerTenantBranding(api, m.branding)
 	registerPublic(api, m.public)
+	registerJWTKeys(api, m.jwtKeys)
 }
 
 type aiIdentityProvider interface {
@@ -544,7 +550,8 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 				reader: d.TenantBrandingReader,
 				writer: d.TenantBrandingWriter,
 			},
-			public: publicModule{invite: d.Invite, legal: d.Legal},
+			public:  publicModule{invite: d.Invite, legal: d.Legal},
+			jwtKeys: jwtKeysModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}},
 		},
 		platformBillingModule{payment: paymentModule{
 			auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
@@ -578,7 +585,6 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerAdminUsageBilling(api, d)
 	registerAdminDashboard(api, d)
 	registerAdminEndUsers(api, d)
-	registerJWTKeys(api, d)
 	// 公开端点由 platformIdentityModule 注册。
 }
 

@@ -18,9 +18,9 @@ type jwtKeysOutput struct {
 }
 
 // registerJWTKeys 注册 JWT 签名密钥管理端点（仅 super_admin capability）。
-func registerJWTKeys(api huma.API, d Deps) {
-	jwtSvc := d.JWT
-	superAdmin := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilitySuperAdmin)}
+func registerJWTKeys(api huma.API, d jwtKeysModule) {
+	jwtSvc := d.auth.JWT
+	superAdmin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilitySuperAdmin)}
 
 	huma.Register(api, huma.Operation{OperationID: "list-jwt-keys", Method: http.MethodGet, Path: "/api/v1/jwt-keys",
 		Summary: "JWT 签名密钥列表", Tags: []string{"jwt-keys"}, Middlewares: superAdmin},

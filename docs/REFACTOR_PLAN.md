@@ -131,7 +131,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
-- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开与认证、operations、payment 已提取最小依赖，管理员身份聚合仍需继续拆分。
+- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations 与 payment 已提取最小依赖，管理员身份聚合仍需继续拆分。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
@@ -924,6 +924,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：登录、刷新、激活、MFA、近期认证、当前用户、登出和改密路由改为显式接收认证服务、账号读写/审计端口、限速器、Cookie 策略和日志，不再通过完整 `transport.Deps` 读取身份/运营聚合。
 - 装配：`platformIdentityModule` 内新增 `authModule` 注册认证公开与受保护端点；管理员账号、JWT key 管理和其他管理聚合继续留在平台主模块，避免本次切片扩大状态机范围。
 - 回归：现有认证 cookie、MFA、限速、账号投影和端口契约测试继续通过；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（JWT key transport module split，2026-08-27）
+
+- 依赖：JWT key 列表与轮换路由改为仅接收 JWT 服务和黑名单认证依赖，不再从完整 `transport.Deps` 读取平台其他服务。
+- 装配：`jwtKeysModule` 并入 `platformIdentityModule`，保持超级管理员 capability 和既有 operation/path 不变。
+- 回归：OpenAPI module surface contract 增加 JWT key 代表路径；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
