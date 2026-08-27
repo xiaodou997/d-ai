@@ -248,6 +248,9 @@ func TestLiteLLMSourceStopCancelsRefreshAndPreventsRestart(t *testing.T) {
 	fetcher := newSequenceFetcher(fetchStep{release: release})
 	source := newLiteLLMPriceSource(fetcher, time.Minute, time.Second)
 	source.Start(context.Background())
+	if got := source.Health(); !got.Started || got.Stopped {
+		t.Fatalf("running LiteLLM source health = %+v, want started and not stopped", got)
+	}
 	select {
 	case <-fetcher.started:
 	case <-time.After(time.Second):
@@ -272,6 +275,9 @@ func TestLiteLLMSourceStopCancelsRefreshAndPreventsRestart(t *testing.T) {
 	}
 	if err := source.Stop(stopCtx); err != nil {
 		t.Fatalf("second Stop() error = %v", err)
+	}
+	if got := source.Health(); !got.Stopped {
+		t.Fatalf("stopped LiteLLM source health = %+v, want stopped", got)
 	}
 }
 

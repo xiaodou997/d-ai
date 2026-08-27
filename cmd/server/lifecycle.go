@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+
+	lifecyclepkg "xiaodou/dai/internal/lifecycle"
 )
 
 // shutdownStack owns resources created during application assembly. Entries
@@ -28,19 +30,21 @@ type shutdownEntry struct {
 // idempotent, while every Stop call still gets a chance to wait with its own
 // deadline after an earlier short shutdown deadline expires.
 type periodicWorker struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	once   sync.Once
+	cancel  context.CancelFunc
+	done    chan struct{}
+	once    sync.Once
+	stateMu sync.RWMutex
+	started bool
+	stopped bool
 }
 
-// componentHealth is the lifecycle-only portion of the process health
-// projection. Dependency reachability belongs to /ready; keeping this state
-// separate makes /health useful during startup and shutdown without exposing
-// connection strings, provider details, or other internal diagnostics.
-type componentHealth struct {
-	Started bool `json:"started"`
-	Stopped bool `json:"stopped"`
-}
+var _ lifecyclepkg.Component = (*periodicWorker)(nil)
+
+// componentHealth aliases the shared worker contract. Dependency reachability
+// belongs to /ready; keeping this state separate makes /health useful during
+// startup and shutdown without exposing connection strings, provider details,
+// or other internal diagnostics.
+type componentHealth = lifecyclepkg.HealthSnapshot
 
 const (
 	healthPostgres          = "postgres"
@@ -165,6 +169,27 @@ func (w *periodicWorker) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for the root health
+// projection. A worker is stopped only after its loop has actually exited.
+func (w *periodicWorker) Health() lifecyclepkg.HealthSnapshot {
+	if w == nil {
+		return lifecyclepkg.HealthSnapshot{}
+	}
+	w.stateMu.RLock()
+	started, stopped := w.started, w.stopped
+	w.stateMu.RUnlock()
+	return lifecyclepkg.HealthSnapshot{Started: started, Stopped: stopped}
+}
+
+func (w *periodicWorker) markStopped() {
+	if w == nil {
+		return
+	}
+	w.stateMu.Lock()
+	w.stopped = true
+	w.stateMu.Unlock()
 }
 
 func registerPeriodicWorker(stack *shutdownStack, lifecycle *lifecycleHealth, name, healthName string, worker *periodicWorker) {

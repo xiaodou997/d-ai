@@ -386,11 +386,13 @@ func startHourlyCleanup(ctx context.Context, cleanup func(context.Context)) *per
 	}
 	workerCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
+	worker := &periodicWorker{cancel: cancel, done: done, started: true}
 	go func() {
+		defer worker.markStopped()
 		defer close(done)
 		runHourlyCleanup(workerCtx, cleanup)
 	}()
-	return &periodicWorker{cancel: cancel, done: done}
+	return worker
 }
 
 // runHourlyCleanup runs cleanup immediately, then every hour until ctx cancels.

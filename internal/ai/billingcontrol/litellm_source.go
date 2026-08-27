@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const llmRetryDelay = time.Minute
@@ -90,6 +92,17 @@ func (s *liteLLMPriceSource) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (s *liteLLMPriceSource) Health() lifecycle.HealthSnapshot {
+	if s == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	s.mu.Lock()
+	started, stopped := s.started, s.stopped
+	s.mu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 // Snapshot never waits for network I/O. It returns the newest successful

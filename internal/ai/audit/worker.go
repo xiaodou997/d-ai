@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const (
@@ -100,6 +101,8 @@ type Worker struct {
 	wg          sync.WaitGroup
 }
 
+var _ lifecycle.Component = (*Worker)(nil)
+
 type WorkerOptions struct {
 	StoreImageBlobs bool
 	PollInterval    time.Duration
@@ -182,6 +185,17 @@ func (w *Worker) Stop(ctx context.Context) {
 	}
 	cancel()
 	w.wait(ctx)
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (w *Worker) Health() lifecycle.HealthSnapshot {
+	if w == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	w.lifecycleMu.Lock()
+	started, stopped := w.started, w.stopped
+	w.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (w *Worker) wait(ctx context.Context) {

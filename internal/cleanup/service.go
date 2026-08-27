@@ -18,6 +18,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const (
@@ -99,10 +101,13 @@ type Service struct {
 	mu           sync.RWMutex
 	workerCancel context.CancelFunc
 	workerDone   chan struct{}
+	started      bool
 	stopped      bool
 	startOnce    sync.Once
 	stopOnce     sync.Once
 }
+
+var _ lifecycle.Component = (*Service)(nil)
 
 func NewService(pool *pgxpool.Pool, logger *zap.Logger) *Service {
 	if logger == nil {
@@ -165,6 +170,7 @@ func (s *Service) Start(ctx context.Context) {
 		s.root = ctx
 		s.workerCancel = cancel
 		s.workerDone = done
+		s.started = true
 		s.mu.Unlock()
 
 		go func() {
@@ -218,6 +224,17 @@ func (s *Service) Stop(ctx context.Context) {
 	case <-done:
 	case <-ctx.Done():
 	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (s *Service) Health() lifecycle.HealthSnapshot {
+	if s == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	s.mu.RLock()
+	started, stopped := s.started, s.stopped
+	s.mu.RUnlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (s *Service) GetPolicy(ctx context.Context) (Policy, error) {

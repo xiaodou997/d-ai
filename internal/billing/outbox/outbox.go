@@ -27,6 +27,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/billing/ledger"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 // Charge is one settled AI request awaiting ledger application.
@@ -123,6 +124,8 @@ type Consumer struct {
 	wg          sync.WaitGroup
 }
 
+var _ lifecycle.Component = (*Consumer)(nil)
+
 func NewConsumer(pool *pgxpool.Pool, logger *zap.Logger) *Consumer {
 	if logger == nil {
 		logger = zap.NewNop()
@@ -184,6 +187,17 @@ func (c *Consumer) Stop(ctx context.Context) {
 	}
 	cancel()
 	c.wait(ctx)
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (c *Consumer) Health() lifecycle.HealthSnapshot {
+	if c == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	c.lifecycleMu.Lock()
+	started, stopped := c.started, c.stopped
+	c.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (c *Consumer) wait(ctx context.Context) {

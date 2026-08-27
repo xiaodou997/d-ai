@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/lifecycle"
 )
 
 // BanReconciler periodically re-syncs the Redis ban keys (dai:banned:user:*,
@@ -31,6 +33,8 @@ type BanReconciler struct {
 	wg          sync.WaitGroup
 }
 
+var _ lifecycle.Component = (*BanReconciler)(nil)
+
 // NewBanReconciler constructs a reconciler. interval <= 0 defaults to 5 minutes.
 func NewBanReconciler(pool *pgxpool.Pool, redisClient *redis.Client, logger *zap.Logger, interval time.Duration) *BanReconciler {
 	if interval <= 0 {
@@ -45,7 +49,7 @@ func NewBanReconciler(pool *pgxpool.Pool, redisClient *redis.Client, logger *zap
 // Start launches the periodic reconcile loop in a background goroutine.
 // No-op if redis is nil (ban enforcement itself is disabled in that case).
 func (r *BanReconciler) Start() {
-	if r.redis == nil || r.pool == nil {
+	if r == nil || r.redis == nil || r.pool == nil {
 		return
 	}
 	r.lifecycleMu.Lock()
@@ -65,6 +69,9 @@ func (r *BanReconciler) Start() {
 
 // Stop signals the reconcile loop to exit.
 func (r *BanReconciler) Stop() {
+	if r == nil {
+		return
+	}
 	r.lifecycleMu.Lock()
 	if r.stopped {
 		r.lifecycleMu.Unlock()
@@ -80,6 +87,17 @@ func (r *BanReconciler) Stop() {
 		return
 	}
 	r.wg.Wait()
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (r *BanReconciler) Health() lifecycle.HealthSnapshot {
+	if r == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	r.lifecycleMu.Lock()
+	started, stopped := r.started, r.stopped
+	r.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (r *BanReconciler) run() {

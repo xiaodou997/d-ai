@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const (
@@ -39,6 +40,8 @@ type Worker struct {
 	wg          sync.WaitGroup
 }
 
+var _ lifecycle.Component = (*Worker)(nil)
+
 func NewWorker(checker *Checker, logger *zap.Logger) *Worker {
 	return &Worker{checker: checker, ch: make(chan WorkerTask, workerQueueCap), logger: logger}
 }
@@ -46,6 +49,12 @@ func NewWorker(checker *Checker, logger *zap.Logger) *Worker {
 // Start launches workerCount goroutines draining the queue until ctx is
 // cancelled (server shutdown). workerCount <= 0 uses defaultWorkerCount.
 func (w *Worker) Start(ctx context.Context, workerCount int) {
+	if w == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	w.lifecycleMu.Lock()
 	if w.started || w.stopped {
 		w.lifecycleMu.Unlock()
@@ -69,6 +78,12 @@ func (w *Worker) Start(ctx context.Context, workerCount int) {
 
 // Stop cancels workers and waits for them to observe cancellation.
 func (w *Worker) Stop(ctx context.Context) {
+	if w == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	w.lifecycleMu.Lock()
 	if w.stopped {
 		w.lifecycleMu.Unlock()
@@ -88,6 +103,17 @@ func (w *Worker) Stop(ctx context.Context) {
 	case <-done:
 	case <-ctx.Done():
 	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (w *Worker) Health() lifecycle.HealthSnapshot {
+	if w == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	w.lifecycleMu.Lock()
+	started, stopped := w.started, w.stopped
+	w.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (w *Worker) run(ctx context.Context) {

@@ -133,7 +133,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，平台域仍需继续按 identity/billing/operations 提取最小依赖。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
-- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、data cleanup 和小时级清理任务已补齐幂等停止与等待退出，`/health.components` 已统一暴露生命周期状态，故障级 Health 仍待补齐。
+- [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
@@ -907,6 +907,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 等待：Stop 支持超时返回并可由后续更长上下文继续等待，成功释放任务/投递后不会重复执行释放 SQL；调用方会记录关闭不完整告警。
 - 观测：新增 `HealthSnapshot`，暴露 started/stopped 生命周期状态，不将队列内容或内部错误细节混入健康响应。
 - 回归：新增 Stop-before-Start 与 Health 测试；`go test ./internal/ai/asynctask -run '^TestEngineHealthAndStopBeforeStart$'`、`go vet` 和差异检查通过（完整包测试受限于当前环境 httptest IPv6 监听权限）。
+
+### P1-02（Shared worker Health contract，2026-08-27）
+
+- 合约：新增无基础设施依赖的 `internal/lifecycle.Component` / `HealthSnapshot`，Ban reconciler、cleanup、风险审查、审计 inbox、OAuth refresh、结算 outbox、LiteLLM refresh、异步任务和小时级 worker 均提供锁安全的生命周期 Health。
+- 语义：Health 只表达 started/stopped，不把队列载荷、DSN、Provider 密钥或内部错误细节暴露给管理探针；真实连通性与失败/积压指标继续由 `/ready` 和各领域指标负责。
+- 回归：扩展各 worker 生命周期测试与编译期接口断言，并补充根 health 投影的 async task 状态；相关包测试、`go vet` 和差异检查通过。
 
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 

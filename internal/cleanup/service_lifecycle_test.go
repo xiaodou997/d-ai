@@ -20,6 +20,9 @@ func TestServiceStartStopIsIdempotentAndWaitsForWorker(t *testing.T) {
 	cancel()
 	service := NewService(pool, zap.NewNop())
 	service.Start(workerCtx)
+	if got := service.Health(); !got.Started || got.Stopped {
+		t.Fatalf("running cleanup health = %+v, want started and not stopped", got)
+	}
 
 	service.mu.RLock()
 	done := service.workerDone
@@ -45,6 +48,9 @@ func TestServiceStartStopIsIdempotentAndWaitsForWorker(t *testing.T) {
 	default:
 		t.Fatal("Stop returned before cleanup worker exited")
 	}
+	if got := service.Health(); !got.Stopped {
+		t.Fatalf("stopped cleanup health = %+v, want stopped", got)
+	}
 }
 
 func TestServiceDoesNotStartAfterStop(t *testing.T) {
@@ -57,5 +63,8 @@ func TestServiceDoesNotStartAfterStop(t *testing.T) {
 	service.mu.RUnlock()
 	if done != nil {
 		t.Fatal("Start created a worker after Stop")
+	}
+	if got := service.Health(); !got.Stopped || got.Started {
+		t.Fatalf("cleanup health after stop-before-start = %+v", got)
 	}
 }

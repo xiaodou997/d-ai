@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+
+	"xiaodou/dai/internal/lifecycle"
 )
 
 // Config tunes the engine. Zero values get sensible defaults via withDefaults.
@@ -137,13 +139,11 @@ type Engine struct {
 	wg           sync.WaitGroup
 }
 
-// HealthSnapshot is the lifecycle projection for the async task workers. It
-// intentionally reports process state only; queue depth and task failures are
-// exposed by task metrics and durable task views.
-type HealthSnapshot struct {
-	Started bool `json:"started"`
-	Stopped bool `json:"stopped"`
-}
+// HealthSnapshot keeps the async task package's public name while sharing the
+// common lifecycle contract with other process-owned workers.
+type HealthSnapshot = lifecycle.HealthSnapshot
+
+var _ lifecycle.Component = (*Engine)(nil)
 
 // New builds an Engine. Register handlers on it, then call Start.
 func New(cfg Config, deps Deps) (*Engine, error) {

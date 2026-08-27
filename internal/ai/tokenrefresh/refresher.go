@@ -20,6 +20,7 @@ import (
 
 	pgadapter "xiaodou/dai/internal/ai/adapters/postgres"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 // sanitizeOAuthError truncates an OAuth error response body and masks
@@ -138,6 +139,8 @@ type Refresher struct {
 	wg              sync.WaitGroup
 }
 
+var _ lifecycle.Component = (*Refresher)(nil)
+
 // New creates a Refresher that checks every interval and refreshes credentials
 // expiring within window.
 func New(store *pgadapter.OAuthCredentialStore, logger *zap.Logger) *Refresher {
@@ -198,6 +201,17 @@ func (r *Refresher) Stop(ctx context.Context) {
 	}
 	cancel()
 	r.wait(ctx)
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (r *Refresher) Health() lifecycle.HealthSnapshot {
+	if r == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	r.lifecycleMu.Lock()
+	started, stopped := r.started, r.stopped
+	r.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
 func (r *Refresher) wait(ctx context.Context) {

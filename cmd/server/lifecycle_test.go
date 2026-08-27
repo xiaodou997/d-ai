@@ -136,6 +136,9 @@ func TestPeriodicWorkerStopsIdempotently(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("periodic worker did not run its initial cleanup")
 	}
+	if got := worker.Health(); !got.Started || got.Stopped {
+		t.Fatalf("running worker health = %+v, want started and not stopped", got)
+	}
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -144,6 +147,9 @@ func TestPeriodicWorkerStopsIdempotently(t *testing.T) {
 	}
 	if err := worker.Stop(stopCtx); err != nil {
 		t.Fatalf("second Stop() error = %v", err)
+	}
+	if got := worker.Health(); !got.Stopped {
+		t.Fatalf("stopped worker health = %+v, want stopped", got)
 	}
 }
 

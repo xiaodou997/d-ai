@@ -8,6 +8,7 @@ import (
 
 	corebilling "xiaodou/dai/internal/ai/core/billing"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const maxPricePerToken = 1.0
@@ -17,6 +18,8 @@ type Service struct {
 	repo      Repository
 	llmSource *liteLLMPriceSource
 }
+
+var _ lifecycle.Component = (*Service)(nil)
 
 func New(repo Repository, fetcher LiteLLMFetcher) *Service {
 	return &Service{
@@ -41,6 +44,14 @@ func (s *Service) Stop(ctx context.Context) error {
 		return nil
 	}
 	return s.llmSource.Stop(ctx)
+}
+
+// Health returns the lifecycle state of the background price refresh.
+func (s *Service) Health() lifecycle.HealthSnapshot {
+	if s == nil || s.llmSource == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	return s.llmSource.Health()
 }
 
 func (s *Service) CreatePriceBook(ctx context.Context, name, description string) (domain.PriceBook, error) {

@@ -142,6 +142,6 @@ httpServers.Start / Shutdown
 - Workspace HTTP 已由独立 `WorkspaceHTTPDeps` 组合 tenant/user 工作台端口，并通过 `RegisterWorkspace` 注册两个认证分组；Core 不再注册 14 条工作台路径。
 - 用户自助控制 HTTP 已由独立 `UserSelfControlHTTPDeps` 组合 API key、分组、限额和 `HTTPAuthDeps`，并通过 `RegisterUserSelfControl` 注册终端用户认证分组；Core 不再注册 9 条用户 key/限额路径。
 - 用户自助读取 HTTP 已由独立 `UserSelfReadHTTPDeps` 组合分组、模型目录、用户日志、usage 和 `HTTPAuthDeps`，并通过 `RegisterUserSelfRead` 注册终端用户认证分组；Core 不再注册 5 条用户读取路径。
-- 部分后台组件仍只有 `Start(ctx)` 或 `Start/Stop`，尚未提供自身故障级 `Health`/指标接口；当前 root 级生命周期状态已统一投影到 `/health.components`，且不再有未登记的小时级清理 goroutine。
+- 已纳入进程生命周期的后台组件现在共享 `internal/lifecycle.Component` / `HealthSnapshot` 合约；Health 目前表达 started/stopped 生命周期，队列深度、失败和延迟仍由各自 Prometheus/领域探针提供。请求级短生命周期 goroutine 不纳入该合约，且不再有未登记的小时级清理 goroutine。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
