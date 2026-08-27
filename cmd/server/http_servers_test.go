@@ -34,3 +34,34 @@ func TestNewHTTPServersBuildsIndependentPublicAndManagementListeners(t *testing.
 		t.Fatalf("Shutdown() error = %v", err)
 	}
 }
+
+func TestHTTPServersStartIsIdempotentAndShutdownWaitsForListeners(t *testing.T) {
+	servers := newHTTPServers(httpServerOptions{
+		PublicAddr:        "127.0.0.1:0",
+		ManagementAddr:    "127.0.0.1:0",
+		PublicHandler:     http.NewServeMux(),
+		ManagementHandler: http.NewServeMux(),
+	})
+
+	servers.Start(nil)
+	servers.Start(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := servers.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	select {
+	case <-servers.publicDone:
+	default:
+		t.Fatal("public listener goroutine remained after Shutdown")
+	}
+	select {
+	case <-servers.managementDone:
+	default:
+		t.Fatal("management listener goroutine remained after Shutdown")
+	}
+
+	if err := servers.Shutdown(ctx); err != nil {
+		t.Fatalf("second Shutdown() error = %v", err)
+	}
+}

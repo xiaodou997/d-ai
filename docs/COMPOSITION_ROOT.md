@@ -20,7 +20,7 @@ httpServers.Start / Shutdown
 - `openInfrastructure` 只负责数据库、Redis 连通性和 schema 版本校验，不构造业务模块。
 - `run` 返回可描述的启动错误，避免模块构造失败时直接 `logger.Fatal` 终止进程。
 - `shutdownStack` 记录已成功构造的资源，按构造逆序关闭，并且重复调用安全；因此部分启动失败也会释放已经拿到的基础设施。
-- `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时。
+- `httpServers` 独立管理公共业务监听和 loopback 管理监听；公共 AI 流式监听保持 `WriteTimeout=0`，管理监听使用有限超时，Start/Shutdown 具备幂等保护并等待监听 goroutine 退出。
 - 异步任务引擎已经登记到生命周期栈；收到退出信号后先取消 worker context，再释放 Redis/PostgreSQL。
 - `transport.Deps` 与 AI Core `CoreHTTPDeps` 已按职责收敛；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 已脱离 Core，由独立模块依赖注册。
 - `platformModules` 已集中负责平台身份、计费、运营服务的构造，并统一托管 Ban reconciler 与 scheduler

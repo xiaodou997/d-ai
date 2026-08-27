@@ -134,7 +134,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入 AI 路由，其他域仍待迁移。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，根级生命周期投影已接入 `/health`，组件自身探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、data cleanup 和小时级清理任务已补齐幂等停止与等待退出，`/health.components` 已统一暴露生命周期状态，故障级 Health 仍待补齐。
-- [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块和 AI 异步任务已登记，其他 context-owned worker 仍待补充等待语义。
+- [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
 - [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
@@ -888,6 +888,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：`liteLLMPriceSource` 现在拥有独立的可取消刷新上下文、启动/停止状态和 in-flight refresh 等待通道；重复 Stop 安全，停止后不会重新触发远程刷新。
 - 装配：`billingcontrol.Service.Stop` 暴露最小关闭入口，`aiModules.Stop` 在释放其他 AI worker 时同步取消并等待 LiteLLM 价格刷新，避免根 context 取消后遗留网络 goroutine。
 - 回归：新增刷新取消、停止后禁止重启以及首个 Stop 超时后可用更长上下文再次等待的测试；`go test ./internal/ai/billingcontrol -count=1`、`go test ./cmd/server -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（HTTP listener lifecycle，2026-08-27）
+
+- 生命周期：`httpServers` 增加幂等 Start、关闭状态和公共/管理监听 goroutine 的完成通道；`Shutdown` 在调用标准库关闭后继续等待两个监听循环退出，并支持超时后再次用更长上下文等待。
+- 故障：监听启动失败仍触发根 context 取消，监听 goroutine 无论正常关闭还是异常返回都会关闭完成通道，避免启动失败路径遗留不可观测 goroutine。
+- 回归：增加双监听器重复 Start、Shutdown 等待和重复 Shutdown 测试；`go test ./cmd/server -count=1`、HTTP 生命周期 race 测试、`go vet` 和差异检查通过。
 
 ### P1-01（Database cross-module write boundary completion，2026-08-27）
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -27,6 +28,12 @@ type httpServers struct {
 	management *http.Server
 	logger     *zap.Logger
 	version    string
+
+	lifecycleMu    sync.Mutex
+	started        bool
+	shutdown       bool
+	publicDone     chan struct{}
+	managementDone chan struct{}
 }
 
 func newHTTPServers(opts httpServerOptions) *httpServers {
@@ -64,22 +71,51 @@ func newHTTPServers(opts httpServerOptions) *httpServers {
 }
 
 func (s *httpServers) Start(stop context.CancelFunc) {
+	if s == nil {
+		return
+	}
 	if stop == nil {
 		stop = func() {}
 	}
+	s.lifecycleMu.Lock()
+	if s.started || s.shutdown {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.started = true
+	s.publicDone = make(chan struct{})
 	if s.management != nil {
+		s.managementDone = make(chan struct{})
+	}
+	publicDone := s.publicDone
+	managementDone := s.managementDone
+	management := s.management
+	public := s.public
+	s.lifecycleMu.Unlock()
+
+	if management != nil {
 		go func() {
-			s.logger.Info("D-AI management listener started", zap.String("addr", s.management.Addr))
-			if err := s.management.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.logger.Error("management listener failed", zap.Error(err))
+			defer close(managementDone)
+			if s.logger != nil {
+				s.logger.Info("D-AI management listener started", zap.String("addr", management.Addr))
+			}
+			if err := management.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				if s.logger != nil {
+					s.logger.Error("management listener failed", zap.Error(err))
+				}
 				stop()
 			}
 		}()
 	}
 	go func() {
-		s.logger.Info("D-AI server listening", zap.String("addr", s.public.Addr), zap.String("version", s.version))
-		if err := s.public.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.logger.Error("server failed", zap.Error(err))
+		defer close(publicDone)
+		if s.logger != nil {
+			s.logger.Info("D-AI server listening", zap.String("addr", public.Addr), zap.String("version", s.version))
+		}
+		if err := public.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if s.logger != nil {
+				s.logger.Error("server failed", zap.Error(err))
+			}
 			stop()
 		}
 	}()
@@ -89,16 +125,52 @@ func (s *httpServers) Shutdown(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.lifecycleMu.Lock()
+	s.shutdown = true
+	started := s.started
+	public := s.public
+	management := s.management
+	publicDone := s.publicDone
+	managementDone := s.managementDone
+	s.lifecycleMu.Unlock()
+
 	var errs []error
-	if s.management != nil {
-		if err := s.management.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("management listener: %w", err))
+	if management != nil {
+		shutdownErr := management.Shutdown(ctx)
+		if shutdownErr != nil {
+			errs = append(errs, fmt.Errorf("management listener: %w", shutdownErr))
+		}
+		if started {
+			if waitErr := waitHTTPServerDone(ctx, managementDone); waitErr != nil && !errors.Is(waitErr, shutdownErr) {
+				errs = append(errs, fmt.Errorf("management listener wait: %w", waitErr))
+			}
 		}
 	}
-	if s.public != nil {
-		if err := s.public.Shutdown(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("public listener: %w", err))
+	if public != nil {
+		shutdownErr := public.Shutdown(ctx)
+		if shutdownErr != nil {
+			errs = append(errs, fmt.Errorf("public listener: %w", shutdownErr))
+		}
+		if started {
+			if waitErr := waitHTTPServerDone(ctx, publicDone); waitErr != nil && !errors.Is(waitErr, shutdownErr) {
+				errs = append(errs, fmt.Errorf("public listener wait: %w", waitErr))
+			}
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func waitHTTPServerDone(ctx context.Context, done <-chan struct{}) error {
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
