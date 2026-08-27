@@ -1274,3 +1274,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：在线充值配置、下单、查单和列表端点改为依赖 `PaymentTopupHTTPService`，不再与管理支付配置、提现和人工充值能力共享同一 handler service 字段。
 - 边界：订单归属继续由 application 层 `GetOrderForScope` 校验；管理员支付 handler 保留独立管理 service，避免权限模型混用。
 - 回归：payment、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。
+
+### P1-03（Narrow admin payment HTTP port，2026-08-27）
+
+- 依赖：管理支付路由改为依赖 `AdminPaymentHTTPService`，完整 `PaymentService` 不再直接出现在管理 handler 字段中；在线充值、租户现金和回调端口保持独立。
+- 边界：平台规则、微信配置、订单同步、人工充值冲正、流水和提现 command/query 统一通过管理 application port，管理员权限中间件不变。
+- 回归：payment、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。

@@ -334,6 +334,7 @@ type paymentModule struct {
 	service *paymentsvc.PaymentService
 	cash    PaymentCashHTTPService
 	topup   PaymentTopupHTTPService
+	admin   AdminPaymentHTTPService
 	logger  *zap.Logger
 }
 

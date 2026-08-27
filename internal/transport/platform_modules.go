@@ -18,6 +18,7 @@ import (
 	notificationpkg "xiaodou/dai/internal/notification"
 	paymentpkg "xiaodou/dai/internal/payment"
 	paymentsvc "xiaodou/dai/internal/payment/service"
+	"xiaodou/dai/internal/payment/wechat"
 	systempkg "xiaodou/dai/internal/system"
 	systemports "xiaodou/dai/internal/system/ports"
 	tenantports "xiaodou/dai/internal/tenant/ports"
@@ -183,6 +184,23 @@ type PaymentTopupHTTPService interface {
 	CreateTopupOrder(context.Context, paymentsvc.CreateTopupOrderParams) (*paymentpkg.Order, error)
 	GetOrderForScope(context.Context, string, string, string) (*paymentpkg.Order, error)
 	ListOrders(context.Context, paymentpkg.ListOrdersParams) ([]*paymentpkg.Order, int64, error)
+}
+
+type AdminPaymentHTTPService interface {
+	GetGlobalSettings(context.Context) (*paymentpkg.GlobalSettings, error)
+	UpdateGlobalSettings(context.Context, *paymentpkg.GlobalSettings, string) error
+	GetWechatConfigView(context.Context) (*wechat.AdminView, error)
+	UpdateWechatConfig(context.Context, wechat.UpdateInput, string) error
+	ListOrders(context.Context, paymentpkg.ListOrdersParams) ([]*paymentpkg.Order, int64, error)
+	SyncOrder(context.Context, string) (*paymentpkg.Order, error)
+	ListAdminRechargeOrders(context.Context, paymentpkg.ListAdminRechargeOrdersParams) ([]paymentpkg.AdminRechargeOrder, int64, error)
+	GetAdminRechargeOrder(context.Context, string) (*paymentpkg.AdminRechargeOrder, error)
+	SyncAdminRechargeOrder(context.Context, string) (*paymentpkg.AdminRechargeOrder, error)
+	ReverseManualRechargeCredit(context.Context, string, string, string) (*paymentpkg.AdminRechargeOrder, error)
+	RecordAdminRechargeRefund(context.Context, string, paymentsvc.RecordCompletedRefundParams) (*paymentpkg.AdminRechargeOrder, error)
+	ListCashLedger(context.Context, string, string, int, int) ([]*paymentpkg.CashLedgerEntry, int64, error)
+	ListWithdrawals(context.Context, paymentpkg.WithdrawalListParams) ([]*paymentpkg.Withdrawal, int64, error)
+	CreateWithdrawal(context.Context, paymentsvc.CreateWithdrawalParams) (*paymentpkg.Withdrawal, error)
 }
 
 // PlatformBillingModuleDeps groups the platform billing route module.
@@ -378,6 +396,7 @@ func NewPlatformBillingModule(d PlatformBillingModuleDeps) Module {
 		service: d.Payment.Service,
 		cash:    d.Payment.Service,
 		topup:   d.Payment.Service,
+		admin:   d.Payment.Service,
 		logger:  d.Payment.Logger,
 	}}
 }

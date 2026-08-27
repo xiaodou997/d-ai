@@ -199,3 +199,5 @@ HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台
 租户现金 HTTP 模块通过 `PaymentCashHTTPService` 接收余额、流水和支付设置能力，与在线充值和管理支付路由隔离。
 
 在线充值 HTTP 模块通过 `PaymentTopupHTTPService` 接收配置、下单和订单查询能力；管理支付继续使用独立的管理 service 字段。
+
+管理支付 HTTP 模块通过 `AdminPaymentHTTPService` 接收平台配置、订单、人工充值和提现能力，与在线充值、租户现金及微信回调端口隔离。
