@@ -354,8 +354,9 @@ type Module interface {
 	Register(api huma.API)
 }
 
-type platformModule struct {
-	deps Deps
+type metaModule struct {
+	version string
+	jwt     *auth.JWTService
 }
 
 type platformAuthDeps struct {
@@ -490,15 +491,16 @@ type aiModule struct {
 	deps     AIHTTPDeps
 }
 
-var _ Module = platformModule{}
+var _ Module = metaModule{}
 var _ Module = platformOperationsModule{}
 var _ Module = platformBillingModule{}
 var _ Module = platformIdentityModule{}
 var _ Module = platformAdminModule{}
 var _ Module = aiModule{}
 
-func (m platformModule) Register(api huma.API) {
-	registerMeta(api, m.deps)
+func (m metaModule) Register(api huma.API) {
+	registerInfo(api, m.version)
+	registerJWKS(api, m.jwt)
 }
 
 func (m platformOperationsModule) Register(api huma.API) {
@@ -566,7 +568,7 @@ func (m aiModule) Register(api huma.API) {
 // Register 在 Huma API 上注册平台端点和显式 AI 模块。
 func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	modules := []Module{
-		platformModule{deps: d},
+		metaModule{version: d.Version, jwt: d.JWT},
 		platformIdentityModule{
 			auth: authModule{
 				platformAuthDeps:  platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
@@ -631,11 +633,6 @@ func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	for _, module := range modules {
 		module.Register(api)
 	}
-}
-
-func registerMeta(api huma.API, d Deps) {
-	registerInfo(api, d.Version)
-	registerJWKS(api, d.JWT)
 }
 
 func buildAICoreHTTPDeps(platform aiPlatformDeps, d AICoreHTTPDeps, identity aiIdentityProvider) aitransport.CoreHTTPDeps {

@@ -29,7 +29,8 @@ httpServers.Start / Shutdown
   outbox 结算使用 billing pool，未配置时仅在非生产环境回退到主 pool，避免把权限切换误带入开发环境。
 - `aiModules` 已集中负责 AI 控制面、Serving pipeline、Gateway、Console 和异步 worker 的构造；
   `Start/Stop` 统一管理价格同步、风险审查、审计、Token refresh、结算和异步任务，LiteLLM 远程刷新在 Stop 时会取消并等待退出。
-- 平台 HTTP 路由现在与 AI 路由一样通过 `transport.Module` 注册；平台模块暂时复用分组后的 `transport.Deps`，后续按 identity/billing/operations 角色继续缩小依赖。
+- 平台 HTTP 路由现在与 AI 路由一样通过 `transport.Module` 注册；identity、billing、operations 和管理员模块已逐步改用显式依赖，剩余聚合依赖继续收敛。
+- 元数据与 JWKS 已由最小 `metaModule` 注册，仅接收版本字符串和 JWT 服务；平台主模块不再作为完整依赖容器参与路由注册。
 - 运营 HTTP 路由已从平台主模块拆成显式 `platformOperationsModule`，公告、通知、系统模块、数据清理和代理节点只接收各自服务及统一平台认证依赖；其余管理聚合路由仍待继续拆分。
 - 计费 HTTP 路由已从平台主模块拆成显式 `platformBillingModule`，在线充值、租户额度、管理支付和微信回调共享仅支付服务与平台认证/日志依赖；充值/管理聚合编排仍待继续收敛。
 - 身份自助与公开路由已拆成显式 `platformIdentityModule`，账户查询、租户自助、门户品牌和公开邀请只接收各自端口及平台认证/法律配置；管理员账号聚合和认证状态写入仍待继续拆分。

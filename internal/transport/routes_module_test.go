@@ -9,7 +9,7 @@ import (
 func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 	_, api := humatest.New(t)
 	modules := []Module{
-		platformModule{deps: Deps{}},
+		metaModule{},
 		platformIdentityModule{},
 		platformAdminModule{},
 		platformBillingModule{},
@@ -27,6 +27,7 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 		post bool
 	}{
 		{path: "/api/auth/login", name: "auth login", post: true},
+		{path: "/api/v1/info", name: "service metadata", get: true},
 		{path: "/api/v1/jwt-keys", name: "JWT key management", get: true},
 		{path: "/api/v1/tenants", name: "tenant management", get: true, post: true},
 		{path: "/api/v1/system-admins", name: "admin accounts", get: true, post: true},

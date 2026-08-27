@@ -943,6 +943,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：AI Transport 仍可通过显式构造函数取得所需平台认证与 identity provider，平台账务、运营和管理服务不会进入 AI 路由依赖容器。
 - 回归：更新 AI HTTP 依赖 wiring 测试，覆盖全部纵向模块的认证端口投影；`go test ./internal/transport -count=1`、`go test ./cmd/server -count=1`、`go vet` 和差异检查通过。
 
+### P1-02（Minimal metadata transport module，2026-08-27）
+
+- 依赖：服务信息与 JWKS 公钥端点改由 `metaModule` 注册，仅接收版本字符串和 JWT 服务，不再把完整平台 `Deps` 传给元数据路由。
+- 装配：移除仅承载元数据的空壳 `platformModule`，平台 identity/admin/billing/operations/AI 模块按职责并列注册。
+- 回归：OpenAPI module surface contract 增加服务信息路径并确认 JWKS/平台代表路由仍存在；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
 - 生命周期：`asynctask.Engine` 现在自持有 worker context，Start/Stop 幂等且 Stop-before-Start 会阻止后续启动；停止时先取消 worker、webhook 和 reaper 循环，再执行租约释放。
