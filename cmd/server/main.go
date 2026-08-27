@@ -121,65 +121,24 @@ func run() error {
 	// 2. 平台身份与计费域装配
 	// ──────────────────────────────────────────────────────
 
-	platform, err := buildPlatformModules(cfg, pool, billingPool, redisClient, appLogger)
+	platformRole, err := assemblePlatformRuntimeRole(ctx, cfg, pool, billingPool, redisClient, appLogger, shutdowns, lifecycle)
 	if err != nil {
 		return fmt.Errorf("build platform modules failed: %w", err)
 	}
-	platform.Start(ctx)
-	shutdowns.Add("platform modules", func(ctx context.Context) error {
-		err := platform.Stop(ctx)
-		if err != nil {
-			return err
-		}
-		lifecycle.MarkStopped(healthPlatformModules)
-		if platform.banReconciler != nil {
-			lifecycle.MarkStopped(healthBanReconciler)
-		}
-		if platform.sched != nil {
-			lifecycle.MarkStopped(healthScheduler)
-		}
-		return nil
-	})
-	lifecycle.MarkStarted(healthPlatformModules)
-	if platform.banReconciler != nil {
-		lifecycle.MarkStarted(healthBanReconciler)
-	}
-	if platform.sched != nil {
-		lifecycle.MarkStarted(healthScheduler)
-	}
-	sessionSvc := platform.Sessions
-	activationSvc := platform.Activations
-	dataCleanupSvc := platform.DataCleanup
+	platform := platformRole.modules
+	sessionSvc := platformRole.sessions
+	activationSvc := platformRole.activations
+	dataCleanupSvc := platformRole.dataCleanup
 
 	// ──────────────────────────────────────────────────────
 	// 3. AI 域服务装配
 	// ──────────────────────────────────────────────────────
 
-	ai, err := buildAIModules(cfg, pool, billingPool, redisClient, appLogger, platform)
+	aiRole, err := assembleAIRuntimeRole(ctx, cfg, pool, billingPool, redisClient, appLogger, platformRole, shutdowns, lifecycle)
 	if err != nil {
 		return fmt.Errorf("build AI modules failed: %w", err)
 	}
-	ai.Start(ctx)
-	shutdowns.Add("AI modules", func(ctx context.Context) error {
-		if err := ai.Stop(ctx); err != nil {
-			return err
-		}
-		lifecycle.MarkStopped(healthAIModules)
-		if ai.RuntimeGateway != nil && ai.RuntimeGateway.Health().Stopped {
-			lifecycle.MarkStopped(healthRuntimeGateway)
-		}
-		if ai.AsyncTasks != nil {
-			lifecycle.MarkStopped(healthAsyncTasks)
-		}
-		return nil
-	})
-	lifecycle.MarkStarted(healthAIModules)
-	if ai.RuntimeGateway != nil && ai.RuntimeGateway.Health().Started {
-		lifecycle.MarkStarted(healthRuntimeGateway)
-	}
-	if ai.AsyncTasks != nil {
-		lifecycle.MarkStarted(healthAsyncTasks)
-	}
+	ai := aiRole.modules
 	fileStore := ai.FileStore
 	imageAssetSvc := ai.ImageAssets
 	runtimeGateway := ai.RuntimeGateway

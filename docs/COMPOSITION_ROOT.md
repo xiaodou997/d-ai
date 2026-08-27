@@ -184,6 +184,8 @@ httpServers.Start / Shutdown
 
 HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台、AI worker、小时任务和基础设施共享同一逆序关闭链；启动中途失败时也能释放已创建的监听资源。
 
+组合根通过 `platformRuntimeRole` / `aiRuntimeRole` 明确两个运行角色的装配和生命周期边界；AI 角色依赖平台角色先完成，二者的 shutdown callback 按依赖逆序登记。
+
 公告 HTTP 模块通过 `AnnouncementHTTPService` 窄端口接收查询、草稿和状态转换能力；具体公告 application service 只在组合根构造并投影，Transport 不再暴露实现类型。
 
 系统模块 HTTP 通过 `SystemHTTPService` 窄端口接收状态和 PII 配置 command/query；具体 `system.Service` 仅由组合根持有。
