@@ -176,3 +176,115 @@ func TestServiceCallerCancellationDoesNotPoisonSharedDiscovery(t *testing.T) {
 		t.Fatalf("inspection calls = %d, want 1", inspections.Load())
 	}
 }
+
+func TestServiceStopCancelsInFlightDiscovery(t *testing.T) {
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	release := make(chan struct{})
+	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
+	}), inspectorStub{
+		supported: true,
+		inspect: func(ctx context.Context, _ clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
+			close(started)
+			<-ctx.Done()
+			close(canceled)
+			<-release
+			return clientruntime.InspectionSnapshot{}, ctx.Err()
+		},
+	}, nil)
+	pool := domain.CredentialPool{ID: "pool-stop", FixedProviderType: domain.FixedProviderCodex}
+	service.Start(context.Background())
+	resultDone := make(chan Result, 1)
+	go func() {
+		resultDone <- service.Resolve(context.Background(), pool)
+	}()
+	<-started
+
+	shortCtx, shortCancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err := service.Stop(shortCtx)
+	shortCancel()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		close(release)
+		t.Fatalf("short Stop() error = %v, want context.DeadlineExceeded", err)
+	}
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("in-flight discovery did not receive cancellation")
+	}
+	shortCancel()
+	close(release)
+	if err := service.Stop(context.Background()); err != nil {
+		t.Fatalf("second Stop() error = %v", err)
+	}
+	if result := <-resultDone; result.Source != "fallback" {
+		t.Fatalf("stopped discovery source = %q, want fallback", result.Source)
+	}
+	health := service.Health()
+	if !health.Started || !health.Stopped {
+		t.Fatalf("health after Stop = %+v, want started and stopped", health)
+	}
+}
+
+func TestServiceStopBeforeStartPreventsDiscovery(t *testing.T) {
+	var inspections atomic.Int32
+	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
+	}), inspectorStub{
+		supported: true,
+		inspect: func(context.Context, clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
+			inspections.Add(1)
+			return clientruntime.InspectionSnapshot{Models: []clientruntime.ModelCard{{ID: "gpt-live"}}}, nil
+		},
+	}, nil)
+	if err := service.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	result := service.Resolve(context.Background(), domain.CredentialPool{
+		ID: "pool-stop-before-start", FixedProviderType: domain.FixedProviderCodex,
+	})
+	if result.Source != "fallback" {
+		t.Fatalf("stopped-before-start source = %q, want fallback", result.Source)
+	}
+	if inspections.Load() != 0 {
+		t.Fatalf("inspections after Stop-before-Start = %d, want 0", inspections.Load())
+	}
+}
+
+func TestServiceOwnerContextCancelsInFlightDiscovery(t *testing.T) {
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	service := New(selectorFunc(func(context.Context, string, string) (*domain.OAuthCredential, error) {
+		return &domain.OAuthCredential{ID: "credential-1", AccessToken: "token"}, nil
+	}), inspectorStub{
+		supported: true,
+		inspect: func(ctx context.Context, _ clientruntime.Inspection) (clientruntime.InspectionSnapshot, error) {
+			close(started)
+			<-ctx.Done()
+			close(canceled)
+			return clientruntime.InspectionSnapshot{}, ctx.Err()
+		},
+	}, nil)
+	ownerCtx, cancelOwner := context.WithCancel(context.Background())
+	service.Start(ownerCtx)
+	resultDone := make(chan Result, 1)
+	go func() {
+		resultDone <- service.Resolve(context.Background(), domain.CredentialPool{
+			ID: "pool-owner-context", FixedProviderType: domain.FixedProviderCodex,
+		})
+	}()
+	<-started
+	cancelOwner()
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("owner context did not cancel in-flight discovery")
+	}
+	if result := <-resultDone; result.Source != "fallback" {
+		t.Fatalf("owner-canceled discovery source = %q, want fallback", result.Source)
+	}
+	if err := service.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() after owner cancellation = %v", err)
+	}
+}

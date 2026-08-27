@@ -2,6 +2,7 @@ package clientcatalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"xiaodou/dai/internal/ai/clientruntime"
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/lifecycle"
 )
 
 const (
@@ -39,6 +41,8 @@ type cacheEntry struct {
 	nextAttempt time.Time
 }
 
+var errServiceStopped = errors.New("client catalog service is stopped")
+
 // Service owns live fixed-provider model discovery, cache revalidation,
 // stale-if-error behavior, and versioned built-in fallbacks.
 type Service struct {
@@ -54,7 +58,17 @@ type Service struct {
 	mu      sync.Mutex
 	entries map[string]cacheEntry
 	flights singleflight.Group
+
+	lifecycleMu sync.Mutex
+	started     bool
+	stopped     bool
+	ownerCtx    context.Context
+	nextLoadID  uint64
+	activeLoads map[uint64]context.CancelFunc
+	loadWG      sync.WaitGroup
 }
+
+var _ lifecycle.Component = (*Service)(nil)
 
 func New(selector CredentialSelector, inspector clientruntime.Inspector, logger *zap.Logger) *Service {
 	if logger == nil {
@@ -69,10 +83,79 @@ func New(selector CredentialSelector, inspector clientruntime.Inspector, logger 
 		fetchTimeout:   DefaultFetchTimeout,
 		now:            time.Now,
 		entries:        make(map[string]cacheEntry),
+		activeLoads:    make(map[uint64]context.CancelFunc),
 	}
 }
 
+// Start marks the catalog as owned by the process lifecycle. Resolve remains
+// usable before Start for lightweight callers and tests; Start is idempotent
+// and a stopped catalog cannot be restarted.
+func (s *Service) Start(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.lifecycleMu.Lock()
+	if s.started || s.stopped {
+		s.lifecycleMu.Unlock()
+		return
+	}
+	s.started = true
+	s.ownerCtx = ctx
+	s.lifecycleMu.Unlock()
+}
+
+// Stop cancels every in-flight provider discovery and waits for the
+// singleflight leader to leave the selector/inspector path. It is safe to call
+// again with a longer context after an earlier wait timed out.
+func (s *Service) Stop(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.lifecycleMu.Lock()
+	s.stopped = true
+	s.ownerCtx = nil
+	cancels := make([]context.CancelFunc, 0, len(s.activeLoads))
+	for _, cancel := range s.activeLoads {
+		cancels = append(cancels, cancel)
+	}
+	s.lifecycleMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		s.loadWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Health returns a lock-safe lifecycle snapshot for management probes.
+func (s *Service) Health() lifecycle.HealthSnapshot {
+	if s == nil {
+		return lifecycle.HealthSnapshot{}
+	}
+	s.lifecycleMu.Lock()
+	started, stopped := s.started, s.stopped
+	s.lifecycleMu.Unlock()
+	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
+}
+
 func (s *Service) Resolve(ctx context.Context, pool domain.CredentialPool) Result {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if s == nil || s.selector == nil || s.inspector == nil ||
 		!s.inspector.SupportsInspection(pool.FixedProviderType, clientruntime.InspectModels) {
 		if s != nil && s.now != nil {
@@ -89,8 +172,11 @@ func (s *Service) Resolve(ctx context.Context, pool domain.CredentialPool) Resul
 		if cached, ok := s.cachedResult(pool.ID); ok {
 			return cached, nil
 		}
-		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.fetchTimeout)
-		defer cancel()
+		fetchCtx, release, ok := s.beginLoad(ctx)
+		if !ok {
+			return Result{}, errServiceStopped
+		}
+		defer release()
 		return s.refresh(fetchCtx, pool)
 	})
 	select {
@@ -100,6 +186,9 @@ func (s *Service) Resolve(ctx context.Context, pool domain.CredentialPool) Resul
 		if outcome.Err == nil {
 			return cloneResult(outcome.Val.(Result))
 		}
+		if errors.Is(outcome.Err, errServiceStopped) {
+			return s.staleOrFallback(pool)
+		}
 		s.logger.Warn("fixed-provider model discovery failed",
 			zap.String("pool_id", pool.ID),
 			zap.String("fixed_provider_type", string(pool.FixedProviderType)),
@@ -107,6 +196,48 @@ func (s *Service) Resolve(ctx context.Context, pool domain.CredentialPool) Resul
 		)
 		return s.staleOrFallback(pool)
 	}
+}
+
+func (s *Service) beginLoad(callerCtx context.Context) (context.Context, func(), bool) {
+	base := context.WithoutCancel(callerCtx)
+	timeout := s.fetchTimeout
+	if timeout <= 0 {
+		timeout = DefaultFetchTimeout
+	}
+	fetchCtx, cancel := context.WithTimeout(base, timeout)
+	s.lifecycleMu.Lock()
+	if s.stopped {
+		s.lifecycleMu.Unlock()
+		cancel()
+		return nil, nil, false
+	}
+	if s.activeLoads == nil {
+		s.activeLoads = make(map[uint64]context.CancelFunc)
+	}
+	ownerCtx := s.ownerCtx
+	s.nextLoadID++
+	id := s.nextLoadID
+	s.activeLoads[id] = cancel
+	s.loadWG.Add(1)
+	s.lifecycleMu.Unlock()
+
+	stopOwner := func() {}
+	if ownerCtx != nil {
+		stop := context.AfterFunc(ownerCtx, cancel)
+		stopOwner = func() { stop() }
+	}
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			stopOwner()
+			cancel()
+			s.lifecycleMu.Lock()
+			delete(s.activeLoads, id)
+			s.lifecycleMu.Unlock()
+			s.loadWG.Done()
+		})
+	}
+	return fetchCtx, release, true
 }
 
 func (s *Service) cachedResult(poolID string) (Result, bool) {
