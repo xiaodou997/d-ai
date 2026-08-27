@@ -10,6 +10,7 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 	_, api := humatest.New(t)
 	modules := []Module{
 		platformModule{deps: Deps{}},
+		platformIdentityModule{},
 		platformBillingModule{},
 		platformOperationsModule{},
 	}

@@ -394,6 +394,27 @@ type paymentModule struct {
 	logger  *zap.Logger
 }
 
+type accountModule struct {
+	auth    platformAuthDeps
+	queries billingports.AccountQueryReader
+}
+
+type tenantSelfModule struct {
+	auth    platformAuthDeps
+	service tenantports.TenantSelfService
+}
+
+type tenantBrandingModule struct {
+	auth   platformAuthDeps
+	reader tenantports.PortalBrandingReader
+	writer tenantports.PortalBrandingWriter
+}
+
+type publicModule struct {
+	invite inviteports.PublicService
+	legal  config.LegalConfig
+}
+
 type platformOperationsModule struct {
 	announcements announcementModule
 	notifications notificationModule
@@ -406,6 +427,13 @@ type platformBillingModule struct {
 	payment paymentModule
 }
 
+type platformIdentityModule struct {
+	account  accountModule
+	tenant   tenantSelfModule
+	branding tenantBrandingModule
+	public   publicModule
+}
+
 type aiModule struct {
 	platform Deps
 	deps     AIHTTPDeps
@@ -414,6 +442,7 @@ type aiModule struct {
 var _ Module = platformModule{}
 var _ Module = platformOperationsModule{}
 var _ Module = platformBillingModule{}
+var _ Module = platformIdentityModule{}
 var _ Module = aiModule{}
 
 func (m platformModule) Register(api huma.API) {
@@ -433,6 +462,13 @@ func (m platformBillingModule) Register(api huma.API) {
 	registerPayment(api, m.payment)
 	registerTenantCash(api, m.payment)
 	registerAdminPayment(api, m.payment)
+}
+
+func (m platformIdentityModule) Register(api huma.API) {
+	registerAccount(api, m.account)
+	registerTenantSelf(api, m.tenant)
+	registerTenantBranding(api, m.branding)
+	registerPublic(api, m.public)
 }
 
 type aiIdentityProvider interface {
@@ -468,6 +504,16 @@ func (m aiModule) Register(api huma.API) {
 func Register(api huma.API, d Deps, ai AIHTTPDeps) {
 	modules := []Module{
 		platformModule{deps: d},
+		platformIdentityModule{
+			account: accountModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, queries: d.AccountQueries},
+			tenant:  tenantSelfModule{auth: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist}, service: d.TenantSelf},
+			branding: tenantBrandingModule{
+				auth:   platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+				reader: d.TenantBrandingReader,
+				writer: d.TenantBrandingWriter,
+			},
+			public: publicModule{invite: d.Invite, legal: d.Legal},
+		},
 		platformBillingModule{payment: paymentModule{
 			auth:    platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
 			service: d.Payment,
@@ -506,13 +552,8 @@ func registerPublicPlane(api huma.API, d Deps) {
 	registerAdminUsageBilling(api, d)
 	registerAdminDashboard(api, d)
 	registerAdminEndUsers(api, d)
-	registerAccount(api, d)
-	registerTenantSelf(api, d)
-	registerTenantBranding(api, d)
 	registerJWTKeys(api, d)
-	// 公开端点（无认证）
-	registerPublic(api, d)
-
+	// 公开端点由 platformIdentityModule 注册。
 }
 
 func buildAICoreHTTPDeps(platform Deps, d AICoreHTTPDeps, identity aiIdentityProvider) aitransport.CoreHTTPDeps {
@@ -840,7 +881,7 @@ func RegisterPublicRaw(mux *chi.Mux, d Deps) {
 		logger:  d.Logger,
 	})
 	mux.Post("/api/v1/payments/wechat/notify", notifyHandler.wechatNotify)
-	registerTenantBrandingRaw(mux, d)
+	registerTenantBrandingRaw(mux, tenantBrandingModule{reader: d.TenantBrandingReader})
 }
 
 var _ = http.MethodGet

@@ -64,9 +64,9 @@ type updateTenantFaviconInput struct {
 	}
 }
 
-func registerTenantBranding(api huma.API, d Deps) {
-	h := newTenantBrandingHandlers(d.TenantBrandingReader, d.TenantBrandingWriter)
-	ua := userAuth(api, d.JWT, d.Blacklist)
+func registerTenantBranding(api huma.API, d tenantBrandingModule) {
+	h := newTenantBrandingHandlers(d.reader, d.writer)
+	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	tenantOnly := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf)}
 	customerOnly := huma.Middlewares{ua, requireCapability(api, auth.CapabilityCustomerSelf)}
 
@@ -82,8 +82,8 @@ func registerTenantBranding(api huma.API, d Deps) {
 		Summary: "当前用户门户品牌", Tags: []string{"customer-branding"}, Middlewares: customerOnly}, h.getCustomerPortalBrand)
 }
 
-func registerTenantBrandingRaw(mux *chi.Mux, d Deps) {
-	h := newTenantBrandingHandlers(d.TenantBrandingReader, nil)
+func registerTenantBrandingRaw(mux *chi.Mux, d tenantBrandingModule) {
+	h := newTenantBrandingHandlers(d.reader, nil)
 	mux.Get("/api/v1/public/tenant-brands/{tenantId}/favicon", h.serveFavicon)
 }
 

@@ -131,7 +131,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
 - [~] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台与 AI 容器已分离并按域分组，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，平台根容器和 Transport 业务逻辑仍待拆除。
-- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，operations 与 payment 已提取最小依赖，平台 identity/管理聚合仍需继续拆分。
+- [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、operations 与 payment 已提取最小依赖，管理员身份聚合仍需继续拆分。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
@@ -912,6 +912,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：在线充值、租户额度、管理支付和微信回调路由改为显式接收支付服务与平台认证/日志依赖，不再通过完整 `transport.Deps` 构造支付 handler。
 - 装配：新增 `platformBillingModule`，由统一 `transport.Module` 列表注册支付相关 Huma 路由；原生微信回调继续保留在 `RegisterRaw`，仅复用同一窄支付依赖。
 - 回归：OpenAPI module surface contract 增加支付代表路径，确认注册顺序和对外 operation/path 不变；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
+
+### P1-02（Identity self-service transport module split，2026-08-27）
+
+- 依赖：账户余额/充值查询、租户自助、门户品牌和公开邀请路由改为显式接收查询端口、租户自助/品牌端口、公开邀请端口及平台认证/法律配置，不再从完整 `transport.Deps` 读取无关服务。
+- 装配：新增 `platformIdentityModule`，与计费/运营模块并列注册；原生公开 favicon 路由复用窄品牌依赖，认证与管理员聚合路由暂留平台主模块。
+- 回归：OpenAPI module surface contract 增加身份自助和公开代表路径，确认既有 operation/path 不变；`go test ./internal/transport -count=1`、`go vet` 和差异检查通过。
 
 ### P1-02（Async task engine lifecycle，2026-08-27）
 

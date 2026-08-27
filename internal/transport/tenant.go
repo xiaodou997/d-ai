@@ -124,9 +124,9 @@ type userConsumptionOutput struct {
 }
 
 // registerTenantSelf 注册租户自助端点（tenant_self capability）。
-func registerTenantSelf(api huma.API, d Deps) {
-	h := newTenantSelfHandlers(d.TenantSelf)
-	tenantOnly := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
+func registerTenantSelf(api huma.API, d tenantSelfModule) {
+	h := newTenantSelfHandlers(d.service)
+	tenantOnly := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",
 		Summary: "当前租户用户信息", Tags: []string{"tenant-self"}, Middlewares: tenantOnly}, h.me)

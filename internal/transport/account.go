@@ -62,9 +62,9 @@ type accountStatsOutput struct {
 }
 
 // registerAccount 注册账户自助端点（RequireAuthenticated：1/2/3/4）。
-func registerAccount(api huma.API, d Deps) {
-	h := newAccountHandlers(d.AccountQueries)
-	authed := huma.Middlewares{userAuth(api, d.JWT, d.Blacklist), requireAnyCapability(api,
+func registerAccount(api huma.API, d accountModule) {
+	h := newAccountHandlers(d.queries)
+	authed := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireAnyCapability(api,
 		auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin,
 		auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf,
 	)}

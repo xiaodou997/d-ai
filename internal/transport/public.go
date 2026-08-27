@@ -18,10 +18,10 @@ type publicHandlers struct {
 	legal  config.LegalConfig
 }
 
-func newPublicHandlers(d Deps) *publicHandlers {
+func newPublicHandlers(d publicModule) *publicHandlers {
 	return &publicHandlers{
-		invite: d.Invite,
-		legal:  d.Legal,
+		invite: d.invite,
+		legal:  d.legal,
 	}
 }
 
@@ -70,7 +70,7 @@ type publicRegistrationOutput struct {
 }
 
 // registerPublic 注册无需认证的公开端点（邀请查询 + 邀请注册）。
-func registerPublic(api huma.API, d Deps) {
+func registerPublic(api huma.API, d publicModule) {
 	h := newPublicHandlers(d)
 
 	huma.Register(api, huma.Operation{
