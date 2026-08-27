@@ -177,9 +177,9 @@ func (r *Refresher) Start(ctx context.Context) {
 
 // Stop cancels the refresh loop and waits for an in-flight provider request
 // and its persistence decision to finish.
-func (r *Refresher) Stop(ctx context.Context) {
+func (r *Refresher) Stop(ctx context.Context) error {
 	if r == nil {
-		return
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -189,18 +189,18 @@ func (r *Refresher) Stop(ctx context.Context) {
 		started := r.started
 		r.lifecycleMu.Unlock()
 		if started {
-			r.wait(ctx)
+			return r.wait(ctx)
 		}
-		return
+		return nil
 	}
 	r.stopped = true
 	started, cancel := r.started, r.cancel
 	r.lifecycleMu.Unlock()
 	if !started {
-		return
+		return nil
 	}
 	cancel()
-	r.wait(ctx)
+	return r.wait(ctx)
 }
 
 // Health returns a lock-safe lifecycle snapshot for management probes.
@@ -214,12 +214,14 @@ func (r *Refresher) Health() lifecycle.HealthSnapshot {
 	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
-func (r *Refresher) wait(ctx context.Context) {
+func (r *Refresher) wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() { r.wg.Wait(); close(done) }()
 	select {
 	case <-done:
+		return nil
 	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

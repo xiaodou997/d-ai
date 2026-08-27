@@ -77,9 +77,9 @@ func (w *Worker) Start(ctx context.Context, workerCount int) {
 }
 
 // Stop cancels workers and waits for them to observe cancellation.
-func (w *Worker) Stop(ctx context.Context) {
+func (w *Worker) Stop(ctx context.Context) error {
 	if w == nil {
-		return
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -89,27 +89,29 @@ func (w *Worker) Stop(ctx context.Context) {
 		started := w.started
 		w.lifecycleMu.Unlock()
 		if started {
-			w.wait(ctx)
+			return w.wait(ctx)
 		}
-		return
+		return nil
 	}
 	w.stopped = true
 	started := w.started
 	cancel := w.cancel
 	w.lifecycleMu.Unlock()
 	if !started {
-		return
+		return nil
 	}
 	cancel()
-	w.wait(ctx)
+	return w.wait(ctx)
 }
 
-func (w *Worker) wait(ctx context.Context) {
+func (w *Worker) wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() { w.wg.Wait(); close(done) }()
 	select {
 	case <-done:
+		return nil
 	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

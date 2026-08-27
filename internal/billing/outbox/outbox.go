@@ -163,9 +163,9 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 // Stop cancels polling and waits for the current transaction/batch to finish.
-func (c *Consumer) Stop(ctx context.Context) {
+func (c *Consumer) Stop(ctx context.Context) error {
 	if c == nil {
-		return
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -175,18 +175,18 @@ func (c *Consumer) Stop(ctx context.Context) {
 		started := c.started
 		c.lifecycleMu.Unlock()
 		if started {
-			c.wait(ctx)
+			return c.wait(ctx)
 		}
-		return
+		return nil
 	}
 	c.stopped = true
 	started, cancel := c.started, c.cancel
 	c.lifecycleMu.Unlock()
 	if !started {
-		return
+		return nil
 	}
 	cancel()
-	c.wait(ctx)
+	return c.wait(ctx)
 }
 
 // Health returns a lock-safe lifecycle snapshot for management probes.
@@ -200,12 +200,14 @@ func (c *Consumer) Health() lifecycle.HealthSnapshot {
 	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
-func (c *Consumer) wait(ctx context.Context) {
+func (c *Consumer) wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() { c.wg.Wait(); close(done) }()
 	select {
 	case <-done:
+		return nil
 	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

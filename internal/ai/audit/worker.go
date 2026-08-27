@@ -161,9 +161,9 @@ func (w *Worker) Start(ctx context.Context) {
 
 // Stop cancels polling and waits for any in-flight delivery to complete or
 // schedule its durable retry decision before shutdown continues.
-func (w *Worker) Stop(ctx context.Context) {
+func (w *Worker) Stop(ctx context.Context) error {
 	if w == nil {
-		return
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -173,18 +173,18 @@ func (w *Worker) Stop(ctx context.Context) {
 		started := w.started
 		w.lifecycleMu.Unlock()
 		if started {
-			w.wait(ctx)
+			return w.wait(ctx)
 		}
-		return
+		return nil
 	}
 	w.stopped = true
 	started, cancel := w.started, w.cancel
 	w.lifecycleMu.Unlock()
 	if !started {
-		return
+		return nil
 	}
 	cancel()
-	w.wait(ctx)
+	return w.wait(ctx)
 }
 
 // Health returns a lock-safe lifecycle snapshot for management probes.
@@ -198,12 +198,14 @@ func (w *Worker) Health() lifecycle.HealthSnapshot {
 	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
-func (w *Worker) wait(ctx context.Context) {
+func (w *Worker) wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() { w.wg.Wait(); close(done) }()
 	select {
 	case <-done:
+		return nil
 	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

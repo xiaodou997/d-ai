@@ -580,9 +580,9 @@ func (m *aiModules) Start(ctx context.Context) {
 	})
 }
 
-func (m *aiModules) Stop(ctx context.Context) {
+func (m *aiModules) Stop(ctx context.Context) error {
 	if m == nil {
-		return
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -598,58 +598,101 @@ func (m *aiModules) Stop(ctx context.Context) {
 	workerCancel := m.workerCancel
 	m.lifecycleMu.Unlock()
 	if !started {
-		return
+		return nil
 	}
+	var errs []error
 	if workerCancel != nil {
 		workerCancel()
 	}
 	if m.clientCatalog != nil {
-		if err := m.clientCatalog.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("client catalog shutdown incomplete", zap.Error(err))
+		if err := m.clientCatalog.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("client catalog shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop client catalog: %w", err))
 		}
 	}
 	if m.clientRuntime != nil {
-		if err := m.clientRuntime.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("client runtime shutdown incomplete", zap.Error(err))
+		if err := m.clientRuntime.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("client runtime shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop client runtime: %w", err))
 		}
 	}
 	if m.RuntimeGateway != nil {
-		if err := m.RuntimeGateway.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("runtime gateway shutdown incomplete", zap.Error(err))
+		if err := m.RuntimeGateway.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("runtime gateway shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop runtime gateway: %w", err))
 		}
 	}
 	if m.runtimeBinder != nil {
-		if err := m.runtimeBinder.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("runtime binding resolver shutdown incomplete", zap.Error(err))
+		if err := m.runtimeBinder.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("runtime binding resolver shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop runtime binding resolver: %w", err))
 		}
 	}
 	if m.subscriptionSvc != nil {
-		if err := m.subscriptionSvc.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("subscription janitor shutdown incomplete", zap.Error(err))
+		if err := m.subscriptionSvc.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("subscription janitor shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop subscription janitor: %w", err))
 		}
 	}
 	if m.riskControlWorker != nil {
-		m.riskControlWorker.Stop(ctx)
+		if err := m.riskControlWorker.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("risk control worker shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop risk control worker: %w", err))
+		}
 	}
 	if m.auditWorker != nil {
-		m.auditWorker.Stop(ctx)
+		if err := m.auditWorker.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("audit worker shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop audit worker: %w", err))
+		}
 	}
 	if m.refresher != nil {
-		m.refresher.Stop(ctx)
+		if err := m.refresher.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("oauth token refresher shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop oauth token refresher: %w", err))
+		}
 	}
 	if m.settlementConsumer != nil {
-		m.settlementConsumer.Stop(ctx)
+		if err := m.settlementConsumer.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("settlement consumer shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop settlement consumer: %w", err))
+		}
 	}
 	if m.AsyncTasks != nil {
-		if err := m.AsyncTasks.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("async task engine shutdown incomplete", zap.Error(err))
+		if err := m.AsyncTasks.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("async task engine shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop async task engine: %w", err))
 		}
 	}
 	if m.priceBookSvc != nil {
-		if err := m.priceBookSvc.Stop(ctx); err != nil && m.logger != nil {
-			m.logger.Warn("LiteLLM price refresh shutdown incomplete", zap.Error(err))
+		if err := m.priceBookSvc.Stop(ctx); err != nil {
+			if m.logger != nil {
+				m.logger.Warn("LiteLLM price refresh shutdown incomplete", zap.Error(err))
+			}
+			errs = append(errs, fmt.Errorf("stop LiteLLM price refresh: %w", err))
 		}
 	}
+	return errors.Join(errs...)
 }
 
 // subsPort adapts a possibly-nil subscription service into the serving port.

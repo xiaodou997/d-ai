@@ -1196,3 +1196,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 语义：数据库 mutation 成功后才执行安全副作用；删除的 ban guard 由 application service 注入 repository 事务，安全失败返回 `AdminEndUserSecurityError`，可重试而不会重复业务写入。
 - 装配：终端用户管理模块移除直接 `AccountSecurityWriter` 依赖，composition root 注入 lifecycle service。
 - 回归：新增 status/session/ban context 透传及安全错误测试；user/Transport/server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-02（AI worker shutdown error propagation，2026-08-27）
+
+- 生命周期：风险控制、审计 inbox、OAuth token refresh 和结算 outbox worker 的 `Stop(ctx)` 统一返回调用方 deadline 错误；重复 Stop 在首次超时后继续等待。
+- 聚合：`aiModules.Stop(ctx)` 汇总所有 worker/component 关闭错误，composition root 的 shutdown stack 能识别关闭不完整并保留后续重试机会。
+- 回归：worker 停止接口、AI 聚合关闭和既有生命周期测试通过；授权模式下 riskcontrol/audit/tokenrefresh/outbox/server 测试、`go vet`、`go build`、`checkdeps` 和差异检查通过。
