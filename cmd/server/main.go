@@ -307,6 +307,17 @@ func run() error {
 		Version:           version,
 	})
 	httpRuntime.Start(stop)
+	shutdowns.Add("http listeners", func(ctx context.Context) error {
+		err := httpRuntime.Shutdown(ctx)
+		if err != nil {
+			return err
+		}
+		lifecycle.MarkStopped(healthHTTPPublic)
+		if httpRuntime.management != nil {
+			lifecycle.MarkStopped(healthHTTPManagement)
+		}
+		return nil
+	})
 	lifecycle.MarkStarted(healthHTTPPublic)
 	if httpRuntime.management != nil {
 		lifecycle.MarkStarted(healthHTTPManagement)
@@ -315,13 +326,8 @@ func run() error {
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := httpRuntime.Shutdown(shutdownCtx); err != nil {
-		appLogger.Warn("HTTP listener shutdown incomplete", zap.Error(err))
-	} else {
-		lifecycle.MarkStopped(healthHTTPPublic)
-		if httpRuntime.management != nil {
-			lifecycle.MarkStopped(healthHTTPManagement)
-		}
+	if err := shutdowns.Close(shutdownCtx); err != nil {
+		appLogger.Warn("resource shutdown incomplete", zap.Error(err))
 	}
 	appLogger.Info("server shutdown complete")
 	return nil

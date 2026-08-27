@@ -181,3 +181,5 @@ httpServers.Start / Shutdown
 平台与 AI builder 在返回运行角色 bundle 前执行必需依赖契约校验；校验失败会阻止 HTTP 注册和后台 worker 启动。对应的缺失依赖回归测试位于 `cmd/server/platform_modules_test.go` 与 `cmd/server/ai_modules_test.go`，不依赖真实数据库或 Redis。
 
 管理员 HTTP handler 不再持有或编排 `AccountSecurityWriter`；账号、租户与终端用户的安全副作用统一由 lifecycle application service 在组合根装配，Transport 只接收对应最小端口。
+
+HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台、AI worker、小时任务和基础设施共享同一逆序关闭链；启动中途失败时也能释放已创建的监听资源。

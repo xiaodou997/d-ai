@@ -134,7 +134,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；异步任务引擎、数据库、Redis、平台 worker 和 AI worker 已接入统一关闭路径，异步任务引擎已提供自身 Health 快照，其他组件探针仍待补齐。
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
-- [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
+- [x] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器均已登记并具备等待语义，剩余请求级 goroutine 由各自 owner 收尾。
 - [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
 - [x] Console 流式消息持久化 goroutine 由请求级 owner 使用 defer、`sync.Once` 和 `WaitGroup` 管理；正常完成持久化最终路由，panic/异常退出标记中断并等待退出，不再遗留请求外 goroutine。
 - [x] 为各运行角色增加装配测试；组合根现在对平台与 AI 运行角色执行必需依赖契约校验，缺失依赖在 builder 阶段快速失败，并由不完整装配回归测试锁定。
@@ -1220,3 +1220,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：删除 `internal/transport/admin.go` 中已由管理员账号/终端用户 lifecycle application service 取代的 `AccountSecurityWriter` 字段及安全编排 helper，避免 HTTP 层保留不可达的跨域副作用入口。
 - 依赖：管理员 handler 仅保留真实使用的审计读端口和各域 lifecycle/reader/writer 端口，组合根依赖图进一步收窄。
 - 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-02（Register HTTP listeners in shutdown stack，2026-08-27）
+
+- 关闭链：公共与管理 HTTP listener 在启动后立即登记到 `shutdownStack`，正常信号退出与启动失败都沿统一逆序关闭路径执行。
+- 语义：HTTP 关闭完成后才标记 listener stopped；重复关闭由 stack 幂等处理，避免主流程维护独立的第二套 listener shutdown。
+- 回归：`go test ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
