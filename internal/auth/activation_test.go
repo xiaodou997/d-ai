@@ -86,7 +86,7 @@ func TestActivationExpiryAndResetReplacement(t *testing.T) {
 	if first.Token == second.Token {
 		t.Fatal("consecutive resets returned the same token")
 	}
-	if _, err := sessions.jwt.ParseToken(pair.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := sessions.jwt.ParseToken(ctx, pair.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access after reset = %v, want ErrSessionInactive", err)
 	}
 	if _, _, err := sessions.Rotate(ctx, pair.RefreshToken); !errors.Is(err, ErrSessionInactive) {

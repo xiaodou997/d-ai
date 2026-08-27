@@ -11,7 +11,7 @@ import (
 )
 
 type TokenVerifier interface {
-	ParseToken(token string) (*auth.Claims, error)
+	ParseToken(ctx context.Context, token string) (*auth.Claims, error)
 }
 
 type TokenRevocationChecker interface {
@@ -64,7 +64,7 @@ func userAuth(api huma.API, d HTTPAuthDeps, allowedTypes map[int]bool, forbidden
 			return
 		}
 
-		claims, err := d.TokenVerifier.ParseToken(token)
+		claims, err := d.TokenVerifier.ParseToken(ctx.Context(), token)
 		if err != nil || claims == nil || claims.PrincipalType != "user" || claims.TokenUse != "access" || claims.SessionID == "" {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid bearer token")
 			return

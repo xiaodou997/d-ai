@@ -30,7 +30,7 @@ import (
 
 // TokenVerifier validates a D-AI JWT and returns its claims.
 type TokenVerifier interface {
-	ParseToken(token string) (*auth.Claims, error)
+	ParseToken(ctx context.Context, token string) (*auth.Claims, error)
 }
 
 // BanChecker reports whether a user or tenant has been banned (real-time revocation).

@@ -43,6 +43,26 @@ func TestSessionRefreshRotationAndReplayRevocation(t *testing.T) {
 	}
 }
 
+func TestParseTokenHonorsCanceledContext(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	principal := seedSessionAccount(t, ctx, pool, "session-parse-cancel")
+	service := newTestSessionService(pool)
+	pair, err := service.Create(ctx, principal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := service.jwt.ParseToken(canceled, pair.AccessToken); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ParseToken() error = %v, want context.Canceled", err)
+	}
+}
+
 func TestSessionConcurrentRefreshHasSingleWinner(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 6})
@@ -106,7 +126,7 @@ func TestCredentialAndStatusChangesRevokeAllSessions(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE iam_accounts SET credential_version = credential_version + 1 WHERE user_id = $1`, principal.UserID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.jwt.ParseToken(first.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := service.jwt.ParseToken(ctx, first.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access after credential change = %v, want ErrSessionInactive", err)
 	}
 	for _, raw := range []string{first.RefreshToken, second.RefreshToken} {
@@ -123,7 +143,7 @@ func TestCredentialAndStatusChangesRevokeAllSessions(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE iam_accounts SET status = 'disabled' WHERE user_id = $1`, principal.UserID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.jwt.ParseToken(third.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := service.jwt.ParseToken(ctx, third.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access after account disable = %v, want ErrSessionInactive", err)
 	}
 	if _, _, err := service.Rotate(ctx, third.RefreshToken); !errors.Is(err, ErrSessionInactive) {
@@ -148,14 +168,14 @@ func TestLogoutRevokesCurrentSessionOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := service.jwt.ParseToken(first.AccessToken)
+	claims, err := service.jwt.ParseToken(ctx, first.AccessToken)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Revoke(ctx, claims.SessionID, "logout"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.jwt.ParseToken(first.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := service.jwt.ParseToken(ctx, first.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access token after logout = %v, want ErrSessionInactive", err)
 	}
 	if _, _, err := service.Rotate(ctx, first.RefreshToken); !errors.Is(err, ErrSessionInactive) {
@@ -241,7 +261,7 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	`, principal.UserID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.jwt.ParseToken(pair.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := service.jwt.ParseToken(ctx, pair.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access token after role/scope change = %v, want ErrSessionInactive", err)
 	}
 
@@ -252,7 +272,7 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	if refreshedPrincipal.UserType != 3 || refreshedPrincipal.TenantID != "auth-role-change-tenant" {
 		t.Fatalf("refreshed principal = %#v, want tenant-scoped role", refreshedPrincipal)
 	}
-	claims, err := service.jwt.ParseToken(rotated.AccessToken)
+	claims, err := service.jwt.ParseToken(ctx, rotated.AccessToken)
 	if err != nil {
 		t.Fatalf("refreshed access token should be valid: %v", err)
 	}
@@ -269,7 +289,7 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	`, principal.UserID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.jwt.ParseToken(rotated.AccessToken); !errors.Is(err, ErrSessionInactive) {
+	if _, err := service.jwt.ParseToken(ctx, rotated.AccessToken); !errors.Is(err, ErrSessionInactive) {
 		t.Fatalf("access token after tenant scope change = %v, want ErrSessionInactive", err)
 	}
 	rotatedAgain, refreshedPrincipal, err := service.Rotate(ctx, rotated.RefreshToken)
@@ -279,7 +299,7 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	if refreshedPrincipal.UserType != 3 || refreshedPrincipal.TenantID != "auth-scope-change-tenant" {
 		t.Fatalf("principal after tenant scope change = %#v, want new tenant", refreshedPrincipal)
 	}
-	claims, err = service.jwt.ParseToken(rotatedAgain.AccessToken)
+	claims, err = service.jwt.ParseToken(ctx, rotatedAgain.AccessToken)
 	if err != nil {
 		t.Fatalf("access token after tenant scope refresh should be valid: %v", err)
 	}

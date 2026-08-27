@@ -269,9 +269,10 @@ func (s *JWTService) GenerateAccessToken(principal Principal, sessionID string) 
 
 func (s *JWTService) AccessTokenExpiration() time.Duration { return s.accessTokenExpiration }
 
-// ParseToken 解析并验证 Token，根据 kid 选择公钥
+// ParseToken 解析并验证 Token，根据 kid 选择公钥；访问令牌的 session
+// 校验沿用调用方 context，以便 HTTP 请求取消时及时停止数据库查询。
 // 新系统不兼容无 kid 的 token
-func (s *JWTService) ParseToken(tokenString string) (*Claims, error) {
+func (s *JWTService) ParseToken(ctx context.Context, tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if token.Method != jwt.SigningMethodRS256 {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -308,7 +309,7 @@ func (s *JWTService) ParseToken(tokenString string) (*Claims, error) {
 	}
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		if claims.PrincipalType == "user" && claims.TokenUse == "access" {
-			if err := s.validateAccessSession(claims); err != nil {
+			if err := s.validateAccessSession(ctx, claims); err != nil {
 				return nil, err
 			}
 		}
@@ -317,11 +318,11 @@ func (s *JWTService) ParseToken(tokenString string) (*Claims, error) {
 	return nil, jwt.ErrSignatureInvalid
 }
 
-func (s *JWTService) validateAccessSession(claims *Claims) error {
+func (s *JWTService) validateAccessSession(ctx context.Context, claims *Claims) error {
 	if claims.SessionID == "" || claims.CredentialVersion <= 0 {
 		return ErrSessionInactive
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), accessSessionValidationTimeout)
+	ctx, cancel := context.WithTimeout(ctx, accessSessionValidationTimeout)
 	defer cancel()
 	var valid bool
 	err := s.database.QueryRow(ctx, `

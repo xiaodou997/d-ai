@@ -184,6 +184,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 管理充值目标归属与存在性统一由 `RechargeService.GrantManual` 在同一账务事务锁内解析/校验；Transport 不再通过 `TenantRepository` 做锁外预检，平台管理员可在用户充值时省略 `tenantId`。
 - [x] 用户身份查询与状态更新统一透传调用方 context；`UserService` 不再丢弃请求取消信号，PostgreSQL UserRepository 的读写均使用传入 context。
 - [x] 邀请码公开查询、邀请码管理、用户名唯一性检查和邀请注册统一透传调用方 context；InviteService/InviteRepository 不再为请求路径隐式创建 `context.Background()`。
+- [x] JWT access token 的 session 校验统一透传请求 context；平台、AI Transport 和 Console middleware 不再让取消的请求继续使用独立 `context.Background()` 查询会话。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1095,3 +1096,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 上下文：邀请码查询、租户品牌读取、列表统计、创建/更新/删除、用户名唯一性检查和邀请注册均接收并使用调用方 context；公开邀请 HTTP 请求取消后不会继续使用无界数据库操作。
 - 边界：`InviteService` 的 repository contract 显式携带 context，注册事务继续使用同一 context，未改变邀请码状态校验、密码策略和法律文件记录语义。
 - 回归：新增邀请服务读写/注册 context 透传测试；`go test ./internal/invite ./internal/invite/pg ./internal/transport ./cmd/server -count=1`、race、`go vet` 和差异检查通过。
+
+### P1-03（JWT session validation context propagation，2026-08-27）
+
+- 上下文：`JWTService.ParseToken` 接收调用方 context，access token 的实时 session 查询使用同一取消/超时链；平台 Huma、AI Huma 和 Console 原生入口均传递请求 context。
+- 契约：更新 `TokenVerifier` 接口及实现，保持 token 签名、claims、黑名单和租户/账号状态校验语义不变，仅改变数据库查询的取消边界。
+- 回归：新增真实 PostgreSQL 取消查询测试；auth、transport、AI transport/Console 定向测试与 race、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。

@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -73,7 +74,7 @@ func TestTenantSelfAPIKeyStaticRouteWinsOverPlatformDynamicRoute(t *testing.T) {
 
 type tenantSelfRouteTokenVerifier struct{}
 
-func (tenantSelfRouteTokenVerifier) ParseToken(string) (*auth.Claims, error) {
+func (tenantSelfRouteTokenVerifier) ParseToken(context.Context, string) (*auth.Claims, error) {
 	return &auth.Claims{
 		PrincipalType: "user",
 		TokenUse:      "access",

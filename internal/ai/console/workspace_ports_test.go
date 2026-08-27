@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,7 +14,7 @@ import (
 
 type workspaceTokenVerifierStub struct{}
 
-func (workspaceTokenVerifierStub) ParseToken(string) (*auth.Claims, error) {
+func (workspaceTokenVerifierStub) ParseToken(context.Context, string) (*auth.Claims, error) {
 	return &auth.Claims{
 		PrincipalType: "user",
 		TokenUse:      "access",

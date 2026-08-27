@@ -128,7 +128,7 @@ func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistSe
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "缺少 Bearer Token")
 			return
 		}
-		claims, err := jwtSvc.ParseToken(token)
+		claims, err := jwtSvc.ParseToken(ctx.Context(), token)
 		if err != nil {
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token 无效或已过期")
 			return
