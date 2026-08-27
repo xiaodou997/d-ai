@@ -108,6 +108,7 @@ type consoleChatStreamPersistence struct {
 	capture    *captureResponseWriter
 	updates    chan struct{}
 	done       chan struct{}
+	closeOnce  sync.Once
 	wg         sync.WaitGroup
 }
 
@@ -184,22 +185,27 @@ func (p *consoleChatStreamPersistence) persistContent() {
 	}
 }
 
-func (p *consoleChatStreamPersistence) close(routeID string) {
-	close(p.done)
-	p.wg.Wait()
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(p.requestCtx), 3*time.Second)
-	defer cancel()
-	streamStatus := workspace.ChatStreamStatusCompleted
-	if p.requestCtx.Err() != nil {
-		streamStatus = workspace.ChatStreamStatusInterrupted
+func (p *consoleChatStreamPersistence) close(routeID string, interrupted bool) {
+	if p == nil {
+		return
 	}
-	if err := p.console.workspaceMessages.UpdateChatMessageRoute(ctx, p.owner, p.messageID, workspace.ChatMessageRouteUpdate{
-		ClientSurface: workspace.SurfaceFromProtocol(string(p.protocol)),
-		RouteID:       routeID,
-		StreamStatus:  streamStatus,
-	}); err != nil {
-		p.console.logger.Warn("runtime chat: persist assistant route failed", zap.Error(err), zap.String("session_id", p.sessionID))
-	}
+	p.closeOnce.Do(func() {
+		close(p.done)
+		p.wg.Wait()
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(p.requestCtx), 3*time.Second)
+		defer cancel()
+		streamStatus := workspace.ChatStreamStatusCompleted
+		if interrupted || p.requestCtx.Err() != nil {
+			streamStatus = workspace.ChatStreamStatusInterrupted
+		}
+		if err := p.console.workspaceMessages.UpdateChatMessageRoute(ctx, p.owner, p.messageID, workspace.ChatMessageRouteUpdate{
+			ClientSurface: workspace.SurfaceFromProtocol(string(p.protocol)),
+			RouteID:       routeID,
+			StreamStatus:  streamStatus,
+		}); err != nil {
+			p.console.logger.Warn("runtime chat: persist assistant route failed", zap.Error(err), zap.String("session_id", p.sessionID))
+		}
+	})
 }
 
 func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request) {
@@ -282,20 +288,23 @@ func (s *Console) handleConsoleChatStream(w http.ResponseWriter, r *http.Request
 
 	capture := &captureResponseWriter{ResponseWriter: w}
 	persistence := s.startConsoleChatStreamPersistence(r.Context(), owner, sessionID, protocol, capture)
+	completed := false
+	var routeID string
+	if persistence != nil {
+		defer func() { persistence.close(routeID, !completed) }()
+	}
 	runtimeResult := s.gateway.ExecuteRuntime(capture, r, domain.CapabilityChat, gateway.RuntimeOverride{
 		ClientProtocol: protocol,
 		ClientPath:     clientPath,
 	}, sessionSubject, false)
 
-	routeID := runtimeResult.RouteID
-	if persistence != nil {
-		persistence.close(routeID)
-	}
+	routeID = runtimeResult.RouteID
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 3*time.Second)
 	defer cancel()
 	if err := s.workspaceMessages.UpdateChatSessionRoute(ctx, owner, sessionID, workspace.SurfaceFromProtocol(string(protocol)), routeID); err != nil {
 		s.logger.Warn("runtime chat: persist session route failed", zap.Error(err), zap.String("session_id", sessionID))
 	}
+	completed = true
 }
 
 // consoleGrantedChatModels 返回调用者在 Web 运行层聊天中可选的 chat 模型。

@@ -161,5 +161,6 @@ httpServers.Start / Shutdown
 - 用户自助控制 HTTP 已由独立 `UserSelfControlHTTPDeps` 组合 API key、分组、限额和 `HTTPAuthDeps`，并通过 `RegisterUserSelfControl` 注册终端用户认证分组；Core 不再注册 9 条用户 key/限额路径。
 - 用户自助读取 HTTP 已由独立 `UserSelfReadHTTPDeps` 组合分组、模型目录、用户日志、usage 和 `HTTPAuthDeps`，并通过 `RegisterUserSelfRead` 注册终端用户认证分组；Core 不再注册 5 条用户读取路径。
 - 已纳入进程生命周期的后台组件现在共享 `internal/lifecycle.Component` / `HealthSnapshot` 合约；Health 目前表达 started/stopped 生命周期，队列深度、失败和延迟仍由各自 Prometheus/领域探针提供。请求级短生命周期 goroutine 不纳入该合约，且不再有未登记的小时级清理 goroutine。
+- Console 流式消息持久化由请求级 owner 的 defer、`sync.Once` 和 `WaitGroup` 管理；正常完成与 panic/取消路径都等待 goroutine 收尾，异常路径记录 `interrupted`，不会在关闭数据库后继续写入。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。

@@ -136,6 +136,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 后台组件统一实现 Start/Stop/Health 生命周期；平台 BanReconciler、AI 风控 worker、审计 inbox worker、OAuth 刷新 worker、结算 outbox consumer、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务已补齐幂等停止、等待退出和共享生命周期 Health，队列故障级指标仍由各自观测面提供。
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
+- [x] Console 流式消息持久化 goroutine 由请求级 owner 使用 defer、`sync.Once` 和 `WaitGroup` 管理；正常完成持久化最终路由，panic/异常退出标记中断并等待退出，不再遗留请求外 goroutine。
 - [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
 - [x] 组合根新增全量 Transport surface contract，验证 metadata、identity、admin、billing、operations 和 AI 六组模块在同一注册列表中均有代表路由。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
@@ -1074,3 +1075,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 装配：新增组合根级 OpenAPI surface contract，直接验证 `buildPlatformTransportModules` 生成的六个显式模块都注册了 metadata、identity、admin、billing、operations 和 AI 路由代表。
 - 防漂移：模块数量与单个模块测试之外，契约现在能发现组合根遗漏整组模块或错误注册顺序导致的 surface 缺失。
 - 回归：`go test ./cmd/server ./internal/transport`、`go vet`、`go build`、`checkdeps` 和 `git diff --check` 通过。
+
+### P1-02（Console stream persistence lifecycle，2026-08-27）
+
+- 生命周期：Console 流式 assistant message persistence 现在由请求级 owner 的 defer 统一关闭，`sync.Once` 防止正常与异常路径重复收尾；panic、请求取消或提前退出会标记 `interrupted`，正常返回才标记 `completed`。
+- 等待：关闭流程先发出 done 信号、等待持久化 goroutine，再使用独立短超时上下文完成最终会话路由更新；数据库池释放前不会遗留该请求的消息写入。
+- 回归：新增关闭幂等与中断状态测试；Console/Gateway/server 定向测试、race 测试、全仓 `go test ./...`、`go vet`、`go build`、`checkdeps` 和差异检查通过。
