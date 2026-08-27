@@ -53,6 +53,14 @@ type Delivery struct {
 	CreatedAt       time.Time      `json:"createdAt"`
 }
 
+// HTTPService is the narrow notification application surface used by the
+// transport module. Persistence and delivery implementation details remain
+// behind the service.
+type HTTPService interface {
+	ListForActor(ctx context.Context, actor auth.Actor, limit int) ([]Delivery, error)
+	Send(ctx context.Context, input Input) (Delivery, error)
+}
+
 type Service struct {
 	pool *pgxpool.Pool
 	http *http.Client
@@ -60,6 +68,20 @@ type Service struct {
 
 func NewService(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool, http: &http.Client{Timeout: 8 * time.Second}}
+}
+
+// Send dispatches one notification through the requested channel. Channel
+// selection belongs to the application command so every caller receives the
+// same validation and delivery semantics.
+func (s *Service) Send(ctx context.Context, input Input) (Delivery, error) {
+	switch input.Channel {
+	case "in_app":
+		return s.CreateInApp(ctx, input)
+	case "webhook":
+		return s.SendWebhook(ctx, input)
+	default:
+		return Delivery{}, ErrInvalidChannel
+	}
 }
 
 func (s *Service) CreateInApp(ctx context.Context, input Input) (Delivery, error) {

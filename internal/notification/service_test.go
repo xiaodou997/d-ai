@@ -59,3 +59,11 @@ func TestListForActorEnforcesRecipientAndTenantScope(t *testing.T) {
 		t.Fatalf("unknown role actor error = %v, want ErrInvalidActor", err)
 	}
 }
+
+func TestSendRejectsUnknownChannelBeforePersistence(t *testing.T) {
+	service := NewService(nil)
+	_, err := service.Send(context.Background(), Input{Channel: "sms", EventKey: "event", Title: "title"})
+	if !errors.Is(err, ErrInvalidChannel) {
+		t.Fatalf("Send() error = %v, want ErrInvalidChannel", err)
+	}
+}

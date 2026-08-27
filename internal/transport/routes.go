@@ -315,7 +315,7 @@ type announcementModule struct {
 
 type notificationModule struct {
 	auth    platformAuthDeps
-	service *notificationpkg.Service
+	service notificationpkg.HTTPService
 }
 
 type systemModule struct {

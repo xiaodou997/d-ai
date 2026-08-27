@@ -177,6 +177,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，公告与少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
+- [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -1046,3 +1047,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：新增 `auth/ports.AccountSecurityWriter` 与 `AccountSecurityService`，统一承接账号/租户状态同步、token 撤销和用户会话失效；管理账号、终端用户、认证路由不再直接写 Redis 黑名单。
 - 上下文：BlacklistService 的读写 API 全部接收调用方 context，HTTP middleware、AI middleware 和账号 security command 不再隐式创建 `context.Background()`。
 - 回归：新增 miniredis 覆盖用户/租户 ban 同步、token 撤销与取消语义；auth、AI transport、platform transport/server 定向编译测试通过。
+
+### P1-03（Notification send command，2026-08-27）
+
+- 边界：新增 `notification.Service.Send` application command，统一 `in_app`/`webhook` 分发与 channel 校验；Transport 只组装输入、调用 command 和映射错误。
+- 依赖：通知 HTTP 模块改为注入 `notification.HTTPService`，不再暴露具体通知 service 实现。
+- 回归：未知 channel 在进入数据库前被拒绝；`notification`、`transport`、`cmd/server` 定向测试、`go vet`、`go build` 和 `checkdeps` 通过。

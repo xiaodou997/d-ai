@@ -178,7 +178,7 @@ type AnnouncementModuleDeps struct {
 // NotificationModuleDeps contains notification routes.
 type NotificationModuleDeps struct {
 	PlatformAuthDeps
-	Service *notificationpkg.Service
+	Service notificationpkg.HTTPService
 }
 
 // SystemModuleDeps contains system-module routes.

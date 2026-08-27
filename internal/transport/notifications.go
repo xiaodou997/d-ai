@@ -56,13 +56,7 @@ func registerNotifications(api huma.API, d notificationModule) {
 	huma.Register(api, huma.Operation{OperationID: "admin-send-notification", Method: http.MethodPost, Path: "/api/v1/admin/notifications/send", Summary: "发送通知", Tags: []string{"notifications"}, Middlewares: admins}, func(ctx context.Context, in *notificationSendInput) (*notificationOutput, error) {
 		body := in.Body
 		input := notificationpkg.Input{EventKey: body.EventKey, Channel: body.Channel, RecipientUserID: body.RecipientUserID, RecipientType: body.RecipientType, TenantID: body.TenantID, Title: body.Title, Body: body.Body, Payload: body.Payload, IdempotencyKey: body.IdempotencyKey, WebhookURL: body.WebhookURL}
-		var item notificationpkg.Delivery
-		var err error
-		if body.Channel == "webhook" {
-			item, err = d.service.SendWebhook(ctx, input)
-		} else {
-			item, err = d.service.CreateInApp(ctx, input)
-		}
+		item, err := d.service.Send(ctx, input)
 		if errors.Is(err, notificationpkg.ErrInvalidChannel) || errors.Is(err, notificationpkg.ErrInvalidInput) {
 			return nil, httpx.ErrBadRequest.WithCause(err)
 		}

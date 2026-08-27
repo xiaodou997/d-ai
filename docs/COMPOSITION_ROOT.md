@@ -38,7 +38,7 @@ httpServers.Start / Shutdown
 - 元数据与 JWKS 已由最小 `metaModule` 注册，仅接收版本字符串和 JWT 服务；平台主模块不再作为完整依赖容器参与路由注册。
 - chi 原生路由现在接收独立 `transport.RawDeps`，微信回调只依赖支付服务/日志，公开 favicon 只依赖品牌读端口；`RegisterRaw` 不再接收平台聚合容器。
 - AI 身份补全现在只接收 `user/ports.IdentityUserReader` 的非敏感用户投影；具体 `UserService` 与 PostgreSQL 用户模型留在用户域和 composition root，Transport 不再依赖它们。
-- 运营 HTTP 路由已从平台主模块拆成显式 `platformOperationsModule`，公告、通知、系统模块、数据清理和代理节点只接收各自服务及统一平台认证依赖；其余管理聚合路由仍待继续拆分。
+- 运营 HTTP 路由已从平台主模块拆成显式 `platformOperationsModule`，公告、通知、系统模块、数据清理和代理节点只接收各自服务及统一平台认证依赖；通知路由进一步只接收 `notification.HTTPService`，其余管理聚合路由仍待继续拆分。
 - 计费 HTTP 路由已从平台主模块拆成显式 `platformBillingModule`，在线充值、租户额度、管理支付和微信回调共享仅支付服务与平台认证/日志依赖；充值/管理聚合编排仍待继续收敛。
 - 身份自助与公开路由已拆成显式 `platformIdentityModule`，账户查询、租户自助、门户品牌和公开邀请只接收各自端口及平台认证/法律配置；管理员账号业务编排和认证状态写入仍待继续收敛。
 - 认证路由已在身份模块内使用独立 `authModule` 依赖，登录/刷新/激活、MFA、近期认证、`/me`、登出和改密不再接收平台路由聚合容器；管理员账号与 JWT key 管理仍待后续提取。
