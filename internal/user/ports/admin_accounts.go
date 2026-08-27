@@ -60,7 +60,8 @@ type AdminAccountReader interface {
 }
 
 // AdminAccountWriter owns lifecycle mutations for system administrators and
-// tenant users. Blacklist/session side effects remain outside persistence.
+// tenant users. Blacklist/session effects are coordinated by the separate
+// auth/ports.AccountSecurityWriter application port.
 type AdminAccountWriter interface {
 	CreateSystemAdmin(ctx context.Context, input AdminAccountCreate) error
 	CreateTenantUser(ctx context.Context, input AdminAccountCreate) error

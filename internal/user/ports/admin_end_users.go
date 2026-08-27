@@ -101,8 +101,8 @@ type AdminEndUserDeleteGuardError struct {
 func (e *AdminEndUserDeleteGuardError) Error() string { return "end-user deletion guard failed" }
 func (e *AdminEndUserDeleteGuardError) Unwrap() error { return e.Cause }
 
-// AdminEndUserWriter owns end-user profile and status mutations. Session
-// blacklist side effects remain at the application/HTTP orchestration layer.
+// AdminEndUserWriter owns end-user profile and status mutations. Session and
+// blacklist effects are coordinated by the separate auth security command.
 type AdminEndUserWriter interface {
 	CreateEndUser(ctx context.Context, input AdminEndUserCreate) error
 	UpdateEndUser(ctx context.Context, input AdminEndUserUpdate) (bool, error)

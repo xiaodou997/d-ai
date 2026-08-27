@@ -139,12 +139,12 @@ func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistSe
 		}
 		// 黑名单：单 token 撤销（jti）与用户级强制登出时间戳（封号/全端登出）
 		if blacklist != nil {
-			if blacklist.IsBlacklisted(claims.ID) {
+			if blacklist.IsBlacklisted(ctx.Context(), claims.ID) {
 				_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token 已撤销")
 				return
 			}
 			if claims.IssuedAt != nil {
-				if logoutTime := blacklist.GetUserLogoutTime(claims.UserID); logoutTime > 0 && claims.IssuedAt.Unix() < logoutTime {
+				if logoutTime := blacklist.GetUserLogoutTime(ctx.Context(), claims.UserID); logoutTime > 0 && claims.IssuedAt.Unix() < logoutTime {
 					_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Token 已撤销")
 					return
 				}

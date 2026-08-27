@@ -21,12 +21,13 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 		platform = &platformModules{}
 	}
 	platformAuth := transport.PlatformAuthDeps{JWT: platform.JWT, Blacklist: platform.Blacklist}
-	adminAuth := transport.AdminRouteAuthDeps{PlatformAuthDeps: platformAuth, RecentAuth: platform.RecentAuth}
+	adminAuth := transport.AdminRouteAuthDeps{PlatformAuthDeps: platformAuth, Security: platform.Security, RecentAuth: platform.RecentAuth}
 	return []transport.Module{
 		transport.NewMetaModule(version, platform.JWT),
 		transport.NewPlatformIdentityModule(transport.PlatformIdentityModuleDeps{
 			Auth: transport.AuthModuleDeps{
 				PlatformAuthDeps:  platformAuth,
+				Security:          platform.Security,
 				SecureCookies:     cfg.App.Env == "production",
 				Sessions:          platform.Sessions,
 				Activations:       platform.Activations,

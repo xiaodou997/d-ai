@@ -99,12 +99,13 @@ httpServers.Start / Shutdown
 - 支付 sweep 额外发布 retry 总量、到期重试量、最老失败时长和统计读取失败指标；排查顺序与 PromQL 告警阈值记录在 `docs/PAYMENT_SWEEP_RUNBOOK.md`。
 - 反向充值的租户范围与 `order_type` 校验下沉到 `DeductionService.ReverseTenantOrder` 的订单 `FOR UPDATE` 事务；handler 只传入 claims 作用域并映射领域错误，不再先读 `bill_recharge_orders`。
 - 运营账务 command 的 context 由 HTTP/payment application 一路传入 `DeductionService`；退款、充值撤销和批量退款不再创建脱离请求的 `context.Background()` 数据库操作，取消时批量处理会停止剩余项目。
+- 账号和租户状态、密码重置、资料变更及登出的 Redis token/ban 副作用统一经 `auth/ports.AccountSecurityWriter`；Transport 只传递 claims、状态结果和请求 context，具体黑名单写入由 auth application service 负责。
 - 管理系统管理员和租户用户列表查询已移入 `internal/user/pg.AdminAccountRepository`；HTTP handler 不再拼接分页 SQL，只保留状态与 DTO 映射。
-- 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步仍由 handler 编排。
-- 三类管理账号密码重置的目标类型校验与凭证结果映射也通过 `AdminAccountWriter.Reset*Password` / `AdminEndUserWriter.ResetEndUserPassword` 注入；`ActivationService.Reset` 仍由用户 adapter 调用，HTTP handler 不再直接查询 `iam_accounts`。
-- 系统管理员删除和终端用户删除事务分别由 `AdminAccountWriter.DeleteSystemAdmin` 与 `AdminEndUserWriter.DeleteEndUser` 持有；终端用户删除在余额行锁后执行显式 blacklist guard，失败会回滚数据库状态。
+- 系统管理员与租户用户的创建、更新和启停状态写入已移入同一 `AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 注入；激活令牌复用 composition root 注入的 `ActivationService.Store`，黑名单同步改由 `auth/ports.AccountSecurityWriter` command 负责。
+- 三类管理账号密码重置的目标类型校验与凭证结果映射也通过 `AdminAccountWriter.Reset*Password` / `AdminEndUserWriter.ResetEndUserPassword` 注入；`ActivationService.Reset` 仍由用户 adapter 调用，HTTP handler 不再直接查询 `iam_accounts`，会话失效通过 `AccountSecurityWriter` command 完成。
+- 系统管理员删除和终端用户删除事务分别由 `AdminAccountWriter.DeleteSystemAdmin` 与 `AdminEndUserWriter.DeleteEndUser` 持有；终端用户删除在余额行锁后执行 `AccountSecurityWriter` ban guard，失败会回滚数据库状态。
 - 终端用户列表查询已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserReader` 注入；HTTP handler 不再直接执行跨租户列表 SQL，只负责 claims scope 和 DTO 映射。
-- 终端用户资料更新与启停状态写入已移入同一 `AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 注入；HTTP handler 只保留租户归属校验、错误映射和会话封禁副作用。
+- 终端用户资料更新与启停状态写入已移入同一 `AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 注入；HTTP handler 只保留租户归属校验、错误映射和 `AccountSecurityWriter` 调用。
 - 终端用户创建的账号与一次性激活令牌由同一 `AdminEndUserRepository` 事务写入；repository 通过 composition root 注入的 `ActivationService.Store` 复用激活凭证逻辑，HTTP handler 不再持有创建事务。
 - AI 认证端点的 Ban 检查也改用 `HumaBanChecker` 端口，统一 Transport 不再暴露具体 Redis `banstate.Checker`。
 - OAuth 凭证管理中的手动刷新能力只依赖 `OAuthTokenRefresher.RefreshByID`，后台轮询刷新器的具体实现继续由 composition root 持有。

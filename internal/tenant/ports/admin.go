@@ -13,7 +13,8 @@ type AdminTenantStatusResult struct {
 }
 
 // AdminTenantStatusWriter owns the tenant status transaction and account
-// cascade. Redis blacklist synchronization remains outside persistence.
+// cascade. Redis blacklist synchronization is coordinated by the separate
+// auth security command after the transaction commits.
 type AdminTenantStatusWriter interface {
 	UpdateStatus(ctx context.Context, tenantID, status string) (AdminTenantStatusResult, error)
 }

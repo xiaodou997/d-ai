@@ -102,9 +102,11 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 		if err := d.Sessions.Revoke(ctx, claims.SessionID, "logout"); err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)
 		}
-		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ExpiresAt != nil {
+		if d.Security != nil && claims.ExpiresAt != nil {
 			if exp := time.Until(claims.ExpiresAt.Time); exp > 0 {
-				_ = d.Blacklist.AddToBlacklist(claims.ID, exp)
+				if err := d.Security.RevokeAccessToken(ctx, claims.ID, exp); err != nil {
+					return nil, httpx.ErrUnavailable.WithCause(err)
+				}
 			}
 		}
 		out := &authLogoutOutput{SetCookie: clearRefreshCookie(d.SecureCookies)}
@@ -154,10 +156,9 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 		if !updated {
 			return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
-		// 数据库触发器撤销全部 refresh session；Redis 立即拒绝现存 access token。
-		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ID != "" {
-			_ = d.Blacklist.AddToBlacklist(claims.ID, 2*time.Hour)
-			_ = d.Blacklist.LogoutUser(claims.UserID)
+		// 数据库触发器撤销全部 refresh session；security command 立即拒绝现存 access token。
+		if err := invalidateAccountSecurity(ctx, d.Security, claims, 2*time.Hour); err != nil {
+			return nil, httpx.ErrUnavailable.WithCause(err)
 		}
 
 		out := &messageOutput{}
@@ -227,10 +228,9 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 			return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 		}
 
-		// 用户名变更后旧 token 中的 claim 已过期，强制重新登录
-		if d.Blacklist != nil && d.Blacklist.IsEnabled() && claims.ID != "" {
-			_ = d.Blacklist.AddToBlacklist(claims.ID, 2*time.Hour)
-			_ = d.Blacklist.LogoutUser(claims.UserID)
+		// 用户名变更后旧 token 中的 claim 已过期，强制重新登录。
+		if err := invalidateAccountSecurity(ctx, d.Security, claims, 2*time.Hour); err != nil {
+			return nil, httpx.ErrUnavailable.WithCause(err)
 		}
 
 		out := &messageOutput{}
@@ -345,6 +345,18 @@ func registerAuthProtected(api huma.API, d authModule, mw huma.Middlewares) {
 			Message string `json:"message"`
 		}{Message: "重新认证成功"}}, nil
 	})
+}
+
+func invalidateAccountSecurity(ctx context.Context, security authports.AccountSecurityWriter, claims *auth.Claims, tokenExpiration time.Duration) error {
+	if security == nil || claims == nil {
+		return nil
+	}
+	if claims.ID != "" {
+		if err := security.RevokeAccessToken(ctx, claims.ID, tokenExpiration); err != nil {
+			return err
+		}
+	}
+	return security.InvalidateUserSessions(ctx, claims.UserID)
 }
 
 type currentUserSnapshot struct {

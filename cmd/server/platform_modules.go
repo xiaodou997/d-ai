@@ -43,6 +43,7 @@ type platformModules struct {
 	MFA              *auth.MFAService
 	RecentAuth       *auth.RecentAuthService
 	Blacklist        *auth.BlacklistService
+	Security         *auth.AccountSecurityService
 	UserService      *userpkg.UserService
 	AuthAccounts     *authpg.AuthRepository
 	AuthRateLimiters *auth.RateLimiters
@@ -111,6 +112,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	sessionSvc := auth.NewSessionService(pool, jwtSvc, cfg.JWT.RefreshExpiration)
 	activationSvc := auth.NewActivationService(pool, cfg.Auth.ActivationExpiration)
 	blacklist := auth.NewBlacklistService(redisClient, appLogger)
+	security := auth.NewAccountSecurityService(blacklist)
 	mfaSvc := auth.NewMFAService(pool, redisClient)
 	recentAuthSvc := auth.NewRecentAuthService(redisClient)
 
@@ -145,6 +147,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 		MFA:              mfaSvc,
 		RecentAuth:       recentAuthSvc,
 		Blacklist:        blacklist,
+		Security:         security,
 		UserService:      userSvc,
 		AuthAccounts:     authAccountRepo,
 		AuthRateLimiters: authRateLimiters,

@@ -294,6 +294,7 @@ type aiPlatformDeps struct {
 
 type authModule struct {
 	platformAuthDeps
+	Security          authports.AccountSecurityWriter
 	SecureCookies     bool
 	Sessions          *auth.SessionService
 	Activations       *auth.ActivationService
@@ -386,6 +387,7 @@ type platformIdentityModule struct {
 
 type adminRouteAuth struct {
 	platformAuthDeps
+	Security   authports.AccountSecurityWriter
 	RecentAuth *auth.RecentAuthService
 }
 

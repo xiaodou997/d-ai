@@ -50,7 +50,7 @@ func NewBlacklistService(redisClient *redis.Client, logger *zap.Logger) *Blackli
 // AddToBlacklist 将 Token 加入黑名单
 // tokenID: Token 的唯一标识（jti claim）
 // expiration: Token 剩余有效期
-func (s *BlacklistService) AddToBlacklist(tokenID string, expiration time.Duration) error {
+func (s *BlacklistService) AddToBlacklist(ctx context.Context, tokenID string, expiration time.Duration) error {
 	if !s.enabled {
 		s.logger.Debug("Blacklist disabled, skip adding token", zap.String("tokenId", tokenID))
 		return nil
@@ -61,7 +61,6 @@ func (s *BlacklistService) AddToBlacklist(tokenID string, expiration time.Durati
 	}
 
 	key := blacklistPrefix + tokenID
-	ctx := context.Background()
 
 	err := s.redis.Set(ctx, key, "1", expiration).Err()
 	if err != nil {
@@ -74,13 +73,12 @@ func (s *BlacklistService) AddToBlacklist(tokenID string, expiration time.Durati
 }
 
 // IsBlacklisted 检查 Token 是否在黑名单中
-func (s *BlacklistService) IsBlacklisted(tokenID string) bool {
+func (s *BlacklistService) IsBlacklisted(ctx context.Context, tokenID string) bool {
 	if !s.enabled {
 		return false
 	}
 
 	key := blacklistPrefix + tokenID
-	ctx := context.Background()
 
 	exists, err := s.redis.Exists(ctx, key).Result()
 	if err != nil {
@@ -93,14 +91,13 @@ func (s *BlacklistService) IsBlacklisted(tokenID string) bool {
 
 // LogoutUser 登出用户（将用户所有 Token 加入黑名单）
 // 通过记录登出时间实现，所有在此时间之前签发的 Token 都视为无效
-func (s *BlacklistService) LogoutUser(userID string) error {
+func (s *BlacklistService) LogoutUser(ctx context.Context, userID string) error {
 	if !s.enabled {
 		s.logger.Debug("Blacklist disabled, skip user logout", zap.String("userId", userID))
 		return nil
 	}
 
 	key := "user:logout:" + userID
-	ctx := context.Background()
 
 	// 记录登出时间
 	err := s.redis.Set(ctx, key, time.Now().Unix(), defaultTokenTTL).Err()
@@ -115,13 +112,12 @@ func (s *BlacklistService) LogoutUser(userID string) error {
 
 // GetUserLogoutTime 获取用户登出时间
 // 返回 0 表示用户未登出
-func (s *BlacklistService) GetUserLogoutTime(userID string) int64 {
+func (s *BlacklistService) GetUserLogoutTime(ctx context.Context, userID string) int64 {
 	if !s.enabled {
 		return 0
 	}
 
 	key := "user:logout:" + userID
-	ctx := context.Background()
 
 	result, err := s.redis.Get(ctx, key).Int64()
 	if err != nil {
@@ -144,7 +140,7 @@ func (s *BlacklistService) IsEnabled() bool {
 // BanUser marks a user as banned (Redis key, no TTL) and kills its existing
 // JWT sessions via LogoutUser. Idempotent.
 func (s *BlacklistService) BanUser(ctx context.Context, userID string) error {
-	if err := s.LogoutUser(userID); err != nil {
+	if err := s.LogoutUser(ctx, userID); err != nil {
 		return err
 	}
 	if !s.enabled {

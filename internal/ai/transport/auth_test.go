@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,11 +15,11 @@ type revocationCheckerStub struct {
 	logoutTime int64
 }
 
-func (s revocationCheckerStub) IsBlacklisted(tokenID string) bool {
+func (s revocationCheckerStub) IsBlacklisted(_ context.Context, tokenID string) bool {
 	return tokenID == s.revokedJTI
 }
 
-func (s revocationCheckerStub) GetUserLogoutTime(string) int64 {
+func (s revocationCheckerStub) GetUserLogoutTime(context.Context, string) int64 {
 	return s.logoutTime
 }
 
@@ -32,16 +33,17 @@ func TestTokenRevoked(t *testing.T) {
 		},
 	}
 
-	if tokenRevoked(nil, claims) {
+	ctx := context.Background()
+	if tokenRevoked(ctx, nil, claims) {
 		t.Fatal("nil checker must not revoke tokens")
 	}
-	if !tokenRevoked(revocationCheckerStub{revokedJTI: "token-1"}, claims) {
+	if !tokenRevoked(ctx, revocationCheckerStub{revokedJTI: "token-1"}, claims) {
 		t.Fatal("blacklisted token ID must be rejected")
 	}
-	if !tokenRevoked(revocationCheckerStub{logoutTime: issuedAt.Unix() + 1}, claims) {
+	if !tokenRevoked(ctx, revocationCheckerStub{logoutTime: issuedAt.Unix() + 1}, claims) {
 		t.Fatal("token issued before user logout must be rejected")
 	}
-	if tokenRevoked(revocationCheckerStub{logoutTime: issuedAt.Unix()}, claims) {
+	if tokenRevoked(ctx, revocationCheckerStub{logoutTime: issuedAt.Unix()}, claims) {
 		t.Fatal("token issued at logout timestamp must remain valid")
 	}
 }

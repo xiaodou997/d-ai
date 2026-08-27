@@ -299,12 +299,8 @@ func (h *adminHandlers) updateEndUserStatus(ctx context.Context, in *statusPathI
 	if !updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
-	if h.blacklist != nil {
-		if in.Body.Status == "disabled" {
-			_ = h.blacklist.BanUser(ctx, in.ID)
-		} else {
-			_ = h.blacklist.UnbanUser(ctx, in.ID)
-		}
+	if err := h.syncUserSecurity(ctx, in.ID, in.Body.Status); err != nil {
+		return nil, err
 	}
 	out := &messageOutput{}
 	out.Body.Message = "用户状态已更新"
@@ -326,8 +322,8 @@ func (h *adminHandlers) resetEndUserPassword(ctx context.Context, in *tenantIDIn
 	if result.Token == "" {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
-	if h.blacklist != nil {
-		_ = h.blacklist.LogoutUser(in.ID)
+	if err := h.invalidateUserSessions(ctx, in.ID); err != nil {
+		return nil, err
 	}
 	out := &activationCredentialOutput{}
 	setActivationOutput(out, result)
@@ -345,11 +341,11 @@ func (h *adminHandlers) deleteEndUser(ctx context.Context, in *tenantIDInput) (*
 	if err := h.checkUserBelongsToActor(ctx, in.ID, actorFromClaims(claims)); err != nil {
 		return nil, err
 	}
-	if h.blacklist == nil || !h.blacklist.IsEnabled() {
+	if h.security == nil || !h.security.IsEnabled() {
 		return nil, httpx.ErrUnavailable.WithDetail("删除用户需要可用的会话封禁服务")
 	}
 	result, err := h.endUserWriter.DeleteEndUser(ctx, in.ID, func(ctx context.Context, userID string) error {
-		return h.blacklist.BanUser(ctx, userID)
+		return h.security.BanUser(ctx, userID)
 	})
 	if err != nil {
 		var guardErr *userports.AdminEndUserDeleteGuardError

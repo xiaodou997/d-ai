@@ -225,12 +225,8 @@ func (h *adminHandlers) updateSystemAdmin(ctx context.Context, in *updateSystemA
 	if !result.Updated {
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
-	if h.blacklist != nil {
-		if in.Body.Status == 2 {
-			_ = h.blacklist.BanUser(ctx, in.ID)
-		} else {
-			_ = h.blacklist.UnbanUser(ctx, in.ID)
-		}
+	if err := h.syncUserSecurity(ctx, in.ID, status); err != nil {
+		return nil, err
 	}
 	return okSuccess(), nil
 }
@@ -243,8 +239,8 @@ func (h *adminHandlers) resetSystemAdminPassword(ctx context.Context, in *tenant
 	if result.Token == "" {
 		return nil, httpx.ErrNotFound.WithDetail("平台管理员不存在")
 	}
-	if h.blacklist != nil {
-		_ = h.blacklist.LogoutUser(in.ID)
+	if err := h.invalidateUserSessions(ctx, in.ID); err != nil {
+		return nil, err
 	}
 	out := &activationCredentialOutput{}
 	setActivationOutput(out, result)
@@ -333,12 +329,8 @@ func (h *adminHandlers) updateTenantUserStatus(ctx context.Context, in *statusPa
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	// 停用立即失效该用户所有 token 并标记封禁；启用时清除封禁标记
-	if h.blacklist != nil {
-		if in.Body.Status == "disabled" {
-			_ = h.blacklist.BanUser(ctx, in.ID)
-		} else {
-			_ = h.blacklist.UnbanUser(ctx, in.ID)
-		}
+	if err := h.syncUserSecurity(ctx, in.ID, in.Body.Status); err != nil {
+		return nil, err
 	}
 	return okSuccess(), nil
 }
@@ -360,12 +352,8 @@ func (h *adminHandlers) updateTenantUser(ctx context.Context, in *updateTenantUs
 		return nil, httpx.ErrNotFound.WithDetail("用户不存在")
 	}
 	// 停用时强制下线并标记封禁；启用时清除封禁标记
-	if h.blacklist != nil {
-		if status == "disabled" {
-			_ = h.blacklist.BanUser(ctx, in.ID)
-		} else {
-			_ = h.blacklist.UnbanUser(ctx, in.ID)
-		}
+	if err := h.syncUserSecurity(ctx, in.ID, status); err != nil {
+		return nil, err
 	}
 	return okSuccess(), nil
 }
@@ -378,8 +366,8 @@ func (h *adminHandlers) resetTenantUserPassword(ctx context.Context, in *tenantI
 	if result.Token == "" {
 		return nil, httpx.ErrNotFound.WithDetail("租户用户不存在")
 	}
-	if h.blacklist != nil {
-		_ = h.blacklist.LogoutUser(in.ID)
+	if err := h.invalidateUserSessions(ctx, in.ID); err != nil {
+		return nil, err
 	}
 	out := &activationCredentialOutput{}
 	setActivationOutput(out, result)

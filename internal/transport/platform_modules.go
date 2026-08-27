@@ -31,6 +31,7 @@ type PlatformAuthDeps struct {
 // routes.
 type AuthModuleDeps struct {
 	PlatformAuthDeps
+	Security          authports.AccountSecurityWriter
 	SecureCookies     bool
 	Sessions          *auth.SessionService
 	Activations       *auth.ActivationService
@@ -90,6 +91,7 @@ type PlatformIdentityModuleDeps struct {
 // route module.
 type AdminRouteAuthDeps struct {
 	PlatformAuthDeps
+	Security   authports.AccountSecurityWriter
 	RecentAuth *auth.RecentAuthService
 }
 
@@ -224,6 +226,7 @@ func NewPlatformIdentityModule(d PlatformIdentityModuleDeps) Module {
 	return platformIdentityModule{
 		auth: authModule{
 			platformAuthDeps:  platformAuthDeps{JWT: d.Auth.JWT, Blacklist: d.Auth.Blacklist},
+			Security:          d.Auth.Security,
 			SecureCookies:     d.Auth.SecureCookies,
 			Sessions:          d.Auth.Sessions,
 			Activations:       d.Auth.Activations,
@@ -260,6 +263,7 @@ func NewPlatformIdentityModule(d PlatformIdentityModuleDeps) Module {
 func toAdminRouteAuth(d AdminRouteAuthDeps) adminRouteAuth {
 	return adminRouteAuth{
 		platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+		Security:         d.Security,
 		RecentAuth:       d.RecentAuth,
 	}
 }

@@ -322,15 +322,8 @@ func (h *adminHandlers) updateTenantStatus(ctx context.Context, in *updateTenant
 		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 	}
 
-	if h.blacklist != nil {
-		if in.Body.Status == "disabled" {
-			_ = h.blacklist.BanTenant(ctx, in.ID)
-		} else {
-			_ = h.blacklist.UnbanTenant(ctx, in.ID)
-			for _, id := range result.RestoredUserIDs {
-				_ = h.blacklist.UnbanUser(ctx, id)
-			}
-		}
+	if err := h.syncTenantSecurity(ctx, in.ID, in.Body.Status, result.RestoredUserIDs); err != nil {
+		return nil, err
 	}
 
 	return okSuccess(), nil

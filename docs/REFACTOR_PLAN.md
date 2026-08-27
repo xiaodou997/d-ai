@@ -176,6 +176,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务和状态机已下沉，部分管理副作用和跨域编排仍在 HTTP 层。
 - [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入和清理租约已迁移，公告与少量 legacy 编排仍待收敛。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
+- [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
 - [x] AI 管理 API 已按价格、上游、路由、用量、订阅和风控拆分为独立 HTTP 模块与最小端口。
 - [x] 将 Transport 层关键路径覆盖率提升到可执行门槛；`scripts/check_transport_coverage.sh`、Make target 和 CI 统一执行 atomic coverage，当前门槛 10.0%，基线 10.4%，支持通过 `TRANSPORT_COVERAGE_MIN` 持续抬高。
 
@@ -526,11 +527,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 跨副本锁边界：支付 sweep/cleanup 的 advisory lock 由同一物理 PostgreSQL 连接完成获取、执行和释放；任务上下文有 5 分钟硬超时，解锁不受任务超时影响，避免连接池错配和永久占锁。
 - 调度指标边界：Scheduler 暴露任务运行结果、耗时、运行中、连续失败和跳过原因 Prometheus 指标；失败/卡住/持续跨副本跳过可以在管理端 `/metrics` 上做告警，不改变 `/ready` 的基础设施语义。
 - 管理账号列表读取：系统管理员与租户用户分页查询已移入 `internal/user/pg.AdminAccountRepository`，Transport 只负责状态展示和分页 DTO 转换。
-- 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和黑名单副作用。
+- 管理账号写入边界：系统管理员与租户用户创建、更新和启停状态变更已移入 `internal/user/pg.AdminAccountRepository`，通过 `user/ports.AdminAccountWriter` 接收命令；Transport 只保留角色/租户前置校验、错误映射和 `AccountSecurityWriter` 调用。
 - 密码重置边界：系统管理员、租户用户和终端用户的目标类型/删除状态校验与 `ActivationService.Reset` 调用已移入对应 user repository；Transport 只映射一次性凭证响应并触发会话下线。
-- 删除事务边界：系统管理员硬删除和终端用户余额保护/软删除已移入 user repository；终端用户 guard 在持锁事务提交前执行，黑名单不可用或失败时不会提交删除。
+- 删除事务边界：系统管理员硬删除和终端用户余额保护/软删除已移入 user repository；终端用户 security ban guard 在持锁事务提交前执行，黑名单不可用或失败时不会提交删除。
 - 终端用户列表读取：租户范围、租户名/用户名/关键词/状态过滤，以及余额、最后登录和资料投影已移入 `internal/user/pg.AdminEndUserRepository`；权限范围仍由 claims 在 handler 先收窄。
-- 终端用户写入边界：资料更新与启用/停用状态变更已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 接收显式字段更新命令；Transport 不再直接执行这两类 `iam_accounts` UPDATE，黑名单同步仍由 handler 编排。
+- 终端用户写入边界：资料更新与启用/停用状态变更已移入 `internal/user/pg.AdminEndUserRepository`，通过 `user/ports.AdminEndUserWriter` 接收显式字段更新命令；Transport 不再直接执行这两类 `iam_accounts` UPDATE，黑名单同步改由 `AccountSecurityWriter` command 负责。
 - 终端用户创建事务：账号插入和一次性激活令牌写入已移入 `AdminEndUserRepository.CreateEndUser`，由同一事务提交/回滚；handler 只生成凭证、组装命令和映射唯一约束错误。
 - 回归：新增 canonical schema 集成测试，确认 24 小时窗口、失败状态过滤、空 settlement error 和时间倒序；`internal/transport` 仅保留展示转换。
 - 回归：新增 TenantRepository canonical schema 测试，覆盖租户详情投影、联系人字段、终端用户租户归属和 deleted 用户不可见。
@@ -1039,3 +1040,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 边界：`DeductionService` 的用量退款、充值撤销和批量退款 command 统一接收调用方 context；Transport 与 PaymentService 不再让账务操作隐式创建 `context.Background()`。
 - 取消语义：数据库查询、锁、账本写入、审计和提交沿用同一 context；批量退款检测取消并停止处理剩余请求，查询取消不会再被误映射为“记录不存在”。
 - 回归：新增取消 context 的退款、撤销和批量命令测试；定向 billing/payment/transport 编译测试、gofmt 与差异检查通过。
+
+### P1-03（Account security side-effect command，2026-08-27）
+
+- 边界：新增 `auth/ports.AccountSecurityWriter` 与 `AccountSecurityService`，统一承接账号/租户状态同步、token 撤销和用户会话失效；管理账号、终端用户、认证路由不再直接写 Redis 黑名单。
+- 上下文：BlacklistService 的读写 API 全部接收调用方 context，HTTP middleware、AI middleware 和账号 security command 不再隐式创建 `context.Background()`。
+- 回归：新增 miniredis 覆盖用户/租户 ban 同步、token 撤销与取消语义；auth、AI transport、platform transport/server 定向编译测试通过。
