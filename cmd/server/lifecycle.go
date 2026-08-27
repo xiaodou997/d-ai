@@ -22,6 +22,38 @@ type shutdownEntry struct {
 	close func(context.Context) error
 }
 
+// periodicWorker owns a context-driven background loop. The cancellation is
+// idempotent, while every Stop call still gets a chance to wait with its own
+// deadline after an earlier short shutdown deadline expires.
+type periodicWorker struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+	once   sync.Once
+}
+
+func (w *periodicWorker) Stop(ctx context.Context) error {
+	if w == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	w.once.Do(func() {
+		if w.cancel != nil {
+			w.cancel()
+		}
+	})
+	if w.done == nil {
+		return nil
+	}
+	select {
+	case <-w.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (s *shutdownStack) Add(name string, closeFn func(context.Context) error) {
 	if closeFn == nil {
 		return

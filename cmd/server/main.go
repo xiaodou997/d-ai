@@ -146,22 +146,22 @@ func run() error {
 	})
 
 	// Hourly cleanups
-	go runHourlyCleanup(ctx, func() {
-		if _, err := imageAssetSvc.CleanupExpired(ctx); err != nil && !errors.Is(err, imageassets.ErrCleanupAlreadyRunning) {
+	shutdowns.Add("hourly image cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+		if _, err := imageAssetSvc.CleanupExpired(cleanupCtx); err != nil && !errors.Is(err, imageassets.ErrCleanupAlreadyRunning) {
 			appLogger.Warn("expired image asset cleanup failed", zap.Error(err))
 		}
-	})
-	go runHourlyCleanup(ctx, func() { fileStore.CleanupExpired(ctx, 500) })
-	go runHourlyCleanup(ctx, func() {
-		if _, err := sessionSvc.DeleteExpired(ctx, 5000); err != nil {
+	}).Stop)
+	shutdowns.Add("hourly file cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) { fileStore.CleanupExpired(cleanupCtx, 500) }).Stop)
+	shutdowns.Add("hourly auth session cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+		if _, err := sessionSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
 			appLogger.Warn("expired auth session cleanup failed", zap.Error(err))
 		}
-	})
-	go runHourlyCleanup(ctx, func() {
-		if _, err := activationSvc.DeleteExpired(ctx, 5000); err != nil {
+	}).Stop)
+	shutdowns.Add("hourly activation cleanup", startHourlyCleanup(ctx, func(cleanupCtx context.Context) {
+		if _, err := activationSvc.DeleteExpired(cleanupCtx, 5000); err != nil {
 			appLogger.Warn("expired activation credential cleanup failed", zap.Error(err))
 		}
-	})
+	}).Stop)
 
 	// ──────────────────────────────────────────────────────
 	// 4. 统一 Transport 装配
@@ -329,9 +329,29 @@ func isBackendPath(requestPath string) bool {
 	return false
 }
 
-// runHourlyCleanup runs cleanup() immediately, then every hour until ctx cancels.
-func runHourlyCleanup(ctx context.Context, cleanup func()) {
-	cleanup()
+// startHourlyCleanup runs cleanup immediately, then every hour until its
+// worker context is cancelled. The returned worker must be registered with
+// shutdownStack so shutdown waits for an in-flight cleanup to leave its
+// dependency graph.
+func startHourlyCleanup(ctx context.Context, cleanup func(context.Context)) *periodicWorker {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runHourlyCleanup(workerCtx, cleanup)
+	}()
+	return &periodicWorker{cancel: cancel, done: done}
+}
+
+// runHourlyCleanup runs cleanup immediately, then every hour until ctx cancels.
+func runHourlyCleanup(ctx context.Context, cleanup func(context.Context)) {
+	if cleanup == nil {
+		return
+	}
+	cleanup(ctx)
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -339,7 +359,7 @@ func runHourlyCleanup(ctx context.Context, cleanup func()) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cleanup()
+			cleanup(ctx)
 		}
 	}
 }
