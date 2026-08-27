@@ -175,9 +175,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-03 收敛 HTTP 层业务逻辑
 
-- [~] 把权限、事务、状态机和数据库查询移出 `internal/transport`；已完成管理 Dashboard 异常扣费告警查询迁移到 `SystemRepository`，管理员租户用户创建改由账号事务和外键错误映射保证一致性，管理员账号/租户/终端用户安全编排已下沉，其余少量 legacy 逻辑继续按边界逐项迁移。
-- [~] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；核心查询、事务、终端用户 tenant scope、公告状态机、管理员账号、租户和终端用户安全副作用已下沉，仍有少量 legacy 编排待收敛。
-- [~] 用户、租户、支付、充值、公告和清理逐域迁移；用户、租户、支付、充值查询/写入、公告状态事务、管理员账号/租户/终端用户安全编排和清理租约已迁移，管理员账号创建不再依赖锁外租户预检，少量 legacy 编排仍待收敛。
+- [x] 把权限、事务、状态机和数据库查询移出 `internal/transport`；管理 Dashboard、用户/租户 scope、支付订单范围、公告状态机、管理员账号/租户/终端用户安全副作用均已下沉到 application/repository 边界。
+- [x] Handler 只负责认证上下文、DTO 转换、调用 application 和错误映射；Transport 已清零事务、数据库驱动和跨域安全编排，具体 service 仅作为窄端口的组合根实现承载。
+- [x] 用户、租户、支付、充值、公告和清理逐域迁移；用户/租户/支付写入与查询、订单范围、公告状态事务、账号安全生命周期和清理 command 均已由 application/repository 负责。
 - [x] 运营账务 command（用量退款、充值撤销和批量退款）统一接收调用方 context；Transport 与支付 application 不再让请求脱离 `context.Background()` 访问账务数据库，批量命令在取消后会停止处理剩余项目。
 - [x] 账号/租户状态变更、密码重置、资料更新、登出和改密的黑名单/会话副作用统一通过 `auth/ports.AccountSecurityWriter`；Transport 不再直接编排 Redis token 与 ban 写入，读路径也沿用请求 context。
 - [x] 通知发送统一通过 `notification.Service.Send` command，并以 `notification.HTTPService` 最小端口注入 Transport；channel 分发和未知 channel 校验不再由 Handler 决定。
@@ -1280,3 +1280,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：管理支付路由改为依赖 `AdminPaymentHTTPService`，完整 `PaymentService` 不再直接出现在管理 handler 字段中；在线充值、租户现金和回调端口保持独立。
 - 边界：平台规则、微信配置、订单同步、人工充值冲正、流水和提现 command/query 统一通过管理 application port，管理员权限中间件不变。
 - 回归：payment、Transport、server 定向测试、`go vet`、`go build`、`checkdeps` 与差异检查通过。
+
+### P1-03（Transport business-logic boundary completion，2026-08-27）
+
+- 审计：复查 `internal/transport` 生产代码，已无事务 API、PostgreSQL/Redis/sqlc 直接调用或跨域安全副作用编排；认证中间件与模块窄端口仅保留组合根注入的基础设施/应用接口。
+- 结论：P1-03 三项域迁移清单完成，后续新增业务必须沿现有 application port/repository 边界进入，避免回流 handler。
