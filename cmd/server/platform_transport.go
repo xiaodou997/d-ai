@@ -73,7 +73,6 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 			},
 			Finance: transport.AdminFinanceModuleDeps{
 				AdminRouteAuthDeps: adminAuth,
-				TenantReader:       platform.TenantRepo,
 				Deduction:          platform.Deduction,
 				AccountQueries:     platform.AccountQueries,
 				Recharge:           platform.Recharge,

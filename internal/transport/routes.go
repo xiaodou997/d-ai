@@ -409,7 +409,6 @@ type adminUsersModule struct {
 
 type adminFinanceModule struct {
 	adminRouteAuth
-	TenantReader   tenantports.AdminTenantReader
 	Deduction      *billingsvc.DeductionService
 	AccountQueries billingports.AccountQueryReader
 	Recharge       *billingsvc.RechargeService

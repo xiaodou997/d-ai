@@ -22,7 +22,7 @@ import (
 // owns the iam_* query. This keeps the row-lock boundary out of HTTP without
 // making billing depend on a concrete tenant repository.
 type ManualRechargeTargetLocker interface {
-	LockManualRechargeTarget(ctx context.Context, tx pgx.Tx, tenantID, userID string) error
+	LockManualRechargeTarget(ctx context.Context, tx pgx.Tx, tenantID, userID string) (string, error)
 }
 
 // RechargeService owns manual recharge lifecycle transactions. Payment
@@ -58,6 +58,7 @@ type GrantParams struct {
 
 // GrantResult 记账结果。
 type GrantResult struct {
+	TenantID            string
 	OrderID             string
 	BalanceLotID        string // empty when the entire grant cleared debt
 	ClearedDebtMicroUSD int64
@@ -118,6 +119,7 @@ func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 	}
 
 	return &GrantResult{
+		TenantID:            p.TenantID,
 		OrderID:             orderID,
 		BalanceLotID:        lotID,
 		ClearedDebtMicroUSD: clearedDebt,
@@ -128,10 +130,11 @@ func GrantBalance(ctx context.Context, tx pgx.Tx, p GrantParams) (*GrantResult, 
 
 // GrantManual creates a platform_to_tenant or tenant_to_user recharge and its
 // balance lot atomically. The target row is locked before GrantBalance runs,
-// so a concurrent account disable/delete cannot pass the HTTP preflight and
-// still receive a grant.
+// so a concurrent account disable/delete cannot pass an out-of-transaction
+// preflight and still receive a grant. When a platform operator omits the
+// tenant for a user recharge, the locker resolves it under the same lock.
 func (s *RechargeService) GrantManual(ctx context.Context, p GrantParams) (*GrantResult, error) {
-	if err := validateGrantParams(p); err != nil {
+	if err := validateManualGrantParams(p); err != nil {
 		return nil, err
 	}
 	if p.OrderType != billing.OrderTypePlatformToTenant && p.OrderType != billing.OrderTypeTenantToUser {
@@ -147,13 +150,20 @@ func (s *RechargeService) GrantManual(ctx context.Context, p GrantParams) (*Gran
 	}
 	defer tx.Rollback(ctx)
 
-	if err := s.targetLocker.LockManualRechargeTarget(ctx, tx, p.TenantID, p.UserID); err != nil {
+	resolvedTenantID, err := s.targetLocker.LockManualRechargeTarget(ctx, tx, p.TenantID, p.UserID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			if p.UserID != "" {
 				return nil, grantValidationError("用户不存在、已删除或已停用")
 			}
 			return nil, grantValidationError("目标租户不存在")
 		}
+		return nil, err
+	}
+	if p.TenantID == "" {
+		p.TenantID = resolvedTenantID
+	}
+	if err := validateGrantParams(p); err != nil {
 		return nil, err
 	}
 
@@ -168,7 +178,15 @@ func (s *RechargeService) GrantManual(ctx context.Context, p GrantParams) (*Gran
 }
 
 func validateGrantParams(p GrantParams) error {
-	if p.TenantID == "" {
+	return validateGrantParamsInternal(p, false)
+}
+
+func validateManualGrantParams(p GrantParams) error {
+	return validateGrantParamsInternal(p, true)
+}
+
+func validateGrantParamsInternal(p GrantParams, allowTenantResolution bool) error {
+	if p.TenantID == "" && !(allowTenantResolution && p.OrderType == billing.OrderTypeTenantToUser && p.UserID != "") {
 		return grantValidationError("tenant id is required")
 	}
 	if p.OperatorID == "" {

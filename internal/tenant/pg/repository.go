@@ -255,9 +255,23 @@ func (r *TenantRepository) GetEndUserTenantID(ctx context.Context, userID string
 
 // LockManualRechargeTarget serializes a manual recharge with tenant/account
 // lifecycle changes. It intentionally checks existence and the active end-user
-// state while holding the same transaction lock used by the billing service;
-// callers must map pgx.ErrNoRows to their request-level validation error.
-func (r *TenantRepository) LockManualRechargeTarget(ctx context.Context, tx pgx.Tx, tenantID, userID string) error {
+// state while holding the same transaction lock used by the billing service.
+// When tenantID is empty, an active user row supplies the tenant scope before
+// the tenant row is locked. Callers must map pgx.ErrNoRows to request-level
+// validation errors.
+func (r *TenantRepository) LockManualRechargeTarget(ctx context.Context, tx pgx.Tx, tenantID, userID string) (string, error) {
+	if tenantID == "" {
+		if userID == "" {
+			return "", pgx.ErrNoRows
+		}
+		if err := tx.QueryRow(ctx, `
+			SELECT tenant_id
+			FROM iam_accounts
+			WHERE user_id = $1 AND user_type = 4 AND status = 'active'
+		`, userID).Scan(&tenantID); err != nil {
+			return "", err
+		}
+	}
 	var lockedTenantID string
 	if err := tx.QueryRow(ctx, `
 		SELECT tenant_id
@@ -265,17 +279,20 @@ func (r *TenantRepository) LockManualRechargeTarget(ctx context.Context, tx pgx.
 		WHERE tenant_id = $1
 		FOR UPDATE
 	`, tenantID).Scan(&lockedTenantID); err != nil {
-		return err
+		return "", err
 	}
 	if userID == "" {
-		return nil
+		return lockedTenantID, nil
 	}
-	return tx.QueryRow(ctx, `
+	if err := tx.QueryRow(ctx, `
 		SELECT tenant_id
 		FROM iam_accounts
 		WHERE user_id = $1 AND tenant_id = $2 AND user_type = 4 AND status = 'active'
 		FOR UPDATE
-	`, userID, lockedTenantID).Scan(&lockedTenantID)
+	`, userID, lockedTenantID).Scan(&lockedTenantID); err != nil {
+		return "", err
+	}
+	return lockedTenantID, nil
 }
 
 // Legacy aliases keep adapter callers source-compatible while new callers use

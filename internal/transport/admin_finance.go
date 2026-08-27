@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -15,7 +16,6 @@ import (
 	billingports "xiaodou/dai/internal/billing/ports"
 	billingsvc "xiaodou/dai/internal/billing/service"
 	shared "xiaodou/dai/internal/domain"
-	tenantports "xiaodou/dai/internal/tenant/ports"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -174,51 +174,34 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 		if !actor.Has(auth.CapabilityPlatformAdmin) {
 			return nil, httpx.ErrForbidden.WithDetail("只有平台管理员才能进行租户充值")
 		}
-		tenantID = in.Body.TenantID
+		tenantID = strings.TrimSpace(in.Body.TenantID)
 		if tenantID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("租户充值时 tenantId 必填")
 		}
-		if h.tenantReader == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
-		}
-		if _, err := h.tenantReader.GetTenantDetails(ctx, tenantID); err != nil {
-			if !errors.Is(err, tenantports.ErrTenantNotFound) {
-				return nil, httpx.ErrInternal.WithCause(err)
-			}
-			return nil, httpx.ErrBadRequest.WithDetail("目标租户不存在")
-		}
 	} else {
-		if in.Body.UserID == "" {
+		userID = strings.TrimSpace(in.Body.UserID)
+		if userID == "" {
 			return nil, httpx.ErrBadRequest.WithDetail("用户充值时 userId 必填")
 		}
-		if h.tenantReader == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("租户查询服务不可用")
-		}
-		userTenantID, err := h.tenantReader.GetEndUserTenantID(ctx, in.Body.UserID)
-		if err != nil {
-			if !errors.Is(err, tenantports.ErrTenantEndUserNotFound) {
-				return nil, httpx.ErrInternal.WithCause(err)
+		if actor.Has(auth.CapabilityTenantSelf) {
+			if actor.TenantID == "" {
+				return nil, httpx.ErrForbidden.WithDetail("租户用户缺少租户范围")
 			}
-			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
+			tenantID = string(actor.TenantID)
+		} else if !actor.Has(auth.CapabilityPlatformAdmin) {
+			return nil, httpx.ErrForbidden.WithDetail("无权为用户充值")
 		}
-		if userTenantID == "" {
-			return nil, httpx.ErrBadRequest.WithDetail("用户不存在或无归属租户")
+		if actor.Has(auth.CapabilityPlatformAdmin) {
+			// Platform operators may omit tenantId; GrantManual resolves it while
+			// locking the user and tenant rows in one billing transaction.
+			tenantID = strings.TrimSpace(in.Body.TenantID)
 		}
-		if !actor.Owns(auth.NewResourceOwnership(userTenantID, "")) {
-			return nil, httpx.ErrForbidden.WithDetail("只能为本租户用户充值")
-		}
-		tenantID = userTenantID
-		userID = in.Body.UserID
 	}
 
 	pkgSource := billingdomain.PackageSourceAdminRecharge
 	if orderType == billingdomain.OrderTypeTenantToUser {
 		pkgSource = billingdomain.PackageSourceTenantRecharge
 	}
-	if in.Body.AmountMicroUSD <= 0 {
-		return nil, httpx.ErrBadRequest.WithDetail("amountMicroUsd must be positive")
-	}
-
 	grant, err := h.rechargeSvc.GrantManual(ctx, billingsvc.GrantParams{
 		OrderType: orderType, TenantID: tenantID, UserID: userID,
 		AmountMicroUSD: in.Body.AmountMicroUSD, PaidAmount: in.Body.PaidAmountMinor,
@@ -228,6 +211,7 @@ func (h *adminHandlers) recharge(ctx context.Context, in *rechargeInput) (*recha
 	if err != nil {
 		return nil, toProblem(err)
 	}
+	tenantID = grant.TenantID
 
 	out := &rechargeOutput{}
 	out.Body.OrderID = grant.OrderID

@@ -66,7 +66,6 @@ func newAdminUsersHandlers(d adminUsersModule) *adminHandlers {
 
 func newAdminFinanceHandlers(d adminFinanceModule) *adminHandlers {
 	return &adminHandlers{
-		tenantReader:    d.TenantReader,
 		deduction:       d.Deduction,
 		accountQueries:  d.AccountQueries,
 		rechargeSvc:     d.Recharge,

@@ -91,6 +91,43 @@ func TestRechargeServiceOwnsManualGrantTransactionAndTargetLock(t *testing.T) {
 	}
 }
 
+func TestRechargeServiceResolvesUserTenantInsideGrantTransaction(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ('tenant_resolve_grant', 'Resolve Grant Tenant', 'active');
+		INSERT INTO iam_accounts (user_id, tenant_id, username, password_hash, user_type, status)
+		VALUES ('user_resolve_grant', 'tenant_resolve_grant', 'resolve-grant-user', 'x', 4, 'active');
+	`); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+
+	recharge := service.NewRechargeService(pool, tenantpg.NewTenantRepository(pool))
+	grant, err := recharge.GrantManual(ctx, service.GrantParams{
+		OrderType: billing.OrderTypeTenantToUser, UserID: "user_resolve_grant",
+		AmountMicroUSD: 1200, OperatorID: "platform-operator", Source: billing.PackageSourceTenantRecharge,
+	})
+	if err != nil {
+		t.Fatalf("grant with resolved tenant: %v", err)
+	}
+	if grant.TenantID != "tenant_resolve_grant" {
+		t.Fatalf("resolved grant tenant = %q, want tenant_resolve_grant", grant.TenantID)
+	}
+	var storedTenantID string
+	if err := pool.QueryRow(ctx, `SELECT tenant_id FROM bill_recharge_orders WHERE order_id = $1`, grant.OrderID).Scan(&storedTenantID); err != nil {
+		t.Fatalf("read resolved grant tenant: %v", err)
+	}
+	if storedTenantID != grant.TenantID {
+		t.Fatalf("stored grant tenant = %q, result tenant = %q", storedTenantID, grant.TenantID)
+	}
+}
+
 func TestGrantBalanceRejectsPaymentAndManualBoundaryMixups(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 2})

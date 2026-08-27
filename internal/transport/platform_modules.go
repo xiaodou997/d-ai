@@ -117,7 +117,6 @@ type AdminUsersModuleDeps struct {
 // AdminFinanceModuleDeps contains administrator finance and auth-audit routes.
 type AdminFinanceModuleDeps struct {
 	AdminRouteAuthDeps
-	TenantReader   tenantports.AdminTenantReader
 	Deduction      *billingsvc.DeductionService
 	AccountQueries billingports.AccountQueryReader
 	Recharge       *billingsvc.RechargeService
@@ -287,7 +286,6 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 		},
 		finance: adminFinanceModule{
 			adminRouteAuth: toAdminRouteAuth(d.Finance.AdminRouteAuthDeps),
-			TenantReader:   d.Finance.TenantReader,
 			Deduction:      d.Finance.Deduction,
 			AccountQueries: d.Finance.AccountQueries,
 			Recharge:       d.Finance.Recharge,
