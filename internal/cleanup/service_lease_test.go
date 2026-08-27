@@ -20,7 +20,7 @@ func TestCleanupLeaseHeartbeatAndTerminalWriteAreFenced(t *testing.T) {
 
 	first := NewService(pool, zap.NewNop())
 	second := NewService(pool, zap.NewNop())
-	run, err := first.queueRun("manual", []string{TargetNotifications}, "operator-1")
+	run, err := first.queueRun(ctx, "manual", []string{TargetNotifications}, "operator-1")
 	if err != nil {
 		t.Fatalf("queue cleanup run: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestCleanupLeaseHeartbeatAndTerminalWriteAreFenced(t *testing.T) {
 	if recovered != "failed" {
 		t.Fatalf("recovered stale run status = %q, want failed", recovered)
 	}
-	if _, err := second.queueRun("automatic", []string{TargetNotifications}, ""); err != nil {
+	if _, err := second.queueRun(ctx, "automatic", []string{TargetNotifications}, ""); err != nil {
 		t.Fatalf("queue after expired lease recovery: %v", err)
 	}
 }

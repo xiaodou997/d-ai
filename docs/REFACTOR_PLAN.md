@@ -967,6 +967,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 装配：`platformAdminModule` 仅编排六个子模块；共享 `adminHandlers` 只由各子模块按需投影字段，认证、近期认证和黑名单能力保持统一但不携带无关业务服务。
 - 回归：既有管理员 OpenAPI surface、授权和数据库集成测试继续覆盖原 operation/path；`go test ./internal/transport ./cmd/server -count=1`、`go vet` 和差异检查通过。
 
+### P1-02（Manual cleanup lifecycle fencing，2026-08-27）
+
+- 生命周期：`cleanup.Service.StartManual` 的脱离请求执行现在挂接服务级可取消 context，并登记到 manual run wait group；`Stop` 会同时取消自动 worker 与手动执行，避免关闭数据库后仍有清理 goroutine 访问依赖。
+- 并发：手动 run 入队使用可取消 context，停止竞态不会留下未被等待的后台执行；服务停止后拒绝新的手动清理请求。
+- 回归：新增手动执行取消、Stop 等待和停止后拒绝测试；`go test ./internal/cleanup -count=1`、`go vet` 和差异检查通过。
+
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
 - 生命周期：`asynctask.Engine` 现在自持有 worker context，Start/Stop 幂等且 Stop-before-Start 会阻止后续启动；停止时先取消 worker、webhook 和 reaper 循环，再执行租约释放。

@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -66,5 +67,47 @@ func TestServiceDoesNotStartAfterStop(t *testing.T) {
 	}
 	if got := service.Health(); !got.Stopped || got.Started {
 		t.Fatalf("cleanup health after stop-before-start = %+v", got)
+	}
+}
+
+func TestServiceStopWaitsForManualRun(t *testing.T) {
+	service := NewService(nil, zap.NewNop())
+	manualCtx, release, err := service.beginManualRun()
+	if err != nil {
+		t.Fatalf("begin manual run: %v", err)
+	}
+	started := make(chan struct{})
+	releaseRun := make(chan struct{})
+	go func() {
+		defer release()
+		close(started)
+		<-manualCtx.Done()
+		<-releaseRun
+	}()
+	<-started
+
+	shortCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	service.Stop(shortCtx)
+	select {
+	case <-manualCtx.Done():
+	default:
+		t.Fatal("Stop did not cancel manual cleanup context")
+	}
+
+	longCtx, longCancel := context.WithTimeout(context.Background(), time.Second)
+	defer longCancel()
+	close(releaseRun)
+	service.Stop(longCtx)
+	if got := service.Health(); !got.Stopped {
+		t.Fatalf("stopped cleanup health = %+v, want stopped", got)
+	}
+}
+
+func TestServiceRejectsManualRunAfterStop(t *testing.T) {
+	service := NewService(nil, zap.NewNop())
+	service.Stop(context.Background())
+	if _, err := service.StartManual([]string{TargetNotifications}, "operator"); !errors.Is(err, ErrServiceStopped) {
+		t.Fatalf("StartManual after Stop error = %v, want %v", err, ErrServiceStopped)
 	}
 }

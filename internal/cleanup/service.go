@@ -41,6 +41,7 @@ const (
 
 var (
 	ErrAlreadyRunning = errors.New("data cleanup is already running")
+	ErrServiceStopped = errors.New("data cleanup service is stopped")
 	ErrInvalidTarget  = errors.New("invalid data cleanup target")
 	ErrLeaseLost      = errors.New("data cleanup lease was lost")
 	archiveTableName  = regexp.MustCompile(`^ai_request_payloads_archive_[0-9]{4}_[0-9]{2}$`)
@@ -93,7 +94,6 @@ type Run struct {
 type Service struct {
 	pool              *pgxpool.Pool
 	logger            *zap.Logger
-	root              context.Context
 	ownerID           string
 	leaseTTL          time.Duration
 	heartbeatInterval time.Duration
@@ -101,6 +101,9 @@ type Service struct {
 	mu           sync.RWMutex
 	workerCancel context.CancelFunc
 	workerDone   chan struct{}
+	manualCtx    context.Context
+	manualCancel context.CancelFunc
+	manualRuns   sync.WaitGroup
 	started      bool
 	stopped      bool
 	startOnce    sync.Once
@@ -113,10 +116,12 @@ func NewService(pool *pgxpool.Pool, logger *zap.Logger) *Service {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	manualCtx, manualCancel := context.WithCancel(context.Background())
 	return &Service{
 		pool:              pool,
 		logger:            logger,
-		root:              context.Background(),
+		manualCtx:         manualCtx,
+		manualCancel:      manualCancel,
 		ownerID:           uuid.NewString(),
 		leaseTTL:          cleanupLeaseTTL,
 		heartbeatInterval: cleanupHeartbeat,
@@ -167,7 +172,6 @@ func (s *Service) Start(ctx context.Context) {
 			cancel()
 			return
 		}
-		s.root = ctx
 		s.workerCancel = cancel
 		s.workerDone = done
 		s.started = true
@@ -207,19 +211,28 @@ func (s *Service) Stop(ctx context.Context) {
 	s.stopOnce.Do(func() {
 		s.mu.Lock()
 		s.stopped = true
-		cancel := s.workerCancel
+		workerCancel := s.workerCancel
+		manualCancel := s.manualCancel
 		s.mu.Unlock()
-		if cancel != nil {
-			cancel()
+		if workerCancel != nil {
+			workerCancel()
+		}
+		if manualCancel != nil {
+			manualCancel()
 		}
 	})
 
 	s.mu.RLock()
-	done := s.workerDone
+	workerDone := s.workerDone
 	s.mu.RUnlock()
-	if done == nil {
-		return
-	}
+	done := make(chan struct{})
+	go func() {
+		if workerDone != nil {
+			<-workerDone
+		}
+		s.manualRuns.Wait()
+		close(done)
+	}()
 	select {
 	case <-done:
 	case <-ctx.Done():
@@ -303,18 +316,39 @@ func (s *Service) StartManual(targets []string, actor string) (Run, error) {
 	if err != nil {
 		return Run{}, err
 	}
-	run, err := s.queueRun("manual", targets, actor)
+	manualCtx, release, err := s.beginManualRun()
 	if err != nil {
 		return Run{}, err
 	}
-	s.mu.RLock()
-	root := s.root
-	s.mu.RUnlock()
-	if root == nil {
-		root = context.Background()
+	run, err := s.queueRun(manualCtx, "manual", targets, actor)
+	if err != nil {
+		release()
+		return Run{}, err
 	}
-	go s.execute(context.WithoutCancel(root), run.ID, "manual", targets, actor)
+	go func() {
+		defer release()
+		s.execute(manualCtx, run.ID, "manual", targets, actor)
+	}()
 	return run, nil
+}
+
+// beginManualRun reserves a slot for a manually-triggered cleanup before its
+// durable run is queued. The reservation closes the shutdown race between the
+// HTTP request returning and the process releasing the database pool.
+func (s *Service) beginManualRun() (context.Context, func(), error) {
+	if s == nil {
+		return nil, func() {}, ErrServiceStopped
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped {
+		return nil, func() {}, ErrServiceStopped
+	}
+	if s.manualCtx == nil {
+		s.manualCtx, s.manualCancel = context.WithCancel(context.Background())
+	}
+	s.manualRuns.Add(1)
+	return s.manualCtx, s.manualRuns.Done, nil
 }
 
 func (s *Service) ListRuns(ctx context.Context) ([]Run, error) {
@@ -350,7 +384,7 @@ func (s *Service) runAutomatic(ctx context.Context) {
 		s.logger.Debug("data cleanup: automatic cleanup is disabled")
 		return
 	}
-	run, err := s.queueRun("automatic", AllTargets(), "")
+	run, err := s.queueRun(ctx, "automatic", AllTargets(), "")
 	if errors.Is(err, ErrAlreadyRunning) {
 		s.logger.Info("data cleanup: another run is already active")
 		return
@@ -362,8 +396,11 @@ func (s *Service) runAutomatic(ctx context.Context) {
 	s.execute(ctx, run.ID, "automatic", run.Targets, "")
 }
 
-func (s *Service) queueRun(trigger string, targets []string, actor string) (Run, error) {
-	if err := s.recoverStaleRuns(context.Background()); err != nil {
+func (s *Service) queueRun(ctx context.Context, trigger string, targets []string, actor string) (Run, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := s.recoverStaleRuns(ctx); err != nil {
 		return Run{}, fmt.Errorf("recover stale cleanup runs: %w", err)
 	}
 	rawTargets, err := json.Marshal(targets)
@@ -372,7 +409,7 @@ func (s *Service) queueRun(trigger string, targets []string, actor string) (Run,
 	}
 	var run Run
 	var rawTargetBytes, rawSummary []byte
-	err = s.pool.QueryRow(context.Background(), `
+	err = s.pool.QueryRow(ctx, `
 		INSERT INTO sys_data_cleanup_runs (
 			trigger, status, requested_by, targets, owner_id, heartbeat_at, lease_until
 		)
