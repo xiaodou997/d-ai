@@ -68,7 +68,9 @@ func assembleAIRuntimeRole(ctx context.Context, cfg *config.Config, pool, billin
 	if platform == nil || platform.modules == nil {
 		return nil, fmt.Errorf("platform runtime role is required")
 	}
-	modules, err := buildAIModules(cfg, pool, billingPool, redisClient, logger, platform.modules)
+	modules, err := buildAIModules(cfg, pool, billingPool, redisClient, logger, aiPlatformDeps{
+		JWT: platform.modules.JWT, ProxyNodes: platform.modules.ProxyNodes, Modules: platform.modules.Modules,
+	})
 	if err != nil {
 		return nil, err
 	}

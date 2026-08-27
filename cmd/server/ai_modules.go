@@ -38,6 +38,7 @@ import (
 	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/privacy"
+	"xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
 	"xiaodou/dai/internal/ai/secret"
@@ -48,8 +49,10 @@ import (
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
 	workspacesvc "xiaodou/dai/internal/ai/workspace"
+	"xiaodou/dai/internal/auth"
 	billingoutbox "xiaodou/dai/internal/billing/outbox"
 	"xiaodou/dai/internal/config"
+	"xiaodou/dai/internal/system"
 	"xiaodou/dai/internal/transport"
 	"xiaodou/dai/libs/go/banstate"
 )
@@ -86,12 +89,18 @@ type aiModules struct {
 	startOnce          sync.Once
 }
 
-func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, appLogger *zap.Logger, platform *platformModules) (*aiModules, error) {
+type aiPlatformDeps struct {
+	JWT        *auth.JWTService
+	ProxyNodes *proxy.Service
+	Modules    *system.Service
+}
+
+func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisClient *redis.Client, appLogger *zap.Logger, platform aiPlatformDeps) (*aiModules, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("configuration is required")
 	}
-	if platform == nil {
-		return nil, fmt.Errorf("platform modules are required")
+	if platform.JWT == nil || platform.ProxyNodes == nil || platform.Modules == nil {
+		return nil, fmt.Errorf("AI platform dependencies are incomplete")
 	}
 	if appLogger == nil {
 		appLogger = zap.NewNop()

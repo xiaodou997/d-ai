@@ -186,6 +186,8 @@ HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台
 
 组合根通过 `platformRuntimeRole` / `aiRuntimeRole` 明确两个运行角色的装配和生命周期边界；AI 角色依赖平台角色先完成，二者的 shutdown callback 按依赖逆序登记。
 
+AI builder 仅接收 `aiPlatformDeps` 显式投影，不再接收完整平台容器；平台身份、账务和运营服务不会通过组合根隐式泄漏进 AI 装配。
+
 公告 HTTP 模块通过 `AnnouncementHTTPService` 窄端口接收查询、草稿和状态转换能力；具体公告 application service 只在组合根构造并投影，Transport 不再暴露实现类型。
 
 系统模块 HTTP 通过 `SystemHTTPService` 窄端口接收状态和 PII 配置 command/query；具体 `system.Service` 仅由组合根持有。

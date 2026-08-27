@@ -129,7 +129,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-02 拆分 composition root 和巨型依赖容器
 
-- [~] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、HTTP、平台模块和 AI 模块生命周期已抽出，剩余是运行角色拆分与全量模块注册完善。
+- [x] 将 `cmd/server/main.go` 拆为配置、基础设施、模块装配和运行生命周期；基础设施、平台/AI 运行角色、HTTP 和后台生命周期均已抽出，`run()` 仅保留顺序编排。
 - [x] 删除包含几十个字段的 `transport.Deps` / AI Core service locator；平台路由改由 `transport.Module` 和模块专属依赖类型注册，AI Core 已收敛为 `CoreHTTPDeps` / `AICoreHTTPDeps`，AI 与 raw 路由均使用窄依赖。
 - [~] 每个模块提供最小的 Register/Module 接口和显式依赖；已建立 `transport.Module` 并接入平台/AI 路由，identity 自助/公开、认证/JWT key、operations、payment、AI identity user port 与管理员六类子模块已提取最小依赖，平台根容器治理仍需继续收敛。
 - [x] 后台组件统一实现 Start/Stop/Health 生命周期；数据库、Redis、平台 worker、AI worker、LiteLLM 刷新、异步任务、runtime binding cache、subscription janitor、data cleanup 和小时级清理任务均已接入统一关闭路径与生命周期 Health，队列故障级指标继续由各自观测面提供。
@@ -1296,3 +1296,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 结构：新增 `platformRuntimeRole` 与 `aiRuntimeRole`，分别封装平台/AI bundle 的构造、启动、健康投影和 shutdown stack 登记；`run()` 不再重复编排两套角色生命周期。
 - 依赖：AI 角色装配显式要求已完成的平台角色，缺失时返回组合根错误而不是触发 nil dereference；平台角色继续先于 AI 角色启动并后于 AI 角色停止。
 - 回归：新增运行角色缺失依赖测试；`go test ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-02（Narrow AI composition dependencies，2026-08-27）
+
+- 依赖：`buildAIModules` 不再接收完整 `platformModules` 容器，改为显式 `aiPlatformDeps`，仅包含 JWT、代理节点和模块门禁三个真实依赖。
+- 边界：AI 运行角色装配继续由 `aiRuntimeRole` 负责从平台角色投影依赖，避免 AI builder 反向了解平台身份、账务和运营服务。
+- 回归：`go test ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
