@@ -27,6 +27,8 @@ type RuntimeAuth struct {
 	Subject coreidentity.Subject
 }
 
+const runtimeAuthTouchTimeout = 2 * time.Second
+
 func (s *Gateway) runtimeAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key, err := extractRuntimeAPIKey(r.Header)
@@ -70,8 +72,12 @@ func (s *Gateway) runtimeAuth(next http.Handler) http.Handler {
 		httpx.SetAPIKey(ctx, shortHash(runtimeAuthUUIDString(row.ID)), row.TenantID, subject.UserID)
 
 		keyID := row.ID
+		// Last-used telemetry is best effort, but it must not outlive the
+		// request indefinitely or keep a released database pool busy.
 		go func() {
-			_ = s.queries.TouchLastUsedAt(context.Background(), keyID)
+			touchCtx, cancel := context.WithTimeout(r.Context(), runtimeAuthTouchTimeout)
+			defer cancel()
+			_ = s.queries.TouchLastUsedAt(touchCtx, keyID)
 		}()
 
 		next.ServeHTTP(w, r.WithContext(ctx))

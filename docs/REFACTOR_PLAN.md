@@ -991,6 +991,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 超时：心跳数据库调用改用继承任务取消的 5 秒超时 context，不再通过 `WithoutCancel` 绕过关闭信号；租约续期失败/丢失的既有停止语义保持不变。
 - 回归：异步任务取消、生命周期和心跳相关测试通过；`go test -race ./internal/ai/asynctask -run '^TestEngine(CancelStopsRunningTask|HealthAndStopBeforeStart)$' -count=1`、`go vet` 和差异检查通过（完整包 httptest 受当前本地监听权限限制）。
 
+### P1-02（Runtime auth telemetry cancellation，2026-08-27）
+
+- 生命周期：Runtime API Key 的 `last_used_at` best-effort 更新不再脱离请求 context，后台写入最多运行 2 秒并会随请求/服务器关闭取消，避免残留数据库 goroutine。
+- 行为：鉴权成功与下游请求路径保持不变，telemetry 写入失败仍不影响请求响应。
+- 回归：`go test ./internal/ai/gateway -count=1`、`go vet ./internal/ai/gateway` 和差异检查通过。
+
 ### P1-02（Async task engine lifecycle，2026-08-27）
 
 - 生命周期：`asynctask.Engine` 现在自持有 worker context，Start/Stop 幂等且 Stop-before-Start 会阻止后续启动；停止时先取消 worker、webhook 和 reaper 循环，再执行租约释放。
