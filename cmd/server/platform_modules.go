@@ -196,7 +196,7 @@ func (m *platformModules) Start(ctxs ...context.Context) {
 		m.started = true
 		m.lifecycleMu.Unlock()
 		if m.banReconciler != nil {
-			m.banReconciler.Start()
+			m.banReconciler.Start(ctx)
 		}
 		if m.sched != nil {
 			m.sched.Start(ctx)
@@ -232,7 +232,9 @@ func (m *platformModules) Stop(ctxs ...context.Context) error {
 		}
 	}
 	if m.banReconciler != nil {
-		m.banReconciler.Stop()
+		if err := m.banReconciler.Stop(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("stop ban reconciler: %w", err))
+		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return err

@@ -22,15 +22,19 @@ import (
 // either direction (a ban that should exist but doesn't, or a stale ban that
 // should have been cleared) self-heals without operator intervention.
 type BanReconciler struct {
-	pool        *pgxpool.Pool
-	redis       *redis.Client
-	logger      *zap.Logger
-	interval    time.Duration
-	stopChan    chan struct{}
-	lifecycleMu sync.Mutex
-	started     bool
-	stopped     bool
-	wg          sync.WaitGroup
+	pool         *pgxpool.Pool
+	redis        *redis.Client
+	logger       *zap.Logger
+	interval     time.Duration
+	stopChan     chan struct{}
+	lifecycleMu  sync.Mutex
+	stopMu       sync.Mutex
+	started      bool
+	stopped      bool
+	stopClosed   bool
+	workerCtx    context.Context
+	workerCancel context.CancelFunc
+	wg           sync.WaitGroup
 }
 
 var _ lifecycle.Component = (*BanReconciler)(nil)
@@ -48,9 +52,13 @@ func NewBanReconciler(pool *pgxpool.Pool, redisClient *redis.Client, logger *zap
 
 // Start launches the periodic reconcile loop in a background goroutine.
 // No-op if redis is nil (ban enforcement itself is disabled in that case).
-func (r *BanReconciler) Start() {
+func (r *BanReconciler) Start(ctxs ...context.Context) {
 	if r == nil || r.redis == nil || r.pool == nil {
 		return
+	}
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
 	}
 	r.lifecycleMu.Lock()
 	if r.started || r.stopped {
@@ -58,35 +66,65 @@ func (r *BanReconciler) Start() {
 		return
 	}
 	r.started = true
+	r.workerCtx, r.workerCancel = context.WithCancel(ctx)
+	workerCtx := r.workerCtx
 	r.wg.Add(1)
 	r.lifecycleMu.Unlock()
 	r.logger.Info("ban reconciler started", zap.Duration("interval", r.interval))
 	go func() {
 		defer r.wg.Done()
-		r.run()
+		r.run(workerCtx)
 	}()
 }
 
-// Stop signals the reconcile loop to exit.
-func (r *BanReconciler) Stop() {
+// Stop signals the reconcile loop to exit and waits using the caller's
+// deadline. A later call can continue waiting after an earlier deadline.
+func (r *BanReconciler) Stop(ctxs ...context.Context) error {
 	if r == nil {
-		return
+		return nil
 	}
+	ctx := context.Background()
+	if len(ctxs) > 0 && ctxs[0] != nil {
+		ctx = ctxs[0]
+	}
+	r.stopMu.Lock()
+	defer r.stopMu.Unlock()
+
 	r.lifecycleMu.Lock()
-	if r.stopped {
-		r.lifecycleMu.Unlock()
-		return
+	if !r.stopped {
+		r.stopped = true
 	}
-	r.stopped = true
 	started := r.started
-	if started {
-		close(r.stopChan)
+	cancel := r.workerCancel
+	stopChan := r.stopChan
+	firstStop := false
+	if started && !r.stopClosed {
+		r.stopClosed = true
+		firstStop = true
 	}
 	r.lifecycleMu.Unlock()
 	if !started {
-		return
+		return nil
 	}
-	r.wg.Wait()
+	if cancel != nil {
+		cancel()
+	}
+	if firstStop && stopChan != nil {
+		// stopClosed is set while holding lifecycleMu; stopMu serializes the
+		// actual close with retrying Stop calls.
+		close(stopChan)
+	}
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Health returns a lock-safe lifecycle snapshot for management probes.
@@ -100,10 +138,10 @@ func (r *BanReconciler) Health() lifecycle.HealthSnapshot {
 	return lifecycle.HealthSnapshot{Started: started, Stopped: stopped}
 }
 
-func (r *BanReconciler) run() {
+func (r *BanReconciler) run(ctx context.Context) {
 	// Reconcile once immediately so a fresh deploy/restart doesn't wait a
 	// full interval before Redis matches Postgres.
-	if err := r.ReconcileOnce(context.Background()); err != nil {
+	if err := r.ReconcileOnce(ctx); err != nil && ctx.Err() == nil {
 		r.logger.Warn("ban reconcile failed", zap.Error(err))
 	}
 
@@ -113,8 +151,10 @@ func (r *BanReconciler) run() {
 		select {
 		case <-r.stopChan:
 			return
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
-			if err := r.ReconcileOnce(context.Background()); err != nil {
+			if err := r.ReconcileOnce(ctx); err != nil && ctx.Err() == nil {
 				r.logger.Warn("ban reconcile failed", zap.Error(err))
 			}
 		}

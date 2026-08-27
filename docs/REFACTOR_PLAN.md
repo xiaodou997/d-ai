@@ -1156,3 +1156,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生命周期：Scheduler 由 composition root 注入 worker context，五类后台循环同时响应父 context 与 Stop；任务的 5 分钟操作超时不再从独立 `context.Background()` 起步。
 - 关闭：Scheduler/平台模块的 Stop 支持调用方 deadline，超时后可再次等待；平台 shutdown stack 不再吞掉 scheduler 的关闭错误，Stop-before-Start 会封存平台后台 worker。
 - 回归：新增 scheduler Stop-before-Start、短 deadline 重试等待测试；scheduler/cmd-server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-02（Ban reconciler shutdown context propagation，2026-08-27）
+
+- 生命周期：BanReconciler 的周期校准循环由平台 worker context 驱动，Redis SCAN/写入和 PostgreSQL 真相查询会在关闭时收到取消信号。
+- 关闭：`Stop(ctx)` 支持调用方 deadline 与超时后重试等待；平台模块继续在 scheduler 后停止 reconciler，并汇总关闭错误，避免数据库/Redis 释放前遗留校准 goroutine。
+- 回归：新增 Stop-before-Start 和短 deadline 重试测试；auth/cmd-server 定向测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。

@@ -29,6 +29,7 @@ httpServers.Start / Shutdown
 - Fixed-provider client runtime 的 401 credential refresh 现在由 `clientruntime.Runtime` 自持有的 active-refresh registry 管理；请求取消不破坏共享刷新，`aiModules.Stop` 先停止 catalog、再停止 runtime，最后才释放 OAuth/数据库依赖。
 - `aiModules.Stop` 现在由 owner 串行执行并允许在短超时后再次等待；Stop-before-Start 会永久封存模块，风险控制 worker 的重复 Stop 也会继续等待在途任务，避免关闭超时后留下无法收敛的后台 goroutine。
 - Scheduler 现在继承 composition root 的 worker context；五类调度任务的数据库/账务操作会随关闭取消，`platformModules.Stop(ctx)` 将 scheduler 的超时错误返回 shutdown stack，并支持后续使用更长 deadline 重试等待。
+- BanReconciler 现在同样继承平台 worker context；Redis 扫描和 PostgreSQL 真相校准会响应关闭取消，`Stop(ctx)` 在短 deadline 后可继续等待，平台关闭不会在 reconciler 仍访问依赖时提前释放资源。
 - 图片桥接的请求 envelope 携带原始请求 context，远程输入图 materialization 遵循请求取消；离线/合成 bridge 调用才回退到有限默认 context。
 - 订阅 janitor 现在由 `subscription.Service` 提供幂等 `Start/Stop/Health`，并纳入 `aiModules` 生命周期；订阅订单补偿不再是未登记的阻塞循环。
 - 平台 Transport 依赖已按模块显式投影，AI Core 使用 `CoreHTTPDeps`；订阅、风控、审计读取、系统、管理仪表盘、管理用量、OAuth 管理、模型绑定、上游诊断、上游账号管理、上游访问、租户目录、平台 API key、租户自助控制、租户自助读取、workspace、用户自助控制和用户自助读取 HTTP 均由独立模块注册。
