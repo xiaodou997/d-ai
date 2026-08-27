@@ -230,7 +230,13 @@ type DataCleanupHTTPService interface {
 // ProxyNodesModuleDeps contains proxy-node routes.
 type ProxyNodesModuleDeps struct {
 	PlatformAuthDeps
-	Service *proxypkg.Service
+	Service ProxyNodesHTTPService
+}
+
+type ProxyNodesHTTPService interface {
+	List(context.Context) ([]proxypkg.Node, error)
+	Upsert(context.Context, string, proxypkg.UpsertInput, string) (proxypkg.Node, error)
+	Delete(context.Context, string) error
 }
 
 // PlatformOperationsModuleDeps groups platform operations route modules.

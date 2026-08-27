@@ -1244,3 +1244,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：数据清理 HTTP 模块改为依赖 `DataCleanupHTTPService` 窄端口，具体 `*cleanup.Service` 不再泄漏到 Transport module/handler。
 - 语义：策略、预览、运行记录和手动执行端点保持原有确认短语、错误映射与权限边界。
 - 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。
+
+### P1-03（Narrow proxy-node HTTP service port，2026-08-27）
+
+- 依赖：代理节点 HTTP 模块改为依赖 `ProxyNodesHTTPService` 窄端口，仅暴露列表、写入和删除 command/query；运行时选路的 `SelectProxy` 能力不再泄漏到 Transport。
+- 语义：节点参数校验、404/400/500 错误映射和管理员权限保持不变。
+- 回归：`go test ./internal/transport ./cmd/server -count=1`、`go vet ./...`、`go build ./...`、`go run ./cmd/checkdeps` 与差异检查通过。

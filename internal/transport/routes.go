@@ -20,7 +20,6 @@ import (
 	userports "xiaodou/dai/internal/user/ports"
 
 	// AI 域
-	proxypkg "xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/routing"
 	aitransport "xiaodou/dai/internal/ai/transport"
 	"xiaodou/dai/internal/ai/workspace"
@@ -327,7 +326,7 @@ type dataCleanupModule struct {
 
 type proxyNodesModule struct {
 	auth    platformAuthDeps
-	service *proxypkg.Service
+	service ProxyNodesHTTPService
 }
 
 type paymentModule struct {

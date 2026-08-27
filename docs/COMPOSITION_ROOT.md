@@ -189,3 +189,5 @@ HTTP 公共/管理 listener 启动后立即登记到 `shutdownStack`，与平台
 系统模块 HTTP 通过 `SystemHTTPService` 窄端口接收状态和 PII 配置 command/query；具体 `system.Service` 仅由组合根持有。
 
 数据清理 HTTP 通过 `DataCleanupHTTPService` 窄端口接收策略、预览和运行 command/query；具体 cleanup service 仅由组合根持有。
+
+代理节点 HTTP 通过 `ProxyNodesHTTPService` 窄端口接收管理 command/query；代理选路能力继续由 AI runtime 在组合根内独立持有。
