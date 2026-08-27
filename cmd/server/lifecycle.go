@@ -54,6 +54,7 @@ const (
 	healthBanReconciler     = "ban_reconciler"
 	healthScheduler         = "scheduler"
 	healthAIModules         = "ai_modules"
+	healthRuntimeGateway    = "runtime_gateway"
 	healthAsyncTasks        = "async_tasks"
 	healthDataCleanup       = "data_cleanup"
 	healthHourlyImage       = "hourly_image_cleanup"

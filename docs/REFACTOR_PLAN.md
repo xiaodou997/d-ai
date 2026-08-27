@@ -1066,4 +1066,4 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 生命周期：Runtime Gateway 新增 owner-managed auth telemetry，`Start` 允许请求触发 `last_used_at` 写入，`Stop` 先 fencing、取消 in-flight context，再等待所有写入退出。
 - 装配：`aiModules` 将 Gateway 纳入统一 Start/Stop；HTTP listener 关闭后才释放 AI/数据库依赖，重复 Stop 和 Stop 超时后再次等待均安全。
-- 回归：新增 telemetry Stop 等待、超时、取消和禁止新写入 race 测试；`go test ./internal/ai/gateway ./cmd/server`、`go test -race`、`go vet`、`go build` 和 `checkdeps` 通过。
+- 回归：新增 telemetry Stop 等待、超时、取消和禁止新写入 race 测试，并将 Runtime Gateway 状态接入 `/health.components`；`go test ./internal/ai/gateway ./cmd/server`、`go test -race`、`go vet`、`go build` 和 `checkdeps` 通过。

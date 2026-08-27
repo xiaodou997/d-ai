@@ -87,6 +87,7 @@ func TestHealthHandlerProjectsComponentsAndKeepsSchedulerCompatibility(t *testin
 	lifecycle := newLifecycleHealth()
 	lifecycle.MarkStarted(healthPostgres)
 	lifecycle.MarkStarted(healthAIModules)
+	lifecycle.MarkStarted(healthRuntimeGateway)
 
 	handler := newHealthHandler("test-version", func() any {
 		return map[string]any{"started": true, "stopped": false, "tasks": map[string]any{"sweep": map[string]any{"running": true}}}
@@ -119,6 +120,9 @@ func TestHealthHandlerProjectsComponentsAndKeepsSchedulerCompatibility(t *testin
 	}
 	if got := response.Components[healthAIModules]; got != (componentHealth{Started: true}) {
 		t.Fatalf("AI health = %+v", got)
+	}
+	if got := response.Components[healthRuntimeGateway]; got != (componentHealth{Started: true}) {
+		t.Fatalf("runtime gateway health = %+v", got)
 	}
 }
 

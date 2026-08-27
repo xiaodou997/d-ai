@@ -160,12 +160,18 @@ func run() error {
 	shutdowns.Add("AI modules", func(ctx context.Context) error {
 		ai.Stop(ctx)
 		lifecycle.MarkStopped(healthAIModules)
+		if ai.RuntimeGateway != nil && ai.RuntimeGateway.Health().Stopped {
+			lifecycle.MarkStopped(healthRuntimeGateway)
+		}
 		if ai.AsyncTasks != nil {
 			lifecycle.MarkStopped(healthAsyncTasks)
 		}
 		return nil
 	})
 	lifecycle.MarkStarted(healthAIModules)
+	if ai.RuntimeGateway != nil && ai.RuntimeGateway.Health().Started {
+		lifecycle.MarkStarted(healthRuntimeGateway)
+	}
 	if ai.AsyncTasks != nil {
 		lifecycle.MarkStarted(healthAsyncTasks)
 	}

@@ -47,7 +47,7 @@ httpServers.Start / Shutdown
 - AI 纵向路由模块不再持有平台路由聚合容器，统一改用仅含 JWT/黑名单、租户读取和用户投影的 `aiPlatformDeps`；平台身份、账务和运营服务不会随 AI Transport 容器传递。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；自动清理与 HTTP 触发的手动清理共享可取消 context 和等待计数，停止时先取消并等待所有清理执行，再释放数据库依赖。
 - 四个小时级清理任务（图片、文件、会话、激活凭证）现在由 `periodicWorker` 统一持有子 context，首次执行、每小时执行和 Stop 等待都登记在 shutdown stack 中。
-- composition root 维护统一的 `lifecycleHealth` 投影；`/health.components` 暴露基础设施、平台/AI 模块、异步任务、后台清理任务和公共/管理监听器的 started/stopped 状态，同时保留 Scheduler 任务快照。真实 PostgreSQL/Redis 连通性仍只由 `/ready` 判定。
+- composition root 维护统一的 `lifecycleHealth` 投影；`/health.components` 暴露基础设施、平台/AI 模块、Runtime Gateway telemetry、异步任务、后台清理任务和公共/管理监听器的 started/stopped 状态，同时保留 Scheduler 任务快照。真实 PostgreSQL/Redis 连通性仍只由 `/ready` 判定。
 - Transport 已将平台路由模块与 AI HTTP 模块分离；composition-only `AIHTTPDeps` 分别持有 `Core`、
   `Subscriptions`、`RiskControl`、`AuditLog`、`System`、`Dashboard`、`Usage`、`OAuthManagement`、`ModelBindings`、`UpstreamDiagnostics`、`UpstreamAccounts`、`UpstreamAccess`、`TenantCatalog`、`APIKeyManagement`、`TenantSelfControl`、`TenantGroups`、`TenantSelfRead`、`Workspace`、`UserSelfControl` 和 `UserSelfRead`，通过 `transport.Module` 调用对应独立注册入口，handler 只接收所属模块依赖。
 
