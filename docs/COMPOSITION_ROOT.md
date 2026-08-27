@@ -35,9 +35,9 @@ httpServers.Start / Shutdown
 - AI 身份补全现在只接收 `user/ports.IdentityUserReader` 的非敏感用户投影；具体 `UserService` 与 PostgreSQL 用户模型留在用户域和 composition root，Transport 不再依赖它们。
 - 运营 HTTP 路由已从平台主模块拆成显式 `platformOperationsModule`，公告、通知、系统模块、数据清理和代理节点只接收各自服务及统一平台认证依赖；其余管理聚合路由仍待继续拆分。
 - 计费 HTTP 路由已从平台主模块拆成显式 `platformBillingModule`，在线充值、租户额度、管理支付和微信回调共享仅支付服务与平台认证/日志依赖；充值/管理聚合编排仍待继续收敛。
-- 身份自助与公开路由已拆成显式 `platformIdentityModule`，账户查询、租户自助、门户品牌和公开邀请只接收各自端口及平台认证/法律配置；管理员账号聚合和认证状态写入仍待继续拆分。
+- 身份自助与公开路由已拆成显式 `platformIdentityModule`，账户查询、租户自助、门户品牌和公开邀请只接收各自端口及平台认证/法律配置；管理员账号业务编排和认证状态写入仍待继续收敛。
 - 认证路由已在身份模块内使用独立 `authModule` 依赖，登录/刷新/激活、MFA、近期认证、`/me`、登出和改密不再接收完整平台 `Deps`；管理员账号与 JWT key 管理仍待后续提取。
-- JWT key 列表与轮换已加入身份模块的 `jwtKeysModule`，只接收 JWT/黑名单认证依赖；管理员账号和财务/仪表盘聚合仍待继续拆分。
+- JWT key 列表与轮换已加入身份模块的 `jwtKeysModule`，只接收 JWT/黑名单认证依赖；管理员账号、财务和仪表盘的 handler 业务编排仍待继续收敛。
 - 管理员租户、账号、终端用户、财务、仪表盘和用量路由已集中到 `platformAdminModule` 下的六个显式子模块，各自只接收所属端口与认证依赖；平台主模块不再直接注册这组管理路由。
 - AI 纵向路由模块不再持有完整平台 `Deps`，统一改用仅含 JWT/黑名单、租户读取和用户投影的 `aiPlatformDeps`；平台身份、账务和运营服务不会随 AI Transport 容器传递。
 - `cleanup.Service` 已补齐幂等 `Start/Stop` 和 worker 等待语义，并由 `run` 注册到 shutdown stack；停止时先取消自动清理，再释放其数据库依赖。
