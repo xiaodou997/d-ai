@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -346,7 +347,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	})
 	mgmtConsole.RegisterImageTaskHandlers(asyncTasks)
 
-	return &aiModules{
+	modules := &aiModules{
 		AIHTTPDeps: transport.AIHTTPDeps{
 			Core: transport.AICoreHTTPDeps{
 				PlatformPriceBooks:         priceBookSvc,
@@ -519,7 +520,57 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		refresher:          refresher,
 		settlementConsumer: billingoutbox.NewConsumer(billingPool, appLogger),
 		logger:             appLogger,
-	}, nil
+	}
+	if err := validateAIAssembly(modules); err != nil {
+		return nil, err
+	}
+	return modules, nil
+}
+
+// validateAIAssembly keeps the AI runtime role fail-fast: every process-owned
+// worker and request-path owner must be present before routes are registered.
+func validateAIAssembly(m *aiModules) error {
+	if m == nil {
+		return fmt.Errorf("AI assembly is nil")
+	}
+	missing := make([]string, 0, 8)
+	if m.RuntimeGateway == nil {
+		missing = append(missing, "runtime_gateway")
+	}
+	if m.ManagementConsole == nil {
+		missing = append(missing, "management_console")
+	}
+	if m.FileStore == nil {
+		missing = append(missing, "file_store")
+	}
+	if m.AsyncTasks == nil {
+		missing = append(missing, "async_tasks")
+	}
+	if m.clientRuntime == nil {
+		missing = append(missing, "client_runtime")
+	}
+	if m.clientCatalog == nil {
+		missing = append(missing, "client_catalog")
+	}
+	if m.subscriptionSvc == nil {
+		missing = append(missing, "subscription")
+	}
+	if m.riskControlWorker == nil {
+		missing = append(missing, "risk_control_worker")
+	}
+	if m.auditWorker == nil {
+		missing = append(missing, "audit_worker")
+	}
+	if m.refresher == nil {
+		missing = append(missing, "token_refresher")
+	}
+	if m.settlementConsumer == nil {
+		missing = append(missing, "settlement_consumer")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("AI assembly missing required dependencies: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func (m *aiModules) Start(ctx context.Context) {

@@ -47,6 +47,24 @@ func TestAIModulesLifecycleIsSafeForEmptyBundle(t *testing.T) {
 	modules.Stop(context.Background())
 }
 
+func TestValidateAIAssemblyRejectsIncompleteBundle(t *testing.T) {
+	err := validateAIAssembly(&aiModules{})
+	if err == nil {
+		t.Fatal("expected incomplete AI assembly to be rejected")
+	}
+	for _, dependency := range []string{"runtime_gateway", "async_tasks", "client_runtime", "settlement_consumer"} {
+		if !strings.Contains(err.Error(), dependency) {
+			t.Fatalf("validation error %q does not mention %q", err, dependency)
+		}
+	}
+}
+
+func TestValidateAIAssemblyRejectsNilBundle(t *testing.T) {
+	if err := validateAIAssembly(nil); err == nil {
+		t.Fatal("expected nil AI assembly to be rejected")
+	}
+}
+
 func TestAIModulesCannotStartAfterStop(t *testing.T) {
 	runtime := clientruntime.New(nil, nil)
 	modules := &aiModules{clientRuntime: runtime}

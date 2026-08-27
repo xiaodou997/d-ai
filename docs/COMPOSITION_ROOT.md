@@ -177,3 +177,5 @@ httpServers.Start / Shutdown
 - Console 流式消息持久化由请求级 owner 的 defer、`sync.Once` 和 `WaitGroup` 管理；正常完成与 panic/取消路径都等待 goroutine 收尾，异常路径记录 `interrupted`，不会在关闭数据库后继续写入。
 
 装配测试位于 `cmd/server/*_test.go`，不启动真实监听，覆盖资源逆序关闭、幂等关闭和公共/管理监听参数隔离。
+
+平台与 AI builder 在返回运行角色 bundle 前执行必需依赖契约校验；校验失败会阻止 HTTP 注册和后台 worker 启动。对应的缺失依赖回归测试位于 `cmd/server/platform_modules_test.go` 与 `cmd/server/ai_modules_test.go`，不依赖真实数据库或 Redis。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,7 +152,7 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 	notificationSvc := notificationpkg.NewService(pool)
 	dataCleanupSvc := cleanuppkg.NewService(pool, appLogger)
 
-	return &platformModules{
+	modules := &platformModules{
 		JWT:                   jwtSvc,
 		Sessions:              sessionSvc,
 		Activations:           activationSvc,
@@ -183,7 +184,55 @@ func buildPlatformModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, r
 		DataCleanup:           dataCleanupSvc,
 		banReconciler:         auth.NewBanReconciler(pool, redisClient, appLogger, 5*time.Minute),
 		sched:                 scheduler.NewScheduler(billingPool, jwtSvc, paymentSvc, appLogger),
-	}, nil
+	}
+	if err := validatePlatformAssembly(modules); err != nil {
+		return nil, err
+	}
+	return modules, nil
+}
+
+// validatePlatformAssembly is the composition-root contract for the platform
+// runtime role. Keeping the check next to the builder prevents a partially
+// wired bundle from reaching HTTP registration or background workers.
+func validatePlatformAssembly(m *platformModules) error {
+	if m == nil {
+		return fmt.Errorf("platform assembly is nil")
+	}
+	missing := make([]string, 0, 4)
+	if m.JWT == nil {
+		missing = append(missing, "jwt")
+	}
+	if m.Sessions == nil {
+		missing = append(missing, "sessions")
+	}
+	if m.Security == nil {
+		missing = append(missing, "security")
+	}
+	if m.TenantLifecycle == nil {
+		missing = append(missing, "tenant_lifecycle")
+	}
+	if m.AdminAccountLifecycle == nil {
+		missing = append(missing, "admin_account_lifecycle")
+	}
+	if m.AdminEndUserLifecycle == nil {
+		missing = append(missing, "admin_end_user_lifecycle")
+	}
+	if m.Payment == nil {
+		missing = append(missing, "payment")
+	}
+	if m.DataCleanup == nil {
+		missing = append(missing, "data_cleanup")
+	}
+	if m.banReconciler == nil {
+		missing = append(missing, "ban_reconciler")
+	}
+	if m.sched == nil {
+		missing = append(missing, "scheduler")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("platform assembly missing required dependencies: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func (m *platformModules) Start(ctxs ...context.Context) {

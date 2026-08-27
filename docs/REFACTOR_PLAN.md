@@ -137,7 +137,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [~] 启动失败时按逆序释放已经创建的资源；基础设施、平台模块、AI worker、LiteLLM 刷新、小时级任务和 HTTP 监听器已登记并具备等待语义，仍需清点少量请求外 goroutine。
 - [x] Runtime Gateway 的 API Key telemetry goroutine 由 Gateway owner 登记、fencing 和等待；`aiModules.Start/Stop` 统一启停，数据库池释放前不会遗留 `last_used_at` 写入。
 - [x] Console 流式消息持久化 goroutine 由请求级 owner 使用 defer、`sync.Once` 和 `WaitGroup` 管理；正常完成持久化最终路由，panic/异常退出标记中断并等待退出，不再遗留请求外 goroutine。
-- [~] 为各运行角色增加装配测试；当前覆盖资源栈、平台/AI 模块生命周期和公共/管理监听参数，完整依赖契约测试仍待补齐。
+- [x] 为各运行角色增加装配测试；组合根现在对平台与 AI 运行角色执行必需依赖契约校验，缺失依赖在 builder 阶段快速失败，并由不完整装配回归测试锁定。
 - [x] 组合根新增全量 Transport surface contract，验证 metadata、identity、admin、billing、operations 和 AI 六组模块在同一注册列表中均有代表路由。
 - [x] PostgreSQL adapter 将缺失行、唯一/外键/检查约束和输入格式错误翻译为领域错误；AI Transport 不再识别 pgx/pgconn 错误类型。
 - [x] AI Transport 使用领域/标准值类型承接 HTTP 数据，清零 pgx、Redis、sqlc 和 PostgreSQL adapter 的直接依赖及对应例外台账。
@@ -1208,3 +1208,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 关闭顺序：`shutdownStack` 在逆序关闭时遇到第一个错误立即短路，保留失败项及所有尚未关闭的底层资源；只有整条依赖链成功才标记 stack closed。
 - 重试：后续 `Close(ctx)` 会从失败项重新执行，支持使用更长 deadline 收敛；关闭调用通过独立互斥保护，避免并发 Stop 重复释放同一资源。
 - 回归：新增失败依赖短路、二次重试和最终释放顺序测试；server 生命周期测试、race、`go vet`、`go build`、`checkdeps` 和差异检查通过。
+
+### P1-02（Composition role assembly validation，2026-08-27）
+
+- 装配契约：`buildPlatformModules` 与 `buildAIModules` 返回前分别校验运行角色所需的请求路径 owner、后台 worker、生命周期组件和关闭依赖；缺失项按稳定名称聚合为启动错误。
+- 失败语义：nil 或部分构造的 bundle 不再进入 Transport 注册、后台启动或 shutdown stack；错误发生在组合根边界，避免运行中出现 nil handler 或未登记 goroutine。
+- 回归：新增平台/AI 不完整装配及 nil bundle 测试；`go test ./cmd/server -count=1` 通过。
