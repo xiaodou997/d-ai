@@ -44,13 +44,9 @@ const columns: DsTableColumn[] = [
 const fetchLogs = async () => {
   loading.value = true
   try {
-    // v4 仅接受 limit；其余 filters 字段后端忽略（保留 UI 输入以贴合 V1）
+    // v4 仅接受 limit；其余 filters 字段后端不再声明，保留 UI 输入以贴合 V1。
     const res: any = await aiAdminApi.listGatewayAuditLogs({
-      limit: limit.value,
-      actor: filters.actor || undefined,
-      object_type: filters.object_type || undefined,
-      object_id: filters.object_id || undefined,
-      result: filters.result || undefined
+      limit: limit.value
     })
     logs.value = res?.items || []
   } finally {

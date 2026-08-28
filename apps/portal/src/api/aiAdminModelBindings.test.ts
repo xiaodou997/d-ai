@@ -81,7 +81,7 @@ describe("AI admin generated model binding facade", () => {
       status: "active",
       image_stream_mode: "force_sync",
       image_edit_transport: "multipart/form-data" as const,
-      image_upstream_response_format: "",
+      image_upstream_response_format: "" as const,
       image_max_output_count: 1,
       image_edit_max_output_count: 1
     };

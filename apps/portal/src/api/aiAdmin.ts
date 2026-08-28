@@ -87,6 +87,11 @@ type AccountTestTransport = OperationResponse<"ai-test-account-upstream">;
 type AccountModelImportTransport = OperationResponse<"ai-import-account-upstream-models">;
 type PoolAvailableModelsTransport = OperationResponse<"ai-get-pool-available-models">;
 type PoolModelImportTransport = OperationResponse<"ai-import-pool-available-models">;
+type DashboardSummaryTransport = OperationResponse<"ai-get-dashboard-summary">;
+type DashboardTopModelsTransport = OperationResponse<"ai-list-dashboard-top-models">;
+type DashboardTopTenantsTransport = OperationResponse<"ai-list-dashboard-top-tenants">;
+type DashboardRecentErrorsTransport = OperationResponse<"ai-list-dashboard-recent-errors">;
+type AuditLogsTransport = OperationResponse<"ai-list-audit-logs">;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
 type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
@@ -450,10 +455,29 @@ function toModelCapability(value: OperationResponse<"ai-infer-model-capability">
   };
 }
 
-type AiWorkbenchWindowQuery = {
-  date_from?: string;
-  date_to?: string;
-};
+function toDashboardSummary(value: DashboardSummaryTransport): DashboardSummaryDTO {
+  return stripSchema(value);
+}
+
+function toDashboardTopModels(value: DashboardTopModelsTransport): DashboardTopModelsOutputBody {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toDashboardTopTenants(value: DashboardTopTenantsTransport): DashboardTopTenantsOutputBody {
+  return {
+    items: value.items?.map((item) => stripSchema(item)) ?? [],
+    total: value.total,
+    included: value.included
+  };
+}
+
+function toDashboardRecentErrors(value: DashboardRecentErrorsTransport): DashboardRecentErrorsOutputBody {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toAuditLogs(value: AuditLogsTransport): AuditLogsOutputBody {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
 
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
@@ -708,41 +732,41 @@ export const aiAdminApi = {
   },
 
   // ---- Dashboard ----
-  getDashboardSummary(params: AiWorkbenchWindowQuery = {}) {
-    return request()<DashboardSummaryDTO>({
+  getDashboardSummary(params: OperationQuery<"ai-get-dashboard-summary"> = {}) {
+    return typedRequest<"ai-get-dashboard-summary">({
       method: "GET",
       path: "/api/v1/dashboard/summary",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toDashboardSummary);
   },
-  listDashboardTopModels(params: AiWorkbenchWindowQuery & { limit?: number } = {}) {
-    return request()<DashboardTopModelsOutputBody>({
+  listDashboardTopModels(params: OperationQuery<"ai-list-dashboard-top-models"> = {}) {
+    return typedRequest<"ai-list-dashboard-top-models">({
       method: "GET",
       path: "/api/v1/dashboard/top-models",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toDashboardTopModels);
   },
-  listDashboardTopTenants(params: AiWorkbenchWindowQuery & { limit?: number } = {}) {
-    return request()<DashboardTopTenantsOutputBody>({
+  listDashboardTopTenants(params: OperationQuery<"ai-list-dashboard-top-tenants"> = {}) {
+    return typedRequest<"ai-list-dashboard-top-tenants">({
       method: "GET",
       path: "/api/v1/dashboard/top-tenants",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toDashboardTopTenants);
   },
-  listDashboardRecentErrors(params: AiWorkbenchWindowQuery & { limit?: number } = {}) {
-    return request()<DashboardRecentErrorsOutputBody>({
+  listDashboardRecentErrors(params: OperationQuery<"ai-list-dashboard-recent-errors"> = {}) {
+    return typedRequest<"ai-list-dashboard-recent-errors">({
       method: "GET",
       path: "/api/v1/dashboard/recent-errors",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toDashboardRecentErrors);
   },
   // ---- Runtime limit policies ----
   listRuntimeLimitPolicies(params: Record<string, string | number | undefined> = {}) {
@@ -800,14 +824,14 @@ export const aiAdminApi = {
   },
 
   // ---- Audit logs ----
-  listGatewayAuditLogs(params: Record<string, string | number | undefined> = {}) {
-    return request()<AuditLogsOutputBody>({
+  listGatewayAuditLogs(params: OperationQuery<"ai-list-audit-logs"> = {}) {
+    return typedRequest<"ai-list-audit-logs">({
       method: "GET",
       path: "/api/v1/audit-logs",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAuditLogs);
   },
 
   // ---- 风控中心（内容安全审核）----
