@@ -252,7 +252,6 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 结算 Outbox 保持多消费者唯一处理；消费者使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，并发回归测试验证每条 request_id 只落账一次。
 - [x] 异步任务和 Webhook 保持租约、心跳、回收与 fencing；并发 claim 与 stale owner 终态写入回归测试已覆盖。
-- [ ] 调度任务统一使用 advisory lock、租约或可证明的幂等执行。
 - [x] 调度任务统一使用 advisory lock、租约或可证明的幂等执行；对账/支付任务使用 advisory lock，额度过期使用锁顺序、`FOR UPDATE SKIP LOCKED` 与 `expired_at` 幂等锚点，并发副本回归测试已覆盖。
 - [x] JWT key retire 使用数据库条件更新并由每个副本在每轮执行后刷新本地 key cache。
 - [x] LiteLLM 价格导入与常用模型同步按价格表事务批量执行，重复快照不重复 bump revision，失败回滚可重试且不覆盖手工条目。
