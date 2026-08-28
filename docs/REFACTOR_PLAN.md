@@ -481,6 +481,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：旧页面继续使用稳定的 tenant view model，facade 显式转换生成 transport DTO，归一 nullable 列表与有效期字段，充值订单的 mode/status/scene 和终端用户 credential state 在进入页面前校验。
 - 回归：新增 tenant facade 测试覆盖 self-service 请求、充值与邀请 body、编码 path、schema 清理、空值归一和非法枚举拒绝；Portal 91 个测试文件、304 项测试、typecheck 与 OpenAPI gate 通过。
 
+### P2-04（Typed residual Portal feature APIs，2026-08-29）
+
+- 迁移：公告收件箱与平台/租户管理的双 scope operation、管理员 MFA enrollment/confirm，以及上游模型绑定批量删除不再直接调用宽泛 `RequestAdapter<T>`；请求 body、query、path 和响应均绑定 generated operation。
+- 领域边界：公告 transport 的状态、受众和 nullable 分页在进入管理/收件箱组件前显式映射并校验；MFA 与批量删除保留页面需要的最小结果，动态 scope 仅在 facade 内选择对应 operation。
+- 回归：新增公告 operation client 与模型绑定批量操作测试，覆盖双 scope、编码 path、body 转换、空集合和非法状态；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
