@@ -457,6 +457,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：审计、密钥、趋势、资源和告警 nullable 集合归一为空数组，生成的 schema 字段只在 facade 内转换为既有平台页面模型。
 - 回归：新增 platform observability facade 测试覆盖 query 转发、JWT message、分析/告警列表空值和页面 DTO 映射；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed platform payment facade，2026-08-28）
+
+- 迁移：平台支付规则/微信配置读取与更新、支付订单列表/同步共 6 个 facade 请求绑定 generated OpenAPI operations；订单动态 path 与查询参数显式传递。
+- 领域边界：充值套餐和订单的 nullable 字段归一为页面语义，微信验签模式进入页面前校验，配置写入将可选敏感字段显式转换为 `null`，同步响应移除 transport `$schema`。
+- 回归：新增 platform payment facade 测试覆盖设置/微信 body、订单 query/path、套餐空值和非法支付维度拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

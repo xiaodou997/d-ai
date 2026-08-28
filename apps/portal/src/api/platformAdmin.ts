@@ -28,6 +28,7 @@ import type {
   PageAdminUserItem,
   PageEndUserItem,
   PageTenantListItem,
+  TopupPackage,
   ActivationCredentialOutput,
   CreateAdminUserOutput,
   TenantDetailOutput,
@@ -42,6 +43,11 @@ function request() {
 }
 
 const typedRequest = createTypedOperationRequest(request());
+
+function stripSchema<T>(value: T): Omit<T, "$schema"> {
+  const { $schema: _schema, ...rest } = value as T & { $schema?: string };
+  return rest as Omit<T, "$schema">;
+}
 
 type AdminUserPageTransport = OperationResponse<"admin-list-system-admins">;
 type AdminUserTransport = NonNullable<AdminUserPageTransport["items"]>[number];
@@ -64,6 +70,12 @@ type GlobalStatsTransport = OperationResponse<"admin-global-stats">;
 type ConsumptionTrendTransport = OperationResponse<"admin-consumption-trend">;
 type ResourceStatisticsTransport = OperationResponse<"admin-resource-statistics">;
 type DashboardAlertsTransport = OperationResponse<"admin-dashboard-alerts">;
+type PaymentSettingsTransport = OperationResponse<"admin-get-payment-settings">;
+type PaymentSettingsWriteBody = OperationBody<"admin-update-payment-settings">;
+type WechatConfigTransport = OperationResponse<"admin-get-wechat-config">;
+type WechatConfigWriteBody = OperationBody<"admin-update-wechat-config">;
+type PaymentOrdersTransport = OperationResponse<"admin-list-payment-orders">;
+type PaymentOrderTransport = NonNullable<PaymentOrdersTransport["items"]>[number];
 
 function toOperationStatus(value: { success: boolean }): { status: string } {
   return { status: value.success ? "success" : "failed" };
@@ -339,6 +351,121 @@ function toDashboardAlerts(value: DashboardAlertsTransport): DashboardAlertsOutp
       createdTime: item.createdTime
     })) ?? []
   };
+}
+
+function toTopupPackage(value: components["schemas"]["TopupPackage"]): TopupPackage {
+  return {
+    id: value.id,
+    name: value.name,
+    paymentAmountMicroUsd: value.paymentAmountMicroUsd,
+    giftAmountMicroUsd: value.giftAmountMicroUsd,
+    validityDays: value.validityDays ?? null,
+    badge: value.badge,
+    enabled: value.enabled,
+    sortOrder: value.sortOrder
+  };
+}
+
+function toPaymentSettings(value: PaymentSettingsTransport): PaymentGlobalSettings {
+  return {
+    tenantCustomTopupFeeBp: value.tenantCustomTopupFeeBp,
+    tenantWithdrawFeeBp: value.tenantWithdrawFeeBp,
+    tenantCustomValidityDays: value.tenantCustomValidityDays ?? null,
+    tenantTopupPackages: value.tenantTopupPackages?.map(toTopupPackage) ?? []
+  };
+}
+
+function toPaymentSettingsBody(value: PaymentGlobalSettings): PaymentSettingsWriteBody {
+  return {
+    tenantCustomTopupFeeBp: value.tenantCustomTopupFeeBp,
+    tenantWithdrawFeeBp: value.tenantWithdrawFeeBp,
+    tenantCustomValidityDays: value.tenantCustomValidityDays ?? undefined,
+    tenantTopupPackages: value.tenantTopupPackages.map((item) => ({
+      id: item.id,
+      name: item.name,
+      paymentAmountMicroUsd: item.paymentAmountMicroUsd,
+      giftAmountMicroUsd: item.giftAmountMicroUsd,
+      validityDays: item.validityDays ?? undefined,
+      badge: item.badge,
+      enabled: item.enabled,
+      sortOrder: item.sortOrder
+    }))
+  };
+}
+
+function toWechatVerifyMode(value: string): WechatConfig["verifyMode"] {
+  if (value === "platform_cert" || value === "public_key") return value;
+  throw new Error(`Unexpected WeChat verify mode: ${value}`);
+}
+
+function toWechatConfig(value: WechatConfigTransport): WechatConfig {
+  return {
+    enabled: value.enabled,
+    mock: value.mock,
+    verifyMode: toWechatVerifyMode(value.verifyMode),
+    appId: value.appId,
+    mchId: value.mchId,
+    mchCertSerialNo: value.mchCertSerialNo,
+    notifyBaseUrl: value.notifyBaseUrl,
+    orderTtlSeconds: value.orderTtlSeconds,
+    hasPrivateKey: value.hasPrivateKey,
+    hasApiv3Key: value.hasApiv3Key,
+    wechatPayPublicKeyId: value.wechatPayPublicKeyId,
+    hasWechatPayPublicKey: value.hasWechatPayPublicKey
+  };
+}
+
+function toWechatConfigBody(value: WechatConfigWriteInput): WechatConfigWriteBody {
+  return {
+    enabled: value.enabled,
+    mock: value.mock,
+    verifyMode: toWechatVerifyMode(value.verifyMode),
+    appId: value.appId,
+    mchId: value.mchId,
+    mchCertSerialNo: value.mchCertSerialNo,
+    notifyBaseUrl: value.notifyBaseUrl,
+    orderTtlSeconds: value.orderTtlSeconds,
+    mchPrivateKey: value.mchPrivateKey ?? null,
+    apiv3Key: value.apiv3Key ?? null,
+    wechatPayPublicKeyId: value.wechatPayPublicKeyId ?? null,
+    wechatPayPublicKey: value.wechatPayPublicKey ?? null
+  };
+}
+
+function toPaymentOrderScene(value: string): PaymentOrderItem["scene"] {
+  if (value === "user_topup" || value === "tenant_topup") return value;
+  throw new Error(`Unexpected payment order scene: ${value}`);
+}
+
+function toPaymentOrderMode(value: string): PaymentOrderItem["topupMode"] {
+  if (value === "custom" || value === "package") return value;
+  throw new Error(`Unexpected payment order topup mode: ${value}`);
+}
+
+function toPaymentOrder(value: PaymentOrderTransport): PaymentOrderItem {
+  return {
+    orderId: value.orderId,
+    scene: toPaymentOrderScene(value.scene),
+    tenantName: value.tenantName,
+    username: value.username,
+    status: value.status,
+    paymentCurrency: value.paymentCurrency,
+    paymentAmountMinor: value.paymentAmountMinor,
+    grossAmountMicroUsd: value.grossAmountMicroUsd,
+    feeAmountMicroUsd: value.feeAmountMicroUsd,
+    giftAmountMicroUsd: value.giftAmountMicroUsd,
+    creditedAmountMicroUsd: value.creditedAmountMicroUsd,
+    topupMode: toPaymentOrderMode(value.topupMode),
+    packageName: value.packageName,
+    transactionId: value.transactionId,
+    createdAt: value.createdAt,
+    paidAt: value.paidAt ?? null,
+    balanceExpiresAt: value.balanceExpiresAt ?? null
+  };
+}
+
+function toPaymentOrders(value: PaymentOrdersTransport): PagePaymentOrderItem {
+  return { items: value.items?.map(toPaymentOrder) ?? [], total: value.total, page: value.page, size: value.size };
 }
 
 export const platformAdminApi = {
@@ -720,55 +847,56 @@ export const platformAdminApi = {
   // ==================== 微信支付在线充值（管理端） ====================
 
   getPaymentSettings() {
-    return request()<PaymentGlobalSettings>({
+    return typedRequest<"admin-get-payment-settings">({
       method: "GET",
       path: "/api/v1/admin/payment-settings",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPaymentSettings);
   },
   updatePaymentSettings(body: PaymentGlobalSettings) {
-    return request()<PaymentGlobalSettings>({
+    return typedRequest<"admin-update-payment-settings">({
       method: "PUT",
       path: "/api/v1/admin/payment-settings",
       headers: apiHeaders,
-      body,
+      body: toPaymentSettingsBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toPaymentSettings);
   },
   getWechatConfig() {
-    return request()<WechatConfig>({
+    return typedRequest<"admin-get-wechat-config">({
       method: "GET",
       path: "/api/v1/admin/wechat-config",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toWechatConfig);
   },
   updateWechatConfig(body: WechatConfigWriteInput) {
-    return request()<WechatConfig>({
+    return typedRequest<"admin-update-wechat-config">({
       method: "PUT",
       path: "/api/v1/admin/wechat-config",
       headers: apiHeaders,
-      body,
+      body: toWechatConfigBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toWechatConfig);
   },
-  listPaymentOrders(params: { scene?: string; status?: string; tenantId?: string; page?: number; size?: number } = {}) {
-    return request()<PagePaymentOrderItem>({
+  listPaymentOrders(params: OperationQuery<"admin-list-payment-orders"> = {}) {
+    return typedRequest<"admin-list-payment-orders">({
       method: "GET",
       path: "/api/v1/admin/payment-orders",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPaymentOrders);
   },
   syncPaymentOrder(orderId: string) {
-    return request()<PaymentOrderItem>({
+    return typedRequest<"admin-sync-payment-order">({
       method: "POST",
       path: `/api/v1/admin/payment-orders/${encodeURIComponent(orderId)}/sync`,
+      pathParams: { orderId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(stripSchema);
   },
   listAdminRechargeOrders(params: {
     keyword?: string;
