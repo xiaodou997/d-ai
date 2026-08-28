@@ -469,6 +469,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：充值方式/对象、支付/到账/退款状态、退款记录及嵌套额度明细进入页面前校验并映射；nullable 订单、额度和流水列表归一为空数组，同时保留列表未加载详情额度的语义。
 - 回归：新增 platform recharge-order facade 测试覆盖订单 CRUD/同步/撤回/退款 body/path、嵌套明细、余额流水 nullable 归一和非法订单状态拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed platform withdrawals facade，2026-08-29）
+
+- 迁移：后台提现列表与创建共 2 个 facade 请求绑定 generated OpenAPI operations；提现筛选 query 和写入 body 由 operation 类型推导。
+- 领域边界：提现分页 nullable 集合归一为空数组，创建/列表响应显式映射页面字段并移除 transport `$schema`，保留未支付时间的页面 `null` 语义。
+- 回归：新增 platform withdrawals facade 测试覆盖筛选 query、创建 body、nullable 列表、字段映射与 schema 清理；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

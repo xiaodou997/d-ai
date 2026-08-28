@@ -85,6 +85,8 @@ type BalanceLedgerPageTransport = OperationResponse<"admin-list-balance-ledger">
 type BalanceLedgerTransport = components["schemas"]["CashLedgerItem"];
 type ReverseAdminRechargeBody = OperationBody<"admin-reverse-recharge-order-credit">;
 type RecordCompletedRefundBody = OperationBody<"admin-record-completed-recharge-refund">;
+type WithdrawalPageTransport = OperationResponse<"admin-list-withdrawals">;
+type WithdrawalTransport = components["schemas"]["WithdrawalItem"];
 
 function toOperationStatus(value: { success: boolean }): { status: string } {
   return { status: value.success ? "success" : "failed" };
@@ -609,6 +611,29 @@ function toBalanceLedgerPage(value: BalanceLedgerPageTransport): PageBalanceLedg
   return { items: value.items?.map(toBalanceLedger) ?? [], total: value.total, page: value.page, size: value.size };
 }
 
+function toWithdrawal(value: WithdrawalTransport): WithdrawalItem {
+  return {
+    withdrawalId: value.withdrawalId,
+    currency: value.currency,
+    amountMicroUsd: value.amountMicroUsd,
+    feeAmountMicroUsd: value.feeAmountMicroUsd,
+    payoutAmountMicroUsd: value.payoutAmountMicroUsd,
+    accountName: value.accountName,
+    bankName: value.bankName,
+    accountNo: value.accountNo,
+    status: value.status,
+    applyNote: value.applyNote,
+    reviewNote: value.reviewNote,
+    paymentRef: value.paymentRef,
+    paidAt: value.paidAt ?? null,
+    createdAt: value.createdAt
+  };
+}
+
+function toWithdrawals(value: WithdrawalPageTransport): PageWithdrawalItem {
+  return { items: value.items?.map(toWithdrawal) ?? [], total: value.total, page: value.page, size: value.size };
+}
+
 export const platformAdminApi = {
   // ---- 账号自助 ----
   // 修改本人密码（后端统一密码策略）
@@ -1095,30 +1120,22 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     }).then(toBalanceLedgerPage);
   },
-  listWithdrawals(params: { status?: string; page?: number; size?: number } = {}) {
-    return request()<PageWithdrawalItem>({
+  listWithdrawals(params: OperationQuery<"admin-list-withdrawals"> = {}) {
+    return typedRequest<"admin-list-withdrawals">({
       method: "GET",
       path: "/api/v1/admin/withdrawals",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toWithdrawals);
   },
-  createWithdrawal(body: {
-    tenantId: string;
-    amountMicroUsd: number;
-    accountName?: string;
-    bankName?: string;
-    accountNo?: string;
-    note?: string;
-    paymentRef?: string;
-  }) {
-    return request()<WithdrawalItem>({
+  createWithdrawal(body: OperationBody<"admin-create-withdrawal">) {
+    return typedRequest<"admin-create-withdrawal">({
       method: "POST",
       path: "/api/v1/admin/withdrawals",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toWithdrawal);
   }
 };
