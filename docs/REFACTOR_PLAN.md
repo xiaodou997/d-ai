@@ -391,6 +391,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：套餐/订单/订阅的 nullable 分组和分页 `included` 经过显式 mapper，购买策略及套餐状态校验有限集合；写入 body 将页面可空字段转换为 generated schema 允许的传输形状。
 - 回归：新增 tenant subscription facade 测试覆盖分页与策略映射、nullable groups、query/path/body forwarding 以及 204 响应；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed tenant workspace facade，2026-08-28）
+
+- 迁移：租户聊天模型、会话列表/创建/详情/删除和图片任务列表的 6 个 control-plane 请求绑定生成的 OpenAPI operation；runtime 流式与图片执行端点继续使用独立 transport。
+- 领域边界：模型、会话和图片任务显式移除 `$schema`，nullable 列表归一为空数组，图片 operation 只接受 `generation`/`edit`；session path 参数和默认 limit 通过 operation 类型约束。
+- 回归：新增 tenant workspace facade 测试覆盖 nullable 集合、session 详情映射、编码 path、默认 query limit 和非法图片 operation 拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

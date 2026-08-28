@@ -28,9 +28,11 @@ import {
 } from ".";
 import type {
   ChatModel,
+  ChatMessageDTO,
   ConsoleImageGenerateRequest,
   ConsoleImageJob,
   ConsoleImageModel,
+  ConsoleImageTaskAsset,
   ChatSession,
   ChatSessionDetail,
   TenantAiApiKey,
@@ -115,6 +117,12 @@ type SubscriptionPageTransport = OperationResponse<"ai-list-tenant-self-subscrip
 type SubscriptionTransport = components["schemas"]["SubscriptionDTO"];
 type SubscriptionPolicyTransport = components["schemas"]["SubPurchasePolicyDTO"];
 type SubscriptionPolicyRevisionTransport = components["schemas"]["SubPurchasePolicyRevisionDTO"];
+type WorkspaceChatModelsTransport = OperationResponse<"ai-api-v1-tenants-me-workspace-chat-models">;
+type WorkspaceChatSessionsTransport = OperationResponse<"ai-api-v1-tenants-me-workspace-chat-sessions">;
+type WorkspaceChatSessionTransport = components["schemas"]["WorkspaceChatSessionDTO"];
+type WorkspaceChatSessionDetailTransport = OperationResponse<"ai-api-v1-tenants-me-workspace-chat-sessions-sessionid">;
+type WorkspaceImageJobsTransport = OperationResponse<"ai-api-v1-tenants-me-workspace-image-jobs">;
+type WorkspaceImageJobTransport = components["schemas"]["WorkspaceImageJobDTO"];
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -556,6 +564,116 @@ function toSubscriptionPlanBody(value: TenantSubPlanWriteRequest): OperationBody
 function toSubscriptionPlanStatus(value: string): "on_sale" | "off_sale" {
   if (value === "on_sale" || value === "off_sale") return value;
   throw new Error(`Unexpected subscription plan status: ${value}`);
+}
+
+function toWorkspaceChatModel(value: components["schemas"]["WorkspaceChatModelDTO"]): ChatModel {
+  return {
+    group_id: value.group_id,
+    group_name: value.group_name,
+    effective_user_multiplier: value.effective_user_multiplier,
+    billing_group_label: value.billing_group_label,
+    model_code: value.model_code,
+    capability_type: value.capability_type,
+    default_api_format: value.default_api_format,
+    available_api_formats: value.available_api_formats ?? [],
+    supports_stream: value.supports_stream,
+    status: value.status
+  };
+}
+
+function toWorkspaceChatModels(value: WorkspaceChatModelsTransport): { items: ChatModel[]; total: number } {
+  return { items: value.items?.map(toWorkspaceChatModel) ?? [], total: value.total };
+}
+
+function toWorkspaceChatSession(value: WorkspaceChatSessionTransport): ChatSession {
+  return {
+    id: value.id,
+    title: value.title,
+    model_code: value.model_code,
+    group_id: value.group_id,
+    group_name: value.group_name,
+    effective_user_multiplier: value.effective_user_multiplier,
+    billing_group_label: value.billing_group_label,
+    provider_api_format: value.provider_api_format,
+    selected_route_id: value.selected_route_id,
+    status: value.status,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toWorkspaceChatSessions(value: WorkspaceChatSessionsTransport): { items: ChatSession[]; total: number } {
+  return { items: value.items?.map(toWorkspaceChatSession) ?? [], total: value.total };
+}
+
+function toWorkspaceChatMessage(value: components["schemas"]["WorkspaceChatMessageDTO"]): ChatMessageDTO {
+  return {
+    id: value.id,
+    role: value.role,
+    content: value.content,
+    protocol: value.protocol,
+    route_id: value.route_id,
+    usage: value.usage,
+    error: value.error,
+    created_at: value.created_at
+  };
+}
+
+function toWorkspaceChatSessionDetail(value: WorkspaceChatSessionDetailTransport): ChatSessionDetail {
+  return {
+    session: toWorkspaceChatSession(value.session),
+    messages: value.messages?.map(toWorkspaceChatMessage) ?? []
+  };
+}
+
+function toWorkspaceImageAsset(value: components["schemas"]["WorkspaceImageAssetDTO"]): ConsoleImageTaskAsset {
+  return {
+    id: value.id,
+    index: value.index,
+    preview_url: value.preview_url,
+    display_url: value.display_url,
+    original_url: value.original_url,
+    content_type: value.content_type,
+    size_bytes: value.size_bytes,
+    preview_content_type: value.preview_content_type,
+    preview_size_bytes: value.preview_size_bytes,
+    width: value.width,
+    height: value.height,
+    expires_at: value.expires_at
+  };
+}
+
+function toWorkspaceImageJob(value: WorkspaceImageJobTransport): ConsoleImageJob {
+  if (value.operation !== "generation" && value.operation !== "edit") {
+    throw new Error(`Unexpected workspace image operation: ${value.operation}`);
+  }
+  return {
+    id: value.id,
+    operation: value.operation,
+    model_code: value.model_code,
+    prompt: value.prompt,
+    status: value.status,
+    storage_policy: value.storage_policy,
+    raw_image_retained: value.raw_image_retained,
+    size: value.size,
+    quality: value.quality,
+    style: value.style,
+    response_format: value.response_format,
+    requested_output_count: value.requested_output_count,
+    caller_charge_usd: value.caller_charge_usd,
+    image_count: value.image_count,
+    inline_count: value.inline_count,
+    url_count: value.url_count,
+    revised_prompts: value.revised_prompts ?? undefined,
+    assets: value.assets?.map(toWorkspaceImageAsset) ?? undefined,
+    error_message: value.error_message,
+    created_at: value.created_at,
+    completed_at: value.completed_at
+  };
+}
+
+function toWorkspaceImageJobs(value: WorkspaceImageJobsTransport): { items: ConsoleImageJob[]; total: number } {
+  return { items: value.items?.map(toWorkspaceImageJob) ?? [], total: value.total };
 }
 
 export { formatUSD };
@@ -1103,60 +1221,62 @@ export const aiTenantApi = {
       baseUrl: baseUrl()
     }).then(toSubscriptionOrderPage);
   },
-  listWorkspaceChatSessions(params: { limit?: number } = {}) {
-    return request()<{ items: ChatSession[]; total: number }>({
+  listWorkspaceChatSessions(params: OperationQuery<"ai-api-v1-tenants-me-workspace-chat-sessions"> = {}) {
+    return typedRequest<"ai-api-v1-tenants-me-workspace-chat-sessions">({
       method: "GET",
       path: "/api/v1/tenants/me/workspace/chat/sessions",
       headers: headers(),
       query: { limit: 50, ...params },
       baseUrl: baseUrl()
-    });
+    }).then(toWorkspaceChatSessions);
   },
   listWorkspaceChatModels() {
-    return request()<{ items: ChatModel[]; total: number }>({
+    return typedRequest<"ai-api-v1-tenants-me-workspace-chat-models">({
       method: "GET",
       path: "/api/v1/tenants/me/workspace/chat/models",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toWorkspaceChatModels);
   },
   createWorkspaceChatSession(body: {
     model_code: string;
     group_id: string;
     title?: string;
   }) {
-    return request()<ChatSession>({
+    return typedRequest<"ai-api-v1-tenants-me-workspace-chat-sessions:create">({
       method: "POST",
       path: "/api/v1/tenants/me/workspace/chat/sessions",
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(toWorkspaceChatSession);
   },
   getWorkspaceChatSession(sessionId: string) {
-    return request()<ChatSessionDetail>({
+    return typedRequest<"ai-api-v1-tenants-me-workspace-chat-sessions-sessionid">({
       method: "GET",
       path: `/api/v1/tenants/me/workspace/chat/sessions/${encodeURIComponent(sessionId)}`,
+      pathParams: { sessionID: sessionId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toWorkspaceChatSessionDetail);
   },
   deleteWorkspaceChatSession(sessionId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-api-v1-tenants-me-workspace-chat-sessions-sessionid:delete">({
       method: "DELETE",
       path: `/api/v1/tenants/me/workspace/chat/sessions/${encodeURIComponent(sessionId)}`,
+      pathParams: { sessionID: sessionId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
-  listWorkspaceImageJobs(params: { limit?: number } = {}) {
-    return request()<{ items: ConsoleImageJob[]; total: number }>({
+  listWorkspaceImageJobs(params: OperationQuery<"ai-api-v1-tenants-me-workspace-image-jobs"> = {}) {
+    return typedRequest<"ai-api-v1-tenants-me-workspace-image-jobs">({
       method: "GET",
       path: "/api/v1/tenants/me/workspace/image/jobs",
       headers: headers(),
       query: { limit: 50, ...params },
       baseUrl: baseUrl()
-    });
+    }).then(toWorkspaceImageJobs);
   }
 };
 
