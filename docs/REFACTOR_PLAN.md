@@ -261,7 +261,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 本地图片 `_tmp`/`ephemeral` 清理增加共享 storage 文件租约与心跳；task orphan 扫描接入 async task 检查器，未确认的任务目录默认不删。
 - [x] 支付补偿使用 advisory lock 执行单轮任务，并以订单级持久化退避、失败计数和状态 fencing 处理 provider 长时间故障。
 - [x] 增加支付 retry backlog、最老失败时长指标和告警 runbook，避免仅依赖单轮 scheduler 错误或人工查询 `sweep_last_error`。
-- [ ] 禁止依赖进程内内存作为跨副本真相源。
+- [x] 禁止依赖进程内内存作为跨副本真相源；Redis-backed health tracker 在 Redis 不可达时不回退本地状态，读取采取 fail-closed，异步/账务状态继续只以 PostgreSQL durable state 为准。
 
 ### P2-03 独立交付 Portal
 
@@ -1327,3 +1327,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 语义：billing reconciliation 与 payment sweep/cleanup 通过 PostgreSQL advisory lock 互斥；JWT retire 使用条件更新；lot expiry 使用确定性账户锁顺序、`FOR UPDATE SKIP LOCKED` 与 `expired_at` 幂等标记。
 - 回归：新增两个独立 expiry 副本并发执行测试，确认同一批次只结算一次；`go test ./internal/billing/ledger ./internal/scheduler -count=1` 通过。
+
+### P2-02（No process-local cross-replica truth，2026-08-28）
+
+- 边界：Redis-backed upstream health 状态不再在 Redis 读写失败时回退到 `InMemoryTracker`；共享状态不可确认时读取 fail-closed，避免副本间 circuit-breaker 分叉。进程内缓存仅作为性能优化，不参与任务、计费、租约或授权真相判断。
+- 回归：新增 Redis 不可用与读取失败测试；`go test ./internal/ai/routing -count=1`（提升权限以允许 miniredis 本地监听）通过。

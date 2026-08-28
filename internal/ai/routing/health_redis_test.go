@@ -125,3 +125,33 @@ func TestRedisHealthTrackerPrunesExpiredSnapshotIndexMembers(t *testing.T) {
 		t.Fatal("expired target should be removed from the health index")
 	}
 }
+
+func TestRedisHealthTrackerFailsClosedWithoutSharedState(t *testing.T) {
+	tracker := NewRedisHealthTracker(NewInMemoryTracker(1, time.Millisecond), nil)
+	tracker.RecordFailure("account-unavailable", TargetAccount)
+	if !tracker.IsBlocked("account-unavailable", defaultProbeLease) {
+		t.Fatal("tracker without Redis must fail closed rather than trust process-local state")
+	}
+	if got := tracker.StateOf("account-unavailable"); got != StateOpen {
+		t.Fatalf("state without Redis = %s, want open", got)
+	}
+	if got := tracker.StatesOf([]string{"account-unavailable"})["account-unavailable"]; got != StateOpen {
+		t.Fatalf("bulk state without Redis = %s, want open", got)
+	}
+	if got := tracker.Snapshot(); len(got) != 0 {
+		t.Fatalf("snapshot without Redis = %+v, want no local fallback", got)
+	}
+}
+
+func TestRedisHealthTrackerFailsClosedWhenRedisReadFails(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	client.Close()
+	tracker := NewRedisHealthTracker(NewInMemoryTracker(1, time.Millisecond), client)
+	if !tracker.IsBlocked("account-down", defaultProbeLease) {
+		t.Fatal("Redis read failure must fail closed")
+	}
+	if got := tracker.StateOf("account-down"); got != StateOpen {
+		t.Fatalf("state after Redis read failure = %s, want open", got)
+	}
+}

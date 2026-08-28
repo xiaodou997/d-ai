@@ -107,8 +107,9 @@ return 1
 `)
 
 // RedisHealthTracker stores the circuit-breaker FSM in Redis. Every node sees
-// the same failure counter and half-open probe claim; inner is only a fallback
-// for brief Redis outages.
+// the same failure counter and half-open probe claim. The inner tracker is
+// retained only for API compatibility; it is never used as a cross-replica
+// source of truth when Redis is unavailable.
 type RedisHealthTracker struct {
 	inner *InMemoryTracker
 	rdb   *redis.Client
@@ -125,15 +126,15 @@ func (r *RedisHealthTracker) RecordSuccess(targetID string, kind TargetKind) {
 	if targetID == "" {
 		return
 	}
-	r.inner.RecordSuccess(targetID, kind)
 	if r.rdb == nil {
+		zap.L().Warn("health redis unavailable; success state not persisted", zap.String("target_id", targetID))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
 	defer cancel()
 	if err := recordHealthSuccessScript.Run(ctx, r.rdb, []string{r.key(targetID), healthIndexKey},
 		targetID, int(kind), healthStateTTL.Milliseconds()).Err(); err != nil {
-		zap.L().Debug("health redis success update failed", zap.String("target_id", targetID), zap.Error(err))
+		zap.L().Warn("health redis success update failed; shared state remains authoritative", zap.String("target_id", targetID), zap.Error(err))
 	}
 }
 
@@ -141,8 +142,8 @@ func (r *RedisHealthTracker) RecordFailure(targetID string, kind TargetKind) {
 	if targetID == "" {
 		return
 	}
-	r.inner.RecordFailure(targetID, kind)
 	if r.rdb == nil {
+		zap.L().Warn("health redis unavailable; failure state not persisted", zap.String("target_id", targetID))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
@@ -156,7 +157,7 @@ func (r *RedisHealthTracker) RecordFailure(targetID string, kind TargetKind) {
 		maxOpenDuration.Milliseconds(),
 		healthStateTTL.Milliseconds(),
 	).Err(); err != nil {
-		zap.L().Debug("health redis failure update failed", zap.String("target_id", targetID), zap.Error(err))
+		zap.L().Warn("health redis failure update failed; shared state remains authoritative", zap.String("target_id", targetID), zap.Error(err))
 	}
 }
 
@@ -168,14 +169,15 @@ func (r *RedisHealthTracker) IsBlocked(targetID string, probeLease time.Duration
 		probeLease = defaultProbeLease
 	}
 	if r.rdb == nil {
-		return r.inner.IsBlocked(targetID, probeLease)
+		return true
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
 	defer cancel()
 	blocked, err := claimHealthProbeScript.Run(ctx, r.rdb, []string{r.key(targetID)},
 		time.Now().UnixMilli(), healthStateTTL.Milliseconds(), probeLease.Milliseconds()).Int()
 	if err != nil {
-		return r.inner.IsBlocked(targetID, probeLease)
+		zap.L().Warn("health redis probe claim failed; failing closed", zap.String("target_id", targetID), zap.Error(err))
+		return true
 	}
 	return blocked == 1
 }
@@ -184,14 +186,13 @@ func (r *RedisHealthTracker) ReleaseProbe(targetID string) {
 	if targetID == "" {
 		return
 	}
-	r.inner.ReleaseProbe(targetID)
 	if r.rdb == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
 	defer cancel()
 	if err := releaseHealthProbeScript.Run(ctx, r.rdb, []string{r.key(targetID)}, healthStateTTL.Milliseconds()).Err(); err != nil {
-		zap.L().Debug("health redis probe release failed", zap.String("target_id", targetID), zap.Error(err))
+		zap.L().Warn("health redis probe release failed", zap.String("target_id", targetID), zap.Error(err))
 	}
 }
 
@@ -200,7 +201,7 @@ func (r *RedisHealthTracker) StateOf(targetID string) HealthState {
 		return StateClosed
 	}
 	if r.rdb == nil {
-		return r.inner.StateOf(targetID)
+		return StateOpen
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
 	defer cancel()
@@ -209,7 +210,8 @@ func (r *RedisHealthTracker) StateOf(targetID string) HealthState {
 		return StateClosed
 	}
 	if err != nil {
-		return r.inner.StateOf(targetID)
+		zap.L().Warn("health redis state read failed; treating target as open", zap.String("target_id", targetID), zap.Error(err))
+		return StateOpen
 	}
 	return HealthState(value)
 }
@@ -220,7 +222,12 @@ func (r *RedisHealthTracker) StatesOf(targetIDs []string) map[string]HealthState
 		return out
 	}
 	if r.rdb == nil {
-		return r.inner.StatesOf(targetIDs)
+		for _, targetID := range targetIDs {
+			if targetID != "" {
+				out[targetID] = StateOpen
+			}
+		}
+		return out
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), healthRedisWait)
 	defer cancel()
@@ -234,7 +241,13 @@ func (r *RedisHealthTracker) StatesOf(targetIDs []string) map[string]HealthState
 	}
 	_, err := pipe.Exec(ctx)
 	if err != nil && err != redis.Nil {
-		return r.inner.StatesOf(targetIDs)
+		zap.L().Warn("health redis states read failed; treating targets as open", zap.Error(err))
+		for _, targetID := range targetIDs {
+			if targetID != "" {
+				out[targetID] = StateOpen
+			}
+		}
+		return out
 	}
 	for _, targetID := range targetIDs {
 		command, ok := commands[targetID]
@@ -246,7 +259,7 @@ func (r *RedisHealthTracker) StatesOf(targetIDs []string) map[string]HealthState
 		if readErr == redis.Nil {
 			out[targetID] = StateClosed
 		} else if readErr != nil {
-			out[targetID] = r.inner.StateOf(targetID)
+			out[targetID] = StateOpen
 		} else {
 			out[targetID] = HealthState(value)
 		}
@@ -256,13 +269,14 @@ func (r *RedisHealthTracker) StatesOf(targetIDs []string) map[string]HealthState
 
 func (r *RedisHealthTracker) Snapshot() []HealthRecord {
 	if r.rdb == nil {
-		return r.inner.Snapshot()
+		return []HealthRecord{}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	targetIDs, err := r.rdb.SMembers(ctx, healthIndexKey).Result()
 	if err != nil {
-		return r.inner.Snapshot()
+		zap.L().Warn("health redis snapshot read failed; returning no local fallback", zap.Error(err))
+		return []HealthRecord{}
 	}
 	pipe := r.rdb.Pipeline()
 	commands := make(map[string]*redis.SliceCmd, len(targetIDs))
@@ -271,7 +285,8 @@ func (r *RedisHealthTracker) Snapshot() []HealthRecord {
 			"kind", "state", "consec_fail", "opened_at_ms", "next_probe_at_ms")
 	}
 	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
-		return r.inner.Snapshot()
+		zap.L().Warn("health redis snapshot state read failed; returning no local fallback", zap.Error(err))
+		return []HealthRecord{}
 	}
 	records := make([]HealthRecord, 0, len(targetIDs))
 	stale := make([]any, 0)
