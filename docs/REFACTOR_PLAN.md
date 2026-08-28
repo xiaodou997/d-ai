@@ -335,6 +335,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 空值边界：页面友好的 `ProfileUpdateInput` 仍使用可选字段，facade 显式转换为生成 DTO 要求的 `string | null`，避免 nullable 传输语义泄漏到页面组件。
 - 回归：完整 Portal 221 项测试、typecheck、认证与 operation client 定向测试、`ensure:api` 通过；全仓 Go 验证结果随本次提交记录。
 
+### P2-04（Typed customer self-service facade，2026-08-28）
+
+- 迁移：用户端品牌、余额、充值记录和在线充值的 7 个手写请求全部绑定生成的 OpenAPI operation；下单 body 与成功响应由 operation 推导，不再重复声明传输 DTO。
+- 领域边界：facade 显式移除 transport `$schema`，将 nullable 列表归一为页面数组，并在订单 `topupMode`、`status`、`scene` 进入页面模型前校验有限集合；未知值直接拒绝，不静默污染 UI 状态。
+- 回归：新增 customer facade 测试覆盖空值归一、订单映射、path 参数和未知枚举拒绝；完整 Portal 67 个测试文件、224 项测试、typecheck 与 318-operation OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
