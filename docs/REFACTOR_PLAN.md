@@ -433,6 +433,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：池 provider/access/strategy/status、凭证 provider/status、必填 access token 和数值权重在 facade 边界校验；nullable 池/凭证/健康列表归一为空数组，传输层冷却字段不泄漏到页面 DTO。
 - 回归：新增 admin credential-pool facade 测试覆盖池与凭证 CRUD body/path、schema 清理、健康汇总映射和非法枚举拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed admin risk-control facade，2026-08-28）
+
+- 迁移：风控配置读写、文本检测、审核日志/风险事件查询和事件处置共 6 个 facade 请求绑定 generated OpenAPI operations；日志/事件 query 与动态事件 path 使用 operation 推导类型。
+- 领域边界：风控模式、关键词等级、事件严重级别/状态和处置状态进入页面前校验；配置及日志/事件 nullable 集合归一为空数组，`[]byte` 风险详情转换为页面对象并隔离传输 `$schema`。
+- 回归：新增 admin risk-control facade 测试覆盖配置嵌套空值、敏感 key 写入、检测结果、日志/事件 query、编码处置 path 和非法枚举拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

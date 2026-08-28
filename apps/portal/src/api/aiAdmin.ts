@@ -58,6 +58,9 @@ import type {
   RiskControlConfigDTO,
   RiskControlConfigWriteRequest,
   RiskControlTestResultDTO,
+  KeywordConfigDTO,
+  KeywordEntryDTO,
+  RiskControlLogDTO,
   RiskControlLogsOutputBody,
   RiskEventDTO,
   RiskEventsOutputBody,
@@ -118,6 +121,15 @@ type PoolStatus = components["schemas"]["CredentialPoolDTO"]["status"];
 type PoolCredentialProvider = NonNullable<PoolCredentialWriteBody["provider_type"]>;
 type PoolCredentialStatus = "active" | "invalid" | "disabled";
 type PoolCredentialPatchStatus = NonNullable<PoolCredentialPatchBody["status"]>;
+type RiskControlConfigTransport = components["schemas"]["RiskControlConfigDTO"];
+type RiskControlConfigWriteBody = OperationBody<"ai-update-risk-control-config">;
+type RiskControlMode = RiskControlConfigWriteBody["mode"];
+type RiskControlLogsTransport = OperationResponse<"ai-list-risk-control-logs">;
+type RiskEventsTransport = OperationResponse<"ai-list-risk-events">;
+type RiskEventTransport = components["schemas"]["RiskEventDTO"];
+type RiskEventResolutionBody = OperationBody<"ai-resolve-risk-event">;
+type RiskEventResolutionStatus = RiskEventResolutionBody["status"];
+type RiskTestTransport = OperationResponse<"ai-test-risk-control-moderation">;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
 type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
@@ -721,6 +733,170 @@ function toOAuthPoolHealthPage(value: OAuthPoolHealthPageTransport): OAuthPoolHe
   return { items: value.items?.map(toOAuthPoolHealth) ?? [], total: value.total };
 }
 
+function toRiskControlMode(value: string): RiskControlMode {
+  if (value === "off" || value === "observe" || value === "pre_block") return value;
+  throw new Error(`Unexpected risk control mode: ${value}`);
+}
+
+function toRiskKeywordEntry(value: components["schemas"]["KeywordEntryDTO"]): KeywordEntryDTO {
+  if (value.level !== "block" && value.level !== "suspect") {
+    throw new Error(`Unexpected risk keyword level: ${value.level}`);
+  }
+  return {
+    word: value.word,
+    level: value.level,
+    require_with: value.require_with ?? [],
+    note: value.note
+  };
+}
+
+function toRiskKeywordConfig(value: components["schemas"]["KeywordConfigDTO"]): KeywordConfigDTO {
+  return {
+    enabled: value.enabled,
+    entries: value.entries?.map(toRiskKeywordEntry) ?? [],
+    homoglyph_map_extra: value.homoglyph_map_extra,
+    pinyin: {
+      enabled: value.pinyin.enabled,
+      entries: value.pinyin.entries?.map(toRiskKeywordEntry) ?? [],
+      include_initials: value.pinyin.include_initials
+    }
+  };
+}
+
+function toRiskConfig(value: RiskControlConfigTransport): RiskControlConfigDTO {
+  return {
+    enabled: value.enabled,
+    mode: toRiskControlMode(value.mode),
+    config_revision: value.config_revision,
+    keyword: toRiskKeywordConfig(value.keyword),
+    provider: {
+      base_url: value.provider.base_url,
+      model: value.provider.model,
+      has_api_key: value.provider.has_api_key,
+      timeout_ms: value.provider.timeout_ms
+    },
+    thresholds: value.thresholds,
+    sample_rate: value.sample_rate,
+    verdict_cache_ttl_seconds: value.verdict_cache_ttl_seconds,
+    scope_group_ids: value.scope_group_ids ?? [],
+    violation_window_hours: value.violation_window_hours,
+    risk_event_threshold: value.risk_event_threshold,
+    record_non_hits: value.record_non_hits,
+    block_status_code: value.block_status_code,
+    block_message: value.block_message
+  };
+}
+
+function toRiskKeywordConfigBody(value: KeywordConfigDTO): RiskControlConfigWriteBody["keyword"] {
+  return {
+    enabled: value.enabled,
+    entries: value.entries.map((entry) => ({
+      word: entry.word,
+      level: entry.level,
+      require_with: entry.require_with,
+      note: entry.note
+    })),
+    homoglyph_map_extra: value.homoglyph_map_extra,
+    pinyin: {
+      enabled: value.pinyin.enabled,
+      entries: value.pinyin.entries.map((entry) => ({
+        word: entry.word,
+        level: entry.level,
+        require_with: entry.require_with,
+        note: entry.note
+      })),
+      include_initials: value.pinyin.include_initials
+    }
+  };
+}
+
+function toRiskControlConfigBody(value: RiskControlConfigWriteRequest): RiskControlConfigWriteBody {
+  return {
+    enabled: value.enabled,
+    mode: toRiskControlMode(value.mode),
+    keyword: toRiskKeywordConfigBody(value.keyword),
+    provider: {
+      base_url: value.provider.base_url,
+      model: value.provider.model,
+      api_key: value.provider.api_key,
+      timeout_ms: value.provider.timeout_ms
+    },
+    thresholds: value.thresholds,
+    sample_rate: value.sample_rate,
+    scope_group_ids: value.scope_group_ids,
+    verdict_cache_ttl_seconds: value.verdict_cache_ttl_seconds,
+    violation_window_hours: value.violation_window_hours,
+    risk_event_threshold: value.risk_event_threshold,
+    record_non_hits: value.record_non_hits,
+    block_status_code: value.block_status_code,
+    block_message: value.block_message
+  };
+}
+
+function toRiskControlTest(value: RiskTestTransport): RiskControlTestResultDTO {
+  return stripSchema(value);
+}
+
+function toRiskControlLog(value: components["schemas"]["RiskControlLogDTO"]): RiskControlLogDTO {
+  return stripSchema(value);
+}
+
+function toRiskControlLogs(value: RiskControlLogsTransport): RiskControlLogsOutputBody {
+  return { items: value.items?.map(toRiskControlLog) ?? [], total: value.total };
+}
+
+function toRiskEventSeverity(value: string): "low" | "medium" | "high" {
+  if (value === "low" || value === "medium" || value === "high") return value;
+  throw new Error(`Unexpected risk event severity: ${value}`);
+}
+
+function toRiskEventStatus(value: string): RiskEventDTO["status"] {
+  if (value === "open" || value === "acknowledged" || value === "resolved" || value === "dismissed") return value;
+  throw new Error(`Unexpected risk event status: ${value}`);
+}
+
+function toRiskEventDetail(value: string | undefined): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch {
+    // Huma serializes the []byte field as base64; fall through to preserve the opaque detail.
+  }
+  return { raw: value };
+}
+
+function toRiskEvent(value: RiskEventTransport): RiskEventDTO {
+  return {
+    id: value.id,
+    event_type: value.event_type,
+    severity: toRiskEventSeverity(value.severity),
+    tenant_id: value.tenant_id,
+    user_id: value.user_id,
+    source_log_id: value.source_log_id,
+    summary: value.summary,
+    detail: toRiskEventDetail(value.detail),
+    status: toRiskEventStatus(value.status),
+    resolved_by: value.resolved_by,
+    resolved_at: value.resolved_at,
+    resolution_note: value.resolution_note,
+    created_at: value.created_at
+  };
+}
+
+function toRiskEvents(value: RiskEventsTransport): RiskEventsOutputBody {
+  return { items: value.items?.map(toRiskEvent) ?? [], total: value.total };
+}
+
+function toRiskEventResolutionStatus(value: string): RiskEventResolutionStatus {
+  if (value === "acknowledged" || value === "resolved" || value === "dismissed") return value;
+  throw new Error(`Unexpected risk event resolution status: ${value}`);
+}
+
+function toRiskEventResolutionBody(value: { status: string; note?: string }): RiskEventResolutionBody {
+  return { status: toRiskEventResolutionStatus(value.status), note: value.note };
+}
+
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
@@ -1081,57 +1257,58 @@ export const aiAdminApi = {
 
   // ---- 风控中心（内容安全审核）----
   getRiskControlConfig() {
-    return request()<RiskControlConfigDTO>({
+    return typedRequest<"ai-get-risk-control-config">({
       method: "GET",
       path: "/api/v1/risk-control/config",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRiskConfig);
   },
   updateRiskControlConfig(body: RiskControlConfigWriteRequest) {
-    return request()<RiskControlConfigDTO>({
+    return typedRequest<"ai-update-risk-control-config">({
       method: "PUT",
       path: "/api/v1/risk-control/config",
       headers: apiHeaders,
-      body,
+      body: toRiskControlConfigBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toRiskConfig);
   },
   testRiskControlModeration(text: string) {
-    return request()<RiskControlTestResultDTO>({
+    return typedRequest<"ai-test-risk-control-moderation">({
       method: "POST",
       path: "/api/v1/risk-control/test",
       headers: apiHeaders,
       body: { text },
       baseUrl: apiBaseUrl
-    });
+    }).then(toRiskControlTest);
   },
-  listRiskControlLogs(params: Record<string, string | number | undefined> = {}) {
-    return request()<RiskControlLogsOutputBody>({
+  listRiskControlLogs(params: OperationQuery<"ai-list-risk-control-logs"> = {}) {
+    return typedRequest<"ai-list-risk-control-logs">({
       method: "GET",
       path: "/api/v1/risk-control/logs",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRiskControlLogs);
   },
-  listRiskControlEvents(params: Record<string, string | number | undefined> = {}) {
-    return request()<RiskEventsOutputBody>({
+  listRiskControlEvents(params: OperationQuery<"ai-list-risk-events"> = {}) {
+    return typedRequest<"ai-list-risk-events">({
       method: "GET",
       path: "/api/v1/risk-control/events",
       query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRiskEvents);
   },
   resolveRiskControlEvent(eventId: string, body: { status: string; note?: string }) {
-    return request()<RiskEventDTO>({
+    return typedRequest<"ai-resolve-risk-event">({
       method: "POST",
       path: `/api/v1/risk-control/events/${encodeURIComponent(eventId)}/resolve`,
+      pathParams: { eventID: eventId },
       headers: apiHeaders,
-      body,
+      body: toRiskEventResolutionBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toRiskEvent);
   },
 
   // ---- System & 路由策略 ----
