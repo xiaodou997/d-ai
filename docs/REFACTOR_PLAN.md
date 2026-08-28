@@ -409,6 +409,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：账号状态、租户访问模式、provider family、图片导入 action 和图片响应格式进入管理页面前校验；导入导出 nullable 集合归一为空数组，写入 body 显式适配可空并发限制和必填 API key。
 - 回归：新增 admin upstream-account facade 测试覆盖 CRUD body/path、nullable transfer 集合、默认导出选项、导入 action 和未知状态拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed admin model-binding facade，2026-08-28）
+
+- 迁移：账号模型发现、显式绑定 CRUD、连通性测试、模型导入、能力推断，以及凭证池可用模型和显式绑定请求共 14 个 facade 请求绑定 generated OpenAPI operations；账号、凭证池及绑定 path 参数显式传递。
+- 领域边界：模型绑定写入的 API 格式、能力类型、流式策略、状态和图片返回格式在进入页面前校验；发现/绑定/可用模型和导入结果的 nullable 集合归一为空数组，测试响应图片传输枚举显式适配页面 DTO。
+- 回归：新增 admin model-binding facade 测试覆盖账号/凭证池 path 与 body、模型发现/列表空值、导入和能力推断 query、测试响应映射及非法枚举拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

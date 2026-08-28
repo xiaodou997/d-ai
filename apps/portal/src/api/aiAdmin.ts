@@ -2,6 +2,7 @@ import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import {
   createTypedOperationRequest,
   type OperationBody,
+  type OperationQuery,
   type OperationResponse
 } from ".";
 import type { components } from "./generated/dai";
@@ -79,6 +80,19 @@ type AccountImportPreviewTransport = OperationResponse<"ai-preview-import-upstre
 type AccountImportTransport = OperationResponse<"ai-import-upstream-accounts">;
 type AccountTransferTransport = components["schemas"]["UpstreamAccountTransferAccountDTO"];
 type AccountTransferBindingTransport = components["schemas"]["UpstreamAccountTransferBindingDTO"];
+type DiscoveredModelsTransport = OperationResponse<"ai-fetch-account-upstream-models">;
+type UpstreamModelBindingTransport = components["schemas"]["UpstreamModelBindingDTO"];
+type UpstreamModelBindingsTransport = OperationResponse<"ai-list-account-model-bindings">;
+type AccountTestTransport = OperationResponse<"ai-test-account-upstream">;
+type AccountModelImportTransport = OperationResponse<"ai-import-account-upstream-models">;
+type PoolAvailableModelsTransport = OperationResponse<"ai-get-pool-available-models">;
+type PoolModelImportTransport = OperationResponse<"ai-import-pool-available-models">;
+type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
+type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
+type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
+type BindingImageStreamMode = NonNullable<BindingWriteBody["image_stream_mode"]>;
+type BindingStatus = NonNullable<BindingWriteBody["status"]>;
+type InferEndpointProtocol = NonNullable<OperationQuery<"ai-infer-model-capability">["endpoint_protocol"]>;
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -287,6 +301,155 @@ function toAccountImport(value: AccountImportTransport): UpstreamAccountImportOu
   };
 }
 
+function toBindingApiFormat(value: string | undefined): BindingApiFormat | undefined {
+  if (
+    value === undefined ||
+    value === "openai_chat" ||
+    value === "openai_responses" ||
+    value === "openai_embeddings" ||
+    value === "openai_images" ||
+    value === "anthropic_messages" ||
+    value === "gemini_generate" ||
+    value === "gemini_embeddings"
+  ) return value;
+  throw new Error(`Unexpected upstream API format: ${value}`);
+}
+
+function toBindingCapabilityType(value: string | undefined): BindingCapabilityType | undefined {
+  if (
+    value === undefined ||
+    value === "chat" ||
+    value === "image" ||
+    value === "video" ||
+    value === "embedding" ||
+    value === "audio_tts" ||
+    value === "audio_stt" ||
+    value === "rerank"
+  ) return value;
+  throw new Error(`Unexpected upstream capability type: ${value}`);
+}
+
+function toBindingImageStreamMode(value: string | undefined): BindingImageStreamMode | undefined {
+  if (value === undefined || value === "auto" || value === "force_stream" || value === "force_sync") return value;
+  throw new Error(`Unexpected image stream mode: ${value}`);
+}
+
+function toBindingStatus(value: string | undefined): BindingStatus | undefined {
+  if (value === undefined || value === "active" || value === "disabled") return value;
+  throw new Error(`Unexpected upstream model binding status: ${value}`);
+}
+
+function toBindingResponseFormat(value: string | undefined): "" | "url" | "b64_json" | undefined {
+  if (value === undefined || value === "" || value === "url" || value === "b64_json") return value;
+  throw new Error(`Unexpected upstream image response format: ${value}`);
+}
+
+function toAccountModelBindingBody(value: UpstreamModelBindingWriteRequest): BindingWriteBody {
+  return {
+    model_code: value.model_code,
+    capability_type: toBindingCapabilityType(value.capability_type),
+    api_format: toBindingApiFormat(value.api_format),
+    upstream_model_name: value.upstream_model_name,
+    status: toBindingStatus(value.status),
+    image_stream_mode: toBindingImageStreamMode(value.image_stream_mode),
+    image_edit_transport: value.image_edit_transport,
+    image_upstream_response_format: toBindingResponseFormat(value.image_upstream_response_format),
+    image_max_output_count: value.image_max_output_count,
+    image_edit_max_output_count: value.image_edit_max_output_count
+  };
+}
+
+function toDiscoveredModels(value: DiscoveredModelsTransport): { items: DiscoveredUpstreamModelDTO[] } {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [] };
+}
+
+function toUpstreamModelBinding(value: UpstreamModelBindingTransport): UpstreamModelBindingDTO {
+  return stripSchema(value);
+}
+
+function toUpstreamModelBindings(value: UpstreamModelBindingsTransport): UpstreamModelBindingsOutputBody {
+  return { items: value.items?.map(toUpstreamModelBinding) ?? [], total: value.total };
+}
+
+function toAccountTestBody(value: UpstreamAccountTestRequest): OperationBody<"ai-test-account-upstream"> {
+  return {
+    model_code: value.model_code,
+    prompt: value.prompt,
+    image_edit: value.image_edit,
+    image: value.image ? { ...value.image } : undefined
+  };
+}
+
+function toTestImageEditTransport(value: string | undefined): "application/json" | "multipart/form-data" | undefined {
+  if (value === undefined || value === "application/json" || value === "multipart/form-data") return value;
+  throw new Error(`Unexpected image edit transport: ${value}`);
+}
+
+function toTestImageResponseFormat(value: string | undefined): "url" | "b64_json" | undefined {
+  if (value === undefined || value === "url" || value === "b64_json") return value;
+  throw new Error(`Unexpected image upstream response format: ${value}`);
+}
+
+function toAccountTest(value: AccountTestTransport): UpstreamAccountTestResult {
+  return {
+    ok: value.ok,
+    http_status: value.http_status,
+    latency_ms: value.latency_ms,
+    capability: value.capability,
+    api_format: value.api_format,
+    upstream_model: value.upstream_model,
+    reply_text: value.reply_text,
+    image_b64: value.image_b64,
+    image_mime: value.image_mime,
+    image_url: value.image_url,
+    image_stream_mode: value.image_stream_mode,
+    image_edit_transport: toTestImageEditTransport(value.image_edit_transport),
+    image_upstream_response_format: toTestImageResponseFormat(value.image_upstream_response_format),
+    actual_image_format: value.actual_image_format,
+    prompt_tokens: value.prompt_tokens,
+    output_tokens: value.output_tokens,
+    total_tokens: value.total_tokens,
+    error: value.error
+  };
+}
+
+function toImportedModels(value: AccountModelImportTransport | PoolModelImportTransport): { created: string[]; skipped: string[] } {
+  return { created: value.created ?? [], skipped: value.skipped ?? [] };
+}
+
+function toAccountModelImportBody(value: ImportUpstreamModelsRequest): OperationBody<"ai-import-account-upstream-models"> {
+  return {
+    models: value.models,
+    api_format: toBindingApiFormat(value.api_format)
+  };
+}
+
+function toPoolModelImportBody(value: { models: string[] }): OperationBody<"ai-import-pool-available-models"> {
+  return { models: value.models };
+}
+
+function toPoolAvailableModels(value: PoolAvailableModelsTransport): PoolAvailableModelsDTO {
+  return {
+    pool_id: value.pool_id,
+    fixed_provider_type: value.fixed_provider_type,
+    models: value.models ?? [],
+    source: value.source
+  };
+}
+
+function toInferEndpointProtocol(value: string | undefined): InferEndpointProtocol | undefined {
+  if (value === undefined || value === "openai_compatible" || value === "anthropic" || value === "gemini") return value;
+  throw new Error(`Unexpected endpoint protocol: ${value}`);
+}
+
+function toModelCapability(value: OperationResponse<"ai-infer-model-capability">): ModelCapabilityInferResult {
+  return {
+    capability_type: value.capability_type,
+    api_format: value.api_format,
+    source: value.source
+  };
+}
+
 type AiWorkbenchWindowQuery = {
   date_from?: string;
   date_to?: string;
@@ -369,73 +532,80 @@ export const aiAdminApi = {
   },
   // ---- 上游模型发现 / 导入（账号维度）----
   fetchAccountUpstreamModels(accountId: string) {
-    return request()<{ items: DiscoveredUpstreamModelDTO[] }>({
+    return typedRequest<"ai-fetch-account-upstream-models">({
       method: "GET",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/upstream-models`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toDiscoveredModels);
   },
   listAccountModelBindings(accountId: string) {
-    return request()<UpstreamModelBindingsOutputBody>({
+    return typedRequest<"ai-list-account-model-bindings">({
       method: "GET",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toUpstreamModelBindings);
   },
   testUpstreamAccount(accountId: string, body: UpstreamAccountTestRequest) {
-    return request()<UpstreamAccountTestResult>({
+    return typedRequest<"ai-test-account-upstream">({
       method: "POST",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/test`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
-      body,
+      body: toAccountTestBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccountTest);
   },
   createAccountModelBinding(accountId: string, body: UpstreamModelBindingWriteRequest) {
-    return request()<UpstreamModelBindingDTO>({
+    return typedRequest<"ai-create-account-model-binding">({
       method: "POST",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
-      body,
+      body: toAccountModelBindingBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toUpstreamModelBinding);
   },
   updateAccountModelBinding(accountId: string, bindingId: string, body: UpstreamModelBindingWriteRequest) {
-    return request()<UpstreamModelBindingDTO>({
+    return typedRequest<"ai-update-account-model-binding">({
       method: "PATCH",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings/${encodeURIComponent(bindingId)}`,
+      pathParams: { accountID: accountId, bindingID: bindingId },
       headers: apiHeaders,
-      body,
+      body: toAccountModelBindingBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toUpstreamModelBinding);
   },
   deleteAccountModelBinding(accountId: string, bindingId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-account-model-binding">({
       method: "DELETE",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/model-bindings/${encodeURIComponent(bindingId)}`,
+      pathParams: { accountID: accountId, bindingID: bindingId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   importAccountUpstreamModels(accountId: string, body: ImportUpstreamModelsRequest) {
-    return request()<{ created: string[]; skipped: string[] }>({
+    return typedRequest<"ai-import-account-upstream-models">({
       method: "POST",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/import-upstream-models`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
-      body,
+      body: toAccountModelImportBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toImportedModels);
   },
   inferModelCapability(modelCode: string, endpointProtocol?: string) {
-    return request()<ModelCapabilityInferResult>({
+    return typedRequest<"ai-infer-model-capability">({
       method: "GET",
       path: "/api/v1/model-capability/infer",
       headers: apiHeaders,
-      query: { model_code: modelCode, endpoint_protocol: endpointProtocol || undefined },
+      query: { model_code: modelCode, endpoint_protocol: toInferEndpointProtocol(endpointProtocol || undefined) },
       baseUrl: apiBaseUrl
-    });
+    }).then(toModelCapability);
   },
 
   // ---- 价格表 ----
@@ -809,55 +979,61 @@ export const aiAdminApi = {
     });
   },
   getPoolAvailableModels(poolId: string) {
-    return request()<PoolAvailableModelsDTO>({
+    return typedRequest<"ai-get-pool-available-models">({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/available-models`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPoolAvailableModels);
   },
   listPoolModelBindings(poolId: string) {
-    return request()<UpstreamModelBindingsOutputBody>({
+    return typedRequest<"ai-list-pool-model-bindings">({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toUpstreamModelBindings);
   },
   createPoolModelBinding(poolId: string, body: UpstreamModelBindingWriteRequest) {
-    return request()<UpstreamModelBindingDTO>({
+    return typedRequest<"ai-create-pool-model-binding">({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
-      body,
+      body: toAccountModelBindingBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toUpstreamModelBinding);
   },
   updatePoolModelBinding(poolId: string, bindingId: string, body: UpstreamModelBindingWriteRequest) {
-    return request()<UpstreamModelBindingDTO>({
+    return typedRequest<"ai-update-pool-model-binding">({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings/${encodeURIComponent(bindingId)}`,
+      pathParams: { poolID: poolId, bindingID: bindingId },
       headers: apiHeaders,
-      body,
+      body: toAccountModelBindingBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toUpstreamModelBinding);
   },
   deletePoolModelBinding(poolId: string, bindingId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-pool-model-binding">({
       method: "DELETE",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/model-bindings/${encodeURIComponent(bindingId)}`,
+      pathParams: { poolID: poolId, bindingID: bindingId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   importPoolAvailableModels(poolId: string, body: { models: string[] }) {
-    return request()<{ created: string[]; skipped: string[] }>({
+    return typedRequest<"ai-import-pool-available-models">({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/import-available-models`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
-      body,
+      body: toPoolModelImportBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toImportedModels);
   },
   getOAuthPoolHealth() {
     return request()<OAuthPoolHealthOutputBody>({
