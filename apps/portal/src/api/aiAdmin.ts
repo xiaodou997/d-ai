@@ -1,5 +1,10 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
-import { createTypedOperationRequest } from ".";
+import {
+  createTypedOperationRequest,
+  type OperationBody,
+  type OperationResponse
+} from ".";
+import type { components } from "./generated/dai";
 import type {
   AccountDTO,
   AccountsOutputBody,
@@ -60,6 +65,60 @@ function request() {
 }
 
 const typedRequest = createTypedOperationRequest(authenticatedRequest());
+
+type PriceBookTransport = components["schemas"]["PriceBookDTO"];
+type PriceBookEntryTransport = components["schemas"]["PriceBookEntryDTO"];
+type PriceBookPageTransport = OperationResponse<"ai-list-price-books">;
+type PriceBookEntriesPageTransport = OperationResponse<"ai-list-price-book-entries">;
+
+function stripSchema<T>(value: T): Omit<T, "$schema"> {
+  const { $schema: _schema, ...rest } = value as T & { $schema?: string };
+  return rest as Omit<T, "$schema">;
+}
+
+function toPriceBook(value: PriceBookTransport): PriceBookDTO {
+  if (value.status !== "active" && value.status !== "disabled") {
+    throw new Error(`Unexpected price book status: ${value.status}`);
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description,
+    status: value.status,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toPriceBooks(value: PriceBookPageTransport): PriceBooksOutputBody {
+  return { items: value.items?.map(toPriceBook) ?? [], total: value.total };
+}
+
+function toPriceBookEntry(value: PriceBookEntryTransport): PriceBookEntryDTO {
+  return {
+    ...stripSchema(value),
+    token_price_tiers: value.token_price_tiers?.map(stripSchema) ?? [],
+    image_prices: value.image_prices?.map(stripSchema) ?? undefined,
+    video_prices: value.video_prices?.map(stripSchema) ?? undefined
+  };
+}
+
+function toPriceBookEntries(value: PriceBookEntriesPageTransport): PriceBookEntriesOutputBody {
+  return { items: value.items?.map(toPriceBookEntry) ?? [], total: value.total };
+}
+
+function toPriceBookEntryBody(value: PriceBookEntryWriteRequest): OperationBody<"ai-upsert-price-book-entry"> {
+  return {
+    capability_type: value.capability_type,
+    token_price_tiers: value.token_price_tiers,
+    image_default_price_usd: value.image_default_price_usd,
+    video_default_price_usd: value.video_default_price_usd,
+    image_prices: value.image_prices,
+    video_prices: value.video_prices,
+    audio_tts_per_1m_chars_usd: value.audio_tts_per_1m_chars_usd,
+    audio_stt_per_minute_usd: value.audio_stt_per_minute_usd
+  };
+}
 
 type AiWorkbenchWindowQuery = {
   date_from?: string;
@@ -211,71 +270,77 @@ export const aiAdminApi = {
 
   // ---- 价格表 ----
   listPriceBooks() {
-    return request()<PriceBooksOutputBody>({
+    return typedRequest<"ai-list-price-books">({
       method: "GET",
       path: "/api/v1/price-books",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPriceBooks);
   },
   createPriceBook(body: { name: string; description?: string }) {
-    return request()<PriceBookDTO>({
+    return typedRequest<"ai-create-price-book">({
       method: "POST",
       path: "/api/v1/price-books",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPriceBook);
   },
   getPriceBook(bookId: string) {
-    return request()<PriceBookDTO>({
+    return typedRequest<"ai-get-price-book">({
       method: "GET",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}`,
+      pathParams: { bookID: bookId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPriceBook);
   },
   updatePriceBook(bookId: string, body: PriceBookWriteRequest) {
-    return request()<PriceBookDTO>({
+    return typedRequest<"ai-update-price-book">({
       method: "PATCH",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}`,
+      pathParams: { bookID: bookId },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPriceBook);
   },
   deletePriceBook(bookId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-price-book">({
       method: "DELETE",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}`,
+      pathParams: { bookID: bookId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   listPriceBookEntries(bookId: string) {
-    return request()<PriceBookEntriesOutputBody>({
+    return typedRequest<"ai-list-price-book-entries">({
       method: "GET",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/entries`,
+      pathParams: { bookID: bookId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPriceBookEntries);
   },
   upsertPriceBookEntry(bookId: string, modelCode: string, body: PriceBookEntryWriteRequest) {
-    return request()<PriceBookEntryDTO>({
+    return typedRequest<"ai-upsert-price-book-entry">({
       method: "PUT",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`,
+      pathParams: { bookID: bookId, modelCode },
       headers: apiHeaders,
-      body,
+      body: toPriceBookEntryBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toPriceBookEntry);
   },
   deletePriceBookEntry(bookId: string, modelCode: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-price-book-entry">({
       method: "DELETE",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`,
+      pathParams: { bookID: bookId, modelCode },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   searchLiteLLMModels(q: string, limit = 50) {
     return typedRequest<"ai-search-litellm-price-models">({
@@ -293,12 +358,13 @@ export const aiAdminApi = {
     }));
   },
   syncCommonModels(bookId: string) {
-    return request()<{ synced: number; missing: string[] }>({
+    return typedRequest<"ai-sync-common-price-book-models">({
       method: "POST",
       path: `/api/v1/price-books/${encodeURIComponent(bookId)}/sync-common`,
+      pathParams: { bookID: bookId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ synced: value.synced, missing: value.missing ?? [] }));
   },
 
   // ---- Dashboard ----

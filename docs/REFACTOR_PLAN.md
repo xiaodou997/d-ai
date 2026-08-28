@@ -397,6 +397,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：模型、会话和图片任务显式移除 `$schema`，nullable 列表归一为空数组，图片 operation 只接受 `generation`/`edit`；session path 参数和默认 limit 通过 operation 类型约束。
 - 回归：新增 tenant workspace facade 测试覆盖 nullable 集合、session 详情映射、编码 path、默认 query limit 和非法图片 operation 拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed admin price-book facade，2026-08-28）
+
+- 迁移：平台 AI 价格表、条目 CRUD、LiteLLM 搜索和常用模型同步请求绑定 generated OpenAPI operations；动态价格表/模型 path 使用显式 `pathParams`。
+- 领域边界：管理页面继续使用精简 `PriceBookDTO`/条目模型，facade 显式移除 `$schema`、归一 nullable 条目与同步缺失列表，并校验价格表状态。
+- 回归：新增 admin price-book facade 测试覆盖 nullable 页面集合、CRUD/条目 body 与编码 path、同步结果和非法状态拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
