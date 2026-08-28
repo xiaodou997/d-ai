@@ -80,7 +80,7 @@ function resetPolicyState() {
 async function loadPolicies(tenantId: string) {
   policiesLoading.value = true;
   try {
-    const res = await aiAdminApi.listRuntimeLimitPolicies({ limit: 500 });
+    const res = await aiAdminApi.listRuntimeLimitPolicies();
     if (props.tenant?.tenantId === tenantId) limitPolicies.value = res.items || [];
   } catch (error: any) {
     ElMessage.error(error?.message || "加载租户容量限制失败");

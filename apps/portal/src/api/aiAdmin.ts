@@ -50,6 +50,7 @@ import type {
   RouteWeightsOutputBody,
   RuntimeLimitPolicyDTO,
   RuntimeLimitPoliciesOutputBody,
+  TenantUpstreamAccessDTO,
   TenantUpstreamAccessOutputBody,
   TenantUpstreamPolicyRef,
   SystemStatusDTO,
@@ -92,6 +93,14 @@ type DashboardTopModelsTransport = OperationResponse<"ai-list-dashboard-top-mode
 type DashboardTopTenantsTransport = OperationResponse<"ai-list-dashboard-top-tenants">;
 type DashboardRecentErrorsTransport = OperationResponse<"ai-list-dashboard-recent-errors">;
 type AuditLogsTransport = OperationResponse<"ai-list-audit-logs">;
+type RuntimeLimitPolicyTransport = components["schemas"]["RuntimeLimitPolicyDTO"];
+type RuntimeLimitPoliciesTransport = OperationResponse<"ai-list-runtime-limit-policies">;
+type TenantUpstreamAccessTransport = components["schemas"]["TenantUpstreamAccessDTO"];
+type TenantUpstreamAccessPageTransport = OperationResponse<"ai-list-tenant-upstream-access">;
+type LimitPolicyWriteBody = OperationBody<"ai-create-runtime-limit-policy">;
+type LimitPolicyScopeType = LimitPolicyWriteBody["scope_type"];
+type LimitPolicyStatus = NonNullable<LimitPolicyWriteBody["status"]>;
+type TenantUpstreamAccessWriteBody = OperationBody<"ai-replace-tenant-upstream-access">;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
 type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
@@ -479,6 +488,76 @@ function toAuditLogs(value: AuditLogsTransport): AuditLogsOutputBody {
   return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
 }
 
+function toRuntimeLimitPolicyStatus(value: unknown): LimitPolicyStatus | undefined {
+  if (value === undefined || value === "active" || value === "disabled") return value;
+  throw new Error(`Unexpected runtime limit policy status: ${String(value)}`);
+}
+
+function toLimitPolicyScopeType(value: unknown): LimitPolicyScopeType {
+  if (value === "tenant" || value === "user" || value === "api_key") return value;
+  throw new Error(`Unexpected runtime limit policy scope: ${String(value)}`);
+}
+
+function toLimitPolicyWriteBody(value: Record<string, unknown>): LimitPolicyWriteBody {
+  if (typeof value.scope_id !== "string") throw new Error("runtime limit policy scope_id is required");
+  const concurrencyLimit = value.concurrency_limit;
+  if (concurrencyLimit !== undefined && concurrencyLimit !== null && (typeof concurrencyLimit !== "number" || !Number.isFinite(concurrencyLimit))) {
+    throw new Error("runtime limit policy concurrency_limit must be a finite number");
+  }
+  if (value.created_by !== undefined && typeof value.created_by !== "string") {
+    throw new Error("runtime limit policy created_by must be a string");
+  }
+  return {
+    scope_id: value.scope_id,
+    scope_type: toLimitPolicyScopeType(value.scope_type),
+    concurrency_limit: concurrencyLimit === null ? undefined : concurrencyLimit,
+    created_by: value.created_by as string | undefined,
+    status: toRuntimeLimitPolicyStatus(value.status)
+  };
+}
+
+function toRuntimeLimitPolicy(value: RuntimeLimitPolicyTransport): RuntimeLimitPolicyDTO {
+  return stripSchema(value);
+}
+
+function toRuntimeLimitPolicies(value: RuntimeLimitPoliciesTransport): RuntimeLimitPoliciesOutputBody {
+  return {
+    items: value.items?.map(toRuntimeLimitPolicy) ?? [],
+    total: value.total,
+    included: value.included
+  };
+}
+
+function toTenantUpstreamResourceKind(value: string): "direct_upstream" | "oauth_pool" {
+  if (value === "direct_upstream" || value === "oauth_pool") return value;
+  throw new Error(`Unexpected tenant upstream resource kind: ${value}`);
+}
+
+function toTenantUpstreamAccess(value: TenantUpstreamAccessTransport): TenantUpstreamAccessDTO {
+  if (value.access_mode !== "public" && value.access_mode !== "restricted") {
+    throw new Error(`Unexpected tenant upstream access mode: ${value.access_mode}`);
+  }
+  return {
+    ...stripSchema(value),
+    resource_kind: toTenantUpstreamResourceKind(value.resource_kind)
+  };
+}
+
+function toTenantUpstreamAccessPage(value: TenantUpstreamAccessPageTransport): TenantUpstreamAccessOutputBody {
+  return { items: value.items?.map(toTenantUpstreamAccess) ?? [], total: value.total };
+}
+
+function toTenantUpstreamAccessBody(policies: TenantUpstreamPolicyRef[]): TenantUpstreamAccessWriteBody {
+  return {
+    policies: policies.map((policy) => ({
+      resource_kind: toTenantUpstreamResourceKind(policy.resource_kind),
+      resource_id: policy.resource_id,
+      access_granted: policy.access_granted,
+      tenant_multiplier_override: policy.tenant_multiplier_override
+    }))
+  };
+}
+
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
@@ -769,58 +848,61 @@ export const aiAdminApi = {
     }).then(toDashboardRecentErrors);
   },
   // ---- Runtime limit policies ----
-  listRuntimeLimitPolicies(params: Record<string, string | number | undefined> = {}) {
-    return request()<RuntimeLimitPoliciesOutputBody>({
+  listRuntimeLimitPolicies() {
+    return typedRequest<"ai-list-runtime-limit-policies">({
       method: "GET",
       path: "/api/v1/limit-policies",
-      query: params,
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRuntimeLimitPolicies);
   },
   createRuntimeLimitPolicy(body: Record<string, unknown>) {
-    return request()<RuntimeLimitPolicyDTO>({
+    return typedRequest<"ai-create-runtime-limit-policy">({
       method: "POST",
       path: "/api/v1/limit-policies",
       headers: apiHeaders,
-      body,
+      body: toLimitPolicyWriteBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toRuntimeLimitPolicy);
   },
   updateRuntimeLimitPolicy(policyId: string, body: Record<string, unknown>) {
-    return request()<RuntimeLimitPolicyDTO>({
+    return typedRequest<"ai-update-runtime-limit-policy">({
       method: "PATCH",
       path: `/api/v1/limit-policies/${encodeURIComponent(policyId)}`,
+      pathParams: { policyID: policyId },
       headers: apiHeaders,
-      body,
+      body: toLimitPolicyWriteBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toRuntimeLimitPolicy);
   },
   updateRuntimeLimitPolicyStatus(policyId: string, status: string) {
-    return request()<RuntimeLimitPolicyDTO>({
+    return typedRequest<"ai-update-runtime-limit-policy-status">({
       method: "PATCH",
       path: `/api/v1/limit-policies/${encodeURIComponent(policyId)}/status`,
+      pathParams: { policyID: policyId },
       headers: apiHeaders,
-      body: { status },
+      body: { status: toRuntimeLimitPolicyStatus(status) as LimitPolicyStatus },
       baseUrl: apiBaseUrl
-    });
+    }).then(toRuntimeLimitPolicy);
   },
   listTenantUpstreamAccess(tenantId: string) {
-    return request()<TenantUpstreamAccessOutputBody>({
+    return typedRequest<"ai-list-tenant-upstream-access">({
       method: "GET",
       path: `/api/v1/tenants/${encodeURIComponent(tenantId)}/upstream-access`,
+      pathParams: { tenantID: tenantId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toTenantUpstreamAccessPage);
   },
   replaceTenantUpstreamAccess(tenantId: string, policies: TenantUpstreamPolicyRef[]) {
-    return request()<{ updated: boolean }>({
+    return typedRequest<"ai-replace-tenant-upstream-access">({
       method: "PUT",
       path: `/api/v1/tenants/${encodeURIComponent(tenantId)}/upstream-access`,
+      pathParams: { tenantID: tenantId },
       headers: apiHeaders,
-      body: { policies },
+      body: toTenantUpstreamAccessBody(policies),
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ updated: value.updated }));
   },
 
   // ---- Audit logs ----

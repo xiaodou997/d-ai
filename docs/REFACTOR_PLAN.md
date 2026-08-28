@@ -421,6 +421,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：summary、dashboard 列表和审计响应显式移除 `$schema`，nullable 列表归一为空数组；审计页面仅发送契约声明的 `limit` 参数，旧版未声明筛选字段不再进入请求。
 - 回归：新增 admin observability facade 测试覆盖 dashboard query、热门租户 identity included、nullable 列表、审计映射和 limit forwarding；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed admin policy facade，2026-08-28）
+
+- 迁移：运行限额策略列表/创建/更新/启停与租户上游访问读取/替换共 6 个 facade 请求绑定 generated OpenAPI operations；策略、租户及资源 path 参数显式传递，列表请求移除未在契约声明的伪分页参数。
+- 领域边界：限额 scope/status、并发数和上游资源 kind/access mode 在进入传输层前校验，nullable 策略/资源列表归一为空数组，页面可空并发值转换为 generated schema 的 `undefined`。
+- 回归：新增 admin policy facade 测试覆盖 CRUD body、编码 path、identity included、上游授权列表/替换和非法 scope/status/resource kind 拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
