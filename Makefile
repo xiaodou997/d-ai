@@ -9,6 +9,12 @@ LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMM
 
 .PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership-cutover check-db-ownership help
 
+# ---- Portal delivery ----
+
+.PHONY: frontend-static portal-smoke portal-smoke-embed
+
+.PHONY: frontend-static portal-smoke portal-smoke-embed
+
 # ---- 本地开发 ----
 
 dev: dev-setup ## 准备依赖并启动 all 角色后端
@@ -44,7 +50,7 @@ db-recreate: ## 删除本地数据卷并用 init.sql 重建（会清空本地数
 
 # ---- 构建 ----
 
-build: frontend embed database-artifacts legal-artifacts ## 构建单二进制和发布附件
+build: frontend frontend-static embed database-artifacts legal-artifacts ## 构建静态 Portal、embed 二进制和发布附件
 	@echo "Building $(BINARY) v$(VERSION)..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
@@ -56,7 +62,7 @@ build-server: database-artifacts legal-artifacts ## 只构建后端和发布附�
 	CGO_ENABLED=0 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY) ./cmd/server
 	@echo "Done: $(BUILD_DIR)/$(BINARY)"
 
-build-linux-amd64: frontend embed database-artifacts legal-artifacts ## 构建生产 Docker 使用的 Linux amd64 二进制
+build-linux-amd64: frontend frontend-static embed database-artifacts legal-artifacts ## 构建生产 Docker 使用的 Linux amd64 二进制与静态 Portal
 	@echo "Building $(BINARY) linux/amd64 v$(VERSION)..."
 	mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY)-linux-amd64 ./cmd/server
@@ -81,6 +87,16 @@ legal-artifacts: ## 将开源许可、第三方通知和商标政策复制到发
 frontend: ## 构建前端
 	bun install
 	bun run build:frontend
+
+frontend-static: ## 构建可由 CDN/反向代理托管的独立 Portal 制品
+	bun install
+	bun run build:portal-static
+
+portal-smoke: ## 校验独立 Portal 静态制品及 checksum
+	bash scripts/smoke_portal.sh release/portal
+
+portal-smoke-embed: ## 校验 embed Portal 二进制包含前端制品
+	bash scripts/smoke_embed_portal.sh release/$(BINARY)
 
 embed: ## 前端 dist 必须存在
 	@if [ ! -d $(FRONTEND_DIST) ]; then \

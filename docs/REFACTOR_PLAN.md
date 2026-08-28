@@ -264,11 +264,18 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-03 独立交付 Portal
 
-- [ ] Portal 默认作为静态制品交付，可由 CDN 或反向代理托管。
-- [ ] 保留 embed 构建作为轻量发行选项。
-- [ ] HTML 与带 hash 的静态资源使用不同缓存策略。
-- [ ] 构建产物不作为普通源码提交，发布流程生成并校验 checksum。
-- [ ] 增加独立 Portal 和 embed Portal 两种 smoke test。
+- [x] Portal 默认作为静态制品交付，可由 CDN 或反向代理托管。
+- [x] 保留 embed 构建作为轻量发行选项。
+- [x] HTML 与带 hash 的静态资源使用不同缓存策略。
+- [x] 构建产物不作为普通源码提交，发布流程生成并校验 checksum。
+- [x] 增加独立 Portal 和 embed Portal 两种 smoke test，并接入 CI。
+
+### P2-03（Standalone Portal delivery，2026-08-28）
+
+- 构建：Vite 输出目录通过 `DAI_PORTAL_OUT_DIR` 可配置；`bun run build:portal-static` 生成 `release/portal` 静态制品并写入 `SHA256SUMS`，默认 `bun run build:frontend` 仍生成 Go embed 目录。
+- 缓存：Portal 服务端继续对 HTML 使用 `no-store`，对 `/assets/` hash 资源使用一年 immutable 缓存，静态交付沿用同一策略。
+- 验收：新增 `scripts/smoke_portal.sh` 与 `scripts/smoke_embed_portal.sh`，并接入 CI 与 Make 目标；构建产物目录由 `.gitignore` 排除，发布流程负责生成和校验 checksum。
+- 回归：Portal 214 tests、`bun run typecheck`、静态构建、两种 smoke 及 Go 全量验证通过。
 
 ## P2：Portal 架构与设计系统
 

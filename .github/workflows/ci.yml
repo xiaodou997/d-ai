@@ -156,3 +156,17 @@ jobs:
 
       - name: Test
         run: bun run test
+
+      - name: Build standalone Portal artifact
+        run: bun run build:portal-static
+
+      - name: Smoke test standalone Portal artifact
+        run: bash scripts/smoke_portal.sh release/portal
+
+      - name: Build embed Portal artifact
+        run: |
+          bun run build:frontend
+          go build -o /tmp/dai-embed-smoke ./cmd/server
+
+      - name: Smoke test embed Portal artifact
+        run: bash scripts/smoke_embed_portal.sh /tmp/dai-embed-smoke

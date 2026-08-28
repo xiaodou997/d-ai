@@ -1,7 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const assetsDir = resolve(import.meta.dirname, "../../../cmd/server/frontend_dist/assets");
+const distDir = resolve(import.meta.dirname, process.env.DAI_PORTAL_DIST?.trim() || "../../../cmd/server/frontend_dist");
+const assetsDir = resolve(distDir, "assets");
 const bootstrapPath = resolve(import.meta.dirname, "../src/platform/bootstrap.ts");
 const assetNames = await readdir(assetsDir);
 const cssNames = assetNames.filter((name) => name.endsWith(".css"));
