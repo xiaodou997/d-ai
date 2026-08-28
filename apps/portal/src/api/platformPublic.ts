@@ -21,7 +21,18 @@ function toPublicInvitation(value: Awaited<ReturnType<typeof typedRequest<"publi
   const status = statuses.includes(value.status as PublicInvitationStatus)
     ? (value.status as PublicInvitationStatus)
     : "not_found";
-  return { ...value, status };
+  return {
+    code: value.code,
+    tenantName: value.tenantName,
+    customerSiteName: value.customerSiteName,
+    faviconPath: value.faviconPath,
+    description: value.description,
+    expiresAt: value.expiresAt ?? null,
+    status,
+    canRegister: value.canRegister,
+    message: value.message,
+    legal: value.legal
+  };
 }
 
 export const platformPublicApi = {

@@ -1,11 +1,8 @@
+import type { components } from "../generated/dai";
+
 export type PublicInvitationStatus = "active" | "expired" | "disabled" | "used_up" | "not_found";
 
-export interface PublicLegalDocuments {
-  termsUrl: string;
-  termsVersion: string;
-  privacyUrl: string;
-  privacyVersion: string;
-}
+export type PublicLegalDocuments = components["schemas"]["LegalStruct"];
 
 export interface PublicInvitation {
   code: string;
@@ -20,33 +17,8 @@ export interface PublicInvitation {
   legal: PublicLegalDocuments;
 }
 
-export interface PublicRegistrationPayload {
-  username: string;
-  password: string;
-  email?: string;
-  phone?: string;
-  termsVersion: string;
-  privacyVersion: string;
-}
-
-export interface PublicRegistrationResult {
-  success: boolean;
-  userId: string;
-  message: string;
-}
-
-export interface PasswordPolicy {
-  minLength: number;
-  maxBytes: number;
-  requiredCharacterClasses: number;
-  description: string;
-}
-
-export interface ActivateAccountPayload {
-  token: string;
-  password: string;
-}
-
-export interface ActivateAccountResult {
-  message: string;
-}
+export type PublicRegistrationPayload = components["schemas"]["PublicRegistrationInputBody"];
+export type PublicRegistrationResult = components["schemas"]["PublicRegistrationOutputBody"];
+export type PasswordPolicy = components["schemas"]["PasswordPolicy"];
+export type ActivateAccountPayload = components["schemas"]["ActivateAccountInputBody"];
+export type ActivateAccountResult = components["schemas"]["MessageOutputBody"];

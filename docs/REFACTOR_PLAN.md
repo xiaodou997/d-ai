@@ -293,6 +293,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 迁移：公开密码策略、账号激活、邀请读取和邀请注册 facade 已使用 operation ID 绑定请求；领域 `PublicInvitation` 通过显式转换校验 OpenAPI 的字符串状态，避免传输 DTO 与领域联合类型混用。
 - 回归：新增 operation client 类型/运行时转发测试；`bun run ensure:api`、Portal typecheck 与前端测试通过。
 
+### P2-04（Generated DTO aliases，2026-08-28）
+
+- 传输类型：公开认证/邀请 facade 的 request/response DTO 改为 `components["schemas"]` 生成类型别名，删除同字段手写接口。
+- 领域边界：`PublicInvitation` 保留为领域 view model，由显式 mapper 处理 OpenAPI 的 `$schema`、字符串状态和可空 `expiresAt`，未知状态安全降级为 `not_found`。
+- 回归：公开认证/邀请页面测试、operation client 测试、`bun run ensure:api`、Portal typecheck、全量 Portal 测试及 Go 全量验证通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

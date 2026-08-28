@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createTypedOperationRequest, type RequestAdapter } from ".";
+import type { PublicRegistrationPayload } from "./types/platformPublic";
 
 describe("typed OpenAPI operation request", () => {
   it("infers generated response and forwards the operation request", async () => {
@@ -19,5 +20,15 @@ describe("typed OpenAPI operation request", () => {
     });
 
     expect(response.minLength).toBe(12);
+  });
+
+  it("keeps generated request bodies assignable to the facade domain alias", () => {
+    const payload: PublicRegistrationPayload = {
+      username: "demo",
+      password: "Strong-password-123",
+      termsVersion: "2026-07-19",
+      privacyVersion: "2026-07-19"
+    };
+    expect(payload.email).toBeUndefined();
   });
 });
