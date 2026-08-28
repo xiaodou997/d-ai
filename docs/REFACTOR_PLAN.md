@@ -451,6 +451,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：余额服务状态、债务 owner/state 在进入页面前校验，余额批次与充值记录的 nullable/空时间归一为页面模型；批量退款结果和退款成功消息复用 generated response，不再声明手写响应 DTO。
 - 回归：新增 platform billing facade 测试覆盖 query/body/path、nullable balance/records/refund 集合、schema 清理和非法状态拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed platform observability facade，2026-08-28）
+
+- 迁移：认证审计、JWT 密钥列表/轮换、全局统计、消费趋势、资源统计和 dashboard 告警共 7 个 facade 请求绑定 generated OpenAPI operations；分析/审计 query 改用 operation 推导类型。
+- 领域边界：审计、密钥、趋势、资源和告警 nullable 集合归一为空数组，生成的 schema 字段只在 facade 内转换为既有平台页面模型。
+- 回归：新增 platform observability facade 测试覆盖 query 转发、JWT message、分析/告警列表空值和页面 DTO 映射；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

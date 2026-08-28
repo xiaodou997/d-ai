@@ -58,6 +58,12 @@ type DebtTransport = OperationResponse<"admin-get-debt">;
 type AccountBalanceLotTransport = components["schemas"]["AccountBalanceLot"];
 type AccountBalanceServiceState = "active" | "blocked_debt";
 type DebtOwnerType = "tenant" | "user";
+type AuthAuditPageTransport = OperationResponse<"admin-auth-audit-logs">;
+type JwtKeysTransport = OperationResponse<"list-jwt-keys">;
+type GlobalStatsTransport = OperationResponse<"admin-global-stats">;
+type ConsumptionTrendTransport = OperationResponse<"admin-consumption-trend">;
+type ResourceStatisticsTransport = OperationResponse<"admin-resource-statistics">;
+type DashboardAlertsTransport = OperationResponse<"admin-dashboard-alerts">;
 
 function toOperationStatus(value: { success: boolean }): { status: string } {
   return { status: value.success ? "success" : "failed" };
@@ -257,6 +263,81 @@ function toDebtStatus(value: DebtTransport): DebtStatusOutputBody {
     account_id: value.account_id,
     outstanding_debt_micro_usd: value.outstanding_debt_micro_usd,
     service_state: toDebtServiceState(value.service_state)
+  };
+}
+
+function toAuthAuditPage(value: AuthAuditPageTransport): PageAuditLogItem {
+  return {
+    items: value.items?.map((item) => ({
+      id: item.id,
+      eventType: item.eventType,
+      principalType: item.principalType,
+      decision: item.decision,
+      userId: item.userId,
+      createdAt: item.createdAt,
+      reasonCode: item.reasonCode,
+      reasonMessage: item.reasonMessage
+    })) ?? [],
+    total: value.total,
+    page: value.page,
+    size: value.size
+  };
+}
+
+function toJwtKeys(value: JwtKeysTransport): { keys: JwtKeyItem[]; total: number } {
+  return {
+    keys: value.keys?.map((item) => ({
+      id: item.id,
+      kid: item.kid,
+      status: item.status,
+      createdTime: item.createdTime,
+      graceUntil: item.graceUntil,
+      retiredTime: item.retiredTime
+    })) ?? [],
+    total: value.total
+  };
+}
+
+function toGlobalStats(value: GlobalStatsTransport): GlobalStatsRow {
+  return {
+    currency: value.currency,
+    tenantRechargePaidMinor: value.tenantRechargePaidMinor,
+    tenantRechargeAmountUsd: value.tenantRechargeAmountUsd,
+    activeTenants: value.activeTenants,
+    tenantTotalBalanceUsd: value.tenantTotalBalanceUsd,
+    userRechargePaidMinor: value.userRechargePaidMinor,
+    userRechargeAmountUsd: value.userRechargeAmountUsd,
+    newUsers: value.newUsers,
+    userTotalBalanceUsd: value.userTotalBalanceUsd
+  };
+}
+
+function toConsumptionTrend(value: ConsumptionTrendTransport): ConsumptionTrendOutput {
+  return {
+    totalUsd: value.totalUsd,
+    dataPoints: value.dataPoints?.map((point) => ({ timeLabel: point.timeLabel, amountUsd: point.amountUsd })) ?? []
+  };
+}
+
+function toResourceStatistics(value: ResourceStatisticsTransport): { resources: ResourceStatItem[] } {
+  return {
+    resources: value.resources?.map((resource) => ({
+      clientName: resource.clientName,
+      clientId: resource.clientId,
+      amountUsd: resource.amountUsd,
+      percentage: resource.percentage
+    })) ?? []
+  };
+}
+
+function toDashboardAlerts(value: DashboardAlertsTransport): DashboardAlertsOutput {
+  return {
+    failedTransactions: value.failedTransactions?.map((item) => ({
+      requestId: item.requestId,
+      settlementError: item.settlementError,
+      status: item.status,
+      createdTime: item.createdTime
+    })) ?? []
   };
 }
 
@@ -571,77 +652,70 @@ export const platformAdminApi = {
 	},
 
   // ---- 认证审计 ----
-  getAuthAuditLogs(params: {
-    page?: number;
-    size?: number;
-    eventType?: string;
-    principalType?: string;
-    decision?: string;
-    userId?: string;
-  }) {
-    return request()<PageAuditLogItem>({
+  getAuthAuditLogs(params: OperationQuery<"admin-auth-audit-logs">) {
+    return typedRequest<"admin-auth-audit-logs">({
       method: "GET",
       path: "/api/v1/auth-audit-logs",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAuthAuditPage);
   },
 
   // ---- JWT 密钥 ----
   listJwtKeys() {
-    return request()<{ keys: JwtKeyItem[]; total: number }>({
+    return typedRequest<"list-jwt-keys">({
       method: "GET",
       path: "/api/v1/jwt-keys",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toJwtKeys);
   },
   rotateJwtKey() {
-    return request()<{ message: string }>({
+    return typedRequest<"rotate-jwt-key">({
       method: "POST",
       path: "/api/v1/jwt-keys/rotate",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toMessage);
   },
 
 
   // ---- 控制概览（数据分析）----
-  getGlobalStats(params: { timeFrom?: number; timeTo?: number }) {
-    return request()<GlobalStatsRow>({
+  getGlobalStats(params: OperationQuery<"admin-global-stats">) {
+    return typedRequest<"admin-global-stats">({
       method: "GET",
       path: "/api/v1/analytics/global-stats",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toGlobalStats);
   },
-  getConsumptionTrend(params: { timeFrom?: number; timeTo?: number; accountType?: string }) {
-    return request()<ConsumptionTrendOutput>({
+  getConsumptionTrend(params: OperationQuery<"admin-consumption-trend">) {
+    return typedRequest<"admin-consumption-trend">({
       method: "GET",
       path: "/api/v1/analytics/consumption-trend",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toConsumptionTrend);
   },
-  getResourceStatistics(params: { timeFrom?: number; timeTo?: number }) {
-    return request()<{ resources: ResourceStatItem[] }>({
+  getResourceStatistics(params: OperationQuery<"admin-resource-statistics">) {
+    return typedRequest<"admin-resource-statistics">({
       method: "GET",
       path: "/api/v1/analytics/resource-statistics",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toResourceStatistics);
   },
   getDashboardAlerts() {
-    return request()<DashboardAlertsOutput>({
+    return typedRequest<"admin-dashboard-alerts">({
       method: "GET",
       path: "/api/v1/dashboard/alerts",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toDashboardAlerts);
   },
   // ==================== 微信支付在线充值（管理端） ====================
 
