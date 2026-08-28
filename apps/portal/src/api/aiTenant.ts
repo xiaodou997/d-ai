@@ -11,6 +11,7 @@ import {
 } from "@/platform/ai/runtime";
 import { formatUSD } from "@/platform/ai/usage";
 import { type PortalImageTaskCreateResponse } from "@/platform/ai/images";
+import type { components } from "./generated/dai";
 import type {
   PortalTaskPage,
   PortalTaskQuery,
@@ -53,6 +54,7 @@ import type {
   TenantAiPriceBookEntry,
   TenantAiPriceBookEntryWriteRequest,
   TenantAiLiteLLMPriceModel,
+  TenantAiLiteLLMModelsOutput,
   TenantAiPriceBookTransferBundle,
   TenantAiUpstreamResource,
   TenantAiUserGroupsOutputBody,
@@ -373,9 +375,12 @@ export const aiTenantApi = {
     });
   },
   searchLiteLLMPriceModels(q: string, limit = 50) {
-    return request()<{ items: TenantAiLiteLLMPriceModel[]; total: number }>({
+    return request()<components["schemas"]["LiteLLMModelsOutputBody"]>({
       method: "GET", path: "/api/v1/tenants/me/price-books/litellm/models", query: { q, limit }, headers: headers(), baseUrl: baseUrl()
-    });
+    }).then((response): TenantAiLiteLLMModelsOutput => ({
+      ...response,
+      items: response.items?.map((model) => ({ ...model, token_price_tiers: model.token_price_tiers ?? [] })) ?? []
+    }));
   },
   listPriceBookEntries(bookId: string) {
     return request()<{ items: TenantAiPriceBookEntry[]; total: number }>({

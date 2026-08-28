@@ -305,6 +305,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：facade 将生成 DTO 中可空的 `token_price_tiers` 归一化为页面领域模型所需数组，不把 nullable 传输语义泄漏到组件。
 - 回归：API 目录不再包含 `any[]`、`Promise<any>` 或 `as any`；Portal 65 个测试文件、217 个断言、typecheck、`ensure:api` 及 Go 全量门禁通过。全量测试仍受既有 migration 0019 OID 环境 flake 影响。
 
+### P2-04（Tenant generated LiteLLM DTO boundary，2026-08-28）
+
+- 传输类型：租户价格表 LiteLLM 搜索响应复用生成的 `LiteLLMModelsOutputBody` / `LiteLLMModelInfo`，删除重复的同字段传输接口。
+- 领域边界：租户 facade 将 nullable `token_price_tiers` 映射为领域模型数组，保持组件层无 nullable 分支。
+- 回归：价格表定向 30 项测试、完整 Portal 217 项测试、typecheck、`ensure:api` 和 Go 全量门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

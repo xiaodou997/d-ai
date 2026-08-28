@@ -146,11 +146,12 @@ export interface TenantAiPriceBookEntry {
   updated_at?: number;
 }
 
-export interface TenantAiLiteLLMPriceModel {
-  model_code: string;
-  capability_type: string;
+export type TenantAiLiteLLMPriceModel = Omit<components["schemas"]["LiteLLMModelInfo"], "token_price_tiers"> & {
   token_price_tiers: TenantAiTokenPriceTierUSD[];
-}
+};
+export type TenantAiLiteLLMModelsOutput = Omit<components["schemas"]["LiteLLMModelsOutputBody"], "items"> & {
+  items: TenantAiLiteLLMPriceModel[] | null;
+};
 
 export type TenantAiPriceBookEntryWriteRequest = Omit<
   TenantAiPriceBookEntry,
