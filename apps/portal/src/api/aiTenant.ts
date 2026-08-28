@@ -22,6 +22,7 @@ import { useAuthStore } from "@/stores/auth";
 import {
   createTypedOperationRequest,
   type OperationBody,
+  type OperationQuery,
   type OperationResponse
 } from ".";
 import type {
@@ -94,6 +95,14 @@ type PriceBookEntryTransport = components["schemas"]["PriceBookEntryDTO"];
 type PriceBookPageTransport = OperationResponse<"ai-list-tenant-price-books">;
 type PriceBookEntriesPageTransport = OperationResponse<"ai-list-tenant-price-book-entries">;
 type PriceBookTransferTransport = OperationResponse<"ai-export-tenant-price-book">;
+type AvailableModelsTransport = OperationResponse<"ai-list-tenant-self-available-models">;
+type UpstreamResourcesTransport = OperationResponse<"ai-list-tenant-upstream-resources">;
+type GroupEffectivePricesTransport = OperationResponse<"ai-list-tenant-self-group-effective-prices">;
+type UserGroupsTransport = OperationResponse<"ai-list-user-groups">;
+type LimitPoliciesTransport = OperationResponse<"ai-list-tenant-self-user-limit-policies">;
+type DashboardSummaryTransport = OperationResponse<"ai-get-tenant-self-dashboard-summary">;
+type DashboardTopModelsTransport = OperationResponse<"ai-list-tenant-self-dashboard-top-models">;
+type DashboardRecentErrorsTransport = OperationResponse<"ai-list-tenant-self-dashboard-recent-errors">;
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -231,6 +240,154 @@ function toPriceBookTransferBody(value: TenantAiPriceBookTransferBundle): Operat
   };
 }
 
+function toAvailableModels(value: AvailableModelsTransport): TenantAiAvailableModelsOutputBody {
+  return {
+    items: value.items?.map((item) => ({
+      model_code: item.model_code,
+      model_name: item.model_name,
+      capability_type: item.capability_type,
+      input_per_1m_usd_min: item.input_per_1m_usd_min,
+      input_per_1m_usd_max: item.input_per_1m_usd_max,
+      output_per_1m_usd_min: item.output_per_1m_usd_min,
+      output_per_1m_usd_max: item.output_per_1m_usd_max,
+      cache_write_per_1m_usd_min: item.cache_write_per_1m_usd_min,
+      cache_write_per_1m_usd_max: item.cache_write_per_1m_usd_max,
+      cache_read_per_1m_usd_min: item.cache_read_per_1m_usd_min,
+      cache_read_per_1m_usd_max: item.cache_read_per_1m_usd_max,
+      has_context_tiers: item.has_context_tiers,
+      image_default_price_usd_min: item.image_default_price_usd_min,
+      image_default_price_usd_max: item.image_default_price_usd_max,
+      video_default_price_usd_min: item.video_default_price_usd_min,
+      video_default_price_usd_max: item.video_default_price_usd_max,
+      image_prices: item.image_prices?.map(stripSchema) ?? undefined,
+      video_prices: item.video_prices?.map(stripSchema) ?? undefined
+    })) ?? [],
+    total: value.total
+  };
+}
+
+function toUpstreamResources(value: UpstreamResourcesTransport): { items: TenantAiUpstreamResource[]; total: number } {
+  return {
+    items: value.items?.map((resource) => {
+      if (resource.resource_kind !== "direct_upstream" && resource.resource_kind !== "oauth_pool") {
+        throw new Error(`Unexpected upstream resource kind: ${resource.resource_kind}`);
+      }
+      return {
+        id: resource.id,
+        resource_kind: resource.resource_kind,
+        name: resource.name,
+        tenant_multiplier: resource.tenant_multiplier,
+        price_book_id: resource.price_book_id,
+        price_book_name: resource.price_book_name,
+        price_book_revision: resource.price_book_revision,
+        models: resource.models?.map((model) => {
+          if (model.availability !== "available" && model.availability !== "no_price_configured") {
+            throw new Error(`Unexpected upstream model availability: ${model.availability}`);
+          }
+          return {
+            model_code: model.model_code,
+            capability_type: model.capability_type,
+            api_format: model.api_format,
+            availability: model.availability,
+            price: model.price ? toPriceBookEntry(model.price) : undefined
+          };
+        }) ?? []
+      };
+    }) ?? [],
+    total: value.total
+  };
+}
+
+function toGroupEffectivePrices(value: GroupEffectivePricesTransport): TenantAiGroupEffectivePricesOutputBody {
+  return {
+    group_id: value.group_id,
+    retail_price_book_id: value.retail_price_book_id,
+    effective_user_multiplier: value.effective_user_multiplier,
+    items: value.items?.map((item) => ({
+      model_code: item.model_code,
+      capability_type: item.capability_type,
+      token_price_tiers: item.token_price_tiers?.map(stripSchema) ?? [],
+      image_default_price_usd: item.image_default_price_usd,
+      video_default_price_usd: item.video_default_price_usd,
+      image_prices: item.image_prices?.map(stripSchema) ?? undefined,
+      video_prices: item.video_prices?.map(stripSchema) ?? undefined,
+      audio_tts_per_1m_chars_usd: item.audio_tts_per_1m_chars_usd,
+      audio_stt_per_minute_usd: item.audio_stt_per_minute_usd
+    })) ?? [],
+    total: value.total
+  };
+}
+
+function toUserGroups(value: UserGroupsTransport): TenantAiUserGroupsOutputBody {
+  return {
+    items: value.items?.map((item) => ({
+      group_id: item.group_id,
+      group_name: item.group_name,
+      multiplier_override: item.multiplier_override
+    })) ?? [],
+    total: value.total
+  };
+}
+
+function toLimitPolicy(value: components["schemas"]["RuntimeLimitPolicyDTO"]): TenantAiLimitPolicy {
+  if (value.scope_type !== "tenant" && value.scope_type !== "user" && value.scope_type !== "api_key") {
+    throw new Error(`Unexpected limit policy scope: ${value.scope_type}`);
+  }
+  if (value.status !== "active" && value.status !== "disabled") {
+    throw new Error(`Unexpected limit policy status: ${value.status}`);
+  }
+  return {
+    id: value.id,
+    scope_type: value.scope_type,
+    scope_id: value.scope_id,
+    concurrency_limit: value.concurrency_limit,
+    status: value.status,
+    created_by: value.created_by,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toLimitPolicies(value: LimitPoliciesTransport): TenantAiLimitPoliciesOutputBody {
+  return { items: value.items?.map(toLimitPolicy) ?? [], total: value.total };
+}
+
+function toDashboardSummary(value: DashboardSummaryTransport): TenantAiDashboardSummary {
+  return {
+    total_requests: value.total_requests,
+    successful_requests: value.successful_requests,
+    failed_requests: value.failed_requests,
+    total_tokens: value.total_tokens,
+    total_prompt_tokens: value.total_prompt_tokens,
+    total_completion_tokens: value.total_completion_tokens,
+    total_catalog_base_usd: value.total_catalog_base_usd,
+    total_tenant_payable_usd: value.total_tenant_payable_usd,
+    total_retail_base_usd: value.total_retail_base_usd,
+    total_user_payable_usd: value.total_user_payable_usd,
+    total_user_charged_usd: value.total_user_charged_usd,
+    avg_latency_ms: value.avg_latency_ms
+  };
+}
+
+function toDashboardTopModels(value: DashboardTopModelsTransport): TenantAiDashboardTopModelsOutputBody {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toDashboardRecentErrors(value: DashboardRecentErrorsTransport): TenantAiDashboardRecentErrorsOutputBody {
+  return {
+    items: value.items?.map((item) => ({
+      request_id: item.request_id,
+      model_code: item.model_code,
+      request_status: item.request_status,
+      error_code: item.error_code,
+      error_message: item.error_message,
+      http_status: item.http_status,
+      created_at: item.created_at
+    })) ?? [],
+    total: value.total
+  };
+}
+
 export { formatUSD };
 
 const runtimeTransport = createPortalRuntimeTransport({
@@ -268,12 +425,12 @@ export const capabilityOptions = [
 export const aiTenantApi = {
   // ---- 可用模型（可见分组暴露的去重模型集合） ----
   listAvailableModels() {
-    return request()<TenantAiAvailableModelsOutputBody>({
+    return typedRequest<"ai-list-tenant-self-available-models">({
       method: "GET",
       path: "/api/v1/tenants/me/available-models",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toAvailableModels);
   },
 
   // ---- 租户 API Key ----
@@ -599,92 +756,98 @@ export const aiTenantApi = {
 
   // ---- 不含地址、密钥和内部模型名的上游目录 ----
   listUpstreamResources() {
-    return request()<{ items: TenantAiUpstreamResource[]; total: number }>({
+    return typedRequest<"ai-list-tenant-upstream-resources">({
       method: "GET", path: "/api/v1/tenants/me/upstream-resources", headers: headers(), baseUrl: baseUrl()
-    });
+    }).then(toUpstreamResources);
   },
   // ---- 某可见分组对本租户的每模型生效 USD 单价 ----
   getMyGroupEffectivePrices(groupId: string) {
-    return request()<TenantAiGroupEffectivePricesOutputBody>({
+    return typedRequest<"ai-list-tenant-self-group-effective-prices">({
       method: "GET",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/effective-prices`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toGroupEffectivePrices);
   },
   // ---- 租户→用户 分组绑定（套餐收窄 + 加价倍率） ----
   listUserGroups(userId: string) {
-    return request()<TenantAiUserGroupsOutputBody>({
+    return typedRequest<"ai-list-user-groups">({
       method: "GET",
       path: `/api/v1/tenants/me/users/${encodeURIComponent(userId)}/groups`,
+      pathParams: { userID: userId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toUserGroups);
   },
   upsertUserGroup(userId: string, groupId: string, body: TenantAiUserGroupWriteRequest) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-upsert-user-group">({
       method: "PUT",
       path: `/api/v1/tenants/me/users/${encodeURIComponent(userId)}/groups/${encodeURIComponent(groupId)}`,
+      pathParams: { userID: userId, groupID: groupId },
       headers: headers(),
-      body,
+      body: { multiplier_override: body.multiplier_override ?? undefined },
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   deleteUserGroup(userId: string, groupId: string) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-delete-user-group">({
       method: "DELETE",
       path: `/api/v1/tenants/me/users/${encodeURIComponent(userId)}/groups/${encodeURIComponent(groupId)}`,
+      pathParams: { userID: userId, groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
 
   // ---- 租户限流策略 ----
   listUserLimitPolicies(userId: string) {
-    return request()<TenantAiLimitPoliciesOutputBody>({
+    return typedRequest<"ai-list-tenant-self-user-limit-policies">({
       method: "GET",
       path: `/api/v1/tenants/me/users/${encodeURIComponent(userId)}/limit-policies`,
+      pathParams: { userID: userId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toLimitPolicies);
   },
   upsertUserLimitPolicy(userId: string, body: TenantAiLimitPolicyWriteRequest) {
-    return request()<TenantAiLimitPolicy>({
+    return typedRequest<"ai-upsert-tenant-self-user-limit-policy">({
       method: "PUT",
       path: `/api/v1/tenants/me/users/${encodeURIComponent(userId)}/limit-policies`,
+      pathParams: { userID: userId },
       headers: headers(),
-      body,
+      body: { concurrency_limit: body.concurrency_limit, status: body.status },
       baseUrl: baseUrl()
-    });
+    }).then(toLimitPolicy);
   },
 
   // ---- Dashboard（tenant 维度，claims-scoped） ----
-  getDashboardSummary(params: { date_from?: string; date_to?: string } = {}) {
-    return request()<TenantAiDashboardSummary>({
+  getDashboardSummary(params: OperationQuery<"ai-get-tenant-self-dashboard-summary"> = {}) {
+    return typedRequest<"ai-get-tenant-self-dashboard-summary">({
       method: "GET",
       path: "/api/v1/tenants/me/dashboard/summary",
       headers: headers(),
       query: params,
       baseUrl: baseUrl()
-    });
+    }).then(toDashboardSummary);
   },
-  getDashboardTopModels(params: { date_from?: string; date_to?: string; limit?: number } = {}) {
-    return request()<TenantAiDashboardTopModelsOutputBody>({
+  getDashboardTopModels(params: OperationQuery<"ai-list-tenant-self-dashboard-top-models"> = {}) {
+    return typedRequest<"ai-list-tenant-self-dashboard-top-models">({
       method: "GET",
       path: "/api/v1/tenants/me/dashboard/top-models",
       headers: headers(),
       query: params,
       baseUrl: baseUrl()
-    });
+    }).then(toDashboardTopModels);
   },
-  listDashboardRecentErrors(params: { date_from?: string; date_to?: string; limit?: number } = {}) {
-    return request()<TenantAiDashboardRecentErrorsOutputBody>({
+  listDashboardRecentErrors(params: OperationQuery<"ai-list-tenant-self-dashboard-recent-errors"> = {}) {
+    return typedRequest<"ai-list-tenant-self-dashboard-recent-errors">({
       method: "GET",
       path: "/api/v1/tenants/me/dashboard/recent-errors",
       headers: headers(),
       query: params,
       baseUrl: baseUrl()
-    });
+    }).then(toDashboardRecentErrors);
   },
 
   // ---- 订阅制套餐（租户自助管理，docs/ai-subscription-design.md §7.2） ----

@@ -379,6 +379,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：价格表和条目响应显式移除 `$schema`，nullable 条目、token 档位和规格覆盖归一为页面模型；owner/status 与 transfer schema version 在进入页面前校验，导入 body 显式补齐传输字段。
 - 回归：新增 tenant price-book facade 测试覆盖分页/条目空值、schema 清理、编码 path、导入字段映射、同步结果和非法 schema version；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed tenant self-read facade，2026-08-28）
+
+- 迁移：租户可用模型、上游资源、分组生效价格、用户分组/限流和 dashboard 的 11 个 facade 请求绑定生成的 OpenAPI operation；runtime 工作台协议保持独立。
+- 领域边界：显式移除 transport `$schema`，将 nullable 列表/价格档位归一为空数组；upstream、限流 scope/status 和 dashboard 结果映射到页面领域模型，旧模型中不再由后端提供的字段已清理。
+- 回归：新增 tenant self-read facade 测试覆盖空值归一、嵌套价格映射、用户 scope path、query forwarding 和非法限流 scope 拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

@@ -16,27 +16,22 @@ export type { TenantAiApiKey, TenantAiApiKeysOutputBody } from "./tenant";
 // ==================== 可用模型（分组暴露的去重模型集合） ====================
 
 export interface TenantAiAvailableModel {
-  id: string;
   model_code: string;
-  model_name?: string;
+  model_name: string;
   capability_type: string;
-  context_window?: number | null;
-  default_max_output_tokens: number;
-  max_output_tokens?: number | null;
-  status?: string;
-  input_per_1m_usd_min?: number;
-  input_per_1m_usd_max?: number;
-  output_per_1m_usd_min?: number;
-  output_per_1m_usd_max?: number;
-  cache_write_per_1m_usd_min?: number;
-  cache_write_per_1m_usd_max?: number;
-  cache_read_per_1m_usd_min?: number;
-  cache_read_per_1m_usd_max?: number;
-  has_context_tiers?: boolean;
-  image_default_price_usd_min?: number;
-  image_default_price_usd_max?: number;
-  video_default_price_usd_min?: number;
-  video_default_price_usd_max?: number;
+  input_per_1m_usd_min: number;
+  input_per_1m_usd_max: number;
+  output_per_1m_usd_min: number;
+  output_per_1m_usd_max: number;
+  cache_write_per_1m_usd_min: number;
+  cache_write_per_1m_usd_max: number;
+  cache_read_per_1m_usd_min: number;
+  cache_read_per_1m_usd_max: number;
+  has_context_tiers: boolean;
+  image_default_price_usd_min: number;
+  image_default_price_usd_max: number;
+  video_default_price_usd_min: number;
+  video_default_price_usd_max: number;
   image_prices?: Array<{ resolution: string; price_usd_min: number; price_usd_max: number }>;
   video_prices?: Array<{ resolution: string; price_usd_min: number; price_usd_max: number }>;
 }
@@ -192,7 +187,7 @@ export interface TenantAiUserGroup {
   group_id: string;
   group_name?: string;
   multiplier_override?: number | null; // 为空=继承分组默认用户倍率
-  status: string;
+  status?: string;
 }
 
 export interface TenantAiUserGroupsOutputBody {
