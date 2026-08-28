@@ -19,7 +19,11 @@ import type {
 } from "@/platform/ai/tasks";
 import { portalEnv } from "@/env";
 import { useAuthStore } from "@/stores/auth";
-import { createTypedOperationRequest } from ".";
+import {
+  createTypedOperationRequest,
+  type OperationBody,
+  type OperationResponse
+} from ".";
 import type {
   ChatModel,
   ConsoleImageGenerateRequest,
@@ -80,6 +84,75 @@ const headers = () => apiHeaders;
 const baseUrl = () => apiBaseUrl;
 const runtimeBasePath = "/runtime/v1";
 
+type ApiKeyPageTransport = OperationResponse<"ai-list-tenant-self-api-keys">;
+type GroupPageTransport = OperationResponse<"ai-list-groups">;
+type DispatchRulePageTransport = OperationResponse<"ai-list-group-dispatch-rules">;
+type DispatchModelPageTransport = OperationResponse<"ai-list-group-dispatch-models">;
+type GroupTargetPageTransport = OperationResponse<"ai-list-group-targets">;
+
+function stripSchema<T>(value: T): Omit<T, "$schema"> {
+  const { $schema: _schema, ...rest } = value as T & { $schema?: string };
+  return rest as Omit<T, "$schema">;
+}
+
+function toApiKeyWrite(body: TenantAiApiKeyWriteRequest): OperationBody<"ai-create-tenant-self-api-key"> {
+  return {
+    name: body.name,
+    group_id: body.group_id,
+    quota_limit_micro_usd: body.quota_limit_micro_usd,
+    status: body.status === "active" || body.status === "disabled" ? body.status : undefined,
+    expires_at: body.expires_at,
+    limit_policy: body.limit_policy ?? undefined
+  };
+}
+
+function toApiKeyStatus(value: string): OperationBody<"ai-update-tenant-self-api-key-status">["status"] {
+  if (value === "active" || value === "disabled") return value;
+  throw new Error(`Unexpected API key status: ${value}`);
+}
+
+function toGroupTarget(value: OperationResponse<"ai-add-group-target">): TenantAiGroupTarget {
+  if (value.target_type !== "account" && value.target_type !== "pool") {
+    throw new Error(`Unexpected group target type: ${value.target_type}`);
+  }
+  if (value.status !== "active" && value.status !== "disabled") {
+    throw new Error(`Unexpected group target status: ${value.status}`);
+  }
+  const unavailableReason = value.unavailable_reason;
+  if (unavailableReason !== undefined && unavailableReason !== "inactive" && unavailableReason !== "access_revoked" && unavailableReason !== "missing") {
+    throw new Error(`Unexpected group target availability reason: ${unavailableReason}`);
+  }
+  return { ...stripSchema(value), target_type: value.target_type, status: value.status, unavailable_reason: unavailableReason };
+}
+
+function toApiKeyPage(value: ApiKeyPageTransport): TenantAiApiKeysOutputBody {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toApiKey(value: OperationResponse<"ai-update-tenant-self-api-key">): TenantAiApiKey {
+  return stripSchema(value);
+}
+
+function toCreatedApiKey(value: OperationResponse<"ai-create-tenant-self-api-key">): TenantAiApiKeyCreatedOutputBody {
+  return { plaintext_key: value.plaintext_key, key: stripSchema(value.key) };
+}
+
+function toGroupPage(value: GroupPageTransport): TenantAiVisibleGroupsOutputBody {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toDispatchRulePage(value: DispatchRulePageTransport): { items: TenantAiDispatchRule[]; total: number } {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toDispatchModelPage(value: DispatchModelPageTransport): { items: TenantAiDispatchModel[]; total: number } {
+  return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
+}
+
+function toGroupTargetPage(value: GroupTargetPageTransport): { items: TenantAiGroupTarget[]; total: number } {
+  return { items: value.items?.map(toGroupTarget) ?? [], total: value.total };
+}
+
 export { formatUSD };
 
 const runtimeTransport = createPortalRuntimeTransport({
@@ -127,228 +200,250 @@ export const aiTenantApi = {
 
   // ---- 租户 API Key ----
   listApiKeys() {
-    return request()<TenantAiApiKeysOutputBody>({
+    return typedRequest<"ai-list-tenant-self-api-keys">({
       method: "GET",
       path: "/api/v1/tenant-api-keys",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toApiKeyPage);
   },
   createApiKey(body: TenantAiApiKeyWriteRequest) {
-    return request()<TenantAiApiKeyCreatedOutputBody>({
+    return typedRequest<"ai-create-tenant-self-api-key">({
       method: "POST",
       path: "/api/v1/tenants/me/api-keys",
       headers: headers(),
-      body,
+      body: toApiKeyWrite(body),
       baseUrl: baseUrl()
-    });
+    }).then(toCreatedApiKey);
   },
   updateApiKey(apiKeyId: string, body: TenantAiApiKeyWriteRequest) {
-    return request()<TenantAiApiKey>({
+    return typedRequest<"ai-update-tenant-self-api-key">({
       method: "PATCH",
       path: `/api/v1/tenants/me/api-keys/${encodeURIComponent(apiKeyId)}`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
-      body,
+      body: toApiKeyWrite(body),
       baseUrl: baseUrl()
-    });
+    }).then(toApiKey);
   },
   updateApiKeyStatus(apiKeyId: string, status: string) {
-    return request()<TenantAiApiKey>({
+    return typedRequest<"ai-update-tenant-self-api-key-status">({
       method: "PATCH",
       path: `/api/v1/tenants/me/api-keys/${encodeURIComponent(apiKeyId)}/status`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
-      body: { status },
+      body: { status: toApiKeyStatus(status) },
       baseUrl: baseUrl()
-    });
+    }).then(toApiKey);
   },
   revealApiKey(apiKeyId: string) {
-    return request()<TenantAiApiKeyRevealOutputBody>({
+    return typedRequest<"ai-reveal-tenant-self-api-key">({
       method: "POST",
       path: `/api/v1/tenants/me/api-keys/${encodeURIComponent(apiKeyId)}/reveal`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ plaintext_key: value.plaintext_key }));
   },
   rotateApiKey(apiKeyId: string) {
-    return request()<TenantAiApiKeyCreatedOutputBody>({
+    return typedRequest<"ai-rotate-tenant-self-api-key">({
       method: "POST",
       path: `/api/v1/tenants/me/api-keys/${encodeURIComponent(apiKeyId)}/rotate`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toCreatedApiKey);
   },
   deleteApiKey(apiKeyId: string) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-delete-tenant-self-api-key">({
       method: "DELETE",
       path: `/api/v1/tenants/me/api-keys/${encodeURIComponent(apiKeyId)}`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
 
   // ---- 租户自有分组 ----
   listMyGroups() {
-    return request()<TenantAiVisibleGroupsOutputBody>({
+    return typedRequest<"ai-list-groups">({
       method: "GET",
       path: "/api/v1/tenants/me/groups",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toGroupPage);
   },
   getGroup(groupId: string) {
-    return request()<TenantAiVisibleGroup>({
+    return typedRequest<"ai-get-group">({
       method: "GET",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
-  createGroup(body: TenantAiGroupWriteRequest) {
-    return request()<TenantAiVisibleGroup>({
+  createGroup(body: OperationBody<"ai-create-group">) {
+    return typedRequest<"ai-create-group">({
       method: "POST",
       path: "/api/v1/tenants/me/groups",
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
-  updateGroup(groupId: string, body: TenantAiGroupWriteRequest) {
-    return request()<TenantAiVisibleGroup>({
+  updateGroup(groupId: string, body: OperationBody<"ai-update-group">) {
+    return typedRequest<"ai-update-group">({
       method: "PATCH",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
-  updateGroupStatus(groupId: string, status: "active" | "disabled") {
-    return request()<TenantAiVisibleGroup>({
+  updateGroupStatus(groupId: string, status: OperationBody<"ai-update-group-status">["status"]) {
+    return typedRequest<"ai-update-group-status">({
       method: "PATCH",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/status`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       body: { status },
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
   deleteGroup(groupId: string) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-delete-group">({
       method: "DELETE",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   getGroupClientSurfacePolicy(groupId: string) {
-    return request()<TenantAiClientSurfacePolicy>({
+    return typedRequest<"ai-get-group-client-surface-policy">({
       method: "GET",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/client-surface-policy`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
-  replaceGroupClientSurfacePolicy(groupId: string, body: TenantAiClientSurfacePolicyWrite) {
-    return request()<TenantAiClientSurfacePolicy>({
+  replaceGroupClientSurfacePolicy(groupId: string, body: OperationBody<"ai-replace-group-client-surface-policy">) {
+    return typedRequest<"ai-replace-group-client-surface-policy">({
       method: "PUT",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/client-surface-policy`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
   listGroupDispatchRules(groupId: string) {
-    return request()<{ items: TenantAiDispatchRule[] | null; total: number }>({
+    return typedRequest<"ai-list-group-dispatch-rules">({
       method: "GET",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-rules`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toDispatchRulePage);
   },
-  createGroupDispatchRule(groupId: string, body: TenantAiDispatchRuleWriteRequest) {
-    return request()<TenantAiDispatchRule>({
+  createGroupDispatchRule(groupId: string, body: OperationBody<"ai-add-group-dispatch-rule">) {
+    return typedRequest<"ai-add-group-dispatch-rule">({
       method: "POST",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-rules`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
-  updateGroupDispatchRule(groupId: string, ruleId: string, body: TenantAiDispatchRuleWriteRequest) {
-    return request()<TenantAiDispatchRule>({
+  updateGroupDispatchRule(groupId: string, ruleId: string, body: OperationBody<"ai-update-group-dispatch-rule">) {
+    return typedRequest<"ai-update-group-dispatch-rule">({
       method: "PATCH",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-rules/${encodeURIComponent(ruleId)}`,
+      pathParams: { groupID: groupId, ruleID: ruleId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
-  updateGroupDispatchRuleStatus(groupId: string, ruleId: string, status: "active" | "disabled") {
-    return request()<TenantAiDispatchRule>({
+  updateGroupDispatchRuleStatus(groupId: string, ruleId: string, status: OperationBody<"ai-update-group-dispatch-rule-status">["status"]) {
+    return typedRequest<"ai-update-group-dispatch-rule-status">({
       method: "PATCH",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-rules/${encodeURIComponent(ruleId)}/status`,
+      pathParams: { groupID: groupId, ruleID: ruleId },
       headers: headers(),
       body: { status },
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
   deleteGroupDispatchRule(groupId: string, ruleId: string) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-delete-group-dispatch-rule">({
       method: "DELETE",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-rules/${encodeURIComponent(ruleId)}`,
+      pathParams: { groupID: groupId, ruleID: ruleId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
-  previewGroupDispatch(groupId: string, body: TenantAiDispatchPreviewRequest) {
-    return request()<TenantAiDispatchPreview>({
+  previewGroupDispatch(groupId: string, body: OperationBody<"ai-preview-group-dispatch">) {
+    return typedRequest<"ai-preview-group-dispatch">({
       method: "POST",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-rules/preview`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(stripSchema);
   },
   listGroupDispatchModels(groupId: string, clientSurface: string) {
-    return request()<{ items: TenantAiDispatchModel[] | null; total: number }>({
+    return typedRequest<"ai-list-group-dispatch-models">({
       method: "GET",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/dispatch-models`,
+      pathParams: { groupID: groupId },
       query: { client_surface: clientSurface },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toDispatchModelPage);
   },
   listGroupTargets(groupId: string) {
-    return request()<{ items: TenantAiGroupTarget[]; total: number }>({
+    return typedRequest<"ai-list-group-targets">({
       method: "GET",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/targets`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toGroupTargetPage);
   },
-  addGroupTarget(groupId: string, body: TenantAiGroupTargetWriteRequest) {
-    return request()<TenantAiGroupTarget>({
+  addGroupTarget(groupId: string, body: OperationBody<"ai-add-group-target">) {
+    return typedRequest<"ai-add-group-target">({
       method: "POST",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/targets`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then(toGroupTarget);
   },
-  updateGroupTarget(groupId: string, bindingId: string, body: TenantAiGroupTargetWriteRequest) {
-    return request()<TenantAiGroupTarget>({
+  updateGroupTarget(groupId: string, bindingId: string, body: OperationBody<"ai-update-group-target">) {
+    return typedRequest<"ai-update-group-target">({
       method: "PATCH",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/targets/${encodeURIComponent(bindingId)}`,
+      pathParams: { groupID: groupId, bindingID: bindingId },
       headers: headers(),
       body,
       baseUrl: baseUrl()
-    });
+    }).then((value) => toGroupTarget(value));
   },
   deleteGroupTarget(groupId: string, bindingId: string) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-delete-group-target">({
       method: "DELETE",
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/targets/${encodeURIComponent(bindingId)}`,
+      pathParams: { groupID: groupId, bindingID: bindingId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
 
   // ---- 租户价格表（平台表只读，租户表可写） ----

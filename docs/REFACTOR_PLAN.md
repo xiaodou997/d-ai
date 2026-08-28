@@ -367,6 +367,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：分页 `items: null` 统一为空数组，credential state 只接受 `active`/`pending_activation`；兼容层保留旧页面需要的 `{status}`、激活凭据和租户详情字段。
 - 回归：新增 platform admin facade 测试覆盖分页空值、未知 credential state、租户详情兼容字段、编码 path 参数和状态/重置响应；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed tenant AI control facade，2026-08-28）
+
+- 迁移：租户 API key、分组、客户端 surface policy、dispatch rule/model 和上游 target 的 25 个 control-plane 请求绑定生成的 OpenAPI operation；runtime 流式与图片协议保持独立 transport。
+- 领域边界：生成 DTO 的 `$schema` 不进入页面模型，nullable 列表统一为空数组；API key 状态、target 类型/状态/不可用原因进入页面前校验有限集合，并兼容页面现有可空写入结构。
+- 回归：新增 tenant AI control facade 测试覆盖 schema 清理、nullable 列表、编码 path 参数、旧输入映射和非法状态拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
