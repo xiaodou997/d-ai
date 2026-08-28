@@ -4,6 +4,7 @@ import {
   apiBaseUrl
 } from "./request";
 import { redirectPortalToLogin } from "@/platform";
+import { normalizeIdentityIncluded } from "@/platform/ai/identity";
 import {
   appendPortalQuery,
   createPortalRuntimeTransport,
@@ -68,11 +69,14 @@ import type {
   TenantAiVisibleGroup,
   TenantAiVisibleGroupsOutputBody,
   TenantSubPlan,
+  TenantSubPlanGroup,
+  TenantSubPlanWriteRequest,
+  TenantSubPurchasePolicy,
+  TenantSubPurchasePolicyInput,
   TenantSubPurchasePolicyRevision,
   TenantSubscription,
   TenantSubOrder,
-  TenantSubPage,
-  TenantSubPlanWriteRequest
+  TenantSubPage
 } from "./types/aiTenant";
 
 function request() {
@@ -103,6 +107,14 @@ type LimitPoliciesTransport = OperationResponse<"ai-list-tenant-self-user-limit-
 type DashboardSummaryTransport = OperationResponse<"ai-get-tenant-self-dashboard-summary">;
 type DashboardTopModelsTransport = OperationResponse<"ai-list-tenant-self-dashboard-top-models">;
 type DashboardRecentErrorsTransport = OperationResponse<"ai-list-tenant-self-dashboard-recent-errors">;
+type SubscriptionPlanPageTransport = OperationResponse<"ai-list-tenant-self-subscription-plans">;
+type SubscriptionPlanTransport = components["schemas"]["SubPlanDTO"];
+type SubscriptionOrderPageTransport = OperationResponse<"ai-list-tenant-self-subscription-orders">;
+type SubscriptionOrderTransport = components["schemas"]["SubOrderDTO"];
+type SubscriptionPageTransport = OperationResponse<"ai-list-tenant-self-subscriptions">;
+type SubscriptionTransport = components["schemas"]["SubscriptionDTO"];
+type SubscriptionPolicyTransport = components["schemas"]["SubPurchasePolicyDTO"];
+type SubscriptionPolicyRevisionTransport = components["schemas"]["SubPurchasePolicyRevisionDTO"];
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -386,6 +398,164 @@ function toDashboardRecentErrors(value: DashboardRecentErrorsTransport): TenantA
     })) ?? [],
     total: value.total
   };
+}
+
+function toSubscriptionPolicy(value: SubscriptionPolicyTransport): TenantSubPurchasePolicy {
+  if (value.period_type !== "none" && value.period_type !== "rolling" && value.period_type !== "calendar") {
+    throw new Error(`Unexpected subscription period type: ${value.period_type}`);
+  }
+  if (value.calendar_unit !== undefined && value.calendar_unit !== "day" && value.calendar_unit !== "week" && value.calendar_unit !== "month") {
+    throw new Error(`Unexpected subscription calendar unit: ${value.calendar_unit}`);
+  }
+  return {
+    lifetime_max_purchases: value.lifetime_max_purchases,
+    period_type: value.period_type,
+    period_max_purchases: value.period_max_purchases,
+    rolling_window_hours: value.rolling_window_hours,
+    calendar_unit: value.calendar_unit,
+    calendar_timezone: value.calendar_timezone,
+    allow_advance_purchase: value.allow_advance_purchase,
+    version: value.version
+  };
+}
+
+function toSubscriptionPlanGroup(value: components["schemas"]["SubPlanGroupDTO"]): TenantSubPlanGroup {
+  return { id: value.id, name: value.name, quota_debit_multiplier: value.quota_debit_multiplier };
+}
+
+function toSubscriptionPlan(value: SubscriptionPlanTransport): TenantSubPlan {
+  if (value.status !== "draft" && value.status !== "on_sale" && value.status !== "off_sale") {
+    throw new Error(`Unexpected subscription plan status: ${value.status}`);
+  }
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    name: value.name,
+    description: value.description,
+    price_micro_usd: value.price_micro_usd,
+    duration_days: value.duration_days,
+    total_limit_micro_usd: value.total_limit_micro_usd,
+    window_5h_limit_micro_usd: value.window_5h_limit_micro_usd,
+    window_7d_limit_micro_usd: value.window_7d_limit_micro_usd,
+    status: value.status,
+    sort_order: value.sort_order,
+    sale_limit: value.sale_limit,
+    sold_count: value.sold_count,
+    reserved_count: value.reserved_count,
+    available_count: value.available_count,
+    sold_out: value.sold_out,
+    groups: value.groups?.map(toSubscriptionPlanGroup) ?? [],
+    purchase_policy: toSubscriptionPolicy(value.purchase_policy),
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toSubscriptionPlanPage(value: SubscriptionPlanPageTransport): TenantSubPage<TenantSubPlan> {
+  return {
+    items: value.items?.map(toSubscriptionPlan) ?? [],
+    total: value.total,
+    page: value.page,
+    size: value.size,
+    included: normalizeIdentityIncluded(value.included)
+  };
+}
+
+function toSubscriptionOrder(value: SubscriptionOrderTransport): TenantSubOrder {
+  return {
+    id: value.id,
+    order_no: value.order_no,
+    tenant_id: value.tenant_id,
+    user_id: value.user_id,
+    plan_id: value.plan_id,
+    plan_name: value.plan_name,
+    price_micro_usd: value.price_micro_usd,
+    status: value.status,
+    debit_reference: value.debit_reference,
+    subscription_id: value.subscription_id,
+    fail_reason: value.fail_reason,
+    purchase_policy_version: value.purchase_policy_version,
+    purchase_policy: toSubscriptionPolicy(value.purchase_policy),
+    paid_at: value.paid_at,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toSubscriptionOrderPage(value: SubscriptionOrderPageTransport): TenantSubPage<TenantSubOrder> {
+  return {
+    items: value.items?.map(toSubscriptionOrder) ?? [],
+    total: value.total,
+    page: value.page,
+    size: value.size,
+    included: normalizeIdentityIncluded(value.included)
+  };
+}
+
+function toSubscription(value: SubscriptionTransport): TenantSubscription {
+  return {
+    id: value.id,
+    tenant_id: value.tenant_id,
+    user_id: value.user_id,
+    plan_id: value.plan_id,
+    order_id: value.order_id,
+    plan_name: value.plan_name,
+    duration_days: value.duration_days,
+    status: value.status,
+    activated_at: value.activated_at,
+    expires_at: value.expires_at,
+    total_limit_micro_usd: value.total_limit_micro_usd,
+    total_used_micro_usd: value.total_used_micro_usd,
+    total_remaining_micro_usd: value.total_remaining_micro_usd,
+    window_5h: { ...value.window_5h },
+    window_7d: { ...value.window_7d },
+    groups: value.groups?.map(toSubscriptionPlanGroup) ?? [],
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toSubscriptionPage(value: SubscriptionPageTransport): TenantSubPage<TenantSubscription> {
+  return {
+    items: value.items?.map(toSubscription) ?? [],
+    total: value.total,
+    page: value.page,
+    size: value.size,
+    included: normalizeIdentityIncluded(value.included)
+  };
+}
+
+function toSubscriptionPolicyInput(value: TenantSubPurchasePolicyInput): components["schemas"]["SubPurchasePolicyInput"] {
+  return {
+    lifetime_max_purchases: value.lifetime_max_purchases ?? undefined,
+    period_type: value.period_type,
+    period_max_purchases: value.period_max_purchases ?? undefined,
+    rolling_window_hours: value.rolling_window_hours ?? undefined,
+    calendar_unit: value.calendar_unit === "" ? undefined : value.calendar_unit,
+    calendar_timezone: value.calendar_timezone,
+    allow_advance_purchase: value.allow_advance_purchase
+  };
+}
+
+function toSubscriptionPlanBody(value: TenantSubPlanWriteRequest): OperationBody<"ai-create-tenant-self-subscription-plan"> {
+  return {
+    name: value.name,
+    description: value.description,
+    price_micro_usd: value.price_micro_usd,
+    duration_days: value.duration_days,
+    total_limit_micro_usd: value.total_limit_micro_usd,
+    window_5h_limit_micro_usd: value.window_5h_limit_micro_usd ?? undefined,
+    window_7d_limit_micro_usd: value.window_7d_limit_micro_usd ?? undefined,
+    sort_order: value.sort_order,
+    sale_limit: value.sale_limit ?? undefined,
+    groups: value.groups,
+    purchase_policy: value.purchase_policy ? toSubscriptionPolicyInput(value.purchase_policy) : undefined
+  };
+}
+
+function toSubscriptionPlanStatus(value: string): "on_sale" | "off_sale" {
+  if (value === "on_sale" || value === "off_sale") return value;
+  throw new Error(`Unexpected subscription plan status: ${value}`);
 }
 
 export { formatUSD };
@@ -851,76 +1021,87 @@ export const aiTenantApi = {
   },
 
   // ---- 订阅制套餐（租户自助管理，docs/ai-subscription-design.md §7.2） ----
-  listSubscriptionPlans(params: { status?: string; limit?: number; offset?: number } = {}) {
-    return request()<TenantSubPage<TenantSubPlan>>({
+  listSubscriptionPlans(params: OperationQuery<"ai-list-tenant-self-subscription-plans"> = {}) {
+    return typedRequest<"ai-list-tenant-self-subscription-plans">({
       method: "GET",
       path: "/api/v1/tenants/me/subscription-plans",
       headers: headers(),
       query: params,
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionPlanPage);
   },
   createSubscriptionPlan(body: TenantSubPlanWriteRequest) {
-    return request()<TenantSubPlan>({
+    return typedRequest<"ai-create-tenant-self-subscription-plan">({
       method: "POST",
       path: "/api/v1/tenants/me/subscription-plans",
-      body,
+      body: toSubscriptionPlanBody(body),
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionPlan);
   },
   updateSubscriptionPlan(planId: string, body: TenantSubPlanWriteRequest) {
-    return request()<TenantSubPlan>({
+    return typedRequest<"ai-update-tenant-self-subscription-plan">({
       method: "PUT",
       path: `/api/v1/tenants/me/subscription-plans/${encodeURIComponent(planId)}`,
-      body,
+      pathParams: { planID: planId },
+      body: toSubscriptionPlanBody(body),
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionPlan);
   },
   reorderSubscriptionPlans(planIds: string[]) {
-    return request()<Record<string, never>>({
+    return typedRequest<"ai-reorder-tenant-self-subscription-plans">({
       method: "PUT",
       path: "/api/v1/tenants/me/subscription-plans/reorder",
       body: { plan_ids: planIds },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(() => ({}));
   },
   listSubscriptionPlanPurchasePolicyRevisions(planId: string) {
-    return request()<{ items: TenantSubPurchasePolicyRevision[] }>({
+    return typedRequest<"ai-list-tenant-self-subscription-plan-purchase-policy-revisions">({
       method: "GET",
       path: `/api/v1/tenants/me/subscription-plans/${encodeURIComponent(planId)}/purchase-policy-revisions`,
+      pathParams: { planID: planId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({
+      items: value.items?.map((item) => ({
+        plan_id: item.plan_id,
+        version: item.version,
+        policy: toSubscriptionPolicy(item.policy),
+        changed_by: item.changed_by,
+        changed_at: item.changed_at
+      })) ?? []
+    }));
   },
   setSubscriptionPlanStatus(planId: string, status: "on_sale" | "off_sale") {
-    return request()<TenantSubPlan>({
+    return typedRequest<"ai-set-tenant-self-subscription-plan-status">({
       method: "PUT",
       path: `/api/v1/tenants/me/subscription-plans/${encodeURIComponent(planId)}/status`,
-      body: { status },
+      pathParams: { planID: planId },
+      body: { status: toSubscriptionPlanStatus(status) },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionPlan);
   },
-  listSubscriptions(params: { user_id?: string; status?: string; limit?: number; offset?: number } = {}) {
-    return request()<TenantSubPage<TenantSubscription>>({
+  listSubscriptions(params: OperationQuery<"ai-list-tenant-self-subscriptions"> = {}) {
+    return typedRequest<"ai-list-tenant-self-subscriptions">({
       method: "GET",
       path: "/api/v1/tenants/me/subscriptions",
       headers: headers(),
       query: params,
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionPage);
   },
-  listSubscriptionOrders(params: { user_id?: string; status?: string; limit?: number; offset?: number } = {}) {
-    return request()<TenantSubPage<TenantSubOrder>>({
+  listSubscriptionOrders(params: OperationQuery<"ai-list-tenant-self-subscription-orders"> = {}) {
+    return typedRequest<"ai-list-tenant-self-subscription-orders">({
       method: "GET",
       path: "/api/v1/tenants/me/subscription-orders",
       headers: headers(),
       query: params,
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionOrderPage);
   },
   listWorkspaceChatSessions(params: { limit?: number } = {}) {
     return request()<{ items: ChatSession[]; total: number }>({
