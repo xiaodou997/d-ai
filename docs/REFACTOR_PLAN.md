@@ -287,6 +287,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [ ] 删除 facade 中的 `any` 返回值和未经校验的 JSON 断言。
 - [ ] CI 检查生成物 freshness、破坏性契约变化和未使用 operation。
 
+### P2-04（Typed operation request boundary，2026-08-28）
+
+- 生成类型：新增 `createTypedOperationRequest`，从生成的 `operations` 推导 JSON request body 与成功响应类型；新请求不再需要手写 `<T>` 响应泛型。
+- 迁移：公开密码策略、账号激活、邀请读取和邀请注册 facade 已使用 operation ID 绑定请求；领域 `PublicInvitation` 通过显式转换校验 OpenAPI 的字符串状态，避免传输 DTO 与领域联合类型混用。
+- 回归：新增 operation client 类型/运行时转发测试；`bun run ensure:api`、Portal typecheck 与前端测试通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
