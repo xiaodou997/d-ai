@@ -373,6 +373,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：生成 DTO 的 `$schema` 不进入页面模型，nullable 列表统一为空数组；API key 状态、target 类型/状态/不可用原因进入页面前校验有限集合，并兼容页面现有可空写入结构。
 - 回归：新增 tenant AI control facade 测试覆盖 schema 清理、nullable 列表、编码 path 参数、旧输入映射和非法状态拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed tenant price-book facade，2026-08-28）
+
+- 迁移：租户价格表、条目、复制/导入导出、常用模型同步等 10 个 facade 请求绑定生成的 OpenAPI operation；价格表搜索 operation 已在前序切片完成。
+- 领域边界：价格表和条目响应显式移除 `$schema`，nullable 条目、token 档位和规格覆盖归一为页面模型；owner/status 与 transfer schema version 在进入页面前校验，导入 body 显式补齐传输字段。
+- 回归：新增 tenant price-book facade 测试覆盖分页/条目空值、schema 清理、编码 path、导入字段映射、同步结果和非法 schema version；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

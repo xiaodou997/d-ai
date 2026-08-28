@@ -89,6 +89,11 @@ type GroupPageTransport = OperationResponse<"ai-list-groups">;
 type DispatchRulePageTransport = OperationResponse<"ai-list-group-dispatch-rules">;
 type DispatchModelPageTransport = OperationResponse<"ai-list-group-dispatch-models">;
 type GroupTargetPageTransport = OperationResponse<"ai-list-group-targets">;
+type PriceBookTransport = components["schemas"]["PriceBookDTO"];
+type PriceBookEntryTransport = components["schemas"]["PriceBookEntryDTO"];
+type PriceBookPageTransport = OperationResponse<"ai-list-tenant-price-books">;
+type PriceBookEntriesPageTransport = OperationResponse<"ai-list-tenant-price-book-entries">;
+type PriceBookTransferTransport = OperationResponse<"ai-export-tenant-price-book">;
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -151,6 +156,79 @@ function toDispatchModelPage(value: DispatchModelPageTransport): { items: Tenant
 
 function toGroupTargetPage(value: GroupTargetPageTransport): { items: TenantAiGroupTarget[]; total: number } {
   return { items: value.items?.map(toGroupTarget) ?? [], total: value.total };
+}
+
+function toPriceBook(value: PriceBookTransport): TenantAiPriceBook {
+  if (value.owner_type !== "platform" && value.owner_type !== "tenant") {
+    throw new Error(`Unexpected price book owner type: ${value.owner_type}`);
+  }
+  if (value.status !== "active" && value.status !== "disabled") {
+    throw new Error(`Unexpected price book status: ${value.status}`);
+  }
+  return { ...stripSchema(value), owner_type: value.owner_type, status: value.status };
+}
+
+function toPriceBookPage(value: PriceBookPageTransport): { items: TenantAiPriceBook[]; total: number } {
+  return { items: value.items?.map(toPriceBook) ?? [], total: value.total };
+}
+
+function toPriceBookEntry(value: PriceBookEntryTransport): TenantAiPriceBookEntry {
+  return {
+    ...stripSchema(value),
+    token_price_tiers: value.token_price_tiers?.map(stripSchema) ?? [],
+    image_prices: value.image_prices?.map(stripSchema) ?? undefined,
+    video_prices: value.video_prices?.map(stripSchema) ?? undefined
+  };
+}
+
+function toPriceBookEntriesPage(value: PriceBookEntriesPageTransport): { items: TenantAiPriceBookEntry[]; total: number } {
+  return { items: value.items?.map(toPriceBookEntry) ?? [], total: value.total };
+}
+
+function toPriceBookTransfer(value: PriceBookTransferTransport): TenantAiPriceBookTransferBundle {
+  if (value.schema_version !== 1) throw new Error(`Unsupported price book schema version: ${value.schema_version}`);
+  return {
+    schema_version: 1,
+    name: value.name,
+    description: value.description,
+    entries: value.entries?.map(toPriceBookEntry) ?? []
+  };
+}
+
+function toPriceBookEntryBody(value: TenantAiPriceBookEntryWriteRequest): OperationBody<"ai-upsert-tenant-price-book-entry"> {
+  return {
+    capability_type: value.capability_type,
+    token_price_tiers: value.token_price_tiers,
+    image_default_price_usd: value.image_default_price_usd,
+    video_default_price_usd: value.video_default_price_usd,
+    image_prices: value.image_prices,
+    video_prices: value.video_prices,
+    audio_tts_per_1m_chars_usd: value.audio_tts_per_1m_chars_usd,
+    audio_stt_per_minute_usd: value.audio_stt_per_minute_usd
+  };
+}
+
+function toPriceBookTransferBody(value: TenantAiPriceBookTransferBundle): OperationBody<"ai-import-tenant-price-book"> {
+  if (value.schema_version !== 1) throw new Error(`Unsupported price book schema version: ${value.schema_version}`);
+  return {
+    schema_version: 1,
+    name: value.name,
+    description: value.description,
+    entries: value.entries.map((entry) => ({
+      model_code: entry.model_code,
+      capability_type: entry.capability_type,
+      token_price_tiers: entry.token_price_tiers,
+      image_default_price_usd: entry.image_default_price_usd,
+      video_default_price_usd: entry.video_default_price_usd,
+      image_prices: entry.image_prices ?? null,
+      video_prices: entry.video_prices ?? null,
+      audio_tts_per_1m_chars_usd: entry.audio_tts_per_1m_chars_usd,
+      audio_stt_per_minute_usd: entry.audio_stt_per_minute_usd,
+      source: entry.source ?? "manual",
+      manually_edited: entry.manually_edited ?? true,
+      updated_at: entry.updated_at
+    }))
+  };
 }
 
 export { formatUSD };
@@ -448,29 +526,32 @@ export const aiTenantApi = {
 
   // ---- 租户价格表（平台表只读，租户表可写） ----
   listPriceBooks() {
-    return request()<{ items: TenantAiPriceBook[]; total: number }>({
+    return typedRequest<"ai-list-tenant-price-books">({
       method: "GET", path: "/api/v1/tenants/me/price-books", headers: headers(), baseUrl: baseUrl()
-    });
+    }).then(toPriceBookPage);
   },
   createPriceBook(body: { name: string; description?: string }) {
-    return request()<TenantAiPriceBook>({
+    return typedRequest<"ai-create-tenant-price-book">({
       method: "POST", path: "/api/v1/tenants/me/price-books", headers: headers(), body, baseUrl: baseUrl()
-    });
+    }).then(toPriceBook);
   },
   updatePriceBook(bookId: string, body: { name: string; description?: string; status?: "active" | "disabled" }) {
-    return request()<TenantAiPriceBook>({
-      method: "PATCH", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}`, headers: headers(), body, baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-update-tenant-price-book">({
+      method: "PATCH", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}`,
+      pathParams: { bookID: bookId }, headers: headers(), body, baseUrl: baseUrl()
+    }).then(toPriceBook);
   },
   deletePriceBook(bookId: string) {
-    return request()<TenantAiDeleteOutputBody>({
-      method: "DELETE", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}`, headers: headers(), baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-delete-tenant-price-book">({
+      method: "DELETE", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}`,
+      pathParams: { bookID: bookId }, headers: headers(), baseUrl: baseUrl()
+    }).then((value) => ({ deleted: value.deleted }));
   },
   copyPriceBook(bookId: string, name?: string) {
-    return request()<TenantAiPriceBook>({
-      method: "POST", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/clone`, headers: headers(), body: { name }, baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-clone-tenant-price-book">({
+      method: "POST", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/clone`,
+      pathParams: { bookID: bookId }, headers: headers(), body: { name }, baseUrl: baseUrl()
+    }).then(toPriceBook);
   },
   searchLiteLLMPriceModels(q: string, limit = 50) {
     return typedRequest<"ai-search-tenant-litellm-price-models">({
@@ -481,35 +562,39 @@ export const aiTenantApi = {
     }));
   },
   listPriceBookEntries(bookId: string) {
-    return request()<{ items: TenantAiPriceBookEntry[]; total: number }>({
-      method: "GET", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/entries`, headers: headers(), baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-list-tenant-price-book-entries">({
+      method: "GET", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/entries`,
+      pathParams: { bookID: bookId }, headers: headers(), baseUrl: baseUrl()
+    }).then(toPriceBookEntriesPage);
   },
   upsertPriceBookEntry(bookId: string, modelCode: string, body: TenantAiPriceBookEntryWriteRequest) {
-    return request()<TenantAiPriceBookEntry>({
-      method: "PUT", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`, headers: headers(), body, baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-upsert-tenant-price-book-entry">({
+      method: "PUT", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`,
+      pathParams: { bookID: bookId, modelCode }, headers: headers(), body: toPriceBookEntryBody(body), baseUrl: baseUrl()
+    }).then(toPriceBookEntry);
   },
   deletePriceBookEntry(bookId: string, modelCode: string, capabilityType: string) {
-    return request()<TenantAiDeleteOutputBody>({
+    return typedRequest<"ai-delete-tenant-price-book-entry">({
       method: "DELETE", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/entries/${encodeURIComponent(modelCode)}`,
-      query: { capability_type: capabilityType }, headers: headers(), baseUrl: baseUrl()
-    });
+      pathParams: { bookID: bookId, modelCode }, query: { capability_type: capabilityType }, headers: headers(), baseUrl: baseUrl()
+    }).then((value) => ({ deleted: value.deleted }));
   },
   syncCommonPriceModels(bookId: string) {
-    return request()<{ synced: number; missing: string[] }>({
-      method: "POST", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/sync-common`, headers: headers(), baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-sync-tenant-common-price-models">({
+      method: "POST", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/sync-common`,
+      pathParams: { bookID: bookId }, headers: headers(), baseUrl: baseUrl()
+    }).then((value) => ({ synced: value.synced, missing: value.missing ?? [] }));
   },
   importPriceBook(body: TenantAiPriceBookTransferBundle) {
-    return request()<TenantAiPriceBook>({
-      method: "POST", path: "/api/v1/tenants/me/price-books/import", headers: headers(), body, baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-import-tenant-price-book">({
+      method: "POST", path: "/api/v1/tenants/me/price-books/import", headers: headers(), body: toPriceBookTransferBody(body), baseUrl: baseUrl()
+    }).then(toPriceBook);
   },
   exportPriceBook(bookId: string) {
-    return request()<TenantAiPriceBookTransferBundle>({
-      method: "GET", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/export`, headers: headers(), baseUrl: baseUrl()
-    });
+    return typedRequest<"ai-export-tenant-price-book">({
+      method: "GET", path: `/api/v1/tenants/me/price-books/${encodeURIComponent(bookId)}/export`,
+      pathParams: { bookID: bookId }, headers: headers(), baseUrl: baseUrl()
+    }).then(toPriceBookTransfer);
   },
 
   // ---- 不含地址、密钥和内部模型名的上游目录 ----
