@@ -7,10 +7,13 @@ import type {
   IdentityIncludedTenant,
   IdentityIncludedUser
 } from "@/platform/ai/identity";
+import type { components } from "../generated/dai";
 
 export type IdentityUserDTO = IdentityIncludedUser;
 export type IdentityTenantDTO = IdentityIncludedTenant;
 export type IdentityIncludedDTO = IdentityIncluded;
+export type LiteLLMModelInfo = components["schemas"]["LiteLLMModelInfo"];
+export type LiteLLMModelsOutputBody = components["schemas"]["LiteLLMModelsOutputBody"];
 
 export type {
   AccountDTO,

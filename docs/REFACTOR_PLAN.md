@@ -299,6 +299,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：`PublicInvitation` 保留为领域 view model，由显式 mapper 处理 OpenAPI 的 `$schema`、字符串状态和可空 `expiresAt`，未知状态安全降级为 `not_found`。
 - 回归：公开认证/邀请页面测试、operation client 测试、`bun run ensure:api`、Portal typecheck、全量 Portal 测试及 Go 全量验证通过。
 
+### P2-04（Remove facade any response，2026-08-28）
+
+- 变更：`aiAdminApi.searchLiteLLMModels` 改用生成的 `LiteLLMModelsOutputBody` / `LiteLLMModelInfo`，移除唯一 `items: any[]` facade 返回。
+- 领域边界：facade 将生成 DTO 中可空的 `token_price_tiers` 归一化为页面领域模型所需数组，不把 nullable 传输语义泄漏到组件。
+- 回归：API 目录不再包含 `any[]`、`Promise<any>` 或 `as any`；Portal 65 个测试文件、217 个断言、typecheck、`ensure:api` 及 Go 全量门禁通过。全量测试仍受既有 migration 0019 OID 环境 flake 影响。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

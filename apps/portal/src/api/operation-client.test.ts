@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createTypedOperationRequest, type RequestAdapter } from ".";
 import type { PublicRegistrationPayload } from "./types/platformPublic";
+import type { LiteLLMModelsOutputBody } from "./types/ai";
 
 describe("typed OpenAPI operation request", () => {
   it("infers generated response and forwards the operation request", async () => {
@@ -30,5 +31,10 @@ describe("typed OpenAPI operation request", () => {
       privacyVersion: "2026-07-19"
     };
     expect(payload.email).toBeUndefined();
+  });
+
+  it("exposes generated LiteLLM response fields without any", () => {
+    const result: LiteLLMModelsOutputBody = { items: [], total: 0 };
+    expect(result.items).toEqual([]);
   });
 });

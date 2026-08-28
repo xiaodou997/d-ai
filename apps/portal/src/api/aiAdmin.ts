@@ -49,7 +49,9 @@ import type {
   RiskControlTestResultDTO,
   RiskControlLogsOutputBody,
   RiskEventDTO,
-  RiskEventsOutputBody
+  RiskEventsOutputBody,
+  LiteLLMModelsOutputBody,
+  LiteLLMModelInfo
 } from "./types/ai";
 
 function request() {
@@ -273,13 +275,19 @@ export const aiAdminApi = {
     });
   },
   searchLiteLLMModels(q: string, limit = 50) {
-    return request()<{ items: any[]; total: number }>({
+    return request()<LiteLLMModelsOutputBody>({
       method: "GET",
       path: "/api/v1/price-books/litellm/models",
       query: { q, limit },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((response) => ({
+      ...response,
+      items: (response.items ?? []).map((model: LiteLLMModelInfo) => ({
+        ...model,
+        token_price_tiers: model.token_price_tiers ?? []
+      }))
+    }));
   },
   syncCommonModels(bookId: string) {
     return request()<{ synced: number; missing: string[] }>({
