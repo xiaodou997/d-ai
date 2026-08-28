@@ -1,5 +1,9 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
-import { createTypedOperationRequest } from ".";
+import {
+  createTypedOperationRequest,
+  type OperationBody,
+  type OperationResponse
+} from ".";
 import type {
   AccountBalanceOutput,
   BatchOpResult,
@@ -37,6 +41,94 @@ function request() {
 
 const typedRequest = createTypedOperationRequest(request());
 
+type AdminUserPageTransport = OperationResponse<"admin-list-system-admins">;
+type AdminUserTransport = NonNullable<AdminUserPageTransport["items"]>[number];
+type TenantPageTransport = OperationResponse<"admin-list-tenants">;
+type TenantTransport = NonNullable<TenantPageTransport["items"]>[number];
+type EndUserPageTransport = OperationResponse<"admin-list-end-users">;
+type EndUserTransport = NonNullable<EndUserPageTransport["items"]>[number];
+
+function toOperationStatus(value: { success: boolean }): { status: string } {
+  return { status: value.success ? "success" : "failed" };
+}
+
+function toCredentialState(value: string): "active" | "pending_activation" {
+  if (value === "active" || value === "pending_activation") return value;
+  throw new Error(`Unexpected credential state: ${value}`);
+}
+
+function toAdminUser(value: AdminUserTransport): PageAdminUserItem["items"][number] {
+  return {
+    userId: value.userId,
+    username: value.username,
+    email: value.email,
+    status: value.status,
+    statusText: value.statusText,
+    credentialState: toCredentialState(value.credentialState),
+    createdTime: value.createdTime
+  };
+}
+
+function toAdminUserPage(value: AdminUserPageTransport): PageAdminUserItem {
+  return { items: value.items?.map(toAdminUser) ?? [], total: value.total, page: value.page, size: value.size };
+}
+
+function toTenant(value: TenantTransport): PageTenantListItem["items"][number] {
+  return {
+    tenantId: value.tenantId,
+    tenantName: value.tenantName,
+    contactPerson: value.contactPerson,
+    contactEmail: value.contactEmail,
+    status: value.status,
+    statusDisplay: value.statusDisplay,
+    balanceUsd: value.balanceUsd,
+    userCount: value.userCount,
+    createdTime: value.createdTime
+  };
+}
+
+function toTenantPage(value: TenantPageTransport): PageTenantListItem {
+  return { items: value.items?.map(toTenant) ?? [], total: value.total, page: value.page, size: value.size };
+}
+
+function toEndUser(value: EndUserTransport): PageEndUserItem["items"][number] {
+  return {
+    userId: value.userId,
+    tenantId: value.tenantId,
+    tenantName: value.tenantName,
+    username: value.username,
+    nickname: value.nickname,
+    email: value.email,
+    phone: value.phone,
+    status: value.status,
+    credentialState: toCredentialState(value.credentialState),
+    balanceUsd: value.balanceUsd,
+    createdTime: value.createdTime,
+    lastLoginTime: value.lastLoginTime
+  };
+}
+
+function toEndUserPage(value: EndUserPageTransport): PageEndUserItem {
+  return { items: value.items?.map(toEndUser) ?? [], total: value.total, page: value.page, size: value.size };
+}
+
+function toCreateAdminUser(value: OperationResponse<"admin-create-system-admin">): CreateAdminUserOutput {
+  return {
+    userId: value.userId,
+    username: value.username,
+    activationToken: value.activationToken,
+    activationExpiresIn: value.activationExpiresIn
+  };
+}
+
+function toActivation(value: OperationResponse<"admin-reset-system-admin-password">): ActivationCredentialOutput {
+  return { activationToken: value.activationToken, activationExpiresIn: value.activationExpiresIn };
+}
+
+function toMessage(value: { message: string }): { message: string } {
+  return { message: value.message };
+}
+
 export const platformAdminApi = {
   // ---- 账号自助 ----
   // 修改本人密码（后端统一密码策略）
@@ -52,58 +144,61 @@ export const platformAdminApi = {
 
   // ---- 系统管理员 ----
   listSystemAdmins(params: { page?: number; size?: number; keyword?: string }) {
-    return request()<PageAdminUserItem>({
+    return typedRequest<"admin-list-system-admins">({
       method: "GET",
       path: "/api/v1/system-admins",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminUserPage);
   },
-  createSystemAdmin(body: { username: string; email?: string }) {
-    return request()<CreateAdminUserOutput>({
+  createSystemAdmin(body: OperationBody<"admin-create-system-admin">) {
+    return typedRequest<"admin-create-system-admin">({
       method: "POST",
       path: "/api/v1/system-admins",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toCreateAdminUser);
   },
-  updateSystemAdmin(id: string, body: { email?: string; status?: number }) {
-    return request()<{ status: string }>({
+  updateSystemAdmin(id: string, body: OperationBody<"admin-update-system-admin">) {
+    return typedRequest<"admin-update-system-admin">({
       method: "PUT",
       path: `/api/v1/system-admins/${encodeURIComponent(id)}`,
+      pathParams: { id },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
   deleteSystemAdmin(id: string) {
-    return request()<{ status: string }>({
+    return typedRequest<"admin-delete-system-admin">({
       method: "DELETE",
       path: `/api/v1/system-admins/${encodeURIComponent(id)}`,
+      pathParams: { id },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
   resetSystemAdminPassword(id: string) {
-    return request()<ActivationCredentialOutput>({
+    return typedRequest<"admin-reset-system-admin-password">({
       method: "POST",
       path: `/api/v1/system-admins/${encodeURIComponent(id)}/reset-password`,
+      pathParams: { id },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toActivation);
   },
 
   // ---- 租户 ----
   listTenants(params: { page?: number; size?: number; keyword?: string; status?: number }) {
-    return request()<PageTenantListItem>({
+    return typedRequest<"admin-list-tenants">({
       method: "GET",
       path: "/api/v1/tenants",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toTenantPage);
   },
   getAccountBalance(params: { accountType: number; accountId: string; detail?: boolean }) {
     return request()<AccountBalanceOutput>({
@@ -115,114 +210,124 @@ export const platformAdminApi = {
     });
   },
   getTenant(id: string) {
-    return request()<TenantDetailOutput>({
+    return typedRequest<"admin-get-tenant">({
       method: "GET",
       path: `/api/v1/tenants/${encodeURIComponent(id)}`,
+      pathParams: { id },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value): TenantDetailOutput => ({
+      tenantId: value.tenantId,
+      tenantName: value.tenantName,
+      contactPerson: value.contactPerson,
+      contactEmail: value.contactEmail,
+      status: value.status,
+      statusDisplay: value.statusDisplay,
+      createdTime: value.createdTime,
+      isWildcard: false,
+      clientIds: []
+    }));
   },
-  createTenant(body: {
-    tenantName: string;
-    contactPerson?: string;
-    contactEmail?: string;
-    status?: number;
-    initUsername?: string;
-    initEmail?: string;
-  }) {
-    return request()<{
-      tenantId: string;
-      initUserId?: string;
-      initUsername?: string;
-      activationToken?: string;
-      activationExpiresIn?: number;
-    }>({
+  createTenant(body: OperationBody<"admin-create-tenant">) {
+    return typedRequest<"admin-create-tenant">({
       method: "POST",
       path: "/api/v1/tenants",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({
+      tenantId: value.tenantId,
+      initUserId: value.initUserId,
+      initUsername: value.initUsername,
+      activationToken: value.activationToken,
+      activationExpiresIn: value.activationExpiresIn
+    }));
   },
   updateTenant(
     id: string,
-    body: {
-      tenantName: string;
-      contactPerson?: string;
-      contactEmail?: string;
-      status?: number;
-    }
+    body: OperationBody<"admin-update-tenant">
   ) {
-    return request()<{ status: string }>({
+    return typedRequest<"admin-update-tenant">({
       method: "PUT",
       path: `/api/v1/tenants/${encodeURIComponent(id)}`,
+      pathParams: { id },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
   deleteTenant(id: string) {
-    return request()<{ status: string }>({
+    return typedRequest<"admin-delete-tenant">({
       method: "DELETE",
       path: `/api/v1/tenants/${encodeURIComponent(id)}`,
+      pathParams: { id },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
-  updateTenantStatus(id: string, status: "active" | "disabled") {
-    return request()<{ status: string }>({
+  updateTenantStatus(id: string, status: OperationBody<"admin-update-tenant-status">["status"]) {
+    return typedRequest<"admin-update-tenant-status">({
       method: "PATCH",
       path: `/api/v1/tenants/${encodeURIComponent(id)}/status`,
+      pathParams: { id },
       headers: apiHeaders,
       body: { status },
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
 
   // ---- 租户用户 ----
   listTenantUsers(params: { page?: number; size?: number; tenantId?: string; keyword?: string }) {
-    return request()<PageAdminUserItem>({
+    return typedRequest<"admin-list-tenant-users">({
       method: "GET",
       path: "/api/v1/tenant-users",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminUserPage);
   },
-  createTenantUser(body: { tenantId: string; username: string; email?: string }) {
-    return request()<CreateAdminUserOutput>({
+  createTenantUser(body: OperationBody<"admin-create-tenant-user">) {
+    return typedRequest<"admin-create-tenant-user">({
       method: "POST",
       path: "/api/v1/tenant-users",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then((value): CreateAdminUserOutput => ({
+      userId: value.userId,
+      username: value.username,
+      activationToken: value.activationToken,
+      activationExpiresIn: value.activationExpiresIn
+    }));
   },
-  updateTenantUserStatus(id: string, status: "active" | "disabled") {
-    return request()<{ status: string }>({
+  updateTenantUserStatus(id: string, status: OperationBody<"admin-update-tenant-user-status">["status"]) {
+    return typedRequest<"admin-update-tenant-user-status">({
       method: "PATCH",
       path: `/api/v1/tenant-users/${encodeURIComponent(id)}/status`,
+      pathParams: { id },
       headers: apiHeaders,
       body: { status },
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
-  updateTenantUser(id: string, body: { email?: string; status?: number }) {
-    return request()<{ status: string }>({
+  updateTenantUser(id: string, body: OperationBody<"admin-update-tenant-user">) {
+    return typedRequest<"admin-update-tenant-user">({
       method: "PUT",
       path: `/api/v1/tenant-users/${encodeURIComponent(id)}`,
+      pathParams: { id },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toOperationStatus);
   },
   resetTenantUserPassword(id: string) {
-    return request()<ActivationCredentialOutput>({
+    return typedRequest<"admin-reset-tenant-user-password">({
       method: "POST",
       path: `/api/v1/tenant-users/${encodeURIComponent(id)}/reset-password`,
+      pathParams: { id },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ activationToken: value.activationToken, activationExpiresIn: value.activationExpiresIn }));
   },
 
   // ---- 终端用户 ----
@@ -235,39 +340,46 @@ export const platformAdminApi = {
     username?: string;
     status?: number;
   }) {
-    return request()<PageEndUserItem>({
+    return typedRequest<"admin-list-end-users">({
       method: "GET",
       path: "/api/v1/users",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toEndUserPage);
   },
-  createEndUser(body: { username: string; email?: string; phone?: string }) {
-    return request()<CreateAdminUserOutput>({
+  createEndUser(body: OperationBody<"admin-create-end-user">) {
+    return typedRequest<"admin-create-end-user">({
       method: "POST",
       path: "/api/v1/users",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then((value): CreateAdminUserOutput => ({
+      userId: value.userId,
+      username: value.username,
+      activationToken: value.activationToken,
+      activationExpiresIn: value.activationExpiresIn
+    }));
   },
-  updateEndUserStatus(id: string, status: "active" | "disabled") {
-    return request()<{ message: string }>({
+  updateEndUserStatus(id: string, status: OperationBody<"admin-update-end-user-status">["status"]) {
+    return typedRequest<"admin-update-end-user-status">({
       method: "PATCH",
       path: `/api/v1/users/${encodeURIComponent(id)}/status`,
+      pathParams: { id },
       headers: apiHeaders,
       body: { status },
       baseUrl: apiBaseUrl
-    });
+    }).then(toMessage);
   },
   resetEndUserPassword(id: string) {
-    return request()<ActivationCredentialOutput>({
+    return typedRequest<"admin-reset-end-user-password">({
       method: "POST",
       path: `/api/v1/users/${encodeURIComponent(id)}/reset-password`,
+      pathParams: { id },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ activationToken: value.activationToken, activationExpiresIn: value.activationExpiresIn }));
   },
 
   listRechargeRecords(params: {

@@ -357,23 +357,15 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P2-04（Typed customer AI facade，2026-08-28）
 
 - 迁移：用户端 API key、分组价格、订阅和工作台 control-plane 请求全部绑定生成的 21 个 OpenAPI operation；`runtime/v1` 流式/图片协议保持独立 transport，不与 control-plane DTO 混用。
-- 契约准确性：API key nullable 输入、订阅购买动态 `202 Accepted` 和无当前订阅的 `null` 响应已反映到 Huma/OpenAPI 生成物；operation request 推导必填 `Idempotency-Key` header 与 path 参数。
-- 领域边界：新增 customer AI mapper，归一 nullable 列表、移除 `$schema`、校验 API key/订阅状态与购买策略枚举，并保留页面所需 view model，未知值拒绝进入 UI 状态。
-- 回归：新增 mapper 与 facade 请求测试覆盖 nullable/枚举/path/header 边界；完整 Portal 及 Go 门禁结果随本次提交记录。
-
-### P2-04（Typed customer AI facade，2026-08-28）
-
-- 迁移：用户端 API key、分组价格、订阅和工作台 control-plane 请求全部绑定生成的 21 个 OpenAPI operation；`runtime/v1` 流式/图片协议保持独立 transport，不与 control-plane DTO 混用。
-- 契约准确性：API key nullable 输入、订阅购买动态 `202 Accepted` 和无当前订阅的 `null` 响应已反映到 Huma/OpenAPI 生成物；operation request 推导必填 `Idempotency-Key` header 与 path 参数。
-- 领域边界：新增 customer AI mapper，归一 nullable 列表、移除 `$schema`、校验 API key/订阅状态与购买策略枚举，并保留页面所需 view model，未知值拒绝进入 UI 状态。
-- 回归：新增 mapper 及 operation 类型测试；customer AI 定向测试、Portal typecheck、OpenAPI gate 和后端 subscription contract 测试通过，完整 Go 门禁随本次提交记录。
-
-### P2-04（Typed customer AI facade，2026-08-28）
-
-- 迁移：用户端 API key、分组价格、订阅和工作台 control-plane 请求全部绑定生成的 21 个 OpenAPI operation；`runtime/v1` 流式/图片协议保持独立 transport，不与 control-plane DTO 混用。
 - 契约准确性：API key nullable 输入、订阅购买动态 `202 Accepted` 和无当前订阅的 `null` 响应已反映到 Huma/OpenAPI 生成物；operation request 现在推导必填 header，购买幂等键在编译期受约束。
 - 领域边界：新增 customer AI mapper，归一 nullable 列表、移除 `$schema`、校验 API key/订阅状态与购买策略枚举，并保留页面所需 snake_case view model，未知值拒绝进入 UI 状态。
 - 回归：新增 mapper 及 operation 类型测试；customer AI 定向测试、Portal typecheck、OpenAPI gate 和后端 subscription contract 测试通过，完整 Go 门禁随本次提交记录。
+
+### P2-04（Typed platform identity/admin facade，2026-08-28）
+
+- 迁移：管理员账号、租户、租户用户和终端用户管理的 20 个 facade 请求绑定生成的 OpenAPI operation；请求 body、path 参数和响应类型不再重复声明传输 DTO。
+- 领域边界：分页 `items: null` 统一为空数组，credential state 只接受 `active`/`pending_activation`；兼容层保留旧页面需要的 `{status}`、激活凭据和租户详情字段。
+- 回归：新增 platform admin facade 测试覆盖分页空值、未知 credential state、租户详情兼容字段、编码 path 参数和状态/重置响应；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
 ### P2-05 按 feature 垂直切分 Portal
 
