@@ -329,6 +329,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：认证 store 继续使用稳定的 `AuthTokenResponse` / `UserInfoResponse` facade 类型，生成 transport schema 不直接泄漏到页面状态。
 - 回归：认证定向测试 7 项、完整 Portal 220 项测试、typecheck、`ensure:api`、Go 全量测试、`go vet`、`go build`、`checkdeps` 和 `git diff --check` 通过。
 
+### P2-04（Typed profile/password facades，2026-08-28）
+
+- 迁移：管理端、租户端和用户端的修改密码 facade 统一绑定生成的 `auth-change-password` operation；租户端和用户端的个人资料更新绑定 `auth-update-profile`，共享 `api/types/auth.ts` 的生成 DTO 别名并删除手写 `message` 响应 DTO。
+- 空值边界：页面友好的 `ProfileUpdateInput` 仍使用可选字段，facade 显式转换为生成 DTO 要求的 `string | null`，避免 nullable 传输语义泄漏到页面组件。
+- 回归：完整 Portal 221 项测试、typecheck、认证与 operation client 定向测试、`ensure:api` 通过；全仓 Go 验证结果随本次提交记录。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

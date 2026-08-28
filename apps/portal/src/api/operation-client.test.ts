@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createTypedOperationRequest, type RequestAdapter, type OperationQuery } from ".";
 import type { PublicRegistrationPayload } from "./types/platformPublic";
+import type { ChangePasswordPayload, UpdateProfilePayload } from "./types/auth";
 import type { LiteLLMModelsOutputBody } from "./types/ai";
 
 describe("typed OpenAPI operation request", () => {
@@ -41,5 +42,13 @@ describe("typed OpenAPI operation request", () => {
   it("derives operation query keys from the OpenAPI contract", () => {
     const query: OperationQuery<"ai-search-litellm-price-models"> = { q: "gpt", limit: 10 };
     expect(query.limit).toBe(10);
+  });
+
+  it("keeps nullable profile fields at the generated transport boundary", () => {
+    const password: ChangePasswordPayload = { oldPassword: "old", newPassword: "new" };
+    const profile: UpdateProfilePayload = { username: null, email: "user@example.com" };
+
+    expect(password.newPassword).toBe("new");
+    expect(profile.username).toBeNull();
   });
 });

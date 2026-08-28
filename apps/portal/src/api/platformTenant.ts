@@ -1,5 +1,6 @@
 // Portal 租户自助业务 API。
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
+import { createTypedOperationRequest } from ".";
 import type {
   AccountBalance,
   ActivationCredentialOutput,
@@ -15,18 +16,20 @@ import type {
   TenantAnalyticsOverview,
   UserConsumptionItem
 } from "./types/platformTenant";
+import type { ChangePasswordPayload, ProfileUpdateInput, UpdateProfilePayload } from "./types/auth";
 
 function platform() {
   return authenticatedRequest();
 }
 
 const baseUrl = apiBaseUrl;
+const typedRequest = createTypedOperationRequest(platform());
 
 export const platformTenantApi = {
   // ===== 账号自助 =====
   // 修改密码（后端统一密码策略）
-  changePassword(body: { oldPassword: string; newPassword: string }) {
-    return platform()<{ message: string }>({
+  changePassword(body: ChangePasswordPayload) {
+    return typedRequest<"auth-change-password">({
       method: "PUT",
       path: "/api/auth/password",
       headers: apiHeaders,
@@ -35,12 +38,15 @@ export const platformTenantApi = {
     });
   },
 
-  updateProfile(body: { username?: string; email?: string }) {
-    return platform()<{ message: string }>({
+  updateProfile(body: ProfileUpdateInput) {
+    return typedRequest<"auth-update-profile">({
       method: "PUT",
       path: "/api/auth/profile",
       headers: apiHeaders,
-      body,
+      body: {
+        username: body.username ?? null,
+        email: body.email ?? null
+      } satisfies UpdateProfilePayload,
       baseUrl
     });
   },

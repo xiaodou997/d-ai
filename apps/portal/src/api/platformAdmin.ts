@@ -1,4 +1,5 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
+import { createTypedOperationRequest } from ".";
 import type {
   AccountBalanceOutput,
   BatchOpResult,
@@ -28,16 +29,19 @@ import type {
   WechatConfig,
   WechatConfigWriteInput
 } from "./types/admin";
+import type { ChangePasswordPayload } from "./types/auth";
 
 function request() {
   return authenticatedRequest();
 }
 
+const typedRequest = createTypedOperationRequest(request());
+
 export const platformAdminApi = {
   // ---- 账号自助 ----
   // 修改本人密码（后端统一密码策略）
-  changePassword(body: { oldPassword: string; newPassword: string }) {
-    return request()<{ message: string }>({
+  changePassword(body: ChangePasswordPayload) {
+    return typedRequest<"auth-change-password">({
       method: "PUT",
       path: "/api/auth/password",
       headers: apiHeaders,

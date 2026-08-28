@@ -3,6 +3,7 @@
 // 用户端统一使用 D-AI 的 /api/v1 业务端点和 /api/auth 账号端点。
 // 终端用户分支由后端按 claims.UserType==4 自动锁定本人范围，前端无需传 userId。
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
+import { createTypedOperationRequest } from ".";
 import type {
   AccountBalance,
   CustomerPortalBrand,
@@ -13,12 +14,14 @@ import type {
   TopupOrderItem,
   TopupOrderStatus
 } from "./types/platformCustomer";
+import type { ChangePasswordPayload, ProfileUpdateInput, UpdateProfilePayload } from "./types/auth";
 
 function platform() {
   return authenticatedRequest();
 }
 
 const baseUrl = apiBaseUrl;
+const typedRequest = createTypedOperationRequest(platform());
 
 export const platformCustomerApi = {
   getPortalBrand() {
@@ -52,8 +55,8 @@ export const platformCustomerApi = {
   },
 
   // 修改密码（后端统一密码策略）
-  changePassword(body: { oldPassword: string; newPassword: string }) {
-    return platform()<{ message: string }>({
+  changePassword(body: ChangePasswordPayload) {
+    return typedRequest<"auth-change-password">({
       method: "PUT",
       path: "/api/auth/password",
       headers: apiHeaders,
@@ -62,12 +65,15 @@ export const platformCustomerApi = {
     });
   },
 
-  updateProfile(body: { username?: string; email?: string }) {
-    return platform()<{ message: string }>({
+  updateProfile(body: ProfileUpdateInput) {
+    return typedRequest<"auth-update-profile">({
       method: "PUT",
       path: "/api/auth/profile",
       headers: apiHeaders,
-      body,
+      body: {
+        username: body.username ?? null,
+        email: body.email ?? null
+      } satisfies UpdateProfilePayload,
       baseUrl
     });
   },
