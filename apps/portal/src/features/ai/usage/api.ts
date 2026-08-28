@@ -1,4 +1,4 @@
-import type { RequestAdapter } from "@/api";
+import { createTypedOperationRequest, type RequestAdapter } from "@/api";
 import type { components as AiComponents } from "@/api/ai";
 import type { components as PlatformComponents } from "@/api/platform";
 
@@ -30,20 +30,22 @@ export interface AdminUsageApi {
 export function createAdminUsageApi(adapter: RequestAdapter = authenticatedRequest()): AdminUsageApi {
   const base = apiBaseUrl;
   const headers = apiHeaders;
+  const request = createTypedOperationRequest(adapter);
   return {
-    listLogs: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-logs", query, headers, baseUrl: base, signal }),
-    getDetail: (requestId, signal) => adapter({
+    listLogs: (query, signal) => request<"ai-list-usage-logs">({ method: "GET", path: "/api/v1/usage-logs", query, headers, baseUrl: base, signal }),
+    getDetail: (requestId, signal) => request<"ai-get-usage-log-detail">({
       method: "GET",
       path: `/api/v1/usage-logs/${encodeURIComponent(requestId)}`,
+      pathParams: { requestID: requestId },
       headers,
       baseUrl: base,
       signal
     }),
-    listSummary: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-summary", query, headers, baseUrl: base, signal }),
-    listUnitSummary: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-unit-summary", query, headers, baseUrl: base, signal }),
-    listUpstreamSummary: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-upstream-summary", query, headers, baseUrl: base, signal }),
-    listUserRanking: (query, signal) => adapter({ method: "GET", path: "/api/v1/usage-ranking/users", query, headers, baseUrl: base, signal }),
-    listDailyTrend: (query, signal) => adapter({ method: "GET", path: "/api/v1/analytics/daily-trend", query, headers, baseUrl: base, signal })
+    listSummary: (query, signal) => request<"ai-list-usage-summary">({ method: "GET", path: "/api/v1/usage-summary", query, headers, baseUrl: base, signal }),
+    listUnitSummary: (query, signal) => request<"ai-list-usage-unit-summary">({ method: "GET", path: "/api/v1/usage-unit-summary", query, headers, baseUrl: base, signal }),
+    listUpstreamSummary: (query, signal) => request<"ai-list-usage-upstream-summary">({ method: "GET", path: "/api/v1/usage-upstream-summary", query, headers, baseUrl: base, signal }),
+    listUserRanking: (query, signal) => request<"ai-list-usage-user-ranking">({ method: "GET", path: "/api/v1/usage-ranking/users", query, headers, baseUrl: base, signal }),
+    listDailyTrend: (query, signal) => request<"ai-list-daily-trend">({ method: "GET", path: "/api/v1/analytics/daily-trend", query, headers, baseUrl: base, signal })
   };
 }
 
@@ -63,8 +65,10 @@ export function createTenantUsageApi(
   aiRequest: RequestAdapter = authenticatedRequest(),
   platformRequest: RequestAdapter = authenticatedRequest()
 ): TenantUsageApi {
+  const tenantRequest = createTypedOperationRequest(aiRequest);
+  const platformRequestTyped = createTypedOperationRequest(platformRequest);
   return {
-    listRecords: (query, signal) => aiRequest({
+    listRecords: (query, signal) => tenantRequest<"ai-list-tenant-self-usage-logs">({
       method: "GET",
       path: "/api/v1/tenants/me/usage-logs",
       query,
@@ -72,7 +76,7 @@ export function createTenantUsageApi(
       baseUrl: apiBaseUrl,
       signal
     }),
-    listSummary: (query, signal) => aiRequest({
+    listSummary: (query, signal) => tenantRequest<"ai-list-tenant-self-usage-summary">({
       method: "GET",
       path: "/api/v1/tenants/me/usage-summary",
       query,
@@ -80,7 +84,7 @@ export function createTenantUsageApi(
       baseUrl: apiBaseUrl,
       signal
     }),
-    listUsers: (signal) => platformRequest({
+    listUsers: (signal) => platformRequestTyped<"admin-list-end-users">({
       method: "GET",
       path: "/api/v1/users",
       query: { page: 1, size: 200 },
@@ -107,8 +111,9 @@ export interface CustomerUsageApi {
 }
 
 export function createCustomerUsageApi(adapter: RequestAdapter = authenticatedRequest()): CustomerUsageApi {
+  const request = createTypedOperationRequest(adapter);
   return {
-    listRecords: (query, signal) => adapter({
+    listRecords: (query, signal) => request<"ai-list-user-self-usage-logs">({
       method: "GET",
       path: "/api/v1/user-usage-logs",
       query,
@@ -116,7 +121,7 @@ export function createCustomerUsageApi(adapter: RequestAdapter = authenticatedRe
       baseUrl: apiBaseUrl,
       signal
     }),
-    getSummary: (requestSource, signal) => adapter({
+    getSummary: (requestSource, signal) => request<"ai-get-user-self-usage-summary">({
       method: "GET",
       path: "/api/v1/user-usage-summary",
       query: { request_source: requestSource || undefined },

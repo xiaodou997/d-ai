@@ -487,6 +487,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：公告 transport 的状态、受众和 nullable 分页在进入管理/收件箱组件前显式映射并校验；MFA 与批量删除保留页面需要的最小结果，动态 scope 仅在 facade 内选择对应 operation。
 - 回归：新增公告 operation client 与模型绑定批量操作测试，覆盖双 scope、编码 path、body 转换、空集合和非法状态；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed usage feature APIs，2026-08-29）
+
+- 迁移：admin、tenant、customer 用量查询 API 的日志、汇总、排行、趋势、用户详情和终端用户目录请求全部绑定对应 generated operation；取消直接把 `RequestAdapter` 当作未约束 JSON client 的调用方式。
+- 领域边界：既有用量 schema/view model 保持稳定，facade 仅负责 operation query/path/signal 转发，终端用户详情请求显式传递 `requestID` path 参数。
+- 回归：新增 usage API 测试覆盖三端 query、signal、编码详情 path 和租户用户目录 operation；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
