@@ -439,6 +439,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：风控模式、关键词等级、事件严重级别/状态和处置状态进入页面前校验；配置及日志/事件 nullable 集合归一为空数组，`[]byte` 风险详情转换为页面对象并隔离传输 `$schema`。
 - 回归：新增 admin risk-control facade 测试覆盖配置嵌套空值、敏感 key 写入、检测结果、日志/事件 query、编码处置 path 和非法枚举拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed admin system facade，2026-08-28）
+
+- 迁移：系统健康状态读取与路由权重读写共 3 个 facade 请求绑定 generated OpenAPI operations；动态 scope path 参数显式传递。
+- 领域边界：健康快照中的 nullable records 归一为空数组，评分权重 body 通过 generated schema 绑定并拒绝非有限数值，transport `$schema` 不进入页面模型。
+- 回归：新增 admin system facade 测试覆盖健康映射、路由权重 get/put path/body、schema 清理和非有限权重拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

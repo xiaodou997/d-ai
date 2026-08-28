@@ -130,6 +130,9 @@ type RiskEventTransport = components["schemas"]["RiskEventDTO"];
 type RiskEventResolutionBody = OperationBody<"ai-resolve-risk-event">;
 type RiskEventResolutionStatus = RiskEventResolutionBody["status"];
 type RiskTestTransport = OperationResponse<"ai-test-risk-control-moderation">;
+type SystemStatusTransport = OperationResponse<"ai-get-system-status">;
+type RouteWeightsTransport = OperationResponse<"ai-get-route-weights">;
+type RouteWeightsBody = OperationBody<"ai-put-route-weights">;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
 type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
@@ -897,6 +900,51 @@ function toRiskEventResolutionBody(value: { status: string; note?: string }): Ri
   return { status: toRiskEventResolutionStatus(value.status), note: value.note };
 }
 
+function toSystemStatus(value: SystemStatusTransport): SystemStatusDTO {
+  return {
+    timestamp: value.timestamp,
+    db: { status: value.db.status, error: value.db.error },
+    redis: { status: value.redis.status, error: value.redis.error },
+    health: {
+      total_tracked: value.health.total_tracked,
+      open_count: value.health.open_count,
+      half_open_count: value.health.half_open_count,
+      records: value.health.records?.map((record) => ({
+        target_id: record.target_id,
+        kind: record.kind,
+        state: record.state,
+        consecutive_failures: record.consecutive_failures,
+        opened_at: record.opened_at,
+        next_probe_at: record.next_probe_at
+      })) ?? []
+    }
+  };
+}
+
+function toRouteWeights(value: RouteWeightsTransport): RouteWeightsOutputBody {
+  return {
+    scope: value.scope,
+    weights: {
+      cost: value.weights.cost,
+      latency: value.weights.latency,
+      load: value.weights.load,
+      health: value.weights.health
+    }
+  };
+}
+
+function toRouteWeightsBody(value: { cost: number; latency: number; load: number; health: number }): RouteWeightsBody {
+  if (![value.cost, value.latency, value.load, value.health].every(Number.isFinite)) {
+    throw new Error("route weights must be finite numbers");
+  }
+  return {
+    cost: value.cost,
+    latency: value.latency,
+    load: value.load,
+    health: value.health
+  };
+}
+
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
@@ -1313,29 +1361,31 @@ export const aiAdminApi = {
 
   // ---- System & 路由策略 ----
   getSystemStatus() {
-    return request()<SystemStatusDTO>({
+    return typedRequest<"ai-get-system-status">({
       method: "GET",
       path: "/api/v1/system/status",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toSystemStatus);
   },
   getRouteWeights(scope = "global") {
-    return request()<RouteWeightsOutputBody>({
+    return typedRequest<"ai-get-route-weights">({
       method: "GET",
       path: `/api/v1/route-weights/${encodeURIComponent(scope)}`,
+      pathParams: { scope },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRouteWeights);
   },
   putRouteWeights(scope: string, body: { cost: number; latency: number; load: number; health: number }) {
-    return request()<RouteWeightsOutputBody>({
+    return typedRequest<"ai-put-route-weights">({
       method: "PUT",
       path: `/api/v1/route-weights/${encodeURIComponent(scope)}`,
       headers: apiHeaders,
-      body,
+      pathParams: { scope },
+      body: toRouteWeightsBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toRouteWeights);
   },
 
   // ---- Credential pools ----
