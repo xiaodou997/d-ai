@@ -15,6 +15,9 @@ import type {
   PagePaymentOrderItem,
   PageAdminRechargeOrder,
   AdminRechargeOrder,
+  AdminRefundRecord,
+  RechargeCreditDetail,
+  BalanceLedgerItem,
   PageWithdrawalItem,
   WithdrawalItem,
   PaymentGlobalSettings,
@@ -76,6 +79,12 @@ type WechatConfigTransport = OperationResponse<"admin-get-wechat-config">;
 type WechatConfigWriteBody = OperationBody<"admin-update-wechat-config">;
 type PaymentOrdersTransport = OperationResponse<"admin-list-payment-orders">;
 type PaymentOrderTransport = NonNullable<PaymentOrdersTransport["items"]>[number];
+type AdminRechargeOrdersTransport = OperationResponse<"admin-list-recharge-orders">;
+type AdminRechargeOrderTransport = components["schemas"]["AdminRechargeOrder"];
+type BalanceLedgerPageTransport = OperationResponse<"admin-list-balance-ledger">;
+type BalanceLedgerTransport = components["schemas"]["CashLedgerItem"];
+type ReverseAdminRechargeBody = OperationBody<"admin-reverse-recharge-order-credit">;
+type RecordCompletedRefundBody = OperationBody<"admin-record-completed-recharge-refund">;
 
 function toOperationStatus(value: { success: boolean }): { status: string } {
   return { status: value.success ? "success" : "failed" };
@@ -466,6 +475,138 @@ function toPaymentOrder(value: PaymentOrderTransport): PaymentOrderItem {
 
 function toPaymentOrders(value: PaymentOrdersTransport): PagePaymentOrderItem {
   return { items: value.items?.map(toPaymentOrder) ?? [], total: value.total, page: value.page, size: value.size };
+}
+
+function toRechargeMethod(value: string): AdminRechargeOrder["method"] {
+  if (value === "manual" || value === "online") return value;
+  throw new Error(`Unexpected recharge method: ${value}`);
+}
+
+function toRechargeTargetType(value: string): AdminRechargeOrder["targetType"] {
+  if (value === "tenant" || value === "user") return value;
+  throw new Error(`Unexpected recharge target type: ${value}`);
+}
+
+function toRechargePaymentStatus(value: string): AdminRechargeOrder["paymentStatus"] {
+  if (value === "not_required" || value === "created" || value === "paying" || value === "paid" || value === "closed" || value === "expired") return value;
+  throw new Error(`Unexpected recharge payment status: ${value}`);
+}
+
+function toRechargeFulfillmentStatus(value: string): AdminRechargeOrder["fulfillmentStatus"] {
+  if (value === "pending" || value === "credited" || value === "partially_reversed" || value === "reversed") return value;
+  throw new Error(`Unexpected recharge fulfillment status: ${value}`);
+}
+
+function toRechargeRefundStatus(value: string): AdminRechargeOrder["refundStatus"] {
+  if (value === "none" || value === "refunded" || value === "not_applicable") return value;
+  throw new Error(`Unexpected recharge refund status: ${value}`);
+}
+
+function toRechargeCredit(value: components["schemas"]["RechargeCreditDetail"]): RechargeCreditDetail {
+  return {
+    balanceOrderId: value.balanceOrderId,
+    orderType: value.orderType,
+    primary: value.primary,
+    creditAmountMicroUsd: value.creditAmountMicroUsd,
+    status: value.status,
+    note: value.note,
+    balanceExpiresAt: value.balanceExpiresAt ?? null,
+    reversedAt: value.reversedAt ?? null,
+    reversedBy: value.reversedBy,
+    reversalReason: value.reversalReason,
+    reversedAmountMicroUsd: value.reversedAmountMicroUsd,
+    lostAmountMicroUsd: value.lostAmountMicroUsd,
+    lotId: value.lotId,
+    grantedAmountMicroUsd: value.grantedAmountMicroUsd,
+    consumedAmountMicroUsd: value.consumedAmountMicroUsd,
+    remainingAmountMicroUsd: value.remainingAmountMicroUsd,
+    lotStatus: value.lotStatus,
+    refundId: value.refundId,
+    refundAvailableMicroUsd: value.refundAvailableMicroUsd,
+    refundNonAvailableMicroUsd: value.refundNonAvailableMicroUsd,
+    refundExpiredMicroUsd: value.refundExpiredMicroUsd,
+    refundAccountDebitMicroUsd: value.refundAccountDebitMicroUsd,
+    refundBalanceAfterMicroUsd: value.refundBalanceAfterMicroUsd
+  };
+}
+
+function toAdminRefund(value: components["schemas"]["AdminRefundRecord"]): AdminRefundRecord {
+  if (value.method !== "wechat" && value.method !== "offline") throw new Error(`Unexpected refund method: ${value.method}`);
+  if (value.status !== "completed") throw new Error(`Unexpected refund status: ${value.status}`);
+  return {
+    refundId: value.refundId,
+    method: value.method,
+    refundReference: value.refundReference,
+    channelRefundId: value.channelRefundId,
+    refundAmountMinor: value.refundAmountMinor,
+    status: value.status,
+    refundedAt: value.refundedAt,
+    reason: value.reason,
+    note: value.note,
+    operatorId: value.operatorId,
+    createdAt: value.createdAt
+  };
+}
+
+function toAdminRechargeOrder(value: AdminRechargeOrderTransport): AdminRechargeOrder {
+  return {
+    orderId: value.orderId,
+    balanceOrderId: value.balanceOrderId,
+    method: toRechargeMethod(value.method),
+    targetType: toRechargeTargetType(value.targetType),
+    orderType: value.orderType,
+    tenantId: value.tenantId,
+    tenantName: value.tenantName,
+    userId: value.userId,
+    username: value.username,
+    paidAmountMinor: value.paidAmountMinor,
+    grossAmountMicroUsd: value.grossAmountMicroUsd,
+    feeAmountMicroUsd: value.feeAmountMicroUsd,
+    giftAmountMicroUsd: value.giftAmountMicroUsd,
+    creditedAmountMicroUsd: value.creditedAmountMicroUsd,
+    tenantIncomeMicroUsd: value.tenantIncomeMicroUsd,
+    paymentStatus: toRechargePaymentStatus(value.paymentStatus),
+    fulfillmentStatus: toRechargeFulfillmentStatus(value.fulfillmentStatus),
+    refundStatus: toRechargeRefundStatus(value.refundStatus),
+    outTradeNo: value.outTradeNo,
+    transactionId: value.transactionId,
+    topupMode: value.topupMode,
+    packageName: value.packageName,
+    channel: value.channel,
+    note: value.note,
+    failNote: value.failNote,
+    createdAt: value.createdAt,
+    paidAt: value.paidAt ?? null,
+    paymentExpiresAt: value.paymentExpiresAt ?? null,
+    balanceExpiresAt: value.balanceExpiresAt ?? null,
+    reversedAt: value.reversedAt ?? null,
+    reversedBy: value.reversedBy,
+    reversalReason: value.reversalReason,
+    credits: value.credits?.map(toRechargeCredit),
+    refund: value.refund ? toAdminRefund(value.refund) : undefined
+  };
+}
+
+function toAdminRechargeOrders(value: AdminRechargeOrdersTransport): PageAdminRechargeOrder {
+  return { items: value.items?.map(toAdminRechargeOrder) ?? [], total: value.total, page: value.page, size: value.size };
+}
+
+function toBalanceLedger(value: BalanceLedgerTransport): BalanceLedgerItem {
+  return {
+    txnId: value.txnId,
+    txnType: value.txnType,
+    currency: value.currency,
+    amountMicroUsd: value.amountMicroUsd,
+    balanceAfterMicroUsd: value.balanceAfterMicroUsd,
+    refType: value.refType,
+    refId: value.refId,
+    note: value.note,
+    createdAt: value.createdAt
+  };
+}
+
+function toBalanceLedgerPage(value: BalanceLedgerPageTransport): PageBalanceLedgerItem {
+  return { items: value.items?.map(toBalanceLedger) ?? [], total: value.total, page: value.page, size: value.size };
 }
 
 export const platformAdminApi = {
@@ -898,75 +1039,61 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     }).then(stripSchema);
   },
-  listAdminRechargeOrders(params: {
-    keyword?: string;
-    method?: "manual" | "online";
-    targetType?: "tenant" | "user";
-    paymentStatus?: string;
-    fulfillmentStatus?: string;
-    refundStatus?: string;
-    timeFrom?: number;
-    timeTo?: number;
-    page?: number;
-    size?: number;
-  } = {}) {
-    return request()<PageAdminRechargeOrder>({
+  listAdminRechargeOrders(params: OperationQuery<"admin-list-recharge-orders"> = {}) {
+    return typedRequest<"admin-list-recharge-orders">({
       method: "GET",
       path: "/api/v1/admin/recharge-orders",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminRechargeOrders);
   },
   getAdminRechargeOrder(orderId: string) {
-    return request()<AdminRechargeOrder>({
+    return typedRequest<"admin-get-recharge-order">({
       method: "GET",
       path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}`,
+      pathParams: { orderId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminRechargeOrder);
   },
   syncAdminRechargeOrder(orderId: string) {
-    return request()<AdminRechargeOrder>({
+    return typedRequest<"admin-sync-recharge-order">({
       method: "POST",
       path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/sync`,
+      pathParams: { orderId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminRechargeOrder);
   },
-  reverseAdminRechargeOrderCredit(orderId: string, body: { reason: string }) {
-    return request()<AdminRechargeOrder>({
+  reverseAdminRechargeOrderCredit(orderId: string, body: ReverseAdminRechargeBody) {
+    return typedRequest<"admin-reverse-recharge-order-credit">({
       method: "POST",
       path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/reverse-credit`,
+      pathParams: { orderId },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminRechargeOrder);
   },
-  recordCompletedRechargeRefund(orderId: string, body: {
-    method: "wechat" | "offline";
-    refundReference: string;
-    channelRefundId?: string;
-    refundedAt: number;
-    reason: string;
-    note?: string;
-  }) {
-    return request()<AdminRechargeOrder>({
+  recordCompletedRechargeRefund(orderId: string, body: RecordCompletedRefundBody) {
+    return typedRequest<"admin-record-completed-recharge-refund">({
       method: "POST",
       path: `/api/v1/admin/recharge-orders/${encodeURIComponent(orderId)}/refund-reversal`,
+      pathParams: { orderId },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAdminRechargeOrder);
   },
-  listBalanceLedger(params: { tenantId: string; txnType?: string; page?: number; size?: number }) {
-    return request()<PageBalanceLedgerItem>({
+  listBalanceLedger(params: OperationQuery<"admin-list-balance-ledger">) {
+    return typedRequest<"admin-list-balance-ledger">({
       method: "GET",
       path: "/api/v1/admin/balance-ledger",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toBalanceLedgerPage);
   },
   listWithdrawals(params: { status?: string; page?: number; size?: number } = {}) {
     return request()<PageWithdrawalItem>({

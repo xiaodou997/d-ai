@@ -463,6 +463,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：充值套餐和订单的 nullable 字段归一为页面语义，微信验签模式进入页面前校验，配置写入将可选敏感字段显式转换为 `null`，同步响应移除 transport `$schema`。
 - 回归：新增 platform payment facade 测试覆盖设置/微信 body、订单 query/path、套餐空值和非法支付维度拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed platform recharge-order facade，2026-08-29）
+
+- 迁移：后台充值订单列表/详情/同步、额度撤回、退款登记和余额流水共 6 个 facade 请求绑定 generated OpenAPI operations；订单动态 path 与订单筛选 query 显式传递。
+- 领域边界：充值方式/对象、支付/到账/退款状态、退款记录及嵌套额度明细进入页面前校验并映射；nullable 订单、额度和流水列表归一为空数组，同时保留列表未加载详情额度的语义。
+- 回归：新增 platform recharge-order facade 测试覆盖订单 CRUD/同步/撤回/退款 body/path、嵌套明细、余额流水 nullable 归一和非法订单状态拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

@@ -362,7 +362,7 @@ const {
   targetType: "" | "tenant" | "user";
   paymentStatus: string;
   fulfillmentStatus: string;
-  refundStatus: string;
+  refundStatus: "" | "none" | "refunded" | "not_applicable";
 }, AdminRechargeOrder>({
   initialQuery: { keyword: "", method: "", targetType: "", paymentStatus: "", fulfillmentStatus: "", refundStatus: "" },
   pageSize: 20,
