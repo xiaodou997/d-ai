@@ -354,6 +354,27 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：共享账户分页/余额 mapper 收敛 customer 与 tenant 的重复 DTO；租户 facade 将 nullable 列表归一为空数组，并在终端用户 credential/status 与邀请码 status 进入页面模型前校验有限集合。
 - 回归：新增 5 项 tenant facade 测试覆盖租户充值范围、路径参数、分页空值和未知状态拒绝；相关用户管理/租户页面测试、typecheck、320-operation OpenAPI gate 通过。
 
+### P2-04（Typed customer AI facade，2026-08-28）
+
+- 迁移：用户端 API key、分组价格、订阅和工作台 control-plane 请求全部绑定生成的 21 个 OpenAPI operation；`runtime/v1` 流式/图片协议保持独立 transport，不与 control-plane DTO 混用。
+- 契约准确性：API key nullable 输入、订阅购买动态 `202 Accepted` 和无当前订阅的 `null` 响应已反映到 Huma/OpenAPI 生成物；operation request 推导必填 `Idempotency-Key` header 与 path 参数。
+- 领域边界：新增 customer AI mapper，归一 nullable 列表、移除 `$schema`、校验 API key/订阅状态与购买策略枚举，并保留页面所需 view model，未知值拒绝进入 UI 状态。
+- 回归：新增 mapper 与 facade 请求测试覆盖 nullable/枚举/path/header 边界；完整 Portal 及 Go 门禁结果随本次提交记录。
+
+### P2-04（Typed customer AI facade，2026-08-28）
+
+- 迁移：用户端 API key、分组价格、订阅和工作台 control-plane 请求全部绑定生成的 21 个 OpenAPI operation；`runtime/v1` 流式/图片协议保持独立 transport，不与 control-plane DTO 混用。
+- 契约准确性：API key nullable 输入、订阅购买动态 `202 Accepted` 和无当前订阅的 `null` 响应已反映到 Huma/OpenAPI 生成物；operation request 推导必填 `Idempotency-Key` header 与 path 参数。
+- 领域边界：新增 customer AI mapper，归一 nullable 列表、移除 `$schema`、校验 API key/订阅状态与购买策略枚举，并保留页面所需 view model，未知值拒绝进入 UI 状态。
+- 回归：新增 mapper 及 operation 类型测试；customer AI 定向测试、Portal typecheck、OpenAPI gate 和后端 subscription contract 测试通过，完整 Go 门禁随本次提交记录。
+
+### P2-04（Typed customer AI facade，2026-08-28）
+
+- 迁移：用户端 API key、分组价格、订阅和工作台 control-plane 请求全部绑定生成的 21 个 OpenAPI operation；`runtime/v1` 流式/图片协议保持独立 transport，不与 control-plane DTO 混用。
+- 契约准确性：API key nullable 输入、订阅购买动态 `202 Accepted` 和无当前订阅的 `null` 响应已反映到 Huma/OpenAPI 生成物；operation request 现在推导必填 header，购买幂等键在编译期受约束。
+- 领域边界：新增 customer AI mapper，归一 nullable 列表、移除 `$schema`、校验 API key/订阅状态与购买策略枚举，并保留页面所需 snake_case view model，未知值拒绝进入 UI 状态。
+- 回归：新增 mapper 及 operation 类型测试；customer AI 定向测试、Portal typecheck、OpenAPI gate 和后端 subscription contract 测试通过，完整 Go 门禁随本次提交记录。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

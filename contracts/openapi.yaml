@@ -711,7 +711,9 @@ components:
         expires_at:
           description: 过期时间，Unix 毫秒；为空表示不过期
           format: int64
-          type: integer
+          type:
+            - integer
+            - "null"
         group_id:
           description: 密钥唯一绑定的分组 ID
           type: string
@@ -725,7 +727,9 @@ components:
           description: 额度上限，单位 micro-USD；为空表示无限制
           format: int64
           minimum: 0
-          type: integer
+          type:
+            - integer
+            - "null"
         status:
           description: 状态；为空默认 active
           enum:
@@ -7134,7 +7138,9 @@ components:
         concurrency_limit:
           description: 最大同时请求数
           format: int32
-          type: integer
+          type:
+            - integer
+            - "null"
         status:
           description: 状态；为空默认 active
           enum:
@@ -21311,6 +21317,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/SubPurchaseOutputBody"
           description: Created
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubPurchaseOutputBody"
+          description: Accepted
         default:
           content:
             application/problem+json:
@@ -21433,7 +21445,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubscriptionDTO"
+                anyOf:
+                  - $ref: "#/components/schemas/SubscriptionDTO"
+                  - type: "null"
           description: OK
         default:
           content:

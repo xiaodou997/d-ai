@@ -12,7 +12,7 @@ import (
 )
 
 type scopedLimitPolicyWriteRequest struct {
-	ConcurrencyLimit *int32 `json:"concurrency_limit,omitempty" doc:"最大同时请求数"`
+	ConcurrencyLimit *int32 `json:"concurrency_limit,omitempty" nullable:"true" doc:"最大同时请求数"`
 	Status           string `json:"status,omitempty" enum:"active,disabled" doc:"状态；为空默认 active"`
 }
 

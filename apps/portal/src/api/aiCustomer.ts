@@ -19,25 +19,31 @@ import type {
 import { portalEnv } from "@/env";
 import { useAuthStore } from "@/stores/auth";
 import type {
-  AiApiKey,
-  AiApiKeyCreatedOutput,
   AiApiKeyRevealOutput,
-  AiApiKeysOutput,
   AiApiKeyWriteRequest,
-  AiGroupEffectivePricesOutput,
-  AiVisibleGroupsOutput,
-  AiSubPlan,
-  AiSubscription,
-  AiSubOrder,
-  AiSubPurchaseResult,
-  AiSubPage,
-  ChatModel,
   ConsoleImageGenerateRequest,
   ConsoleImageJob,
   ConsoleImageModel,
-  ChatSession,
-  ChatSessionDetail
 } from "./types/aiCustomer";
+import {
+  toApiKey,
+  toApiKeys,
+  toChatModels,
+  toChatSession,
+  toChatSessionDetail,
+  toChatSessions,
+  toCreatedApiKey,
+  toCurrentSubscription,
+  toGroupPrices,
+  toImageJobs,
+  toOrder,
+  toOrderPage,
+  toPlanPage,
+  toPurchaseResult,
+  toSubscriptionPage,
+  toVisibleGroups
+} from "./aiCustomerMappers";
+import { createTypedOperationRequest, type OperationBody } from ".";
 
 function request() {
   return authenticatedRequest();
@@ -46,6 +52,7 @@ function request() {
 const headers = () => apiHeaders;
 const baseUrl = () => apiBaseUrl;
 const runtimeBasePath = "/runtime/v1";
+const typedRequest = createTypedOperationRequest(request());
 
 export { formatUSD };
 
@@ -69,195 +76,225 @@ const runtimeTransport = createPortalRuntimeTransport({
 
 export const statusOptions = portalStatusOptions;
 
+function toApiKeyStatus(value: string): OperationBody<"ai-update-user-self-api-key-status">["status"] {
+  if (value === "active" || value === "disabled") return value;
+  throw new Error(`Unexpected API key status: ${value}`);
+}
+
+function toApiKeyWriteBody(
+  value: AiApiKeyWriteRequest
+): OperationBody<"ai-create-user-self-api-key"> {
+  return {
+    name: value.name,
+    group_id: value.group_id,
+    quota_limit_micro_usd: value.quota_limit_micro_usd,
+    status: value.status ? toApiKeyStatus(value.status) : undefined,
+    expires_at: value.expires_at,
+    limit_policy: value.limit_policy
+      ? {
+          concurrency_limit: value.limit_policy.concurrency_limit,
+          status: value.limit_policy.status
+        }
+      : undefined
+  };
+}
+
 // ==================== AI 用户自助扁平端点（userType=4，身份由 JWT claims 推导） ====================
 
 export const aiCustomerApi = {
   // ---- API Key ----
   listApiKeys() {
-    return request()<AiApiKeysOutput>({
+    return typedRequest<"ai-list-user-self-api-keys">({
       method: "GET",
       path: "/api/v1/user-api-keys",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toApiKeys);
   },
   createApiKey(body: AiApiKeyWriteRequest) {
-    return request()<AiApiKeyCreatedOutput>({
+    return typedRequest<"ai-create-user-self-api-key">({
       method: "POST",
       path: "/api/v1/users/me/api-keys",
-      body,
+      body: toApiKeyWriteBody(body),
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toCreatedApiKey);
   },
   updateApiKey(apiKeyId: string, body: AiApiKeyWriteRequest) {
-    return request()<AiApiKey>({
+    return typedRequest<"ai-update-user-self-api-key">({
       method: "PATCH",
       path: `/api/v1/users/me/api-keys/${encodeURIComponent(apiKeyId)}`,
-      body,
+      pathParams: { apiKeyID: apiKeyId },
+      body: toApiKeyWriteBody(body),
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toApiKey);
   },
   updateApiKeyStatus(apiKeyId: string, status: string) {
-    return request()<AiApiKey>({
+    return typedRequest<"ai-update-user-self-api-key-status">({
       method: "PATCH",
       path: `/api/v1/users/me/api-keys/${encodeURIComponent(apiKeyId)}/status`,
-      body: { status },
+      pathParams: { apiKeyID: apiKeyId },
+      body: { status: toApiKeyStatus(status) },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toApiKey);
   },
   rotateApiKey(apiKeyId: string) {
-    return request()<AiApiKeyCreatedOutput>({
+    return typedRequest<"ai-rotate-user-self-api-key">({
       method: "POST",
       path: `/api/v1/users/me/api-keys/${encodeURIComponent(apiKeyId)}/rotate`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toCreatedApiKey);
   },
   revealApiKey(apiKeyId: string) {
-    return request()<AiApiKeyRevealOutput>({
+    return typedRequest<"ai-reveal-user-self-api-key">({
       method: "POST",
       path: `/api/v1/users/me/api-keys/${encodeURIComponent(apiKeyId)}/reveal`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value): AiApiKeyRevealOutput => ({ plaintext_key: value.plaintext_key }));
   },
   deleteApiKey(apiKeyId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-user-self-api-key">({
       method: "DELETE",
       path: `/api/v1/users/me/api-keys/${encodeURIComponent(apiKeyId)}`,
+      pathParams: { apiKeyID: apiKeyId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   listMyGroups() {
-    return request()<AiVisibleGroupsOutput>({
+    return typedRequest<"ai-list-user-self-groups">({
       method: "GET",
       path: "/api/v1/users/me/groups",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toVisibleGroups);
   },
   getMyGroupEffectivePrices(groupId: string) {
-    return request()<AiGroupEffectivePricesOutput>({
+    return typedRequest<"ai-list-user-self-group-effective-prices">({
       method: "GET",
       path: `/api/v1/users/me/groups/${encodeURIComponent(groupId)}/effective-prices`,
+      pathParams: { groupID: groupId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toGroupPrices);
   },
 
   // ---- 订阅制套餐（终端用户自助，docs/ai-subscription-design.md §7.1） ----
   listSubscriptionPlans(params: { limit?: number; offset?: number } = {}) {
-    return request()<AiSubPage<AiSubPlan>>({
+    return typedRequest<"ai-list-user-self-subscription-plans">({
       method: "GET",
       path: "/api/v1/users/me/subscription-plans",
       query: params,
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toPlanPage);
   },
   createSubscriptionOrder(planId: string, idempotencyKey: string) {
-    return request()<AiSubPurchaseResult>({
+    return typedRequest<"ai-create-user-self-subscription-order">({
       method: "POST",
       path: "/api/v1/users/me/subscription-orders",
       body: { plan_id: planId },
       headers: { ...headers(), "Idempotency-Key": idempotencyKey },
       baseUrl: baseUrl()
-    });
+    }).then(toPurchaseResult);
   },
   listSubscriptionOrders(params: { limit?: number; offset?: number } = {}) {
-    return request()<AiSubPage<AiSubOrder>>({
+    return typedRequest<"ai-list-user-self-subscription-orders">({
       method: "GET",
       path: "/api/v1/users/me/subscription-orders",
       query: params,
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toOrderPage);
   },
   getSubscriptionOrder(orderId: string) {
-    return request()<AiSubOrder>({
+    return typedRequest<"ai-get-user-self-subscription-order">({
       method: "GET",
       path: `/api/v1/users/me/subscription-orders/${encodeURIComponent(orderId)}`,
+      pathParams: { orderID: orderId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toOrder);
   },
   listMySubscriptions(params: { limit?: number; offset?: number } = {}) {
-    return request()<AiSubPage<AiSubscription>>({
+    return typedRequest<"ai-list-user-self-subscriptions">({
       method: "GET",
       path: "/api/v1/users/me/subscriptions",
       query: params,
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toSubscriptionPage);
   },
   getCurrentSubscription() {
-    return request()<AiSubscription | null>({
+    return typedRequest<"ai-get-user-self-current-subscription">({
       method: "GET",
       path: "/api/v1/users/me/subscriptions/current",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toCurrentSubscription);
   },
   listWorkspaceChatSessions(params: { limit?: number } = {}, signal?: AbortSignal) {
-    return request()<{ items: ChatSession[]; total: number }>({
+    return typedRequest<"ai-api-v1-users-me-workspace-chat-sessions">({
       method: "GET",
       path: "/api/v1/users/me/workspace/chat/sessions",
       query: { limit: 50, ...params },
       headers: headers(),
       baseUrl: baseUrl(),
       signal
-    });
+    }).then(toChatSessions);
   },
   listWorkspaceChatModels() {
-    return request()<{ items: ChatModel[]; total: number }>({
+    return typedRequest<"ai-api-v1-users-me-workspace-chat-models">({
       method: "GET",
       path: "/api/v1/users/me/workspace/chat/models",
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toChatModels);
   },
-  createWorkspaceChatSession(body: {
-    model_code: string;
-    group_id: string;
-    title?: string;
-  }) {
-    return request()<ChatSession>({
+  createWorkspaceChatSession(
+    body: OperationBody<"ai-api-v1-users-me-workspace-chat-sessions:create">
+  ) {
+    return typedRequest<"ai-api-v1-users-me-workspace-chat-sessions:create">({
       method: "POST",
       path: "/api/v1/users/me/workspace/chat/sessions",
       body,
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toChatSession);
   },
   getWorkspaceChatSession(sessionId: string) {
-    return request()<ChatSessionDetail>({
+    return typedRequest<"ai-api-v1-users-me-workspace-chat-sessions-sessionid">({
       method: "GET",
       path: `/api/v1/users/me/workspace/chat/sessions/${encodeURIComponent(sessionId)}`,
+      pathParams: { sessionID: sessionId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then(toChatSessionDetail);
   },
   deleteWorkspaceChatSession(sessionId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-api-v1-users-me-workspace-chat-sessions-sessionid:delete">({
       method: "DELETE",
       path: `/api/v1/users/me/workspace/chat/sessions/${encodeURIComponent(sessionId)}`,
+      pathParams: { sessionID: sessionId },
       headers: headers(),
       baseUrl: baseUrl()
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   listWorkspaceImageJobs(params: { limit?: number } = {}, signal?: AbortSignal) {
-    return request()<{ items: ConsoleImageJob[]; total: number }>({
+    return typedRequest<"ai-api-v1-users-me-workspace-image-jobs">({
       method: "GET",
       path: "/api/v1/users/me/workspace/image/jobs",
       query: { limit: 50, ...params },
       headers: headers(),
       baseUrl: baseUrl(),
       signal
-    });
+    }).then(toImageJobs);
   }
 };
 

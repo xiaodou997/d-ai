@@ -105,9 +105,9 @@ type apiKeyDTO struct {
 type apiKeyWriteRequest struct {
 	Name               string                         `json:"name" doc:"名称"`
 	GroupID            string                         `json:"group_id" doc:"密钥唯一绑定的分组 ID"`
-	QuotaLimitMicroUSD *int64                         `json:"quota_limit_micro_usd,omitempty" minimum:"0" doc:"额度上限，单位 micro-USD；为空表示无限制"`
+	QuotaLimitMicroUSD *int64                         `json:"quota_limit_micro_usd,omitempty" nullable:"true" minimum:"0" doc:"额度上限，单位 micro-USD；为空表示无限制"`
 	Status             string                         `json:"status,omitempty" enum:"active,disabled" doc:"状态；为空默认 active"`
-	ExpiresAt          *int64                         `json:"expires_at,omitempty" doc:"过期时间，Unix 毫秒；为空表示不过期"`
+	ExpiresAt          *int64                         `json:"expires_at,omitempty" nullable:"true" doc:"过期时间，Unix 毫秒；为空表示不过期"`
 	LimitPolicy        *scopedLimitPolicyWriteRequest `json:"limit_policy,omitempty" doc:"API key 独立限流策略"`
 	CreatedBy          string                         `json:"created_by,omitempty" doc:"创建人；仅创建时使用"`
 }

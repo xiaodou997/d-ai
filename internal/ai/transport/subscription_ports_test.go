@@ -248,6 +248,25 @@ func TestSubscriptionRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 	}
 }
 
+func TestUserSubscriptionOpenAPIIncludesDynamicAndNullableResponses(t *testing.T) {
+	_, api := server.New(server.Options{Title: "test", Version: "test"})
+	RegisterSubscriptions(api, SubscriptionHTTPDeps{})
+
+	purchase := api.OpenAPI().Paths["/api/v1/users/me/subscription-orders"].Post
+	if purchase.Responses["201"] == nil || purchase.Responses["202"] == nil {
+		t.Fatalf("purchase responses = %#v, want 201 and 202", purchase.Responses)
+	}
+	if purchase.Responses["202"].Content["application/json"].Schema.Ref == "" {
+		t.Fatal("purchase 202 response has no JSON schema")
+	}
+
+	current := api.OpenAPI().Paths["/api/v1/users/me/subscriptions/current"].Get
+	currentSchema := current.Responses["200"].Content["application/json"].Schema
+	if len(currentSchema.AnyOf) != 2 || currentSchema.AnyOf[0].Ref == "" || currentSchema.AnyOf[1].Type != "null" {
+		t.Fatalf("current subscription response schema = %#v, want ref-or-null", currentSchema)
+	}
+}
+
 func performSubscriptionRequest(handler http.Handler, method, path, body, idempotencyKey string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	if body != "" {

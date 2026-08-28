@@ -41,6 +41,22 @@ type subPurchaseOutput struct {
 	}
 }
 
+func documentUserSubscriptionResponseVariants(api huma.API) {
+	paths := api.OpenAPI().Paths
+	purchase := paths["/api/v1/users/me/subscription-orders"].Post
+	created := purchase.Responses["201"]
+	purchase.Responses["202"] = &huma.Response{
+		Description: http.StatusText(http.StatusAccepted),
+		Content:     created.Content,
+	}
+
+	current := paths["/api/v1/users/me/subscriptions/current"].Get
+	currentSchema := current.Responses["200"].Content["application/json"].Schema
+	current.Responses["200"].Content["application/json"].Schema = &huma.Schema{
+		AnyOf: []*huma.Schema{{Ref: currentSchema.Ref}, {Type: "null"}},
+	}
+}
+
 func registerUserSelfSubscriptions(api huma.API, d SubscriptionHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-list-user-self-subscription-plans",
@@ -232,4 +248,6 @@ func registerUserSelfSubscriptions(api huma.API, d SubscriptionHTTPDeps) {
 		}
 		return out, nil
 	})
+
+	documentUserSubscriptionResponseVariants(api)
 }

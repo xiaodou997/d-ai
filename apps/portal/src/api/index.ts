@@ -65,6 +65,14 @@ export type OperationPath<Operation extends keyof operations> = operations[Opera
     : never
   : never;
 
+export type OperationHeader<Operation extends keyof operations> = operations[Operation] extends {
+  parameters: { header?: infer Header };
+}
+  ? Header extends Record<string, string>
+    ? Header
+    : never
+  : never;
+
 export type OperationRequest<Operation extends keyof operations> = {
   method: string;
   path: string;
@@ -72,10 +80,12 @@ export type OperationRequest<Operation extends keyof operations> = {
     ? Record<string, string | number | boolean | undefined | null>
     : OperationQuery<Operation>;
   pathParams?: OperationPath<Operation> extends never ? never : OperationPath<Operation>;
-  headers?: Record<string, string | undefined>;
   baseUrl?: string;
   signal?: AbortSignal;
-} & (OperationBody<Operation> extends never ? { body?: never } : { body?: OperationBody<Operation> });
+} & (OperationHeader<Operation> extends never
+  ? { headers?: Record<string, string | undefined> }
+  : { headers: OperationHeader<Operation> & Record<string, string | undefined> }) &
+  (OperationBody<Operation> extends never ? { body?: never } : { body?: OperationBody<Operation> });
 
 /**
  * Binds the runtime fetch adapter to generated operation response/body types.

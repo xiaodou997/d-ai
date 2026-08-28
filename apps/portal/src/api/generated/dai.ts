@@ -4999,7 +4999,7 @@ export interface components {
              * Format: int64
              * @description 过期时间，Unix 毫秒；为空表示不过期
              */
-            expires_at?: number;
+            expires_at?: number | null;
             /** @description 密钥唯一绑定的分组 ID */
             group_id: string;
             /** @description API key 独立限流策略 */
@@ -5010,7 +5010,7 @@ export interface components {
              * Format: int64
              * @description 额度上限，单位 micro-USD；为空表示无限制
              */
-            quota_limit_micro_usd?: number;
+            quota_limit_micro_usd?: number | null;
             /**
              * @description 状态；为空默认 active
              * @enum {string}
@@ -8419,7 +8419,7 @@ export interface components {
              * Format: int32
              * @description 最大同时请求数
              */
-            concurrency_limit?: number;
+            concurrency_limit?: number | null;
             /**
              * @description 状态；为空默认 active
              * @enum {string}
@@ -21229,6 +21229,15 @@ export interface operations {
                     "application/json": components["schemas"]["SubPurchaseOutputBody"];
                 };
             };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubPurchaseOutputBody"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -21355,7 +21364,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SubscriptionDTO"];
+                    "application/json": components["schemas"]["SubscriptionDTO"] | null;
                 };
             };
             /** @description Error */
