@@ -281,11 +281,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-04 让 OpenAPI 成为唯一传输契约源
 
-- [ ] 生成带类型的 API client，而不只生成 `paths/components` 类型。
-- [ ] 删除与 OpenAPI 重复的手写请求和响应 DTO。
-- [ ] 领域 view model 与传输 DTO 显式转换，不混用命名和空值语义。
-- [ ] 删除 facade 中的 `any` 返回值和未经校验的 JSON 断言。
-- [ ] CI 检查生成物 freshness、破坏性契约变化和未使用 operation。
+- [x] 生成带类型的 API client，而不只生成 `paths/components` 类型。
+- [x] 删除与 OpenAPI 重复的手写请求和响应 DTO。
+- [x] 领域 view model 与传输 DTO 显式转换，不混用命名和空值语义。
+- [x] 删除 facade 中的 `any` 返回值和未经校验的 JSON 断言。
+- [x] CI 检查生成物 freshness、破坏性契约变化和未使用 operation。
 
 ### P2-04（Typed operation request boundary，2026-08-28）
 
@@ -492,6 +492,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 迁移：admin、tenant、customer 用量查询 API 的日志、汇总、排行、趋势、用户详情和终端用户目录请求全部绑定对应 generated operation；取消直接把 `RequestAdapter` 当作未约束 JSON client 的调用方式。
 - 领域边界：既有用量 schema/view model 保持稳定，facade 仅负责 operation query/path/signal 转发，终端用户详情请求显式传递 `requestID` path 参数。
 - 回归：新增 usage API 测试覆盖三端 query、signal、编码详情 path 和租户用户目录 operation；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
+### P2-04（Contract boundary complete，2026-08-29）
+
+- 验收：Portal 全部 control-plane 请求站点均通过 `createTypedOperationRequest` 绑定 generated operation；`rg` 审计不再发现手写 `return request(...)`、未约束 adapter JSON 返回或 facade `any` 返回。
+- 门禁：`bun run ensure:api` 持续校验 320 个 operation 的生成物 freshness、契约 operation 集合和破坏性删除；`cmd/checkauthz` 已覆盖 320/320 operation。runtime 流式/图片协议属于独立 transport，继续使用专用 runtime client。
+- 状态：P2-04 五项清单完成；下一优先级转入 P2-05 feature 垂直切分，保留本节的 API facade 迁移记录作为回归基线。
 
 ### P2-05 按 feature 垂直切分 Portal
 
