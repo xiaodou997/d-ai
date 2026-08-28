@@ -403,6 +403,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：管理页面继续使用精简 `PriceBookDTO`/条目模型，facade 显式移除 `$schema`、归一 nullable 条目与同步缺失列表，并校验价格表状态。
 - 回归：新增 admin price-book facade 测试覆盖 nullable 页面集合、CRUD/条目 body 与编码 path、同步结果和非法状态拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
 
+### P2-04（Typed admin upstream-account facade，2026-08-28）
+
+- 迁移：平台上游账号列表、创建/更新/启停/删除及导入预览、导入导出共 8 个 facade 请求绑定 generated OpenAPI operations；账号 path 参数显式传递。
+- 领域边界：账号状态、租户访问模式、provider family、图片导入 action 和图片响应格式进入管理页面前校验；导入导出 nullable 集合归一为空数组，写入 body 显式适配可空并发限制和必填 API key。
+- 回归：新增 admin upstream-account facade 测试覆盖 CRUD body/path、nullable transfer 集合、默认导出选项、导入 action 和未知状态拒绝；Portal typecheck、OpenAPI gate 与全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

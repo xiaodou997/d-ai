@@ -9,6 +9,8 @@ import type {
   AccountDTO,
   AccountsOutputBody,
   AccountWriteRequest,
+  UpstreamAccountTransferBindingDTO,
+  UpstreamAccountTransferAccountDTO,
   UpstreamAccountExportOutputBody,
   UpstreamAccountExportRequest,
   UpstreamAccountImportOutputBody,
@@ -70,6 +72,13 @@ type PriceBookTransport = components["schemas"]["PriceBookDTO"];
 type PriceBookEntryTransport = components["schemas"]["PriceBookEntryDTO"];
 type PriceBookPageTransport = OperationResponse<"ai-list-price-books">;
 type PriceBookEntriesPageTransport = OperationResponse<"ai-list-price-book-entries">;
+type AccountTransport = components["schemas"]["AccountDTO"];
+type AccountsPageTransport = OperationResponse<"ai-list-upstream-accounts">;
+type AccountExportTransport = OperationResponse<"ai-export-upstream-accounts">;
+type AccountImportPreviewTransport = OperationResponse<"ai-preview-import-upstream-accounts">;
+type AccountImportTransport = OperationResponse<"ai-import-upstream-accounts">;
+type AccountTransferTransport = components["schemas"]["UpstreamAccountTransferAccountDTO"];
+type AccountTransferBindingTransport = components["schemas"]["UpstreamAccountTransferBindingDTO"];
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -120,6 +129,164 @@ function toPriceBookEntryBody(value: PriceBookEntryWriteRequest): OperationBody<
   };
 }
 
+function toProviderFamily(value: string | undefined): "openai_compatible" | "anthropic" | "gemini" | undefined {
+  if (value === undefined || value === "openai_compatible" || value === "anthropic" || value === "gemini") return value;
+  throw new Error(`Unexpected upstream provider family: ${value}`);
+}
+
+function toAccountBodyFields(value: AccountWriteRequest) {
+  const providerFamily = toProviderFamily(value.default_provider_family);
+  return {
+    name: value.name,
+    tenant_display_name: value.tenant_display_name,
+    tenant_access_mode: value.tenant_access_mode,
+    base_url: value.base_url,
+    extra_headers: value.extra_headers,
+    default_provider_family: providerFamily,
+    concurrency_limit: value.concurrency_limit ?? undefined,
+    price_book_id: value.price_book_id,
+    tenant_multiplier: value.tenant_multiplier
+  };
+}
+
+function toCreateAccountBody(value: AccountWriteRequest): OperationBody<"ai-create-upstream-account"> {
+  if (typeof value.api_key !== "string") throw new Error("upstream API key is required");
+  return { ...toAccountBodyFields(value), api_key: value.api_key };
+}
+
+function toUpdateAccountBody(value: AccountWriteRequest): OperationBody<"ai-update-upstream-account"> {
+  return { ...toAccountBodyFields(value), api_key: value.api_key };
+}
+
+function toAccount(value: AccountTransport): AccountDTO {
+  if (value.status !== "active" && value.status !== "invalid" && value.status !== "disabled") {
+    throw new Error(`Unexpected upstream account status: ${value.status}`);
+  }
+  if (value.tenant_access_mode !== "public" && value.tenant_access_mode !== "restricted") {
+    throw new Error(`Unexpected upstream tenant access mode: ${value.tenant_access_mode}`);
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    tenant_display_name: value.tenant_display_name,
+    tenant_access_mode: value.tenant_access_mode,
+    base_url: value.base_url,
+    extra_headers: value.extra_headers,
+    default_provider_family: value.default_provider_family,
+    concurrency_limit: value.concurrency_limit,
+    price_book_id: value.price_book_id,
+    tenant_multiplier: value.tenant_multiplier,
+    status: value.status,
+    invalid_reason: value.invalid_reason,
+    invalid_at: value.invalid_at,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toAccounts(value: AccountsPageTransport): AccountsOutputBody {
+  return { items: value.items?.map(toAccount) ?? [], total: value.total };
+}
+
+function toTransferBinding(value: AccountTransferBindingTransport): UpstreamAccountTransferBindingDTO {
+  if (value.image_edit_transport !== undefined && value.image_edit_transport !== "application/json" && value.image_edit_transport !== "multipart/form-data") {
+    throw new Error(`Unexpected image edit transport: ${value.image_edit_transport}`);
+  }
+  if (value.image_upstream_response_format !== undefined && value.image_upstream_response_format !== "url" && value.image_upstream_response_format !== "b64_json") {
+    throw new Error(`Unexpected image upstream response format: ${value.image_upstream_response_format}`);
+  }
+  return {
+    model_code: value.model_code,
+    capability_type: value.capability_type,
+    api_format: value.api_format,
+    upstream_model_name: value.upstream_model_name,
+    status: value.status,
+    image_stream_mode: value.image_stream_mode,
+    image_edit_transport: value.image_edit_transport,
+    image_upstream_response_format: value.image_upstream_response_format,
+    image_max_output_count: value.image_max_output_count,
+    image_edit_max_output_count: value.image_edit_max_output_count
+  };
+}
+
+function toTransferAccount(value: AccountTransferTransport): UpstreamAccountTransferAccountDTO {
+  if (value.tenant_access_mode !== "public" && value.tenant_access_mode !== "restricted") {
+    throw new Error(`Unexpected upstream tenant access mode: ${value.tenant_access_mode}`);
+  }
+  return {
+    name: value.name,
+    tenant_display_name: value.tenant_display_name,
+    tenant_access_mode: value.tenant_access_mode,
+    base_url: value.base_url,
+    api_key: value.api_key,
+    default_provider_family: value.default_provider_family,
+    concurrency_limit: value.concurrency_limit,
+    status: value.status,
+    extra_headers: value.extra_headers,
+    model_bindings: value.model_bindings?.map(toTransferBinding) ?? []
+  };
+}
+
+function toAccountExport(value: AccountExportTransport): UpstreamAccountExportOutputBody {
+  return {
+    schema_version: value.schema_version,
+    exported_at: value.exported_at,
+    contains_plaintext_api_keys: value.contains_plaintext_api_keys,
+    accounts: value.accounts?.map(toTransferAccount) ?? []
+  };
+}
+
+function toImportAction(value: string): "create" | "skip" | "error" {
+  if (value === "create" || value === "skip" || value === "error") return value;
+  throw new Error(`Unexpected upstream import action: ${value}`);
+}
+
+function toAccountImportRequest(value: UpstreamAccountImportRequest): OperationBody<"ai-import-upstream-accounts"> {
+  return {
+    accounts: value.accounts.map((account) => ({
+      name: account.name,
+      tenant_display_name: account.tenant_display_name,
+      tenant_access_mode: account.tenant_access_mode,
+      base_url: account.base_url,
+      api_key: account.api_key,
+      default_provider_family: account.default_provider_family,
+      concurrency_limit: account.concurrency_limit,
+      status: account.status,
+      extra_headers: account.extra_headers,
+      model_bindings: account.model_bindings?.map((binding) => ({ ...binding })) ?? []
+    })),
+    default_price_book_id: value.default_price_book_id,
+    default_tenant_multiplier: value.default_tenant_multiplier,
+    duplicate_account_strategy: value.duplicate_account_strategy,
+    duplicate_binding_strategy: value.duplicate_binding_strategy
+  };
+}
+
+function toAccountImportPreview(value: AccountImportPreviewTransport): UpstreamAccountImportPreviewOutputBody {
+  return {
+    items: value.items?.map((item) => ({
+      name: item.name,
+      base_url: item.base_url,
+      action: toImportAction(item.action),
+      reason: item.reason,
+      model_binding_count: item.model_binding_count,
+      duplicate_model_bindings: item.duplicate_model_bindings,
+      warnings: item.warnings ?? []
+    })) ?? [],
+    summary: value.summary
+  };
+}
+
+function toAccountImport(value: AccountImportTransport): UpstreamAccountImportOutputBody {
+  return {
+    created_account_ids: value.created_account_ids ?? [],
+    skipped_accounts: value.skipped_accounts?.map((item) => ({ ...item })) ?? [],
+    created_model_bindings: value.created_model_bindings?.map((item) => ({ ...item })) ?? [],
+    skipped_model_bindings: value.skipped_model_bindings?.map((item) => ({ ...item })) ?? [],
+    summary: value.summary
+  };
+}
+
 type AiWorkbenchWindowQuery = {
   date_from?: string;
   date_to?: string;
@@ -128,74 +295,77 @@ type AiWorkbenchWindowQuery = {
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
-    return request()<AccountsOutputBody>({
+    return typedRequest<"ai-list-upstream-accounts">({
       method: "GET",
       path: "/api/v1/upstream-accounts",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccounts);
   },
   createUpstreamAccount(body: AccountWriteRequest) {
-    return request()<AccountDTO>({
+    return typedRequest<"ai-create-upstream-account">({
       method: "POST",
       path: "/api/v1/upstream-accounts",
       headers: apiHeaders,
-      body,
+      body: toCreateAccountBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccount);
   },
   updateUpstreamAccount(accountId: string, body: AccountWriteRequest) {
-    return request()<AccountDTO>({
+    return typedRequest<"ai-update-upstream-account">({
       method: "PATCH",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
-      body,
+      body: toUpdateAccountBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccount);
   },
   updateUpstreamAccountStatus(accountId: string, status: "active" | "disabled") {
-    return request()<AccountDTO>({
+    return typedRequest<"ai-update-upstream-account-status">({
       method: "PATCH",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/status`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
       body: { status },
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccount);
   },
   deleteUpstreamAccount(accountId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-upstream-account">({
       method: "DELETE",
       path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}`,
+      pathParams: { accountID: accountId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   exportUpstreamAccounts(body: UpstreamAccountExportRequest) {
-    return request()<UpstreamAccountExportOutputBody>({
+    return typedRequest<"ai-export-upstream-accounts">({
       method: "POST",
       path: "/api/v1/upstream-accounts/export",
       headers: apiHeaders,
-      body,
+      body: { account_ids: body.account_ids, include_model_bindings: body.include_model_bindings ?? false },
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccountExport);
   },
   previewImportUpstreamAccounts(body: UpstreamAccountImportRequest) {
-    return request()<UpstreamAccountImportPreviewOutputBody>({
+    return typedRequest<"ai-preview-import-upstream-accounts">({
       method: "POST",
       path: "/api/v1/upstream-accounts/import/preview",
       headers: apiHeaders,
-      body,
+      body: toAccountImportRequest(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccountImportPreview);
   },
   importUpstreamAccounts(body: UpstreamAccountImportRequest) {
-    return request()<UpstreamAccountImportOutputBody>({
+    return typedRequest<"ai-import-upstream-accounts">({
       method: "POST",
       path: "/api/v1/upstream-accounts/import",
       headers: apiHeaders,
-      body,
+      body: toAccountImportRequest(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccountImport);
   },
   // ---- 上游模型发现 / 导入（账号维度）----
   fetchAccountUpstreamModels(accountId: string) {
