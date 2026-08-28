@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createTypedOperationRequest, type RequestAdapter } from ".";
+import { createTypedOperationRequest, type RequestAdapter, type OperationQuery } from ".";
 import type { PublicRegistrationPayload } from "./types/platformPublic";
 import type { LiteLLMModelsOutputBody } from "./types/ai";
 
@@ -36,5 +36,10 @@ describe("typed OpenAPI operation request", () => {
   it("exposes generated LiteLLM response fields without any", () => {
     const result: LiteLLMModelsOutputBody = { items: [], total: 0 };
     expect(result.items).toEqual([]);
+  });
+
+  it("derives operation query keys from the OpenAPI contract", () => {
+    const query: OperationQuery<"ai-search-litellm-price-models"> = { q: "gpt", limit: 10 };
+    expect(query.limit).toBe(10);
   });
 });

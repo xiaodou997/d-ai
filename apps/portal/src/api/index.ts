@@ -47,10 +47,29 @@ export type OperationBody<Operation extends keyof operations> = operations[Opera
   ? Body
   : never;
 
+export type OperationQuery<Operation extends keyof operations> = operations[Operation] extends {
+  parameters: { query?: infer Query };
+}
+  ? Query extends Record<string, unknown>
+    ? Query
+    : never
+  : never;
+
+export type OperationPath<Operation extends keyof operations> = operations[Operation] extends {
+  parameters: { path?: infer Path };
+}
+  ? Path extends Record<string, string>
+    ? Path
+    : never
+  : never;
+
 export type OperationRequest<Operation extends keyof operations> = {
   method: string;
   path: string;
-  query?: Record<string, string | number | boolean | undefined | null>;
+  query?: OperationQuery<Operation> extends never
+    ? Record<string, string | number | boolean | undefined | null>
+    : OperationQuery<Operation>;
+  pathParams?: OperationPath<Operation> extends never ? never : OperationPath<Operation>;
   headers?: Record<string, string | undefined>;
   baseUrl?: string;
   signal?: AbortSignal;

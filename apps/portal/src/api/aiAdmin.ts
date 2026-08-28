@@ -1,4 +1,5 @@
 import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
+import { createTypedOperationRequest } from ".";
 import type {
   AccountDTO,
   AccountsOutputBody,
@@ -57,6 +58,8 @@ import type {
 function request() {
   return authenticatedRequest();
 }
+
+const typedRequest = createTypedOperationRequest(authenticatedRequest());
 
 type AiWorkbenchWindowQuery = {
   date_from?: string;
@@ -275,13 +278,13 @@ export const aiAdminApi = {
     });
   },
   searchLiteLLMModels(q: string, limit = 50) {
-    return request()<LiteLLMModelsOutputBody>({
+    return typedRequest<"ai-search-litellm-price-models">({
       method: "GET",
       path: "/api/v1/price-books/litellm/models",
       query: { q, limit },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    }).then((response) => ({
+    }).then((response: LiteLLMModelsOutputBody) => ({
       ...response,
       items: (response.items ?? []).map((model: LiteLLMModelInfo) => ({
         ...model,

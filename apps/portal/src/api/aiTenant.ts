@@ -19,6 +19,7 @@ import type {
 } from "@/platform/ai/tasks";
 import { portalEnv } from "@/env";
 import { useAuthStore } from "@/stores/auth";
+import { createTypedOperationRequest } from ".";
 import type {
   ChatModel,
   ConsoleImageGenerateRequest,
@@ -72,6 +73,8 @@ import type {
 function request() {
   return authenticatedRequest();
 }
+
+const typedRequest = createTypedOperationRequest(authenticatedRequest());
 
 const headers = () => apiHeaders;
 const baseUrl = () => apiBaseUrl;
@@ -375,9 +378,9 @@ export const aiTenantApi = {
     });
   },
   searchLiteLLMPriceModels(q: string, limit = 50) {
-    return request()<components["schemas"]["LiteLLMModelsOutputBody"]>({
+    return typedRequest<"ai-search-tenant-litellm-price-models">({
       method: "GET", path: "/api/v1/tenants/me/price-books/litellm/models", query: { q, limit }, headers: headers(), baseUrl: baseUrl()
-    }).then((response): TenantAiLiteLLMModelsOutput => ({
+    }).then((response: components["schemas"]["LiteLLMModelsOutputBody"]): TenantAiLiteLLMModelsOutput => ({
       ...response,
       items: response.items?.map((model) => ({ ...model, token_price_tiers: model.token_price_tiers ?? [] })) ?? []
     }));

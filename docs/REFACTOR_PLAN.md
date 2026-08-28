@@ -311,6 +311,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：租户 facade 将 nullable `token_price_tiers` 映射为领域模型数组，保持组件层无 nullable 分支。
 - 回归：价格表定向 30 项测试、完整 Portal 217 项测试、typecheck、`ensure:api` 和 Go 全量门禁通过。
 
+### P2-04（Generated operation query/path typing，2026-08-28）
+
+- 生成客户端：`OperationRequest` 现在从 OpenAPI `operations` 推导 query 与 path 参数类型，admin/tenant LiteLLM 搜索 facade 使用对应 operation ID，不再依赖无关的宽泛查询类型。
+- 回归：operation client、价格表定向测试、完整 Portal 测试、typecheck、`ensure:api` 和 Go 全量验证通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
