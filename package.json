@@ -13,7 +13,7 @@
     "validate:portal-architecture": "node apps/portal/scripts/validate-portal-architecture.mjs",
     "validate:frontend-styles": "node apps/portal/scripts/validate-built-styles.mjs",
     "generate:api": "node apps/portal/scripts/generate.mjs --generate",
-    "ensure:api": "node apps/portal/scripts/generate.mjs --ensure",
+    "ensure:api": "node apps/portal/scripts/generate.mjs --ensure && node apps/portal/scripts/check-openapi-contract.mjs",
     "typecheck": "vue-tsc --noEmit -p apps/portal/tsconfig.json",
     "test": "vitest run"
   },
@@ -49,6 +49,7 @@
     "unplugin-vue-components": "^32.1.0",
     "vite": "^8.1.4",
     "vitest": "4.0.18",
-    "vue-tsc": "^3.3.7"
+    "vue-tsc": "^3.3.7",
+    "yaml": "^2.9.0"
   }
 }

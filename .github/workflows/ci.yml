@@ -151,6 +151,12 @@ jobs:
       - name: Generated API types are current
         run: bun run ensure:api
 
+      - name: Reject breaking OpenAPI operations
+        if: github.event_name == 'pull_request'
+        env:
+          OPENAPI_BASELINE_REF: ${{ github.event.pull_request.base.sha }}
+        run: node apps/portal/scripts/check-openapi-contract.mjs
+
       - name: Typecheck
         run: bun run typecheck
 

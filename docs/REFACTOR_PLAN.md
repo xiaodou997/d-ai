@@ -316,6 +316,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 生成客户端：`OperationRequest` 现在从 OpenAPI `operations` 推导 query 与 path 参数类型，admin/tenant LiteLLM 搜索 facade 使用对应 operation ID，不再依赖无关的宽泛查询类型。
 - 回归：operation client、价格表定向测试、完整 Portal 测试、typecheck、`ensure:api` 和 Go 全量验证通过。
 
+### P2-04（OpenAPI contract freshness and operation gate，2026-08-28）
+
+- 门禁：新增结构化 YAML 检查，比较 OpenAPI `operationId` 集合与生成 `operations` 集合，拒绝缺失/重复 operation，并校验生成 marker freshness。
+- 破坏性变更：支持 `OPENAPI_BASELINE_REF` 对比基准契约，删除 operation 默认失败；只有显式 `ALLOW_BREAKING_OPENAPI=1` 才允许带批准的迁移。
+- 接入：`bun run ensure:api`、CI Portal job 均执行契约门禁；新增 6 项门禁单测覆盖匹配、漂移和破坏性删除。
+- 回归：完整 Portal 220 项测试、typecheck、`ensure:api`、Go 全量测试、`go vet`、`go build`、`checkdeps` 和 `git diff --check` 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
