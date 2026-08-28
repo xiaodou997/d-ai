@@ -94,6 +94,13 @@ func TestSweepInFlightPersistsProviderFailure(t *testing.T) {
 	if order.Status != payment.OrderStatusCreated || order.SweepAttempts != 1 || order.SweepNextAttemptAt == nil || order.SweepLastError == "" {
 		t.Fatalf("persisted sweep failure = %+v", order)
 	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE pay_orders
+		SET sweep_last_attempt_at = now() - interval '1 minute'
+		WHERE order_id = $1
+	`, orderID); err != nil {
+		t.Fatalf("age persisted sweep failure: %v", err)
+	}
 	if err := svc.publishSweepRetryHealth(ctx); err != nil {
 		t.Fatalf("publish sweep retry health: %v", err)
 	}
