@@ -475,6 +475,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：提现分页 nullable 集合归一为空数组，创建/列表响应显式映射页面字段并移除 transport `$schema`，保留未支付时间的页面 `null` 语义。
 - 回归：新增 platform withdrawals facade 测试覆盖筛选 query、创建 body、nullable 列表、字段映射与 schema 清理；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed tenant legacy facade，2026-08-29）
+
+- 迁移：租户旧 facade 的品牌、分析、账户、终端用户、邀请码、API key、在线充值、支付设置和余额流水共 25 个请求全部绑定 generated OpenAPI operations；动态用户/订单/邀请码 path 参数显式传递。
+- 领域边界：旧页面继续使用稳定的 tenant view model，facade 显式转换生成 transport DTO，归一 nullable 列表与有效期字段，充值订单的 mode/status/scene 和终端用户 credential state 在进入页面前校验。
+- 回归：新增 tenant facade 测试覆盖 self-service 请求、充值与邀请 body、编码 path、schema 清理、空值归一和非法枚举拒绝；Portal 91 个测试文件、304 项测试、typecheck 与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
