@@ -380,6 +380,108 @@ func TestWebhookDeliveryClaimUsesAnExclusiveLease(t *testing.T) {
 	}
 }
 
+// TestWebhookDeliveryClaimIsExclusiveUnderContention exercises the same
+// database-backed claim path with independent workers. A process-local mutex
+// would not protect this scenario when worker replicas run in separate pods.
+func TestWebhookDeliveryClaimIsExclusiveUnderContention(t *testing.T) {
+	const (
+		deliveries = 32
+		workers    = 8
+	)
+	s, _ := openStore(t, workers+2)
+	ctx := context.Background()
+	for range deliveries {
+		id := seedTask(t, s, "tenant-a", func(r *insertRecord) {
+			r.WebhookURL = "https://hooks.example.com/task-events"
+		})
+		claimed, ok, err := s.claim(ctx, []string{probeType}, 100, "task-worker", claimLease)
+		if err != nil || !ok {
+			t.Fatalf("claim task: %v ok=%v", err, ok)
+		}
+		if claimed.ID != id {
+			t.Fatalf("claimed task = %s, want %s", claimed.ID, id)
+		}
+		if written, err := s.complete(ctx, id, "task-worker", Result{Status: domain.TaskCompleted}); err != nil || !written {
+			t.Fatalf("complete task: written=%v err=%v", written, err)
+		}
+	}
+
+	var (
+		mu      sync.Mutex
+		claimed = map[string]string{}
+		wg      sync.WaitGroup
+	)
+	for w := range workers {
+		workerID := fmt.Sprintf("delivery-worker-%d", w)
+		wg.Go(func() {
+			for {
+				delivery, ok, err := s.claimDelivery(ctx, workerID, claimLease)
+				if err != nil {
+					t.Errorf("claim delivery: %v", err)
+					return
+				}
+				if !ok {
+					return
+				}
+				mu.Lock()
+				if previous, duplicate := claimed[delivery.ID]; duplicate {
+					t.Errorf("delivery %s claimed twice: by %s and %s", delivery.ID, previous, workerID)
+				}
+				claimed[delivery.ID] = workerID
+				mu.Unlock()
+				if written, err := s.finishDelivery(ctx, delivery.ID, workerID, deliveryOutcome{Status: "delivered", StatusCode: 200}); err != nil || !written {
+					t.Errorf("finish delivery %s: written=%v err=%v", delivery.ID, written, err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	if len(claimed) != deliveries {
+		t.Fatalf("claimed %d distinct deliveries, want %d", len(claimed), deliveries)
+	}
+}
+
+func TestWebhookDeliveryFinishRejectsStaleLeaseHolder(t *testing.T) {
+	s, pool := openStore(t, 3)
+	ctx := context.Background()
+	id := seedTask(t, s, "tenant-a", func(r *insertRecord) {
+		r.WebhookURL = "https://hooks.example.com/task-events"
+	})
+	task, ok, err := s.claim(ctx, []string{probeType}, 10, "task-worker", claimLease)
+	if err != nil || !ok {
+		t.Fatalf("claim task: %v ok=%v", err, ok)
+	}
+	if written, err := s.complete(ctx, task.ID, "task-worker", Result{Status: domain.TaskCompleted}); err != nil || !written {
+		t.Fatalf("complete task: written=%v err=%v", written, err)
+	}
+	first, ok, err := s.claimDelivery(ctx, "delivery-worker-1", claimLease)
+	if err != nil || !ok {
+		t.Fatalf("first delivery claim: %v ok=%v", err, ok)
+	}
+	if first.TaskID != id {
+		t.Fatalf("delivery task id = %s, want %s", first.TaskID, id)
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE ai_async_task_deliveries SET lease_expires_at = now() - interval '1 second' WHERE id = $1::uuid
+	`, first.ID); err != nil {
+		t.Fatalf("expire delivery lease: %v", err)
+	}
+	second, ok, err := s.claimDelivery(ctx, "delivery-worker-2", claimLease)
+	if err != nil || !ok {
+		t.Fatalf("reclaim delivery: %v ok=%v", err, ok)
+	}
+	if second.Attempt != first.Attempt+1 {
+		t.Fatalf("reclaimed attempt = %d, want %d", second.Attempt, first.Attempt+1)
+	}
+	if written, err := s.finishDelivery(ctx, first.ID, "delivery-worker-1", deliveryOutcome{Status: "delivered", StatusCode: 200}); err != nil || written {
+		t.Fatalf("stale finish: written=%v err=%v, want fenced", written, err)
+	}
+	if written, err := s.finishDelivery(ctx, second.ID, "delivery-worker-2", deliveryOutcome{Status: "delivered", StatusCode: 200}); err != nil || !written {
+		t.Fatalf("current finish: written=%v err=%v", written, err)
+	}
+}
+
 func TestWebhookDeliveryRetryPersistsBackoff(t *testing.T) {
 	s, pool := openStore(t, 2)
 	ctx := context.Background()
