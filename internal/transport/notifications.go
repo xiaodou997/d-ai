@@ -33,9 +33,6 @@ type notificationSendInput struct {
 type notificationOutput struct{ Body notificationpkg.Delivery }
 
 func registerNotifications(api huma.API, d notificationModule) {
-	if d.service == nil {
-		return
-	}
 	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}

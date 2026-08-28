@@ -206,7 +206,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 将散落的 `userType` 判断集中为后端 capability/policy 授权；`auth.Actor` / `Capability` / `requireCapability` 已覆盖主要 HTTP 与应用策略，登录租户状态、管理员 MFA 和审计 principal 分类也已收敛到同一 Actor policy。
 - [x] Portal 菜单和路由 capability 只用于展示/导航提示；后端通过 operation middleware 和 capability/policy 矩阵执行最终授权，并有服务端拒绝回归测试。
 - [x] 建立统一的 `auth.Actor`、`TenantScope`、`UserID`/`TenantID` 和 `ResourceOwnership` 类型；Transport 从 claims 统一构造 actor，租户、终端用户、租户详情和支付订单 ownership 均通过同一 typed reference 校验。
-- [x] 为当前 318 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
+- [x] 为当前 320 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
 - [x] 增加跨租户、越权、对象枚举和角色降级测试；授权核心已覆盖四类角色、缺失/未知角色、租户/用户 ownership 组合，Transport middleware、AI identity、终端用户、异步任务、账务和会话集成测试覆盖拒绝与对象不可枚举语义。
 
 ## P1：数据库与资金数据治理
@@ -339,7 +339,14 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 迁移：用户端品牌、余额、充值记录和在线充值的 7 个手写请求全部绑定生成的 OpenAPI operation；下单 body 与成功响应由 operation 推导，不再重复声明传输 DTO。
 - 领域边界：facade 显式移除 transport `$schema`，将 nullable 列表归一为页面数组，并在订单 `topupMode`、`status`、`scene` 进入页面模型前校验有限集合；未知值直接拒绝，不静默污染 UI 状态。
-- 回归：新增 customer facade 测试覆盖空值归一、订单映射、path 参数和未知枚举拒绝；完整 Portal 67 个测试文件、224 项测试、typecheck 与 318-operation OpenAPI gate 通过。
+- 回归：新增 customer facade 测试覆盖空值归一、订单映射、path 参数和未知枚举拒绝；完整 Portal 67 个测试文件、224 项测试、typecheck 与 OpenAPI gate 通过。
+
+### P2-04（Typed system operations facade，2026-08-28）
+
+- 契约补全：通知 Huma 模块不再因 OpenAPI export 的空 service 跳过注册，`admin-send-notification` 与 `list-my-notifications` 进入唯一契约、生成 types 和 capability 授权矩阵；composition route 测试固定该 surface。
+- 迁移：系统模块、PII、代理节点、通知和数据清理的 16 个 facade 请求全部绑定生成 operation；typed client 新增 `202 Accepted` 成功响应推导，清理启动不再退化为 `never`。
+- 领域边界：模块、PII、代理与清理 mapper 移除 `$schema`、归一 nullable 集合，并校验 proxy/run 有限状态；删除代理节点继续保持页面需要的 `Promise<void>`，通知响应收敛为最小结果。
+- 回归：新增 4 项 system facade 测试与 accepted-response 类型测试；完整 Portal 68 个测试文件、229 项测试、typecheck、320-operation OpenAPI gate、320/320 capability matrix 与相关 Go route 测试通过。
 
 ### P2-05 按 feature 垂直切分 Portal
 
@@ -680,7 +687,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 自助入口授权迁移：模块状态、租户现金和在线支付入口已改用 `CapabilityPlatformAdmin`、`CapabilityTenantSelf`、`CapabilityCustomerSelf`；支付场景选择也由 actor capability 决定，未授权角色不会进入下单/查单流程。
 - 授权遗留清理：Transport 已删除未使用的 `requireUserType` 兼容 middleware；认证资料、MFA 注册/确认和租户状态检查改用 actor capability/tenant-scope helper，JWT userType 数值只保留为 claims 数据完整性校验。
 - 授权遗留清理：管理反向充值也改用 `CapabilityTenantSelf` 选择 scoped/unscoped command；Transport 中剩余 userType 读取仅用于持久化投影和 claims 完整性校验，不再承担路由授权判断。
-- 授权矩阵：以 `contracts/openapi.yaml` 为唯一 operation 输入，`docs/AUTHORIZATION_MATRIX.md` 逐条列出 318 个 operation 的 policy、capability/auth mode 和 ownership；`go run ./cmd/checkauthz` 负责覆盖率、重复 operationId、未分类规则和文档 freshness。
+- 授权矩阵：以 `contracts/openapi.yaml` 为唯一 operation 输入，`docs/AUTHORIZATION_MATRIX.md` 逐条列出 320 个 operation 的 policy、capability/auth mode 和 ownership；`go run ./cmd/checkauthz` 负责覆盖率、重复 operationId、未分类规则和文档 freshness。
 - 结算 outbox 生命周期：`billing/outbox.Consumer` 使用独立 worker context，Stop 会停止 claim 新批次并等待当前数据库事务/批次完成；重复 Run/Stop 和停止后启动均安全。
 - 回归：新增账户查询 service 委托/能力缺失测试、Transport 账户范围与 query command 测试；adapter 增加编译期端口断言。
 - 验证：`go test ./internal/billing/... ./internal/transport ./cmd/server`、`go test ./internal/transport -run 'TestAccount'`、`bun run ensure:api` 和 `git diff --check` 通过；完整仓库验证在提交前执行。

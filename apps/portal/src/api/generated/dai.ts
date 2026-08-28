@@ -571,6 +571,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/notifications/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发送通知 */
+        post: operations["admin-send-notification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/payment-orders": {
         parameters: {
             query?: never;
@@ -1479,6 +1496,23 @@ export interface paths {
          * @description 优先查 models.dev 缓存目录，按模态结构判断 image/audio_tts/audio_stt；未命中或模态无法区分 chat/embedding/rerank 时回退本地模型名规则。仅用于表单默认值建议，不做任何写入，也不影响提交时的合法性校验。
          */
         get: operations["ai-infer-model-capability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的通知 */
+        get: operations["list-my-notifications"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6180,6 +6214,34 @@ export interface components {
             readonly $schema?: string;
             deleted: boolean;
         };
+        Delivery: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Delivery.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            attempts: number;
+            body: string;
+            channel: string;
+            /** Format: date-time */
+            createdAt: string;
+            eventKey: string;
+            id: string;
+            lastError?: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            recipientUserId?: string;
+            /** Format: int64 */
+            recipientUserType?: number;
+            /** Format: date-time */
+            sentAt?: string;
+            status: string;
+            tenantId?: string;
+            title: string;
+        };
         DiscoveredModelDTO: {
             /** @description 推断的上游 API 格式 */
             api_format: string;
@@ -7096,6 +7158,28 @@ export interface components {
             username?: string;
             /** Format: int64 */
             weight: number;
+        };
+        NotificationSendInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/NotificationSendInputBody.json
+             */
+            readonly $schema?: string;
+            body: string;
+            /** @enum {string} */
+            channel: "in_app" | "webhook";
+            eventKey: string;
+            idempotencyKey?: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+            recipientUserId?: string;
+            /** Format: int64 */
+            recipientUserType?: number;
+            tenantId?: string;
+            title: string;
+            webhookUrl?: string;
         };
         OauthPoolHealthDTO: {
             /**
@@ -12376,6 +12460,39 @@ export interface operations {
             };
         };
     };
+    "admin-send-notification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationSendInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Delivery"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "admin-list-payment-orders": {
         parameters: {
             query?: {
@@ -14468,6 +14585,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InferModelCapabilityOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "list-my-notifications": {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Delivery"][] | null;
                 };
             };
             /** @description Error */

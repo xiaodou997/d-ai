@@ -2830,6 +2830,60 @@ components:
       required:
         - deleted
       type: object
+    Delivery:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/Delivery.json
+          format: uri
+          readOnly: true
+          type: string
+        attempts:
+          format: int64
+          type: integer
+        body:
+          type: string
+        channel:
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        eventKey:
+          type: string
+        id:
+          type: string
+        lastError:
+          type: string
+        payload:
+          additionalProperties: {}
+          type: object
+        recipientUserId:
+          type: string
+        recipientUserType:
+          format: int64
+          type: integer
+        sentAt:
+          format: date-time
+          type: string
+        status:
+          type: string
+        tenantId:
+          type: string
+        title:
+          type: string
+      required:
+        - id
+        - eventKey
+        - channel
+        - title
+        - body
+        - payload
+        - status
+        - attempts
+        - createdAt
+      type: object
     DiscoveredModelDTO:
       additionalProperties: false
       properties:
@@ -4781,6 +4835,47 @@ components:
         - healthStatus
         - createdAt
         - updatedAt
+      type: object
+    NotificationSendInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/NotificationSendInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        body:
+          type: string
+        channel:
+          enum:
+            - in_app
+            - webhook
+          type: string
+        eventKey:
+          type: string
+        idempotencyKey:
+          type: string
+        payload:
+          additionalProperties: {}
+          type: object
+        recipientUserId:
+          type: string
+        recipientUserType:
+          format: int64
+          type: integer
+        tenantId:
+          type: string
+        title:
+          type: string
+        webhookUrl:
+          type: string
+      required:
+        - eventKey
+        - channel
+        - title
+        - body
       type: object
     OauthPoolHealthDTO:
       additionalProperties: false
@@ -12876,6 +12971,31 @@ paths:
       summary: 启用或禁用模块
       tags:
         - modules
+  /api/v1/admin/notifications/send:
+    post:
+      operationId: admin-send-notification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationSendInputBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Delivery"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 发送通知
+      tags:
+        - notifications
   /api/v1/admin/payment-orders:
     get:
       operationId: admin-list-payment-orders
@@ -14899,6 +15019,37 @@ paths:
       summary: 推断模型能力与协议
       tags:
         - upstream-accounts
+  /api/v1/notifications:
+    get:
+      operationId: list-my-notifications
+      parameters:
+        - explode: false
+          in: query
+          name: limit
+          schema:
+            default: 50
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/Delivery"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 我的通知
+      tags:
+        - notifications
   /api/v1/oauth-pool-health:
     get:
       description: 返回每个 OAuth 凭证池的账号状态聚合指标。

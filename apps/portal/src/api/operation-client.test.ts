@@ -44,6 +44,20 @@ describe("typed OpenAPI operation request", () => {
     expect(query.limit).toBe(10);
   });
 
+  it("infers accepted operation responses", () => {
+    type CleanupRun = import(".").OperationResponse<"admin-start-data-cleanup">;
+    const run: CleanupRun = {
+      id: "run-1",
+      trigger: "manual",
+      status: "queued",
+      targets: ["notifications"],
+      summary: {},
+      createdAt: "2026-08-28T04:00:00Z"
+    };
+
+    expect(run.status).toBe("queued");
+  });
+
   it("keeps nullable profile fields at the generated transport boundary", () => {
     const password: ChangePasswordPayload = { oldPassword: "old", newPassword: "new" };
     const profile: UpdateProfilePayload = { username: null, email: "user@example.com" };

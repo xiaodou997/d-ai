@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -41,6 +42,18 @@ func TestAuthorizationRulesCoverCriticalFamilies(t *testing.T) {
 		got, ok := classify(operation{Method: "GET", Path: tt.path, ID: "test"})
 		if !ok || got.Policy != tt.policy {
 			t.Errorf("classify(%q) = %#v/%v, want policy %q", tt.path, got, ok, tt.policy)
+		}
+	}
+}
+
+func TestRenderedAuthorizationMatrixHasNoTrailingWhitespace(t *testing.T) {
+	rendered := renderMatrix([]byte("contract"), []struct {
+		operation
+		rule
+	}{{operation: operation{Method: "GET", Path: "/health", ID: "health"}, rule: rule{Policy: "public", Ownership: "none"}}})
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.TrimRight(line, " \t") != line {
+			t.Fatalf("rendered line has trailing whitespace: %q", line)
 		}
 	}
 }

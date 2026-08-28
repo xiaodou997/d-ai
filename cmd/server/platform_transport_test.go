@@ -56,6 +56,7 @@ func TestBuildPlatformTransportModulesRegisterEverySurface(t *testing.T) {
 		{path: "/api/v1/system-admins", name: "admin", get: true, post: true},
 		{path: "/api/v1/payments/topup-orders", name: "billing", post: true},
 		{path: "/api/v1/admin/modules", name: "operations", get: true},
+		{path: "/api/v1/admin/notifications/send", name: "notifications", post: true},
 		{path: "/api/v1/tenants/me/groups", name: "ai", get: true},
 	} {
 		item, ok := paths[route.path]

@@ -36,9 +36,11 @@ export type OperationResponse<Operation extends keyof operations> =
     ? JSONResponseContent<operations[Operation]["responses"][200]>
     : 201 extends keyof operations[Operation]["responses"]
       ? JSONResponseContent<operations[Operation]["responses"][201]>
-      : 204 extends keyof operations[Operation]["responses"]
-        ? undefined
-        : never;
+      : 202 extends keyof operations[Operation]["responses"]
+        ? JSONResponseContent<operations[Operation]["responses"][202]>
+        : 204 extends keyof operations[Operation]["responses"]
+          ? undefined
+          : never;
 
 /** JSON request body inferred from one generated OpenAPI operation. */
 export type OperationBody<Operation extends keyof operations> = operations[Operation] extends {

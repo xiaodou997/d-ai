@@ -31,6 +31,7 @@ func TestPlatformModuleRegistersPlatformSurface(t *testing.T) {
 		{path: "/api/v1/system-admins", name: "admin accounts", get: true, post: true},
 		{path: "/api/v1/payments/topup-orders", name: "payment", post: true},
 		{path: "/api/v1/admin/modules", name: "operations", get: true},
+		{path: "/api/v1/admin/notifications/send", name: "notifications", post: true},
 	} {
 		item, ok := paths[route.path]
 		if !ok || item == nil {
