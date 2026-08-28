@@ -253,6 +253,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 结算 Outbox 保持多消费者唯一处理；消费者使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，并发回归测试验证每条 request_id 只落账一次。
 - [x] 异步任务和 Webhook 保持租约、心跳、回收与 fencing；并发 claim 与 stale owner 终态写入回归测试已覆盖。
 - [ ] 调度任务统一使用 advisory lock、租约或可证明的幂等执行。
+- [x] 调度任务统一使用 advisory lock、租约或可证明的幂等执行；对账/支付任务使用 advisory lock，额度过期使用锁顺序、`FOR UPDATE SKIP LOCKED` 与 `expired_at` 幂等锚点，并发副本回归测试已覆盖。
 - [x] JWT key retire 使用数据库条件更新并由每个副本在每轮执行后刷新本地 key cache。
 - [x] LiteLLM 价格导入与常用模型同步按价格表事务批量执行，重复快照不重复 bump revision，失败回滚可重试且不覆盖手工条目。
 - [x] 数据清理运行增加 owner、heartbeat、lease_until 和终态 fencing，过期租约可回收，长任务不会被固定启动扫描误判为 stale。
@@ -1321,3 +1322,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 语义：异步任务和 Webhook delivery 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 领取，heartbeat 续租，reaper 回收过期 lease；终态写入必须匹配当前 `worker_id`，旧 owner 在接管后被 fencing。
 - 回归：新增多副本并发 Webhook claim 与 stale owner 终态写入测试；`go test ./internal/ai/asynctask -count=1` 通过。
 - 环境备注：本次全量测试中 `internal/db/TestMigration0019RepairsHistoricalBillingStatusIndex` 受测试数据库 OID/连接环境影响失败，单独重跑因当前环境无法连接默认测试数据库而 skip；该既有 migration flake 与本项无关。
+
+### P2-02（Scheduler cross-replica coordination，2026-08-28）
+
+- 语义：billing reconciliation 与 payment sweep/cleanup 通过 PostgreSQL advisory lock 互斥；JWT retire 使用条件更新；lot expiry 使用确定性账户锁顺序、`FOR UPDATE SKIP LOCKED` 与 `expired_at` 幂等标记。
+- 回归：新增两个独立 expiry 副本并发执行测试，确认同一批次只结算一次；`go test ./internal/billing/ledger ./internal/scheduler -count=1` 通过。

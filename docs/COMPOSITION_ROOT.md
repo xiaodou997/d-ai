@@ -104,6 +104,7 @@ P2-01 在同一组合根上增加运行角色参数：`dai all`（默认）、`d
 - 提现列表通过 `PaymentService.ListWithdrawals` 接收 `WithdrawalListParams`，由 application 层归一化租户/状态/分页并拒绝未知状态，Transport 不再传递裸查询参数。
 - 支付 cleanup 失败通过 `error` 返回 Scheduler 统一记录；Scheduler 的后台任务启动/停止具备幂等保护、等待语义，JWT 退役初始延迟可被停止信号中断。
 - Scheduler 通过 `/health` 暴露五类后台任务的运行中、最近成功/失败、连续失败和跨副本锁跳过快照；支付 sweep 将单轮错误回传，订单级退避状态负责跨周期/重启重试，`sweep_last_error` 可用于故障告警与人工对账。
+- Scheduler 的跨副本任务协调已统一记录：billing reconciliation 与 payment sweep/cleanup 使用 PostgreSQL advisory lock，lot expiry 使用账户锁顺序和 `FOR UPDATE SKIP LOCKED`，JWT retire 依赖条件更新；并发 expiry 回归测试验证每个 lot 只结算一次。
 - JWT 密钥退役使用带超时的数据库更新；即使某个副本 UPDATE 影响 0 行，也会重新加载 active/grace 集合，及时清除其他副本已退役的本地公钥缓存。
 - LiteLLM 价格导入与常用模型同步按价格表单事务批量执行，价格表行锁串行化同一价格表的副本写入；相同快照只在实际变化时 bump revision，失败整批回滚后可安全重试，手工条目仍受保护。
 - 数据清理运行记录持有 owner、heartbeat 和 lease_until；清理 worker 续租失败会主动取消，终态写入必须匹配 owner，过期租约可被其他副本回收，避免长任务误完成或永久占用活动槽位。

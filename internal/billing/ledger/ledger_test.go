@@ -310,6 +310,66 @@ func TestExpireDueLotsDeductsOnceAndIsIdempotent(t *testing.T) {
 	assertLotInvariant(t, ctx, pool, user)
 }
 
+// Independent scheduler replicas may run expiry at the same time. Account
+// locking followed by FOR UPDATE SKIP LOCKED must make exactly one replica
+// claim and stamp each due lot; the other observes the idempotency marker.
+func TestConcurrentExpiryReplicasSettleEachLotOnce(t *testing.T) {
+	pool, ctx := openLedgerPool(t)
+	_, user := seedAccounts(t, ctx, pool)
+	past := time.Now().UTC().Add(-time.Hour)
+	mustGrant(t, ctx, pool, user, 500_000, &past, "")
+
+	start := make(chan struct{})
+	results := make(chan struct {
+		settled int
+		err     error
+	}, 2)
+	for range 2 {
+		go func() {
+			<-start
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				results <- struct {
+					settled int
+					err     error
+				}{err: err}
+				return
+			}
+			defer tx.Rollback(ctx)
+			var settled int
+			err = func() error {
+				var err error
+				settled, err = ledger.ExpireDueLots(ctx, tx, time.Now().UTC(), 100)
+				return err
+			}()
+			if err == nil {
+				err = tx.Commit(ctx)
+			}
+			results <- struct {
+				settled int
+				err     error
+			}{settled: settled, err: err}
+		}()
+	}
+	close(start)
+
+	total := 0
+	for range 2 {
+		result := <-results
+		if result.err != nil {
+			t.Fatalf("concurrent expiry: %v", result.err)
+		}
+		total += result.settled
+	}
+	if total != 1 {
+		t.Fatalf("concurrent expiry settled %d lots, want exactly 1", total)
+	}
+	if got := balanceOf(t, ctx, pool, user); got != 0 {
+		t.Fatalf("balance after concurrent expiry = %d, want 0", got)
+	}
+	assertLotInvariant(t, ctx, pool, user)
+}
+
 // Expiry only removes what was left; money already spent out of the lot is not
 // deducted a second time.
 func TestExpireDueLotsOnlyReclaimsTheUnspentPart(t *testing.T) {
