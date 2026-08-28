@@ -323,6 +323,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 接入：`bun run ensure:api`、CI Portal job 均执行契约门禁；新增 6 项门禁单测覆盖匹配、漂移和破坏性删除。
 - 回归：完整 Portal 220 项测试、typecheck、`ensure:api`、Go 全量测试、`go vet`、`go build`、`checkdeps` 和 `git diff --check` 通过。
 
+### P2-04（Typed authentication facade，2026-08-28）
+
+- 迁移：登录、刷新、MFA、登出和当前用户查询改用生成的 `operations` typed request，删除认证 facade 的直接 `fetch`、手写响应 DTO 和未经校验的 JSON 断言。
+- 领域边界：认证 store 继续使用稳定的 `AuthTokenResponse` / `UserInfoResponse` facade 类型，生成 transport schema 不直接泄漏到页面状态。
+- 回归：认证定向测试 7 项、完整 Portal 220 项测试、typecheck、`ensure:api`、Go 全量测试、`go vet`、`go build`、`checkdeps` 和 `git diff --check` 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

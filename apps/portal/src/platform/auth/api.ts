@@ -1,12 +1,9 @@
-import type { RequestAdapter } from "@/api";
+import { createTypedOperationRequest, type RequestAdapter } from "@/api";
+import type { components } from "@/api/generated/dai";
 
-export interface AuthTokenResponse {
-  accessToken: string;
-  expiresIn: number;
-  refreshExpiresIn: number;
-  mfaRequired?: boolean;
-  mfaChallengeToken?: string;
-}
+export type AuthTokenResponse = components["schemas"]["AuthTokenResponse"];
+export type UserInfoResponse = components["schemas"]["UserInfoOutputBody"];
+export type AuthLogoutResponse = components["schemas"]["AuthLogoutOutputBody"];
 
 export class MFARequiredError extends Error {
   readonly challengeToken: string;
@@ -18,80 +15,50 @@ export class MFARequiredError extends Error {
   }
 }
 
-export interface UserInfoResponse {
-  sub: string;
-  username: string;
-  userType: number;
-  tenantId: string;
-  tenantName: string;
-  mfaEnabled?: boolean;
-}
-
 export interface CreateAuthApiOptions {
   request: RequestAdapter;
   baseUrl: string;
 }
 
 export function createPortalAuthApi(options: CreateAuthApiOptions) {
+  const request = createTypedOperationRequest(options.request);
   return {
     async login(username: string, password: string): Promise<AuthTokenResponse> {
-      return requestAuth(options, "/api/auth/login", {
-        username: username.trim(),
-        password
+      return request<"auth-login">({
+        method: "POST",
+        path: "/api/auth/login",
+        body: { username: username.trim(), password },
+        baseUrl: options.baseUrl
       });
     },
     async refreshToken(): Promise<AuthTokenResponse> {
-      return requestAuth(options, "/api/auth/refresh");
-    },
-    async verifyMFA(challengeToken: string, code: string): Promise<AuthTokenResponse> {
-      return requestAuth(options, "/api/auth/mfa/verify", {
-        challengeToken,
-        code
+      return request<"auth-refresh">({
+        method: "POST",
+        path: "/api/auth/refresh",
+        baseUrl: options.baseUrl
       });
     },
-    async logout(): Promise<{ success?: boolean; message?: string }> {
-      return options.request({
+    async verifyMFA(challengeToken: string, code: string): Promise<AuthTokenResponse> {
+      return request<"auth-mfa-verify">({
+        method: "POST",
+        path: "/api/auth/mfa/verify",
+        body: { challengeToken, code },
+        baseUrl: options.baseUrl
+      });
+    },
+    async logout(): Promise<AuthLogoutResponse> {
+      return request<"auth-logout">({
         method: "POST",
         path: "/api/auth/logout",
         baseUrl: options.baseUrl
       });
     },
     async getCurrentUser(): Promise<UserInfoResponse> {
-      return options.request({
+      return request<"auth-current-user">({
         method: "GET",
         path: "/api/auth/me",
         baseUrl: options.baseUrl
       });
     }
   };
-}
-
-// 支持相对或绝对 API 基址；相对基址不能直接交给 new URL。
-function authEndpoint(baseUrl: string, path: string): string {
-  return `${(baseUrl || "").replace(/\/$/, "")}${path}`;
-}
-
-async function requestAuth(
-  options: CreateAuthApiOptions,
-  path: string,
-  body?: Record<string, string>
-): Promise<AuthTokenResponse> {
-  const response = await fetch(authEndpoint(options.baseUrl, path), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    credentials: "include",
-    ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  });
-
-  if (!response.ok) {
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/problem+json")) {
-      throw new Error((await response.json()).detail || `HTTP ${response.status}`);
-    }
-    throw new Error(`HTTP ${response.status}`);
-  }
-
-  return (await response.json()) as AuthTokenResponse;
 }

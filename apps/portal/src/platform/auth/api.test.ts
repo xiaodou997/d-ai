@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RequestAdapter } from "@/api";
 import { createPortalAuthApi } from "./api";
+import { createFetchAdapter } from "../http";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -19,8 +19,8 @@ describe("unified Portal password login", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const api = createPortalAuthApi({
-      request: vi.fn() as unknown as RequestAdapter,
-      baseUrl: ""
+      request: createFetchAdapter(),
+      baseUrl: "/"
     });
 
     await api.login(" alice ", "secret");
@@ -44,8 +44,8 @@ describe("unified Portal password login", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const api = createPortalAuthApi({
-      request: vi.fn() as unknown as RequestAdapter,
-      baseUrl: ""
+      request: createFetchAdapter(),
+      baseUrl: "/"
     });
 
     await api.refreshToken();
