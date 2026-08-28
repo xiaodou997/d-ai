@@ -60,7 +60,7 @@ export type OperationQuery<Operation extends keyof operations> = operations[Oper
 export type OperationPath<Operation extends keyof operations> = operations[Operation] extends {
   parameters: { path?: infer Path };
 }
-  ? Path extends Record<string, string>
+  ? Path extends Record<string, string | number>
     ? Path
     : never
   : never;

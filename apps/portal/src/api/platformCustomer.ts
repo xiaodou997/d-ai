@@ -8,6 +8,7 @@ import {
   type OperationBody,
   type OperationResponse
 } from ".";
+import { toAccountBalance, toRechargePage } from "./accountMappers";
 import type {
   AccountBalance,
   CustomerPortalBrand,
@@ -28,8 +29,6 @@ const baseUrl = apiBaseUrl;
 const typedRequest = createTypedOperationRequest(platform());
 
 type PortalBrandTransport = OperationResponse<"customer-get-portal-brand">;
-type BalanceTransport = OperationResponse<"account-balance">;
-type RechargePageTransport = OperationResponse<"account-recharge-records">;
 type TopupConfigTransport = OperationResponse<"payment-topup-config">;
 type TopupOrderCreatedTransport = OperationResponse<"payment-create-topup-order">;
 type TopupOrderStatusTransport = OperationResponse<"payment-get-topup-order">;
@@ -38,30 +37,6 @@ type TopupOrderItemTransport = NonNullable<TopupOrderPageTransport["items"]>[num
 
 function toPortalBrand(value: PortalBrandTransport): CustomerPortalBrand {
   return { siteName: value.siteName, faviconPath: value.faviconPath };
-}
-
-function toAccountBalance(value: BalanceTransport): AccountBalance {
-  return {
-    currency: value.currency,
-    totalUsd: value.totalUsd,
-    usedUsd: value.usedUsd,
-    remainingUsd: value.remainingUsd,
-    availableUsd: value.availableUsd,
-    permanentUsd: value.permanentUsd,
-    timedUsd: value.timedUsd,
-    outstandingDebtMicroUsd: value.outstandingDebtMicroUsd,
-    serviceState: value.serviceState,
-    balanceLots: value.balanceLots?.map((item) => ({ ...item }))
-  };
-}
-
-function toRechargePage(value: RechargePageTransport): Page<RechargeRecordItem> {
-  return {
-    items: value.items?.map((item) => ({ ...item })) ?? [],
-    total: value.total,
-    page: value.page,
-    size: value.size
-  };
 }
 
 function toTopupMode(value: string): TopupOrderCreated["topupMode"] {

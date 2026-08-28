@@ -348,6 +348,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：模块、PII、代理与清理 mapper 移除 `$schema`、归一 nullable 集合，并校验 proxy/run 有限状态；删除代理节点继续保持页面需要的 `Promise<void>`，通知响应收敛为最小结果。
 - 回归：新增 4 项 system facade 测试与 accepted-response 类型测试；完整 Portal 68 个测试文件、229 项测试、typecheck、320-operation OpenAPI gate、320/320 capability matrix 与相关 Go route 测试通过。
 
+### P2-04（Typed tenant self-service facade，2026-08-28）
+
+- 迁移：租户分析、账户、终端用户、充值/撤销和邀请码的 18 个 facade 请求全部绑定生成 operation；数字 path 参数通过 `pathParams` 显式传递，充值与邀请码 body 不再重复声明传输字段。
+- 领域边界：共享账户分页/余额 mapper 收敛 customer 与 tenant 的重复 DTO；租户 facade 将 nullable 列表归一为空数组，并在终端用户 credential/status 与邀请码 status 进入页面模型前校验有限集合。
+- 回归：新增 5 项 tenant facade 测试覆盖租户充值范围、路径参数、分页空值和未知状态拒绝；相关用户管理/租户页面测试、typecheck、320-operation OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

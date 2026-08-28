@@ -1,6 +1,8 @@
 // Platform 租户自助业务页类型 —— 字段名以统一后端 Huma DTO 真实返回为准（camelCase）。
 // 对照 internal/{billing/pg,tenant/pg,transport} 的 DTO。
 
+export type { AccountBalance, BalanceLot, Page, RechargeRecordItem } from "./account";
+
 // ===== 统计 / 概览 =====
 export interface TenantAnalyticsOverview {
 	endUserCount: number;
@@ -26,43 +28,6 @@ export interface UserConsumptionItem {
 	amountUsd: number;
   transactionCount: number;
   percentage: string;
-}
-
-// ===== USD 额度账户 / 额度包 =====
-export interface BalanceLot {
-	balanceLotId: string;
-	totalUsd: number;
-	remainingUsd: number;
-  createdAt: string;
-  expiresAt?: string | null;
-  source: string;
-}
-
-export interface AccountBalance {
-	currency: string;
-	totalUsd: number;
-	usedUsd: number;
-	remainingUsd: number;
-	availableUsd: number;
-	permanentUsd: number;
-	timedUsd: number;
-	outstandingDebtMicroUsd: number;
-	serviceState: string;
-	balanceLots?: BalanceLot[];
-}
-
-// ===== 充值记录 =====
-export interface RechargeRecordItem {
-  orderId: string;
-  orderType: string;
-	paidAmountMinor: number;
-	amountUsd: number;
-  status: string;
-  note: string;
-  userId: string;
-  username: string;
-  tenantName: string;
-  createdTime?: number | null;
 }
 
 // ===== 终端用户 =====
@@ -143,12 +108,4 @@ export interface ReverseRechargeOutput {
 	originalAmountUsd: number;
 	lostAmountUsd: number;
 	balanceLotStatus: string;
-}
-
-// ===== 通用分页 =====
-export interface Page<T> {
-  items: T[];
-  total: number;
-  page: number;
-  size: number;
 }

@@ -1,55 +1,17 @@
 // Platform customer self-service contracts. All money is USD; exact ledger
 // values use int64 micro-USD and display values use decimal USD.
 
-export interface BalanceLot {
-  balanceLotId: string;
-  totalUsd: number;
-  remainingUsd: number;
-  createdAt: string;
-  expiresAt?: string | null;
-  source: string;
-}
+import type { BalanceLot } from "./account";
+
+export type { AccountBalance, BalanceLot, Page, RechargeRecordItem } from "./account";
 
 export interface CustomerPortalBrand {
   siteName: string;
   faviconPath?: string;
 }
 
-export interface AccountBalance {
-  currency: "USD" | string;
-  totalUsd: number;
-  usedUsd: number;
-  remainingUsd: number;
-  availableUsd: number;
-  permanentUsd: number;
-  timedUsd: number;
-  outstandingDebtMicroUsd: number;
-  serviceState: string;
-  balanceLots?: BalanceLot[];
-}
-
 export interface BalanceLotView extends BalanceLot {
   status: number;
-}
-
-export interface RechargeRecordItem {
-  orderId: string;
-  orderType: string;
-  paidAmountMinor: number;
-  amountUsd: number;
-  status: string;
-  note: string;
-  userId: string;
-  username: string;
-  tenantName: string;
-  createdTime?: number | null;
-}
-
-export interface Page<T> {
-  items: T[];
-  total: number;
-  page: number;
-  size: number;
 }
 
 export interface TopupConfig {
