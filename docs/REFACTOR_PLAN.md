@@ -427,6 +427,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：限额 scope/status、并发数和上游资源 kind/access mode 在进入传输层前校验，nullable 策略/资源列表归一为空数组，页面可空并发值转换为 generated schema 的 `undefined`。
 - 回归：新增 admin policy facade 测试覆盖 CRUD body、编码 path、identity included、上游授权列表/替换和非法 scope/status/resource kind 拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed admin credential-pool facade，2026-08-28）
+
+- 迁移：凭证池列表/CRUD/启停、OAuth 凭证导入/列表/状态/刷新/删除及池健康汇总共 11 个 facade 请求绑定 generated OpenAPI operations；池和凭证 path 参数显式传递。
+- 领域边界：池 provider/access/strategy/status、凭证 provider/status、必填 access token 和数值权重在 facade 边界校验；nullable 池/凭证/健康列表归一为空数组，传输层冷却字段不泄漏到页面 DTO。
+- 回归：新增 admin credential-pool facade 测试覆盖池与凭证 CRUD body/path、schema 清理、健康汇总映射和非法枚举拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

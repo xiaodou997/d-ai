@@ -37,6 +37,7 @@ import type {
   DashboardTopTenantsOutputBody,
   DashboardRecentErrorsOutputBody,
   OAuthPoolHealthOutputBody,
+  OAuthPoolHealthDTO,
   PoolAvailableModelsDTO,
   PoolCredentialDTO,
   PoolCredentialPatchRequest,
@@ -101,6 +102,22 @@ type LimitPolicyWriteBody = OperationBody<"ai-create-runtime-limit-policy">;
 type LimitPolicyScopeType = LimitPolicyWriteBody["scope_type"];
 type LimitPolicyStatus = NonNullable<LimitPolicyWriteBody["status"]>;
 type TenantUpstreamAccessWriteBody = OperationBody<"ai-replace-tenant-upstream-access">;
+type CredentialPoolTransport = components["schemas"]["CredentialPoolDTO"];
+type CredentialPoolsTransport = OperationResponse<"ai-list-credential-pools">;
+type PoolCredentialTransport = components["schemas"]["PoolCredentialDTO"];
+type PoolCredentialsTransport = OperationResponse<"ai-list-pool-credentials">;
+type OAuthPoolHealthTransport = components["schemas"]["OauthPoolHealthDTO"];
+type OAuthPoolHealthPageTransport = OperationResponse<"ai-get-oauth-pool-health">;
+type CredentialPoolWriteBody = OperationBody<"ai-create-credential-pool">;
+type PoolCredentialWriteBody = OperationBody<"ai-import-pool-credential">;
+type PoolCredentialPatchBody = OperationBody<"ai-update-pool-credential">;
+type PoolFixedProvider = NonNullable<CredentialPoolWriteBody["fixed_provider_type"]>;
+type PoolOAuthStrategy = NonNullable<CredentialPoolWriteBody["oauth_strategy"]>;
+type PoolAccessMode = NonNullable<CredentialPoolWriteBody["tenant_access_mode"]>;
+type PoolStatus = components["schemas"]["CredentialPoolDTO"]["status"];
+type PoolCredentialProvider = NonNullable<PoolCredentialWriteBody["provider_type"]>;
+type PoolCredentialStatus = "active" | "invalid" | "disabled";
+type PoolCredentialPatchStatus = NonNullable<PoolCredentialPatchBody["status"]>;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
 type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
@@ -558,6 +575,152 @@ function toTenantUpstreamAccessBody(policies: TenantUpstreamPolicyRef[]): Tenant
   };
 }
 
+function toPoolFixedProvider(value: unknown): PoolFixedProvider | undefined {
+  if (value === undefined || value === "codex" || value === "claude_oauth" || value === "gemini_cli" || value === "antigravity") return value;
+  throw new Error(`Unexpected credential pool provider: ${String(value)}`);
+}
+
+function toPoolOAuthStrategy(value: unknown): PoolOAuthStrategy | undefined {
+  if (value === undefined || value === "round_robin" || value === "weighted") return value;
+  throw new Error(`Unexpected credential pool OAuth strategy: ${String(value)}`);
+}
+
+function toPoolAccessMode(value: unknown): PoolAccessMode | undefined {
+  if (value === undefined || value === "public" || value === "restricted") return value;
+  throw new Error(`Unexpected credential pool access mode: ${String(value)}`);
+}
+
+function toPoolStatus(value: unknown): PoolStatus | undefined {
+  if (value === undefined || value === "active" || value === "disabled") return value;
+  throw new Error(`Unexpected credential pool status: ${String(value)}`);
+}
+
+function toCredentialPoolBody(value: CredentialPoolWriteRequest): CredentialPoolWriteBody {
+  if (typeof value.name !== "string") throw new Error("credential pool name is required");
+  return {
+    name: value.name,
+    tenant_display_name: value.tenant_display_name,
+    tenant_access_mode: toPoolAccessMode(value.tenant_access_mode),
+    fixed_provider_type: toPoolFixedProvider(value.fixed_provider_type),
+    oauth_strategy: toPoolOAuthStrategy(value.oauth_strategy),
+    notes: value.notes,
+    price_book_id: value.price_book_id,
+    tenant_multiplier: value.tenant_multiplier
+  };
+}
+
+function toCredentialPool(value: CredentialPoolTransport): CredentialPoolDTO {
+  toPoolFixedProvider(value.fixed_provider_type);
+  toPoolOAuthStrategy(value.oauth_strategy);
+  toPoolAccessMode(value.tenant_access_mode);
+  toPoolStatus(value.status);
+  return {
+    id: value.id,
+    name: value.name,
+    tenant_display_name: value.tenant_display_name,
+    tenant_access_mode: value.tenant_access_mode,
+    fixed_provider_type: value.fixed_provider_type,
+    oauth_strategy: value.oauth_strategy,
+    notes: value.notes,
+    status: value.status,
+    price_book_id: value.price_book_id,
+    tenant_multiplier: value.tenant_multiplier,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toCredentialPools(value: CredentialPoolsTransport): CredentialPoolsOutputBody {
+  return { items: value.items?.map(toCredentialPool) ?? [], total: value.total };
+}
+
+function toPoolCredentialProvider(value: unknown): PoolCredentialProvider | undefined {
+  return toPoolFixedProvider(value) as PoolCredentialProvider | undefined;
+}
+
+function toPoolCredentialStatus(value: string): PoolCredentialStatus {
+  if (value === "active" || value === "invalid" || value === "disabled") return value;
+  throw new Error(`Unexpected OAuth credential status: ${value}`);
+}
+
+function toPoolCredential(value: PoolCredentialTransport): PoolCredentialDTO {
+  toPoolCredentialProvider(value.provider_type);
+  toPoolCredentialStatus(value.status);
+  return {
+    id: value.id,
+    pool_id: value.pool_id,
+    name: value.name,
+    provider_type: value.provider_type,
+    email: value.email,
+    token_type: value.token_type,
+    scope: value.scope,
+    expires_at: value.expires_at,
+    auth_metadata: value.auth_metadata,
+    weight: value.weight,
+    status: value.status,
+    invalid_reason: value.invalid_reason,
+    last_used_at: value.last_used_at,
+    last_refreshed_at: value.last_refreshed_at,
+    last_failed_at: value.last_failed_at,
+    consecutive_fail_count: value.consecutive_fail_count,
+    success_count: value.success_count,
+    fail_count: value.fail_count,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toPoolCredentials(value: PoolCredentialsTransport): PoolCredentialsOutputBody {
+  return { items: value.items?.map(toPoolCredential) ?? [], total: value.total };
+}
+
+function toPoolCredentialBody(value: PoolCredentialWriteRequest): PoolCredentialWriteBody {
+  if (typeof value.access_token !== "string") throw new Error("OAuth access_token is required");
+  return {
+    access_token: value.access_token,
+    name: value.name,
+    provider_type: toPoolCredentialProvider(value.provider_type),
+    email: value.email,
+    refresh_token: value.refresh_token,
+    token_type: value.token_type,
+    scope: value.scope,
+    expires_at: value.expires_at,
+    weight: value.weight,
+    auth_metadata: value.auth_metadata,
+    account_id: value.account_id,
+    plan_type: value.plan_type,
+    user_id: value.user_id,
+    account_user_id: value.account_user_id
+  };
+}
+
+function toPoolCredentialPatchBody(value: PoolCredentialPatchRequest): PoolCredentialPatchBody {
+  if (value.weight !== undefined && !Number.isFinite(value.weight)) {
+    throw new Error("OAuth credential weight must be a finite number");
+  }
+  return { status: value.status === undefined ? undefined : toPoolStatus(value.status) as PoolCredentialPatchStatus, weight: value.weight };
+}
+
+function toOAuthPoolHealth(value: OAuthPoolHealthTransport): OAuthPoolHealthDTO {
+  toPoolFixedProvider(value.fixed_provider_type);
+  toPoolOAuthStrategy(value.oauth_strategy);
+  return {
+    pool_id: value.pool_id,
+    pool_name: value.pool_name,
+    fixed_provider_type: value.fixed_provider_type,
+    oauth_strategy: value.oauth_strategy,
+    total: value.total,
+    active: value.active,
+    invalid: value.invalid,
+    disabled: value.disabled,
+    expiring_soon: value.expiring_soon
+  };
+}
+
+function toOAuthPoolHealthPage(value: OAuthPoolHealthPageTransport): OAuthPoolHealthOutputBody {
+  return { items: value.items?.map(toOAuthPoolHealth) ?? [], total: value.total };
+}
+
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
@@ -1000,89 +1163,97 @@ export const aiAdminApi = {
 
   // ---- Credential pools ----
   listCredentialPools() {
-    return request()<CredentialPoolsOutputBody>({
+    return typedRequest<"ai-list-credential-pools">({
       method: "GET",
       path: "/api/v1/credential-pools",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toCredentialPools);
   },
   createCredentialPool(body: CredentialPoolWriteRequest) {
-    return request()<CredentialPoolDTO>({
+    return typedRequest<"ai-create-credential-pool">({
       method: "POST",
       path: "/api/v1/credential-pools",
       headers: apiHeaders,
-      body,
+      body: toCredentialPoolBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toCredentialPool);
   },
   patchCredentialPool(poolId: string, body: CredentialPoolWriteRequest) {
-    return request()<CredentialPoolDTO>({
+    return typedRequest<"ai-update-credential-pool">({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
-      body,
+      body: toCredentialPoolBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toCredentialPool);
   },
   updateCredentialPoolStatus(poolId: string, status: "active" | "disabled") {
-    return request()<CredentialPoolDTO>({
+    return typedRequest<"ai-update-credential-pool-status">({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/status`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
-      body: { status },
+      body: { status: toPoolStatus(status) as PoolStatus },
       baseUrl: apiBaseUrl
-    });
+    }).then(toCredentialPool);
   },
   deleteCredentialPool(poolId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-credential-pool">({
       method: "DELETE",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   listPoolCredentials(poolId: string) {
-    return request()<PoolCredentialsOutputBody>({
+    return typedRequest<"ai-list-pool-credentials">({
       method: "GET",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPoolCredentials);
   },
   createPoolCredential(poolId: string, body: PoolCredentialWriteRequest) {
-    return request()<PoolCredentialDTO>({
+    return typedRequest<"ai-import-pool-credential">({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials`,
+      pathParams: { poolID: poolId },
       headers: apiHeaders,
-      body,
+      body: toPoolCredentialBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toPoolCredential);
   },
   patchPoolCredential(poolId: string, credId: string, body: PoolCredentialPatchRequest) {
-    return request()<PoolCredentialDTO>({
+    return typedRequest<"ai-update-pool-credential">({
       method: "PATCH",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials/${encodeURIComponent(credId)}`,
+      pathParams: { poolID: poolId, credID: credId },
       headers: apiHeaders,
-      body,
+      body: toPoolCredentialPatchBody(body),
       baseUrl: apiBaseUrl
-    });
+    }).then(toPoolCredential);
   },
   deletePoolCredential(poolId: string, credId: string) {
-    return request()<{ deleted: boolean }>({
+    return typedRequest<"ai-delete-pool-credential">({
       method: "DELETE",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials/${encodeURIComponent(credId)}`,
+      pathParams: { poolID: poolId, credID: credId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then((value) => ({ deleted: value.deleted }));
   },
   refreshPoolCredential(poolId: string, credId: string) {
-    return request()<PoolCredentialDTO>({
+    return typedRequest<"ai-refresh-pool-credential">({
       method: "POST",
       path: `/api/v1/credential-pools/${encodeURIComponent(poolId)}/credentials/${encodeURIComponent(credId)}/refresh`,
+      pathParams: { poolID: poolId, credID: credId },
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toPoolCredential);
   },
   getPoolAvailableModels(poolId: string) {
     return typedRequest<"ai-get-pool-available-models">({
@@ -1142,11 +1313,11 @@ export const aiAdminApi = {
     }).then(toImportedModels);
   },
   getOAuthPoolHealth() {
-    return request()<OAuthPoolHealthOutputBody>({
+    return typedRequest<"ai-get-oauth-pool-health">({
       method: "GET",
       path: "/api/v1/oauth-pool-health",
       headers: apiHeaders,
       baseUrl: apiBaseUrl
-    });
+    }).then(toOAuthPoolHealthPage);
   },
 };
