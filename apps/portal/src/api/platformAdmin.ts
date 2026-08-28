@@ -2,6 +2,7 @@ import { authenticatedRequest, apiHeaders, apiBaseUrl } from "./request";
 import {
   createTypedOperationRequest,
   type OperationBody,
+  type OperationQuery,
   type OperationResponse
 } from ".";
 import type {
@@ -34,6 +35,7 @@ import type {
   WechatConfigWriteInput
 } from "./types/admin";
 import type { ChangePasswordPayload } from "./types/auth";
+import type { components } from "./generated/dai";
 
 function request() {
   return authenticatedRequest();
@@ -47,6 +49,15 @@ type TenantPageTransport = OperationResponse<"admin-list-tenants">;
 type TenantTransport = NonNullable<TenantPageTransport["items"]>[number];
 type EndUserPageTransport = OperationResponse<"admin-list-end-users">;
 type EndUserTransport = NonNullable<EndUserPageTransport["items"]>[number];
+type AccountBalanceTransport = OperationResponse<"account-balance">;
+type RechargeRecordsTransport = OperationResponse<"account-recharge-records">;
+type RechargeTransport = OperationResponse<"admin-recharge">;
+type ReverseRechargeTransport = OperationResponse<"admin-reverse-recharge">;
+type BatchRefundTransport = OperationResponse<"admin-batch-refund-usage">;
+type DebtTransport = OperationResponse<"admin-get-debt">;
+type AccountBalanceLotTransport = components["schemas"]["AccountBalanceLot"];
+type AccountBalanceServiceState = "active" | "blocked_debt";
+type DebtOwnerType = "tenant" | "user";
 
 function toOperationStatus(value: { success: boolean }): { status: string } {
   return { status: value.success ? "success" : "failed" };
@@ -129,6 +140,126 @@ function toMessage(value: { message: string }): { message: string } {
   return { message: value.message };
 }
 
+function toAccountBalanceServiceState(value: string): AccountBalanceServiceState {
+  if (value === "active" || value === "blocked_debt") return value;
+  throw new Error(`Unexpected account balance service state: ${value}`);
+}
+
+function toBalanceLot(value: AccountBalanceLotTransport): NonNullable<AccountBalanceOutput["balanceLots"]>[number] {
+  return {
+    balanceLotId: value.balanceLotId,
+    totalUsd: value.totalUsd,
+    remainingUsd: value.remainingUsd,
+    createdAt: value.createdAt,
+    expiresAt: value.expiresAt ?? null,
+    source: value.source
+  };
+}
+
+function toAccountBalance(value: AccountBalanceTransport): AccountBalanceOutput {
+  return {
+    currency: value.currency,
+    totalUsd: value.totalUsd,
+    usedUsd: value.usedUsd,
+    remainingUsd: value.remainingUsd,
+    availableUsd: value.availableUsd,
+    permanentUsd: value.permanentUsd,
+    timedUsd: value.timedUsd,
+    outstandingDebtMicroUsd: value.outstandingDebtMicroUsd,
+    serviceState: toAccountBalanceServiceState(value.serviceState),
+    balanceLots: value.balanceLots?.map(toBalanceLot) ?? []
+  };
+}
+
+function toRechargeRecord(value: components["schemas"]["RechargeRecordRow"]): PageRechargeRecordItem["items"][number] {
+  return {
+    orderId: value.orderId,
+    orderType: value.orderType,
+    paidAmountMinor: value.paidAmountMinor,
+    amountUsd: value.amountUsd,
+    status: value.status,
+    note: value.note,
+    userId: value.userId,
+    username: value.username,
+    tenantName: value.tenantName,
+    createdTime: value.createdTime ?? undefined
+  };
+}
+
+function toRechargeRecords(value: RechargeRecordsTransport): PageRechargeRecordItem {
+  return {
+    items: value.items?.map(toRechargeRecord) ?? [],
+    total: value.total,
+    page: value.page,
+    size: value.size
+  };
+}
+
+function toRecharge(value: RechargeTransport): RechargeOutputBody {
+  return {
+    orderId: value.orderId,
+    balanceLotId: value.balanceLotId,
+    tenantId: value.tenantId,
+    userId: value.userId,
+    currency: value.currency,
+    amountMicroUsd: value.amountMicroUsd,
+    paidAmountMinor: value.paidAmountMinor,
+    clearedDebtUsd: value.clearedDebtUsd,
+    balanceLotUsd: value.balanceLotUsd,
+    orderTime: value.orderTime
+  };
+}
+
+function toReverseRecharge(value: ReverseRechargeTransport): {
+  status: string;
+  orderId: string;
+  balanceLotId: string;
+  reversedAmountUsd: number;
+  originalAmountUsd: number;
+  lostAmountUsd: number;
+  balanceLotStatus: string;
+} {
+  return {
+    status: value.status,
+    orderId: value.orderId,
+    balanceLotId: value.balanceLotId,
+    reversedAmountUsd: value.reversedAmountUsd,
+    originalAmountUsd: value.originalAmountUsd,
+    lostAmountUsd: value.lostAmountUsd,
+    balanceLotStatus: value.balanceLotStatus
+  };
+}
+
+function toBatchRefund(value: BatchRefundTransport): BatchOpResult {
+  return {
+    succeeded: value.succeeded ?? [],
+    failed: value.failed?.map((item) => ({ requestId: item.requestId, reason: item.reason })) ?? [],
+    totalTenantUsd: value.totalTenantUsd,
+    totalUserUsd: value.totalUserUsd,
+    successCount: value.successCount,
+    failCount: value.failCount
+  };
+}
+
+function toDebtOwnerType(value: string): DebtOwnerType {
+  if (value === "tenant" || value === "user") return value;
+  throw new Error(`Unexpected debt owner type: ${value}`);
+}
+
+function toDebtServiceState(value: string): DebtStatusOutputBody["service_state"] {
+  if (value === "active" || value === "blocked_debt") return value;
+  throw new Error(`Unexpected debt service state: ${value}`);
+}
+
+function toDebtStatus(value: DebtTransport): DebtStatusOutputBody {
+  return {
+    owner_type: toDebtOwnerType(value.owner_type),
+    account_id: value.account_id,
+    outstanding_debt_micro_usd: value.outstanding_debt_micro_usd,
+    service_state: toDebtServiceState(value.service_state)
+  };
+}
+
 export const platformAdminApi = {
   // ---- 账号自助 ----
   // 修改本人密码（后端统一密码策略）
@@ -200,14 +331,14 @@ export const platformAdminApi = {
       baseUrl: apiBaseUrl
     }).then(toTenantPage);
   },
-  getAccountBalance(params: { accountType: number; accountId: string; detail?: boolean }) {
-    return request()<AccountBalanceOutput>({
+  getAccountBalance(params: OperationQuery<"account-balance">) {
+    return typedRequest<"account-balance">({
       method: "GET",
       path: "/api/v1/account/balance",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toAccountBalance);
   },
   getTenant(id: string) {
     return typedRequest<"admin-get-tenant">({
@@ -382,83 +513,62 @@ export const platformAdminApi = {
     }).then((value) => ({ activationToken: value.activationToken, activationExpiresIn: value.activationExpiresIn }));
   },
 
-  listRechargeRecords(params: {
-    page?: number;
-    size?: number;
-    tenantName?: string;
-    username?: string;
-    rechargeType?: string;
-  }) {
-    return request()<PageRechargeRecordItem>({
+  listRechargeRecords(params: OperationQuery<"account-recharge-records">) {
+    return typedRequest<"account-recharge-records">({
       method: "GET",
       path: "/api/v1/account/recharge-records",
       headers: apiHeaders,
       query: params,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRechargeRecords);
   },
-  createRecharge(body: {
-    packageType: number;
-    tenantId?: string;
-    userId?: string;
-    paidAmountMinor?: number;
-    amountMicroUsd: number;
-    note?: string;
-    paymentRef?: string;
-    expireTime?: number | null;
-  }) {
-    return request()<RechargeOutputBody>({
+  createRecharge(body: OperationBody<"admin-recharge">) {
+    return typedRequest<"admin-recharge">({
       method: "POST",
       path: "/api/v1/recharges",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toRecharge);
   },
-  reverseRecharge(orderId: string, body: { reason: string }) {
-    return request()<{
-      status: string;
-      orderId: string;
-      balanceLotId: string;
-      reversedAmountUsd: number;
-      originalAmountUsd: number;
-      lostAmountUsd: number;
-      balanceLotStatus: string;
-    }>({
+  reverseRecharge(orderId: string, body: OperationBody<"admin-reverse-recharge">) {
+    return typedRequest<"admin-reverse-recharge">({
       method: "POST",
       path: `/api/v1/recharges/${encodeURIComponent(orderId)}/reverse`,
+      pathParams: { orderId },
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toReverseRecharge);
   },
   // ---- AI 使用记录人工退款 ----
-  refundUsage(body: { requestId: string; reason?: string }) {
-    return request()<{ status: string }>({
+  refundUsage(body: OperationBody<"admin-refund-usage">) {
+    return typedRequest<"admin-refund-usage">({
       method: "POST",
       path: "/api/v1/ai/usage/refund",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toMessage);
   },
-  batchRefundUsage(body: { requestIds: string[]; reason: string }) {
-    return request()<BatchOpResult>({
+  batchRefundUsage(body: OperationBody<"admin-batch-refund-usage">) {
+    return typedRequest<"admin-batch-refund-usage">({
       method: "POST",
       path: "/api/v1/ai/usage/batch-refund",
       headers: apiHeaders,
       body,
       baseUrl: apiBaseUrl
-    });
+    }).then(toBatchRefund);
   },
   getDebtStatus(ownerType: "tenant" | "user", accountId: string) {
-	return request()<DebtStatusOutputBody>({
+	return typedRequest<"admin-get-debt">({
 	  method: "GET",
 	  path: `/api/v1/admin/debts/${ownerType}/${encodeURIComponent(accountId)}`,
+	  pathParams: { owner_type: ownerType, id: accountId },
 	  headers: apiHeaders,
 	  baseUrl: apiBaseUrl
-	});
-  },
+	}).then(toDebtStatus);
+	},
 
   // ---- 认证审计 ----
   getAuthAuditLogs(params: {

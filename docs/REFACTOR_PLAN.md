@@ -445,6 +445,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：健康快照中的 nullable records 归一为空数组，评分权重 body 通过 generated schema 绑定并拒绝非有限数值，transport `$schema` 不进入页面模型。
 - 回归：新增 admin system facade 测试覆盖健康映射、路由权重 get/put path/body、schema 清理和非有限权重拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
 
+### P2-04（Typed platform billing facade，2026-08-28）
+
+- 迁移：平台账户余额、充值记录/人工充值、充值撤销、AI 用量退款/批量退款和债务查询共 7 个 facade 请求绑定 generated OpenAPI operations；账户、订单和债务动态 path 参数显式传递。
+- 领域边界：余额服务状态、债务 owner/state 在进入页面前校验，余额批次与充值记录的 nullable/空时间归一为页面模型；批量退款结果和退款成功消息复用 generated response，不再声明手写响应 DTO。
+- 回归：新增 platform billing facade 测试覆盖 query/body/path、nullable balance/records/refund 集合、schema 清理和非法状态拒绝；Portal typecheck、全量 Portal 测试与 OpenAPI gate 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
