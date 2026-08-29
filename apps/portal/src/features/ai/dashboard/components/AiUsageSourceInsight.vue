@@ -1,5 +1,5 @@
 <!--
-  AI 工作台来源分布图(echarts 环形图 + 图例列表)。
+  AI 工作台来源分布图（dashboard feature，echarts 环形图 + 图例列表）。
   重构:分类色由硬编码 hex 改为 DsUI token(父级传 colorToken,本组件渲染时对主题子树内
        元素解析,chartTokens.ts),描边色取 --ds-panel,解析失败回退默认色板/CSS 兜底。
 -->

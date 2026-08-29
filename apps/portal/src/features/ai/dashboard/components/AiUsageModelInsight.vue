@@ -1,5 +1,5 @@
 <!--
-  AI 工作台模型消耗分布图(echarts 横向条形图 + 明细列表)。
+  AI 工作台模型消耗分布图（dashboard feature，echarts 横向条形图 + 明细列表）。
   重构:图表色值(坐标轴/背景轨/渐变)由硬编码 hex 改为运行时解析 var(--ds-*) token
        (chartTokens.ts,对主题子树内元素取计算样式),解析失败回退 echarts 默认色板。
 -->

@@ -1,5 +1,5 @@
 <!--
-  AI 工作台异常与质量信号区:最近请求错误 + 样本用户消耗 Top。
+  AI 工作台异常与质量信号区:最近请求错误 + 样本用户消耗 Top（dashboard feature）。
   重构:迁移至 DsUI——TenantWorkbenchSection(自研卡片)→ AiWorkbenchSection 分区,
        错误列表 el-table → DsTable(子面板内 :frame="false"),状态 el-tag → DsTag。
 -->

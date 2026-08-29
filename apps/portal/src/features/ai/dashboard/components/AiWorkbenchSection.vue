@@ -1,5 +1,5 @@
 <!--
-  AI 工作台区块(仅 DashboardView 使用):一体面板 body 内的分区,
+  AI 工作台区块（dashboard feature，仅 TenantDashboardWorkspace 使用）:一体面板 body 内的分区,
   头部 = eyebrow + 标题 + 描述 + 右侧操作,区块之间只用 1px 分隔线,不再各自成卡。
 -->
 <script setup lang="ts">

@@ -1,5 +1,5 @@
 <!--
-  AI 工作台模型与入口版区块:模型消耗分布 + 来源分布。
+  AI 工作台模型与入口版区块:模型消耗分布 + 来源分布（dashboard feature）。
   重构:迁移至 DsUI——TenantWorkbenchSection(自研卡片)→ AiWorkbenchSection 分区,
        来源条目色值由硬编码 hex 改为 DsUI token(在 AiUsageSourceInsight 内解析)。
 -->

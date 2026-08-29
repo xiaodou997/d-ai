@@ -1,5 +1,5 @@
 <!--
-  业务概览核心调用用户 Top 图(echarts 横向条形图 + 排名列表)。
+  业务概览核心调用用户 Top 图（dashboard feature，echarts 横向条形图 + 排名列表）。
   重构:图表色值由硬编码 hex 改为运行时解析 var(--ds-*) token(chartTokens.ts),
        解析失败回退 echarts 默认色板。
 -->

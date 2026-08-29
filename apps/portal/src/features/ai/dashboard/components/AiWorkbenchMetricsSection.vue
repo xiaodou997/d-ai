@@ -1,5 +1,5 @@
 <!--
-  AI 工作台指标区:资产与授权面 + 核心调用信号两组指标。
+  AI 工作台指标区:资产与授权面 + 核心调用信号两组指标（dashboard feature）。
   重构:迁移至 DsUI——自研彩色指标卡(硬编码 hex tone)→ DsMetricCard,
        外层卡片改为 AiWorkbenchSection 分区(一体面板内 1px 分隔线),loading 时值显示「—」。
 -->
