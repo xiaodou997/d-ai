@@ -17,11 +17,14 @@ export class MFARequiredError extends Error {
 
 export interface CreateAuthApiOptions {
   request: RequestAdapter;
+  /** Refresh must bypass 401 recovery to avoid recursively refreshing a dead session. */
+  refreshRequest?: RequestAdapter;
   baseUrl: string;
 }
 
 export function createPortalAuthApi(options: CreateAuthApiOptions) {
   const request = createTypedOperationRequest(options.request);
+  const refreshRequest = createTypedOperationRequest(options.refreshRequest ?? options.request);
   return {
     async login(username: string, password: string): Promise<AuthTokenResponse> {
       return request<"auth-login">({
@@ -32,7 +35,7 @@ export function createPortalAuthApi(options: CreateAuthApiOptions) {
       });
     },
     async refreshToken(): Promise<AuthTokenResponse> {
-      return request<"auth-refresh">({
+      return refreshRequest<"auth-refresh">({
         method: "POST",
         path: "/api/auth/refresh",
         baseUrl: options.baseUrl

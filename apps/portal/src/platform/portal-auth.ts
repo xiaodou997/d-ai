@@ -28,6 +28,7 @@ export function createStandardPortalAuthStore(options: CreateStandardPortalAuthS
   });
   const authApi = createPortalAuthApi({
     request,
+    refreshRequest: createFetchAdapter(),
     baseUrl: options.env.apiBaseUrl
   });
   useAuthStore = createPortalAuthStore({

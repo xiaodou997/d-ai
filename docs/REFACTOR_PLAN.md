@@ -891,6 +891,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 回归：`theme.test.ts` 覆盖三主题的 computed-style 结果，保留无关根类名和主题切换行为断言。
 - 遗留风险：该契约测试不替代真实浏览器像素截图；P2-07 仍需补登录、关键路径、桌面/移动视口截图和无障碍检查。
 
+### P2-07（Playwright browser contract，2026-08-30）
+
+- 状态：第一阶段浏览器验收骨架完成；mock API 模式下四种 `userType`、邀请码、跨端工作区、账务页面、会话恢复/撤销/权限变更以及桌面/移动视口已可重复运行。
+- 变更：新增 `@playwright/test`、`e2e/playwright.config.ts` 和 `e2e/portal.spec.ts`；配置 Chromium 与 Pixel 7 双项目、Vite `webServer`、失败 trace/video、每用例截图、ARIA/键盘/控制台错误检查和 `DAI_E2E_MOCK=0` 真实后端开关。认证 refresh 使用独立 raw adapter，失效 refresh 不再递归 401 恢复。
+- 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 16 项（Chromium/Pixel 7 各 8 项）；mock 之外的 live 模式保留四角色登录/菜单验收，其余依赖确定性 fixture 的流程显式 skip。
+- 遗留风险：尚未覆盖真实支付 provider、退款/订阅购买的状态变更和 axe/像素基线；下一候选项是接入可重置的 E2E 数据库/支付 stub，并补关键操作断言。
+
 ### P0-01（2026-08-20）
 
 - 状态：完成并通过验收。

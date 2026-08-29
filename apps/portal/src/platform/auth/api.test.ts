@@ -55,4 +55,24 @@ describe("unified Portal password login", () => {
     expect(init?.body).toBeUndefined();
     expect(init?.credentials).toBe("include");
   });
+
+  it("does not recursively recover a rejected refresh request", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ status: 401, title: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    const onUnauthorized = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const api = createPortalAuthApi({
+      request: createFetchAdapter({ onUnauthorized }),
+      refreshRequest: createFetchAdapter(),
+      baseUrl: "/"
+    });
+
+    await expect(api.refreshToken()).rejects.toThrow("HTTP 401");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
 });

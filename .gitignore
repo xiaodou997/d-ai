@@ -44,4 +44,6 @@ config.yaml
 
 # Test
 coverage/
+e2e/test-results/
+playwright-report/
 *.test

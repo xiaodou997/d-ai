@@ -10,6 +10,8 @@
     "dev:frontend": "vite --config apps/portal/vite.config.ts",
     "build:frontend": "node apps/portal/scripts/validate-portal-architecture.mjs && node apps/portal/scripts/validate-source-styles.mjs && vite build --config apps/portal/vite.config.ts && node apps/portal/scripts/validate-built-styles.mjs",
     "build:portal-static": "node apps/portal/scripts/validate-portal-architecture.mjs && node apps/portal/scripts/validate-source-styles.mjs && DAI_PORTAL_OUT_DIR=../../release/portal vite build --config apps/portal/vite.config.ts && DAI_PORTAL_DIST=../../../release/portal node apps/portal/scripts/validate-built-styles.mjs && sh scripts/checksum_portal.sh release/portal",
+    "test:e2e": "playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:install": "playwright install chromium",
     "validate:portal-architecture": "node apps/portal/scripts/validate-portal-architecture.mjs",
     "validate:portal-styles": "node apps/portal/scripts/validate-source-styles.mjs",
     "validate:frontend-styles": "node apps/portal/scripts/validate-built-styles.mjs",
@@ -36,6 +38,7 @@
     "vue-sonner": "^2.0.9"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.0",
     "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^24.13.2",
     "@types/qrcode": "^1.5.6",
