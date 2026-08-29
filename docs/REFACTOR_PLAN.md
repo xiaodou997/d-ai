@@ -613,6 +613,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：激活工作区只组合公开平台 API、激活令牌 URL helper、密码策略校验和路由导航，路由层不再持有激活表单状态或令牌清理编排；feature index 提供稳定导出。
 - 回归：既有账号激活集成测试随工作区迁移，覆盖令牌不落 query、表单回填和 URL 清理；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin end-user workspace boundary，2026-08-29）
+
+- 垂直切分：跨租户终端用户筛选、分页、租户详情导航、账户抽屉和账号启停工作区迁移到 `features/platform/user-management/AdminEndUsersWorkspace.vue`；`views/admin/platform/EndUsersView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：终端用户工作区只组合 typed `EndUserItem`/`EndUserRow`、平台管理员 API、`useListPage`、账户抽屉和 DsUI 表格/分页，路由层不再持有列表请求、状态确认或租户导航编排。
+- 回归：新增工作区加载、租户跳转和状态确认集成测试；定向测试、全量 Portal 104 个测试文件/330 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
