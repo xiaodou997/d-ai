@@ -14,6 +14,7 @@ import type {
   AdminTenantPolicySubject,
   AdminTenantUpstreamPolicyDraft
 } from "../types";
+import { resolvePolicyErrorMessage } from "../errorMessage";
 
 const props = defineProps<{
   tenant: AdminTenantPolicySubject | null;
@@ -82,8 +83,8 @@ async function loadPolicies(tenantId: string) {
   try {
     const res = await aiAdminApi.listRuntimeLimitPolicies();
     if (props.tenant?.tenantId === tenantId) limitPolicies.value = res.items || [];
-  } catch (error: any) {
-    ElMessage.error(error?.message || "加载租户容量限制失败");
+  } catch (error: unknown) {
+    ElMessage.error(resolvePolicyErrorMessage(error, "加载租户容量限制失败"));
   } finally {
     policiesLoading.value = false;
   }
@@ -104,8 +105,8 @@ async function loadUpstreamAccess(tenantId: string) {
     ]));
     upstreamPolicyDrafts.value = structuredClone(drafts);
     savedUpstreamPolicyDrafts.value = structuredClone(drafts);
-  } catch (error: any) {
-    ElMessage.error(error?.message || "加载租户上游策略失败");
+  } catch (error: unknown) {
+    ElMessage.error(resolvePolicyErrorMessage(error, "加载租户上游策略失败"));
   } finally {
     upstreamAccessLoading.value = false;
   }
@@ -139,8 +140,8 @@ async function saveLimitPolicy() {
     else await aiAdminApi.createRuntimeLimitPolicy(payload);
     await loadPolicies(tenantId);
     ElMessage.success("租户容量限制已保存");
-  } catch (error: any) {
-    ElMessage.error(error?.message || "保存失败");
+  } catch (error: unknown) {
+    ElMessage.error(resolvePolicyErrorMessage(error, "保存失败"));
   } finally {
     savingPolicy.value = false;
   }
@@ -186,8 +187,8 @@ async function saveUpstreamAccess() {
     await aiAdminApi.replaceTenantUpstreamAccess(tenantId, policies);
     await loadUpstreamAccess(tenantId);
     ElMessage.success("租户上游策略已保存");
-  } catch (error: any) {
-    ElMessage.error(error?.message || "保存租户上游策略失败");
+  } catch (error: unknown) {
+    ElMessage.error(resolvePolicyErrorMessage(error, "保存租户上游策略失败"));
   } finally {
     savingUpstreamAccess.value = false;
   }

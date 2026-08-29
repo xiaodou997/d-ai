@@ -721,6 +721,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：成本分析工作区只组合 `useAdminOverviewData`、typed usage DTO、成本口径计算和共享 overview/Portal/DsUI 组件，路由层不再持有查询状态、聚合计算或刷新编排。
 - 回归：新增成本分析加载与范围切换集成测试；定向测试、全量 Portal 120 个测试文件/361 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin tenant-policy workspace boundary，2026-08-29）
+
+- 垂直切分：平台租户策略的租户详情加载、容量限额、上游访问授权/倍率编辑、保存与刷新迁移到 `features/platform/tenant-management/TenantPolicyWorkspace.vue`；`views/admin/platform/TenantPolicyView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：策略工作区及容量/上游子面板、策略领域类型统一归入 tenant-management feature，继续通过 typed platform/AI API 与 DsUI/Element Plus 控件组合；路由层不再直接引用旧 AI gateway 视图目录。
+- 回归：新增租户策略主体加载与子面板组合测试，并将策略错误映射改为 `unknown` 安全处理；定向测试、全量 Portal 121 个测试文件/363 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -786,7 +792,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：120 个测试文件、361 个测试通过
+- [x] `bun run test`：121 个测试文件、363 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
