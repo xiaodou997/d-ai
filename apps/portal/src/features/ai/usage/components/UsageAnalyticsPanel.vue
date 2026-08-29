@@ -191,14 +191,14 @@ const emit = defineEmits<{
 
 .usage-dist-row__bar {
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   overflow: hidden;
   background: var(--ds-panel);
 }
 
 .usage-dist-row__fill {
   height: 100%;
-  border-radius: inherit;
+  border-radius: var(--ds-radius-inherit);
   background: linear-gradient(90deg, var(--ds-accent), color-mix(in srgb, var(--ds-warning) 58%, var(--ds-accent)));
 }
 

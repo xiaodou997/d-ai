@@ -749,7 +749,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--ds-accent) 12%, var(--ds-line));
-  border-radius: 12px;
+  border-radius: var(--ds-radius-shell);
   background: color-mix(in srgb, var(--ds-accent-soft) 32%, var(--ds-panel));
 }
 
@@ -917,7 +917,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--ds-line);
-  border-radius: 16px;
+  border-radius: var(--ds-radius-xl);
   background:
     radial-gradient(circle at top left, color-mix(in srgb, var(--ds-accent) 10%, transparent), transparent 36%),
     var(--ds-panel);
@@ -1023,7 +1023,7 @@ onBeforeUnmount(() => {
   margin-top: auto;
   padding: 6px 10px;
   border: 1px dashed var(--ds-line-strong);
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-panel-muted);
   color: var(--ds-muted);
   font-size: 12px;

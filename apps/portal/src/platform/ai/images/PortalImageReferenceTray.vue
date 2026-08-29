@@ -128,7 +128,7 @@ function onFileChange(event: Event) {
   flex: 0 0 82px;
   width: 82px;
   height: 82px;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-control);
 }
 
 .reference-item {
@@ -178,7 +178,7 @@ function onFileChange(event: Event) {
   display: flex;
   gap: 1px;
   padding: 2px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: var(--ds-image-overlay);
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -214,7 +214,7 @@ function onFileChange(event: Event) {
   overflow: hidden;
   padding: 3px 5px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--ds-radius-xs);
   background: var(--ds-image-overlay-strong);
   color: var(--ds-white);
   font-size: 11px;

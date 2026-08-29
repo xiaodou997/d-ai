@@ -152,7 +152,7 @@ h1 { margin: 0; color: var(--ds-ink); font: 700 26px/1.2 var(--ds-font-display);
 .activation-form header p, .activation-state p { margin: 10px 0 0; color: var(--ds-muted); font-size: 13px; line-height: 1.6; }
 .activation-field { display: grid; gap: 8px; color: var(--ds-ink); font-size: 14px; font-weight: 650; }
 .activation-field input { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); outline: none; background: var(--ds-panel); color: var(--ds-ink); font: inherit; }
-.activation-field input:focus { border-color: var(--ds-accent); box-shadow: 0 0 0 3px var(--ds-accent-soft); }
+.activation-field input:focus { border-color: var(--ds-accent); box-shadow: var(--ds-shadow-focus-strong); }
 .activation-password { position: relative; }
 .activation-password input { padding-right: 44px; }
 .activation-password button { position: absolute; top: 7px; right: 7px; display: grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; background: transparent; color: var(--ds-muted); cursor: pointer; }

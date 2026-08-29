@@ -148,7 +148,7 @@ const yGuides = computed(() => {
 .usage-trend-chart__legend-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   /* series color 为空（SSR/无 DOM 时 token 解析不到）时的兜底 */
   background-color: var(--ds-accent);
 }

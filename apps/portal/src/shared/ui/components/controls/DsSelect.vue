@@ -81,7 +81,7 @@ function onChange(event: Event) {
 
 .ds-select__field:focus {
   border-color: var(--ds-accent);
-  box-shadow: 0 0 0 2px var(--ds-accent-soft);
+  box-shadow: var(--ds-shadow-focus);
 }
 
 .ds-select--md .ds-select__field {
@@ -101,7 +101,7 @@ function onChange(event: Event) {
 }
 
 .ds-select--error .ds-select__field:focus {
-  box-shadow: 0 0 0 2px var(--ds-danger-soft);
+  box-shadow: var(--ds-shadow-focus-danger);
 }
 
 .ds-select--disabled {

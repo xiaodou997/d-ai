@@ -292,9 +292,9 @@ onUnmounted(() => {
   height: 10px;
   width: 10px;
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-faint);
-  box-shadow: 0 0 0 6px var(--ds-panel-muted);
+  box-shadow: var(--ds-shadow-focus-halo);
 }
 
 .source-insight__legend-label {

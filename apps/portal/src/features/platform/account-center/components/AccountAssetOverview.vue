@@ -44,7 +44,7 @@ const expiryText = computed(() => props.nearestExpiry?.expiresAt
 .asset-overview__head { display:flex; align-items:center; gap:10px; }
 .asset-overview__head > div { display:flex; min-width:0; flex:1; flex-direction:column; }
 .asset-overview__head span, .asset-overview p, dt { color:var(--ds-muted); font-size:12px; }
-.asset-overview__icon { display:grid; width:34px; height:34px; place-items:center; border-radius:8px; background:var(--ds-accent-soft); color:var(--ds-accent); }
+.asset-overview__icon { display:grid; width:34px; height:34px; place-items:center; border-radius:var(--ds-radius-control); background:var(--ds-accent-soft); color:var(--ds-accent); }
 .asset-overview__figures { display:flex; align-items:baseline; flex-wrap:wrap; gap:14px 28px; }
 .asset-overview__value { font-size:28px; font-variant-numeric:tabular-nums; }
 dl { display:flex; flex:1; flex-wrap:wrap; justify-content:flex-end; gap:8px 20px; margin:0; }

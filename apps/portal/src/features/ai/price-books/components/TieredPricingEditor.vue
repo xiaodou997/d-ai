@@ -102,7 +102,7 @@ function rangeLabel(index: number, tier: TokenPriceTier) {
 
 <style scoped>
 .tiered-pricing-editor { display: grid; gap: 12px; width: 100%; }
-.tier-row { padding: 12px; border: 1px solid var(--el-border-color); border-radius: 6px; background: var(--el-fill-color-lighter); }
+.tier-row { padding: 12px; border: 1px solid var(--el-border-color); border-radius: var(--ds-radius-sm); background: var(--el-fill-color-lighter); }
 .tier-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .tier-heading > div { display: flex; align-items: center; gap: 10px; }
 .tier-heading strong { color: var(--el-text-color-primary); font-size: 13px; }

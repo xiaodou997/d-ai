@@ -57,7 +57,7 @@ const document = computed(() =>
 .legal-document,
 .legal-document__missing {
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-white);
   box-shadow: var(--ds-shadow-panel);
 }

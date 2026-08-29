@@ -434,7 +434,7 @@ onMounted(loadGroups);
 
 .group-option--selected {
   background: var(--ds-accent-soft);
-  box-shadow: inset 3px 0 0 var(--ds-accent);
+  box-shadow: var(--ds-shadow-inset-accent-wide);
 }
 
 .group-option__name {
@@ -539,7 +539,7 @@ onMounted(loadGroups);
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  border-radius: var(--ds-radius-inherit);
   pointer-events: none;
   background: linear-gradient(135deg, color-mix(in srgb, var(--ds-panel) 10%, transparent), transparent 55%);
 }
@@ -587,7 +587,7 @@ onMounted(loadGroups);
   align-items: center;
   justify-content: center;
   padding: 4px 8px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   font-size: 10px;
   font-weight: 800;
   white-space: nowrap;

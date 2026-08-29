@@ -43,7 +43,7 @@ function toggle() {
   display: inline-flex;
   align-items: center;
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-line-strong);
   cursor: pointer;
   transition: background-color 180ms ease;
@@ -62,7 +62,7 @@ function toggle() {
 
 .ds-switch__thumb {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-panel);
   box-shadow: var(--ds-shadow-sm);
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -100,6 +100,6 @@ function toggle() {
 }
 
 .ds-switch:not(.ds-switch--disabled):hover {
-  box-shadow: 0 0 0 3px var(--ds-accent-soft);
+  box-shadow: var(--ds-shadow-focus-strong);
 }
 </style>

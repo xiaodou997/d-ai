@@ -66,7 +66,7 @@ withDefaults(
   min-height: 28px;
   padding: 0 10px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
 }
 
 .ds-btn--block {

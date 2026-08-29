@@ -715,7 +715,7 @@ watch(
   gap: 18px;
   padding: 20px;
   border: 1px solid var(--ds-line-strong);
-  border-radius: 24px;
+  border-radius: var(--ds-radius-hero);
   background:
     radial-gradient(circle at top left, var(--ds-info-wash), transparent 28%),
     linear-gradient(180deg, var(--ds-white) 0%, var(--ds-panel-muted) 100%);
@@ -740,7 +740,7 @@ watch(
   display: inline-flex;
   width: fit-content;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-positive-wash);
   color: var(--ds-positive);
   font-size: 11px;
@@ -778,7 +778,7 @@ watch(
   gap: 14px;
   padding: 16px;
   border: 1px solid var(--ds-line-soft);
-  border-radius: 18px;
+  border-radius: var(--ds-radius-2xl);
   background: var(--ds-panel-glass);
   backdrop-filter: blur(10px);
 }
@@ -892,7 +892,7 @@ watch(
   max-height: 420px;
   overflow-y: auto;
   border: 1px solid var(--ds-line);
-  border-radius: 10px;
+  border-radius: var(--ds-radius-panel);
 }
 
 .import-row {
@@ -957,7 +957,7 @@ watch(
 @media (max-width: 720px) {
   .panel {
     padding: 16px;
-    border-radius: 18px;
+    border-radius: var(--ds-radius-2xl);
   }
 
   .panel-header,

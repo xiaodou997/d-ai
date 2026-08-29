@@ -92,7 +92,7 @@ function billingStatusLabel(status?: string) {
 
 <style scoped>
 .detail-sections { display: flex; flex-direction: column; gap: 14px; }
-.detail-section { padding: 14px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-card); background: var(--ds-surface); }
+.detail-section { padding: 14px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-panel); background: var(--ds-panel); }
 .detail-section h3 { margin: 0 0 12px; color: var(--ds-ink); font-size: 14px; font-weight: 700; }
 .detail-section dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 9px 12px; margin: 0; }
 .detail-section dt { color: var(--ds-muted); font-size: 12px; }

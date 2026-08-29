@@ -155,7 +155,7 @@ function handleKeydown(event: KeyboardEvent) {
   max-width: 860px;
   margin: 0 auto;
   border: 1px solid var(--ds-line);
-  border-radius: 16px;
+  border-radius: var(--ds-radius-xl);
   background: var(--ds-panel);
   box-shadow: var(--ds-shadow-panel);
   padding: 10px 14px 8px;
@@ -164,7 +164,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 .composer-box:focus-within {
   border-color: color-mix(in srgb, var(--ds-accent) 55%, var(--ds-line));
-  box-shadow: 0 0 0 4px var(--ds-accent-soft), var(--ds-shadow-panel);
+  box-shadow: var(--ds-shadow-focus-panel);
 }
 
 .composer-input :deep(.el-textarea__inner) {

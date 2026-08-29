@@ -155,7 +155,7 @@ function formatTime(value?: number) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--ds-line);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
 }
 
 .announcement-stats__metrics > div {

@@ -65,7 +65,7 @@ function onFileSelected(event: Event) {
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-accent);
   color: var(--ds-accent-contrast);
   font-size: 28px;

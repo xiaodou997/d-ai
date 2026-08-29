@@ -233,7 +233,7 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   height: 28px;
   width: 28px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-accent);
   color: var(--ds-accent-contrast);
   font-size: 15px;
@@ -243,7 +243,7 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
 .ds-topbar__mark-image {
   width: 100%;
   height: 100%;
-  border-radius: 7px;
+  border-radius: var(--ds-radius-control);
   object-fit: cover;
 }
 
@@ -307,7 +307,7 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   border: 1px solid var(--ds-line);
   border-radius: var(--ds-radius-control);
   background: var(--ds-panel);
-  box-shadow: 0 12px 32px color-mix(in srgb, var(--ds-ink) 12%, transparent);
+  box-shadow: var(--ds-shadow-dropdown);
 }
 
 .ds-topbar__menu-item {
@@ -317,7 +317,7 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   padding: 0 10px;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   color: var(--ds-ink);
   font-size: 13px;
   font-weight: 600;
@@ -370,7 +370,7 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   height: 32px;
   width: 32px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-accent-soft);
   color: var(--ds-accent);
   font-size: 13px;

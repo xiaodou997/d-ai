@@ -74,7 +74,7 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
   padding: 16px;
   background: var(--ds-white);
   border: 1px solid var(--ds-line);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-shell);
 }
 
 .rail-head {
@@ -104,7 +104,7 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
   padding: 10px;
   text-align: left;
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-panel-muted);
   cursor: pointer;
 }

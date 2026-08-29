@@ -203,7 +203,7 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
   color: var(--ds-white);
   font-size: 12px;
   font-weight: 900;
-  border-radius: 10px;
+  border-radius: var(--ds-radius-panel);
   background: var(--ds-accent);
 }
 
@@ -218,7 +218,7 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
   color: var(--ds-ink);
   background: var(--ds-white);
   border: 1px solid var(--ds-line);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-shell);
   box-shadow: var(--ds-shadow-sm);
 }
 
@@ -283,7 +283,7 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
   width: 36px;
   height: 36px;
   border: 1px solid var(--ds-line);
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-panel);
   color: var(--ds-ink-soft);
   box-shadow: var(--ds-shadow-sm);

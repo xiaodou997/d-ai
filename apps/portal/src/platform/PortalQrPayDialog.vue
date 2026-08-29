@@ -184,7 +184,7 @@ function handleClose() {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
 }
 
 .qr-pay-canvas {
@@ -207,7 +207,7 @@ function handleClose() {
   justify-content: center;
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   font-size: 24px;
   font-weight: 700;
 }

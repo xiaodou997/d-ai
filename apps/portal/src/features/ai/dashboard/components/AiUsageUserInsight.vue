@@ -254,7 +254,7 @@ onUnmounted(() => {
   width: 32px;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-accent-soft);
   color: var(--ds-accent-hover);
   font-size: 13px;

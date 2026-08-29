@@ -449,13 +449,13 @@ onMounted(fetchWeights)
   flex: 1;
   height: 8px;
   background: var(--ds-line);
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs);
   overflow: hidden;
 }
 
 .bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs);
   transition: width 0.3s ease;
 }
 
@@ -532,7 +532,7 @@ onMounted(fetchWeights)
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-accent-soft);
   color: var(--ds-accent-hover);
   font-size: 12px;
@@ -630,7 +630,7 @@ onMounted(fetchWeights)
 .term-name {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs);
   background: var(--ds-panel-muted);
   color: var(--ds-ink-soft);
   font-size: 11px;

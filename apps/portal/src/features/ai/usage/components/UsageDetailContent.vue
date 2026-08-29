@@ -646,9 +646,9 @@ function formatContextTier(line: BillingPriceLineSnapshot | undefined) {
   width: 10px;
   height: 10px;
   margin-top: 6px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ds-accent-soft) 80%, transparent);
+  box-shadow: var(--ds-shadow-focus-soft-wide);
 }
 
 .route-timeline__copy {

@@ -115,7 +115,7 @@ defineExpose({ confirmDiscardChanges: policy.confirmDiscardChanges });
   gap: 8px;
   padding: 10px;
   border: 1px solid var(--ds-line);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: var(--ds-panel-muted);
   color: var(--ds-muted);
   font-size: 12px;
@@ -180,7 +180,7 @@ defineExpose({ confirmDiscardChanges: policy.confirmDiscardChanges });
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--ds-positive) 28%, var(--ds-line));
   border-left: 3px solid var(--ds-positive);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: color-mix(in srgb, var(--ds-positive) 7%, var(--ds-panel));
   color: var(--ds-positive);
 }

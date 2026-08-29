@@ -41,7 +41,7 @@ const widths = computed(() =>
   position: relative;
   height: 14px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: var(--ds-panel-muted);
 }
 

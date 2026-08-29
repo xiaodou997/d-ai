@@ -171,7 +171,7 @@ const metrics = computed(() => [
   align-items: center;
   gap: 12px;
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-panel-muted);
   padding: 11px 14px;
 }
@@ -181,7 +181,7 @@ const metrics = computed(() => [
   width: 34px;
   height: 34px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-panel-muted);
   color: var(--ds-muted);
 }

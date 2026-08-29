@@ -45,7 +45,7 @@ defineProps<{
   font-size: 0.92em;
   font-family: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", monospace;
   background: var(--ds-line);
-  border-radius: 0.35rem;
+  border-radius: var(--ds-radius-xs);
 }
 
 .markdown-strong {

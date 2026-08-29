@@ -80,7 +80,7 @@ defineEmits<{
   margin: 0;
   overflow: hidden;
   border: 1px solid var(--ds-line);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: var(--ds-line);
 }
 

@@ -134,7 +134,7 @@ const categoryLabels: Record<PortalAnnouncement["category"], string> = {
 
 .announcement-row__indicator {
   width: 3px;
-  border-radius: 2px;
+  border-radius: var(--ds-radius-2xs);
   background: transparent;
 }
 

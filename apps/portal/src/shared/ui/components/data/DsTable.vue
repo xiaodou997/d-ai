@@ -248,7 +248,7 @@ function toggleExpand(row: unknown) {
 
 .ds-table--frameless {
   border: none;
-  border-radius: 0;
+  border-radius: var(--ds-radius-none);
   background: transparent;
 }
 
@@ -349,7 +349,7 @@ function toggleExpand(row: unknown) {
 }
 
 .ds-table__row--selected > .ds-table__td:first-child {
-  box-shadow: inset 2px 0 0 var(--ds-accent);
+  box-shadow: var(--ds-shadow-inset-accent);
 }
 
 .ds-table__cell--left {
@@ -385,7 +385,7 @@ function toggleExpand(row: unknown) {
   width: 22px;
   height: 22px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: transparent;
   color: var(--ds-muted);
   cursor: pointer;
@@ -413,7 +413,7 @@ function toggleExpand(row: unknown) {
 .ds-table__skeleton {
   display: block;
   height: 12px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: linear-gradient(
     90deg,
     var(--ds-panel-muted) 25%,

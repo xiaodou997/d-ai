@@ -82,7 +82,7 @@ async function selectAnnouncement(item: PortalAnnouncement) {
   min-width: 17px;
   height: 17px;
   border: 2px solid var(--ds-panel);
-  border-radius: 9px;
+  border-radius: var(--ds-radius-panel);
   background: var(--ds-danger);
   color: var(--ds-white);
   font-size: 9px;

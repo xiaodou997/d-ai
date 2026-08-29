@@ -219,7 +219,7 @@ function handleTableClick(event: MouseEvent) {
   justify-content: center;
   min-width: 28px;
   min-height: 28px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: color-mix(in srgb, var(--ds-accent-soft) 68%, var(--ds-panel));
   color: var(--ds-accent-hover);
   font-size: 12px;

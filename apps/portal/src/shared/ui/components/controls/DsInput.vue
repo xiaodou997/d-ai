@@ -60,7 +60,7 @@ function onInput(event: Event) {
 
 .ds-input:focus-within {
   border-color: var(--ds-accent);
-  box-shadow: 0 0 0 2px var(--ds-accent-soft);
+  box-shadow: var(--ds-shadow-focus);
 }
 
 .ds-input--error {
@@ -68,7 +68,7 @@ function onInput(event: Event) {
 }
 
 .ds-input--error:focus-within {
-  box-shadow: 0 0 0 2px var(--ds-danger-soft);
+  box-shadow: var(--ds-shadow-focus-danger);
 }
 
 .ds-input--disabled {

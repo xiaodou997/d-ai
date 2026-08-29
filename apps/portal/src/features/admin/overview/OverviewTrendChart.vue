@@ -101,7 +101,7 @@ function formatValue(value: number) {
 .overview-trend-chart { min-width: 0; }
 .overview-trend-chart__legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; color: var(--ds-muted); font-size: 11px; }
 .overview-trend-chart__legend-item { display: inline-flex; align-items: center; gap: 5px; }
-.overview-trend-chart__legend-item i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.overview-trend-chart__legend-item i { display: inline-block; width: 8px; height: 8px; border-radius: var(--ds-radius-circle); }
 .overview-trend-chart__canvas { width: 100%; overflow: hidden; }
 .overview-trend-chart__canvas svg { display: block; width: 100%; height: auto; min-height: 190px; }
 .overview-trend-chart__empty { display: grid; min-height: 190px; place-items: center; color: var(--ds-muted); font-size: 13px; }

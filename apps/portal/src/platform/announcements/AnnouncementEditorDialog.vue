@@ -273,7 +273,7 @@ async function submit() {
   max-height: 360px;
   overflow: auto;
   border: 1px solid var(--ds-line);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   padding: 14px;
   color: var(--ds-ink);
   line-height: 1.7;

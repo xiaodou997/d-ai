@@ -157,7 +157,7 @@ function formatBytes(bytes: number) {
   gap: 12px;
   padding: 12px;
   border: 1px dashed var(--el-border-color);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--el-fill-color-lighter);
   color: var(--el-text-color-secondary);
   font-size: 12px;
@@ -171,7 +171,7 @@ function formatBytes(bytes: number) {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--el-fill-color-lighter);
 }
 
@@ -179,7 +179,7 @@ function formatBytes(bytes: number) {
   width: 88px;
   height: 88px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   border: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
 }

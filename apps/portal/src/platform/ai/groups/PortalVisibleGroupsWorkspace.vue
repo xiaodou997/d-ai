@@ -192,7 +192,6 @@ onMounted(fetchGroups);
   --groups-border: var(--ds-line);
   --groups-surface: var(--ds-panel);
   --groups-surface-soft: linear-gradient(135deg, var(--ds-accent-soft) 0%, var(--ds-panel-muted) 60%, var(--ds-panel) 100%);
-  --groups-shadow: var(--ds-shadow-panel);
 
   display: flex;
   flex-direction: column;
@@ -207,9 +206,9 @@ onMounted(fetchGroups);
   gap: 20px;
   padding: 24px;
   border: 1px solid var(--ds-line);
-  border-radius: 20px;
+  border-radius: var(--ds-radius-3xl);
   background: var(--groups-surface);
-  box-shadow: var(--groups-shadow);
+  box-shadow: var(--ds-shadow-panel);
 }
 
 .page-copy {
@@ -257,7 +256,7 @@ onMounted(fetchGroups);
   gap: 18px;
   padding: 22px 24px;
   border: 1px solid var(--groups-border);
-  border-radius: 20px;
+  border-radius: var(--ds-radius-3xl);
   background: var(--groups-surface-soft);
 }
 
@@ -288,7 +287,7 @@ onMounted(fetchGroups);
   flex-direction: column;
   gap: 12px;
   padding: 16px 18px;
-  border-radius: 18px;
+  border-radius: var(--ds-radius-2xl);
   background: color-mix(in srgb, var(--ds-panel) 90%, transparent);
   border: 1px solid color-mix(in srgb, var(--ds-line) 90%, transparent);
 }
@@ -307,7 +306,7 @@ onMounted(fetchGroups);
 }
 
 .impact-tag {
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
 }
 
 .impact-empty {
@@ -323,7 +322,7 @@ onMounted(fetchGroups);
   gap: 16px;
   padding: 18px 20px;
   border: 1px solid color-mix(in srgb, var(--ds-danger) 30%, transparent);
-  border-radius: 18px;
+  border-radius: var(--ds-radius-2xl);
   background: var(--ds-danger-soft);
 }
 
@@ -358,9 +357,9 @@ onMounted(fetchGroups);
   gap: 8px;
   padding: 20px;
   border: 1px solid var(--ds-line);
-  border-radius: 18px;
+  border-radius: var(--ds-radius-2xl);
   background: var(--groups-surface);
-  box-shadow: var(--groups-shadow);
+  box-shadow: var(--ds-shadow-panel);
 }
 
 .stat-label {
@@ -388,9 +387,9 @@ onMounted(fetchGroups);
   gap: 16px;
   padding: 24px;
   border: 1px solid var(--ds-line);
-  border-radius: 20px;
+  border-radius: var(--ds-radius-3xl);
   background: var(--groups-surface);
-  box-shadow: var(--groups-shadow);
+  box-shadow: var(--ds-shadow-panel);
 }
 
 .panel-header {

@@ -163,7 +163,7 @@ onMounted(fetchEvents)
   margin: 0 0 12px;
   padding: 10px 12px;
   background: var(--ds-panel-muted);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   font-size: 13px;
   color: var(--ds-ink);
 }

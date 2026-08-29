@@ -109,7 +109,7 @@ function formatTime(timestamp?: number | null) {
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-positive-soft);
   color: var(--ds-positive);
 }

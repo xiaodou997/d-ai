@@ -98,7 +98,7 @@ const current = computed(() => props.breadcrumbs[props.breadcrumbs.length - 1]);
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--ds-radius-panel);
   background: var(--ds-accent-soft);
   color: var(--ds-accent);
 }

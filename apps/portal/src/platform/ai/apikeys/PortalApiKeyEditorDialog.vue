@@ -183,7 +183,7 @@ function groupMultiplierLabel(group: PortalApiKeyGroupRecord) {
 .form-section {
   padding: 16px;
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-panel);
 }
 
@@ -240,7 +240,7 @@ function groupMultiplierLabel(group: PortalApiKeyGroupRecord) {
   margin-top: 10px;
   padding: 14px;
   border: 1px dashed var(--ds-line-strong);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-panel);
 }
 

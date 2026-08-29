@@ -128,7 +128,7 @@ function isGroup(item: SidebarItem): boolean {
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--ds-accent) 18%, transparent);
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: color-mix(in srgb, var(--ds-accent-soft) 78%, var(--ds-panel));
   color: var(--ds-accent);
   font-size: 12px;
@@ -232,7 +232,7 @@ function isGroup(item: SidebarItem): boolean {
   width: 6px;
   height: 6px;
   flex: 0 0 auto;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-faint);
 }
 

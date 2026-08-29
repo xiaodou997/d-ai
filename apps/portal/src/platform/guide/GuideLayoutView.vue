@@ -152,7 +152,7 @@ onUnmounted(() => {
   width: 100%;
   padding: 7px 14px;
   border: 0;
-  border-radius: 0 6px 6px 0;
+  border-radius: var(--ds-radius-none) var(--ds-radius-sm) var(--ds-radius-sm) var(--ds-radius-none);
   background: transparent;
   text-align: left;
   font-size: 12px;
@@ -248,7 +248,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-accent);
   color: var(--ds-accent-contrast);
   font-size: 13px;

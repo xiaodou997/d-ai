@@ -302,14 +302,14 @@ function sourceLabel(source: UserOverviewAccessibleGroup["source"]) {
   width: 100%;
   height: 10px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: var(--ds-line);
 }
 
 .permission-bar-fill {
   display: block;
   height: 100%;
-  border-radius: inherit;
+  border-radius: var(--ds-radius-inherit);
   background: var(--ds-accent);
 }
 

@@ -310,7 +310,7 @@ function billingStatusLabel(status?: string) {
   align-items: center;
   height: 20px;
   border: 1px solid color-mix(in srgb, var(--ds-line-strong) 82%, var(--ds-white) 18%);
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   background: color-mix(in srgb, var(--ds-panel-muted) 78%, var(--ds-white) 22%);
   padding: 0 8px;
   color: var(--ds-ink-soft);

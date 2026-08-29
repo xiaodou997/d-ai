@@ -94,7 +94,7 @@ const emit = defineEmits<{
 
 .account-option--selected {
   background: var(--ds-accent-soft);
-  box-shadow: inset 3px 0 0 var(--ds-accent);
+  box-shadow: var(--ds-shadow-inset-accent-wide);
 }
 
 .account-option--selected:hover {

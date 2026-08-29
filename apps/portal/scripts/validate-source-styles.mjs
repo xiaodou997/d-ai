@@ -9,6 +9,13 @@ const exemptFiles = new Set([
   "shared/ui/theme.ts"
 ]);
 const colorLiteralPattern = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\s*\(|(?<!-)\b(?:white|black)\b(?!-)/g;
+const radiusDeclarationPattern = /border(?:-[a-z]+)*-radius\s*:\s*([^;}{]+)/gi;
+const shadowDeclarationPattern = /box-shadow\s*:\s*([^;}{]+)/gi;
+
+function isTokenizedVisualValue(value) {
+  const normalized = value.trim();
+  return normalized.startsWith("var(--ds-") || ["none", "inherit", "initial", "unset"].includes(normalized);
+}
 
 async function listSourceFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -31,17 +38,25 @@ export async function findSourceStyleViolations(root = sourceRoot) {
     const relativePath = relative(root, file).split("\\").join("/");
     if (exemptFiles.has(relativePath)) continue;
     const content = await readFile(file, "utf8");
-    const lines = content.split(/\r?\n/);
-    lines.forEach((line, lineIndex) => {
-      for (const match of line.matchAll(colorLiteralPattern)) {
-        violations.push({
-          file: relativePath,
-          line: lineIndex + 1,
-          column: (match.index ?? 0) + 1,
-          value: match[0]
-        });
-      }
-    });
+    const location = (offset) => {
+      const prefix = content.slice(0, offset);
+      const line = prefix.split(/\r?\n/);
+      return { line: line.length, column: line.at(-1).length + 1 };
+    };
+    for (const match of content.matchAll(colorLiteralPattern)) {
+      const position = location(match.index ?? 0);
+      violations.push({ file: relativePath, ...position, kind: "color", value: match[0] });
+    }
+    for (const match of content.matchAll(radiusDeclarationPattern)) {
+      if (isTokenizedVisualValue(match[1])) continue;
+      const position = location(match.index ?? 0);
+      violations.push({ file: relativePath, ...position, kind: "radius", value: match[0].trim() });
+    }
+    for (const match of content.matchAll(shadowDeclarationPattern)) {
+      if (isTokenizedVisualValue(match[1])) continue;
+      const position = location(match.index ?? 0);
+      violations.push({ file: relativePath, ...position, kind: "shadow", value: match[0].trim() });
+    }
   }
   return violations;
 }
@@ -50,14 +65,14 @@ export async function validateSourceStyles(root = sourceRoot) {
   const violations = await findSourceStyleViolations(root);
   if (violations.length > 0) {
     const details = violations
-      .map(({ file, line, column, value }) => `- ${file}:${line}:${column} ${value}`)
+      .map(({ file, line, column, kind, value }) => `- ${file}:${line}:${column} [${kind}] ${value}`)
       .join("\n");
-    throw new Error(`Portal source style contract rejected hardcoded colors; use var(--ds-*) tokens.\n${details}`);
+    throw new Error(`Portal source style contract rejected hardcoded visual values; use var(--ds-*) tokens.\n${details}`);
   }
   return violations;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await validateSourceStyles();
-  console.log("Portal source style contract passed (token-based colors only)");
+  console.log("Portal source style contract passed (token-based colors, radius and shadows)");
 }

@@ -54,22 +54,20 @@ const hasActions = computed(() => Boolean(slots.actions));
 .portal-filter-bar :deep(.el-range-editor.el-input__wrapper) {
   min-height: 40px;
   border-radius: var(--ds-radius-control);
-  box-shadow: 0 0 0 1px var(--ds-line-strong) inset;
+  box-shadow: var(--ds-shadow-inset-line);
   background: var(--ds-panel);
 }
 
 .portal-filter-bar :deep(.el-input__wrapper:hover),
 .portal-filter-bar :deep(.el-select__wrapper:hover),
 .portal-filter-bar :deep(.el-range-editor.el-input__wrapper:hover) {
-  box-shadow: 0 0 0 1px var(--ds-accent) inset;
+  box-shadow: var(--ds-shadow-inset-accent-line);
 }
 
 .portal-filter-bar :deep(.el-input__wrapper.is-focus),
 .portal-filter-bar :deep(.el-select__wrapper.is-focused),
 .portal-filter-bar :deep(.el-range-editor.el-input__wrapper.is-focus) {
-  box-shadow:
-    0 0 0 1px var(--ds-accent) inset,
-    0 0 0 3px var(--ds-accent-soft);
+  box-shadow: var(--ds-shadow-filter-focus);
 }
 
 .portal-filter-bar :deep(.el-date-editor) {

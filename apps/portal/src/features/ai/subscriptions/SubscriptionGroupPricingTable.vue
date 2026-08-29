@@ -116,7 +116,7 @@ function fillFromPayg() {
   overflow: hidden;
   width: 100%;
   border: 1px solid var(--ds-line);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
 }
 
 .group-pricing__header {

@@ -1143,7 +1143,7 @@ onMounted(async () => {
 
 .task-card.active {
   border-color: color-mix(in srgb, var(--ds-accent) 38%, transparent);
-  box-shadow: 0 0 0 3px var(--ds-accent-soft), var(--ds-shadow-sm);
+  box-shadow: var(--ds-shadow-focus-sm);
 }
 
 .task-visual {
@@ -1197,7 +1197,7 @@ onMounted(async () => {
 .status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: currentColor;
 }
 
@@ -1262,7 +1262,7 @@ onMounted(async () => {
 .task-prompt-toggle:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ds-accent) 45%, transparent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs);
 }
 
 .task-meta {
@@ -1333,7 +1333,7 @@ onMounted(async () => {
 .progress i {
   display: block;
   height: 100%;
-  border-radius: inherit;
+  border-radius: var(--ds-radius-inherit);
   background: var(--ds-accent);
 }
 
@@ -1424,7 +1424,7 @@ onMounted(async () => {
   position: absolute;
   right: 5px;
   bottom: 5px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: color-mix(in srgb, var(--ds-ink) 78%, transparent);
   color: var(--ds-white);
   font-size: 11px;
@@ -1452,7 +1452,7 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--ds-line-strong) 55%, transparent);
   border-radius: var(--ds-radius-pill);
   background: color-mix(in srgb, var(--ds-panel-muted) 72%, var(--ds-white));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ds-white) 65%, transparent);
+  box-shadow: var(--ds-shadow-inset-highlight);
   opacity: 0.55;
   transition: opacity 0.18s ease;
 }
@@ -1532,7 +1532,7 @@ onMounted(async () => {
   width: min(100%, var(--studio-content-width));
   margin: 0 auto;
   border: 1px solid var(--ds-line);
-  border-radius: 16px;
+  border-radius: var(--ds-radius-xl);
   background: var(--ds-panel);
   box-shadow: var(--ds-shadow-panel);
   padding: 12px 14px 10px;
@@ -1541,7 +1541,7 @@ onMounted(async () => {
 
 .composer-box:focus-within {
   border-color: color-mix(in srgb, var(--ds-accent) 55%, var(--ds-line));
-  box-shadow: 0 0 0 4px var(--ds-accent-soft), var(--ds-shadow-panel);
+  box-shadow: var(--ds-shadow-focus-panel);
 }
 
 .composer-reference-tray {
@@ -1680,7 +1680,7 @@ onMounted(async () => {
   height: 34px;
   padding: 0 11px;
   border: 1px dashed var(--ds-line-strong);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   color: var(--ds-muted);
   font-size: 12px;
   cursor: pointer;
@@ -1745,7 +1745,7 @@ onMounted(async () => {
   max-width: 100%;
   max-height: 78vh;
   margin: 0 auto;
-  border-radius: 10px;
+  border-radius: var(--ds-radius-panel);
 }
 
 @keyframes indeterminate {

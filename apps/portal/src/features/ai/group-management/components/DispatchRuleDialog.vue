@@ -231,12 +231,12 @@ function submit() {
 <style scoped>
 .full-field { width: 100%; }
 .dispatch-form :deep(.el-form-item__content) { display: flex; min-width: 0; flex-direction: column; align-items: stretch; }
-.rule-intro { margin-bottom: 18px; padding: 10px 14px; border-left: 3px solid var(--ds-accent); border-radius: 6px; background: color-mix(in srgb, var(--ds-accent) 5%, var(--ds-white)); }
+.rule-intro { margin-bottom: 18px; padding: 10px 14px; border-left: 3px solid var(--ds-accent); border-radius: var(--ds-radius-sm); background: color-mix(in srgb, var(--ds-accent) 5%, var(--ds-white)); }
 .rule-intro-title { color: var(--ds-ink); font-size: 13px; font-weight: 600; }
 .rule-intro-list { margin: 4px 0 0; padding-left: 20px; color: var(--ds-muted); font-size: 12px; line-height: 1.7; }
-.rule-intro-list code { padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--ds-accent) 10%, var(--ds-white)); color: var(--ds-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.rule-intro-list code { padding: 1px 5px; border-radius: var(--ds-radius-xs); background: color-mix(in srgb, var(--ds-accent) 10%, var(--ds-white)); color: var(--ds-ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 .match-type-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.match-type-chip, .example-chip { border: 1px solid var(--ds-line); border-radius: 999px; cursor: pointer; }
+.match-type-chip, .example-chip { border: 1px solid var(--ds-line); border-radius: var(--ds-radius-pill); cursor: pointer; }
 .match-type-chip { padding: 5px 14px; background: var(--ds-white); color: var(--ds-muted); font-size: 13px; }
 .match-type-chip:hover, .example-chip:hover { border-color: color-mix(in srgb, var(--ds-accent) 40%, var(--ds-line)); color: var(--ds-ink); }
 .match-type-chip.is-active { border-color: var(--ds-accent); background: color-mix(in srgb, var(--ds-accent) 10%, var(--ds-white)); color: var(--ds-accent); font-weight: 600; }

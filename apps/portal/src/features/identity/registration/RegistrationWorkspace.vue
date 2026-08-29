@@ -493,7 +493,7 @@ h1 {
 
 .register-field input:focus {
   border-color: var(--ds-accent);
-  box-shadow: 0 0 0 3px var(--ds-accent-soft);
+  box-shadow: var(--ds-shadow-focus-strong);
 }
 
 .register-field input::placeholder {

@@ -21,7 +21,7 @@ withDefaults(
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
   padding: 1.5px 9px;
   font-size: 12px;
   font-weight: 500;
@@ -33,7 +33,7 @@ withDefaults(
   flex: none;
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: currentColor;
 }
 

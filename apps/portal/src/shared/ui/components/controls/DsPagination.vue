@@ -159,7 +159,7 @@ function changePageSize(size: number) {
 .ds-pagination__select:focus {
   outline: none;
   border-color: var(--ds-accent);
-  box-shadow: 0 0 0 2px var(--ds-accent-soft);
+  box-shadow: var(--ds-shadow-focus);
 }
 
 .ds-pagination__nav {

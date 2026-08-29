@@ -43,7 +43,7 @@ defineSlots<{ icon?(): unknown; action?(): unknown }>();
   place-items: center;
   width: 56px;
   height: 56px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-accent-soft);
   color: var(--ds-accent);
 }

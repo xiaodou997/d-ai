@@ -100,7 +100,7 @@ function barWidth(item: UserConsumptionItem) {
   height: 36px;
   flex: 0 0 36px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: var(--ds-warning-soft);
   color: var(--ds-warning);
 }
@@ -138,7 +138,7 @@ function barWidth(item: UserConsumptionItem) {
 
 .ranking-panel__skeleton {
   height: 36px;
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   /* 骨架渐变与 DsTable .ds-table__skeleton 保持同一组 token */
   background: linear-gradient(
     90deg,
@@ -193,7 +193,7 @@ function barWidth(item: UserConsumptionItem) {
   width: 24px;
   height: 24px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   background: var(--ds-panel-muted);
   color: var(--ds-muted);
   font-size: 11px;
@@ -230,14 +230,14 @@ function barWidth(item: UserConsumptionItem) {
 .ranking-row__bar {
   height: 7px;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs);
   background: var(--ds-panel-muted);
 }
 
 .ranking-row__bar-fill {
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: var(--ds-radius-xs);
   background: var(--ds-positive);
 }
 

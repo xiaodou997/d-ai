@@ -1021,10 +1021,10 @@ onBeforeUnmount(() => {
 .test-account-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 14px; border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px; background: var(--el-fill-color-lighter);
+  border-radius: var(--ds-radius-panel); background: var(--el-fill-color-lighter);
 }
 .test-account-icon {
-  width: 40px; height: 40px; border-radius: 10px;
+  width: 40px; height: 40px; border-radius: var(--ds-radius-panel);
   display: flex; align-items: center; justify-content: center;
   background: var(--el-color-success); color: var(--ds-accent-contrast); font-size: 18px; flex: none;
 }
@@ -1044,7 +1044,7 @@ onBeforeUnmount(() => {
   --console-muted: var(--ds-faint);
   --console-reply: var(--ds-line);
   --console-border: color-mix(in srgb, var(--ds-faint) 30%, transparent);
-  border-radius: 10px; padding: 14px 16px;
+  border-radius: var(--ds-radius-panel); padding: 14px 16px;
   background: var(--console-bg); color: var(--console-fg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px; line-height: 1.7; max-height: 320px; overflow: auto;
@@ -1058,7 +1058,7 @@ onBeforeUnmount(() => {
 .test-reply { color: var(--console-reply); }
 .test-image-wrap { margin-top: 10px; }
 .test-image {
-  max-width: 100%; max-height: 240px; border-radius: 8px;
+  max-width: 100%; max-height: 240px; border-radius: var(--ds-radius-control);
   border: 1px solid var(--console-border);
 }
 </style>

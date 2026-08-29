@@ -128,7 +128,7 @@ async function remove(rule: TenantAiDispatchRule) {
 .panel-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .panel-header h3 { margin: 0; color: var(--ds-ink); font-size: 16px; letter-spacing: 0; }
 .panel-header p { margin: 5px 0 0; color: var(--ds-muted); font-size: 12px; }
-.preview-card { overflow: hidden; padding: 16px; border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-panel); }
+.preview-card { overflow: hidden; padding: 16px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel); }
 @media (max-width: 640px) {
   .panel-header { align-items: stretch; flex-direction: column; }
   .panel-actions { justify-content: stretch; }

@@ -133,7 +133,7 @@ function headingClass(depth: number) {
   min-width: 0;
   padding: 0.55rem;
   background: var(--ds-code-bg);
-  border-radius: 0.9rem;
+  border-radius: var(--ds-radius-panel);
 }
 
 .markdown-code-lang {
@@ -146,7 +146,7 @@ function headingClass(depth: number) {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   background: var(--ds-line-soft);
-  border-radius: 999px;
+  border-radius: var(--ds-radius-pill);
 }
 
 .markdown-code-block {

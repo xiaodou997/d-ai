@@ -804,7 +804,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P2-06 强制执行 DsUI 约束
 
 - [x] 把业务代码中的硬编码颜色迁移为 `var(--ds-*)` token。
-- [ ] 禁止业务页面新增 hex、rgb、rgba 和自建阴影、圆角值。
+- [x] 禁止业务页面新增 hex、rgb、rgba 和自建阴影、圆角值。
 - [x] 将正则存在性检查升级为源码级 lint 规则。
 - [ ] 统一 Element Plus 与 DsUI 的交互、尺寸、状态和可访问性。
 - [ ] 增加 admin、tenant、customer 三主题视觉回归测试。
@@ -858,7 +858,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：130 个测试文件、381 个测试通过
+- [x] `bun run test`：131 个测试文件、382 个测试通过
 - [x] `bun run ensure:api`
 - [x] `bun run validate:portal-styles`：源码颜色仅使用 `var(--ds-*)` token（token 定义文件除外）
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
@@ -870,12 +870,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 后续每次完成一个条目时，在此追加：编号、提交或变更摘要、验证命令、遗留风险和下一候选项。
 
-### P2-06（Source color-token contract，2026-08-29）
+### P2-06（Source visual-token contract，2026-08-29）
 
-- 状态：颜色 token 迁移与源码级检查完成；阴影/圆角约束、交互统一和主题视觉回归仍待推进。
-- 变更：补充 code/overlay/glass/skeleton 语义 token；将 Portal、feature、共享组件中的 134 处 hex/rgb/rgba 迁移为 `var(--ds-*)`；新增 `validate-source-styles.mjs` 并接入 frontend build，保留 `base.css` 与 `theme.ts` 作为 token 定义白名单。
-- 验证：`bun run validate:portal-styles`、源码契约测试、全量 Portal 130 个测试文件/381 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
-- 遗留风险：尚有约束化圆角和阴影值需统一到 token，Element Plus/DsUI 可访问性与三主题截图回归尚未建立。
+- 状态：颜色、阴影和圆角 token 迁移与源码级检查完成；交互统一和主题视觉回归仍待推进。
+- 变更：补充 code/overlay/glass/skeleton、radius 和 focus/drop-shadow 语义 token；将 Portal、feature、共享组件中的 134 处 hex/rgb/rgba 以及自定义阴影/圆角迁移为 `var(--ds-*)`；`validate-source-styles.mjs` 同时检查颜色、`border-radius` 和 `box-shadow`，并接入 frontend build，保留 `base.css` 与 `theme.ts` 作为 token 定义白名单。
+- 验证：`bun run validate:portal-styles`、源码契约测试、全量 Portal 131 个测试文件/382 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+- 遗留风险：Element Plus/DsUI 可访问性与三主题截图回归尚未建立；少数结构性 `none`/`inherit` 圆角与阴影值由 lint 明确允许。
 
 ### P0-01（2026-08-20）
 

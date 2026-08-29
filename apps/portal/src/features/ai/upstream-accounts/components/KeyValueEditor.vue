@@ -139,7 +139,7 @@ function removeRow(index: number) {
 .empty {
   padding: 10px;
   border: 1px dashed var(--ds-line);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   color: var(--ds-faint);
   font-size: 12px;
   text-align: center;

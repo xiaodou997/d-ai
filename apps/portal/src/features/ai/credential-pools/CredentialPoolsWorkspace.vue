@@ -830,7 +830,7 @@ const expiryTone = (ms: any) => {
 .tab-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   flex-shrink: 0;
 }
 
@@ -955,7 +955,7 @@ const expiryTone = (ms: any) => {
 .type-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   flex-shrink: 0;
 }
 

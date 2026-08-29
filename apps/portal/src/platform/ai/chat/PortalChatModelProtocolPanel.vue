@@ -158,7 +158,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
   padding: 16px;
   background: var(--ds-white);
   border: 1px solid var(--ds-line);
-  border-radius: 12px;
+  border-radius: var(--ds-radius-shell);
 }
 
 .panel-head {
@@ -229,7 +229,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
   margin-top: 14px;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--ds-accent) 30%, transparent);
-  border-radius: 10px;
+  border-radius: var(--ds-radius-panel);
   background: var(--ds-accent-soft);
 }
 
@@ -265,7 +265,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
   padding: 12px;
   background: var(--ds-panel-muted);
   border: 1px solid var(--ds-line);
-  border-radius: 10px;
+  border-radius: var(--ds-radius-panel);
 }
 
 .source-note {
@@ -277,7 +277,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
   color: var(--ds-accent-hover);
   font-size: 12px;
   font-weight: 700;
-  border-radius: 10px;
+  border-radius: var(--ds-radius-panel);
   background: var(--ds-accent-soft);
 }
 </style>

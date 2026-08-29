@@ -6,11 +6,37 @@
   --ds-radius-shell: 12px;
   --ds-radius-panel: 10px;
   --ds-radius-control: 8px;
+  --ds-radius-2xs: 2px;
+  --ds-radius-xs: 4px;
+  --ds-radius-sm: 6px;
+  --ds-radius-xl: 16px;
+  --ds-radius-2xl: 18px;
+  --ds-radius-3xl: 20px;
+  --ds-radius-hero: 24px;
+  --ds-radius-none: 0;
+  --ds-radius-circle: 50%;
+  --ds-radius-inherit: inherit;
   --ds-radius-pill: 999px;
 
   --ds-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
   --ds-shadow-panel: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
   --ds-shadow-pop: 0 10px 30px -12px rgba(15, 23, 42, 0.25);
+  --ds-shadow-focus: 0 0 0 2px var(--ds-accent-soft);
+  --ds-shadow-focus-danger: 0 0 0 2px var(--ds-danger-soft);
+  --ds-shadow-focus-strong: 0 0 0 3px var(--ds-accent-soft);
+  --ds-shadow-focus-wide: 0 0 0 4px var(--ds-accent-soft);
+  --ds-shadow-focus-halo: 0 0 0 6px var(--ds-panel-muted);
+  --ds-shadow-focus-soft-wide: 0 0 0 4px color-mix(in srgb, var(--ds-accent-soft) 80%, transparent);
+  --ds-shadow-focus-panel: 0 0 0 4px var(--ds-accent-soft), var(--ds-shadow-panel);
+  --ds-shadow-focus-sm: 0 0 0 3px var(--ds-accent-soft), var(--ds-shadow-sm);
+  --ds-shadow-accent-outline: 0 0 0 1px var(--ds-accent);
+  --ds-shadow-filter-focus: 0 0 0 1px var(--ds-accent) inset, var(--ds-shadow-focus-strong);
+  --ds-shadow-inset-accent: inset 2px 0 0 var(--ds-accent);
+  --ds-shadow-inset-accent-wide: inset 3px 0 0 var(--ds-accent);
+  --ds-shadow-inset-line: 0 0 0 1px var(--ds-line-strong) inset;
+  --ds-shadow-inset-accent-line: 0 0 0 1px var(--ds-accent) inset;
+  --ds-shadow-dropdown: 0 12px 32px color-mix(in srgb, var(--ds-ink) 12%, transparent);
+  --ds-shadow-inset-highlight: inset 0 1px 0 color-mix(in srgb, var(--ds-white) 65%, transparent);
 
   --ds-positive: #059669;
   --ds-positive-soft: #ecfdf5;

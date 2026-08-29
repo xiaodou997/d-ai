@@ -155,7 +155,7 @@ function billingSourceLabel(row: CustomerUsageLog) {
 
 .target-cell { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .target-chip { color: var(--ds-ink); font-weight: 650; }
-.billing-source { display: inline-flex; padding: 1px 8px; border: 1px solid var(--ds-line); border-radius: 999px; color: var(--ds-muted); font-size: 12px; font-weight: 600; }
+.billing-source { display: inline-flex; padding: 1px 8px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-pill); color: var(--ds-muted); font-size: 12px; font-weight: 600; }
 .billing-source.is-subscription { border-color: color-mix(in srgb, var(--ds-accent) 45%, transparent); background: color-mix(in srgb, var(--ds-accent) 12%, transparent); color: var(--ds-accent-hover); }
 .ellipsis { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mono { font-family: var(--ds-font-mono); }

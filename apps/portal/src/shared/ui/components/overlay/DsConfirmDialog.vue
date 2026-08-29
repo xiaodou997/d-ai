@@ -111,7 +111,7 @@ const toneIcon = computed(() => {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 50%;
+  border-radius: var(--ds-radius-circle);
   margin-bottom: 14px;
 }
 

@@ -77,7 +77,7 @@ const renderedContent = computed(() => renderAnnouncementMarkdown(props.item?.co
 .announcement-markdown :deep(pre) {
   overflow-x: auto;
   border: 1px solid var(--ds-line);
-  border-radius: 6px;
+  border-radius: var(--ds-radius-sm);
   background: var(--ds-panel-muted);
   padding: 12px;
 }
