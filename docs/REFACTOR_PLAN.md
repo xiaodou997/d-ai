@@ -571,6 +571,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：工作区直接组合 tenant AI/usage API、typed dashboard DTO 与共享图表分区组件；范围切换只刷新范围相关查询，静态资产/用户查询不重复请求。
 - 回归：租户概览默认加载与范围切换集成测试、全量 Portal 101 个测试文件/324 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Tenant invite-code workspace boundary，2026-08-29）
+
+- 垂直切分：租户邀请码列表、分页、创建、启停、删除和注册链接复制工作区迁移到 `features/platform/invitations/TenantInviteCodesWorkspace.vue`；`views/tenant/platform/InviteCodesView.vue` 收敛为路由 wrapper。
+- 依赖边界：邀请码工作区只组合 tenant invite-code API、`useListPage` 和 DsTable/DsEmpty 等共享组件，路由层不再承载筛选、状态和确认操作。
+- 回归：邀请码列表加载与状态切换集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
