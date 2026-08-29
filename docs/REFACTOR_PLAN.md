@@ -697,6 +697,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：充值工作区只组合 typed customer payment API、金额格式化、共享二维码支付对话框和 DsUI 表格/空态/分页，路由层不再承载配置、订单状态或支付编排；与账户中心和充值记录共享 payment feature 出口。
 - 回归：新增配置/订单初始加载与额度包下单集成测试；定向测试、全量 Portal 116 个测试文件/354 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Gateway audit workspace boundary，2026-08-29）
+
+- 垂直切分：AI 网关审计日志的加载、条数限制、筛选展示、结果映射和摘要格式化迁移到 `features/ai/audit/GatewayAuditWorkspace.vue`；`views/admin/ai/gateway/AuditView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：审计工作区只组合 typed `AuditLogDTO`、`aiAdminApi`、PortalPagePanel 与 DsUI 筛选/表格/标签；只向后端发送契约声明的 `limit`，并与平台认证审计 feature 保持独立。
+- 回归：新增审计列表加载与刷新集成测试，同时清理页面 `any`；定向测试、全量 Portal 117 个测试文件/356 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -762,7 +768,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：116 个测试文件、354 个测试通过
+- [x] `bun run test`：117 个测试文件、356 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
