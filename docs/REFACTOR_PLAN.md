@@ -553,6 +553,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：路由工作区直接消费 typed `RouteWeightsOutputBody`/`ScoreWeightsDTO` 和 `aiAdminApi`，四维权重与预设类型在 feature 内明确建模，页面不再使用未约束的响应 `any`。
 - 回归：路由权重加载与保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
 
+### P2-05（Admin tenant-management workspace boundary，2026-08-29）
+
+- 垂直切分：租户列表筛选、分页、创建/编辑、启停、删除、充值、账户抽屉和策略导航工作区迁移到 `features/platform/tenant-management/AdminTenantsWorkspace.vue`；`views/admin/platform/TenantsView.vue` 收敛为路由 wrapper。
+- 依赖边界：租户工作区只组合 typed `TenantListItem`、平台租户 API、`useListPage` 和账户/充值共享组件，列表查询与状态操作不再由路由层承载。
+- 回归：租户列表初始加载与筛选集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
