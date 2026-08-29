@@ -625,6 +625,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：管理员工作区只组合 typed `AdminUserItem`、平台管理员 API、`useListPage`、`FormInstance` 和 DsUI 表格/分页，路由层不再持有管理员账号请求与表单编排。
 - 回归：新增工作区列表加载与创建入口集成测试；定向测试、全量 Portal 105 个测试文件/332 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin withdrawals workspace boundary，2026-08-29）
+
+- 垂直切分：提现记录筛选、分页、金额/状态展示、租户选择和原子扣减创建表单工作区迁移到 `features/platform/payment/AdminWithdrawalsWorkspace.vue`；`views/admin/platform/WithdrawalsView.vue` 收敛为路由入口 wrapper，与充值订单/支付设置共享 payment feature 出口。
+- 依赖边界：提现工作区只组合 typed `WithdrawalItem`、平台支付 API、`useListPage`、金额格式化和 DsUI 表格/分页，路由层不再持有提现列表或租户选择编排。
+- 回归：新增提现列表加载与创建表单入口集成测试；定向测试、全量 Portal 106 个测试文件/334 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
