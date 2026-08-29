@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PublicInvitation } from "@/api/types/platformPublic";
 
-import RegisterView from "./RegisterView.vue";
+import RegistrationWorkspace from "./RegistrationWorkspace.vue";
 
 const getInvitation = vi.hoisted(() => vi.fn());
 const getPasswordPolicy = vi.hoisted(() => vi.fn());
@@ -98,14 +98,14 @@ async function mountRegister(initialPath = "/register/ABCD2345") {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: "/register/:code", component: RegisterView },
+      { path: "/register/:code", component: RegistrationWorkspace },
       { path: "/login", component: { template: "<div>Login</div>" } }
     ]
   });
   await router.push(initialPath);
   await router.isReady();
 
-  const wrapper = mount(RegisterView, { global: { plugins: [router] } });
+  const wrapper = mount(RegistrationWorkspace, { global: { plugins: [router] } });
   await flushPromises();
   return { router, wrapper };
 }

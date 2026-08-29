@@ -589,6 +589,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：详情工作区按路由 tenant ID 组合 typed admin tenant/user DTO、平台租户 API、`useListPage` 和共享账户/充值组件；关联用户只在切换到对应 tab 时加载。
 - 回归：详情初始加载与关联用户 tab 集成测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Registration workspace boundary，2026-08-29）
+
+- 垂直切分：邀请码校验、邀请注册表单、密码策略校验、法律同意和注册成功状态迁移到 `features/identity/registration/RegistrationWorkspace.vue`；`views/RegisterView.vue` 收敛为公共路由入口 wrapper。
+- 依赖边界：注册工作区只组合公开平台 API、法律页脚和密码策略校验，路由层不再持有表单状态、并发加载或注册请求编排；feature index 提供稳定导出。
+- 回归：既有公共注册链接集成测试随工作区迁移，覆盖邀请码状态、密码确认、法律版本提交和错误提示；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
