@@ -1,16 +1,10 @@
 <script setup lang="ts">
-import { computed } from "vue";
-
-import { portalEnv } from "@/env";
-import { PortalAiDocsPage, type PortalAiDocsSectionKey } from "@/platform/ai";
-import { useAuthStore } from "@/stores/auth";
+import { AiDocsWorkspace } from "@/features/ai/docs";
+import type { PortalAiDocsSectionKey } from "@/platform/ai";
 
 defineProps<{ section: PortalAiDocsSectionKey }>();
-
-const authStore = useAuthStore();
-const scope = computed(() => (authStore.userType === 4 ? "user" : "tenant"));
 </script>
 
 <template>
-  <PortalAiDocsPage :base-url="portalEnv.apiBaseUrl" :scope="scope" :section="section" />
+  <AiDocsWorkspace :section="section" />
 </template>

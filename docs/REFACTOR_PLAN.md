@@ -739,6 +739,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：共享 `PortalKeyManagementWorkspace` 继续负责页面骨架，API Key feature 直接注入对应端 facade，租户刷新/创建 action 由 feature 内 provider 连接。
 - 回归：新增两端 management shell 组合测试；全量 Portal 129 个测试文件/379 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（AI docs adapter boundary，2026-08-29）
+
+- 边界：工具接入文档页的 userType scope 计算迁移到 `features/ai/docs/AiDocsWorkspace.vue`；公共 `views/AiDocsView.vue` 仅转发 section 路由参数。
+- 依赖：文档渲染继续由共享 `PortalAiDocsPage` 承载，feature 根据统一 auth store 将终端用户映射到 user scope，其余角色映射到 tenant scope。
+- 回归：新增 user/tenant scope 适配测试；全量 Portal 130 个测试文件/381 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05（Admin usage-detail workspace boundary，2026-08-29）
 
 - 垂直切分：AI 使用详情的路由 request ID 加载、竞态序列保护、失败空态和返回使用记录导航迁移到 `features/ai/usage/UsageDetailWorkspace.vue`；`views/admin/ai/gateway/UsageDetailView.vue` 收敛为路由入口 wrapper。
