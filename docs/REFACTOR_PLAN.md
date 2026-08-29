@@ -691,6 +691,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：仪表盘工作区只组合 `useAdminOverviewData`、typed dashboard/system DTO、overview 子组件和共享 Portal/DsUI 卡片；路由层不再持有查询状态、聚合计算或刷新操作。
 - 回归：新增仪表盘初始加载、范围切换和刷新集成测试；定向测试、全量 Portal 115 个测试文件/352 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Customer top-up workspace boundary，2026-08-29）
+
+- 垂直切分：客户在线充值配置、额度包/自定义金额、手续费预览、微信扫码订单创建与轮询、支付成功刷新和充值订单分页迁移到 `features/platform/payment/CustomerTopupWorkspace.vue`；`views/customer/platform/TopupView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：充值工作区只组合 typed customer payment API、金额格式化、共享二维码支付对话框和 DsUI 表格/空态/分页，路由层不再承载配置、订单状态或支付编排；与账户中心和充值记录共享 payment feature 出口。
+- 回归：新增配置/订单初始加载与额度包下单集成测试；定向测试、全量 Portal 116 个测试文件/354 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -756,7 +762,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：115 个测试文件、352 个测试通过
+- [x] `bun run test`：116 个测试文件、354 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
