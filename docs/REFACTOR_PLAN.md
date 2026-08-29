@@ -727,6 +727,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：策略工作区及容量/上游子面板、策略领域类型统一归入 tenant-management feature，继续通过 typed platform/AI API 与 DsUI/Element Plus 控件组合；路由层不再直接引用旧 AI gateway 视图目录。
 - 回归：新增租户策略主体加载与子面板组合测试，并将策略错误映射改为 `unknown` 安全处理；定向测试、全量 Portal 121 个测试文件/363 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Tenant/customer API-key workspace adapters，2026-08-29）
+
+- 垂直切分：租户与客户 API Key 的 facade 绑定、输入归一、公开地址和删除/轮换确认策略迁移到 `features/ai/api-keys`；两端 `views/*/ai/ApiKeysView.vue` 仅保留 embedded route adapter，并继续复用同一 `PortalApiKeyWorkspace`。
+- 依赖边界：共享 feature 统一承载 typed API Key adapter 与页面配置，租户/客户差异仅通过 API facade、文案和权限配置表达，避免路由层重复维护业务编排。
+- 回归：新增两端 adapter 的写入归一、generic workspace contract 和 embedded 透传测试；定向测试、全量 Portal 122 个测试文件/365 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -792,7 +798,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：121 个测试文件、363 个测试通过
+- [x] `bun run test`：122 个测试文件、365 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
