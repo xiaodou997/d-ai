@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { aiTenantApi } from "@/api/aiTenant";
 import type { TenantAiVisibleGroup } from "@/api/types/aiTenant";
 import { formatMultiplier } from "@/platform/ai/utils";
-import UserPricingGroupsPanel from "@/views/tenant/ai/user-pricing/components/UserPricingGroupsPanel.vue";
+import UserPricingGroupsPanel from "./user-pricing/components/UserPricingGroupsPanel.vue";
 
 import type { UserGroupPolicyRow, UserPolicyTarget } from "./model";
 

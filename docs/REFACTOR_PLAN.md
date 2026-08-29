@@ -739,6 +739,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：详情工作区只组合 typed `adminUsageApi`、`UsageLogDetailDTO`、UsageDetailContent 与共享 PortalPagePanel/DsEmpty，路由层不再持有详情请求和加载状态。
 - 回归：新增详情加载成功与失败空态集成测试；定向测试、全量 Portal 123 个测试文件/367 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（User-pricing component boundary，2026-08-29）
+
+- 边界：终端用户分组策略与用户选择面板、倍率 presentation helper 及行为测试迁移到 `features/ai/user-management/user-pricing`；`UserGroupPolicyDialog` 改为 feature 内部相对依赖，不再从旧 tenant view 目录反向导入。
+- 依赖：用户管理 feature 统一承载用户分组策略组件，详情/列表工作区和限流对话框可共享同一领域组件，旧 `views/tenant/ai/user-pricing` 目录不再保留业务实现。
+- 回归：迁移后的 presentation 测试、租户用户管理集成测试、全量 Portal 123 个测试文件/367 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05（Price-book component boundary cleanup，2026-08-29）
 
 - 边界：删除旧 `views/admin/ai/gateway/components` 下未被路由或工作区引用的价格表条目/分辨率组件副本；实际使用的 `PriceBookEntryFormDialog`、`TieredPricingEditor` 与行为测试统一归入 `features/ai/price-books/components`。
