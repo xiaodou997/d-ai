@@ -583,6 +583,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：敏感信息工作区只组合 typed system-modules API、DsUI 输入/表格/状态组件和 Element Plus 表单生命周期，路由层不再持有配置编辑状态或预览操作。
 - 回归：既有配置保存/预览集成测试已随工作区迁移，全量 Portal 102 个测试文件/326 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin tenant-detail workspace boundary，2026-08-29）
+
+- 垂直切分：租户详情、组织用户分页、关联用户懒加载、账户余额、充值、用户启停/密码重置和策略导航工作区迁移到 `features/platform/tenant-management/TenantDetailWorkspace.vue`；`views/admin/platform/TenantDetailView.vue` 收敛为路由 wrapper。
+- 依赖边界：详情工作区按路由 tenant ID 组合 typed admin tenant/user DTO、平台租户 API、`useListPage` 和共享账户/充值组件；关联用户只在切换到对应 tab 时加载。
+- 回归：详情初始加载与关联用户 tab 集成测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -648,7 +654,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：102 个测试文件、326 个测试通过
+- [x] `bun run test`：103 个测试文件、328 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
