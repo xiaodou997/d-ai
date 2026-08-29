@@ -751,6 +751,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：三类共享 `platform/ai` workspace 继续承载状态与交互，端侧差异由 feature adapter 注入，避免 `views` 直接组合 API facade 或确认逻辑。
 - 回归：新增租户/客户聊天、生图、任务 adapter 集成测试；定向测试、全量 Portal 126 个测试文件/373 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Customer group-pricing adapter，2026-08-29）
+
+- 边界：客户模型定价的分组/生效价格 facade、能力标签、服务导航和刷新通知适配迁移到 `features/ai/group-pricing/CustomerGroupPricingWorkspace.vue`；`views/customer/ai/GroupsView.vue` 仅保留路由入口。
+- 依赖：分组价格加载、竞态保护和 DsUI 展示继续由共享 `PortalGroupPricingWorkspace` 承载，客户端只注入 API 与导航配置。
+- 回归：新增客户分组价格 facade 与 API Key 导航集成测试；定向测试、全量 Portal 127 个测试文件/375 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05（Price-book component boundary cleanup，2026-08-29）
 
 - 边界：删除旧 `views/admin/ai/gateway/components` 下未被路由或工作区引用的价格表条目/分辨率组件副本；实际使用的 `PriceBookEntryFormDialog`、`TieredPricingEditor` 与行为测试统一归入 `features/ai/price-books/components`。
