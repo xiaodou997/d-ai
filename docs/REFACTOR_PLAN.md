@@ -733,6 +733,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：共享 feature 统一承载 typed API Key adapter 与页面配置，租户/客户差异仅通过 API facade、文案和权限配置表达，避免路由层重复维护业务编排。
 - 回归：新增两端 adapter 的写入归一、generic workspace contract 和 embedded 透传测试；定向测试、全量 Portal 122 个测试文件/365 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（API-key management shell boundary，2026-08-29）
+
+- 边界：租户 tab action provider、客户/租户 KeyManagement 工作区壳和 embedded API Key feature 组合迁移到 `features/ai/api-keys`；两端 `KeysView.vue` 仅保留路由入口，并删除无引用的 `ApiKeysView.vue` 转发层。
+- 依赖：共享 `PortalKeyManagementWorkspace` 继续负责页面骨架，API Key feature 直接注入对应端 facade，租户刷新/创建 action 由 feature 内 provider 连接。
+- 回归：新增两端 management shell 组合测试；全量 Portal 129 个测试文件/379 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05（Admin usage-detail workspace boundary，2026-08-29）
 
 - 垂直切分：AI 使用详情的路由 request ID 加载、竞态序列保护、失败空态和返回使用记录导航迁移到 `features/ai/usage/UsageDetailWorkspace.vue`；`views/admin/ai/gateway/UsageDetailView.vue` 收敛为路由入口 wrapper。
