@@ -5,7 +5,7 @@ import { nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import UsersView from "./UsersView.vue";
+import TenantUsersWorkspace from "./TenantUsersWorkspace.vue";
 
 const api = vi.hoisted(() => ({
   getUsers: vi.fn(),
@@ -115,12 +115,12 @@ describe("tenant user management", () => {
 async function mountUsers() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: "/tenant/users/directory", component: UsersView }]
+    routes: [{ path: "/tenant/users/directory", component: TenantUsersWorkspace }]
   });
   await router.push("/tenant/users/directory");
   await router.isReady();
 
-  const wrapper = mount(UsersView, {
+  const wrapper = mount(TenantUsersWorkspace, {
     attachTo: document.body,
     global: { plugins: [router, ElementPlus] }
   });

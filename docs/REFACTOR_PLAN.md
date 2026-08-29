@@ -643,6 +643,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：客户资料工作区只组合 auth store、客户资料 API、公开密码策略和共享身份校验，路由层不再持有资料/密码表单状态或退出编排；feature index 提供稳定导出。
 - 回归：新增身份加载、密码策略、资料更新和退出登录集成测试；定向测试、全量 Portal 109 个测试文件/340 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Tenant users workspace boundary，2026-08-29）
+
+- 垂直切分：租户终端用户搜索、分页、创建、编辑、分组策略、充值、启停、删除和密码重置工作区迁移到 `features/ai/user-management/TenantUsersWorkspace.vue`；`views/tenant/platform/UsersView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：租户用户工作区只组合 `useTenantUsers`、用户编辑/分组策略/充值组件、typed `EndUserItem` 和 DsUI 表格/分页，避免 feature 内部再通过路由 view index 形成循环依赖。
+- 回归：既有租户用户管理集成测试随工作区迁移，覆盖创建、分组策略和确认式状态切换；定向测试、全量 Portal 109 个测试文件/340 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
