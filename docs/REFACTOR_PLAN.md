@@ -499,6 +499,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 门禁：`bun run ensure:api` 持续校验 320 个 operation 的生成物 freshness、契约 operation 集合和破坏性删除；`cmd/checkauthz` 已覆盖 320/320 operation。runtime 流式/图片协议属于独立 transport，继续使用专用 runtime client。
 - 状态：P2-04 五项清单完成；下一优先级转入 P2-05 feature 垂直切分，保留本节的 API facade 迁移记录作为回归基线。
 
+### P2-05（Tenant user-management state boundary，2026-08-29）
+
+- 垂直切分：终端用户列表页的分页、搜索、创建、启停、删除、重置密码、分组策略和充值状态/API 调用提取到 `features/ai/user-management/useTenantUsers`；`views/tenant/platform/UsersView.vue` 仅保留页面骨架、列定义、路由跳转和 feature 组件组合。
+- 领域边界：composable 直接使用 `platformTenantApi` 的 `EndUserItem` 与 `RechargeFormPayload`，统一错误提示、加载状态和目标用户状态更新，页面不再维护跨工作流的请求编排。
+- 回归：既有租户用户管理集成测试覆盖创建弹窗、分组策略入口和确认式启停；typecheck 与定向 `UsersView` 测试通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
