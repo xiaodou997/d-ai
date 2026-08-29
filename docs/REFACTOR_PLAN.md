@@ -649,6 +649,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：租户用户工作区只组合 `useTenantUsers`、用户编辑/分组策略/充值组件、typed `EndUserItem` 和 DsUI 表格/分页，避免 feature 内部再通过路由 view index 形成循环依赖。
 - 回归：既有租户用户管理集成测试随工作区迁移，覆盖创建、分组策略和确认式状态切换；定向测试、全量 Portal 109 个测试文件/340 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（System-modules workspace boundary，2026-08-29）
+
+- 垂直切分：系统模块状态、开关、数据生命周期清理策略/预览/运行记录和统一通知测试工作区迁移到 `features/platform/system-modules/SystemModulesWorkspace.vue`；`views/admin/platform/SystemModulesView.vue` 收敛为路由入口 wrapper，与代理出口/敏感信息保护共享 system-modules feature 出口。
+- 依赖边界：系统模块工作区只组合 typed system-modules DTO、模块导航、清理轮询、通知 API 和 DsUI 卡片/表格/状态控件，路由层不再持有清理策略或异步运行状态。
+- 回归：新增模块加载、清理预览、开关和策略保存集成测试；定向测试、全量 Portal 110 个测试文件/342 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
