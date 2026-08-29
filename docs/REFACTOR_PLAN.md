@@ -733,6 +733,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：共享 feature 统一承载 typed API Key adapter 与页面配置，租户/客户差异仅通过 API facade、文案和权限配置表达，避免路由层重复维护业务编排。
 - 回归：新增两端 adapter 的写入归一、generic workspace contract 和 embedded 透传测试；定向测试、全量 Portal 122 个测试文件/365 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin usage-detail workspace boundary，2026-08-29）
+
+- 垂直切分：AI 使用详情的路由 request ID 加载、竞态序列保护、失败空态和返回使用记录导航迁移到 `features/ai/usage/UsageDetailWorkspace.vue`；`views/admin/ai/gateway/UsageDetailView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：详情工作区只组合 typed `adminUsageApi`、`UsageLogDetailDTO`、UsageDetailContent 与共享 PortalPagePanel/DsEmpty，路由层不再持有详情请求和加载状态。
+- 回归：新增详情加载成功与失败空态集成测试；定向测试、全量 Portal 123 个测试文件/367 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05（Price-book component boundary cleanup，2026-08-29）
 
 - 边界：删除旧 `views/admin/ai/gateway/components` 下未被路由或工作区引用的价格表条目/分辨率组件副本；实际使用的 `PriceBookEntryFormDialog`、`TieredPricingEditor` 与行为测试统一归入 `features/ai/price-books/components`。
@@ -804,7 +810,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：122 个测试文件、365 个测试通过
+- [x] `bun run test`：123 个测试文件、367 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
