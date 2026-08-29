@@ -3,7 +3,7 @@
   页面骨架已迁移至 DsUI 一体面板(PortalPagePanel),详见 workspace 组件。
 -->
 <script setup lang="ts">
-import TenantAccountCenterWorkspace from "@/features/platform/account-center/TenantAccountCenterWorkspace.vue";
+import { TenantAccountCenterWorkspace } from "@/features/platform/account-center";
 </script>
 
 <template>

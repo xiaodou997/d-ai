@@ -631,6 +631,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：提现工作区只组合 typed `WithdrawalItem`、平台支付 API、`useListPage`、金额格式化和 DsUI 表格/分页，路由层不再持有提现列表或租户选择编排。
 - 回归：新增提现列表加载与创建表单入口集成测试；定向测试、全量 Portal 107 个测试文件/336 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过；撤销告警类型统一为 Element Plus 合法的 `error`。
 
+### P2-05（Customer account workspace boundary，2026-08-29）
+
+- 垂直切分：客户 USD 余额指标、透支摘要、有效期额度包列表、状态进度和刷新工作区迁移到 `features/platform/account-center/CustomerAccountWorkspace.vue`；`views/customer/platform/AccountView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：客户账户工作区只组合 typed `AccountBalance`/`BalanceLotView`、客户账户 API、金额格式化和 DsUI 指标/标签/空态；account-center index 同时提供客户与租户账户工作区出口。
+- 回归：新增余额加载、额度包映射和刷新动作集成测试；定向测试、全量 Portal 108 个测试文件/338 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
