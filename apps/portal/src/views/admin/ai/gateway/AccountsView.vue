@@ -27,7 +27,7 @@ import { firstActivePriceBookId } from './priceBookSelection'
 import type { PriceBookRecord } from './pricingTypes'
 import KeyValueEditor from './components/KeyValueEditor.vue'
 import UpstreamImageTestUpload from './components/UpstreamImageTestUpload.vue'
-import UpstreamModelBindingsPanel from './components/UpstreamModelBindingsPanel.vue'
+import UpstreamModelBindingsPanel from '@/features/ai/upstream-model-bindings/UpstreamModelBindingsPanel.vue'
 import UpstreamAccountStatusControl from './components/upstream-account/UpstreamAccountStatusControl.vue'
 import {
   upstreamAccountStatusLabel,

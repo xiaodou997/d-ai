@@ -14,7 +14,7 @@ import {
   OTHER_CAPABILITY_TYPES,
   protocolOptions,
   statusOptions
-} from '../constants'
+} from './constants'
 import type {
   DiscoveredUpstreamModelDTO,
   UpstreamModelBindingDTO,

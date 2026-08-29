@@ -511,6 +511,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：订阅工作区继续通过 `aiCustomerApi`、`platformCustomerApi` 和 subscription feature 组件组合，页面入口不再承载订阅业务实现；feature index 提供稳定导出。
 - 回归：Portal architecture check、frontend build（68 CSS / 131 JS assets）、全量 Portal 311 项测试和 typecheck 通过。
 
+### P2-05（Credential-pool workspace boundary，2026-08-29）
+
+- 垂直切分：账号池工作区迁移到 `features/ai/credential-pools/CredentialPoolsWorkspace.vue`，原 `views/admin/ai/gateway/CredentialPoolsView.vue` 收敛为路由入口 wrapper；显式模型绑定面板及其批量操作测试归入 `features/ai/upstream-model-bindings`。
+- 依赖边界：绑定能力选择器常量与面板由 feature 自持有，账号管理页只消费 feature component；旧网关 constants 保留兼容 re-export，避免路由层继续拥有绑定实现。
+- 回归：账号管理与模型绑定定向测试（15 项）、Portal typecheck、architecture contract 和 frontend build 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

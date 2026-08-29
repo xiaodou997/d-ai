@@ -94,7 +94,7 @@ const global = {
   }
 }
 
-describe('UpstreamModelBindingsPanel batch deletion', () => {
+describe('UpstreamModelBindingsPanel feature batch deletion', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     messages.confirm.mockResolvedValue('confirm')
