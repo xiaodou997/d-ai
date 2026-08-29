@@ -505,6 +505,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 领域边界：composable 直接使用 `platformTenantApi` 的 `EndUserItem` 与 `RechargeFormPayload`，统一错误提示、加载状态和目标用户状态更新，页面不再维护跨工作流的请求编排。
 - 回归：既有租户用户管理集成测试覆盖创建弹窗、分组策略入口和确认式启停；typecheck 与定向 `UsersView` 测试通过。
 
+### P2-05（Customer subscription workspace boundary，2026-08-29）
+
+- 垂直切分：客户订阅商城与我的订阅完整工作区迁移到 `features/ai/subscriptions/CustomerSubscriptionWorkspace.vue`；原 `views/customer/ai/SubscriptionView.vue` 收敛为路由入口 wrapper，路由路径和组件行为保持不变。
+- 依赖边界：订阅工作区继续通过 `aiCustomerApi`、`platformCustomerApi` 和 subscription feature 组件组合，页面入口不再承载订阅业务实现；feature index 提供稳定导出。
+- 回归：Portal architecture check、frontend build（68 CSS / 131 JS assets）、全量 Portal 311 项测试和 typecheck 通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
