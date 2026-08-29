@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -75,6 +76,8 @@ var defaultDSNs = []string{
 	"postgres://postgres:postgres@127.0.0.1:5432/dai_test?sslmode=disable",
 }
 
+var isolatedSchemaSequence atomic.Uint64
+
 // openWithRetry rides out transient connection-limit exhaustion, which parallel
 // packages each opening a pool can otherwise hit against a small local server.
 func openWithRetry(ctx context.Context, dsn, schemaSQL string, opts PoolOptions) (*pgxpool.Pool, func(context.Context) error, error) {
@@ -100,7 +103,11 @@ func openWithRetry(ctx context.Context, dsn, schemaSQL string, opts PoolOptions)
 }
 
 func openWithDSN(ctx context.Context, dsn, schemaSQL string, opts PoolOptions) (*pgxpool.Pool, func(context.Context) error, error) {
-	schema := fmt.Sprintf("dai_test_%d", time.Now().UnixNano())
+	// UnixNano alone is not unique enough when many Go packages provision
+	// isolated schemas concurrently. A collision lets one test's cleanup drop
+	// another test's relation while it is still being inspected, producing
+	// misleading "could not open relation with OID" failures.
+	schema := fmt.Sprintf("dai_test_%d_%d", time.Now().UnixNano(), isolatedSchemaSequence.Add(1))
 
 	bootstrapCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
