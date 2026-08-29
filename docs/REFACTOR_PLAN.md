@@ -607,6 +607,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：登录工作区只组合 auth store、MFA 错误类型和路由导航，路由层不再持有凭证/MFA 表单状态或重定向编排；feature index 提供稳定导出。
 - 回归：既有统一登录集成测试随工作区迁移，覆盖单一登录入口、凭证提交和安全重定向；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Activation workspace boundary，2026-08-29）
+
+- 垂直切分：激活令牌解析与清理、密码策略加载、新密码确认、账号激活提交和成功状态迁移到 `features/identity/activation/ActivationWorkspace.vue`；`views/ActivateAccountView.vue` 收敛为公共路由入口 wrapper。
+- 依赖边界：激活工作区只组合公开平台 API、激活令牌 URL helper、密码策略校验和路由导航，路由层不再持有激活表单状态或令牌清理编排；feature index 提供稳定导出。
+- 回归：既有账号激活集成测试随工作区迁移，覆盖令牌不落 query、表单回填和 URL 清理；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import ActivateAccountView from "./ActivateAccountView.vue";
+import ActivationWorkspace from "./ActivationWorkspace.vue";
 import { buildActivationUrl } from "@/platform/auth/activation";
 
 const getPasswordPolicy = vi.hoisted(() => vi.fn());
@@ -35,14 +35,14 @@ describe("account activation", () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: "/activate", component: ActivateAccountView },
+        { path: "/activate", component: ActivationWorkspace },
         { path: "/login", component: { template: "<div>Login</div>" } }
       ]
     });
     await router.push("/activate?campaign=admin#token=dai_act_secret");
     await router.isReady();
 
-    const wrapper = mount(ActivateAccountView, { global: { plugins: [router] } });
+    const wrapper = mount(ActivationWorkspace, { global: { plugins: [router] } });
     await flushPromises();
 
     expect((wrapper.get('input[autocomplete="one-time-code"]').element as HTMLInputElement).value)
