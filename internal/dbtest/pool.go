@@ -103,11 +103,11 @@ func openWithRetry(ctx context.Context, dsn, schemaSQL string, opts PoolOptions)
 }
 
 func openWithDSN(ctx context.Context, dsn, schemaSQL string, opts PoolOptions) (*pgxpool.Pool, func(context.Context) error, error) {
-	// UnixNano alone is not unique enough when many Go packages provision
-	// isolated schemas concurrently. A collision lets one test's cleanup drop
-	// another test's relation while it is still being inspected, producing
-	// misleading "could not open relation with OID" failures.
-	schema := fmt.Sprintf("dai_test_%d_%d", time.Now().UnixNano(), isolatedSchemaSequence.Add(1))
+	// UnixNano alone is not unique enough when many Go package processes
+	// provision isolated schemas concurrently. A collision lets one test's
+	// cleanup drop another test's relation while it is still being inspected,
+	// producing misleading "could not open relation with OID" failures.
+	schema := fmt.Sprintf("dai_test_%d_%d_%d", os.Getpid(), time.Now().UnixNano(), isolatedSchemaSequence.Add(1))
 
 	bootstrapCfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {

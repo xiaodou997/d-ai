@@ -58,7 +58,9 @@ func TestMigration0019RepairsHistoricalBillingStatusIndex(t *testing.T) {
 		SELECT pg_get_constraintdef(constraint_row.oid, true)
 		FROM pg_constraint constraint_row
 		JOIN pg_class table_class ON table_class.oid = constraint_row.conrelid
-		WHERE table_class.relname = 'ledger_credit_leases'
+		JOIN pg_namespace table_namespace ON table_namespace.oid = table_class.relnamespace
+		WHERE table_namespace.nspname = current_schema()
+		  AND table_class.relname = 'ledger_credit_leases'
 		  AND constraint_row.conname = 'ledger_credit_leases_check8'
 	`).Scan(&constraintDefinition); err != nil {
 		t.Fatalf("read repaired lease constraint: %v", err)
