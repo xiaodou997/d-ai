@@ -577,6 +577,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：邀请码工作区只组合 tenant invite-code API、`useListPage` 和 DsTable/DsEmpty 等共享组件，路由层不再承载筛选、状态和确认操作。
 - 回归：邀请码列表加载与状态切换集成测试、全量 Portal 102 个测试文件/326 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin sensitive-information workspace boundary，2026-08-29）
+
+- 垂直切分：敏感信息保护开关、预置/自定义规则、占位符前缀和脱敏预览工作区迁移到 `features/platform/system-modules/SensitiveInformationProtectionWorkspace.vue`；`views/admin/platform/SensitiveInformationProtectionView.vue` 收敛为路由 wrapper。
+- 依赖边界：敏感信息工作区只组合 typed system-modules API、DsUI 输入/表格/状态组件和 Element Plus 表单生命周期，路由层不再持有配置编辑状态或预览操作。
+- 回归：既有配置保存/预览集成测试已随工作区迁移，全量 Portal 102 个测试文件/326 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

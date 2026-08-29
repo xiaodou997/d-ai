@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DsButton, DsSwitch } from "@/shared/ui";
-import SensitiveInformationProtectionView from "./SensitiveInformationProtectionView.vue";
+import SensitiveInformationProtectionWorkspace from "./SensitiveInformationProtectionWorkspace.vue";
 
 const api = vi.hoisted(() => ({
   getPIIProtectionConfig: vi.fn(),
@@ -22,7 +22,7 @@ const rule = {
   system: true
 };
 
-describe("SensitiveInformationProtectionView", () => {
+describe("SensitiveInformationProtectionWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.getPIIProtectionConfig.mockResolvedValue({ enabled: false, rules: [rule], placeholderPrefix: "DAI" });
@@ -58,11 +58,11 @@ describe("SensitiveInformationProtectionView", () => {
 async function mountView() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: "/admin/system-modules/pii-protection", component: SensitiveInformationProtectionView }]
+    routes: [{ path: "/admin/system-modules/pii-protection", component: SensitiveInformationProtectionWorkspace }]
   });
   await router.push("/admin/system-modules/pii-protection");
   await router.isReady();
-  const wrapper = mount(SensitiveInformationProtectionView, { global: { plugins: [router] } });
+  const wrapper = mount(SensitiveInformationProtectionWorkspace, { global: { plugins: [router] } });
   await flushPromises();
   return wrapper;
 }
