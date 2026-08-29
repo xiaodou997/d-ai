@@ -1,0 +1,33 @@
+<!-- 客户生图工作区适配层；生图状态与交互由共享 PortalImageStudioWorkspace 负责。 -->
+<script setup lang="ts">
+import { notifyError, notifySuccess } from "@/platform";
+import {
+  portalImageWorkspaceIconProps,
+  PortalImageStudioWorkspace,
+  type PortalImageApi
+} from "@/platform/ai/images";
+
+import { formatUSD, runtimeImageApi } from "@/api/aiCustomer";
+import { apiBaseUrl } from "@/api/request";
+
+const imageApi: PortalImageApi = {
+  listModels: () => runtimeImageApi.listModels(),
+  listJobs: () => runtimeImageApi.listJobs(),
+  createTask: (payload) => runtimeImageApi.createTask(payload),
+  getTask: (taskId) => runtimeImageApi.getTask(taskId),
+  cancelTask: (taskId) => runtimeImageApi.cancelTask(taskId),
+  deleteTask: (taskId) => runtimeImageApi.deleteTask(taskId)
+};
+</script>
+
+<template>
+  <PortalImageStudioWorkspace
+    :api="imageApi"
+    :format-u-s-d="formatUSD"
+    usage-message="消耗会计入个人用量"
+    :asset-base-url="apiBaseUrl"
+    v-bind="portalImageWorkspaceIconProps"
+    :notify-success="notifySuccess"
+    :notify-error="notifyError"
+  />
+</template>

@@ -745,6 +745,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：用户管理 feature 统一承载用户分组策略组件，详情/列表工作区和限流对话框可共享同一领域组件，旧 `views/tenant/ai/user-pricing` 目录不再保留业务实现。
 - 回归：迁移后的 presentation 测试、租户用户管理集成测试、全量 Portal 123 个测试文件/367 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（AI workbench adapter boundaries，2026-08-29）
+
+- 边界：租户/客户聊天、生图和任务中心的 runtime API 适配、端侧用量文案与删除确认策略迁移到 `features/ai/{chat,images,tasks}`；对应 `views` 仅保留路由入口并转发 feature workspace。
+- 依赖：三类共享 `platform/ai` workspace 继续承载状态与交互，端侧差异由 feature adapter 注入，避免 `views` 直接组合 API facade 或确认逻辑。
+- 回归：新增租户/客户聊天、生图、任务 adapter 集成测试；定向测试、全量 Portal 126 个测试文件/373 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05（Price-book component boundary cleanup，2026-08-29）
 
 - 边界：删除旧 `views/admin/ai/gateway/components` 下未被路由或工作区引用的价格表条目/分辨率组件副本；实际使用的 `PriceBookEntryFormDialog`、`TieredPricingEditor` 与行为测试统一归入 `features/ai/price-books/components`。
