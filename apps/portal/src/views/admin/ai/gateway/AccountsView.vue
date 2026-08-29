@@ -23,7 +23,7 @@ import type {
   UpstreamAccountTestResult
 } from '@/api/types/ai'
 import { defaultBindingProtocolForProviderFamily, endpointProtocolOptions } from './constants'
-import { firstActivePriceBookId } from './priceBookSelection'
+import { firstActivePriceBookId } from '@/features/ai/price-books/priceBookSelection'
 import type { PriceBookRecord } from './pricingTypes'
 import KeyValueEditor from './components/KeyValueEditor.vue'
 import UpstreamImageTestUpload from './components/UpstreamImageTestUpload.vue'

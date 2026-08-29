@@ -517,6 +517,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：绑定能力选择器常量与面板由 feature 自持有，账号管理页只消费 feature component；旧网关 constants 保留兼容 re-export，避免路由层继续拥有绑定实现。
 - 回归：账号管理与模型绑定定向测试（15 项）、Portal typecheck、architecture contract 和 frontend build 通过。
 
+### P2-05（Admin price-book workspace boundary，2026-08-29）
+
+- 垂直切分：平台价格表列表、条目编辑、LiteLLM 搜索、同步、导入/导出与 CRUD 工作区迁移到 `features/ai/price-books/AdminPriceBookWorkspace.vue`；`views/admin/ai/gateway/PricingView.vue` 收敛为路由 wrapper。
+- 依赖边界：价格表领域类型、JSON 文件解析/生成和价格表选择 helper 归入 price-books feature，旧 gateway helper 仅保留兼容 re-export；admin 页面不再承载价格表业务实现。
+- 回归：价格表文件/选择/档位编辑定向测试（9 项）、Portal typecheck 通过，待本切片提交前执行全量 Portal 与 Go 门禁。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

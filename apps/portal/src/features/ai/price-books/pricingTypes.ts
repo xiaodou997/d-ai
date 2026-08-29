@@ -4,6 +4,18 @@ import type {
   TenantAiTokenPriceTierUSD
 } from "@/api/types/aiTenant";
 
+export interface PriceBookRecord {
+  id: string;
+  name: string;
+  description: string;
+  status: "active" | "disabled";
+}
+
+export interface ResolutionUSDPrice {
+  resolution: string;
+  price: number;
+}
+
 export type PriceBookEntryRecord = TenantAiPriceBookEntry;
 export type TokenPriceTier = TenantAiTokenPriceTierUSD;
 export type LiteLLMPriceModel = TenantAiLiteLLMPriceModel;
