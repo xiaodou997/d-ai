@@ -14,7 +14,7 @@ vi.mock("@/features/admin/overview/useAdminOverviewData", () => ({
 }));
 
 import { DsTabs } from "@/shared/ui";
-import OperationsOverviewView from "./OperationsOverviewView.vue";
+import OperationsOverviewWorkspace from "./OperationsOverviewWorkspace.vue";
 
 function overviewData(refresh: () => Promise<void>) {
   return {
@@ -52,12 +52,12 @@ describe("OperationsOverviewView", () => {
   it("loads health data only after switching to the health tab", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
-      routes: [{ path: "/admin/overview/operations", component: OperationsOverviewView }]
+      routes: [{ path: "/admin/overview/operations", component: OperationsOverviewWorkspace }]
     });
     await router.push("/admin/overview/operations");
     await router.isReady();
 
-    const wrapper = shallowMount(OperationsOverviewView, {
+    const wrapper = shallowMount(OperationsOverviewWorkspace, {
       global: {
         plugins: [router],
         stubs: {

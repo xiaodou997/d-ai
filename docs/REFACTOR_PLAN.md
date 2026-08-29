@@ -655,6 +655,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：系统模块工作区只组合 typed system-modules DTO、模块导航、清理轮询、通知 API 和 DsUI 卡片/表格/状态控件，路由层不再持有清理策略或异步运行状态。
 - 回归：新增模块加载、清理预览、开关和策略保存集成测试；定向测试、全量 Portal 110 个测试文件/342 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Operations overview workspace boundary，2026-08-29）
+
+- 垂直切分：运行概览/健康详情 tab、时间范围切换、运行趋势、异常请求、数据库/Redis/代理健康指标和按需刷新工作区迁移到 `features/admin/overview/OperationsOverviewWorkspace.vue`；`views/admin/overview/OperationsOverviewView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：运营概览工作区只组合 `useAdminOverviewData`、overview 领域类型/格式化工具、健康/趋势子组件和共享 Portal 卡片，健康 tab 仍保持懒加载与路由 query 同步。
+- 回归：既有健康 tab 懒加载集成测试随工作区迁移；定向测试、全量 Portal 110 个测试文件/342 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
