@@ -769,6 +769,18 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖：价格表业务组件不再从 views 目录反向承载，管理员与租户价格表工作区共享同一 feature 实现，避免重复维护和路径漂移。
 - 回归：迁移原有分档价格组件测试；定向测试、全量 Portal 122 个测试文件/365 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Price-book helper boundary cleanup，2026-08-29）
+
+- 边界：价格表文件导入/导出、活动价格表选择和领域类型测试迁移到 `features/ai/price-books`；删除 `views/admin/ai/gateway` 下无业务引用的 helper 转发、旧模型目录和常量文件。
+- 依赖：价格表相关源码与测试统一从 feature 出口维护，views 目录不再保留反向兼容路径或未引用的旧价格目录。
+- 回归：迁移的价格表文件/选择 helper 测试 5 项通过；全量 Portal 测试文件/测试总数保持 128/377，typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
+### P2-05（Legacy portal view cleanup，2026-08-29）
+
+- 边界：删除已确认无路由/源码引用的客户旧 profile 副本、租户工作台旧 trail 组件和旧分辨率定价编辑器，避免未维护视图继续伪装成可用业务入口。
+- 依赖：当前客户 profile、AI 工作台与价格表均由对应 feature/platform workspace 提供，清理不改变现行路由或运行时依赖。
+- 回归：删除前完成全仓引用检索；全量 Portal 测试文件/测试总数保持 128/377，typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
