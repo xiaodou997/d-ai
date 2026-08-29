@@ -595,6 +595,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：注册工作区只组合公开平台 API、法律页脚和密码策略校验，路由层不再持有表单状态、并发加载或注册请求编排；feature index 提供稳定导出。
 - 回归：既有公共注册链接集成测试随工作区迁移，覆盖邀请码状态、密码确认、法律版本提交和错误提示；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Proxy-egress workspace boundary，2026-08-29）
+
+- 垂直切分：代理出口模块开关、节点 CRUD、健康状态展示和凭证表单迁移到 `features/platform/system-modules/ProxyEgressWorkspace.vue`；`views/admin/platform/ProxyEgressView.vue` 收敛为路由入口 wrapper，并与敏感信息保护共享 system-modules feature 出口。
+- 依赖边界：代理工作区只组合 typed system-modules API、PortalPagePanel、DsUI 表格/抽屉与状态控件，路由层不再持有节点编辑状态、密码保留规则或刷新编排。
+- 回归：既有代理出口加载/启停与节点密码保留集成测试随工作区迁移；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。

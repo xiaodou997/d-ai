@@ -3,7 +3,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DsButton, DsSwitch } from "@/shared/ui";
-import ProxyEgressView from "./ProxyEgressView.vue";
+import ProxyEgressWorkspace from "./ProxyEgressWorkspace.vue";
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
@@ -44,7 +44,7 @@ const node = {
   updatedAt: "2026-08-19T08:00:00Z"
 };
 
-describe("ProxyEgressView", () => {
+describe("ProxyEgressWorkspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     api.list.mockResolvedValue([proxyModule]);
@@ -91,11 +91,11 @@ describe("ProxyEgressView", () => {
 async function mountView() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: "/admin/proxy-nodes", component: ProxyEgressView }]
+    routes: [{ path: "/admin/proxy-nodes", component: ProxyEgressWorkspace }]
   });
   await router.push("/admin/proxy-nodes");
   await router.isReady();
-  const wrapper = mount(ProxyEgressView, { attachTo: document.body, global: { plugins: [router] } });
+  const wrapper = mount(ProxyEgressWorkspace, { attachTo: document.body, global: { plugins: [router] } });
   await flushPromises();
   return wrapper;
 }
