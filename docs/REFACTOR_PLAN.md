@@ -563,7 +563,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 垂直切分：租户端终端用户充值规则、额度包与手续费配置工作区迁移到 `features/platform/payment/TenantPaymentSettingsWorkspace.vue`；`views/tenant/platform/PaymentSettingsView.vue` 收敛为路由 wrapper，并与管理端支付 feature 统一出口。
 - 依赖边界：租户工作区只组合 tenant payment API、金额单位转换和共享 Portal/Element Plus 表单，路由层不再承载加载、保存或额度包状态。
-- 回归：租户支付设置加载与 basis-point 保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+- 回归：租户支付设置加载与 basis-point 保存集成测试、全量 Portal 100 个测试文件/322 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05 按 feature 垂直切分 Portal
 
@@ -630,7 +630,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：99 个测试文件、320 个测试通过
+- [x] `bun run test`：100 个测试文件、322 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
