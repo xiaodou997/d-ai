@@ -715,6 +715,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：业务概览工作区只组合 `useAdminOverviewData`、typed dashboard/usage DTO、身份投影和共享 overview/Portal/DsUI 组件，路由层不再持有查询状态、聚合计算或刷新编排。
 - 回归：新增业务概览加载、范围切换和刷新集成测试；定向测试、全量 Portal 119 个测试文件/359 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin cost-analysis workspace boundary，2026-08-29）
+
+- 垂直切分：平台成本分析的时间范围、参考成本/租户应收/用户扣款指标、结算趋势和上游资源结构迁移到 `features/admin/overview/CostAnalysisWorkspace.vue`；`views/admin/overview/CostAnalysisView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：成本分析工作区只组合 `useAdminOverviewData`、typed usage DTO、成本口径计算和共享 overview/Portal/DsUI 组件，路由层不再持有查询状态、聚合计算或刷新编排。
+- 回归：新增成本分析加载与范围切换集成测试；定向测试、全量 Portal 120 个测试文件/361 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -780,7 +786,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：119 个测试文件、359 个测试通过
+- [x] `bun run test`：120 个测试文件、361 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
