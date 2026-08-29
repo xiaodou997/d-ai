@@ -637,6 +637,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：客户账户工作区只组合 typed `AccountBalance`/`BalanceLotView`、客户账户 API、金额格式化和 DsUI 指标/标签/空态；account-center index 同时提供客户与租户账户工作区出口。
 - 回归：新增余额加载、额度包映射和刷新动作集成测试；定向测试、全量 Portal 108 个测试文件/338 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Customer profile workspace boundary，2026-08-29）
+
+- 垂直切分：客户身份摘要、资料编辑、密码策略加载、密码修改和修改后安全退出工作区迁移到 `features/identity/profile/CustomerProfileWorkspace.vue`；`views/customer/ProfileView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：客户资料工作区只组合 auth store、客户资料 API、公开密码策略和共享身份校验，路由层不再持有资料/密码表单状态或退出编排；feature index 提供稳定导出。
+- 回归：新增身份加载、密码策略、资料更新和退出登录集成测试；定向测试、全量 Portal 109 个测试文件/340 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
