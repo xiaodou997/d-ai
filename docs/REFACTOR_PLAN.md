@@ -679,6 +679,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：客户充值工作区只组合 typed `RechargeRecordItem`、客户支付 API、金额格式化、充值方式映射和 DsUI 表格/分页，路由层不再持有记录请求或分页状态。
 - 回归：新增客户充值记录加载与分页集成测试；定向测试、全量 Portal 113 个测试文件/348 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Tenant user-detail workspace boundary，2026-08-29）
+
+- 垂直切分：终端用户详情的路由参数、基础资料/充值/AI 用量并行加载、分组与限流摘要、风险信号、刷新和返回导航迁移到 `features/ai/user-management/TenantUserDetailWorkspace.vue`；`views/tenant/platform/UserDetailView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：详情工作区及其 user-overview 组件、领域类型和 `useTenantUserOverview` composable 统一归入 user-management feature，继续复用 typed tenant/platform/usage API 与编辑/分组策略组件；路由层不再持有业务状态或 API 编排。
+- 回归：新增工作区加载、刷新和返回列表集成测试；定向测试、全量 Portal 114 个测试文件/350 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -744,7 +750,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：113 个测试文件、348 个测试通过
+- [x] `bun run test`：114 个测试文件、350 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容

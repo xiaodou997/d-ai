@@ -1,4 +1,5 @@
 const numberFormatter = new Intl.NumberFormat("zh-CN");
+// User-detail formatting stays inside the user-management feature boundary.
 const currencyFormatter = new Intl.NumberFormat("zh-CN", {
   style: "currency",
   currency: "USD",
