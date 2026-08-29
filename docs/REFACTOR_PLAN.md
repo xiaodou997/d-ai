@@ -539,25 +539,25 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 垂直切分：微信收款、租户充值规则和管理员提现规则工作区迁移到 `features/platform/payment/AdminPaymentSettingsWorkspace.vue`；`views/admin/platform/PaymentSettingsView.vue` 收敛为路由 wrapper。
 - 依赖边界：支付设置工作区只组合平台支付 API、DsTabs 与 Element Plus 表单控件，路由层不再持有配置加载、金额单位转换或保存编排。
-- 回归：支付设置工作区加载与规则保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+- 回归：支付设置工作区加载与规则保存集成测试、全量 Portal 96 个测试文件/314 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05（Admin recharge-records workspace boundary，2026-08-29）
 
 - 垂直切分：充值订单筛选、分页、详情、支付同步、退款登记和手动额度撤回工作区迁移到 `features/platform/payment/AdminRechargeRecordsWorkspace.vue`；`views/admin/platform/RechargeRecordsView.vue` 收敛为路由 wrapper。
 - 依赖边界：订单工作区只组合平台支付 API、`useListPage`、DsTable/DsDrawer 等共享组件，路由层不再持有筛选归一化、状态展示和退款/撤回编排。
-- 回归：充值订单初始加载与筛选集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+- 回归：充值订单初始加载与筛选集成测试、全量 Portal 97 个测试文件/316 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05（Admin routing workspace boundary，2026-08-29）
 
 - 垂直切分：路由评分权重、归一化、推荐预设和选路说明工作区迁移到 `features/ai/routing/AdminRoutingWorkspace.vue`；`views/admin/ai/gateway/RoutingView.vue` 收敛为路由 wrapper。
 - 依赖边界：路由工作区直接消费 typed `RouteWeightsOutputBody`/`ScoreWeightsDTO` 和 `aiAdminApi`，四维权重与预设类型在 feature 内明确建模，页面不再使用未约束的响应 `any`。
-- 回归：路由权重加载与保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+- 回归：路由权重加载与保存集成测试、全量 Portal 98 个测试文件/318 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05（Admin tenant-management workspace boundary，2026-08-29）
 
 - 垂直切分：租户列表筛选、分页、创建/编辑、启停、删除、充值、账户抽屉和策略导航工作区迁移到 `features/platform/tenant-management/AdminTenantsWorkspace.vue`；`views/admin/platform/TenantsView.vue` 收敛为路由 wrapper。
 - 依赖边界：租户工作区只组合 typed `TenantListItem`、平台租户 API、`useListPage` 和账户/充值共享组件，列表查询与状态操作不再由路由层承载。
-- 回归：租户列表初始加载与筛选集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+- 回归：租户列表初始加载与筛选集成测试、全量 Portal 99 个测试文件/320 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05 按 feature 垂直切分 Portal
 
@@ -624,7 +624,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：64 个测试文件、214 个测试通过
+- [x] `bun run test`：99 个测试文件、320 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
