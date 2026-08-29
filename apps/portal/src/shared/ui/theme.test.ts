@@ -1,11 +1,25 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-import { applyPortalTheme } from "./theme";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { applyPortalTheme, portalThemes, type PortalThemeName } from "./theme";
+
+const baseCss = readFileSync(resolve(process.cwd(), "apps/portal/src/shared/ui/styles/base.css"), "utf8");
+let baseStyle: HTMLStyleElement;
+
+beforeEach(() => {
+  baseStyle = document.createElement("style");
+  baseStyle.dataset.test = "ds-theme-contract";
+  baseStyle.textContent = baseCss;
+  document.head.append(baseStyle);
+});
 
 afterEach(() => {
   const root = document.documentElement;
   delete root.dataset.theme;
   root.classList.remove("ds-theme-admin", "ds-theme-tenant", "ds-theme-customer");
+  baseStyle.remove();
 });
 
 describe("applyPortalTheme", () => {
@@ -27,4 +41,31 @@ describe("applyPortalTheme", () => {
 
     root.classList.remove("unrelated-class");
   });
+
+  it.each(Object.keys(portalThemes) as PortalThemeName[])(
+    "keeps the %s theme's accent and Element Plus bridge tokens aligned",
+    (name) => {
+      applyPortalTheme(name);
+      const styles = getComputedStyle(document.documentElement);
+      const meta = portalThemes[name];
+      const preview = document.createElement("button");
+      preview.style.cssText =
+        "background: var(--ds-accent); color: var(--ds-accent-contrast); border-radius: var(--ds-radius-control); box-shadow: var(--ds-shadow-focus);";
+      document.body.append(preview);
+      const previewStyles = getComputedStyle(preview);
+
+      expect(styles.getPropertyValue("--ds-accent").trim().toLowerCase()).toBe(meta.accent.toLowerCase());
+      expect(styles.getPropertyValue("--ds-accent-soft").trim().toLowerCase()).toBe(meta.accentSoft.toLowerCase());
+      expect(styles.getPropertyValue("--ds-accent-hover").trim().toLowerCase()).not.toBe("");
+      expect(styles.getPropertyValue("--ds-paper").trim().toLowerCase()).toBe(meta.surface.toLowerCase());
+      expect(styles.getPropertyValue("--el-color-primary").trim().toLowerCase()).toBe(meta.accent.toLowerCase());
+      expect(styles.getPropertyValue("--el-component-size").trim()).toBe("36px");
+      expect(styles.getPropertyValue("--el-border-radius-base").trim()).toBe("8px");
+      expect(previewStyles.backgroundColor.toLowerCase()).toBe(meta.accent.toLowerCase());
+      expect(previewStyles.borderRadius).toBe("8px");
+      expect(previewStyles.boxShadow).toContain(meta.accentSoft.toLowerCase());
+
+      preview.remove();
+    }
+  );
 });

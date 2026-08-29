@@ -807,7 +807,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 禁止业务页面新增 hex、rgb、rgba 和自建阴影、圆角值。
 - [x] 将正则存在性检查升级为源码级 lint 规则。
 - [x] 统一 Element Plus 与 DsUI 的交互、尺寸、状态和可访问性。
-- [ ] 增加 admin、tenant、customer 三主题视觉回归测试。
+- [x] 增加 admin、tenant、customer 三主题视觉回归测试。
 
 ### P2-07 增加浏览器端到端验收
 
@@ -858,7 +858,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：136 个测试文件、395 个测试通过
+- [x] `bun run test`：136 个测试文件、398 个测试通过
 - [x] `bun run ensure:api`
 - [x] `bun run validate:portal-styles`：源码颜色仅使用 `var(--ds-*)` token（token 定义文件除外）
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
@@ -883,6 +883,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 变更：统一 Element Plus 控件的 DsUI 尺寸、圆角、焦点环和禁用色；DsButton 增加 loading/忙碌语义；输入、选择、数字输入自动转发原生属性并关联错误文本；Tabs 支持方向键与 roving tabindex；表格/分页补齐表头、选择、当前页和 loading 语义；Modal/Drawer/ConfirmDialog 增加 Escape、ARIA 标题/描述、滚动锁定和焦点恢复。
 - 回归：新增共享控件和弹层契约测试，覆盖原生属性、错误关联、loading/disabled、键盘导航、选择/分页/表格 ARIA 和弹层焦点行为。
 - 遗留风险：尚未建立真实浏览器截图级主题回归与完整 focus trap；P2-07 浏览器端到端验收继续作为下一候选项。
+
+### P2-06（Theme token visual regression，2026-08-30）
+
+- 状态：admin、tenant、customer 三主题的 token 渲染回归完成；真实浏览器截图与跨视口验收仍由 P2-07 负责。
+- 变更：主题测试注入生产 `base.css`，逐主题调用 `applyPortalTheme`，通过 happy-dom 计算样式 fixture 校验 accent、accent-soft、Element Plus primary、控件尺寸、圆角和 focus shadow 均与主题元数据一致。
+- 回归：`theme.test.ts` 覆盖三主题的 computed-style 结果，保留无关根类名和主题切换行为断言。
+- 遗留风险：该契约测试不替代真实浏览器像素截图；P2-07 仍需补登录、关键路径、桌面/移动视口截图和无障碍检查。
 
 ### P0-01（2026-08-20）
 
