@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import LoginView from "./LoginView.vue";
+import LoginWorkspace from "./LoginWorkspace.vue";
 
 const login = vi.hoisted(() => vi.fn());
 
@@ -46,13 +46,13 @@ async function mountLogin(initialPath = "/login") {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: "/login", component: LoginView },
+        { path: "/login", component: LoginWorkspace },
         { path: "/workspace", component: { template: "<div>Workspace</div>" } }
       ]
     });
     await router.push(initialPath);
     await router.isReady();
 
-    const wrapper = mount(LoginView, { global: { plugins: [router] } });
+    const wrapper = mount(LoginWorkspace, { global: { plugins: [router] } });
     return { router, wrapper };
 }

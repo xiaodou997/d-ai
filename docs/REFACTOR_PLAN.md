@@ -601,6 +601,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：代理工作区只组合 typed system-modules API、PortalPagePanel、DsUI 表格/抽屉与状态控件，路由层不再持有节点编辑状态、密码保留规则或刷新编排。
 - 回归：既有代理出口加载/启停与节点密码保留集成测试随工作区迁移；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Login workspace boundary，2026-08-29）
+
+- 垂直切分：统一用户名/邮箱登录、重定向路径校验、管理员 MFA 二次验证和错误状态迁移到 `features/identity/login/LoginWorkspace.vue`；`views/LoginView.vue` 收敛为公共路由入口 wrapper。
+- 依赖边界：登录工作区只组合 auth store、MFA 错误类型和路由导航，路由层不再持有凭证/MFA 表单状态或重定向编排；feature index 提供稳定导出。
+- 回归：既有统一登录集成测试随工作区迁移，覆盖单一登录入口、凭证提交和安全重定向；定向测试、全量 Portal 103 个测试文件/328 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
