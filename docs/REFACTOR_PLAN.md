@@ -661,6 +661,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：运营概览工作区只组合 `useAdminOverviewData`、overview 领域类型/格式化工具、健康/趋势子组件和共享 Portal 卡片，健康 tab 仍保持懒加载与路由 query 同步。
 - 回归：既有健康 tab 懒加载集成测试随工作区迁移；定向测试、全量 Portal 110 个测试文件/342 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Authentication-audit workspace boundary，2026-08-29）
+
+- 垂直切分：认证事件筛选、分页、主体/决策状态映射和拒绝原因展示工作区迁移到 `features/platform/audit/AuthAuditWorkspace.vue`；`views/admin/platform/AuditLogView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：认证审计工作区只组合 typed `AuditLogItem`、平台管理员 API、`useListPage` 和 DsUI 筛选/表格/标签，主体/决策展示映射在 feature 内明确建模。
+- 回归：新增审计列表加载与 User ID 搜索集成测试；定向测试、全量 Portal 111 个测试文件/344 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
