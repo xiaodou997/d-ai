@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed, useAttrs, useId } from "vue";
 import { ChevronDown } from "lucide-vue-next";
+
+defineOptions({ inheritAttrs: false });
 
 interface SelectOption {
   label: string;
@@ -24,6 +27,29 @@ const props = withDefaults(
   }
 );
 
+const attrs = useAttrs();
+const generatedId = useId();
+const selectId = computed(() =>
+  typeof attrs.id === "string" ? attrs.id : `ds-select-${generatedId}`
+);
+const selectAttrs = computed(() => {
+  const {
+    class: _class,
+    style: _style,
+    id: _id,
+    "aria-invalid": _ariaInvalid,
+    "aria-describedby": _ariaDescribedBy,
+    ...rest
+  } = attrs;
+  return rest;
+});
+const describedBy = computed(() => {
+  const ids = [attrs["aria-describedby"], props.error ? `${selectId.value}-error` : undefined]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ");
+  return ids || undefined;
+});
+
 const emit = defineEmits<{
   "update:modelValue": [value: string | number];
 }>();
@@ -35,11 +61,23 @@ function onChange(event: Event) {
 </script>
 
 <template>
-  <div class="ds-select" :class="[`ds-select--${size}`, { 'ds-select--error': error, 'ds-select--disabled': disabled }]">
+  <div
+    class="ds-select"
+    :class="[
+      `ds-select--${size}`,
+      { 'ds-select--error': error, 'ds-select--disabled': disabled },
+      attrs.class
+    ]"
+    :style="attrs.style"
+  >
     <select
+      v-bind="selectAttrs"
       class="ds-select__field"
+      :id="selectId"
       :value="modelValue"
       :disabled="disabled"
+      :aria-invalid="error ? 'true' : undefined"
+      :aria-describedby="describedBy"
       @change="onChange"
     >
       <option value="" disabled>{{ placeholder }}</option>
@@ -53,7 +91,7 @@ function onChange(event: Event) {
       </option>
     </select>
     <ChevronDown class="ds-select__arrow" :size="14" />
-    <p v-if="error" class="ds-select__error">{{ error }}</p>
+    <p v-if="error" :id="`${selectId}-error`" class="ds-select__error" aria-live="polite">{{ error }}</p>
   </div>
 </template>
 
@@ -85,13 +123,13 @@ function onChange(event: Event) {
 }
 
 .ds-select--md .ds-select__field {
-  height: 36px;
+  height: var(--ds-control-height-md);
   padding-left: 12px;
   font-size: 13px;
 }
 
 .ds-select--sm .ds-select__field {
-  height: 28px;
+  height: var(--ds-control-height-sm);
   padding-left: 8px;
   font-size: 12px;
 }

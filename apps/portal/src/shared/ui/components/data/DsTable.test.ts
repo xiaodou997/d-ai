@@ -28,6 +28,8 @@ describe("DsTable", () => {
 
     const headers = wrapper.findAll("thead th");
     expect(headers.map((th) => th.text())).toEqual(["名称", "状态"]);
+    expect(headers.every((th) => th.attributes("scope") === "col")).toBe(true);
+    expect(wrapper.find("table").attributes("aria-label")).toBe("数据表格");
 
     const bodyRows = wrapper.findAll("tbody tr.ds-table__row");
     expect(bodyRows).toHaveLength(2);
@@ -64,6 +66,8 @@ describe("DsTable", () => {
 
     const rowCheckboxes = wrapper.findAll('tbody input[type="checkbox"]');
     expect(rowCheckboxes).toHaveLength(2);
+    expect(wrapper.find('thead input[type="checkbox"]').attributes("aria-label")).toBe("全选当前页");
+    expect(rowCheckboxes[0].attributes("aria-label")).toBe("选择1");
 
     await rowCheckboxes[0].setValue(true);
     expect(wrapper.emitted("update:selection")?.[0]).toEqual([[rows[0]]]);

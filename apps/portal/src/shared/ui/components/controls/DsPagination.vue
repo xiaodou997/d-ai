@@ -54,22 +54,24 @@ function changePageSize(size: number) {
 
 <template>
   <div class="ds-pagination">
-    <span class="ds-pagination__info">共 {{ total }} 条</span>
+    <span class="ds-pagination__info" aria-live="polite">共 {{ total }} 条</span>
 
     <div class="ds-pagination__controls">
       <select
         class="ds-pagination__select"
         :value="pageSize"
+        aria-label="每页条数"
         @change="changePageSize(Number(($event.target as HTMLSelectElement).value))"
       >
         <option v-for="size in pageSizes" :key="size" :value="size">{{ size }} 条/页</option>
       </select>
 
-      <nav class="ds-pagination__nav">
+      <nav class="ds-pagination__nav" aria-label="分页">
         <button
           type="button"
           class="ds-pagination__btn ds-pagination__btn--icon"
           :disabled="page <= 1"
+          aria-label="第一页"
           title="第一页"
           @click="goTo(1)"
         >
@@ -79,6 +81,7 @@ function changePageSize(size: number) {
           type="button"
           class="ds-pagination__btn ds-pagination__btn--icon"
           :disabled="page <= 1"
+          aria-label="上一页"
           title="上一页"
           @click="goTo(page - 1)"
         >
@@ -92,6 +95,8 @@ function changePageSize(size: number) {
             type="button"
             class="ds-pagination__btn"
             :class="{ 'ds-pagination__btn--active': p === page }"
+            :aria-current="p === page ? 'page' : undefined"
+            :aria-label="`第 ${p} 页`"
             @click="goTo(p as number)"
           >
             {{ p }}
@@ -102,6 +107,7 @@ function changePageSize(size: number) {
           type="button"
           class="ds-pagination__btn ds-pagination__btn--icon"
           :disabled="page >= totalPages"
+          aria-label="下一页"
           title="下一页"
           @click="goTo(page + 1)"
         >
@@ -111,6 +117,7 @@ function changePageSize(size: number) {
           type="button"
           class="ds-pagination__btn ds-pagination__btn--icon"
           :disabled="page >= totalPages"
+          aria-label="最后一页"
           title="最后一页"
           @click="goTo(totalPages)"
         >
@@ -146,7 +153,7 @@ function changePageSize(size: number) {
 }
 
 .ds-pagination__select {
-  height: 30px;
+  height: var(--ds-control-height-icon);
   border: 1px solid var(--ds-line-strong);
   border-radius: var(--ds-radius-control);
   background: var(--ds-panel);
@@ -162,6 +169,12 @@ function changePageSize(size: number) {
   box-shadow: var(--ds-shadow-focus);
 }
 
+.ds-pagination__select:focus-visible,
+.ds-pagination__btn:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
+}
+
 .ds-pagination__nav {
   display: flex;
   align-items: center;
@@ -173,7 +186,7 @@ function changePageSize(size: number) {
   align-items: center;
   justify-content: center;
   min-width: 30px;
-  height: 30px;
+  height: var(--ds-control-height-icon);
   border: 1px solid transparent;
   border-radius: var(--ds-radius-control);
   background: transparent;
@@ -212,7 +225,7 @@ function changePageSize(size: number) {
   align-items: center;
   justify-content: center;
   min-width: 30px;
-  height: 30px;
+  height: var(--ds-control-height-icon);
   color: var(--ds-muted);
   font-size: 12.5px;
   user-select: none;

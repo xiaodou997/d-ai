@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -17,29 +17,71 @@ const emit = defineEmits<{
   close: [];
 }>();
 
+const drawerId = useId();
+const titleId = `ds-drawer-${drawerId}-title`;
+const bodyId = `ds-drawer-${drawerId}-body`;
+const panel = ref<HTMLElement | null>(null);
+const restoreFocus = ref<HTMLElement | null>(null);
+const previousBodyOverflow = ref<string | null>(null);
+
+function restoreFocusAndOverflow() {
+  if (typeof document === "undefined") return;
+  document.body.style.overflow = previousBodyOverflow.value ?? "";
+  previousBodyOverflow.value = null;
+  const target = restoreFocus.value;
+  restoreFocus.value = null;
+  if (target?.isConnected) nextTick(() => target.focus({ preventScroll: true }));
+}
+
 watch(
   () => props.open,
   (open) => {
     if (typeof document === "undefined") return;
-    document.body.style.overflow = open ? "hidden" : "";
-  }
+    if (open) {
+      restoreFocus.value = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      previousBodyOverflow.value = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      nextTick(() => panel.value?.focus({ preventScroll: true }));
+      return;
+    }
+    restoreFocusAndOverflow();
+  },
+  { immediate: true }
 );
+
+onBeforeUnmount(() => {
+  if (props.open) restoreFocusAndOverflow();
+});
+
+function onEscape() {
+  emit("close");
+}
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="ds-drawer">
-      <div v-if="open" class="ds-drawer" @keydown.esc="emit('close')">
-        <div class="ds-drawer__scrim" @click="emit('close')"></div>
-        <aside class="ds-drawer__panel" :style="{ width }" role="dialog" aria-modal="true">
+      <div v-if="open" class="ds-drawer" @keydown.esc.stop.prevent="onEscape">
+        <div class="ds-drawer__scrim" aria-hidden="true" @click="emit('close')"></div>
+        <aside
+          ref="panel"
+          class="ds-drawer__panel"
+          :style="{ width }"
+          role="dialog"
+          aria-modal="true"
+          tabindex="-1"
+          :aria-label="title ? undefined : '抽屉'"
+          :aria-labelledby="title ? titleId : undefined"
+          :aria-describedby="subtitle ? bodyId : undefined"
+        >
           <header class="ds-drawer__head">
             <div class="ds-drawer__copy">
-              <h2 v-if="title" class="ds-drawer__title">{{ title }}</h2>
+              <h2 v-if="title" :id="titleId" class="ds-drawer__title">{{ title }}</h2>
               <p v-if="subtitle" class="ds-drawer__subtitle">{{ subtitle }}</p>
             </div>
             <button type="button" class="ds-drawer__close" aria-label="关闭" @click="emit('close')">×</button>
           </header>
-          <div class="ds-drawer__body">
+          <div :id="bodyId" class="ds-drawer__body">
             <slot />
           </div>
           <footer v-if="$slots.footer" class="ds-drawer__foot">
@@ -118,6 +160,11 @@ watch(
 .ds-drawer__close:hover {
   background: var(--ds-panel-muted);
   color: var(--ds-ink);
+}
+
+.ds-drawer__close:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 
 .ds-drawer__body {

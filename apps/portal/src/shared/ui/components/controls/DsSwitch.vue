@@ -28,6 +28,7 @@ function toggle() {
     type="button"
     role="switch"
     :aria-checked="modelValue"
+    :aria-disabled="disabled ? 'true' : undefined"
     :disabled="disabled"
     class="ds-switch"
     :class="[`ds-switch--${size}`, { 'ds-switch--on': modelValue, 'ds-switch--disabled': disabled }]"
@@ -51,13 +52,13 @@ function toggle() {
 }
 
 .ds-switch--md {
-  width: 44px;
-  height: 24px;
+  width: var(--ds-switch-width);
+  height: var(--ds-switch-height);
 }
 
 .ds-switch--sm {
-  width: 36px;
-  height: 20px;
+  width: var(--ds-switch-width-sm);
+  height: var(--ds-switch-height-sm);
 }
 
 .ds-switch__thumb {
@@ -101,5 +102,10 @@ function toggle() {
 
 .ds-switch:not(.ds-switch--disabled):hover {
   box-shadow: var(--ds-shadow-focus-strong);
+}
+
+.ds-switch:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 </style>

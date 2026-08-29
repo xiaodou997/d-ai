@@ -4,6 +4,19 @@ import { describe, expect, it } from "vitest";
 import DsNumberInput from "./DsNumberInput.vue";
 
 describe("DsNumberInput", () => {
+  it("associates the spinbutton with its validation message", () => {
+    const wrapper = mount(DsNumberInput, {
+      props: { modelValue: 1, error: "请输入有效倍率" },
+      attrs: { id: "multiplier", "aria-describedby": "multiplier-hint" }
+    });
+    const input = wrapper.get("input");
+
+    expect(input.attributes("id")).toBe("multiplier");
+    expect(input.attributes("aria-invalid")).toBe("true");
+    expect(input.attributes("aria-describedby")).toBe("multiplier-hint multiplier-error");
+    expect(wrapper.get("#multiplier-error").attributes("aria-live")).toBe("polite");
+  });
+
   it("preserves decimal editing states and emits the parsed number", async () => {
     const wrapper = mount(DsNumberInput, {
       props: { modelValue: 1, min: 0, precision: 4 }

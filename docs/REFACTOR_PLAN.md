@@ -806,7 +806,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 把业务代码中的硬编码颜色迁移为 `var(--ds-*)` token。
 - [x] 禁止业务页面新增 hex、rgb、rgba 和自建阴影、圆角值。
 - [x] 将正则存在性检查升级为源码级 lint 规则。
-- [ ] 统一 Element Plus 与 DsUI 的交互、尺寸、状态和可访问性。
+- [x] 统一 Element Plus 与 DsUI 的交互、尺寸、状态和可访问性。
 - [ ] 增加 admin、tenant、customer 三主题视觉回归测试。
 
 ### P2-07 增加浏览器端到端验收
@@ -858,7 +858,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：131 个测试文件、382 个测试通过
+- [x] `bun run test`：136 个测试文件、395 个测试通过
 - [x] `bun run ensure:api`
 - [x] `bun run validate:portal-styles`：源码颜色仅使用 `var(--ds-*)` token（token 定义文件除外）
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
@@ -876,6 +876,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 变更：补充 code/overlay/glass/skeleton、radius 和 focus/drop-shadow 语义 token；将 Portal、feature、共享组件中的 134 处 hex/rgb/rgba 以及自定义阴影/圆角迁移为 `var(--ds-*)`；`validate-source-styles.mjs` 同时检查颜色、`border-radius` 和 `box-shadow`，并接入 frontend build，保留 `base.css` 与 `theme.ts` 作为 token 定义白名单。
 - 验证：`bun run validate:portal-styles`、源码契约测试、全量 Portal 131 个测试文件/382 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 - 遗留风险：Element Plus/DsUI 可访问性与三主题截图回归尚未建立；少数结构性 `none`/`inherit` 圆角与阴影值由 lint 明确允许。
+
+### P2-06（DsUI/Element interaction contract，2026-08-29）
+
+- 状态：共享控件的交互、尺寸、状态和可访问性契约完成；三主题视觉回归仍待推进。
+- 变更：统一 Element Plus 控件的 DsUI 尺寸、圆角、焦点环和禁用色；DsButton 增加 loading/忙碌语义；输入、选择、数字输入自动转发原生属性并关联错误文本；Tabs 支持方向键与 roving tabindex；表格/分页补齐表头、选择、当前页和 loading 语义；Modal/Drawer/ConfirmDialog 增加 Escape、ARIA 标题/描述、滚动锁定和焦点恢复。
+- 回归：新增共享控件和弹层契约测试，覆盖原生属性、错误关联、loading/disabled、键盘导航、选择/分页/表格 ARIA 和弹层焦点行为。
+- 遗留风险：尚未建立真实浏览器截图级主题回归与完整 focus trap；P2-07 浏览器端到端验收继续作为下一候选项。
 
 ### P0-01（2026-08-20）
 

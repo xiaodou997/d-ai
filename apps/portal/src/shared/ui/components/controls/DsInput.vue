@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { computed, useAttrs, useId } from "vue";
+
+defineOptions({ inheritAttrs: false });
+
 const props = withDefaults(
   defineProps<{
     modelValue?: string;
@@ -16,6 +20,29 @@ const props = withDefaults(
   }
 );
 
+const attrs = useAttrs();
+const generatedId = useId();
+const inputId = computed(() =>
+  typeof attrs.id === "string" ? attrs.id : `ds-input-${generatedId}`
+);
+const inputAttrs = computed(() => {
+  const {
+    class: _class,
+    style: _style,
+    id: _id,
+    "aria-invalid": _ariaInvalid,
+    "aria-describedby": _ariaDescribedBy,
+    ...rest
+  } = attrs;
+  return rest;
+});
+const describedBy = computed(() => {
+  const ids = [attrs["aria-describedby"], props.error ? `${inputId.value}-error` : undefined]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ");
+  return ids || undefined;
+});
+
 const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
@@ -26,22 +53,34 @@ function onInput(event: Event) {
 </script>
 
 <template>
-  <div class="ds-input" :class="[`ds-input--${size}`, { 'ds-input--error': error, 'ds-input--disabled': disabled }]">
+  <div
+    class="ds-input"
+    :class="[
+      `ds-input--${size}`,
+      { 'ds-input--error': error, 'ds-input--disabled': disabled },
+      attrs.class
+    ]"
+    :style="attrs.style"
+  >
     <div v-if="$slots.prefix" class="ds-input__prefix">
       <slot name="prefix" />
     </div>
     <input
+      v-bind="inputAttrs"
       class="ds-input__field"
+      :id="inputId"
       :type="type"
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"
+      :aria-invalid="error ? 'true' : undefined"
+      :aria-describedby="describedBy"
       @input="onInput"
     />
     <div v-if="$slots.suffix" class="ds-input__suffix">
       <slot name="suffix" />
     </div>
-    <p v-if="error" class="ds-input__error">{{ error }}</p>
+    <p v-if="error" :id="`${inputId}-error`" class="ds-input__error" aria-live="polite">{{ error }}</p>
   </div>
 </template>
 
@@ -86,19 +125,23 @@ function onInput(event: Event) {
 }
 
 .ds-input--md .ds-input__field {
-  height: 36px;
+  height: var(--ds-control-height-md);
   padding: 0 12px;
   font-size: 13px;
 }
 
 .ds-input--sm .ds-input__field {
-  height: 28px;
+  height: var(--ds-control-height-sm);
   padding: 0 8px;
   font-size: 12px;
 }
 
 .ds-input__field::placeholder {
   color: var(--ds-muted);
+}
+
+.ds-input__field:focus-visible {
+  outline: none;
 }
 
 .ds-input__prefix,

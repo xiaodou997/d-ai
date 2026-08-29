@@ -21,6 +21,7 @@ const props = withDefaults(
     selection?: unknown[];
     /** false 时去掉自身边框/圆角/背景，便于嵌入卡片内 */
     frame?: boolean;
+    ariaLabel?: string;
   }>(),
   {
     loading: false,
@@ -29,7 +30,8 @@ const props = withDefaults(
     selectable: false,
     expandable: false,
     selection: () => [],
-    frame: true
+    frame: true,
+    ariaLabel: "数据表格"
   }
 );
 
@@ -139,7 +141,7 @@ function toggleExpand(row: unknown) {
 
 <template>
   <div class="ds-table" :class="{ 'ds-table--frameless': !frame }">
-    <table class="ds-table__table">
+    <table class="ds-table__table" :aria-label="ariaLabel" :aria-busy="loading ? 'true' : undefined">
       <thead>
         <tr>
           <th v-if="selectable" class="ds-table__th ds-table__th--selection">
@@ -148,6 +150,7 @@ function toggleExpand(row: unknown) {
               type="checkbox"
               class="ds-table__checkbox"
               :checked="allSelected"
+              aria-label="全选当前页"
               title="全选当前页"
               @change="toggleAll"
             />
@@ -159,6 +162,7 @@ function toggleExpand(row: unknown) {
             class="ds-table__th"
             :class="`ds-table__cell--${col.align ?? 'left'}`"
             :style="col.width ? { width: columnWidth(col.width) } : undefined"
+            scope="col"
           >
             {{ col.title }}
           </th>
@@ -183,6 +187,7 @@ function toggleExpand(row: unknown) {
                 type="checkbox"
                 class="ds-table__checkbox"
                 :checked="isSelected(row)"
+                :aria-label="`选择${displayValue(cellValue(row, rowKey))}`"
                 @change="toggleRow(row)"
               />
             </td>
@@ -192,6 +197,8 @@ function toggleExpand(row: unknown) {
                 class="ds-table__expand-toggle"
                 :class="{ 'ds-table__expand-toggle--open': isExpanded(row) }"
                 :title="isExpanded(row) ? '收起' : '展开'"
+                :aria-label="isExpanded(row) ? '收起详情' : '展开详情'"
+                :aria-expanded="isExpanded(row)"
                 @click="toggleExpand(row)"
               >
                 <ChevronRight :size="14" />
@@ -376,6 +383,12 @@ function toggleExpand(row: unknown) {
   accent-color: var(--ds-accent);
   cursor: pointer;
   vertical-align: middle;
+}
+
+.ds-table__checkbox:focus-visible,
+.ds-table__expand-toggle:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 
 .ds-table__expand-toggle {

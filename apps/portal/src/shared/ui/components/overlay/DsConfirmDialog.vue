@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
 import { AlertTriangle } from "lucide-vue-next";
 import DsButton from "../controls/DsButton.vue";
 
@@ -28,11 +28,50 @@ const emit = defineEmits<{
   "update:open": [value: boolean];
 }>();
 
+const dialogId = useId();
+const titleId = `ds-confirm-${dialogId}-title`;
+const messageId = `ds-confirm-${dialogId}-message`;
+const panel = ref<HTMLElement | null>(null);
+const restoreFocus = ref<HTMLElement | null>(null);
+const previousBodyOverflow = ref<string | null>(null);
+
+watch(
+  () => props.open,
+  (open) => {
+    if (typeof document === "undefined") return;
+    if (open) {
+      restoreFocus.value = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      previousBodyOverflow.value = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      nextTick(() => panel.value?.focus({ preventScroll: true }));
+      return;
+    }
+    document.body.style.overflow = previousBodyOverflow.value ?? "";
+    previousBodyOverflow.value = null;
+    const target = restoreFocus.value;
+    restoreFocus.value = null;
+    if (target?.isConnected) nextTick(() => target.focus({ preventScroll: true }));
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  if (!props.open) return;
+  document.body.style.overflow = previousBodyOverflow.value ?? "";
+  previousBodyOverflow.value = null;
+  const target = restoreFocus.value;
+  if (target?.isConnected) target.focus({ preventScroll: true });
+});
+
 function onCancel() {
   if (!props.loading) {
     emit("update:open", false);
     emit("cancel");
   }
+}
+
+function onEscape() {
+  if (!props.loading) onCancel();
 }
 
 const toneIcon = computed(() => {
@@ -48,15 +87,24 @@ const toneIcon = computed(() => {
 <template>
   <Teleport to="body">
     <Transition name="ds-confirm">
-      <div v-if="open" class="ds-confirm">
-        <div class="ds-confirm__scrim" @click="onCancel" />
-        <div class="ds-confirm__panel" role="alertdialog" aria-modal="true">
+      <div v-if="open" class="ds-confirm" @keydown.esc.stop.prevent="onEscape">
+        <div class="ds-confirm__scrim" aria-hidden="true" @click="onCancel" />
+        <div
+          ref="panel"
+          class="ds-confirm__panel"
+          role="alertdialog"
+          aria-modal="true"
+          tabindex="-1"
+          :aria-label="title ? undefined : '确认操作'"
+          :aria-labelledby="title ? titleId : undefined"
+          :aria-describedby="messageId"
+        >
           <div class="ds-confirm__icon" :class="toneIcon">
             <AlertTriangle :size="22" />
           </div>
-          <h3 v-if="title" class="ds-confirm__title">{{ title }}</h3>
-          <p v-if="message" class="ds-confirm__message">{{ message }}</p>
-          <div v-else class="ds-confirm__message">
+          <h3 v-if="title" :id="titleId" class="ds-confirm__title">{{ title }}</h3>
+          <p v-if="message" :id="messageId" class="ds-confirm__message">{{ message }}</p>
+          <div v-else :id="messageId" class="ds-confirm__message">
             <slot />
           </div>
           <div class="ds-confirm__actions">
@@ -66,7 +114,7 @@ const toneIcon = computed(() => {
             <DsButton
               :variant="tone === 'danger' ? 'danger' : 'primary'"
               size="sm"
-              :disabled="loading"
+              :loading="loading"
               @click="emit('confirm')"
             >
               {{ loading ? "处理中…" : confirmText }}
@@ -103,6 +151,11 @@ const toneIcon = computed(() => {
   box-shadow: var(--ds-shadow-pop);
   padding: 24px;
   text-align: center;
+}
+
+.ds-confirm__panel:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 
 .ds-confirm__icon {

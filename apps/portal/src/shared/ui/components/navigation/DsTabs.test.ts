@@ -35,5 +35,18 @@ describe("DsTabs", () => {
     expect(buttons[1].classes()).toContain("ds-tabs__tab--active");
     expect(buttons[1].attributes("aria-selected")).toBe("true");
     expect(buttons[0].attributes("aria-selected")).toBe("false");
+    expect(buttons[1].attributes("tabindex")).toBe("0");
+    expect(buttons[0].attributes("tabindex")).toBe("-1");
+  });
+
+  it("supports arrow-key navigation and emits the next tab", async () => {
+    const wrapper = mount(DsTabs, { props: { tabs, modelValue: "all" }, attachTo: document.body });
+    const buttons = wrapper.findAll("button");
+
+    await buttons[0].trigger("keydown", { key: "ArrowRight" });
+
+    expect(wrapper.emitted("update:modelValue")).toEqual([["active"]]);
+    expect(document.activeElement).toBe(buttons[1].element);
+    wrapper.unmount();
   });
 });

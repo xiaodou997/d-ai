@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useAttrs, watch } from "vue";
+import { computed, ref, useAttrs, useId, watch } from "vue";
 
 defineOptions({ inheritAttrs: false });
 
@@ -38,6 +38,10 @@ const emit = defineEmits<{
 }>();
 
 const attrs = useAttrs();
+const generatedId = useId();
+const inputId = computed(() =>
+  typeof attrs.id === "string" ? attrs.id : `ds-number-input-${generatedId}`
+);
 const input = ref<HTMLInputElement>();
 const focused = ref(false);
 const focusValue = ref<number | null>(props.modelValue ?? null);
@@ -48,8 +52,21 @@ const normalizedPrecision = computed(() => {
 });
 
 const inputAttrs = computed(() => {
-  const { class: _class, style: _style, ...rest } = attrs;
+  const {
+    class: _class,
+    style: _style,
+    id: _id,
+    "aria-invalid": _ariaInvalid,
+    "aria-describedby": _ariaDescribedBy,
+    ...rest
+  } = attrs;
   return rest;
+});
+const describedBy = computed(() => {
+  const ids = [attrs["aria-describedby"], props.error ? `${inputId.value}-error` : undefined]
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ");
+  return ids || undefined;
 });
 
 function round(value: number): number {
@@ -190,6 +207,7 @@ function onKeydown(event: KeyboardEvent) {
       ref="input"
       v-bind="inputAttrs"
       class="ds-number-input__field"
+      :id="inputId"
       type="text"
       :inputmode="normalizedPrecision > 0 ? 'decimal' : 'numeric'"
       :value="draft"
@@ -201,13 +219,14 @@ function onKeydown(event: KeyboardEvent) {
       :aria-valuemax="max"
       :aria-valuenow="modelValue ?? undefined"
       :aria-invalid="error ? 'true' : undefined"
+      :aria-describedby="describedBy"
       @input="onInput"
       @focus="onFocus"
       @blur="onBlur"
       @keydown="onKeydown"
     />
     <div v-if="$slots.suffix" class="ds-number-input__suffix"><slot name="suffix" /></div>
-    <p v-if="error" class="ds-number-input__error">{{ error }}</p>
+    <p v-if="error" :id="`${inputId}-error`" class="ds-number-input__error" aria-live="polite">{{ error }}</p>
   </div>
 </template>
 
@@ -263,13 +282,13 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .ds-number-input--md .ds-number-input__field {
-  height: 32px;
+  height: var(--ds-control-height-md);
   padding: 0 11px;
   font-size: 13px;
 }
 
 .ds-number-input--sm .ds-number-input__field {
-  height: 24px;
+  height: var(--ds-control-height-sm);
   padding: 0 8px;
   font-size: 12px;
 }

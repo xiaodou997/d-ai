@@ -12,17 +12,36 @@ export interface DsTabItem {
   label: string;
 }
 
-defineProps<{
+const props = defineProps<{
   tabs: DsTabItem[];
   modelValue: string;
 }>();
 
 const emit = defineEmits<{ "update:modelValue": [key: string] }>();
+
+function onKeydown(event: KeyboardEvent, index: number) {
+  const { key } = event;
+  if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(key)) return;
+
+  event.preventDefault();
+  const targetIndex =
+    key === "Home"
+      ? 0
+      : key === "End"
+        ? props.tabs.length - 1
+        : (index + (key === "ArrowRight" ? 1 : -1) + props.tabs.length) % props.tabs.length;
+  const currentTarget = event.currentTarget as HTMLElement | null;
+  const target = currentTarget?.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")?.[targetIndex];
+  const targetTab = targetIndex >= 0 ? target : undefined;
+  if (!targetTab) return;
+  targetTab.focus();
+  emit("update:modelValue", props.tabs[targetIndex]?.key ?? "");
+}
 </script>
 
 <template>
   <div class="ds-tabs">
-    <div class="ds-tabs__list" role="tablist">
+    <div class="ds-tabs__list" role="tablist" aria-orientation="horizontal">
       <button
         v-for="tab in tabs"
         :key="tab.key"
@@ -31,6 +50,9 @@ const emit = defineEmits<{ "update:modelValue": [key: string] }>();
         class="ds-tabs__tab"
         :class="{ 'ds-tabs__tab--active': tab.key === modelValue }"
         :aria-selected="tab.key === modelValue"
+        :tabindex="tab.key === modelValue ? 0 : -1"
+        :data-tab-key="tab.key"
+        @keydown="onKeydown($event, tabs.indexOf(tab))"
         @click="emit('update:modelValue', tab.key)"
       >
         {{ tab.label }}
@@ -67,7 +89,7 @@ const emit = defineEmits<{ "update:modelValue": [key: string] }>();
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  height: 30px;
+  height: var(--ds-control-height-tab);
   padding: 0 14px;
   border: 1px solid transparent;
   border-radius: var(--ds-radius-control);

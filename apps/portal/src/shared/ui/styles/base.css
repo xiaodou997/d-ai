@@ -18,6 +18,16 @@
   --ds-radius-inherit: inherit;
   --ds-radius-pill: 999px;
 
+  --ds-control-height-sm: 28px;
+  --ds-control-height-md: 36px;
+  --ds-control-height-lg: 40px;
+  --ds-control-height-icon: 30px;
+  --ds-control-height-tab: 30px;
+  --ds-switch-width: 44px;
+  --ds-switch-height: 24px;
+  --ds-switch-width-sm: 36px;
+  --ds-switch-height-sm: 20px;
+
   --ds-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
   --ds-shadow-panel: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
   --ds-shadow-pop: 0 10px 30px -12px rgba(15, 23, 42, 0.25);
@@ -111,8 +121,13 @@
   --el-font-size-base: 14px;
   --el-font-size-small: 13px;
   --el-font-size-extra-small: 12px;
+  --el-component-size-large: var(--ds-control-height-lg);
+  --el-component-size: var(--ds-control-height-md);
+  --el-component-size-small: var(--ds-control-height-sm);
   --el-border-radius-base: var(--ds-radius-control);
-  --el-border-radius-small: 6px;
+  --el-border-radius-small: var(--ds-radius-sm);
+  --el-border-radius-round: var(--ds-radius-pill);
+  --el-border-radius-circle: var(--ds-radius-circle);
 
   --el-color-primary: var(--ds-accent);
   --el-color-primary-light-3: color-mix(in srgb, var(--ds-accent) 70%, var(--ds-panel));
@@ -157,6 +172,63 @@
   --el-overlay-color: color-mix(in srgb, var(--ds-ink) 80%, transparent);
   --el-overlay-color-light: color-mix(in srgb, var(--ds-ink) 64%, transparent);
   --el-overlay-color-lighter: color-mix(in srgb, var(--ds-ink) 48%, transparent);
+}
+
+/* Element Plus controls share DsUI dimensions and focus states. */
+.el-button {
+  height: var(--ds-control-height-md);
+  border-radius: var(--ds-radius-control);
+}
+
+.el-button--small {
+  --el-button-size: var(--ds-control-height-sm);
+  height: var(--ds-control-height-sm);
+  border-radius: var(--ds-radius-sm);
+}
+
+.el-button--large {
+  --el-button-size: var(--ds-control-height-lg);
+  height: var(--ds-control-height-lg);
+}
+
+.el-input,
+.el-select {
+  --el-input-height: var(--ds-control-height-md);
+}
+
+.el-input--small,
+.el-select--small {
+  --el-input-height: var(--ds-control-height-sm);
+}
+
+.el-input--large,
+.el-select--large {
+  --el-input-height: var(--ds-control-height-lg);
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  border-radius: var(--ds-radius-control);
+}
+
+.el-pagination {
+  --el-pagination-border-radius: var(--ds-radius-control);
+  --el-pagination-button-width: var(--ds-control-height-icon);
+  --el-pagination-button-height: var(--ds-control-height-icon);
+}
+
+.el-pagination.is-background {
+  --el-pagination-button-width: var(--ds-control-height-icon);
+  --el-pagination-button-height: var(--ds-control-height-icon);
+}
+
+.el-button:focus-visible,
+.el-input__wrapper:focus-within,
+.el-select__wrapper.is-focused,
+.el-pagination button:focus-visible,
+.el-switch__input:focus-visible + .el-switch__core {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 
 * {

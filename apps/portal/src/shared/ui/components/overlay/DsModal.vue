@@ -1,5 +1,7 @@
 <script setup lang="ts">
-withDefaults(
+import { nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
+
+const props = withDefaults(
   defineProps<{
     open: boolean;
     title?: string;
@@ -10,6 +12,42 @@ withDefaults(
   }
 );
 
+const modalId = useId();
+const titleId = `ds-modal-${modalId}-title`;
+const bodyId = `ds-modal-${modalId}-body`;
+const panel = ref<HTMLElement | null>(null);
+const restoreFocus = ref<HTMLElement | null>(null);
+const previousBodyOverflow = ref<string | null>(null);
+
+function restoreFocusAndOverflow() {
+  if (typeof document === "undefined") return;
+  document.body.style.overflow = previousBodyOverflow.value ?? "";
+  previousBodyOverflow.value = null;
+  const target = restoreFocus.value;
+  restoreFocus.value = null;
+  if (target?.isConnected) nextTick(() => target.focus({ preventScroll: true }));
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    if (typeof document === "undefined") return;
+    if (open) {
+      restoreFocus.value = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      previousBodyOverflow.value = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      nextTick(() => panel.value?.focus({ preventScroll: true }));
+      return;
+    }
+    restoreFocusAndOverflow();
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  if (props.open) restoreFocusAndOverflow();
+});
+
 const emit = defineEmits<{
   close: [];
 }>();
@@ -18,11 +56,20 @@ const emit = defineEmits<{
 <template>
   <Teleport to="body">
     <Transition name="ds-modal">
-      <div v-if="open" class="ds-modal">
-        <div class="ds-modal__scrim" @click="emit('close')"></div>
-        <div class="ds-modal__panel" role="dialog" aria-modal="true">
-          <h2 v-if="title" class="ds-modal__title" :class="{ 'is-danger': tone === 'danger' }">{{ title }}</h2>
-          <div class="ds-modal__body">
+      <div v-if="open" class="ds-modal" @keydown.esc.stop.prevent="emit('close')">
+        <div class="ds-modal__scrim" aria-hidden="true" @click="emit('close')"></div>
+        <div
+          ref="panel"
+          class="ds-modal__panel"
+          role="dialog"
+          aria-modal="true"
+          tabindex="-1"
+          :aria-label="title ? undefined : '对话框'"
+          :aria-labelledby="title ? titleId : undefined"
+          :aria-describedby="bodyId"
+        >
+          <h2 v-if="title" :id="titleId" class="ds-modal__title" :class="{ 'is-danger': tone === 'danger' }">{{ title }}</h2>
+          <div :id="bodyId" class="ds-modal__body">
             <slot />
           </div>
           <div class="ds-modal__foot">
@@ -58,6 +105,11 @@ const emit = defineEmits<{
   background: var(--ds-panel);
   box-shadow: var(--ds-shadow-pop);
   padding: 22px;
+}
+
+.ds-modal__panel:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 
 .ds-modal__title {

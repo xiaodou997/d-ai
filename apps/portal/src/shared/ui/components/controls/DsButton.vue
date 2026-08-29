@@ -13,6 +13,7 @@ withDefaults(
     size?: "sm" | "md";
     type?: "button" | "submit" | "reset";
     disabled?: boolean;
+    loading?: boolean;
     block?: boolean;
   }>(),
   {
@@ -20,6 +21,7 @@ withDefaults(
     size: "md",
     type: "button",
     disabled: false,
+    loading: false,
     block: false
   }
 );
@@ -28,10 +30,13 @@ withDefaults(
 <template>
   <button
     class="ds-btn"
-    :class="[`ds-btn--${variant}`, `ds-btn--${size}`, { 'ds-btn--block': block }]"
+    :class="[`ds-btn--${variant}`, `ds-btn--${size}`, { 'ds-btn--block': block, 'ds-btn--loading': loading }]"
     :type="type"
-    :disabled="disabled"
+    :disabled="disabled || loading"
+    :aria-disabled="disabled || loading ? 'true' : undefined"
+    :aria-busy="loading ? 'true' : undefined"
   >
+    <span v-if="loading" class="ds-btn__spinner" aria-hidden="true" />
     <slot name="icon" />
     <slot />
   </button>
@@ -57,13 +62,13 @@ withDefaults(
 }
 
 .ds-btn--md {
-  min-height: 36px;
+  min-height: var(--ds-control-height-md);
   padding: 0 14px;
   font-size: 13px;
 }
 
 .ds-btn--sm {
-  min-height: 28px;
+  min-height: var(--ds-control-height-sm);
   padding: 0 10px;
   font-size: 12px;
   border-radius: var(--ds-radius-sm);
@@ -71,6 +76,22 @@ withDefaults(
 
 .ds-btn--block {
   width: 100%;
+}
+
+.ds-btn__spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--ds-radius-circle);
+  animation: ds-btn-spin 720ms linear infinite;
+}
+
+@keyframes ds-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ds-btn--primary {
@@ -173,5 +194,10 @@ withDefaults(
 .ds-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.ds-btn:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
 }
 </style>

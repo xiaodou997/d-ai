@@ -47,6 +47,9 @@ describe("DsPagination", () => {
     const active = wrapper.find(".ds-pagination__btn--active");
     expect(active.exists()).toBe(true);
     expect(active.text()).toBe("3");
+    expect(active.attributes("aria-current")).toBe("page");
+    expect(wrapper.find("nav").attributes("aria-label")).toBe("分页");
+    expect(wrapper.find("select").attributes("aria-label")).toBe("每页条数");
   });
 
   it("emits update:page when navigating", async () => {
