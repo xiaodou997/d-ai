@@ -575,7 +575,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 垂直切分：租户邀请码列表、分页、创建、启停、删除和注册链接复制工作区迁移到 `features/platform/invitations/TenantInviteCodesWorkspace.vue`；`views/tenant/platform/InviteCodesView.vue` 收敛为路由 wrapper。
 - 依赖边界：邀请码工作区只组合 tenant invite-code API、`useListPage` 和 DsTable/DsEmpty 等共享组件，路由层不再承载筛选、状态和确认操作。
-- 回归：邀请码列表加载与状态切换集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+- 回归：邀请码列表加载与状态切换集成测试、全量 Portal 102 个测试文件/326 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05 按 feature 垂直切分 Portal
 
@@ -642,7 +642,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：101 个测试文件、324 个测试通过
+- [x] `bun run test`：102 个测试文件、326 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
