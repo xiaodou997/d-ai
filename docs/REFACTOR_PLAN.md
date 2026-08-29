@@ -733,6 +733,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：共享 feature 统一承载 typed API Key adapter 与页面配置，租户/客户差异仅通过 API facade、文案和权限配置表达，避免路由层重复维护业务编排。
 - 回归：新增两端 adapter 的写入归一、generic workspace contract 和 embedded 透传测试；定向测试、全量 Portal 122 个测试文件/365 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Price-book component boundary cleanup，2026-08-29）
+
+- 边界：删除旧 `views/admin/ai/gateway/components` 下未被路由或工作区引用的价格表条目/分辨率组件副本；实际使用的 `PriceBookEntryFormDialog`、`TieredPricingEditor` 与行为测试统一归入 `features/ai/price-books/components`。
+- 依赖：价格表业务组件不再从 views 目录反向承载，管理员与租户价格表工作区共享同一 feature 实现，避免重复维护和路径漂移。
+- 回归：迁移原有分档价格组件测试；定向测试、全量 Portal 122 个测试文件/365 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
