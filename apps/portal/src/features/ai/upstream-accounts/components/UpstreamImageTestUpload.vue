@@ -2,7 +2,7 @@
 import { computed, shallowRef, useTemplateRef } from 'vue'
 import { ImagePlus, Trash2 } from 'lucide-vue-next'
 
-interface UpstreamImageTestValue {
+export interface UpstreamImageTestValue {
   filename: string
   mime_type: 'image/png' | 'image/jpeg' | 'image/webp'
   b64_json: string

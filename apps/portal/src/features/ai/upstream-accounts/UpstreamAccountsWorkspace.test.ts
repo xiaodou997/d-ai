@@ -2,7 +2,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import AccountsView from './AccountsView.vue'
+import UpstreamAccountsWorkspace from './UpstreamAccountsWorkspace.vue'
+
+const AccountsView = UpstreamAccountsWorkspace
 
 const api = vi.hoisted(() => ({
   createUpstreamAccount: vi.fn(),
@@ -104,7 +106,7 @@ const global = {
   }
 }
 
-describe('AccountsView', () => {
+describe('UpstreamAccountsWorkspace', () => {
   beforeEach(() => {
     api.createUpstreamAccount.mockReset().mockResolvedValue({ id: 'account-1' })
     api.listAccountModelBindings.mockReset().mockResolvedValue({ items: [], total: 0 })

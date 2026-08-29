@@ -521,7 +521,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 垂直切分：平台价格表列表、条目编辑、LiteLLM 搜索、同步、导入/导出与 CRUD 工作区迁移到 `features/ai/price-books/AdminPriceBookWorkspace.vue`；`views/admin/ai/gateway/PricingView.vue` 收敛为路由 wrapper。
 - 依赖边界：价格表领域类型、JSON 文件解析/生成和价格表选择 helper 归入 price-books feature，旧 gateway helper 仅保留兼容 re-export；admin 页面不再承载价格表业务实现。
-- 回归：价格表文件/选择/档位编辑定向测试（9 项）、Portal typecheck 通过，待本切片提交前执行全量 Portal 与 Go 门禁。
+- 回归：价格表文件/选择/档位编辑定向测试（9 项）、全量 Portal 94 个测试文件/311 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
+### P2-05（Admin upstream-account workspace boundary，2026-08-29）
+
+- 垂直切分：上游账号 CRUD、模型绑定、连通性测试和导入/导出工作区迁移到 `features/ai/upstream-accounts/UpstreamAccountsWorkspace.vue`；`views/admin/ai/gateway/AccountsView.vue` 收敛为路由 wrapper。
+- 依赖边界：账号 Provider 元数据、键值编辑器、图片测试上传和账号状态控件归入 upstream-accounts feature；模型绑定面板及其常量留在 upstream-model-bindings feature，价格表选择器复用 price-books feature。
+- 回归：迁移后的 upstream-account workspace、图片上传和模型绑定定向测试（18 项）、全量 Portal 94 个测试文件/311 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
 ### P2-05 按 feature 垂直切分 Portal
 

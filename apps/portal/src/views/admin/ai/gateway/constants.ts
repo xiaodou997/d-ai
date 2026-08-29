@@ -17,24 +17,10 @@ export {
   protocolOptions,
   statusOptions
 } from "@/features/ai/upstream-model-bindings/constants";
-
-export function defaultBindingProtocolForProviderFamily(providerFamily?: string) {
-  switch (providerFamily) {
-    case "anthropic":
-      return "anthropic_messages";
-    case "gemini":
-      return "gemini_generate";
-    default:
-      return "openai_responses";
-  }
-}
-
-// 上游端点协议（Provider endpoint 用）。
-export const endpointProtocolOptions: CapabilityOption[] = [
-  { label: "OpenAI", value: "openai_compatible" },
-  { label: "Anthropic", value: "anthropic" },
-  { label: "Gemini", value: "gemini" }
-];
+export {
+  defaultBindingProtocolForProviderFamily,
+  endpointProtocolOptions
+} from "@/features/ai/upstream-accounts/constants";
 
 const STATUS_LABEL_MAP: Record<string, string> = {
   active: "启用",

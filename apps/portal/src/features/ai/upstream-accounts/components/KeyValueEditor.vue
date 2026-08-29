@@ -6,7 +6,7 @@ import { Delete, Plus } from '@element-plus/icons-vue'
 const props = defineProps<{ modelValue?: Record<string, any> }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: Record<string, any>): void }>()
 
-// Local rows state. Empty-key rows are preserved while the user is typing;
+// Feature-local rows state. Empty-key rows are preserved while the user is typing;
 // they only get filtered out on emit so they don't pollute the parent object.
 const rows = ref<any[]>(rowsFromObject(props.modelValue))
 

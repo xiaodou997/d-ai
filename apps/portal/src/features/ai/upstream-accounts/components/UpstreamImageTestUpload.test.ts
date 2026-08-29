@@ -16,7 +16,7 @@ const global = {
   }
 }
 
-describe('UpstreamImageTestUpload', () => {
+describe('UpstreamImageTestUpload feature component', () => {
   it('emits the selected image bytes and metadata', async () => {
     const wrapper = mount(UpstreamImageTestUpload, {
       props: { modelValue: null },
