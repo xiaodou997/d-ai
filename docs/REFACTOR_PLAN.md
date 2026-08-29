@@ -574,7 +574,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
-- [ ] 拆分图片工作台、订阅、上游账号、凭据池和价格管理等超大页面。
+- [x] 拆分图片工作台、订阅、上游账号、凭据池和价格管理等超大页面。
 - [ ] admin、tenant、customer 共享同一业务 workspace，通过权限和配置形成差异。
 - [ ] 为复杂页面状态使用明确的 composable/store 和领域类型。
 - [ ] 为关键工作流增加组件集成测试。
