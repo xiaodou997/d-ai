@@ -529,6 +529,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：账号 Provider 元数据、键值编辑器、图片测试上传和账号状态控件归入 upstream-accounts feature；模型绑定面板及其常量留在 upstream-model-bindings feature，价格表选择器复用 price-books feature。
 - 回归：迁移后的 upstream-account workspace、图片上传和模型绑定定向测试（18 项）、全量 Portal 94 个测试文件/311 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Customer workspace boundary，2026-08-29）
+
+- 垂直切分：客户端余额、用量图表、分组预览、最近对话和最近生图工作区迁移到 `features/ai/workspace/CustomerWorkspace.vue`；`views/customer/ai/WorkspaceView.vue` 收敛为路由 wrapper。
+- 依赖边界：客户工作区继续组合 customer API、usage feature、共享 AI image/usage 组件和 PortalPagePanel；路由层不再持有请求、图表生命周期或刷新状态。
+- 回归：CustomerWorkspace 工作区加载/导航集成测试、全量 Portal 95 个测试文件/312 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
