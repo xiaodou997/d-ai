@@ -667,6 +667,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：认证审计工作区只组合 typed `AuditLogItem`、平台管理员 API、`useListPage` 和 DsUI 筛选/表格/标签，主体/决策展示映射在 feature 内明确建模。
 - 回归：新增审计列表加载与 User ID 搜索集成测试；定向测试、全量 Portal 111 个测试文件/344 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（JWT-keys workspace boundary，2026-08-29）
+
+- 垂直切分：JWT 密钥列表、签发/宽限/退役状态展示、轮换确认和轮换后刷新工作区迁移到 `features/platform/identity/JwtKeysWorkspace.vue`；`views/admin/platform/JwtKeysView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：JWT 工作区只组合 typed `JwtKeyItem`、平台管理员 API、轮换确认和 DsUI 表格/标签；密钥状态映射与错误处理留在 feature 内。
+- 回归：新增密钥加载、状态展示和轮换确认集成测试；定向测试、全量 Portal 112 个测试文件/346 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
