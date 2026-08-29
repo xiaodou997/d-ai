@@ -559,6 +559,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：租户工作区只组合 typed `TenantListItem`、平台租户 API、`useListPage` 和账户/充值共享组件，列表查询与状态操作不再由路由层承载。
 - 回归：租户列表初始加载与筛选集成测试、全量 Portal 99 个测试文件/320 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Tenant payment-settings workspace boundary，2026-08-29）
+
+- 垂直切分：租户端终端用户充值规则、额度包与手续费配置工作区迁移到 `features/platform/payment/TenantPaymentSettingsWorkspace.vue`；`views/tenant/platform/PaymentSettingsView.vue` 收敛为路由 wrapper，并与管理端支付 feature 统一出口。
+- 依赖边界：租户工作区只组合 tenant payment API、金额单位转换和共享 Portal/Element Plus 表单，路由层不再承载加载、保存或额度包状态。
+- 回归：租户支付设置加载与 basis-point 保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
