@@ -541,6 +541,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：支付设置工作区只组合平台支付 API、DsTabs 与 Element Plus 表单控件，路由层不再持有配置加载、金额单位转换或保存编排。
 - 回归：支付设置工作区加载与规则保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
 
+### P2-05（Admin recharge-records workspace boundary，2026-08-29）
+
+- 垂直切分：充值订单筛选、分页、详情、支付同步、退款登记和手动额度撤回工作区迁移到 `features/platform/payment/AdminRechargeRecordsWorkspace.vue`；`views/admin/platform/RechargeRecordsView.vue` 收敛为路由 wrapper。
+- 依赖边界：订单工作区只组合平台支付 API、`useListPage`、DsTable/DsDrawer 等共享组件，路由层不再持有筛选归一化、状态展示和退款/撤回编排。
+- 回归：充值订单初始加载与筛选集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
