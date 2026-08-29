@@ -673,6 +673,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：JWT 工作区只组合 typed `JwtKeyItem`、平台管理员 API、轮换确认和 DsUI 表格/标签；密钥状态映射与错误处理留在 feature 内。
 - 回归：新增密钥加载、状态展示和轮换确认集成测试；定向测试、全量 Portal 112 个测试文件/346 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Customer recharge-records workspace boundary，2026-08-29）
+
+- 垂直切分：客户历史充值记录、支付/到账金额展示、充值方式/状态映射和共享分页工作区迁移到 `features/platform/payment/CustomerRechargeRecordsWorkspace.vue`；`views/customer/platform/RechargeView.vue` 收敛为路由入口 wrapper，与账户、充值撤销和支付设置共享 payment feature 出口。
+- 依赖边界：客户充值工作区只组合 typed `RechargeRecordItem`、客户支付 API、金额格式化、充值方式映射和 DsUI 表格/分页，路由层不再持有记录请求或分页状态。
+- 回归：新增客户充值记录加载与分页集成测试；定向测试、全量 Portal 113 个测试文件/348 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -738,7 +744,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：112 个测试文件、346 个测试通过
+- [x] `bun run test`：113 个测试文件、348 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容

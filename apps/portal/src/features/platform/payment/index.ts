@@ -3,3 +3,4 @@ export { default as AdminRechargeRecordsWorkspace } from "./AdminRechargeRecords
 export { default as TenantPaymentSettingsWorkspace } from "./TenantPaymentSettingsWorkspace.vue";
 export { default as AdminWithdrawalsWorkspace } from "./AdminWithdrawalsWorkspace.vue";
 export { default as TenantUserRechargeRecordsWorkspace } from "./TenantUserRechargeRecordsWorkspace.vue";
+export { default as CustomerRechargeRecordsWorkspace } from "./CustomerRechargeRecordsWorkspace.vue";
