@@ -709,6 +709,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：订阅工作区只组合 subscription feature 的三个业务 panel、typed tab 状态与共享 PortalPagePanel/DsTabs，路由层不再承载 tab 状态或面板挂载编排；与客户订阅商城共享订阅 feature 出口。
 - 回归：新增租户订阅 tab 查询同步与懒加载集成测试；定向测试、全量 Portal 118 个测试文件/357 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
+### P2-05（Admin business-overview workspace boundary，2026-08-29）
+
+- 垂直切分：平台业务概览的时间范围、全局业务指标、调用趋势、热门模型、租户排行和失败数据提示迁移到 `features/admin/overview/BusinessOverviewWorkspace.vue`；`views/admin/overview/BusinessOverviewView.vue` 收敛为路由入口 wrapper。
+- 依赖边界：业务概览工作区只组合 `useAdminOverviewData`、typed dashboard/usage DTO、身份投影和共享 overview/Portal/DsUI 组件，路由层不再持有查询状态、聚合计算或刷新编排。
+- 回归：新增业务概览加载、范围切换和刷新集成测试；定向测试、全量 Portal 119 个测试文件/359 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
@@ -774,7 +780,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：118 个测试文件、357 个测试通过
+- [x] `bun run test`：119 个测试文件、359 个测试通过
 - [x] `bun run ensure:api`
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
