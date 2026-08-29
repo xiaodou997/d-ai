@@ -547,6 +547,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：订单工作区只组合平台支付 API、`useListPage`、DsTable/DsDrawer 等共享组件，路由层不再持有筛选归一化、状态展示和退款/撤回编排。
 - 回归：充值订单初始加载与筛选集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
 
+### P2-05（Admin routing workspace boundary，2026-08-29）
+
+- 垂直切分：路由评分权重、归一化、推荐预设和选路说明工作区迁移到 `features/ai/routing/AdminRoutingWorkspace.vue`；`views/admin/ai/gateway/RoutingView.vue` 收敛为路由 wrapper。
+- 依赖边界：路由工作区直接消费 typed `RouteWeightsOutputBody`/`ScoreWeightsDTO` 和 `aiAdminApi`，四维权重与预设类型在 feature 内明确建模，页面不再使用未约束的响应 `any`。
+- 回归：路由权重加载与保存集成测试、Portal typecheck 与定向测试通过；全量 Portal 与 Go 门禁待本切片提交前执行。
+
 ### P2-05 按 feature 垂直切分 Portal
 
 - [ ] `views` 只保留路由入口，状态、API 和业务组件归入对应 feature。
