@@ -115,7 +115,7 @@ withDefaults(
 .ds-btn--danger:hover:not(:disabled) {
   background: var(--ds-danger);
   border-color: var(--ds-danger);
-  color: #ffffff;
+  color: var(--ds-white);
 }
 
 .ds-btn--link {

@@ -77,7 +77,7 @@ const diagnosticTooltip = computed(() => {
   height: 14px;
   border: 1px solid color-mix(in srgb, var(--ds-info) 22%, var(--ds-info-soft));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ds-info-soft) 78%, white 22%);
+  background: color-mix(in srgb, var(--ds-info-soft) 78%, var(--ds-white) 22%);
   color: var(--ds-info);
   font-size: 10px;
   font-weight: 700;

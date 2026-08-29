@@ -155,7 +155,7 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
   min-height: 0;
   overflow-y: auto;
   padding: 24px;
-  background: #f8fafc;
+  background: var(--ds-panel-muted);
 }
 
 .empty-state {
@@ -164,13 +164,13 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
+  color: var(--ds-faint);
   text-align: center;
 }
 
 .empty-state h2 {
   margin: 14px 0 4px;
-  color: #334155;
+  color: var(--ds-ink-soft);
   font-size: 18px;
   font-weight: 900;
 }
@@ -200,7 +200,7 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #fff;
+  color: var(--ds-white);
   font-size: 12px;
   font-weight: 900;
   border-radius: 10px;
@@ -208,18 +208,18 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
 }
 
 .message-row.assistant .message-avatar {
-  background: #0f766e;
+  background: var(--ds-positive);
 }
 
 .message-bubble {
   position: relative;
   max-width: min(760px, 76%);
   padding: 12px 14px;
-  color: #0f172a;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  color: var(--ds-ink);
+  background: var(--ds-white);
+  border: 1px solid var(--ds-line);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--ds-shadow-sm);
 }
 
 .message-toolbar {
@@ -246,7 +246,7 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
 }
 
 .message-row.user .message-bubble {
-  color: #fff;
+  color: var(--ds-white);
   background: var(--ds-accent);
   border-color: var(--ds-accent);
 }
@@ -260,13 +260,13 @@ defineExpose({ scrollToBottom, forceScrollToBottom });
 }
 
 .message-meta {
-  color: #64748b;
+  color: var(--ds-muted);
   font-size: 11px;
   font-weight: 800;
 }
 
 .typing-dot {
-  color: #64748b;
+  color: var(--ds-muted);
   font-size: 13px;
   font-weight: 700;
 }

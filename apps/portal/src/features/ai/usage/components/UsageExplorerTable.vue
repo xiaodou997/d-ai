@@ -309,9 +309,9 @@ function billingStatusLabel(status?: string) {
   display: inline-flex;
   align-items: center;
   height: 20px;
-  border: 1px solid color-mix(in srgb, var(--ds-line-strong) 82%, white 18%);
+  border: 1px solid color-mix(in srgb, var(--ds-line-strong) 82%, var(--ds-white) 18%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ds-panel-muted) 78%, white 22%);
+  background: color-mix(in srgb, var(--ds-panel-muted) 78%, var(--ds-white) 22%);
   padding: 0 8px;
   color: var(--ds-ink-soft);
   font-size: 11px;
@@ -321,7 +321,7 @@ function billingStatusLabel(status?: string) {
 
 .profile-chip--resolution {
   color: var(--ds-info);
-  background: color-mix(in srgb, var(--ds-info-soft) 78%, white 22%);
+  background: color-mix(in srgb, var(--ds-info-soft) 78%, var(--ds-white) 22%);
   border-color: color-mix(in srgb, var(--ds-info) 24%, var(--ds-info-soft));
 }
 

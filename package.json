@@ -8,9 +8,10 @@
   "packageManager": "bun@1.3.14",
   "scripts": {
     "dev:frontend": "vite --config apps/portal/vite.config.ts",
-    "build:frontend": "node apps/portal/scripts/validate-portal-architecture.mjs && vite build --config apps/portal/vite.config.ts && node apps/portal/scripts/validate-built-styles.mjs",
-    "build:portal-static": "node apps/portal/scripts/validate-portal-architecture.mjs && DAI_PORTAL_OUT_DIR=../../release/portal vite build --config apps/portal/vite.config.ts && DAI_PORTAL_DIST=../../../release/portal node apps/portal/scripts/validate-built-styles.mjs && sh scripts/checksum_portal.sh release/portal",
+    "build:frontend": "node apps/portal/scripts/validate-portal-architecture.mjs && node apps/portal/scripts/validate-source-styles.mjs && vite build --config apps/portal/vite.config.ts && node apps/portal/scripts/validate-built-styles.mjs",
+    "build:portal-static": "node apps/portal/scripts/validate-portal-architecture.mjs && node apps/portal/scripts/validate-source-styles.mjs && DAI_PORTAL_OUT_DIR=../../release/portal vite build --config apps/portal/vite.config.ts && DAI_PORTAL_DIST=../../../release/portal node apps/portal/scripts/validate-built-styles.mjs && sh scripts/checksum_portal.sh release/portal",
     "validate:portal-architecture": "node apps/portal/scripts/validate-portal-architecture.mjs",
+    "validate:portal-styles": "node apps/portal/scripts/validate-source-styles.mjs",
     "validate:frontend-styles": "node apps/portal/scripts/validate-built-styles.mjs",
     "generate:api": "node apps/portal/scripts/generate.mjs --generate",
     "ensure:api": "node apps/portal/scripts/generate.mjs --ensure && node apps/portal/scripts/check-openapi-contract.mjs",

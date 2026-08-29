@@ -72,8 +72,8 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
   display: flex;
   flex-direction: column;
   padding: 16px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ds-white);
+  border: 1px solid var(--ds-line);
   border-radius: 12px;
 }
 
@@ -82,7 +82,7 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 12px;
-  color: #334155;
+  color: var(--ds-ink-soft);
   font-size: 13px;
   font-weight: 900;
 }
@@ -103,9 +103,9 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
   width: 100%;
   padding: 10px;
   text-align: left;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ds-line);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--ds-panel-muted);
   cursor: pointer;
 }
 
@@ -116,7 +116,7 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
 
 .session-item span {
   overflow: hidden;
-  color: #0f172a;
+  color: var(--ds-ink);
   font-size: 13px;
   font-weight: 800;
   text-overflow: ellipsis;
@@ -125,7 +125,7 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
 
 .session-item small {
   overflow: hidden;
-  color: #64748b;
+  color: var(--ds-muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -140,7 +140,7 @@ function sessionSubtitle(session: PortalChatSessionRecord) {
   display: grid;
   place-items: center;
   min-height: 140px;
-  color: #94a3b8;
+  color: var(--ds-faint);
   font-size: 13px;
 }
 

@@ -98,7 +98,7 @@ function headingClass(depth: number) {
 }
 
 .markdown-heading {
-  color: #0f172a;
+  color: var(--ds-ink);
   line-height: 1.35;
 }
 
@@ -132,7 +132,7 @@ function headingClass(depth: number) {
 .markdown-code-surface {
   min-width: 0;
   padding: 0.55rem;
-  background: #0f172a;
+  background: var(--ds-code-bg);
   border-radius: 0.9rem;
 }
 
@@ -140,12 +140,12 @@ function headingClass(depth: number) {
   display: inline-flex;
   margin-bottom: 0.45rem;
   padding: 0.15rem 0.45rem;
-  color: #cbd5e1;
+  color: var(--ds-line-strong);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: rgba(148, 163, 184, 0.18);
+  background: var(--ds-line-soft);
   border-radius: 999px;
 }
 
@@ -155,7 +155,7 @@ function headingClass(depth: number) {
 
 .markdown-code-text {
   display: block;
-  color: #e2e8f0;
+  color: var(--ds-code-fg);
   font-size: 0.87rem;
   line-height: 1.6;
   font-family: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", monospace;
@@ -164,8 +164,8 @@ function headingClass(depth: number) {
 
 .markdown-blockquote {
   padding-left: 0.95rem;
-  color: #334155;
-  border-left: 0.24rem solid #99f6e4;
+  color: var(--ds-ink-soft);
+  border-left: 0.24rem solid var(--ds-info);
 }
 
 .markdown-list {
@@ -199,6 +199,6 @@ function headingClass(depth: number) {
 
 .markdown-rule {
   height: 1px;
-  background: #cbd5e1;
+  background: var(--ds-line-strong);
 }
 </style>

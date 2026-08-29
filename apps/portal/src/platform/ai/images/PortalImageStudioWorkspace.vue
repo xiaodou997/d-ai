@@ -1040,7 +1040,7 @@ onMounted(async () => {
 
 .studio-bar :deep(.el-segmented) {
   --el-segmented-item-selected-bg-color: var(--ds-accent);
-  --el-segmented-item-selected-color: #fff;
+  --el-segmented-item-selected-color: var(--ds-white);
   border-radius: var(--ds-radius-pill);
   padding: 3px;
 }
@@ -1395,7 +1395,7 @@ onMounted(async () => {
 }
 
 .skeleton-grid span {
-  background: linear-gradient(100deg, var(--ds-panel-muted) 30%, #eef2f7 50%, var(--ds-panel-muted) 70%);
+  background: linear-gradient(100deg, var(--ds-panel-muted) 30%, var(--ds-surface-soft) 50%, var(--ds-panel-muted) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }
@@ -1425,8 +1425,8 @@ onMounted(async () => {
   right: 5px;
   bottom: 5px;
   border-radius: 6px;
-  background: color-mix(in srgb, #0f172a 78%, transparent);
-  color: #fff;
+  background: color-mix(in srgb, var(--ds-ink) 78%, transparent);
+  color: var(--ds-white);
   font-size: 11px;
   padding: 2px 6px;
   opacity: 0;
@@ -1451,8 +1451,8 @@ onMounted(async () => {
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--ds-line-strong) 55%, transparent);
   border-radius: var(--ds-radius-pill);
-  background: color-mix(in srgb, var(--ds-panel-muted) 72%, white);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 65%, transparent);
+  background: color-mix(in srgb, var(--ds-panel-muted) 72%, var(--ds-white));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ds-white) 65%, transparent);
   opacity: 0.55;
   transition: opacity 0.18s ease;
 }
@@ -1479,7 +1479,7 @@ onMounted(async () => {
 
 .task-icon-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  background: color-mix(in srgb, var(--ds-panel) 80%, white);
+  background: color-mix(in srgb, var(--ds-panel) 80%, var(--ds-white));
   color: var(--ds-ink);
 }
 
@@ -1488,7 +1488,7 @@ onMounted(async () => {
 }
 
 .task-icon-button--copy:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ds-accent-soft) 82%, white);
+  background: color-mix(in srgb, var(--ds-accent-soft) 82%, var(--ds-white));
   color: var(--ds-accent-hover);
 }
 
@@ -1499,7 +1499,7 @@ onMounted(async () => {
 
 .task-icon-button--cancel:hover:not(:disabled),
 .task-icon-button--delete:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ds-danger-soft) 80%, white);
+  background: color-mix(in srgb, var(--ds-danger-soft) 80%, var(--ds-white));
   color: var(--ds-danger);
 }
 
@@ -1513,7 +1513,7 @@ onMounted(async () => {
   margin: 8px 0;
   border-radius: var(--ds-radius-control);
   background: var(--ds-danger-soft);
-  color: color-mix(in srgb, var(--ds-danger) 72%, #000);
+  color: color-mix(in srgb, var(--ds-danger) 72%, var(--ds-black));
   padding: 8px 11px;
   font-size: 12px;
   line-height: 1.5;
@@ -1587,7 +1587,7 @@ onMounted(async () => {
 
 .composer-controls :deep(.el-segmented) {
   --el-segmented-item-selected-bg-color: var(--ds-accent);
-  --el-segmented-item-selected-color: #fff;
+  --el-segmented-item-selected-color: var(--ds-white);
   border-radius: var(--ds-radius-pill);
   padding: 2px;
 }

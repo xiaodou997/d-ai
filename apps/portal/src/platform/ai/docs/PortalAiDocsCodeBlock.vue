@@ -50,7 +50,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--ds-line);
   border-top: 2px solid var(--ds-accent);
   border-radius: var(--ds-radius-panel);
-  background: #0f172a;
+  background: var(--ds-code-bg);
 }
 
 .ai-docs-code-block__bar {
@@ -59,8 +59,8 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ds-accent) 16%, rgba(148, 163, 184, 0.18));
-  background: rgba(15, 23, 42, 0.72);
+  border-bottom: 1px solid color-mix(in srgb, var(--ds-accent) 16%, var(--ds-line-soft));
+  background: var(--ds-code-header);
 }
 
 .ai-docs-code-block__copy {
@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
 
 .ai-docs-code-block__title {
   display: block;
-  color: #e2e8f0;
+  color: var(--ds-code-fg);
   font-family: var(--ds-font-mono);
   font-size: 12px;
   font-weight: 700;
@@ -77,7 +77,7 @@ onBeforeUnmount(() => {
 
 .ai-docs-code-block__caption {
   margin: 4px 0 0;
-  color: #94a3b8;
+  color: var(--ds-faint);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -103,7 +103,7 @@ onBeforeUnmount(() => {
   margin: 0;
   overflow-x: auto;
   padding: 16px 18px;
-  color: #dbeafe;
+  color: var(--ds-code-accent);
   font-family: var(--ds-font-mono);
   font-size: 13px;
   line-height: 1.75;

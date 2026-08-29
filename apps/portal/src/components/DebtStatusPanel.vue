@@ -62,24 +62,24 @@ defineExpose({ refresh: fetchStatus });
   justify-content: space-between;
   gap: 20px;
   padding: 20px;
-  border-left: 3px solid #16a34a;
-  background: #f8fafc;
+  border-left: 3px solid var(--ds-positive);
+  background: var(--ds-panel-muted);
 }
 
 .debt-status__main.is-blocked {
-  border-left-color: #dc2626;
-  background: #fef2f2;
+  border-left-color: var(--ds-danger);
+  background: var(--ds-danger-soft);
 }
 
 .debt-status__label,
 .debt-status__meta {
-  color: #64748b;
+  color: var(--ds-muted);
   font-size: 12px;
 }
 
 .debt-status__value {
   margin: 4px 0 0;
-  color: #0f172a;
+  color: var(--ds-ink);
   font-size: 24px;
   font-weight: 700;
   line-height: 1.2;

@@ -159,8 +159,8 @@ function onFileChange(event: Event) {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 32%);
-  color: #fff;
+  background: var(--ds-overlay);
+  color: var(--ds-white);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -179,7 +179,7 @@ function onFileChange(event: Event) {
   gap: 1px;
   padding: 2px;
   border-radius: 6px;
-  background: rgb(20 22 25 / 78%);
+  background: var(--ds-image-overlay);
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -194,15 +194,15 @@ function onFileChange(event: Event) {
   min-width: 22px;
   height: 22px;
   margin: 0;
-  color: #fff;
+  color: var(--ds-white);
 }
 
 .reference-item__tools :deep(.el-button.is-disabled) {
-  color: rgb(255 255 255 / 30%);
+  color: var(--ds-overlay-white-muted);
 }
 
 .reference-item__delete :deep(.el-icon) {
-  color: #ff8c8c;
+  color: var(--ds-danger);
 }
 
 .reference-item__label {
@@ -215,8 +215,8 @@ function onFileChange(event: Event) {
   padding: 3px 5px;
   border: 0;
   border-radius: 5px;
-  background: rgb(18 20 23 / 78%);
-  color: #fff;
+  background: var(--ds-image-overlay-strong);
+  color: var(--ds-white);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.2;

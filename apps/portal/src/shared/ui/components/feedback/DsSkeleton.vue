@@ -52,7 +52,7 @@ const widths = computed(() =>
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.65) 50%,
+    var(--ds-skeleton-highlight) 50%,
     transparent 100%
   );
   transform: translateX(-100%);

@@ -29,7 +29,7 @@ const currentPath = computed(() => {
 .billing-host {
   border: 1px dashed var(--ds-line);
   border-radius: var(--ds-radius-panel);
-  background: color-mix(in srgb, var(--ds-panel) 88%, #ffffff 12%);
+  background: color-mix(in srgb, var(--ds-panel) 88%, var(--ds-white) 12%);
   padding: 28px;
 }
 

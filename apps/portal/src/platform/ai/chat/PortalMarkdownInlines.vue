@@ -41,10 +41,10 @@ defineProps<{
 
 .markdown-inline-code {
   padding: 0.1rem 0.35rem;
-  color: #0f172a;
+  color: var(--ds-ink);
   font-size: 0.92em;
   font-family: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", monospace;
-  background: #e2e8f0;
+  background: var(--ds-line);
   border-radius: 0.35rem;
 }
 
@@ -61,7 +61,7 @@ defineProps<{
 }
 
 .markdown-link {
-  color: #0f766e;
+  color: var(--ds-positive);
   text-decoration: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;

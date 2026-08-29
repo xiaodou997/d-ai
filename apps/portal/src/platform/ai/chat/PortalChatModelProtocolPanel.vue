@@ -156,8 +156,8 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 .model-panel {
   flex-shrink: 0;
   padding: 16px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--ds-white);
+  border: 1px solid var(--ds-line);
   border-radius: 12px;
 }
 
@@ -176,14 +176,14 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 }
 
 .panel-title span {
-  color: #475569;
+  color: var(--ds-ink-soft);
   font-size: 12px;
   font-weight: 900;
 }
 
 .panel-title strong {
   overflow: hidden;
-  color: #0f172a;
+  color: var(--ds-ink);
   font-size: 15px;
   font-weight: 900;
   text-overflow: ellipsis;
@@ -191,7 +191,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 }
 
 .panel-title small {
-  color: #64748b;
+  color: var(--ds-muted);
   font-size: 11px;
   font-weight: 800;
 }
@@ -203,7 +203,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 .field-label {
   display: block;
   margin: 0 0 8px;
-  color: #475569;
+  color: var(--ds-ink-soft);
   font-size: 12px;
   font-weight: 800;
 }
@@ -219,7 +219,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 }
 
 .model-option small {
-  color: #64748b;
+  color: var(--ds-muted);
 }
 
 .protocol-card {
@@ -235,7 +235,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 
 .protocol-card span,
 .protocol-card small {
-  color: #64748b;
+  color: var(--ds-muted);
   font-size: 11px;
   font-weight: 800;
 }
@@ -253,7 +253,7 @@ function modelOptionLabel(model: PortalChatModelRecord) {
   gap: 8px;
   margin: 16px 0 10px;
   padding: 10px 0;
-  color: #334155;
+  color: var(--ds-ink-soft);
   font-size: 13px;
   font-weight: 800;
   background: transparent;
@@ -263,8 +263,8 @@ function modelOptionLabel(model: PortalChatModelRecord) {
 
 .advanced-panel {
   padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--ds-panel-muted);
+  border: 1px solid var(--ds-line);
   border-radius: 10px;
 }
 

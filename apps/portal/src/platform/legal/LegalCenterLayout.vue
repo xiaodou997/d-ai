@@ -31,8 +31,8 @@ import { legalDocuments } from "./catalog";
 <style scoped>
 .legal-center {
   min-height: 100dvh;
-  background: #f6f7fb;
-  color: #1d1d24;
+  background: var(--ds-paper);
+  color: var(--ds-ink);
 }
 
 .legal-center__header {
@@ -41,8 +41,8 @@ import { legalDocuments } from "./catalog";
   gap: 18px;
   min-height: 60px;
   padding: 0 32px;
-  border-bottom: 1px solid #e3e6ee;
-  background: #ffffff;
+  border-bottom: 1px solid var(--ds-line);
+  background: var(--ds-white);
 }
 
 .legal-center__brand,
@@ -58,8 +58,8 @@ import { legalDocuments } from "./catalog";
 
 .legal-center__title {
   padding-left: 18px;
-  border-left: 1px solid #d9dde8;
-  color: #66697a;
+  border-left: 1px solid var(--ds-line-strong);
+  color: var(--ds-muted);
   font-size: 13px;
 }
 
@@ -72,12 +72,12 @@ import { legalDocuments } from "./catalog";
 }
 
 .legal-center__nav a {
-  color: #66697a;
+  color: var(--ds-muted);
   font-size: 13px;
 }
 
 .legal-center__nav a.router-link-active {
-  color: #5b45b5;
+  color: var(--ds-accent);
   font-weight: 700;
 }
 
@@ -89,8 +89,8 @@ import { legalDocuments } from "./catalog";
 
 .legal-center__footer {
   padding: 20px 32px;
-  border-top: 1px solid #e3e6ee;
-  color: #777b8e;
+  border-top: 1px solid var(--ds-line);
+  color: var(--ds-faint);
   font-size: 12px;
   text-align: center;
 }
