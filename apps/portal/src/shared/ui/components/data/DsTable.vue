@@ -140,7 +140,7 @@ function toggleExpand(row: unknown) {
 </script>
 
 <template>
-  <div class="ds-table" :class="{ 'ds-table--frameless': !frame }">
+  <div class="ds-table" :class="{ 'ds-table--frameless': !frame }" tabindex="0">
     <table class="ds-table__table" :aria-label="ariaLabel" :aria-busy="loading ? 'true' : undefined">
       <thead>
         <tr>

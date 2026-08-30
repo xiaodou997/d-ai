@@ -130,7 +130,7 @@ function isGroup(item: SidebarItem): boolean {
   border: 1px solid color-mix(in srgb, var(--ds-accent) 18%, transparent);
   border-radius: var(--ds-radius-pill);
   background: color-mix(in srgb, var(--ds-accent-soft) 78%, var(--ds-panel));
-  color: var(--ds-accent);
+  color: var(--ds-accent-hover);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -201,7 +201,7 @@ function isGroup(item: SidebarItem): boolean {
 
 .ds-sidebar__link.is-active {
   background: var(--ds-accent-soft);
-  color: var(--ds-accent);
+  color: var(--ds-accent-hover);
   font-weight: 600;
 }
 

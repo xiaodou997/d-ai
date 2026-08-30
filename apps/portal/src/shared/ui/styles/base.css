@@ -48,13 +48,13 @@
   --ds-shadow-dropdown: 0 12px 32px color-mix(in srgb, var(--ds-ink) 12%, transparent);
   --ds-shadow-inset-highlight: inset 0 1px 0 color-mix(in srgb, var(--ds-white) 65%, transparent);
 
-  --ds-positive: #059669;
+  --ds-positive: #065f46;
   --ds-positive-soft: #ecfdf5;
-  --ds-warning: #d97706;
+  --ds-warning: #92400e;
   --ds-warning-soft: #fffbeb;
-  --ds-danger: #dc2626;
+  --ds-danger: #b91c1c;
   --ds-danger-soft: #fef2f2;
-  --ds-info: #0284c7;
+  --ds-info: #0369a1;
   --ds-info-soft: #f0f9ff;
 
   /* shared neutral scale (slate) — default = admin palette */
@@ -68,7 +68,7 @@
   --ds-ink: #0f172a;
   --ds-ink-soft: #334155;
   --ds-muted: #64748b;
-  --ds-faint: #94a3b8;
+  --ds-faint: #64748b;
   --ds-accent: #7c3aed;
   --ds-accent-soft: #f3f0ff;
   --ds-accent-hover: #6d28d9;
@@ -189,6 +189,12 @@
 .el-button--large {
   --el-button-size: var(--ds-control-height-lg);
   height: var(--ds-control-height-lg);
+}
+
+.el-button.is-plain.el-button--primary {
+  --el-button-text-color: var(--ds-accent-hover);
+  --el-button-hover-text-color: var(--ds-accent-hover);
+  color: var(--ds-accent-hover);
 }
 
 .el-input,

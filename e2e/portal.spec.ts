@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
 
 type PortalRole = {
@@ -61,6 +62,14 @@ function watchBrowserErrors(page: Page) {
     if (message.type() === "error") errors.push(`console: ${message.text()}`);
   });
   return errors;
+}
+
+async function expectNoAccessibilityViolations(page: Page) {
+  const results = await new AxeBuilder({ page }).analyze();
+  const violations = results.violations.flatMap((item) =>
+    item.nodes.map((node) => `${item.id} ${node.target.join(" ")}: ${item.help}`)
+  );
+  expect(violations, violations.join("\n")).toEqual([]);
 }
 
 async function fulfillJson(route: Route, payload: unknown, status = 200) {
@@ -200,6 +209,8 @@ for (const role of roles) {
       expect(menu).toContain("模型定价");
       expect(menu).not.toContain("用户管理");
     }
+    await page.waitForLoadState("networkidle");
+    await expectNoAccessibilityViolations(page);
     expect(errors).toEqual([]);
   });
 }

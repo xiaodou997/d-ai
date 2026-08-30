@@ -811,11 +811,11 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-07 增加浏览器端到端验收
 
-- [ ] 使用 Playwright 覆盖四种 `userType` 登录与菜单授权。
-- [ ] 覆盖邀请注册、用户管理、API Key、AI 对话、图片任务和用量查询。
+- [x] 使用 Playwright 覆盖四种 `userType` 登录与菜单授权。
+- [x] 覆盖邀请注册、用户管理、API Key、AI 对话、图片任务和用量查询路径。
 - [ ] 覆盖充值、退款、订阅购买和余额变化关键路径。
-- [ ] 覆盖 Token 过期刷新、跨标签登出和权限变更。
-- [ ] 在桌面和移动视口执行截图、无障碍和控制台错误检查。
+- [x] 覆盖 Token 过期刷新、跨标签登出和权限变更。
+- [x] 在桌面和移动视口执行截图、无障碍和控制台错误检查。
 
 ## P3：可观测性、质量门禁与运维
 
@@ -858,13 +858,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：136 个测试文件、398 个测试通过
+- [x] `bun run test`：136 个测试文件、399 个测试通过
 - [x] `bun run ensure:api`
 - [x] `bun run validate:portal-styles`：源码颜色仅使用 `var(--ds-*)` token（token 定义文件除外）
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
 - [ ] 前端依赖审计：当前 registry 的 audit API 返回 404
-- [ ] 浏览器级端到端验收尚未建立
+- [ ] 浏览器级端到端验收尚未完成：P2-07 仍剩有状态账务流程
 
 ## 执行记录
 
@@ -893,10 +893,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-07（Playwright browser contract，2026-08-30）
 
-- 状态：第一阶段浏览器验收骨架完成；mock API 模式下四种 `userType`、邀请码、跨端工作区、账务页面、会话恢复/撤销/权限变更以及桌面/移动视口已可重复运行。
-- 变更：新增 `@playwright/test`、`e2e/playwright.config.ts` 和 `e2e/portal.spec.ts`；配置 Chromium 与 Pixel 7 双项目、Vite `webServer`、失败 trace/video、每用例截图、ARIA/键盘/控制台错误检查和 `DAI_E2E_MOCK=0` 真实后端开关。认证 refresh 使用独立 raw adapter，失效 refresh 不再递归 401 恢复。
+- 状态：第一阶段浏览器验收骨架完成；mock API 模式下四种 `userType`、邀请码、跨端工作区路径、账务页面、会话恢复/撤销/权限变更以及桌面/移动视口已可重复运行。
+- 变更：新增 `@playwright/test`、`@axe-core/playwright`、`e2e/playwright.config.ts` 和 `e2e/portal.spec.ts`；配置 Chromium 与 Pixel 7 双项目、Vite `webServer`、失败 trace/video、每用例截图、Axe WCAG 扫描、ARIA/键盘/控制台错误检查和 `DAI_E2E_MOCK=0` 真实后端开关。共享 token 的语义色满足 WCAG AA，对话框面板标题、表格滚动容器和工作台选择框补齐无障碍契约。认证 refresh 使用独立 raw adapter，失效 refresh 不再递归 401 恢复。
 - 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 16 项（Chromium/Pixel 7 各 8 项）；mock 之外的 live 模式保留四角色登录/菜单验收，其余依赖确定性 fixture 的流程显式 skip。
-- 遗留风险：尚未覆盖真实支付 provider、退款/订阅购买的状态变更和 axe/像素基线；下一候选项是接入可重置的 E2E 数据库/支付 stub，并补关键操作断言。
+- 遗留风险：尚未覆盖真实支付 provider、退款/订阅购买和余额变化的有状态断言，也未建立像素级截图基线；下一候选项是接入可重置的 E2E 数据库/支付 stub，并补关键操作断言。
 
 ### P0-01（2026-08-20）
 

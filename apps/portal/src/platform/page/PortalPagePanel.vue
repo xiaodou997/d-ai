@@ -42,7 +42,7 @@ const current = computed(() => props.breadcrumbs[props.breadcrumbs.length - 1]);
             <span v-else class="portal-page-panel__crumb">{{ crumb.label }}</span>
             <span class="portal-page-panel__sep">/</span>
           </template>
-          <span v-if="current" class="portal-page-panel__current">{{ current.label }}</span>
+          <h1 v-if="current" class="portal-page-panel__current">{{ current.label }}</h1>
         </nav>
         <span v-if="description" class="portal-page-panel__desc">{{ description }}</span>
       </div>
@@ -129,6 +129,7 @@ const current = computed(() => props.breadcrumbs[props.breadcrumbs.length - 1]);
 
 /* 面包屑末级即页面标题:与父级同字号,只用主题色区分 */
 .portal-page-panel__current {
+  margin: 0;
   color: var(--ds-accent);
   font-weight: 500;
 }

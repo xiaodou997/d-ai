@@ -385,7 +385,7 @@ function isAbortError(error: unknown) {
       <template #actions>
         <el-button @click="openChatWorkspace">进入对话</el-button>
         <el-button @click="openImageWorkspace">进入生图</el-button>
-        <el-select v-model="requestSource" placeholder="全部来源" class="workspace-source-select" @change="fetchWorkspaceData">
+        <el-select v-model="requestSource" placeholder="全部来源" aria-label="请求来源" class="workspace-source-select" @change="fetchWorkspaceData">
           <el-option
             v-for="item in workspaceRequestSourceOptions"
             :key="item.value"
