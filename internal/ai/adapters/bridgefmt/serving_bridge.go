@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -208,9 +209,12 @@ func (r *Runtime) BridgeResponse(req *serving.Request, body []byte) ([]byte, err
 }
 
 func (r *Runtime) BuildUpstreamRequest(req *serving.Request, prepared corebridge.PreparedRequest) (*serving.UpstreamRequest, error) {
+	if req == nil || req.Candidate == nil {
+		return nil, errors.New("bridgefmt: request and route candidate are required")
+	}
 	meta := buildUpstreamCompatMeta(req)
 	candidate := req.Candidate
-	if req != nil && req.Candidate != nil && prepared.RequestPath != "" {
+	if prepared.RequestPath != "" {
 		cloned := *req.Candidate
 		cloned.RequestPath = prepared.RequestPath
 		candidate = &cloned

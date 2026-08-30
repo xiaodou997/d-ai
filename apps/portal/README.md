@@ -17,6 +17,9 @@ Portal 是仓库唯一的前端项目。原 `packages/*` 的 UI、shell、鉴权
 bun run dev:frontend
 bun run typecheck
 bun run test
+bun run validate:frontend-quality
+bun run validate:portal-styles
+bun run validate:portal-architecture
 bun run build:frontend
 bun run build:portal-static
 bun run build:portal-static
@@ -39,6 +42,8 @@ Portal 在 `/login` 直接提供统一的用户名密码表单，不要求用户
 桌面/移动截图、Axe WCAG 无障碍、ARIA/键盘和控制台错误检查；mock provider 还会断言用户创建、API Key、流式对话、生图任务、充值、退款冲正、订阅购买和余额变化。运行真实后端时设置 `DAI_E2E_MOCK=0`
 与 `DAI_E2E_BASE_URL`，并可通过 `DAI_E2E_*_USERNAME` / `DAI_E2E_*_PASSWORD` 覆盖开发账号；
 CI 或新环境先运行 `bun run test:e2e:install` 安装 Chromium。
+
+依赖安装和审计使用仓库根目录 `.npmrc` 指定的官方 npm registry；前端质量门禁会阻止新增未审查的显式 `any`、硬编码视觉值和 Portal 架构越界。
 
 OpenAPI 唯一来源是根目录的 `contracts/openapi.yaml`，由 `cmd/openapi` 从当前 Go 后端的 Huma route registration 导出。运行时 facade 不直接暴露生成器细节，页面只从 `@/api` 和领域 facade 引用。
 

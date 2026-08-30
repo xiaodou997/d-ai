@@ -44,7 +44,7 @@ export function routeAllowedForUserType(
 }
 
 export interface PortalRouterLike {
-  beforeEach: (guard: (to: PortalRouteLike) => any) => unknown;
+  beforeEach: (guard: (to: PortalRouteLike) => unknown | Promise<unknown>) => unknown;
 }
 
 export function resolvePortalPublicBaseUrl(baseUrl?: string): string {

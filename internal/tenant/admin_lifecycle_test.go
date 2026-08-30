@@ -9,6 +9,8 @@ import (
 	tenantports "xiaodou/dai/internal/tenant/ports"
 )
 
+type adminTenantLifecycleContextKey struct{}
+
 type adminTenantLifecycleWriterStub struct {
 	result   tenantports.AdminTenantStatusResult
 	ctx      context.Context
@@ -47,7 +49,7 @@ func (s *adminTenantLifecycleSecurityStub) SyncTenantStatus(ctx context.Context,
 }
 
 func TestAdminTenantLifecycleSynchronizesCommittedStatus(t *testing.T) {
-	ctx := context.WithValue(context.Background(), struct{}{}, "request")
+	ctx := context.WithValue(context.Background(), adminTenantLifecycleContextKey{}, "request")
 	writer := &adminTenantLifecycleWriterStub{result: tenantports.AdminTenantStatusResult{Updated: true, RestoredUserIDs: []string{"user-1"}}}
 	security := &adminTenantLifecycleSecurityStub{}
 	service := NewAdminTenantLifecycleService(writer, security)

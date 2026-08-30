@@ -9,6 +9,8 @@ import (
 	userports "xiaodou/dai/internal/user/ports"
 )
 
+type adminAccountLifecycleContextKey struct{}
+
 type adminAccountLifecycleWriterStub struct {
 	updated      bool
 	mutation     userports.AdminAccountMutationResult
@@ -83,7 +85,7 @@ func (s *adminAccountLifecycleSecurityStub) SyncTenantStatus(context.Context, st
 }
 
 func TestAdminAccountLifecycleSynchronizesCommittedMutations(t *testing.T) {
-	ctx := context.WithValue(context.Background(), struct{}{}, "request")
+	ctx := context.WithValue(context.Background(), adminAccountLifecycleContextKey{}, "request")
 	writer := &adminAccountLifecycleWriterStub{updated: true, credential: userports.ActivationCredentialResult{Token: "token", ExpiresIn: 60}}
 	security := &adminAccountLifecycleSecurityStub{}
 	service := NewAdminAccountLifecycleService(writer, security)

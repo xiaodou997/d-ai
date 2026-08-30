@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import { attachPortalAuthGuard } from "@/platform/portal-router";
+import type { PortalRouterLike } from "@/platform/portal-router";
 
 import { portalEnv } from "./env";
 import {
@@ -67,11 +68,11 @@ const router = createRouter({
   routes
 });
 
-attachPortalAuthGuard(router, {
-  env: portalEnv as any,
+attachPortalAuthGuard(router as unknown as PortalRouterLike, {
+  env: portalEnv,
   defaultPathForUserType: defaultPortalPathForUserType,
   hasCapability: userHasPortalCapability,
-  useAuthStore: useAuthStore as any
+  useAuthStore
 });
 
 export default router;

@@ -395,9 +395,15 @@ test("tenant user management creates an activation credential", async ({ page })
   await expect.poll(() => state.tenantUserCreated).toBe(true);
   const activationBox = page.locator(".el-message-box");
   await expect(activationBox).toBeVisible();
-  for (let attempt = 0; attempt < 2 && await activationBox.isVisible(); attempt += 1) {
-    await activationBox.getByRole("button").last().evaluate((button) => (button as HTMLButtonElement).click());
-    await page.waitForTimeout(100);
+  // Clipboard is unavailable in the deterministic browser fixture, so the
+  // UI may show a manual-copy prompt while the first dialog's close
+  // transition is still removing its DOM node. Always act on the topmost
+  // dialog instead of querying a strict locator during that overlap.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const current = activationBox.last();
+    if (!(await current.isVisible())) break;
+    await current.getByRole("button").last().evaluate((button) => (button as HTMLButtonElement).click());
+    await page.waitForTimeout(150);
   }
   await expect(page.getByText("created-user", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);

@@ -50,6 +50,26 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Go formatting
+        run: |
+          test -z "$(gofmt -l .)"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version-file: .golangci-lint-version
+          args: --timeout=5m
+
+      - name: Validate golangci-lint scope
+        run: bash scripts/check_golangci_config.sh
+
+      - name: Go vulnerability scan
+        env:
+          GOBIN: ${{ runner.temp }}/go-bin
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "${GOBIN}/govulncheck" ./...
+
       - name: Build
         run: go build ./...
 
@@ -143,7 +163,11 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
 
       - name: Install
         run: bun install --frozen-lockfile
@@ -159,6 +183,15 @@ jobs:
 
       - name: Typecheck
         run: bun run typecheck
+
+      - name: Frontend quality contracts
+        run: |
+          bun run validate:frontend-quality
+          bun run validate:portal-styles
+          bun run validate:portal-architecture
+
+      - name: Frontend dependency vulnerability scan
+        run: bun audit --audit-level=high
 
       - name: Test
         run: bun run test
@@ -176,3 +209,62 @@ jobs:
 
       - name: Smoke test embed Portal artifact
         run: bash scripts/smoke_embed_portal.sh /tmp/dai-embed-smoke
+
+  release:
+    name: Release evidence and container contract
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build release artifacts
+        run: make build-linux-amd64
+
+      - name: Generate release SBOM, provenance and checksums
+        run: bash scripts/generate_release_metadata.sh release
+
+      - name: Verify release artifact contracts
+        run: |
+          bash scripts/smoke_portal.sh release/portal
+          bash scripts/smoke_embed_portal.sh release/dai-linux-amd64
+          bash scripts/smoke_release.sh --help >/dev/null
+          test -s release/SBOM.spdx.json
+          test -s release/PROVENANCE.json
+          test -s release/SHA256SUMS
+
+      - name: Verify hardened production image definition
+        run: |
+          grep -q '^USER 10001:10001$' deploy/production/Dockerfile
+          grep -q '^    read_only: true$' deploy/production/compose.yaml
+          grep -q '^      - ALL$' deploy/production/compose.yaml
+
+      - name: Build production image
+        run: docker build --tag dai:ci --file deploy/production/Dockerfile .
+
+      - name: Scan production image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: dai:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH

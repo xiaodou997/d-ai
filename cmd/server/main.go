@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/imageassets"
+	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
 	"xiaodou/dai/internal/ai/observability/tracing"
 	"xiaodou/dai/internal/config"
 	"xiaodou/dai/internal/transport"
@@ -43,10 +44,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "D-AI startup failed: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func run() error {
-	return runRole(runtimeRoleAll)
 }
 
 func runRole(role runtimeRole) error {
@@ -101,6 +98,7 @@ func runRole(role runtimeRole) error {
 		return err
 	}
 	pool, billingPool, redisClient := infra.pool, infra.billingPool, infra.redis
+	aimetrics.RegisterDBPools(pool, billingPool)
 	// Dependencies are registered immediately after construction. Any later
 	// module assembly error therefore releases them before run() returns.
 	lifecycle.MarkStarted(healthPostgres)
@@ -201,6 +199,9 @@ func runRole(role runtimeRole) error {
 		HSTS:         cfg.App.Env == "production",
 		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
+	// Register the metrics middleware inside chi so the route context is
+	// available after dispatch; this keeps dynamic IDs out of Prometheus labels.
+	router.Use(aimetrics.HTTPMiddleware)
 
 	if role.HasControlAPI() {
 		transport.Register(api, buildPlatformTransportModules(version, cfg, platform, ai.AIHTTPDeps, appLogger)...)
@@ -285,7 +286,7 @@ func runRole(role runtimeRole) error {
 		PublicAddr:        publicAddr,
 		ManagementAddr:    strings.TrimSpace(cfg.Server.ManagementAddr),
 		PublicHandler:     weborigin.Middleware(router, originResolver),
-		ManagementHandler: server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux))),
+		ManagementHandler: aimetrics.HTTPMiddleware(server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux)))),
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		IdleTimeout:       time.Duration(cfg.Server.IdleTimeout) * time.Second,
 		MaxHeaderBytes:    cfg.Server.MaxHeaderBytes,

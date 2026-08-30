@@ -41,6 +41,8 @@ release. The license files shipped by each dependency are authoritative.
 
 | Scope | Dependency | Resolved version | License |
 |---|---|---:|---|
+| development | `@axe-core/playwright` | `4.10.2` | MPL-2.0 |
+| development | `@playwright/test` | `1.55.1` | Apache-2.0 |
 | production | `@element-plus/icons-vue` | `2.3.2` | MIT |
 | production | `dompurify` | `3.4.13` | Apache-2.0 OR MPL-2.0 |
 | production | `echarts` | `6.1.0` | Apache-2.0 |
@@ -60,13 +62,13 @@ release. The license files shipped by each dependency are authoritative.
 | development | `@vue/compiler-sfc` | `3.5.39` | MIT |
 | development | `@vue/test-utils` | `2.4.6` | MIT |
 | development | `@vue/tsconfig` | `0.7.0` | MIT |
-| development | `happy-dom` | `20.8.3` | MIT |
+| development | `happy-dom` | `20.8.9` | MIT |
 | development | `openapi-typescript` | `7.10.1` | MIT |
 | development | `postcss` | `8.5.25` | MIT |
 | development | `typescript` | `6.0.3` | Apache-2.0 |
 | development | `unplugin-vue-components` | `32.1.0` | MIT |
 | development | `vite` | `8.2.0` | MIT |
-| development | `vitest` | `4.0.18` | MIT |
+| development | `vitest` | `4.1.0` | MIT |
 | development | `vue-tsc` | `3.3.9` | MIT |
 
 ## Distribution Notes

@@ -1,0 +1,34 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+# Keep this gate focused on correctness and maintainability. The repository's
+# architecture, style-token, OpenAPI, and authorization contracts run as
+# separate explicit checks in CI.
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - unused
+  settings:
+    staticcheck:
+      # Run Staticcheck's correctness (SA) and simplification (S1) families.
+      # Style (ST) and quick-fix (QF) suggestions are intentionally handled by
+      # the repository's separate documentation/style contracts, so this gate
+      # does not hide correctness findings behind a broad directory ignore.
+      checks:
+        - SA*
+        - S1*
+  exclusions:
+    generated: lax
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

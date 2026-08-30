@@ -1,10 +1,10 @@
 # D-AI 项目状态与实施清单
 
-更新日期：2026-08-26
+更新日期：2026-08-30
 
 ## 当前结论
 
-D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后端、OpenAPI 导出、Portal 类型检查、生产构建和前端测试均已打通；剩余工作主要是运行时业务验收、契约细节校准和发布自动化。
+D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产正确性、P1 领域/数据库治理、P2 运行角色与 Portal 架构，以及 P3 可观测性、质量门禁、供应链和发布代码侧均已完成并通过自动化回归。真实支付 Provider、域名和证书属于上线后的环境验收，不作为本轮代码阻塞。
 
 ## 已完成
 
@@ -18,6 +18,9 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 - `cmd/openapi` 从统一 Go route registration 导出 `contracts/openapi.yaml`。
 - `apps/portal/scripts/generate.mjs` 只消费统一契约，并生成 `apps/portal/src/api/generated/dai.ts`；`ensure:api` 在契约或生成物缺失/过期时失败。
 - 登录上下文已统一为单一 `portal`；后端根据账号凭证跨管理员、租户用户和终端用户表解析 `userType`，Portal 再按身份和权限生成菜单、路由与主题。
+- 浏览器 Mock 验收覆盖四种 `userType`、桌面/移动视口、Axe 无障碍和充值/退款冲正/订阅/AI 工作流；Portal 当前 137 个测试文件、400 个测试通过。
+- HTTP 请求已接入 Prometheus 指标和 chi 路由模板标签；请求日志提取 W3C Trace Context 并记录 `trace_id`/`span_id`，数据库池、Outbox、支付扫单、异步任务和审计 inbox 均有可观测信号。
+- 生产镜像默认使用非 root、只读根文件系统、临时目录和最小 Linux capability；release 可生成 SPDX SBOM、provenance 和 SHA256 清单。
 
 ## 目录约定
 
@@ -31,24 +34,32 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 | Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
 | 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v24 新库基线、v1→v24 forward-only 人工变更和结构门禁 |
 
-## 当前剩余任务
+## 本轮重构收口状态
 
-### P0：运行时产品验收
+### P3-01：统一可观测性
 
-- 用真实本地管理员完成 admin、tenant、customer 三种 `userType` 的登录、动态菜单、动态主题和关键页面冒烟。
-- 逐个校验 facade 的路径、请求参数、错误处理和分页字段与 `contracts/openapi.yaml` 及后端实际响应一致。
-- 对 Portal 页面做一次浏览器级验收，重点覆盖登录、租户邀请/用户管理、AI 工作台、用量、计费和异步任务。
+- [x] HTTP Prometheus middleware、路由模板标签、入站 Trace Context、trace ID 日志和 parent-based 可配置采样。
+- [x] 请求、上游、计费、Outbox、异步任务、审计和数据库池指标及告警 runbook。
 
-### P1：发布门禁
+### P3-02：静态分析和格式门禁
 
-- 将 `make openapi`、`bun run ensure:api`、`bun run typecheck`、`bun run test`、`bun run build:frontend` 纳入 CI。
-- 增加 `make build` 后的单二进制业务 `/health`、管理 `/ready`/`/metrics`、首页和 `/api/v1/info` smoke。
-- 补充应用 Dockerfile、release 构建说明和跨平台构建矩阵。
+- [x] 固定兼容当前 Go 工具链的 golangci-lint 版本和配置。
+- [x] Portal 前端质量契约（显式 `any` 基线、DsUI 颜色、Portal 架构/依赖边界）。
+- [x] 格式化、lint、vet、typecheck 和测试均纳入 CI。
 
-### P1：测试环境统一
+### P3-03：供应链和发布验证
 
-- 统一并文档化 Go 集成测试使用的 PostgreSQL/Redis 环境变量。
-- 保持默认单元测试无需外部服务；真实数据库测试明确标注 skip 条件和 schema 初始化方式。
+- [x] 固定 Go、Bun、Node、golangci-lint 和 govulncheck 版本。
+- [x] Go/前端依赖审计、SPDX SBOM、provenance、制品 checksum、非 root 只读容器契约。
+- [x] 独立 Portal、embed 二进制和发布元数据 smoke；迁移链、备份和回滚规则沿用现有发布手册。
+
+### P3-04：文档同步
+
+- [x] 本状态、P3 执行记录、可观测性和 release 说明已同步；真实支付环境验收仍按上线窗口执行。
+
+## 上线后剩余任务
+
+- [ ] 在目标环境执行真实 `/health`、`/ready`、Portal、API、流式响应和支付 Provider 验收；这项依赖正式域名、证书、回调和生产凭证，按上线窗口执行，不属于本轮代码开发。
 
 ## 验证结果
 
@@ -56,15 +67,17 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。数据库、Go 后�
 | --- | --- |
 | `bun run typecheck` | 通过 |
 | `bun run build:frontend` | 通过，产物写入 `cmd/server/frontend_dist` |
-| `bun run test` | 55 个测试文件、191 个测试通过 |
+| `bun run test` | 137 个测试文件、400 个测试通过 |
 | `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
 | `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
-| `make dev`、后端 health/management-ready/info | 旧本地数据卷需先 `make db-recreate` 后验证 |
+| `bun run validate:frontend-quality` | 通过；显式 `any` 仅允许在已审查基线内 |
+| `golangci-lint` v2.12.2 + `staticcheck ./...` | 通过；未使用目录级或全局 ignore |
+| `govulncheck ./...`（Go 1.26.6） | 通过；0 个受影响漏洞 |
+| `make build-linux-amd64` + release metadata | 通过；生成 SBOM、provenance 和 SHA256 清单 |
+| `make dev`、后端 health/management-ready/info | 本地可验证；目标环境真实验收在上线后执行 |
 | `go test ./...` | 通过 |
 
 ## 后续顺序
 
-1. 完成真实浏览器流程和三类用户的运行时验收。
-2. 校准 API facade 与统一 OpenAPI 契约的字段/错误/分页细节。
-3. 将前后端检查接入 CI，并补单二进制 smoke。
-4. 再做 Docker/release 和部署文档。
+1. 合并并运行 P3 CI 门禁，修复目标环境中出现的工具或依赖兼容问题。
+2. 上线后执行真实 `/health`、`/ready`、Portal、API、流式响应和支付 Provider 验收。

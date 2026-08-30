@@ -8,7 +8,7 @@ D-AI 在一个进程中提供身份、权限、计费和 AI 能力，Portal 按 
 
 ## 项目状态
 
-> 开发中：后端、数据库和 Portal 工程链已打通；完整产品仍需按业务流程做运行时验收。
+> 重构代码和自动化门禁已收口；真实 Provider、支付域名/证书/回调和目标环境 smoke 在上线后执行。
 
 本仓库于 2026-08-05 从 UniHub 的未跟踪 `v3/` 工作目录中独立出来，UniHub 基线提交为 `cc5bc36bc93a77c0eb7aa8bd4f654e6ad5d08ad4`。当前已知状态：
 
@@ -103,6 +103,13 @@ make test-unit
 
 make test-frontend
 make typecheck
+make validate-frontend-quality
+
+# 构建后生成 SPDX SBOM、provenance 和 SHA256 清单
+make release-metadata
+
+# 已部署环境验收（需提供公开和管理地址）
+make release-smoke DAI_RELEASE_SMOKE_PUBLIC_URL=https://portal.example.com DAI_RELEASE_SMOKE_MANAGEMENT_URL=https://management.example.internal
 ```
 
 `make test` 设置 `DAI_TEST_DATABASE_STRICT=1`：数据库配置了却连不上时直接失败，
@@ -126,6 +133,7 @@ make build-linux-amd64
 
 - [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)：项目现状、已完成重构、剩余验收项和实施顺序。
 - [`docs/DATABASE.md`](docs/DATABASE.md)：完整 schema、人工变更和版本校验规则。
+- [`docs/OBSERVABILITY_RUNBOOK.md`](docs/OBSERVABILITY_RUNBOOK.md)：指标、追踪、SLO 告警和故障排查。
 - [`apps/portal/README.md`](apps/portal/README.md)：Portal 目录、API facade 和契约生成说明。
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)：贡献流程与贡献许可要求。
 - [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md)：直接依赖许可证清单与发布审计范围。

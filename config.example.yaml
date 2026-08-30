@@ -58,3 +58,10 @@ legal:
 
 log:
   level: debug
+
+# OpenTelemetry uses the standard OTEL_TRACES_* environment variables when
+# enabled. Default sampler is parentbased_traceidratio with a 10% ratio.
+# OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4318
+# OTEL_EXPORTER_OTLP_INSECURE=true
+# OTEL_TRACES_SAMPLER=parentbased_traceidratio
+# OTEL_TRACES_SAMPLER_ARG=0.1

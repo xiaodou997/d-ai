@@ -1,0 +1,54 @@
+{
+  "shared/ui/components/data/DsTable.vue": {
+    "max": 1,
+    "reason": "Heterogeneous cell-slot rows are a deliberate component boundary; all indexing is narrowed through asRow/cellValue helpers."
+  },
+  "features/ai/credential-pools/CredentialPoolsWorkspace.vue": {
+    "max": 38,
+    "reason": "Legacy credential-pool DTO/import boundary; replace with CredentialPoolDTO and PoolCredentialDTO types when the workspace is next migrated."
+  },
+  "features/ai/price-books/AdminPriceBookWorkspace.vue": {
+    "max": 21,
+    "reason": "Legacy price-book import/export payload boundary; keep parsing isolated until the generated DTO adapter is expanded."
+  },
+  "features/ai/routing/AdminRoutingWorkspace.vue": {
+    "max": 2,
+    "reason": "Legacy routing response boundary; the API adapter is the migration owner."
+  },
+  "features/ai/upstream-accounts/UpstreamAccountsWorkspace.vue": {
+    "max": 26,
+    "reason": "Legacy upstream-account import/test payload boundary; dynamic provider fields are narrowed before requests are sent."
+  },
+  "features/ai/upstream-accounts/components/KeyValueEditor.vue": {
+    "max": 11,
+    "reason": "Provider extra-header JSON editor intentionally handles arbitrary JSON values."
+  },
+  "features/ai/upstream-model-bindings/UpstreamModelBindingsPanel.vue": {
+    "max": 6,
+    "reason": "Legacy model-binding table response boundary; generated DTO migration remains local to this panel."
+  },
+  "features/platform/payment/AdminRechargeRecordsWorkspace.vue": {
+    "max": 3,
+    "reason": "Legacy recharge detail response boundary; generated billing DTO migration remains local to this workspace."
+  },
+  "features/platform/system-modules/ProxyEgressWorkspace.vue": {
+    "max": 4,
+    "reason": "Legacy proxy configuration response boundary; API adapter narrowing is the migration owner."
+  },
+  "features/platform/system-modules/SensitiveInformationProtectionWorkspace.vue": {
+    "max": 3,
+    "reason": "Legacy sensitive-information preview payload boundary; arbitrary provider fields are isolated to the editor."
+  },
+  "features/platform/system-modules/SystemModulesWorkspace.vue": {
+    "max": 5,
+    "reason": "Legacy system-module response boundary; replace with generated module DTOs when the workspace is next migrated."
+  },
+  "features/platform/tenant-management/AdminTenantsWorkspace.vue": {
+    "max": 2,
+    "reason": "Legacy tenant recharge response boundary; billing DTO migration remains local to this workspace."
+  },
+  "features/platform/tenant-management/TenantDetailWorkspace.vue": {
+    "max": 3,
+    "reason": "Legacy tenant detail response boundary; generated tenant DTO migration remains local to this workspace."
+  }
+}

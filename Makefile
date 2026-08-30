@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership-cutover check-db-ownership help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts release-metadata release-smoke frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api validate-frontend-quality check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership-cutover check-db-ownership help
 
 # ---- Portal delivery ----
 
@@ -85,11 +85,11 @@ legal-artifacts: ## 将开源许可、第三方通知和商标政策复制到发
 	cp $(LEGAL_RELEASE_FILES) $(BUILD_DIR)/
 
 frontend: ## 构建前端
-	bun install
+	bun install --frozen-lockfile
 	bun run build:frontend
 
 frontend-static: ## 构建可由 CDN/反向代理托管的独立 Portal 制品
-	bun install
+	bun install --frozen-lockfile
 	bun run build:portal-static
 
 portal-smoke: ## 校验独立 Portal 静态制品及 checksum
@@ -97,6 +97,12 @@ portal-smoke: ## 校验独立 Portal 静态制品及 checksum
 
 portal-smoke-embed: ## 校验 embed Portal 二进制包含前端制品
 	bash scripts/smoke_embed_portal.sh release/$(BINARY)
+
+release-metadata: ## 生成 release SBOM、provenance 和 SHA256 清单（先完成构建）
+	bash scripts/generate_release_metadata.sh release "$(VERSION)"
+
+release-smoke: ## 验证已部署构建的业务、管理和可选流式端点
+	bash scripts/smoke_release.sh "$(DAI_RELEASE_SMOKE_PUBLIC_URL)" "$(DAI_RELEASE_SMOKE_MANAGEMENT_URL)"
 
 embed: ## 前端 dist 必须存在
 	@if [ ! -d $(FRONTEND_DIST) ]; then \
@@ -140,6 +146,11 @@ check-transport-coverage: ## 校验 Transport 关键路径覆盖率不得回退
 
 typecheck: ## 前端类型检查
 	bun run typecheck
+
+validate-frontend-quality: ## 前端 any/颜色/架构契约
+	bun run validate:frontend-quality
+	bun run validate:portal-styles
+	bun run validate:portal-architecture
 
 # ---- 清理 ----
 

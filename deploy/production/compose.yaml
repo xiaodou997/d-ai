@@ -8,6 +8,13 @@ services:
     image: dai:${DAI_IMAGE_TAG:-local}
     restart: unless-stopped
     init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     stop_grace_period: 30s
     mem_limit: 1536m
     env_file:

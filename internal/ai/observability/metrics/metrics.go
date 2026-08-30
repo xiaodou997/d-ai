@@ -2,10 +2,15 @@
 package metrics
 
 import (
+	"bufio"
+	"io"
+	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -116,25 +121,40 @@ func (g *Gateway) SetCircuitBreakerOpen(deploymentID string, open bool) {
 // HTTP middleware — instruments every HTTP request
 // ============================================================================
 
-// HTTPMiddleware wraps an http.Handler with basic request instrumentation.
-func HTTPMiddleware(next http.Handler) http.Handler {
-	inFlight := promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "dai_http_requests_in_flight",
-		Help: "Current number of in-flight HTTP requests.",
+var (
+	httpMetricsOnce     sync.Once
+	httpInFlight        prometheus.Gauge
+	httpRequestsTotal   *prometheus.CounterVec
+	httpRequestDuration *prometheus.HistogramVec
+)
+
+func initHTTPMetrics() {
+	httpMetricsOnce.Do(func() {
+		httpInFlight = promauto.NewGauge(prometheus.GaugeOpts{
+			Name: "dai_http_requests_in_flight",
+			Help: "Current number of in-flight HTTP requests.",
+		})
+		httpRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "dai_http_requests_total",
+			Help: "Total HTTP requests by method, route template, and status.",
+		}, []string{"method", "route", "status"})
+		httpRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "dai_http_request_duration_ms",
+			Help:    "HTTP request latency in milliseconds by method and route template.",
+			Buckets: buckets,
+		}, []string{"method", "route", "status"})
 	})
-	total := promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "dai_http_requests_total",
-		Help: "Total HTTP requests by method, path pattern, and status.",
-	}, []string{"method", "status"})
-	duration := promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "dai_http_request_duration_ms",
-		Help:    "HTTP request latency in milliseconds.",
-		Buckets: buckets,
-	}, []string{"method", "status"})
+}
+
+// HTTPMiddleware wraps an http.Handler with basic request instrumentation.
+// The route label is resolved after the handler runs so chi has populated the
+// route context. Raw URLs are never used as metric labels.
+func HTTPMiddleware(next http.Handler) http.Handler {
+	initHTTPMetrics()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		inFlight.Inc()
-		defer inFlight.Dec()
+		httpInFlight.Inc()
+		defer httpInFlight.Dec()
 
 		rw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
@@ -142,17 +162,83 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		elapsed := time.Since(start).Milliseconds()
 
 		status := strconv.Itoa(rw.status)
-		total.WithLabelValues(r.Method, status).Inc()
-		duration.WithLabelValues(r.Method, status).Observe(float64(elapsed))
+		route := routeTemplate(r)
+		httpRequestsTotal.WithLabelValues(r.Method, route, status).Inc()
+		httpRequestDuration.WithLabelValues(r.Method, route, status).Observe(float64(elapsed))
 	})
+}
+
+func routeTemplate(r *http.Request) string {
+	if r != nil {
+		if ctx := chi.RouteContext(r.Context()); ctx != nil {
+			if pattern := ctx.RoutePattern(); pattern != "" {
+				return pattern
+			}
+		}
+		switch r.URL.Path {
+		case "/metrics", "/health", "/healthz", "/ready":
+			// The management mux has no chi route context, but these are fixed
+			// operational endpoints and therefore safe, low-cardinality labels.
+			return r.URL.Path
+		}
+	}
+	return "unmatched"
 }
 
 type statusWriter struct {
 	http.ResponseWriter
 	status int
+	wrote  bool
 }
 
 func (sw *statusWriter) WriteHeader(code int) {
+	if sw.wrote {
+		return
+	}
 	sw.status = code
+	sw.wrote = true
 	sw.ResponseWriter.WriteHeader(code)
+}
+
+func (sw *statusWriter) Write(p []byte) (int, error) {
+	if !sw.wrote {
+		sw.WriteHeader(http.StatusOK)
+	}
+	return sw.ResponseWriter.Write(p)
+}
+
+func (sw *statusWriter) Unwrap() http.ResponseWriter { return sw.ResponseWriter }
+
+func (sw *statusWriter) Flush() {
+	if !sw.wrote {
+		sw.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := sw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (sw *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := sw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hijacker.Hijack()
+}
+
+func (sw *statusWriter) ReadFrom(src io.Reader) (int64, error) {
+	if !sw.wrote {
+		sw.WriteHeader(http.StatusOK)
+	}
+	if readerFrom, ok := sw.ResponseWriter.(io.ReaderFrom); ok {
+		return readerFrom.ReadFrom(src)
+	}
+	return io.Copy(sw.ResponseWriter, src)
+}
+
+func (sw *statusWriter) Push(target string, opts *http.PushOptions) error {
+	if pusher, ok := sw.ResponseWriter.(http.Pusher); ok {
+		return pusher.Push(target, opts)
+	}
+	return http.ErrNotSupported
 }

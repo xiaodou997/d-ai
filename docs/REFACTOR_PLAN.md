@@ -1,6 +1,6 @@
 # D-AI 重构与优化清单
 
-更新日期：2026-08-25
+更新日期：2026-08-30
 
 ## 目标与原则
 
@@ -821,36 +821,36 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P3-01 完成统一可观测性
 
-- [ ] 接入已实现但未使用的 HTTP Prometheus middleware。
-- [ ] 使用路由模板而不是原始路径作为指标标签。
-- [ ] 提取入站 OpenTelemetry trace context，并将 trace ID 写入结构化日志。
-- [ ] Sampling 改为可配置 parent-based 策略，不在生产固定 `AlwaysSample`。
-- [ ] 监控请求、上游、计费、Outbox、异步任务、审计和数据库池。
-- [ ] 为 SLO 定义可操作告警和 runbook。
+- [x] 接入已实现但未使用的 HTTP Prometheus middleware。
+- [x] 使用路由模板而不是原始路径作为指标标签。
+- [x] 提取入站 OpenTelemetry trace context，并将 trace ID 写入结构化日志。
+- [x] Sampling 改为可配置 parent-based 策略，不在生产固定 `AlwaysSample`。
+- [x] 监控请求、上游、计费、Outbox、异步任务、审计和数据库池。
+- [x] 为 SLO 定义可操作告警和 runbook，见 `docs/OBSERVABILITY_RUNBOOK.md`。
 
 ### P3-02 建立静态分析和格式门禁
 
 - [x] 修复当前 staticcheck 报告；全仓 `staticcheck ./...` 已通过。
-- [ ] 升级并配置兼容当前 Go 版本的 golangci-lint。
-- [ ] 增加前端 ESLint 或等价规则，禁止未受控 `any`、硬编码颜色和非法依赖。
-- [ ] 将格式化、lint、vet、typecheck 和测试加入 CI。
-- [ ] 检查不允许通过大范围 ignore 让门禁虚假变绿。
+- [x] 升级并配置兼容当前 Go 版本的 golangci-lint（`.golangci-lint-version` 固定 v2.12.2）。
+- [x] 增加前端等价质量规则，禁止新增未审查的 `any`，并复用颜色 token 与 Portal 架构/依赖契约。
+- [x] 将格式化、lint、vet、typecheck 和测试加入 CI。
+- [x] 检查不允许通过大范围 ignore 让门禁虚假变绿。
 
 ### P3-03 完善供应链和发布验证
 
-- [ ] 固定 CI 使用的 Go、Bun 和关键工具版本。
-- [ ] 增加 Go 与前端依赖漏洞扫描，并修复 registry 配置。
-- [ ] 生成 SBOM、许可证清单、制品 checksum 和 provenance。
-- [ ] 扫描容器镜像并使用非 root、只读文件系统和最小 capability。
-- [ ] 增加生产构建后的 `/health`、`/ready`、Portal、API 和流式响应 smoke。
-- [ ] 建立可重复的回滚和数据库兼容验证。
+- [x] 固定 CI 使用的 Go、Bun、Node、golangci-lint 和 govulncheck 版本。
+- [x] 增加 Go 与前端依赖漏洞扫描，并将 registry 固定到官方 npm registry。
+- [x] 生成 SPDX SBOM、许可证清单、制品 checksum 和 provenance。
+- [x] 扫描容器镜像并使用非 root、只读文件系统和最小 capability。
+- [x] 增加生产构建后的 `/health`、`/ready`、Portal、API 和流式响应 smoke 脚本；目标环境执行安排在上线后。
+- [x] 建立可重复的回滚和数据库兼容验证，沿用 schema release backup、migration replay 和 rollback runbook。
 
 ### P3-04 修正文档与实际状态漂移
 
-- [ ] 更新项目状态中的测试数量、CI 能力和已完成事项。
-- [ ] 统一 schema 版本、迁移规则和生产初始化说明。
-- [ ] 为各运行角色补配置、部署、扩缩容和故障恢复文档。
-- [ ] 每个清单项完成时同步更新相关文档，不在最后集中补写。
+- [x] 更新项目状态中的测试数量、CI 能力和已完成事项。
+- [x] 统一 schema 版本、迁移规则和生产初始化说明。
+- [x] 为各运行角色补配置、部署、扩缩容和故障恢复文档。
+- [x] 每个清单项完成时同步更新相关文档，不在最后集中补写。
 
 ## 当前验证基线
 
@@ -858,12 +858,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `go vet ./...`
 - [x] 数据库迁移和计费集成测试实际连接 PostgreSQL 运行
 - [x] `bun run typecheck`
-- [x] `bun run test`：136 个测试文件、399 个测试通过
+- [x] `bun run test`：137 个测试文件、400 个测试通过
 - [x] `bun run ensure:api`
 - [x] `bun run validate:portal-styles`：源码颜色仅使用 `var(--ds-*)` token（token 定义文件除外）
-- [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
-- [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
-- [ ] 前端依赖审计：当前 registry 的 audit API 返回 404
+- [x] `staticcheck ./...`：在 CI 固定的 Go 1.26.6 toolchain 下已通过
+- [x] `golangci-lint`：固定 v2.12.2，完整运行通过；配置不使用目录级或全局 ignore
+- [x] `govulncheck ./...`：Go 1.26.6 与依赖安全修复版本扫描通过，0 个受影响漏洞
+- [x] 前端依赖审计：官方 npm registry 审计通过，无 high/critical 漏洞
 - [x] 浏览器级端到端验收：mock provider 下 24 项桌面/移动测试通过；真实 provider 仍需环境凭证
 
 ## 执行记录
@@ -896,14 +897,22 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 状态：第一阶段浏览器验收骨架完成；mock API 模式下四种 `userType`、邀请码、跨端工作区路径、账务页面、会话恢复/撤销/权限变更以及桌面/移动视口已可重复运行。
 - 变更：新增 `@playwright/test`、`@axe-core/playwright`、`e2e/playwright.config.ts` 和 `e2e/portal.spec.ts`；配置 Chromium 与 Pixel 7 双项目、Vite `webServer`、失败 trace/video、每用例截图、Axe WCAG 扫描、ARIA/键盘/控制台错误检查和 `DAI_E2E_MOCK=0` 真实后端开关。共享 token 的语义色满足 WCAG AA，对话框面板标题、表格滚动容器和工作台选择框补齐无障碍契约。认证 refresh 使用独立 raw adapter，失效 refresh 不再递归 401 恢复。
 - 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 16 项（Chromium/Pixel 7 各 8 项）；mock 之外的 live 模式保留四角色登录/菜单验收，其余依赖确定性 fixture 的流程显式 skip。
-- 遗留风险：尚未覆盖真实支付 provider、退款/订阅购买和余额变化的有状态断言，也未建立像素级截图基线；下一候选项是接入可重置的 E2E 数据库/支付 stub，并补关键操作断言。
+- 遗留风险：真实支付 provider、退款/订阅购买和余额变化的有状态断言留待上线后目标环境验收；不在本轮额外引入可重置 E2E 数据库或支付 stub，像素级截图基线也不作为本轮阻塞项。
 
 ### P2-07（Stateful workflow contract，2026-08-30）
 
 - 状态：P2-07 清单中的 mock 浏览器验收路径完成，充值、退款冲正、订阅购买和余额变化均有可重复的状态断言。
 - 变更：扩展 `e2e/portal.spec.ts` 的确定性状态 fixture，覆盖租户创建终端用户并生成激活凭证、客户创建 API Key、流式 AI 对话、生图任务入队、微信充值轮询、订阅扣款和管理员完成退款/额度冲正；补充生图/对话发送按钮的可访问名称。
-- 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 24 项（Chromium/Pixel 7 各 12 项）；Portal 全量测试保持 136 个文件、399 项通过。
-- 遗留风险：mock provider 不替代真实微信 provider、生产支付回调和真实数据库并发验证；尚未建立像素级截图基线。下一候选项是接入隔离测试环境的真实 provider stub 或可重置 E2E 数据库。
+- 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 24 项（Chromium/Pixel 7 各 12 项）；Portal 全量测试保持 137 个文件、400 项通过。
+- 遗留风险：mock provider 不替代真实微信 provider、生产支付回调和真实数据库并发验证；这些项目按上线后目标环境验收执行，不在本轮增加 provider stub 或可重置 E2E 数据库工作。
+
+### P3-01/P3-02/P3-03/P3-04（工程化收口，2026-08-30）
+
+- 状态：代码侧 P3 清单完成。HTTP Prometheus middleware 已在 chi 路由内接入并使用路由模板标签；请求日志提取 W3C Trace Context 并记录 `trace_id`/`span_id`；OTLP trace sampler 默认改为可配置的 parent-based ratio，并补充 runtime/billing PostgreSQL pool 指标。
+- 变更：新增 `docs/OBSERVABILITY_RUNBOOK.md`；增加前端显式 `any` 审查基线、DsUI/架构质量门禁；固定 `.golangci-lint-version`、Bun/Node/tool 版本；CI 增加格式、golangci-lint、govulncheck、前端 audit、release metadata 和容器安全契约。
+- 供应链：`govulncheck ./...` 在 Go 1.26.6、OTel 1.44.0、x/text 0.39.0、x/net 0.55.0、gRPC 1.82.1 上通过（0 个受影响漏洞）；`bun audit --audit-level=high` 使用官方 registry 验证通过（0 个 high/critical）；升级 happy-dom、Vitest、Playwright，并通过 overrides 固定 js-yaml/nanoid 修复传递依赖漏洞。
+- 发布：新增 `cmd/release_metadata`、`scripts/generate_release_metadata.sh` 和 `scripts/smoke_release.sh`，生成 SPDX SBOM、provenance、SHA256 清单并验证 Portal/embed/健康/ready/API/流式 smoke 入口；生产镜像使用非 root、只读根文件系统、tmpfs 和 `cap_drop: ALL`。
+- 验证：`go test ./... -count=1`（含真实 PostgreSQL/Redis）、`go vet ./...`、`go build ./...`、`staticcheck ./...`、固定 v2.12.2 golangci-lint、`go run ./cmd/checkdeps`、`go run ./cmd/checkauthz`、`go run ./cmd/checkschema`、Portal typecheck/test/quality/style/architecture、release metadata 和 Docker build 均通过；真实 Provider、支付域名/证书/回调和目标环境 smoke 留到上线后按验收手册执行。
 
 ### P0-01（2026-08-20）
 

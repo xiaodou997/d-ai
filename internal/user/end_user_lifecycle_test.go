@@ -9,6 +9,8 @@ import (
 	userports "xiaodou/dai/internal/user/ports"
 )
 
+type endUserLifecycleContextKey struct{}
+
 type endUserLifecycleSecurityStub struct {
 	statusErr   error
 	banErr      error
@@ -69,7 +71,7 @@ func (s *endUserLifecycleWriterStub) DeleteEndUser(ctx context.Context, input us
 }
 
 func TestAdminEndUserLifecycleProjectsStatusAndSessions(t *testing.T) {
-	ctx := context.WithValue(context.Background(), struct{}{}, "request")
+	ctx := context.WithValue(context.Background(), endUserLifecycleContextKey{}, "request")
 	writer := &endUserLifecycleWriterStub{updated: true, credential: userports.ActivationCredentialResult{Token: "token"}, deleted: userports.AdminEndUserDeleteResult{Found: true, Deleted: true}}
 	security := &endUserLifecycleSecurityStub{}
 	service := NewAdminEndUserLifecycleService(writer, security)

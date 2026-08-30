@@ -7,6 +7,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/weborigin"
@@ -31,7 +36,10 @@ func ChiRequestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			ctx, errorRecorder := withRequestErrorRecorder(r.Context())
+			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+			ctx, span := otel.Tracer("dai/http").Start(ctx, r.Method+" HTTP request", trace.WithSpanKind(trace.SpanKindServer))
+			defer span.End()
+			ctx, errorRecorder := withRequestErrorRecorder(ctx)
 			r = r.WithContext(ctx)
 
 			// Extract request ID from chi context
@@ -76,6 +84,25 @@ func ChiRequestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
 					zap.Duration("latency", latency),
 					zap.String("client_ip", weborigin.ClientIPFromRequest(r)),
 					zap.Int("bytes", ww.BytesWritten()),
+				}
+				if spanContext := span.SpanContext(); spanContext.IsValid() {
+					fields = append(fields,
+						zap.String("trace_id", spanContext.TraceID().String()),
+						zap.String("span_id", spanContext.SpanID().String()),
+					)
+				}
+
+				span.SetName(r.Method + " " + path)
+				span.SetAttributes(
+					attribute.String("http.request.method", r.Method),
+					attribute.String("http.route", path),
+					attribute.Int("http.response.status_code", status),
+					attribute.String("http.request.id", requestID),
+				)
+				if status >= http.StatusInternalServerError {
+					span.SetStatus(codes.Error, http.StatusText(status))
+				} else {
+					span.SetStatus(codes.Unset, "")
 				}
 
 				// Extract identity fields from context (if set by auth middleware)

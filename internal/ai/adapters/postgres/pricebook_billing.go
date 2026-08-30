@@ -429,11 +429,9 @@ func marshalBillingBreakdown(
 	accountBase, tenantCharge billingCostLine,
 	userRetail *billingCostLine,
 ) []byte {
-	priceLines := priceLineBreakdown{}
+	priceLines := accountBase.PriceLines
 	if userRetail != nil {
 		priceLines = userRetail.PriceLines
-	} else {
-		priceLines = accountBase.PriceLines
 	}
 	raw, err := json.Marshal(billingBreakdownSnapshot{
 		// Version 5 drops the platform-payable line: platform cost is no longer

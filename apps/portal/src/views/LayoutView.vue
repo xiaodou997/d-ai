@@ -32,8 +32,8 @@ const user = computed(() => {
 const theme = computed(() => themeForUserType(authStore.userType));
 
 const { handleLogout } = usePortalShellScaffold({
-  authStore: authStore as any,
-  menuStore: menuStore as any,
+  authStore,
+  menuStore,
   routePath: () => route.path,
   watchUserType: true
 });

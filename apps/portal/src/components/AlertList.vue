@@ -54,7 +54,11 @@ import { computed } from 'vue'
 import { WarningFilled, CircleCloseFilled, CircleCheck } from '@element-plus/icons-vue'
 
 const props = defineProps<{
-  failedTransactions: any[]
+  failedTransactions: Array<{
+    requestId: string
+    createdTime?: number
+    settlementError?: string
+  }>
 }>()
 
 const alertCount = computed(() => props.failedTransactions.length)

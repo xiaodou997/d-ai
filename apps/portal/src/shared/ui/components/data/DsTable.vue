@@ -10,7 +10,8 @@ type Row = Record<string, unknown>;
 const props = withDefaults(
   defineProps<{
     columns: DsTableColumn[];
-    // 开放为 any[]：cell 插槽的 row 需要可直接取字段，避免每个消费页面重复断言
+    // The slot API intentionally accepts heterogeneous records. This is a
+    // reviewed dynamic boundary; cell helpers narrow rows before indexing.
     rows: any[];
     rowKey: string;
     loading?: boolean;
