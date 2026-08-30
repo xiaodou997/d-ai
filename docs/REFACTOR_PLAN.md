@@ -813,7 +813,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 使用 Playwright 覆盖四种 `userType` 登录与菜单授权。
 - [x] 覆盖邀请注册、用户管理、API Key、AI 对话、图片任务和用量查询路径。
-- [ ] 覆盖充值、退款、订阅购买和余额变化关键路径。
+- [x] 覆盖充值、退款、订阅购买和余额变化关键路径（mock provider/state fixture）。
 - [x] 覆盖 Token 过期刷新、跨标签登出和权限变更。
 - [x] 在桌面和移动视口执行截图、无障碍和控制台错误检查。
 
@@ -864,7 +864,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] `staticcheck ./...`：使用与 Go 1.27 匹配的 staticcheck 已通过
 - [ ] `golangci-lint`：本机版本与当前 Go 工具链不兼容
 - [ ] 前端依赖审计：当前 registry 的 audit API 返回 404
-- [ ] 浏览器级端到端验收尚未完成：P2-07 仍剩有状态账务流程
+- [x] 浏览器级端到端验收：mock provider 下 24 项桌面/移动测试通过；真实 provider 仍需环境凭证
 
 ## 执行记录
 
@@ -897,6 +897,13 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 变更：新增 `@playwright/test`、`@axe-core/playwright`、`e2e/playwright.config.ts` 和 `e2e/portal.spec.ts`；配置 Chromium 与 Pixel 7 双项目、Vite `webServer`、失败 trace/video、每用例截图、Axe WCAG 扫描、ARIA/键盘/控制台错误检查和 `DAI_E2E_MOCK=0` 真实后端开关。共享 token 的语义色满足 WCAG AA，对话框面板标题、表格滚动容器和工作台选择框补齐无障碍契约。认证 refresh 使用独立 raw adapter，失效 refresh 不再递归 401 恢复。
 - 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 16 项（Chromium/Pixel 7 各 8 项）；mock 之外的 live 模式保留四角色登录/菜单验收，其余依赖确定性 fixture 的流程显式 skip。
 - 遗留风险：尚未覆盖真实支付 provider、退款/订阅购买和余额变化的有状态断言，也未建立像素级截图基线；下一候选项是接入可重置的 E2E 数据库/支付 stub，并补关键操作断言。
+
+### P2-07（Stateful workflow contract，2026-08-30）
+
+- 状态：P2-07 清单中的 mock 浏览器验收路径完成，充值、退款冲正、订阅购买和余额变化均有可重复的状态断言。
+- 变更：扩展 `e2e/portal.spec.ts` 的确定性状态 fixture，覆盖租户创建终端用户并生成激活凭证、客户创建 API Key、流式 AI 对话、生图任务入队、微信充值轮询、订阅扣款和管理员完成退款/额度冲正；补充生图/对话发送按钮的可访问名称。
+- 回归：`DAI_E2E_MOCK=1 bun run test:e2e` 通过 24 项（Chromium/Pixel 7 各 12 项）；Portal 全量测试保持 136 个文件、399 项通过。
+- 遗留风险：mock provider 不替代真实微信 provider、生产支付回调和真实数据库并发验证；尚未建立像素级截图基线。下一候选项是接入隔离测试环境的真实 provider stub 或可重置 E2E 数据库。
 
 ### P0-01（2026-08-20）
 

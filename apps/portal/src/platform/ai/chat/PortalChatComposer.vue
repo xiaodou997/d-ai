@@ -131,6 +131,7 @@ function handleKeydown(event: KeyboardEvent) {
           class="composer-send"
           type="primary"
           circle
+          aria-label="发送消息"
           :disabled="disabled"
           @click="emit('send')"
         >

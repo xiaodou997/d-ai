@@ -36,7 +36,7 @@ Portal 在 `/login` 直接提供统一的用户名密码表单，不要求用户
 
 浏览器验收由 `e2e/portal.spec.ts` 驱动，默认使用本地 Vite dev server 和确定性 API fixture，覆盖四种
 `userType` 登录/菜单、邀请码注册、跨端工作区、账务页面、token refresh、跨标签登出、权限变更以及
-桌面/移动截图、ARIA/键盘和控制台错误检查。运行真实后端时设置 `DAI_E2E_MOCK=0`
+桌面/移动截图、Axe WCAG 无障碍、ARIA/键盘和控制台错误检查；mock provider 还会断言用户创建、API Key、流式对话、生图任务、充值、退款冲正、订阅购买和余额变化。运行真实后端时设置 `DAI_E2E_MOCK=0`
 与 `DAI_E2E_BASE_URL`，并可通过 `DAI_E2E_*_USERNAME` / `DAI_E2E_*_PASSWORD` 覆盖开发账号；
 CI 或新环境先运行 `bun run test:e2e:install` 安装 Chromium。
 

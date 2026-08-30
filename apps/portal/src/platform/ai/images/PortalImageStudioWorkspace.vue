@@ -937,6 +937,7 @@ onMounted(async () => {
               class="composer-send"
               type="primary"
               circle
+              aria-label="生成图片"
               :loading="submitting"
               :disabled="!canSubmit"
               @click="submit"
