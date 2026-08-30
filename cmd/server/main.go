@@ -266,10 +266,12 @@ func runRole(role runtimeRole) error {
 	// 5. 前端静态文件 embed
 	// ──────────────────────────────────────────────────────
 
-	if frontendSub, err := fs.Sub(frontendFS, "frontend_dist"); err == nil {
-		router.Handle("/*", newPortalHandler(frontendSub))
-	} else {
-		appLogger.Warn("frontend embed not available, serving API only", zap.Error(err))
+	if portalEnabledForRole(role) {
+		if frontendSub, err := fs.Sub(frontendFS, "frontend_dist"); err == nil {
+			router.Handle("/*", newPortalHandler(frontendSub))
+		} else {
+			appLogger.Warn("frontend embed not available, serving API only", zap.Error(err))
+		}
 	}
 
 	// ──────────────────────────────────────────────────────
@@ -318,6 +320,10 @@ func runRole(role runtimeRole) error {
 	}
 	appLogger.Info("server shutdown complete")
 	return nil
+}
+
+func portalEnabledForRole(role runtimeRole) bool {
+	return role.HasControlAPI()
 }
 
 // ── 辅助函数 ──────────────────────────────────────────

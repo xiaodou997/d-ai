@@ -3,7 +3,7 @@
 `deploy/production/schema_release.sh`（构建附件中的 `release/sql/schema_release.sh`）是唯一推荐的发布期 schema 执行入口。
 应用启动只验证 `dai_schema_metadata.version`，不会调用它、不会执行 DDL，也不会隐式升级生产库。
 
-当前仓库基线为 schema v24。发布制品应先运行 `scripts/generate_release_metadata.sh release` 生成
+当前仓库基线为 schema v25。发布制品应先运行 `scripts/generate_release_metadata.sh release` 生成
 SBOM/provenance/checksum，再将同一 `release/sql/` 与二进制交给本手册执行；部署后的
 `/health`、`/ready`、Portal、API 和流式 smoke 由 `scripts/smoke_release.sh` 执行。
 
@@ -72,7 +72,7 @@ deploy/production/schema_release.sh verify
 bash -n deploy/production/schema_release.sh
 deploy/production/schema_release.sh --help
 go run ./cmd/checkschema
-SCHEMA_REPLAY_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v24_test?sslmode=disable' \
+SCHEMA_REPLAY_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v25_test?sslmode=disable' \
   bash scripts/replay_schema_chain.sh
 ```
 

@@ -36,6 +36,8 @@ func registerNotifications(api huma.API, d notificationModule) {
 	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
+	adminSensitive := append(huma.Middlewares{}, admins...)
+	adminSensitive = append(adminSensitive, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 	huma.Register(api, huma.Operation{OperationID: "list-my-notifications", Method: http.MethodGet, Path: "/api/v1/notifications", Summary: "我的通知", Tags: []string{"notifications"}, Middlewares: allUsers}, func(ctx context.Context, in *notificationListInput) (*notificationsOutput, error) {
 		actor, err := notificationActor(ctx)
 		if err != nil {
@@ -50,7 +52,7 @@ func registerNotifications(api huma.API, d notificationModule) {
 		}
 		return &notificationsOutput{Body: items}, nil
 	})
-	huma.Register(api, huma.Operation{OperationID: "admin-send-notification", Method: http.MethodPost, Path: "/api/v1/admin/notifications/send", Summary: "发送通知", Tags: []string{"notifications"}, Middlewares: admins}, func(ctx context.Context, in *notificationSendInput) (*notificationOutput, error) {
+	huma.Register(api, huma.Operation{OperationID: "admin-send-notification", Method: http.MethodPost, Path: "/api/v1/admin/notifications/send", Summary: "发送通知", Tags: []string{"notifications"}, Middlewares: adminSensitive}, func(ctx context.Context, in *notificationSendInput) (*notificationOutput, error) {
 		body := in.Body
 		input := notificationpkg.Input{EventKey: body.EventKey, Channel: body.Channel, RecipientUserID: body.RecipientUserID, RecipientType: body.RecipientType, TenantID: body.TenantID, Title: body.Title, Body: body.Body, Payload: body.Payload, IdempotencyKey: body.IdempotencyKey, WebhookURL: body.WebhookURL}
 		item, err := d.service.Send(ctx, input)

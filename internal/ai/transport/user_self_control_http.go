@@ -18,7 +18,7 @@ type UserSelfControlHTTPDeps struct {
 // RegisterUserSelfControl owns end-user API-key and limit-policy routes.
 func RegisterUserSelfControl(api huma.API, d UserSelfControlHTTPDeps) {
 	user := huma.NewGroup(api)
-	user.UseMiddleware(endUserAuth(api, d.Auth))
+	user.UseMiddleware(endUserSensitiveAuth(api, d.Auth))
 	registerUserSelfAPIKeys(user, d)
 	registerUserSelfLimits(user, d)
 }

@@ -58,6 +58,28 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" -c \
   "SET ROLE \"$runtime_role\";
    SELECT count(*) FROM \"$schema_name\".bill_accounts;"
 
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
+  -c "SET ROLE \"$runtime_role\";
+      INSERT INTO \"$schema_name\".iam_tenants (tenant_id, tenant_name, status)
+        VALUES ('ownership-runtime-tenant', 'Ownership Runtime Tenant', 'active');
+      INSERT INTO \"$schema_name\".iam_accounts
+        (user_id, tenant_id, username, password_hash, user_type, status)
+        VALUES ('ownership-runtime-user', 'ownership-runtime-tenant',
+                'ownership-runtime-user', 'hash', 4, 'active');
+      SELECT count(*) FROM \"$schema_name\".bill_accounts
+       WHERE account_id IN ('ownership-runtime-tenant', 'ownership-runtime-user');"
+
+if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
+  -c "SET ROLE \"$runtime_role\";
+      SELECT count(*) FROM \"$schema_name\".pay_cash_ledger;" \
+  >"$tmp_dir/runtime-raw-billing-read-denied.log" 2>&1; then
+  echo "db-ownership: runtime role unexpectedly read raw pay_cash_ledger" >&2
+  cat "$tmp_dir/runtime-raw-billing-read-denied.log" >&2
+  exit 1
+fi
+
 if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" -c \
   "SET ROLE \"$runtime_role\";
    UPDATE \"$schema_name\".bill_accounts SET balance_micro = balance_micro + 1;" \
@@ -169,6 +191,12 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -c "SET ROLE \"$runtime_role\";
       SELECT count(*) FROM \"$schema_name\".system_usage_projection;"
 
+psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
+  -v schema_name="$schema_name" -v runtime_role="$runtime_role" \
+  -c "SET ROLE \"$runtime_role\";
+      SELECT count(*) FROM \"$schema_name\".system_account_stats_projection;
+      SELECT count(*) FROM \"$schema_name\".tenant_income_projection;"
+
 if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   -v schema_name="$schema_name" -v billing_role="$billing_role" \
   -c "SET ROLE \"$billing_role\";
@@ -179,4 +207,4 @@ if psql -X -v ON_ERROR_STOP=1 --dbname="$database_url" \
   exit 1
 fi
 
-echo "db-ownership: runtime read/insert, billing ledger/view/audit insert passed; immutable audit update/delete, runtime ledger update and billing catalog read denied"
+echo "db-ownership: runtime projection read/outbox insert, billing ledger/view/audit insert passed; raw billing read, immutable audit update/delete, runtime ledger update and billing catalog read denied"

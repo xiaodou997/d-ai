@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
 	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/server"
 )
@@ -56,8 +59,15 @@ func performTenantSelfControlRequest(handler http.Handler, method, path string) 
 func TestTenantSelfAPIKeyStaticRouteWinsOverPlatformDynamicRoute(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	verifier := tenantSelfRouteTokenVerifier{}
+	mini := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mini.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	recent := auth.NewRecentAuthService(client)
+	if err := recent.Mark(context.Background(), "user-1", "test"); err != nil {
+		t.Fatal(err)
+	}
 	RegisterTenantSelfControl(api, TenantSelfControlHTTPDeps{
-		Auth: HTTPAuthDeps{TokenVerifier: verifier},
+		Auth: HTTPAuthDeps{TokenVerifier: verifier, RecentAuth: recent},
 	})
 	RegisterAPIKeyManagement(api, APIKeyManagementHTTPDeps{
 		Auth: HTTPAuthDeps{TokenVerifier: verifier},

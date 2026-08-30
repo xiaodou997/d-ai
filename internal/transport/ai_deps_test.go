@@ -35,6 +35,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
 	jwt := &auth.JWTService{}
+	recentAuth := &auth.RecentAuthService{}
 	banChecker := &humaBanCheckerStub{}
 	identity := &aiIdentityProviderStub{}
 	providerSecrets := &providerSecretCodecStub{}
@@ -62,7 +63,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	groupTransfer := commercial.NewGroupTransferService(nil, commercial.GroupTransferOptions{})
 
 	got := buildAICoreHTTPDeps(
-		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist, RecentAuth: recentAuth}},
 		AICoreHTTPDeps{
 			PlatformPriceBooks:         priceBookPorts,
 			PriceBookSync:              priceBookPorts,
@@ -82,12 +83,12 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	if got.IdentityEnrichmentFailures != identityEnrichmentFailures {
 		t.Fatal("observability dependencies were not preserved")
 	}
-	if got.TokenVerifier != jwt || got.TokenRevocations != blacklist || got.IdentityProvider != identity {
+	if got.TokenVerifier != jwt || got.TokenRevocations != blacklist || got.RecentAuth != recentAuth || got.IdentityProvider != identity {
 		t.Fatal("core authentication dependencies were not preserved")
 	}
 
 	subscriptions := buildSubscriptionHTTPDeps(
-		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist}},
+		aiPlatformDeps{platformAuthDeps: platformAuthDeps{JWT: jwt, Blacklist: blacklist, RecentAuth: recentAuth}},
 		AISubscriptionHTTPDeps{
 			SubscriptionPlans:          subscriptionPorts,
 			SubscriptionPlanWriter:     subscriptionPorts,
@@ -100,7 +101,7 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 		},
 		identity,
 	)
-	if subscriptions.Auth.TokenVerifier != jwt || subscriptions.Auth.TokenRevocations != blacklist || subscriptions.Auth.BanChecker != banChecker {
+	if subscriptions.Auth.TokenVerifier != jwt || subscriptions.Auth.TokenRevocations != blacklist || subscriptions.Auth.RecentAuth != recentAuth || subscriptions.Auth.BanChecker != banChecker {
 		t.Fatal("subscription auth dependencies were not preserved")
 	}
 	if subscriptions.SubscriptionPlans != subscriptionPorts || subscriptions.SubscriptionPlanWriter != subscriptionPorts || subscriptions.SubscriptionPurchases != subscriptionPorts || subscriptions.Subscriptions != subscriptionPorts || subscriptions.SubscriptionOrders != subscriptionPorts || subscriptions.SubscriptionGroupNames != subscriptionPorts {

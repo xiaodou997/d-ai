@@ -26,10 +26,12 @@ import (
 )
 
 // PlatformAuthDeps is the common authentication projection used by platform
-// route modules. It contains no database, cache, or business service.
+// route modules. It contains only token/revocation/recent-auth services and no
+// database or business service.
 type PlatformAuthDeps struct {
-	JWT       *auth.JWTService
-	Blacklist *auth.BlacklistService
+	JWT        *auth.JWTService
+	Blacklist  *auth.BlacklistService
+	RecentAuth *auth.RecentAuthService
 }
 
 // AuthModuleDeps contains only the collaborators used by authentication
@@ -304,7 +306,7 @@ func NewMetaModule(version string, jwt *auth.JWTService) Module {
 func NewPlatformIdentityModule(d PlatformIdentityModuleDeps) Module {
 	return platformIdentityModule{
 		auth: authModule{
-			platformAuthDeps:  platformAuthDeps{JWT: d.Auth.JWT, Blacklist: d.Auth.Blacklist},
+			platformAuthDeps:  platformAuthDeps{JWT: d.Auth.JWT, Blacklist: d.Auth.Blacklist, RecentAuth: d.Auth.RecentAuth},
 			Security:          d.Auth.Security,
 			SecureCookies:     d.Auth.SecureCookies,
 			Sessions:          d.Auth.Sessions,
@@ -319,15 +321,15 @@ func NewPlatformIdentityModule(d PlatformIdentityModuleDeps) Module {
 			Logger:            d.Auth.Logger,
 		},
 		account: accountModule{
-			auth:    platformAuthDeps{JWT: d.Account.JWT, Blacklist: d.Account.Blacklist},
+			auth:    platformAuthDeps{JWT: d.Account.JWT, Blacklist: d.Account.Blacklist, RecentAuth: d.Account.RecentAuth},
 			queries: d.Account.Queries,
 		},
 		tenant: tenantSelfModule{
-			auth:    platformAuthDeps{JWT: d.Tenant.JWT, Blacklist: d.Tenant.Blacklist},
+			auth:    platformAuthDeps{JWT: d.Tenant.JWT, Blacklist: d.Tenant.Blacklist, RecentAuth: d.Tenant.RecentAuth},
 			service: d.Tenant.Service,
 		},
 		branding: tenantBrandingModule{
-			auth:   platformAuthDeps{JWT: d.Branding.JWT, Blacklist: d.Branding.Blacklist},
+			auth:   platformAuthDeps{JWT: d.Branding.JWT, Blacklist: d.Branding.Blacklist, RecentAuth: d.Branding.RecentAuth},
 			reader: d.Branding.Reader,
 			writer: d.Branding.Writer,
 		},
@@ -335,13 +337,13 @@ func NewPlatformIdentityModule(d PlatformIdentityModuleDeps) Module {
 			invite: d.Public.Invite,
 			legal:  d.Public.Legal,
 		},
-		jwtKeys: jwtKeysModule{auth: platformAuthDeps{JWT: d.JWTKeys.JWT, Blacklist: d.JWTKeys.Blacklist}},
+		jwtKeys: jwtKeysModule{auth: platformAuthDeps{JWT: d.JWTKeys.JWT, Blacklist: d.JWTKeys.Blacklist, RecentAuth: d.JWTKeys.RecentAuth}},
 	}
 }
 
 func toAdminRouteAuth(d AdminRouteAuthDeps) adminRouteAuth {
 	return adminRouteAuth{
-		platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist},
+		platformAuthDeps: platformAuthDeps{JWT: d.JWT, Blacklist: d.Blacklist, RecentAuth: d.RecentAuth},
 		Security:         d.Security,
 		RecentAuth:       d.RecentAuth,
 	}
@@ -392,7 +394,7 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 // NewPlatformBillingModule creates the payment route module.
 func NewPlatformBillingModule(d PlatformBillingModuleDeps) Module {
 	return platformBillingModule{payment: paymentModule{
-		auth:    platformAuthDeps{JWT: d.Payment.JWT, Blacklist: d.Payment.Blacklist},
+		auth:    platformAuthDeps{JWT: d.Payment.JWT, Blacklist: d.Payment.Blacklist, RecentAuth: d.Payment.RecentAuth},
 		service: d.Payment.Service,
 		cash:    d.Payment.Service,
 		topup:   d.Payment.Service,
@@ -405,23 +407,23 @@ func NewPlatformBillingModule(d PlatformBillingModuleDeps) Module {
 func NewPlatformOperationsModule(d PlatformOperationsModuleDeps) Module {
 	return platformOperationsModule{
 		announcements: announcementModule{
-			auth:    platformAuthDeps{JWT: d.Announcements.JWT, Blacklist: d.Announcements.Blacklist},
+			auth:    platformAuthDeps{JWT: d.Announcements.JWT, Blacklist: d.Announcements.Blacklist, RecentAuth: d.Announcements.RecentAuth},
 			service: d.Announcements.Service,
 		},
 		notifications: notificationModule{
-			auth:    platformAuthDeps{JWT: d.Notifications.JWT, Blacklist: d.Notifications.Blacklist},
+			auth:    platformAuthDeps{JWT: d.Notifications.JWT, Blacklist: d.Notifications.Blacklist, RecentAuth: d.Notifications.RecentAuth},
 			service: d.Notifications.Service,
 		},
 		system: systemModule{
-			auth:    platformAuthDeps{JWT: d.System.JWT, Blacklist: d.System.Blacklist},
+			auth:    platformAuthDeps{JWT: d.System.JWT, Blacklist: d.System.Blacklist, RecentAuth: d.System.RecentAuth},
 			service: d.System.Service,
 		},
 		dataCleanup: dataCleanupModule{
-			auth:    platformAuthDeps{JWT: d.DataCleanup.JWT, Blacklist: d.DataCleanup.Blacklist},
+			auth:    platformAuthDeps{JWT: d.DataCleanup.JWT, Blacklist: d.DataCleanup.Blacklist, RecentAuth: d.DataCleanup.RecentAuth},
 			service: d.DataCleanup.Service,
 		},
 		proxyNodes: proxyNodesModule{
-			auth:    platformAuthDeps{JWT: d.ProxyNodes.JWT, Blacklist: d.ProxyNodes.Blacklist},
+			auth:    platformAuthDeps{JWT: d.ProxyNodes.JWT, Blacklist: d.ProxyNodes.Blacklist, RecentAuth: d.ProxyNodes.RecentAuth},
 			service: d.ProxyNodes.Service,
 		},
 	}
@@ -431,7 +433,7 @@ func NewPlatformOperationsModule(d PlatformOperationsModuleDeps) Module {
 func NewAIModule(platform AIPlatformModuleDeps, deps AIHTTPDeps) Module {
 	return aiModule{
 		platform: aiPlatformDeps{
-			platformAuthDeps: platformAuthDeps{JWT: platform.JWT, Blacklist: platform.Blacklist},
+			platformAuthDeps: platformAuthDeps{JWT: platform.JWT, Blacklist: platform.Blacklist, RecentAuth: platform.RecentAuth},
 			TenantReader:     platform.TenantReader,
 			IdentityReader:   platform.IdentityReader,
 		},

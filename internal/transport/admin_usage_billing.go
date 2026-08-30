@@ -33,9 +33,11 @@ func registerAdminUsageBilling(api huma.API, d adminUsageBillingModule) {
 	h := newAdminUsageBillingHandlers(d)
 	ua := userAuth(api, d.JWT, d.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
+	sysUserSensitive := append(huma.Middlewares{}, sysUser...)
+	sysUserSensitive = append(sysUserSensitive, requireRecentAuthForMutation(api, d.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "admin-batch-refund-usage", Method: http.MethodPost, Path: "/api/v1/ai/usage/batch-refund",
-		Summary: "批量退款 AI 使用记录", Tags: []string{"admin-usage"}, Middlewares: sysUser}, h.batchRefundUsage)
+		Summary: "批量退款 AI 使用记录", Tags: []string{"admin-usage"}, Middlewares: sysUserSensitive}, h.batchRefundUsage)
 }
 
 func (h *adminHandlers) batchRefundUsage(ctx context.Context, in *batchRefundUsageInput) (*batchUsageOpOutput, error) {

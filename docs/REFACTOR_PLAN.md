@@ -70,6 +70,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 登录限速失败时 fail-closed，并记录结构化安全审计事件。
 - [x] 为超级管理员和平台管理员增加 TOTP MFA。
 - [x] 为高权限敏感操作增加近期认证或二次验证机制。
+- [x] 管理端和 AI 平台管理端的所有状态变更、密钥/支付/Provider/路由/风控配置写操作统一经过近期认证；只读 GET/HEAD 不额外阻断。
 - [x] 增加限速、多实例共享状态、失效和并发消费场景测试。
 
 ### P0-04 改造浏览器 Token 存储
@@ -215,8 +216,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；`deploy/production/schema_release.sh` 负责备份、连续脚本执行和逐步版本确认，不引入运行时迁移依赖。
 - [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
-- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v24，并将最终 schema-only dump 与 `init.sql` 比较。
-- [x] 每个迁移在空库和前一 schema 版本副本上验证；23 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v24 全链重放并逐步校验版本。
+- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v25，并将最终 schema-only dump 与 `init.sql` 比较。
+- [x] 每个迁移在空库和前一 schema 版本副本上验证；24 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v25 全链重放并逐步校验版本。
 - [x] 为缺少专项测试的 0002、0003、0009 补迁移测试；测试覆盖来源版本、关键结构、数据转换和约束行为。
 - [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [x] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤；`deploy/production/schema_release.sh` 显式执行并记录备份/哈希/版本，`docs/SCHEMA_RELEASE_RUNBOOK.md` 固化停流量、readiness、兼容窗口和恢复步骤。
@@ -225,7 +226,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 从全 `public` schema 迁移到领域 schema，或用独立数据库角色实现等价隔离；`internal/db/ownership.sql` 固化 runtime/billing 角色契约，composition root 已支持独立 `DAI_BILLING_DATABASE_URL`。
 - [x] 账本表只允许 billing 模块角色写入；账务表 owner、runtime DML revoke 和 billing grants 已由契约/探针锁定，角色 provisioning 与维护窗口切换均已脚本化并要求显式确认。
-- [x] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置；runtime 仅保留账务读取和 `bill_charge_outbox` 的 `INSERT`，billing pool 承担结算/支付/订阅扣费写路径。
+- [x] 网关只写运行时事实、用量和可靠投递，不直接修改控制面配置；runtime 仅保留余额/额度批次读取、只读账务投影和 `bill_charge_outbox` 的 `INSERT`，原始支付/账务工作流表的读取与写入均由 billing pool 承担。
 - [x] 跨域读取通过视图、只读端口或显式 query service；billing/payment、租户管理/分析、管理员终端用户与运营仪表盘核心聚合均已迁移到只读视图，相关查询不再直接跨域联表。
 - [x] CI 检查应用角色的最小权限和越权失败行为；`scripts/check_db_ownership.sh` 验证 runtime 账本写入失败、outbox 入队成功和 billing 角色写入成功。
 
@@ -1889,3 +1890,10 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - 边界：Redis-backed upstream health 状态不再在 Redis 读写失败时回退到 `InMemoryTracker`；共享状态不可确认时读取 fail-closed，避免副本间 circuit-breaker 分叉。进程内缓存仅作为性能优化，不参与任务、计费、租约或授权真相判断。
 - 回归：新增 Redis 不可用与读取失败测试；`go test ./internal/ai/routing -count=1`（提升权限以允许 miniredis 本地监听）通过。
+
+### P0-03/P1-05/P1-07/P2-01（Security and boundary closure，2026-08-30）
+
+- 安全：平台管理端、AI 管理端及租户自助状态变更统一组合近期认证 middleware；AI Transport 的角色入口改用 `auth.Actor` capability，不再直接维护 userType 白名单。
+- 角色：Portal embed 只在 `all`/ `control-api` 注册，`gateway` 公共监听不再暴露 Portal catch-all。
+- 数据边界：新增 schema v25 的 `system_account_stats_projection` 与 `tenant_income_projection`，账户/租户统计不再直接读取跨域账务表；ownership 契约同步授予只读视图权限，并将账户 provisioning trigger 改为 security-definer，保证 runtime 创建身份时仍可建立账务账户。
+- 回归：新增 v25 migration/read-model 检查和运行角色 Portal 暴露矩阵测试；定向 Go 测试、schema chain、授权矩阵和差异检查通过。

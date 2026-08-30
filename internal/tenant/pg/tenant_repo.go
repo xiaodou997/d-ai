@@ -32,20 +32,6 @@ type EndUserItem struct {
 // InviteCodeItem remains an adapter-level alias for legacy callers.
 type InviteCodeItem = tenantports.InviteCodeItem
 
-// RechargeItem 充值记录条目
-type RechargeItem struct {
-	ID              int64   `json:"id"`
-	OrderID         string  `json:"orderId"`
-	OrderType       string  `json:"orderType"`
-	TenantID        string  `json:"tenantId"`
-	UserID          string  `json:"userId"`
-	PaidAmountMinor int64   `json:"paidAmountMinor"`
-	AmountUSD       float64 `json:"amountUsd"`
-	Status          string  `json:"status"`
-	Note            string  `json:"note"`
-	CreatedTime     int64   `json:"createdTime"`
-}
-
 // TenantRepo 租户数据访问层
 type TenantRepo struct {
 	pool *pgxpool.Pool
@@ -294,48 +280,6 @@ func (r *TenantRepo) DeleteInvitationCode(ctx context.Context, id int64, tenantI
 	return err
 }
 
-// ListRechargeRecords 查询充值记录（分页）—— 租户只查看本租户收到的充值
-// （platform_to_tenant 管理员手动充值 + online_tenant_topup 微信在线充值）
-func (r *TenantRepo) ListRechargeRecords(ctx context.Context, tenantID string, page, size int) ([]RechargeItem, int64, error) {
-	var total int64
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM bill_recharge_orders WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND tenant_id = $1`, tenantID).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	offset := (page - 1) * size
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, order_id, order_type, tenant_id, COALESCE(user_id,''), paid_amount, credit_amount, status, COALESCE(note,''), created_at
-		FROM bill_recharge_orders
-		WHERE order_type IN ('platform_to_tenant', 'online_tenant_topup') AND tenant_id = $1
-		ORDER BY created_at DESC LIMIT $2 OFFSET $3
-	`, tenantID, size, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
-
-	var list []RechargeItem
-	for rows.Next() {
-		var item RechargeItem
-		var creditMicro int64
-		var createdAt time.Time
-		if err := rows.Scan(
-			&item.ID, &item.OrderID, &item.OrderType, &item.TenantID, &item.UserID,
-			&item.PaidAmountMinor, &creditMicro, &item.Status, &item.Note, &createdAt,
-		); err != nil {
-			continue
-		}
-		item.CreatedTime = createdAt.UnixMilli()
-		item.AmountUSD = billing.MicroToUSD(creditMicro)
-		list = append(list, item)
-	}
-	if list == nil {
-		list = []RechargeItem{}
-	}
-	return list, total, rows.Err()
-}
-
 // TenantOverviewStats, ClientConsumptionItem and UserConsumptionItem remain
 // adapter-level aliases for legacy callers.
 type TenantOverviewStats = tenantports.TenantOverviewStats
@@ -390,7 +334,7 @@ func (r *TenantRepo) GetTenantOverviewStats(ctx context.Context, tenantID string
 
 	incomeQuery := `
 		SELECT COALESCE(SUM(amount_micro_usd), 0)
-		FROM pay_cash_ledger
+		FROM tenant_income_projection
 		WHERE tenant_id = $1 AND txn_type = 'topup_income' AND amount_micro_usd > 0
 	`
 	incomeArgs := []any{tenantID}

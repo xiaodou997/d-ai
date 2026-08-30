@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `23`。
+- `internal/db/init.sql` 是当前唯一完整结构，schema 版本为 `25`。
 - 初始化脚本只允许在空 PostgreSQL schema 中执行，不能用于覆盖或修复已有数据库。
 - 应用启动只校验 `dai_schema_metadata.version`，不会执行 DDL 或升级 SQL。
 - `internal/db/changes/` 存放首次发布后的人工升级 SQL。
@@ -156,7 +156,7 @@ release/
 
 schema v17 为 `pay_orders` 增加 `sweep_attempts`、`sweep_next_attempt_at`、
 `sweep_last_attempt_at` 和 `sweep_last_error`，schema v18 为重试健康统计增加部分索引，
-schema v19 修复历史 v1→v18 链遗漏的 `ai_usage_logs.billing_status` 索引，schema v20 增加 billing/payment 跨域只读投影视图，schema v21 增加租户管理与分析只读投影视图，schema v22 增加管理员终端用户只读投影视图，schema v23 增加运营仪表盘只读投影视图，schema v24 增加不可变资金修复审计与 parked outbox 受控 requeue 函数。
+schema v19 修复历史 v1→v18 链遗漏的 `ai_usage_logs.billing_status` 索引，schema v20 增加 billing/payment 跨域只读投影视图，schema v21 增加租户管理与分析只读投影视图，schema v22 增加管理员终端用户只读投影视图，schema v23 增加运营仪表盘只读投影视图，schema v24 增加不可变资金修复审计与 parked outbox 受控 requeue 函数，schema v25 增加账户统计和租户收入只读投影视图。
 支付 provider 或补偿入账失败会按
 1 分钟起步、指数增长、最多 1 小时的退避写入下一次尝试时间；非终态的
 `USERPAYING/NOTPAY` 查单结果使用 5 分钟延后但不增加失败次数。成功入账或关单会清理
@@ -170,7 +170,8 @@ schema v19 修复历史 v1→v18 链遗漏的 `ai_usage_logs.billing_status` 索
 `internal/db/changes/0021_20260826_tenant_read_models.sql` 和
 `internal/db/changes/0022_20260826_user_read_models.sql` 和
 `internal/db/changes/0023_20260826_system_read_models.sql` 和
-`internal/db/changes/0024_20260826_billing_repair_audits.sql`；不要直接修改
+`internal/db/changes/0024_20260826_billing_repair_audits.sql` 和
+`internal/db/changes/0025_20260830_account_tenant_read_models.sql`；不要直接修改
 schema 版本号跳过脚本。
 
 ## 统一账号模型

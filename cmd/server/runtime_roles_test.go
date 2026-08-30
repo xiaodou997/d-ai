@@ -38,6 +38,23 @@ func TestParseRuntimeRoleAndCapabilities(t *testing.T) {
 	}
 }
 
+func TestPortalOnlyRunsOnControlRoles(t *testing.T) {
+	tests := []struct {
+		role    runtimeRole
+		expects bool
+	}{
+		{role: runtimeRoleAll, expects: true},
+		{role: runtimeRoleControlAPI, expects: true},
+		{role: runtimeRoleGateway, expects: false},
+		{role: runtimeRoleWorker, expects: false},
+	}
+	for _, tt := range tests {
+		if got := portalEnabledForRole(tt.role); got != tt.expects {
+			t.Fatalf("portalEnabledForRole(%q) = %v, want %v", tt.role, got, tt.expects)
+		}
+	}
+}
+
 func TestHTTPServersCanRunManagementOnly(t *testing.T) {
 	servers := newHTTPServers(httpServerOptions{
 		ManagementAddr:    "127.0.0.1:0",

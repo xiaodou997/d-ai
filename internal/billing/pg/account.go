@@ -221,9 +221,11 @@ func (r *AccountRepository) GetAccountStats(ctx context.Context, tenantID string
 	var userDeductionMicro int64
 	err := r.pool.QueryRow(ctx, `
 			SELECT
-			  (SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = $1 AND user_type = 4)::bigint,
-			  (SELECT COUNT(*) FROM iam_invitation_codes WHERE tenant_id = $1)::bigint,
-			  COALESCE((SELECT SUM(user_charged) FROM ai_usage_logs WHERE tenant_id = $1 AND billing_status = 'settled'), 0)::bigint
+			  COALESCE(MAX(end_user_count), 0)::bigint,
+			  COALESCE(MAX(invite_code_count), 0)::bigint,
+			  COALESCE(MAX(user_deduction_micro), 0)::bigint
+			FROM system_account_stats_projection
+			WHERE tenant_id = $1
 		`, tenantID).Scan(&result.EndUserCount, &result.InviteCodeCount, &userDeductionMicro)
 	if err != nil {
 		return nil, fmt.Errorf("查询账户统计失败: %w", err)

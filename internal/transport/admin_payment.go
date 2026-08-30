@@ -197,31 +197,33 @@ func registerAdminPayment(api huma.API, d paymentModule) {
 	h := newAdminPaymentHandlers(d)
 	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	sysUser := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
+	sysUserSensitive := append(huma.Middlewares{}, sysUser...)
+	sysUserSensitive = append(sysUserSensitive, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "admin-get-payment-settings", Method: http.MethodGet, Path: "/api/v1/admin/payment-settings",
 		Summary: "平台充值与提现规则", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.getGlobalSettings)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-payment-settings", Method: http.MethodPut, Path: "/api/v1/admin/payment-settings",
-		Summary: "更新平台充值与提现规则", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.updateGlobalSettings)
+		Summary: "更新平台充值与提现规则", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive}, h.updateGlobalSettings)
 
 	huma.Register(api, huma.Operation{OperationID: "admin-get-wechat-config", Method: http.MethodGet, Path: "/api/v1/admin/wechat-config",
 		Summary: "微信商户配置（脱敏）", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.getWechatConfig)
 	huma.Register(api, huma.Operation{OperationID: "admin-update-wechat-config", Method: http.MethodPut, Path: "/api/v1/admin/wechat-config",
-		Summary: "更新微信商户配置（开关/商户号/密钥）", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.updateWechatConfig)
+		Summary: "更新微信商户配置（开关/商户号/密钥）", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive}, h.updateWechatConfig)
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-payment-orders", Method: http.MethodGet, Path: "/api/v1/admin/payment-orders",
 		Summary: "在线支付订单列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listOrders)
 	huma.Register(api, huma.Operation{OperationID: "admin-sync-payment-order", Method: http.MethodPost, Path: "/api/v1/admin/payment-orders/{orderId}/sync",
-		Summary: "手动查单同步（mock 模式下即仿真支付成功）", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.syncOrder)
+		Summary: "手动查单同步（mock 模式下即仿真支付成功）", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive}, h.syncOrder)
 	huma.Register(api, huma.Operation{OperationID: "admin-list-recharge-orders", Method: http.MethodGet, Path: "/api/v1/admin/recharge-orders",
 		Summary: "充值订单统一列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listRechargeOrders)
 	huma.Register(api, huma.Operation{OperationID: "admin-get-recharge-order", Method: http.MethodGet, Path: "/api/v1/admin/recharge-orders/{orderId}",
 		Summary: "充值订单统一详情", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.getRechargeOrder)
 	huma.Register(api, huma.Operation{OperationID: "admin-sync-recharge-order", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/sync",
-		Summary: "同步充值订单支付状态", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.syncRechargeOrder)
+		Summary: "同步充值订单支付状态", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive}, h.syncRechargeOrder)
 	huma.Register(api, huma.Operation{OperationID: "admin-reverse-recharge-order-credit", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/reverse-credit",
-		Summary: "撤回手动充值剩余额度", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.reverseRechargeOrderCredit)
+		Summary: "撤回手动充值剩余额度", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive}, h.reverseRechargeOrderCredit)
 	huma.Register(api, huma.Operation{OperationID: "admin-record-completed-recharge-refund", Method: http.MethodPost, Path: "/api/v1/admin/recharge-orders/{orderId}/refund-reversal",
-		Summary: "登记已完成退款并整单冲正", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.recordCompletedRechargeRefund)
+		Summary: "登记已完成退款并整单冲正", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive}, h.recordCompletedRechargeRefund)
 
 	huma.Register(api, huma.Operation{OperationID: "admin-list-balance-ledger", Method: http.MethodGet, Path: "/api/v1/admin/balance-ledger",
 		Summary: "任意租户余额流水", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listCashLedger)
@@ -229,7 +231,7 @@ func registerAdminPayment(api huma.API, d paymentModule) {
 	huma.Register(api, huma.Operation{OperationID: "admin-list-withdrawals", Method: http.MethodGet, Path: "/api/v1/admin/withdrawals",
 		Summary: "提现记录列表", Tags: []string{"admin-payment"}, Middlewares: sysUser}, h.listWithdrawals)
 	huma.Register(api, huma.Operation{OperationID: "admin-create-withdrawal", Method: http.MethodPost, Path: "/api/v1/admin/withdrawals",
-		Summary: "创建提现记录并直接扣减租户额度", Tags: []string{"admin-payment"}, Middlewares: sysUser, DefaultStatus: http.StatusCreated}, h.createWithdrawal)
+		Summary: "创建提现记录并直接扣减租户额度", Tags: []string{"admin-payment"}, Middlewares: sysUserSensitive, DefaultStatus: http.StatusCreated}, h.createWithdrawal)
 }
 
 func (h *adminPaymentHandlers) getGlobalSettings(ctx context.Context, _ *struct{}) (*globalPaymentSettingsOutput, error) {

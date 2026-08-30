@@ -15,7 +15,7 @@ type TenantCatalogHTTPDeps struct {
 // RegisterTenantCatalog owns the tenant-user authenticated catalog surface.
 func RegisterTenantCatalog(api huma.API, d TenantCatalogHTTPDeps) {
 	tenant := huma.NewGroup(api)
-	tenant.UseMiddleware(tenantUserAuth(api, d.Auth))
+	tenant.UseMiddleware(tenantUserSensitiveAuth(api, d.Auth))
 	registerTenantSelfPricing(tenant, d)
 	registerTenantPriceBooks(tenant, d)
 	registerTenantUpstreamCatalog(tenant, d)

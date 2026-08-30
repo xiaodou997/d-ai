@@ -69,6 +69,7 @@ func registerTenantBranding(api huma.API, d tenantBrandingModule) {
 	ua := userAuth(api, d.auth.JWT, d.auth.Blacklist)
 	tenantOnly := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf)}
 	customerOnly := huma.Middlewares{ua, requireCapability(api, auth.CapabilityCustomerSelf)}
+	tenantOnly = append(tenantOnly, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-get-branding", Method: http.MethodGet, Path: "/api/v1/tenant/branding",
 		Summary: "当前租户名称与用户门户品牌", Tags: []string{"tenant-branding"}, Middlewares: tenantOnly}, h.getTenantBranding)

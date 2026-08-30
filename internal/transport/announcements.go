@@ -141,6 +141,8 @@ func registerAnnouncements(api huma.API, d announcementModule) {
 	allUsers := huma.Middlewares{ua, requireAnyCapability(api, auth.CapabilitySuperAdmin, auth.CapabilityPlatformAdmin, auth.CapabilityTenantSelf, auth.CapabilityCustomerSelf)}
 	admins := huma.Middlewares{ua, requireCapability(api, auth.CapabilityPlatformAdmin)}
 	tenants := huma.Middlewares{ua, requireCapability(api, auth.CapabilityTenantSelf)}
+	admins = append(admins, requireRecentAuthForMutation(api, d.auth.RecentAuth))
+	tenants = append(tenants, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "list-my-announcements", Method: http.MethodGet, Path: "/api/v1/announcements", Summary: "当前用户公告", Tags: []string{"announcements"}, Middlewares: allUsers}, h.listInbox)
 	huma.Register(api, huma.Operation{OperationID: "get-my-announcement", Method: http.MethodGet, Path: "/api/v1/announcements/{id}", Summary: "当前用户公告详情", Tags: []string{"announcements"}, Middlewares: allUsers}, h.getVisible)

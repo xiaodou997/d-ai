@@ -20,7 +20,7 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 	if platform == nil {
 		platform = &platformModules{}
 	}
-	platformAuth := transport.PlatformAuthDeps{JWT: platform.JWT, Blacklist: platform.Blacklist}
+	platformAuth := transport.PlatformAuthDeps{JWT: platform.JWT, Blacklist: platform.Blacklist, RecentAuth: platform.RecentAuth}
 	adminAuth := transport.AdminRouteAuthDeps{PlatformAuthDeps: platformAuth, Security: platform.Security, RecentAuth: platform.RecentAuth}
 	return []transport.Module{
 		transport.NewMetaModule(version, platform.JWT),

@@ -19,6 +19,7 @@ import (
 	"xiaodou/dai/internal/ai/identitycontrol"
 	"xiaodou/dai/internal/ai/upstreamaccess"
 	"xiaodou/dai/internal/ai/upstreamcontrol"
+	"xiaodou/dai/internal/auth"
 	"xiaodou/dai/libs/go/httpx"
 )
 
@@ -336,6 +337,7 @@ type CoreHTTPDeps struct {
 	IdentityProvider           IdentityProvider
 	TokenVerifier              TokenVerifier
 	TokenRevocations           TokenRevocationChecker
+	RecentAuth                 *auth.RecentAuthService
 	BanChecker                 HumaBanChecker
 	PlatformPriceBooks         PlatformPriceBookManager
 	PriceBookSync              PriceBookSyncManager
@@ -358,6 +360,7 @@ func httpAuthDepsFromAI(d CoreHTTPDeps) HTTPAuthDeps {
 		TokenVerifier:    d.TokenVerifier,
 		TokenRevocations: d.TokenRevocations,
 		BanChecker:       d.BanChecker,
+		RecentAuth:       d.RecentAuth,
 	}
 }
 

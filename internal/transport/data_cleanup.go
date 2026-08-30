@@ -27,6 +27,8 @@ type dataCleanupRunInput struct {
 
 func registerDataCleanup(api huma.API, d dataCleanupModule) {
 	admin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
+	adminSensitive := append(huma.Middlewares{}, admin...)
+	adminSensitive = append(adminSensitive, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-get-data-cleanup-policy",
@@ -49,7 +51,7 @@ func registerDataCleanup(api huma.API, d dataCleanupModule) {
 		Path:        "/api/v1/admin/data-cleanup/policy",
 		Summary:     "更新数据清理策略",
 		Tags:        []string{"data-cleanup"},
-		Middlewares: admin,
+		Middlewares: adminSensitive,
 	}, func(ctx context.Context, in *dataCleanupPolicyInput) (*dataCleanupPolicyOutput, error) {
 		policy, err := d.service.UpdatePolicy(ctx, in.Body, actorID(ctx))
 		if err != nil {
@@ -94,7 +96,7 @@ func registerDataCleanup(api huma.API, d dataCleanupModule) {
 		Path:          "/api/v1/admin/data-cleanup/runs",
 		Summary:       "手动执行数据清理",
 		Tags:          []string{"data-cleanup"},
-		Middlewares:   admin,
+		Middlewares:   adminSensitive,
 		DefaultStatus: http.StatusAccepted,
 	}, func(ctx context.Context, in *dataCleanupRunInput) (*dataCleanupRunOutput, error) {
 		if in.Body.Confirmation != cleanuppkg.ConfirmationPhrase {

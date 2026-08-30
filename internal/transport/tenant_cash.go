@@ -63,6 +63,7 @@ type updateTenantPaymentSettingsInput struct {
 func registerTenantCash(api huma.API, d paymentModule) {
 	h := newTenantCashHandlers(d)
 	tenantOnly := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
+	tenantOnly = append(tenantOnly, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-balance", Method: http.MethodGet, Path: "/api/v1/tenant/balance",
 		Summary: "租户 USD 额度余额", Tags: []string{"tenant-balance"}, Middlewares: tenantOnly}, h.getAccount)

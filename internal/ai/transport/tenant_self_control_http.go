@@ -21,7 +21,7 @@ type TenantSelfControlHTTPDeps struct {
 // limit-policy management routes.
 func RegisterTenantSelfControl(api huma.API, d TenantSelfControlHTTPDeps) {
 	tenant := huma.NewGroup(api)
-	tenant.UseMiddleware(tenantUserAuth(api, d.Auth))
+	tenant.UseMiddleware(tenantUserSensitiveAuth(api, d.Auth))
 	registerTenantSelfAPIKeys(tenant, d)
 	registerTenantSelfAPIKeyWrites(tenant, d)
 	registerTenantSelfLimits(tenant, d)

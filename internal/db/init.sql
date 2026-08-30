@@ -215,19 +215,25 @@ CREATE INDEX idx_bill_accounts_negative ON bill_accounts (account_id) WHERE bala
 -- provision" would take a caller offline; making it structural removes the
 -- possibility instead of documenting it.
 CREATE FUNCTION bill_provision_account() RETURNS TRIGGER AS $$
+DECLARE
+    target_schema TEXT := TG_TABLE_SCHEMA;
 BEGIN
     IF TG_TABLE_NAME = 'iam_tenants' THEN
-        INSERT INTO bill_accounts (account_id, account_kind, tenant_id)
-        VALUES (NEW.tenant_id, 1, NEW.tenant_id)
-        ON CONFLICT (account_id) DO NOTHING;
+        EXECUTE format('
+            INSERT INTO %I.bill_accounts (account_id, account_kind, tenant_id)
+            VALUES ($1, 1, $1)
+            ON CONFLICT (account_id) DO NOTHING', target_schema)
+        USING NEW.tenant_id;
     ELSIF NEW.user_type = 4 AND NEW.tenant_id IS NOT NULL THEN
-        INSERT INTO bill_accounts (account_id, account_kind, tenant_id)
-        VALUES (NEW.user_id, 2, NEW.tenant_id)
-        ON CONFLICT (account_id) DO NOTHING;
+        EXECUTE format('
+            INSERT INTO %I.bill_accounts (account_id, account_kind, tenant_id)
+            VALUES ($1, 2, $2)
+            ON CONFLICT (account_id) DO NOTHING', target_schema)
+        USING NEW.user_id, NEW.tenant_id;
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog;
 
 CREATE TRIGGER trg_bill_provision_tenant_account
     AFTER INSERT ON iam_tenants
@@ -2627,6 +2633,30 @@ SELECT tenant_id,
        user_charged
 FROM ai_usage_logs;
 
+CREATE VIEW system_account_stats_projection AS
+SELECT t.tenant_id,
+       (SELECT COUNT(*)
+        FROM iam_accounts u
+        WHERE u.tenant_id = t.tenant_id
+          AND u.user_type = 4)::bigint AS end_user_count,
+       (SELECT COUNT(*)
+        FROM iam_invitation_codes i
+        WHERE i.tenant_id = t.tenant_id)::bigint AS invite_code_count,
+       COALESCE((SELECT SUM(u.user_charged)
+                 FROM ai_usage_logs u
+                 WHERE u.tenant_id = t.tenant_id
+                   AND u.billing_status = 'settled'), 0)::bigint AS user_deduction_micro
+FROM iam_tenants t;
+
+CREATE VIEW tenant_income_projection AS
+SELECT tenant_id,
+       txn_type,
+       amount_micro_usd,
+       created_at
+FROM pay_cash_ledger
+WHERE txn_type = 'topup_income'
+  AND amount_micro_usd > 0;
+
 -- Required system defaults
 INSERT INTO sys_settings (key, value)
 VALUES (
@@ -2673,6 +2703,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 24);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 25);
 
 COMMIT;

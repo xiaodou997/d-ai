@@ -66,7 +66,9 @@ BEGIN
         'system_recharge_projection',
         'system_identity_projection',
         'system_balance_projection',
-        'system_usage_projection'
+        'system_usage_projection',
+        'system_account_stats_projection',
+        'tenant_income_projection'
     ] LOOP
         IF to_regclass(format('%I.%I', target_schema, view_name)) IS NULL THEN
             RAISE EXCEPTION 'ownership contract view %.% does not exist', target_schema, view_name;
@@ -121,7 +123,9 @@ GRANT SELECT ON TABLE
     system_recharge_projection,
     system_identity_projection,
     system_balance_projection,
-    system_usage_projection
+    system_usage_projection,
+    system_account_stats_projection,
+    tenant_income_projection
 TO :"runtime_role", :"billing_role";
 REVOKE INSERT, UPDATE, DELETE ON TABLE
     billing_recharge_order_projection,
@@ -134,12 +138,29 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE
     system_recharge_projection,
     system_identity_projection,
     system_balance_projection,
-    system_usage_projection
+    system_usage_projection,
+    system_account_stats_projection,
+    tenant_income_projection
 FROM :"runtime_role", :"billing_role";
 
 REVOKE INSERT, UPDATE, DELETE ON TABLE
     bill_accounts,
     bill_credit_lots,
+    bill_charge_outbox,
+    bill_recharge_orders,
+    bill_refund_reversal_effects,
+    bill_repair_audits,
+    pay_orders,
+    pay_refunds,
+    pay_cash_ledger,
+    pay_withdrawals,
+    pay_tenant_settings,
+    pay_wechat_config,
+    ledger_credit_leases
+FROM :"runtime_role";
+-- Runtime needs the account/credit-lot rows for admission and balance detail,
+-- but reporting and payment workflow reads must go through owned projections.
+REVOKE SELECT ON TABLE
     bill_charge_outbox,
     bill_recharge_orders,
     bill_refund_reversal_effects,
@@ -183,6 +204,14 @@ REVOKE ALL ON FUNCTION bill_repair_audits_immutable() FROM PUBLIC;
 REVOKE ALL ON FUNCTION bill_requeue_parked_outbox(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION bill_requeue_parked_outbox(TEXT, TEXT, TEXT, TEXT, TEXT) TO :"billing_role";
 
+-- Account provisioning is triggered by runtime-owned identity inserts, but its
+-- ledger row must be created under the billing owner. The function resolves
+-- the trigger schema dynamically while keeping an immutable pg_catalog path.
+ALTER FUNCTION bill_provision_account() OWNER TO :"billing_role";
+ALTER FUNCTION bill_provision_account() SECURITY DEFINER;
+ALTER FUNCTION bill_provision_account() SET search_path TO pg_catalog;
+GRANT EXECUTE ON FUNCTION bill_provision_account() TO :"runtime_role", :"billing_role";
+
 -- The views run with their owner's privileges. Keep the owner aligned with
 -- the billing role so transferring the source-table owners cannot make a
 -- production read model fail after the migration account disconnects.
@@ -197,5 +226,7 @@ ALTER VIEW system_recharge_projection OWNER TO :"runtime_role";
 ALTER VIEW system_identity_projection OWNER TO :"runtime_role";
 ALTER VIEW system_balance_projection OWNER TO :"runtime_role";
 ALTER VIEW system_usage_projection OWNER TO :"runtime_role";
+ALTER VIEW system_account_stats_projection OWNER TO :"runtime_role";
+ALTER VIEW tenant_income_projection OWNER TO :"billing_role";
 
 COMMIT;

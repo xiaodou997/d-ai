@@ -55,6 +55,8 @@ type previewPIIConfigOutput struct {
 
 func registerModules(api huma.API, d systemModule) {
 	admin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
+	adminSensitive := append(huma.Middlewares{}, admin...)
+	adminSensitive = append(adminSensitive, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-list-modules",
@@ -103,7 +105,7 @@ func registerModules(api huma.API, d systemModule) {
 		Path:        "/api/v1/admin/modules/pii-protection/config",
 		Summary:     "更新敏感信息保护配置",
 		Tags:        []string{"modules"},
-		Middlewares: admin,
+		Middlewares: adminSensitive,
 	}, func(ctx context.Context, in *updatePIIConfigInput) (*piiConfigOutput, error) {
 		actor := ""
 		if claims := userClaimsFromCtx(ctx); claims != nil {
@@ -164,7 +166,7 @@ func registerModules(api huma.API, d systemModule) {
 		Path:        "/api/v1/admin/modules/{name}/enabled",
 		Summary:     "启用或禁用模块",
 		Tags:        []string{"modules"},
-		Middlewares: admin,
+		Middlewares: adminSensitive,
 	}, func(ctx context.Context, in *moduleEnabledInput) (*moduleStatusOutput, error) {
 		claims := userClaimsFromCtx(ctx)
 		actor := ""

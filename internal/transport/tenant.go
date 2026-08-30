@@ -127,6 +127,7 @@ type userConsumptionOutput struct {
 func registerTenantSelf(api huma.API, d tenantSelfModule) {
 	h := newTenantSelfHandlers(d.service)
 	tenantOnly := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityTenantSelf)}
+	tenantOnly = append(tenantOnly, requireRecentAuthForMutation(api, d.auth.RecentAuth))
 
 	huma.Register(api, huma.Operation{OperationID: "tenant-me", Method: http.MethodGet, Path: "/api/v1/tenants/me",
 		Summary: "当前租户用户信息", Tags: []string{"tenant-self"}, Middlewares: tenantOnly}, h.me)

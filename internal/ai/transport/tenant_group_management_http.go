@@ -21,7 +21,7 @@ type TenantGroupManagementHTTPDeps struct {
 // group control-plane routes and their portable transfer workflow.
 func RegisterTenantGroupManagement(api huma.API, d TenantGroupManagementHTTPDeps) {
 	tenant := huma.NewGroup(api)
-	tenant.UseMiddleware(tenantUserAuth(api, d.Auth))
+	tenant.UseMiddleware(tenantUserSensitiveAuth(api, d.Auth))
 	registerGroups(tenant, d)
 	registerGroupTransfer(tenant, d)
 }

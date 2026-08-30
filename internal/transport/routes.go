@@ -278,8 +278,9 @@ type metaModule struct {
 }
 
 type platformAuthDeps struct {
-	JWT       *auth.JWTService
-	Blacklist *auth.BlacklistService
+	JWT        *auth.JWTService
+	Blacklist  *auth.BlacklistService
+	RecentAuth *auth.RecentAuthService
 }
 
 type aiPlatformDeps struct {
@@ -535,6 +536,7 @@ func buildAICoreHTTPDeps(platform aiPlatformDeps, d AICoreHTTPDeps, identity aiI
 	aiDeps := aitransport.CoreHTTPDeps{
 		TokenVerifier:              platform.JWT,
 		TokenRevocations:           platform.Blacklist,
+		RecentAuth:                 platform.RecentAuth,
 		BanChecker:                 d.BanChecker,
 		PlatformPriceBooks:         d.PlatformPriceBooks,
 		PriceBookSync:              d.PriceBookSync,
@@ -547,13 +549,18 @@ func buildAICoreHTTPDeps(platform aiPlatformDeps, d AICoreHTTPDeps, identity aiI
 	return aiDeps
 }
 
+func buildAIHTTPAuthDeps(platform aiPlatformDeps, banChecker aitransport.HumaBanChecker) aitransport.HTTPAuthDeps {
+	return aitransport.HTTPAuthDeps{
+		TokenVerifier:    platform.JWT,
+		TokenRevocations: platform.Blacklist,
+		BanChecker:       banChecker,
+		RecentAuth:       platform.RecentAuth,
+	}
+}
+
 func buildUpstreamAccountManagementHTTPDeps(platform aiPlatformDeps, d AIUpstreamAccountManagementHTTPDeps) aitransport.UpstreamAccountManagementHTTPDeps {
 	return aitransport.UpstreamAccountManagementHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:            buildAIHTTPAuthDeps(platform, d.BanChecker),
 		Accounts:        d.Accounts,
 		AccountManager:  d.AccountManager,
 		AccountReader:   d.AccountReader,
@@ -566,22 +573,14 @@ func buildUpstreamAccountManagementHTTPDeps(platform aiPlatformDeps, d AIUpstrea
 
 func buildUpstreamAccessManagementHTTPDeps(platform aiPlatformDeps, d AIUpstreamAccessManagementHTTPDeps) aitransport.UpstreamAccessManagementHTTPDeps {
 	return aitransport.UpstreamAccessManagementHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:           buildAIHTTPAuthDeps(platform, d.BanChecker),
 		UpstreamAccess: d.UpstreamAccess,
 	}
 }
 
 func buildTenantCatalogHTTPDeps(platform aiPlatformDeps, d AITenantCatalogHTTPDeps) aitransport.TenantCatalogHTTPDeps {
 	return aitransport.TenantCatalogHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:             buildAIHTTPAuthDeps(platform, d.BanChecker),
 		ModelCatalog:     d.ModelCatalog,
 		Groups:           d.Groups,
 		TenantPriceBooks: d.TenantPriceBooks,
@@ -591,11 +590,7 @@ func buildTenantCatalogHTTPDeps(platform aiPlatformDeps, d AITenantCatalogHTTPDe
 
 func buildTenantSelfControlHTTPDeps(platform aiPlatformDeps, d AITenantSelfControlHTTPDeps, identity aiIdentityProvider) aitransport.TenantSelfControlHTTPDeps {
 	return aitransport.TenantSelfControlHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:            buildAIHTTPAuthDeps(platform, d.BanChecker),
 		APIKeys:         d.APIKeys,
 		APIKeyWriter:    d.APIKeyWriter,
 		APIKeyLifecycle: d.APIKeyLifecycle,
@@ -608,11 +603,7 @@ func buildTenantSelfControlHTTPDeps(platform aiPlatformDeps, d AITenantSelfContr
 
 func buildTenantGroupManagementHTTPDeps(platform aiPlatformDeps, d AITenantGroupManagementHTTPDeps, identity aiIdentityProvider) aitransport.TenantGroupManagementHTTPDeps {
 	return aitransport.TenantGroupManagementHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:             buildAIHTTPAuthDeps(platform, d.BanChecker),
 		Groups:           d.Groups,
 		GroupManager:     d.GroupManager,
 		DispatchRules:    d.DispatchRules,
@@ -627,11 +618,7 @@ func buildTenantGroupManagementHTTPDeps(platform aiPlatformDeps, d AITenantGroup
 
 func buildAPIKeyManagementHTTPDeps(platform aiPlatformDeps, d AIAPIKeyManagementHTTPDeps) aitransport.APIKeyManagementHTTPDeps {
 	return aitransport.APIKeyManagementHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:            buildAIHTTPAuthDeps(platform, d.BanChecker),
 		APIKeys:         d.APIKeys,
 		APIKeyWriter:    d.APIKeyWriter,
 		APIKeyLifecycle: d.APIKeyLifecycle,
@@ -643,22 +630,14 @@ func buildAPIKeyManagementHTTPDeps(platform aiPlatformDeps, d AIAPIKeyManagement
 
 func buildTenantSelfReadHTTPDeps(platform aiPlatformDeps, d AITenantSelfReadHTTPDeps) aitransport.TenantSelfReadHTTPDeps {
 	return aitransport.TenantSelfReadHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:             buildAIHTTPAuthDeps(platform, d.BanChecker),
 		DashboardQueries: d.DashboardQueries,
 		UsageQueries:     d.UsageQueries,
 	}
 }
 
 func buildWorkspaceHTTPDeps(platform aiPlatformDeps, d AIWorkspaceHTTPDeps) aitransport.WorkspaceHTTPDeps {
-	auth := aitransport.HTTPAuthDeps{
-		TokenVerifier:    platform.JWT,
-		TokenRevocations: platform.Blacklist,
-		BanChecker:       d.BanChecker,
-	}
+	auth := buildAIHTTPAuthDeps(platform, d.BanChecker)
 	return aitransport.WorkspaceHTTPDeps{
 		TenantAuth:        auth,
 		UserAuth:          auth,
@@ -674,11 +653,7 @@ func buildWorkspaceHTTPDeps(platform aiPlatformDeps, d AIWorkspaceHTTPDeps) aitr
 
 func buildUserSelfControlHTTPDeps(platform aiPlatformDeps, d AIUserSelfControlHTTPDeps) aitransport.UserSelfControlHTTPDeps {
 	return aitransport.UserSelfControlHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:            buildAIHTTPAuthDeps(platform, d.BanChecker),
 		APIKeys:         d.APIKeys,
 		APIKeyWriter:    d.APIKeyWriter,
 		APIKeyLifecycle: d.APIKeyLifecycle,
@@ -690,11 +665,7 @@ func buildUserSelfControlHTTPDeps(platform aiPlatformDeps, d AIUserSelfControlHT
 
 func buildUserSelfReadHTTPDeps(platform aiPlatformDeps, d AIUserSelfReadHTTPDeps) aitransport.UserSelfReadHTTPDeps {
 	return aitransport.UserSelfReadHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:          buildAIHTTPAuthDeps(platform, d.BanChecker),
 		Groups:        d.Groups,
 		ModelCatalog:  d.ModelCatalog,
 		UserUsageLogs: d.UserUsageLogs,
@@ -704,11 +675,7 @@ func buildUserSelfReadHTTPDeps(platform aiPlatformDeps, d AIUserSelfReadHTTPDeps
 
 func buildSubscriptionHTTPDeps(platform aiPlatformDeps, d AISubscriptionHTTPDeps, identity aiIdentityProvider) aitransport.SubscriptionHTTPDeps {
 	deps := aitransport.SubscriptionHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:                       buildAIHTTPAuthDeps(platform, d.BanChecker),
 		SubscriptionPlans:          d.SubscriptionPlans,
 		SubscriptionPlanWriter:     d.SubscriptionPlanWriter,
 		SubscriptionPurchases:      d.SubscriptionPurchases,
@@ -725,11 +692,7 @@ func buildSubscriptionHTTPDeps(platform aiPlatformDeps, d AISubscriptionHTTPDeps
 
 func buildRiskControlHTTPDeps(platform aiPlatformDeps, d AIRiskControlHTTPDeps) aitransport.RiskControlHTTPDeps {
 	return aitransport.RiskControlHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:                buildAIHTTPAuthDeps(platform, d.BanChecker),
 		ProviderSecrets:     d.ProviderSecrets,
 		RiskControlConfig:   d.RiskControlConfig,
 		RiskControlDetector: d.RiskControlDetector,
@@ -740,22 +703,14 @@ func buildRiskControlHTTPDeps(platform aiPlatformDeps, d AIRiskControlHTTPDeps) 
 
 func buildAuditLogHTTPDeps(platform aiPlatformDeps, d AIAuditLogHTTPDeps) aitransport.AuditLogHTTPDeps {
 	return aitransport.AuditLogHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:      buildAIHTTPAuthDeps(platform, d.BanChecker),
 		AuditLogs: d.AuditLogs,
 	}
 }
 
 func buildSystemHTTPDeps(platform aiPlatformDeps, d AISystemHTTPDeps) aitransport.SystemHTTPDeps {
 	return aitransport.SystemHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:           buildAIHTTPAuthDeps(platform, d.BanChecker),
 		DatabaseHealth: d.DatabaseHealth,
 		RedisHealth:    d.RedisHealth,
 		Health:         d.Health,
@@ -765,11 +720,7 @@ func buildSystemHTTPDeps(platform aiPlatformDeps, d AISystemHTTPDeps) aitranspor
 
 func buildDashboardHTTPDeps(platform aiPlatformDeps, d AIDashboardHTTPDeps, identity aiIdentityProvider) aitransport.DashboardHTTPDeps {
 	deps := aitransport.DashboardHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:                       buildAIHTTPAuthDeps(platform, d.BanChecker),
 		DashboardQueries:           d.DashboardQueries,
 		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 	}
@@ -781,11 +732,7 @@ func buildDashboardHTTPDeps(platform aiPlatformDeps, d AIDashboardHTTPDeps, iden
 
 func buildUsageHTTPDeps(platform aiPlatformDeps, d AIUsageHTTPDeps, identity aiIdentityProvider) aitransport.UsageHTTPDeps {
 	deps := aitransport.UsageHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:                       buildAIHTTPAuthDeps(platform, d.BanChecker),
 		UsageQueries:               d.UsageQueries,
 		IdentityEnrichmentFailures: d.IdentityEnrichmentFailures,
 	}
@@ -797,11 +744,7 @@ func buildUsageHTTPDeps(platform aiPlatformDeps, d AIUsageHTTPDeps, identity aiI
 
 func buildOAuthManagementHTTPDeps(platform aiPlatformDeps, d AIOAuthManagementHTTPDeps) aitransport.OAuthManagementHTTPDeps {
 	return aitransport.OAuthManagementHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:              buildAIHTTPAuthDeps(platform, d.BanChecker),
 		CredentialCreator: d.CredentialCreator,
 		CredentialReader:  d.CredentialReader,
 		CredentialWriter:  d.CredentialWriter,
@@ -816,11 +759,7 @@ func buildOAuthManagementHTTPDeps(platform aiPlatformDeps, d AIOAuthManagementHT
 
 func buildModelBindingHTTPDeps(platform aiPlatformDeps, d AIModelBindingHTTPDeps) aitransport.ModelBindingHTTPDeps {
 	return aitransport.ModelBindingHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:          buildAIHTTPAuthDeps(platform, d.BanChecker),
 		AccountReader: d.AccountReader,
 		PoolReader:    d.PoolReader,
 		ModelBindings: d.ModelBindings,
@@ -829,11 +768,7 @@ func buildModelBindingHTTPDeps(platform aiPlatformDeps, d AIModelBindingHTTPDeps
 
 func buildUpstreamDiagnosticsHTTPDeps(platform aiPlatformDeps, d AIUpstreamDiagnosticsHTTPDeps) aitransport.UpstreamDiagnosticsHTTPDeps {
 	return aitransport.UpstreamDiagnosticsHTTPDeps{
-		Auth: aitransport.HTTPAuthDeps{
-			TokenVerifier:    platform.JWT,
-			TokenRevocations: platform.Blacklist,
-			BanChecker:       d.BanChecker,
-		},
+		Auth:              buildAIHTTPAuthDeps(platform, d.BanChecker),
 		AccountReader:     d.AccountReader,
 		ModelBindings:     d.ModelBindings,
 		ProviderSecrets:   d.ProviderSecrets,

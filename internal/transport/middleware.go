@@ -119,6 +119,22 @@ func requireRecentAuth(api huma.API, recent *auth.RecentAuthService) func(huma.C
 	}
 }
 
+// requireRecentAuthForMutation keeps ordinary read-only management pages
+// usable while requiring a fresh password/MFA proof before a state-changing
+// operation. It is intentionally composed after userAuth/capability
+// middleware so the claims used by requireRecentAuth are already present.
+func requireRecentAuthForMutation(api huma.API, recent *auth.RecentAuthService) func(huma.Context, func(huma.Context)) {
+	check := requireRecentAuth(api, recent)
+	return func(ctx huma.Context, next func(huma.Context)) {
+		switch ctx.Method() {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			check(ctx, next)
+		default:
+			next(ctx)
+		}
+	}
+}
+
 // userAuth 是 Huma 中间件：校验用户 JWT 并做黑名单/强制
 // 登出检查，通过则把完整 Claims 注入上下文。
 func userAuth(api huma.API, jwtSvc *auth.JWTService, blacklist *auth.BlacklistService) func(huma.Context, func(huma.Context)) {

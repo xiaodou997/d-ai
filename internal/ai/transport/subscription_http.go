@@ -66,10 +66,10 @@ type SubscriptionGroupNameResolver interface {
 // groups, including their role-specific authentication middleware.
 func RegisterSubscriptions(api huma.API, d SubscriptionHTTPDeps) {
 	tenant := huma.NewGroup(api)
-	tenant.UseMiddleware(tenantUserAuth(api, d.Auth))
+	tenant.UseMiddleware(tenantUserSensitiveAuth(api, d.Auth))
 	registerTenantSelfSubscriptions(tenant, d)
 
 	userSelf := huma.NewGroup(api)
-	userSelf.UseMiddleware(endUserAuth(api, d.Auth))
+	userSelf.UseMiddleware(endUserSensitiveAuth(api, d.Auth))
 	registerUserSelfSubscriptions(userSelf, d)
 }

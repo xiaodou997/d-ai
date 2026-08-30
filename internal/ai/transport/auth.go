@@ -35,23 +35,47 @@ type HTTPAuthDeps struct {
 	TokenVerifier    TokenVerifier
 	TokenRevocations TokenRevocationChecker
 	BanChecker       HumaBanChecker
+	RecentAuth       *auth.RecentAuthService
 }
 
 type authClaimsContextKey struct{}
 
 func platformUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
-	return userAuth(api, d, map[int]bool{1: true, 2: true}, "platform user required")
+	base := userAuth(api, d, auth.CapabilityPlatformAdmin, "platform user required")
+	return func(ctx huma.Context, next func(huma.Context)) {
+		base(ctx, func(ctx huma.Context) {
+			requireRecentAuthForMutation(api, d.RecentAuth)(ctx, next)
+		})
+	}
 }
 
 func tenantUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
-	return userAuth(api, d, map[int]bool{3: true}, "tenant user required")
+	return userAuth(api, d, auth.CapabilityTenantSelf, "tenant user required")
+}
+
+func tenantUserSensitiveAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
+	base := tenantUserAuth(api, d)
+	return func(ctx huma.Context, next func(huma.Context)) {
+		base(ctx, func(ctx huma.Context) {
+			requireRecentAuthForMutation(api, d.RecentAuth)(ctx, next)
+		})
+	}
 }
 
 func endUserAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
-	return userAuth(api, d, map[int]bool{4: true}, "end user required")
+	return userAuth(api, d, auth.CapabilityCustomerSelf, "end user required")
 }
 
-func userAuth(api huma.API, d HTTPAuthDeps, allowedTypes map[int]bool, forbiddenMessage string) func(huma.Context, func(huma.Context)) {
+func endUserSensitiveAuth(api huma.API, d HTTPAuthDeps) func(huma.Context, func(huma.Context)) {
+	base := endUserAuth(api, d)
+	return func(ctx huma.Context, next func(huma.Context)) {
+		base(ctx, func(ctx huma.Context) {
+			requireRecentAuthForMutation(api, d.RecentAuth)(ctx, next)
+		})
+	}
+}
+
+func userAuth(api huma.API, d HTTPAuthDeps, capability auth.Capability, forbiddenMessage string) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		if d.TokenVerifier == nil {
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "authentication is not configured")
@@ -73,7 +97,7 @@ func userAuth(api huma.API, d HTTPAuthDeps, allowedTypes map[int]bool, forbidden
 			huma.WriteErr(api, ctx, http.StatusUnauthorized, "bearer token has been revoked")
 			return
 		}
-		if len(allowedTypes) > 0 && !allowedTypes[claims.UserType] {
+		if capability != "" && !auth.ActorFromClaims(claims).Has(capability) {
 			huma.WriteErr(api, ctx, http.StatusForbidden, forbiddenMessage)
 			return
 		}
@@ -83,6 +107,42 @@ func userAuth(api huma.API, d HTTPAuthDeps, allowedTypes map[int]bool, forbidden
 		}
 
 		next(huma.WithValue(ctx, authClaimsContextKey{}, claims))
+	}
+}
+
+func requireRecentAuthForMutation(api huma.API, recent *auth.RecentAuthService) func(huma.Context, func(huma.Context)) {
+	check := requireRecentAuth(api, recent)
+	return func(ctx huma.Context, next func(huma.Context)) {
+		switch ctx.Method() {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			check(ctx, next)
+		default:
+			next(ctx)
+		}
+	}
+}
+
+func requireRecentAuth(api huma.API, recent *auth.RecentAuthService) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		claims, ok := ctx.Context().Value(authClaimsContextKey{}).(*auth.Claims)
+		if !ok || claims == nil {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if recent == nil {
+			huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "recent authentication is unavailable")
+			return
+		}
+		valid, err := recent.Check(ctx.Context(), claims.UserID)
+		if err != nil {
+			huma.WriteErr(api, ctx, http.StatusServiceUnavailable, "recent authentication is unavailable")
+			return
+		}
+		if !valid {
+			huma.WriteErr(api, ctx, http.StatusUnauthorized, "recent re-authentication is required")
+			return
+		}
+		next(ctx)
 	}
 }
 
