@@ -170,11 +170,17 @@ function handleTableClick(event: MouseEvent) {
 <style scoped>
 .usage-errors-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  min-width: 0;
 }
 
 .usage-errors-table :deep(.ds-table__row) {
   cursor: pointer;
+}
+
+.usage-errors-table {
+  min-width: 0;
 }
 
 .usage-panel-toolbar {
@@ -212,6 +218,7 @@ function handleTableClick(event: MouseEvent) {
 .usage-panel-pager {
   display: flex;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .stack-cell {

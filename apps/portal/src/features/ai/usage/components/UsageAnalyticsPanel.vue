@@ -137,7 +137,9 @@ const emit = defineEmits<{
 <style scoped>
 .usage-analytics {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
+  min-width: 0;
 }
 
 .usage-analytics__grid {

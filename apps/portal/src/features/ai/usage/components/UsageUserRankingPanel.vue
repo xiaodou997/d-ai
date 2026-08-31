@@ -150,7 +150,13 @@ function handleTableClick(event: MouseEvent) {
 <style scoped>
 .usage-ranking-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  min-width: 0;
+}
+
+.usage-ranking-table {
+  min-width: 0;
 }
 
 .usage-ranking-table :deep(.ds-table__row) {

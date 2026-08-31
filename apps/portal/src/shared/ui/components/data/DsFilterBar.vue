@@ -17,12 +17,17 @@ defineSlots<{ default?(): unknown; actions?(): unknown }>();
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 12px;
+  min-width: 0;
 }
 
 .ds-filter-bar__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 </style>

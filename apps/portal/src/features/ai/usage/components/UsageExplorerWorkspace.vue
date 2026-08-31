@@ -146,7 +146,9 @@ function selectRecord(row: AdminUsageRow) {
 <style scoped>
 .usage-explorer {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
+  min-width: 0;
 }
 
 .usage-explorer__brief-grid {
@@ -206,10 +208,12 @@ function selectRecord(row: AdminUsageRow) {
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: start;
+  min-width: 0;
 }
 
 .usage-explorer__data {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
 }
@@ -217,11 +221,14 @@ function selectRecord(row: AdminUsageRow) {
 .usage-explorer__pager {
   display: flex;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .usage-explorer__filters {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  min-width: 0;
 }
 
 .usage-filter {

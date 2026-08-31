@@ -149,9 +149,13 @@ const current = computed(() => props.breadcrumbs[props.breadcrumbs.length - 1]);
 
 .portal-page-panel__actions {
   display: flex;
+  flex-wrap: wrap;
   flex-shrink: 0;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .portal-page-panel__filters {
@@ -161,6 +165,12 @@ const current = computed(() => props.breadcrumbs[props.breadcrumbs.length - 1]);
 }
 
 .portal-page-panel__body {
+  min-width: 0;
+}
+
+/* Let a workspace shrink before an embedded table handles its intrinsic
+   width with the table's own horizontal scroller. */
+.portal-page-panel__body > * {
   min-width: 0;
 }
 

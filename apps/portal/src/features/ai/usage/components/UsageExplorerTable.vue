@@ -221,6 +221,7 @@ function billingStatusLabel(status?: string) {
 <style scoped>
 .usage-explorer-table {
   width: 100%;
+  min-width: 0;
 }
 
 /* 整行可点击进入请求详情页 */

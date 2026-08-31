@@ -52,6 +52,7 @@ const hasFooter = computed(() => Boolean(slots.footer));
 <style scoped>
 .portal-content-card {
   overflow: hidden;
+  min-width: 0;
   border: 1px solid var(--ds-line);
   border-radius: var(--ds-radius-panel);
   background: var(--ds-panel);
@@ -92,6 +93,11 @@ const hasFooter = computed(() => Boolean(slots.footer));
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.portal-content-card__body {
+  min-width: 0;
 }
 
 .portal-content-card__body--none {

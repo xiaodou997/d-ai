@@ -113,6 +113,7 @@ const metrics = computed(() => [
   gap: 20px;
   padding: 24px;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 </style>

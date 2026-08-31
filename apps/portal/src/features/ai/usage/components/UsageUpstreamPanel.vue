@@ -130,7 +130,9 @@ function successRate(row: UsageUpstreamSummaryRowDTO) {
 <style scoped>
 .usage-upstream-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  min-width: 0;
 }
 
 .usage-panel-toolbar {

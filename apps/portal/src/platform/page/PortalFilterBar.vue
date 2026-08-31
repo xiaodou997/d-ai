@@ -23,6 +23,7 @@ const hasActions = computed(() => Boolean(slots.actions));
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .portal-filter-bar__fields {
@@ -36,9 +37,13 @@ const hasActions = computed(() => Boolean(slots.actions));
 
 .portal-filter-bar__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 @media (max-width: 768px) {

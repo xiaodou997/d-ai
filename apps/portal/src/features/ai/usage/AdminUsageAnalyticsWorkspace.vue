@@ -171,6 +171,7 @@ function handleSelectUser(userId: string) {
 .usage-body {
   display: grid;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   gap: 20px;
   padding: 24px;

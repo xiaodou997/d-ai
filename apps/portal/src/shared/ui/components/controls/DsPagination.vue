@@ -135,6 +135,7 @@ function changePageSize(size: number) {
   justify-content: space-between;
   gap: 14px;
   width: 100%;
+  min-width: 0;
   flex-wrap: wrap;
 }
 
@@ -149,6 +150,9 @@ function changePageSize(size: number) {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-end;
   flex-wrap: wrap;
 }
 
@@ -179,6 +183,10 @@ function changePageSize(size: number) {
   display: flex;
   align-items: center;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .ds-pagination__btn {

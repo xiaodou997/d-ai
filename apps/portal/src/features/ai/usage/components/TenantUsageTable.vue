@@ -144,6 +144,7 @@ function groupLabel(row: TenantUsageRow) {
   gap: 16px;
   width: 100%;
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -163,6 +164,7 @@ function groupLabel(row: TenantUsageRow) {
 .tenant-usage-table__pager {
   display: flex;
   justify-content: flex-end;
+  min-width: 0;
   flex-shrink: 0;
 }
 
