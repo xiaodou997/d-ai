@@ -31,6 +31,13 @@ function statusLabel(item: SystemModuleStatus) { return item.active ? "运行中
 function cleanupRunTone(status: string) { return status === "completed" ? "positive" : status === "failed" ? "danger" : status === "running" ? "info" : "neutral"; }
 function cleanupRunLabel(status: string) { return status === "completed" ? "已完成" : status === "failed" ? "失败" : status === "running" ? "执行中" : "排队中"; }
 function cleanupRunTotal(summary: Record<string, number>) { return Object.values(summary).reduce((sum, value) => sum + value, 0).toLocaleString(); }
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** unitIndex;
+  return `${value.toLocaleString("zh-CN", { maximumFractionDigits: unitIndex === 0 ? 0 : 1 })} ${units[unitIndex]}`;
+}
 function updateCleanupNumber(key: keyof DataCleanupPolicy, value: string) {
   cleanupPolicy.value[key] = Number(value) as never;
 }
@@ -84,9 +91,18 @@ async function startCleanup() {
 }
 
 async function purgeRequestBodies() {
+  cleanupBusy.value = true;
   try {
+    const preview = await systemModulesApi.previewCleanup();
+    cleanupPreview.value = preview;
+    const bodyPreview = preview.requestBodyPurge;
     const result = await ElMessageBox.prompt(
-      "这是不可逆操作。系统会清空所有请求/响应正文、请求参数、媒体引用和底层错误详情，保留请求元数据、用量统计及账务数据；完成后会压缩审计表，期间可能短暂阻塞新的审计写入。请输入 CLEANUP_DATA 继续。",
+      `这是不可逆操作。系统会清空所有请求/响应正文、请求参数、媒体引用和底层错误详情，保留请求元数据、用量统计及账务数据；完成后会压缩审计表，期间可能短暂阻塞新的审计写入。
+
+本次预览：${bodyPreview.eligibleRows.toLocaleString()} 条正文数据，占用约 ${formatBytes(bodyPreview.occupiedBytes)}。
+预览时间：${cleanupDate(preview.generatedAt)}
+
+请输入 CLEANUP_DATA 继续。`,
       "清空请求体",
       {
         type: "warning",
@@ -95,7 +111,6 @@ async function purgeRequestBodies() {
         inputErrorMessage: "确认短语不正确"
       }
     );
-    cleanupBusy.value = true;
     const run = await systemModulesApi.purgeRequestBodies({ confirmation: result.value });
     cleanupRuns.value = [run, ...cleanupRuns.value.filter((item) => item.id !== run.id)];
     ElMessage.success("请求体清理任务已开始");
@@ -201,6 +216,7 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
             <div class="cleanup-danger-zone__copy">
               <div class="cleanup-danger-zone__title"><FileText :size="15" /><strong>立即清空请求体</strong></div>
               <p>清除所有请求/响应正文等大字段，保留请求记录、用量统计和对账数据；任务完成后自动回收 TOAST 空间。</p>
+              <p v-if="cleanupPreview" class="cleanup-danger-zone__preview">当前待清理 {{ cleanupPreview.requestBodyPurge.eligibleRows.toLocaleString() }} 条正文数据，占用约 <strong>{{ formatBytes(cleanupPreview.requestBodyPurge.occupiedBytes) }}</strong>；预览于 {{ cleanupDate(cleanupPreview.generatedAt) }}</p>
             </div>
             <DsButton variant="danger" :disabled="cleanupBusy" @click="purgeRequestBodies">
               <template #icon><Trash2 :size="14" /></template>
@@ -256,6 +272,7 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
 .cleanup-danger-zone__copy { min-width: 0; }
 .cleanup-danger-zone__title { display: flex; align-items: center; gap: 7px; color: var(--ds-danger); font-size: 13px; }
 .cleanup-danger-zone__copy p { margin: 6px 0 0; color: var(--ds-ink-soft); font-size: 12px; line-height: 1.6; }
+.cleanup-danger-zone__preview strong { color: var(--ds-danger); font-weight: 700; }
 .notification-form { display: grid; grid-template-columns: 180px 220px minmax(180px, 1fr) minmax(220px, 1.5fr) auto; align-items: center; gap: 10px; }
 @media (max-width: 1100px) { .module-grid { grid-template-columns: 1fr; } .cleanup-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cleanup-workspace { grid-template-columns: 1fr; } }
 @media (max-width: 900px) { .notification-form { grid-template-columns: 1fr; } }

@@ -5761,10 +5761,13 @@ components:
             - "null"
         policy:
           $ref: "#/components/schemas/Policy"
+        requestBodyPurge:
+          $ref: "#/components/schemas/RequestBodyPurgePreview"
       required:
         - policy
         - generatedAt
         - items
+        - requestBodyPurge
       type: object
     PreviewItem:
       additionalProperties: false
@@ -6460,6 +6463,19 @@ components:
           type: boolean
       required:
         - updated
+      type: object
+    RequestBodyPurgePreview:
+      additionalProperties: false
+      properties:
+        eligibleRows:
+          format: int64
+          type: integer
+        occupiedBytes:
+          format: int64
+          type: integer
+      required:
+        - eligibleRows
+        - occupiedBytes
       type: object
     ResolutionUSDDTO:
       additionalProperties: false

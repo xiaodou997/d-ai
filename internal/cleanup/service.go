@@ -78,10 +78,19 @@ type PreviewItem struct {
 	EligibleRows  int64     `json:"eligibleRows"`
 }
 
+// RequestBodyPurgePreview reports the body values that the manual purge would
+// remove. occupiedBytes is the current storage size of those values, including
+// body keys still waiting in the durable audit inbox.
+type RequestBodyPurgePreview struct {
+	EligibleRows  int64 `json:"eligibleRows"`
+	OccupiedBytes int64 `json:"occupiedBytes"`
+}
+
 type Preview struct {
-	Policy      Policy        `json:"policy"`
-	GeneratedAt time.Time     `json:"generatedAt"`
-	Items       []PreviewItem `json:"items"`
+	Policy           Policy                  `json:"policy"`
+	GeneratedAt      time.Time               `json:"generatedAt"`
+	Items            []PreviewItem           `json:"items"`
+	RequestBodyPurge RequestBodyPurgePreview `json:"requestBodyPurge"`
 }
 
 type Run struct {
@@ -314,7 +323,70 @@ func (s *Service) Preview(ctx context.Context) (Preview, error) {
 			EligibleRows:  count,
 		})
 	}
-	return Preview{Policy: policy, GeneratedAt: now, Items: items}, nil
+	requestBodyPurge, err := s.previewRequestBodyPurge(ctx)
+	if err != nil {
+		return Preview{}, fmt.Errorf("preview %s: %w", TargetRequestBodyPurge, err)
+	}
+	return Preview{Policy: policy, GeneratedAt: now, Items: items, RequestBodyPurge: requestBodyPurge}, nil
+}
+
+func (s *Service) previewRequestBodyPurge(ctx context.Context) (RequestBodyPurgePreview, error) {
+	var preview RequestBodyPurgePreview
+	if err := s.pool.QueryRow(ctx, `
+		SELECT
+			(
+				SELECT COUNT(*)
+				FROM ai_request_payloads
+				WHERE request_messages IS NOT NULL
+				   OR request_params IS NOT NULL
+				   OR response_message IS NOT NULL
+				   OR internal_error_detail IS NOT NULL
+				   OR attempts_detail IS NOT NULL
+				   OR media_refs IS NOT NULL
+			)
+			+ (
+				SELECT COUNT(*)
+				FROM ai_audit_inbox
+				WHERE payload ?| ARRAY[
+					'request_messages', 'request_params', 'response_message',
+					'media_refs', 'internal_error_detail', 'attempts_detail'
+				]
+			),
+			(
+				SELECT COALESCE(SUM(
+					COALESCE(pg_column_size(request_messages), 0)::bigint
+					+ COALESCE(pg_column_size(request_params), 0)::bigint
+					+ COALESCE(pg_column_size(response_message), 0)::bigint
+					+ COALESCE(pg_column_size(internal_error_detail), 0)::bigint
+					+ COALESCE(pg_column_size(attempts_detail), 0)::bigint
+					+ COALESCE(pg_column_size(media_refs), 0)::bigint
+				), 0)::bigint
+				FROM ai_request_payloads
+				WHERE request_messages IS NOT NULL
+				   OR request_params IS NOT NULL
+				   OR response_message IS NOT NULL
+				   OR internal_error_detail IS NOT NULL
+				   OR attempts_detail IS NOT NULL
+				   OR media_refs IS NOT NULL
+			)
+			+ (
+				SELECT COALESCE(SUM(
+					GREATEST(
+						pg_column_size(payload)
+						- pg_column_size(payload - 'request_messages' - 'request_params' - 'response_message' - 'media_refs' - 'internal_error_detail' - 'attempts_detail'),
+						0
+					)::bigint
+				), 0)::bigint
+				FROM ai_audit_inbox
+				WHERE payload ?| ARRAY[
+					'request_messages', 'request_params', 'response_message',
+					'media_refs', 'internal_error_detail', 'attempts_detail'
+				]
+			)
+	`).Scan(&preview.EligibleRows, &preview.OccupiedBytes); err != nil {
+		return RequestBodyPurgePreview{}, err
+	}
+	return preview, nil
 }
 
 func (s *Service) StartManual(targets []string, actor string) (Run, error) {

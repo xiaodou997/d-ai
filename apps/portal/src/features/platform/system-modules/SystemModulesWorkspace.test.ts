@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import ElementPlus from "element-plus";
+import ElementPlus, { ElMessageBox } from "element-plus";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -53,6 +53,8 @@ describe("SystemModulesWorkspace", () => {
     api.setEnabled.mockResolvedValue({ ...module, enabled: false, active: false });
     api.getCleanupPolicy.mockResolvedValue(policy);
     api.previewCleanup.mockResolvedValue({
+      generatedAt: "2026-08-28T04:00:00Z",
+      requestBodyPurge: { eligibleRows: 2, occupiedBytes: 2048 },
       items: [{ target: "request_body", label: "请求正文", retentionDays: 30, eligibleRows: 2 }]
     });
     api.listCleanupRuns.mockResolvedValue([]);
@@ -73,6 +75,7 @@ describe("SystemModulesWorkspace", () => {
     expect(wrapper.text()).toContain("数据生命周期");
     expect(wrapper.text()).toContain("立即清空请求体");
     expect(wrapper.text()).toContain("预计处理 2 条");
+    expect(wrapper.text()).toContain("占用约 2 KB");
     wrapper.unmount();
   });
 
@@ -87,6 +90,24 @@ describe("SystemModulesWorkspace", () => {
     await saveButton!.trigger("click");
     await flushPromises();
     expect(api.updateCleanupPolicy).toHaveBeenCalledWith(policy);
+    wrapper.unmount();
+  });
+
+  it("refreshes the body purge preview before asking for confirmation", async () => {
+    const prompt = vi.spyOn(ElMessageBox, "prompt").mockResolvedValue({ value: "CLEANUP_DATA", action: "confirm" });
+    api.purgeRequestBodies.mockResolvedValue({ id: "run-1", summary: {} });
+    const { wrapper } = await mountWorkspace();
+
+    const purgeButton = wrapper.findAllComponents(DsButton).find((button) => button.text().includes("清空请求体"));
+    expect(purgeButton).toBeDefined();
+    await purgeButton!.trigger("click");
+    await flushPromises();
+
+    expect(api.previewCleanup).toHaveBeenCalledTimes(2);
+    expect(prompt).toHaveBeenCalledWith(expect.stringContaining("占用约 2 KB"), "清空请求体", expect.any(Object));
+    expect(api.purgeRequestBodies).toHaveBeenCalledWith({ confirmation: "CLEANUP_DATA" });
+
+    prompt.mockRestore();
     wrapper.unmount();
   });
 });

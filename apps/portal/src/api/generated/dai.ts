@@ -7710,6 +7710,7 @@ export interface components {
             generatedAt: string;
             items: components["schemas"]["PreviewItem"][] | null;
             policy: components["schemas"]["Policy"];
+            requestBodyPurge: components["schemas"]["RequestBodyPurgePreview"];
         };
         PreviewItem: {
             /** Format: date-time */
@@ -8067,6 +8068,12 @@ export interface components {
              */
             readonly $schema?: string;
             updated: boolean;
+        };
+        RequestBodyPurgePreview: {
+            /** Format: int64 */
+            eligibleRows: number;
+            /** Format: int64 */
+            occupiedBytes: number;
         };
         ResolutionUSDDTO: {
             /**

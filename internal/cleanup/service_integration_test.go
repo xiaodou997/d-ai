@@ -35,6 +35,12 @@ func TestCleanupTargetsRespectRetentionAndProtectionRules(t *testing.T) {
 		t.Fatalf("seed request payloads: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
+		INSERT INTO ai_audit_inbox (request_id, payload)
+		VALUES ('cleanup-inbox', '{"request_messages":{"queued":true},"metadata":"keep"}'::jsonb)
+	`); err != nil {
+		t.Fatalf("seed audit inbox: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO ai_audit_blobs (sha256, content, content_type, size_bytes, created_at)
 		VALUES ('referenced', '\x01'::bytea, 'image/png', 1, $1), ('unreferenced', '\x02'::bytea, 'image/png', 1, $1)
 	`, old); err != nil {
@@ -74,6 +80,13 @@ func TestCleanupTargetsRespectRetentionAndProtectionRules(t *testing.T) {
 
 	svc := NewService(pool, zap.NewNop())
 	policy := DefaultPolicy()
+	preview, err := svc.Preview(ctx)
+	if err != nil {
+		t.Fatalf("preview cleanup: %v", err)
+	}
+	if preview.RequestBodyPurge.EligibleRows != 4 || preview.RequestBodyPurge.OccupiedBytes <= 0 {
+		t.Fatalf("request body purge preview = %+v, want 4 rows and positive occupied bytes", preview.RequestBodyPurge)
+	}
 	if got, err := svc.clearRequestBodies(ctx, time.Now().UTC().Add(-30*24*time.Hour), policy.BatchSize); err != nil || got != 2 {
 		t.Fatalf("clear request bodies = %d, err=%v; want 2", got, err)
 	}
@@ -111,6 +124,16 @@ func TestCleanupTargetsRespectRetentionAndProtectionRules(t *testing.T) {
 	}
 	if requestStatus != "completed" || requestMessages != nil {
 		t.Fatalf("purged request payload = status:%q messages:%v, want completed and NULL messages", requestStatus, requestMessages)
+	}
+	var inboxHasBody, inboxHasMetadata bool
+	if err := pool.QueryRow(ctx, `
+		SELECT payload ? 'request_messages', payload ? 'metadata'
+		FROM ai_audit_inbox WHERE request_id = 'cleanup-inbox'
+	`).Scan(&inboxHasBody, &inboxHasMetadata); err != nil {
+		t.Fatalf("read purged audit inbox: %v", err)
+	}
+	if inboxHasBody || !inboxHasMetadata {
+		t.Fatalf("purged audit inbox body=%t metadata=%t, want body=false metadata=true", inboxHasBody, inboxHasMetadata)
 	}
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM sys_notification_deliveries WHERE status = 'pending'`, 1)
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM ai_content_moderation_logs WHERE flagged = true`, 1)

@@ -70,10 +70,16 @@ export type DataCleanupPreviewItem = {
   eligibleRows: number;
 };
 
+export type DataCleanupRequestBodyPurgePreview = {
+  eligibleRows: number;
+  occupiedBytes: number;
+};
+
 export type DataCleanupPreview = {
   policy: DataCleanupPolicy;
   generatedAt: string;
   items: DataCleanupPreviewItem[];
+  requestBodyPurge: DataCleanupRequestBodyPurgePreview;
 };
 
 export type DataCleanupRun = {
@@ -180,7 +186,11 @@ function toCleanupPreview(value: CleanupPreviewTransport): DataCleanupPreview {
   return {
     policy: toCleanupPolicy(value.policy),
     generatedAt: value.generatedAt,
-    items: value.items?.map((item) => ({ ...item })) ?? []
+    items: value.items?.map((item) => ({ ...item })) ?? [],
+    requestBodyPurge: {
+      eligibleRows: value.requestBodyPurge?.eligibleRows ?? 0,
+      occupiedBytes: value.requestBodyPurge?.occupiedBytes ?? 0
+    }
   };
 }
 
