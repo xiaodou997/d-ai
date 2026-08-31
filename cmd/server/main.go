@@ -199,10 +199,6 @@ func runRole(role runtimeRole) error {
 		HSTS:         cfg.App.Env == "production",
 		MaxBodyBytes: cfg.Server.MaxBodyBytes,
 	})
-	// Register the metrics middleware inside chi so the route context is
-	// available after dispatch; this keeps dynamic IDs out of Prometheus labels.
-	router.Use(aimetrics.HTTPMiddleware)
-
 	if role.HasControlAPI() {
 		transport.Register(api, buildPlatformTransportModules(version, cfg, platform, ai.AIHTTPDeps, appLogger)...)
 	}
@@ -287,7 +283,7 @@ func runRole(role runtimeRole) error {
 	httpRuntime := newHTTPServers(httpServerOptions{
 		PublicAddr:        publicAddr,
 		ManagementAddr:    strings.TrimSpace(cfg.Server.ManagementAddr),
-		PublicHandler:     weborigin.Middleware(router, originResolver),
+		PublicHandler:     aimetrics.HTTPMiddleware(weborigin.Middleware(router, originResolver)),
 		ManagementHandler: aimetrics.HTTPMiddleware(server.SecurityHeaders(cfg.App.Env == "production")(server.NoStoreAPI(server.RequestBodyLimit(1 << 20)(managementMux)))),
 		ReadTimeout:       time.Duration(cfg.Server.ReadTimeout) * time.Second,
 		IdleTimeout:       time.Duration(cfg.Server.IdleTimeout) * time.Second,
