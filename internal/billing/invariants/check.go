@@ -151,12 +151,12 @@ func checkRechargeOrders(ctx context.Context, q Querier, report *Report) error {
 	rows, err := q.Query(ctx, `
 		SELECT r.order_id, r.status, r.credit_amount,
 		       COALESCE(SUM(l.granted_micro), 0)::bigint,
-		       COUNT(*) FILTER (WHERE l.expired_at IS NULL AND l.revoked_at IS NULL)
+		       COUNT(l.id) FILTER (WHERE l.expired_at IS NULL AND l.revoked_at IS NULL)
 		FROM bill_recharge_orders r
 		LEFT JOIN bill_credit_lots l ON l.recharge_order_id = r.order_id
 		GROUP BY r.order_id, r.status, r.credit_amount
 		HAVING COALESCE(SUM(l.granted_micro), 0) > r.credit_amount
-		    OR (r.status = 'reversed' AND COUNT(*) FILTER (WHERE l.expired_at IS NULL AND l.revoked_at IS NULL) > 0)
+		    OR (r.status = 'reversed' AND COUNT(l.id) FILTER (WHERE l.expired_at IS NULL AND l.revoked_at IS NULL) > 0)
 		ORDER BY r.order_id
 	`)
 	if err != nil {

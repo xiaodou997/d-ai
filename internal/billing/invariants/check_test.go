@@ -16,6 +16,38 @@ import (
 	"xiaodou/dai/internal/dbtest"
 )
 
+func TestReversedRechargeOrderWithoutLotIsHealthy(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	const tenantID = "invariant-reversed-without-lot"
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ($1, 'Reversed Without Lot Tenant', 'active')
+	`, tenantID); err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO bill_recharge_orders
+			(order_id, order_type, tenant_id, credit_amount, paid_amount, operator_id, status)
+		VALUES ('INV_REVERSED_WITHOUT_LOT', 'platform_to_tenant', $1, 1000, 1000, 'invariant-test', 'reversed')
+	`, tenantID); err != nil {
+		t.Fatalf("seed reversed recharge order: %v", err)
+	}
+
+	report, err := invariants.Check(ctx, pool)
+	if err != nil {
+		t.Fatalf("check invariants: %v", err)
+	}
+	if err := report.Err(); err != nil {
+		t.Fatalf("reversed order without lot reported as a violation: %v", err)
+	}
+}
+
 func TestMoneyInvariantSuiteCoversCrossModuleLifecycle(t *testing.T) {
 	ctx := context.Background()
 	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 8})

@@ -531,6 +531,12 @@ func (s *Service) CleanupExpired(ctx context.Context) (CleanupResult, error) {
 }
 
 func (s *Service) acquireCleanupLease(now time.Time) (func(), error) {
+	// The image directory is created lazily when the first asset is stored. The
+	// hourly cleanup can run before that, so make the lease parent explicit here
+	// instead of treating a brand-new local data directory as a failure.
+	if err := os.MkdirAll(s.storageDir, 0o755); err != nil {
+		return nil, fmt.Errorf("imageassets: create storage directory: %w", err)
+	}
 	leasePath := filepath.Join(s.storageDir, imageCleanupLeaseName)
 	for attempt := 0; attempt < 2; attempt++ {
 		file, err := os.OpenFile(leasePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)

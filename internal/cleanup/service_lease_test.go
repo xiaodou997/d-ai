@@ -74,3 +74,27 @@ func TestCleanupLeaseHeartbeatAndTerminalWriteAreFenced(t *testing.T) {
 		t.Fatalf("queue after expired lease recovery: %v", err)
 	}
 }
+
+func TestCleanupExecuteClaimsQueuedRun(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+
+	service := NewService(pool, zap.NewNop())
+	run, err := service.queueRun(ctx, "manual", []string{TargetNotifications}, "operator-1")
+	if err != nil {
+		t.Fatalf("queue cleanup run: %v", err)
+	}
+	service.execute(ctx, run.ID, "manual", []string{TargetNotifications}, "operator-1")
+
+	var status string
+	if err := pool.QueryRow(ctx, `SELECT status FROM sys_data_cleanup_runs WHERE id = $1::uuid`, run.ID).Scan(&status); err != nil {
+		t.Fatalf("read cleanup run status: %v", err)
+	}
+	if status != "completed" {
+		t.Fatalf("cleanup run status = %q, want completed", status)
+	}
+}

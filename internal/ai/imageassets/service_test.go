@@ -309,6 +309,18 @@ func TestCleanupExpiredLeavesTaskAssetsForEngineExpirer(t *testing.T) {
 	}
 }
 
+func TestCleanupExpiredCreatesMissingStorageDirectory(t *testing.T) {
+	storageDir := filepath.Join(t.TempDir(), "images")
+	svc := New(Config{StorageDir: storageDir}, nil)
+
+	if _, err := svc.CleanupExpired(context.Background()); err != nil {
+		t.Fatalf("CleanupExpired with missing storage directory: %v", err)
+	}
+	if info, err := os.Stat(storageDir); err != nil || !info.IsDir() {
+		t.Fatalf("storage directory was not created: info=%v err=%v", info, err)
+	}
+}
+
 func TestCleanupExpiredScansOrphanTaskAssetsOnlyWithRetainer(t *testing.T) {
 	storageDir := t.TempDir()
 	svc := New(Config{StorageDir: storageDir, Retention: time.Hour}, nil)

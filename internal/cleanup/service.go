@@ -470,8 +470,8 @@ func (s *Service) execute(ctx context.Context, runID, trigger string, targets []
 	started := time.Now().UTC()
 	claimed, err := s.pool.Exec(workCtx, `
 		UPDATE sys_data_cleanup_runs
-		SET status = 'running', started_at = $2, heartbeat_at = $2,
-		    lease_until = $2 + make_interval(secs => $3)
+		SET status = 'running', started_at = $2::timestamptz, heartbeat_at = $2::timestamptz,
+		    lease_until = $2::timestamptz + make_interval(secs => $3::double precision)
 		WHERE id = $1 AND status = 'queued' AND owner_id = $4 AND lease_until > now()
 	`, runID, started, s.leaseTTL.Seconds(), s.ownerID)
 	if err != nil {
