@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(18);
-    expect(leavesFor(2)).toHaveLength(17);
+    expect(leavesFor(1)).toHaveLength(20);
+    expect(leavesFor(2)).toHaveLength(19);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -31,7 +31,9 @@ describe("portal module registry", () => {
       "管理员与身份",
       "资金中心",
       "支付设置",
-      "上游与定价",
+      "上游账号",
+      "账号池",
+      "价格表",
       "路由策略",
       "使用记录",
       "用量分析",
@@ -241,7 +243,27 @@ describe("portal module registry", () => {
       ?.children;
 
     expect(aiGatewayMenus).toMatchObject([
-      { id: "admin-upstream-workspace", label: "上游与定价", active: false },
+      {
+        id: "admin-upstream-accounts",
+        label: "上游账号",
+        to: "/admin/ai/upstreams/accounts",
+        icon: "database",
+        active: false
+      },
+      {
+        id: "admin-credential-pools",
+        label: "账号池",
+        to: "/admin/ai/upstreams/pools",
+        icon: "boxes",
+        active: false
+      },
+      {
+        id: "admin-price-books",
+        label: "价格表",
+        to: "/admin/ai/upstreams/pricing",
+        icon: "tags",
+        active: false
+      },
       {
         id: "admin-routing-policy",
         label: "路由策略",
@@ -253,6 +275,19 @@ describe("portal module registry", () => {
       { id: "admin-usage-analytics", label: "用量分析", active: false },
       { id: "admin-security-workspace", label: "审计与风控", active: false }
     ]);
+  });
+
+  it("keeps upstream, pool and pricing pages as separate admin menus", () => {
+    for (const [path, id] of [
+      ["/admin/ai/upstreams/accounts", "admin-upstream-accounts"],
+      ["/admin/ai/upstreams/pools", "admin-credential-pools"],
+      ["/admin/ai/upstreams/pricing", "admin-price-books"]
+    ] as const) {
+      const active = leavesFor(1, path).filter((item) => item.active).map((item) => item.id);
+      expect(active).toEqual([id]);
+    }
+
+    expect(portalModules.some((module) => module.id === "admin-upstream-workspace")).toBe(false);
   });
 
   it("exposes usage records separately from security controls", () => {

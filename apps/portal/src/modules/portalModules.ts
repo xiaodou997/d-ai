@@ -212,18 +212,34 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/platform/PaymentSettingsView.vue")
   },
   {
-    id: "admin-upstream-workspace",
-    label: "上游与定价",
-    path: "/admin/ai/upstreams",
+    id: "admin-upstream-accounts",
+    label: "上游账号",
+    path: "/admin/ai/upstreams/accounts",
     icon: "database",
     capability: "admin.ai.upstream",
     navGroup: adminAi,
     order: 20,
-    tabs: [
-      { id: "accounts", label: "上游账号", path: "accounts", component: () => import("@/views/admin/ai/gateway/AccountsView.vue") },
-      { id: "pools", label: "账号池", path: "pools", component: () => import("@/views/admin/ai/gateway/CredentialPoolsView.vue") },
-      { id: "pricing", label: "价格表", path: "pricing", component: () => import("@/views/admin/ai/gateway/PricingView.vue") }
-    ]
+    component: () => import("@/views/admin/ai/gateway/AccountsView.vue")
+  },
+  {
+    id: "admin-credential-pools",
+    label: "账号池",
+    path: "/admin/ai/upstreams/pools",
+    icon: "boxes",
+    capability: "admin.ai.upstream",
+    navGroup: adminAi,
+    order: 21,
+    component: () => import("@/views/admin/ai/gateway/CredentialPoolsView.vue")
+  },
+  {
+    id: "admin-price-books",
+    label: "价格表",
+    path: "/admin/ai/upstreams/pricing",
+    icon: "tags",
+    capability: "admin.ai.upstream",
+    navGroup: adminAi,
+    order: 22,
+    component: () => import("@/views/admin/ai/gateway/PricingView.vue")
   },
   {
     id: "admin-routing-policy",
