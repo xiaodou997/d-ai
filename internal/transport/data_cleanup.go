@@ -25,6 +25,12 @@ type dataCleanupRunInput struct {
 	}
 }
 
+type dataCleanupRequestBodyPurgeInput struct {
+	Body struct {
+		Confirmation string `json:"confirmation"`
+	}
+}
+
 func registerDataCleanup(api huma.API, d dataCleanupModule) {
 	admin := huma.Middlewares{userAuth(api, d.auth.JWT, d.auth.Blacklist), requireCapability(api, auth.CapabilityPlatformAdmin)}
 	adminSensitive := append(huma.Middlewares{}, admin...)
@@ -108,6 +114,28 @@ func registerDataCleanup(api huma.API, d dataCleanupModule) {
 		}
 		if errors.Is(err, cleanuppkg.ErrInvalidTarget) {
 			return nil, httpx.ErrBadRequest.WithDetail(err.Error())
+		}
+		if err != nil {
+			return nil, httpx.ErrInternal.WithCause(err)
+		}
+		return &dataCleanupRunOutput{Body: run}, nil
+	})
+
+	huma.Register(api, huma.Operation{
+		OperationID:   "admin-purge-request-bodies",
+		Method:        http.MethodPost,
+		Path:          "/api/v1/admin/data-cleanup/request-bodies/purge",
+		Summary:       "立即清空请求正文并回收空间",
+		Tags:          []string{"data-cleanup"},
+		Middlewares:   adminSensitive,
+		DefaultStatus: http.StatusAccepted,
+	}, func(ctx context.Context, in *dataCleanupRequestBodyPurgeInput) (*dataCleanupRunOutput, error) {
+		if in.Body.Confirmation != cleanuppkg.ConfirmationPhrase {
+			return nil, httpx.ErrBadRequest.WithDetail("请输入正确的确认短语：" + cleanuppkg.ConfirmationPhrase)
+		}
+		run, err := d.service.StartRequestBodyPurge(actorID(ctx))
+		if errors.Is(err, cleanuppkg.ErrAlreadyRunning) {
+			return nil, httpx.ErrConflict.WithDetail("已有数据清理任务正在执行")
 		}
 		if err != nil {
 			return nil, httpx.ErrInternal.WithCause(err)

@@ -433,6 +433,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/data-cleanup/request-bodies/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 立即清空请求正文并回收空间 */
+        post: operations["admin-purge-request-bodies"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/data-cleanup/runs": {
         parameters: {
             query?: never;
@@ -6110,6 +6127,15 @@ export interface components {
             items: components["schemas"]["DashboardTopTenantDTO"][] | null;
             /** Format: int64 */
             total: number;
+        };
+        DataCleanupRequestBodyPurgeInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DataCleanupRequestBodyPurgeInputBody.json
+             */
+            readonly $schema?: string;
+            confirmation: string;
         };
         DataCleanupRunInputBody: {
             /**
@@ -12134,6 +12160,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Preview"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-purge-request-bodies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataCleanupRequestBodyPurgeInputBody"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
                 };
             };
             /** @description Error */

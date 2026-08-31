@@ -23,14 +23,20 @@ import (
 )
 
 const (
-	TargetRequestBody     = "request_body"
-	TargetRequestPayloads = "request_payloads"
-	TargetNotifications   = "notifications"
-	TargetModerationLogs  = "moderation_logs"
-	TargetRiskEvents      = "risk_events"
-	TargetAdminAuditLogs  = "admin_audit_logs"
-	TargetAuditBlobs      = "audit_blobs"
-	TargetUsageRollups    = "usage_rollups"
+	TargetRequestBody = "request_body"
+	// TargetRequestBodyPurge is a manual-only operation. It clears request and
+	// response payload fields for every retained audit row and compacts the
+	// table afterwards so PostgreSQL can return the old TOAST files to the OS.
+	// It is intentionally excluded from AllTargets and therefore never runs
+	// from the daily automatic cleanup policy.
+	TargetRequestBodyPurge = "request_body_purge"
+	TargetRequestPayloads  = "request_payloads"
+	TargetNotifications    = "notifications"
+	TargetModerationLogs   = "moderation_logs"
+	TargetRiskEvents       = "risk_events"
+	TargetAdminAuditLogs   = "admin_audit_logs"
+	TargetAuditBlobs       = "audit_blobs"
+	TargetUsageRollups     = "usage_rollups"
 
 	ConfirmationPhrase = "CLEANUP_DATA"
 	policyKey          = "data_cleanup"
@@ -332,6 +338,28 @@ func (s *Service) StartManual(targets []string, actor string) (Run, error) {
 	return run, nil
 }
 
+// StartRequestBodyPurge queues an irreversible, manual-only purge of all
+// request/response body fields. Usage, billing, ledger and request metadata
+// rows are preserved. The operation is asynchronous and appears in the same
+// cleanup run history as retention-based cleanup.
+func (s *Service) StartRequestBodyPurge(actor string) (Run, error) {
+	manualCtx, release, err := s.beginManualRun()
+	if err != nil {
+		return Run{}, err
+	}
+	targets := []string{TargetRequestBodyPurge}
+	run, err := s.queueRun(manualCtx, "manual", targets, actor)
+	if err != nil {
+		release()
+		return Run{}, err
+	}
+	go func() {
+		defer release()
+		s.execute(manualCtx, run.ID, "manual", targets, actor)
+	}()
+	return run, nil
+}
+
 // beginManualRun reserves a slot for a manually-triggered cleanup before its
 // durable run is queued. The reservation closes the shutdown race between the
 // HTTP request returning and the process releasing the database pool.
@@ -598,6 +626,8 @@ func (s *Service) cleanTarget(ctx context.Context, target string, policy Policy)
 	switch target {
 	case TargetRequestBody:
 		return s.clearRequestBodies(ctx, cutoff, policy.BatchSize)
+	case TargetRequestBodyPurge:
+		return s.clearAllRequestBodies(ctx, policy.BatchSize)
 	case TargetRequestPayloads:
 		return s.deleteRequestPayloads(ctx, cutoff, policy.BatchSize)
 	case TargetNotifications:
@@ -615,6 +645,76 @@ func (s *Service) cleanTarget(ctx context.Context, target string, policy Policy)
 	default:
 		return 0, fmt.Errorf("%w: %s", ErrInvalidTarget, target)
 	}
+}
+
+// clearAllRequestBodies removes only wire payloads and diagnostics. Keeping
+// the audit row itself preserves request IDs and metadata for ordinary usage
+// queries while releasing the large JSONB values from the row.
+func (s *Service) clearAllRequestBodies(ctx context.Context, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = DefaultPolicy().BatchSize
+	}
+	var total int64
+	for {
+		result, err := s.pool.Exec(ctx, `
+			UPDATE ai_request_payloads
+			SET request_messages = NULL,
+			    request_params = NULL,
+			    response_message = NULL,
+			    internal_error_detail = NULL,
+			    attempts_detail = NULL,
+			    media_refs = NULL
+			WHERE id IN (
+				SELECT id FROM ai_request_payloads
+				WHERE request_messages IS NOT NULL
+				   OR request_params IS NOT NULL
+				   OR response_message IS NOT NULL
+				   OR internal_error_detail IS NOT NULL
+				   OR attempts_detail IS NOT NULL
+				   OR media_refs IS NOT NULL
+				ORDER BY created_at, id
+				LIMIT $1
+			)
+		`, batchSize)
+		if err != nil {
+			return total, err
+		}
+		changed := result.RowsAffected()
+		total += changed
+		if changed < int64(batchSize) {
+			break
+		}
+	}
+
+	// The durable inbox may still contain payloads waiting for materialization.
+	// Strip their body keys as well, otherwise an old queued envelope could
+	// repopulate the large fields after this purge completes.
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE ai_audit_inbox
+		SET payload = payload
+		  - 'request_messages'
+		  - 'request_params'
+		  - 'response_message'
+		  - 'media_refs'
+		  - 'internal_error_detail'
+		  - 'attempts_detail'
+		WHERE payload ?| ARRAY[
+			'request_messages', 'request_params', 'response_message',
+			'media_refs', 'internal_error_detail', 'attempts_detail'
+		]
+	`); err != nil {
+		return total, fmt.Errorf("clear audit inbox request bodies: %w", err)
+	}
+
+	// DELETE/UPDATE leaves dead TOAST tuples behind. This operation is
+	// explicitly initiated by an administrator, so compact the two audit
+	// relations now instead of waiting for autovacuum. VACUUM FULL runs outside
+	// a transaction (pool.Exec uses a fresh autocommit statement) and takes an
+	// ACCESS EXCLUSIVE lock while it rewrites the relation.
+	if _, err := s.pool.Exec(ctx, `VACUUM (FULL, ANALYZE) ai_request_payloads`); err != nil {
+		return total, fmt.Errorf("compact ai_request_payloads (runtime role needs table ownership): %w", err)
+	}
+	return total, nil
 }
 
 func (s *Service) countTarget(ctx context.Context, target string, cutoff time.Time) (int64, error) {
@@ -989,6 +1089,8 @@ func targetLabel(target string) string {
 	switch target {
 	case TargetRequestBody:
 		return "请求正文与错误详情"
+	case TargetRequestBodyPurge:
+		return "全部请求正文"
 	case TargetRequestPayloads:
 		return "过期请求记录"
 	case TargetNotifications:

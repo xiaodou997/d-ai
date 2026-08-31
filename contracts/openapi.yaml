@@ -2656,6 +2656,21 @@ components:
         - total
         - included
       type: object
+    DataCleanupRequestBodyPurgeInputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/DataCleanupRequestBodyPurgeInputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        confirmation:
+          type: string
+      required:
+        - confirmation
+      type: object
     DataCleanupRunInputBody:
       additionalProperties: false
       properties:
@@ -12729,6 +12744,31 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 预览数据清理范围
+      tags:
+        - data-cleanup
+  /api/v1/admin/data-cleanup/request-bodies/purge:
+    post:
+      operationId: admin-purge-request-bodies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataCleanupRequestBodyPurgeInputBody"
+        required: true
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+          description: Accepted
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 立即清空请求正文并回收空间
       tags:
         - data-cleanup
   /api/v1/admin/data-cleanup/runs:

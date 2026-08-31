@@ -98,9 +98,20 @@ func TestCleanupTargetsRespectRetentionAndProtectionRules(t *testing.T) {
 	if got, err := svc.deleteUnreferencedBlobs(ctx, time.Now().UTC().Add(-180*24*time.Hour), policy.BatchSize); err != nil || got != 1 {
 		t.Fatalf("delete audit blobs = %d, err=%v; want 1", got, err)
 	}
+	if got, err := svc.clearAllRequestBodies(ctx, policy.BatchSize); err != nil || got != 1 {
+		t.Fatalf("clear all request bodies = %d, err=%v; want 1", got, err)
+	}
 
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM ai_request_payloads WHERE request_id = 'cleanup-body'`, 1)
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM ai_request_payloads WHERE request_id = 'cleanup-delete'`, 0)
+	var requestStatus string
+	var requestMessages []byte
+	if err := pool.QueryRow(ctx, `SELECT request_status, request_messages FROM ai_request_payloads WHERE request_id = 'cleanup-reference'`).Scan(&requestStatus, &requestMessages); err != nil {
+		t.Fatalf("read purged request payload: %v", err)
+	}
+	if requestStatus != "completed" || requestMessages != nil {
+		t.Fatalf("purged request payload = status:%q messages:%v, want completed and NULL messages", requestStatus, requestMessages)
+	}
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM sys_notification_deliveries WHERE status = 'pending'`, 1)
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM ai_content_moderation_logs WHERE flagged = true`, 1)
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM ai_risk_events WHERE status = 'open'`, 1)

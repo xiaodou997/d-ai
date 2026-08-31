@@ -163,6 +163,16 @@ describe("system modules generated operation facade", () => {
     await expect(
       systemModulesApi.startCleanup({ targets: ["notifications"], confirmation: "CLEANUP_DATA" })
     ).resolves.toMatchObject({ id: "run-1", status: "queued", targets: [] });
+
+    mocks.request.mockResolvedValueOnce(cleanupRun);
+    await expect(systemModulesApi.purgeRequestBodies({ confirmation: "CLEANUP_DATA" })).resolves.toMatchObject({
+      id: "run-1",
+      status: "queued"
+    });
+    expect(mocks.request.mock.calls.at(-1)?.[0]).toMatchObject({
+      path: "/api/v1/admin/data-cleanup/request-bodies/purge",
+      body: { confirmation: "CLEANUP_DATA" }
+    });
   });
 
   it("rejects unknown transport enums before they reach page state", async () => {

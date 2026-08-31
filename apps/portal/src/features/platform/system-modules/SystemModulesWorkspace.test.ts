@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   listCleanupRuns: vi.fn(),
   updateCleanupPolicy: vi.fn(),
   startCleanup: vi.fn(),
+  purgeRequestBodies: vi.fn(),
   sendNotification: vi.fn()
 }));
 
@@ -70,6 +71,7 @@ describe("SystemModulesWorkspace", () => {
     expect(api.previewCleanup).toHaveBeenCalledOnce();
     expect(wrapper.text()).toContain("公告服务");
     expect(wrapper.text()).toContain("数据生命周期");
+    expect(wrapper.text()).toContain("立即清空请求体");
     expect(wrapper.text()).toContain("预计处理 2 条");
     wrapper.unmount();
   });

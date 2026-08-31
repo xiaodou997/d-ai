@@ -96,6 +96,7 @@ type ProxyNodeTransport = OperationResponse<"admin-create-proxy-node">;
 type CleanupPolicyTransport = OperationResponse<"admin-get-data-cleanup-policy">;
 type CleanupPreviewTransport = OperationResponse<"admin-preview-data-cleanup">;
 type CleanupRunTransport = OperationResponse<"admin-start-data-cleanup">;
+type CleanupRequestBodyPurgeTransport = OperationResponse<"admin-purge-request-bodies">;
 
 export type NotificationSendResult = {
   id: string;
@@ -354,5 +355,14 @@ export const systemModulesApi = {
       body,
       baseUrl: apiBaseUrl
     }).then(toCleanupRun);
+  },
+  purgeRequestBodies(body: { confirmation: string }) {
+    return typedRequest<"admin-purge-request-bodies">({
+      method: "POST",
+      path: "/api/v1/admin/data-cleanup/request-bodies/purge",
+      headers: apiHeaders,
+      body,
+      baseUrl: apiBaseUrl
+    }).then((value: CleanupRequestBodyPurgeTransport) => toCleanupRun(value));
   }
 };

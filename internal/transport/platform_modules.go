@@ -266,6 +266,7 @@ type DataCleanupHTTPService interface {
 	Preview(context.Context) (cleanuppkg.Preview, error)
 	ListRuns(context.Context) ([]cleanuppkg.Run, error)
 	StartManual([]string, string) (cleanuppkg.Run, error)
+	StartRequestBodyPurge(string) (cleanuppkg.Run, error)
 }
 
 // ProxyNodesModuleDeps contains proxy-node routes.

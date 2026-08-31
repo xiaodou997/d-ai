@@ -87,6 +87,13 @@ SET search_path TO :"schema_name";
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA :"schema_name" TO :"runtime_role";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA :"schema_name" TO :"runtime_role";
 
+-- Request payload purging is an explicit platform-admin maintenance action.
+-- Keep this non-financial audit table owned by the runtime role so it can run
+-- VACUUM FULL after clearing its large TOAST fields (PostgreSQL 16 has no
+-- separate MAINTAIN table privilege). Billing and ledger relations remain
+-- owned by the billing role below.
+ALTER TABLE ai_request_payloads OWNER TO :"runtime_role";
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
     bill_accounts,
     bill_credit_lots,

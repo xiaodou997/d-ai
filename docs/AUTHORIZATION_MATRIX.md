@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `ffba370452d8828a08ccdc805638d3b8a91ee7a12d90a977786f0a92ec4689e0`
+Contract SHA-256: `a69b3e2761dc5d6c705d716f9f2e97d8cb4a5d25a866ae776b6423ee760957e5`
 
-Coverage: **320/320 operations (100%)**
+Coverage: **321/321 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 13 | `authenticated` | `actor.user` |
 | `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 153 | `platform_admin` | `actor.user` |
+| `platform_admin` | 154 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -56,6 +56,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `GET` | `/api/v1/admin/data-cleanup/policy` | `admin-get-data-cleanup-policy` | `platform_admin` | `global/resource` |
 | `PUT` | `/api/v1/admin/data-cleanup/policy` | `admin-update-data-cleanup-policy` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/data-cleanup/preview` | `admin-preview-data-cleanup` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v1/admin/data-cleanup/request-bodies/purge` | `admin-purge-request-bodies` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/data-cleanup/runs` | `admin-list-data-cleanup-runs` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/admin/data-cleanup/runs` | `admin-start-data-cleanup` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/admin/debts/{owner_type}/{id}` | `admin-get-debt` | `platform_admin` | `global/resource` |

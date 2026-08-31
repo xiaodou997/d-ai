@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Blocks, Play, RefreshCw, Save, Settings } from "lucide-vue-next";
+import { Blocks, FileText, Play, RefreshCw, Save, Settings, Trash2 } from "lucide-vue-next";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { PortalPagePanel, PortalContentCard } from "@/platform";
 import { DsButton, DsEmpty, DsInput, DsSwitch, DsTable, DsTag } from "@/shared/ui";
@@ -81,6 +81,32 @@ async function startCleanup() {
   } catch (error: any) {
     if (error !== "cancel" && error !== "close") ElMessage.error(error?.message || "启动清理失败");
   } finally { cleanupBusy.value = false; }
+}
+
+async function purgeRequestBodies() {
+  try {
+    const result = await ElMessageBox.prompt(
+      "这是不可逆操作。系统会清空所有请求/响应正文、请求参数、媒体引用和底层错误详情，保留请求元数据、用量统计及账务数据；完成后会压缩审计表，期间可能短暂阻塞新的审计写入。请输入 CLEANUP_DATA 继续。",
+      "清空请求体",
+      {
+        type: "warning",
+        inputPlaceholder: "输入 CLEANUP_DATA",
+        inputPattern: /^CLEANUP_DATA$/,
+        inputErrorMessage: "确认短语不正确"
+      }
+    );
+    cleanupBusy.value = true;
+    const run = await systemModulesApi.purgeRequestBodies({ confirmation: result.value });
+    cleanupRuns.value = [run, ...cleanupRuns.value.filter((item) => item.id !== run.id)];
+    ElMessage.success("请求体清理任务已开始");
+    pollCleanupRun(run.id);
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") {
+      ElMessage.error(error instanceof Error ? error.message : "清空请求体失败");
+    }
+  } finally {
+    cleanupBusy.value = false;
+  }
 }
 
 function pollCleanupRun(runID: string) {
@@ -171,6 +197,16 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
               <DsEmpty v-else title="还没有清理记录" description="保存策略后，系统会在每日后台任务中执行清理。" />
             </div>
           </div>
+          <div class="cleanup-danger-zone">
+            <div class="cleanup-danger-zone__copy">
+              <div class="cleanup-danger-zone__title"><FileText :size="15" /><strong>立即清空请求体</strong></div>
+              <p>清除所有请求/响应正文等大字段，保留请求记录、用量统计和对账数据；任务完成后自动回收 TOAST 空间。</p>
+            </div>
+            <DsButton variant="danger" :disabled="cleanupBusy" @click="purgeRequestBodies">
+              <template #icon><Trash2 :size="14" /></template>
+              {{ cleanupBusy ? "清理中…" : "清空请求体" }}
+            </DsButton>
+          </div>
         </PortalContentCard>
 
         <PortalContentCard title="统一通知服务" description="当前第一版提供站内通知投递记录，并保留 Webhook 通道 API；公告管理继续使用原有公告能力。">
@@ -216,7 +252,12 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
 .cleanup-target strong { color: var(--ds-ink-soft); font-size: 13px; font-weight: 600; }
 .cleanup-target small { color: var(--ds-muted); font-size: 11px; }
 .cleanup-runs { min-width: 0; }
+.cleanup-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 22px; padding: 16px; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-radius-control); background: var(--ds-danger-soft); }
+.cleanup-danger-zone__copy { min-width: 0; }
+.cleanup-danger-zone__title { display: flex; align-items: center; gap: 7px; color: var(--ds-danger); font-size: 13px; }
+.cleanup-danger-zone__copy p { margin: 6px 0 0; color: var(--ds-ink-soft); font-size: 12px; line-height: 1.6; }
 .notification-form { display: grid; grid-template-columns: 180px 220px minmax(180px, 1fr) minmax(220px, 1.5fr) auto; align-items: center; gap: 10px; }
 @media (max-width: 1100px) { .module-grid { grid-template-columns: 1fr; } .cleanup-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cleanup-workspace { grid-template-columns: 1fr; } }
 @media (max-width: 900px) { .notification-form { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .cleanup-danger-zone { align-items: stretch; flex-direction: column; } .cleanup-danger-zone .ds-btn { width: 100%; } }
 </style>
