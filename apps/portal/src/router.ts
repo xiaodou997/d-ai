@@ -25,14 +25,6 @@ export const routes: RouteRecordRaw[] = [
         component: () => import("./modules/PortalHomeRedirect.vue"),
         meta: { title: "工作台" }
       },
-      { path: "admin/overview", redirect: "/admin/overview/business" },
-      { path: "admin/overview/platform", redirect: "/admin/overview/business" },
-      { path: "admin/overview/ai", redirect: "/admin/ai/analytics" },
-      { path: "admin/overview/health", redirect: "/admin/overview/operations?tab=health" },
-      { path: "admin/ai/monitoring", redirect: "/admin/overview/operations?tab=health" },
-      { path: "admin/ai/monitoring/status", redirect: "/admin/overview/operations?tab=health" },
-      { path: "admin/ai/monitoring/analytics", redirect: "/admin/ai/analytics" },
-      { path: "tenant/overview/ai", redirect: "/tenant/overview/business" },
       ...buildPortalModuleRoutes()
     ]
   },

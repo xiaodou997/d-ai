@@ -67,15 +67,20 @@ describe("unified portal route contract", () => {
     expect(flatRoutes.find((route) => route.name === "tenant-user-detail")?.path).toBe("/tenant/users/directory/:userId");
   });
 
-  it("redirects legacy overview and monitoring URLs to their replacements", () => {
-    expect(flatRoutes.find((route) => route.path === "/admin/overview")?.redirect).toBe("/admin/overview/business");
-    expect(flatRoutes.find((route) => route.path === "/admin/overview/platform")?.redirect).toBe("/admin/overview/business");
-    expect(flatRoutes.find((route) => route.path === "/admin/overview/ai")?.redirect).toBe("/admin/ai/analytics");
-    expect(flatRoutes.find((route) => route.path === "/admin/overview/health")?.redirect).toBe("/admin/overview/operations?tab=health");
-    expect(flatRoutes.find((route) => route.path === "/admin/ai/monitoring")?.redirect).toBe("/admin/overview/operations?tab=health");
-    expect(flatRoutes.find((route) => route.path === "/admin/ai/monitoring/status")?.redirect).toBe("/admin/overview/operations?tab=health");
-    expect(flatRoutes.find((route) => route.path === "/admin/ai/monitoring/analytics")?.redirect).toBe("/admin/ai/analytics");
-    expect(flatRoutes.find((route) => route.path === "/tenant/overview/ai")?.redirect).toBe("/tenant/overview/business");
+  it("does not register removed legacy overview and monitoring URLs", () => {
+    for (const path of [
+      "/admin/overview",
+      "/admin/overview/platform",
+      "/admin/overview/ai",
+      "/admin/overview/health",
+      "/admin/ai/monitoring",
+      "/admin/ai/monitoring/status",
+      "/admin/ai/monitoring/analytics",
+      "/admin/ai/upstreams",
+      "/tenant/overview/ai"
+    ]) {
+      expect(flatRoutes.find((route) => route.path === path), path).toBeUndefined();
+    }
   });
 
   it("generates one route tree from every registered module", () => {

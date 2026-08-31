@@ -7,7 +7,7 @@
        弹窗/抽屉/表单仍为 element-plus(过渡期)。
 -->
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Download, Edit, Plus, Refresh, Upload, VideoPlay } from '@element-plus/icons-vue'
 import { Database } from 'lucide-vue-next'
@@ -40,6 +40,7 @@ const priceBooks = shallowRef<PriceBookRecord[]>([])
 const selectedAccountId = shallowRef('')
 const selectedExportAccountIds = shallowRef<string[]>([])
 const updatingAccountStatusId = shallowRef('')
+const accountContentScroll = ref<HTMLElement | null>(null)
 
 const activePriceBookId = computed(() => firstActivePriceBookId(priceBooks.value))
 const selectedAccount = computed(() => accounts.value.find((a: any) => a.id === selectedAccountId.value))
@@ -411,6 +412,11 @@ function selectAccount(id: string) {
   selectedAccountId.value = id
 }
 
+// 详情区是独立滚动容器。切换账号时回到详情顶部，避免沿用上一个账号的滚动位置。
+watch(selectedAccountId, () => {
+  void nextTick(() => accountContentScroll.value?.scrollTo?.({ top: 0, behavior: 'auto' }))
+})
+
 // ── 列表增量渲染(接口全量返回,前端分批挂载) ──────────────────────────────────
 const LIST_PAGE_SIZE = 20
 const visibleCount = shallowRef(LIST_PAGE_SIZE)
@@ -632,48 +638,50 @@ onBeforeUnmount(() => {
 
       <!-- 账号详情 + 路由配置 -->
       <el-col :span="17" class="account-content-column">
-        <div v-if="selectedAccount" class="account-content-stack">
-          <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
-            <template #actions>
-              <el-button
-                size="small"
-                type="success"
-                plain
-                :icon="VideoPlay"
-                @click="openTestDialog(selectedAccount)"
-              >测试连通</el-button>
-              <el-button size="small" :icon="Edit" @click="openAccountEdit(selectedAccount)">编辑账号</el-button>
-              <el-button size="small" type="danger" plain :icon="Delete" @click="removeAccount(selectedAccount)">删除</el-button>
-            </template>
-            <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
-              <el-descriptions-item label="Base URL">{{ selectedAccount.base_url }}</el-descriptions-item>
-              <el-descriptions-item label="协议">{{ providerFamilyLabel(selectedAccount.default_provider_family) }}</el-descriptions-item>
-              <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
-              <el-descriptions-item label="运行状态">
-                <DsTag :tone="statusTone(selectedAccount.status)">
-                  {{ upstreamAccountStatusLabel(selectedAccount.status) }}
-                </DsTag>
-              </el-descriptions-item>
-              <el-descriptions-item label="租户可见性">{{ selectedAccount.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</el-descriptions-item>
-              <el-descriptions-item label="价格表">{{ priceBookName(selectedAccount.price_book_id) }}</el-descriptions-item>
-              <el-descriptions-item label="租户倍率">{{ formatMultiplier(selectedAccount.tenant_multiplier) }}</el-descriptions-item>
-              <el-descriptions-item v-if="selectedAccount.status === 'invalid'" label="失效原因" :span="2">
-                {{ selectedAccount.invalid_reason || '上游拒绝了账号凭据' }}
-              </el-descriptions-item>
-            </el-descriptions>
-          </PortalContentCard>
+        <div ref="accountContentScroll" class="account-content-scroll">
+          <div v-if="selectedAccount" class="account-content-stack">
+            <PortalContentCard title="账号概览" :description="`当前账号:${selectedAccount.name}`">
+              <template #actions>
+                <el-button
+                  size="small"
+                  type="success"
+                  plain
+                  :icon="VideoPlay"
+                  @click="openTestDialog(selectedAccount)"
+                >测试连通</el-button>
+                <el-button size="small" :icon="Edit" @click="openAccountEdit(selectedAccount)">编辑账号</el-button>
+                <el-button size="small" type="danger" plain :icon="Delete" @click="removeAccount(selectedAccount)">删除</el-button>
+              </template>
+              <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
+                <el-descriptions-item label="Base URL">{{ selectedAccount.base_url }}</el-descriptions-item>
+                <el-descriptions-item label="协议">{{ providerFamilyLabel(selectedAccount.default_provider_family) }}</el-descriptions-item>
+                <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
+                <el-descriptions-item label="运行状态">
+                  <DsTag :tone="statusTone(selectedAccount.status)">
+                    {{ upstreamAccountStatusLabel(selectedAccount.status) }}
+                  </DsTag>
+                </el-descriptions-item>
+                <el-descriptions-item label="租户可见性">{{ selectedAccount.tenant_access_mode === 'restricted' ? '专属' : '公开' }}</el-descriptions-item>
+                <el-descriptions-item label="价格表">{{ priceBookName(selectedAccount.price_book_id) }}</el-descriptions-item>
+                <el-descriptions-item label="租户倍率">{{ formatMultiplier(selectedAccount.tenant_multiplier) }}</el-descriptions-item>
+                <el-descriptions-item v-if="selectedAccount.status === 'invalid'" label="失效原因" :span="2">
+                  {{ selectedAccount.invalid_reason || '上游拒绝了账号凭据' }}
+                </el-descriptions-item>
+              </el-descriptions>
+            </PortalContentCard>
 
-          <UpstreamModelBindingsPanel
-            target-kind="account"
-            :target-id="selectedAccount.id"
-            :default-binding-protocol="defaultBindingProtocolForProviderFamily(selectedAccount?.default_provider_family)"
-            title="上游账号显式模型绑定"
-            description="用显式绑定声明这个上游账号实际可用的模型、API 格式和模型配置。"
-            empty-text="当前账号暂无显式模型绑定。可先从上游发现模型，再补充精细化编辑。"
-            import-button-label="发现上游模型"
-            import-dialog-title="发现上游模型"
-            import-alert-title="从上游 /v1/models 拉取，勾选后创建该账号的显式上游模型绑定。"
-          />
+            <UpstreamModelBindingsPanel
+              target-kind="account"
+              :target-id="selectedAccount.id"
+              :default-binding-protocol="defaultBindingProtocolForProviderFamily(selectedAccount?.default_provider_family)"
+              title="上游账号显式模型绑定"
+              description="用显式绑定声明这个上游账号实际可用的模型、API 格式和模型配置。"
+              empty-text="当前账号暂无显式模型绑定。可先从上游发现模型，再补充精细化编辑。"
+              import-button-label="发现上游模型"
+              import-dialog-title="发现上游模型"
+              import-alert-title="从上游 /v1/models 拉取，勾选后创建该账号的显式上游模型绑定。"
+            />
+          </div>
         </div>
       </el-col>
         </el-row>
@@ -969,12 +977,21 @@ onBeforeUnmount(() => {
 .accounts-view {
   flex: 1;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  overflow: hidden;
 }
 
-.account-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px; }
+.account-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 12px;
+  scrollbar-gutter: stable;
+}
 .account-list-sentinel { text-align: center; font-size: 12px; color: var(--ds-faint); }
 .account-list-sentinel span { display: block; padding: 4px 0 10px; }
 .account-item { padding: 10px 12px; border-radius: var(--ds-radius-control); cursor: pointer; border: 1px solid transparent; margin-bottom: 6px; }
@@ -984,8 +1001,22 @@ onBeforeUnmount(() => {
 .account-item-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .account-item-subtitle { font-size: 12px; color: var(--ds-muted); margin-top: 2px; }
 .account-item-host { font-size: 12px; color: var(--ds-faint); }
-.account-content-column { min-width: 0; min-height: 0; }
-.account-content-stack { display: flex; flex-direction: column; gap: 16px; height: 100%; }
+.account-content-column {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+.account-content-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0 2px 2px 0;
+}
+.account-content-stack { display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
 .hint { color: var(--ds-faint); font-size: 12px; margin-left: 8px; }
 .advanced-sections { margin-bottom: 18px; }
 .advanced-hint { margin: 0 0 12px; color: var(--ds-faint); font-size: 12px; line-height: 1.4; }
@@ -1004,16 +1035,59 @@ onBeforeUnmount(() => {
 .import-stats span { padding: 6px 10px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
 .import-stats strong { color: var(--ds-ink); }
 
-/* 主从布局:PortalPagePanel body 无内边距,用 24px 容器承载原栅格;fill 模式下容器自身伸展、两栏等高撑满 */
-.accounts-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 24px; }
-.accounts-main-row { flex: 1; min-height: 640px; align-items: stretch; }
-.accounts-list-col { min-height: 0; }
+/* 主从布局：限制在页面剩余高度内，左右两栏各自滚动，避免列表把整个页面向下撑开。 */
+.accounts-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 24px;
+}
+.accounts-main-row {
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+.accounts-list-col { display: flex; min-height: 0; flex-direction: column; }
 .accounts-list-card { height: 100%; }
 :deep(.accounts-list-card.portal-content-card) { display: flex; flex-direction: column; height: 100%; }
 :deep(.accounts-list-card .portal-content-card__body) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 @media (max-width: 1200px) {
-  .accounts-main-row { min-height: 0; }
+  .accounts-body { padding: 16px; }
+}
+
+@media (max-width: 768px) {
+  .accounts-view {
+    height: auto;
+    overflow: visible;
+  }
+
+  .accounts-body {
+    overflow: visible;
+    padding: 16px;
+  }
+
+  .accounts-main-row {
+    height: auto;
+    overflow: visible;
+  }
+
+  .accounts-list-col {
+    height: min(420px, 52dvh);
+    margin-bottom: 16px;
+  }
+
+  .account-content-column {
+    overflow: visible;
+  }
+
+  .account-content-scroll {
+    overflow: visible;
+  }
 }
 
 /* ── 连通性测试弹窗 ── */
