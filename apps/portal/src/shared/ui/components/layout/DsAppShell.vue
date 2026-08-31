@@ -112,6 +112,8 @@ watch(sidebarCollapsed, (value) => {
 
 <style scoped>
 .ds-app-shell {
+  --ds-sidebar-width: 232px;
+  --ds-sidebar-collapsed-width: 64px;
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
@@ -121,14 +123,14 @@ watch(sidebarCollapsed, (value) => {
 
 .ds-app-shell__body {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: var(--ds-sidebar-width) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   transition: grid-template-columns 160ms ease;
 }
 
 .ds-app-shell__body.is-sidebar-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: var(--ds-sidebar-collapsed-width) minmax(0, 1fr);
 }
 
 .ds-app-shell__sidebar {

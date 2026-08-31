@@ -975,9 +975,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .accounts-view {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
-  height: 100%;
+  height: calc(100dvh - 56px - 72px);
+  max-height: calc(100dvh - 56px - 72px);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -1001,12 +1002,6 @@ onBeforeUnmount(() => {
 .account-item-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .account-item-subtitle { font-size: 12px; color: var(--ds-muted); margin-top: 2px; }
 .account-item-host { font-size: 12px; color: var(--ds-faint); }
-.account-content-column {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex-direction: column;
-}
 .account-content-scroll {
   flex: 1;
   min-width: 0;
@@ -1051,7 +1046,15 @@ onBeforeUnmount(() => {
   align-items: stretch;
   overflow: hidden;
 }
-.accounts-list-col { display: flex; min-height: 0; flex-direction: column; }
+.accounts-list-col,
+.account-content-column {
+  display: flex;
+  height: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
 .accounts-list-card { height: 100%; }
 :deep(.accounts-list-card.portal-content-card) { display: flex; flex-direction: column; height: 100%; }
 :deep(.accounts-list-card .portal-content-card__body) { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -1062,6 +1065,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .accounts-view {
+    max-height: none;
     height: auto;
     overflow: visible;
   }

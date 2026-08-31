@@ -18,21 +18,23 @@ export default defineConfig({
   server: {
     port: 6900,
     proxy: {
+      // Keep the browser's Host header so the backend same-origin guard sees
+      // the local Portal origin (localhost:6900) instead of the proxy target.
       "/api": {
         target: devProxyTarget,
-        changeOrigin: true
+        changeOrigin: false
       },
       "/v1": {
         target: devProxyTarget,
-        changeOrigin: true
+        changeOrigin: false
       },
       "/internal": {
         target: devProxyTarget,
-        changeOrigin: true
+        changeOrigin: false
       },
       "/runtime": {
         target: devProxyTarget,
-        changeOrigin: true
+        changeOrigin: false
       }
     }
   },

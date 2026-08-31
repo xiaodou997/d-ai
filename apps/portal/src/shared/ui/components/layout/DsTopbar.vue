@@ -20,7 +20,7 @@ const props = defineProps<{
   user: TopbarUser;
   userMenu?: TopbarUserMenuItem[];
   navigationOpen?: boolean;
-  /** 侧栏折叠态;传入时品牌区右端渲染折叠按钮,品牌区宽度与侧栏同步(260px/64px) */
+  /** 侧栏折叠态;传入时品牌区右端渲染折叠按钮,品牌区宽度与侧栏同步(232px/64px) */
   sidebarCollapsed?: boolean;
 }>();
 
@@ -138,21 +138,21 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
   padding: 0 20px 0 0;
 }
 
-/* 品牌区与侧栏同宽(260px,折叠 64px),右边界与侧栏分隔线对齐 */
+/* 品牌区与侧栏同宽(232px,折叠 64px),右边界与侧栏分隔线对齐 */
 .ds-topbar__brand {
   display: flex;
   align-items: center;
   align-self: stretch;
   gap: 10px;
   flex: 0 0 auto;
-  width: 260px;
+  width: var(--ds-sidebar-width, 232px);
   padding: 0 10px 0 20px;
   border-right: 1px solid var(--ds-line);
   transition: width 160ms ease;
 }
 
 .ds-topbar__brand--collapsed {
-  width: 64px;
+  width: var(--ds-sidebar-collapsed-width, 64px);
   padding: 0;
   justify-content: center;
 }
