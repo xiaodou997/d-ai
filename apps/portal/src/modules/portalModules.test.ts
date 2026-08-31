@@ -286,8 +286,6 @@ describe("portal module registry", () => {
       const active = leavesFor(1, path).filter((item) => item.active).map((item) => item.id);
       expect(active).toEqual([id]);
     }
-
-    expect(portalModules.some((module) => module.id === "admin-upstream-workspace")).toBe(false);
   });
 
   it("exposes usage records separately from security controls", () => {
