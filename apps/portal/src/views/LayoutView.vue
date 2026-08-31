@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { PortalShellLayout, usePortalShellScaffold } from "@/platform";
+import AnnouncementTopbarAction from "@/features/announcements/AnnouncementTopbarAction.vue";
 
 import { portalEnv, themeForUserType } from "@/env";
 import { profilePathForUserType } from "@/modules/portalModules";
@@ -49,5 +50,9 @@ const { handleLogout } = usePortalShellScaffold({
     :user="user"
     :user-menu="userMenu"
     @logout="handleLogout"
-  />
+  >
+    <template #topbar-actions>
+      <AnnouncementTopbarAction />
+    </template>
+  </PortalShellLayout>
 </template>
