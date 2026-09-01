@@ -16,7 +16,7 @@ describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
     expect(leavesFor(1)).toHaveLength(19);
     expect(leavesFor(2)).toHaveLength(18);
-    expect(leavesFor(3)).toHaveLength(14);
+    expect(leavesFor(3)).toHaveLength(17);
     expect(leavesFor(4)).toHaveLength(9);
   });
 
@@ -145,6 +145,119 @@ describe("portal module registry", () => {
     expect(userWorkspace?.tabs?.filter((tab) => tab.nav !== false).map((tab) => tab.label)).toEqual([
       "用户管理"
     ]);
+  });
+
+  it("orders the tenant workbench after overview and before users", () => {
+    expect(buildPortalNav(3, "/tenant/overview/business").map((item) => item.label)).toEqual([
+      "概览",
+      "AI 工作台",
+      "用户与权限",
+      "AI 服务",
+      "账户与设置"
+    ]);
+  });
+
+  it("exposes tenant model groups, prices and resources as separate menus", () => {
+    const aiMenus = buildPortalNav(3, "/tenant/ai/models/prices")
+      .find((item) => item.id === "tenant-ai")
+      ?.children;
+
+    expect(aiMenus).toEqual([
+      {
+        id: "tenant-model-groups",
+        label: "模型分组",
+        to: "/tenant/ai/models/groups",
+        icon: "layers",
+        active: false
+      },
+      {
+        id: "tenant-model-prices",
+        label: "模型价格",
+        to: "/tenant/ai/models/prices",
+        icon: "tags",
+        active: true
+      },
+      {
+        id: "tenant-model-resources",
+        label: "模型资源",
+        to: "/tenant/ai/models/upstreams",
+        icon: "database",
+        active: false
+      },
+      {
+        id: "tenant-plans",
+        label: "套餐管理",
+        to: "/tenant/ai/plans",
+        icon: "calendar-clock",
+        active: false
+      },
+      {
+        id: "tenant-usage",
+        label: "使用分析",
+        to: "/tenant/ai/usage",
+        icon: "gauge",
+        active: false
+      },
+      {
+        id: "tenant-developer",
+        label: "API 密钥",
+        to: "/tenant/developer",
+        icon: "key-round",
+        active: false
+      }
+    ]);
+    expect(portalModules.some((module) => module.id === "tenant-model-workspace")).toBe(false);
+    expect(portalModules.some((module) => module.path === "/tenant/ai/models")).toBe(false);
+  });
+
+  it("keeps the group detail route hidden from tenant navigation", () => {
+    const tenantNav = buildPortalNav(3, "/tenant/ai/models/groups/group-1");
+
+    expect(tenantNav.flatMap((item) => item.children ?? []).some((item) => item.id === "tenant-model-group-detail")).toBe(false);
+    expect(portalModules.find((module) => module.id === "tenant-model-group-detail")).toMatchObject({
+      path: "/tenant/ai/models/groups/:groupId",
+      name: "ai-group-detail",
+      nav: false
+    });
+  });
+
+  it("exposes tenant branding and announcements as separate account menus", () => {
+    const accountMenus = buildPortalNav(3, "/tenant/operations/announcements")
+      .find((item) => item.id === "tenant-account")
+      ?.children;
+
+    expect(accountMenus).toEqual([
+      {
+        id: "tenant-account-center",
+        label: "账户中心",
+        to: "/tenant/account",
+        icon: "wallet",
+        active: false
+      },
+      {
+        id: "tenant-payment",
+        label: "支付设置",
+        to: "/tenant/payment",
+        icon: "credit-card",
+        active: false
+      },
+      {
+        id: "tenant-branding",
+        label: "品牌设置",
+        to: "/tenant/operations/branding",
+        icon: "palette",
+        active: false
+      },
+      {
+        id: "tenant-announcements",
+        label: "公告管理",
+        to: "/tenant/operations/announcements",
+        icon: "megaphone",
+        active: true
+      }
+    ]);
+    expect(portalModules.some((module) => module.id === "tenant-operations")).toBe(false);
+    expect(portalModules.some((module) => module.path === "/tenant/operations")).toBe(false);
   });
 
   it("exposes model pricing and subscriptions as separate customer menus", () => {

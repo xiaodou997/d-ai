@@ -109,9 +109,9 @@ const adminOrganization = { id: "admin-organization", label: "组织与权限", 
 const adminFinance = { id: "admin-finance", label: "资金管理", order: 20 };
 const adminAi = { id: "admin-ai", label: "AI 网关", order: 30 };
 const adminOperations = { id: "admin-operations", label: "平台运营", order: 40 };
-const tenantUsers = { id: "tenant-users", label: "用户与权限", order: 10 };
-const tenantAi = { id: "tenant-ai", label: "AI 服务", order: 20 };
-const tenantWorkbench = { id: "tenant-workbench", label: "AI 工作台", order: 30 };
+const tenantWorkbench = { id: "tenant-workbench", label: "AI 工作台", order: 10 };
+const tenantUsers = { id: "tenant-users", label: "用户与权限", order: 20 };
+const tenantAi = { id: "tenant-ai", label: "AI 服务", order: 30 };
 const tenantAccount = { id: "tenant-account", label: "账户与设置", order: 40 };
 const customerWorkbench = { id: "customer-workbench", label: "AI 工作台", order: 10 };
 const customerServices = { id: "customer-services", label: "我的服务", order: 20 };
@@ -364,19 +364,46 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/tenant/platform/InviteCodesView.vue")
   },
   {
-    id: "tenant-model-workspace",
-    label: "模型与价格",
-    path: "/tenant/ai/models",
+    id: "tenant-model-groups",
+    label: "模型分组",
+    path: "/tenant/ai/models/groups",
     icon: "layers",
     capability: "tenant.ai.models",
     navGroup: tenantAi,
     order: 10,
-    tabs: [
-      { id: "groups", label: "模型分组", path: "groups", component: () => import("@/views/tenant/ai/GroupManagementView.vue"), name: "ai-groups" },
-      { id: "group-detail", label: "分组详情", path: "groups/:groupId", component: () => import("@/views/tenant/ai/GroupDetailView.vue"), name: "ai-group-detail", nav: false, activeTabId: "groups" },
-      { id: "prices", label: "租户价格", path: "prices", component: () => import("@/views/tenant/ai/PricesView.vue") },
-      { id: "upstreams", label: "上游目录", path: "upstreams", component: () => import("@/views/tenant/ai/UpstreamCatalogView.vue") }
-    ]
+    name: "ai-groups",
+    component: () => import("@/views/tenant/ai/GroupManagementView.vue")
+  },
+  {
+    id: "tenant-model-group-detail",
+    label: "分组详情",
+    path: "/tenant/ai/models/groups/:groupId",
+    icon: "layers",
+    capability: "tenant.ai.models",
+    order: 11,
+    name: "ai-group-detail",
+    nav: false,
+    component: () => import("@/views/tenant/ai/GroupDetailView.vue")
+  },
+  {
+    id: "tenant-model-prices",
+    label: "模型价格",
+    path: "/tenant/ai/models/prices",
+    icon: "tags",
+    capability: "tenant.ai.models",
+    navGroup: tenantAi,
+    order: 20,
+    component: () => import("@/views/tenant/ai/PricesView.vue")
+  },
+  {
+    id: "tenant-model-resources",
+    label: "模型资源",
+    path: "/tenant/ai/models/upstreams",
+    icon: "database",
+    capability: "tenant.ai.models",
+    navGroup: tenantAi,
+    order: 30,
+    component: () => import("@/views/tenant/ai/UpstreamCatalogView.vue")
   },
   {
     id: "tenant-plans",
@@ -385,7 +412,7 @@ export const portalModules: PortalModule[] = [
     icon: "calendar-clock",
     capability: "tenant.ai.plans",
     navGroup: tenantAi,
-    order: 20,
+    order: 40,
     component: () => import("@/views/tenant/ai/SubscriptionManagementView.vue")
   },
   {
@@ -395,7 +422,7 @@ export const portalModules: PortalModule[] = [
     icon: "gauge",
     capability: "tenant.ai.usage",
     navGroup: tenantAi,
-    order: 30,
+    order: 50,
     component: () => import("@/views/tenant/ai/UserConsumptionView.vue")
   },
   {
@@ -405,7 +432,7 @@ export const portalModules: PortalModule[] = [
     icon: "key-round",
     capability: "tenant.developer",
     navGroup: tenantAi,
-    order: 40,
+    order: 60,
     tabs: [
       { id: "keys", label: "API 密钥", path: "keys", component: () => import("@/views/tenant/ai/KeysView.vue") },
       { id: "tooling", label: "工具接入指南", path: "tooling", component: () => import("@/views/AiDocsView.vue"), props: { section: "tooling" } }
@@ -462,17 +489,24 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/tenant/platform/PaymentSettingsView.vue")
   },
   {
-    id: "tenant-operations",
-    label: "运营设置",
-    path: "/tenant/operations",
+    id: "tenant-branding",
+    label: "品牌设置",
+    path: "/tenant/operations/branding",
     icon: "palette",
     capability: "tenant.operations",
     navGroup: tenantAccount,
     order: 30,
-    tabs: [
-      { id: "branding", label: "品牌设置", path: "branding", component: () => import("@/views/tenant/platform/TenantBrandingView.vue") },
-      { id: "announcements", label: "公告管理", path: "announcements", component: () => import("@/views/tenant/platform/AnnouncementsView.vue") }
-    ]
+    component: () => import("@/views/tenant/platform/TenantBrandingView.vue")
+  },
+  {
+    id: "tenant-announcements",
+    label: "公告管理",
+    path: "/tenant/operations/announcements",
+    icon: "megaphone",
+    capability: "tenant.operations",
+    navGroup: tenantAccount,
+    order: 40,
+    component: () => import("@/views/tenant/platform/AnnouncementsView.vue")
   },
   {
     id: "customer-workbench-home",
