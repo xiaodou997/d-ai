@@ -75,4 +75,27 @@ describe("unified Portal password login", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
+
+  it("posts recent-auth credentials without retrying a rejected verification", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ message: "重新认证成功" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const api = createPortalAuthApi({
+      request: createFetchAdapter({ getAccessToken: () => "access-token" }),
+      recentAuthRequest: createFetchAdapter({ getAccessToken: () => "access-token" }),
+      baseUrl: "/"
+    });
+
+    await api.recentAuth("secret", " 123456 ");
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+    expect(url).toBe("/api/auth/recent-auth");
+    expect(headers.get("Authorization")).toBe("Bearer access-token");
+    expect(JSON.parse(String(init?.body))).toEqual({ password: "secret", code: "123456" });
+  });
 });

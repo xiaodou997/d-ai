@@ -44,4 +44,27 @@ describe("unified Portal HTTP", () => {
     expect(error).toBeInstanceOf(HttpProblem);
     expect(error.meta).toEqual({ retry_at: "later" });
   });
+
+  it("does not refresh a valid session for a recent-auth requirement", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 401, title: "Unauthorized", detail: "recent re-authentication is required" }), {
+        status: 401,
+        headers: { "Content-Type": "application/problem+json" }
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const onUnauthorized = vi.fn();
+    const onRecentAuthRequired = vi.fn().mockResolvedValue("retry");
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createFetchAdapter({ onUnauthorized, onRecentAuthRequired })({
+      method: "PATCH",
+      path: "/groups/g1/status",
+      body: { status: "disabled" },
+      baseUrl: env.apiBaseUrl
+    });
+
+    expect(onRecentAuthRequired).toHaveBeenCalledOnce();
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

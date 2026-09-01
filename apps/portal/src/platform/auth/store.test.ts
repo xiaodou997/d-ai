@@ -18,6 +18,7 @@ function makeOptions(prefix: string, overrides: Partial<Parameters<typeof create
     expectedUserTypes: [4],
     login: vi.fn().mockResolvedValue({ accessToken: "access-1", expiresIn: 3600, refreshExpiresIn: 604800 }),
     refreshToken: vi.fn().mockResolvedValue({ accessToken: "access-refresh", expiresIn: 3600, refreshExpiresIn: 604700 }),
+    recentAuth: vi.fn().mockResolvedValue({ message: "重新认证成功" }),
     logout: vi.fn().mockResolvedValue({ success: true }),
     getCurrentUser: vi.fn().mockResolvedValue(user),
     ...overrides
@@ -77,6 +78,19 @@ describe("Portal auth memory and cookie session", () => {
 
     expect(options.refreshToken).toHaveBeenCalledOnce();
     expect(store.userInfo?.sub).toBe(user.sub);
+    store.stopAutoRefresh();
+  });
+
+  it("delegates recent authentication without replacing the access token", async () => {
+    const recentAuth = vi.fn().mockResolvedValue({ message: "重新认证成功" });
+    const options = makeOptions("reauth", { recentAuth });
+    const store = createPortalAuthStore(options)();
+    await store.login("alice", "password");
+
+    await store.reauthenticate("current-password", "123456");
+
+    expect(recentAuth).toHaveBeenCalledWith("current-password", "123456");
+    expect(store.accessToken).toBe("access-1");
     store.stopAutoRefresh();
   });
 });

@@ -1,5 +1,6 @@
 import type { ProblemDetail, RequestAdapter } from "@/api";
 import { joinUrl, withQuery } from "@/api";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 import type { PortalEnv } from "./env";
 
@@ -26,12 +27,15 @@ export type RequestRecoveryResult = boolean | "retry" | "handled" | void;
 export interface HttpClientOptions {
   getAccessToken?: () => string | undefined;
   onUnauthorized?: () => Promise<RequestRecoveryResult> | RequestRecoveryResult;
+  onRecentAuthRequired?: () => Promise<RequestRecoveryResult> | RequestRecoveryResult;
   defaultHeaders?: Record<string, string>;
 }
 
 export interface PortalAuthLike {
   accessToken: string;
+  userInfo?: { mfaEnabled?: boolean } | null;
   refreshAccessToken: () => Promise<unknown>;
+  reauthenticate?: (password: string, code?: string) => Promise<unknown>;
   ensureSession: (options?: { force?: boolean }) => Promise<unknown>;
   clear: () => void;
 }
@@ -82,8 +86,11 @@ export function createFetchAdapter(options: HttpClientOptions = {}): RequestAdap
 
     let response = await execute();
 
-    if (response.status === 401 && options.onUnauthorized) {
-      const result = await options.onUnauthorized();
+    if (response.status === 401 && (options.onUnauthorized || options.onRecentAuthRequired)) {
+      const recentAuthRequired = await isRecentAuthRequired(response);
+      const result = recentAuthRequired
+        ? await options.onRecentAuthRequired?.() ?? false
+        : await options.onUnauthorized?.() ?? false;
       if (result === "handled") {
         return suspendForNavigation<T>();
       }
@@ -110,10 +117,21 @@ export function createFetchAdapter(options: HttpClientOptions = {}): RequestAdap
 
 export function createPortalRequestContext(options: CreatePortalRequestContextOptions): PortalRequestContext {
   const apiHeaders: Record<string, string> = {};
+  let recentAuthInFlight: Promise<RequestRecoveryResult> | null = null;
+
+  function requestRecentAuth(): Promise<RequestRecoveryResult> {
+    if (!recentAuthInFlight) {
+      recentAuthInFlight = promptRecentAuth(options.useAuthStore()).finally(() => {
+        recentAuthInFlight = null;
+      });
+    }
+    return recentAuthInFlight;
+  }
 
   function authenticatedRequest(): RequestAdapter {
     return createFetchAdapter({
       getAccessToken: () => options.useAuthStore().accessToken,
+      onRecentAuthRequired: requestRecentAuth,
       async onUnauthorized() {
         const authStore = options.useAuthStore();
         try {
@@ -132,6 +150,70 @@ export function createPortalRequestContext(options: CreatePortalRequestContextOp
     apiBaseUrl: options.env.apiBaseUrl,
     authenticatedRequest
   };
+}
+
+async function isRecentAuthRequired(response: Response): Promise<boolean> {
+  if (response.status !== 401) return false;
+  try {
+    const problem = (await response.clone().json()) as Partial<ProblemDetail>;
+    const detail = String(problem.detail || "").toLowerCase();
+    return problem.code === "recent_auth_required"
+      || detail === "recent re-authentication is required"
+      || detail.includes("recent re-authentication")
+      || detail.includes("近期重新认证");
+  } catch {
+    return false;
+  }
+}
+
+async function promptRecentAuth(authStore: PortalAuthLike): Promise<RequestRecoveryResult> {
+  if (!authStore.reauthenticate) {
+    ElMessage.error("当前页面不支持重新认证，请重新登录");
+    return false;
+  }
+
+  try {
+    const passwordPrompt = await ElMessageBox.prompt(
+      "该操作需要近期重新认证，请输入当前账号密码。认证成功后 10 分钟内有效。",
+      "需要重新认证",
+      {
+        confirmButtonText: "验证",
+        cancelButtonText: "取消",
+        inputType: "password",
+        inputPlaceholder: "请输入当前密码",
+        inputPattern: /\S+/,
+        inputErrorMessage: "请输入当前密码",
+        closeOnClickModal: false,
+        closeOnPressEscape: false
+      }
+    );
+
+    let code = "";
+    if (authStore.userInfo?.mfaEnabled) {
+      const codePrompt = await ElMessageBox.prompt(
+        "当前账号已启用 MFA，请输入 6 位动态验证码。",
+        "验证 MFA",
+        {
+          confirmButtonText: "验证并继续",
+          cancelButtonText: "取消",
+          inputPlaceholder: "请输入 6 位验证码",
+          inputPattern: /^\d{6}$/,
+          inputErrorMessage: "请输入 6 位动态验证码",
+          closeOnClickModal: false,
+          closeOnPressEscape: false
+        }
+      );
+      code = codePrompt.value.trim();
+    }
+
+    await authStore.reauthenticate(passwordPrompt.value, code);
+    ElMessage.success("重新认证成功");
+    return "retry";
+  } catch (error) {
+    if (error === "cancel" || error === "close") return false;
+    ElMessage.error(error instanceof Error && error.message ? error.message : "重新认证失败");
+    return false;
+  }
 }
 
 export function createPortalRequestBindings(options: CreatePortalRequestContextOptions): PortalRequestContext {

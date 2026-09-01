@@ -19,12 +19,15 @@ export interface CreateAuthApiOptions {
   request: RequestAdapter;
   /** Refresh must bypass 401 recovery to avoid recursively refreshing a dead session. */
   refreshRequest?: RequestAdapter;
+  /** Recent-auth must also bypass 401 recovery so a wrong password is not mistaken for an expired access token. */
+  recentAuthRequest?: RequestAdapter;
   baseUrl: string;
 }
 
 export function createPortalAuthApi(options: CreateAuthApiOptions) {
   const request = createTypedOperationRequest(options.request);
   const refreshRequest = createTypedOperationRequest(options.refreshRequest ?? options.request);
+  const recentAuthRequest = createTypedOperationRequest(options.recentAuthRequest ?? options.request);
   return {
     async login(username: string, password: string): Promise<AuthTokenResponse> {
       return request<"auth-login">({
@@ -38,6 +41,14 @@ export function createPortalAuthApi(options: CreateAuthApiOptions) {
       return refreshRequest<"auth-refresh">({
         method: "POST",
         path: "/api/auth/refresh",
+        baseUrl: options.baseUrl
+      });
+    },
+    async recentAuth(password: string, code = "") {
+      return recentAuthRequest<"auth-recent-auth">({
+        method: "POST",
+        path: "/api/auth/recent-auth",
+        body: code.trim() ? { password, code: code.trim() } : { password },
         baseUrl: options.baseUrl
       });
     },

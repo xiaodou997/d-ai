@@ -10,6 +10,7 @@ export interface AuthStoreOptions {
   expectedUserTypes: number[];
   login?: (username: string, password: string) => Promise<AuthTokenResponse>;
   refreshToken: () => Promise<AuthTokenResponse>;
+  recentAuth?: (password: string, code?: string) => Promise<unknown>;
   verifyMFA?: (challengeToken: string, code: string) => Promise<AuthTokenResponse>;
   logout: () => Promise<unknown>;
   logoutRedirectUrl?: string | (() => string | null);
@@ -182,6 +183,13 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       return refreshInFlight;
     }
 
+    async function reauthenticate(password: string, code = "") {
+      if (!options.recentAuth) {
+        throw new Error("近期认证服务未配置");
+      }
+      return options.recentAuth(password, code);
+    }
+
     async function logout() {
       const redirectUrl = resolveLogoutRedirectUrl(options.logoutRedirectUrl);
       try {
@@ -247,6 +255,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       clear,
       login,
       verifyMFA,
+      reauthenticate,
       logout,
       fetchUserInfo,
       ensureSession,
