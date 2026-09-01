@@ -10393,14 +10393,25 @@ components:
           format: uri
           readOnly: true
           type: string
+        api_key_id:
+          type: string
+        api_key_quota_usd:
+          description: API key 配额USD 金额
+          format: double
+          type: number
         attempts_count:
           description: 路由尝试次数（含重试）
           format: int32
           type: integer
         attempts_detail:
           description: 仅管理员可见：本次请求每次候选路由（上游账号/凭据）重试的明细
+        auth_method:
+          type: string
         billing_breakdown: {}
         billing_group_label_snapshot:
+          type: string
+        billing_source:
+          description: 计费来源
           type: string
         billing_status:
           type: string
@@ -10410,6 +10421,10 @@ components:
         cache_write_tokens:
           format: int32
           type: integer
+        catalog_base_usd:
+          description: 上游目录基准价USD 金额
+          format: double
+          type: number
         client_api_format:
           description: 客户端 API 格式
           type: string
@@ -10418,12 +10433,18 @@ components:
         completion_tokens:
           format: int32
           type: integer
+        created_at:
+          description: 创建时间，Unix 毫秒
+          format: int64
+          type: integer
         effective_user_multiplier_snapshot:
           format: double
           type: number
         error_code:
           type: string
         error_message:
+          type: string
+        external_user_id:
           type: string
         failed_step:
           description: 仅管理员可见：触发失败的调用链路阶段
@@ -10450,8 +10471,12 @@ components:
         http_status:
           format: int32
           type: integer
+        id:
+          type: string
         internal_error_detail:
           description: 仅管理员可见：未脱敏/未截断的真实底层错误（Go 错误链或上游原始报文）
+          type: string
+        key_owner_type:
           type: string
         latency_ms:
           format: int32
@@ -10461,6 +10486,9 @@ components:
         matched_dispatch_rule_summary:
           type: string
         media_refs: {}
+        model_code:
+          description: 模型编码
+          type: string
         prompt_tokens:
           format: int32
           type: integer
@@ -10495,6 +10523,8 @@ components:
         request_setup_ms:
           format: int32
           type: integer
+        request_source:
+          type: string
         request_status:
           type: string
         request_total_ms:
@@ -10513,6 +10543,10 @@ components:
         response_tail_ms:
           format: int32
           type: integer
+        retail_base_usd:
+          description: 零售价格表原价USD 金额
+          format: double
+          type: number
         selected_upstream_model:
           type: string
         selected_upstream_target_type:
@@ -10529,10 +10563,19 @@ components:
           type: boolean
         tenant_id:
           type: string
+        tenant_name:
+          type: string
+        tenant_payable_usd:
+          description: 租户扣除积分，即平台与租户之间的结算USD 金额
+          format: double
+          type: number
         total_tokens:
           format: int32
           type: integer
         trace_id:
+          type: string
+        upstream_model:
+          description: 上游模型
           type: string
         upstream_model_mapping_applied:
           type: boolean
@@ -10541,9 +10584,21 @@ components:
           type: integer
         user_agent:
           type: string
+        user_charged_usd:
+          description: 用户实际扣除积分USD 金额
+          format: double
+          type: number
+        user_id:
+          type: string
         user_multiplier_override_snapshot:
           format: double
           type: number
+        user_payable_usd:
+          description: 用户应付USD 金额
+          format: double
+          type: number
+        username:
+          type: string
       required:
         - request_id
         - client_api_format
@@ -10560,6 +10615,12 @@ components:
         - total_tokens
         - attempts_count
         - service_tier
+        - catalog_base_usd
+        - tenant_payable_usd
+        - retail_base_usd
+        - user_payable_usd
+        - user_charged_usd
+        - api_key_quota_usd
         - billing_status
         - refund_status
       type: object

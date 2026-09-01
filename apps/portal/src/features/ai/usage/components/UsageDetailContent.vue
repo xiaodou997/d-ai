@@ -1,27 +1,22 @@
-<!--
-  请求详情内容:由 UsageDetailDrawer 的抽屉内容提取而来,供独立详情页使用。
-  与原抽屉的差异:
-  - 只依赖详情 DTO(页面按 requestId 直接拉取,不再有列表行上下文),
-    租户结算/用户扣款等列表行专有字段不再展示;
-  - 版面按宽页排版(左主右辅双栏),不再按抽屉窄栏压缩;
-  - 去掉了上一条/下一条导航(页面形态下由面包屑返回列表);
-  - el-table 边框色等硬编码 hex 已 token 化。
--->
 <script setup lang="ts">
-import { computed } from "vue";
-import { CopyDocument } from "@element-plus/icons-vue";
+import { computed, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import {
-  PortalContentCard,
-  PortalDetailLayout
-} from "@/platform";
+  AlertTriangle,
+  Braces,
+  Building2,
+  ChevronDown,
+  CircleDollarSign,
+  Clock3,
+  Copy,
+  KeyRound,
+  Route,
+  UserRound
+} from "lucide-vue-next";
+
+import { PortalContentCard } from "@/platform";
 import { formatMultiplier } from "@/platform/ai/utils";
-import {
-  formatMs,
-  UsageTag,
-  UsageTimingCell,
-  UsageTokenCell
-} from "@/platform/ai/usage";
+import { formatMs, formatNumber, formatUSD, UsageTag } from "@/platform/ai/usage";
 
 import { normalizeUsageAttempts, type UsageAttemptDetail, type UsageLogDetailDTO } from "../model";
 import {
@@ -39,64 +34,92 @@ const props = defineProps<{
   loading: boolean;
 }>();
 
+type PayloadKey = "request_params" | "request_messages" | "response_message" | "media_refs" | "billing_breakdown";
+
+const payloadOpen = ref(false);
+const activePayload = ref<PayloadKey>("request_params");
+const attemptsOpen = ref(false);
+
+watch(
+  () => props.detail?.request_id,
+  () => {
+    payloadOpen.value = false;
+    activePayload.value = "request_params";
+    attemptsOpen.value = false;
+  }
+);
+
+const detailReady = computed(() => Boolean(props.detail));
 const resolvedRequestId = computed(() => props.detail?.request_id || "");
 const resolvedStatus = computed(() => props.detail?.request_status || "");
 const resolvedTrace = computed(() => props.detail?.trace_id || "—");
 const resolvedHeadline = computed(() => {
-  const requested = props.detail?.requested_model || "—";
+  const requested = props.detail?.requested_model || props.detail?.model_code || "—";
   const resolved = props.detail?.resolved_logical_model || requested;
   return requested === resolved ? requested : `${requested} → ${resolved}`;
 });
+const tenantLabel = computed(() => props.detail?.tenant_name || props.detail?.tenant_id || "—");
+const userLabel = computed(() =>
+  props.detail?.username || props.detail?.external_user_id || props.detail?.user_id || "—"
+);
+const groupLabel = computed(() =>
+  props.detail?.group_name_snapshot || props.detail?.billing_group_label_snapshot || props.detail?.group_id || "—"
+);
+const accountLabel = computed(() => props.detail?.api_key_id || props.detail?.auth_method || "—");
+const requestSourceLabel = computed(() => sourceLabel(props.detail?.request_source));
+const billingSourceText = computed(() => billingSourceLabel(props.detail?.billing_source));
 
 function multiplierLabel(value?: number | null) {
-  return value == null ? "—" : `x${formatMultiplier(value)}`;
+  return value == null ? "—" : `×${formatMultiplier(value)}`;
 }
 
-const summaryFacts = computed(() => {
-  const facts = [
-    { label: "租户", value: props.detail?.tenant_id || "—" },
-    { label: "分组", value: props.detail?.group_name_snapshot || "—" },
-    { label: "计费分组", value: props.detail?.billing_group_label_snapshot || "—" }
-  ];
-  if (props.detail?.resolution) {
-    facts.push({ label: "图片/视频规格", value: props.detail.resolution });
-  }
-  return facts;
-});
+function durationLabel(value?: number | null) {
+  const formatted = formatMs(value ?? null);
+  return formatted === "-" ? "—" : formatted;
+}
 
-const routeSteps = computed(() => [
-  {
-    title: "客户端请求模型",
-    value: props.detail?.requested_model || "—",
-    hint: `入口格式：${props.detail?.client_api_format || "—"}`
-  },
-  {
-    title: "售价计费模型",
-    value: props.detail?.resolved_logical_model || "—",
-    hint: props.detail?.matched_dispatch_rule_summary || "未命中规则，原样路由"
-  },
-  {
-    title: "成本计费模型",
-    value: props.detail?.selected_upstream_model || "—",
-    hint: `上游目标：${props.detail?.resolved_provider_family || "不限制"}`
-  },
-  {
-    title: "客户端响应模型",
-    value: props.detail?.public_response_model || "—",
-    hint: `上游格式：${props.detail?.provider_api_format || "—"}`
-  }
-]);
+function moneyLabel(value?: number | null) {
+  return value == null ? "—" : formatUSD(value);
+}
 
-const payloadSections = computed(() => [
-  { key: "request_params", title: "请求参数", value: props.detail?.request_params },
-  { key: "request_messages", title: "请求消息", value: props.detail?.request_messages },
-  { key: "response_message", title: "响应摘要", value: props.detail?.response_message },
-  { key: "media_refs", title: "媒体引用", value: props.detail?.media_refs },
-  { key: "billing_breakdown", title: "计费明细", value: props.detail?.billing_breakdown }
-]);
+function sourceLabel(value?: string | null) {
+  return {
+    api_key: "API Key",
+    workspace: "工作台",
+    openai_compatible: "OpenAI 兼容",
+    internal: "内部调用"
+  }[value || ""] || value || "—";
+}
 
-const attempts = computed<UsageAttemptDetail[]>(() => normalizeUsageAttempts(props.detail?.attempts_detail));
-const resolvedTimingSource = computed(() => ({
+function billingSourceLabel(value?: string | null) {
+  return {
+    payg: "按量计费",
+    subscription: "订阅内"
+  }[value || ""] || value || "—";
+}
+
+function billingStatusLabel(status?: string | null) {
+  return {
+    free: "免费",
+    pending: "待结算",
+    settled: "已结算",
+    failed: "结算失败"
+  }[status || ""] || status || "—";
+}
+
+function refundStatusLabel(status?: string | null) {
+  return status === "refunded" ? "已退款" : "未退款";
+}
+
+function timestampLabel(value?: number | null) {
+  return value ? formatTimestamp(value) : "—";
+}
+
+function attemptOutcomeLabel(value: string) {
+  return value === "success" ? "成功" : value === "failed" ? "失败" : value || "未知";
+}
+
+const timingSource = computed(() => ({
   request_total_ms: props.detail?.request_total_ms,
   final_attempt_total_ms: props.detail?.final_attempt_total_ms,
   first_token_latency_ms: props.detail?.first_token_latency_ms,
@@ -106,23 +129,44 @@ const resolvedTimingSource = computed(() => ({
   request_setup_ms: props.detail?.request_setup_ms,
   response_tail_ms: props.detail?.response_tail_ms
 }));
+
 const timingSummary = computed(() => ({
-  totalMs: resolveRequestTotalMs(resolvedTimingSource.value) || null,
-  firstResponseMs: resolveFirstResponseByteMs(resolvedTimingSource.value) || null,
-  headerMs: resolveHeaderMs(resolvedTimingSource.value) || null
+  totalMs: resolveRequestTotalMs(timingSource.value) || null,
+  firstResponseMs: resolveFirstResponseByteMs(timingSource.value) || null,
+  headerMs: resolveHeaderMs(timingSource.value) || null
 }));
-const timingFacts = computed(() =>
-  [
-    { label: "请求准备", value: formatTimeValue(resolveRequestSetupMs(resolvedTimingSource.value)), tone: "neutral" },
-    { label: "最终连接", value: formatTimeValue(resolveHeaderMs(resolvedTimingSource.value)), tone: "info" },
-    { label: "首响后尾程", value: formatTimeValue(resolveResponseTailMs(resolvedTimingSource.value)), tone: "accent" },
-    {
-      label: "最终尝试",
-      value: formatTimeValue(Number(resolvedTimingSource.value.final_attempt_total_ms ?? 0) || 0),
-      tone: "warning"
-    }
-  ].filter((fact) => fact.value !== "—")
-);
+
+const performanceFacts = computed(() => [
+  { label: "网关准备", value: durationLabel(resolveRequestSetupMs(timingSource.value)) },
+  { label: "上游响应头", value: durationLabel(resolveHeaderMs(timingSource.value)) },
+  { label: "首个响应字节", value: durationLabel(resolveFirstResponseByteMs(timingSource.value)) },
+  { label: "响应尾程", value: durationLabel(resolveResponseTailMs(timingSource.value)) }
+].filter((fact) => fact.value !== "—"));
+
+const routeSteps = computed(() => [
+  {
+    title: "客户请求模型",
+    value: props.detail?.requested_model || props.detail?.model_code || "—",
+    hint: `入口格式：${props.detail?.client_api_format || "—"}`
+  },
+  {
+    title: "售价计费模型",
+    value: props.detail?.resolved_logical_model || "—",
+    hint: props.detail?.matched_dispatch_rule_summary || "未命中规则，原样路由"
+  },
+  {
+    title: "成本计费模型",
+    value: props.detail?.selected_upstream_model || props.detail?.upstream_model || "—",
+    hint: `上游目标：${props.detail?.resolved_provider_family || "不限制"}`
+  },
+  {
+    title: "客户端响应模型",
+    value: props.detail?.public_response_model || "—",
+    hint: `上游格式：${props.detail?.provider_api_format || "—"}`
+  }
+]);
+
+const attempts = computed<UsageAttemptDetail[]>(() => normalizeUsageAttempts(props.detail?.attempts_detail));
 
 interface BillingPriceLineSnapshot {
   input_context_tokens?: number;
@@ -131,30 +175,34 @@ interface BillingPriceLineSnapshot {
 }
 
 interface BillingCostLineSnapshot {
+  applied_multiplier?: number;
+  raw_usd?: number;
+  charge_usd_equivalent?: number;
   price_lines?: BillingPriceLineSnapshot;
 }
 
-// 对应后端 billingBreakdownSnapshot（v4）。这是 JSON.parse 出来的不透明 blob，
-// 类型检查不会在后端改键名时报错，所以字段名与 pricebook_billing.go 的 json tag 必须手工对齐。
 interface BillingBreakdownSnapshot {
   version?: number;
-  /** 目录基准价（倍率 1），谁都不付，只作基数。 */
   catalog_base?: BillingCostLineSnapshot;
-  /** 租户应付平台。 */
   tenant_payable?: BillingCostLineSnapshot;
-  /** 用户应付租户；租户自有 key 的请求没有这一段。 */
   user_payable?: BillingCostLineSnapshot;
+  user_charged_micro?: number;
   price_lines?: BillingPriceLineSnapshot;
+}
+
+function parseBillingBreakdown(raw: unknown): BillingBreakdownSnapshot | null {
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as BillingBreakdownSnapshot;
+    } catch {
+      return null;
+    }
+  }
+  return raw && typeof raw === "object" ? raw as BillingBreakdownSnapshot : null;
 }
 
 const billingContext = computed(() => {
-  const raw = props.detail?.billing_breakdown;
-  let value: BillingBreakdownSnapshot | null = null;
-  if (typeof raw === "string") {
-    try { value = JSON.parse(raw) as BillingBreakdownSnapshot; } catch { return null; }
-  } else if (raw && typeof raw === "object") {
-    value = raw as BillingBreakdownSnapshot;
-  }
+  const value = parseBillingBreakdown(props.detail?.billing_breakdown);
   if (!value || Number(value.version) < 2) return null;
   const sell = value.user_payable?.price_lines || value.price_lines;
   const provider = value.catalog_base?.price_lines;
@@ -164,6 +212,38 @@ const billingContext = computed(() => {
     providerTier: formatContextTier(provider)
   };
 });
+
+function formatContextTier(line?: BillingPriceLineSnapshot) {
+  if (!line || line.token_price_tier_index == null) return "—";
+  const upper = line.token_price_tier_up_to_input_tokens == null
+    ? "无上限"
+    : `≤ ${Number(line.token_price_tier_up_to_input_tokens).toLocaleString("zh-CN")}`;
+  return `档位 ${Number(line.token_price_tier_index) + 1} · ${upper}`;
+}
+
+const payloadSections = computed(() => [
+  { key: "request_params" as const, title: "请求参数", value: props.detail?.request_params },
+  { key: "request_messages" as const, title: "请求消息", value: props.detail?.request_messages },
+  { key: "response_message" as const, title: "响应摘要", value: props.detail?.response_message },
+  { key: "media_refs" as const, title: "媒体引用", value: props.detail?.media_refs },
+  { key: "billing_breakdown" as const, title: "计费明细", value: props.detail?.billing_breakdown }
+].map((section) => ({
+  ...section,
+  present: section.value != null && section.value !== "",
+  size: payloadSizeLabel(section.value)
+})));
+
+const activePayloadSection = computed(() =>
+  payloadSections.value.find((section) => section.key === activePayload.value) || payloadSections.value[0]
+);
+const activePayloadText = computed(() => formatJSON(activePayloadSection.value?.value));
+const payloadPresentCount = computed(() => payloadSections.value.filter((section) => section.present).length);
+
+function payloadSizeLabel(value: unknown) {
+  if (value == null || value === "") return "未记录";
+  const length = formatJSON(value).length;
+  return length < 1024 ? `${length} 字符` : `${(length / 1024).toFixed(1)} KB`;
+}
 
 async function copyText(value: string) {
   if (!value || value === "—") return;
@@ -175,559 +255,680 @@ async function copyText(value: string) {
   }
 }
 
-function formatTimeValue(value?: number | null) {
-  return formatMs(value ?? null);
-}
-
-function billingStatusLabel(status?: string) {
-  return {
-    free: "免费",
-    pending: "待结算",
-    settled: "已结算",
-    failed: "结算失败"
-  }[status || ""] || status || "—";
-}
-
-function refundStatusLabel(status?: string) {
-  return status === "refunded" ? "已退款" : "未退款";
-}
-
-function timestampLabel(value?: number) {
-  return value ? formatTimestamp(value) : "—";
-}
-
-function formatContextTier(line: BillingPriceLineSnapshot | undefined) {
-  if (!line || line.token_price_tier_index == null) return "—";
-  const upper = line.token_price_tier_up_to_input_tokens == null
-    ? "无上限"
-    : `≤ ${Number(line.token_price_tier_up_to_input_tokens).toLocaleString("zh-CN")}`;
-  return `档位 ${Number(line.token_price_tier_index) + 1} · ${upper}`;
+function copyActivePayload() {
+  void copyText(activePayloadText.value);
 }
 </script>
 
 <template>
   <div class="usage-detail" v-loading="loading">
-    <PortalDetailLayout summary-width="320px">
-      <template #summary>
-        <PortalContentCard class="usage-detail-card">
-          <div class="usage-detail-hero">
-            <div class="usage-detail-hero__header">
-              <div>
-                <p class="usage-detail-eyebrow">请求身份</p>
-                <h3 class="usage-detail-title">{{ resolvedHeadline }}</h3>
-              </div>
-              <el-button
-                v-if="resolvedRequestId"
-                link
-                type="primary"
-                :icon="CopyDocument"
-                @click="copyText(resolvedRequestId)"
-              >
-                复制 ID
-              </el-button>
-            </div>
+    <PortalContentCard class="usage-detail-header">
+      <div class="usage-detail-header__main">
+        <div class="usage-detail-eyebrow">AI 网关请求</div>
+        <div class="usage-detail-header__title-row">
+          <h1>{{ resolvedHeadline }}</h1>
+          <UsageTag v-if="detailReady" kind="status" :value="resolvedStatus" />
+          <UsageTag v-if="detail" kind="stream" :value="detail.stream" />
+          <UsageTag v-if="detail?.reasoning_effort" kind="effort" :value="detail.reasoning_effort" />
+        </div>
+        <div class="usage-detail-header__meta">
+          <span>{{ detail?.request_path || "—" }}</span>
+          <span class="meta-separator">·</span>
+          <span>{{ requestSourceLabel }}</span>
+          <span class="meta-separator">·</span>
+          <span>{{ timestampLabel(detail?.created_at) }}</span>
+        </div>
+      </div>
+      <div class="usage-detail-header__actions">
+        <button v-if="resolvedRequestId" class="detail-copy-button" type="button" @click="copyText(resolvedRequestId)">
+          <Copy :size="14" />
+          复制 Request ID
+        </button>
+        <button v-if="resolvedTrace !== '—'" class="detail-copy-button" type="button" @click="copyText(resolvedTrace)">
+          <Copy :size="14" />
+          复制 Trace ID
+        </button>
+      </div>
+    </PortalContentCard>
 
-            <div class="usage-detail-tags">
-              <UsageTag kind="status" :value="resolvedStatus" />
-              <UsageTag v-if="detail" kind="stream" :value="detail.stream" />
-              <UsageTag v-if="detail?.reasoning_effort" kind="effort" :value="detail.reasoning_effort" />
-            </div>
+    <PortalContentCard title="请求主体" description="先确认请求来自谁、使用哪个账号和分组，再查看技术链路。">
+      <div class="identity-grid">
+        <article class="identity-item identity-item--tenant">
+          <div class="identity-item__label"><Building2 :size="15" />租户</div>
+          <strong>{{ tenantLabel }}</strong>
+          <small>{{ detail?.tenant_id || "未返回租户 ID" }}</small>
+        </article>
+        <article class="identity-item identity-item--user">
+          <div class="identity-item__label"><UserRound :size="15" />用户</div>
+          <strong>{{ userLabel }}</strong>
+          <small>{{ detail?.user_id || detail?.external_user_id || "未关联终端用户" }}</small>
+        </article>
+        <article class="identity-item">
+          <div class="identity-item__label"><KeyRound :size="15" />认证账号</div>
+          <strong>{{ accountLabel }}</strong>
+          <small>{{ detail?.key_owner_type || detail?.auth_method || "—" }}</small>
+        </article>
+        <article class="identity-item">
+          <div class="identity-item__label"><Route :size="15" />分组</div>
+          <strong>{{ groupLabel }}</strong>
+          <small>{{ detail?.group_id || "未返回分组 ID" }}</small>
+        </article>
+        <article class="identity-item">
+          <span>客户端 IP</span>
+          <strong>{{ detail?.client_ip || "—" }}</strong>
+        </article>
+        <article class="identity-item identity-item--wide">
+          <span>User-Agent</span>
+          <strong>{{ detail?.user_agent || "—" }}</strong>
+        </article>
+      </div>
+    </PortalContentCard>
 
-            <div class="usage-detail-facts">
-              <article v-for="fact in summaryFacts" :key="fact.label" class="usage-detail-fact">
-                <span>{{ fact.label }}</span>
-                <strong>{{ fact.value }}</strong>
-              </article>
-            </div>
-          </div>
-        </PortalContentCard>
+    <PortalContentCard title="账务与倍率" description="金额单位为 USD；租户扣除积分就是平台与租户之间的结算金额。">
+      <div class="billing-amount-grid">
+        <article class="billing-amount billing-amount--user">
+          <div class="billing-amount__label"><CircleDollarSign :size="16" />用户扣除积分</div>
+          <strong>{{ moneyLabel(detail?.user_charged_usd) }}</strong>
+          <small>用户账户本次实际扣除</small>
+        </article>
+        <article class="billing-amount billing-amount--tenant">
+          <div class="billing-amount__label"><CircleDollarSign :size="16" />租户扣除积分</div>
+          <strong>{{ moneyLabel(detail?.tenant_payable_usd) }}</strong>
+          <small>平台与租户之间的结算金额</small>
+        </article>
+        <article class="billing-amount billing-amount--base">
+          <div class="billing-amount__label"><CircleDollarSign :size="16" />上游参考成本</div>
+          <strong>{{ moneyLabel(detail?.catalog_base_usd) }}</strong>
+          <small>上游目录价基准，不代表平台实际采购价</small>
+        </article>
+      </div>
 
-        <PortalContentCard title="执行剖面" description="总耗时是主指标，连接、首响与尾程用于拆慢点。">
-          <div class="usage-detail-snapshot">
-            <article class="usage-detail-snapshot__item">
-              <span>Token</span>
-              <UsageTokenCell
-                :prompt="detail?.prompt_tokens ?? 0"
-                :completion="detail?.completion_tokens ?? 0"
-                :cache-read="detail?.cache_read_tokens ?? 0"
-                :cache-write="detail?.cache_write_tokens ?? 0"
-                :reasoning="detail?.reasoning_tokens ?? 0"
-              />
-            </article>
-            <article class="usage-detail-snapshot__item">
-              <span>总耗时</span>
-              <UsageTimingCell
-                :total-ms="timingSummary.totalMs"
-                :first-response-byte-ms="timingSummary.firstResponseMs"
-                :header-ms="timingSummary.headerMs"
-              />
-            </article>
-            <article class="usage-detail-snapshot__item">
-              <span>尝试次数</span>
-              <strong>{{ detail?.attempts_count ?? "—" }}</strong>
-            </article>
+      <div class="billing-info-grid">
+        <div class="billing-info-block">
+          <div class="billing-info-block__title">计费倍率</div>
+          <div class="billing-facts">
+            <div><span>账号倍率</span><strong>{{ multiplierLabel(detail?.effective_user_multiplier_snapshot) }}</strong></div>
+            <div><span>分组倍率</span><strong>{{ multiplierLabel(detail?.group_default_user_multiplier_snapshot) }}</strong></div>
+            <div><span>账号覆盖</span><strong>{{ multiplierLabel(detail?.user_multiplier_override_snapshot) }}</strong></div>
+            <div><span>计费分组</span><strong>{{ detail?.billing_group_label_snapshot || groupLabel }}</strong></div>
           </div>
-          <div v-if="timingFacts.length" class="usage-detail-timing">
-            <article
-              v-for="fact in timingFacts"
-              :key="fact.label"
-              class="usage-detail-timing__item"
-              :class="`usage-detail-timing__item--${fact.tone}`"
-            >
-              <span>{{ fact.label }}</span>
-              <strong>{{ fact.value }}</strong>
-            </article>
+        </div>
+        <div class="billing-info-block">
+          <div class="billing-info-block__title">结算状态</div>
+          <div class="billing-facts">
+            <div><span>计费来源</span><strong>{{ billingSourceText }}</strong></div>
+            <div><span>计费状态</span><strong>{{ billingStatusLabel(detail?.billing_status) }}</strong></div>
+            <div><span>结算时间</span><strong>{{ timestampLabel(detail?.settled_at) }}</strong></div>
+            <div><span>退款状态</span><strong>{{ refundStatusLabel(detail?.refund_status) }}</strong></div>
           </div>
-        </PortalContentCard>
+        </div>
+      </div>
 
-        <PortalContentCard title="结算与退款" description="使用记录同时承载本次请求的结算和退款状态。">
-          <div class="usage-detail-kv">
-            <div>
-              <span>结算状态</span>
-              <strong>{{ billingStatusLabel(detail?.billing_status) }}</strong>
-            </div>
-            <div>
-              <span>结算时间</span>
-              <strong>{{ timestampLabel(detail?.settled_at) }}</strong>
-            </div>
-            <div>
-              <span>退款状态</span>
-              <strong>{{ refundStatusLabel(detail?.refund_status) }}</strong>
-            </div>
-            <div>
-              <span>退款时间</span>
-              <strong>{{ timestampLabel(detail?.refunded_at) }}</strong>
-            </div>
-            <div v-if="detail?.settlement_error" class="usage-detail-kv__wide">
-              <span>结算失败原因</span>
-              <strong class="usage-detail-kv__danger">{{ detail.settlement_error }}</strong>
-            </div>
-            <div v-if="detail?.refund_reason">
-              <span>退款原因</span>
-              <strong>{{ detail.refund_reason }}</strong>
-            </div>
-            <div v-if="detail?.refund_operator_id">
-              <span>退款操作人</span>
-              <strong class="mono">{{ detail.refund_operator_id }}</strong>
-            </div>
-          </div>
-        </PortalContentCard>
+      <div class="token-strip">
+        <div><span>输入 Token</span><strong>{{ formatNumber(detail?.prompt_tokens) }}</strong></div>
+        <div><span>输出 Token</span><strong>{{ formatNumber(detail?.completion_tokens) }}</strong></div>
+        <div><span>缓存读</span><strong>{{ formatNumber(detail?.cache_read_tokens) }}</strong></div>
+        <div><span>缓存写</span><strong>{{ formatNumber(detail?.cache_write_tokens) }}</strong></div>
+        <div><span>推理 Token</span><strong>{{ formatNumber(detail?.reasoning_tokens) }}</strong></div>
+        <div><span>总 Token</span><strong>{{ formatNumber(detail?.total_tokens) }}</strong></div>
+      </div>
 
-        <PortalContentCard title="计费档位">
-          <div class="usage-detail-kv">
-            <div>
-              <span>服务档位</span>
-              <strong>{{ detail?.service_tier || "—" }}</strong>
-            </div>
-            <div>
-              <span>用户有效倍率</span>
-              <strong>{{ multiplierLabel(detail?.effective_user_multiplier_snapshot) }}</strong>
-            </div>
-            <div>
-              <span>分组用户默认倍率</span>
-              <strong>{{ multiplierLabel(detail?.group_default_user_multiplier_snapshot) }}</strong>
-            </div>
-            <div>
-              <span>输入上下文</span>
-              <strong>{{ billingContext?.inputTokens?.toLocaleString("zh-CN") || "—" }}</strong>
-            </div>
-            <div>
-              <span>零售价上下文档</span>
-              <strong>{{ billingContext?.sellTier || "—" }}</strong>
-            </div>
-            <div>
-              <span>账号价格上下文档</span>
-              <strong>{{ billingContext?.providerTier || "—" }}</strong>
-            </div>
-            <div>
-              <span>用户覆盖</span>
-              <strong>{{ multiplierLabel(detail?.user_multiplier_override_snapshot) }}</strong>
-            </div>
+      <div v-if="detail?.user_payable_usd != null || detail?.retail_base_usd != null" class="billing-secondary">
+        <span>用户应付 {{ moneyLabel(detail?.user_payable_usd) }}</span>
+        <span>零售原价 {{ moneyLabel(detail?.retail_base_usd) }}</span>
+        <span v-if="detail?.api_key_quota_usd">Key 配额 {{ moneyLabel(detail.api_key_quota_usd) }}</span>
+        <span v-if="billingContext?.inputTokens">上下文 {{ formatNumber(billingContext.inputTokens) }} tokens · {{ billingContext.sellTier }}</span>
+      </div>
+      <div v-if="detail?.settlement_error" class="billing-error">
+        <AlertTriangle :size="15" />
+        <span>结算异常：{{ detail.settlement_error }}</span>
+      </div>
+    </PortalContentCard>
+
+    <div class="usage-detail-columns">
+      <PortalContentCard title="性能时间线" description="总耗时是主指标，其余节点用于定位慢点。">
+        <div class="performance-total">
+          <div>
+            <span>请求总耗时</span>
+            <strong>{{ durationLabel(timingSummary.totalMs) }}</strong>
           </div>
-        </PortalContentCard>
+          <div>
+            <span>首响</span>
+            <strong>{{ durationLabel(timingSummary.firstResponseMs) }}</strong>
+          </div>
+          <div>
+            <span>尝试次数</span>
+            <strong>{{ detail?.attempts_count ?? "—" }}</strong>
+          </div>
+        </div>
+        <div v-if="performanceFacts.length" class="performance-facts">
+          <div v-for="fact in performanceFacts" :key="fact.label" class="performance-fact">
+            <Clock3 :size="14" />
+            <span>{{ fact.label }}</span>
+            <strong>{{ fact.value }}</strong>
+          </div>
+        </div>
+      </PortalContentCard>
+
+      <PortalContentCard title="路由决策" description="只展示关键模型身份，完整候选尝试按需查看。">
+        <div class="route-flow">
+          <article v-for="(step, index) in routeSteps" :key="step.title" class="route-step">
+            <span class="route-step__index">{{ index + 1 }}</span>
+            <span class="route-step__title">{{ step.title }}</span>
+            <strong>{{ step.value }}</strong>
+            <small>{{ step.hint }}</small>
+          </article>
+        </div>
+        <div class="route-meta">
+          <span>调度规则：{{ detail?.matched_dispatch_rule_id ? "已命中" : "未命中" }}</span>
+          <span>协议转换：{{ detail?.protocol_conversion_enabled ? "已启用" : "未启用" }}</span>
+          <span>模型映射：{{ detail?.upstream_model_mapping_applied ? "已发生" : "未发生" }}</span>
+        </div>
+        <button v-if="attempts.length" class="route-attempt-toggle" type="button" @click="attemptsOpen = !attemptsOpen">
+          <span>{{ attempts.length }} 次候选尝试 · {{ attemptsOpen ? "收起明细" : "查看明细" }}</span>
+          <ChevronDown :size="15" :class="{ 'is-open': attemptsOpen }" />
+        </button>
+        <el-table v-if="attemptsOpen" :data="attempts" size="small" class="attempts-table">
+          <el-table-column label="#" type="index" width="44" />
+          <el-table-column label="供应商" prop="provider_code" min-width="110">
+            <template #default="{ row }">{{ row.provider_code || "—" }}</template>
+          </el-table-column>
+          <el-table-column label="上游模型" prop="upstream_model" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.upstream_model || "—" }}</template>
+          </el-table-column>
+          <el-table-column label="结果" width="80">
+            <template #default="{ row }">
+              <span :class="['attempt-result', row.outcome === 'success' ? 'is-success' : 'is-danger']">{{ attemptOutcomeLabel(row.outcome) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="总耗时" width="92" align="right">
+            <template #default="{ row }">{{ durationLabel(row.total_ms) }}</template>
+          </el-table-column>
+        </el-table>
+      </PortalContentCard>
+    </div>
+
+    <PortalContentCard
+      v-if="detail && detail.request_status !== 'success' && (detail.internal_error_detail || detail.failed_step || detail.error_message)"
+      title="失败详情"
+      description="用于确认失败阶段和底层错误。"
+      class="failure-card"
+    >
+      <div class="failure-card__summary">
+        <AlertTriangle :size="17" />
+        <span>失败阶段：{{ detail.failed_step || "网关请求" }}</span>
+        <strong>{{ detail.error_message || detail.error_code || "请求失败" }}</strong>
+      </div>
+      <pre v-if="detail.internal_error_detail">{{ detail.internal_error_detail }}</pre>
+    </PortalContentCard>
+
+    <PortalContentCard title="载荷与响应" description="原始 JSON 默认收起，展开后按分区查看并复制。">
+      <template #actions>
+        <button class="payload-toggle" type="button" @click="payloadOpen = !payloadOpen">
+          <Braces :size="15" />
+          {{ payloadOpen ? "收起载荷" : "展开载荷" }}
+          <ChevronDown :size="15" :class="{ 'is-open': payloadOpen }" />
+        </button>
       </template>
 
-      <div class="usage-detail-main">
-        <PortalContentCard title="总览" description="把排障最常看的字段收敛到一块，不再靠 descriptions 全铺开。">
-          <div class="usage-detail-overview">
-            <div class="usage-detail-overview__grid">
-              <article class="usage-detail-overview__item">
-                <span>Trace ID</span>
-                <strong>{{ resolvedTrace }}</strong>
-              </article>
-              <article class="usage-detail-overview__item">
-                <span>HTTP / 上游状态</span>
-                <strong>{{ detail?.http_status ?? "—" }} / {{ detail?.upstream_status ?? "—" }}</strong>
-              </article>
-              <article class="usage-detail-overview__item">
-                <span>请求路径</span>
-                <strong>{{ detail?.request_path || "—" }}</strong>
-              </article>
-              <article class="usage-detail-overview__item">
-                <span>客户端 IP</span>
-                <strong>{{ detail?.client_ip || "—" }}</strong>
-              </article>
-              <article class="usage-detail-overview__item usage-detail-overview__item--wide">
-                <span>User-Agent</span>
-                <strong>{{ detail?.user_agent || "—" }}</strong>
-              </article>
-              <article class="usage-detail-overview__item usage-detail-overview__item--wide">
-                <span>错误信息</span>
-                <strong>{{ detail?.error_message || detail?.error_code || "—" }}</strong>
-              </article>
-            </div>
-          </div>
-        </PortalContentCard>
+      <button v-if="!payloadOpen" class="payload-collapsed" type="button" @click="payloadOpen = true">
+        <div class="payload-collapsed__icon"><Braces :size="19" /></div>
+        <div>
+          <strong>原始载荷已收起</strong>
+          <span>{{ payloadPresentCount }} 个分区已记录 · 请求参数、消息、响应和计费 JSON 按需查看</span>
+        </div>
+        <ChevronDown :size="17" />
+      </button>
 
-        <PortalContentCard title="路由链路" description="请求、售价、成本与响应模型身份。">
-          <div class="route-timeline">
-            <article v-for="step in routeSteps" :key="step.title" class="route-timeline__item">
-              <span class="route-timeline__dot"></span>
-              <div class="route-timeline__copy">
-                <strong>{{ step.title }}</strong>
-                <span>{{ step.value }}</span>
-                <small>{{ step.hint }}</small>
-              </div>
-            </article>
-          </div>
-        </PortalContentCard>
-
-        <PortalContentCard title="载荷与响应" description="JSON 不再散落在弹框底部，统一收进结构化分区。">
-          <div class="payload-grid">
-            <section v-for="section in payloadSections" :key="section.key" class="payload-panel">
-              <header class="payload-panel__head">
-                <h4>{{ section.title }}</h4>
-                <el-button
-                  v-if="section.value != null"
-                  link
-                  size="small"
-                  :icon="CopyDocument"
-                  @click="copyText(formatJSON(section.value))"
-                >
-                  复制
-                </el-button>
-              </header>
-              <pre>{{ formatJSON(section.value) }}</pre>
-            </section>
-          </div>
-        </PortalContentCard>
-
-        <PortalContentCard
-          v-if="detail && detail.request_status !== 'success' && (detail.internal_error_detail || detail.failed_step)"
-          title="失败详情"
-          description="仅管理员可见，用于确认失败阶段和底层原始错误。"
-        >
-          <div class="failure-card">
-            <div class="failure-card__meta">
-              <span>失败阶段</span>
-              <strong>{{ detail.failed_step || "—" }}</strong>
-            </div>
-            <pre>{{ detail.internal_error_detail || "—" }}</pre>
-          </div>
-        </PortalContentCard>
-
-        <PortalContentCard
-          v-if="attempts.length"
-          title="重试链路"
-          :description="`本次请求共 ${attempts.length} 次候选尝试，按发生顺序展开。`"
-        >
-          <el-table :data="attempts" size="small" class="attempts-table">
-            <el-table-column label="#" type="index" width="44" />
-            <el-table-column label="供应商" prop="provider_code" min-width="120">
-              <template #default="{ row }">{{ row.provider_code || "—" }}</template>
-            </el-table-column>
-            <el-table-column label="上游模型" prop="upstream_model" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.upstream_model || "—" }}</template>
-            </el-table-column>
-            <el-table-column label="HTTP" width="80" align="right">
-              <template #default="{ row }">{{ row.http_status ?? "—" }}</template>
-            </el-table-column>
-            <el-table-column label="结果" width="110">
-              <template #default="{ row }">
-                <el-tag size="small" :type="row.outcome === 'success' ? 'success' : 'danger'">{{ row.outcome }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="连接" width="94" align="right">
-              <template #default="{ row }">{{ row.latency_ms != null ? `${row.latency_ms} ms` : "—" }}</template>
-            </el-table-column>
-            <el-table-column label="首响" width="94" align="right">
-              <template #default="{ row }">{{ row.first_byte_ms != null ? `${row.first_byte_ms} ms` : "—" }}</template>
-            </el-table-column>
-            <el-table-column label="总耗时" width="98" align="right">
-              <template #default="{ row }">{{ row.total_ms != null ? `${row.total_ms} ms` : "—" }}</template>
-            </el-table-column>
-            <el-table-column label="错误" min-width="240" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.error || "—" }}</template>
-            </el-table-column>
-          </el-table>
-        </PortalContentCard>
+      <div v-else class="payload-viewer">
+        <nav class="payload-tabs" aria-label="载荷分区">
+          <button
+            v-for="section in payloadSections"
+            :key="section.key"
+            type="button"
+            :class="{ 'is-active': activePayload === section.key }"
+            @click="activePayload = section.key"
+          >
+            <span>{{ section.title }}</span>
+            <small>{{ section.present ? section.size : "未记录" }}</small>
+          </button>
+        </nav>
+        <div class="payload-viewer__head">
+          <span>{{ activePayloadSection?.title }} · JSON</span>
+          <button v-if="activePayloadSection?.present" class="detail-copy-button" type="button" @click="copyActivePayload">
+            <Copy :size="14" />复制
+          </button>
+        </div>
+        <pre>{{ activePayloadText }}</pre>
       </div>
-    </PortalDetailLayout>
+    </PortalContentCard>
   </div>
 </template>
 
 <style scoped>
 .usage-detail {
+  display: grid;
+  gap: 16px;
   min-height: 240px;
 }
 
-.usage-detail-hero,
-.usage-detail-main {
-  display: grid;
-  gap: 16px;
+.usage-detail-header :deep(.portal-content-card__body--md) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
 }
 
-.usage-detail-hero__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+.usage-detail-header__main {
+  min-width: 0;
 }
 
 .usage-detail-eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 5px;
   color: var(--ds-muted);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: 750;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.usage-detail-title {
-  margin: 0;
-  color: var(--ds-ink);
-  font-size: 18px;
-  line-height: 1.35;
+.usage-detail-header__title-row,
+.usage-detail-header__meta,
+.usage-detail-header__actions,
+.detail-copy-button,
+.identity-item__label,
+.billing-amount__label,
+.route-attempt-toggle,
+.payload-toggle,
+.failure-card__summary {
+  display: flex;
+  align-items: center;
 }
 
-.usage-detail-tags {
-  display: flex;
+.usage-detail-header__title-row {
   flex-wrap: wrap;
+  gap: 9px;
+}
+
+.usage-detail-header h1 {
+  margin: 0;
+  color: var(--ds-ink);
+  font-size: 21px;
+  font-weight: 720;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+}
+
+.usage-detail-header__meta {
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+  color: var(--ds-muted);
+  font-size: 12px;
+}
+
+.meta-separator {
+  color: var(--ds-line-strong);
+}
+
+.usage-detail-header__actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 
-.usage-detail-facts,
-.usage-detail-overview__grid,
-.usage-detail-kv {
-  display: grid;
-  gap: 10px;
-}
-
-.usage-detail-facts {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.usage-detail-fact,
-.usage-detail-overview__item,
-.usage-detail-kv > div,
-.usage-detail-snapshot__item {
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--ds-line);
-  border-radius: var(--ds-radius-control);
-  background: var(--ds-panel-muted);
-  padding: 10px 12px;
-}
-
-.usage-detail-fact span,
-.usage-detail-overview__item span,
-.usage-detail-kv span,
-.usage-detail-snapshot__item span,
-.failure-card__meta span {
-  color: var(--ds-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.usage-detail-fact strong,
-.usage-detail-overview__item strong,
-.usage-detail-kv strong,
-.usage-detail-snapshot__item strong,
-.failure-card__meta strong {
-  color: var(--ds-ink);
-  font-size: 13px;
-  line-height: 1.45;
-  word-break: break-word;
-}
-
-.usage-detail-snapshot {
-  display: grid;
-  gap: 10px;
-}
-
-.usage-detail-timing {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.usage-detail-timing__item {
-  display: grid;
-  gap: 4px;
-  border: 1px solid var(--ds-line);
-  border-radius: var(--ds-radius-control);
-  background: var(--ds-panel-muted);
-  padding: 10px 12px;
-}
-
-.usage-detail-timing__item span {
-  color: var(--ds-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.usage-detail-timing__item strong {
-  color: var(--ds-ink);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.usage-detail-timing__item--info {
-  border-color: color-mix(in srgb, var(--ds-info) 18%, var(--ds-info-soft));
-}
-
-.usage-detail-timing__item--info strong {
-  color: var(--ds-info);
-}
-
-.usage-detail-timing__item--accent {
-  border-color: color-mix(in srgb, var(--ds-accent) 20%, var(--ds-accent-soft));
-}
-
-.usage-detail-timing__item--accent strong {
+.detail-copy-button,
+.payload-toggle,
+.route-attempt-toggle {
+  gap: 6px;
+  border: 0;
+  background: transparent;
   color: var(--ds-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
 }
 
-.usage-detail-timing__item--warning {
-  border-color: color-mix(in srgb, var(--ds-warning) 22%, var(--ds-warning-soft));
+.detail-copy-button:hover,
+.payload-toggle:hover,
+.route-attempt-toggle:hover {
+  color: var(--ds-accent-hover);
 }
 
-.usage-detail-timing__item--warning strong {
-  color: var(--ds-warning);
+.identity-grid,
+.billing-amount-grid,
+.billing-info-grid,
+.token-strip,
+.usage-detail-columns {
+  display: grid;
+  gap: 12px;
 }
 
-.usage-detail-kv {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.identity-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.usage-detail-kv__wide {
-  grid-column: 1 / -1;
+.identity-item,
+.billing-amount,
+.billing-info-block,
+.performance-total,
+.performance-fact,
+.payload-collapsed {
+  min-width: 0;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-panel-muted);
 }
 
-.usage-detail-kv__danger {
-  color: var(--ds-danger) !important;
+.identity-item {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
 }
 
-.mono {
-  font-family: var(--ds-font-mono);
-}
-
-.usage-detail-overview__grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.usage-detail-overview__item--wide {
+.identity-item--wide {
   grid-column: span 2;
 }
 
-.route-timeline {
-  display: grid;
-  gap: 14px;
+.identity-item--tenant {
+  border-color: color-mix(in srgb, var(--ds-accent) 24%, var(--ds-line));
+  background: color-mix(in srgb, var(--ds-accent-soft) 48%, var(--ds-panel-muted));
 }
 
-.route-timeline__item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 12px;
+.identity-item--user {
+  border-color: color-mix(in srgb, var(--ds-info) 20%, var(--ds-line));
 }
 
-.route-timeline__dot {
-  width: 10px;
-  height: 10px;
-  margin-top: 6px;
-  border-radius: var(--ds-radius-pill);
-  background: var(--ds-accent);
-  box-shadow: var(--ds-shadow-focus-soft-wide);
-}
-
-.route-timeline__copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.route-timeline__copy strong {
-  color: var(--ds-ink);
-  font-size: 13px;
-}
-
-.route-timeline__copy span {
-  color: var(--ds-ink-soft);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.route-timeline__copy small {
-  color: var(--ds-faint);
-  font-size: 12px;
-}
-
-.payload-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.payload-panel {
-  display: grid;
-  gap: 8px;
-  border: 1px solid var(--ds-line);
-  border-radius: var(--ds-radius-control);
-  background: var(--ds-panel-muted);
-  padding: 12px;
-  min-width: 0;
-}
-
-.payload-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.payload-panel__head h4 {
-  margin: 0;
-  color: var(--ds-ink);
-  font-size: 13px;
+.identity-item__label {
+  gap: 6px;
+  color: var(--ds-muted);
+  font-size: 11px;
   font-weight: 700;
 }
 
-.payload-panel pre,
-.failure-card pre {
-  margin: 0;
-  max-height: 280px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+.identity-item__label svg {
+  color: var(--ds-accent);
+}
+
+.identity-item strong,
+.billing-facts strong,
+.token-strip strong,
+.performance-total strong,
+.performance-fact strong {
+  overflow: hidden;
+  color: var(--ds-ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity-item small {
+  overflow: hidden;
+  color: var(--ds-faint);
+  font-family: var(--ds-font-mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.billing-amount-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.billing-amount {
+  display: grid;
+  gap: 6px;
+  padding: 15px 16px;
+}
+
+.billing-amount__label {
+  gap: 7px;
+  color: var(--ds-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.billing-amount__label svg {
+  color: var(--ds-accent);
+}
+
+.billing-amount strong {
+  color: var(--ds-ink);
+  font-family: var(--ds-font-mono);
+  font-size: 23px;
+  font-weight: 760;
+  letter-spacing: -0.03em;
+}
+
+.billing-amount small {
+  color: var(--ds-faint);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.billing-amount--user {
+  border-color: color-mix(in srgb, var(--ds-accent) 28%, var(--ds-line));
+  background: color-mix(in srgb, var(--ds-accent-soft) 44%, var(--ds-panel-muted));
+}
+
+.billing-amount--user strong {
+  color: var(--ds-accent);
+}
+
+.billing-amount--tenant {
+  border-color: color-mix(in srgb, var(--ds-info) 24%, var(--ds-line));
+}
+
+.billing-amount--tenant strong {
+  color: var(--ds-info);
+}
+
+.billing-info-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.billing-info-block {
+  padding: 13px 14px;
+}
+
+.billing-info-block__title {
+  margin-bottom: 10px;
   color: var(--ds-ink-soft);
   font-size: 12px;
-  line-height: 1.55;
+  font-weight: 750;
 }
 
-.failure-card {
+.billing-facts {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 18px;
 }
 
-.failure-card__meta {
+.billing-facts > div,
+.token-strip > div,
+.performance-total > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.billing-facts span,
+.token-strip span,
+.performance-total span,
+.performance-fact span {
+  color: var(--ds-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.token-strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-line);
+}
+
+.token-strip strong,
+.token-strip span,
+.performance-total strong {
+  font-family: var(--ds-font-mono);
+}
+
+.billing-secondary {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 12px;
+  color: var(--ds-muted);
+  font-size: 11px;
+}
+
+.billing-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  color: var(--ds-danger);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.usage-detail-columns {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
+}
+
+.performance-total {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 0.8fr));
   gap: 12px;
+  padding: 13px 14px;
+}
+
+.performance-total > div:first-child strong {
+  color: var(--ds-accent);
+  font-size: 20px;
+}
+
+.performance-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.performance-fact {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 10px;
+}
+
+.performance-fact svg {
+  color: var(--ds-accent);
+}
+
+.route-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.route-step {
+  position: relative;
+  display: grid;
+  flex: 1 1 0;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 25px 0 0;
+}
+
+.route-step:not(:last-child)::after {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  color: var(--ds-line-strong);
+  content: "→";
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.route-step__index {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-bottom: 4px;
+  border-radius: var(--ds-radius-circle);
+  background: var(--ds-accent-soft);
+  color: var(--ds-accent);
+  font-family: var(--ds-font-mono);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.route-step__title {
+  color: var(--ds-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.route-step strong {
+  overflow: hidden;
+  color: var(--ds-ink);
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-step small {
+  overflow: hidden;
+  color: var(--ds-faint);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 16px;
+  margin-top: 17px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-line);
+  color: var(--ds-muted);
+  font-size: 11px;
+}
+
+.route-attempt-toggle {
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 13px;
+  padding: 10px 0 0;
+  border-top: 1px dashed var(--ds-line-strong);
+}
+
+.route-attempt-toggle svg,
+.payload-toggle svg:last-child,
+.payload-collapsed > svg {
+  transition: transform 160ms ease;
+}
+
+.route-attempt-toggle svg.is-open,
+.payload-toggle svg.is-open {
+  transform: rotate(180deg);
 }
 
 :deep(.attempts-table.el-table) {
+  margin-top: 10px;
   --el-table-border-color: var(--ds-line);
   --el-table-header-bg-color: transparent;
 }
@@ -736,17 +937,245 @@ function formatContextTier(line: BillingPriceLineSnapshot | undefined) {
   display: none;
 }
 
-@media (max-width: 960px) {
-  .usage-detail-facts,
-  .usage-detail-kv,
-  .usage-detail-timing,
-  .usage-detail-overview__grid,
-  .payload-grid {
+.attempt-result {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.attempt-result.is-success {
+  color: var(--ds-positive);
+}
+
+.attempt-result.is-danger {
+  color: var(--ds-danger);
+}
+
+.failure-card :deep(.portal-content-card__body--md) {
+  padding-top: 12px;
+}
+
+.failure-card__summary {
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ds-danger);
+  font-size: 12px;
+}
+
+.failure-card__summary strong {
+  color: var(--ds-ink);
+  font-weight: 650;
+}
+
+.failure-card pre,
+.payload-viewer pre {
+  max-height: 340px;
+  margin: 12px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ds-code-fg);
+  font-family: var(--ds-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.failure-card pre {
+  padding: 13px;
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-code-bg);
+}
+
+.payload-toggle {
+  padding: 0;
+}
+
+.payload-collapsed {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  padding: 13px 14px;
+  color: var(--ds-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.payload-collapsed:hover {
+  border-color: var(--ds-accent);
+  background: var(--ds-accent-soft);
+}
+
+.payload-collapsed__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-accent-soft);
+  color: var(--ds-accent);
+}
+
+.payload-collapsed > div:nth-child(2) {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.payload-collapsed strong {
+  font-size: 13px;
+}
+
+.payload-collapsed span {
+  overflow: hidden;
+  color: var(--ds-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payload-collapsed > svg {
+  color: var(--ds-muted);
+  transform: rotate(-90deg);
+}
+
+.payload-viewer {
+  overflow: hidden;
+  border: 1px solid var(--ds-line);
+  border-radius: var(--ds-radius-control);
+}
+
+.payload-tabs {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ds-line);
+  background: var(--ds-panel-muted);
+}
+
+.payload-tabs button {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 10px 13px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ds-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.payload-tabs button:hover,
+.payload-tabs button.is-active {
+  color: var(--ds-accent);
+}
+
+.payload-tabs button.is-active {
+  border-bottom-color: var(--ds-accent);
+  background: var(--ds-panel);
+}
+
+.payload-tabs small {
+  color: var(--ds-faint);
+  font-size: 10px;
+}
+
+.payload-viewer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--ds-code-header);
+  color: var(--ds-code-accent);
+  font-family: var(--ds-font-mono);
+  font-size: 11px;
+}
+
+.payload-viewer__head .detail-copy-button {
+  color: var(--ds-code-accent);
+}
+
+.payload-viewer pre {
+  max-height: 460px;
+  margin: 0;
+  padding: 14px;
+  background: var(--ds-code-bg);
+}
+
+@media (max-width: 1100px) {
+  .identity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .token-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+}
+
+@media (max-width: 860px) {
+  .usage-detail-header :deep(.portal-content-card__body--md),
+  .usage-detail-columns {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
-  .usage-detail-overview__item--wide {
+  .usage-detail-header__actions {
+    justify-content: flex-start;
+  }
+
+  .billing-amount-grid,
+  .billing-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .route-flow {
+    display: grid;
+    gap: 13px;
+  }
+
+  .route-step {
+    padding: 0 0 13px 30px;
+  }
+
+  .route-step:not(:last-child)::after {
+    top: auto;
+    right: auto;
+    bottom: -3px;
+    left: 5px;
+    content: "↓";
+  }
+
+  .route-step__index {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .identity-grid,
+  .billing-facts,
+  .performance-facts,
+  .token-strip,
+  .performance-total {
+    grid-template-columns: 1fr;
+  }
+
+  .identity-item--wide {
     grid-column: auto;
+  }
+
+  .billing-amount strong {
+    font-size: 20px;
+  }
+
+  .usage-detail-header h1 {
+    font-size: 18px;
   }
 }
 </style>

@@ -145,9 +145,18 @@ type usageLogDetailInput struct {
 }
 
 type usageLogDetailDTO struct {
+	ID                                 string          `json:"id,omitempty"`
 	RequestID                          string          `json:"request_id"`
 	TraceID                            *string         `json:"trace_id,omitempty"`
+	APIKeyID                           string          `json:"api_key_id,omitempty"`
+	KeyOwnerType                       string          `json:"key_owner_type,omitempty"`
+	AuthMethod                         string          `json:"auth_method,omitempty"`
+	RequestSource                      string          `json:"request_source,omitempty"`
 	TenantID                           *string         `json:"tenant_id,omitempty"`
+	TenantName                         *string         `json:"tenant_name,omitempty"`
+	UserID                             *string         `json:"user_id,omitempty"`
+	Username                           *string         `json:"username,omitempty"`
+	ExternalUserID                     *string         `json:"external_user_id,omitempty"`
 	GroupID                            *string         `json:"group_id,omitempty"`
 	GroupNameSnapshot                  *string         `json:"group_name_snapshot,omitempty"`
 	GroupDefaultUserMultiplierSnapshot float64         `json:"group_default_user_multiplier_snapshot,omitempty"`
@@ -155,6 +164,7 @@ type usageLogDetailDTO struct {
 	EffectiveUserMultiplierSnapshot    float64         `json:"effective_user_multiplier_snapshot,omitempty"`
 	BillingGroupLabelSnapshot          *string         `json:"billing_group_label_snapshot,omitempty"`
 	ClientAPIFormat                    string          `json:"client_api_format" doc:"客户端 API 格式"`
+	ModelCode                          string          `json:"model_code,omitempty" doc:"模型编码"`
 	RequestedModel                     string          `json:"requested_model"`
 	MatchedDispatchRuleID              *string         `json:"matched_dispatch_rule_id,omitempty"`
 	MatchedDispatchRuleSummary         *string         `json:"matched_dispatch_rule_summary,omitempty"`
@@ -164,6 +174,7 @@ type usageLogDetailDTO struct {
 	ProviderAPIFormat                  *string         `json:"provider_api_format,omitempty" doc:"最终上游 API 格式"`
 	SelectedUpstreamTargetType         *string         `json:"selected_upstream_target_type,omitempty"`
 	SelectedUpstreamModel              *string         `json:"selected_upstream_model,omitempty"`
+	UpstreamModel                      *string         `json:"upstream_model,omitempty" doc:"上游模型"`
 	UpstreamModelMappingApplied        bool            `json:"upstream_model_mapping_applied"`
 	PublicResponseModel                *string         `json:"public_response_model,omitempty"`
 	RequestStatus                      string          `json:"request_status"`
@@ -182,8 +193,15 @@ type usageLogDetailDTO struct {
 	AttemptsCount                      int32           `json:"attempts_count" doc:"路由尝试次数（含重试）"`
 	Resolution                         *string         `json:"resolution,omitempty" doc:"图片/视频规格，例如 1024x1024 / 720p"`
 	ServiceTier                        string          `json:"service_tier"`
+	CatalogBaseUSD                     float64         `json:"catalog_base_usd" doc:"上游目录基准价USD 金额"`
+	TenantPayableUSD                   float64         `json:"tenant_payable_usd" doc:"租户扣除积分，即平台与租户之间的结算USD 金额"`
+	RetailBaseUSD                      float64         `json:"retail_base_usd" doc:"零售价格表原价USD 金额"`
+	UserPayableUSD                     float64         `json:"user_payable_usd" doc:"用户应付USD 金额"`
+	UserChargedUSD                     float64         `json:"user_charged_usd" doc:"用户实际扣除积分USD 金额"`
+	APIKeyQuotaUSD                     float64         `json:"api_key_quota_usd" doc:"API key 配额USD 金额"`
 	BillingBreakdown                   json.RawMessage `json:"billing_breakdown,omitempty"`
 	BillingStatus                      string          `json:"billing_status"`
+	BillingSource                      string          `json:"billing_source,omitempty" doc:"计费来源"`
 	SettlementError                    *string         `json:"settlement_error,omitempty"`
 	RefundStatus                       string          `json:"refund_status"`
 	RefundReason                       *string         `json:"refund_reason,omitempty"`
@@ -208,6 +226,7 @@ type usageLogDetailDTO struct {
 	InternalErrorDetail                *string         `json:"internal_error_detail,omitempty" doc:"仅管理员可见：未脱敏/未截断的真实底层错误（Go 错误链或上游原始报文）"`
 	FailedStep                         *string         `json:"failed_step,omitempty" doc:"仅管理员可见：触发失败的调用链路阶段"`
 	AttemptsDetail                     json.RawMessage `json:"attempts_detail,omitempty" doc:"仅管理员可见：本次请求每次候选路由（上游账号/凭据）重试的明细"`
+	CreatedAt                          *int64          `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
 }
 
 type usageLogDetailOutput struct{ Body usageLogDetailDTO }
@@ -515,7 +534,19 @@ func registerUsage(api huma.API, d UsageHTTPDeps) {
 		if err != nil {
 			return nil, mapServiceError(err)
 		}
-		return &usageLogDetailOutput{Body: usageLogDetailToDTO(detail)}, nil
+		out := usageLogDetailToDTO(detail)
+		included := buildIdentityIncluded(ctx, d.IdentityProvider, d.IdentityEnrichmentFailures,
+			filterNonEmptyIDs(detail.UserID), filterNonEmptyIDs(detail.TenantID))
+		if tenant, ok := included.Tenants[detail.TenantID]; ok {
+			out.TenantName = stringPtrOrNil(tenant.TenantName)
+		}
+		if user, ok := included.Users[detail.UserID]; ok {
+			out.Username = stringPtrOrNil(user.Username)
+			if out.Username == nil {
+				out.Username = user.Nickname
+			}
+		}
+		return &usageLogDetailOutput{Body: out}, nil
 	})
 
 	huma.Register(api, huma.Operation{
@@ -834,9 +865,16 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		selectedUpstreamModel = detail.UpstreamModel
 	}
 	return usageLogDetailDTO{
+		ID:                                 detail.ID,
 		RequestID:                          detail.RequestID,
 		TraceID:                            stringPtrOrNil(detail.TraceID),
+		APIKeyID:                           detail.APIKeyID,
+		KeyOwnerType:                       detail.KeyOwnerType,
+		AuthMethod:                         detail.AuthMethod,
+		RequestSource:                      detail.RequestSource,
 		TenantID:                           stringPtrOrNil(detail.TenantID),
+		UserID:                             stringPtrOrNil(detail.UserID),
+		ExternalUserID:                     stringPtrOrNil(detail.ExternalUserID),
 		GroupID:                            stringPtrOrNil(detail.GroupID),
 		GroupNameSnapshot:                  stringPtrOrNil(detail.GroupNameSnapshot),
 		GroupDefaultUserMultiplierSnapshot: detail.GroupDefaultUserMultiplierSnapshot,
@@ -844,6 +882,7 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		EffectiveUserMultiplierSnapshot:    detail.EffectiveUserMultiplierSnapshot,
 		BillingGroupLabelSnapshot:          stringPtrOrNil(detail.BillingGroupLabelSnapshot),
 		ClientAPIFormat:                    detail.ClientProtocol,
+		ModelCode:                          detail.ModelCode,
 		RequestedModel:                     requestedModel,
 		MatchedDispatchRuleID:              stringPtrOrNil(detail.MatchedDispatchRuleID),
 		MatchedDispatchRuleSummary:         stringPtrOrNil(detail.MatchedDispatchRuleSummary),
@@ -853,6 +892,7 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		ProviderAPIFormat:                  stringPtrOrNil(providerAPIFormat),
 		SelectedUpstreamTargetType:         stringPtrOrNil(detail.SelectedUpstreamTargetType),
 		SelectedUpstreamModel:              stringPtrOrNil(selectedUpstreamModel),
+		UpstreamModel:                      stringPtrOrNil(detail.UpstreamModel),
 		UpstreamModelMappingApplied:        detail.UpstreamModelMappingApplied,
 		PublicResponseModel:                stringPtrOrNil(detail.PublicResponseModel),
 		RequestStatus:                      detail.RequestStatus,
@@ -871,8 +911,15 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		AttemptsCount:                      detail.AttemptsCount,
 		Resolution:                         stringPtrOrNil(detail.Resolution),
 		ServiceTier:                        detail.ServiceTier,
+		CatalogBaseUSD:                     moneyfmt.MicroToUSD(detail.CatalogBaseMicro),
+		TenantPayableUSD:                   moneyfmt.MicroToUSD(detail.TenantPayableMicro),
+		RetailBaseUSD:                      moneyfmt.MicroToUSD(detail.RetailBaseMicro),
+		UserPayableUSD:                     moneyfmt.MicroToUSD(detail.UserPayableMicro),
+		UserChargedUSD:                     moneyfmt.MicroToUSD(detail.UserChargedMicro),
+		APIKeyQuotaUSD:                     moneyfmt.MicroToUSD(detail.APIKeyQuotaCostMicro),
 		BillingBreakdown:                   jsonObjectOrEmpty(detail.BillingBreakdownJSON),
 		BillingStatus:                      detail.BillingStatus,
+		BillingSource:                      billingSourceOrDefault(detail.BillingSource),
 		SettlementError:                    stringPtrOrNil(detail.SettlementError),
 		RefundStatus:                       detail.RefundStatus,
 		RefundReason:                       stringPtrOrNil(detail.RefundReason),
@@ -897,7 +944,15 @@ func usageLogDetailToDTO(detail domain.UsageLogDetail) usageLogDetailDTO {
 		InternalErrorDetail:                stringPtrOrNil(detail.InternalErrorDetail),
 		FailedStep:                         stringPtrOrNil(detail.FailedStep),
 		AttemptsDetail:                     jsonObjectOrNull(detail.AttemptsDetail),
+		CreatedAt:                          timeToMillisPtr(detail.CreatedAt),
 	}
+}
+
+func filterNonEmptyIDs(id string) []string {
+	if id == "" {
+		return nil
+	}
+	return []string{id}
 }
 
 func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {

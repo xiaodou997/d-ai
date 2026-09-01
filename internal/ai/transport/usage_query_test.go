@@ -209,6 +209,52 @@ func TestUsageRoutesUseQueryReader(t *testing.T) {
 	}
 }
 
+func TestUsageDetailIncludesIdentityAndBillingContext(t *testing.T) {
+	reader := &usageQueryReaderStub{
+		detail: domain.UsageLogDetail{UsageLog: domain.UsageLog{
+			ID:                                 "log-1",
+			RequestID:                          "request-identity",
+			TenantID:                           "tenant-1",
+			UserID:                             "user-1",
+			GroupNameSnapshot:                  "pro",
+			GroupDefaultUserMultiplierSnapshot: 0.8,
+			EffectiveUserMultiplierSnapshot:    0.6,
+			TenantPayableMicro:                 1_250_000,
+			UserChargedMicro:                   2_500_000,
+			RequestStatus:                      "success",
+		}},
+	}
+	router, api := server.New(server.Options{Title: "test", Version: "test"})
+	registerUsage(api, UsageHTTPDeps{
+		UsageQueries:     reader,
+		IdentityProvider: usageDetailIdentityProvider{},
+	})
+
+	recorder := performUsageRequest(router, "/api/v1/usage-logs/request-identity")
+	requireUsageStatus(t, recorder, http.StatusOK)
+	var detail usageLogDetailDTO
+	decodeUsageResponse(t, recorder, &detail)
+	if detail.TenantName == nil || *detail.TenantName != "Tenant One" {
+		t.Fatalf("tenant name = %v", detail.TenantName)
+	}
+	if detail.Username == nil || *detail.Username != "alice" {
+		t.Fatalf("username = %v", detail.Username)
+	}
+	if detail.TenantPayableUSD != 1.25 || detail.UserChargedUSD != 2.5 {
+		t.Fatalf("billing = tenant %v user %v", detail.TenantPayableUSD, detail.UserChargedUSD)
+	}
+}
+
+type usageDetailIdentityProvider struct{}
+
+func (usageDetailIdentityProvider) BatchGetUsers(context.Context, []string) (map[string]*IdentityUser, error) {
+	return map[string]*IdentityUser{"user-1": {UserID: "user-1", TenantID: "tenant-1", Username: "alice"}}, nil
+}
+
+func (usageDetailIdentityProvider) BatchGetTenants(context.Context, []string) (map[string]*IdentityTenant, error) {
+	return map[string]*IdentityTenant{"tenant-1": {TenantID: "tenant-1", TenantName: "Tenant One"}}, nil
+}
+
 func TestUsageRoutesRequireQueryReader(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	registerUsage(api, UsageHTTPDeps{})

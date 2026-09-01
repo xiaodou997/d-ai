@@ -10272,6 +10272,12 @@ export interface components {
              * @example https://example.com/schemas/UsageLogDetailDTO.json
              */
             readonly $schema?: string;
+            api_key_id?: string;
+            /**
+             * Format: double
+             * @description API key 配额USD 金额
+             */
+            api_key_quota_usd: number;
             /**
              * Format: int32
              * @description 路由尝试次数（含重试）
@@ -10279,22 +10285,36 @@ export interface components {
             attempts_count: number;
             /** @description 仅管理员可见：本次请求每次候选路由（上游账号/凭据）重试的明细 */
             attempts_detail?: unknown;
+            auth_method?: string;
             billing_breakdown?: unknown;
             billing_group_label_snapshot?: string;
+            /** @description 计费来源 */
+            billing_source?: string;
             billing_status: string;
             /** Format: int32 */
             cache_read_tokens: number;
             /** Format: int32 */
             cache_write_tokens: number;
+            /**
+             * Format: double
+             * @description 上游目录基准价USD 金额
+             */
+            catalog_base_usd: number;
             /** @description 客户端 API 格式 */
             client_api_format: string;
             client_ip?: string;
             /** Format: int32 */
             completion_tokens: number;
+            /**
+             * Format: int64
+             * @description 创建时间，Unix 毫秒
+             */
+            created_at?: number;
             /** Format: double */
             effective_user_multiplier_snapshot?: number;
             error_code?: string;
             error_message?: string;
+            external_user_id?: string;
             /** @description 仅管理员可见：触发失败的调用链路阶段 */
             failed_step?: string;
             /** Format: int32 */
@@ -10311,13 +10331,17 @@ export interface components {
             group_name_snapshot?: string;
             /** Format: int32 */
             http_status?: number;
+            id?: string;
             /** @description 仅管理员可见：未脱敏/未截断的真实底层错误（Go 错误链或上游原始报文） */
             internal_error_detail?: string;
+            key_owner_type?: string;
             /** Format: int32 */
             latency_ms?: number;
             matched_dispatch_rule_id?: string;
             matched_dispatch_rule_summary?: string;
             media_refs?: unknown;
+            /** @description 模型编码 */
+            model_code?: string;
             /** Format: int32 */
             prompt_tokens: number;
             protocol_conversion_enabled: boolean;
@@ -10339,6 +10363,7 @@ export interface components {
             request_path?: string;
             /** Format: int32 */
             request_setup_ms?: number;
+            request_source?: string;
             request_status: string;
             /** Format: int32 */
             request_total_ms?: number;
@@ -10350,6 +10375,11 @@ export interface components {
             response_message?: unknown;
             /** Format: int32 */
             response_tail_ms?: number;
+            /**
+             * Format: double
+             * @description 零售价格表原价USD 金额
+             */
+            retail_base_usd: number;
             selected_upstream_model?: string;
             selected_upstream_target_type?: string;
             service_tier: string;
@@ -10359,15 +10389,35 @@ export interface components {
             /** @description 是否流式请求 */
             stream: boolean;
             tenant_id?: string;
+            tenant_name?: string;
+            /**
+             * Format: double
+             * @description 租户扣除积分，即平台与租户之间的结算USD 金额
+             */
+            tenant_payable_usd: number;
             /** Format: int32 */
             total_tokens: number;
             trace_id?: string;
+            /** @description 上游模型 */
+            upstream_model?: string;
             upstream_model_mapping_applied: boolean;
             /** Format: int32 */
             upstream_status?: number;
             user_agent?: string;
+            /**
+             * Format: double
+             * @description 用户实际扣除积分USD 金额
+             */
+            user_charged_usd: number;
+            user_id?: string;
             /** Format: double */
             user_multiplier_override_snapshot?: number;
+            /**
+             * Format: double
+             * @description 用户应付USD 金额
+             */
+            user_payable_usd: number;
+            username?: string;
         };
         UsageLogsOutputBody: {
             /**
