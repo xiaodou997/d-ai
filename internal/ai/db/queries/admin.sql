@@ -171,12 +171,10 @@ INSERT INTO ai_group_targets (
   group_id,
   target_kind,
   target_id,
-  priority,
-  routing_weight,
   status
 ) SELECT
   sqlc.arg(group_id), sqlc.arg(target_kind), sqlc.arg(target_id),
-  sqlc.arg(priority), sqlc.arg(routing_weight), sqlc.arg(status)
+  sqlc.arg(status)
 FROM ai_groups g
 WHERE g.id = sqlc.arg(group_id) AND g.tenant_id = sqlc.arg(tenant_id)
   AND EXISTS (
@@ -200,30 +198,24 @@ RETURNING
   group_id,
   target_kind,
   target_id,
-  priority,
-  routing_weight,
   status,
   created_at,
   updated_at;
 
 -- name: UpdateGroupTarget :one
 UPDATE ai_group_targets AS gt
-SET priority = $2,
-    routing_weight = $3,
-    status = $4,
+SET status = sqlc.arg(status),
     updated_at = now()
-WHERE gt.id = $1
+WHERE gt.id = sqlc.arg(id)
   AND EXISTS (
     SELECT 1 FROM ai_groups g
-    WHERE g.id = gt.group_id AND g.tenant_id = $5
+    WHERE g.id = gt.group_id AND g.tenant_id = sqlc.arg(tenant_id)
   )
 RETURNING
   id,
   group_id,
   target_kind,
   target_id,
-  priority,
-  routing_weight,
   status,
   created_at,
   updated_at;
@@ -240,8 +232,6 @@ SELECT
   gt.group_id,
   gt.target_kind,
   gt.target_id,
-  gt.priority,
-  gt.routing_weight,
   gt.status,
   gt.created_at,
   gt.updated_at,
@@ -256,7 +246,7 @@ LEFT JOIN ai_credential_pools cp
   ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 WHERE gt.group_id = $2
   AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $1)
-ORDER BY gt.priority ASC, account_name ASC, pool_name ASC;
+ORDER BY account_name ASC, pool_name ASC, gt.id ASC;
 
 -- name: ListGroupModels :many
 -- 分组对外可售模型 = 该组售价价格表 entries 去重 by model_code。
@@ -281,8 +271,7 @@ INSERT INTO ai_groups (
   default_user_multiplier,
   user_default_visible,
   allow_protocol_conversion,
-  route_strategy,
-  route_objective,
+  route_policy,
   sort_order,
   status
 ) VALUES (
@@ -302,22 +291,21 @@ INSERT INTO ai_groups (
   sqlc.arg('default_user_multiplier')::numeric,
   sqlc.arg('user_default_visible')::boolean,
   sqlc.arg('allow_protocol_conversion')::boolean,
-  sqlc.arg('route_strategy')::text,
-  sqlc.arg('route_objective')::text,
+  sqlc.arg('route_policy')::text,
   sqlc.arg('sort_order')::integer,
   sqlc.arg('status')::text
 )
 RETURNING
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
   user_default_visible, allow_protocol_conversion,
-  route_strategy, route_objective, route_policy_version,
+  route_policy, route_policy_version,
   sort_order, status, created_at, updated_at;
 
 -- name: ListGroups :many
 SELECT
   g.id, g.tenant_id, g.name, g.description, g.retail_price_book_id, g.default_user_multiplier,
   g.user_default_visible, g.allow_protocol_conversion,
-  g.route_strategy, g.route_objective, g.route_policy_version, g.sort_order, g.status,
+  g.route_policy, g.route_policy_version, g.sort_order, g.status,
   g.created_at, g.updated_at,
   COALESCE(pb.name, '') AS retail_price_book_name
 FROM ai_groups g
@@ -328,7 +316,7 @@ ORDER BY g.sort_order ASC, g.name ASC;
 -- name: GetGroup :one
 SELECT
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-  user_default_visible, allow_protocol_conversion, route_strategy, route_objective, route_policy_version,
+  user_default_visible, allow_protocol_conversion, route_policy, route_policy_version,
   sort_order, status, created_at, updated_at
 FROM ai_groups
 WHERE id = $2 AND tenant_id = $1;
@@ -341,40 +329,38 @@ SET name = $2,
     default_user_multiplier = $5,
     user_default_visible = $6,
     allow_protocol_conversion = $7,
-    route_strategy = $8,
-    route_objective = $9,
+    route_policy = $8,
     route_policy_version = route_policy_version + 1,
-    sort_order = $10,
-    status = $11,
+    sort_order = $9,
+    status = $10,
     updated_at = now()
 FROM ai_price_books pb
 WHERE ai_groups.id = $1
-  AND ai_groups.tenant_id = $12
+  AND ai_groups.tenant_id = $11
   AND pb.id = $4
   AND pb.status = 'active'
   AND (
     pb.owner_type = 'platform'
-    OR (pb.owner_type = 'tenant' AND pb.owner_tenant_id = $12)
+      OR (pb.owner_type = 'tenant' AND pb.owner_tenant_id = $11)
   )
 RETURNING
   ai_groups.id, ai_groups.tenant_id, ai_groups.name, ai_groups.description,
   ai_groups.retail_price_book_id, ai_groups.default_user_multiplier,
   ai_groups.user_default_visible, ai_groups.allow_protocol_conversion,
-  ai_groups.route_strategy, ai_groups.route_objective, ai_groups.route_policy_version,
+  ai_groups.route_policy, ai_groups.route_policy_version,
   ai_groups.sort_order, ai_groups.status, ai_groups.created_at, ai_groups.updated_at;
 
 -- name: UpdateGroupRoutePolicy :one
 UPDATE ai_groups
-SET route_strategy = $2,
-    route_objective = $3,
+SET route_policy = sqlc.arg(route_policy),
     route_policy_version = route_policy_version + 1,
     updated_at = now()
-WHERE id = $1
-  AND tenant_id = $4
-  AND route_policy_version = $5
+WHERE id = sqlc.arg(id)
+  AND tenant_id = sqlc.arg(tenant_id)
+  AND route_policy_version = sqlc.arg(route_policy_version)
 RETURNING
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-  user_default_visible, allow_protocol_conversion, route_strategy, route_objective, route_policy_version,
+  user_default_visible, allow_protocol_conversion, route_policy, route_policy_version,
   sort_order, status, created_at, updated_at;
 
 -- name: UpdateGroupStatus :one
@@ -385,7 +371,7 @@ SET status = $2,
 WHERE id = $1 AND tenant_id = $3
 RETURNING
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-  user_default_visible, allow_protocol_conversion, route_strategy, route_objective, route_policy_version,
+  user_default_visible, allow_protocol_conversion, route_policy, route_policy_version,
   sort_order, status, created_at, updated_at;
 
 -- name: DeleteGroup :exec
@@ -450,7 +436,7 @@ DELETE FROM ai_group_model_dispatch_rules WHERE id = $1 AND group_id = $2;
 SELECT
   g.id, g.tenant_id, g.name, g.description, g.retail_price_book_id,
   g.default_user_multiplier, g.user_default_visible, g.allow_protocol_conversion,
-  g.route_strategy, g.route_objective, g.route_policy_version, g.sort_order, g.status,
+  g.route_policy, g.route_policy_version, g.sort_order, g.status,
   g.created_at, g.updated_at,
   g.default_user_multiplier::numeric(10,4) AS effective_user_multiplier
 FROM ai_groups g

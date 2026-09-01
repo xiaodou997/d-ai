@@ -73,8 +73,7 @@ const availableGroups = computed<TenantAiVisibleGroup[]>(() => {
       default_user_multiplier: 0,
       user_default_visible: false,
       allow_protocol_conversion: false,
-      route_strategy: "adaptive",
-      route_objective: "balanced",
+      route_policy: "balanced",
       route_policy_version: 1,
       sort_order: 0,
       status: 'disabled'

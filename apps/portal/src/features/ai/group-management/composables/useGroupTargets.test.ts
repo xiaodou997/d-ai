@@ -40,8 +40,6 @@ function target(id = "binding-1"): TenantAiGroupTarget {
     account_id: "account-1",
     target_type: "account",
     account_name: "主 API",
-    priority: 10,
-    routing_weight: 1,
     status: "active"
   };
 }
@@ -58,8 +56,6 @@ function createApi(initial: TenantAiGroupTarget[] = [target()]) {
         account_id: body.account_id,
         credential_pool_id: body.credential_pool_id,
         target_type: body.account_id ? "account" : "pool",
-        priority: body.priority ?? 100,
-        routing_weight: body.routing_weight ?? 1,
         status: body.status ?? "active"
       };
       stored = [...stored, saved];
@@ -78,7 +74,7 @@ function createApi(initial: TenantAiGroupTarget[] = [target()]) {
 }
 
 describe("useGroupTargets", () => {
-  it("maps API and OAuth resources, blocks unpriced additions, and saves priority and status", async () => {
+  it("maps API and OAuth resources, blocks unpriced additions, and saves status", async () => {
     const api = createApi();
     const state = useGroupTargets({ groupId: () => "group-1", api });
     await state.load();
@@ -91,27 +87,23 @@ describe("useGroupTargets", () => {
     state.setSelected("direct_upstream:account-unpriced", true);
     expect(state.rows.value.find((row) => row.targetId === "account-unpriced")?.selected).toBe(false);
 
-    state.setDefaults(20, "disabled");
+    state.updateDraft("oauth_pool:pool-1", { status: "disabled" });
     state.setSelected("oauth_pool:pool-1", true);
     await expect(state.save()).resolves.toMatchObject({ added: 1, failures: [] });
     expect(api.add).toHaveBeenCalledWith("group-1", {
       credential_pool_id: "pool-1",
-      priority: 20,
-      routing_weight: 1,
       status: "disabled"
     });
   });
 
-  it("updates priority, routing weight, and status", async () => {
+  it("updates status", async () => {
     const api = createApi();
     const state = useGroupTargets({ groupId: () => "group-1", api });
     await state.load();
 
-    state.updateDraft("direct_upstream:account-1", { priority: 20, status: "disabled" });
+    state.updateDraft("direct_upstream:account-1", { status: "disabled" });
     await expect(state.save()).resolves.toMatchObject({ updated: 1, failures: [] });
     expect(api.update).toHaveBeenCalledWith("group-1", "binding-1", {
-      priority: 20,
-      routing_weight: 1,
       status: "disabled"
     });
   });
@@ -128,8 +120,6 @@ describe("useGroupTargets", () => {
           credential_pool_id: body.targets.find((item) => item.credential_pool_id)?.credential_pool_id,
           target_type: "pool" as const,
           pool_name: "OAuth 池",
-          priority: 100,
-          routing_weight: 1,
           status: "active" as const
         }
       ],
@@ -138,14 +128,14 @@ describe("useGroupTargets", () => {
     }));
     const state = useGroupTargets({ groupId: () => "group-1", api });
     await state.load();
-    state.updateDraft("direct_upstream:account-1", { priority: 20 });
+    state.updateDraft("direct_upstream:account-1", { status: "disabled" });
     state.setSelected("oauth_pool:pool-1", true);
 
     await expect(state.save()).resolves.toEqual({ added: 1, updated: 1, removed: 0, failures: [] });
     expect(api.replace).toHaveBeenCalledWith("group-1", expect.objectContaining({
       expected_version: 7,
       targets: expect.arrayContaining([
-        expect.objectContaining({ account_id: "account-1", priority: 20 }),
+        expect.objectContaining({ account_id: "account-1", status: "disabled" }),
         expect.objectContaining({ credential_pool_id: "pool-1" })
       ])
     }));

@@ -14,21 +14,16 @@ const (
 	StatusDisabled Status = "disabled"
 )
 
-type RouteStrategy string
+// RoutePolicy is the single group-owned policy used to choose among the
+// group's active upstream targets. The engine owns the actual scoring details;
+// tenants only choose a named behavior.
+type RoutePolicy string
 
 const (
-	RouteStrategyFailover RouteStrategy = "failover"
-	RouteStrategyWeighted RouteStrategy = "weighted"
-	RouteStrategyAdaptive RouteStrategy = "adaptive"
-)
-
-type RouteObjective string
-
-const (
-	RouteObjectiveBalanced  RouteObjective = "balanced"
-	RouteObjectiveCost      RouteObjective = "cost"
-	RouteObjectiveLatency   RouteObjective = "latency"
-	RouteObjectiveStability RouteObjective = "stability"
+	RoutePolicyBalanced  RoutePolicy = "balanced"
+	RoutePolicyCost      RoutePolicy = "cost"
+	RoutePolicyLatency   RoutePolicy = "latency"
+	RoutePolicyStability RoutePolicy = "stability"
 )
 
 // TenantGroupScope is the only identity accepted by tenant-owned group
@@ -49,8 +44,7 @@ type Group struct {
 	DefaultUserMultiplier   float64
 	UserDefaultVisible      bool
 	AllowProtocolConversion bool
-	RouteStrategy           RouteStrategy
-	RouteObjective          RouteObjective
+	RoutePolicy             RoutePolicy
 	RoutePolicyVersion      int64
 	Status                  Status
 	SortOrder               int
@@ -97,15 +91,13 @@ const (
 
 // GroupTarget connects a group to one upstream resource.
 type GroupTarget struct {
-	ID            string
-	GroupID       string
-	TargetKind    TargetKind
-	TargetID      string
-	Priority      int
-	RoutingWeight float64
-	Status        Status
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID         string
+	GroupID    string
+	TargetKind TargetKind
+	TargetID   string
+	Status     Status
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type GroupTargetDetail struct {
@@ -158,8 +150,7 @@ type DispatchPreview struct {
 	ClientSurface      string
 	MatchedRule        *DispatchRule
 	ResolvedModelID    string
-	RouteStrategy      RouteStrategy
-	RouteObjective     RouteObjective
+	RoutePolicy        RoutePolicy
 	CandidateUpstreams []DispatchPreviewCandidate
 	RejectedCandidates []DispatchPreviewRejection
 }
@@ -173,8 +164,6 @@ type DispatchPreviewCandidate struct {
 	SelectedProtocol   string
 	UpstreamModel      string
 	ProtocolConversion bool
-	Priority           int
-	RoutingWeight      float64
 }
 
 type DispatchPreviewRejection struct {
@@ -183,7 +172,6 @@ type DispatchPreviewRejection struct {
 	ResolvedModelID string
 	ReasonCode      string
 	ReasonDetail    string
-	Priority        int
 }
 
 // UserGroupBinding is an explicit user-to-group authorization relation.

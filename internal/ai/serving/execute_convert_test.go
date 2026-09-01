@@ -41,31 +41,11 @@ func TestActiveBucketTier(t *testing.T) {
 	}
 }
 
-func TestActivePriorityTier(t *testing.T) {
-	cands := []*domain.RouteCandidate{
-		{RouteID: "a", Priority: 20},
-		{RouteID: "b", Priority: 10},
-		{RouteID: "c", Priority: 10},
-	}
-	used := map[string]bool{}
-
-	tier := activePriorityTier(cands, used)
-	if len(tier) != 2 || tier[0].RouteID != "b" || tier[1].RouteID != "c" {
-		t.Fatalf("first priority tier = %+v, want [b c] (priority 10)", routeIDs(tier))
-	}
-
-	used["b"], used["c"] = true, true
-	tier = activePriorityTier(cands, used)
-	if len(tier) != 1 || tier[0].RouteID != "a" {
-		t.Fatalf("fallback priority tier = %v, want [a] (priority 20)", routeIDs(tier))
-	}
-}
-
 func TestActiveGroupTierExhaustsHigherRankBeforeFallback(t *testing.T) {
 	cands := []*domain.RouteCandidate{
-		{RouteID: "primary-slow", GroupRank: 0, Priority: 20},
-		{RouteID: "secondary-fast", GroupRank: 1, Priority: 1},
-		{RouteID: "primary-next", GroupRank: 0, Priority: 30},
+		{RouteID: "primary-slow", GroupRank: 0},
+		{RouteID: "secondary-fast", GroupRank: 1},
+		{RouteID: "primary-next", GroupRank: 0},
 	}
 	used := map[string]bool{}
 
@@ -99,17 +79,17 @@ func TestCandidateSplitExhaustsAllRoutesForOnePhysicalTarget(t *testing.T) {
 	}
 }
 
-func TestPickCandidateKeepsTargetPriorityAheadOfConversionPreference(t *testing.T) {
+func TestPickCandidateKeepsConversionPreferenceAheadOfScoring(t *testing.T) {
 	req := &Request{
 		Candidates: []*domain.RouteCandidate{
-			{RouteID: "primary-converted", GroupRank: 0, Priority: 10, ConversionBucket: 3},
-			{RouteID: "backup-native", GroupRank: 0, Priority: 20, ConversionBucket: 0},
+			{RouteID: "converted", GroupRank: 0, ConversionBucket: 3},
+			{RouteID: "native", GroupRank: 0, ConversionBucket: 0},
 		},
 		UsedCandidates: map[string]bool{},
 	}
 	got, _ := (&ExecuteStep{}).pickCandidate(context.Background(), req)
-	if got == nil || got.RouteID != "primary-converted" {
-		t.Fatalf("picked %#v, want configured primary route", got)
+	if got == nil || got.RouteID != "native" {
+		t.Fatalf("picked %#v, want native protocol route", got)
 	}
 }
 
@@ -119,23 +99,21 @@ func TestPickCandidateRecordsPolicyReason(t *testing.T) {
 	req := &Request{
 		Candidates: []*domain.RouteCandidate{
 			{
-				RouteID:       "weighted-route",
-				GroupID:       "group-1",
-				GroupRank:     0,
-				Priority:      1,
-				RouteStrategy: "weighted",
-				RoutingWeight: 2,
+				RouteID:     "cost-route",
+				GroupID:     "group-1",
+				GroupRank:   0,
+				RoutePolicy: "cost",
 			},
-			{RouteID: "excluded-route", GroupID: "group-1", GroupRank: 0, Priority: 1, RouteStrategy: "weighted"},
+			{RouteID: "second-route", GroupID: "group-1", GroupRank: 0, RoutePolicy: "cost"},
 		},
 		UsedCandidates: map[string]bool{},
 	}
 	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
-	if got == nil || got.RouteID != "weighted-route" {
+	if got == nil {
 		t.Fatalf("picked %#v", got)
 	}
-	if req.SelectionReason != "weighted" {
-		t.Fatalf("selection reason = %q, want weighted", req.SelectionReason)
+	if req.SelectionReason != "cost" {
+		t.Fatalf("selection reason = %q, want cost", req.SelectionReason)
 	}
 }
 
@@ -144,10 +122,9 @@ func TestPickCandidateExplainsSingleCandidate(t *testing.T) {
 
 	req := &Request{
 		Candidates: []*domain.RouteCandidate{{
-			RouteID:       "only-route",
-			GroupRank:     0,
-			Priority:      1,
-			RouteStrategy: "adaptive",
+			RouteID:     "only-route",
+			GroupRank:   0,
+			RoutePolicy: "balanced",
 		}},
 		UsedCandidates: map[string]bool{},
 	}
@@ -156,41 +133,6 @@ func TestPickCandidateExplainsSingleCandidate(t *testing.T) {
 	}
 	if req.SelectionReason != "single_candidate" {
 		t.Fatalf("selection reason = %q, want single_candidate", req.SelectionReason)
-	}
-}
-
-func TestPickCandidateKeepsWeightedSelectionInsidePriorityTier(t *testing.T) {
-	t.Parallel()
-
-	req := &Request{
-		Candidates: []*domain.RouteCandidate{
-			{RouteID: "primary", GroupRank: 0, Priority: 1, RouteStrategy: "weighted", RoutingWeight: 0},
-			{RouteID: "backup", GroupRank: 0, Priority: 5, RouteStrategy: "weighted", RoutingWeight: 100},
-		},
-		UsedCandidates: map[string]bool{},
-	}
-	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
-	if got == nil || got.RouteID != "primary" {
-		t.Fatalf("weighted policy crossed priority boundary and picked %#v", got)
-	}
-}
-
-func TestPickCandidateExplainsAllZeroWeightedFallback(t *testing.T) {
-	t.Parallel()
-
-	req := &Request{
-		Candidates: []*domain.RouteCandidate{
-			{RouteID: "zero-a", GroupRank: 0, Priority: 1, RouteStrategy: "weighted"},
-			{RouteID: "zero-b", GroupRank: 0, Priority: 1, RouteStrategy: "weighted"},
-		},
-		UsedCandidates: map[string]bool{},
-	}
-	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
-	if got == nil {
-		t.Fatal("expected priority fallback candidate")
-	}
-	if req.SelectionReason != "weighted_fallback" {
-		t.Fatalf("selection reason = %q, want weighted_fallback", req.SelectionReason)
 	}
 }
 

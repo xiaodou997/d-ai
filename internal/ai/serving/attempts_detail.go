@@ -19,11 +19,8 @@ const attemptsDetailErrorMaxLen = 2048
 type attemptDetailDTO struct {
 	RouteID         string  `json:"route_id,omitempty"`
 	GroupID         string  `json:"group_id,omitempty"`
-	RouteStrategy   string  `json:"route_strategy,omitempty"`
-	RouteObjective  string  `json:"route_objective,omitempty"`
+	RoutePolicy     string  `json:"route_policy,omitempty"`
 	GroupRank       int     `json:"group_rank"`
-	Priority        int     `json:"priority"`
-	RoutingWeight   float64 `json:"routing_weight"`
 	SelectionReason string  `json:"selection_reason,omitempty"`
 	ProviderCode    string  `json:"provider_code,omitempty"`
 	UpstreamModel   string  `json:"upstream_model,omitempty"`
@@ -53,11 +50,8 @@ func BuildAttemptsDetail(attempts []AttemptRecord) json.RawMessage {
 		out = append(out, attemptDetailDTO{
 			RouteID:         a.RouteID,
 			GroupID:         a.GroupID,
-			RouteStrategy:   a.RouteStrategy,
-			RouteObjective:  a.RouteObjective,
+			RoutePolicy:     a.RoutePolicy,
 			GroupRank:       a.GroupRank,
-			Priority:        a.Priority,
-			RoutingWeight:   a.RoutingWeight,
 			SelectionReason: a.SelectionReason,
 			ProviderCode:    a.ProviderCode,
 			UpstreamModel:   a.UpstreamModel,

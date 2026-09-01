@@ -143,11 +143,8 @@ func (o Outcome) CountsAsHealthFailure() bool {
 type AttemptRecord struct {
 	RouteID            string
 	GroupID            string
-	RouteStrategy      string
-	RouteObjective     string
+	RoutePolicy        string
 	GroupRank          int
-	Priority           int
-	RoutingWeight      float64
 	SelectionReason    string
 	TargetID           string // deployment_id or credential_id (legacy/opaque; kept for existing consumers)
 	ProviderCode       string

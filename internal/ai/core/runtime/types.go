@@ -43,7 +43,7 @@ type Request struct {
 
 // PlannedTarget is one executable group-target binding. RouteID is always the
 // ai_group_targets.id UUID. GroupRank is the caller-visible group failover rank;
-// Priority is scoped to targets inside that group.
+// the targets inside a group are peers selected by its route policy.
 type PlannedTarget struct {
 	RouteID     string
 	GroupRank   int
@@ -55,8 +55,8 @@ type PlannedTarget struct {
 }
 
 // RoutePlan is the sole output of runtime route planning. Candidates are in
-// deterministic structural order (group rank, then target priority). Runtime
-// health and scoring may choose among candidates only within those tiers.
+// deterministic structural order by group rank. Runtime health, conversion
+// compatibility and the group policy choose among targets.
 type RoutePlan struct {
 	RequestID  string
 	Candidates []PlannedTarget

@@ -56,8 +56,6 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
   const resources = shallowRef<TenantAiUpstreamResource[]>([]);
   const selectedKeys = shallowRef<string[]>([]);
   const drafts = shallowRef<Record<string, GroupTargetDraft>>({});
-  const defaultPriority = shallowRef(100);
-  const defaultStatus = shallowRef<GroupTargetStatus>("active");
   const routePolicyVersion = shallowRef(0);
   const loading = shallowRef(false);
   const saving = shallowRef(false);
@@ -107,15 +105,11 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     return [...options.values()].map((option) => {
       const binding = bindingByKey.value.get(option.key);
       const selected = selectedSet.value.has(option.key);
-      const draft = drafts.value[option.key] || {
-        priority: defaultPriority.value,
-        routing_weight: binding?.routing_weight ?? 1,
-        status: defaultStatus.value
-      };
+      const draft = drafts.value[option.key] || { status: "active" as GroupTargetStatus };
       let change: GroupTargetChange | null = null;
       if (option.linked && !selected) change = "remove";
       else if (!option.linked && selected) change = "add";
-      else if (binding && selected && (binding.priority !== draft.priority || binding.routing_weight !== draft.routing_weight || binding.status !== draft.status)) change = "update";
+      else if (binding && selected && binding.status !== draft.status) change = "update";
       return { ...option, ...draft, selected, change };
     }).sort((left, right) => {
       if (left.linked !== right.linked) return left.linked ? -1 : 1;
@@ -131,8 +125,6 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
   function resetDrafts(nextBindings: TenantAiGroupTarget[]) {
     selectedKeys.value = nextBindings.map(bindingKey);
     drafts.value = Object.fromEntries(nextBindings.map((binding) => [bindingKey(binding), {
-      priority: binding.priority,
-      routing_weight: binding.routing_weight ?? 1,
       status: binding.status
     }]));
   }
@@ -166,11 +158,6 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     }
   }
 
-  function setDefaults(priority: number, status: GroupTargetStatus) {
-    defaultPriority.value = priority;
-    defaultStatus.value = status;
-  }
-
   function setSelected(key: string, selected: boolean) {
     const row = rows.value.find((item) => item.key === key);
     if (!row || (!row.selectable && selected)) return;
@@ -178,14 +165,14 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     if (selected) {
       next.add(key);
       if (!drafts.value[key]) {
-        drafts.value = { ...drafts.value, [key]: { priority: defaultPriority.value, routing_weight: 1, status: defaultStatus.value } };
+        drafts.value = { ...drafts.value, [key]: { status: "active" } };
       }
     } else next.delete(key);
     selectedKeys.value = [...next];
   }
 
   function updateDraft(key: string, patch: Partial<GroupTargetDraft>) {
-    const current = drafts.value[key] || { priority: defaultPriority.value, routing_weight: 1, status: defaultStatus.value };
+    const current = drafts.value[key] || { status: "active" as GroupTargetStatus };
     drafts.value = { ...drafts.value, [key]: { ...current, ...patch } };
   }
 
@@ -221,8 +208,6 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
           const removedCount = removals.value.length;
           const desiredTargets = rows.value.filter((row) => row.selected).map((row) => ({
             ...(row.kind === "direct_upstream" ? { account_id: row.targetId } : { credential_pool_id: row.targetId }),
-            priority: row.priority,
-            routing_weight: row.routing_weight,
             status: row.status
           }));
           const response = await api.replace(groupId, {
@@ -255,16 +240,12 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
           if (command.action === "add") {
             const saved = await api.add(groupId, {
               ...(command.row.kind === "direct_upstream" ? { account_id: command.row.targetId } : { credential_pool_id: command.row.targetId }),
-              priority: command.row.priority,
-              routing_weight: command.row.routing_weight,
               status: command.row.status
             });
             applySavedBinding(saved);
             result.added++;
           } else if (command.action === "update" && binding) {
             const saved = await api.update(groupId, binding.id, {
-              priority: command.row.priority,
-              routing_weight: command.row.routing_weight,
               status: command.row.status
             });
             applySavedBinding(saved);
@@ -296,15 +277,12 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     loading: readonly(loading),
     saving: readonly(saving),
     loadError: readonly(loadError),
-    defaultPriority: readonly(defaultPriority),
-    defaultStatus: readonly(defaultStatus),
     routePolicyVersion: readonly(routePolicyVersion),
     additions,
     updates,
     removals,
     hasChanges,
     load,
-    setDefaults,
     setSelected,
     updateDraft,
     discard,

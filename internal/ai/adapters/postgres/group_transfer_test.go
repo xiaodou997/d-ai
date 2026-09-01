@@ -28,7 +28,7 @@ func openGroupTransferTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 				retail_price_book_id UUID NOT NULL, default_user_multiplier NUMERIC NOT NULL,
 				user_default_visible BOOLEAN NOT NULL DEFAULT false,
 			allow_protocol_conversion BOOLEAN NOT NULL,
-			route_strategy TEXT NOT NULL DEFAULT 'adaptive', route_objective TEXT NOT NULL DEFAULT 'balanced',
+			route_policy TEXT NOT NULL DEFAULT 'balanced',
 			route_policy_version BIGINT NOT NULL DEFAULT 1,
 			sort_order INTEGER NOT NULL, status TEXT NOT NULL,
 			UNIQUE (tenant_id, name),
@@ -36,7 +36,7 @@ func openGroupTransferTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 		);
 		CREATE TEMP TABLE ai_group_targets (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(), group_id UUID NOT NULL, target_kind TEXT NOT NULL,
-			target_id UUID NOT NULL, priority INTEGER NOT NULL, routing_weight NUMERIC NOT NULL DEFAULT 1, status TEXT NOT NULL,
+			target_id UUID NOT NULL, status TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		CREATE TEMP TABLE ai_group_client_surfaces (
@@ -80,8 +80,8 @@ func TestCommercialRepoApplyGroupImportReplacesConfigurationAndPreservesAssociat
 		{`INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id, default_user_multiplier,
 				user_default_visible, allow_protocol_conversion, sort_order, status)
 			  VALUES ($1::uuid, 'tenant-1', '原分组', $2::uuid, 1, false, false, 0, 'active')`, []any{groupID, priceBookID}},
-		{`INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, status)
-		  VALUES ($1::uuid, 'direct_upstream', gen_random_uuid(), 100, 'active')`, []any{groupID}},
+		{`INSERT INTO ai_group_targets (group_id, target_kind, target_id, status)
+		  VALUES ($1::uuid, 'direct_upstream', gen_random_uuid(), 'active')`, []any{groupID}},
 		{`INSERT INTO ai_group_client_surfaces (group_id, surface, bridge_enabled, status)
 		  VALUES ($1::uuid, 'openai_chat', false, 'active')`, []any{groupID}},
 		{`INSERT INTO ai_group_model_dispatch_rules (group_id, client_surface, match_type, match_value, target_model_code, priority, status, notes)

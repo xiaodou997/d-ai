@@ -3269,7 +3269,7 @@ components:
           type: string
         retail_price_book_name:
           type: string
-        route_objective:
+        route_policy:
           enum:
             - balanced
             - cost
@@ -3279,12 +3279,6 @@ components:
         route_policy_version:
           format: int64
           type: integer
-        route_strategy:
-          enum:
-            - failover
-            - weighted
-            - adaptive
-          type: string
         sort_order:
           format: int32
           type: integer
@@ -3306,8 +3300,7 @@ components:
         - default_user_multiplier
         - user_default_visible
         - allow_protocol_conversion
-        - route_strategy
-        - route_objective
+        - route_policy
         - route_policy_version
         - sort_order
         - status
@@ -3321,25 +3314,17 @@ components:
           type: string
         display_name:
           type: string
-        priority:
-          format: int32
-          type: integer
         protocol_conversion:
           type: boolean
         provider_api_format:
           type: string
         provider_family:
           type: string
-        routing_weight:
-          format: double
-          type: number
         target_type:
           type: string
       required:
         - target_type
         - protocol_conversion
-        - priority
-        - routing_weight
       type: object
     GroupDispatchPreviewDTO:
       additionalProperties: false
@@ -3371,34 +3356,24 @@ components:
           type: string
         resolved_logical_model:
           type: string
-        route_objective:
+        route_policy:
           enum:
             - balanced
             - cost
             - latency
             - stability
           type: string
-        route_strategy:
-          enum:
-            - failover
-            - weighted
-            - adaptive
-          type: string
       required:
         - requested_model
         - client_surface
         - resolved_logical_model
-        - route_strategy
-        - route_objective
+        - route_policy
         - candidate_upstreams
         - rejected_candidates
       type: object
     GroupDispatchPreviewRejectionDTO:
       additionalProperties: false
       properties:
-        priority:
-          format: int32
-          type: integer
         reason_code:
           enum:
             - no_active_group_target
@@ -3422,7 +3397,6 @@ components:
       required:
         - resolved_model
         - reason_code
-        - priority
       type: object
     GroupDispatchPreviewRequest:
       additionalProperties: false
@@ -3803,7 +3777,7 @@ components:
           format: uri
           readOnly: true
           type: string
-        route_objective:
+        route_policy:
           enum:
             - balanced
             - cost
@@ -3813,15 +3787,8 @@ components:
         route_policy_version:
           format: int64
           type: integer
-        route_strategy:
-          enum:
-            - failover
-            - weighted
-            - adaptive
-          type: string
       required:
-        - route_strategy
-        - route_objective
+        - route_policy
         - route_policy_version
       type: object
     GroupTargetDTO:
@@ -3855,12 +3822,6 @@ components:
           type: string
         pool_name:
           type: string
-        priority:
-          format: int32
-          type: integer
-        routing_weight:
-          format: double
-          type: number
         status:
           type: string
         target_type:
@@ -3875,8 +3836,6 @@ components:
       required:
         - id
         - group_id
-        - priority
-        - routing_weight
         - status
         - available
       type: object
@@ -3890,12 +3849,6 @@ components:
           format: uri
           readOnly: true
           type: string
-        priority:
-          format: int32
-          type: integer
-        routing_weight:
-          format: double
-          type: number
         status:
           enum:
             - active
@@ -3918,12 +3871,6 @@ components:
         credential_pool_id:
           description: 凭证池 id；与 account_id 二选一
           type: string
-        priority:
-          format: int32
-          type: integer
-        routing_weight:
-          format: double
-          type: number
         status:
           enum:
             - active
@@ -4076,18 +4023,12 @@ components:
             - "null"
         name:
           type: string
-        route_objective:
+        route_policy:
           enum:
             - balanced
             - cost
             - latency
             - stability
-          type: string
-        route_strategy:
-          enum:
-            - failover
-            - weighted
-            - adaptive
           type: string
         sort_order:
           format: int64
@@ -4104,8 +4045,7 @@ components:
         - default_user_multiplier
         - user_default_visible
         - allow_protocol_conversion
-        - route_strategy
-        - route_objective
+        - route_policy
         - sort_order
         - status
         - client_surface_policy
@@ -4134,7 +4074,8 @@ components:
           type: string
         retail_price_book_id:
           type: string
-        route_objective:
+        route_policy:
+          description: 分组路由策略；为空默认智能均衡
           enum:
             - balanced
             - cost
@@ -4145,12 +4086,6 @@ components:
           description: 更新分组时用于防止覆盖较新的路由策略
           format: int64
           type: integer
-        route_strategy:
-          enum:
-            - failover
-            - weighted
-            - adaptive
-          type: string
         sort_order:
           format: int32
           type: integer
@@ -8098,39 +8033,32 @@ components:
           format: uri
           readOnly: true
           type: string
-        CompletedAt:
-          format: date-time
-          type:
-            - string
-            - "null"
-        ExecuteAfter:
+        completedAt:
           format: date-time
           type: string
-        JobID:
-          type: string
-        LastError:
-          type: string
-        RequestedAt:
+        executeAfter:
           format: date-time
           type: string
-        StartedAt:
-          format: date-time
-          type:
-            - string
-            - "null"
-        Status:
+        jobId:
           type: string
-        TenantID:
+        lastError:
+          type: string
+        requestedAt:
+          format: date-time
+          type: string
+        startedAt:
+          format: date-time
+          type: string
+        status:
+          type: string
+        tenantId:
           type: string
       required:
-        - JobID
-        - TenantID
-        - Status
-        - RequestedAt
-        - ExecuteAfter
-        - StartedAt
-        - CompletedAt
-        - LastError
+        - jobId
+        - tenantId
+        - status
+        - requestedAt
+        - executeAfter
       type: object
     TenantDetailOutputBody:
       additionalProperties: false
@@ -18201,7 +18129,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 更新关联(优先级/权重/状态)
+      summary: 更新关联状态
       tags:
         - groups
   /api/v1/tenants/me/price-books:

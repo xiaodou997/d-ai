@@ -506,15 +506,11 @@ func normalizeGroupWrite(in GroupWrite) (GroupWrite, error) {
 	in.Code = strings.TrimSpace(in.Code)
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)
-	policy, err := normalizeGroupRoutePolicyWrite(GroupRoutePolicyWrite{
-		RouteStrategy:  in.RouteStrategy,
-		RouteObjective: in.RouteObjective,
-	})
+	policy, err := normalizeGroupRoutePolicyWrite(GroupRoutePolicyWrite{RoutePolicy: in.RoutePolicy})
 	if err != nil {
 		return GroupWrite{}, err
 	}
-	in.RouteStrategy = policy.RouteStrategy
-	in.RouteObjective = policy.RouteObjective
+	in.RoutePolicy = policy.RoutePolicy
 	in.RetailPriceBookID = strings.TrimSpace(in.RetailPriceBookID)
 	if in.Name == "" && in.Code == "" {
 		return GroupWrite{}, newValidationError("name", "name or code is required")
@@ -543,27 +539,13 @@ func normalizeGroupWrite(in GroupWrite) (GroupWrite, error) {
 }
 
 func normalizeGroupRoutePolicyWrite(in GroupRoutePolicyWrite) (GroupRoutePolicyWrite, error) {
-	if in.RouteStrategy == "" {
-		in.RouteStrategy = RouteStrategyAdaptive
+	if in.RoutePolicy == "" {
+		in.RoutePolicy = RoutePolicyBalanced
 	}
-	if in.RouteObjective == "" {
-		in.RouteObjective = RouteObjectiveBalanced
-	}
-	switch in.RouteStrategy {
-	case RouteStrategyFailover, RouteStrategyWeighted, RouteStrategyAdaptive:
+	switch in.RoutePolicy {
+	case RoutePolicyBalanced, RoutePolicyCost, RoutePolicyLatency, RoutePolicyStability:
 	default:
-		return GroupRoutePolicyWrite{}, newValidationError("route_strategy", "unsupported route_strategy")
-	}
-	switch in.RouteObjective {
-	case RouteObjectiveBalanced, RouteObjectiveCost, RouteObjectiveLatency, RouteObjectiveStability:
-	default:
-		return GroupRoutePolicyWrite{}, newValidationError("route_objective", "unsupported route_objective")
-	}
-	// Objectives are meaningful only for adaptive scoring. Canonicalising them
-	// for structural strategies prevents stale UI values from looking active in
-	// the API while keeping the group policy a single coherent document.
-	if in.RouteStrategy != RouteStrategyAdaptive {
-		in.RouteObjective = RouteObjectiveBalanced
+		return GroupRoutePolicyWrite{}, newValidationError("route_policy", "unsupported route_policy")
 	}
 	return in, nil
 }
@@ -577,12 +559,6 @@ func normalizeGroupTargetWrite(in GroupTargetWrite) (GroupTargetWrite, error) {
 	case TargetKindDirectUpstream, TargetKindOAuthPool:
 	default:
 		return GroupTargetWrite{}, newValidationError("target_kind", "unsupported target_kind")
-	}
-	if in.Priority < 0 {
-		return GroupTargetWrite{}, newValidationError("priority", "priority must be >= 0")
-	}
-	if !isFiniteNonNegative(in.RoutingWeight) {
-		return GroupTargetWrite{}, newValidationError("routing_weight", "routing_weight must be a finite number >= 0")
 	}
 	status, err := normalizeStatus(in.Status)
 	if err != nil {

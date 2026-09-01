@@ -8,8 +8,6 @@ export type GroupTargetStatus = "active" | "disabled";
 export type GroupTargetKind = "direct_upstream" | "oauth_pool";
 
 export interface GroupTargetDraft {
-  priority: number;
-  routing_weight: number;
   status: GroupTargetStatus;
 }
 

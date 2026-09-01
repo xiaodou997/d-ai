@@ -388,11 +388,8 @@ func (s *ExecuteStep) recordAttempt(req *Request, cand *domain.RouteCandidate, o
 	req.Attempts = append(req.Attempts, AttemptRecord{
 		RouteID:            cand.RouteID,
 		GroupID:            cand.GroupID,
-		RouteStrategy:      cand.RouteStrategy,
-		RouteObjective:     cand.RouteObjective,
+		RoutePolicy:        cand.RoutePolicy,
 		GroupRank:          cand.GroupRank,
-		Priority:           cand.Priority,
-		RoutingWeight:      cand.RoutingWeight,
 		SelectionReason:    req.SelectionReason,
 		TargetID:           targetID,
 		ProviderCode:       cand.ProviderCode,

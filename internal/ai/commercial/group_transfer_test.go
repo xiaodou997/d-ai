@@ -211,24 +211,22 @@ func TestValidateTransferGroupRejectsInvalidRoutePolicy(t *testing.T) {
 	errors := validateTransferGroup(GroupTransferGroup{
 		Name:                  "bad-policy",
 		DefaultUserMultiplier: 1,
-		RouteStrategy:         RouteStrategyWeighted,
-		RouteObjective:        RouteObjectiveLatency,
+		RoutePolicy:           RoutePolicyCost,
 		Status:                StatusActive,
 		ClientSurfacePolicy:   GroupTransferClientSurfacePolicy{Mode: GroupClientSurfacePolicyAll},
 	})
 	if len(errors) != 0 {
-		t.Fatalf("non-adaptive objective should be canonicalized, errors = %#v", errors)
+		t.Fatalf("valid route policy rejected, errors = %#v", errors)
 	}
 	invalid := validateTransferGroup(GroupTransferGroup{
 		Name:                  "bad-policy",
 		DefaultUserMultiplier: 1,
-		RouteStrategy:         RouteStrategy("invalid"),
-		RouteObjective:        RouteObjectiveBalanced,
+		RoutePolicy:           RoutePolicy("invalid"),
 		Status:                StatusActive,
 		ClientSurfacePolicy:   GroupTransferClientSurfacePolicy{Mode: GroupClientSurfacePolicyAll},
 	})
 	if len(invalid) == 0 {
-		t.Fatal("invalid route strategy was accepted")
+		t.Fatal("invalid route policy was accepted")
 	}
 }
 

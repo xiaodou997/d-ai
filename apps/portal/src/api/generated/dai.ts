@@ -2853,7 +2853,7 @@ export interface paths {
         delete: operations["ai-delete-group-target"];
         options?: never;
         head?: never;
-        /** 更新关联(优先级/权重/状态) */
+        /** 更新关联状态 */
         patch: operations["ai-update-group-target"];
         trace?: never;
     };
@@ -3394,8 +3394,42 @@ export interface paths {
         /** 更新租户 */
         put: operations["admin-update-tenant"];
         post?: never;
-        /** 删除租户 */
+        /** 申请删除租户 */
         delete: operations["admin-delete-tenant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenants/{id}/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 查询租户删除状态 */
+        get: operations["admin-get-tenant-deletion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenants/{id}/deletion/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消租户删除 */
+        post: operations["admin-cancel-tenant-deletion"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6432,11 +6466,9 @@ export interface components {
             retail_price_book_id: string;
             retail_price_book_name?: string;
             /** @enum {string} */
-            route_objective: "balanced" | "cost" | "latency" | "stability";
+            route_policy: "balanced" | "cost" | "latency" | "stability";
             /** Format: int64 */
             route_policy_version: number;
-            /** @enum {string} */
-            route_strategy: "failover" | "weighted" | "adaptive";
             /** Format: int32 */
             sort_order: number;
             status: string;
@@ -6449,13 +6481,9 @@ export interface components {
             account_id?: string;
             credential_pool_id?: string;
             display_name?: string;
-            /** Format: int32 */
-            priority: number;
             protocol_conversion: boolean;
             provider_api_format?: string;
             provider_family?: string;
-            /** Format: double */
-            routing_weight: number;
             target_type: string;
         };
         GroupDispatchPreviewDTO: {
@@ -6472,13 +6500,9 @@ export interface components {
             requested_model: string;
             resolved_logical_model: string;
             /** @enum {string} */
-            route_objective: "balanced" | "cost" | "latency" | "stability";
-            /** @enum {string} */
-            route_strategy: "failover" | "weighted" | "adaptive";
+            route_policy: "balanced" | "cost" | "latency" | "stability";
         };
         GroupDispatchPreviewRejectionDTO: {
-            /** Format: int32 */
-            priority: number;
             /** @enum {string} */
             reason_code: "no_active_group_target" | "access_denied" | "target_not_found" | "target_inactive" | "model_binding_missing" | "protocol_incompatible" | "credential_unavailable" | "binding_invalid" | "binding_unavailable";
             reason_detail?: string;
@@ -6647,11 +6671,9 @@ export interface components {
              */
             readonly $schema?: string;
             /** @enum {string} */
-            route_objective: "balanced" | "cost" | "latency" | "stability";
+            route_policy: "balanced" | "cost" | "latency" | "stability";
             /** Format: int64 */
             route_policy_version: number;
-            /** @enum {string} */
-            route_strategy: "failover" | "weighted" | "adaptive";
         };
         GroupTargetDTO: {
             /**
@@ -6671,10 +6693,6 @@ export interface components {
             group_id: string;
             id: string;
             pool_name?: string;
-            /** Format: int32 */
-            priority: number;
-            /** Format: double */
-            routing_weight: number;
             status: string;
             /** @description account|pool */
             target_type?: string;
@@ -6690,10 +6708,6 @@ export interface components {
              * @example https://example.com/schemas/GroupTargetUpdateRequest.json
              */
             readonly $schema?: string;
-            /** Format: int32 */
-            priority?: number;
-            /** Format: double */
-            routing_weight?: number;
             /** @enum {string} */
             status?: "active" | "disabled";
         };
@@ -6708,10 +6722,6 @@ export interface components {
             account_id?: string;
             /** @description 凭证池 id；与 account_id 二选一 */
             credential_pool_id?: string;
-            /** Format: int32 */
-            priority?: number;
-            /** Format: double */
-            routing_weight?: number;
             /** @enum {string} */
             status?: "active" | "disabled";
         };
@@ -6774,9 +6784,7 @@ export interface components {
             dispatch_rules: components["schemas"]["GroupTransferDispatchRule"][] | null;
             name: string;
             /** @enum {string} */
-            route_objective: "balanced" | "cost" | "latency" | "stability";
-            /** @enum {string} */
-            route_strategy: "failover" | "weighted" | "adaptive";
+            route_policy: "balanced" | "cost" | "latency" | "stability";
             /** Format: int64 */
             sort_order: number;
             /** @enum {string} */
@@ -6802,15 +6810,16 @@ export interface components {
             description?: string;
             name: string;
             retail_price_book_id: string;
-            /** @enum {string} */
-            route_objective?: "balanced" | "cost" | "latency" | "stability";
+            /**
+             * @description 分组路由策略；为空默认智能均衡
+             * @enum {string}
+             */
+            route_policy?: "balanced" | "cost" | "latency" | "stability";
             /**
              * Format: int64
              * @description 更新分组时用于防止覆盖较新的路由策略
              */
             route_policy_version?: number;
-            /** @enum {string} */
-            route_strategy?: "failover" | "weighted" | "adaptive";
             /** Format: int32 */
             sort_order?: number;
             /** @enum {string} */
@@ -8912,6 +8921,26 @@ export interface components {
             customerSiteName: string;
             faviconPath?: string;
             tenantName: string;
+        };
+        TenantDeletionJob: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TenantDeletionJob.json
+             */
+            readonly $schema?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            executeAfter: string;
+            jobId: string;
+            lastError?: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** Format: date-time */
+            startedAt?: string;
+            status: string;
+            tenantId: string;
         };
         TenantDetailOutputBody: {
             /**
@@ -19338,6 +19367,68 @@ export interface operations {
         };
     };
     "admin-delete-tenant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-get-tenant-deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDeletionJob"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-cancel-tenant-deletion": {
         parameters: {
             query?: never;
             header?: never;

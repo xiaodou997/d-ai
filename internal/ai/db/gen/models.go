@@ -253,8 +253,7 @@ type AiGroup struct {
 	DefaultUserMultiplier   pgtype.Numeric     `json:"default_user_multiplier"`
 	UserDefaultVisible      bool               `json:"user_default_visible"`
 	AllowProtocolConversion bool               `json:"allow_protocol_conversion"`
-	RouteStrategy           string             `json:"route_strategy"`
-	RouteObjective          string             `json:"route_objective"`
+	RoutePolicy             string             `json:"route_policy"`
 	RoutePolicyVersion      int64              `json:"route_policy_version"`
 	SortOrder               int32              `json:"sort_order"`
 	Status                  string             `json:"status"`
@@ -287,15 +286,13 @@ type AiGroupModelDispatchRule struct {
 }
 
 type AiGroupTarget struct {
-	ID            pgtype.UUID        `json:"id"`
-	GroupID       pgtype.UUID        `json:"group_id"`
-	TargetKind    string             `json:"target_kind"`
-	TargetID      pgtype.UUID        `json:"target_id"`
-	Priority      int32              `json:"priority"`
-	RoutingWeight pgtype.Numeric     `json:"routing_weight"`
-	Status        string             `json:"status"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	ID         pgtype.UUID        `json:"id"`
+	GroupID    pgtype.UUID        `json:"group_id"`
+	TargetKind string             `json:"target_kind"`
+	TargetID   pgtype.UUID        `json:"target_id"`
+	Status     string             `json:"status"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiPriceBook struct {
@@ -1343,6 +1340,19 @@ type SystemUsageProjection struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 	TenantPayable int64              `json:"tenant_payable"`
 	UserCharged   int64              `json:"user_charged"`
+}
+
+type TenantDeletionJob struct {
+	JobID        pgtype.UUID        `json:"job_id"`
+	TenantID     string             `json:"tenant_id"`
+	Status       string             `json:"status"`
+	RequestedBy  pgtype.Text        `json:"requested_by"`
+	RequestedAt  pgtype.Timestamptz `json:"requested_at"`
+	ExecuteAfter pgtype.Timestamptz `json:"execute_after"`
+	StartedAt    pgtype.Timestamptz `json:"started_at"`
+	CompletedAt  pgtype.Timestamptz `json:"completed_at"`
+	LastError    pgtype.Text        `json:"last_error"`
+	Attempts     int32              `json:"attempts"`
 }
 
 type TenantIncomeProjection struct {

@@ -315,7 +315,7 @@ func (s *Console) consoleImagePolicyForModel(ctx context.Context, subject *corei
 		    OR
 		    (gt.target_kind = 'oauth_pool' AND cp.status = 'active')
 		  )
-		ORDER BY array_position($2::uuid[], gt.group_id), gt.priority ASC
+		ORDER BY array_position($2::uuid[], gt.group_id), gt.id ASC
 		LIMIT 1
 	`, modelCode, groups).Scan(&raw)
 	if err == pgx.ErrNoRows {

@@ -34,8 +34,7 @@ func (r *CommercialRepo) CreateGroup(ctx context.Context, tenantID string, in co
 		DefaultUserMultiplier:   floatToNumeric(in.DefaultUserMultiplier),
 		UserDefaultVisible:      in.UserDefaultVisible,
 		AllowProtocolConversion: in.AllowProtocolConversion,
-		RouteStrategy:           string(in.RouteStrategy),
-		RouteObjective:          string(in.RouteObjective),
+		RoutePolicy:             string(in.RoutePolicy),
 		SortOrder:               int32(in.SortOrder),
 		Status:                  commercialStatusOrDefault(in.Status),
 	})
@@ -113,8 +112,7 @@ func (r *CommercialRepo) UpdateGroup(ctx context.Context, scope commercial.Tenan
 		DefaultUserMultiplier:   floatToNumeric(in.DefaultUserMultiplier),
 		UserDefaultVisible:      in.UserDefaultVisible,
 		AllowProtocolConversion: in.AllowProtocolConversion,
-		RouteStrategy:           string(in.RouteStrategy),
-		RouteObjective:          string(in.RouteObjective),
+		RoutePolicy:             string(in.RoutePolicy),
 		SortOrder:               int32(in.SortOrder),
 		Status:                  nextStatus,
 		TenantID:                scope.TenantID,
@@ -159,8 +157,7 @@ func (r *CommercialRepo) UpdateGroupRoutePolicy(ctx context.Context, scope comme
 	}
 	item, err := queriesWithTx(tx).UpdateGroupRoutePolicy(ctx, dbgen.UpdateGroupRoutePolicyParams{
 		ID:                 gid,
-		RouteStrategy:      string(in.RouteStrategy),
-		RouteObjective:     string(in.RouteObjective),
+		RoutePolicy:        string(in.RoutePolicy),
 		TenantID:           scope.TenantID,
 		RoutePolicyVersion: in.ExpectedVersion,
 	})
@@ -288,7 +285,7 @@ func (r *CommercialRepo) LoadDispatchData(ctx context.Context, tenantID string, 
 		ORDER BY r.group_id, r.priority ASC, r.created_at ASC, r.id ASC
 	`, ids, tenantID)
 	batch.Queue(`
-		SELECT id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
+		SELECT id::text, group_id::text, target_kind, target_id::text, status, created_at, updated_at
 		FROM ai_group_targets gt
 		WHERE gt.group_id = ANY($1::uuid[])
 		  AND EXISTS (
@@ -305,7 +302,7 @@ func (r *CommercialRepo) LoadDispatchData(ctx context.Context, tenantID string, 
 		        )
 		      )
 		  )
-		ORDER BY gt.group_id, gt.priority ASC, gt.target_kind ASC, gt.target_id ASC
+		ORDER BY gt.group_id, gt.target_kind ASC, gt.target_id ASC
 	`, ids, tenantID)
 
 	results := r.pool.SendBatch(ctx, batch)
@@ -465,16 +462,12 @@ func scanCommercialGroupTargetRow(scanner interface {
 	var (
 		item               commercial.GroupTarget
 		targetKind, status string
-		priority           int32
-		routingWeight      float64
 	)
 	if err := scanner.Scan(
 		&item.ID,
 		&item.GroupID,
 		&targetKind,
 		&item.TargetID,
-		&priority,
-		&routingWeight,
 		&status,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -482,8 +475,6 @@ func scanCommercialGroupTargetRow(scanner interface {
 		return commercial.GroupTarget{}, err
 	}
 	item.TargetKind = commercial.TargetKind(targetKind)
-	item.Priority = int(priority)
-	item.RoutingWeight = routingWeight
 	item.Status = commercial.Status(status)
 	return item, nil
 }

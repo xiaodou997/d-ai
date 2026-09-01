@@ -14,7 +14,7 @@ import (
 	"xiaodou/dai/internal/ai/core/surface"
 )
 
-const GroupTransferSchemaVersion = 3
+const GroupTransferSchemaVersion = 4
 
 const (
 	GroupTransferMaxGroups = 500
@@ -38,8 +38,7 @@ type GroupTransferGroup struct {
 	DefaultUserMultiplier   float64                          `json:"default_user_multiplier"`
 	UserDefaultVisible      bool                             `json:"user_default_visible"`
 	AllowProtocolConversion bool                             `json:"allow_protocol_conversion"`
-	RouteStrategy           RouteStrategy                    `json:"route_strategy" enum:"failover,weighted,adaptive"`
-	RouteObjective          RouteObjective                   `json:"route_objective" enum:"balanced,cost,latency,stability"`
+	RoutePolicy             RoutePolicy                      `json:"route_policy" enum:"balanced,cost,latency,stability"`
 	SortOrder               int                              `json:"sort_order"`
 	Status                  Status                           `json:"status" enum:"active,disabled"`
 	ClientSurfacePolicy     GroupTransferClientSurfacePolicy `json:"client_surface_policy"`
@@ -503,8 +502,7 @@ func validateTransferGroup(group GroupTransferGroup) []string {
 		DefaultUserMultiplier:   group.DefaultUserMultiplier,
 		UserDefaultVisible:      group.UserDefaultVisible,
 		AllowProtocolConversion: group.AllowProtocolConversion,
-		RouteStrategy:           group.RouteStrategy,
-		RouteObjective:          group.RouteObjective,
+		RoutePolicy:             group.RoutePolicy,
 		Status:                  group.Status,
 		SortOrder:               group.SortOrder,
 	}); err != nil {
@@ -603,7 +601,7 @@ func (group *GroupTransferGroup) UnmarshalJSON(data []byte) error {
 	group.UnknownFields = unknownTransferFields(data,
 		"name", "description", "default_user_multiplier", "user_default_visible",
 		"allow_protocol_conversion",
-		"route_strategy", "route_objective",
+		"route_policy",
 		"sort_order", "status", "client_surface_policy", "dispatch_rules")
 	return nil
 }

@@ -28,8 +28,6 @@ const upstreamColumns: DsTableColumn[] = [
   { key: "providerFamily", title: "协议", width: 130 },
   { key: "apiFormat", title: "上游 API 格式", width: 170 },
   { key: "conversion", title: "协议转换", width: 92 },
-  { key: "priority", title: "优先级", width: 82, align: "right" },
-  { key: "routingWeight", title: "分流权重", width: 92, align: "right" }
 ];
 
 // 候选上游无唯一 id 字段,合成行 key 供 DsTable 使用
@@ -44,12 +42,8 @@ function providerFamilyLabel(value?: string) {
   return ({ openai_compatible: "OpenAI 兼容", anthropic: "Anthropic", gemini: "Gemini", google: "Gemini" } as Record<string, string>)[value || ""] || value || "不限制";
 }
 
-function routeStrategyLabel(value?: string) {
-  return ({ failover: "严格故障转移", weighted: "按权重", adaptive: "自适应" } as Record<string, string>)[value || ""] || value || "未配置";
-}
-
-function routeObjectiveLabel(value?: string) {
-  return ({ balanced: "均衡", cost: "成本", latency: "速度", stability: "稳定性" } as Record<string, string>)[value || ""] || value || "均衡";
+function routePolicyLabel(value?: string) {
+  return ({ balanced: "智能均衡", cost: "成本优先", latency: "速度优先", stability: "稳定优先" } as Record<string, string>)[value || ""] || value || "智能均衡";
 }
 
 async function runPreview() {
@@ -103,8 +97,7 @@ watch(() => props.groupId, () => {
           {{ preview.matched_rule ? `${preview.matched_rule.match_value} → ${preview.matched_rule.target_model_code}` : "未命中，按原模型路由" }}
         </el-descriptions-item>
         <el-descriptions-item label="映射后逻辑模型">{{ preview.resolved_logical_model }}</el-descriptions-item>
-        <el-descriptions-item label="选择策略">{{ routeStrategyLabel(preview.route_strategy) }}</el-descriptions-item>
-        <el-descriptions-item v-if="preview.route_strategy === 'adaptive'" label="优化目标">{{ routeObjectiveLabel(preview.route_objective) }}</el-descriptions-item>
+        <el-descriptions-item label="路由策略">{{ routePolicyLabel(preview.route_policy) }}</el-descriptions-item>
         <el-descriptions-item label="候选上游">{{ preview.candidate_upstreams?.length || 0 }}</el-descriptions-item>
       </el-descriptions>
 
@@ -127,7 +120,6 @@ watch(() => props.groupId, () => {
         <template #cell-conversion="{ row }">
           <DsTag :tone="row.protocol_conversion ? 'warning' : 'positive'">{{ row.protocol_conversion ? "需要" : "无需" }}</DsTag>
         </template>
-        <template #cell-routingWeight="{ row }">{{ row.routing_weight }}</template>
       </DsTable>
     </template>
 

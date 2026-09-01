@@ -82,8 +82,7 @@ func groupFromRow(r dbgen.AiGroup) domain.Group {
 		DefaultUserMultiplier:   numericToFloat(r.DefaultUserMultiplier),
 		UserDefaultVisible:      r.UserDefaultVisible,
 		AllowProtocolConversion: r.AllowProtocolConversion,
-		RouteStrategy:           r.RouteStrategy,
-		RouteObjective:          r.RouteObjective,
+		RoutePolicy:             r.RoutePolicy,
 		RoutePolicyVersion:      r.RoutePolicyVersion,
 		SortOrder:               r.SortOrder,
 		Status:                  r.Status,
@@ -109,8 +108,7 @@ func (r *GroupRepo) ListGroups(ctx context.Context, tenantID string) ([]domain.G
 				DefaultUserMultiplier:   numericToFloat(row.DefaultUserMultiplier),
 				UserDefaultVisible:      row.UserDefaultVisible,
 				AllowProtocolConversion: row.AllowProtocolConversion,
-				RouteStrategy:           row.RouteStrategy,
-				RouteObjective:          row.RouteObjective,
+				RoutePolicy:             row.RoutePolicy,
 				RoutePolicyVersion:      row.RoutePolicyVersion,
 				SortOrder:               row.SortOrder,
 				Status:                  row.Status,
@@ -148,8 +146,7 @@ func (r *GroupRepo) UpdateGroup(ctx context.Context, tenantID, id string, w comm
 		DefaultUserMultiplier:   floatToNumeric(w.DefaultUserMultiplier),
 		UserDefaultVisible:      w.UserDefaultVisible,
 		AllowProtocolConversion: w.AllowProtocolConversion,
-		RouteStrategy:           string(w.RouteStrategy),
-		RouteObjective:          string(w.RouteObjective),
+		RoutePolicy:             string(w.RoutePolicy),
 		SortOrder:               int32(w.SortOrder),
 		Status:                  string(w.Status),
 		TenantID:                tenantID,
@@ -222,17 +219,15 @@ func (r *GroupRepo) ListGroupDispatchRules(ctx context.Context, groupID string) 
 
 // ---- Group targets (分组 → 上游目标：账号或凭证池) ----
 
-func groupTargetBindingFromRow(id, groupID, targetKind, targetID string, priority int32, routingWeight float64, status string, createdAt, updatedAt time.Time) domain.GroupTargetBinding {
+func groupTargetBindingFromRow(id, groupID, targetKind, targetID, status string, createdAt, updatedAt time.Time) domain.GroupTargetBinding {
 	return domain.GroupTargetBinding{
-		ID:            id,
-		GroupID:       groupID,
-		TargetKind:    targetKind,
-		TargetID:      targetID,
-		Priority:      priority,
-		RoutingWeight: routingWeight,
-		Status:        status,
-		CreatedAt:     createdAt,
-		UpdatedAt:     updatedAt,
+		ID:         id,
+		GroupID:    groupID,
+		TargetKind: targetKind,
+		TargetID:   targetID,
+		Status:     status,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
 	}
 }
 
@@ -247,7 +242,7 @@ func (r *GroupRepo) ListGroupTargets(ctx context.Context, tenantID, groupID stri
 	}
 	out := make([]domain.GroupTargetBinding, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Priority, numericToFloat(row.RoutingWeight), row.Status, row.CreatedAt.Time, row.UpdatedAt.Time))
+		out = append(out, groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Status, row.CreatedAt.Time, row.UpdatedAt.Time))
 	}
 	return out, nil
 }
@@ -282,8 +277,6 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 			gt.group_id::text,
 			gt.target_kind,
 			gt.target_id::text,
-			gt.priority,
-			gt.routing_weight,
 			gt.status,
 			gt.created_at,
 			gt.updated_at,
@@ -303,7 +296,7 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 		  ON tp.resource_kind = gt.target_kind AND tp.resource_id = gt.target_id AND tp.tenant_id = $1
 		WHERE gt.group_id = $2
 		  AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $1)
-		ORDER BY gt.priority ASC, account_name ASC, pool_name ASC
+		ORDER BY account_name ASC, pool_name ASC, gt.id ASC
 	`, tenantID, gid)
 	if err != nil {
 		return nil, err
@@ -314,15 +307,13 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 		var (
 			id, groupIDText, tKind, tID                           string
 			status                                                string
-			priority                                              int32
-			routingWeight                                         float64
 			createdAt, updatedAt                                  time.Time
 			accountName, defaultProtocol, poolName, fixedProvider string
 			targetStatus, accessMode                              string
 			accessGranted                                         bool
 		)
 		if err := rows.Scan(
-			&id, &groupIDText, &tKind, &tID, &priority, &routingWeight, &status, &createdAt, &updatedAt,
+			&id, &groupIDText, &tKind, &tID, &status, &createdAt, &updatedAt,
 			&accountName, &defaultProtocol, &poolName, &fixedProvider,
 			&targetStatus, &accessMode, &accessGranted,
 		); err != nil {
@@ -330,7 +321,7 @@ func (r *GroupRepo) ListGroupTargetDetails(ctx context.Context, tenantID, groupI
 		}
 		available, reason := computeTargetAvailability(targetStatus, accessMode, accessGranted)
 		out = append(out, domain.GroupTargetDetail{
-			GroupTargetBinding: groupTargetBindingFromRow(id, groupIDText, tKind, tID, priority, routingWeight, status, createdAt, updatedAt),
+			GroupTargetBinding: groupTargetBindingFromRow(id, groupIDText, tKind, tID, status, createdAt, updatedAt),
 			AccountName:        accountName,
 			DefaultProtocol:    defaultProtocol,
 			PoolName:           poolName,
@@ -354,8 +345,6 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 			gt.group_id::text,
 			gt.target_kind,
 			gt.target_id::text,
-			gt.priority,
-			gt.routing_weight,
 			gt.status,
 			gt.created_at,
 			gt.updated_at,
@@ -369,7 +358,7 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 		LEFT JOIN ai_credential_pools cp
 		  ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 		WHERE gt.target_kind = $1 AND gt.target_id = $2
-		ORDER BY gt.priority ASC, account_name ASC, pool_name ASC
+		ORDER BY account_name ASC, pool_name ASC, gt.id ASC
 	`, targetKind, tid)
 	if err != nil {
 		return nil, err
@@ -380,19 +369,17 @@ func (r *GroupRepo) ListGroupTargetsByTarget(ctx context.Context, targetKind, ta
 		var (
 			id, groupID, tKind, tID                               string
 			status                                                string
-			priority                                              int32
-			routingWeight                                         float64
 			createdAt, updatedAt                                  time.Time
 			accountName, defaultProtocol, poolName, fixedProvider string
 		)
 		if err := rows.Scan(
-			&id, &groupID, &tKind, &tID, &priority, &routingWeight, &status, &createdAt, &updatedAt,
+			&id, &groupID, &tKind, &tID, &status, &createdAt, &updatedAt,
 			&accountName, &defaultProtocol, &poolName, &fixedProvider,
 		); err != nil {
 			return nil, err
 		}
 		item := domain.GroupTargetDetail{
-			GroupTargetBinding: groupTargetBindingFromRow(id, groupID, tKind, tID, priority, routingWeight, status, createdAt, updatedAt),
+			GroupTargetBinding: groupTargetBindingFromRow(id, groupID, tKind, tID, status, createdAt, updatedAt),
 			AccountName:        accountName,
 			DefaultProtocol:    defaultProtocol,
 			PoolName:           poolName,
@@ -418,8 +405,6 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 	var (
 		targetID, targetGroupID, targetKind                       string
 		status                                                    string
-		priority                                                  int32
-		routingWeight                                             float64
 		createdAt, updatedAt                                      time.Time
 		accountName, defaultProtocol, poolName, fixedProviderType string
 		targetStatus, accessMode                                  string
@@ -431,8 +416,6 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 			gt.group_id::text,
 			gt.target_kind,
 			gt.status,
-			gt.priority,
-			gt.routing_weight,
 			gt.created_at,
 			gt.updated_at,
 			COALESCE(a.tenant_display_name, '')  AS account_name,
@@ -452,7 +435,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 		JOIN ai_groups g ON g.id = gt.group_id AND g.tenant_id = $3
 		WHERE gt.group_id = $1 AND gt.id = $2
 	`, gid, rid, tenantID).Scan(
-		&targetID, &targetGroupID, &targetKind, &status, &priority, &routingWeight, &createdAt, &updatedAt,
+		&targetID, &targetGroupID, &targetKind, &status, &createdAt, &updatedAt,
 		&accountName, &defaultProtocol, &poolName, &fixedProviderType,
 		&targetStatus, &accessMode, &accessGranted,
 	); err != nil {
@@ -463,7 +446,7 @@ func (r *GroupRepo) GetGroupTargetDetail(ctx context.Context, tenantID, groupID,
 	}
 	available, reason := computeTargetAvailability(targetStatus, accessMode, accessGranted)
 	return domain.GroupTargetDetail{
-		GroupTargetBinding: groupTargetBindingFromRow(id, targetGroupID, targetKind, targetID, priority, routingWeight, status, createdAt, updatedAt),
+		GroupTargetBinding: groupTargetBindingFromRow(id, targetGroupID, targetKind, targetID, status, createdAt, updatedAt),
 		AccountName:        accountName,
 		DefaultProtocol:    defaultProtocol,
 		PoolName:           poolName,
@@ -479,12 +462,12 @@ func (r *GroupRepo) UpdateGroupTarget(ctx context.Context, tenantID, id string, 
 		return domain.GroupTargetBinding{}, err
 	}
 	row, err := r.q.UpdateGroupTarget(ctx, dbgen.UpdateGroupTargetParams{
-		ID: rid, Priority: int32(w.Priority), RoutingWeight: floatToNumeric(w.RoutingWeight), Status: string(w.Status), TenantID: tenantID,
+		ID: rid, Status: string(w.Status), TenantID: tenantID,
 	})
 	if err != nil {
 		return domain.GroupTargetBinding{}, err
 	}
-	return groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Priority, numericToFloat(row.RoutingWeight), row.Status, row.CreatedAt.Time, row.UpdatedAt.Time), nil
+	return groupTargetBindingFromRow(uuidToString(row.ID), uuidToString(row.GroupID), row.TargetKind, uuidToString(row.TargetID), row.Status, row.CreatedAt.Time, row.UpdatedAt.Time), nil
 }
 
 func (r *GroupRepo) DeleteGroupTarget(ctx context.Context, tenantID, id string) error {
@@ -512,8 +495,7 @@ func (r *GroupRepo) ListVisibleGroupsForTenant(ctx context.Context, tenantID str
 				DefaultUserMultiplier:   numericToFloat(row.DefaultUserMultiplier),
 				UserDefaultVisible:      row.UserDefaultVisible,
 				AllowProtocolConversion: row.AllowProtocolConversion,
-				RouteStrategy:           row.RouteStrategy,
-				RouteObjective:          row.RouteObjective,
+				RoutePolicy:             row.RoutePolicy,
 				RoutePolicyVersion:      row.RoutePolicyVersion,
 				SortOrder:               row.SortOrder,
 				Status:                  row.Status,

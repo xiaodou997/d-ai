@@ -165,7 +165,6 @@ type Model struct {
 type RouteCandidate struct {
 	RouteID                      string
 	GroupRank                    int
-	Priority                     int
 	SupportsStream               bool
 	ModelCode                    string // 映射后的逻辑模型，用于售价价格表查找
 	CapabilityType               CapabilityType
@@ -174,8 +173,7 @@ type RouteCandidate struct {
 	MatchedDispatchRuleSummary   string
 	ResolvedProviderFamily       string
 	GroupAllowProtocolConversion bool
-	RouteStrategy                string
-	RouteObjective               string
+	RoutePolicy                  string
 
 	// Account-based route fields (API Key type)
 	UpstreamModel               string // 显式上游模型绑定中的真实模型名
@@ -203,14 +201,13 @@ type RouteCandidate struct {
 	OAuthStrategy     string            // "round_robin" | "weighted"
 
 	// ConversionBucket 是协议转换偏好桶（0 同格式零转换 > 1 同子类型 > 2 同家族 >
-	// 3 跨家族），由绑定解析按 client↔provider 落差计算。pickCandidate 在相同分组、
-	// 相同目标 priority 内按桶分层，实现「主备优先级不被转换偏好打乱，同层零转换优先」。
+	// 3 跨家族），由绑定解析按 client↔provider 落差计算。pickCandidate 在当前分组
+	// 中按桶分层，实现「同层零转换优先」。
 	ConversionBucket int
 
 	// 评分提示：CostPer1kTokens 供 scorer 计算成本分项（1/cost；0 = 免费路由，
 	// scorer 以 costCapFree 兜底）。来自售价表 first-tier input+output × 1000 × tenant_multiplier。
 	CostPer1kTokens float64 // 0 for free/pool routes → scorer treats as very cheap
-	RoutingWeight   float64
 
 	// 租户结算绑定。按对外 ModelCode + CapabilityType 查价，不暴露或依赖上游真实模型名。
 	AccountPriceBookID string

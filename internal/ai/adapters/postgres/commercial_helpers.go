@@ -18,8 +18,7 @@ func legacyGroupToCommercial(item domain.Group) commercial.Group {
 		DefaultUserMultiplier:   item.DefaultUserMultiplier,
 		UserDefaultVisible:      item.UserDefaultVisible,
 		AllowProtocolConversion: item.AllowProtocolConversion,
-		RouteStrategy:           commercial.RouteStrategy(item.RouteStrategy),
-		RouteObjective:          commercial.RouteObjective(item.RouteObjective),
+		RoutePolicy:             commercial.RoutePolicy(item.RoutePolicy),
 		RoutePolicyVersion:      item.RoutePolicyVersion,
 		Status:                  commercial.Status(item.Status),
 		SortOrder:               int(item.SortOrder),
@@ -30,15 +29,13 @@ func legacyGroupToCommercial(item domain.Group) commercial.Group {
 
 func groupTargetBindingToCommercial(item domain.GroupTargetBinding) commercial.GroupTarget {
 	return commercial.GroupTarget{
-		ID:            item.ID,
-		GroupID:       item.GroupID,
-		TargetKind:    commercial.TargetKind(item.TargetKind),
-		TargetID:      item.TargetID,
-		Priority:      int(item.Priority),
-		RoutingWeight: item.RoutingWeight,
-		Status:        commercial.Status(item.Status),
-		CreatedAt:     item.CreatedAt,
-		UpdatedAt:     item.UpdatedAt,
+		ID:         item.ID,
+		GroupID:    item.GroupID,
+		TargetKind: commercial.TargetKind(item.TargetKind),
+		TargetID:   item.TargetID,
+		Status:     commercial.Status(item.Status),
+		CreatedAt:  item.CreatedAt,
+		UpdatedAt:  item.UpdatedAt,
 	}
 }
 

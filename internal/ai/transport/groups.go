@@ -27,8 +27,7 @@ type groupDTO struct {
 	DefaultUserMultiplier   float64 `json:"default_user_multiplier" doc:"用户默认零售倍率"`
 	UserDefaultVisible      bool    `json:"user_default_visible"`
 	AllowProtocolConversion bool    `json:"allow_protocol_conversion" doc:"允许协议转换：true=本组候选可作跨格式转换目标"`
-	RouteStrategy           string  `json:"route_strategy" enum:"failover,weighted,adaptive"`
-	RouteObjective          string  `json:"route_objective" enum:"balanced,cost,latency,stability"`
+	RoutePolicy             string  `json:"route_policy" enum:"balanced,cost,latency,stability"`
 	RoutePolicyVersion      int64   `json:"route_policy_version"`
 	SortOrder               int32   `json:"sort_order"`
 	Status                  string  `json:"status"`
@@ -44,8 +43,7 @@ type groupWriteRequest struct {
 	DefaultUserMultiplier   *float64 `json:"default_user_multiplier,omitempty" doc:"为空默认 1"`
 	UserDefaultVisible      bool     `json:"user_default_visible,omitempty"`
 	AllowProtocolConversion bool     `json:"allow_protocol_conversion,omitempty" doc:"允许协议转换；默认 false=仅同家族 passthrough"`
-	RouteStrategy           string   `json:"route_strategy,omitempty" enum:"failover,weighted,adaptive"`
-	RouteObjective          string   `json:"route_objective,omitempty" enum:"balanced,cost,latency,stability"`
+	RoutePolicy             string   `json:"route_policy,omitempty" enum:"balanced,cost,latency,stability" doc:"分组路由策略；为空默认智能均衡"`
 	RoutePolicyVersion      *int64   `json:"route_policy_version,omitempty" doc:"更新分组时用于防止覆盖较新的路由策略"`
 	SortOrder               int32    `json:"sort_order,omitempty"`
 	Status                  string   `json:"status,omitempty" enum:"active,disabled"`
@@ -68,8 +66,7 @@ type updateGroupInput struct {
 	Body    groupWriteRequest
 }
 type groupRoutePolicyWriteRequest struct {
-	RouteStrategy      string `json:"route_strategy" enum:"failover,weighted,adaptive"`
-	RouteObjective     string `json:"route_objective" enum:"balanced,cost,latency,stability"`
+	RoutePolicy        string `json:"route_policy" enum:"balanced,cost,latency,stability"`
 	RoutePolicyVersion int64  `json:"route_policy_version"`
 }
 type updateGroupRoutePolicyInput struct {
@@ -151,15 +148,13 @@ type groupDispatchPreviewRequest struct {
 }
 
 type groupDispatchPreviewCandidateDTO struct {
-	TargetType         string  `json:"target_type"`
-	AccountID          string  `json:"account_id,omitempty"`
-	CredentialPoolID   string  `json:"credential_pool_id,omitempty"`
-	DisplayName        string  `json:"display_name,omitempty"`
-	ProviderFamily     string  `json:"provider_family,omitempty"`
-	ProviderAPIFormat  string  `json:"provider_api_format,omitempty"`
-	ProtocolConversion bool    `json:"protocol_conversion"`
-	Priority           int32   `json:"priority"`
-	RoutingWeight      float64 `json:"routing_weight"`
+	TargetType         string `json:"target_type"`
+	AccountID          string `json:"account_id,omitempty"`
+	CredentialPoolID   string `json:"credential_pool_id,omitempty"`
+	DisplayName        string `json:"display_name,omitempty"`
+	ProviderFamily     string `json:"provider_family,omitempty"`
+	ProviderAPIFormat  string `json:"provider_api_format,omitempty"`
+	ProtocolConversion bool   `json:"protocol_conversion"`
 }
 
 type groupDispatchPreviewRejectionDTO struct {
@@ -168,7 +163,6 @@ type groupDispatchPreviewRejectionDTO struct {
 	ResolvedModel string `json:"resolved_model"`
 	ReasonCode    string `json:"reason_code" enum:"no_active_group_target,access_denied,target_not_found,target_inactive,model_binding_missing,protocol_incompatible,credential_unavailable,binding_invalid,binding_unavailable"`
 	ReasonDetail  string `json:"reason_detail,omitempty"`
-	Priority      int32  `json:"priority"`
 }
 
 type groupDispatchPreviewDTO struct {
@@ -176,8 +170,7 @@ type groupDispatchPreviewDTO struct {
 	ClientSurface        string                             `json:"client_surface"`
 	MatchedRule          *groupDispatchRuleDTO              `json:"matched_rule,omitempty"`
 	ResolvedLogicalModel string                             `json:"resolved_logical_model"`
-	RouteStrategy        string                             `json:"route_strategy" enum:"failover,weighted,adaptive"`
-	RouteObjective       string                             `json:"route_objective" enum:"balanced,cost,latency,stability"`
+	RoutePolicy          string                             `json:"route_policy" enum:"balanced,cost,latency,stability"`
 	CandidateUpstreams   []groupDispatchPreviewCandidateDTO `json:"candidate_upstreams"`
 	RejectedCandidates   []groupDispatchPreviewRejectionDTO `json:"rejected_candidates"`
 }
@@ -226,18 +219,16 @@ type deleteGroupDispatchRuleInput struct {
 
 // 分组关联上游目标 DTO（账号或凭证池）
 type groupTargetDTO struct {
-	ID                    string  `json:"id"`
-	GroupID               string  `json:"group_id"`
-	AccountID             string  `json:"account_id,omitempty"`
-	CredentialPoolID      string  `json:"credential_pool_id,omitempty"`
-	Priority              int32   `json:"priority"`
-	RoutingWeight         float64 `json:"routing_weight"`
-	Status                string  `json:"status"`
-	TargetType            string  `json:"target_type,omitempty" doc:"account|pool"`
-	AccountName           string  `json:"account_name,omitempty"`
-	DefaultProviderFamily string  `json:"default_provider_family,omitempty"`
-	PoolName              string  `json:"pool_name,omitempty"`
-	FixedProviderType     string  `json:"fixed_provider_type,omitempty"`
+	ID                    string `json:"id"`
+	GroupID               string `json:"group_id"`
+	AccountID             string `json:"account_id,omitempty"`
+	CredentialPoolID      string `json:"credential_pool_id,omitempty"`
+	Status                string `json:"status"`
+	TargetType            string `json:"target_type,omitempty" doc:"account|pool"`
+	AccountName           string `json:"account_name,omitempty"`
+	DefaultProviderFamily string `json:"default_provider_family,omitempty"`
+	PoolName              string `json:"pool_name,omitempty"`
+	FixedProviderType     string `json:"fixed_provider_type,omitempty"`
 	// Available 反映该绑定的上游资源当前是否仍可被本租户路由；false 时 UnavailableReason
 	// 给出原因（inactive/access_revoked/missing）。用于呈现「已绑定但请求会被拒」的哑故障。
 	Available         bool   `json:"available"`
@@ -247,18 +238,14 @@ type groupTargetDTO struct {
 }
 
 type groupTargetWriteRequest struct {
-	AccountID        string   `json:"account_id,omitempty" doc:"上游账号 id；与 credential_pool_id 二选一"`
-	CredentialPoolID string   `json:"credential_pool_id,omitempty" doc:"凭证池 id；与 account_id 二选一"`
-	Priority         *int32   `json:"priority,omitempty"`
-	RoutingWeight    *float64 `json:"routing_weight,omitempty"`
-	Status           string   `json:"status,omitempty" enum:"active,disabled"`
+	AccountID        string `json:"account_id,omitempty" doc:"上游账号 id；与 credential_pool_id 二选一"`
+	CredentialPoolID string `json:"credential_pool_id,omitempty" doc:"凭证池 id；与 account_id 二选一"`
+	Status           string `json:"status,omitempty" enum:"active,disabled"`
 }
 
-// 更新仅允许改 priority/routing_weight/status；换目标请删除后重新关联。
+// 更新只允许修改关联状态；换目标请删除后重新关联。
 type groupTargetUpdateRequest struct {
-	Priority      *int32   `json:"priority,omitempty"`
-	RoutingWeight *float64 `json:"routing_weight,omitempty"`
-	Status        string   `json:"status,omitempty" enum:"active,disabled"`
+	Status string `json:"status,omitempty" enum:"active,disabled"`
 }
 
 type groupTargetsOutput struct {
@@ -398,8 +385,7 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			}
 			group, err := d.GroupManager.UpdateGroupRoutePolicy(ctx, tenantGroupScope(ctx, in.GroupID), commercial.GroupRoutePolicyWrite{
 				ExpectedVersion: in.Body.RoutePolicyVersion,
-				RouteStrategy:   commercial.RouteStrategy(in.Body.RouteStrategy),
-				RouteObjective:  commercial.RouteObjective(in.Body.RouteObjective),
+				RoutePolicy:     commercial.RoutePolicy(in.Body.RoutePolicy),
 			})
 			if err != nil {
 				return nil, mapServiceError(err)
@@ -661,7 +647,7 @@ func registerGroups(api huma.API, d TenantGroupManagementHTTPDeps) {
 			return out, nil
 		})
 
-	huma.Register(api, huma.Operation{OperationID: "ai-update-group-target", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}", Summary: "更新关联(优先级/权重/状态)", Tags: []string{"groups"}},
+	huma.Register(api, huma.Operation{OperationID: "ai-update-group-target", Method: http.MethodPatch, Path: "/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}", Summary: "更新关联状态", Tags: []string{"groups"}},
 		func(ctx context.Context, in *updateGroupTargetInput) (*groupTargetOutput, error) {
 			if err := commercialPortReady(d.GroupTargets); err != nil {
 				return nil, err
@@ -777,8 +763,7 @@ func groupWriteFromReq(req groupWriteRequest) commercial.GroupWrite {
 		DefaultUserMultiplier:      defaultMultiplier,
 		UserDefaultVisible:         req.UserDefaultVisible,
 		AllowProtocolConversion:    req.AllowProtocolConversion,
-		RouteStrategy:              commercial.RouteStrategy(req.RouteStrategy),
-		RouteObjective:             commercial.RouteObjective(req.RouteObjective),
+		RoutePolicy:                commercial.RoutePolicy(req.RoutePolicy),
 		ExpectedRoutePolicyVersion: int64PtrOrDefault(req.RoutePolicyVersion, 0),
 		SortOrder:                  int(req.SortOrder),
 		Status:                     commercial.Status(req.Status),
@@ -795,8 +780,7 @@ func groupToDTO(group commercial.Group) groupDTO {
 		DefaultUserMultiplier:   group.DefaultUserMultiplier,
 		UserDefaultVisible:      group.UserDefaultVisible,
 		AllowProtocolConversion: group.AllowProtocolConversion,
-		RouteStrategy:           string(group.RouteStrategy),
-		RouteObjective:          string(group.RouteObjective),
+		RoutePolicy:             string(group.RoutePolicy),
 		RoutePolicyVersion:      group.RoutePolicyVersion,
 		SortOrder:               int32(group.SortOrder),
 		Status:                  string(group.Status),
@@ -829,8 +813,7 @@ func groupDispatchPreviewToDTO(preview commercial.DispatchPreview) groupDispatch
 		RequestedModel:       preview.RequestedModel,
 		ClientSurface:        preview.ClientSurface,
 		ResolvedLogicalModel: preview.ResolvedModelID,
-		RouteStrategy:        string(preview.RouteStrategy),
-		RouteObjective:       string(preview.RouteObjective),
+		RoutePolicy:          string(preview.RoutePolicy),
 		CandidateUpstreams:   make([]groupDispatchPreviewCandidateDTO, 0, len(preview.CandidateUpstreams)),
 		RejectedCandidates:   make([]groupDispatchPreviewRejectionDTO, 0, len(preview.RejectedCandidates)),
 	}
@@ -847,8 +830,6 @@ func groupDispatchPreviewToDTO(preview commercial.DispatchPreview) groupDispatch
 			ProviderFamily:     item.ProviderFamily,
 			ProviderAPIFormat:  item.SelectedProtocol,
 			ProtocolConversion: item.ProtocolConversion,
-			Priority:           int32(item.Priority),
-			RoutingWeight:      item.RoutingWeight,
 		})
 	}
 	for _, rejected := range preview.RejectedCandidates {
@@ -858,7 +839,6 @@ func groupDispatchPreviewToDTO(preview commercial.DispatchPreview) groupDispatch
 			ResolvedModel: rejected.ResolvedModelID,
 			ReasonCode:    rejected.ReasonCode,
 			ReasonDetail:  rejected.ReasonDetail,
-			Priority:      int32(rejected.Priority),
 		})
 	}
 	return out
@@ -927,11 +907,9 @@ func groupTargetWriteFromRequest(req groupTargetWriteRequest) (commercial.GroupT
 		targetID = poolID
 	}
 	return commercial.GroupTargetWrite{
-		TargetKind:    targetKind,
-		TargetID:      targetID,
-		Priority:      int(int32OrDefault(req.Priority, 100)),
-		RoutingWeight: float64PtrOrDefault(req.RoutingWeight, 1),
-		Status:        commercial.Status(req.Status),
+		TargetKind: targetKind,
+		TargetID:   targetID,
+		Status:     commercial.Status(req.Status),
 	}, nil
 }
 
@@ -953,11 +931,9 @@ func groupTargetUpdateWriteFromRequest(existing commercial.GroupTarget, req grou
 		status = commercial.Status(req.Status)
 	}
 	return commercial.GroupTargetWrite{
-		TargetKind:    existing.TargetKind,
-		TargetID:      existing.TargetID,
-		Priority:      int(int32OrDefault(req.Priority, int32(existing.Priority))),
-		RoutingWeight: float64PtrOrDefault(req.RoutingWeight, existing.RoutingWeight),
-		Status:        status,
+		TargetKind: existing.TargetKind,
+		TargetID:   existing.TargetID,
+		Status:     status,
 	}
 }
 
@@ -966,13 +942,6 @@ func tenantGroupScope(ctx context.Context, groupID string) commercial.TenantGrou
 }
 
 func int32OrDefault(v *int32, fallback int32) int32 {
-	if v == nil {
-		return fallback
-	}
-	return *v
-}
-
-func float64PtrOrDefault(v *float64, fallback float64) float64 {
 	if v == nil {
 		return fallback
 	}
@@ -1001,8 +970,6 @@ func groupTargetToDTO(item commercial.GroupTargetDetail) groupTargetDTO {
 		GroupID:               item.GroupID,
 		AccountID:             accountID,
 		CredentialPoolID:      credentialPoolID,
-		Priority:              int32(item.Priority),
-		RoutingWeight:         item.RoutingWeight,
 		Status:                string(item.Status),
 		TargetType:            targetType,
 		AccountName:           item.AccountName,

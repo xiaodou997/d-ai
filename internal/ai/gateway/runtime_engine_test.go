@@ -52,11 +52,11 @@ func TestBuildRuntimeServingRequestHasNoPreResolvedCandidates(t *testing.T) {
 	}
 }
 
-func TestRuntimeRouteSelectorPreservesCanonicalFailoverPlan(t *testing.T) {
+func TestRuntimeRouteSelectorPreservesCanonicalGroupPlan(t *testing.T) {
 	planner := &routePlannerStub{plan: coreruntime.RoutePlan{Candidates: []coreruntime.PlannedTarget{
-		plannedDirectTarget("route-1", "group-1", 0, "upstream-1", 3),
-		plannedDirectTarget("route-2", "group-1", 0, "upstream-2", 5),
-		plannedDirectTarget("route-3", "group-2", 1, "upstream-3", 1),
+		plannedDirectTarget("route-1", "group-1", 0, "upstream-1"),
+		plannedDirectTarget("route-2", "group-1", 0, "upstream-2"),
+		plannedDirectTarget("route-3", "group-2", 1, "upstream-3"),
 	}}}
 	planner.plan.Candidates[0].Binding.ConversionBucket = 2
 	selector := NewRuntimeRouteSelector(planner, zap.NewNop())
@@ -80,11 +80,10 @@ func TestRuntimeRouteSelectorPreservesCanonicalFailoverPlan(t *testing.T) {
 	for i, want := range []struct {
 		route string
 		group int
-		prio  int
-	}{{"route-1", 0, 3}, {"route-2", 0, 5}, {"route-3", 1, 1}} {
+	}{{"route-1", 0}, {"route-2", 0}, {"route-3", 1}} {
 		got := candidates[i]
-		if got.RouteID != want.route || got.GroupRank != want.group || got.Priority != want.prio {
-			t.Fatalf("candidate[%d] = route=%q group=%d priority=%d", i, got.RouteID, got.GroupRank, got.Priority)
+		if got.RouteID != want.route || got.GroupRank != want.group {
+			t.Fatalf("candidate[%d] = route=%q group=%d", i, got.RouteID, got.GroupRank)
 		}
 	}
 	if candidates[0].ConversionBucket != 2 {
@@ -94,7 +93,7 @@ func TestRuntimeRouteSelectorPreservesCanonicalFailoverPlan(t *testing.T) {
 
 func TestRuntimeRouteSelectorAppliesSubscriptionGroupsBeforePlanning(t *testing.T) {
 	planner := &routePlannerStub{plan: coreruntime.RoutePlan{Candidates: []coreruntime.PlannedTarget{
-		plannedDirectTarget("route-plan", "group-plan", 0, "upstream-1", 3),
+		plannedDirectTarget("route-plan", "group-plan", 0, "upstream-1"),
 	}}}
 	selector := NewRuntimeRouteSelector(planner, zap.NewNop())
 	req := &serving.Request{
@@ -184,14 +183,14 @@ func (s *routePlannerStub) Resolve(_ context.Context, subject coreidentity.Subje
 	return s.plan, s.err
 }
 
-func plannedDirectTarget(routeID, groupID string, groupRank int, endpointID string, priority int) coreruntime.PlannedTarget {
+func plannedDirectTarget(routeID, groupID string, groupRank int, endpointID string) coreruntime.PlannedTarget {
 	return coreruntime.PlannedTarget{
 		RouteID:   routeID,
 		GroupRank: groupRank,
 		Group: commercial.AccessibleGroup{Group: commercial.Group{
 			ID: groupID, Name: groupID, RetailPriceBookID: "sell-book", DefaultUserMultiplier: 1,
 		}},
-		Target:  commercial.GroupTarget{ID: routeID, GroupID: groupID, TargetID: endpointID, TargetKind: commercial.TargetKindDirectUpstream, Priority: priority},
+		Target:  commercial.GroupTarget{ID: routeID, GroupID: groupID, TargetID: endpointID, TargetKind: commercial.TargetKindDirectUpstream},
 		ModelID: "gpt-5.6-luna",
 		Binding: coreupstream.RuntimeBinding{
 			Upstream: coreupstream.Upstream{

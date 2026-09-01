@@ -1101,8 +1101,8 @@ CREATE INDEX idx_ledger_credit_leases_account
   --   1. api_format 使用运行时协议名（openai_chat / gemini_generate / ...）。
   --   2. 不使用外键，由业务层保证关联关系。
   --   3. request/response 协议已合并为单一 api_format——实际使用中两者永远相同。
-  --   4. weight 已移除——运行时路由不使用 binding 级 weight，故障转移由
-  --      ai_group_targets.priority 控制。
+  --   4. weight 已移除——运行时路由不使用 binding 级 weight；分组策略和运行时
+  --      健康/性能信号负责选择，失败目标自动故障转移。
   --   5. priority 已移除——每个 model_code + capability_type 在同一上游上只有
   --      一条绑定，binding 级 priority 作为次级排序键从未实际生效。
   --   6. 唯一约束已收紧为 (upstream_kind, upstream_id, model_code, capability_type)——
@@ -1184,13 +1184,8 @@ CREATE INDEX idx_ledger_credit_leases_account
     -- 协议转换网关开关（分组级 opt-in）：false（默认）= 仅同家族 passthrough（今天的行为）；
     -- true = 允许把本组候选作为跨格式协议转换目标（client↔provider 落差由 internal/formats 翻译）。
     allow_protocol_conversion BOOLEAN   NOT NULL DEFAULT false,
-    route_strategy          TEXT          NOT NULL DEFAULT 'adaptive'
-      CHECK (route_strategy IN ('failover', 'weighted', 'adaptive')),
-    route_objective         TEXT          NOT NULL DEFAULT 'balanced'
-      CHECK (route_objective IN ('balanced', 'cost', 'latency', 'stability')),
-    CONSTRAINT ai_groups_route_objective_strategy_check CHECK (
-      route_strategy = 'adaptive' OR route_objective = 'balanced'
-    ),
+    route_policy            TEXT          NOT NULL DEFAULT 'balanced'
+      CHECK (route_policy IN ('balanced', 'cost', 'latency', 'stability')),
     route_policy_version    BIGINT        NOT NULL DEFAULT 1 CHECK (route_policy_version > 0),
     sort_order            INTEGER       NOT NULL DEFAULT 0,
     status                TEXT          NOT NULL DEFAULT 'active',
@@ -1210,8 +1205,8 @@ CREATE INDEX idx_ledger_credit_leases_account
   -- ============================================================================
   -- AI Group Targets (分组 → 上游目标 直连关联)
   -- 分组不再按「模型→部署」路由，而是直连一批上游目标（账号或凭证池），
-  -- 候选 = 该组关联的 active 目标里存在对应 ai_upstream_models 绑定者，按 priority 分层；
-  -- 同层内再交给运行时 scorer 做动态择优（无实时 stats 时随机/粘性/健康兜底）。
+  -- 候选 = 该组关联的 active 目标里存在对应 ai_upstream_models 绑定者；
+  -- 运行时按分组路由策略自动择优，并在失败时自动切换。
   -- 目标为多态：target_kind + target_id 恰好描述一个上游目标。
   -- ============================================================================
   CREATE TABLE IF NOT EXISTS ai_group_targets (
@@ -1220,9 +1215,6 @@ CREATE INDEX idx_ledger_credit_leases_account
     target_kind  TEXT        NOT NULL
       CHECK (target_kind IN ('direct_upstream', 'oauth_pool')),
     target_id    UUID        NOT NULL,
-    priority     INTEGER     NOT NULL DEFAULT 100 CHECK (priority >= 0),
-    routing_weight NUMERIC(10,4) NOT NULL DEFAULT 1
-      CHECK (routing_weight >= 0 AND routing_weight <> 'NaN'::numeric),
     status       TEXT        NOT NULL DEFAULT 'active',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1230,7 +1222,7 @@ CREATE INDEX idx_ledger_credit_leases_account
   );
 
   CREATE INDEX IF NOT EXISTS idx_ai_group_targets_group
-    ON ai_group_targets (group_id, status, priority);
+    ON ai_group_targets (group_id, status);
   CREATE INDEX IF NOT EXISTS idx_ai_group_targets_target
     ON ai_group_targets (target_kind, target_id);
 
@@ -2719,6 +2711,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 28);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 29);
 
 COMMIT;

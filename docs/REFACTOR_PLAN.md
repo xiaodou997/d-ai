@@ -218,8 +218,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；`deploy/production/schema_release.sh` 负责备份、连续脚本执行和逐步版本确认，不引入运行时迁移依赖。
 - [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
-- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v27，并将最终 schema-only dump 与 `init.sql` 比较。
-- [x] 每个迁移在空库和前一 schema 版本副本上验证；26 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v27 全链重放并逐步校验版本。
+- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v29，并将最终 schema-only dump 与 `init.sql` 比较。
+- [x] 每个迁移在空库和前一 schema 版本副本上验证；28 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v29 全链重放并逐步校验版本。
 - [x] 为缺少专项测试的 0002、0003、0009 补迁移测试；测试覆盖来源版本、关键结构、数据转换和约束行为。
 - [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [x] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤；`deploy/production/schema_release.sh` 显式执行并记录备份/哈希/版本，`docs/SCHEMA_RELEASE_RUNBOOK.md` 固化停流量、readiness、兼容窗口和恢复步骤。
@@ -1253,7 +1253,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P1-04（Serving 候选选择拆分，2026-08-26）
 
-- 文件边界：`execute_candidates.go` 独立承载 sticky affinity、group/priority/conversion 分层、动态 scorer、OAuth pool credential 选择、健康探针和 physical target exhaustion；`execute.go` 保留执行编排与共享契约。
+- 文件边界：`execute_candidates.go` 独立承载 sticky affinity、group failover/conversion 分层、动态 scorer、OAuth pool credential 选择、健康探针和 physical target exhaustion；`execute.go` 保留执行编排与共享契约。
 - 行为：未改变候选排序、sticky 首选、credential fallback、健康 lease 或失败耗尽语义。
 - 验证：`go test ./internal/ai/serving -count=1` 通过（受限环境需允许既有 `httptest` 本地监听）。
 - 遗留范围：上游 attempt/transport、sync/stream relay 和 image response 仍待移出主文件。
@@ -1902,9 +1902,9 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 ### P2-06（Group-owned routing policy v2 and atomic target writes，2026-09-01）
 
-- 归属：删除旧的全局 `ai_route_score_weights` 管理面与存储；路由策略下沉到租户分组，分组持有 `route_strategy`、`route_objective`，上游目标持有 `routing_weight`，运行时按分组优先级和策略选择。
+- 归属：删除旧的全局 `ai_route_score_weights` 管理面与存储；路由策略下沉到租户分组，分组只持有一个 `route_policy`，上游目标不再持有优先级或分流权重，运行时自动选择并故障切换。
 - 写入：新增分组路由策略窄更新端点，以及带 `route_policy_version` 乐观并发令牌的目标集合原子替换端点；旧的已注册单目标接口仍保留兼容，但所有已注册目标、入口、调度规则和导入写入都会推进版本，避免旧草稿覆盖新配置。
-- 一致性：schema v26/v27、sqlc、OpenAPI 和授权矩阵同步；批量目标更新在锁定分组行的单事务中完成增删改，版本冲突返回 `group_route_policy_conflict` 及期望/实际版本，Portal 提供重新加载入口。
-- 可观测性：runtime attempt/trace/admin projection 带策略、目标优先级/权重和选择原因；Prometheus 增加按策略、选择原因的尝试与延迟维度。
-- 回归：Portal 135 个测试文件/399 项测试、typecheck、architecture/style/quality、OpenAPI 321 operations、Go compile/vet/build/checkdeps 和差异检查通过；需要本机数据库/监听权限的集成测试继续在具备 PostgreSQL/Redis 网络权限的 CI 环境执行。
+- 一致性：schema v26→v29、sqlc、OpenAPI 和授权矩阵同步；批量目标更新在锁定分组行的单事务中完成增删改，版本冲突返回 `group_route_policy_conflict` 及期望/实际版本，Portal 提供重新加载入口。
+- 可观测性：runtime attempt/trace/admin projection 只记录分组策略和选择原因，不再记录目标优先级/权重；Prometheus 按策略、选择原因记录尝试与延迟维度。
+- 回归：Portal 136 个测试文件/407 项测试、typecheck、architecture/style/quality、OpenAPI 323 operations、Go compile/vet/build/checkdeps 和差异检查通过；需要本机数据库/监听权限的集成测试继续在具备 PostgreSQL/Redis 网络权限的 CI 环境执行。
 - 门禁：新增 `make test-group-route-policy` 与 CI 独立步骤，强制执行原子替换/版本冲突 PostgreSQL 测试；测试被 skip 时门禁失败。

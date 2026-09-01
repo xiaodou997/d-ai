@@ -63,7 +63,6 @@ type RuntimeBindingRequest struct {
 	AllowProtocolConversion bool
 	TargetMode              AccessMode
 	TargetID                string
-	Priority                int
 }
 
 // RuntimeBinding is the upstream-layer result returned to the runtime kernel

@@ -34,18 +34,15 @@ func TestGroupDispatchPreviewToDTOIncludesRoutePolicy(t *testing.T) {
 		RequestedModel:  "gpt-latest",
 		ClientSurface:   "openai_chat",
 		ResolvedModelID: "gpt-5.5",
-		RouteStrategy:   commercial.RouteStrategyWeighted,
-		RouteObjective:  commercial.RouteObjectiveBalanced,
+		RoutePolicy:     commercial.RoutePolicyCost,
 		CandidateUpstreams: []commercial.DispatchPreviewCandidate{{
-			TargetType:    "account",
-			Priority:      10,
-			RoutingWeight: 2.5,
+			TargetType: "account",
 		}},
 	})
-	if dto.RouteStrategy != "weighted" || dto.RouteObjective != "balanced" {
-		t.Fatalf("route policy = %q/%q", dto.RouteStrategy, dto.RouteObjective)
+	if dto.RoutePolicy != "cost" {
+		t.Fatalf("route policy = %q", dto.RoutePolicy)
 	}
-	if len(dto.CandidateUpstreams) != 1 || dto.CandidateUpstreams[0].RoutingWeight != 2.5 {
-		t.Fatalf("candidate weights = %#v", dto.CandidateUpstreams)
+	if len(dto.CandidateUpstreams) != 1 {
+		t.Fatalf("candidate upstreams = %#v", dto.CandidateUpstreams)
 	}
 }

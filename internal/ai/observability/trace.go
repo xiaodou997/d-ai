@@ -11,11 +11,8 @@ import (
 // TraceAttempt is one upstream call in the X-Route-Trace payload.
 type TraceAttempt struct {
 	RouteID         string  `json:"route_id"`
-	RouteStrategy   string  `json:"strategy,omitempty"`
-	RouteObjective  string  `json:"objective,omitempty"`
+	RoutePolicy     string  `json:"policy,omitempty"`
 	GroupRank       int     `json:"group_rank"`
-	Priority        int     `json:"priority"`
-	RoutingWeight   float64 `json:"routing_weight"`
 	SelectionReason string  `json:"selection_reason,omitempty"`
 	Score           float64 `json:"score,omitempty"`
 	Outcome         string  `json:"outcome"`
@@ -43,11 +40,8 @@ func BuildTrace(req *serving.Request) *TracePayload {
 	for _, a := range req.Attempts {
 		attempts = append(attempts, TraceAttempt{
 			RouteID:         a.RouteID,
-			RouteStrategy:   a.RouteStrategy,
-			RouteObjective:  a.RouteObjective,
+			RoutePolicy:     a.RoutePolicy,
 			GroupRank:       a.GroupRank,
-			Priority:        a.Priority,
-			RoutingWeight:   a.RoutingWeight,
 			SelectionReason: a.SelectionReason,
 			Score:           a.Score,
 			Outcome:         a.Outcome.String(),

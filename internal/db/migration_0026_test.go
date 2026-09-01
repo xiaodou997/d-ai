@@ -17,9 +17,7 @@ func TestMigration0026MovesRoutingPolicyIntoGroups(t *testing.T) {
 	t.Cleanup(func() { _ = cleanup(context.Background()) })
 
 	if _, err := pool.Exec(ctx, `
-		ALTER TABLE ai_groups DROP CONSTRAINT IF EXISTS ai_groups_route_objective_strategy_check;
-		ALTER TABLE ai_groups DROP COLUMN route_strategy, DROP COLUMN route_objective;
-		ALTER TABLE ai_group_targets DROP COLUMN routing_weight;
+		ALTER TABLE ai_groups DROP COLUMN route_policy;
 		CREATE TABLE ai_route_score_weights (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			scope TEXT NOT NULL,

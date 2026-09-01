@@ -324,16 +324,15 @@ func (r *CommercialRepo) previewWithRuntime(ctx context.Context, tenantID, group
 		if out.ResolvedModelID == requestedModel {
 			out.ResolvedModelID = candidate.ModelID
 		}
-		if out.RouteStrategy == "" {
-			out.RouteStrategy = candidate.Group.Group.RouteStrategy
-			out.RouteObjective = candidate.Group.Group.RouteObjective
+		if out.RoutePolicy == "" {
+			out.RoutePolicy = candidate.Group.Group.RoutePolicy
 		}
 		if candidate.MatchedRule != nil && out.MatchedRule == nil {
 			rule := *candidate.MatchedRule
 			out.MatchedRule = &rule
 		}
 		binding := candidate.Binding
-		item := commercial.DispatchPreviewCandidate{DisplayName: binding.Upstream.Name, ProviderFamily: string(binding.Upstream.ProviderFamily), UpstreamModel: binding.ModelBinding.UpstreamModelName, ProtocolConversion: binding.ModelBinding.RequestSurface != surfaceID, Priority: candidate.Target.Priority, RoutingWeight: candidate.Target.RoutingWeight}
+		item := commercial.DispatchPreviewCandidate{DisplayName: binding.Upstream.Name, ProviderFamily: string(binding.Upstream.ProviderFamily), UpstreamModel: binding.ModelBinding.UpstreamModelName, ProtocolConversion: binding.ModelBinding.RequestSurface != surfaceID}
 		if candidate.Target.TargetKind == commercial.TargetKindOAuthPool {
 			item.TargetType = "pool"
 			item.CredentialPoolID = binding.Upstream.ID
@@ -354,16 +353,14 @@ func (r *CommercialRepo) previewWithRuntime(ctx context.Context, tenantID, group
 			rule := *rejected.MatchedRule
 			out.MatchedRule = &rule
 		}
-		if out.RouteStrategy == "" {
-			out.RouteStrategy = rejected.Group.Group.RouteStrategy
-			out.RouteObjective = rejected.Group.Group.RouteObjective
+		if out.RoutePolicy == "" {
+			out.RoutePolicy = rejected.Group.Group.RoutePolicy
 		}
 		item := commercial.DispatchPreviewRejection{
 			TargetID:        rejected.Target.TargetID,
 			ResolvedModelID: rejected.ModelID,
 			ReasonCode:      string(rejected.Code),
 			ReasonDetail:    rejected.Detail,
-			Priority:        rejected.Target.Priority,
 		}
 		switch rejected.Target.TargetKind {
 		case commercial.TargetKindOAuthPool:
@@ -373,11 +370,8 @@ func (r *CommercialRepo) previewWithRuntime(ctx context.Context, tenantID, group
 		}
 		out.RejectedCandidates = append(out.RejectedCandidates, item)
 	}
-	if out.RouteStrategy == "" {
-		out.RouteStrategy = commercial.RouteStrategyAdaptive
-	}
-	if out.RouteObjective == "" {
-		out.RouteObjective = commercial.RouteObjectiveBalanced
+	if out.RoutePolicy == "" {
+		out.RoutePolicy = commercial.RoutePolicyBalanced
 	}
 	return out, nil
 }

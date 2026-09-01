@@ -76,7 +76,7 @@ func (s *commercialGroupManagerStub) CreateGroup(_ context.Context, tenantID str
 func (s *commercialGroupManagerStub) UpdateGroupRoutePolicy(_ context.Context, scope commercial.TenantGroupScope, input commercial.GroupRoutePolicyWrite) (commercial.Group, error) {
 	s.routeScope = scope
 	s.routeInput = input
-	return commercial.Group{ID: scope.GroupID, TenantID: scope.TenantID, Name: "route-policy-group", RouteStrategy: input.RouteStrategy, RouteObjective: input.RouteObjective, Status: commercial.StatusActive}, nil
+	return commercial.Group{ID: scope.GroupID, TenantID: scope.TenantID, Name: "route-policy-group", RoutePolicy: input.RoutePolicy, Status: commercial.StatusActive}, nil
 }
 
 type commercialDispatchRuleManagerStub struct {
@@ -212,14 +212,14 @@ func TestCommercialRoutesUseSeparatedPorts(t *testing.T) {
 	if groupTargets.listScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) {
 		t.Fatalf("target scope = %#v", groupTargets.listScope)
 	}
-	replaceRecorder := performCommercialRequest(handler, http.MethodPut, "/api/v1/tenants/me/groups/group-1/targets", `{"expected_version":1,"targets":[{"account_id":"account-1","priority":10,"routing_weight":2}]}`)
+	replaceRecorder := performCommercialRequest(handler, http.MethodPut, "/api/v1/tenants/me/groups/group-1/targets", `{"expected_version":1,"targets":[{"account_id":"account-1"}]}`)
 	requireCommercialStatus(t, replaceRecorder, http.StatusOK)
 	if groupTargets.replaceScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) || groupTargets.replaceInput.ExpectedVersion != 1 || len(groupTargets.replaceInput.Targets) != 1 || groupTargets.replaceInput.Targets[0].TargetID != "account-1" {
 		t.Fatalf("target replacement command = scope %#v input %#v", groupTargets.replaceScope, groupTargets.replaceInput)
 	}
-	policyRecorder := performCommercialRequest(handler, http.MethodPatch, "/api/v1/tenants/me/groups/group-1/route-policy", `{"route_strategy":"weighted","route_objective":"balanced","route_policy_version":1}`)
+	policyRecorder := performCommercialRequest(handler, http.MethodPatch, "/api/v1/tenants/me/groups/group-1/route-policy", `{"route_policy":"cost","route_policy_version":1}`)
 	requireCommercialStatus(t, policyRecorder, http.StatusOK)
-	if groupManager.routeScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) || groupManager.routeInput.RouteStrategy != commercial.RouteStrategyWeighted {
+	if groupManager.routeScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) || groupManager.routeInput.RoutePolicy != commercial.RoutePolicyCost {
 		t.Fatalf("route policy command = scope %#v input %#v", groupManager.routeScope, groupManager.routeInput)
 	}
 

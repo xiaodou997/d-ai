@@ -9,9 +9,9 @@ import (
 	"xiaodou/dai/internal/ai/domain"
 )
 
-// pickCandidate returns the next candidate using the multi-dim scorer when
-// available, or falls back to linear priority order. Health admission happens
-// after local request preparation and immediately before the transport call.
+// pickCandidate returns the next candidate using the group's built-in route
+// policy. Health admission happens after local request preparation and
+// immediately before the transport call.
 func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.RouteCandidate, float64) {
 	req.SelectionReason = ""
 	// Sticky is an explicit caller affinity decision. RouteCandidatesStep has
@@ -24,14 +24,11 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 		req.SelectionReason = "sticky"
 		return candidate, 0
 	}
-	// GroupRank and target Priority are hard failover boundaries. Protocol
-	// conversion preference and dynamic scoring apply only among peers in the
-	// active target-priority tier.
+	// A lower-ranked group is a failover boundary. Within the active group,
+	// protocol conversion preference is the only hard compatibility boundary;
+	// the group route policy chooses among the remaining targets.
 	tier := activeBucketTier(
-		activePriorityTier(
-			activeGroupTier(req.Candidates, req.UsedCandidates),
-			req.UsedCandidates,
-		),
+		activeGroupTier(req.Candidates, req.UsedCandidates),
 		req.UsedCandidates,
 	)
 	if len(tier) == 0 {
@@ -55,21 +52,10 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 	}
 	req.ModelCode = cand.ModelCode
 	req.SelectionReason = routeSelectionReason(cand, score, s.Scorer != nil)
-	if cand.RouteStrategy == "weighted" && !hasPositiveRoutingWeight(tier) {
-		req.SelectionReason = "weighted_fallback"
-	} else if len(tier) == 1 && s.Scorer != nil {
+	if len(tier) == 1 && s.Scorer != nil {
 		req.SelectionReason = "single_candidate"
 	}
 	return cand, score
-}
-
-func hasPositiveRoutingWeight(candidates []*domain.RouteCandidate) bool {
-	for _, candidate := range candidates {
-		if candidate != nil && routingWeight(candidate.RoutingWeight) > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func routeSelectionReason(candidate *domain.RouteCandidate, score float64, scorerConfigured bool) string {
@@ -77,20 +63,16 @@ func routeSelectionReason(candidate *domain.RouteCandidate, score float64, score
 		return "unknown"
 	}
 	if !scorerConfigured {
-		return "priority_fallback"
+		return "automatic_fallback"
 	}
-	switch candidate.RouteStrategy {
-	case "weighted":
-		return "weighted"
-	case "failover":
-		return "failover"
-	case "adaptive":
-		if score > 0 {
-			return "adaptive"
-		}
-		return "adaptive_fallback"
+	switch candidate.RoutePolicy {
+	case "balanced", "cost", "latency", "stability":
+		return candidate.RoutePolicy
 	default:
-		return "scored"
+		if score > 0 {
+			return "balanced"
+		}
+		return "automatic_fallback"
 	}
 }
 
@@ -230,31 +212,6 @@ func activeBucketTier(candidates []*domain.RouteCandidate, used map[string]bool)
 	var tier []*domain.RouteCandidate
 	for _, c := range candidates {
 		if !used[c.RouteID] && c.ConversionBucket == minBucket {
-			tier = append(tier, c)
-		}
-	}
-	return tier
-}
-
-// activePriorityTier returns the not-yet-used candidates sharing the lowest
-// Priority inside the current group. Restricting the scorer to this tier makes
-// target priority a real runtime failover layer.
-func activePriorityTier(candidates []*domain.RouteCandidate, used map[string]bool) []*domain.RouteCandidate {
-	minPriority := int(^uint(0) >> 1)
-	for _, c := range candidates {
-		if used[c.RouteID] {
-			continue
-		}
-		if c.Priority < minPriority {
-			minPriority = c.Priority
-		}
-	}
-	if minPriority == int(^uint(0)>>1) {
-		return nil
-	}
-	var tier []*domain.RouteCandidate
-	for _, c := range candidates {
-		if !used[c.RouteID] && c.Priority == minPriority {
 			tier = append(tier, c)
 		}
 	}

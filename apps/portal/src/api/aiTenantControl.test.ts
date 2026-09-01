@@ -61,7 +61,7 @@ describe("AI tenant control facade", () => {
     expect(mocks.request).not.toHaveBeenCalled();
 
     mocks.request.mockResolvedValueOnce({
-      items: [{ id: "target-1", group_id: "group-1", available: true, priority: 1, status: "active", target_type: "other" }],
+      items: [{ id: "target-1", group_id: "group-1", available: true, status: "active", target_type: "other" }],
       total: 1
     });
     await expect(aiTenantApi.listGroupTargets("group/1")).rejects.toThrow("Unexpected group target type");
@@ -75,7 +75,7 @@ describe("AI tenant control facade", () => {
     mocks.request.mockResolvedValueOnce({ items: [], total: 0, route_policy_version: 9 });
     await expect(aiTenantApi.replaceGroupTargets("group/1", {
       expected_version: 8,
-      targets: [{ account_id: "account-1", priority: 10, routing_weight: 2, status: "active" }]
+      targets: [{ account_id: "account-1", status: "active" }]
     })).resolves.toEqual({ items: [], total: 0, route_policy_version: 9 });
     expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({
       method: "PUT",
@@ -83,7 +83,7 @@ describe("AI tenant control facade", () => {
       pathParams: { groupID: "group/1" },
       body: {
         expected_version: 8,
-        targets: [{ account_id: "account-1", priority: 10, routing_weight: 2, status: "active" }]
+        targets: [{ account_id: "account-1", status: "active" }]
       }
     });
   });

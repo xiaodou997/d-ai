@@ -29,7 +29,7 @@ billing/payment 三类视图和 `tenant_income_projection` owner 转给 billing 
 
 ## Apply
 
-先确认目标库已完成 schema v27（包含上述只读视图、不可变资金修复审计表和分组路由策略版本）升级；在维护窗口、应用已经配置并验证
+先确认目标库已完成 schema v29（包含上述只读视图、不可变资金修复审计表和单一分组路由策略）升级；在维护窗口、应用已经配置并验证
 billing DSN 后，以数据库 owner/superuser 执行角色 provisioning：
 
 ```bash
@@ -62,7 +62,7 @@ deploy/production/cutover_db_ownership.sh verify
 ## Contract probe
 
 ```bash
-SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v27_test?sslmode=disable' \
+SCHEMA_OWNERSHIP_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:15432/dai_v29_test?sslmode=disable' \
   bash scripts/check_db_ownership.sh
 ```
 

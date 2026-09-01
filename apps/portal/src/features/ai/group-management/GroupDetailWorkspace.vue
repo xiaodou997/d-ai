@@ -39,7 +39,7 @@ const detailTabs: { key: DetailTab; label: string }[] = [
   { key: "client-surfaces", label: "API 入口" },
   { key: "dispatch-rules", label: "请求规则" },
   { key: "targets", label: "关联上游目标" },
-  { key: "route-policy", label: "路由配置" }
+  { key: "route-policy", label: "路由策略" }
 ];
 const route = useRoute();
 const router = useRouter();

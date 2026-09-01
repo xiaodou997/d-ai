@@ -64,8 +64,7 @@ type GroupWrite struct {
 	DefaultUserMultiplier   float64
 	UserDefaultVisible      bool
 	AllowProtocolConversion bool
-	RouteStrategy           RouteStrategy
-	RouteObjective          RouteObjective
+	RoutePolicy             RoutePolicy
 	// ExpectedRoutePolicyVersion is optional for create/legacy callers. When
 	// supplied on an update, the adapter rejects a stale full-group form rather
 	// than allowing it to overwrite a newer route-policy edit.
@@ -79,8 +78,7 @@ type GroupWrite struct {
 // overwriting unrelated pricing, visibility, or status fields.
 type GroupRoutePolicyWrite struct {
 	ExpectedVersion int64
-	RouteStrategy   RouteStrategy
-	RouteObjective  RouteObjective
+	RoutePolicy     RoutePolicy
 }
 
 type GroupClientSurfaceWrite struct {
@@ -90,11 +88,9 @@ type GroupClientSurfaceWrite struct {
 }
 
 type GroupTargetWrite struct {
-	TargetKind    TargetKind
-	TargetID      string
-	Priority      int
-	RoutingWeight float64
-	Status        Status
+	TargetKind TargetKind
+	TargetID   string
+	Status     Status
 }
 
 // GroupTargetBatchWrite describes the complete desired target set for a group.

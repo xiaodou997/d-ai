@@ -26,20 +26,19 @@ func TestNormalizeGroupWriteDefaults(t *testing.T) {
 	}
 }
 
-func TestNormalizeGroupWriteCanonicalizesObjectiveForFailover(t *testing.T) {
+func TestNormalizeGroupWriteDefaultsRoutePolicy(t *testing.T) {
 	t.Parallel()
 
 	got, err := normalizeGroupWrite(GroupWrite{
 		Name:              "primary",
 		RetailPriceBookID: "pb_1",
-		RouteStrategy:     RouteStrategyFailover,
-		RouteObjective:    RouteObjectiveLatency,
+		RoutePolicy:       RoutePolicyCost,
 	})
 	if err != nil {
 		t.Fatalf("normalizeGroupWrite: %v", err)
 	}
-	if got.RouteObjective != RouteObjectiveBalanced {
-		t.Fatalf("objective = %q, want %q for failover", got.RouteObjective, RouteObjectiveBalanced)
+	if got.RoutePolicy != RoutePolicyCost {
+		t.Fatalf("route policy = %q, want %q", got.RoutePolicy, RoutePolicyCost)
 	}
 }
 
@@ -53,13 +52,6 @@ func TestNormalizeGroupWriteRejectsNonFinitePolicyNumbers(t *testing.T) {
 			DefaultUserMultiplier: value,
 		}); err == nil {
 			t.Fatalf("normalizeGroupWrite accepted default multiplier %v", value)
-		}
-		if _, err := normalizeGroupTargetWrite(GroupTargetWrite{
-			TargetKind:    TargetKindDirectUpstream,
-			TargetID:      "upstream-1",
-			RoutingWeight: value,
-		}); err == nil {
-			t.Fatalf("normalizeGroupTargetWrite accepted routing weight %v", value)
 		}
 	}
 }

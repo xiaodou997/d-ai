@@ -46,9 +46,8 @@ func TestGatewayRecordsRoutePolicyMetrics(t *testing.T) {
 		Attempts: []serving.AttemptRecord{{
 			RouteID:         "route-1",
 			GroupID:         "group-1",
-			RouteStrategy:   "adaptive",
-			RouteObjective:  "latency",
-			SelectionReason: "adaptive",
+			RoutePolicy:     "latency",
+			SelectionReason: "latency",
 			Outcome:         serving.ResultSuccess,
 			TotalMs:         25,
 		}},
@@ -61,10 +60,10 @@ func TestGatewayRecordsRoutePolicyMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(body)
-	if !strings.Contains(text, `dai_ai_route_attempts_total{group_id="group-1",objective="latency",outcome="success",reason="adaptive",route_id="route-1",strategy="adaptive"}`) {
+	if !strings.Contains(text, `dai_ai_route_attempts_total{group_id="group-1",outcome="success",policy="latency",reason="latency",route_id="route-1"}`) {
 		t.Fatalf("route attempt metric missing:\n%s", text)
 	}
-	if !strings.Contains(text, `dai_ai_route_attempt_duration_ms_count{group_id="group-1",objective="latency",outcome="success",strategy="adaptive"} 1`) {
+	if !strings.Contains(text, `dai_ai_route_attempt_duration_ms_count{group_id="group-1",outcome="success",policy="latency"} 1`) {
 		t.Fatalf("route latency metric missing:\n%s", text)
 	}
 }

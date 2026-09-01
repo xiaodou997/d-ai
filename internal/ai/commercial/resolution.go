@@ -191,7 +191,7 @@ func (s *Service) ResolveDispatch(
 		}
 
 		targets := dispatchData.Targets[item.Group.ID]
-		targets = filterAndSortActiveTargets(targets)
+		targets = filterActiveTargets(targets)
 
 		out = append(out, DispatchResolution{
 			Group:           item,
@@ -279,22 +279,13 @@ func dispatchRuleMatches(rule DispatchRule, requestedModel string) bool {
 	}
 }
 
-func filterAndSortActiveTargets(targets []GroupTarget) []GroupTarget {
+func filterActiveTargets(targets []GroupTarget) []GroupTarget {
 	out := make([]GroupTarget, 0, len(targets))
 	for _, target := range targets {
 		if target.Status == StatusActive {
 			out = append(out, target)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Priority != out[j].Priority {
-			return out[i].Priority < out[j].Priority
-		}
-		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return out[i].CreatedAt.Before(out[j].CreatedAt)
-		}
-		return out[i].ID < out[j].ID
-	})
 	return out
 }
 

@@ -15,12 +15,9 @@ func TestBuildTraceIncludesGroupPolicyDecision(t *testing.T) {
 			{
 				RouteID:         "route-1",
 				GroupID:         "group-private",
-				RouteStrategy:   "weighted",
-				RouteObjective:  "balanced",
+				RoutePolicy:     "cost",
 				GroupRank:       2,
-				Priority:        10,
-				RoutingWeight:   3,
-				SelectionReason: "weighted",
+				SelectionReason: "cost",
 				Outcome:         serving.ResultSuccess,
 				HTTPStatus:      200,
 				LatencyMs:       42,
@@ -46,12 +43,9 @@ func TestBuildTraceIncludesGroupPolicyDecision(t *testing.T) {
 	}
 	attempt := attempts[0].(map[string]any)
 	for key, want := range map[string]any{
-		"strategy":         "weighted",
-		"objective":        "balanced",
+		"policy":           "cost",
 		"group_rank":       float64(2),
-		"priority":         float64(10),
-		"routing_weight":   float64(3),
-		"selection_reason": "weighted",
+		"selection_reason": "cost",
 	} {
 		if attempt[key] != want {
 			t.Fatalf("attempt[%q] = %#v, want %#v", key, attempt[key], want)

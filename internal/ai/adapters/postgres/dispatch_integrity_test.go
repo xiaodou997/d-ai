@@ -195,7 +195,7 @@ func TestCommercialRepoDeleteGroupReportsBusinessReferencesAndCascadesConfigurat
 		{`INSERT INTO ai_group_client_surfaces (group_id, surface, bridge_enabled, status) VALUES ($1::uuid, 'openai_chat', false, 'active')`, []any{dispatchTestGroup}},
 		{`INSERT INTO ai_group_model_dispatch_rules (group_id, client_surface, match_type, match_value, target_model_code, priority, status, notes)
 		 VALUES ($1::uuid, 'openai_chat', 'exact', 'public', 'model', 10, 'disabled', '')`, []any{dispatchTestGroup}},
-		{`INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, status) VALUES ($1::uuid, 'direct_upstream', gen_random_uuid(), 10, 'active')`, []any{dispatchTestGroup}},
+		{`INSERT INTO ai_group_targets (group_id, target_kind, target_id, status) VALUES ($1::uuid, 'direct_upstream', gen_random_uuid(), 'active')`, []any{dispatchTestGroup}},
 		{`INSERT INTO ai_user_groups (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},
 		{`INSERT INTO ai_api_keys (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},
 		{`INSERT INTO ai_sub_plan_groups (group_id) VALUES ($1::uuid)`, []any{dispatchTestGroup}},

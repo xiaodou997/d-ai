@@ -30,8 +30,8 @@ import (
 //         allow_protocol_conversion 开时，才可作为转换目标；桶由 runtime 的
 //         SupportMatrix 给出（0 同格式 >1 同子类型/专用双向桥 >2 同家族 >3
 //         跨家族）。全不可服务则丢弃该候选。
-//  3. 执行层先遵守分组与目标 priority，协议偏好桶只在同一 priority 内选择：
-//     同层零转换优先、跨家族兜底。
+//  3. 执行层先遵守分组故障切换层级，协议偏好桶只在当前分组内选择：
+//     同层零转换优先、跨家族兜底；组内目标由分组 route_policy 自动择优。
 //
 // 排查 “某上游协议路由不到” → 看 chooseProviderProtocol（匹配/丢弃）与分组开关；
 // 排查 “路由到了但上游 4xx / 路径不对” → 看 c.Protocol（= provider 协议）与
@@ -76,15 +76,13 @@ func capabilityTypeFromProtocol(protocol domain.UpstreamProtocol) domain.Capabil
 // routeRow holds one resolved candidate (a row of ai_group_targets joined to its
 // group, target account/pool, and explicit upstream model binding).
 type routeRow struct {
-	RouteID       string // ai_group_targets.id
-	RoutePriority int32
-	RoutingWeight float64
+	RouteID string // ai_group_targets.id
 
 	PriceBookID      *string // 租户结算价格表（COALESCE account→pool）
 	TenantMultiplier float64
 	UpstreamModel    string // 显式 binding 已解析出的上游真实模型名
 
-	// 成本提示（仅供 scorer 多候选择优；非计费口径）：
+	// 成本提示（仅供 scorer 自动择优；非计费口径）：
 	// (first-tier input + output) × 1000 × tenant_multiplier，无成本 entry 时为 0。
 	CostPer1kTokens float64
 
@@ -110,17 +108,16 @@ type routeRow struct {
 
 	// 分组协议转换开关：决定本组候选能否作为跨格式转换目标。
 	GroupAllowConversion bool
-	GroupRouteStrategy   string
-	GroupRouteObjective  string
+	GroupRoutePolicy     string
 }
 
 // listRoutesForGroups fetches active targets that can serve modelCode within the
 // given groups (in failover order), protocol-matched and explicit-binding filtered.
-// Results are ordered by group failover order, then target priority and binding ID.
+// Results are ordered by group failover order and binding ID.
 func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode string, capType domain.CapabilityType, groupIDs []string) ([]routeRow, error) {
 	const q = `
 			SELECT
-			  gt.id::text, gt.priority, gt.routing_weight,
+			  gt.id::text,
 		  COALESCE(a.price_book_id, cp.price_book_id)::text        AS cost_price_book_id,
 		  COALESCE(tp.tenant_multiplier_override, a.tenant_multiplier, cp.tenant_multiplier, 1) AS tenant_multiplier,
 		  um.upstream_model_name                                    AS upstream_model,
@@ -138,7 +135,7 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 			  um.api_format, um.config_json,
 			  cp.id::text, cp.fixed_provider_type, cp.oauth_strategy,
 			  g.id::text, g.name, g.retail_price_book_id::text, g.default_user_multiplier, g.allow_protocol_conversion,
-			  g.route_strategy, g.route_objective
+			  g.route_policy
 		FROM ai_group_targets gt
 		JOIN ai_groups g ON g.id = gt.group_id
 		JOIN ai_upstream_models um
@@ -175,7 +172,7 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 		    COALESCE(a.tenant_access_mode, cp.tenant_access_mode) = 'public'
 		    OR COALESCE(tp.access_granted, false)
 		  )
-			ORDER BY array_position($3::uuid[], gt.group_id), gt.priority ASC, gt.id ASC`
+			ORDER BY array_position($3::uuid[], gt.group_id), gt.id ASC`
 
 	if groupIDs == nil {
 		groupIDs = []string{}
@@ -190,13 +187,13 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 	for pgRows.Next() {
 		var r routeRow
 		if err := pgRows.Scan(
-			&r.RouteID, &r.RoutePriority, &r.RoutingWeight,
+			&r.RouteID,
 			&r.PriceBookID, &r.TenantMultiplier, &r.UpstreamModel, &r.CostPer1kTokens,
 			&r.AccountID, &r.AccountName, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.APIFormat, &r.ConfigJSON,
 			&r.PoolID, &r.FixedProviderType, &r.OAuthStrategy,
 			&r.GroupID, &r.GroupName, &r.RetailPriceBookID, &r.GroupDefaultUserMultiplier, &r.GroupAllowConversion,
-			&r.GroupRouteStrategy, &r.GroupRouteObjective,
+			&r.GroupRoutePolicy,
 		); err != nil {
 			return nil, fmt.Errorf("scan route row: %w", err)
 		}

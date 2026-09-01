@@ -85,14 +85,12 @@ INSERT INTO ai_group_targets (
   group_id,
   target_kind,
   target_id,
-  priority,
-  routing_weight,
   status
 ) SELECT
   $1, $2, $3,
-  $4, $5, $6
+  $4
 FROM ai_groups g
-WHERE g.id = $1 AND g.tenant_id = $7
+WHERE g.id = $1 AND g.tenant_id = $5
   AND EXISTS (
     SELECT 1
     FROM ai_upstream_resources r
@@ -114,21 +112,17 @@ RETURNING
   group_id,
   target_kind,
   target_id,
-  priority,
-  routing_weight,
   status,
   created_at,
   updated_at
 `
 
 type AddGroupTargetParams struct {
-	GroupID       pgtype.UUID    `json:"group_id"`
-	TargetKind    string         `json:"target_kind"`
-	TargetID      pgtype.UUID    `json:"target_id"`
-	Priority      int32          `json:"priority"`
-	RoutingWeight pgtype.Numeric `json:"routing_weight"`
-	Status        string         `json:"status"`
-	TenantID      string         `json:"tenant_id"`
+	GroupID    pgtype.UUID `json:"group_id"`
+	TargetKind string      `json:"target_kind"`
+	TargetID   pgtype.UUID `json:"target_id"`
+	Status     string      `json:"status"`
+	TenantID   string      `json:"tenant_id"`
 }
 
 // ============================================================================
@@ -140,8 +134,6 @@ func (q *Queries) AddGroupTarget(ctx context.Context, arg AddGroupTargetParams) 
 		arg.GroupID,
 		arg.TargetKind,
 		arg.TargetID,
-		arg.Priority,
-		arg.RoutingWeight,
 		arg.Status,
 		arg.TenantID,
 	)
@@ -151,8 +143,6 @@ func (q *Queries) AddGroupTarget(ctx context.Context, arg AddGroupTargetParams) 
 		&i.GroupID,
 		&i.TargetKind,
 		&i.TargetID,
-		&i.Priority,
-		&i.RoutingWeight,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -362,8 +352,7 @@ INSERT INTO ai_groups (
   default_user_multiplier,
   user_default_visible,
   allow_protocol_conversion,
-  route_strategy,
-  route_objective,
+  route_policy,
   sort_order,
   status
 ) VALUES (
@@ -384,14 +373,13 @@ INSERT INTO ai_groups (
   $6::boolean,
   $7::boolean,
   $8::text,
-  $9::text,
-  $10::integer,
-  $11::text
+  $9::integer,
+  $10::text
 )
 RETURNING
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
   user_default_visible, allow_protocol_conversion,
-  route_strategy, route_objective, route_policy_version,
+  route_policy, route_policy_version,
   sort_order, status, created_at, updated_at
 `
 
@@ -403,8 +391,7 @@ type CreateGroupParams struct {
 	DefaultUserMultiplier   pgtype.Numeric `json:"default_user_multiplier"`
 	UserDefaultVisible      bool           `json:"user_default_visible"`
 	AllowProtocolConversion bool           `json:"allow_protocol_conversion"`
-	RouteStrategy           string         `json:"route_strategy"`
-	RouteObjective          string         `json:"route_objective"`
+	RoutePolicy             string         `json:"route_policy"`
 	SortOrder               int32          `json:"sort_order"`
 	Status                  string         `json:"status"`
 }
@@ -421,8 +408,7 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (AiGro
 		arg.DefaultUserMultiplier,
 		arg.UserDefaultVisible,
 		arg.AllowProtocolConversion,
-		arg.RouteStrategy,
-		arg.RouteObjective,
+		arg.RoutePolicy,
 		arg.SortOrder,
 		arg.Status,
 	)
@@ -436,8 +422,7 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (AiGro
 		&i.DefaultUserMultiplier,
 		&i.UserDefaultVisible,
 		&i.AllowProtocolConversion,
-		&i.RouteStrategy,
-		&i.RouteObjective,
+		&i.RoutePolicy,
 		&i.RoutePolicyVersion,
 		&i.SortOrder,
 		&i.Status,
@@ -823,7 +808,7 @@ func (q *Queries) GetDashboardSummary(ctx context.Context, arg GetDashboardSumma
 const getGroup = `-- name: GetGroup :one
 SELECT
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-  user_default_visible, allow_protocol_conversion, route_strategy, route_objective, route_policy_version,
+  user_default_visible, allow_protocol_conversion, route_policy, route_policy_version,
   sort_order, status, created_at, updated_at
 FROM ai_groups
 WHERE id = $2 AND tenant_id = $1
@@ -846,8 +831,7 @@ func (q *Queries) GetGroup(ctx context.Context, arg GetGroupParams) (AiGroup, er
 		&i.DefaultUserMultiplier,
 		&i.UserDefaultVisible,
 		&i.AllowProtocolConversion,
-		&i.RouteStrategy,
-		&i.RouteObjective,
+		&i.RoutePolicy,
 		&i.RoutePolicyVersion,
 		&i.SortOrder,
 		&i.Status,
@@ -1721,8 +1705,6 @@ SELECT
   gt.group_id,
   gt.target_kind,
   gt.target_id,
-  gt.priority,
-  gt.routing_weight,
   gt.status,
   gt.created_at,
   gt.updated_at,
@@ -1737,7 +1719,7 @@ LEFT JOIN ai_credential_pools cp
   ON gt.target_kind = 'oauth_pool' AND cp.id = gt.target_id
 WHERE gt.group_id = $2
   AND EXISTS (SELECT 1 FROM ai_groups g WHERE g.id = gt.group_id AND g.tenant_id = $1)
-ORDER BY gt.priority ASC, account_name ASC, pool_name ASC
+ORDER BY account_name ASC, pool_name ASC, gt.id ASC
 `
 
 type ListGroupTargetsParams struct {
@@ -1750,8 +1732,6 @@ type ListGroupTargetsRow struct {
 	GroupID           pgtype.UUID        `json:"group_id"`
 	TargetKind        string             `json:"target_kind"`
 	TargetID          pgtype.UUID        `json:"target_id"`
-	Priority          int32              `json:"priority"`
-	RoutingWeight     pgtype.Numeric     `json:"routing_weight"`
 	Status            string             `json:"status"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
@@ -1776,8 +1756,6 @@ func (q *Queries) ListGroupTargets(ctx context.Context, arg ListGroupTargetsPara
 			&i.GroupID,
 			&i.TargetKind,
 			&i.TargetID,
-			&i.Priority,
-			&i.RoutingWeight,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1800,7 +1778,7 @@ const listGroups = `-- name: ListGroups :many
 SELECT
   g.id, g.tenant_id, g.name, g.description, g.retail_price_book_id, g.default_user_multiplier,
   g.user_default_visible, g.allow_protocol_conversion,
-  g.route_strategy, g.route_objective, g.route_policy_version, g.sort_order, g.status,
+  g.route_policy, g.route_policy_version, g.sort_order, g.status,
   g.created_at, g.updated_at,
   COALESCE(pb.name, '') AS retail_price_book_name
 FROM ai_groups g
@@ -1818,8 +1796,7 @@ type ListGroupsRow struct {
 	DefaultUserMultiplier   pgtype.Numeric     `json:"default_user_multiplier"`
 	UserDefaultVisible      bool               `json:"user_default_visible"`
 	AllowProtocolConversion bool               `json:"allow_protocol_conversion"`
-	RouteStrategy           string             `json:"route_strategy"`
-	RouteObjective          string             `json:"route_objective"`
+	RoutePolicy             string             `json:"route_policy"`
 	RoutePolicyVersion      int64              `json:"route_policy_version"`
 	SortOrder               int32              `json:"sort_order"`
 	Status                  string             `json:"status"`
@@ -1846,8 +1823,7 @@ func (q *Queries) ListGroups(ctx context.Context, tenantID string) ([]ListGroups
 			&i.DefaultUserMultiplier,
 			&i.UserDefaultVisible,
 			&i.AllowProtocolConversion,
-			&i.RouteStrategy,
-			&i.RouteObjective,
+			&i.RoutePolicy,
 			&i.RoutePolicyVersion,
 			&i.SortOrder,
 			&i.Status,
@@ -2810,7 +2786,7 @@ const listVisibleGroupsForTenant = `-- name: ListVisibleGroupsForTenant :many
 SELECT
   g.id, g.tenant_id, g.name, g.description, g.retail_price_book_id,
   g.default_user_multiplier, g.user_default_visible, g.allow_protocol_conversion,
-  g.route_strategy, g.route_objective, g.route_policy_version, g.sort_order, g.status,
+  g.route_policy, g.route_policy_version, g.sort_order, g.status,
   g.created_at, g.updated_at,
   g.default_user_multiplier::numeric(10,4) AS effective_user_multiplier
 FROM ai_groups g
@@ -2827,8 +2803,7 @@ type ListVisibleGroupsForTenantRow struct {
 	DefaultUserMultiplier   pgtype.Numeric     `json:"default_user_multiplier"`
 	UserDefaultVisible      bool               `json:"user_default_visible"`
 	AllowProtocolConversion bool               `json:"allow_protocol_conversion"`
-	RouteStrategy           string             `json:"route_strategy"`
-	RouteObjective          string             `json:"route_objective"`
+	RoutePolicy             string             `json:"route_policy"`
 	RoutePolicyVersion      int64              `json:"route_policy_version"`
 	SortOrder               int32              `json:"sort_order"`
 	Status                  string             `json:"status"`
@@ -2856,8 +2831,7 @@ func (q *Queries) ListVisibleGroupsForTenant(ctx context.Context, tenantID strin
 			&i.DefaultUserMultiplier,
 			&i.UserDefaultVisible,
 			&i.AllowProtocolConversion,
-			&i.RouteStrategy,
-			&i.RouteObjective,
+			&i.RoutePolicy,
 			&i.RoutePolicyVersion,
 			&i.SortOrder,
 			&i.Status,
@@ -2954,26 +2928,25 @@ SET name = $2,
     default_user_multiplier = $5,
     user_default_visible = $6,
     allow_protocol_conversion = $7,
-    route_strategy = $8,
-    route_objective = $9,
+    route_policy = $8,
     route_policy_version = route_policy_version + 1,
-    sort_order = $10,
-    status = $11,
+    sort_order = $9,
+    status = $10,
     updated_at = now()
 FROM ai_price_books pb
 WHERE ai_groups.id = $1
-  AND ai_groups.tenant_id = $12
+  AND ai_groups.tenant_id = $11
   AND pb.id = $4
   AND pb.status = 'active'
   AND (
     pb.owner_type = 'platform'
-    OR (pb.owner_type = 'tenant' AND pb.owner_tenant_id = $12)
+      OR (pb.owner_type = 'tenant' AND pb.owner_tenant_id = $11)
   )
 RETURNING
   ai_groups.id, ai_groups.tenant_id, ai_groups.name, ai_groups.description,
   ai_groups.retail_price_book_id, ai_groups.default_user_multiplier,
   ai_groups.user_default_visible, ai_groups.allow_protocol_conversion,
-  ai_groups.route_strategy, ai_groups.route_objective, ai_groups.route_policy_version,
+  ai_groups.route_policy, ai_groups.route_policy_version,
   ai_groups.sort_order, ai_groups.status, ai_groups.created_at, ai_groups.updated_at
 `
 
@@ -2985,8 +2958,7 @@ type UpdateGroupParams struct {
 	DefaultUserMultiplier   pgtype.Numeric `json:"default_user_multiplier"`
 	UserDefaultVisible      bool           `json:"user_default_visible"`
 	AllowProtocolConversion bool           `json:"allow_protocol_conversion"`
-	RouteStrategy           string         `json:"route_strategy"`
-	RouteObjective          string         `json:"route_objective"`
+	RoutePolicy             string         `json:"route_policy"`
 	SortOrder               int32          `json:"sort_order"`
 	Status                  string         `json:"status"`
 	TenantID                string         `json:"tenant_id"`
@@ -3001,8 +2973,7 @@ func (q *Queries) UpdateGroup(ctx context.Context, arg UpdateGroupParams) (AiGro
 		arg.DefaultUserMultiplier,
 		arg.UserDefaultVisible,
 		arg.AllowProtocolConversion,
-		arg.RouteStrategy,
-		arg.RouteObjective,
+		arg.RoutePolicy,
 		arg.SortOrder,
 		arg.Status,
 		arg.TenantID,
@@ -3017,8 +2988,7 @@ func (q *Queries) UpdateGroup(ctx context.Context, arg UpdateGroupParams) (AiGro
 		&i.DefaultUserMultiplier,
 		&i.UserDefaultVisible,
 		&i.AllowProtocolConversion,
-		&i.RouteStrategy,
-		&i.RouteObjective,
+		&i.RoutePolicy,
 		&i.RoutePolicyVersion,
 		&i.SortOrder,
 		&i.Status,
@@ -3087,32 +3057,29 @@ func (q *Queries) UpdateGroupDispatchRule(ctx context.Context, arg UpdateGroupDi
 
 const updateGroupRoutePolicy = `-- name: UpdateGroupRoutePolicy :one
 UPDATE ai_groups
-SET route_strategy = $2,
-    route_objective = $3,
+SET route_policy = $1,
     route_policy_version = route_policy_version + 1,
     updated_at = now()
-WHERE id = $1
-  AND tenant_id = $4
-  AND route_policy_version = $5
+WHERE id = $2
+  AND tenant_id = $3
+  AND route_policy_version = $4
 RETURNING
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-  user_default_visible, allow_protocol_conversion, route_strategy, route_objective, route_policy_version,
+  user_default_visible, allow_protocol_conversion, route_policy, route_policy_version,
   sort_order, status, created_at, updated_at
 `
 
 type UpdateGroupRoutePolicyParams struct {
+	RoutePolicy        string      `json:"route_policy"`
 	ID                 pgtype.UUID `json:"id"`
-	RouteStrategy      string      `json:"route_strategy"`
-	RouteObjective     string      `json:"route_objective"`
 	TenantID           string      `json:"tenant_id"`
 	RoutePolicyVersion int64       `json:"route_policy_version"`
 }
 
 func (q *Queries) UpdateGroupRoutePolicy(ctx context.Context, arg UpdateGroupRoutePolicyParams) (AiGroup, error) {
 	row := q.db.QueryRow(ctx, updateGroupRoutePolicy,
+		arg.RoutePolicy,
 		arg.ID,
-		arg.RouteStrategy,
-		arg.RouteObjective,
 		arg.TenantID,
 		arg.RoutePolicyVersion,
 	)
@@ -3126,8 +3093,7 @@ func (q *Queries) UpdateGroupRoutePolicy(ctx context.Context, arg UpdateGroupRou
 		&i.DefaultUserMultiplier,
 		&i.UserDefaultVisible,
 		&i.AllowProtocolConversion,
-		&i.RouteStrategy,
-		&i.RouteObjective,
+		&i.RoutePolicy,
 		&i.RoutePolicyVersion,
 		&i.SortOrder,
 		&i.Status,
@@ -3145,7 +3111,7 @@ SET status = $2,
 WHERE id = $1 AND tenant_id = $3
 RETURNING
   id, tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-  user_default_visible, allow_protocol_conversion, route_strategy, route_objective, route_policy_version,
+  user_default_visible, allow_protocol_conversion, route_policy, route_policy_version,
   sort_order, status, created_at, updated_at
 `
 
@@ -3167,8 +3133,7 @@ func (q *Queries) UpdateGroupStatus(ctx context.Context, arg UpdateGroupStatusPa
 		&i.DefaultUserMultiplier,
 		&i.UserDefaultVisible,
 		&i.AllowProtocolConversion,
-		&i.RouteStrategy,
-		&i.RouteObjective,
+		&i.RoutePolicy,
 		&i.RoutePolicyVersion,
 		&i.SortOrder,
 		&i.Status,
@@ -3180,51 +3145,37 @@ func (q *Queries) UpdateGroupStatus(ctx context.Context, arg UpdateGroupStatusPa
 
 const updateGroupTarget = `-- name: UpdateGroupTarget :one
 UPDATE ai_group_targets AS gt
-SET priority = $2,
-    routing_weight = $3,
-    status = $4,
+SET status = $1,
     updated_at = now()
-WHERE gt.id = $1
+WHERE gt.id = $2
   AND EXISTS (
     SELECT 1 FROM ai_groups g
-    WHERE g.id = gt.group_id AND g.tenant_id = $5
+    WHERE g.id = gt.group_id AND g.tenant_id = $3
   )
 RETURNING
   id,
   group_id,
   target_kind,
   target_id,
-  priority,
-  routing_weight,
   status,
   created_at,
   updated_at
 `
 
 type UpdateGroupTargetParams struct {
-	ID            pgtype.UUID    `json:"id"`
-	Priority      int32          `json:"priority"`
-	RoutingWeight pgtype.Numeric `json:"routing_weight"`
-	Status        string         `json:"status"`
-	TenantID      string         `json:"tenant_id"`
+	Status   string      `json:"status"`
+	ID       pgtype.UUID `json:"id"`
+	TenantID string      `json:"tenant_id"`
 }
 
 func (q *Queries) UpdateGroupTarget(ctx context.Context, arg UpdateGroupTargetParams) (AiGroupTarget, error) {
-	row := q.db.QueryRow(ctx, updateGroupTarget,
-		arg.ID,
-		arg.Priority,
-		arg.RoutingWeight,
-		arg.Status,
-		arg.TenantID,
-	)
+	row := q.db.QueryRow(ctx, updateGroupTarget, arg.Status, arg.ID, arg.TenantID)
 	var i AiGroupTarget
 	err := row.Scan(
 		&i.ID,
 		&i.GroupID,
 		&i.TargetKind,
 		&i.TargetID,
-		&i.Priority,
-		&i.RoutingWeight,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,

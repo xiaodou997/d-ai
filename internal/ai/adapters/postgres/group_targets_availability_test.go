@@ -37,8 +37,8 @@ func TestListGroupTargetDetailsAvailability(t *testing.T) {
 		{`INSERT INTO ai_groups (id, tenant_id, name, retail_price_book_id) VALUES ($1::uuid, $2, 'g', $3::uuid)`, []any{groupID, tenantID, priceBook}},
 		{`INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, tenant_access_mode, base_url, api_key_ciphertext, status)
 		  VALUES ($1::uuid, 'acct', 'Acct', 'public', 'https://u', 'x', 'active')`, []any{accountID}},
-		{`INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, priority, status)
-		  VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 100, 'active')`, []any{bindingID, groupID, accountID}},
+		{`INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, status)
+		  VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 'active')`, []any{bindingID, groupID, accountID}},
 	}
 	for _, s := range seed {
 		if _, err := pool.Exec(ctx, s.q, s.args...); err != nil {

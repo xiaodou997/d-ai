@@ -311,12 +311,11 @@ target_psql -P pager=off -c "
   FROM bill_credit_packages GROUP BY package_type, status ORDER BY package_type, status;
   SELECT count(*) AS ai_usage_rows FROM ai_usage_logs;
   SELECT key FROM ai_settings ORDER BY key;
-  SELECT route_strategy, route_objective, count(*) AS groups
-  FROM ai_groups GROUP BY route_strategy, route_objective
-  ORDER BY route_strategy, route_objective;
-  SELECT count(*) AS weighted_targets,
-         COALESCE(sum(routing_weight), 0) AS total_routing_weight
-  FROM ai_group_targets;
+  SELECT route_policy, count(*) AS groups
+  FROM ai_groups GROUP BY route_policy
+  ORDER BY route_policy;
+  SELECT status, count(*) AS targets
+  FROM ai_group_targets GROUP BY status ORDER BY status;
 "
 
 cat > "$backup_dir/MIGRATION.txt" <<EOF

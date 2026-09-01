@@ -208,7 +208,6 @@ func buildRuntimeBindingRequest(tenantID string, req Request, option commercial.
 		AllowProtocolConversion: option.Group.Group.AllowProtocolConversion,
 		TargetMode:              mode,
 		TargetID:                target.TargetID,
-		Priority:                target.Priority,
 	}, nil
 }
 

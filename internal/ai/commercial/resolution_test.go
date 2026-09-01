@@ -142,7 +142,7 @@ func TestResolveDispatchAppliesRuleAndAllowedModels(t *testing.T) {
 		},
 		groupTargets: map[string][]GroupTarget{
 			"g1": {
-				{ID: "t1", GroupID: "g1", TargetKind: TargetKindDirectUpstream, TargetID: "up-1", Priority: 10, Status: StatusActive},
+				{ID: "t1", GroupID: "g1", TargetKind: TargetKindDirectUpstream, TargetID: "up-1", Status: StatusActive},
 			},
 		},
 	}
@@ -192,7 +192,7 @@ func TestResolveDispatchHonorsGroupClientSurfaces(t *testing.T) {
 		},
 		groupTargets: map[string][]GroupTarget{
 			"g1": {
-				{ID: "t1", GroupID: "g1", TargetKind: TargetKindDirectUpstream, TargetID: "up-1", Priority: 10, Status: StatusActive},
+				{ID: "t1", GroupID: "g1", TargetKind: TargetKindDirectUpstream, TargetID: "up-1", Status: StatusActive},
 			},
 		},
 	}
@@ -231,10 +231,10 @@ func TestResolveDispatchUsesSelectedAPIKeyGroupSurface(t *testing.T) {
 		},
 		groupTargets: map[string][]GroupTarget{
 			"chat-denied": {
-				{ID: "image-target", GroupID: "chat-denied", TargetKind: TargetKindDirectUpstream, TargetID: "up-image", Priority: 10, Status: StatusActive},
+				{ID: "image-target", GroupID: "chat-denied", TargetKind: TargetKindDirectUpstream, TargetID: "up-image", Status: StatusActive},
 			},
 			"chat-allowed": {
-				{ID: "chat-target", GroupID: "chat-allowed", TargetKind: TargetKindDirectUpstream, TargetID: "up-chat", Priority: 10, Status: StatusActive},
+				{ID: "chat-target", GroupID: "chat-allowed", TargetKind: TargetKindDirectUpstream, TargetID: "up-chat", Status: StatusActive},
 			},
 		},
 	}

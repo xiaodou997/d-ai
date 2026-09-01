@@ -1,7 +1,7 @@
 <!--
   关联上游目标 — 分组详情页签:勾选/解除上游资源关联,草稿态统一保存。
   重构:el-table 改 DsTable(行键用草稿 key),el-tag 改 DsTag,空态走 DsTable 空槽;
-       协议标记硬编码颜色换 accent token;筛选、默认值行、保存栏与保存逻辑保持不变。
+       协议标记硬编码颜色换 accent token;租户只维护关联和启停状态。
 -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, shallowRef } from "vue";
@@ -11,7 +11,7 @@ import { formatMultiplier } from "@/platform/ai/utils";
 import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import { useGroupTargets } from "../composables/useGroupTargets";
-import type { GroupTargetDraft, GroupTargetSaveFailure, GroupTargetStatus } from "../groupTargets";
+import type { GroupTargetDraft, GroupTargetSaveFailure } from "../groupTargets";
 import { errorMessage } from "../problemPresentation";
 
 const props = defineProps<{ groupId: string }>();
@@ -38,14 +38,10 @@ const columns: DsTableColumn[] = [
   { key: "link", title: "关联", width: 58, align: "center" },
   { key: "resource", title: "上游资源" },
   { key: "priceModel", title: "价格模型", width: 104 },
-  { key: "priority", title: "优先级", width: 108 },
-  { key: "routingWeight", title: "分流权重", width: 108 },
   { key: "status", title: "状态", width: 104 },
   { key: "change", title: "变更", width: 82 }
 ];
 
-const priorityModel = computed({ get: () => state.defaultPriority.value, set: (value: number) => state.setDefaults(value, state.defaultStatus.value) });
-const statusModel = computed<GroupTargetStatus>({ get: () => state.defaultStatus.value, set: (value) => state.setDefaults(state.defaultPriority.value, value) });
 const visibleRows = computed(() => {
   const query = keyword.value.trim().toLowerCase();
   return state.rows.value.filter((row) => {
@@ -142,9 +138,7 @@ defineExpose({ confirmDiscardChanges });
     </div>
 
     <div class="defaults-row">
-      <strong>新关联默认值</strong>
-      <label><span>优先级</span><el-input-number v-model="priorityModel" :min="0" :step="10" :controls="false" /></label>
-      <label><span>状态</span><el-segmented v-model="statusModel" :options="[{ label: '启用', value: 'active' }, { label: '停用', value: 'disabled' }]" /></label>
+      <span>勾选上游后会自动加入路由候选；停用的上游不会接收请求。</span>
       <span class="count">{{ visibleRows.length }} / {{ state.rows.value.length }}</span>
     </div>
 
@@ -180,16 +174,8 @@ defineExpose({ confirmDiscardChanges });
           {{ row.resourceState === "available" ? `${row.availableModels} 个` : row.resourceState === "missing" ? "资源失效" : "无可用价格" }}
         </DsTag>
       </template>
-      <template #cell-priority="{ row }">
-        <el-input-number v-if="row.selected" :model-value="row.priority" :min="0" :step="10" :controls="false" size="small" :disabled="state.saving.value" @update:model-value="updateDraft(row.key, { priority: Number($event || 0) })" />
-        <span v-else class="muted">未关联</span>
-      </template>
       <template #cell-status="{ row }">
         <el-switch v-if="row.selected" :model-value="row.status === 'active'" inline-prompt active-text="启用" inactive-text="停用" size="small" :disabled="state.saving.value" @update:model-value="updateDraft(row.key, { status: $event ? 'active' : 'disabled' })" />
-        <span v-else class="muted">未关联</span>
-      </template>
-      <template #cell-routingWeight="{ row }">
-        <el-input-number v-if="row.selected" :model-value="row.routing_weight" :min="0" :step="0.1" :controls="false" size="small" :disabled="state.saving.value" @update:model-value="updateDraft(row.key, { routing_weight: Number($event || 0) })" />
         <span v-else class="muted">未关联</span>
       </template>
       <template #cell-change="{ row }">

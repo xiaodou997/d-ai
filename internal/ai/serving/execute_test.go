@@ -454,14 +454,14 @@ func TestExecuteDoesNotRetrySamePhysicalTargetThroughAnotherGroup(t *testing.T) 
 	}
 }
 
-func TestExecuteKeepsGroupPriorityOutsideTargetPriority(t *testing.T) {
+func TestExecuteKeepsGroupFailoverBoundary(t *testing.T) {
 	transport := &sequenceTransport{responses: []*UpstreamResponse{
 		{StatusCode: http.StatusBadGateway, Headers: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"error":"primary failed"}`))},
 		jsonResp(`{"id":"ok","choices":[{"message":{"role":"assistant","content":"done"}}]}`),
 	}}
 	req := executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{
-		{RouteID: "primary-group", GroupRank: 0, Priority: 50, EndpointID: "upstream-primary", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
-		{RouteID: "fallback-group", GroupRank: 1, Priority: 1, EndpointID: "upstream-fallback", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
+		{RouteID: "primary-group", GroupRank: 0, EndpointID: "upstream-primary", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
+		{RouteID: "fallback-group", GroupRank: 1, EndpointID: "upstream-fallback", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
 	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}}
 	if err := step.Execute(context.Background(), req); err != nil {
@@ -473,12 +473,12 @@ func TestExecuteKeepsGroupPriorityOutsideTargetPriority(t *testing.T) {
 }
 
 func TestPickCandidateHonorsStickyBeforeStructuralTiers(t *testing.T) {
-	sticky := &domain.RouteCandidate{RouteID: "sticky", GroupRank: 2, Priority: 99, ModelCode: "model"}
+	sticky := &domain.RouteCandidate{RouteID: "sticky", GroupRank: 2, ModelCode: "model"}
 	req := &Request{
 		Candidate: sticky,
 		Candidates: []*domain.RouteCandidate{
 			sticky,
-			{RouteID: "primary", GroupRank: 0, Priority: 1, ModelCode: "model"},
+			{RouteID: "primary", GroupRank: 0, ModelCode: "model"},
 		},
 		UsedCandidates: map[string]bool{},
 		StickyHit:      true,
@@ -498,7 +498,7 @@ func TestExecuteDirect401FailsOverToNextRoute(t *testing.T) {
 	accountState := &recordingDirectAccountState{}
 	req := executeTestRequest(httptest.NewRecorder(), []*domain.RouteCandidate{
 		{RouteID: "bad-key", GroupRank: 0, EndpointID: "account-bad", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
-		{RouteID: "good-key", GroupRank: 0, Priority: 1, EndpointID: "account-good", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
+		{RouteID: "good-key", GroupRank: 0, EndpointID: "account-good", ModelCode: "public-model", UpstreamModel: "upstream-model", Protocol: domain.ProtocolOpenAIChat, Timeouts: domain.DefaultRouteTimeouts(domain.CapabilityChat)},
 	})
 	step := &ExecuteStep{Transport: transport, Bridge: testProtocolBridge{}, Health: health, AccountState: accountState}
 	if err := step.Execute(context.Background(), req); err != nil {

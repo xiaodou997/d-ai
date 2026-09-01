@@ -62,8 +62,6 @@ export interface TenantAiGroupTarget {
   pool_name?: string;
   default_provider_family?: string;
   fixed_provider_type?: string;
-  priority: number;
-  routing_weight: number;
   status: "active" | "disabled";
   // 该绑定的上游资源当前是否仍可被本租户路由。管理员把资源转 restricted、撤销授权或
   // 停用后，绑定不会自动消失，请求会被网关 fail-closed 拒；available=false 时以
@@ -75,8 +73,6 @@ export interface TenantAiGroupTarget {
 export interface TenantAiGroupTargetWriteRequest {
   account_id?: string;
   credential_pool_id?: string;
-  priority?: number;
-  routing_weight?: number;
   status?: "active" | "disabled";
 }
 

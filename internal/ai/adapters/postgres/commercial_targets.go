@@ -120,10 +120,10 @@ func (r *CommercialRepo) AddGroupTarget(ctx context.Context, scope commercial.Te
 		return commercial.GroupTarget{}, domain.NewValidationError("target_id", "target is not available to tenant")
 	}
 	item, err := scanCommercialGroupTargetRow(tx.QueryRow(ctx, `
-		INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, routing_weight, status)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
-	`, gid, string(in.TargetKind), tid, in.Priority, in.RoutingWeight, commercialStatusOrDefault(in.Status)))
+		INSERT INTO ai_group_targets (group_id, target_kind, target_id, status)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id::text, group_id::text, target_kind, target_id::text, status, created_at, updated_at
+	`, gid, string(in.TargetKind), tid, commercialStatusOrDefault(in.Status)))
 	if err != nil {
 		return commercial.GroupTarget{}, err
 	}
@@ -137,12 +137,10 @@ func (r *CommercialRepo) AddGroupTarget(ctx context.Context, scope commercial.Te
 }
 
 type groupTargetBatchState struct {
-	ID            string
-	TargetKind    string
-	TargetID      string
-	Priority      int
-	RoutingWeight float64
-	Status        string
+	ID         string
+	TargetKind string
+	TargetID   string
+	Status     string
 }
 
 func groupTargetBatchKey(kind commercial.TargetKind, targetID string) string {
@@ -183,7 +181,7 @@ func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commerci
 
 	current := make(map[string]groupTargetBatchState, len(in.Targets))
 	rows, err := tx.Query(ctx, `
-		SELECT id::text, target_kind, target_id::text, priority, routing_weight, status
+		SELECT id::text, target_kind, target_id::text, status
 		FROM ai_group_targets
 		WHERE group_id = $1
 		FOR UPDATE
@@ -193,7 +191,7 @@ func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commerci
 	}
 	for rows.Next() {
 		var item groupTargetBatchState
-		if err := rows.Scan(&item.ID, &item.TargetKind, &item.TargetID, &item.Priority, &item.RoutingWeight, &item.Status); err != nil {
+		if err := rows.Scan(&item.ID, &item.TargetKind, &item.TargetID, &item.Status); err != nil {
 			rows.Close()
 			return commercial.GroupTargetBatchResult{}, err
 		}
@@ -261,23 +259,23 @@ func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commerci
 	for key, target := range desired {
 		status := commercialStatusOrDefault(target.Status)
 		if currentItem, exists := current[key]; exists {
-			if currentItem.Priority == target.Priority && currentItem.RoutingWeight == target.RoutingWeight && currentItem.Status == status {
+			if currentItem.Status == status {
 				continue
 			}
 			changed = true
 			if _, err := tx.Exec(ctx, `
 				UPDATE ai_group_targets
-				SET priority = $1, routing_weight = $2, status = $3, updated_at = now()
-				WHERE id = $4::uuid AND group_id = $5
-			`, target.Priority, target.RoutingWeight, status, currentItem.ID, gid); err != nil {
+				SET status = $1, updated_at = now()
+				WHERE id = $2::uuid AND group_id = $3
+			`, status, currentItem.ID, gid); err != nil {
 				return commercial.GroupTargetBatchResult{}, err
 			}
 			continue
 		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, routing_weight, status)
-			VALUES ($1, $2, $3::uuid, $4, $5, $6)
-		`, gid, string(target.TargetKind), target.TargetID, target.Priority, target.RoutingWeight, status); err != nil {
+			INSERT INTO ai_group_targets (group_id, target_kind, target_id, status)
+			VALUES ($1, $2, $3::uuid, $4)
+		`, gid, string(target.TargetKind), target.TargetID, status); err != nil {
 			return commercial.GroupTargetBatchResult{}, err
 		}
 		changed = true
@@ -296,10 +294,10 @@ func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commerci
 	}
 
 	resultRows, err := tx.Query(ctx, `
-		SELECT id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
+		SELECT id::text, group_id::text, target_kind, target_id::text, status, created_at, updated_at
 		FROM ai_group_targets
 		WHERE group_id = $1
-		ORDER BY priority ASC, target_kind ASC, target_id ASC
+		ORDER BY target_kind ASC, target_id ASC
 	`, gid)
 	if err != nil {
 		return commercial.GroupTargetBatchResult{}, err
@@ -417,10 +415,10 @@ func (r *CommercialRepo) UpdateGroupTarget(ctx context.Context, scope commercial
 	}
 	item, err := scanCommercialGroupTargetRow(tx.QueryRow(ctx, `
 		UPDATE ai_group_targets
-		SET priority = $1, routing_weight = $2, status = $3, updated_at = now()
-		WHERE id = $4 AND group_id = $5
-		RETURNING id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
-	`, in.Priority, in.RoutingWeight, commercialStatusOrDefault(in.Status), rid, gid))
+		SET status = $1, updated_at = now()
+		WHERE id = $2 AND group_id = $3
+		RETURNING id::text, group_id::text, target_kind, target_id::text, status, created_at, updated_at
+	`, commercialStatusOrDefault(in.Status), rid, gid))
 	if err != nil {
 		return commercial.GroupTarget{}, err
 	}

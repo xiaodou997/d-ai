@@ -63,13 +63,13 @@ func NewGateway() *Gateway {
 		routeAttempts: promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: "dai_ai_route_attempts_total",
 			Help: "Upstream route attempts by group policy, route binding, and outcome.",
-		}, []string{"group_id", "route_id", "strategy", "objective", "reason", "outcome"}),
+		}, []string{"group_id", "route_id", "policy", "reason", "outcome"}),
 
 		routeLatency: promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "dai_ai_route_attempt_duration_ms",
 			Help:    "Upstream route attempt latency by group policy and outcome.",
 			Buckets: buckets,
-		}, []string{"group_id", "strategy", "objective", "outcome"}),
+		}, []string{"group_id", "policy", "outcome"}),
 	}
 }
 
@@ -118,13 +118,12 @@ func (g *Gateway) RecordRequest(req *serving.Request) {
 	for _, attempt := range req.Attempts {
 		groupID := metricLabel(attempt.GroupID, "unknown")
 		routeID := metricLabel(attempt.RouteID, "unknown")
-		strategy := metricLabel(attempt.RouteStrategy, "unknown")
-		objective := metricLabel(attempt.RouteObjective, "balanced")
+		policy := metricLabel(attempt.RoutePolicy, "balanced")
 		reason := metricLabel(attempt.SelectionReason, "unknown")
 		outcome := metricLabel(attempt.Outcome.String(), "unknown")
-		g.routeAttempts.WithLabelValues(groupID, routeID, strategy, objective, reason, outcome).Inc()
+		g.routeAttempts.WithLabelValues(groupID, routeID, policy, reason, outcome).Inc()
 		if attempt.TotalMs > 0 {
-			g.routeLatency.WithLabelValues(groupID, strategy, objective, outcome).Observe(float64(attempt.TotalMs))
+			g.routeLatency.WithLabelValues(groupID, policy, outcome).Observe(float64(attempt.TotalMs))
 		}
 	}
 }

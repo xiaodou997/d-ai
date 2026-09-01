@@ -153,9 +153,9 @@ func seedModelCatalog(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 		  ) VALUES
 			($1::uuid, $3, 'public-group', $4::uuid, true, 'active'),
 			($2::uuid, $3, 'private-group', $5::uuid, false, 'active')`, []any{catalogPublicGroupID, catalogPrivateGroupID, catalogTenantID, catalogRetailBookOne, catalogRetailBookTwo}},
-		{`INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, status)
-		  VALUES ($1::uuid, 'direct_upstream', $3::uuid, 10, 'active'),
-		         ($2::uuid, 'direct_upstream', $3::uuid, 10, 'active')`, []any{catalogPublicGroupID, catalogPrivateGroupID, catalogAccountID}},
+		{`INSERT INTO ai_group_targets (group_id, target_kind, target_id, status)
+		  VALUES ($1::uuid, 'direct_upstream', $3::uuid, 'active'),
+		         ($2::uuid, 'direct_upstream', $3::uuid, 'active')`, []any{catalogPublicGroupID, catalogPrivateGroupID, catalogAccountID}},
 	}
 	for _, seed := range seeds {
 		if _, err := pool.Exec(ctx, seed.query, seed.args...); err != nil {

@@ -46,8 +46,6 @@ func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) 
 			group_id UUID NOT NULL,
 			target_kind TEXT NOT NULL,
 			target_id UUID NOT NULL,
-			priority INTEGER NOT NULL DEFAULT 100,
-			routing_weight NUMERIC NOT NULL DEFAULT 1,
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -126,8 +124,8 @@ func TestCommercialRepoLoadDispatchDataUsesOneBatchSnapshot(t *testing.T) {
 		    (group_id, client_surface, match_type, match_value, target_model_code, priority, status)
 		  VALUES ($1::uuid, 'openai_chat', 'exact', 'public-model', 'upstream-model', 3, 'active')`, []any{groupID}},
 		{`INSERT INTO ai_upstream_accounts (id, name, tenant_display_name) VALUES ($1::uuid, 'internal', 'Public Upstream')`, []any{targetID}},
-		{`INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, priority, status)
-		  VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 5, 'active')`, []any{routeID, groupID, targetID}},
+		{`INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, status)
+		  VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 'active')`, []any{routeID, groupID, targetID}},
 	}
 	for _, fixture := range fixtures {
 		if _, err := pool.Exec(ctx, fixture.query, fixture.args...); err != nil {
@@ -145,7 +143,7 @@ func TestCommercialRepoLoadDispatchDataUsesOneBatchSnapshot(t *testing.T) {
 	if got := data.Rules[groupID]; len(got) != 1 || got[0].TargetModelID != "upstream-model" || got[0].Priority != 3 {
 		t.Fatalf("dispatch rules = %#v", got)
 	}
-	if got := data.Targets[groupID]; len(got) != 1 || got[0].ID != routeID || got[0].TargetID != targetID || got[0].Priority != 5 {
+	if got := data.Targets[groupID]; len(got) != 1 || got[0].ID != routeID || got[0].TargetID != targetID {
 		t.Fatalf("group targets = %#v", got)
 	}
 }
@@ -179,8 +177,7 @@ func TestCommercialRepoAddGroupTargetRejectsDisabledTargets(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := repo.AddGroupTarget(ctx, commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}, commercial.GroupTargetWrite{
-				TargetKind: tc.kind, TargetID: tc.id,
-				Priority: 100, Status: commercial.StatusActive,
+				TargetKind: tc.kind, TargetID: tc.id, Status: commercial.StatusActive,
 			})
 			if !errors.Is(err, domain.ErrValidation) {
 				t.Fatalf("AddGroupTarget() error = %v, want validation error", err)
@@ -217,7 +214,7 @@ func TestCommercialRepoAddGroupTargetRequiresRestrictedGrant(t *testing.T) {
 
 	write := commercial.GroupTargetWrite{
 		TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID,
-		Priority: 100, Status: commercial.StatusActive,
+		Status: commercial.StatusActive,
 	}
 	if _, err := repo.AddGroupTarget(ctx, commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}, write); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("AddGroupTarget() without grant error = %v, want validation error", err)
@@ -255,8 +252,8 @@ func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
 	first, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
 		ExpectedVersion: 3,
 		Targets: []commercial.GroupTargetWrite{
-			{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Priority: 10, RoutingWeight: 2, Status: commercial.StatusActive},
-			{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Priority: 20, RoutingWeight: 1, Status: commercial.StatusDisabled},
+			{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Status: commercial.StatusActive},
+			{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Status: commercial.StatusDisabled},
 		},
 	})
 	if err != nil {
@@ -268,7 +265,7 @@ func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
 
 	_, err = repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
 		ExpectedVersion: 3,
-		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Priority: 1, RoutingWeight: 1, Status: commercial.StatusActive}},
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Status: commercial.StatusActive}},
 	})
 	var conflict *domain.GroupRoutePolicyConflictError
 	if !errors.As(err, &conflict) || conflict.ActualVersion != 4 {
@@ -284,17 +281,17 @@ func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
 
 	second, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
 		ExpectedVersion: 4,
-		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Priority: 30, RoutingWeight: 3, Status: commercial.StatusActive}},
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Status: commercial.StatusActive}},
 	})
 	if err != nil {
 		t.Fatalf("second replacement: %v", err)
 	}
-	if second.RoutePolicyVersion != 5 || len(second.Targets) != 1 || second.Targets[0].TargetID != poolID || second.Targets[0].RoutingWeight != 3 {
+	if second.RoutePolicyVersion != 5 || len(second.Targets) != 1 || second.Targets[0].TargetID != poolID {
 		t.Fatalf("second replacement = %#v, want version 5 and pool target", second)
 	}
 	unchanged, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
 		ExpectedVersion: 5,
-		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Priority: 30, RoutingWeight: 3, Status: commercial.StatusActive}},
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Status: commercial.StatusActive}},
 	})
 	if err != nil {
 		t.Fatalf("unchanged replacement: %v", err)
@@ -316,8 +313,7 @@ func TestCommercialRepoUpdateGroupRoutePolicyIsVersioned(t *testing.T) {
 			ADD COLUMN default_user_multiplier NUMERIC NOT NULL DEFAULT 1,
 			ADD COLUMN user_default_visible BOOLEAN NOT NULL DEFAULT false,
 			ADD COLUMN allow_protocol_conversion BOOLEAN NOT NULL DEFAULT false,
-			ADD COLUMN route_strategy TEXT NOT NULL DEFAULT 'adaptive',
-			ADD COLUMN route_objective TEXT NOT NULL DEFAULT 'balanced',
+			ADD COLUMN route_policy TEXT NOT NULL DEFAULT 'balanced',
 			ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0,
 			ADD COLUMN status TEXT NOT NULL DEFAULT 'active',
 			ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -332,32 +328,30 @@ func TestCommercialRepoUpdateGroupRoutePolicyIsVersioned(t *testing.T) {
 	scope := commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}
 	updated, err := repo.UpdateGroupRoutePolicy(ctx, scope, commercial.GroupRoutePolicyWrite{
 		ExpectedVersion: 7,
-		RouteStrategy:   commercial.RouteStrategyWeighted,
-		RouteObjective:  commercial.RouteObjectiveBalanced,
+		RoutePolicy:     commercial.RoutePolicyCost,
 	})
 	if err != nil {
 		t.Fatalf("route policy update: %v", err)
 	}
-	if updated.RoutePolicyVersion != 8 || updated.RouteStrategy != commercial.RouteStrategyWeighted {
-		t.Fatalf("updated group = version %d strategy %q, want 8/weighted", updated.RoutePolicyVersion, updated.RouteStrategy)
+	if updated.RoutePolicyVersion != 8 || updated.RoutePolicy != commercial.RoutePolicyCost {
+		t.Fatalf("updated group = version %d policy %q, want 8/cost", updated.RoutePolicyVersion, updated.RoutePolicy)
 	}
 
 	_, err = repo.UpdateGroupRoutePolicy(ctx, scope, commercial.GroupRoutePolicyWrite{
 		ExpectedVersion: 7,
-		RouteStrategy:   commercial.RouteStrategyFailover,
-		RouteObjective:  commercial.RouteObjectiveBalanced,
+		RoutePolicy:     commercial.RoutePolicyLatency,
 	})
 	var conflict *domain.GroupRoutePolicyConflictError
 	if !errors.As(err, &conflict) || conflict.ExpectedVersion != 7 || conflict.ActualVersion != 8 {
 		t.Fatalf("stale route policy update = %v, conflict = %#v", err, conflict)
 	}
-	var strategy string
+	var policy string
 	var version int64
-	if err := pool.QueryRow(ctx, `SELECT route_strategy, route_policy_version FROM ai_groups WHERE id = $1::uuid`, groupID).Scan(&strategy, &version); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT route_policy, route_policy_version FROM ai_groups WHERE id = $1::uuid`, groupID).Scan(&policy, &version); err != nil {
 		t.Fatalf("read route policy group: %v", err)
 	}
-	if strategy != string(commercial.RouteStrategyWeighted) || version != 8 {
-		t.Fatalf("stale route policy changed group = %q/%d, want weighted/8", strategy, version)
+	if policy != string(commercial.RoutePolicyCost) || version != 8 {
+		t.Fatalf("stale route policy changed group = %q/%d, want cost/8", policy, version)
 	}
 }
 
@@ -368,7 +362,6 @@ func TestGroupTargetBindingToCommercial(t *testing.T) {
 		GroupID:    "group-1",
 		TargetKind: string(commercial.TargetKindOAuthPool),
 		TargetID:   "pool-1",
-		Priority:   7,
 		Status:     "disabled",
 		CreatedAt:  now,
 		UpdatedAt:  now.Add(time.Minute),
@@ -378,9 +371,7 @@ func TestGroupTargetBindingToCommercial(t *testing.T) {
 	if got.TargetKind != commercial.TargetKindOAuthPool || got.TargetID != "pool-1" {
 		t.Fatalf("target identity mismatch: %+v", got)
 	}
-	if got.Priority != 7 {
-		t.Fatalf("target routing fields mismatch: %+v", got)
-	}
+
 	if got.Status != commercial.StatusDisabled || !got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now.Add(time.Minute)) {
 		t.Fatalf("target metadata mismatch: %+v", got)
 	}
@@ -393,7 +384,6 @@ func TestGroupTargetDetailToCommercial(t *testing.T) {
 			GroupID:    "group-2",
 			TargetKind: string(commercial.TargetKindDirectUpstream),
 			TargetID:   "account-2",
-			Priority:   3,
 			Status:     "active",
 		},
 		AccountName:       "OpenAI Primary",
@@ -430,15 +420,14 @@ func TestCommercialRepoUpdateGroupTargetUsesCurrentSchema(t *testing.T) {
 		t.Fatalf("seed upstream account: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, priority, status)
-		VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 100, 'active')
+		INSERT INTO ai_group_targets (id, group_id, target_kind, target_id, status)
+		VALUES ($1::uuid, $2::uuid, 'direct_upstream', $3::uuid, 'active')
 	`, bindingID, groupID, accountID); err != nil {
 		t.Fatalf("seed group target: %v", err)
 	}
 
 	got, err := repo.UpdateGroupTarget(ctx, commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}, bindingID, commercial.GroupTargetWrite{
-		Priority: 7,
-		Status:   commercial.StatusActive,
+		Status: commercial.StatusActive,
 	})
 	if err != nil {
 		t.Fatalf("UpdateGroupTarget() error = %v", err)
@@ -446,8 +435,8 @@ func TestCommercialRepoUpdateGroupTargetUsesCurrentSchema(t *testing.T) {
 	if got.ID != bindingID || got.GroupID != groupID || got.TargetID != accountID {
 		t.Fatalf("updated target identity = %+v", got)
 	}
-	if got.Priority != 7 || got.Status != commercial.StatusActive {
-		t.Fatalf("updated routing fields = %+v", got)
+	if got.Status != commercial.StatusActive {
+		t.Fatalf("updated target = %+v", got)
 	}
 }
 
