@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"xiaodou/dai/internal/auth"
 	authports "xiaodou/dai/internal/auth/ports"
@@ -78,6 +79,7 @@ type tenantDetailOutput struct {
 		CreatedTime   int64  `json:"createdTime"`
 	}
 }
+type tenantDeletionOutput struct{ Body tenantports.TenantDeletionJob }
 
 type updateTenantInput struct {
 	ID   string `path:"id"`
@@ -126,8 +128,10 @@ func registerAdminTenants(api huma.API, d adminTenantModule) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-delete-tenant", Method: http.MethodDelete, Path: "/api/v1/tenants/{id}",
-		Summary: "删除租户", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
+		Summary: "申请删除租户", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.deleteTenant)
+	huma.Register(api, huma.Operation{OperationID: "admin-get-tenant-deletion", Method: http.MethodGet, Path: "/api/v1/tenants/{id}/deletion", Summary: "查询租户删除状态", Tags: []string{"admin-tenants"}, Middlewares: sysUser}, h.getTenantDeletion)
+	huma.Register(api, huma.Operation{OperationID: "admin-cancel-tenant-deletion", Method: http.MethodPost, Path: "/api/v1/tenants/{id}/deletion/cancel", Summary: "取消租户删除", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive}, h.cancelTenantDeletion)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "admin-update-tenant-status", Method: http.MethodPatch, Path: "/api/v1/tenants/{id}/status",
@@ -297,15 +301,41 @@ func (h *adminHandlers) updateTenant(ctx context.Context, in *updateTenantInput)
 }
 
 func (h *adminHandlers) deleteTenant(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
-	deleted, err := h.tenantWriter.DeleteTenant(ctx, in.ID)
+	if h.tenantDeletion == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户删除服务不可用")
+	}
+	claims := userClaimsFromCtx(ctx)
+	job, err := h.tenantDeletion.Request(ctx, in.ID, userIDOf(claims))
 	if err != nil {
-		if errors.Is(err, tenantports.ErrTenantReferenced) {
-			return nil, httpx.ErrConflict.WithDetail("租户仍有关联账号或业务数据，不能删除")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
 		}
 		return nil, httpx.ErrInternal.WithCause(err)
 	}
-	if !deleted {
-		return nil, httpx.ErrNotFound.WithDetail("租户不存在")
+	_ = job
+	return okSuccess(), nil
+}
+
+func (h *adminHandlers) getTenantDeletion(ctx context.Context, in *tenantIDInput) (*tenantDeletionOutput, error) {
+	if h.tenantDeletion == nil {
+		return nil, httpx.ErrUnavailable
+	}
+	job, err := h.tenantDeletion.Get(ctx, in.ID)
+	if err != nil {
+		return nil, httpx.ErrNotFound
+	}
+	return &tenantDeletionOutput{Body: job}, nil
+}
+func (h *adminHandlers) cancelTenantDeletion(ctx context.Context, in *tenantIDInput) (*successOutput, error) {
+	if h.tenantDeletion == nil {
+		return nil, httpx.ErrUnavailable
+	}
+	ok, err := h.tenantDeletion.Cancel(ctx, in.ID)
+	if err != nil {
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if !ok {
+		return nil, httpx.ErrConflict.WithDetail("租户删除任务不存在或已开始执行")
 	}
 	return okSuccess(), nil
 }

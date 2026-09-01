@@ -62,6 +62,7 @@ func buildPlatformTransportModules(version string, cfg *config.Config, platform 
 				TenantReader:       platform.TenantRepo,
 				TenantLifecycle:    platform.TenantLifecycle,
 				TenantWriter:       platform.TenantRepo,
+				TenantDeletion:     platform.TenantDeletion,
 				Activations:        platform.Activations,
 			},
 			Users: transport.AdminUsersModuleDeps{

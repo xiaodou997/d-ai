@@ -27,12 +27,29 @@ CREATE TABLE iam_tenants (
     tenant_name TEXT NOT NULL,
     contact_person TEXT,
     contact_email TEXT,
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'suspended')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'suspended', 'deleting', 'purging')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_iam_tenants_status ON iam_tenants (status);
+
+CREATE TABLE tenant_deletion_jobs (
+    job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'cancelled', 'completed', 'failed')),
+    requested_by TEXT,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    execute_after TIMESTAMPTZ NOT NULL,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    last_error TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0)
+);
+CREATE UNIQUE INDEX uq_tenant_deletion_jobs_active ON tenant_deletion_jobs (tenant_id)
+    WHERE status IN ('pending', 'running');
+CREATE INDEX idx_tenant_deletion_jobs_ready ON tenant_deletion_jobs (execute_after)
+    WHERE status = 'pending';
 
 CREATE TABLE iam_accounts (
     id BIGSERIAL PRIMARY KEY,
@@ -2702,6 +2719,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 27);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 28);
 
 COMMIT;

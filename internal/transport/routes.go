@@ -395,6 +395,7 @@ type adminTenantModule struct {
 	TenantReader    tenantports.AdminTenantReader
 	TenantLifecycle tenantports.AdminTenantLifecycle
 	TenantWriter    tenantports.AdminTenantWriter
+	TenantDeletion  tenantports.TenantDeletionService
 	Activations     *auth.ActivationService
 }
 

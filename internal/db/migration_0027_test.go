@@ -57,6 +57,7 @@ func TestMigration0027AddsGroupRoutePolicyVersion(t *testing.T) {
 		FROM pg_constraint c
 		JOIN pg_class table_ref ON table_ref.oid = c.conrelid
 		WHERE table_ref.relname = 'ai_groups'
+		  AND table_ref.relnamespace = current_schema()::regnamespace
 		  AND pg_get_constraintdef(c.oid) LIKE '%route_policy_version > 0%'
 	`).Scan(&checkCount); err != nil {
 		t.Fatal(err)

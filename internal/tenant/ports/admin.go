@@ -72,3 +72,28 @@ type AdminTenantWriter interface {
 	UpdateTenant(ctx context.Context, input TenantUpdateCommand) (bool, error)
 	DeleteTenant(ctx context.Context, tenantID string) (bool, error)
 }
+
+type TenantDeletionJob struct {
+	JobID        string     `json:"jobId"`
+	TenantID     string     `json:"tenantId"`
+	Status       string     `json:"status"`
+	RequestedAt  time.Time  `json:"requestedAt"`
+	ExecuteAfter time.Time  `json:"executeAfter"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+	LastError    string     `json:"lastError,omitempty"`
+}
+
+type TenantDeletionService interface {
+	Request(ctx context.Context, tenantID, requestedBy string) (TenantDeletionJob, error)
+	Cancel(ctx context.Context, tenantID string) (bool, error)
+	Get(ctx context.Context, tenantID string) (TenantDeletionJob, error)
+}
+
+type TenantDeletionStore interface {
+	RequestDeletion(ctx context.Context, tenantID, requestedBy string, executeAfter time.Time) (TenantDeletionJob, error)
+	CancelDeletion(ctx context.Context, tenantID string) (bool, error)
+	GetDeletion(ctx context.Context, tenantID string) (TenantDeletionJob, error)
+	RunDeletion(ctx context.Context, jobID, tenantID string) error
+	GetDueDeletion(ctx context.Context) (TenantDeletionJob, error)
+}

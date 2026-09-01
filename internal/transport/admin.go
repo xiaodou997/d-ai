@@ -19,6 +19,7 @@ type adminHandlers struct {
 	tenantReader     tenantports.AdminTenantReader
 	tenantLifecycle  tenantports.AdminTenantLifecycle
 	tenantWriter     tenantports.AdminTenantWriter
+	tenantDeletion   tenantports.TenantDeletionService
 	accountRepo      userports.AdminAccountReader
 	accountWriter    userports.AdminAccountWriter
 	accountLifecycle userports.AdminAccountLifecycle
@@ -50,6 +51,7 @@ func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 		tenantReader:    d.TenantReader,
 		tenantLifecycle: d.TenantLifecycle,
 		tenantWriter:    d.TenantWriter,
+		tenantDeletion:  d.TenantDeletion,
 		activations:     d.Activations,
 	}
 }
@@ -144,6 +146,10 @@ func adminTenantStatusToInt(value string) int {
 		return 2
 	case "suspended":
 		return 3
+	case "deleting":
+		return 4
+	case "purging":
+		return 5
 	default:
 		return 1
 	}
@@ -158,6 +164,10 @@ func tenantStatusText(status int) string {
 		return "停用"
 	case 3:
 		return "欠费封禁"
+	case 4:
+		return "删除中"
+	case 5:
+		return "清理中"
 	default:
 		return "未知"
 	}

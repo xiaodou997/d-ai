@@ -8088,6 +8088,50 @@ components:
         - tenantName
         - customerSiteName
       type: object
+    TenantDeletionJob:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/TenantDeletionJob.json
+          format: uri
+          readOnly: true
+          type: string
+        CompletedAt:
+          format: date-time
+          type:
+            - string
+            - "null"
+        ExecuteAfter:
+          format: date-time
+          type: string
+        JobID:
+          type: string
+        LastError:
+          type: string
+        RequestedAt:
+          format: date-time
+          type: string
+        StartedAt:
+          format: date-time
+          type:
+            - string
+            - "null"
+        Status:
+          type: string
+        TenantID:
+          type: string
+      required:
+        - JobID
+        - TenantID
+        - Status
+        - RequestedAt
+        - ExecuteAfter
+        - StartedAt
+        - CompletedAt
+        - LastError
+      type: object
     TenantDetailOutputBody:
       additionalProperties: false
       properties:
@@ -19424,7 +19468,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 删除租户
+      summary: 申请删除租户
       tags:
         - admin-tenants
     get:
@@ -19479,6 +19523,56 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 更新租户
+      tags:
+        - admin-tenants
+  /api/v1/tenants/{id}/deletion:
+    get:
+      operationId: admin-get-tenant-deletion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantDeletionJob"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 查询租户删除状态
+      tags:
+        - admin-tenants
+  /api/v1/tenants/{id}/deletion/cancel:
+    post:
+      operationId: admin-cancel-tenant-deletion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 取消租户删除
       tags:
         - admin-tenants
   /api/v1/tenants/{id}/status:

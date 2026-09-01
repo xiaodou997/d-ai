@@ -271,8 +271,15 @@ func TestTenantRepositoryManagesLifecycleAtomically(t *testing.T) {
 		t.Fatalf("DeleteTenant conflict fixture = deleted:%v err:%v", deleted, err)
 	}
 	deleted, err = repo.DeleteTenant(ctx, "tenant-lifecycle")
-	if err == nil || deleted || !IsTenantReferenced(err) {
+	if err != nil || !deleted {
 		t.Fatalf("DeleteTenant referenced = deleted:%v err:%v", deleted, err)
+	}
+	var remaining int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM iam_accounts WHERE tenant_id = 'tenant-lifecycle'`).Scan(&remaining); err != nil {
+		t.Fatalf("count deleted tenant users: %v", err)
+	}
+	if remaining != 0 {
+		t.Fatalf("deleted tenant users = %d, want 0", remaining)
 	}
 	deleted, err = repo.DeleteTenant(ctx, "missing-lifecycle-tenant")
 	if err != nil || deleted {

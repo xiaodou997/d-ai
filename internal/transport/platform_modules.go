@@ -108,6 +108,7 @@ type AdminTenantModuleDeps struct {
 	TenantReader    tenantports.AdminTenantReader
 	TenantLifecycle tenantports.AdminTenantLifecycle
 	TenantWriter    tenantports.AdminTenantWriter
+	TenantDeletion  tenantports.TenantDeletionService
 	Activations     *auth.ActivationService
 }
 
@@ -358,6 +359,7 @@ func NewPlatformAdminModule(d PlatformAdminModuleDeps) Module {
 			TenantReader:    d.Tenants.TenantReader,
 			TenantLifecycle: d.Tenants.TenantLifecycle,
 			TenantWriter:    d.Tenants.TenantWriter,
+			TenantDeletion:  d.Tenants.TenantDeletion,
 			Activations:     d.Tenants.Activations,
 		},
 		users: adminUsersModule{
