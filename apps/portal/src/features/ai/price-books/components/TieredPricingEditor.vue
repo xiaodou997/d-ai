@@ -7,6 +7,7 @@ import { validateTokenPriceTiers, type TokenPriceTier } from "../pricingTypes";
 const tiers = defineModel<TokenPriceTier[]>({ required: true });
 
 const commonLimits = [64_000, 128_000, 200_000, 272_000, 500_000, 1_000_000];
+const priceStep = 0.000001;
 const validationError = computed(() => validateTokenPriceTiers(tiers.value));
 
 function emptyTier(): TokenPriceTier {
@@ -78,19 +79,19 @@ function rangeLabel(index: number, tier: TokenPriceTier) {
       <div class="price-grid">
         <label>
           <span>输入 $/1M</span>
-          <el-input-number :model-value="tier.input_per_1m_usd" :min="0" :precision="6" :controls="false" @update:model-value="(value?: number) => updateTier(index, { input_per_1m_usd: value ?? 0 })" />
+          <el-input-number :model-value="tier.input_per_1m_usd" :min="0" :step="priceStep" step-strictly :controls="false" @update:model-value="(value?: number) => updateTier(index, { input_per_1m_usd: value ?? 0 })" />
         </label>
         <label>
           <span>输出 $/1M</span>
-          <el-input-number :model-value="tier.output_per_1m_usd" :min="0" :precision="6" :controls="false" @update:model-value="(value?: number) => updateTier(index, { output_per_1m_usd: value ?? 0 })" />
+          <el-input-number :model-value="tier.output_per_1m_usd" :min="0" :step="priceStep" step-strictly :controls="false" @update:model-value="(value?: number) => updateTier(index, { output_per_1m_usd: value ?? 0 })" />
         </label>
         <label>
           <span>缓存写 $/1M</span>
-          <el-input-number :model-value="tier.cache_write_per_1m_usd" :min="0" :precision="6" :controls="false" @update:model-value="(value?: number) => updateTier(index, { cache_write_per_1m_usd: value ?? 0 })" />
+          <el-input-number :model-value="tier.cache_write_per_1m_usd" :min="0" :step="priceStep" step-strictly :controls="false" @update:model-value="(value?: number) => updateTier(index, { cache_write_per_1m_usd: value ?? 0 })" />
         </label>
         <label>
           <span>缓存读 $/1M</span>
-          <el-input-number :model-value="tier.cache_read_per_1m_usd" :min="0" :precision="6" :controls="false" @update:model-value="(value?: number) => updateTier(index, { cache_read_per_1m_usd: value ?? 0 })" />
+          <el-input-number :model-value="tier.cache_read_per_1m_usd" :min="0" :step="priceStep" step-strictly :controls="false" @update:model-value="(value?: number) => updateTier(index, { cache_read_per_1m_usd: value ?? 0 })" />
         </label>
       </div>
     </div>

@@ -29,6 +29,7 @@ const isTokenCap = computed(() => isTokenPricedCapability(form.value.capability_
 const isImageCap = computed(() => form.value.capability_type === "image");
 const isVideoCap = computed(() => form.value.capability_type === "video");
 const isAudioCap = computed(() => form.value.capability_type === "audio_tts" || form.value.capability_type === "audio_stt");
+const priceStep = 0.000001;
 const imagePriceTiers = [
   { value: "1k", label: "1K" },
   { value: "2k", label: "2K" },
@@ -120,7 +121,7 @@ function firstTierLabel(model: LiteLLMPriceModel) {
 
       <template v-else-if="isImageCap">
         <el-form-item label="默认价（每张 USD）" required>
-          <el-input-number v-model="form.image_default_price_usd" :min="0" :precision="6" :controls="false" />
+          <el-input-number v-model="form.image_default_price_usd" :min="0" :step="priceStep" step-strictly :controls="false" />
         </el-form-item>
         <el-form-item label="尺寸档位（每张 USD）">
           <div class="image-tier-list">
@@ -136,7 +137,8 @@ function firstTierLabel(model: LiteLLMPriceModel) {
                 :model-value="imageTierPrice(tier.value)"
                 :disabled="!imageTierConfigured(tier.value)"
                 :min="0"
-                :precision="6"
+                :step="priceStep"
+                step-strictly
                 :controls="false"
                 @update:model-value="setImageTierPrice(tier.value, $event)"
               />
@@ -147,13 +149,13 @@ function firstTierLabel(model: LiteLLMPriceModel) {
 
       <template v-else-if="isVideoCap">
         <el-form-item label="默认价（每秒 USD）" required>
-          <el-input-number v-model="form.video_default_price_usd" :min="0" :precision="6" :controls="false" />
+          <el-input-number v-model="form.video_default_price_usd" :min="0" :step="priceStep" step-strictly :controls="false" />
         </el-form-item>
         <el-form-item label="分辨率价格">
           <div class="resolution-list">
             <div v-for="(price, index) in form.video_prices" :key="index" class="resolution-row">
               <el-input v-model="price.resolution" placeholder="720p" />
-              <el-input-number v-model="price.price" :min="0" :precision="6" :controls="false" />
+              <el-input-number v-model="price.price" :min="0" :step="priceStep" step-strictly :controls="false" />
               <el-button :icon="Delete" circle title="删除规格" @click="removeResolution('video_prices', index)" />
             </div>
             <el-button :icon="Plus" @click="addResolution('video_prices')">添加规格</el-button>
@@ -163,10 +165,10 @@ function firstTierLabel(model: LiteLLMPriceModel) {
 
       <div v-else-if="isAudioCap" class="identity-grid">
         <el-form-item label="TTS USD/1M 字符">
-          <el-input-number v-model="form.audio_tts_per_1m_chars_usd" :min="0" :precision="6" :controls="false" />
+          <el-input-number v-model="form.audio_tts_per_1m_chars_usd" :min="0" :step="priceStep" step-strictly :controls="false" />
         </el-form-item>
         <el-form-item label="STT USD/分钟">
-          <el-input-number v-model="form.audio_stt_per_minute_usd" :min="0" :precision="6" :controls="false" />
+          <el-input-number v-model="form.audio_stt_per_minute_usd" :min="0" :step="priceStep" step-strictly :controls="false" />
         </el-form-item>
       </div>
     </el-form>
