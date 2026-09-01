@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
+
 	commercial "xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/domain"
 )
@@ -33,6 +35,9 @@ func (r *CommercialRepo) ReplaceGroupClientSurfaces(ctx context.Context, scope c
 		`, gid, entry.Surface, entry.BridgeEnabled, commercialStatusOrDefault(entry.Status)); err != nil {
 			return err
 		}
+	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, gid); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -115,17 +120,208 @@ func (r *CommercialRepo) AddGroupTarget(ctx context.Context, scope commercial.Te
 		return commercial.GroupTarget{}, domain.NewValidationError("target_id", "target is not available to tenant")
 	}
 	item, err := scanCommercialGroupTargetRow(tx.QueryRow(ctx, `
-		INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, status)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id::text, group_id::text, target_kind, target_id::text, priority, status, created_at, updated_at
-	`, gid, string(in.TargetKind), tid, in.Priority, commercialStatusOrDefault(in.Status)))
+		INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, routing_weight, status)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
+	`, gid, string(in.TargetKind), tid, in.Priority, in.RoutingWeight, commercialStatusOrDefault(in.Status)))
 	if err != nil {
+		return commercial.GroupTarget{}, err
+	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, gid); err != nil {
 		return commercial.GroupTarget{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return commercial.GroupTarget{}, err
 	}
 	return item, nil
+}
+
+type groupTargetBatchState struct {
+	ID            string
+	TargetKind    string
+	TargetID      string
+	Priority      int
+	RoutingWeight float64
+	Status        string
+}
+
+func groupTargetBatchKey(kind commercial.TargetKind, targetID string) string {
+	return string(kind) + "\x00" + targetID
+}
+
+// ReplaceGroupTargets reconciles a complete desired target set while holding
+// the group row lock. The expected route-policy version makes stale browser
+// drafts fail as one conflict instead of partially applying a sequence of
+// add/update/delete requests.
+func (r *CommercialRepo) ReplaceGroupTargets(ctx context.Context, scope commercial.TenantGroupScope, in commercial.GroupTargetBatchWrite) (commercial.GroupTargetBatchResult, error) {
+	gid, err := akUUID(scope.GroupID)
+	if err != nil {
+		return commercial.GroupTargetBatchResult{}, domain.NewValidationError("group_id", "invalid group_id")
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var actualVersion int64
+	if err := tx.QueryRow(ctx, `
+		SELECT route_policy_version
+		FROM ai_groups
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, gid, scope.TenantID).Scan(&actualVersion); err != nil {
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	if actualVersion != in.ExpectedVersion {
+		return commercial.GroupTargetBatchResult{}, &domain.GroupRoutePolicyConflictError{
+			GroupID:         scope.GroupID,
+			ExpectedVersion: in.ExpectedVersion,
+			ActualVersion:   actualVersion,
+		}
+	}
+
+	current := make(map[string]groupTargetBatchState, len(in.Targets))
+	rows, err := tx.Query(ctx, `
+		SELECT id::text, target_kind, target_id::text, priority, routing_weight, status
+		FROM ai_group_targets
+		WHERE group_id = $1
+		FOR UPDATE
+	`, gid)
+	if err != nil {
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	for rows.Next() {
+		var item groupTargetBatchState
+		if err := rows.Scan(&item.ID, &item.TargetKind, &item.TargetID, &item.Priority, &item.RoutingWeight, &item.Status); err != nil {
+			rows.Close()
+			return commercial.GroupTargetBatchResult{}, err
+		}
+		current[groupTargetBatchKey(commercial.TargetKind(item.TargetKind), item.TargetID)] = item
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	rows.Close()
+
+	desired := make(map[string]commercial.GroupTargetWrite, len(in.Targets))
+	for _, target := range in.Targets {
+		if target.TargetKind != commercial.TargetKindDirectUpstream && target.TargetKind != commercial.TargetKindOAuthPool {
+			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_kind", "unsupported target_kind")
+		}
+		tid, parseErr := akUUID(target.TargetID)
+		if parseErr != nil {
+			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "invalid target_id")
+		}
+		target.TargetID = uuidToString(tid)
+		key := groupTargetBatchKey(target.TargetKind, target.TargetID)
+		if _, exists := desired[key]; exists {
+			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("targets", "duplicate target: "+target.TargetID)
+		}
+		desired[key] = target
+		if _, exists := current[key]; exists {
+			continue
+		}
+		var targetStatus string
+		var allowed bool
+		if err := tx.QueryRow(ctx, `
+			SELECT r.status,
+			       r.tenant_access_mode = 'public' OR EXISTS (
+			         SELECT 1 FROM ai_upstream_resource_tenant_policies rg
+			         WHERE rg.resource_kind = r.resource_kind AND rg.resource_id = r.id
+			           AND rg.tenant_id = $3 AND rg.access_granted
+			       )
+			FROM ai_upstream_resources r
+			WHERE r.resource_kind = $1 AND r.id = $2::uuid
+		`, string(target.TargetKind), target.TargetID, scope.TenantID).Scan(&targetStatus, &allowed); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "target does not exist")
+			}
+			return commercial.GroupTargetBatchResult{}, err
+		}
+		if targetStatus != string(commercial.StatusActive) {
+			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "target must be active")
+		}
+		if !allowed {
+			return commercial.GroupTargetBatchResult{}, domain.NewValidationError("target_id", "target is not available to tenant")
+		}
+	}
+
+	changed := len(current) != len(desired)
+	for key, item := range current {
+		if _, keep := desired[key]; keep {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM ai_group_targets WHERE id = $1::uuid AND group_id = $2`, item.ID, gid); err != nil {
+			return commercial.GroupTargetBatchResult{}, err
+		}
+		changed = true
+	}
+	for key, target := range desired {
+		status := commercialStatusOrDefault(target.Status)
+		if currentItem, exists := current[key]; exists {
+			if currentItem.Priority == target.Priority && currentItem.RoutingWeight == target.RoutingWeight && currentItem.Status == status {
+				continue
+			}
+			changed = true
+			if _, err := tx.Exec(ctx, `
+				UPDATE ai_group_targets
+				SET priority = $1, routing_weight = $2, status = $3, updated_at = now()
+				WHERE id = $4::uuid AND group_id = $5
+			`, target.Priority, target.RoutingWeight, status, currentItem.ID, gid); err != nil {
+				return commercial.GroupTargetBatchResult{}, err
+			}
+			continue
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO ai_group_targets (group_id, target_kind, target_id, priority, routing_weight, status)
+			VALUES ($1, $2, $3::uuid, $4, $5, $6)
+		`, gid, string(target.TargetKind), target.TargetID, target.Priority, target.RoutingWeight, status); err != nil {
+			return commercial.GroupTargetBatchResult{}, err
+		}
+		changed = true
+	}
+
+	version := actualVersion
+	if changed {
+		if err := tx.QueryRow(ctx, `
+			UPDATE ai_groups
+			SET route_policy_version = route_policy_version + 1, updated_at = now()
+			WHERE id = $1 AND tenant_id = $2
+			RETURNING route_policy_version
+		`, gid, scope.TenantID).Scan(&version); err != nil {
+			return commercial.GroupTargetBatchResult{}, err
+		}
+	}
+
+	resultRows, err := tx.Query(ctx, `
+		SELECT id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
+		FROM ai_group_targets
+		WHERE group_id = $1
+		ORDER BY priority ASC, target_kind ASC, target_id ASC
+	`, gid)
+	if err != nil {
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	targets := make([]commercial.GroupTarget, 0, len(desired))
+	for resultRows.Next() {
+		item, scanErr := scanCommercialGroupTargetRow(resultRows)
+		if scanErr != nil {
+			resultRows.Close()
+			return commercial.GroupTargetBatchResult{}, scanErr
+		}
+		targets = append(targets, item)
+	}
+	if err := resultRows.Err(); err != nil {
+		resultRows.Close()
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	resultRows.Close()
+	if err := tx.Commit(ctx); err != nil {
+		return commercial.GroupTargetBatchResult{}, err
+	}
+	return commercial.GroupTargetBatchResult{RoutePolicyVersion: version, Targets: targets}, nil
 }
 
 func (r *CommercialRepo) ListGroupTargets(ctx context.Context, scope commercial.TenantGroupScope) ([]commercial.GroupTarget, error) {
@@ -221,11 +417,14 @@ func (r *CommercialRepo) UpdateGroupTarget(ctx context.Context, scope commercial
 	}
 	item, err := scanCommercialGroupTargetRow(tx.QueryRow(ctx, `
 		UPDATE ai_group_targets
-		SET priority = $1, status = $2, updated_at = now()
-		WHERE id = $3 AND group_id = $4
-		RETURNING id::text, group_id::text, target_kind, target_id::text, priority, status, created_at, updated_at
-	`, in.Priority, commercialStatusOrDefault(in.Status), rid, gid))
+		SET priority = $1, routing_weight = $2, status = $3, updated_at = now()
+		WHERE id = $4 AND group_id = $5
+		RETURNING id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
+	`, in.Priority, in.RoutingWeight, commercialStatusOrDefault(in.Status), rid, gid))
 	if err != nil {
+		return commercial.GroupTarget{}, err
+	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, gid); err != nil {
 		return commercial.GroupTarget{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -265,6 +464,13 @@ func (r *CommercialRepo) DeleteGroupTarget(ctx context.Context, scope commercial
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
+	}
+	groupUUID, err := akUUID(groupID)
+	if err != nil {
+		return err
+	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, groupUUID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }

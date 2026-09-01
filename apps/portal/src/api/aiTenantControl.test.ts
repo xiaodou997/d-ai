@@ -70,4 +70,21 @@ describe("AI tenant control facade", () => {
       pathParams: { groupID: "group/1" }
     });
   });
+
+  it("forwards the versioned atomic group-target replacement contract", async () => {
+    mocks.request.mockResolvedValueOnce({ items: [], total: 0, route_policy_version: 9 });
+    await expect(aiTenantApi.replaceGroupTargets("group/1", {
+      expected_version: 8,
+      targets: [{ account_id: "account-1", priority: 10, routing_weight: 2, status: "active" }]
+    })).resolves.toEqual({ items: [], total: 0, route_policy_version: 9 });
+    expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({
+      method: "PUT",
+      path: "/api/v1/tenants/me/groups/group%2F1/targets",
+      pathParams: { groupID: "group/1" },
+      body: {
+        expected_version: 8,
+        targets: [{ account_id: "account-1", priority: 10, routing_weight: 2, status: "active" }]
+      }
+    });
+  });
 });

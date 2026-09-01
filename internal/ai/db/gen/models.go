@@ -99,6 +99,20 @@ type AiAuditBlob struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type AiAuditInbox struct {
+	ID          int64              `json:"id"`
+	RequestID   string             `json:"request_id"`
+	Payload     []byte             `json:"payload"`
+	Status      string             `json:"status"`
+	Attempts    int32              `json:"attempts"`
+	AvailableAt pgtype.Timestamptz `json:"available_at"`
+	LockedAt    pgtype.Timestamptz `json:"locked_at"`
+	LockedBy    pgtype.Text        `json:"locked_by"`
+	LastError   pgtype.Text        `json:"last_error"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	DeadAt      pgtype.Timestamptz `json:"dead_at"`
+}
+
 type AiBillingRequestAdmission struct {
 	RequestID         string             `json:"request_id"`
 	WindowID          string             `json:"window_id"`
@@ -239,6 +253,9 @@ type AiGroup struct {
 	DefaultUserMultiplier   pgtype.Numeric     `json:"default_user_multiplier"`
 	UserDefaultVisible      bool               `json:"user_default_visible"`
 	AllowProtocolConversion bool               `json:"allow_protocol_conversion"`
+	RouteStrategy           string             `json:"route_strategy"`
+	RouteObjective          string             `json:"route_objective"`
+	RoutePolicyVersion      int64              `json:"route_policy_version"`
 	SortOrder               int32              `json:"sort_order"`
 	Status                  string             `json:"status"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
@@ -270,14 +287,15 @@ type AiGroupModelDispatchRule struct {
 }
 
 type AiGroupTarget struct {
-	ID         pgtype.UUID        `json:"id"`
-	GroupID    pgtype.UUID        `json:"group_id"`
-	TargetKind string             `json:"target_kind"`
-	TargetID   pgtype.UUID        `json:"target_id"`
-	Priority   int32              `json:"priority"`
-	Status     string             `json:"status"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID            pgtype.UUID        `json:"id"`
+	GroupID       pgtype.UUID        `json:"group_id"`
+	TargetKind    string             `json:"target_kind"`
+	TargetID      pgtype.UUID        `json:"target_id"`
+	Priority      int32              `json:"priority"`
+	RoutingWeight pgtype.Numeric     `json:"routing_weight"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiPriceBook struct {
@@ -337,6 +355,23 @@ type AiProviderOauthCredential struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AiProxyNode struct {
+	ID               pgtype.UUID        `json:"id"`
+	Name             string             `json:"name"`
+	ProxyType        string             `json:"proxy_type"`
+	Endpoint         string             `json:"endpoint"`
+	Username         string             `json:"username"`
+	ProxyPasswordEnc string             `json:"proxy_password_enc"`
+	Weight           int32              `json:"weight"`
+	Status           string             `json:"status"`
+	HealthStatus     string             `json:"health_status"`
+	LastCheckedAt    pgtype.Timestamptz `json:"last_checked_at"`
+	LastError        pgtype.Text        `json:"last_error"`
+	CreatedBy        pgtype.Text        `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AiRequestPayload struct {
 	ID                          pgtype.UUID        `json:"id"`
 	RequestID                   string             `json:"request_id"`
@@ -382,13 +417,6 @@ type AiRiskEvent struct {
 	ResolvedAt     pgtype.Timestamptz `json:"resolved_at"`
 	ResolutionNote pgtype.Text        `json:"resolution_note"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-}
-
-type AiRouteScoreWeight struct {
-	ID        pgtype.UUID        `json:"id"`
-	Scope     string             `json:"scope"`
-	Weights   []byte             `json:"weights"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AiRuntimeLimitPolicy struct {
@@ -796,6 +824,15 @@ type AnnReceipt struct {
 	ReadAt         pgtype.Timestamptz `json:"read_at"`
 }
 
+type AuthActivationToken struct {
+	TokenHash  []byte             `json:"token_hash"`
+	UserID     string             `json:"user_id"`
+	Purpose    string             `json:"purpose"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt pgtype.Timestamptz `json:"consumed_at"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
 type AuthAuditLog struct {
 	ID            int64              `json:"id"`
 	EventType     string             `json:"event_type"`
@@ -808,6 +845,29 @@ type AuthAuditLog struct {
 	ReasonMessage pgtype.Text        `json:"reason_message"`
 	Metadata      []byte             `json:"metadata"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuthRefreshToken struct {
+	TokenHash      []byte             `json:"token_hash"`
+	SessionID      pgtype.UUID        `json:"session_id"`
+	Status         string             `json:"status"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
+	ReplacedByHash []byte             `json:"replaced_by_hash"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuthSession struct {
+	SessionID         pgtype.UUID        `json:"session_id"`
+	UserID            string             `json:"user_id"`
+	CredentialVersion int64              `json:"credential_version"`
+	Status            string             `json:"status"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
+	RevokeReason      pgtype.Text        `json:"revoke_reason"`
+	LastRefreshedAt   pgtype.Timestamptz `json:"last_refreshed_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AuthSigningKey struct {
@@ -898,6 +958,34 @@ type BillRefundReversalEffect struct {
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 }
 
+type BillRepairAudit struct {
+	ID             int64              `json:"id"`
+	RepairID       string             `json:"repair_id"`
+	Action         string             `json:"action"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	TargetType     string             `json:"target_type"`
+	TargetID       string             `json:"target_id"`
+	OperatorID     string             `json:"operator_id"`
+	Reason         string             `json:"reason"`
+	BeforeState    []byte             `json:"before_state"`
+	AfterState     []byte             `json:"after_state"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type BillingRechargeOrderProjection struct {
+	OrderID      string             `json:"order_id"`
+	OrderType    string             `json:"order_type"`
+	PaidAmount   int64              `json:"paid_amount"`
+	CreditAmount int64              `json:"credit_amount"`
+	Status       string             `json:"status"`
+	Note         string             `json:"note"`
+	UserID       string             `json:"user_id"`
+	Username     string             `json:"username"`
+	TenantID     string             `json:"tenant_id"`
+	TenantName   string             `json:"tenant_name"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type DaiSchemaMetadatum struct {
 	Singleton     bool               `json:"singleton"`
 	Version       int32              `json:"version"`
@@ -912,30 +1000,37 @@ type FileAccessLink struct {
 }
 
 type FileAsset struct {
-	ID          pgtype.UUID        `json:"id"`
-	StorageKey  string             `json:"storage_key"`
-	ContentType string             `json:"content_type"`
-	SizeBytes   int64              `json:"size_bytes"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	ID                pgtype.UUID        `json:"id"`
+	StorageKey        string             `json:"storage_key"`
+	ContentType       string             `json:"content_type"`
+	SizeBytes         int64              `json:"size_bytes"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
+	CleanupOwner      pgtype.Text        `json:"cleanup_owner"`
+	CleanupLeaseUntil pgtype.Timestamptz `json:"cleanup_lease_until"`
 }
 
 type IamAccount struct {
-	ID           int64              `json:"id"`
-	UserID       string             `json:"user_id"`
-	TenantID     pgtype.Text        `json:"tenant_id"`
-	Username     string             `json:"username"`
-	PasswordHash string             `json:"password_hash"`
-	Email        pgtype.Text        `json:"email"`
-	Phone        pgtype.Text        `json:"phone"`
-	UserType     int32              `json:"user_type"`
-	InternalNote string             `json:"internal_note"`
-	Nickname     pgtype.Text        `json:"nickname"`
-	Avatar       pgtype.Text        `json:"avatar"`
-	Status       string             `json:"status"`
-	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                 int64              `json:"id"`
+	UserID             string             `json:"user_id"`
+	TenantID           pgtype.Text        `json:"tenant_id"`
+	Username           string             `json:"username"`
+	PasswordHash       string             `json:"password_hash"`
+	CredentialVersion  int64              `json:"credential_version"`
+	CredentialState    string             `json:"credential_state"`
+	MfaSecretEncrypted pgtype.Text        `json:"mfa_secret_encrypted"`
+	MfaEnabled         bool               `json:"mfa_enabled"`
+	MfaEnrolledAt      pgtype.Timestamptz `json:"mfa_enrolled_at"`
+	Email              pgtype.Text        `json:"email"`
+	Phone              pgtype.Text        `json:"phone"`
+	UserType           int32              `json:"user_type"`
+	InternalNote       string             `json:"internal_note"`
+	Nickname           pgtype.Text        `json:"nickname"`
+	Avatar             pgtype.Text        `json:"avatar"`
+	Status             string             `json:"status"`
+	LastLoginAt        pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type IamInvitationCode struct {
@@ -1059,6 +1154,10 @@ type PayOrder struct {
 	ExpiresAt              pgtype.Timestamptz `json:"expires_at"`
 	BalanceOrderID         pgtype.Text        `json:"balance_order_id"`
 	FailNote               pgtype.Text        `json:"fail_note"`
+	SweepAttempts          int32              `json:"sweep_attempts"`
+	SweepNextAttemptAt     pgtype.Timestamptz `json:"sweep_next_attempt_at"`
+	SweepLastAttemptAt     pgtype.Timestamptz `json:"sweep_last_attempt_at"`
+	SweepLastError         pgtype.Text        `json:"sweep_last_error"`
 	NotifyRaw              []byte             `json:"notify_raw"`
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
@@ -1128,9 +1227,172 @@ type PayWithdrawal struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PaymentAdminRechargeOrderProjection struct {
+	OrderID                string             `json:"order_id"`
+	BalanceOrderID         string             `json:"balance_order_id"`
+	OrderType              string             `json:"order_type"`
+	Method                 string             `json:"method"`
+	TargetType             string             `json:"target_type"`
+	TenantID               string             `json:"tenant_id"`
+	TenantName             string             `json:"tenant_name"`
+	UserID                 string             `json:"user_id"`
+	Username               string             `json:"username"`
+	PaymentAmountMinor     int64              `json:"payment_amount_minor"`
+	GrossAmountMicroUsd    int64              `json:"gross_amount_micro_usd"`
+	FeeAmountMicroUsd      int64              `json:"fee_amount_micro_usd"`
+	GiftAmountMicroUsd     int64              `json:"gift_amount_micro_usd"`
+	CreditedAmountMicroUsd int64              `json:"credited_amount_micro_usd"`
+	TenantIncomeMicroUsd   int64              `json:"tenant_income_micro_usd"`
+	PaymentStatus          string             `json:"payment_status"`
+	FulfillmentStatus      string             `json:"fulfillment_status"`
+	RefundStatus           string             `json:"refund_status"`
+	OutTradeNo             string             `json:"out_trade_no"`
+	TransactionID          string             `json:"transaction_id"`
+	TopupMode              string             `json:"topup_mode"`
+	PackageName            string             `json:"package_name"`
+	Channel                string             `json:"channel"`
+	Note                   string             `json:"note"`
+	FailNote               string             `json:"fail_note"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+	PaidAt                 pgtype.Timestamptz `json:"paid_at"`
+	PaymentExpiresAt       pgtype.Timestamptz `json:"payment_expires_at"`
+	BalanceExpiresAt       pgtype.Timestamptz `json:"balance_expires_at"`
+	ReversedAt             pgtype.Timestamptz `json:"reversed_at"`
+	ReversedBy             string             `json:"reversed_by"`
+	ReversalReason         string             `json:"reversal_reason"`
+}
+
+type PaymentOrderPartyProjection struct {
+	OrderID    string `json:"order_id"`
+	TenantName string `json:"tenant_name"`
+	Username   string `json:"username"`
+}
+
+type SysDataCleanupRun struct {
+	ID          pgtype.UUID        `json:"id"`
+	Trigger     string             `json:"trigger"`
+	Status      string             `json:"status"`
+	RequestedBy pgtype.Text        `json:"requested_by"`
+	Targets     []byte             `json:"targets"`
+	Summary     []byte             `json:"summary"`
+	Error       pgtype.Text        `json:"error"`
+	OwnerID     pgtype.Text        `json:"owner_id"`
+	HeartbeatAt pgtype.Timestamptz `json:"heartbeat_at"`
+	LeaseUntil  pgtype.Timestamptz `json:"lease_until"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	StartedAt   pgtype.Timestamptz `json:"started_at"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+}
+
+type SysNotificationDelivery struct {
+	ID                pgtype.UUID        `json:"id"`
+	EventKey          string             `json:"event_key"`
+	Channel           string             `json:"channel"`
+	RecipientUserID   pgtype.Text        `json:"recipient_user_id"`
+	RecipientUserType pgtype.Int4        `json:"recipient_user_type"`
+	TenantID          pgtype.Text        `json:"tenant_id"`
+	Title             string             `json:"title"`
+	Body              string             `json:"body"`
+	Payload           []byte             `json:"payload"`
+	Status            string             `json:"status"`
+	Attempts          int32              `json:"attempts"`
+	LastError         pgtype.Text        `json:"last_error"`
+	IdempotencyKey    pgtype.Text        `json:"idempotency_key"`
+	SentAt            pgtype.Timestamptz `json:"sent_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type SysSetting struct {
 	Key       string             `json:"key"`
 	Value     []byte             `json:"value"`
 	UpdatedBy pgtype.Text        `json:"updated_by"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type SystemAccountStatsProjection struct {
+	TenantID           string `json:"tenant_id"`
+	EndUserCount       int64  `json:"end_user_count"`
+	InviteCodeCount    int64  `json:"invite_code_count"`
+	UserDeductionMicro int64  `json:"user_deduction_micro"`
+}
+
+type SystemBalanceProjection struct {
+	AccountKind  int16 `json:"account_kind"`
+	BalanceMicro int64 `json:"balance_micro"`
+}
+
+type SystemIdentityProjection struct {
+	EntityKind string             `json:"entity_kind"`
+	EntityID   string             `json:"entity_id"`
+	Status     string             `json:"status"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type SystemRechargeProjection struct {
+	OrderType    string             `json:"order_type"`
+	PaidAmount   int64              `json:"paid_amount"`
+	CreditAmount int64              `json:"credit_amount"`
+	Status       string             `json:"status"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type SystemUsageProjection struct {
+	TenantID      string             `json:"tenant_id"`
+	RequestSource string             `json:"request_source"`
+	BillingStatus string             `json:"billing_status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	TenantPayable int64              `json:"tenant_payable"`
+	UserCharged   int64              `json:"user_charged"`
+}
+
+type TenantIncomeProjection struct {
+	TenantID       string             `json:"tenant_id"`
+	TxnType        string             `json:"txn_type"`
+	AmountMicroUsd int64              `json:"amount_micro_usd"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type TenantManagementProjection struct {
+	TenantID      string             `json:"tenant_id"`
+	TenantName    string             `json:"tenant_name"`
+	ContactPerson pgtype.Text        `json:"contact_person"`
+	ContactEmail  pgtype.Text        `json:"contact_email"`
+	Status        string             `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	BalanceMicro  int64              `json:"balance_micro"`
+	UserCount     int64              `json:"user_count"`
+}
+
+type TenantSelfOverviewProjection struct {
+	TenantID              string `json:"tenant_id"`
+	EndUserCount          int64  `json:"end_user_count"`
+	InviteCodeCount       int64  `json:"invite_code_count"`
+	UserTotalBalanceMicro int64  `json:"user_total_balance_micro"`
+}
+
+type TenantUsageProjection struct {
+	TenantID      string             `json:"tenant_id"`
+	UserID        pgtype.Text        `json:"user_id"`
+	Username      interface{}        `json:"username"`
+	RequestSource string             `json:"request_source"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	BillingStatus string             `json:"billing_status"`
+	UserCharged   int64              `json:"user_charged"`
+}
+
+type UserAdminEndUserProjection struct {
+	UserID          string             `json:"user_id"`
+	TenantID        pgtype.Text        `json:"tenant_id"`
+	Username        string             `json:"username"`
+	Email           pgtype.Text        `json:"email"`
+	Phone           pgtype.Text        `json:"phone"`
+	InternalNote    string             `json:"internal_note"`
+	Nickname        pgtype.Text        `json:"nickname"`
+	Avatar          pgtype.Text        `json:"avatar"`
+	Status          string             `json:"status"`
+	CredentialState string             `json:"credential_state"`
+	LastLoginAt     pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	TenantName      string             `json:"tenant_name"`
+	BalanceMicro    int64              `json:"balance_micro"`
 }

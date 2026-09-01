@@ -9,6 +9,7 @@ export type GroupTargetKind = "direct_upstream" | "oauth_pool";
 
 export interface GroupTargetDraft {
   priority: number;
+  routing_weight: number;
   status: GroupTargetStatus;
 }
 
@@ -35,6 +36,7 @@ export interface GroupTargetSaveFailure {
   targetKey: string;
   targetName: string;
   message: string;
+  code?: string;
 }
 
 export interface GroupTargetSaveResult {

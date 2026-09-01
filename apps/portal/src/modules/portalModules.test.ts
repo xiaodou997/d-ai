@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(20);
-    expect(leavesFor(2)).toHaveLength(19);
+    expect(leavesFor(1)).toHaveLength(19);
+    expect(leavesFor(2)).toHaveLength(18);
     expect(leavesFor(3)).toHaveLength(14);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -34,7 +34,6 @@ describe("portal module registry", () => {
       "上游账号",
       "账号池",
       "价格表",
-      "路由策略",
       "使用记录",
       "用量分析",
       "审计与风控",
@@ -237,18 +236,16 @@ describe("portal module registry", () => {
     });
   });
 
-  it("exposes routing policy as a standalone AI gateway menu", () => {
-    const aiGatewayMenus = buildPortalNav(1, "/admin/ai/routing")
-      .find((item) => item.id === "admin-ai")
-      ?.children;
-
+  it("keeps upstream, pool and pricing pages as separate admin menus", () => {
+    const aiGatewayMenus = buildPortalNav(1, "/admin/ai/upstreams/accounts")
+      .find((item) => item.id === "admin-ai")?.children;
     expect(aiGatewayMenus).toMatchObject([
       {
         id: "admin-upstream-accounts",
         label: "上游账号",
         to: "/admin/ai/upstreams/accounts",
         icon: "database",
-        active: false
+        active: true
       },
       {
         id: "admin-credential-pools",
@@ -264,20 +261,13 @@ describe("portal module registry", () => {
         icon: "tags",
         active: false
       },
-      {
-        id: "admin-routing-policy",
-        label: "路由策略",
-        to: "/admin/ai/routing",
-        icon: "route",
-        active: true
-      },
       { id: "admin-usage", label: "使用记录", active: false },
       { id: "admin-usage-analytics", label: "用量分析", active: false },
       { id: "admin-security-workspace", label: "审计与风控", active: false }
     ]);
   });
 
-  it("keeps upstream, pool and pricing pages as separate admin menus", () => {
+  it("keeps upstream, pool and pricing pages active independently", () => {
     for (const [path, id] of [
       ["/admin/ai/upstreams/accounts", "admin-upstream-accounts"],
       ["/admin/ai/upstreams/pools", "admin-credential-pools"],

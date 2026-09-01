@@ -24,7 +24,7 @@ dai worker       # 后台任务与管理探针，不监听公共业务端口
 
 ## 生产运行约定
 
-- 所有角色使用同一份 schema v25；生产启动只校验版本，不执行迁移。迁移、备份和恢复按 [`SCHEMA_RELEASE_RUNBOOK.md`](SCHEMA_RELEASE_RUNBOOK.md) 执行。
+- 所有角色使用同一份 schema v27；生产启动只校验版本，不执行迁移。迁移、备份和恢复按 [`SCHEMA_RELEASE_RUNBOOK.md`](SCHEMA_RELEASE_RUNBOOK.md) 执行。
 - 每个角色都应配置独立的 `DAI_SERVER_MANAGEMENT_ADDR`，或通过私有管理网络汇聚 `/health`、`/ready` 和 `/metrics`；业务监听器不承载 Prometheus 抓取。
 - `control-api` 主要受数据库读写和身份/计费流量约束；`gateway` 主要受 Redis、上游连接池和 AI 请求并发约束；`worker` 主要受 Outbox、审计 inbox、异步任务和支付扫单积压约束。对应指标和阈值见 [`OBSERVABILITY_RUNBOOK.md`](OBSERVABILITY_RUNBOOK.md)。
 - 生产容器以非 root 用户运行、根文件系统只读，只有 `/data` 挂载卷可写；临时文件使用 `/tmp` tmpfs。扩容或恢复时不能依赖进程内缓存作为业务真相。

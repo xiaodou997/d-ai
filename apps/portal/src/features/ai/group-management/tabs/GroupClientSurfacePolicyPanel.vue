@@ -7,6 +7,7 @@ import { clientSurfaceOptions } from "../catalog";
 import { useGroupClientSurfacePolicy } from "../composables/useGroupClientSurfacePolicy";
 
 const props = defineProps<{ groupId: string }>();
+const emit = defineEmits<{ changed: [] }>();
 const policy = useGroupClientSurfacePolicy({ groupId: () => props.groupId });
 
 const modeModel = computed<"all" | "restricted">({
@@ -22,6 +23,10 @@ const groupedOptions = [
   { id: "embedding", label: "向量嵌入", icon: ScanSearch, items: clientSurfaceOptions.filter((item) => item.capability === "embedding") },
   { id: "image", label: "图片生成", icon: Image, items: clientSurfaceOptions.filter((item) => item.capability === "image") }
 ];
+
+async function save() {
+  if (await policy.save()) emit("changed");
+}
 
 defineExpose({ confirmDiscardChanges: policy.confirmDiscardChanges });
 </script>
@@ -70,7 +75,7 @@ defineExpose({ confirmDiscardChanges: policy.confirmDiscardChanges });
     </div>
 
     <footer class="panel-footer">
-      <el-button type="primary" :icon="Save" :loading="policy.saving.value" :disabled="!policy.canSave.value" @click="policy.save">保存</el-button>
+      <el-button type="primary" :icon="Save" :loading="policy.saving.value" :disabled="!policy.canSave.value" @click="save">保存</el-button>
     </footer>
   </section>
 </template>

@@ -66,7 +66,26 @@ echo "Creating source backups in $backup_dir"
 docker exec "$source_container" pg_dump -U postgres -d urm -Fc > "$backup_dir/urm.dump"
 # Keep the old AI dump only for offline rollback; it is deliberately not imported.
 docker exec "$source_container" pg_dump -U postgres -d ai_gateway -Fc > "$backup_dir/ai_gateway.dump"
-sha256sum "$backup_dir/urm.dump" "$backup_dir/ai_gateway.dump" > "$backup_dir/SHA256SUMS"
+
+# The v2 cutover deliberately drops the legacy global policy. Preserve a
+# human-readable snapshot before rebuilding the target schema so operators can
+# audit what was removed and recover it from the full dump if needed. The
+# source table is optional because some installations already ran a partial
+# v2 migration.
+legacy_route_policy_file="$backup_dir/legacy_route_score_weights.tsv"
+legacy_route_policy_table=$(source_psql ai_gateway -qAtc \
+  "SELECT CASE WHEN to_regclass('public.ai_route_score_weights') IS NULL THEN '' ELSE 'ai_route_score_weights' END")
+if [[ "$legacy_route_policy_table" == "ai_route_score_weights" ]]; then
+  source_psql ai_gateway -qAt -F $'\t' -c \
+    "SELECT scope, weights::text, updated_at FROM public.ai_route_score_weights ORDER BY scope" \
+    > "$legacy_route_policy_file"
+  legacy_route_policy_state=captured
+else
+  : > "$legacy_route_policy_file"
+  legacy_route_policy_state=absent
+fi
+sha256sum "$backup_dir/urm.dump" "$backup_dir/ai_gateway.dump" \
+  "$legacy_route_policy_file" > "$backup_dir/SHA256SUMS"
 
 echo "Reinitializing isolated D-AI database"
 "${compose[@]}" stop app >/dev/null 2>&1 || true
@@ -240,7 +259,7 @@ BEGIN
     FROM pg_catalog.pg_tables
     WHERE schemaname = 'public'
       AND tablename LIKE 'ai_%'
-      AND tablename NOT IN ('ai_settings', 'ai_route_score_weights')
+      AND tablename NOT IN ('ai_settings')
   LOOP
     EXECUTE format('SELECT count(*) FROM public.%I', row.tablename) INTO row_count;
     IF row_count <> 0 THEN
@@ -292,7 +311,12 @@ target_psql -P pager=off -c "
   FROM bill_credit_packages GROUP BY package_type, status ORDER BY package_type, status;
   SELECT count(*) AS ai_usage_rows FROM ai_usage_logs;
   SELECT key FROM ai_settings ORDER BY key;
-  SELECT scope FROM ai_route_score_weights ORDER BY scope;
+  SELECT route_strategy, route_objective, count(*) AS groups
+  FROM ai_groups GROUP BY route_strategy, route_objective
+  ORDER BY route_strategy, route_objective;
+  SELECT count(*) AS weighted_targets,
+         COALESCE(sum(routing_weight), 0) AS total_routing_weight
+  FROM ai_group_targets;
 "
 
 cat > "$backup_dir/MIGRATION.txt" <<EOF
@@ -304,6 +328,8 @@ target_credit_summary=$target_credit_summary
 ai_data=reset_to_schema_defaults
 ai_usage_history=not_migrated
 ai_file_storage=$ai_file_storage
+legacy_route_policy=$legacy_route_policy_state
+legacy_route_policy_snapshot=$legacy_route_policy_file
 EOF
 
 echo "Migration $mode completed; backup: $backup_dir"

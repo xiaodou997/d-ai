@@ -14,6 +14,9 @@ type Group struct {
 	UserDefaultVisible    bool
 	// 协议转换网关开关：true = 允许本组候选作为跨格式协议转换目标（见 routes.go）。
 	AllowProtocolConversion bool
+	RouteStrategy           string
+	RouteObjective          string
+	RoutePolicyVersion      int64
 	SortOrder               int32
 	Status                  string
 	CreatedAt               time.Time
@@ -52,14 +55,15 @@ type UserGroup struct {
 // ai_group_targets。TargetKind/TargetID 直接表达多态目标，不再保留 account/pool
 // 二选一的过渡壳。
 type GroupTargetBinding struct {
-	ID         string
-	GroupID    string
-	TargetKind string // "direct_upstream" | "oauth_pool"
-	TargetID   string
-	Priority   int32
-	Status     string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID            string
+	GroupID       string
+	TargetKind    string // "direct_upstream" | "oauth_pool"
+	TargetID      string
+	Priority      int32
+	RoutingWeight float64
+	Status        string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // GroupTargetDetail 是 GroupTargetBinding 的列表/详情投影，附目标展示信息。

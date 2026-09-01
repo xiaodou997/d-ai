@@ -3269,6 +3269,22 @@ components:
           type: string
         retail_price_book_name:
           type: string
+        route_objective:
+          enum:
+            - balanced
+            - cost
+            - latency
+            - stability
+          type: string
+        route_policy_version:
+          format: int64
+          type: integer
+        route_strategy:
+          enum:
+            - failover
+            - weighted
+            - adaptive
+          type: string
         sort_order:
           format: int32
           type: integer
@@ -3290,6 +3306,9 @@ components:
         - default_user_multiplier
         - user_default_visible
         - allow_protocol_conversion
+        - route_strategy
+        - route_objective
+        - route_policy_version
         - sort_order
         - status
       type: object
@@ -3311,12 +3330,16 @@ components:
           type: string
         provider_family:
           type: string
+        routing_weight:
+          format: double
+          type: number
         target_type:
           type: string
       required:
         - target_type
         - protocol_conversion
         - priority
+        - routing_weight
       type: object
     GroupDispatchPreviewDTO:
       additionalProperties: false
@@ -3348,10 +3371,25 @@ components:
           type: string
         resolved_logical_model:
           type: string
+        route_objective:
+          enum:
+            - balanced
+            - cost
+            - latency
+            - stability
+          type: string
+        route_strategy:
+          enum:
+            - failover
+            - weighted
+            - adaptive
+          type: string
       required:
         - requested_model
         - client_surface
         - resolved_logical_model
+        - route_strategy
+        - route_objective
         - candidate_upstreams
         - rejected_candidates
       type: object
@@ -3755,6 +3793,37 @@ components:
         - skip
         - error
       type: object
+    GroupRoutePolicyWriteRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/GroupRoutePolicyWriteRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        route_objective:
+          enum:
+            - balanced
+            - cost
+            - latency
+            - stability
+          type: string
+        route_policy_version:
+          format: int64
+          type: integer
+        route_strategy:
+          enum:
+            - failover
+            - weighted
+            - adaptive
+          type: string
+      required:
+        - route_strategy
+        - route_objective
+        - route_policy_version
+      type: object
     GroupTargetDTO:
       additionalProperties: false
       properties:
@@ -3789,6 +3858,9 @@ components:
         priority:
           format: int32
           type: integer
+        routing_weight:
+          format: double
+          type: number
         status:
           type: string
         target_type:
@@ -3804,6 +3876,7 @@ components:
         - id
         - group_id
         - priority
+        - routing_weight
         - status
         - available
       type: object
@@ -3820,6 +3893,9 @@ components:
         priority:
           format: int32
           type: integer
+        routing_weight:
+          format: double
+          type: number
         status:
           enum:
             - active
@@ -3845,6 +3921,9 @@ components:
         priority:
           format: int32
           type: integer
+        routing_weight:
+          format: double
+          type: number
         status:
           enum:
             - active
@@ -3867,12 +3946,16 @@ components:
           type:
             - array
             - "null"
+        route_policy_version:
+          format: int64
+          type: integer
         total:
           format: int64
           type: integer
       required:
         - items
         - total
+        - route_policy_version
       type: object
     GroupTransferBundle:
       additionalProperties: true
@@ -3993,6 +4076,19 @@ components:
             - "null"
         name:
           type: string
+        route_objective:
+          enum:
+            - balanced
+            - cost
+            - latency
+            - stability
+          type: string
+        route_strategy:
+          enum:
+            - failover
+            - weighted
+            - adaptive
+          type: string
         sort_order:
           format: int64
           type: integer
@@ -4008,6 +4104,8 @@ components:
         - default_user_multiplier
         - user_default_visible
         - allow_protocol_conversion
+        - route_strategy
+        - route_objective
         - sort_order
         - status
         - client_surface_policy
@@ -4035,6 +4133,23 @@ components:
         name:
           type: string
         retail_price_book_id:
+          type: string
+        route_objective:
+          enum:
+            - balanced
+            - cost
+            - latency
+            - stability
+          type: string
+        route_policy_version:
+          description: 更新分组时用于防止覆盖较新的路由策略
+          format: int64
+          type: integer
+        route_strategy:
+          enum:
+            - failover
+            - weighted
+            - adaptive
           type: string
         sort_order:
           format: int32
@@ -6430,6 +6545,29 @@ components:
         - refundedAt
         - reason
       type: object
+    ReplaceGroupTargetsRequest:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/ReplaceGroupTargetsRequest.json
+          format: uri
+          readOnly: true
+          type: string
+        expected_version:
+          format: int64
+          type: integer
+        targets:
+          items:
+            $ref: "#/components/schemas/GroupTargetWriteRequest"
+          type:
+            - array
+            - "null"
+      required:
+        - expected_version
+        - targets
+      type: object
     ReplaceTenantUpstreamAccessInputBody:
       additionalProperties: false
       properties:
@@ -6963,26 +7101,6 @@ components:
         - items
         - total
       type: object
-    RouteWeightsOutputBody:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/RouteWeightsOutputBody.json
-          format: uri
-          readOnly: true
-          type: string
-        scope:
-          description: 权重作用域
-          type: string
-        weights:
-          $ref: "#/components/schemas/ScoreWeightsDTO"
-          description: 评分权重
-      required:
-        - scope
-        - weights
-      type: object
     RuleConfig:
       additionalProperties: false
       properties:
@@ -7178,38 +7296,6 @@ components:
             - active
             - disabled
           type: string
-      type: object
-    ScoreWeightsDTO:
-      additionalProperties: false
-      properties:
-        $schema:
-          description: A URL to the JSON Schema for this object.
-          examples:
-            - https://example.com/schemas/ScoreWeightsDTO.json
-          format: uri
-          readOnly: true
-          type: string
-        cost:
-          description: 成本权重
-          format: double
-          type: number
-        health:
-          description: 健康权重
-          format: double
-          type: number
-        latency:
-          description: 延迟权重
-          format: double
-          type: number
-        load:
-          description: 负载权重
-          format: double
-          type: number
-      required:
-        - cost
-        - latency
-        - load
-        - health
       type: object
     Status:
       additionalProperties: false
@@ -15932,67 +16018,6 @@ paths:
       summary: 测试风控检测（关键词 + 审核 API），不落库
       tags:
         - risk-control
-  /api/v1/route-weights/{scope}:
-    get:
-      description: 返回指定 scope 的路由评分权重；底层读取失败时沿用运行时默认权重。
-      operationId: ai-get-route-weights
-      parameters:
-        - description: 权重作用域，例如 global
-          in: path
-          name: scope
-          required: true
-          schema:
-            description: 权重作用域，例如 global
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RouteWeightsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 路由评分权重
-      tags:
-        - system
-    put:
-      description: 保存指定 scope 的路由评分权重；四项权重之和建议为 1.0。
-      operationId: ai-put-route-weights
-      parameters:
-        - description: 权重作用域，例如 global
-          in: path
-          name: scope
-          required: true
-          schema:
-            description: 权重作用域，例如 global
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ScoreWeightsDTO"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RouteWeightsOutputBody"
-          description: OK
-        default:
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/AppError"
-          description: Error
-      summary: 保存路由评分权重
-      tags:
-        - system
   /api/v1/system-admins:
     get:
       operationId: admin-list-system-admins
@@ -17862,6 +17887,37 @@ paths:
       summary: 分组默认用户价格
       tags:
         - groups
+  /api/v1/tenants/me/groups/{groupID}/route-policy:
+    patch:
+      operationId: ai-update-group-route-policy
+      parameters:
+        - in: path
+          name: groupID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupRoutePolicyWriteRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupDTO"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 更新分组路由策略
+      tags:
+        - groups
   /api/v1/tenants/me/groups/{groupID}/status:
     patch:
       operationId: ai-update-group-status
@@ -17948,6 +18004,36 @@ paths:
       summary: 关联上游目标
       tags:
         - groups
+    put:
+      operationId: ai-replace-group-targets
+      parameters:
+        - in: path
+          name: groupID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceGroupTargetsRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupTargetsOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 原子替换分组上游目标配置
+      tags:
+        - groups
   /api/v1/tenants/me/groups/{groupID}/targets/{bindingID}:
     delete:
       operationId: ai-delete-group-target
@@ -18010,7 +18096,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 更新关联(优先级/状态)
+      summary: 更新关联(优先级/权重/状态)
       tags:
         - groups
   /api/v1/tenants/me/price-books:

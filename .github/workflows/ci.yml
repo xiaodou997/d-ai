@@ -94,6 +94,16 @@ jobs:
             exit 1
           fi
 
+      - name: Group route policy atomic integration
+        run: |
+          go test ./internal/ai/adapters/postgres \
+            -run '^TestCommercialRepo(ReplaceGroupTargetsIsAtomicAndVersioned|UpdateGroupRoutePolicyIsVersioned)$' \
+            -count=1 -v 2>&1 | tee /tmp/group-route-policy-tests.log
+          if grep -q '^--- SKIP' /tmp/group-route-policy-tests.log; then
+            echo "::error::group route policy integration test was skipped"
+            exit 1
+          fi
+
       - name: Billing invariant lifecycle suite
         run: go test ./internal/billing/invariants -count=1 -v
 

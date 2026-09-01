@@ -66,6 +66,17 @@ func (r *CommercialRepo) ApplyGroupImport(ctx context.Context, tenantID string, 
 	defer tx.Rollback(ctx)
 
 	preview := item.Preview
+	strategy := item.Source.RouteStrategy
+	if strategy == "" {
+		strategy = commercial.RouteStrategyAdaptive
+	}
+	objective := item.Source.RouteObjective
+	if objective == "" {
+		objective = commercial.RouteObjectiveBalanced
+	}
+	if strategy != commercial.RouteStrategyAdaptive {
+		objective = commercial.RouteObjectiveBalanced
+	}
 	var existing commercial.GroupConfigurationSnapshot
 	if preview.Action == commercial.GroupImportActionUpdate {
 		var lockedID string
@@ -109,12 +120,12 @@ func (r *CommercialRepo) ApplyGroupImport(ctx context.Context, tenantID string, 
 		err = tx.QueryRow(ctx, `
 			INSERT INTO ai_groups (
 				tenant_id, name, description, retail_price_book_id, default_user_multiplier,
-				user_default_visible, allow_protocol_conversion, sort_order, status
-			) VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9)
+				user_default_visible, allow_protocol_conversion, route_strategy, route_objective, sort_order, status
+			) VALUES ($1, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10, $11)
 			RETURNING id::text
 		`, tenantID, preview.TargetName, item.Source.Description, preview.PriceBookID,
 			item.Source.DefaultUserMultiplier, item.Source.UserDefaultVisible,
-			item.Source.AllowProtocolConversion, item.Source.SortOrder, string(appliedStatus)).Scan(&groupID)
+			item.Source.AllowProtocolConversion, string(strategy), string(objective), item.Source.SortOrder, string(appliedStatus)).Scan(&groupID)
 		if err != nil {
 			return commercial.AppliedGroupImport{}, err
 		}
@@ -127,13 +138,16 @@ func (r *CommercialRepo) ApplyGroupImport(ctx context.Context, tenantID string, 
 				    default_user_multiplier = $5,
 				    user_default_visible = $6,
 				    allow_protocol_conversion = $7,
-				    sort_order = $8,
-				    status = $9,
+				    route_strategy = $8,
+				    route_objective = $9,
+				    route_policy_version = route_policy_version + 1,
+				    sort_order = $10,
+				    status = $11,
 				    updated_at = now()
-				WHERE id = $1::uuid AND tenant_id = $10
+				WHERE id = $1::uuid AND tenant_id = $12
 		`, groupID, preview.TargetName, item.Source.Description, preview.PriceBookID,
 			item.Source.DefaultUserMultiplier, item.Source.UserDefaultVisible,
-			item.Source.AllowProtocolConversion, item.Source.SortOrder, string(appliedStatus), tenantID)
+			item.Source.AllowProtocolConversion, string(strategy), string(objective), item.Source.SortOrder, string(appliedStatus), tenantID)
 		if err != nil {
 			return commercial.AppliedGroupImport{}, err
 		}
@@ -212,6 +226,7 @@ func loadGroupConfigurationSnapshots(ctx context.Context, db groupTransferQuerie
 	rows, err := db.Query(ctx, fmt.Sprintf(`
 		SELECT g.id::text, g.name, g.description, g.retail_price_book_id::text,
 		       g.default_user_multiplier, g.user_default_visible, g.allow_protocol_conversion,
+		       g.route_strategy, g.route_objective,
 		       g.sort_order, g.status,
 		       (SELECT COUNT(*) FROM ai_group_targets gt WHERE gt.group_id = g.id AND gt.status = 'active')
 		FROM ai_groups g
@@ -232,6 +247,7 @@ func loadGroupConfigurationSnapshots(ctx context.Context, db groupTransferQuerie
 		if err := rows.Scan(
 			&item.GroupID, &item.Configuration.Name, &item.Configuration.Description, &item.PriceBookID,
 			&multiplier, &item.Configuration.UserDefaultVisible, &item.Configuration.AllowProtocolConversion,
+			&item.Configuration.RouteStrategy, &item.Configuration.RouteObjective,
 			&item.Configuration.SortOrder, &status, &activeTargets,
 		); err != nil {
 			return nil, err

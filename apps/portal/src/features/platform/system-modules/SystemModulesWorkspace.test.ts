@@ -94,7 +94,7 @@ describe("SystemModulesWorkspace", () => {
   });
 
   it("refreshes the body purge preview before asking for confirmation", async () => {
-    const prompt = vi.spyOn(ElMessageBox, "prompt").mockResolvedValue({ value: "CLEANUP_DATA", action: "confirm" });
+    const prompt = vi.spyOn(ElMessageBox, "prompt").mockResolvedValue({ value: "CLEANUP_DATA", action: "confirm" } as never);
     api.purgeRequestBodies.mockResolvedValue({ id: "run-1", summary: {} });
     const { wrapper } = await mountWorkspace();
 

@@ -8,8 +8,6 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"xiaodou/dai/internal/ai/routing"
-	"xiaodou/dai/internal/ai/serving"
-	"xiaodou/dai/libs/go/httpx"
 )
 
 type systemStatusOutput struct {
@@ -44,29 +42,6 @@ type healthRecordDTO struct {
 	NextProbeAt *int64 `json:"next_probe_at,omitempty" doc:"下次探测时间，Unix 毫秒"`
 }
 
-type routeWeightsInput struct {
-	Scope string `path:"scope" doc:"权重作用域，例如 global"`
-}
-
-type scoreWeightsDTO struct {
-	Cost    float64 `json:"cost" doc:"成本权重"`
-	Latency float64 `json:"latency" doc:"延迟权重"`
-	Load    float64 `json:"load" doc:"负载权重"`
-	Health  float64 `json:"health" doc:"健康权重"`
-}
-
-type routeWeightsOutput struct {
-	Body struct {
-		Scope   string          `json:"scope" doc:"权重作用域"`
-		Weights scoreWeightsDTO `json:"weights" doc:"评分权重"`
-	}
-}
-
-type putRouteWeightsInput struct {
-	Scope string `path:"scope" doc:"权重作用域，例如 global"`
-	Body  scoreWeightsDTO
-}
-
 func registerSystem(api huma.API, d SystemHTTPDeps) {
 	huma.Register(api, huma.Operation{
 		OperationID: "ai-get-system-status",
@@ -81,55 +56,6 @@ func registerSystem(api huma.API, d SystemHTTPDeps) {
 		out.Body.DB = componentProbeStatus(ctx, d.DatabaseHealth)
 		out.Body.Redis = componentProbeStatus(ctx, d.RedisHealth)
 		out.Body.Health = healthSummaryFromTracker(d.Health)
-		return out, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-get-route-weights",
-		Method:      http.MethodGet,
-		Path:        "/api/v1/route-weights/{scope}",
-		Summary:     "路由评分权重",
-		Description: "返回指定 scope 的路由评分权重；底层读取失败时沿用运行时默认权重。",
-		Tags:        []string{"system"},
-	}, func(ctx context.Context, in *routeWeightsInput) (*routeWeightsOutput, error) {
-		if d.Weights == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("route weights store is not configured")
-		}
-		if in.Scope == "" {
-			return nil, httpx.ErrBadRequest.WithDetail("scope path param is required")
-		}
-		out := &routeWeightsOutput{}
-		out.Body.Scope = in.Scope
-		out.Body.Weights = scoreWeightsToDTO(d.Weights.Get(ctx, in.Scope))
-		return out, nil
-	})
-
-	huma.Register(api, huma.Operation{
-		OperationID: "ai-put-route-weights",
-		Method:      http.MethodPut,
-		Path:        "/api/v1/route-weights/{scope}",
-		Summary:     "保存路由评分权重",
-		Description: "保存指定 scope 的路由评分权重；四项权重之和建议为 1.0。",
-		Tags:        []string{"system"},
-	}, func(ctx context.Context, in *putRouteWeightsInput) (*routeWeightsOutput, error) {
-		if d.Weights == nil {
-			return nil, httpx.ErrUnavailable.WithDetail("route weights store is not configured")
-		}
-		if in.Scope == "" {
-			return nil, httpx.ErrBadRequest.WithDetail("scope path param is required")
-		}
-		weights := serving.ScoreWeights{
-			Cost:    in.Body.Cost,
-			Latency: in.Body.Latency,
-			Load:    in.Body.Load,
-			Health:  in.Body.Health,
-		}
-		if err := d.Weights.Upsert(ctx, in.Scope, weights); err != nil {
-			return nil, mapServiceError(err)
-		}
-		out := &routeWeightsOutput{}
-		out.Body.Scope = in.Scope
-		out.Body.Weights = scoreWeightsToDTO(d.Weights.Get(ctx, in.Scope))
 		return out, nil
 	})
 }
@@ -184,14 +110,5 @@ func healthTargetKindToString(kind routing.TargetKind) string {
 		return "pool"
 	default:
 		return "unknown"
-	}
-}
-
-func scoreWeightsToDTO(weights serving.ScoreWeights) scoreWeightsDTO {
-	return scoreWeightsDTO{
-		Cost:    weights.Cost,
-		Latency: weights.Latency,
-		Load:    weights.Load,
-		Health:  weights.Health,
 	}
 }

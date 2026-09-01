@@ -174,6 +174,8 @@ type RouteCandidate struct {
 	MatchedDispatchRuleSummary   string
 	ResolvedProviderFamily       string
 	GroupAllowProtocolConversion bool
+	RouteStrategy                string
+	RouteObjective               string
 
 	// Account-based route fields (API Key type)
 	UpstreamModel               string // 显式上游模型绑定中的真实模型名
@@ -208,6 +210,7 @@ type RouteCandidate struct {
 	// 评分提示：CostPer1kTokens 供 scorer 计算成本分项（1/cost；0 = 免费路由，
 	// scorer 以 costCapFree 兜底）。来自售价表 first-tier input+output × 1000 × tenant_multiplier。
 	CostPer1kTokens float64 // 0 for free/pool routes → scorer treats as very cheap
+	RoutingWeight   float64
 
 	// 租户结算绑定。按对外 ModelCode + CapabilityType 查价，不暴露或依赖上游真实模型名。
 	AccountPriceBookID string

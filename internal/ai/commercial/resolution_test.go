@@ -7,7 +7,6 @@ import (
 
 	"xiaodou/dai/internal/ai/core/catalog"
 	"xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/core/routing"
 	"xiaodou/dai/internal/ai/core/surface"
 )
 
@@ -401,6 +400,10 @@ func (s *resolutionRepoStub) UpdateGroup(context.Context, TenantGroupScope, Grou
 	return Group{}, nil
 }
 
+func (s *resolutionRepoStub) UpdateGroupRoutePolicy(context.Context, TenantGroupScope, GroupRoutePolicyWrite) (Group, error) {
+	return Group{}, nil
+}
+
 func (s *resolutionRepoStub) UpdateGroupStatus(context.Context, TenantGroupScope, Status) (Group, error) {
 	return Group{}, nil
 }
@@ -473,6 +476,10 @@ func (s *resolutionRepoStub) DeleteGroupTarget(context.Context, TenantGroupScope
 	return nil
 }
 
+func (s *resolutionRepoStub) ReplaceGroupTargets(context.Context, TenantGroupScope, GroupTargetBatchWrite) (GroupTargetBatchResult, error) {
+	return GroupTargetBatchResult{}, nil
+}
+
 func (s *resolutionRepoStub) AddDispatchRule(context.Context, TenantGroupScope, DispatchRuleWrite) (DispatchRule, error) {
 	return DispatchRule{}, nil
 }
@@ -531,12 +538,4 @@ func (s *resolutionRepoStub) UpdateLimitPolicyStatus(context.Context, string, St
 
 func (s *resolutionRepoStub) DeleteLimitPolicies(context.Context, LimitPolicyFilter) error {
 	return nil
-}
-
-func (s *resolutionRepoStub) UpsertRoutingPolicy(context.Context, RoutingPolicyWrite) (routing.Policy, error) {
-	return routing.Policy{}, nil
-}
-
-func (s *resolutionRepoStub) ListRoutingPolicies(context.Context) ([]routing.Policy, error) {
-	return nil, nil
 }

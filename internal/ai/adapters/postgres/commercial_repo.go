@@ -7,11 +7,9 @@ import (
 	dbgen "xiaodou/dai/internal/ai/db/gen"
 )
 
-const (
-	legacyRoutingScopeGlobal = "global"
-)
+const ()
 
-// CommercialRepo adapts the current group/limit/route-weight storage to the
+// CommercialRepo adapts the current group/limit/group-route-policy storage to the
 // rebuilt commercial repository port. This bridge is intentionally honest:
 // only capabilities that already have a real legacy backing store are wired.
 // Features that need the rebuilt schema stay explicitly unavailable instead of
@@ -21,7 +19,6 @@ type CommercialRepo struct {
 	pool            *translatingPool
 	group           *GroupRepo
 	limit           *LimitRepo
-	weights         *RouteWeightsStore
 	runtimeResolver *coreruntime.Resolver
 }
 
@@ -34,11 +31,10 @@ func (r *CommercialRepo) WithRuntimeResolver(resolver *coreruntime.Resolver) *Co
 
 func NewCommercialRepo(q *dbgen.Queries, pool *pgxpool.Pool) *CommercialRepo {
 	return &CommercialRepo{
-		q:       q,
-		pool:    newTranslatingPool(pool),
-		group:   NewGroupRepo(q, pool),
-		limit:   NewLimitRepo(q),
-		weights: NewRouteWeightsStore(pool),
+		q:     q,
+		pool:  newTranslatingPool(pool),
+		group: NewGroupRepo(q, pool),
+		limit: NewLimitRepo(q),
 	}
 }
 

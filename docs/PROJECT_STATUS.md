@@ -1,6 +1,6 @@
 # D-AI 项目状态与实施清单
 
-更新日期：2026-08-30
+更新日期：2026-09-01
 
 ## 当前结论
 
@@ -9,10 +9,10 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 ## 已完成
 
 - 身份、权限、计费和 AI 能力运行在同一个 Go 进程、PostgreSQL 数据库和二进制入口中。
-- 数据库使用 `internal/db/init.sql` schema v25 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
-- `internal/db/changes/` 保存 v1→v25 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
+- 数据库使用 `internal/db/init.sql` schema v27 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
+- `internal/db/changes/` 保存 v1→v27 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
 - 平台管理端及 AI 管理端的状态变更、密钥/支付/Provider/路由/风控配置写操作统一要求 10 分钟内近期密码或 MFA 认证；只读查询保持可用。
-- `gateway` 角色只注册 runtime/file/console 路由，Portal 仅由 `all` 和 `control-api` 提供；账户统计和租户收入统计统一读取 schema v25 只读投影视图。
+- `gateway` 角色只注册 runtime/file/console 路由，Portal 仅由 `all` 和 `control-api` 提供；账户统计和租户收入统计统一读取 schema v25 只读投影视图，分组路由配置由 schema v26/v27 提供。
 - `make dev` 负责本地配置、PostgreSQL、Redis、空库初始化和后端启动，不升级已有数据库。
 - Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。
 - API facade、领域类型、请求适配器、鉴权、shell、DsUI 和 billing 能力均在 `apps/portal/src` 内通过清晰目录边界组织。
@@ -20,8 +20,9 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 - `cmd/openapi` 从统一 Go route registration 导出 `contracts/openapi.yaml`。
 - `apps/portal/scripts/generate.mjs` 只消费统一契约，并生成 `apps/portal/src/api/generated/dai.ts`；`ensure:api` 在契约或生成物缺失/过期时失败。
 - 登录上下文已统一为单一 `portal`；后端根据账号凭证跨管理员、租户用户和终端用户表解析 `userType`，Portal 再按身份和权限生成菜单、路由与主题。
-- 浏览器 Mock 验收覆盖四种 `userType`、桌面/移动视口、Axe 无障碍和充值/退款冲正/订阅/AI 工作流；Portal 当前 137 个测试文件、400 个测试通过。
+- 浏览器 Mock 验收覆盖四种 `userType`、桌面/移动视口、Axe 无障碍和充值/退款冲正/订阅/AI 工作流；Portal 当前 135 个测试文件、399 个测试通过。
 - HTTP 请求已接入 Prometheus 指标和 chi 路由模板标签；请求日志提取 W3C Trace Context 并记录 `trace_id`/`span_id`，数据库池、Outbox、支付扫单、异步任务和审计 inbox 均有可观测信号。
+- 路由策略已从旧的全局评分权重重构为分组拥有的策略文档：分组定义 failover/weighted/adaptive 与 adaptive objective，目标定义 priority/routing weight；策略与目标控制面支持版本化原子写入，运行时 attempt/trace/metrics 保留选择原因。
 - 生产镜像默认使用非 root、只读根文件系统、临时目录和最小 Linux capability；release 可生成 SPDX SBOM、provenance 和 SHA256 清单。
 
 ## 目录约定
@@ -34,7 +35,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 | Portal 平台层 | `apps/portal/src/platform` | 环境、鉴权、路由、shell 和公共工作区 |
 | Portal 设计系统 | `apps/portal/src/shared/ui` | token、DsUI 组件和布局 |
 | Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
-| 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v25 新库基线、v1→v25 forward-only 人工变更和结构门禁 |
+| 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v27 新库基线、v1→v27 forward-only 人工变更和结构门禁 |
 
 ## 本轮重构收口状态
 
@@ -69,18 +70,22 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 | --- | --- |
 | `bun run typecheck` | 通过 |
 | `bun run build:frontend` | 通过，产物写入 `cmd/server/frontend_dist` |
-| `bun run test` | 137 个测试文件、400 个测试通过 |
+| `bun run test` | 135 个测试文件、399 个测试通过 |
 | `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
 | `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
-| `go run ./cmd/checkschema` | 通过，schema v1→v25、24 个 forward migration 连续且与基线一致 |
+| `go run ./cmd/checkschema` | 通过，schema v1→v27、26 个 forward migration 连续且与基线一致 |
 | `bun run validate:frontend-quality` | 通过；显式 `any` 仅允许在已审查基线内 |
 | `golangci-lint` v2.12.2 + `staticcheck ./...` | 通过；未使用目录级或全局 ignore |
 | `govulncheck ./...`（Go 1.26.6） | 通过；0 个受影响漏洞 |
 | `make build-linux-amd64` + release metadata | 通过；生成 SBOM、provenance 和 SHA256 清单 |
 | `make dev`、后端 health/management-ready/info | 本地可验证；目标环境真实验收在上线后执行 |
-| `go test ./...` | 通过 |
+| `go test ./...` | 受当前沙箱禁止 `httptest`/Redis 本地监听影响未能完整执行；可编译测试、定向单元测试通过，完整集成测试在 CI 执行 |
 
 ## 后续顺序
 
-1. 合并并运行 P3 CI 门禁，修复目标环境中出现的工具或依赖兼容问题。
-2. 上线后执行真实 `/health`、`/ready`、Portal、API、流式响应和支付 Provider 验收。
+1. 在具备 PostgreSQL/Redis 监听权限的 CI 环境执行分组目标批量替换、迁移链和完整 Go 集成测试。
+2. 合并并运行 P3 CI 门禁，修复目标环境中出现的工具或依赖兼容问题。
+3. 上线后执行真实 `/health`、`/ready`、Portal、API、流式响应和支付 Provider 验收。
+
+其中，`make test-group-route-policy` 可单独运行分组目标原子替换与乐观并发冲突测试；它与 CI
+中的同名门禁都要求数据库测试实际执行，不接受 skip 作为绿色结果。

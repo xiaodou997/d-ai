@@ -220,12 +220,11 @@ type AIUserSelfReadHTTPDeps struct {
 }
 
 // AISystemHTTPDeps contains the collaborators owned by the independently
-// registered system status and route-weight HTTP module.
+// registered system status HTTP module.
 type AISystemHTTPDeps struct {
 	DatabaseHealth aitransport.ComponentHealthProbe
 	RedisHealth    aitransport.ComponentHealthProbe
 	Health         routing.HealthTracker
-	Weights        aitransport.ScoreWeightsStore
 	BanChecker     aitransport.HumaBanChecker
 }
 
@@ -714,7 +713,6 @@ func buildSystemHTTPDeps(platform aiPlatformDeps, d AISystemHTTPDeps) aitranspor
 		DatabaseHealth: d.DatabaseHealth,
 		RedisHealth:    d.RedisHealth,
 		Health:         d.Health,
-		Weights:        d.Weights,
 	}
 }
 

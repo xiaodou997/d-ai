@@ -1,9 +1,8 @@
 package commercial
 
 import (
+	"math"
 	"testing"
-
-	"xiaodou/dai/internal/ai/core/routing"
 )
 
 func TestNormalizeGroupWriteDefaults(t *testing.T) {
@@ -24,6 +23,54 @@ func TestNormalizeGroupWriteDefaults(t *testing.T) {
 	}
 	if got.Status != StatusActive {
 		t.Fatalf("status = %q", got.Status)
+	}
+}
+
+func TestNormalizeGroupWriteCanonicalizesObjectiveForFailover(t *testing.T) {
+	t.Parallel()
+
+	got, err := normalizeGroupWrite(GroupWrite{
+		Name:              "primary",
+		RetailPriceBookID: "pb_1",
+		RouteStrategy:     RouteStrategyFailover,
+		RouteObjective:    RouteObjectiveLatency,
+	})
+	if err != nil {
+		t.Fatalf("normalizeGroupWrite: %v", err)
+	}
+	if got.RouteObjective != RouteObjectiveBalanced {
+		t.Fatalf("objective = %q, want %q for failover", got.RouteObjective, RouteObjectiveBalanced)
+	}
+}
+
+func TestNormalizeGroupWriteRejectsNonFinitePolicyNumbers(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), maxGroupPolicyNumber + 1} {
+		if _, err := normalizeGroupWrite(GroupWrite{
+			Name:                  "invalid",
+			RetailPriceBookID:     "pb_1",
+			DefaultUserMultiplier: value,
+		}); err == nil {
+			t.Fatalf("normalizeGroupWrite accepted default multiplier %v", value)
+		}
+		if _, err := normalizeGroupTargetWrite(GroupTargetWrite{
+			TargetKind:    TargetKindDirectUpstream,
+			TargetID:      "upstream-1",
+			RoutingWeight: value,
+		}); err == nil {
+			t.Fatalf("normalizeGroupTargetWrite accepted routing weight %v", value)
+		}
+	}
+}
+
+func TestNormalizeGroupWriteRejectsNegativeRoutePolicyVersion(t *testing.T) {
+	t.Parallel()
+
+	if _, err := normalizeGroupWrite(GroupWrite{
+		Name: "stale", RetailPriceBookID: "pb_1", ExpectedRoutePolicyVersion: -1,
+	}); err == nil {
+		t.Fatal("normalizeGroupWrite accepted a negative route policy version")
 	}
 }
 
@@ -49,37 +96,6 @@ func TestNormalizeLimitPolicyRejectsNegativeConcurrency(t *testing.T) {
 		ScopeType:        LimitScopeTenant,
 		ScopeID:          "tenant_1",
 		ConcurrencyLimit: &concurrency,
-	})
-	if err == nil {
-		t.Fatal("expected validation error")
-	}
-}
-
-func TestNormalizeRoutingPolicyWriteDefaultsGlobalScope(t *testing.T) {
-	t.Parallel()
-
-	got, err := normalizeRoutingPolicyWrite(RoutingPolicyWrite{
-		ScopeType: routing.ScopeGlobal,
-		Weights: routing.WeightSet{
-			Cost:    0.4,
-			Latency: 0.3,
-			Load:    0.2,
-			Health:  0.1,
-		},
-	})
-	if err != nil {
-		t.Fatalf("normalizeRoutingPolicyWrite: %v", err)
-	}
-	if got.ScopeID != "global" {
-		t.Fatalf("scope_id = %q", got.ScopeID)
-	}
-}
-
-func TestNormalizeRoutingPolicyWriteRejectsZeroWeights(t *testing.T) {
-	t.Parallel()
-
-	_, err := normalizeRoutingPolicyWrite(RoutingPolicyWrite{
-		ScopeType: routing.ScopeGlobal,
 	})
 	if err == nil {
 		t.Fatal("expected validation error")

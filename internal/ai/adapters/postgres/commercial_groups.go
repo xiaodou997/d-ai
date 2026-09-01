@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
 	commercial "xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/core/surface"
 	dbgen "xiaodou/dai/internal/ai/db/gen"
@@ -32,6 +34,8 @@ func (r *CommercialRepo) CreateGroup(ctx context.Context, tenantID string, in co
 		DefaultUserMultiplier:   floatToNumeric(in.DefaultUserMultiplier),
 		UserDefaultVisible:      in.UserDefaultVisible,
 		AllowProtocolConversion: in.AllowProtocolConversion,
+		RouteStrategy:           string(in.RouteStrategy),
+		RouteObjective:          string(in.RouteObjective),
 		SortOrder:               int32(in.SortOrder),
 		Status:                  commercialStatusOrDefault(in.Status),
 	})
@@ -82,6 +86,12 @@ func (r *CommercialRepo) UpdateGroup(ctx context.Context, scope commercial.Tenan
 	if err != nil {
 		return commercial.Group{}, err
 	}
+	if in.ExpectedRoutePolicyVersion > 0 && current.RoutePolicyVersion != in.ExpectedRoutePolicyVersion {
+		return commercial.Group{}, &domain.GroupRoutePolicyConflictError{
+			GroupID: scope.GroupID, ExpectedVersion: in.ExpectedRoutePolicyVersion,
+			ActualVersion: current.RoutePolicyVersion,
+		}
+	}
 	name := commercialNameOrCode(in.Name, in.Code)
 	if err := validateVisibleActivePriceBook(ctx, tx, scope.TenantID, priceBookID, current.ID, name); err != nil {
 		return commercial.Group{}, err
@@ -103,9 +113,56 @@ func (r *CommercialRepo) UpdateGroup(ctx context.Context, scope commercial.Tenan
 		DefaultUserMultiplier:   floatToNumeric(in.DefaultUserMultiplier),
 		UserDefaultVisible:      in.UserDefaultVisible,
 		AllowProtocolConversion: in.AllowProtocolConversion,
+		RouteStrategy:           string(in.RouteStrategy),
+		RouteObjective:          string(in.RouteObjective),
 		SortOrder:               int32(in.SortOrder),
 		Status:                  nextStatus,
 		TenantID:                scope.TenantID,
+	})
+	if err != nil {
+		return commercial.Group{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return commercial.Group{}, err
+	}
+	return legacyGroupToCommercial(groupFromRow(item)), nil
+}
+
+// UpdateGroupRoutePolicy changes only the route-policy columns. Keeping this
+// mutation separate from UpdateGroup prevents a route-policy save in the
+// tenant UI from racing with unrelated pricing or visibility edits.
+func (r *CommercialRepo) UpdateGroupRoutePolicy(ctx context.Context, scope commercial.TenantGroupScope, in commercial.GroupRoutePolicyWrite) (commercial.Group, error) {
+	gid, err := akUUID(scope.GroupID)
+	if err != nil {
+		return commercial.Group{}, domain.NewValidationError("id", "invalid id")
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return commercial.Group{}, err
+	}
+	defer tx.Rollback(ctx)
+	var actualVersion int64
+	if err := tx.QueryRow(ctx, `
+		SELECT route_policy_version
+		FROM ai_groups
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, gid, scope.TenantID).Scan(&actualVersion); err != nil {
+		return commercial.Group{}, err
+	}
+	if actualVersion != in.ExpectedVersion {
+		return commercial.Group{}, &domain.GroupRoutePolicyConflictError{
+			GroupID:         scope.GroupID,
+			ExpectedVersion: in.ExpectedVersion,
+			ActualVersion:   actualVersion,
+		}
+	}
+	item, err := queriesWithTx(tx).UpdateGroupRoutePolicy(ctx, dbgen.UpdateGroupRoutePolicyParams{
+		ID:                 gid,
+		RouteStrategy:      string(in.RouteStrategy),
+		RouteObjective:     string(in.RouteObjective),
+		TenantID:           scope.TenantID,
+		RoutePolicyVersion: in.ExpectedVersion,
 	})
 	if err != nil {
 		return commercial.Group{}, err
@@ -231,7 +288,7 @@ func (r *CommercialRepo) LoadDispatchData(ctx context.Context, tenantID string, 
 		ORDER BY r.group_id, r.priority ASC, r.created_at ASC, r.id ASC
 	`, ids, tenantID)
 	batch.Queue(`
-		SELECT id::text, group_id::text, target_kind, target_id::text, priority, status, created_at, updated_at
+		SELECT id::text, group_id::text, target_kind, target_id::text, priority, routing_weight, status, created_at, updated_at
 		FROM ai_group_targets gt
 		WHERE gt.group_id = ANY($1::uuid[])
 		  AND EXISTS (
@@ -409,6 +466,7 @@ func scanCommercialGroupTargetRow(scanner interface {
 		item               commercial.GroupTarget
 		targetKind, status string
 		priority           int32
+		routingWeight      float64
 	)
 	if err := scanner.Scan(
 		&item.ID,
@@ -416,6 +474,7 @@ func scanCommercialGroupTargetRow(scanner interface {
 		&targetKind,
 		&item.TargetID,
 		&priority,
+		&routingWeight,
 		&status,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -424,6 +483,7 @@ func scanCommercialGroupTargetRow(scanner interface {
 	}
 	item.TargetKind = commercial.TargetKind(targetKind)
 	item.Priority = int(priority)
+	item.RoutingWeight = routingWeight
 	item.Status = commercial.Status(status)
 	return item, nil
 }

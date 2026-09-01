@@ -1914,30 +1914,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/route-weights/{scope}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 路由评分权重
-         * @description 返回指定 scope 的路由评分权重；底层读取失败时沿用运行时默认权重。
-         */
-        get: operations["ai-get-route-weights"];
-        /**
-         * 保存路由评分权重
-         * @description 保存指定 scope 的路由评分权重；四项权重之和建议为 1.0。
-         */
-        put: operations["ai-put-route-weights"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/system-admins": {
         parameters: {
             query?: never;
@@ -2810,6 +2786,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenants/me/groups/{groupID}/route-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新分组路由策略 */
+        patch: operations["ai-update-group-route-policy"];
+        trace?: never;
+    };
     "/api/v1/tenants/me/groups/{groupID}/status": {
         parameters: {
             query?: never;
@@ -2836,7 +2829,8 @@ export interface paths {
         };
         /** 分组关联上游目标列表 */
         get: operations["ai-list-group-targets"];
-        put?: never;
+        /** 原子替换分组上游目标配置 */
+        put: operations["ai-replace-group-targets"];
         /** 关联上游目标 */
         post: operations["ai-add-group-target"];
         delete?: never;
@@ -2859,7 +2853,7 @@ export interface paths {
         delete: operations["ai-delete-group-target"];
         options?: never;
         head?: never;
-        /** 更新关联(优先级/状态) */
+        /** 更新关联(优先级/权重/状态) */
         patch: operations["ai-update-group-target"];
         trace?: never;
     };
@@ -6437,6 +6431,12 @@ export interface components {
             /** @description 用户零售价格表 */
             retail_price_book_id: string;
             retail_price_book_name?: string;
+            /** @enum {string} */
+            route_objective: "balanced" | "cost" | "latency" | "stability";
+            /** Format: int64 */
+            route_policy_version: number;
+            /** @enum {string} */
+            route_strategy: "failover" | "weighted" | "adaptive";
             /** Format: int32 */
             sort_order: number;
             status: string;
@@ -6454,6 +6454,8 @@ export interface components {
             protocol_conversion: boolean;
             provider_api_format?: string;
             provider_family?: string;
+            /** Format: double */
+            routing_weight: number;
             target_type: string;
         };
         GroupDispatchPreviewDTO: {
@@ -6469,6 +6471,10 @@ export interface components {
             rejected_candidates: components["schemas"]["GroupDispatchPreviewRejectionDTO"][] | null;
             requested_model: string;
             resolved_logical_model: string;
+            /** @enum {string} */
+            route_objective: "balanced" | "cost" | "latency" | "stability";
+            /** @enum {string} */
+            route_strategy: "failover" | "weighted" | "adaptive";
         };
         GroupDispatchPreviewRejectionDTO: {
             /** Format: int32 */
@@ -6633,6 +6639,20 @@ export interface components {
             /** Format: int64 */
             success: number;
         };
+        GroupRoutePolicyWriteRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/GroupRoutePolicyWriteRequest.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            route_objective: "balanced" | "cost" | "latency" | "stability";
+            /** Format: int64 */
+            route_policy_version: number;
+            /** @enum {string} */
+            route_strategy: "failover" | "weighted" | "adaptive";
+        };
         GroupTargetDTO: {
             /**
              * Format: uri
@@ -6653,6 +6673,8 @@ export interface components {
             pool_name?: string;
             /** Format: int32 */
             priority: number;
+            /** Format: double */
+            routing_weight: number;
             status: string;
             /** @description account|pool */
             target_type?: string;
@@ -6670,6 +6692,8 @@ export interface components {
             readonly $schema?: string;
             /** Format: int32 */
             priority?: number;
+            /** Format: double */
+            routing_weight?: number;
             /** @enum {string} */
             status?: "active" | "disabled";
         };
@@ -6686,6 +6710,8 @@ export interface components {
             credential_pool_id?: string;
             /** Format: int32 */
             priority?: number;
+            /** Format: double */
+            routing_weight?: number;
             /** @enum {string} */
             status?: "active" | "disabled";
         };
@@ -6697,6 +6723,8 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["GroupTargetDTO"][] | null;
+            /** Format: int64 */
+            route_policy_version: number;
             /** Format: int64 */
             total: number;
         };
@@ -6745,6 +6773,10 @@ export interface components {
             description?: string;
             dispatch_rules: components["schemas"]["GroupTransferDispatchRule"][] | null;
             name: string;
+            /** @enum {string} */
+            route_objective: "balanced" | "cost" | "latency" | "stability";
+            /** @enum {string} */
+            route_strategy: "failover" | "weighted" | "adaptive";
             /** Format: int64 */
             sort_order: number;
             /** @enum {string} */
@@ -6770,6 +6802,15 @@ export interface components {
             description?: string;
             name: string;
             retail_price_book_id: string;
+            /** @enum {string} */
+            route_objective?: "balanced" | "cost" | "latency" | "stability";
+            /**
+             * Format: int64
+             * @description 更新分组时用于防止覆盖较新的路由策略
+             */
+            route_policy_version?: number;
+            /** @enum {string} */
+            route_strategy?: "failover" | "weighted" | "adaptive";
             /** Format: int32 */
             sort_order?: number;
             /** @enum {string} */
@@ -8051,6 +8092,17 @@ export interface components {
             /** Format: int64 */
             refundedAt: number;
         };
+        ReplaceGroupTargetsRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ReplaceGroupTargetsRequest.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            expected_version: number;
+            targets: components["schemas"]["GroupTargetWriteRequest"][] | null;
+        };
         ReplaceTenantUpstreamAccessInputBody: {
             /**
              * Format: uri
@@ -8334,18 +8386,6 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        RouteWeightsOutputBody: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/RouteWeightsOutputBody.json
-             */
-            readonly $schema?: string;
-            /** @description 权重作用域 */
-            scope: string;
-            /** @description 评分权重 */
-            weights: components["schemas"]["ScoreWeightsDTO"];
-        };
         RuleConfig: {
             enabled: boolean;
             id: string;
@@ -8458,34 +8498,6 @@ export interface components {
              * @enum {string}
              */
             status?: "active" | "disabled";
-        };
-        ScoreWeightsDTO: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/ScoreWeightsDTO.json
-             */
-            readonly $schema?: string;
-            /**
-             * Format: double
-             * @description 成本权重
-             */
-            cost: number;
-            /**
-             * Format: double
-             * @description 健康权重
-             */
-            health: number;
-            /**
-             * Format: double
-             * @description 延迟权重
-             */
-            latency: number;
-            /**
-             * Format: double
-             * @description 负载权重
-             */
-            load: number;
         };
         Status: {
             /**
@@ -15565,74 +15577,6 @@ export interface operations {
             };
         };
     };
-    "ai-get-route-weights": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 权重作用域，例如 global */
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RouteWeightsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
-    "ai-put-route-weights": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description 权重作用域，例如 global */
-                scope: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScoreWeightsDTO"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RouteWeightsOutputBody"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["AppError"];
-                };
-            };
-        };
-    };
     "admin-list-system-admins": {
         parameters: {
             query?: {
@@ -17751,6 +17695,41 @@ export interface operations {
             };
         };
     };
+    "ai-update-group-route-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupRoutePolicyWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupDTO"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
     "ai-update-group-status": {
         parameters: {
             query?: never;
@@ -17796,6 +17775,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupTargetsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-replace-group-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceGroupTargetsRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {

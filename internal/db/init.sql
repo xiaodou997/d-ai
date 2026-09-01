@@ -1167,6 +1167,14 @@ CREATE INDEX idx_ledger_credit_leases_account
     -- 协议转换网关开关（分组级 opt-in）：false（默认）= 仅同家族 passthrough（今天的行为）；
     -- true = 允许把本组候选作为跨格式协议转换目标（client↔provider 落差由 internal/formats 翻译）。
     allow_protocol_conversion BOOLEAN   NOT NULL DEFAULT false,
+    route_strategy          TEXT          NOT NULL DEFAULT 'adaptive'
+      CHECK (route_strategy IN ('failover', 'weighted', 'adaptive')),
+    route_objective         TEXT          NOT NULL DEFAULT 'balanced'
+      CHECK (route_objective IN ('balanced', 'cost', 'latency', 'stability')),
+    CONSTRAINT ai_groups_route_objective_strategy_check CHECK (
+      route_strategy = 'adaptive' OR route_objective = 'balanced'
+    ),
+    route_policy_version    BIGINT        NOT NULL DEFAULT 1 CHECK (route_policy_version > 0),
     sort_order            INTEGER       NOT NULL DEFAULT 0,
     status                TEXT          NOT NULL DEFAULT 'active',
     created_at            TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -1196,6 +1204,8 @@ CREATE INDEX idx_ledger_credit_leases_account
       CHECK (target_kind IN ('direct_upstream', 'oauth_pool')),
     target_id    UUID        NOT NULL,
     priority     INTEGER     NOT NULL DEFAULT 100 CHECK (priority >= 0),
+    routing_weight NUMERIC(10,4) NOT NULL DEFAULT 1
+      CHECK (routing_weight >= 0 AND routing_weight <> 'NaN'::numeric),
     status       TEXT        NOT NULL DEFAULT 'active',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1931,19 +1941,8 @@ CREATE INDEX idx_ledger_credit_leases_account
   }'::jsonb) ON CONFLICT (key) DO NOTHING;
 
   -- ============================================================================
-  -- AI Route Score Weights (多维评分路由权重配置)
+  -- Legacy route score weight storage was replaced by group route policy.
   -- ============================================================================
-  CREATE TABLE IF NOT EXISTS ai_route_score_weights (
-    id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    scope      TEXT        NOT NULL,   -- 'global' | 'tenant:<id>' | 'account:<id>'
-    weights    JSONB       NOT NULL,   -- {"cost":0.4,"latency":0.3,"load":0.2,"health":0.1}
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (scope)
-  );
-
-  INSERT INTO ai_route_score_weights (scope, weights)
-    VALUES ('global', '{"cost":0.4,"latency":0.3,"load":0.2,"health":0.1}'::jsonb)
-    ON CONFLICT (scope) DO NOTHING;
 
   -- ============================================================================
   -- AI Request Payloads v3 (普通表，业务无感知；归档由存储过程 + 定时任务处理)
@@ -2703,6 +2702,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 25);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 27);
 
 COMMIT;

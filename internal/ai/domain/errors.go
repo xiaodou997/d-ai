@@ -152,3 +152,18 @@ type GroupInUseError struct {
 func (e *GroupInUseError) Error() string { return "group is still referenced" }
 
 func (e *GroupInUseError) Is(target error) bool { return target == ErrConflict }
+
+// GroupRoutePolicyConflictError means a route configuration write was based on
+// an older group policy snapshot. Callers should reload the group and retry
+// against the returned version instead of merging stale edits locally.
+type GroupRoutePolicyConflictError struct {
+	GroupID         string `json:"group_id"`
+	ExpectedVersion int64  `json:"expected_version"`
+	ActualVersion   int64  `json:"actual_version"`
+}
+
+func (e *GroupRoutePolicyConflictError) Error() string {
+	return "group route policy was modified by another request"
+}
+
+func (e *GroupRoutePolicyConflictError) Is(target error) bool { return target == ErrConflict }

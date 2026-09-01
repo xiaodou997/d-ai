@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"xiaodou/dai/internal/ai/core/catalog"
-	"xiaodou/dai/internal/ai/core/routing"
 	"xiaodou/dai/internal/ai/core/surface"
 	"xiaodou/dai/internal/ai/domain"
 )
@@ -38,36 +37,6 @@ func TestDispatchSurfaceProtocolMapping(t *testing.T) {
 
 	if _, err := dispatchProtocolFromSurface(surface.ID("unknown_surface")); err == nil {
 		t.Fatal("dispatchProtocolFromSurface(unknown_surface): want validation error")
-	}
-}
-
-func TestRoutingScopeBridge(t *testing.T) {
-	t.Parallel()
-
-	scopeKey, err := encodeRoutingScope(routing.ScopeTenant, "tenant-1")
-	if err != nil {
-		t.Fatalf("encodeRoutingScope tenant: %v", err)
-	}
-	if scopeKey != "tenant:tenant-1" {
-		t.Fatalf("encodeRoutingScope tenant = %q", scopeKey)
-	}
-
-	scopeType, scopeID := decodeRoutingScope(scopeKey)
-	if scopeType != routing.ScopeTenant || scopeID != "tenant-1" {
-		t.Fatalf("decodeRoutingScope(%q) = (%q, %q)", scopeKey, scopeType, scopeID)
-	}
-
-	scopeKey, err = encodeRoutingScope(routing.ScopeGlobal, "")
-	if err != nil {
-		t.Fatalf("encodeRoutingScope global: %v", err)
-	}
-	if scopeKey != "global" {
-		t.Fatalf("encodeRoutingScope global = %q", scopeKey)
-	}
-
-	scopeType, scopeID = decodeRoutingScope(scopeKey)
-	if scopeType != routing.ScopeGlobal || scopeID != "global" {
-		t.Fatalf("decodeRoutingScope(global) = (%q, %q)", scopeType, scopeID)
 	}
 }
 

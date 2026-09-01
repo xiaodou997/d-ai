@@ -69,7 +69,7 @@ P2-01 在同一组合根上增加运行角色参数：`dai all`（默认）、`d
 ## 尚未清零的装配遗留
 
 - 平台路由不再暴露 `transport.Deps` service locator，改由 `transport.Module` 与模块专属依赖类型注册；平台 concrete service 仍只由 composition root 持有，后续转向 Transport 业务逻辑和运行角色治理。
-- AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `ScoreWeightsStore`、`HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `CoreHTTPDeps`；评分权重 PostgreSQL adapter 仍只在 composition root 构造，其他查询、凭证和控制面 adapter 仍待逐项收敛。
+- AI 系统端点已经由独立 `SystemHTTPDeps` 组合 `HealthTracker` 和两个 `ComponentHealthProbe`，不再进入 Core `CoreHTTPDeps`；旧的全局评分权重端点、adapter 和存储已由分组路由策略取代。
 - 管理仪表盘已经由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用查询端口，具体 `DashboardService` 只在 composition root 构造。
 - 管理用量已经由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份 provider、失败 observer 和 `HTTPAuthDeps`；租户自助和工作区读取由各自模块显式复用 `UsageQueryReader` / `UserUsageLogReader`，具体 `UsageService` 只在 composition root 构造。
 - OAuth pool/credential 管理已经由独立 `OAuthManagementHTTPDeps` 组合池/凭证端口、池健康、手动刷新、模型目录和绑定端口；Serving 和后台刷新器仍由 composition root/运行时持有。
@@ -165,7 +165,7 @@ P2-01 在同一组合根上增加运行角色参数：`dai all`（默认）、`d
 - 风控管理路由分别通过 `RiskControlConfigStore`、`RiskControlDetector`、`RiskControlLogReader` 和 `RiskEventManager` 进入 AI Transport；具体 config/log/event service 与 checker 只在 composition root 构造，serving/worker 继续复用 checker。
 - 风控 HTTP 已由独立 `RiskControlHTTPDeps` 组合四组业务端口、`HTTPAuthDeps` 和 `ProviderSecretCodec`，并通过 `RegisterRiskControl` 注册平台管理员认证分组；AI Core `CoreHTTPDeps` 不再接收或注册风控能力。
 - 管理审计读取 HTTP 已由独立 `AuditLogHTTPDeps` 组合 `AdminAuditLogReader` 和 `HTTPAuthDeps`，并通过 `RegisterAuditLog` 注册平台管理员认证分组；AI Core `CoreHTTPDeps` 不再接收或注册读取端口，迁移写入继续使用独立模块的 `AdminAuditRecorder`。
-- 系统状态与路由权重 HTTP 已由独立 `SystemHTTPDeps` 组合 `HealthTracker`、`ComponentHealthProbe`、`ScoreWeightsStore` 和 `HTTPAuthDeps`，并通过 `RegisterSystem` 注册平台管理员认证分组；AI Core `CoreHTTPDeps` 不再接收或注册系统端点。
+- 系统状态 HTTP 已由独立 `SystemHTTPDeps` 组合 `HealthTracker`、`ComponentHealthProbe` 和 `HTTPAuthDeps`，并通过 `RegisterSystem` 注册平台管理员认证分组；路由策略归属租户分组，由分组控制面和运行时规划器共同承载。
 - 管理仪表盘 HTTP 已由独立 `DashboardHTTPDeps` 组合 `DashboardQueryReader`、身份补全端口和 `HTTPAuthDeps`，并通过 `RegisterDashboard` 注册平台管理员认证分组；租户自助和工作区端点由各自模块显式复用共享查询端口。
 - 管理用量 HTTP 已由独立 `UsageHTTPDeps` 组合 `UsageQueryReader`、身份补全端口和 `HTTPAuthDeps`，并通过 `RegisterUsage` 注册平台管理员认证分组；租户、用户和工作区端点由各自模块显式复用共享查询端口。
 - OAuth pool/credential HTTP 已由独立 `OAuthManagementHTTPDeps` 组合池/凭证读写、健康、刷新、目录和绑定端口，并通过 `RegisterOAuthManagement` 注册平台管理员认证分组；Core 不再注册 OAuth pool/credential 管理路径。

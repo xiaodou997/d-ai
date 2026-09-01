@@ -49,6 +49,9 @@ func (r *CommercialRepo) AddDispatchRule(ctx context.Context, scope commercial.T
 	if err := setDispatchRulePriceMetadata(ctx, tx, group.PriceBookID, &item); err != nil {
 		return commercial.DispatchRule{}, err
 	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, gid); err != nil {
+		return commercial.DispatchRule{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return commercial.DispatchRule{}, err
 	}
@@ -188,6 +191,9 @@ func (r *CommercialRepo) UpdateDispatchRule(ctx context.Context, scope commercia
 	if err := setDispatchRulePriceMetadata(ctx, tx, group.PriceBookID, &item); err != nil {
 		return commercial.DispatchRule{}, err
 	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, gid); err != nil {
+		return commercial.DispatchRule{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return commercial.DispatchRule{}, err
 	}
@@ -234,6 +240,9 @@ func (r *CommercialRepo) UpdateDispatchRuleStatus(ctx context.Context, scope com
 	if err := setDispatchRulePriceMetadata(ctx, tx, group.PriceBookID, &item); err != nil {
 		return commercial.DispatchRule{}, err
 	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, gid); err != nil {
+		return commercial.DispatchRule{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return commercial.DispatchRule{}, err
 	}
@@ -273,6 +282,13 @@ func (r *CommercialRepo) DeleteDispatchRule(ctx context.Context, scope commercia
 	if tag.RowsAffected() == 0 {
 		return domain.ErrNotFound
 	}
+	groupUUID, err := akUUID(groupID)
+	if err != nil {
+		return err
+	}
+	if err := bumpGroupRoutePolicyVersion(ctx, tx, scope.TenantID, groupUUID); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -308,12 +324,16 @@ func (r *CommercialRepo) previewWithRuntime(ctx context.Context, tenantID, group
 		if out.ResolvedModelID == requestedModel {
 			out.ResolvedModelID = candidate.ModelID
 		}
+		if out.RouteStrategy == "" {
+			out.RouteStrategy = candidate.Group.Group.RouteStrategy
+			out.RouteObjective = candidate.Group.Group.RouteObjective
+		}
 		if candidate.MatchedRule != nil && out.MatchedRule == nil {
 			rule := *candidate.MatchedRule
 			out.MatchedRule = &rule
 		}
 		binding := candidate.Binding
-		item := commercial.DispatchPreviewCandidate{DisplayName: binding.Upstream.Name, ProviderFamily: string(binding.Upstream.ProviderFamily), UpstreamModel: binding.ModelBinding.UpstreamModelName, ProtocolConversion: binding.ModelBinding.RequestSurface != surfaceID, Priority: candidate.Target.Priority}
+		item := commercial.DispatchPreviewCandidate{DisplayName: binding.Upstream.Name, ProviderFamily: string(binding.Upstream.ProviderFamily), UpstreamModel: binding.ModelBinding.UpstreamModelName, ProtocolConversion: binding.ModelBinding.RequestSurface != surfaceID, Priority: candidate.Target.Priority, RoutingWeight: candidate.Target.RoutingWeight}
 		if candidate.Target.TargetKind == commercial.TargetKindOAuthPool {
 			item.TargetType = "pool"
 			item.CredentialPoolID = binding.Upstream.ID
@@ -334,6 +354,10 @@ func (r *CommercialRepo) previewWithRuntime(ctx context.Context, tenantID, group
 			rule := *rejected.MatchedRule
 			out.MatchedRule = &rule
 		}
+		if out.RouteStrategy == "" {
+			out.RouteStrategy = rejected.Group.Group.RouteStrategy
+			out.RouteObjective = rejected.Group.Group.RouteObjective
+		}
 		item := commercial.DispatchPreviewRejection{
 			TargetID:        rejected.Target.TargetID,
 			ResolvedModelID: rejected.ModelID,
@@ -348,6 +372,12 @@ func (r *CommercialRepo) previewWithRuntime(ctx context.Context, tenantID, group
 			item.TargetType = "account"
 		}
 		out.RejectedCandidates = append(out.RejectedCandidates, item)
+	}
+	if out.RouteStrategy == "" {
+		out.RouteStrategy = commercial.RouteStrategyAdaptive
+	}
+	if out.RouteObjective == "" {
+		out.RouteObjective = commercial.RouteObjectiveBalanced
 	}
 	return out, nil
 }

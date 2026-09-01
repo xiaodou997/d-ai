@@ -14,6 +14,23 @@ const (
 	StatusDisabled Status = "disabled"
 )
 
+type RouteStrategy string
+
+const (
+	RouteStrategyFailover RouteStrategy = "failover"
+	RouteStrategyWeighted RouteStrategy = "weighted"
+	RouteStrategyAdaptive RouteStrategy = "adaptive"
+)
+
+type RouteObjective string
+
+const (
+	RouteObjectiveBalanced  RouteObjective = "balanced"
+	RouteObjectiveCost      RouteObjective = "cost"
+	RouteObjectiveLatency   RouteObjective = "latency"
+	RouteObjectiveStability RouteObjective = "stability"
+)
+
 // TenantGroupScope is the only identity accepted by tenant-owned group
 // operations. Request bodies never carry tenant or group ownership.
 type TenantGroupScope struct {
@@ -32,6 +49,9 @@ type Group struct {
 	DefaultUserMultiplier   float64
 	UserDefaultVisible      bool
 	AllowProtocolConversion bool
+	RouteStrategy           RouteStrategy
+	RouteObjective          RouteObjective
+	RoutePolicyVersion      int64
 	Status                  Status
 	SortOrder               int
 	CreatedAt               time.Time
@@ -77,14 +97,15 @@ const (
 
 // GroupTarget connects a group to one upstream resource.
 type GroupTarget struct {
-	ID         string
-	GroupID    string
-	TargetKind TargetKind
-	TargetID   string
-	Priority   int
-	Status     Status
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID            string
+	GroupID       string
+	TargetKind    TargetKind
+	TargetID      string
+	Priority      int
+	RoutingWeight float64
+	Status        Status
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type GroupTargetDetail struct {
@@ -137,6 +158,8 @@ type DispatchPreview struct {
 	ClientSurface      string
 	MatchedRule        *DispatchRule
 	ResolvedModelID    string
+	RouteStrategy      RouteStrategy
+	RouteObjective     RouteObjective
 	CandidateUpstreams []DispatchPreviewCandidate
 	RejectedCandidates []DispatchPreviewRejection
 }
@@ -151,6 +174,7 @@ type DispatchPreviewCandidate struct {
 	UpstreamModel      string
 	ProtocolConversion bool
 	Priority           int
+	RoutingWeight      float64
 }
 
 type DispatchPreviewRejection struct {

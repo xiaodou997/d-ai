@@ -1,6 +1,8 @@
 # D-AI 重构与优化清单
 
-更新日期：2026-08-30
+更新日期：2026-09-01
+
+> 2026-08-31 起，旧的全局路由评分权重已由分组路由策略 v2 取代；文档中早期的 `ScoreWeightsStore`、`AdminRoutingWorkspace` 条目保留为历史记录，不再代表当前实现。
 
 ## 目标与原则
 
@@ -156,7 +158,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 订阅 HTTP 路由提取为独立 `SubscriptionHTTPDeps` / `RegisterSubscriptions` 纵向模块；`CoreHTTPDeps` 与 `RegisterAICore` 不再持有或注册订阅能力，认证和身份补全也只接收模块显式依赖。
 - [x] 风控管理路由提取为独立 `RiskControlHTTPDeps` / `RegisterRiskControl` 纵向模块；四组业务端口脱离 `CoreHTTPDeps`，平台管理员认证和风控所需 `ProviderSecretCodec` 改为模块显式注入，Serving/worker 继续复用原实现。
 - [x] 管理审计日志读取提取为独立 `AuditLogHTTPDeps` / `RegisterAuditLog` 纵向模块；只读查询从 `CoreHTTPDeps` 移出，跨域迁移仍通过独立模块保留的 `AdminAuditRecorder` 写入。
-- [x] 系统状态与路由权重提取为独立 `SystemHTTPDeps` / `RegisterSystem` 纵向模块；`HealthTracker`、`ComponentHealthProbe` 和 `ScoreWeightsStore` 从 Core 运行时依赖组移出，平台管理员认证在模块内完成。
+- [x] 系统状态提取为独立 `SystemHTTPDeps` / `RegisterSystem` 纵向模块；`HealthTracker`、`ComponentHealthProbe` 从 Core 运行时依赖组移出，旧的全局评分权重能力已由分组路由策略取代，平台管理员认证在模块内完成。
 - [x] 管理端仪表盘四个查询端点提取为独立 `DashboardHTTPDeps` / `RegisterDashboard` 纵向模块；管理端身份补全能力单独装配，租户自助和工作区读取随后由各自模块组合查询端口。
 - [x] 管理端用量查询七个端点提取为独立 `UsageHTTPDeps` / `RegisterUsage` 纵向模块；管理日志与用户排行的身份补全能力单独装配，租户自助和工作区读取随后由各自模块组合查询端口。
 - [x] OAuth 凭证池与凭证管理端点提取为独立 `OAuthManagementHTTPDeps` / `RegisterOAuthManagement` 纵向模块；Core 仅保留共享模型绑定能力，Serving 与后台 token refresh 不进入该 HTTP 依赖容器。
@@ -207,7 +209,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - [x] 将散落的 `userType` 判断集中为后端 capability/policy 授权；`auth.Actor` / `Capability` / `requireCapability` 已覆盖主要 HTTP 与应用策略，登录租户状态、管理员 MFA 和审计 principal 分类也已收敛到同一 Actor policy。
 - [x] Portal 菜单和路由 capability 只用于展示/导航提示；后端通过 operation middleware 和 capability/policy 矩阵执行最终授权，并有服务端拒绝回归测试。
 - [x] 建立统一的 `auth.Actor`、`TenantScope`、`UserID`/`TenantID` 和 `ResourceOwnership` 类型；Transport 从 claims 统一构造 actor，租户、终端用户、租户详情和支付订单 ownership 均通过同一 typed reference 校验。
-- [x] 为当前 320 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
+- [x] 为当前 321 个 OpenAPI operation 生成并维护 capability 授权矩阵；`cmd/checkauthz` 对未归类 operation 失败，并在 CI 校验生成物 freshness。
 - [x] 增加跨租户、越权、对象枚举和角色降级测试；授权核心已覆盖四类角色、缺失/未知角色、租户/用户 ownership 组合，Transport middleware、AI identity、终端用户、异步任务、账务和会话集成测试覆盖拒绝与对象不可枚举语义。
 
 ## P1：数据库与资金数据治理
@@ -216,8 +218,8 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 
 - [x] 采用 forward-only SQL migration 工具，迁移仍由发布步骤显式执行；`deploy/production/schema_release.sh` 负责备份、连续脚本执行和逐步版本确认，不引入运行时迁移依赖。
 - [x] 不允许应用服务启动时隐式执行生产迁移；启动只调用 `db.VerifySchema`，迁移由发布步骤显式执行。
-- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v25，并将最终 schema-only dump 与 `init.sql` 比较。
-- [x] 每个迁移在空库和前一 schema 版本副本上验证；24 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v25 全链重放并逐步校验版本。
+- [x] 空库基线由完整迁移链生成或验证，避免同时手工维护两套结构；`scripts/replay_schema_chain.sh` 从不可变 v1 Git 基线重放到 v27，并将最终 schema-only dump 与 `init.sql` 比较。
+- [x] 每个迁移在空库和前一 schema 版本副本上验证；26 个迁移有真实 PostgreSQL 专项测试，CI 另执行 v1→v27 全链重放并逐步校验版本。
 - [x] 为缺少专项测试的 0002、0003、0009 补迁移测试；测试覆盖来源版本、关键结构、数据转换和约束行为。
 - [x] 校准 `README.md`、`docs/DATABASE.md` 和 `docs/PROJECT_STATUS.md` 的 schema 版本；`docs/SCHEMA_CHAIN.md` 由门禁生成并在 CI 校验 freshness。
 - [x] 发布流程加入备份、迁移校验、兼容窗口和失败恢复步骤；`deploy/production/schema_release.sh` 显式执行并记录备份/哈希/版本，`docs/SCHEMA_RELEASE_RUNBOOK.md` 固化停流量、readiness、兼容窗口和恢复步骤。
@@ -548,7 +550,7 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 依赖边界：订单工作区只组合平台支付 API、`useListPage`、DsTable/DsDrawer 等共享组件，路由层不再持有筛选归一化、状态展示和退款/撤回编排。
 - 回归：充值订单初始加载与筛选集成测试、全量 Portal 97 个测试文件/316 项测试、typecheck、architecture check、frontend build 和全仓 Go 门禁通过。
 
-### P2-05（Admin routing workspace boundary，2026-08-29）
+### P2-05（Admin routing workspace boundary，2026-08-29，历史记录）
 
 - 垂直切分：路由评分权重、归一化、推荐预设和选路说明工作区迁移到 `features/ai/routing/AdminRoutingWorkspace.vue`；`views/admin/ai/gateway/RoutingView.vue` 收敛为路由 wrapper。
 - 依赖边界：路由工作区直接消费 typed `RouteWeightsOutputBody`/`ScoreWeightsDTO` 和 `aiAdminApi`，四维权重与预设类型在 feature 内明确建模，页面不再使用未约束的响应 `any`。
@@ -1897,3 +1899,12 @@ workers ------------ settlement / async tasks / audit / cleanup / token refresh
 - 角色：Portal embed 只在 `all`/ `control-api` 注册，`gateway` 公共监听不再暴露 Portal catch-all。
 - 数据边界：新增 schema v25 的 `system_account_stats_projection` 与 `tenant_income_projection`，账户/租户统计不再直接读取跨域账务表；ownership 契约同步授予只读视图权限，并将账户 provisioning trigger 改为 security-definer，保证 runtime 创建身份时仍可建立账务账户。
 - 回归：新增 v25 migration/read-model 检查和运行角色 Portal 暴露矩阵测试；定向 Go 测试、schema chain、授权矩阵和差异检查通过。
+
+### P2-06（Group-owned routing policy v2 and atomic target writes，2026-09-01）
+
+- 归属：删除旧的全局 `ai_route_score_weights` 管理面与存储；路由策略下沉到租户分组，分组持有 `route_strategy`、`route_objective`，上游目标持有 `routing_weight`，运行时按分组优先级和策略选择。
+- 写入：新增分组路由策略窄更新端点，以及带 `route_policy_version` 乐观并发令牌的目标集合原子替换端点；旧的已注册单目标接口仍保留兼容，但所有已注册目标、入口、调度规则和导入写入都会推进版本，避免旧草稿覆盖新配置。
+- 一致性：schema v26/v27、sqlc、OpenAPI 和授权矩阵同步；批量目标更新在锁定分组行的单事务中完成增删改，版本冲突返回 `group_route_policy_conflict` 及期望/实际版本，Portal 提供重新加载入口。
+- 可观测性：runtime attempt/trace/admin projection 带策略、目标优先级/权重和选择原因；Prometheus 增加按策略、选择原因的尝试与延迟维度。
+- 回归：Portal 135 个测试文件/399 项测试、typecheck、architecture/style/quality、OpenAPI 321 operations、Go compile/vet/build/checkdeps 和差异检查通过；需要本机数据库/监听权限的集成测试继续在具备 PostgreSQL/Redis 网络权限的 CI 环境执行。
+- 门禁：新增 `make test-group-route-policy` 与 CI 独立步骤，强制执行原子替换/版本冲突 PostgreSQL 测试；测试被 skip 时门禁失败。

@@ -131,6 +131,7 @@ type CommercialGroupCatalog interface {
 type CommercialGroupManager interface {
 	CreateGroup(ctx context.Context, tenantID string, input commercial.GroupWrite) (commercial.Group, error)
 	UpdateGroup(ctx context.Context, scope commercial.TenantGroupScope, input commercial.GroupWrite) (commercial.Group, error)
+	UpdateGroupRoutePolicy(ctx context.Context, scope commercial.TenantGroupScope, input commercial.GroupRoutePolicyWrite) (commercial.Group, error)
 	UpdateGroupStatus(ctx context.Context, scope commercial.TenantGroupScope, status commercial.Status) (commercial.Group, error)
 	DeleteGroup(ctx context.Context, scope commercial.TenantGroupScope) error
 	GetGroupClientSurfacePolicy(ctx context.Context, scope commercial.TenantGroupScope) (commercial.GroupClientSurfacePolicy, error)
@@ -156,6 +157,7 @@ type CommercialGroupTargetManager interface {
 	GetGroupTargetDetail(ctx context.Context, scope commercial.TenantGroupScope, id string) (commercial.GroupTargetDetail, error)
 	UpdateGroupTarget(ctx context.Context, scope commercial.TenantGroupScope, id string, input commercial.GroupTargetWrite) (commercial.GroupTarget, error)
 	DeleteGroupTarget(ctx context.Context, scope commercial.TenantGroupScope, id string) error
+	ReplaceGroupTargets(ctx context.Context, scope commercial.TenantGroupScope, input commercial.GroupTargetBatchWrite) (commercial.GroupTargetBatchResult, error)
 }
 
 // CommercialUserBindingManager owns explicit end-user group assignments.
@@ -373,6 +375,7 @@ func mapServiceError(err error) error {
 	var commercialErr *commercial.ValidationError
 	var priceConflict *domain.DispatchRulePriceConflictError
 	var groupInUse *domain.GroupInUseError
+	var routePolicyConflict *domain.GroupRoutePolicyConflictError
 	switch {
 	case errors.As(err, &priceConflict):
 		return httpx.New("dispatch_rule_price_conflict", http.StatusConflict, "Conflict").
@@ -386,6 +389,15 @@ func mapServiceError(err error) error {
 				"group_id":     groupInUse.GroupID,
 				"group_name":   groupInUse.GroupName,
 				"dependencies": groupInUse.Dependencies,
+			}).
+			WithCause(err)
+	case errors.As(err, &routePolicyConflict):
+		return httpx.New("group_route_policy_conflict", http.StatusConflict, "Conflict").
+			WithDetail("分组路由配置已被其他请求修改，请刷新后重试").
+			WithMeta(map[string]any{
+				"group_id":         routePolicyConflict.GroupID,
+				"expected_version": routePolicyConflict.ExpectedVersion,
+				"actual_version":   routePolicyConflict.ActualVersion,
 			}).
 			WithCause(err)
 	case errors.As(err, &commercialErr):

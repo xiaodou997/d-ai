@@ -7,7 +7,7 @@ FRONTEND_DIST := cmd/server/frontend_dist
 DB_RELEASE_DIR := $(BUILD_DIR)/sql
 LEGAL_RELEASE_FILES := LICENSE NOTICE THIRD-PARTY-LICENSES.md TRADEMARKS.md COMMERCIAL_LICENSE.md
 
-.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts release-metadata release-smoke frontend embed clean test test-unit test-db-up test-billing-invariants test-frontend check-transport-coverage typecheck openapi generate-api ensure-api validate-frontend-quality check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership-cutover check-db-ownership help
+.PHONY: dev dev-setup dev-frontend deps-up deps-down deps-logs db-version dev-seed db-recreate build build-server build-linux-amd64 database-artifacts legal-artifacts release-metadata release-smoke frontend embed clean test test-unit test-db-up test-billing-invariants test-group-route-policy test-frontend check-transport-coverage typecheck openapi generate-api ensure-api validate-frontend-quality check-module-deps check-authz check-schema check-schema-release replay-schema-chain check-db-role-provision check-db-ownership-cutover check-db-ownership help
 
 # ---- Portal delivery ----
 
@@ -131,6 +131,12 @@ test-billing-invariants: test-db-up ## 运行统一资金不变量生命周期�
 	DAI_TEST_DATABASE_STRICT=1 \
 	GOCACHE="$(CURDIR)/.cache/go-build" \
 	go test ./internal/billing/invariants -count=1 -v
+
+test-group-route-policy: test-db-up ## 验证分组路由目标原子替换与乐观并发
+	DAI_TEST_DATABASE_URL="$(TEST_DATABASE_URL)" \
+	DAI_TEST_DATABASE_STRICT=1 \
+	GOCACHE="$(CURDIR)/.cache/go-build" \
+	go test ./internal/ai/adapters/postgres -run '^TestCommercialRepo(ReplaceGroupTargetsIsAtomicAndVersioned|UpdateGroupRoutePolicyIsVersioned)$$' -count=1 -v
 
 test-db-up: ## 准备测试用 PostgreSQL/Redis 和 dai_test 库
 	docker compose up -d --wait postgres redis

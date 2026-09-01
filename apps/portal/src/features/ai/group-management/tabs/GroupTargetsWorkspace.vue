@@ -15,6 +15,7 @@ import type { GroupTargetDraft, GroupTargetSaveFailure, GroupTargetStatus } from
 import { errorMessage } from "../problemPresentation";
 
 const props = defineProps<{ groupId: string }>();
+const emit = defineEmits<{ changed: [] }>();
 const state = useGroupTargets({ groupId: () => props.groupId });
 
 const UNAVAILABLE_REASON_LABELS: Record<"inactive" | "access_revoked" | "missing", string> = {
@@ -31,12 +32,14 @@ function unavailableLabel(reason: string | null | undefined): string {
 const keyword = shallowRef("");
 const linkFilter = shallowRef<"all" | "linked" | "unlinked">("all");
 const failures = shallowRef<GroupTargetSaveFailure[]>([]);
+const hasConflict = computed(() => failures.value.some((failure) => failure.code === "group_route_policy_conflict"));
 
 const columns: DsTableColumn[] = [
   { key: "link", title: "关联", width: 58, align: "center" },
   { key: "resource", title: "上游资源" },
   { key: "priceModel", title: "价格模型", width: 104 },
   { key: "priority", title: "优先级", width: 108 },
+  { key: "routingWeight", title: "分流权重", width: 108 },
   { key: "status", title: "状态", width: 104 },
   { key: "change", title: "变更", width: 82 }
 ];
@@ -102,7 +105,14 @@ async function save() {
     ElMessage.warning(`已新增 ${result.added}、更新 ${result.updated}、解除 ${result.removed}，${result.failures.length} 项失败`);
   } else {
     ElMessage.success(`关联已更新：新增 ${result.added}、更新 ${result.updated}、解除 ${result.removed}`);
+    emit("changed");
   }
+}
+
+async function reloadAfterConflict() {
+  failures.value = [];
+  await state.load();
+  ElMessage.info("已重新加载最新分组目标配置，请重新确认变更");
 }
 
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -178,6 +188,10 @@ defineExpose({ confirmDiscardChanges });
         <el-switch v-if="row.selected" :model-value="row.status === 'active'" inline-prompt active-text="启用" inactive-text="停用" size="small" :disabled="state.saving.value" @update:model-value="updateDraft(row.key, { status: $event ? 'active' : 'disabled' })" />
         <span v-else class="muted">未关联</span>
       </template>
+      <template #cell-routingWeight="{ row }">
+        <el-input-number v-if="row.selected" :model-value="row.routing_weight" :min="0" :step="0.1" :controls="false" size="small" :disabled="state.saving.value" @update:model-value="updateDraft(row.key, { routing_weight: Number($event || 0) })" />
+        <span v-else class="muted">未关联</span>
+      </template>
       <template #cell-change="{ row }">
         <DsTag v-if="row.change" :tone="row.change === 'add' ? 'positive' : row.change === 'update' ? 'warning' : 'danger'">
           {{ row.change === "add" ? "待新增" : row.change === "update" ? "待更新" : "待解除" }}
@@ -187,6 +201,12 @@ defineExpose({ confirmDiscardChanges });
     </DsTable>
 
     <el-alert v-for="failure in failures" :key="`${failure.action}:${failure.targetKey}`" :title="`${failure.targetName}：${failure.message}`" type="error" show-icon :closable="false" />
+    <el-alert v-if="hasConflict" type="warning" title="配置版本已变化" show-icon :closable="false">
+      <template #default>
+        <span>其他窗口已修改了这个分组的路由配置，当前草稿没有写入。</span>
+        <el-button link type="primary" :disabled="state.loading.value" @click="reloadAfterConflict">重新加载</el-button>
+      </template>
+    </el-alert>
 
     <footer class="save-bar">
       <span>已选 {{ state.rows.value.filter((row) => row.selected).length }}，新增 {{ state.additions.value.length }}，更新 {{ state.updates.value.length }}，解除 {{ state.removals.value.length }}</span>

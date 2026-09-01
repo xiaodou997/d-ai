@@ -3,7 +3,6 @@ package commercial
 import (
 	"context"
 
-	"xiaodou/dai/internal/ai/core/routing"
 	"xiaodou/dai/internal/ai/core/surface"
 )
 
@@ -13,6 +12,7 @@ type Repository interface {
 	ListGroups(ctx context.Context, tenantID string) ([]Group, error)
 	GetGroup(ctx context.Context, scope TenantGroupScope) (Group, error)
 	UpdateGroup(ctx context.Context, scope TenantGroupScope, in GroupWrite) (Group, error)
+	UpdateGroupRoutePolicy(ctx context.Context, scope TenantGroupScope, in GroupRoutePolicyWrite) (Group, error)
 	UpdateGroupStatus(ctx context.Context, scope TenantGroupScope, status Status) (Group, error)
 	DeleteGroup(ctx context.Context, scope TenantGroupScope) error
 	LoadDispatchData(ctx context.Context, tenantID string, groupIDs []string) (DispatchData, error)
@@ -27,6 +27,7 @@ type Repository interface {
 	GetGroupTargetDetail(ctx context.Context, scope TenantGroupScope, id string) (GroupTargetDetail, error)
 	UpdateGroupTarget(ctx context.Context, scope TenantGroupScope, id string, in GroupTargetWrite) (GroupTarget, error)
 	DeleteGroupTarget(ctx context.Context, scope TenantGroupScope, id string) error
+	ReplaceGroupTargets(ctx context.Context, scope TenantGroupScope, in GroupTargetBatchWrite) (GroupTargetBatchResult, error)
 
 	AddDispatchRule(ctx context.Context, scope TenantGroupScope, in DispatchRuleWrite) (DispatchRule, error)
 	ListDispatchRules(ctx context.Context, scope TenantGroupScope) ([]DispatchRule, error)
@@ -45,9 +46,6 @@ type Repository interface {
 	UpdateLimitPolicy(ctx context.Context, id string, in LimitPolicyWrite) (LimitPolicy, error)
 	UpdateLimitPolicyStatus(ctx context.Context, id string, status Status) (LimitPolicy, error)
 	DeleteLimitPolicies(ctx context.Context, filter LimitPolicyFilter) error
-
-	UpsertRoutingPolicy(ctx context.Context, in RoutingPolicyWrite) (routing.Policy, error)
-	ListRoutingPolicies(ctx context.Context) ([]routing.Policy, error)
 }
 
 // DispatchData is the immutable configuration snapshot used for one dispatch
@@ -66,8 +64,23 @@ type GroupWrite struct {
 	DefaultUserMultiplier   float64
 	UserDefaultVisible      bool
 	AllowProtocolConversion bool
-	Status                  Status
-	SortOrder               int
+	RouteStrategy           RouteStrategy
+	RouteObjective          RouteObjective
+	// ExpectedRoutePolicyVersion is optional for create/legacy callers. When
+	// supplied on an update, the adapter rejects a stale full-group form rather
+	// than allowing it to overwrite a newer route-policy edit.
+	ExpectedRoutePolicyVersion int64
+	Status                     Status
+	SortOrder                  int
+}
+
+// GroupRoutePolicyWrite is the narrow mutation used by the route-policy panel.
+// Keeping it separate from GroupWrite prevents changing a routing policy from
+// overwriting unrelated pricing, visibility, or status fields.
+type GroupRoutePolicyWrite struct {
+	ExpectedVersion int64
+	RouteStrategy   RouteStrategy
+	RouteObjective  RouteObjective
 }
 
 type GroupClientSurfaceWrite struct {
@@ -77,10 +90,23 @@ type GroupClientSurfaceWrite struct {
 }
 
 type GroupTargetWrite struct {
-	TargetKind TargetKind
-	TargetID   string
-	Priority   int
-	Status     Status
+	TargetKind    TargetKind
+	TargetID      string
+	Priority      int
+	RoutingWeight float64
+	Status        Status
+}
+
+// GroupTargetBatchWrite describes the complete desired target set for a group.
+// The repository applies it in one transaction against ExpectedVersion.
+type GroupTargetBatchWrite struct {
+	ExpectedVersion int64
+	Targets         []GroupTargetWrite
+}
+
+type GroupTargetBatchResult struct {
+	RoutePolicyVersion int64
+	Targets            []GroupTarget
 }
 
 type DispatchRuleWrite struct {
@@ -121,11 +147,4 @@ type LimitPolicyFilter struct {
 	ScopeType LimitScope
 	ScopeID   string
 	Status    Status
-}
-
-type RoutingPolicyWrite struct {
-	ScopeType routing.ScopeType
-	ScopeID   string
-	Weights   routing.WeightSet
-	UpdatedBy string
 }

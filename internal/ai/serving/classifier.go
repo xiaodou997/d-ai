@@ -134,13 +134,21 @@ func (o Outcome) CountsAsHealthFailure() bool {
 
 // AttemptRecord captures one upstream call inside the retry loop. Used both
 // for X-Route-Trace observability (via observability.BuildTrace, which reads
-// only RouteID/Score/Outcome/HTTPStatus/latencies — never the fields below)
+// only route-policy metadata, score, outcome and timings — never upstream
+// identity or raw error fields)
 // and for the admin-only persisted retry trail (via BuildAttemptsDetail,
 // serving/attempts_detail.go). ProviderCode/UpstreamModel/EndpointID/PoolID/
 // CredentialID/ErrorMsg must never reach the client — they identify internal
 // upstream accounts and may contain raw transport error text.
 type AttemptRecord struct {
 	RouteID            string
+	GroupID            string
+	RouteStrategy      string
+	RouteObjective     string
+	GroupRank          int
+	Priority           int
+	RoutingWeight      float64
+	SelectionReason    string
 	TargetID           string // deployment_id or credential_id (legacy/opaque; kept for existing consumers)
 	ProviderCode       string
 	UpstreamModel      string

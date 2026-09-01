@@ -8,6 +8,10 @@ import type {
 } from "@/api/types/aiTenant";
 export { errorMessage } from "./errorMessage";
 
+export function isGroupRoutePolicyConflict(error: unknown): boolean {
+  return error instanceof HttpProblem && error.code === "group_route_policy_conflict";
+}
+
 export function dispatchPriceConflicts(error: unknown): TenantAiDispatchPriceConflict[] {
   if (!(error instanceof HttpProblem) || error.code !== "dispatch_rule_price_conflict") return [];
   const conflicts = error.meta?.conflicts;

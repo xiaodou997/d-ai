@@ -27,14 +27,16 @@ func openGroupTransferTestPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 				name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
 				retail_price_book_id UUID NOT NULL, default_user_multiplier NUMERIC NOT NULL,
 				user_default_visible BOOLEAN NOT NULL DEFAULT false,
-				allow_protocol_conversion BOOLEAN NOT NULL,
+			allow_protocol_conversion BOOLEAN NOT NULL,
+			route_strategy TEXT NOT NULL DEFAULT 'adaptive', route_objective TEXT NOT NULL DEFAULT 'balanced',
+			route_policy_version BIGINT NOT NULL DEFAULT 1,
 			sort_order INTEGER NOT NULL, status TEXT NOT NULL,
 			UNIQUE (tenant_id, name),
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		CREATE TEMP TABLE ai_group_targets (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(), group_id UUID NOT NULL, target_kind TEXT NOT NULL,
-			target_id UUID NOT NULL, priority INTEGER NOT NULL, status TEXT NOT NULL,
+			target_id UUID NOT NULL, priority INTEGER NOT NULL, routing_weight NUMERIC NOT NULL DEFAULT 1, status TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		CREATE TEMP TABLE ai_group_client_surfaces (

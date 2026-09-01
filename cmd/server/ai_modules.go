@@ -206,13 +206,11 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		WithDefaultInFlight(cfg.Runtime.DefaultInFlightPerAccount)
 	upstreamConcurrencyLimiter := redisadapter.NewUpstreamConcurrencyLimiter(redisClient)
 
-	routeWeightsStore := aiadapters.NewRouteWeightsStore(pool)
 	routeStats := redisadapter.NewRedisRouteStats(redisClient)
 	stickyStore := routing.StickyStore(redisadapter.NewRedisSticky(redisClient))
 	scorer := &serving.MultiDimScorer{
-		Health:  healthTracker,
-		Stats:   routeStats,
-		Weights: routeWeightsStore,
+		Health: healthTracker,
+		Stats:  routeStats,
 	}
 
 	runtimeBinder := coreruntime.NewCachedBindingResolver(
@@ -392,7 +390,6 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				DatabaseHealth: databaseHealth,
 				RedisHealth:    redisHealth,
 				Health:         healthTracker,
-				Weights:        routeWeightsStore,
 				BanChecker:     banChecker,
 			},
 			Dashboard: transport.AIDashboardHTTPDeps{

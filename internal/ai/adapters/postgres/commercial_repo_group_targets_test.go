@@ -27,7 +27,9 @@ func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) 
 	if _, err := pool.Exec(ctx, `
 		CREATE TEMP TABLE ai_groups (
 			id UUID PRIMARY KEY,
-			tenant_id TEXT NOT NULL DEFAULT 'tenant-1'
+			tenant_id TEXT NOT NULL DEFAULT 'tenant-1',
+			route_policy_version BIGINT NOT NULL DEFAULT 1,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 		CREATE TEMP TABLE ai_group_client_surfaces (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,6 +47,7 @@ func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) 
 			target_kind TEXT NOT NULL,
 			target_id UUID NOT NULL,
 			priority INTEGER NOT NULL DEFAULT 100,
+			routing_weight NUMERIC NOT NULL DEFAULT 1,
 			status TEXT NOT NULL DEFAULT 'active',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -96,11 +99,6 @@ func openCommercialGroupTestPool(t *testing.T) (*pgxpool.Pool, context.Context) 
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 			PRIMARY KEY (resource_kind, resource_id, tenant_id)
-		);
-		CREATE TEMP TABLE ai_route_score_weights (
-			scope TEXT PRIMARY KEY,
-			weights JSONB NOT NULL,
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 	`); err != nil {
 		t.Fatalf("create group target fixtures: %v", err)
@@ -232,6 +230,134 @@ func TestCommercialRepoAddGroupTargetRequiresRestrictedGrant(t *testing.T) {
 	}
 	if _, err := repo.AddGroupTarget(ctx, commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}, write); err != nil {
 		t.Fatalf("AddGroupTarget() with grant: %v", err)
+	}
+}
+
+func TestCommercialRepoReplaceGroupTargetsIsAtomicAndVersioned(t *testing.T) {
+	pool, ctx := openCommercialGroupTestPool(t)
+	repo := NewCommercialRepo(dbgen.New(pool), pool)
+
+	const (
+		groupID   = "99999999-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		accountID = "99999999-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+		poolID    = "99999999-cccc-cccc-cccc-cccccccccccc"
+	)
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_groups (id, tenant_id, route_policy_version) VALUES ($1::uuid, 'tenant-1', 3)`, groupID); err != nil {
+		t.Fatalf("seed group: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_upstream_accounts (id, name, tenant_display_name, tenant_access_mode, status) VALUES ($1::uuid, 'account', 'Account', 'public', 'active')`, accountID); err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_credential_pools (id, name, tenant_display_name, tenant_access_mode, status) VALUES ($1::uuid, 'pool', 'Pool', 'public', 'active')`, poolID); err != nil {
+		t.Fatalf("seed pool: %v", err)
+	}
+	scope := commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}
+	first, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
+		ExpectedVersion: 3,
+		Targets: []commercial.GroupTargetWrite{
+			{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Priority: 10, RoutingWeight: 2, Status: commercial.StatusActive},
+			{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Priority: 20, RoutingWeight: 1, Status: commercial.StatusDisabled},
+		},
+	})
+	if err != nil {
+		t.Fatalf("first replacement: %v", err)
+	}
+	if first.RoutePolicyVersion != 4 || len(first.Targets) != 2 {
+		t.Fatalf("first replacement = version %d targets %d, want 4/2", first.RoutePolicyVersion, len(first.Targets))
+	}
+
+	_, err = repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
+		ExpectedVersion: 3,
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindDirectUpstream, TargetID: accountID, Priority: 1, RoutingWeight: 1, Status: commercial.StatusActive}},
+	})
+	var conflict *domain.GroupRoutePolicyConflictError
+	if !errors.As(err, &conflict) || conflict.ActualVersion != 4 {
+		t.Fatalf("stale replacement error = %v, conflict = %#v", err, conflict)
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM ai_group_targets WHERE group_id = $1::uuid`, groupID).Scan(&count); err != nil {
+		t.Fatalf("count after stale replacement: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("stale replacement changed targets: count = %d, want 2", count)
+	}
+
+	second, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
+		ExpectedVersion: 4,
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Priority: 30, RoutingWeight: 3, Status: commercial.StatusActive}},
+	})
+	if err != nil {
+		t.Fatalf("second replacement: %v", err)
+	}
+	if second.RoutePolicyVersion != 5 || len(second.Targets) != 1 || second.Targets[0].TargetID != poolID || second.Targets[0].RoutingWeight != 3 {
+		t.Fatalf("second replacement = %#v, want version 5 and pool target", second)
+	}
+	unchanged, err := repo.ReplaceGroupTargets(ctx, scope, commercial.GroupTargetBatchWrite{
+		ExpectedVersion: 5,
+		Targets:         []commercial.GroupTargetWrite{{TargetKind: commercial.TargetKindOAuthPool, TargetID: poolID, Priority: 30, RoutingWeight: 3, Status: commercial.StatusActive}},
+	})
+	if err != nil {
+		t.Fatalf("unchanged replacement: %v", err)
+	}
+	if unchanged.RoutePolicyVersion != 5 || len(unchanged.Targets) != 1 {
+		t.Fatalf("unchanged replacement = version %d targets %d, want 5/1", unchanged.RoutePolicyVersion, len(unchanged.Targets))
+	}
+}
+
+func TestCommercialRepoUpdateGroupRoutePolicyIsVersioned(t *testing.T) {
+	pool, ctx := openCommercialGroupTestPool(t)
+	// The target-focused fixture keeps its group table minimal. Add the columns
+	// returned by the generated group query for this narrow-policy contract test.
+	if _, err := pool.Exec(ctx, `
+		ALTER TABLE ai_groups
+			ADD COLUMN name TEXT NOT NULL DEFAULT 'group',
+			ADD COLUMN description TEXT NOT NULL DEFAULT '',
+			ADD COLUMN retail_price_book_id UUID,
+			ADD COLUMN default_user_multiplier NUMERIC NOT NULL DEFAULT 1,
+			ADD COLUMN user_default_visible BOOLEAN NOT NULL DEFAULT false,
+			ADD COLUMN allow_protocol_conversion BOOLEAN NOT NULL DEFAULT false,
+			ADD COLUMN route_strategy TEXT NOT NULL DEFAULT 'adaptive',
+			ADD COLUMN route_objective TEXT NOT NULL DEFAULT 'balanced',
+			ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0,
+			ADD COLUMN status TEXT NOT NULL DEFAULT 'active',
+			ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	`); err != nil {
+		t.Fatalf("extend group fixture: %v", err)
+	}
+	repo := NewCommercialRepo(dbgen.New(pool), pool)
+	const groupID = "99999999-dddd-dddd-dddd-dddddddddddd"
+	if _, err := pool.Exec(ctx, `INSERT INTO ai_groups (id, tenant_id, route_policy_version) VALUES ($1::uuid, 'tenant-1', 7)`, groupID); err != nil {
+		t.Fatalf("seed route policy group: %v", err)
+	}
+	scope := commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: groupID}
+	updated, err := repo.UpdateGroupRoutePolicy(ctx, scope, commercial.GroupRoutePolicyWrite{
+		ExpectedVersion: 7,
+		RouteStrategy:   commercial.RouteStrategyWeighted,
+		RouteObjective:  commercial.RouteObjectiveBalanced,
+	})
+	if err != nil {
+		t.Fatalf("route policy update: %v", err)
+	}
+	if updated.RoutePolicyVersion != 8 || updated.RouteStrategy != commercial.RouteStrategyWeighted {
+		t.Fatalf("updated group = version %d strategy %q, want 8/weighted", updated.RoutePolicyVersion, updated.RouteStrategy)
+	}
+
+	_, err = repo.UpdateGroupRoutePolicy(ctx, scope, commercial.GroupRoutePolicyWrite{
+		ExpectedVersion: 7,
+		RouteStrategy:   commercial.RouteStrategyFailover,
+		RouteObjective:  commercial.RouteObjectiveBalanced,
+	})
+	var conflict *domain.GroupRoutePolicyConflictError
+	if !errors.As(err, &conflict) || conflict.ExpectedVersion != 7 || conflict.ActualVersion != 8 {
+		t.Fatalf("stale route policy update = %v, conflict = %#v", err, conflict)
+	}
+	var strategy string
+	var version int64
+	if err := pool.QueryRow(ctx, `SELECT route_strategy, route_policy_version FROM ai_groups WHERE id = $1::uuid`, groupID).Scan(&strategy, &version); err != nil {
+		t.Fatalf("read route policy group: %v", err)
+	}
+	if strategy != string(commercial.RouteStrategyWeighted) || version != 8 {
+		t.Fatalf("stale route policy changed group = %q/%d, want weighted/8", strategy, version)
 	}
 }
 

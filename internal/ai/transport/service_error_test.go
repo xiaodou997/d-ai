@@ -32,3 +32,16 @@ func TestMapServiceErrorUsesDomainPersistenceErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestMapServiceErrorPreservesGroupRoutePolicyConflictMetadata(t *testing.T) {
+	err := mapServiceError(&domain.GroupRoutePolicyConflictError{
+		GroupID: "group-1", ExpectedVersion: 3, ActualVersion: 4,
+	})
+	var appErr *httpx.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusConflict || appErr.Code != "group_route_policy_conflict" {
+		t.Fatalf("error = %#v, want structured conflict", err)
+	}
+	if got := appErr.Meta["actual_version"]; got != int64(4) {
+		t.Fatalf("actual_version metadata = %#v, want 4", got)
+	}
+}

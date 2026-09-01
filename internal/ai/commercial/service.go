@@ -2,13 +2,14 @@ package commercial
 
 import (
 	"context"
+	"math"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"xiaodou/dai/internal/ai/core/catalog"
 	"xiaodou/dai/internal/ai/core/identity"
-	"xiaodou/dai/internal/ai/core/routing"
 	"xiaodou/dai/internal/ai/core/surface"
 )
 
@@ -75,6 +76,21 @@ func (s *Service) UpdateGroup(ctx context.Context, scope TenantGroupScope, in Gr
 		return Group{}, err
 	}
 	return s.repo.UpdateGroup(ctx, normalizedScope, normalized)
+}
+
+func (s *Service) UpdateGroupRoutePolicy(ctx context.Context, scope TenantGroupScope, in GroupRoutePolicyWrite) (Group, error) {
+	normalizedScope, err := normalizeTenantGroupScope(scope)
+	if err != nil {
+		return Group{}, err
+	}
+	normalized, err := normalizeGroupRoutePolicyWrite(in)
+	if err != nil {
+		return Group{}, err
+	}
+	if in.ExpectedVersion <= 0 {
+		return Group{}, newValidationError("expected_version", "expected_version must be greater than 0")
+	}
+	return s.repo.UpdateGroupRoutePolicy(ctx, normalizedScope, normalized)
 }
 
 func (s *Service) UpdateGroupStatus(ctx context.Context, scope TenantGroupScope, status Status) (Group, error) {
@@ -252,15 +268,11 @@ func (s *Service) UpdateGroupTarget(ctx context.Context, scope TenantGroupScope,
 	if strings.TrimSpace(id) == "" {
 		return GroupTarget{}, newValidationError("id", "id is required")
 	}
-	if in.Priority < 0 {
-		return GroupTarget{}, newValidationError("priority", "priority must be >= 0")
-	}
-	status, err := normalizeStatus(in.Status)
+	normalized, err := normalizeGroupTargetWrite(in)
 	if err != nil {
 		return GroupTarget{}, err
 	}
-	in.Status = status
-	return s.repo.UpdateGroupTarget(ctx, normalizedScope, id, in)
+	return s.repo.UpdateGroupTarget(ctx, normalizedScope, id, normalized)
 }
 
 func (s *Service) DeleteGroupTarget(ctx context.Context, scope TenantGroupScope, id string) error {
@@ -272,6 +284,34 @@ func (s *Service) DeleteGroupTarget(ctx context.Context, scope TenantGroupScope,
 		return newValidationError("id", "id is required")
 	}
 	return s.repo.DeleteGroupTarget(ctx, normalized, id)
+}
+
+func (s *Service) ReplaceGroupTargets(ctx context.Context, scope TenantGroupScope, in GroupTargetBatchWrite) (GroupTargetBatchResult, error) {
+	normalizedScope, err := normalizeTenantGroupScope(scope)
+	if err != nil {
+		return GroupTargetBatchResult{}, err
+	}
+	if in.ExpectedVersion <= 0 {
+		return GroupTargetBatchResult{}, newValidationError("expected_version", "expected_version must be greater than 0")
+	}
+	normalized := make([]GroupTargetWrite, 0, len(in.Targets))
+	seen := make(map[string]struct{}, len(in.Targets))
+	for index, target := range in.Targets {
+		item, normalizeErr := normalizeGroupTargetWrite(target)
+		if normalizeErr != nil {
+			return GroupTargetBatchResult{}, newValidationError("targets", "target "+strconv.Itoa(index+1)+": "+normalizeErr.Error())
+		}
+		key := string(item.TargetKind) + "\x00" + item.TargetID
+		if _, exists := seen[key]; exists {
+			return GroupTargetBatchResult{}, newValidationError("targets", "duplicate target: "+item.TargetID)
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, item)
+	}
+	return s.repo.ReplaceGroupTargets(ctx, normalizedScope, GroupTargetBatchWrite{
+		ExpectedVersion: in.ExpectedVersion,
+		Targets:         normalized,
+	})
 }
 
 func (s *Service) AddDispatchRule(ctx context.Context, scope TenantGroupScope, in DispatchRuleWrite) (DispatchRule, error) {
@@ -459,22 +499,22 @@ func (s *Service) DeleteLimitPolicies(ctx context.Context, filter LimitPolicyFil
 	return s.repo.DeleteLimitPolicies(ctx, normalized)
 }
 
-func (s *Service) UpsertRoutingPolicy(ctx context.Context, in RoutingPolicyWrite) (routing.Policy, error) {
-	normalized, err := normalizeRoutingPolicyWrite(in)
-	if err != nil {
-		return routing.Policy{}, err
-	}
-	return s.repo.UpsertRoutingPolicy(ctx, normalized)
-}
-
-func (s *Service) ListRoutingPolicies(ctx context.Context) ([]routing.Policy, error) {
-	return s.repo.ListRoutingPolicies(ctx)
-}
-
 func normalizeGroupWrite(in GroupWrite) (GroupWrite, error) {
+	if in.ExpectedRoutePolicyVersion < 0 {
+		return GroupWrite{}, newValidationError("route_policy_version", "route_policy_version must be >= 0")
+	}
 	in.Code = strings.TrimSpace(in.Code)
 	in.Name = strings.TrimSpace(in.Name)
 	in.Description = strings.TrimSpace(in.Description)
+	policy, err := normalizeGroupRoutePolicyWrite(GroupRoutePolicyWrite{
+		RouteStrategy:  in.RouteStrategy,
+		RouteObjective: in.RouteObjective,
+	})
+	if err != nil {
+		return GroupWrite{}, err
+	}
+	in.RouteStrategy = policy.RouteStrategy
+	in.RouteObjective = policy.RouteObjective
 	in.RetailPriceBookID = strings.TrimSpace(in.RetailPriceBookID)
 	if in.Name == "" && in.Code == "" {
 		return GroupWrite{}, newValidationError("name", "name or code is required")
@@ -492,13 +532,39 @@ func normalizeGroupWrite(in GroupWrite) (GroupWrite, error) {
 	if err != nil {
 		return GroupWrite{}, err
 	}
-	if in.DefaultUserMultiplier < 0 {
-		return GroupWrite{}, newValidationError("default_user_multiplier", "default_user_multiplier must be >= 0")
+	if !isFiniteNonNegative(in.DefaultUserMultiplier) {
+		return GroupWrite{}, newValidationError("default_user_multiplier", "default_user_multiplier must be a finite number >= 0")
 	}
 	if in.SortOrder < 0 {
 		return GroupWrite{}, newValidationError("sort_order", "sort_order must be >= 0")
 	}
 	in.Status = status
+	return in, nil
+}
+
+func normalizeGroupRoutePolicyWrite(in GroupRoutePolicyWrite) (GroupRoutePolicyWrite, error) {
+	if in.RouteStrategy == "" {
+		in.RouteStrategy = RouteStrategyAdaptive
+	}
+	if in.RouteObjective == "" {
+		in.RouteObjective = RouteObjectiveBalanced
+	}
+	switch in.RouteStrategy {
+	case RouteStrategyFailover, RouteStrategyWeighted, RouteStrategyAdaptive:
+	default:
+		return GroupRoutePolicyWrite{}, newValidationError("route_strategy", "unsupported route_strategy")
+	}
+	switch in.RouteObjective {
+	case RouteObjectiveBalanced, RouteObjectiveCost, RouteObjectiveLatency, RouteObjectiveStability:
+	default:
+		return GroupRoutePolicyWrite{}, newValidationError("route_objective", "unsupported route_objective")
+	}
+	// Objectives are meaningful only for adaptive scoring. Canonicalising them
+	// for structural strategies prevents stale UI values from looking active in
+	// the API while keeping the group policy a single coherent document.
+	if in.RouteStrategy != RouteStrategyAdaptive {
+		in.RouteObjective = RouteObjectiveBalanced
+	}
 	return in, nil
 }
 
@@ -515,12 +581,26 @@ func normalizeGroupTargetWrite(in GroupTargetWrite) (GroupTargetWrite, error) {
 	if in.Priority < 0 {
 		return GroupTargetWrite{}, newValidationError("priority", "priority must be >= 0")
 	}
+	if !isFiniteNonNegative(in.RoutingWeight) {
+		return GroupTargetWrite{}, newValidationError("routing_weight", "routing_weight must be a finite number >= 0")
+	}
 	status, err := normalizeStatus(in.Status)
 	if err != nil {
 		return GroupTargetWrite{}, err
 	}
 	in.Status = status
 	return in, nil
+}
+
+// PostgreSQL NUMERIC(10,4), used by the group policy columns, can represent at
+// most 999999.9999. Rejecting values outside that range at the application
+// boundary gives callers a domain error instead of a driver-specific cast
+// failure, and explicitly rejects NaN/Inf values that can otherwise bypass a
+// simple >= 0 check in some callers.
+const maxGroupPolicyNumber = 999999.9999
+
+func isFiniteNonNegative(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0 && value <= maxGroupPolicyNumber
 }
 
 func normalizeDispatchRuleWrite(in DispatchRuleWrite) (DispatchRuleWrite, error) {
@@ -645,30 +725,6 @@ func normalizeLimitPolicyFilter(filter LimitPolicyFilter) (LimitPolicyFilter, er
 	}
 	filter.ScopeID = strings.TrimSpace(filter.ScopeID)
 	return filter, nil
-}
-
-func normalizeRoutingPolicyWrite(in RoutingPolicyWrite) (RoutingPolicyWrite, error) {
-	in.ScopeID = strings.TrimSpace(in.ScopeID)
-	in.UpdatedBy = strings.TrimSpace(in.UpdatedBy)
-	switch in.ScopeType {
-	case routing.ScopeGlobal:
-		if in.ScopeID == "" {
-			in.ScopeID = "global"
-		}
-	case routing.ScopeTenant, routing.ScopeGroup, routing.ScopeUpstream:
-		if in.ScopeID == "" {
-			return RoutingPolicyWrite{}, newValidationError("scope_id", "scope_id is required")
-		}
-	default:
-		return RoutingPolicyWrite{}, newValidationError("scope_type", "unsupported scope_type")
-	}
-	if in.Weights.Cost < 0 || in.Weights.Latency < 0 || in.Weights.Load < 0 || in.Weights.Health < 0 {
-		return RoutingPolicyWrite{}, newValidationError("weights", "weights must be >= 0")
-	}
-	if in.Weights.IsZero() {
-		return RoutingPolicyWrite{}, newValidationError("weights", "weights cannot all be zero")
-	}
-	return in, nil
 }
 
 func normalizeStatus(status Status) (Status, error) {

@@ -42,28 +42,17 @@ type ScoringPicker interface {
 	PickWithScore(ctx context.Context, scoring RouteScoringContext, candidates []*domain.RouteCandidate, used map[string]bool) (*domain.RouteCandidate, float64)
 }
 
-// ScoreWeightsSource fetches effective weights for a request.
-type ScoreWeightsSource interface {
-	EffectiveWeightsFor(ctx context.Context, scopes []ScoreWeightScope) []ScoreWeights
-}
-
-type ScoreWeightScope struct {
-	TenantID   string
-	GroupID    string
-	UpstreamID string
-}
-
 // ============================================================================
 // MultiDimScorer
 // ============================================================================
 
-// MultiDimScorer implements RouteScorer using cost/latency/load/health scoring.
-// When Redis stats are unavailable (all zero), it falls back to the simpler
-// priority-tier random algorithm.
+// MultiDimScorer implements RouteScorer using the group policy. Weighted groups
+// sample by target routing_weight; adaptive groups use cost/latency/load/health
+// scoring. When dynamic stats are unavailable (or a weighted group has no
+// positive weights), it falls back to the simpler priority-tier algorithm.
 type MultiDimScorer struct {
-	Health  routing.HealthTracker   // optional; nil = no health signals
-	Stats   routing.RouteStatsStore // optional; nil = priority-tier fallback
-	Weights ScoreWeightsSource      // optional; nil = DefaultScoreWeights
+	Health routing.HealthTracker   // optional; nil = no health signals
+	Stats  routing.RouteStatsStore // optional; nil = priority-tier fallback
 }
 
 // Pick returns the best candidate using multi-dim scoring with softmax sampling,
@@ -83,14 +72,51 @@ func (s *MultiDimScorer) PickWithScore(ctx context.Context, scoring RouteScoring
 	if len(eligible) == 1 {
 		return eligible[0], 0
 	}
+	// Priority is the structural failover boundary. Every strategy chooses
+	// within the lowest-priority tier first; only after that tier is exhausted
+	// will the caller ask us to consider the next tier.
+	tier := lowestPriorityTier(eligible)
+	strategy := tier[0].RouteStrategy
+	if strategy == "weighted" {
+		return pickRoutingWeighted(tier)
+	}
+	if strategy == "failover" {
+		return pickPriorityTier(tier), 0
+	}
 
 	if s.Stats != nil {
-		stats := s.Stats.Snapshot(ctx, candidateRouteIDs(eligible))
+		stats := s.Stats.Snapshot(ctx, candidateRouteIDs(tier))
 		if hasRoutingStats(stats) {
-			return s.pickMultiDimWithScore(ctx, scoring, eligible, stats)
+			return s.pickMultiDimWithScore(ctx, scoring, tier, stats)
 		}
 	}
-	return pickPriorityTier(eligible), 0
+	return pickPriorityTier(tier), 0
+}
+
+func pickRoutingWeighted(candidates []*domain.RouteCandidate) (*domain.RouteCandidate, float64) {
+	total := 0.0
+	for _, candidate := range candidates {
+		total += routingWeight(candidate.RoutingWeight)
+	}
+	if total <= 0 {
+		return pickPriorityTier(candidates), 0
+	}
+	r := rand.Float64() * total
+	for _, candidate := range candidates {
+		weight := routingWeight(candidate.RoutingWeight)
+		if r < weight {
+			return candidate, weight / total
+		}
+		r -= weight
+	}
+	return candidates[len(candidates)-1], routingWeight(candidates[len(candidates)-1].RoutingWeight) / total
+}
+
+func routingWeight(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+		return 0
+	}
+	return value
 }
 
 func hasRoutingStats(stats map[string]routing.RouteStats) bool {
@@ -134,7 +160,15 @@ func (s *MultiDimScorer) normalizedCandidateScores(ctx context.Context, scoring 
 	latencyScores := normalizeLowerIsBetter(latencies)
 	loadScores := normalizeLowerIsBetter(loads)
 	healthScores := s.healthScores(eligible)
-	resolvedWeights := s.resolveWeightsFor(ctx, scoring, eligible)
+	strategy := eligible[0].RouteStrategy
+	resolvedWeights := make([]ScoreWeights, len(eligible))
+	objective := eligible[0].RouteObjective
+	if strategy != "adaptive" {
+		objective = "balanced"
+	}
+	for i := range resolvedWeights {
+		resolvedWeights[i] = objectiveWeights(objective)
+	}
 	scores := make([]float64, len(eligible))
 	for i := range eligible {
 		weights := resolvedWeights[i]
@@ -149,6 +183,19 @@ func (s *MultiDimScorer) normalizedCandidateScores(ctx context.Context, scoring 
 			weights.Health*healthScores[i]) / weightSum
 	}
 	return scores
+}
+
+func objectiveWeights(objective string) ScoreWeights {
+	switch objective {
+	case "cost":
+		return ScoreWeights{Cost: 0.65, Latency: 0.15, Load: 0.1, Health: 0.1}
+	case "latency":
+		return ScoreWeights{Cost: 0.1, Latency: 0.65, Load: 0.15, Health: 0.1}
+	case "stability":
+		return ScoreWeights{Cost: 0.1, Latency: 0.15, Load: 0.2, Health: 0.55}
+	default:
+		return DefaultScoreWeights
+	}
 }
 
 func (s *MultiDimScorer) healthScores(candidates []*domain.RouteCandidate) []float64 {
@@ -222,37 +269,6 @@ func candidateRouteIDs(candidates []*domain.RouteCandidate) []string {
 	return ids
 }
 
-func (s *MultiDimScorer) resolveWeights(ctx context.Context, scoring RouteScoringContext, candidate *domain.RouteCandidate) ScoreWeights {
-	return s.resolveWeightsFor(ctx, scoring, []*domain.RouteCandidate{candidate})[0]
-}
-
-func (s *MultiDimScorer) resolveWeightsFor(ctx context.Context, scoring RouteScoringContext, candidates []*domain.RouteCandidate) []ScoreWeights {
-	out := make([]ScoreWeights, len(candidates))
-	if s.Weights == nil {
-		for i := range out {
-			out[i] = DefaultScoreWeights
-		}
-		return out
-	}
-	scopes := make([]ScoreWeightScope, len(candidates))
-	for i, candidate := range candidates {
-		upstreamID := candidate.EndpointID
-		if candidate.IsPoolRoute() {
-			upstreamID = candidate.PoolID
-		}
-		scopes[i] = ScoreWeightScope{TenantID: scoring.TenantID, GroupID: candidate.GroupID, UpstreamID: upstreamID}
-	}
-	resolved := s.Weights.EffectiveWeightsFor(ctx, scopes)
-	for i := range out {
-		if i < len(resolved) {
-			out[i] = resolved[i]
-		} else {
-			out[i] = DefaultScoreWeights
-		}
-	}
-	return out
-}
-
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -271,25 +287,33 @@ func filterEligible(candidates []*domain.RouteCandidate, used map[string]bool) [
 // one candidate within that tier. Fine-grained dynamic preference is handled by
 // the multi-dimensional scorer when runtime statistics are available.
 func pickPriorityTier(eligible []*domain.RouteCandidate) *domain.RouteCandidate {
-	if len(eligible) == 0 {
+	tier := lowestPriorityTier(eligible)
+	if len(tier) == 0 {
 		return nil
 	}
-	minP := eligible[0].Priority
-	for _, c := range eligible[1:] {
-		if c.Priority < minP {
-			minP = c.Priority
+	if len(tier) == 1 {
+		return tier[0]
+	}
+	return tier[rand.Intn(len(tier))]
+}
+
+func lowestPriorityTier(candidates []*domain.RouteCandidate) []*domain.RouteCandidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+	minPriority := candidates[0].Priority
+	for _, candidate := range candidates[1:] {
+		if candidate.Priority < minPriority {
+			minPriority = candidate.Priority
 		}
 	}
-	var group []*domain.RouteCandidate
-	for _, c := range eligible {
-		if c.Priority == minP {
-			group = append(group, c)
+	tier := make([]*domain.RouteCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Priority == minPriority {
+			tier = append(tier, candidate)
 		}
 	}
-	if len(group) == 1 {
-		return group[0]
-	}
-	return group[rand.Intn(len(group))]
+	return tier
 }
 
 // softmaxSampleWithScore draws one candidate and returns its normalised

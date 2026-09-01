@@ -37,8 +37,6 @@ func TestSystemRoutesRegisterIndependentlyFromCoreAI(t *testing.T) {
 		path   string
 	}{
 		{method: http.MethodGet, path: "/api/v1/system/status"},
-		{method: http.MethodGet, path: "/api/v1/route-weights/global"},
-		{method: http.MethodPut, path: "/api/v1/route-weights/global"},
 	}
 
 	coreRouter, coreAPI := server.New(server.Options{Title: "test", Version: "test"})

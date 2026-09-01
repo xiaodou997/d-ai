@@ -242,16 +242,6 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/ai/gateway/PricingView.vue")
   },
   {
-    id: "admin-routing-policy",
-    label: "路由策略",
-    path: "/admin/ai/routing",
-    icon: "route",
-    capability: "admin.ai.upstream",
-    navGroup: adminAi,
-    order: 30,
-    component: () => import("@/views/admin/ai/gateway/RoutingView.vue")
-  },
-  {
     id: "admin-usage",
     label: "使用记录",
     path: "/admin/ai/usage",

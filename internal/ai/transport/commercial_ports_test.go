@@ -63,12 +63,20 @@ type commercialGroupManagerStub struct {
 	CommercialGroupManager
 	createTenantID string
 	createInput    commercial.GroupWrite
+	routeScope     commercial.TenantGroupScope
+	routeInput     commercial.GroupRoutePolicyWrite
 }
 
 func (s *commercialGroupManagerStub) CreateGroup(_ context.Context, tenantID string, input commercial.GroupWrite) (commercial.Group, error) {
 	s.createTenantID = tenantID
 	s.createInput = input
 	return commercial.Group{ID: "group-created", TenantID: tenantID, Name: input.Name, RetailPriceBookID: input.RetailPriceBookID, DefaultUserMultiplier: input.DefaultUserMultiplier, Status: input.Status}, nil
+}
+
+func (s *commercialGroupManagerStub) UpdateGroupRoutePolicy(_ context.Context, scope commercial.TenantGroupScope, input commercial.GroupRoutePolicyWrite) (commercial.Group, error) {
+	s.routeScope = scope
+	s.routeInput = input
+	return commercial.Group{ID: scope.GroupID, TenantID: scope.TenantID, Name: "route-policy-group", RouteStrategy: input.RouteStrategy, RouteObjective: input.RouteObjective, Status: commercial.StatusActive}, nil
 }
 
 type commercialDispatchRuleManagerStub struct {
@@ -83,12 +91,20 @@ func (s *commercialDispatchRuleManagerStub) ListDispatchRules(_ context.Context,
 
 type commercialGroupTargetManagerStub struct {
 	CommercialGroupTargetManager
-	listScope commercial.TenantGroupScope
+	listScope    commercial.TenantGroupScope
+	replaceScope commercial.TenantGroupScope
+	replaceInput commercial.GroupTargetBatchWrite
 }
 
 func (s *commercialGroupTargetManagerStub) ListGroupTargetDetails(_ context.Context, scope commercial.TenantGroupScope) ([]commercial.GroupTargetDetail, error) {
 	s.listScope = scope
 	return nil, nil
+}
+
+func (s *commercialGroupTargetManagerStub) ReplaceGroupTargets(_ context.Context, scope commercial.TenantGroupScope, input commercial.GroupTargetBatchWrite) (commercial.GroupTargetBatchResult, error) {
+	s.replaceScope = scope
+	s.replaceInput = input
+	return commercial.GroupTargetBatchResult{RoutePolicyVersion: input.ExpectedVersion + 1}, nil
 }
 
 type commercialUserBindingManagerStub struct {
@@ -195,6 +211,16 @@ func TestCommercialRoutesUseSeparatedPorts(t *testing.T) {
 	requireCommercialStatus(t, performCommercialRequest(handler, http.MethodGet, "/api/v1/tenants/me/groups/group-1/targets", ""), http.StatusOK)
 	if groupTargets.listScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) {
 		t.Fatalf("target scope = %#v", groupTargets.listScope)
+	}
+	replaceRecorder := performCommercialRequest(handler, http.MethodPut, "/api/v1/tenants/me/groups/group-1/targets", `{"expected_version":1,"targets":[{"account_id":"account-1","priority":10,"routing_weight":2}]}`)
+	requireCommercialStatus(t, replaceRecorder, http.StatusOK)
+	if groupTargets.replaceScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) || groupTargets.replaceInput.ExpectedVersion != 1 || len(groupTargets.replaceInput.Targets) != 1 || groupTargets.replaceInput.Targets[0].TargetID != "account-1" {
+		t.Fatalf("target replacement command = scope %#v input %#v", groupTargets.replaceScope, groupTargets.replaceInput)
+	}
+	policyRecorder := performCommercialRequest(handler, http.MethodPatch, "/api/v1/tenants/me/groups/group-1/route-policy", `{"route_strategy":"weighted","route_objective":"balanced","route_policy_version":1}`)
+	requireCommercialStatus(t, policyRecorder, http.StatusOK)
+	if groupManager.routeScope != (commercial.TenantGroupScope{TenantID: "tenant-1", GroupID: "group-1"}) || groupManager.routeInput.RouteStrategy != commercial.RouteStrategyWeighted {
+		t.Fatalf("route policy command = scope %#v input %#v", groupManager.routeScope, groupManager.routeInput)
 	}
 
 	bindingsRecorder := performCommercialRequest(handler, http.MethodGet, "/api/v1/tenants/me/users/user-1/groups", "")

@@ -183,8 +183,8 @@ function toDispatchModelPage(value: DispatchModelPageTransport): { items: Tenant
   return { items: value.items?.map((item) => stripSchema(item)) ?? [], total: value.total };
 }
 
-function toGroupTargetPage(value: GroupTargetPageTransport): { items: TenantAiGroupTarget[]; total: number } {
-  return { items: value.items?.map(toGroupTarget) ?? [], total: value.total };
+function toGroupTargetPage(value: GroupTargetPageTransport): { items: TenantAiGroupTarget[]; total: number; route_policy_version: number } {
+  return { items: value.items?.map(toGroupTarget) ?? [], total: value.total, route_policy_version: value.route_policy_version };
 }
 
 function toPriceBook(value: PriceBookTransport): TenantAiPriceBook {
@@ -824,6 +824,16 @@ export const aiTenantApi = {
       baseUrl: baseUrl()
     }).then(stripSchema);
   },
+  updateGroupRoutePolicy(groupId: string, body: OperationBody<"ai-update-group-route-policy">) {
+    return typedRequest<"ai-update-group-route-policy">({
+      method: "PATCH",
+      path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/route-policy`,
+      pathParams: { groupID: groupId },
+      headers: headers(),
+      body,
+      baseUrl: baseUrl()
+    }).then(stripSchema);
+  },
   updateGroupStatus(groupId: string, status: OperationBody<"ai-update-group-status">["status"]) {
     return typedRequest<"ai-update-group-status">({
       method: "PATCH",
@@ -936,6 +946,16 @@ export const aiTenantApi = {
       path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/targets`,
       pathParams: { groupID: groupId },
       headers: headers(),
+      baseUrl: baseUrl()
+    }).then(toGroupTargetPage);
+  },
+  replaceGroupTargets(groupId: string, body: OperationBody<"ai-replace-group-targets">) {
+    return typedRequest<"ai-replace-group-targets">({
+      method: "PUT",
+      path: `/api/v1/tenants/me/groups/${encodeURIComponent(groupId)}/targets`,
+      pathParams: { groupID: groupId },
+      headers: headers(),
+      body,
       baseUrl: baseUrl()
     }).then(toGroupTargetPage);
   },

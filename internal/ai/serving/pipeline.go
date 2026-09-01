@@ -114,6 +114,11 @@ type Request struct {
 	// sticky Redis binding rather than freshly scored.
 	StickyHit bool
 
+	// SelectionReason describes why the current candidate was chosen. It is
+	// copied into AttemptRecord and the optional route trace so operators can
+	// distinguish policy decisions from fallback/retry behaviour.
+	SelectionReason string
+
 	// StickyBinding is the binding StickyHit was resolved from. Execute reads
 	// it to pin the pool credential as well, so a conversation stays on one
 	// physical upstream account and not merely on one route.

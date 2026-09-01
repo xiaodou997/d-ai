@@ -2,6 +2,7 @@ package serving
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"xiaodou/dai/internal/ai/domain"
@@ -103,25 +104,25 @@ func TestMultiDimScorer_MultiDimPathActivatedByNonZeroStats(t *testing.T) {
 	}
 }
 
-func TestMultiDimScorerNormalizesDimensionsBeforeApplyingWeights(t *testing.T) {
-	scorer := &MultiDimScorer{Weights: fixedWeightsSource{weights: ScoreWeights{Cost: 0.1, Latency: 0.9}}}
+func TestMultiDimScorerAdaptiveUsesObjective(t *testing.T) {
+	scorer := &MultiDimScorer{}
 	candidates := []*domain.RouteCandidate{
-		{RouteID: "cheap", CostPer1kTokens: 0.01},
-		{RouteID: "fast", CostPer1kTokens: 1},
+		{RouteID: "cheap", CostPer1kTokens: 0.01, RouteStrategy: "adaptive", RouteObjective: "cost"},
+		{RouteID: "fast", CostPer1kTokens: 1, RouteStrategy: "adaptive", RouteObjective: "cost"},
 	}
 	stats := map[string]routing.RouteStats{
 		"cheap": {EWMALatencyMs: 200},
 		"fast":  {EWMALatencyMs: 20},
 	}
 	scores := scorer.normalizedCandidateScores(context.Background(), RouteScoringContext{}, candidates, stats)
-	if len(scores) != 2 || scores[1] <= scores[0] {
-		t.Fatalf("normalized scores = %v, latency weight should make the fast route win", scores)
+	if len(scores) != 2 || scores[0] <= scores[1] {
+		t.Fatalf("normalized scores = %v, cost objective should prefer the cheap route", scores)
 	}
 }
 
 func TestMultiDimScorerUsesNeutralLatencyForColdRoute(t *testing.T) {
-	scorer := &MultiDimScorer{Weights: fixedWeightsSource{weights: ScoreWeights{Latency: 1}}}
-	candidates := []*domain.RouteCandidate{{RouteID: "known"}, {RouteID: "cold"}}
+	scorer := &MultiDimScorer{}
+	candidates := []*domain.RouteCandidate{{RouteID: "known", RouteStrategy: "adaptive"}, {RouteID: "cold", RouteStrategy: "adaptive"}}
 	stats := map[string]routing.RouteStats{"known": {EWMALatencyMs: 100}}
 	scores := scorer.normalizedCandidateScores(context.Background(), RouteScoringContext{}, candidates, stats)
 	if scores[0] != scores[1] {
@@ -129,56 +130,41 @@ func TestMultiDimScorerUsesNeutralLatencyForColdRoute(t *testing.T) {
 	}
 }
 
-type fixedWeightsSource struct{ weights ScoreWeights }
-
-func (s fixedWeightsSource) EffectiveWeightsFor(_ context.Context, scopes []ScoreWeightScope) []ScoreWeights {
-	out := make([]ScoreWeights, len(scopes))
-	for i := range out {
-		out[i] = s.weights
+func TestMultiDimScorerWeightedStrategyUsesTargetWeights(t *testing.T) {
+	scorer := &MultiDimScorer{}
+	candidates := []*domain.RouteCandidate{{RouteID: "zero", RouteStrategy: "weighted", RoutingWeight: 0}, {RouteID: "one", RouteStrategy: "weighted", RoutingWeight: 1}}
+	for range 20 {
+		if got, _ := scorer.PickWithScore(context.Background(), RouteScoringContext{}, candidates, map[string]bool{}); got.RouteID != "one" {
+			t.Fatalf("weighted strategy selected %q", got.RouteID)
+		}
 	}
-	return out
 }
 
-type recordingWeightsSource struct {
-	tenantID   string
-	groupID    string
-	upstreamID string
-	calls      int
-}
-
-func (s *recordingWeightsSource) EffectiveWeightsFor(_ context.Context, scopes []ScoreWeightScope) []ScoreWeights {
-	s.calls++
-	out := make([]ScoreWeights, len(scopes))
-	for index, scope := range scopes {
-		s.tenantID, s.groupID, s.upstreamID = scope.TenantID, scope.GroupID, scope.UpstreamID
-		out[index] = ScoreWeights{Health: 1}
-	}
-	return out
-}
-
-func TestMultiDimScorerLoadsCandidateWeightsInOneBatch(t *testing.T) {
-	weights := &recordingWeightsSource{}
-	scorer := &MultiDimScorer{Weights: weights}
+func TestMultiDimScorerWeightedStrategyTreatsNonFiniteWeightsAsZero(t *testing.T) {
+	scorer := &MultiDimScorer{}
 	candidates := []*domain.RouteCandidate{
-		{GroupID: "group-1", EndpointID: "account-1"},
-		{GroupID: "group-2", PoolID: "pool-2"},
+		{RouteID: "bad", RouteStrategy: "weighted", RoutingWeight: math.NaN()},
+		{RouteID: "good", RouteStrategy: "weighted", RoutingWeight: 1},
 	}
-	resolved := scorer.resolveWeightsFor(context.Background(), RouteScoringContext{TenantID: "tenant-1"}, candidates)
-	if len(resolved) != 2 || weights.calls != 1 {
-		t.Fatalf("resolved weights = %d, batch calls = %d; want 2 results from one call", len(resolved), weights.calls)
+	for range 20 {
+		got, _ := scorer.PickWithScore(context.Background(), RouteScoringContext{}, candidates, map[string]bool{})
+		if got == nil || got.RouteID != "good" {
+			t.Fatalf("weighted strategy selected %#v", got)
+		}
 	}
 }
 
-func TestMultiDimScorerResolvesCandidateScopedWeights(t *testing.T) {
-	weights := &recordingWeightsSource{}
-	scorer := &MultiDimScorer{Weights: weights}
-	candidate := &domain.RouteCandidate{GroupID: "group-1", PoolID: "pool-1"}
-	got := scorer.resolveWeights(context.Background(), RouteScoringContext{TenantID: "tenant-1"}, candidate)
-	if got.Health != 1 {
-		t.Fatalf("weights = %+v", got)
+func TestMultiDimScorerKeepsPriorityAsFailoverBoundary(t *testing.T) {
+	scorer := &MultiDimScorer{}
+	candidates := []*domain.RouteCandidate{
+		{RouteID: "primary", Priority: 10, RouteStrategy: "weighted", RoutingWeight: 0},
+		{RouteID: "backup", Priority: 20, RouteStrategy: "weighted", RoutingWeight: 100},
 	}
-	if weights.tenantID != "tenant-1" || weights.groupID != "group-1" || weights.upstreamID != "pool-1" {
-		t.Fatalf("weight scope = tenant:%q group:%q upstream:%q", weights.tenantID, weights.groupID, weights.upstreamID)
+	for range 20 {
+		got, _ := scorer.PickWithScore(context.Background(), RouteScoringContext{}, candidates, map[string]bool{})
+		if got == nil || got.RouteID != "primary" {
+			t.Fatalf("weighted strategy crossed priority boundary and selected %#v", got)
+		}
 	}
 }
 

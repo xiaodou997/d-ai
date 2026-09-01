@@ -41,6 +41,7 @@ function target(id = "binding-1"): TenantAiGroupTarget {
     target_type: "account",
     account_name: "主 API",
     priority: 10,
+    routing_weight: 1,
     status: "active"
   };
 }
@@ -58,6 +59,7 @@ function createApi(initial: TenantAiGroupTarget[] = [target()]) {
         credential_pool_id: body.credential_pool_id,
         target_type: body.account_id ? "account" : "pool",
         priority: body.priority ?? 100,
+        routing_weight: body.routing_weight ?? 1,
         status: body.status ?? "active"
       };
       stored = [...stored, saved];
@@ -95,11 +97,12 @@ describe("useGroupTargets", () => {
     expect(api.add).toHaveBeenCalledWith("group-1", {
       credential_pool_id: "pool-1",
       priority: 20,
+      routing_weight: 1,
       status: "disabled"
     });
   });
 
-  it("updates priority and status without exposing route weight", async () => {
+  it("updates priority, routing weight, and status", async () => {
     const api = createApi();
     const state = useGroupTargets({ groupId: () => "group-1", api });
     await state.load();
@@ -108,8 +111,45 @@ describe("useGroupTargets", () => {
     await expect(state.save()).resolves.toMatchObject({ updated: 1, failures: [] });
     expect(api.update).toHaveBeenCalledWith("group-1", "binding-1", {
       priority: 20,
+      routing_weight: 1,
       status: "disabled"
     });
+  });
+
+  it("uses one versioned replacement and reports the captured diff", async () => {
+    const api = createApi();
+    api.listTargets = vi.fn(async () => ({ items: [target()], total: 1, route_policy_version: 7 }));
+    api.replace = vi.fn(async (_groupId: string, body: Parameters<NonNullable<GroupTargetsApi["replace"]>>[1]) => ({
+      items: [
+        target(),
+        {
+          id: "binding-2",
+          group_id: "group-1",
+          credential_pool_id: body.targets.find((item) => item.credential_pool_id)?.credential_pool_id,
+          target_type: "pool" as const,
+          pool_name: "OAuth 池",
+          priority: 100,
+          routing_weight: 1,
+          status: "active" as const
+        }
+      ],
+      total: 2,
+      route_policy_version: 8
+    }));
+    const state = useGroupTargets({ groupId: () => "group-1", api });
+    await state.load();
+    state.updateDraft("direct_upstream:account-1", { priority: 20 });
+    state.setSelected("oauth_pool:pool-1", true);
+
+    await expect(state.save()).resolves.toEqual({ added: 1, updated: 1, removed: 0, failures: [] });
+    expect(api.replace).toHaveBeenCalledWith("group-1", expect.objectContaining({
+      expected_version: 7,
+      targets: expect.arrayContaining([
+        expect.objectContaining({ account_id: "account-1", priority: 20 }),
+        expect.objectContaining({ credential_pool_id: "pool-1" })
+      ])
+    }));
+    expect(state.routePolicyVersion.value).toBe(8);
   });
 
   it("keeps successful removals and failed additions as retryable row changes", async () => {

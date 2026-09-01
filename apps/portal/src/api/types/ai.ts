@@ -68,19 +68,6 @@ export interface SystemStatusDTO {
   health: HealthSummaryDTO;
 }
 
-// ---- Route weights ----
-export interface ScoreWeightsDTO {
-  cost: number;
-  latency: number;
-  load: number;
-  health: number;
-}
-
-export interface RouteWeightsOutputBody {
-  scope: string;
-  weights: ScoreWeightsDTO;
-}
-
 // ---- Dashboard summary / top tenants ----
 export interface DashboardSummaryDTO {
   total_requests: number;

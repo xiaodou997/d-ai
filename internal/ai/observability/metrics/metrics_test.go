@@ -10,6 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"xiaodou/dai/internal/ai/serving"
 )
 
 func TestHTTPMiddlewareUsesRouteTemplate(t *testing.T) {
@@ -32,6 +34,38 @@ func TestHTTPMiddlewareUsesRouteTemplate(t *testing.T) {
 	want := `dai_http_requests_total{method="GET",route="/users/{userID}",status="204"}`
 	if !strings.Contains(string(body), want) {
 		t.Fatalf("metrics did not contain route template %q:\n%s", want, body)
+	}
+}
+
+func TestGatewayRecordsRoutePolicyMetrics(t *testing.T) {
+	gateway := NewGateway()
+	gateway.RecordRequest(&serving.Request{
+		ModelCode:      "model-1",
+		CapabilityType: "chat",
+		RequestStatus:  "success",
+		Attempts: []serving.AttemptRecord{{
+			RouteID:         "route-1",
+			GroupID:         "group-1",
+			RouteStrategy:   "adaptive",
+			RouteObjective:  "latency",
+			SelectionReason: "adaptive",
+			Outcome:         serving.ResultSuccess,
+			TotalMs:         25,
+		}},
+	})
+
+	metricsResponse := httptest.NewRecorder()
+	promhttp.Handler().ServeHTTP(metricsResponse, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body, err := io.ReadAll(metricsResponse.Result().Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if !strings.Contains(text, `dai_ai_route_attempts_total{group_id="group-1",objective="latency",outcome="success",reason="adaptive",route_id="route-1",strategy="adaptive"}`) {
+		t.Fatalf("route attempt metric missing:\n%s", text)
+	}
+	if !strings.Contains(text, `dai_ai_route_attempt_duration_ms_count{group_id="group-1",objective="latency",outcome="success",strategy="adaptive"} 1`) {
+		t.Fatalf("route latency metric missing:\n%s", text)
 	}
 }
 

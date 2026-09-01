@@ -25,6 +25,8 @@ type Gateway struct {
 	tokenUsage      *prometheus.CounterVec
 	pipelineErrors  *prometheus.CounterVec
 	circuitBreaker  *prometheus.GaugeVec
+	routeAttempts   *prometheus.CounterVec
+	routeLatency    *prometheus.HistogramVec
 }
 
 var buckets = []float64{50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000}
@@ -57,6 +59,17 @@ func NewGateway() *Gateway {
 			Name: "dai_ai_circuit_breaker_open",
 			Help: "1 if the circuit breaker is open for a deployment, 0 otherwise.",
 		}, []string{"deployment_id"}),
+
+		routeAttempts: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "dai_ai_route_attempts_total",
+			Help: "Upstream route attempts by group policy, route binding, and outcome.",
+		}, []string{"group_id", "route_id", "strategy", "objective", "reason", "outcome"}),
+
+		routeLatency: promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "dai_ai_route_attempt_duration_ms",
+			Help:    "Upstream route attempt latency by group policy and outcome.",
+			Buckets: buckets,
+		}, []string{"group_id", "strategy", "objective", "outcome"}),
 	}
 }
 
@@ -101,6 +114,26 @@ func (g *Gateway) RecordRequest(req *serving.Request) {
 	if usage.ReasoningTokens > 0 {
 		g.tokenUsage.WithLabelValues(model, provider, "reasoning").Add(float64(usage.ReasoningTokens))
 	}
+
+	for _, attempt := range req.Attempts {
+		groupID := metricLabel(attempt.GroupID, "unknown")
+		routeID := metricLabel(attempt.RouteID, "unknown")
+		strategy := metricLabel(attempt.RouteStrategy, "unknown")
+		objective := metricLabel(attempt.RouteObjective, "balanced")
+		reason := metricLabel(attempt.SelectionReason, "unknown")
+		outcome := metricLabel(attempt.Outcome.String(), "unknown")
+		g.routeAttempts.WithLabelValues(groupID, routeID, strategy, objective, reason, outcome).Inc()
+		if attempt.TotalMs > 0 {
+			g.routeLatency.WithLabelValues(groupID, strategy, objective, outcome).Observe(float64(attempt.TotalMs))
+		}
+	}
+}
+
+func metricLabel(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 // RecordPipelineError records a step failure with its error code.

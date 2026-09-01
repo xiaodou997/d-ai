@@ -23,20 +23,23 @@ import GroupSummaryCard from "./components/GroupSummaryCard.vue";
 import GroupClientSurfacePolicyPanel from "./tabs/GroupClientSurfacePolicyPanel.vue";
 import GroupDispatchRulesPanel from "./tabs/GroupDispatchRulesPanel.vue";
 import GroupTargetsWorkspace from "./tabs/GroupTargetsWorkspace.vue";
+import GroupRoutePolicyPanel from "./tabs/GroupRoutePolicyPanel.vue";
 import {
   errorMessage,
+  isGroupRoutePolicyConflict,
   showDispatchPriceConflict,
   showGroupDependencies
 } from "./problemPresentation";
 
-type DetailTab = "client-surfaces" | "dispatch-rules" | "targets";
+type DetailTab = "client-surfaces" | "dispatch-rules" | "targets" | "route-policy";
 interface DirtyHandle { confirmDiscardChanges(message: string): Promise<boolean> }
 
-const validTabs: DetailTab[] = ["client-surfaces", "dispatch-rules", "targets"];
+const validTabs: DetailTab[] = ["client-surfaces", "dispatch-rules", "targets", "route-policy"];
 const detailTabs: { key: DetailTab; label: string }[] = [
   { key: "client-surfaces", label: "API 入口" },
   { key: "dispatch-rules", label: "请求规则" },
-  { key: "targets", label: "关联上游目标" }
+  { key: "targets", label: "关联上游目标" },
+  { key: "route-policy", label: "路由配置" }
 ];
 const route = useRoute();
 const router = useRouter();
@@ -96,7 +99,10 @@ async function saveGroup(payload: TenantAiGroupWriteRequest) {
     dialogVisible.value = false;
     ElMessage.success("分组已更新");
   } catch (error: unknown) {
-    if (!await showDispatchPriceConflict(error)) ElMessage.error(errorMessage(error, "保存分组失败"));
+    if (isGroupRoutePolicyConflict(error)) {
+      ElMessage.warning("路由配置已被其他窗口修改，已重新加载最新版本");
+      await load();
+    } else if (!await showDispatchPriceConflict(error)) ElMessage.error(errorMessage(error, "保存分组失败"));
   } finally {
     busy.value = false;
   }
@@ -179,9 +185,10 @@ onBeforeRouteUpdate((to, from) => to.params.groupId === from.params.groupId || c
 
         <DsTabs :model-value="activeTab" :tabs="detailTabs" @update:model-value="selectTab" />
 
-        <GroupClientSurfacePolicyPanel v-show="activeTab === 'client-surfaces'" ref="surfacePanel" :group-id="group.id" />
-        <GroupDispatchRulesPanel v-show="activeTab === 'dispatch-rules'" :group-id="group.id" :price-book-name="priceBookName" />
-        <GroupTargetsWorkspace v-show="activeTab === 'targets'" ref="targetsPanel" :group-id="group.id" />
+        <GroupClientSurfacePolicyPanel v-show="activeTab === 'client-surfaces'" ref="surfacePanel" :group-id="group.id" @changed="load" />
+        <GroupDispatchRulesPanel v-show="activeTab === 'dispatch-rules'" :group-id="group.id" :price-book-name="priceBookName" @changed="load" />
+        <GroupTargetsWorkspace v-show="activeTab === 'targets'" ref="targetsPanel" :group-id="group.id" @changed="load" />
+        <GroupRoutePolicyPanel v-show="activeTab === 'route-policy'" :group="group" @saved="load" @reload="load" />
       </div>
       <div v-else class="detail-body">
         <DsEmpty title="分组不存在或已删除" description="请返回分组管理列表重新选择" />

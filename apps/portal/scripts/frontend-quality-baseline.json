@@ -11,10 +11,6 @@
     "max": 21,
     "reason": "Legacy price-book import/export payload boundary; keep parsing isolated until the generated DTO adapter is expanded."
   },
-  "features/ai/routing/AdminRoutingWorkspace.vue": {
-    "max": 2,
-    "reason": "Legacy routing response boundary; the API adapter is the migration owner."
-  },
   "features/ai/upstream-accounts/UpstreamAccountsWorkspace.vue": {
     "max": 26,
     "reason": "Legacy upstream-account import/test payload boundary; dynamic provider fields are narrowed before requests are sent."

@@ -100,13 +100,13 @@ export function useGroupClientSurfacePolicy(options: UseGroupClientSurfacePolicy
     if (persisted.value) applyPolicy(persisted.value);
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     const groupId = options.groupId();
     if (!groupId || !canSave.value) {
       if (mode.value === "restricted" && selectedSurfaces.value.length === 0) {
         ElMessage.warning("自定义限制至少保留一个 API 入口");
       }
-      return;
+      return false;
     }
     const previous = effective(persisted.value?.mode || "all", persisted.value?.allowed_surfaces || []);
     const next = effective(mode.value, selectedSurfaces.value);
@@ -119,7 +119,7 @@ export function useGroupClientSurfacePolicy(options: UseGroupClientSurfacePolicy
           cancelButtonText: "取消"
         });
       } catch {
-        return;
+        return false;
       }
     }
     const loadToken = loadGeneration;
@@ -131,11 +131,13 @@ export function useGroupClientSurfacePolicy(options: UseGroupClientSurfacePolicy
     saving.value = true;
     try {
       const policy = await api.replace(groupId, body);
-      if (saveToken !== saveGeneration || loadToken !== loadGeneration || groupId !== options.groupId()) return;
+      if (saveToken !== saveGeneration || loadToken !== loadGeneration || groupId !== options.groupId()) return false;
       applyPolicy(policy);
       ElMessage.success("API 入口策略已保存");
+      return true;
     } catch (error: unknown) {
       if (saveToken === saveGeneration) ElMessage.error(errorMessage(error, "保存 API 入口策略失败"));
+      return false;
     } finally {
       if (saveToken === saveGeneration) saving.value = false;
     }

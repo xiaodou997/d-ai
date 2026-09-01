@@ -13,11 +13,18 @@ const attemptsDetailErrorMaxLen = 2048
 // attempt (ai_request_payloads.attempts_detail). Deliberately separate from
 // AttemptRecord/TraceAttempt: observability.BuildTrace builds the client-
 // visible X-Route-Trace header straight from AttemptRecord and only reads
-// RouteID/Score/Outcome/HTTPStatus/latencies, so extending AttemptRecord
-// cannot leak upstream identity or raw error text to callers — but this DTO
-// is the one place that intentionally persists it, admin-only.
+// route-policy metadata, score, outcome and timings, so extending
+// AttemptRecord cannot leak upstream identity or raw error text to callers —
+// but this DTO is the one place that intentionally persists it, admin-only.
 type attemptDetailDTO struct {
 	RouteID         string  `json:"route_id,omitempty"`
+	GroupID         string  `json:"group_id,omitempty"`
+	RouteStrategy   string  `json:"route_strategy,omitempty"`
+	RouteObjective  string  `json:"route_objective,omitempty"`
+	GroupRank       int     `json:"group_rank"`
+	Priority        int     `json:"priority"`
+	RoutingWeight   float64 `json:"routing_weight"`
+	SelectionReason string  `json:"selection_reason,omitempty"`
 	ProviderCode    string  `json:"provider_code,omitempty"`
 	UpstreamModel   string  `json:"upstream_model,omitempty"`
 	EndpointID      string  `json:"endpoint_id,omitempty"`
@@ -45,6 +52,13 @@ func BuildAttemptsDetail(attempts []AttemptRecord) json.RawMessage {
 	for _, a := range attempts {
 		out = append(out, attemptDetailDTO{
 			RouteID:         a.RouteID,
+			GroupID:         a.GroupID,
+			RouteStrategy:   a.RouteStrategy,
+			RouteObjective:  a.RouteObjective,
+			GroupRank:       a.GroupRank,
+			Priority:        a.Priority,
+			RoutingWeight:   a.RoutingWeight,
+			SelectionReason: a.SelectionReason,
 			ProviderCode:    a.ProviderCode,
 			UpstreamModel:   a.UpstreamModel,
 			EndpointID:      a.EndpointID,

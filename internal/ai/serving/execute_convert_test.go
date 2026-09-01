@@ -113,6 +113,87 @@ func TestPickCandidateKeepsTargetPriorityAheadOfConversionPreference(t *testing.
 	}
 }
 
+func TestPickCandidateRecordsPolicyReason(t *testing.T) {
+	t.Parallel()
+
+	req := &Request{
+		Candidates: []*domain.RouteCandidate{
+			{
+				RouteID:       "weighted-route",
+				GroupID:       "group-1",
+				GroupRank:     0,
+				Priority:      1,
+				RouteStrategy: "weighted",
+				RoutingWeight: 2,
+			},
+			{RouteID: "excluded-route", GroupID: "group-1", GroupRank: 0, Priority: 1, RouteStrategy: "weighted"},
+		},
+		UsedCandidates: map[string]bool{},
+	}
+	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
+	if got == nil || got.RouteID != "weighted-route" {
+		t.Fatalf("picked %#v", got)
+	}
+	if req.SelectionReason != "weighted" {
+		t.Fatalf("selection reason = %q, want weighted", req.SelectionReason)
+	}
+}
+
+func TestPickCandidateExplainsSingleCandidate(t *testing.T) {
+	t.Parallel()
+
+	req := &Request{
+		Candidates: []*domain.RouteCandidate{{
+			RouteID:       "only-route",
+			GroupRank:     0,
+			Priority:      1,
+			RouteStrategy: "adaptive",
+		}},
+		UsedCandidates: map[string]bool{},
+	}
+	if got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req); got == nil {
+		t.Fatal("expected a candidate")
+	}
+	if req.SelectionReason != "single_candidate" {
+		t.Fatalf("selection reason = %q, want single_candidate", req.SelectionReason)
+	}
+}
+
+func TestPickCandidateKeepsWeightedSelectionInsidePriorityTier(t *testing.T) {
+	t.Parallel()
+
+	req := &Request{
+		Candidates: []*domain.RouteCandidate{
+			{RouteID: "primary", GroupRank: 0, Priority: 1, RouteStrategy: "weighted", RoutingWeight: 0},
+			{RouteID: "backup", GroupRank: 0, Priority: 5, RouteStrategy: "weighted", RoutingWeight: 100},
+		},
+		UsedCandidates: map[string]bool{},
+	}
+	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
+	if got == nil || got.RouteID != "primary" {
+		t.Fatalf("weighted policy crossed priority boundary and picked %#v", got)
+	}
+}
+
+func TestPickCandidateExplainsAllZeroWeightedFallback(t *testing.T) {
+	t.Parallel()
+
+	req := &Request{
+		Candidates: []*domain.RouteCandidate{
+			{RouteID: "zero-a", GroupRank: 0, Priority: 1, RouteStrategy: "weighted"},
+			{RouteID: "zero-b", GroupRank: 0, Priority: 1, RouteStrategy: "weighted"},
+		},
+		UsedCandidates: map[string]bool{},
+	}
+	got, _ := (&ExecuteStep{Scorer: &MultiDimScorer{}}).pickCandidate(context.Background(), req)
+	if got == nil {
+		t.Fatal("expected priority fallback candidate")
+	}
+	if req.SelectionReason != "weighted_fallback" {
+		t.Fatalf("selection reason = %q, want weighted_fallback", req.SelectionReason)
+	}
+}
+
 type imageResponseNormalizerStub struct {
 	format string
 }

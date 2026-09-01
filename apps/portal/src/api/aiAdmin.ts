@@ -48,7 +48,6 @@ import type {
   UpstreamModelBindingWriteRequest,
   UpstreamAccountTestRequest,
   UpstreamAccountTestResult,
-  RouteWeightsOutputBody,
   RuntimeLimitPolicyDTO,
   RuntimeLimitPoliciesOutputBody,
   TenantUpstreamAccessDTO,
@@ -131,8 +130,6 @@ type RiskEventResolutionBody = OperationBody<"ai-resolve-risk-event">;
 type RiskEventResolutionStatus = RiskEventResolutionBody["status"];
 type RiskTestTransport = OperationResponse<"ai-test-risk-control-moderation">;
 type SystemStatusTransport = OperationResponse<"ai-get-system-status">;
-type RouteWeightsTransport = OperationResponse<"ai-get-route-weights">;
-type RouteWeightsBody = OperationBody<"ai-put-route-weights">;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
 type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
@@ -921,30 +918,6 @@ function toSystemStatus(value: SystemStatusTransport): SystemStatusDTO {
   };
 }
 
-function toRouteWeights(value: RouteWeightsTransport): RouteWeightsOutputBody {
-  return {
-    scope: value.scope,
-    weights: {
-      cost: value.weights.cost,
-      latency: value.weights.latency,
-      load: value.weights.load,
-      health: value.weights.health
-    }
-  };
-}
-
-function toRouteWeightsBody(value: { cost: number; latency: number; load: number; health: number }): RouteWeightsBody {
-  if (![value.cost, value.latency, value.load, value.health].every(Number.isFinite)) {
-    throw new Error("route weights must be finite numbers");
-  }
-  return {
-    cost: value.cost,
-    latency: value.latency,
-    load: value.load,
-    health: value.health
-  };
-}
-
 export const aiAdminApi = {
   // ---- 上游账号（ai_upstream_accounts）----
   listUpstreamAccounts() {
@@ -1367,25 +1340,6 @@ export const aiAdminApi = {
       headers: apiHeaders,
       baseUrl: apiBaseUrl
     }).then(toSystemStatus);
-  },
-  getRouteWeights(scope = "global") {
-    return typedRequest<"ai-get-route-weights">({
-      method: "GET",
-      path: `/api/v1/route-weights/${encodeURIComponent(scope)}`,
-      pathParams: { scope },
-      headers: apiHeaders,
-      baseUrl: apiBaseUrl
-    }).then(toRouteWeights);
-  },
-  putRouteWeights(scope: string, body: { cost: number; latency: number; load: number; health: number }) {
-    return typedRequest<"ai-put-route-weights">({
-      method: "PUT",
-      path: `/api/v1/route-weights/${encodeURIComponent(scope)}`,
-      headers: apiHeaders,
-      pathParams: { scope },
-      body: toRouteWeightsBody(body),
-      baseUrl: apiBaseUrl
-    }).then(toRouteWeights);
   },
 
   // ---- Credential pools ----

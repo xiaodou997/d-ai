@@ -31,6 +31,7 @@ import GroupFormDialog from "./components/GroupFormDialog.vue";
 import GroupModelPreviewDialog from "./components/GroupModelPreviewDialog.vue";
 import {
   errorMessage,
+  isGroupRoutePolicyConflict,
   showDispatchPriceConflict,
   showGroupDependencies
 } from "./problemPresentation";
@@ -143,7 +144,10 @@ async function submit(payload: TenantAiGroupWriteRequest) {
     }
     await load();
   } catch (error: unknown) {
-    if (!await showDispatchPriceConflict(error)) ElMessage.error(errorMessage(error, "保存分组失败"));
+    if (isGroupRoutePolicyConflict(error)) {
+      ElMessage.warning("路由配置已被其他窗口修改，已重新加载最新版本");
+      await load();
+    } else if (!await showDispatchPriceConflict(error)) ElMessage.error(errorMessage(error, "保存分组失败"));
   } finally {
     submitting.value = false;
   }
@@ -173,6 +177,9 @@ function groupWriteRequest(group: TenantAiVisibleGroup, patch: Partial<TenantAiG
     default_user_multiplier: group.default_user_multiplier,
     user_default_visible: group.user_default_visible,
     allow_protocol_conversion: group.allow_protocol_conversion,
+    route_strategy: group.route_strategy,
+    route_objective: group.route_objective,
+    route_policy_version: group.route_policy_version,
     sort_order: group.sort_order,
     status: group.status === "disabled" ? "disabled" : "active",
     ...patch
@@ -188,7 +195,10 @@ async function updateVisibility(group: TenantAiVisibleGroup, exclusive: boolean)
     groups.value = groups.value.map((item) => item.id === saved.id ? saved : item);
     ElMessage.success(exclusive ? "分组已设为专属" : "分组已设为公开");
   } catch (error: unknown) {
-    if (!await showDispatchPriceConflict(error)) ElMessage.error(errorMessage(error, "更新分组可见范围失败"));
+    if (isGroupRoutePolicyConflict(error)) {
+      ElMessage.warning("路由配置已被其他窗口修改，已重新加载最新版本");
+      await load();
+    } else if (!await showDispatchPriceConflict(error)) ElMessage.error(errorMessage(error, "更新分组可见范围失败"));
   } finally {
     updatingGroupId.value = "";
   }

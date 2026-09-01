@@ -78,6 +78,7 @@ func capabilityTypeFromProtocol(protocol domain.UpstreamProtocol) domain.Capabil
 type routeRow struct {
 	RouteID       string // ai_group_targets.id
 	RoutePriority int32
+	RoutingWeight float64
 
 	PriceBookID      *string // 租户结算价格表（COALESCE account→pool）
 	TenantMultiplier float64
@@ -109,6 +110,8 @@ type routeRow struct {
 
 	// 分组协议转换开关：决定本组候选能否作为跨格式转换目标。
 	GroupAllowConversion bool
+	GroupRouteStrategy   string
+	GroupRouteObjective  string
 }
 
 // listRoutesForGroups fetches active targets that can serve modelCode within the
@@ -117,7 +120,7 @@ type routeRow struct {
 func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode string, capType domain.CapabilityType, groupIDs []string) ([]routeRow, error) {
 	const q = `
 			SELECT
-			  gt.id::text, gt.priority,
+			  gt.id::text, gt.priority, gt.routing_weight,
 		  COALESCE(a.price_book_id, cp.price_book_id)::text        AS cost_price_book_id,
 		  COALESCE(tp.tenant_multiplier_override, a.tenant_multiplier, cp.tenant_multiplier, 1) AS tenant_multiplier,
 		  um.upstream_model_name                                    AS upstream_model,
@@ -134,7 +137,8 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 			  a.id::text, a.name, a.base_url, a.api_key_ciphertext, a.extra_headers,
 			  um.api_format, um.config_json,
 			  cp.id::text, cp.fixed_provider_type, cp.oauth_strategy,
-			  g.id::text, g.name, g.retail_price_book_id::text, g.default_user_multiplier, g.allow_protocol_conversion
+			  g.id::text, g.name, g.retail_price_book_id::text, g.default_user_multiplier, g.allow_protocol_conversion,
+			  g.route_strategy, g.route_objective
 		FROM ai_group_targets gt
 		JOIN ai_groups g ON g.id = gt.group_id
 		JOIN ai_upstream_models um
@@ -186,12 +190,13 @@ func (s *RouteInspector) listRoutesForGroups(ctx context.Context, modelCode stri
 	for pgRows.Next() {
 		var r routeRow
 		if err := pgRows.Scan(
-			&r.RouteID, &r.RoutePriority,
+			&r.RouteID, &r.RoutePriority, &r.RoutingWeight,
 			&r.PriceBookID, &r.TenantMultiplier, &r.UpstreamModel, &r.CostPer1kTokens,
 			&r.AccountID, &r.AccountName, &r.BaseURL, &r.APIKeyCiphertext, &r.ExtraHeaders,
 			&r.APIFormat, &r.ConfigJSON,
 			&r.PoolID, &r.FixedProviderType, &r.OAuthStrategy,
 			&r.GroupID, &r.GroupName, &r.RetailPriceBookID, &r.GroupDefaultUserMultiplier, &r.GroupAllowConversion,
+			&r.GroupRouteStrategy, &r.GroupRouteObjective,
 		); err != nil {
 			return nil, fmt.Errorf("scan route row: %w", err)
 		}

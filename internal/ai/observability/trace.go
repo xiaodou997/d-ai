@@ -10,20 +10,25 @@ import (
 
 // TraceAttempt is one upstream call in the X-Route-Trace payload.
 type TraceAttempt struct {
-	RouteID     string  `json:"route_id"`
-	Score       float64 `json:"score,omitempty"`
-	Outcome     string  `json:"outcome"`
-	HTTP        int     `json:"http,omitempty"`
-	LatencyMs   int     `json:"latency_ms"`
-	FirstByteMs int     `json:"first_byte_ms,omitempty"`
-	TotalMs     int     `json:"total_ms,omitempty"`
+	RouteID         string  `json:"route_id"`
+	RouteStrategy   string  `json:"strategy,omitempty"`
+	RouteObjective  string  `json:"objective,omitempty"`
+	GroupRank       int     `json:"group_rank"`
+	Priority        int     `json:"priority"`
+	RoutingWeight   float64 `json:"routing_weight"`
+	SelectionReason string  `json:"selection_reason,omitempty"`
+	Score           float64 `json:"score,omitempty"`
+	Outcome         string  `json:"outcome"`
+	HTTP            int     `json:"http,omitempty"`
+	LatencyMs       int     `json:"latency_ms"`
+	FirstByteMs     int     `json:"first_byte_ms,omitempty"`
+	TotalMs         int     `json:"total_ms,omitempty"`
 }
 
 // TracePayload is the full X-Route-Trace JSON body (base64-encoded in the header).
 type TracePayload struct {
-	Attempts      []TraceAttempt     `json:"attempts"`
-	StickyHit     bool               `json:"sticky_hit"`
-	ScorerWeights map[string]float64 `json:"scorer_weights,omitempty"`
+	Attempts  []TraceAttempt `json:"attempts"`
+	StickyHit bool           `json:"sticky_hit"`
 }
 
 // TraceHeaderEnabled reports whether X-Route-Trace should be included.
@@ -37,13 +42,19 @@ func BuildTrace(req *serving.Request) *TracePayload {
 	attempts := make([]TraceAttempt, 0, len(req.Attempts))
 	for _, a := range req.Attempts {
 		attempts = append(attempts, TraceAttempt{
-			RouteID:     a.RouteID,
-			Score:       a.Score,
-			Outcome:     a.Outcome.String(),
-			HTTP:        a.HTTPStatus,
-			LatencyMs:   a.LatencyMs,
-			FirstByteMs: a.FirstByteMs,
-			TotalMs:     a.TotalMs,
+			RouteID:         a.RouteID,
+			RouteStrategy:   a.RouteStrategy,
+			RouteObjective:  a.RouteObjective,
+			GroupRank:       a.GroupRank,
+			Priority:        a.Priority,
+			RoutingWeight:   a.RoutingWeight,
+			SelectionReason: a.SelectionReason,
+			Score:           a.Score,
+			Outcome:         a.Outcome.String(),
+			HTTP:            a.HTTPStatus,
+			LatencyMs:       a.LatencyMs,
+			FirstByteMs:     a.FirstByteMs,
+			TotalMs:         a.TotalMs,
 		})
 	}
 	return &TracePayload{

@@ -207,6 +207,31 @@ func TestGroupTransferPreviewRejectsInvalidAndDuplicateDispatchRules(t *testing.
 	}
 }
 
+func TestValidateTransferGroupRejectsInvalidRoutePolicy(t *testing.T) {
+	errors := validateTransferGroup(GroupTransferGroup{
+		Name:                  "bad-policy",
+		DefaultUserMultiplier: 1,
+		RouteStrategy:         RouteStrategyWeighted,
+		RouteObjective:        RouteObjectiveLatency,
+		Status:                StatusActive,
+		ClientSurfacePolicy:   GroupTransferClientSurfacePolicy{Mode: GroupClientSurfacePolicyAll},
+	})
+	if len(errors) != 0 {
+		t.Fatalf("non-adaptive objective should be canonicalized, errors = %#v", errors)
+	}
+	invalid := validateTransferGroup(GroupTransferGroup{
+		Name:                  "bad-policy",
+		DefaultUserMultiplier: 1,
+		RouteStrategy:         RouteStrategy("invalid"),
+		RouteObjective:        RouteObjectiveBalanced,
+		Status:                StatusActive,
+		ClientSurfacePolicy:   GroupTransferClientSurfacePolicy{Mode: GroupClientSurfacePolicyAll},
+	})
+	if len(invalid) == 0 {
+		t.Fatal("invalid route strategy was accepted")
+	}
+}
+
 func (s *groupTransferRepoStub) ApplyGroupImport(_ context.Context, _ string, item PlannedGroupImport) (AppliedGroupImport, error) {
 	s.applied = append(s.applied, item)
 	if s.apply != nil {

@@ -32,6 +32,8 @@ interface GroupFormState {
   default_user_multiplier: number;
   user_default_visible: boolean;
   allow_protocol_conversion: boolean;
+  route_strategy: "failover" | "weighted" | "adaptive";
+  route_objective: "balanced" | "cost" | "latency" | "stability";
   sort_order: number;
   status: "active" | "disabled";
 }
@@ -43,6 +45,8 @@ const form = reactive<GroupFormState>({
   default_user_multiplier: 1,
   user_default_visible: true,
   allow_protocol_conversion: true,
+  route_strategy: "adaptive",
+  route_objective: "balanced",
   sort_order: 100,
   status: "active"
 });
@@ -63,6 +67,8 @@ function resetForm() {
     default_user_multiplier: group?.default_user_multiplier ?? 1,
     user_default_visible: group?.user_default_visible ?? true,
     allow_protocol_conversion: group?.allow_protocol_conversion ?? true,
+    route_strategy: group?.route_strategy ?? "adaptive",
+    route_objective: group?.route_objective ?? "balanced",
     sort_order: group?.sort_order ?? 100,
     status: group?.status === "disabled" ? "disabled" : "active"
   });
@@ -81,16 +87,20 @@ function submit() {
     ElMessage.warning("请选择零售价格表");
     return;
   }
-  emit("submit", {
+  const payload: TenantAiGroupWriteRequest = {
     name: form.name.trim(),
     description: form.description.trim() || undefined,
     retail_price_book_id: form.retail_price_book_id,
     default_user_multiplier: form.default_user_multiplier,
     user_default_visible: form.user_default_visible,
     allow_protocol_conversion: form.allow_protocol_conversion,
+    route_strategy: form.route_strategy,
+    route_objective: form.route_objective,
     sort_order: form.sort_order,
     status: form.status
-  });
+  };
+  if (props.group) payload.route_policy_version = props.group.route_policy_version;
+  emit("submit", payload);
 }
 </script>
 

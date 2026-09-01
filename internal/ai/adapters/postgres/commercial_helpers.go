@@ -1,13 +1,9 @@
 package postgres
 
 import (
-	"encoding/json"
-	"fmt"
-	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 	commercial "xiaodou/dai/internal/ai/commercial"
 	"xiaodou/dai/internal/ai/core/catalog"
-	"xiaodou/dai/internal/ai/core/routing"
 	"xiaodou/dai/internal/ai/domain"
 )
 
@@ -22,6 +18,9 @@ func legacyGroupToCommercial(item domain.Group) commercial.Group {
 		DefaultUserMultiplier:   item.DefaultUserMultiplier,
 		UserDefaultVisible:      item.UserDefaultVisible,
 		AllowProtocolConversion: item.AllowProtocolConversion,
+		RouteStrategy:           commercial.RouteStrategy(item.RouteStrategy),
+		RouteObjective:          commercial.RouteObjective(item.RouteObjective),
+		RoutePolicyVersion:      item.RoutePolicyVersion,
 		Status:                  commercial.Status(item.Status),
 		SortOrder:               int(item.SortOrder),
 		CreatedAt:               item.CreatedAt,
@@ -31,14 +30,15 @@ func legacyGroupToCommercial(item domain.Group) commercial.Group {
 
 func groupTargetBindingToCommercial(item domain.GroupTargetBinding) commercial.GroupTarget {
 	return commercial.GroupTarget{
-		ID:         item.ID,
-		GroupID:    item.GroupID,
-		TargetKind: commercial.TargetKind(item.TargetKind),
-		TargetID:   item.TargetID,
-		Priority:   int(item.Priority),
-		Status:     commercial.Status(item.Status),
-		CreatedAt:  item.CreatedAt,
-		UpdatedAt:  item.UpdatedAt,
+		ID:            item.ID,
+		GroupID:       item.GroupID,
+		TargetKind:    commercial.TargetKind(item.TargetKind),
+		TargetID:      item.TargetID,
+		Priority:      int(item.Priority),
+		RoutingWeight: item.RoutingWeight,
+		Status:        commercial.Status(item.Status),
+		CreatedAt:     item.CreatedAt,
+		UpdatedAt:     item.UpdatedAt,
 	}
 }
 
@@ -66,24 +66,6 @@ func legacyUserBindingToCommercial(item domain.UserGroup) commercial.UserGroupBi
 		CreatedAt:              item.CreatedAt,
 		UpdatedAt:              item.UpdatedAt,
 	}
-}
-
-func routingPolicyFromRow(id pgtype.UUID, scopeKey string, weightsJSON []byte, updatedAt pgtype.Timestamptz) (routing.Policy, error) {
-	var weights routing.WeightSet
-	if len(weightsJSON) > 0 {
-		if err := json.Unmarshal(weightsJSON, &weights); err != nil {
-			return routing.Policy{}, fmt.Errorf("unmarshal routing weights for %s: %w", scopeKey, err)
-		}
-	}
-	scopeType, scopeID := decodeRoutingScope(scopeKey)
-	return routing.Policy{
-		ID:        uuidToString(id),
-		ScopeType: scopeType,
-		ScopeID:   scopeID,
-		Weights:   weights,
-		CreatedAt: updatedAt.Time,
-		UpdatedAt: updatedAt.Time,
-	}, nil
 }
 
 func scanCommercialGroupClientSurfaceRow(scanner interface {
@@ -156,35 +138,6 @@ func legacyProviderFamilyToCatalog(raw string) catalog.ProviderFamily {
 	default:
 		return ""
 	}
-}
-
-func encodeRoutingScope(scopeType routing.ScopeType, scopeID string) (string, error) {
-	switch scopeType {
-	case routing.ScopeGlobal:
-		return legacyRoutingScopeGlobal, nil
-	case routing.ScopeTenant, routing.ScopeGroup, routing.ScopeUpstream:
-		scopeID = strings.TrimSpace(scopeID)
-		if scopeID == "" {
-			return "", domain.NewValidationError("scope_id", "scope_id is required")
-		}
-		return string(scopeType) + ":" + scopeID, nil
-	default:
-		return "", domain.NewValidationError("scope_type", "unsupported scope_type")
-	}
-}
-
-func decodeRoutingScope(scopeKey string) (routing.ScopeType, string) {
-	if scopeKey == legacyRoutingScopeGlobal {
-		return routing.ScopeGlobal, legacyRoutingScopeGlobal
-	}
-	parts := strings.SplitN(scopeKey, ":", 2)
-	if len(parts) == 2 {
-		switch routing.ScopeType(parts[0]) {
-		case routing.ScopeTenant, routing.ScopeGroup, routing.ScopeUpstream:
-			return routing.ScopeType(parts[0]), parts[1]
-		}
-	}
-	return routing.ScopeGlobal, scopeKey
 }
 
 func intPtrToInt32Ptr(v *int) *int32 {

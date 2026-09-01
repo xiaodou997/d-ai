@@ -3,7 +3,7 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `a69b3e2761dc5d6c705d716f9f2e97d8cb4a5d25a866ae776b6423ee760957e5`
+Contract SHA-256: `ba1477a460e9f0f9e29679fbe3de1343b63b7d1f802564eea7d54b9d0e3fea94`
 
 Coverage: **321/321 operations (100%)**
 
@@ -16,12 +16,12 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 13 | `authenticated` | `actor.user` |
 | `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 154 | `platform_admin` | `actor.user` |
+| `platform_admin` | 152 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
 | `tenant_or_customer` | 4 | `tenant_or_customer` | `actor.tenant + actor.user` |
-| `tenant_self` | 99 | `tenant_self` | `actor.tenant` |
+| `tenant_self` | 101 | `tenant_self` | `actor.tenant` |
 
 ## Operation matrix
 
@@ -158,8 +158,6 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `POST` | `/api/v1/risk-control/events/{eventID}/resolve` | `ai-resolve-risk-event` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/risk-control/logs` | `ai-list-risk-control-logs` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/risk-control/test` | `ai-test-risk-control-moderation` | `platform_admin` | `global/resource` |
-| `GET` | `/api/v1/route-weights/{scope}` | `ai-get-route-weights` | `platform_admin` | `global/resource` |
-| `PUT` | `/api/v1/route-weights/{scope}` | `ai-put-route-weights` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/system-admins` | `admin-list-system-admins` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/system-admins` | `admin-create-system-admin` | `platform_admin` | `global/resource` |
 | `DELETE` | `/api/v1/system-admins/{id}` | `admin-delete-system-admin` | `platform_admin` | `global/resource` |
@@ -225,9 +223,11 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PATCH` | `/api/v1/tenants/me/groups/{groupID}/dispatch-rules/{ruleID}` | `ai-update-group-dispatch-rule` | `tenant_self` | `actor.tenant` |
 | `PATCH` | `/api/v1/tenants/me/groups/{groupID}/dispatch-rules/{ruleID}/status` | `ai-update-group-dispatch-rule-status` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/groups/{groupID}/effective-prices` | `ai-list-tenant-self-group-effective-prices` | `tenant_self` | `actor.tenant` |
+| `PATCH` | `/api/v1/tenants/me/groups/{groupID}/route-policy` | `ai-update-group-route-policy` | `tenant_self` | `actor.tenant` |
 | `PATCH` | `/api/v1/tenants/me/groups/{groupID}/status` | `ai-update-group-status` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/groups/{groupID}/targets` | `ai-list-group-targets` | `tenant_self` | `actor.tenant` |
 | `POST` | `/api/v1/tenants/me/groups/{groupID}/targets` | `ai-add-group-target` | `tenant_self` | `actor.tenant` |
+| `PUT` | `/api/v1/tenants/me/groups/{groupID}/targets` | `ai-replace-group-targets` | `tenant_self` | `actor.tenant` |
 | `DELETE` | `/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}` | `ai-delete-group-target` | `tenant_self` | `actor.tenant` |
 | `PATCH` | `/api/v1/tenants/me/groups/{groupID}/targets/{bindingID}` | `ai-update-group-target` | `tenant_self` | `actor.tenant` |
 | `GET` | `/api/v1/tenants/me/price-books` | `ai-list-tenant-price-books` | `tenant_self` | `actor.tenant` |

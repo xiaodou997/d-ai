@@ -32,7 +32,6 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 	databaseHealth := &componentHealthProbeStub{}
 	redisHealth := &componentHealthProbeStub{}
 	health := routing.DefaultInMemoryTracker()
-	weights := &pgadapter.RouteWeightsStore{}
 	blacklist := &auth.BlacklistService{}
 	jwt := &auth.JWTService{}
 	recentAuth := &auth.RecentAuthService{}
@@ -152,14 +151,13 @@ func TestBuildAICoreHTTPDepsWiresRuntimeManagementDependencies(t *testing.T) {
 			DatabaseHealth: databaseHealth,
 			RedisHealth:    redisHealth,
 			Health:         health,
-			Weights:        weights,
 			BanChecker:     banChecker,
 		},
 	)
 	if system.Auth.TokenVerifier != jwt || system.Auth.TokenRevocations != blacklist || system.Auth.BanChecker != banChecker {
 		t.Fatal("system auth dependencies were not preserved")
 	}
-	if system.DatabaseHealth != databaseHealth || system.RedisHealth != redisHealth || system.Health != health || system.Weights != weights {
+	if system.DatabaseHealth != databaseHealth || system.RedisHealth != redisHealth || system.Health != health {
 		t.Fatal("system dependencies were not preserved")
 	}
 

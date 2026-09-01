@@ -13,6 +13,7 @@ import (
 // available, or falls back to linear priority order. Health admission happens
 // after local request preparation and immediately before the transport call.
 func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.RouteCandidate, float64) {
+	req.SelectionReason = ""
 	// Sticky is an explicit caller affinity decision. RouteCandidatesStep has
 	// already validated the binding and BillingGuard has kept Candidate aligned
 	// with the filtered list, so honor it for the first attempt before applying
@@ -20,6 +21,7 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 	if req.StickyHit && len(req.Attempts) == 0 && req.Candidate != nil && !req.UsedCandidates[req.Candidate.RouteID] {
 		candidate := req.Candidate
 		req.ModelCode = candidate.ModelCode
+		req.SelectionReason = "sticky"
 		return candidate, 0
 	}
 	// GroupRank and target Priority are hard failover boundaries. Protocol
@@ -52,7 +54,44 @@ func (s *ExecuteStep) pickCandidate(ctx context.Context, req *Request) (*domain.
 		return nil, 0
 	}
 	req.ModelCode = cand.ModelCode
+	req.SelectionReason = routeSelectionReason(cand, score, s.Scorer != nil)
+	if cand.RouteStrategy == "weighted" && !hasPositiveRoutingWeight(tier) {
+		req.SelectionReason = "weighted_fallback"
+	} else if len(tier) == 1 && s.Scorer != nil {
+		req.SelectionReason = "single_candidate"
+	}
 	return cand, score
+}
+
+func hasPositiveRoutingWeight(candidates []*domain.RouteCandidate) bool {
+	for _, candidate := range candidates {
+		if candidate != nil && routingWeight(candidate.RoutingWeight) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func routeSelectionReason(candidate *domain.RouteCandidate, score float64, scorerConfigured bool) string {
+	if candidate == nil {
+		return "unknown"
+	}
+	if !scorerConfigured {
+		return "priority_fallback"
+	}
+	switch candidate.RouteStrategy {
+	case "weighted":
+		return "weighted"
+	case "failover":
+		return "failover"
+	case "adaptive":
+		if score > 0 {
+			return "adaptive"
+		}
+		return "adaptive_fallback"
+	default:
+		return "scored"
+	}
 }
 
 // selectPoolCredential resolves the OAuth credential for a pool route. On the

@@ -11,25 +11,41 @@ import (
 )
 
 type lockedGroup struct {
-	ID          string
-	TenantID    string
-	Name        string
-	PriceBookID string
-	Status      string
+	ID                 string
+	TenantID           string
+	Name               string
+	PriceBookID        string
+	Status             string
+	RoutePolicyVersion int64
 }
 
 func lockGroupForTenant(ctx context.Context, tx pgx.Tx, tenantID string, groupID pgtype.UUID) (lockedGroup, error) {
 	var group lockedGroup
 	err := tx.QueryRow(ctx, `
-		SELECT id::text, tenant_id, name, retail_price_book_id::text, status
+		SELECT id::text, tenant_id, name, retail_price_book_id::text, status, route_policy_version
 		FROM ai_groups
 		WHERE id = $1 AND tenant_id = $2
 		FOR UPDATE
-	`, groupID, tenantID).Scan(&group.ID, &group.TenantID, &group.Name, &group.PriceBookID, &group.Status)
+	`, groupID, tenantID).Scan(&group.ID, &group.TenantID, &group.Name, &group.PriceBookID, &group.Status, &group.RoutePolicyVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return lockedGroup{}, domain.ErrNotFound
 	}
 	return group, err
+}
+
+// bumpGroupRoutePolicyVersion invalidates optimistic-concurrency snapshots
+// after a legacy per-resource mutation. The newer batch endpoints already
+// perform this update as part of their reconciliation transaction; keeping the
+// helper here makes the older target, surface, and dispatch routes participate
+// in the same version contract instead of silently allowing stale drafts.
+func bumpGroupRoutePolicyVersion(ctx context.Context, tx pgx.Tx, tenantID string, groupID pgtype.UUID) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE ai_groups
+		SET route_policy_version = route_policy_version + 1,
+		    updated_at = now()
+		WHERE id = $1 AND tenant_id = $2
+	`, groupID, tenantID)
+	return err
 }
 
 func validateVisibleActivePriceBook(ctx context.Context, tx pgx.Tx, tenantID string, priceBookID pgtype.UUID, groupID, groupName string) error {

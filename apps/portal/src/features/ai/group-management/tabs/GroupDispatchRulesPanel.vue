@@ -13,6 +13,7 @@ const props = defineProps<{
   groupId: string;
   priceBookName: string;
 }>();
+const emit = defineEmits<{ changed: [] }>();
 const state = useGroupDispatchRules({ groupId: () => props.groupId });
 const dialogVisible = shallowRef(false);
 const previewVisible = shallowRef(false);
@@ -40,6 +41,7 @@ async function save(payload: TenantAiDispatchRuleWriteRequest) {
     else await state.create(payload);
     dialogVisible.value = false;
     ElMessage.success(editingRule.value ? "调度规则已更新" : "调度规则已创建");
+    emit("changed");
   } catch (error: unknown) {
     if (!await showDispatchPriceConflict(error)) {
       ElMessage.error(errorMessage(error, "保存调度规则失败"));
@@ -56,6 +58,7 @@ async function toggle(rule: TenantAiDispatchRule) {
   try {
     await state.updateStatus(rule.id, status);
     ElMessage.success(status === "active" ? "规则已启用" : "规则已停用");
+    emit("changed");
   } catch (error: unknown) {
     ElMessage.error(errorMessage(error, "更新规则状态失败"));
   }
@@ -66,6 +69,7 @@ async function remove(rule: TenantAiDispatchRule) {
     await ElMessageBox.confirm(`删除规则「${rule.match_value}」？`, "确认删除", { type: "warning" });
     await state.remove(rule.id);
     ElMessage.success("调度规则已删除");
+    emit("changed");
   } catch (error: unknown) {
     if (error !== "cancel" && error !== "close") {
       ElMessage.error(errorMessage(error, "删除调度规则失败"));

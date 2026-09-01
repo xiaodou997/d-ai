@@ -1,6 +1,7 @@
 import { computed, readonly, shallowRef, watch } from "vue";
 
 import { aiTenantApi } from "@/api/aiTenant";
+import { HttpProblem } from "@/platform";
 import type {
   TenantAiGroupTarget,
   TenantAiGroupTargetWriteRequest,
@@ -24,11 +25,15 @@ import { errorMessage } from "../errorMessage";
 import { protocolLabel } from "../../upstream-catalog/presentation";
 
 export interface GroupTargetsApi {
-  listTargets(groupId: string): Promise<{ items: TenantAiGroupTarget[]; total: number }>;
+  listTargets(groupId: string): Promise<{ items: TenantAiGroupTarget[]; total: number; route_policy_version?: number }>;
   listResources(): Promise<{ items: TenantAiUpstreamResource[]; total: number }>;
   add(groupId: string, body: TenantAiGroupTargetWriteRequest): Promise<TenantAiGroupTarget>;
   update(groupId: string, bindingId: string, body: TenantAiGroupTargetWriteRequest): Promise<TenantAiGroupTarget>;
   remove(groupId: string, bindingId: string): Promise<unknown>;
+  replace?(groupId: string, body: {
+    expected_version: number;
+    targets: TenantAiGroupTargetWriteRequest[];
+  }): Promise<{ items: TenantAiGroupTarget[]; total: number; route_policy_version: number }>;
 }
 
 interface UseGroupTargetsOptions {
@@ -41,7 +46,8 @@ const defaultApi: GroupTargetsApi = {
   listResources: () => aiTenantApi.listUpstreamResources(),
   add: (groupId, body) => aiTenantApi.addGroupTarget(groupId, body),
   update: (groupId, bindingId, body) => aiTenantApi.updateGroupTarget(groupId, bindingId, body),
-  remove: (groupId, bindingId) => aiTenantApi.deleteGroupTarget(groupId, bindingId)
+  remove: (groupId, bindingId) => aiTenantApi.deleteGroupTarget(groupId, bindingId),
+  replace: (groupId, body) => aiTenantApi.replaceGroupTargets(groupId, body)
 };
 
 export function useGroupTargets(options: UseGroupTargetsOptions) {
@@ -52,6 +58,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
   const drafts = shallowRef<Record<string, GroupTargetDraft>>({});
   const defaultPriority = shallowRef(100);
   const defaultStatus = shallowRef<GroupTargetStatus>("active");
+  const routePolicyVersion = shallowRef(0);
   const loading = shallowRef(false);
   const saving = shallowRef(false);
   const loadError = shallowRef("");
@@ -102,12 +109,13 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
       const selected = selectedSet.value.has(option.key);
       const draft = drafts.value[option.key] || {
         priority: defaultPriority.value,
+        routing_weight: binding?.routing_weight ?? 1,
         status: defaultStatus.value
       };
       let change: GroupTargetChange | null = null;
       if (option.linked && !selected) change = "remove";
       else if (!option.linked && selected) change = "add";
-      else if (binding && selected && (binding.priority !== draft.priority || binding.status !== draft.status)) change = "update";
+      else if (binding && selected && (binding.priority !== draft.priority || binding.routing_weight !== draft.routing_weight || binding.status !== draft.status)) change = "update";
       return { ...option, ...draft, selected, change };
     }).sort((left, right) => {
       if (left.linked !== right.linked) return left.linked ? -1 : 1;
@@ -124,6 +132,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     selectedKeys.value = nextBindings.map(bindingKey);
     drafts.value = Object.fromEntries(nextBindings.map((binding) => [bindingKey(binding), {
       priority: binding.priority,
+      routing_weight: binding.routing_weight ?? 1,
       status: binding.status
     }]));
   }
@@ -134,6 +143,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     if (!groupId) {
       bindings.value = [];
       resources.value = [];
+      routePolicyVersion.value = 0;
       resetDrafts([]);
       return;
     }
@@ -147,6 +157,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
       if (generation !== loadGeneration || groupId !== options.groupId()) return;
       bindings.value = targetResponse.items || [];
       resources.value = resourceResponse.items || [];
+      routePolicyVersion.value = targetResponse.route_policy_version ?? 0;
       resetDrafts(bindings.value);
     } catch (error: unknown) {
       if (generation === loadGeneration) loadError.value = errorMessage(error, "加载上游关联失败");
@@ -167,14 +178,14 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     if (selected) {
       next.add(key);
       if (!drafts.value[key]) {
-        drafts.value = { ...drafts.value, [key]: { priority: defaultPriority.value, status: defaultStatus.value } };
+        drafts.value = { ...drafts.value, [key]: { priority: defaultPriority.value, routing_weight: 1, status: defaultStatus.value } };
       }
     } else next.delete(key);
     selectedKeys.value = [...next];
   }
 
   function updateDraft(key: string, patch: Partial<GroupTargetDraft>) {
-    const current = drafts.value[key] || { priority: defaultPriority.value, status: defaultStatus.value };
+    const current = drafts.value[key] || { priority: defaultPriority.value, routing_weight: 1, status: defaultStatus.value };
     drafts.value = { ...drafts.value, [key]: { ...current, ...patch } };
   }
 
@@ -201,6 +212,42 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     if (!groupId || !commands.length) return result;
     saving.value = true;
     try {
+      if (api.replace && routePolicyVersion.value > 0) {
+        try {
+          // Capture the diff before resetDrafts() replaces the selected/draft
+          // state with the server snapshot.
+          const addedCount = additions.value.length;
+          const updatedCount = updates.value.length;
+          const removedCount = removals.value.length;
+          const desiredTargets = rows.value.filter((row) => row.selected).map((row) => ({
+            ...(row.kind === "direct_upstream" ? { account_id: row.targetId } : { credential_pool_id: row.targetId }),
+            priority: row.priority,
+            routing_weight: row.routing_weight,
+            status: row.status
+          }));
+          const response = await api.replace(groupId, {
+            expected_version: routePolicyVersion.value,
+            targets: desiredTargets
+          });
+          if (generation !== loadGeneration || groupId !== options.groupId()) return result;
+          bindings.value = response.items || [];
+          routePolicyVersion.value = response.route_policy_version;
+          resetDrafts(bindings.value);
+          result.added = addedCount;
+          result.updated = updatedCount;
+          result.removed = removedCount;
+          return result;
+        } catch (error: unknown) {
+          result.failures.push({
+            action: "update",
+            targetKey: "__group__",
+            targetName: "分组目标配置",
+            message: errorMessage(error, "保存失败，配置可能已被其他人修改"),
+            code: error instanceof HttpProblem ? error.code : undefined
+          });
+          return result;
+        }
+      }
       for (const command of commands) {
         if (generation !== loadGeneration || groupId !== options.groupId()) break;
         try {
@@ -209,6 +256,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
             const saved = await api.add(groupId, {
               ...(command.row.kind === "direct_upstream" ? { account_id: command.row.targetId } : { credential_pool_id: command.row.targetId }),
               priority: command.row.priority,
+              routing_weight: command.row.routing_weight,
               status: command.row.status
             });
             applySavedBinding(saved);
@@ -216,6 +264,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
           } else if (command.action === "update" && binding) {
             const saved = await api.update(groupId, binding.id, {
               priority: command.row.priority,
+              routing_weight: command.row.routing_weight,
               status: command.row.status
             });
             applySavedBinding(saved);
@@ -249,6 +298,7 @@ export function useGroupTargets(options: UseGroupTargetsOptions) {
     loadError: readonly(loadError),
     defaultPriority: readonly(defaultPriority),
     defaultStatus: readonly(defaultStatus),
+    routePolicyVersion: readonly(routePolicyVersion),
     additions,
     updates,
     removals,
