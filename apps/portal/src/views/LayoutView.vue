@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { PortalShellLayout, usePortalShellScaffold } from "@/platform";
+import { PortalGithubLink, PortalShellLayout, usePortalShellScaffold } from "@/platform";
 import AnnouncementTopbarAction from "@/features/announcements/AnnouncementTopbarAction.vue";
 
 import { portalEnv, themeForUserType } from "@/env";
@@ -52,6 +52,7 @@ const { handleLogout } = usePortalShellScaffold({
     @logout="handleLogout"
   >
     <template #topbar-actions>
+      <PortalGithubLink />
       <AnnouncementTopbarAction />
     </template>
   </PortalShellLayout>

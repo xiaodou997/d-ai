@@ -12,6 +12,7 @@ export * from "./composables/useListPage";
 export * from "./legal/catalog";
 export { default as PortalLegalFooter } from "./legal/PortalLegalFooter.vue";
 export { default as PortalAppRoot } from "./PortalAppRoot.vue";
+export { default as PortalGithubLink } from "./PortalGithubLink.vue";
 export { default as PortalShellLayout } from "./PortalShellLayout.vue";
 export { default as PortalProfileWorkspace } from "./PortalProfileWorkspace.vue";
 export { default as PortalContentCard } from "./page/PortalContentCard.vue";
