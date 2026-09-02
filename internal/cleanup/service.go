@@ -86,6 +86,21 @@ type RequestBodyPurgePreview struct {
 	OccupiedBytes int64 `json:"occupiedBytes"`
 }
 
+// RunProgress is written after every cleanup batch so operators can observe
+// long-running cleanup work without waiting for the terminal summary.
+type RunProgress struct {
+	TotalRows          int64  `json:"totalRows"`
+	ProcessedRows      int64  `json:"processedRows"`
+	TotalBytes         int64  `json:"totalBytes,omitempty"`
+	CurrentTarget      string `json:"currentTarget,omitempty"`
+	CurrentTargetTotal int64  `json:"currentTargetTotal,omitempty"`
+	CurrentTargetDone  int64  `json:"currentTargetDone,omitempty"`
+	BatchSize          int    `json:"batchSize"`
+	Phase              string `json:"phase"`
+}
+
+type cleanupProgressReporter func(processed int64, phase string) error
+
 type Preview struct {
 	Policy           Policy                  `json:"policy"`
 	GeneratedAt      time.Time               `json:"generatedAt"`
@@ -100,6 +115,7 @@ type Run struct {
 	RequestedBy string           `json:"requestedBy,omitempty"`
 	Targets     []string         `json:"targets"`
 	Summary     map[string]int64 `json:"summary"`
+	Progress    RunProgress      `json:"progress"`
 	Error       string           `json:"error,omitempty"`
 	CreatedAt   time.Time        `json:"createdAt"`
 	StartedAt   *time.Time       `json:"startedAt,omitempty"`
@@ -454,7 +470,7 @@ func (s *Service) beginManualRun() (context.Context, func(), error) {
 func (s *Service) ListRuns(ctx context.Context) ([]Run, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, trigger, status, COALESCE(requested_by, ''), targets, summary,
-		       COALESCE(error, ''), created_at, started_at, completed_at
+		       progress, COALESCE(error, ''), created_at, started_at, completed_at
 		FROM sys_data_cleanup_runs
 		ORDER BY created_at DESC
 		LIMIT $1
@@ -508,17 +524,17 @@ func (s *Service) queueRun(ctx context.Context, trigger string, targets []string
 		return Run{}, err
 	}
 	var run Run
-	var rawTargetBytes, rawSummary []byte
+	var rawTargetBytes, rawSummary, rawProgress []byte
 	err = s.pool.QueryRow(ctx, `
 		INSERT INTO sys_data_cleanup_runs (
 			trigger, status, requested_by, targets, owner_id, heartbeat_at, lease_until
 		)
 		VALUES ($1, 'queued', NULLIF($2, ''), $3::jsonb, $4, now(), now() + make_interval(secs => $5))
 		RETURNING id, trigger, status, COALESCE(requested_by, ''), targets, summary,
-		          COALESCE(error, ''), created_at, started_at, completed_at
+		          progress, COALESCE(error, ''), created_at, started_at, completed_at
 	`, trigger, actor, rawTargets, s.ownerID, s.leaseTTL.Seconds()).Scan(
 		&run.ID, &run.Trigger, &run.Status, &run.RequestedBy,
-		&rawTargetBytes, &rawSummary, &run.Error, &run.CreatedAt, &run.StartedAt, &run.CompletedAt,
+		&rawTargetBytes, &rawSummary, &rawProgress, &run.Error, &run.CreatedAt, &run.StartedAt, &run.CompletedAt,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -532,6 +548,9 @@ func (s *Service) queueRun(ctx context.Context, trigger string, targets []string
 	}
 	if err := json.Unmarshal(rawSummary, &run.Summary); err != nil {
 		return Run{}, fmt.Errorf("decode queued cleanup summary: %w", err)
+	}
+	if err := json.Unmarshal(rawProgress, &run.Progress); err != nil {
+		return Run{}, fmt.Errorf("decode queued cleanup progress: %w", err)
 	}
 	return run, nil
 }
@@ -563,17 +582,65 @@ func (s *Service) execute(ctx context.Context, runID, trigger string, targets []
 		if leaseErr != nil {
 			err = errors.Join(err, leaseErr)
 		}
-		s.finishRun(context.WithoutCancel(ctx), runID, trigger, actor, targets, nil, s.ownerID, err)
+		s.finishRunWithProgress(context.WithoutCancel(ctx), runID, trigger, actor, targets, nil, RunProgress{Phase: "failed"}, s.ownerID, err)
 		return
 	}
 	summary := make(map[string]int64, len(targets))
+	progress := RunProgress{BatchSize: policy.BatchSize, Phase: "preparing"}
+	targetTotals := make(map[string]int64, len(targets))
 	for _, target := range targets {
-		count, cleanErr := s.cleanTarget(workCtx, target, policy)
+		total, bytes, totalErr := s.cleanupTargetTotal(workCtx, target, policy)
+		if totalErr != nil {
+			cancel()
+			leaseErr := <-leaseEvents
+			if leaseErr != nil {
+				totalErr = errors.Join(totalErr, leaseErr)
+			}
+			progress.Phase = "failed"
+			s.finishRunWithProgress(context.WithoutCancel(ctx), runID, trigger, actor, targets, summary, progress, s.ownerID, totalErr)
+			return
+		}
+		targetTotals[target] = total
+		progress.TotalRows += total
+		progress.TotalBytes += bytes
+	}
+	if err := s.updateRunProgress(workCtx, runID, summary, progress); err != nil {
+		cancel()
+		leaseErr := <-leaseEvents
+		if leaseErr != nil {
+			err = errors.Join(err, leaseErr)
+		}
+		s.finishRunWithProgress(context.WithoutCancel(ctx), runID, trigger, actor, targets, summary, progress, s.ownerID, err)
+		return
+	}
+	var processedRows int64
+	for _, target := range targets {
+		currentTargetTotal := targetTotals[target]
+		report := func(processed int64, phase string) error {
+			progress.CurrentTarget = target
+			progress.CurrentTargetTotal = currentTargetTotal
+			progress.CurrentTargetDone = processed
+			progress.ProcessedRows = processedRows + processed
+			progress.Phase = phase
+			summary[target] = processed
+			return s.updateRunProgress(workCtx, runID, summary, progress)
+		}
+		count, cleanErr := s.cleanTargetWithProgress(workCtx, target, policy, report)
 		if cleanErr != nil {
 			err = fmt.Errorf("%s: %w", target, cleanErr)
 			break
 		}
 		summary[target] = count
+		processedRows += count
+		progress.ProcessedRows = processedRows
+		progress.CurrentTarget = target
+		progress.CurrentTargetTotal = currentTargetTotal
+		progress.CurrentTargetDone = count
+		progress.Phase = "completed"
+		if updateErr := s.updateRunProgress(workCtx, runID, summary, progress); updateErr != nil {
+			err = updateErr
+			break
+		}
 	}
 	cancel()
 	if leaseErr := <-leaseEvents; leaseErr != nil {
@@ -583,7 +650,12 @@ func (s *Service) execute(ctx context.Context, runID, trigger string, targets []
 			err = errors.Join(err, leaseErr)
 		}
 	}
-	s.finishRun(context.WithoutCancel(ctx), runID, trigger, actor, targets, summary, s.ownerID, err)
+	if err != nil {
+		progress.Phase = "failed"
+	} else {
+		progress.Phase = "completed"
+	}
+	s.finishRunWithProgress(context.WithoutCancel(ctx), runID, trigger, actor, targets, summary, progress, s.ownerID, err)
 }
 
 func (s *Service) monitorLease(ctx context.Context, cancel context.CancelFunc, runID string) <-chan error {
@@ -632,7 +704,31 @@ func (s *Service) renewLease(ctx context.Context, runID string) (bool, error) {
 	return result.RowsAffected() == 1, nil
 }
 
-func (s *Service) finishRun(ctx context.Context, runID, trigger, actor string, targets []string, summary map[string]int64, ownerID string, runErr error) {
+func (s *Service) updateRunProgress(ctx context.Context, runID string, summary map[string]int64, progress RunProgress) error {
+	rawSummary, err := json.Marshal(summary)
+	if err != nil {
+		return fmt.Errorf("encode cleanup summary: %w", err)
+	}
+	rawProgress, err := json.Marshal(progress)
+	if err != nil {
+		return fmt.Errorf("encode cleanup progress: %w", err)
+	}
+	result, err := s.pool.Exec(ctx, `
+		UPDATE sys_data_cleanup_runs
+		SET summary = $2::jsonb, progress = $3::jsonb, heartbeat_at = now(),
+		    lease_until = now() + make_interval(secs => $4::double precision)
+		WHERE id = $1 AND status = 'running' AND owner_id = $5 AND lease_until > now()
+	`, runID, rawSummary, rawProgress, s.leaseTTL.Seconds(), s.ownerID)
+	if err != nil {
+		return fmt.Errorf("update cleanup progress: %w", err)
+	}
+	if result.RowsAffected() != 1 {
+		return ErrLeaseLost
+	}
+	return nil
+}
+
+func (s *Service) finishRunWithProgress(ctx context.Context, runID, trigger, actor string, targets []string, summary map[string]int64, progress RunProgress, ownerID string, runErr error) {
 	status := "completed"
 	errorText := ""
 	if runErr != nil {
@@ -640,13 +736,14 @@ func (s *Service) finishRun(ctx context.Context, runID, trigger, actor string, t
 		errorText = runErr.Error()
 	}
 	rawSummary, _ := json.Marshal(summary)
+	rawProgress, _ := json.Marshal(progress)
 	now := time.Now().UTC()
 	result, err := s.pool.Exec(ctx, `
 		UPDATE sys_data_cleanup_runs
-		SET status = $2, summary = $3::jsonb, error = NULLIF($4, ''), completed_at = $5,
+		SET status = $2, summary = $3::jsonb, progress = $4::jsonb, error = NULLIF($5, ''), completed_at = $6,
 		    owner_id = NULL, heartbeat_at = NULL, lease_until = NULL
-		WHERE id = $1 AND status = 'running' AND owner_id = $6
-	`, runID, status, rawSummary, errorText, now, ownerID)
+		WHERE id = $1 AND status = 'running' AND owner_id = $7
+	`, runID, status, rawSummary, rawProgress, errorText, now, ownerID)
 	if err != nil {
 		s.logger.Error("data cleanup: finish run failed", zap.String("run_id", runID), zap.Error(err))
 		return
@@ -694,35 +791,56 @@ func (s *Service) finishRun(ctx context.Context, runID, trigger, actor string, t
 }
 
 func (s *Service) cleanTarget(ctx context.Context, target string, policy Policy) (int64, error) {
+	return s.cleanTargetWithProgress(ctx, target, policy, nil)
+}
+
+func (s *Service) cleanupTargetTotal(ctx context.Context, target string, policy Policy) (int64, int64, error) {
+	if target == TargetRequestBodyPurge {
+		preview, err := s.previewRequestBodyPurge(ctx)
+		return preview.EligibleRows, preview.OccupiedBytes, err
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -policy.retentionDays(target))
+	count, err := s.countTarget(ctx, target, cutoff)
+	return count, 0, err
+}
+
+func (s *Service) cleanTargetWithProgress(ctx context.Context, target string, policy Policy, progress cleanupProgressReporter) (int64, error) {
 	cutoff := time.Now().UTC().AddDate(0, 0, -policy.retentionDays(target))
 	switch target {
 	case TargetRequestBody:
-		return s.clearRequestBodies(ctx, cutoff, policy.BatchSize)
+		return s.clearRequestBodies(ctx, cutoff, policy.BatchSize, progress)
 	case TargetRequestBodyPurge:
-		return s.clearAllRequestBodies(ctx, policy.BatchSize)
+		return s.clearAllRequestBodies(ctx, policy.BatchSize, progress)
 	case TargetRequestPayloads:
-		return s.deleteRequestPayloads(ctx, cutoff, policy.BatchSize)
+		return s.deleteRequestPayloads(ctx, cutoff, policy.BatchSize, progress)
 	case TargetNotifications:
-		return s.deleteNotifications(ctx, cutoff, policy.BatchSize)
+		return s.deleteNotifications(ctx, cutoff, policy.BatchSize, progress)
 	case TargetModerationLogs:
-		return s.deleteModerationLogs(ctx, cutoff, policy.BatchSize)
+		return s.deleteModerationLogs(ctx, cutoff, policy.BatchSize, progress)
 	case TargetRiskEvents:
-		return s.deleteRiskEvents(ctx, cutoff, policy.BatchSize)
+		return s.deleteRiskEvents(ctx, cutoff, policy.BatchSize, progress)
 	case TargetAdminAuditLogs:
-		return s.deleteAdminAuditLogs(ctx, cutoff, policy.BatchSize)
+		return s.deleteAdminAuditLogs(ctx, cutoff, policy.BatchSize, progress)
 	case TargetAuditBlobs:
-		return s.deleteUnreferencedBlobs(ctx, cutoff, policy.BatchSize)
+		return s.deleteUnreferencedBlobs(ctx, cutoff, policy.BatchSize, progress)
 	case TargetUsageRollups:
-		return s.deleteUsageRollups(ctx, cutoff, policy.BatchSize)
+		return s.deleteUsageRollups(ctx, cutoff, policy.BatchSize, progress)
 	default:
 		return 0, fmt.Errorf("%w: %s", ErrInvalidTarget, target)
 	}
 }
 
+func reportCleanupProgress(progress []cleanupProgressReporter, processed int64, phase string) error {
+	if len(progress) == 0 || progress[0] == nil {
+		return nil
+	}
+	return progress[0](processed, phase)
+}
+
 // clearAllRequestBodies removes only wire payloads and diagnostics. Keeping
 // the audit row itself preserves request IDs and metadata for ordinary usage
 // queries while releasing the large JSONB values from the row.
-func (s *Service) clearAllRequestBodies(ctx context.Context, batchSize int) (int64, error) {
+func (s *Service) clearAllRequestBodies(ctx context.Context, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = DefaultPolicy().BatchSize
 	}
@@ -753,6 +871,9 @@ func (s *Service) clearAllRequestBodies(ctx context.Context, batchSize int) (int
 		}
 		changed := result.RowsAffected()
 		total += changed
+		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+			return total, err
+		}
 		if changed < int64(batchSize) {
 			break
 		}
@@ -761,30 +882,52 @@ func (s *Service) clearAllRequestBodies(ctx context.Context, batchSize int) (int
 	// The durable inbox may still contain payloads waiting for materialization.
 	// Strip their body keys as well, otherwise an old queued envelope could
 	// repopulate the large fields after this purge completes.
-	if _, err := s.pool.Exec(ctx, `
-		UPDATE ai_audit_inbox
-		SET payload = payload
-		  - 'request_messages'
-		  - 'request_params'
-		  - 'response_message'
-		  - 'media_refs'
-		  - 'internal_error_detail'
-		  - 'attempts_detail'
-		WHERE payload ?| ARRAY[
-			'request_messages', 'request_params', 'response_message',
-			'media_refs', 'internal_error_detail', 'attempts_detail'
-		]
-	`); err != nil {
-		return total, fmt.Errorf("clear audit inbox request bodies: %w", err)
+	for {
+		inboxResult, err := s.pool.Exec(ctx, `
+			UPDATE ai_audit_inbox
+			SET payload = payload
+			  - 'request_messages'
+			  - 'request_params'
+			  - 'response_message'
+			  - 'media_refs'
+			  - 'internal_error_detail'
+			  - 'attempts_detail'
+			WHERE id IN (
+				SELECT id FROM ai_audit_inbox
+				WHERE payload ?| ARRAY[
+					'request_messages', 'request_params', 'response_message',
+					'media_refs', 'internal_error_detail', 'attempts_detail'
+				]
+				ORDER BY id
+				LIMIT $1
+			)
+		`, batchSize)
+		if err != nil {
+			return total, fmt.Errorf("clear audit inbox request bodies: %w", err)
+		}
+		changed := inboxResult.RowsAffected()
+		total += changed
+		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+			return total, err
+		}
+		if changed < int64(batchSize) {
+			break
+		}
 	}
 
 	// DELETE/UPDATE leaves dead TOAST tuples behind. This operation is
-	// explicitly initiated by an administrator, so compact the two audit
+	// explicitly initiated by an administrator, so compact both audit
 	// relations now instead of waiting for autovacuum. VACUUM FULL runs outside
 	// a transaction (pool.Exec uses a fresh autocommit statement) and takes an
-	// ACCESS EXCLUSIVE lock while it rewrites the relation.
-	if _, err := s.pool.Exec(ctx, `VACUUM (FULL, ANALYZE) ai_request_payloads`); err != nil {
-		return total, fmt.Errorf("compact ai_request_payloads (runtime role needs table ownership): %w", err)
+	// ACCESS EXCLUSIVE lock while it rewrites each relation.
+	if err := reportCleanupProgress(progress, total, "compacting"); err != nil {
+		return total, err
+	}
+	if _, err := s.pool.Exec(ctx, `VACUUM (FULL, ANALYZE) ai_request_payloads, ai_audit_inbox`); err != nil {
+		return total, fmt.Errorf("compact request payload and audit inbox tables (runtime role needs table ownership): %w", err)
+	}
+	if err := reportCleanupProgress(progress, total, "cleared"); err != nil {
+		return total, err
 	}
 	return total, nil
 }
@@ -818,7 +961,7 @@ func (s *Service) countTarget(ctx context.Context, target string, cutoff time.Ti
 	return count, nil
 }
 
-func (s *Service) clearRequestBodies(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) clearRequestBodies(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	var total int64
 	for {
 		result, err := s.pool.Exec(ctx, `
@@ -842,13 +985,16 @@ func (s *Service) clearRequestBodies(ctx context.Context, cutoff time.Time, batc
 		}
 		changed := result.RowsAffected()
 		total += changed
+		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+			return total, err
+		}
 		if changed < int64(batchSize) {
 			return total, nil
 		}
 	}
 }
 
-func (s *Service) deleteRequestPayloads(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteRequestPayloads(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM ai_request_payloads
@@ -860,10 +1006,10 @@ func (s *Service) deleteRequestPayloads(ctx context.Context, cutoff time.Time, b
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
-func (s *Service) deleteNotifications(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteNotifications(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM sys_notification_deliveries
@@ -875,10 +1021,10 @@ func (s *Service) deleteNotifications(ctx context.Context, cutoff time.Time, bat
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
-func (s *Service) deleteModerationLogs(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteModerationLogs(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM ai_content_moderation_logs
@@ -890,10 +1036,10 @@ func (s *Service) deleteModerationLogs(ctx context.Context, cutoff time.Time, ba
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
-func (s *Service) deleteRiskEvents(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteRiskEvents(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM ai_risk_events
@@ -905,10 +1051,10 @@ func (s *Service) deleteRiskEvents(ctx context.Context, cutoff time.Time, batchS
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
-func (s *Service) deleteAdminAuditLogs(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteAdminAuditLogs(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM ai_admin_audit_logs
@@ -920,10 +1066,10 @@ func (s *Service) deleteAdminAuditLogs(ctx context.Context, cutoff time.Time, ba
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
-func (s *Service) deleteUsageRollups(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteUsageRollups(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM ai_usage_rollups_hourly
@@ -936,10 +1082,10 @@ func (s *Service) deleteUsageRollups(ctx context.Context, cutoff time.Time, batc
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
-func (s *Service) deleteInBatches(ctx context.Context, operation func() (int64, error)) (int64, error) {
+func (s *Service) deleteInBatches(ctx context.Context, operation func() (int64, error), progress ...cleanupProgressReporter) (int64, error) {
 	var total int64
 	for {
 		changed, err := operation()
@@ -947,6 +1093,9 @@ func (s *Service) deleteInBatches(ctx context.Context, operation func() (int64, 
 			return total, err
 		}
 		total += changed
+		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+			return total, err
+		}
 		if changed == 0 {
 			return total, nil
 		}
@@ -969,7 +1118,7 @@ func (s *Service) countUnreferencedBlobs(ctx context.Context, cutoff time.Time) 
 	return count, nil
 }
 
-func (s *Service) deleteUnreferencedBlobs(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+func (s *Service) deleteUnreferencedBlobs(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
 	filter, err := s.unreferencedBlobFilter(ctx, "candidate")
 	if err != nil {
 		return 0, err
@@ -987,7 +1136,7 @@ func (s *Service) deleteUnreferencedBlobs(ctx context.Context, cutoff time.Time,
 	return s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, query, cutoff, batchSize)
 		return result.RowsAffected(), err
-	})
+	}, progress...)
 }
 
 func (s *Service) unreferencedBlobFilter(ctx context.Context, candidateAlias string) (string, error) {
@@ -1050,10 +1199,10 @@ type rowScanner interface {
 
 func scanRun(row rowScanner) (Run, error) {
 	var run Run
-	var rawTargets, rawSummary []byte
+	var rawTargets, rawSummary, rawProgress []byte
 	if err := row.Scan(
 		&run.ID, &run.Trigger, &run.Status, &run.RequestedBy,
-		&rawTargets, &rawSummary, &run.Error, &run.CreatedAt, &run.StartedAt, &run.CompletedAt,
+		&rawTargets, &rawSummary, &rawProgress, &run.Error, &run.CreatedAt, &run.StartedAt, &run.CompletedAt,
 	); err != nil {
 		return Run{}, err
 	}
@@ -1062,6 +1211,9 @@ func scanRun(row rowScanner) (Run, error) {
 	}
 	if err := json.Unmarshal(rawSummary, &run.Summary); err != nil {
 		return Run{}, fmt.Errorf("decode cleanup summary: %w", err)
+	}
+	if err := json.Unmarshal(rawProgress, &run.Progress); err != nil {
+		return Run{}, fmt.Errorf("decode cleanup progress: %w", err)
 	}
 	return run, nil
 }

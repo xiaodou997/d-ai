@@ -82,6 +82,17 @@ export type DataCleanupPreview = {
   requestBodyPurge: DataCleanupRequestBodyPurgePreview;
 };
 
+export type DataCleanupRunProgress = {
+  totalRows: number;
+  processedRows: number;
+  totalBytes?: number;
+  currentTarget?: string;
+  currentTargetTotal?: number;
+  currentTargetDone?: number;
+  batchSize: number;
+  phase: string;
+};
+
 export type DataCleanupRun = {
   id: string;
   trigger: "automatic" | "manual";
@@ -89,6 +100,7 @@ export type DataCleanupRun = {
   requestedBy?: string;
   targets: string[];
   summary: Record<string, number>;
+  progress?: DataCleanupRunProgress;
   error?: string;
   createdAt: string;
   startedAt?: string;
@@ -212,6 +224,7 @@ function toCleanupStatus(value: string): DataCleanupRun["status"] {
 }
 
 function toCleanupRun(value: CleanupRunTransport): DataCleanupRun {
+  const progress = value.progress;
   return {
     id: value.id,
     trigger: toCleanupTrigger(value.trigger),
@@ -219,6 +232,16 @@ function toCleanupRun(value: CleanupRunTransport): DataCleanupRun {
     requestedBy: value.requestedBy,
     targets: value.targets ?? [],
     summary: { ...value.summary },
+    progress: progress ? {
+      totalRows: progress.totalRows ?? 0,
+      processedRows: progress.processedRows ?? 0,
+      totalBytes: progress.totalBytes,
+      currentTarget: progress.currentTarget,
+      currentTargetTotal: progress.currentTargetTotal,
+      currentTargetDone: progress.currentTargetDone,
+      batchSize: progress.batchSize ?? 0,
+      phase: progress.phase ?? ""
+    } : undefined,
     error: value.error,
     createdAt: value.createdAt,
     startedAt: value.startedAt,

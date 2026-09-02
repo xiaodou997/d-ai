@@ -52,6 +52,7 @@ describe("typed OpenAPI operation request", () => {
       status: "queued",
       targets: ["notifications"],
       summary: {},
+      progress: { totalRows: 0, processedRows: 0, batchSize: 1000, phase: "queued" },
       createdAt: "2026-08-28T04:00:00Z"
     };
 

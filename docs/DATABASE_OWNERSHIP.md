@@ -27,9 +27,12 @@ billing/payment 三类视图和 `tenant_income_projection` owner 转给 billing 
 `system_usage_projection`、`system_account_stats_projection` 视图 owner 转给 runtime role，
 避免报表查询直接依赖对方领域表。
 
+请求正文清理需要在清空大字段后执行 `VACUUM FULL`；因此 `ownership.sql` 会将非财务的
+`ai_request_payloads` 与 `ai_audit_inbox` 两张表交给 runtime role，其他账务表仍由 billing role 持有。
+
 ## Apply
 
-先确认目标库已完成 schema v29（包含上述只读视图、不可变资金修复审计表和单一分组路由策略）升级；在维护窗口、应用已经配置并验证
+先确认目标库已完成 schema v30（包含上述只读视图、不可变资金修复审计表、单一分组路由策略和数据清理进度）升级；在维护窗口、应用已经配置并验证
 billing DSN 后，以数据库 owner/superuser 执行角色 provisioning：
 
 ```bash

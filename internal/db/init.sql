@@ -571,6 +571,7 @@ CREATE TABLE sys_data_cleanup_runs (
     requested_by TEXT,
     targets      JSONB NOT NULL DEFAULT '[]'::jsonb,
     summary      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    progress     JSONB NOT NULL DEFAULT '{}'::jsonb,
     error        TEXT,
     owner_id     TEXT,
     heartbeat_at TIMESTAMPTZ,
@@ -2711,6 +2712,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 29);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 30);
 
 COMMIT;

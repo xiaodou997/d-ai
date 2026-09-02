@@ -48,7 +48,7 @@ func TestCleanupLeaseHeartbeatAndTerminalWriteAreFenced(t *testing.T) {
 		t.Fatalf("heartbeat after takeover = held:%t err:%v, want held:false", held, err)
 	}
 
-	first.finishRun(ctx, run.ID, run.Trigger, run.RequestedBy, run.Targets, nil, first.ownerID, errors.New("stale worker"))
+	first.finishRunWithProgress(ctx, run.ID, run.Trigger, run.RequestedBy, run.Targets, nil, RunProgress{Phase: "failed"}, first.ownerID, errors.New("stale worker"))
 	var status, owner string
 	if err := pool.QueryRow(ctx, `SELECT status, owner_id FROM sys_data_cleanup_runs WHERE id = $1::uuid`, run.ID).Scan(&status, &owner); err != nil {
 		t.Fatal(err)

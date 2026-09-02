@@ -111,8 +111,8 @@ func TestCleanupTargetsRespectRetentionAndProtectionRules(t *testing.T) {
 	if got, err := svc.deleteUnreferencedBlobs(ctx, time.Now().UTC().Add(-180*24*time.Hour), policy.BatchSize); err != nil || got != 1 {
 		t.Fatalf("delete audit blobs = %d, err=%v; want 1", got, err)
 	}
-	if got, err := svc.clearAllRequestBodies(ctx, policy.BatchSize); err != nil || got != 1 {
-		t.Fatalf("clear all request bodies = %d, err=%v; want 1", got, err)
+	if got, err := svc.clearAllRequestBodies(ctx, policy.BatchSize); err != nil || got != 2 {
+		t.Fatalf("clear all request bodies = %d, err=%v; want 2", got, err)
 	}
 
 	assertCount(t, ctx, pool, `SELECT COUNT(*) FROM ai_request_payloads WHERE request_id = 'cleanup-body'`, 1)

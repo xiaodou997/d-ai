@@ -26,6 +26,7 @@ const cleanupBusy = ref(false);
 const selectedCleanupTargets = ref<string[]>([]);
 const cleanupRunsDrawerOpen = ref(false);
 const visibleCleanupRuns = computed(() => cleanupRuns.value.slice(0, 8));
+const activeBodyPurgeRun = computed(() => cleanupRuns.value.find((run) => run.targets?.includes("request_body_purge") && (run.status === "queued" || run.status === "running")));
 const cleanupRunColumns = [
   { key: "status", title: "状态", width: 90 },
   { key: "trigger", title: "触发方式", width: 90 },
@@ -39,6 +40,24 @@ function statusLabel(item: SystemModuleStatus) { return item.active ? "运行中
 function cleanupRunTone(status: string) { return status === "completed" ? "positive" : status === "failed" ? "danger" : status === "running" ? "info" : "neutral"; }
 function cleanupRunLabel(status: string) { return status === "completed" ? "已完成" : status === "failed" ? "失败" : status === "running" ? "执行中" : "排队中"; }
 function cleanupRunTotal(summary: Record<string, number>) { return Object.values(summary).reduce((sum, value) => sum + value, 0).toLocaleString(); }
+function cleanupRunProgress(run: DataCleanupRun) {
+  const progress = run.progress;
+  if (!progress || progress.totalRows <= 0) return progress?.phase === "preparing" ? "正在统计待处理数量…" : "—";
+  const processed = Math.min(Math.max(progress.processedRows, 0), progress.totalRows);
+  const percent = Math.floor((processed / progress.totalRows) * 100);
+  return `${processed.toLocaleString()} / ${progress.totalRows.toLocaleString()}（${percent}%）`;
+}
+function cleanupRunPhase(run: DataCleanupRun) {
+  switch (run.progress?.phase) {
+    case "preparing": return "正在统计";
+    case "clearing": return "正在清理";
+    case "compacting": return "正在回收 TOAST 空间";
+    case "cleared": return "正文已清理，空间回收完成";
+    case "completed": return "已完成";
+    case "failed": return "执行失败";
+    default: return run.status === "queued" ? "等待启动" : "执行中";
+  }
+}
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -67,6 +86,8 @@ async function loadCleanup() {
   cleanupPreview.value = preview;
   cleanupRuns.value = runs;
   if (!selectedCleanupTargets.value.length) selectedCleanupTargets.value = preview.items.map((item) => item.target);
+  const activeRun = runs.find((run) => run.status === "queued" || run.status === "running");
+  if (activeRun) pollCleanupRun(activeRun.id);
 }
 
 async function saveCleanupPolicy() {
@@ -222,7 +243,7 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
                   <template #cell-status="{ row }"><DsTag :tone="cleanupRunTone(row.status)">{{ cleanupRunLabel(row.status) }}</DsTag></template>
                   <template #cell-trigger="{ row }">{{ row.trigger === 'automatic' ? '自动' : '手动' }}</template>
                   <template #cell-createdAt="{ row }">{{ cleanupDate(row.createdAt) }}</template>
-                  <template #cell-summary="{ row }">{{ cleanupRunTotal(row.summary) }}</template>
+                  <template #cell-summary="{ row }"><div class="cleanup-run-progress"><strong>{{ cleanupRunTotal(row.summary) }}</strong><small v-if="row.progress?.totalRows">{{ cleanupRunProgress(row) }} · 每批 {{ row.progress.batchSize.toLocaleString() }} 条</small><small v-else-if="row.status === 'running'">{{ cleanupRunPhase(row) }}</small></div></template>
                 </DsTable>
               </div>
               <DsEmpty v-else title="还没有清理记录" description="保存策略后，系统会在每日后台任务中执行清理。" />
@@ -233,10 +254,11 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
               <div class="cleanup-danger-zone__title"><FileText :size="15" /><strong>立即清空请求体</strong></div>
               <p>清除所有请求/响应正文等大字段，保留请求记录、用量统计和对账数据；任务完成后自动回收 TOAST 空间。</p>
               <p v-if="cleanupPreview" class="cleanup-danger-zone__preview">当前待清理 {{ cleanupPreview.requestBodyPurge.eligibleRows.toLocaleString() }} 条正文数据，占用约 <strong>{{ formatBytes(cleanupPreview.requestBodyPurge.occupiedBytes) }}</strong>；预览于 {{ cleanupDate(cleanupPreview.generatedAt) }}</p>
+              <p v-if="activeBodyPurgeRun" class="cleanup-danger-zone__progress">执行进度：{{ cleanupRunProgress(activeBodyPurgeRun) }}；每批 {{ activeBodyPurgeRun.progress?.batchSize?.toLocaleString() || cleanupPolicy.batchSize.toLocaleString() }} 条；{{ cleanupRunPhase(activeBodyPurgeRun) }}</p>
             </div>
-            <DsButton variant="danger" :disabled="cleanupBusy" @click="purgeRequestBodies">
+            <DsButton variant="danger" :disabled="cleanupBusy || !!activeBodyPurgeRun" @click="purgeRequestBodies">
               <template #icon><Trash2 :size="14" /></template>
-              {{ cleanupBusy ? "清理中…" : "清空请求体" }}
+              {{ cleanupBusy || activeBodyPurgeRun ? "清理中…" : "清空请求体" }}
             </DsButton>
           </div>
         </PortalContentCard>
@@ -265,7 +287,7 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
           <template #cell-status="{ row }"><DsTag :tone="cleanupRunTone(row.status)">{{ cleanupRunLabel(row.status) }}</DsTag></template>
           <template #cell-trigger="{ row }">{{ row.trigger === 'automatic' ? '自动' : '手动' }}</template>
           <template #cell-createdAt="{ row }">{{ cleanupDate(row.createdAt) }}</template>
-          <template #cell-summary="{ row }">{{ cleanupRunTotal(row.summary) }}</template>
+          <template #cell-summary="{ row }"><div class="cleanup-run-progress"><strong>{{ cleanupRunTotal(row.summary) }}</strong><small v-if="row.progress?.totalRows">{{ cleanupRunProgress(row) }} · 每批 {{ row.progress.batchSize.toLocaleString() }} 条</small><small v-else-if="row.status === 'running'">{{ cleanupRunPhase(row) }}</small></div></template>
         </DsTable>
         <DsEmpty v-else title="还没有清理记录" description="保存策略后，系统会在每日后台任务中执行清理。" />
       </div>
@@ -308,11 +330,15 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
 .cleanup-runs__viewport :deep(.ds-table__td), .cleanup-runs__drawer-table :deep(.ds-table__td) { padding: 10px 12px; }
 .cleanup-runs__drawer-table { min-width: 0; }
 .cleanup-runs__drawer-table :deep(.ds-table) { border: 0; border-radius: var(--ds-radius-none); }
+.cleanup-run-progress { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+.cleanup-run-progress strong { color: var(--ds-ink); font-size: 12px; font-weight: 600; }
+.cleanup-run-progress small { color: var(--ds-muted); font-size: 11px; white-space: nowrap; }
 .cleanup-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 22px; padding: 16px; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-radius-control); background: var(--ds-danger-soft); }
 .cleanup-danger-zone__copy { min-width: 0; }
 .cleanup-danger-zone__title { display: flex; align-items: center; gap: 7px; color: var(--ds-danger); font-size: 13px; }
 .cleanup-danger-zone__copy p { margin: 6px 0 0; color: var(--ds-ink-soft); font-size: 12px; line-height: 1.6; }
 .cleanup-danger-zone__preview strong { color: var(--ds-danger); font-weight: 700; }
+.cleanup-danger-zone__progress { color: var(--ds-accent) !important; font-weight: 600; }
 .notification-form { display: grid; grid-template-columns: 180px 220px minmax(180px, 1fr) minmax(220px, 1.5fr) auto; align-items: center; gap: 10px; }
 @media (max-width: 1100px) { .module-grid { grid-template-columns: 1fr; } .cleanup-policy { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cleanup-workspace { grid-template-columns: 1fr; } }
 @media (max-width: 900px) { .notification-form { grid-template-columns: 1fr; } }

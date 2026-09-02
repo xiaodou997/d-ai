@@ -8415,6 +8415,7 @@ export interface components {
             createdAt: string;
             error?: string;
             id: string;
+            progress: components["schemas"]["RunProgress"];
             requestedBy?: string;
             /** Format: date-time */
             startedAt?: string;
@@ -8424,6 +8425,22 @@ export interface components {
             };
             targets: string[] | null;
             trigger: string;
+        };
+        RunProgress: {
+            /** Format: int64 */
+            batchSize: number;
+            currentTarget?: string;
+            /** Format: int64 */
+            currentTargetDone?: number;
+            /** Format: int64 */
+            currentTargetTotal?: number;
+            phase: string;
+            /** Format: int64 */
+            processedRows: number;
+            /** Format: int64 */
+            totalBytes?: number;
+            /** Format: int64 */
+            totalRows: number;
         };
         RuntimeAPIError: {
             code: string;

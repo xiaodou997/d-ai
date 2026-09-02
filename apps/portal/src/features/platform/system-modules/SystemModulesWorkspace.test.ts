@@ -79,6 +79,26 @@ describe("SystemModulesWorkspace", () => {
     wrapper.unmount();
   });
 
+  it("shows persisted cleanup progress and batch size while a purge is running", async () => {
+    api.listCleanupRuns.mockResolvedValue([
+      {
+        id: "run-progress",
+        status: "running",
+        trigger: "manual",
+        targets: ["request_body_purge"],
+        summary: { request_body_purge: 1000 },
+        progress: { totalRows: 32993, processedRows: 1000, batchSize: 1000, phase: "clearing" },
+        createdAt: "2026-09-02T00:34:50Z"
+      }
+    ]);
+    const { wrapper } = await mountWorkspace();
+
+    expect(wrapper.text()).toContain("1,000 / 32,993（3%）");
+    expect(wrapper.text()).toContain("每批 1,000 条");
+    expect(wrapper.text()).toContain("正在清理");
+    wrapper.unmount();
+  });
+
   it("toggles a module and saves the cleanup policy from the workspace", async () => {
     const { wrapper } = await mountWorkspace();
     wrapper.findComponent(DsSwitch).vm.$emit("update:modelValue", false);
