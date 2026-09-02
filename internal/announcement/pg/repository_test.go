@@ -90,6 +90,13 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 	if stats.AudienceSizeAtPublish != 1 || stats.CurrentAudienceSize != 1 || stats.ReadCount != 1 {
 		t.Fatalf("GetStats() = %#v, want audience/read counts 1", stats)
 	}
+	recipients, err := service.ListRecipients(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID, announcement.RecipientQuery{Page: 1, Size: 10})
+	if err != nil {
+		t.Fatalf("ListRecipients() error = %v", err)
+	}
+	if recipients.Total != 1 || len(recipients.Items) != 1 || recipients.Items[0].UserID != userA || recipients.Items[0].ReadAt == nil {
+		t.Fatalf("ListRecipients() = %#v, want one read recipient", recipients)
+	}
 	if _, err := service.Archive(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID); err != nil {
 		t.Fatalf("Archive() error = %v", err)
 	}

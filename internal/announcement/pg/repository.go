@@ -576,7 +576,8 @@ const inboxSelect = `SELECT a.announcement_id, a.publisher_type, COALESCE(a.publ
 	r.read_at`
 
 const recipientCTE = `WITH recipients AS (
-	SELECT u.user_type, u.user_id, COALESCE(u.tenant_id, ''), u.username, COALESCE(u.email, '')
+	SELECT u.user_type, u.user_id, COALESCE(u.tenant_id, '') AS tenant_id,
+		u.username, COALESCE(u.email, '') AS email
 	FROM iam_accounts u
 	WHERE u.status = 'active' AND EXISTS (
 		SELECT 1 FROM ann_audiences aa
