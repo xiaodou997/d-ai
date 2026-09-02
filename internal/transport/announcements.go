@@ -158,7 +158,7 @@ func registerAnnouncementManagement(api huma.API, h *announcementHandlers, base,
 	huma.Register(api, huma.Operation{OperationID: prefix + "-create-announcement", Method: http.MethodPost, Path: base, Summary: "创建公告草稿", Tags: []string{tag}, Middlewares: middleware, DefaultStatus: http.StatusCreated}, h.createDraft)
 	huma.Register(api, huma.Operation{OperationID: prefix + "-get-announcement", Method: http.MethodGet, Path: base + "/{id}", Summary: "公告管理详情", Tags: []string{tag}, Middlewares: middleware}, h.getManaged)
 	huma.Register(api, huma.Operation{OperationID: prefix + "-update-announcement", Method: http.MethodPut, Path: base + "/{id}", Summary: "更新公告草稿", Tags: []string{tag}, Middlewares: middleware}, h.updateDraft)
-	huma.Register(api, huma.Operation{OperationID: prefix + "-delete-announcement", Method: http.MethodDelete, Path: base + "/{id}", Summary: "删除公告草稿", Tags: []string{tag}, Middlewares: middleware}, h.deleteDraft)
+	huma.Register(api, huma.Operation{OperationID: prefix + "-delete-announcement", Method: http.MethodDelete, Path: base + "/{id}", Summary: "删除公告", Tags: []string{tag}, Middlewares: middleware}, h.deleteAnnouncement)
 	huma.Register(api, huma.Operation{OperationID: prefix + "-publish-announcement", Method: http.MethodPost, Path: base + "/{id}/publish", Summary: "发布公告", Tags: []string{tag}, Middlewares: middleware}, h.publish)
 	huma.Register(api, huma.Operation{OperationID: prefix + "-archive-announcement", Method: http.MethodPost, Path: base + "/{id}/archive", Summary: "下线公告", Tags: []string{tag}, Middlewares: middleware}, h.archive)
 	huma.Register(api, huma.Operation{OperationID: prefix + "-get-announcement-stats", Method: http.MethodGet, Path: base + "/{id}/stats", Summary: "公告已读统计", Tags: []string{tag}, Middlewares: middleware}, h.stats)
@@ -265,16 +265,16 @@ func (h *announcementHandlers) updateDraft(ctx context.Context, in *updateAnnoun
 	return &announcementOutput{Body: announcementResponse(item, nil)}, nil
 }
 
-func (h *announcementHandlers) deleteDraft(ctx context.Context, in *announcementPathInput) (*messageOutput, error) {
+func (h *announcementHandlers) deleteAnnouncement(ctx context.Context, in *announcementPathInput) (*messageOutput, error) {
 	actor, err := announcementActor(ctx)
 	if err != nil || h.service == nil {
 		return nil, httpx.ErrUnauthorized
 	}
-	if err := h.service.DeleteDraft(ctx, actor, in.ID); err != nil {
+	if err := h.service.Delete(ctx, actor, in.ID); err != nil {
 		return nil, announcementHTTPError(err)
 	}
 	out := &messageOutput{}
-	out.Body.Message = "草稿已删除"
+	out.Body.Message = "公告已删除"
 	return out, nil
 }
 

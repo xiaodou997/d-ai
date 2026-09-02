@@ -243,7 +243,7 @@ export function createAnnouncementManagementClient(
         ...common
       }).then(toAnnouncement);
     },
-    async deleteDraft(id) {
+    async deleteAnnouncement(id) {
       if (isAdmin) {
         await request<"admin-delete-announcement">({
           method: "DELETE",

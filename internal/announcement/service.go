@@ -53,8 +53,8 @@ type statsRepository interface {
 	GetStats(ctx context.Context, actor Actor, id string) (Stats, error)
 }
 
-type draftDeleter interface {
-	DeleteDraft(ctx context.Context, actor Actor, id string) error
+type deleter interface {
+	Delete(ctx context.Context, actor Actor, id string) error
 }
 
 type managementRepository interface {
@@ -70,7 +70,7 @@ type Service struct {
 	inbox     inboxRepository
 	archiver  archiver
 	stats     statsRepository
-	deleter   draftDeleter
+	deleter   deleter
 	manager   managementRepository
 }
 
@@ -82,7 +82,7 @@ func NewService(repo draftRepository) *Service {
 	service.inbox, _ = repo.(inboxRepository)
 	service.archiver, _ = repo.(archiver)
 	service.stats, _ = repo.(statsRepository)
-	service.deleter, _ = repo.(draftDeleter)
+	service.deleter, _ = repo.(deleter)
 	service.manager, _ = repo.(managementRepository)
 	return service
 }
@@ -94,11 +94,17 @@ func (s *Service) GetManaged(ctx context.Context, actor Actor, id string) (Annou
 	return s.reader.GetManaged(ctx, actor, id)
 }
 
-func (s *Service) DeleteDraft(ctx context.Context, actor Actor, id string) error {
+func (s *Service) Delete(ctx context.Context, actor Actor, id string) error {
 	if s.deleter == nil {
 		return ErrUnavailable
 	}
-	return s.deleter.DeleteDraft(ctx, actor, id)
+	return s.deleter.Delete(ctx, actor, id)
+}
+
+// DeleteDraft is kept as a compatibility alias for callers that still use the
+// old draft-only name. Deletion is now available for every announcement state.
+func (s *Service) DeleteDraft(ctx context.Context, actor Actor, id string) error {
+	return s.Delete(ctx, actor, id)
 }
 
 func (s *Service) ListManaged(ctx context.Context, actor Actor, query ManageQuery) (ManagedPage, error) {

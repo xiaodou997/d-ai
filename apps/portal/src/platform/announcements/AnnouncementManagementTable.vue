@@ -93,7 +93,14 @@ function audienceLabel(item: ManagedAnnouncement) {
         >
           发布
         </el-button>
-        <el-button link type="danger" @click="emit('delete', row as ManagedAnnouncement)">删除</el-button>
+        <el-button
+          link
+          type="danger"
+          :loading="busyId === row.announcementId"
+          @click="emit('delete', row as ManagedAnnouncement)"
+        >
+          删除
+        </el-button>
       </template>
       <template v-else-if="row.status === 'published'">
         <el-button link type="primary" @click="emit('stats', row as ManagedAnnouncement)">统计</el-button>
@@ -105,9 +112,25 @@ function audienceLabel(item: ManagedAnnouncement) {
         >
           归档
         </el-button>
+        <el-button
+          link
+          type="danger"
+          :loading="busyId === row.announcementId"
+          @click="emit('delete', row as ManagedAnnouncement)"
+        >
+          删除
+        </el-button>
       </template>
       <template v-else>
         <el-button link type="primary" @click="emit('stats', row as ManagedAnnouncement)">统计</el-button>
+        <el-button
+          link
+          type="danger"
+          :loading="busyId === row.announcementId"
+          @click="emit('delete', row as ManagedAnnouncement)"
+        >
+          删除
+        </el-button>
       </template>
     </template>
   </DsTable>

@@ -1,6 +1,6 @@
 # D-AI 项目状态与实施清单
 
-更新日期：2026-09-01
+更新日期：2026-09-02
 
 ## 当前结论
 
@@ -9,10 +9,10 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 ## 已完成
 
 - 身份、权限、计费和 AI 能力运行在同一个 Go 进程、PostgreSQL 数据库和二进制入口中。
-- 数据库使用 `internal/db/init.sql` schema v30 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
-- `internal/db/changes/` 保存 v1→v30 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
+- 数据库使用 `internal/db/init.sql` schema v31 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
+- `internal/db/changes/` 保存 v1→v31 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
 - 平台管理端及 AI 管理端的状态变更、密钥/支付/Provider/路由/风控配置写操作统一要求 10 分钟内近期密码或 MFA 认证；只读查询保持可用。
-- `gateway` 角色只注册 runtime/file/console 路由，Portal 仅由 `all` 和 `control-api` 提供；账户统计和租户收入统计统一读取 schema v25 只读投影视图，分组路由策略由 schema v29 提供，数据清理进度由 schema v30 持久化。
+- `gateway` 角色只注册 runtime/file/console 路由，Portal 仅由 `all` 和 `control-api` 提供；账户统计和租户收入统计统一读取 schema v25 只读投影视图，分组路由策略由 schema v29 提供，数据清理进度由 schema v30 持久化，公告删除审计事件由 schema v31 提供。
 - `make dev` 负责本地配置、PostgreSQL、Redis、空库初始化和后端启动，不升级已有数据库。
 - Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。
 - API facade、领域类型、请求适配器、鉴权、shell、DsUI 和 billing 能力均在 `apps/portal/src` 内通过清晰目录边界组织。
@@ -35,7 +35,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 | Portal 平台层 | `apps/portal/src/platform` | 环境、鉴权、路由、shell 和公共工作区 |
 | Portal 设计系统 | `apps/portal/src/shared/ui` | token、DsUI 组件和布局 |
 | Portal 业务层 | `apps/portal/src/features`, `apps/portal/src/views` | 领域工作区和 userType 页面 |
-| 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v30 新库基线、v1→v30 forward-only 人工变更和结构门禁 |
+| 数据库 | `internal/db/init.sql`, `internal/db/changes`, `cmd/checkschema` | schema v31 新库基线、v1→v31 forward-only 人工变更和结构门禁 |
 
 ## 本轮重构收口状态
 
@@ -73,7 +73,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 | `bun run test` | 136 个测试文件、409 个测试通过 |
 | `make openapi` / `go run ./cmd/openapi` | 通过，生成统一 `contracts/openapi.yaml` |
 | `bun run generate:api` | 通过，生成 `src/api/generated/dai.ts` |
-| `go run ./cmd/checkschema` | 通过，schema v1→v30、29 个 forward migration 连续且与基线一致 |
+| `go run ./cmd/checkschema` | 通过，schema v1→v31、30 个 forward migration 连续且与基线一致 |
 | `bun run validate:frontend-quality` | 通过；显式 `any` 仅允许在已审查基线内 |
 | `golangci-lint` v2.12.2 + `staticcheck ./...` | 通过；未使用目录级或全局 ignore |
 | `govulncheck ./...`（Go 1.26.6） | 通过；0 个受影响漏洞 |

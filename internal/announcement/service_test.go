@@ -79,11 +79,8 @@ func (r *transitionOnlyRepository) Publish(_ context.Context, _ Actor, _ string,
 	return r.item, nil
 }
 
-func (r *lifecycleRepository) DeleteDraft(_ context.Context, _ Actor, _ string) error {
+func (r *lifecycleRepository) Delete(_ context.Context, _ Actor, _ string) error {
 	r.deleteCalls++
-	if r.item.Status != StatusDraft {
-		return ErrInvalidTransition
-	}
 	return nil
 }
 
@@ -192,11 +189,11 @@ func TestPublishedAnnouncementCannotBeEdited(t *testing.T) {
 	if repo.updateCalls != 0 {
 		t.Fatalf("UpdateDraft repository calls = %d, want 0", repo.updateCalls)
 	}
-	if err := service.DeleteDraft(context.Background(), actor, "ANN_1"); !errors.Is(err, ErrInvalidTransition) {
-		t.Fatalf("DeleteDraft() error = %v, want %v", err, ErrInvalidTransition)
+	if err := service.Delete(context.Background(), actor, "ANN_1"); err != nil {
+		t.Fatalf("Delete() error = %v, want nil", err)
 	}
 	if repo.deleteCalls != 1 {
-		t.Fatalf("DeleteDraft repository calls = %d, want 1", repo.deleteCalls)
+		t.Fatalf("Delete repository calls = %d, want 1", repo.deleteCalls)
 	}
 }
 

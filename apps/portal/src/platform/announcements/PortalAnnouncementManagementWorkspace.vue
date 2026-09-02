@@ -160,9 +160,14 @@ async function archive(item: ManagedAnnouncement) {
   }
 }
 
-async function deleteDraft(item: ManagedAnnouncement) {
+async function deleteAnnouncement(item: ManagedAnnouncement) {
+  const isDraft = item.status === "draft";
+  const title = isDraft ? "删除草稿" : "删除公告";
+  const detail = isDraft
+    ? "删除后无法恢复。确认删除该草稿？"
+    : "删除后公告及其送达统计无法恢复，已发布公告也会立即下线。确认删除？";
   try {
-    await ElMessageBox.confirm("删除后无法恢复。确认删除该草稿？", "删除草稿", {
+    await ElMessageBox.confirm(detail, title, {
       type: "warning",
       confirmButtonText: "删除",
       cancelButtonText: "取消"
@@ -170,12 +175,15 @@ async function deleteDraft(item: ManagedAnnouncement) {
   } catch {
     return;
   }
+  busyId.value = item.announcementId;
   try {
-    await props.client.deleteDraft(item.announcementId);
-    ElMessage.success("公告草稿已删除");
+    await props.client.deleteAnnouncement(item.announcementId);
+    ElMessage.success(isDraft ? "公告草稿已删除" : "公告已删除");
     await loadAnnouncements();
   } catch (error: unknown) {
-    ElMessage.error(errorMessage(error, "删除公告草稿失败"));
+    ElMessage.error(errorMessage(error, "删除公告失败"));
+  } finally {
+    busyId.value = "";
   }
 }
 
@@ -213,7 +221,7 @@ defineExpose({ openCreate: createAnnouncement });
         @edit="editAnnouncement"
         @publish="publish"
         @archive="archive"
-        @delete="deleteDraft"
+        @delete="deleteAnnouncement"
         @stats="statsItem = $event"
       />
 

@@ -335,7 +335,7 @@ func (r *Repository) GetStats(ctx context.Context, actor announcement.Actor, id 
 	return announcement.Stats{AudienceSizeAtPublish: atPublish, CurrentAudienceSize: current, ReadCount: readCount}, nil
 }
 
-func (r *Repository) DeleteDraft(ctx context.Context, actor announcement.Actor, id string) error {
+func (r *Repository) Delete(ctx context.Context, actor announcement.Actor, id string) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -349,20 +349,26 @@ func (r *Repository) DeleteDraft(ctx context.Context, actor announcement.Actor, 
 	if err != nil {
 		return err
 	}
-	if status != announcement.StatusDraft {
-		return announcement.ErrInvalidTransition
-	}
-	result, err := tx.Exec(ctx, "DELETE FROM ann_announcements WHERE "+where+" AND status='draft'", args...)
+	result, err := tx.Exec(ctx, "DELETE FROM ann_announcements WHERE "+where, args...)
 	if err != nil {
 		return err
 	}
 	if result.RowsAffected() != 1 {
 		return announcement.ErrInvalidTransition
 	}
-	if err := insertAudit(ctx, tx, id, "draft_deleted", actor); err != nil {
+	event := "deleted"
+	if status == announcement.StatusDraft {
+		event = "draft_deleted"
+	}
+	if err := insertAudit(ctx, tx, id, event, actor); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// DeleteDraft is kept as a compatibility alias for the old repository port.
+func (r *Repository) DeleteDraft(ctx context.Context, actor announcement.Actor, id string) error {
+	return r.Delete(ctx, actor, id)
 }
 
 func (r *Repository) ListManaged(ctx context.Context, actor announcement.Actor, query announcement.ManageQuery) (announcement.ManagedPage, error) {

@@ -12632,7 +12632,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 删除公告草稿
+      summary: 删除公告
       tags:
         - admin-announcements
     get:
@@ -16910,7 +16910,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppError"
           description: Error
-      summary: 删除公告草稿
+      summary: 删除公告
       tags:
         - tenant-announcements
     get:

@@ -715,7 +715,7 @@ CREATE TABLE ann_audit_events (
     id BIGSERIAL PRIMARY KEY,
     announcement_id TEXT NOT NULL,
     event_type TEXT NOT NULL
-        CHECK (event_type IN ('created', 'updated', 'published', 'archived', 'draft_deleted')),
+        CHECK (event_type IN ('created', 'updated', 'published', 'archived', 'draft_deleted', 'deleted')),
     actor_user_type INTEGER NOT NULL CHECK (actor_user_type IN (1, 2, 3)),
     actor_user_id TEXT NOT NULL,
     actor_tenant_id TEXT,
@@ -2712,6 +2712,6 @@ CREATE TABLE dai_schema_metadata (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 30);
+INSERT INTO dai_schema_metadata (singleton, version) VALUES (TRUE, 31);
 
 COMMIT;

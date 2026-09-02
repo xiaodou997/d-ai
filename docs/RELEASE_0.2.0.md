@@ -1,6 +1,6 @@
 # 0.2.0 历史上线手册（已归档，schema 2 → 3）
 
-> 本文只保留 0.2.0 的历史账务迁移记录，不是当前发布待办。当前 schema v30、迁移链、备份/恢复和上线检查统一以 [`SCHEMA_RELEASE_RUNBOOK.md`](SCHEMA_RELEASE_RUNBOOK.md)、[`DATABASE.md`](DATABASE.md) 和 [`RUNTIME_ROLES.md`](RUNTIME_ROLES.md) 为准；本文中的未勾选项不代表当前版本尚未完成。
+> 本文只保留 0.2.0 的历史账务迁移记录，不是当前发布待办。当前 schema v31、迁移链、备份/恢复和上线检查统一以 [`SCHEMA_RELEASE_RUNBOOK.md`](SCHEMA_RELEASE_RUNBOOK.md)、[`DATABASE.md`](DATABASE.md) 和 [`RUNTIME_ROLES.md`](RUNTIME_ROLES.md) 为准；本文中的未勾选项不代表当前版本尚未完成。
 
 本次发布把账户余额从「2 张表 3 个非负列」收敛为 `bill_accounts.balance_micro`
 一个有符号整数，并把 AI 扣费改为经 `bill_charge_outbox` 异步结算。

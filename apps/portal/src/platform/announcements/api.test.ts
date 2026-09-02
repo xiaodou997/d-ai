@@ -101,7 +101,7 @@ describe("announcement generated operation clients", () => {
     await expect(client.get("announcement/1")).resolves.toMatchObject({ status: "published" });
     await expect(client.create(payload)).resolves.toMatchObject({ title: "Maintenance" });
     await expect(client.update("announcement/1", payload)).resolves.toMatchObject({ title: "Maintenance" });
-    await expect(client.deleteDraft("announcement/1")).resolves.toBeUndefined();
+    await expect(client.deleteAnnouncement("announcement/1")).resolves.toBeUndefined();
     await expect(client.publish("announcement/1")).resolves.toMatchObject({ status: "published" });
     await expect(client.archive("announcement/1")).resolves.toMatchObject({ status: "published" });
     await expect(client.stats("announcement/1")).resolves.toEqual({

@@ -107,6 +107,12 @@ func TestTenantScopedAnnouncementVisibilityAndReadReceipt(t *testing.T) {
 	if len(inboxA.Items) != 0 || inboxA.UnreadCount != 0 {
 		t.Fatalf("ListInbox(A after archive) = %#v, want empty", inboxA)
 	}
+	if err := service.Delete(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if _, err := service.GetManaged(ctx, announcement.NewActor("SA_"+suffix, "", 1), created.ID); !errors.Is(err, announcement.ErrNotFound) {
+		t.Fatalf("GetManaged() after Delete error = %v, want ErrNotFound", err)
+	}
 	if err := service.DeleteDraft(ctx, announcement.NewActor("SA_"+suffix, "", 1), "missing-announcement"); !errors.Is(err, announcement.ErrNotFound) {
 		t.Fatalf("DeleteDraft(missing) error = %v, want ErrNotFound", err)
 	}

@@ -222,7 +222,7 @@ type AnnouncementModuleDeps struct {
 // composition root and is not exposed through transport module wiring.
 type AnnouncementHTTPService interface {
 	GetManaged(context.Context, announcementpkg.Actor, string) (announcementpkg.Announcement, error)
-	DeleteDraft(context.Context, announcementpkg.Actor, string) error
+	Delete(context.Context, announcementpkg.Actor, string) error
 	ListManaged(context.Context, announcementpkg.Actor, announcementpkg.ManageQuery) (announcementpkg.ManagedPage, error)
 	ListRecipients(context.Context, announcementpkg.Actor, string, announcementpkg.RecipientQuery) (announcementpkg.RecipientPage, error)
 	Archive(context.Context, announcementpkg.Actor, string) (announcementpkg.Announcement, error)

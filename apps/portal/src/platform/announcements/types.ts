@@ -90,7 +90,7 @@ export interface AnnouncementManagementClient {
   get(id: string): Promise<ManagedAnnouncement>;
   create(payload: AnnouncementDraftPayload): Promise<ManagedAnnouncement>;
   update(id: string, payload: AnnouncementDraftPayload): Promise<ManagedAnnouncement>;
-  deleteDraft(id: string): Promise<void>;
+  deleteAnnouncement(id: string): Promise<void>;
   publish(id: string): Promise<ManagedAnnouncement>;
   archive(id: string): Promise<ManagedAnnouncement>;
   stats(id: string): Promise<AnnouncementStats>;

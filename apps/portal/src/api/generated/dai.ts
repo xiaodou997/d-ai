@@ -306,7 +306,7 @@ export interface paths {
         /** 更新公告草稿 */
         put: operations["admin-update-announcement"];
         post?: never;
-        /** 删除公告草稿 */
+        /** 删除公告 */
         delete: operations["admin-delete-announcement"];
         options?: never;
         head?: never;
@@ -2280,7 +2280,7 @@ export interface paths {
         /** 更新公告草稿 */
         put: operations["tenant-update-announcement"];
         post?: never;
-        /** 删除公告草稿 */
+        /** 删除公告 */
         delete: operations["tenant-delete-announcement"];
         options?: never;
         head?: never;
