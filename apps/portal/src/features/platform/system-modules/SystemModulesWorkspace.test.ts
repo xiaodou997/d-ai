@@ -110,6 +110,30 @@ describe("SystemModulesWorkspace", () => {
     prompt.mockRestore();
     wrapper.unmount();
   });
+
+  it("keeps the workspace compact and opens the full cleanup history in a drawer", async () => {
+    api.listCleanupRuns.mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        id: `run-${index}`,
+        status: "completed",
+        trigger: "automatic",
+        createdAt: `2026-08-${String(28 - index).padStart(2, "0")}T04:00:00Z`,
+        summary: { request_body: index }
+      }))
+    );
+
+    const { wrapper } = await mountWorkspace();
+
+    expect(wrapper.findAll(".cleanup-runs__viewport .ds-table__row")).toHaveLength(8);
+
+    const viewAllButton = wrapper.findAllComponents(DsButton).find((button) => button.text().includes("查看全部"));
+    expect(viewAllButton).toBeDefined();
+    await viewAllButton!.trigger("click");
+    await flushPromises();
+
+    expect(document.body.querySelectorAll(".ds-drawer .ds-table__row")).toHaveLength(10);
+    wrapper.unmount();
+  });
 });
 
 async function mountWorkspace() {

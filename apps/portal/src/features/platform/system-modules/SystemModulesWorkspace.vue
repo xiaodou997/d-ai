@@ -1,11 +1,11 @@
 <!-- Admin system-modules workspace. -->
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Blocks, FileText, Play, RefreshCw, Save, Settings, Trash2 } from "lucide-vue-next";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { PortalPagePanel, PortalContentCard } from "@/platform";
-import { DsButton, DsEmpty, DsInput, DsSwitch, DsTable, DsTag } from "@/shared/ui";
+import { DsButton, DsDrawer, DsEmpty, DsInput, DsSwitch, DsTable, DsTag } from "@/shared/ui";
 import {
   systemModulesApi,
   type DataCleanupPolicy,
@@ -24,6 +24,14 @@ const cleanupPreview = ref<DataCleanupPreview | null>(null);
 const cleanupRuns = ref<DataCleanupRun[]>([]);
 const cleanupBusy = ref(false);
 const selectedCleanupTargets = ref<string[]>([]);
+const cleanupRunsDrawerOpen = ref(false);
+const visibleCleanupRuns = computed(() => cleanupRuns.value.slice(0, 8));
+const cleanupRunColumns = [
+  { key: "status", title: "状态", width: 90 },
+  { key: "trigger", title: "触发方式", width: 90 },
+  { key: "createdAt", title: "开始时间" },
+  { key: "summary", title: "处理数量", width: 110, align: "right" as const }
+];
 let cleanupPollTimer: ReturnType<typeof setTimeout> | undefined;
 
 function tone(item: SystemModuleStatus) { return item.active ? "positive" : item.configValidated ? "neutral" : "warning"; }
@@ -202,13 +210,21 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
               </div>
             </div>
             <div class="cleanup-runs">
-              <div class="cleanup-section-head"><strong>最近运行</strong><span>保留最近 30 次</span></div>
-              <DsTable v-if="cleanupRuns.length" :columns="[{ key: 'status', title: '状态', width: 90 }, { key: 'trigger', title: '触发方式', width: 90 }, { key: 'createdAt', title: '开始时间' }, { key: 'summary', title: '处理数量', width: 110, align: 'right' }]" :rows="cleanupRuns" row-key="id" :frame="false">
-                <template #cell-status="{ row }"><DsTag :tone="cleanupRunTone(row.status)">{{ cleanupRunLabel(row.status) }}</DsTag></template>
-                <template #cell-trigger="{ row }">{{ row.trigger === 'automatic' ? '自动' : '手动' }}</template>
-                <template #cell-createdAt="{ row }">{{ cleanupDate(row.createdAt) }}</template>
-                <template #cell-summary="{ row }">{{ cleanupRunTotal(row.summary) }}</template>
-              </DsTable>
+              <div class="cleanup-section-head">
+                <div>
+                  <strong>最近运行</strong>
+                  <span>展示最近 {{ Math.min(cleanupRuns.length, 8) }} 次，共 {{ cleanupRuns.length }} 次</span>
+                </div>
+                <DsButton v-if="cleanupRuns.length > 8" size="sm" variant="ghost" @click="cleanupRunsDrawerOpen = true">查看全部</DsButton>
+              </div>
+              <div v-if="cleanupRuns.length" class="cleanup-runs__viewport">
+                <DsTable :columns="cleanupRunColumns" :rows="visibleCleanupRuns" row-key="id" :frame="false">
+                  <template #cell-status="{ row }"><DsTag :tone="cleanupRunTone(row.status)">{{ cleanupRunLabel(row.status) }}</DsTag></template>
+                  <template #cell-trigger="{ row }">{{ row.trigger === 'automatic' ? '自动' : '手动' }}</template>
+                  <template #cell-createdAt="{ row }">{{ cleanupDate(row.createdAt) }}</template>
+                  <template #cell-summary="{ row }">{{ cleanupRunTotal(row.summary) }}</template>
+                </DsTable>
+              </div>
               <DsEmpty v-else title="还没有清理记录" description="保存策略后，系统会在每日后台任务中执行清理。" />
             </div>
           </div>
@@ -236,6 +252,24 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
         </PortalContentCard>
       </div>
     </PortalPagePanel>
+
+    <DsDrawer
+      :open="cleanupRunsDrawerOpen"
+      title="清理运行记录"
+      :subtitle="`保留最近 ${cleanupRuns.length} 次运行记录`"
+      width="min(760px, 100vw)"
+      @close="cleanupRunsDrawerOpen = false"
+    >
+      <div class="cleanup-runs__drawer-table">
+        <DsTable v-if="cleanupRuns.length" :columns="cleanupRunColumns" :rows="cleanupRuns" row-key="id" :frame="false">
+          <template #cell-status="{ row }"><DsTag :tone="cleanupRunTone(row.status)">{{ cleanupRunLabel(row.status) }}</DsTag></template>
+          <template #cell-trigger="{ row }">{{ row.trigger === 'automatic' ? '自动' : '手动' }}</template>
+          <template #cell-createdAt="{ row }">{{ cleanupDate(row.createdAt) }}</template>
+          <template #cell-summary="{ row }">{{ cleanupRunTotal(row.summary) }}</template>
+        </DsTable>
+        <DsEmpty v-else title="还没有清理记录" description="保存策略后，系统会在每日后台任务中执行清理。" />
+      </div>
+    </DsDrawer>
   </div>
 </template>
 
@@ -258,7 +292,7 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
 .cleanup-switch { flex-direction: row !important; align-items: center; min-height: 36px; }
 .cleanup-switch input, .cleanup-target input { accent-color: var(--ds-accent); }
 .cleanup-policy__actions { display: flex; justify-content: flex-end; }
-.cleanup-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--ds-line); }
+.cleanup-workspace { display: grid; grid-template-columns: minmax(320px, 0.85fr) minmax(460px, 1.15fr); gap: 22px; margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--ds-line); }
 .cleanup-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: var(--ds-ink); font-size: 13px; }
 .cleanup-section-head div { display: flex; align-items: baseline; gap: 10px; }
 .cleanup-section-head span { color: var(--ds-muted); font-size: 12px; font-weight: 400; }
@@ -267,7 +301,13 @@ onBeforeUnmount(() => { if (cleanupPollTimer) clearTimeout(cleanupPollTimer); })
 .cleanup-target span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cleanup-target strong { color: var(--ds-ink-soft); font-size: 13px; font-weight: 600; }
 .cleanup-target small { color: var(--ds-muted); font-size: 11px; }
-.cleanup-runs { min-width: 0; }
+.cleanup-runs { min-width: 0; align-self: start; }
+.cleanup-runs__viewport { max-height: 430px; overflow-y: auto; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); }
+.cleanup-runs__viewport :deep(.ds-table) { border: 0; border-radius: var(--ds-radius-none); }
+.cleanup-runs__viewport :deep(.ds-table__th), .cleanup-runs__drawer-table :deep(.ds-table__th) { padding: 9px 12px; }
+.cleanup-runs__viewport :deep(.ds-table__td), .cleanup-runs__drawer-table :deep(.ds-table__td) { padding: 10px 12px; }
+.cleanup-runs__drawer-table { min-width: 0; }
+.cleanup-runs__drawer-table :deep(.ds-table) { border: 0; border-radius: var(--ds-radius-none); }
 .cleanup-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 22px; padding: 16px; border: 1px solid var(--ds-line-strong); border-radius: var(--ds-radius-control); background: var(--ds-danger-soft); }
 .cleanup-danger-zone__copy { min-width: 0; }
 .cleanup-danger-zone__title { display: flex; align-items: center; gap: 7px; color: var(--ds-danger); font-size: 13px; }
