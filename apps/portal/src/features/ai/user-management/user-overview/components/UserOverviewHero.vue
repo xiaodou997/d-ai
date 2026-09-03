@@ -24,6 +24,8 @@ const emit = defineEmits<{
   (e: "back"): void;
   (e: "edit-user"): void;
   (e: "open-group-policy"): void;
+  (e: "reset-password"): void;
+  (e: "delete-user"): void;
   (e: "refresh"): void;
 }>()
 
@@ -67,6 +69,8 @@ const detailItems = computed(() => [
         <el-button plain @click="emit('back')">返回列表</el-button>
         <el-button plain :disabled="!user" @click="emit('edit-user')">编辑用户</el-button>
         <el-button plain :disabled="!user || !aiAvailable" @click="emit('open-group-policy')">分组策略</el-button>
+        <el-button plain type="warning" :disabled="!user" @click="emit('reset-password')">重置密码</el-button>
+        <el-button plain type="danger" :disabled="!user" @click="emit('delete-user')">删除用户</el-button>
         <el-button type="primary" @click="emit('refresh')">刷新数据</el-button>
       </div>
     </div>

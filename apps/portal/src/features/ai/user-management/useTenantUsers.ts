@@ -19,8 +19,6 @@ export function useTenantUsers() {
   const loading = ref(false);
   const userList = ref<EndUserItem[]>([]);
   const statusUpdatingIds = ref<Set<string>>(new Set());
-  const editDialogOpen = ref(false);
-  const editTarget = ref<EndUserItem | null>(null);
   const groupPolicyDialogOpen = ref(false);
   const groupPolicyTarget = ref<EndUserItem | null>(null);
 
@@ -138,53 +136,9 @@ export function useTenantUsers() {
     }
   }
 
-  async function handleDelete(row: EndUserItem) {
-    try {
-      await ElMessageBox.confirm(
-        `确定要删除用户「${row.username}」吗？账号将立即无法登录，且会从用户列表移除；历史账务与用量记录仍会保留。`,
-        "确认删除用户",
-        {
-          confirmButtonText: "确认删除",
-          cancelButtonText: "取消",
-          type: "warning",
-          confirmButtonClass: "el-button--danger"
-        }
-      );
-      await platformTenantApi.deleteEndUser(row.userId);
-      ElMessage.success("用户已删除");
-      if (userList.value.length === 1 && page.value > 1) page.value -= 1;
-      void fetchUsers();
-    } catch (error) {
-      if (error !== "cancel") ElMessage.error(errorMessage(error, "删除失败"));
-    }
-  }
-
-  function openEditUser(row: EndUserItem) {
-    editTarget.value = row;
-    editDialogOpen.value = true;
-  }
-
   function openGroupPolicy(row: EndUserItem) {
     groupPolicyTarget.value = row;
     groupPolicyDialogOpen.value = true;
-  }
-
-  async function handleResetPassword(row: EndUserItem) {
-    try {
-      await ElMessageBox.confirm(
-        `重置后「${row.username}」的现有会话将全部失效，账号需通过新链接重新激活。`,
-        "确认重置密码",
-        {
-          confirmButtonText: "确认重置",
-          cancelButtonText: "取消",
-          type: "warning"
-        }
-      );
-      const credential = await platformTenantApi.resetUserPassword(row.userId);
-      await showActivationCredential(credential, `用户「${row.username}」`);
-    } catch (error) {
-      if (error !== "cancel") ElMessage.error(errorMessage(error, "操作失败"));
-    }
   }
 
   const showRechargeDialog = ref(false);
@@ -232,8 +186,6 @@ export function useTenantUsers() {
     total,
     loading,
     userList,
-    editDialogOpen,
-    editTarget,
     groupPolicyDialogOpen,
     groupPolicyTarget,
     showCreateDialog,
@@ -254,10 +206,7 @@ export function useTenantUsers() {
     submitCreateUser,
     isStatusUpdating,
     handleStatusChange,
-    handleDelete,
-    openEditUser,
     openGroupPolicy,
-    handleResetPassword,
     openRecharge,
     submitRecharge
   };

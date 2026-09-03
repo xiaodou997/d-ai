@@ -1,5 +1,5 @@
 <!-- Tenant user-management workspace.
-  租户端终端用户列表:搜索 + 表格 + 分页 + 用户编辑/分组策略/创建/充值弹窗。
+  租户端终端用户列表:搜索 + 表格 + 分页 + 详情/分组策略/创建/充值弹窗。
   重构:迁移至 DsUI 一体面板(PortalPagePanel:图标徽章+面包屑标题+描述同行,
        筛选/表格/分页同卡),el-table → DsTable,状态改为确认式开关,空态 DsEmpty,
        分页始终渲染;用户资料与并发统一编辑,分组策略单独配置。
@@ -64,6 +64,11 @@
             />
           </el-tooltip>
         </template>
+        <template #cell-balance="{ row }">
+          <span class="users-balance" :class="{ 'users-balance--negative': Number(row.balanceUsd || 0) < 0 }">
+            {{ formatDisplayUSD(row.balanceUsd) }}
+          </span>
+        </template>
         <template #cell-createdTime="{ row }">
           <span class="users-time">{{ formatTime(row.createdTime) }}</span>
         </template>
@@ -72,11 +77,8 @@
         </template>
         <template #cell-actions="{ row }">
           <el-button type="primary" link @click="openOverview(row)">详情</el-button>
-          <el-button type="primary" link @click="openEditUser(row)">编辑</el-button>
           <el-button type="primary" link @click="openGroupPolicy(row)">分组策略</el-button>
           <el-button type="primary" link @click="openRecharge(row)">充值</el-button>
-          <el-button type="warning" link @click="handleResetPassword(row)">重置密码</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
         </template>
       </DsTable>
 
@@ -90,13 +92,6 @@
         />
       </template>
     </PortalPagePanel>
-
-    <UserEditDialog
-      :open="editDialogOpen"
-      :user="editTarget"
-      @close="editDialogOpen = false"
-      @saved="fetchUsers"
-    />
 
     <UserGroupPolicyDialog
       :open="groupPolicyDialogOpen"
@@ -160,8 +155,8 @@ import { Plus, Search } from "@element-plus/icons-vue";
 import { Users } from "lucide-vue-next";
 import { PortalPagePanel } from "@/platform";
 import RechargeDialog from "@/components/RechargeDialog.vue";
-import UserEditDialog from "./UserEditDialog.vue";
 import UserGroupPolicyDialog from "./UserGroupPolicyDialog.vue";
+import { formatDisplayUSD } from "@/shared/currency";
 import { useTenantUsers } from "./useTenantUsers";
 import {
   DsEmpty,
@@ -179,10 +174,11 @@ const columns: DsTableColumn[] = [
   { key: "userId", title: "用户 ID", width: 110, mono: true },
   { key: "username", title: "用户名", width: 130 },
   { key: "email", title: "邮箱" },
+  { key: "balance", title: "余额", width: 110, align: "right" },
   { key: "internalNote", title: "内部备注" },
   { key: "status", title: "状态", width: 90 },
   { key: "createdTime", title: "注册时间", width: 170 },
-  { key: "actions", title: "操作", width: 360 }
+  { key: "actions", title: "操作", width: 240 }
 ];
 
 const router = useRouter();
@@ -193,8 +189,6 @@ const {
   total,
   loading,
   userList,
-  editDialogOpen,
-  editTarget,
   groupPolicyDialogOpen,
   groupPolicyTarget,
   showCreateDialog,
@@ -215,10 +209,7 @@ const {
   submitCreateUser,
   isStatusUpdating,
   handleStatusChange,
-  handleDelete,
-  openEditUser,
   openGroupPolicy,
-  handleResetPassword,
   openRecharge,
   submitRecharge
 } = useTenantUsers();
@@ -253,6 +244,16 @@ function openOverview(row: EndUserItem) {
 .users-time {
   font-size: 12px;
   color: var(--ds-faint);
+}
+
+.users-balance {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ds-ink-soft);
+}
+
+.users-balance--negative {
+  color: var(--ds-danger);
 }
 
 .users-note {

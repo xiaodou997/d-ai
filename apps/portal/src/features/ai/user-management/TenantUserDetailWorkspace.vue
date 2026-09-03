@@ -10,6 +10,7 @@ import { UserRound } from "lucide-vue-next";
 
 import UserEditDialog from "./UserEditDialog.vue";
 import UserGroupPolicyDialog from "./UserGroupPolicyDialog.vue";
+import { useTenantUserActions } from "./useTenantUserActions";
 import { PortalPagePanel } from "@/platform";
 
 import UserOverviewActivityGrid from "./user-overview/components/UserOverviewActivityGrid.vue";
@@ -27,6 +28,7 @@ const serviceAvailability = computed(() => ({
 }));
 
 const overview = useTenantUserOverview(userId, serviceAvailability);
+const { deleteUser, resetPassword } = useTenantUserActions();
 const editDialogOpen = ref(false);
 const groupPolicyDialogOpen = ref(false);
 
@@ -42,6 +44,16 @@ function openEditUser() {
 function openGroupPolicy() {
   if (!overview.user.value || !serviceAvailability.value.ai) return;
   groupPolicyDialogOpen.value = true;
+}
+
+async function handleResetPassword() {
+  if (overview.user.value) await resetPassword(overview.user.value);
+}
+
+async function handleDelete() {
+  const user = overview.user.value;
+  if (!user || !(await deleteUser(user))) return;
+  await router.push("/tenant/users/directory");
 }
 </script>
 
@@ -69,6 +81,8 @@ function openGroupPolicy() {
           @back="goBack"
           @edit-user="openEditUser"
           @open-group-policy="openGroupPolicy"
+          @reset-password="handleResetPassword"
+          @delete-user="handleDelete"
           @refresh="overview.refresh"
         />
 

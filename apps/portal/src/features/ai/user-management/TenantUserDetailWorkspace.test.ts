@@ -1,4 +1,5 @@
 import { flushPromises, shallowMount } from "@vue/test-utils";
+import { ElMessageBox } from "element-plus";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,7 +7,9 @@ import TenantUserDetailWorkspace from "./TenantUserDetailWorkspace.vue";
 
 const platformApi = vi.hoisted(() => ({
   getUsers: vi.fn(),
-  getUserRechargeRecords: vi.fn()
+  getUserRechargeRecords: vi.fn(),
+  resetUserPassword: vi.fn(),
+  deleteEndUser: vi.fn()
 }));
 const aiApi = vi.hoisted(() => ({
   listMyGroups: vi.fn(),
@@ -20,6 +23,7 @@ const usageApi = vi.hoisted(() => ({
 vi.mock("@/api/platformTenant", () => ({ platformTenantApi: platformApi }));
 vi.mock("@/api/aiTenant", () => ({ aiTenantApi: aiApi }));
 vi.mock("@/features/ai/usage", () => ({ listTenantUsageRecords: usageApi.listTenantUsageRecords }));
+vi.mock("@/platform/auth/activation", () => ({ showActivationCredential: vi.fn() }));
 
 const user = {
   userId: "user-1",
@@ -37,6 +41,8 @@ describe("TenantUserDetailWorkspace", () => {
     vi.clearAllMocks();
     platformApi.getUsers.mockResolvedValue({ items: [user], total: 1 });
     platformApi.getUserRechargeRecords.mockResolvedValue({ items: [], total: 0 });
+    platformApi.resetUserPassword.mockResolvedValue({ activationToken: "token", activationExpiresIn: 3600 });
+    platformApi.deleteEndUser.mockResolvedValue({ success: true });
     aiApi.listMyGroups.mockResolvedValue({ items: [] });
     aiApi.listUserGroups.mockResolvedValue({ items: [] });
     aiApi.listUserLimitPolicies.mockResolvedValue({ items: [] });
@@ -67,6 +73,21 @@ describe("TenantUserDetailWorkspace", () => {
     expect(router.currentRoute.value.fullPath).toBe("/tenant/users/directory");
     wrapper.unmount();
   });
+
+  it("handles password reset and deletion from the detail actions", async () => {
+    vi.spyOn(ElMessageBox, "confirm").mockResolvedValue("confirm" as never);
+    const { router, wrapper } = await mountWorkspace();
+
+    await wrapper.get("[data-testid='overview-reset-password']").trigger("click");
+    await flushPromises();
+    expect(platformApi.resetUserPassword).toHaveBeenCalledWith("user-1");
+
+    await wrapper.get("[data-testid='overview-delete-user']").trigger("click");
+    await flushPromises();
+    expect(platformApi.deleteEndUser).toHaveBeenCalledWith("user-1");
+    expect(router.currentRoute.value.fullPath).toBe("/tenant/users/directory");
+    wrapper.unmount();
+  });
 });
 
 async function mountWorkspace() {
@@ -87,8 +108,8 @@ async function mountWorkspace() {
         PortalPagePanel: { template: "<main><slot /></main>" },
         UserOverviewHero: {
           props: ["userId", "user"],
-          emits: ["back", "refresh"],
-          template: "<div data-testid='overview-user' :data-user-id='user?.userId || userId'><button data-testid='overview-refresh' @click='$emit(\"refresh\")'>刷新</button><button data-testid='overview-back' @click='$emit(\"back\")'>返回</button></div>"
+          emits: ["back", "refresh", "reset-password", "delete-user"],
+          template: "<div data-testid='overview-user' :data-user-id='user?.userId || userId'><button data-testid='overview-refresh' @click='$emit(\"refresh\")'>刷新</button><button data-testid='overview-back' @click='$emit(\"back\")'>返回</button><button data-testid='overview-reset-password' @click='$emit(\"reset-password\")'>重置密码</button><button data-testid='overview-delete-user' @click='$emit(\"delete-user\")'>删除用户</button></div>"
         },
         UserOverviewMetrics: { template: "<div />" },
         UserOverviewActivityGrid: { template: "<div />" },

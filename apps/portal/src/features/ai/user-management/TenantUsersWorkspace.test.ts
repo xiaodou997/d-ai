@@ -12,8 +12,6 @@ const api = vi.hoisted(() => ({
   createEndUser: vi.fn(),
   updateEndUser: vi.fn(),
   updateUserStatus: vi.fn(),
-  deleteEndUser: vi.fn(),
-  resetUserPassword: vi.fn(),
   rechargeUser: vi.fn()
 }));
 const aiApi = vi.hoisted(() => ({
@@ -39,7 +37,8 @@ const user = {
   phone: "13800000000",
   internalNote: "重点客户",
   status: 1,
-  credits: 100,
+  credentialState: "active" as const,
+  balanceUsd: 12.5,
   createdTime: 1_700_000_000_000
 };
 
@@ -96,6 +95,17 @@ describe("tenant user management", () => {
     expect(document.body.textContent).toContain("租户默认");
     expect(document.body.textContent).toContain("单独配置");
     expect(document.body.textContent).toContain("沿用租户默认");
+    wrapper.unmount();
+  });
+
+  it("shows the user balance and keeps uncommon account actions out of the list", async () => {
+    api.getUsers.mockResolvedValue({ items: [{ ...user }], total: 1 });
+    const wrapper = await mountUsers();
+
+    expect(wrapper.text()).toContain("$12.50");
+    expect(wrapper.findAll("button").some((button) => button.text() === "编辑")).toBe(false);
+    expect(wrapper.findAll("button").some((button) => button.text() === "重置密码")).toBe(false);
+    expect(wrapper.findAll("button").some((button) => button.text() === "删除")).toBe(false);
     wrapper.unmount();
   });
 
