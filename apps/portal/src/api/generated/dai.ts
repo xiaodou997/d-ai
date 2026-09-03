@@ -3190,7 +3190,7 @@ export interface paths {
         };
         /**
          * 租户自助用量日志列表
-         * @description 按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；不含上游/供应商/API key 等内部字段。
+         * @description 按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；包含用户名称和 API key 的非敏感标识，不含上游/供应商内部字段。
          */
         get: operations["ai-list-tenant-self-usage-logs"];
         put?: never;
@@ -9181,6 +9181,12 @@ export interface components {
             total: number;
         };
         TenantUsageLogDTO: {
+            /** @description API key ID；仅返回非敏感标识 */
+            api_key_id?: string;
+            /** @description API key 后四位 */
+            api_key_last_four?: string;
+            /** @description API key 名称 */
+            api_key_name?: string;
             /** @description 请求时分组展示标签快照 */
             billing_group_label_snapshot?: string;
             /** @description 计费来源：payg=按量 / subscription=订阅内 */
@@ -9222,6 +9228,11 @@ export interface components {
             error_message?: string;
             /** @description 外部用户 ID */
             external_user_id?: string;
+            /**
+             * Format: int32
+             * @description 首个响应字节耗时，毫秒
+             */
+            first_response_byte_ms?: number;
             /**
              * Format: int32
              * @description 首 token 延迟，毫秒
@@ -9271,6 +9282,11 @@ export interface components {
             /** @description 请求状态 */
             request_status: string;
             /**
+             * Format: int32
+             * @description 请求总耗时，毫秒
+             */
+            request_total_ms?: number;
+            /**
              * Format: double
              * @description 分组零售价格表原价USD 金额
              */
@@ -9303,6 +9319,8 @@ export interface components {
              * @description 用户零售应收USD 金额
              */
             user_payable_usd: number;
+            /** @description 用户名称 */
+            username?: string;
         };
         TenantUsageLogsOutputBody: {
             /**

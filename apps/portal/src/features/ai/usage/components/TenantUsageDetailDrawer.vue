@@ -31,6 +31,20 @@ function multiplierLabel(value?: number | null) {
   if (value == null) return "-";
   return `${formatMultiplier(value)}x`;
 }
+
+function totalLatencyMs(row: TenantUsageRow) {
+  return row.request_total_ms ?? row.latency_ms;
+}
+
+function firstResponseByteMs(row: TenantUsageRow) {
+  return row.first_response_byte_ms ?? row.first_token_latency_ms;
+}
+
+function apiKeyLabel(row: TenantUsageRow) {
+  if (!row.api_key_id) return "-";
+  if (row.api_key_name) return row.api_key_name;
+  return `API 密钥 (${row.api_key_id.slice(0, 8)}…)`;
+}
 </script>
 
 <template>
@@ -41,6 +55,8 @@ function multiplierLabel(value?: number | null) {
         <dl>
           <dt>Request ID</dt><dd class="mono">{{ row.request_id }}</dd>
           <dt>时间</dt><dd>{{ row.created_at ? new Date(row.created_at).toLocaleString("zh-CN") : "-" }}</dd>
+          <dt>用户</dt><dd>{{ row.userLabel }}</dd>
+          <dt>API 密钥</dt><dd>{{ apiKeyLabel(row) }}<template v-if="row.api_key_last_four">（末四位 {{ row.api_key_last_four }}）</template></dd>
           <dt>模型</dt><dd>{{ targetLabel(row) }}</dd>
           <dt>请求分组</dt><dd>{{ groupLabel(row) }}</dd>
           <dt>最终倍率</dt><dd class="mono">{{ multiplierLabel(row.effective_user_multiplier_snapshot) }}</dd>
@@ -68,7 +84,6 @@ function multiplierLabel(value?: number | null) {
           <dt>输出 Token</dt><dd class="mono">{{ formatTokenCount(row.completion_tokens) }}</dd>
           <dt>缓存读</dt><dd class="mono">{{ formatTokenCount(row.cache_read_tokens) }}</dd>
           <dt>缓存写</dt><dd class="mono">{{ formatTokenCount(row.cache_write_tokens) }}</dd>
-          <dt>推理 Token</dt><dd class="mono">{{ formatTokenCount(row.reasoning_tokens) }}</dd>
           <dt>总 Token</dt><dd class="mono">{{ formatTokenCount(row.total_tokens) }}</dd>
         </dl>
       </section>
@@ -80,8 +95,8 @@ function multiplierLabel(value?: number | null) {
           <dt>用户零售应收</dt><dd class="mono">{{ formatUSD(row.user_payable_usd) }}</dd>
           <dt>用户实际扣款</dt><dd class="mono accent">{{ formatUSD(row.user_charged_usd) }}</dd>
           <dt>计费状态</dt><dd>{{ row.billing_status_label || row.billing_status }}</dd>
-          <dt>总延迟</dt><dd class="mono">{{ formatMs(row.latency_ms) }}</dd>
-          <dt>首 Token 延迟</dt><dd class="mono">{{ formatMs(row.first_token_latency_ms) }}</dd>
+          <dt>总延迟</dt><dd class="mono">{{ formatMs(totalLatencyMs(row)) }}</dd>
+          <dt>首字节延迟</dt><dd class="mono">{{ formatMs(firstResponseByteMs(row)) }}</dd>
         </dl>
       </section>
     </div>

@@ -52,7 +52,7 @@ const metrics = computed(() => [
   {
     label: "用户扣款",
     value: formatUSD(stats.value.total_user_charged_usd),
-    hint: `终端用户消费 · 均延 ${Math.round(stats.value.avg_latency_ms)} ms`
+    hint: `终端用户消费 · 平均总耗时 ${Math.round(stats.value.avg_request_total_ms)} ms`
   }
 ]);
 </script>

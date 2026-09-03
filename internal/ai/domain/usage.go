@@ -11,11 +11,14 @@ type UsageLog struct {
 	RequestID                          string
 	TraceID                            string
 	APIKeyID                           string
+	APIKeyName                         string
+	APIKeyLastFour                     string
 	KeyOwnerType                       string
 	AuthMethod                         string
 	RequestSource                      string
 	TenantID                           string
 	UserID                             string
+	Username                           string
 	ClientUserAgent                    string
 	ExternalUserID                     string
 	GroupID                            string

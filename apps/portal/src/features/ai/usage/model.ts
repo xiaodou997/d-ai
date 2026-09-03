@@ -222,7 +222,7 @@ export function mapTenantUsageRows(
     return {
       ...record,
       userLabel: record.user_id
-        ? user?.username || user?.email || record.user_id
+        ? record.username || user?.username || user?.email || record.user_id
         : record.external_user_id || "-"
     };
   });

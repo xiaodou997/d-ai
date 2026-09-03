@@ -8559,6 +8559,15 @@ components:
     TenantUsageLogDTO:
       additionalProperties: false
       properties:
+        api_key_id:
+          description: API key ID；仅返回非敏感标识
+          type: string
+        api_key_last_four:
+          description: API key 后四位
+          type: string
+        api_key_name:
+          description: API key 名称
+          type: string
         billing_group_label_snapshot:
           description: 请求时分组展示标签快照
           type: string
@@ -8603,6 +8612,10 @@ components:
         external_user_id:
           description: 外部用户 ID
           type: string
+        first_response_byte_ms:
+          description: 首个响应字节耗时，毫秒
+          format: int32
+          type: integer
         first_token_latency_ms:
           description: 首 token 延迟，毫秒
           format: int32
@@ -8654,6 +8667,10 @@ components:
         request_status:
           description: 请求状态
           type: string
+        request_total_ms:
+          description: 请求总耗时，毫秒
+          format: int32
+          type: integer
         retail_base_usd:
           description: 分组零售价格表原价USD 金额
           format: double
@@ -8686,6 +8703,9 @@ components:
           description: 用户零售应收USD 金额
           format: double
           type: number
+        username:
+          description: 用户名称
+          type: string
       required:
         - id
         - request_id
@@ -18915,7 +18935,7 @@ paths:
         - upstream-resources
   /api/v1/tenants/me/usage-logs:
     get:
-      description: 按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；不含上游/供应商/API key 等内部字段。
+      description: 按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；包含用户名称和 API key 的非敏感标识，不含上游/供应商内部字段。
       operationId: ai-list-tenant-self-usage-logs
       parameters:
         - description: 用户 ID 过滤；为空表示本租户全部用户

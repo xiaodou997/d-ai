@@ -893,11 +893,18 @@ SELECT
   request_id,
   trace_id,
   api_key_id,
+  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id), '')::text AS api_key_name,
+  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id) AS api_key_last_four,
   key_owner_type,
   auth_method,
   request_source,
   tenant_id,
   user_id,
+  COALESCE((SELECT NULLIF(u.username, '')
+            FROM iam_accounts u
+            WHERE u.user_id = ai_usage_logs.user_id
+              AND u.tenant_id = ai_usage_logs.tenant_id
+              AND u.user_type = 4), '')::text AS username,
   client_user_agent,
   external_user_id,
   group_id,
@@ -974,11 +981,14 @@ type GetUsageLogByRequestIDRow struct {
 	RequestID                          string             `json:"request_id"`
 	TraceID                            pgtype.Text        `json:"trace_id"`
 	ApiKeyID                           pgtype.UUID        `json:"api_key_id"`
+	ApiKeyName                         string             `json:"api_key_name"`
+	ApiKeyLastFour                     pgtype.Text        `json:"api_key_last_four"`
 	KeyOwnerType                       string             `json:"key_owner_type"`
 	AuthMethod                         string             `json:"auth_method"`
 	RequestSource                      string             `json:"request_source"`
 	TenantID                           string             `json:"tenant_id"`
 	UserID                             pgtype.Text        `json:"user_id"`
+	Username                           string             `json:"username"`
 	ClientUserAgent                    string             `json:"client_user_agent"`
 	ExternalUserID                     pgtype.Text        `json:"external_user_id"`
 	GroupID                            pgtype.UUID        `json:"group_id"`
@@ -1056,11 +1066,14 @@ func (q *Queries) GetUsageLogByRequestID(ctx context.Context, requestID string) 
 		&i.RequestID,
 		&i.TraceID,
 		&i.ApiKeyID,
+		&i.ApiKeyName,
+		&i.ApiKeyLastFour,
 		&i.KeyOwnerType,
 		&i.AuthMethod,
 		&i.RequestSource,
 		&i.TenantID,
 		&i.UserID,
+		&i.Username,
 		&i.ClientUserAgent,
 		&i.ExternalUserID,
 		&i.GroupID,
@@ -1966,11 +1979,18 @@ SELECT
   request_id,
   trace_id,
   api_key_id,
+  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id), '')::text AS api_key_name,
+  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id) AS api_key_last_four,
   key_owner_type,
   auth_method,
   request_source,
   tenant_id,
   user_id,
+  COALESCE((SELECT NULLIF(u.username, '')
+            FROM iam_accounts u
+            WHERE u.user_id = ai_usage_logs.user_id
+              AND u.tenant_id = ai_usage_logs.tenant_id
+              AND u.user_type = 4), '')::text AS username,
   client_user_agent,
   external_user_id,
   group_id,
@@ -2068,11 +2088,14 @@ type ListUsageLogsRow struct {
 	RequestID                          string             `json:"request_id"`
 	TraceID                            pgtype.Text        `json:"trace_id"`
 	ApiKeyID                           pgtype.UUID        `json:"api_key_id"`
+	ApiKeyName                         string             `json:"api_key_name"`
+	ApiKeyLastFour                     pgtype.Text        `json:"api_key_last_four"`
 	KeyOwnerType                       string             `json:"key_owner_type"`
 	AuthMethod                         string             `json:"auth_method"`
 	RequestSource                      string             `json:"request_source"`
 	TenantID                           string             `json:"tenant_id"`
 	UserID                             pgtype.Text        `json:"user_id"`
+	Username                           string             `json:"username"`
 	ClientUserAgent                    string             `json:"client_user_agent"`
 	ExternalUserID                     pgtype.Text        `json:"external_user_id"`
 	GroupID                            pgtype.UUID        `json:"group_id"`
@@ -2170,11 +2193,14 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.RequestID,
 			&i.TraceID,
 			&i.ApiKeyID,
+			&i.ApiKeyName,
+			&i.ApiKeyLastFour,
 			&i.KeyOwnerType,
 			&i.AuthMethod,
 			&i.RequestSource,
 			&i.TenantID,
 			&i.UserID,
+			&i.Username,
 			&i.ClientUserAgent,
 			&i.ExternalUserID,
 			&i.GroupID,

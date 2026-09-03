@@ -13,7 +13,7 @@ withDefaults(
 <template>
   <span class="usage-latency-cell mono">
     <span class="usage-latency-cell__main">{{ formatMs(latencyMs) }}</span>
-    <span v-if="firstTokenMs" class="usage-latency-cell__first">首字 {{ formatMs(firstTokenMs) }}</span>
+    <span v-if="firstTokenMs" class="usage-latency-cell__first">首字节 {{ formatMs(firstTokenMs) }}</span>
   </span>
 </template>
 

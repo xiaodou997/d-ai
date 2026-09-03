@@ -1,5 +1,5 @@
 <!--
-  租户端使用记录明细表:DsTable 高密度摘要,列与排序口径不变,
+  租户端使用记录明细表:DsTable 高密度摘要,同时显示用户与 API 密钥身份,
   「详情」操作打开调用详情抽屉;分页 DsPagination 始终渲染。
   被使用记录工作台与用户管理-使用记录面板(showUser=false 隐藏用户列)复用。
 -->
@@ -37,6 +37,7 @@ defineEmits<{
 const columns = computed<DsTableColumn[]>(() => [
   { key: "created_at", title: "时间", width: 140 },
   ...(props.showUser !== false ? [{ key: "user", title: "用户", width: 130 }] : []),
+  { key: "api_key", title: "API 密钥", width: 160 },
   { key: "model", title: "模型" },
   { key: "group", title: "分组/倍率", width: 160 },
   { key: "status", title: "状态", width: 90 },
@@ -75,6 +76,16 @@ function groupLabel(row: TenantUsageRow) {
         <PortalIdentityCell :label="row.userLabel" />
       </template>
 
+      <template #cell-api_key="{ row }">
+        <div v-if="row.api_key_id" class="api-key-cell">
+          <span class="api-key-cell__name">{{ row.api_key_name || "未命名密钥" }}</span>
+          <span class="api-key-cell__meta">
+            {{ row.api_key_last_four ? `末四位 ${row.api_key_last_four}` : `ID ${row.api_key_id.slice(0, 8)}…` }}
+          </span>
+        </div>
+        <span v-else class="muted-cell">-</span>
+      </template>
+
       <template #cell-model="{ row }">
         <span class="model-cell">
           <span class="model-chip">{{ targetLabel(row) }}</span>
@@ -101,7 +112,6 @@ function groupLabel(row: TenantUsageRow) {
           :completion="row.completion_tokens"
           :cache-read="row.cache_read_tokens"
           :cache-write="row.cache_write_tokens"
-          :reasoning="row.reasoning_tokens"
         />
       </template>
 
@@ -189,6 +199,30 @@ function groupLabel(row: TenantUsageRow) {
   padding: 2px 8px;
   font-size: 12px;
   font-weight: 600;
+}
+
+.api-key-cell {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.api-key-cell__name {
+  overflow: hidden;
+  color: var(--ds-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-cell__meta,
+.muted-cell {
+  color: var(--ds-faint);
+  font-family: var(--ds-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .model-chip {

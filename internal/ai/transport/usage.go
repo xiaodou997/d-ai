@@ -237,7 +237,11 @@ type tenantUsageLogDTO struct {
 	RequestSource                      string  `json:"request_source" doc:"请求来源"`
 	TenantID                           string  `json:"tenant_id" doc:"租户 ID"`
 	UserID                             *string `json:"user_id,omitempty" doc:"用户 ID"`
+	Username                           string  `json:"username,omitempty" doc:"用户名称"`
 	ExternalUserID                     *string `json:"external_user_id,omitempty" doc:"外部用户 ID"`
+	APIKeyID                           string  `json:"api_key_id,omitempty" doc:"API key ID；仅返回非敏感标识"`
+	APIKeyName                         string  `json:"api_key_name,omitempty" doc:"API key 名称"`
+	APIKeyLastFour                     *string `json:"api_key_last_four,omitempty" doc:"API key 后四位"`
 	GroupID                            string  `json:"group_id,omitempty" doc:"命中分组 ID"`
 	GroupNameSnapshot                  string  `json:"group_name_snapshot,omitempty" doc:"请求时分组名称快照"`
 	GroupDefaultUserMultiplierSnapshot float64 `json:"group_default_user_multiplier_snapshot,omitempty" doc:"请求时分组用户默认倍率"`
@@ -266,6 +270,8 @@ type tenantUsageLogDTO struct {
 	HTTPStatus                         *int32  `json:"http_status,omitempty" doc:"HTTP 状态码"`
 	LatencyMs                          *int32  `json:"latency_ms,omitempty" doc:"请求延迟，毫秒"`
 	FirstTokenLatencyMs                *int32  `json:"first_token_latency_ms,omitempty" doc:"首 token 延迟，毫秒"`
+	RequestTotalMs                     *int32  `json:"request_total_ms,omitempty" doc:"请求总耗时，毫秒"`
+	FirstResponseByteMs                *int32  `json:"first_response_byte_ms,omitempty" doc:"首个响应字节耗时，毫秒"`
 	ErrorCode                          *string `json:"error_code,omitempty" doc:"错误码"`
 	ErrorMessage                       *string `json:"error_message,omitempty" doc:"错误信息"`
 	CreatedAt                          *int64  `json:"created_at,omitempty" doc:"创建时间，Unix 毫秒"`
@@ -962,7 +968,11 @@ func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 		RequestSource:                      log.RequestSource,
 		TenantID:                           log.TenantID,
 		UserID:                             stringPtrOrNil(log.UserID),
+		Username:                           log.Username,
 		ExternalUserID:                     stringPtrOrNil(log.ExternalUserID),
+		APIKeyID:                           log.APIKeyID,
+		APIKeyName:                         log.APIKeyName,
+		APIKeyLastFour:                     stringPtrOrNil(log.APIKeyLastFour),
 		GroupID:                            log.GroupID,
 		GroupNameSnapshot:                  log.GroupNameSnapshot,
 		GroupDefaultUserMultiplierSnapshot: log.GroupDefaultUserMultiplierSnapshot,
@@ -991,6 +1001,8 @@ func tenantUsageLogToDTO(log domain.UsageLog) tenantUsageLogDTO {
 		HTTPStatus:                         log.HTTPStatus,
 		LatencyMs:                          log.LatencyMs,
 		FirstTokenLatencyMs:                log.FirstTokenLatencyMs,
+		RequestTotalMs:                     log.RequestTotalMs,
+		FirstResponseByteMs:                log.FirstResponseByteMs,
 		ErrorCode:                          stringPtrOrNil(log.ErrorCode),
 		ErrorMessage:                       stringPtrOrNil(log.ErrorMessage),
 		CreatedAt:                          timeToMillisPtr(log.CreatedAt),

@@ -135,7 +135,7 @@ function isAbortError(error: unknown) {
         <span>总 Token</span><strong>{{ formatNumber(stats.total_tokens) }}</strong><small>当前过滤范围</small>
       </div>
       <div class="stat-card">
-        <span>消费金额</span><strong class="accent">{{ formatUSD(stats.total_user_charged_usd) }}</strong><small>均延 {{ Math.round(stats.avg_latency_ms) }} ms</small>
+        <span>消费金额</span><strong class="accent">{{ formatUSD(stats.total_user_charged_usd) }}</strong><small>平均总耗时 {{ Math.round(stats.avg_request_total_ms) }} ms</small>
       </div>
     </div>
 

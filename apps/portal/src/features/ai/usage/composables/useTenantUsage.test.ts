@@ -66,11 +66,13 @@ describe("useTenantUsage", () => {
       tenantRow("known", { user_id: "known-user" }),
       tenantRow("email", { user_id: "email-user" }),
       tenantRow("unknown", { user_id: "unknown-user" }),
-      tenantRow("external", { user_id: undefined, external_user_id: "external-42" })
+      tenantRow("external", { user_id: undefined, external_user_id: "external-42" }),
+      tenantRow("record-name", { user_id: "record-user", username: "record-name" })
     ]));
     api.listUsers.mockResolvedValue(usersResponse([
       { userId: "known-user", username: "alice", email: "alice@example.test" },
-      { userId: "email-user", username: "", email: "email-only@example.test" }
+      { userId: "email-user", username: "", email: "email-only@example.test" },
+      { userId: "record-user", username: "directory-name", email: "record@example.test" }
     ]));
     const { state, wrapper } = mountComposable(api);
 
@@ -79,7 +81,8 @@ describe("useTenantUsage", () => {
       "known-user",
       "email-user",
       "unknown-user",
-      "external-42"
+      "external-42",
+      "record-name"
     ]);
 
     await state.loadUsers();
@@ -88,7 +91,8 @@ describe("useTenantUsage", () => {
       "alice",
       "email-only@example.test",
       "unknown-user",
-      "external-42"
+      "external-42",
+      "record-name"
     ]);
     wrapper.unmount();
   });

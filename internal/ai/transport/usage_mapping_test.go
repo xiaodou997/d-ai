@@ -73,3 +73,35 @@ func TestUserUsageLogToDTOPreservesDomainProjection(t *testing.T) {
 		t.Fatalf("created_at = %v", got.CreatedAt)
 	}
 }
+
+func TestTenantUsageLogToDTOIncludesIdentityAndRequestTiming(t *testing.T) {
+	t.Parallel()
+
+	latencyMs := int32(42)
+	firstTokenLatencyMs := int32(12)
+	requestTotalMs := int32(180)
+	firstResponseByteMs := int32(30)
+
+	got := tenantUsageLogToDTO(domain.UsageLog{
+		ID:                  "log-tenant",
+		RequestID:           "request-tenant",
+		TenantID:            "tenant-1",
+		UserID:              "user-1",
+		Username:            "alice",
+		APIKeyID:            "key-1",
+		APIKeyName:          "Production",
+		APIKeyLastFour:      "7890",
+		RequestSource:       "api_key",
+		LatencyMs:           &latencyMs,
+		FirstTokenLatencyMs: &firstTokenLatencyMs,
+		RequestTotalMs:      &requestTotalMs,
+		FirstResponseByteMs: &firstResponseByteMs,
+	})
+
+	if got.Username != "alice" || got.APIKeyID != "key-1" || got.APIKeyName != "Production" || got.APIKeyLastFour == nil || *got.APIKeyLastFour != "7890" {
+		t.Fatalf("identity fields = %+v", got)
+	}
+	if got.LatencyMs != &latencyMs || got.FirstTokenLatencyMs != &firstTokenLatencyMs || got.RequestTotalMs != &requestTotalMs || got.FirstResponseByteMs != &firstResponseByteMs {
+		t.Fatalf("timing fields = %+v", got)
+	}
+}

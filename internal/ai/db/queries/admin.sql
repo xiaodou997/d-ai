@@ -492,11 +492,18 @@ SELECT
   request_id,
   trace_id,
   api_key_id,
+  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id), '')::text AS api_key_name,
+  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id) AS api_key_last_four,
   key_owner_type,
   auth_method,
   request_source,
   tenant_id,
   user_id,
+  COALESCE((SELECT NULLIF(u.username, '')
+            FROM iam_accounts u
+            WHERE u.user_id = ai_usage_logs.user_id
+              AND u.tenant_id = ai_usage_logs.tenant_id
+              AND u.user_type = 4), '')::text AS username,
   client_user_agent,
   external_user_id,
   group_id,
@@ -593,11 +600,18 @@ SELECT
   request_id,
   trace_id,
   api_key_id,
+  COALESCE((SELECT k.name::text FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id), '')::text AS api_key_name,
+  (SELECT k.last_four FROM ai_api_keys k WHERE k.id = ai_usage_logs.api_key_id AND k.tenant_id = ai_usage_logs.tenant_id) AS api_key_last_four,
   key_owner_type,
   auth_method,
   request_source,
   tenant_id,
   user_id,
+  COALESCE((SELECT NULLIF(u.username, '')
+            FROM iam_accounts u
+            WHERE u.user_id = ai_usage_logs.user_id
+              AND u.tenant_id = ai_usage_logs.tenant_id
+              AND u.user_type = 4), '')::text AS username,
   client_user_agent,
   external_user_id,
   group_id,

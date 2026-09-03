@@ -402,7 +402,7 @@ func registerTenantSelfUsage(api huma.API, d TenantSelfReadHTTPDeps) {
 		Method:      http.MethodGet,
 		Path:        "/api/v1/tenants/me/usage-logs",
 		Summary:     "租户自助用量日志列表",
-		Description: "按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；不含上游/供应商/API key 等内部字段。",
+		Description: "按当前租户 token 返回本租户可见的用量日志分页与同过滤条件下的聚合统计；包含用户名称和 API key 的非敏感标识，不含上游/供应商内部字段。",
 		Tags:        []string{"usage"},
 	}, func(ctx context.Context, in *tenantSelfUsageLogsInput) (*tenantUsageLogsOutput, error) {
 		if d.UsageQueries == nil {
