@@ -48,7 +48,8 @@ export function formatCompactNumber(value: number | string | null | undefined): 
   }
   const unit = abs >= 1e9 ? "B" : abs >= 1e6 ? "M" : "K";
   const divisor = unit === "B" ? 1e9 : unit === "M" ? 1e6 : 1e3;
-  return `${(n / divisor).toFixed(2)}${unit}`;
+  const compact = (n / divisor).toFixed(2).replace(/\.?(0+)$/, "");
+  return `${compact}${unit}`;
 }
 
 export function formatUSD(value: number | string | null | undefined): string {

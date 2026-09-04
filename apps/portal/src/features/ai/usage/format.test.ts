@@ -13,7 +13,8 @@ describe("usage amount formatting", () => {
 describe("compact analytics numbers", () => {
   it("uses K/M/B units and carries rounding into the next unit", () => {
     expect(formatCompactNumber(12_954)).toBe("12.95K");
-    expect(formatCompactNumber(2_500_000)).toBe("2.50M");
-    expect(formatCompactNumber(999.999)).toBe("1.00K");
+    expect(formatCompactNumber(2_500_000)).toBe("2.5M");
+    expect(formatCompactNumber(1000)).toBe("1K");
+    expect(formatCompactNumber(999.999)).toBe("1K");
   });
 });
