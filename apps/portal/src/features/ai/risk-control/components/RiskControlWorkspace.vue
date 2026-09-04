@@ -1,7 +1,7 @@
 <!--
   风控中心 — 智能服务 / AI 网关内容安全审核工作台。
   风控中心统一工作台：审核日志、关键词引擎、审核 API、提示词审核和风险事件
-  通过 DsTabs 切换；网关审计保留在独立的「审计与风控」菜单中。
+  通过 DsTabs 切换；网关审计与风控中心为两个并列的独立菜单。
 -->
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'

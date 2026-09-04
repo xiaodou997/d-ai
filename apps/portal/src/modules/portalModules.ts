@@ -274,16 +274,14 @@ export const portalModules: PortalModule[] = [
     component: () => import("@/views/admin/ai/gateway/UsageDetailView.vue")
   },
   {
-    id: "admin-security-workspace",
-    label: "审计与风控",
-    path: "/admin/ai/security",
+    id: "admin-gateway-audit",
+    label: "网关审计",
+    path: "/admin/ai/audit",
     icon: "shield-alert",
     capability: "admin.ai.security",
     navGroup: adminAi,
     order: 50,
-    tabs: [
-      { id: "audit", label: "网关审计", path: "audit", component: () => import("@/views/admin/ai/gateway/AuditView.vue") }
-    ]
+    component: () => import("@/views/admin/ai/gateway/AuditView.vue")
   },
   {
     id: "admin-risk-control",

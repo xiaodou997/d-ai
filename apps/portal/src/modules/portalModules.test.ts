@@ -36,7 +36,7 @@ describe("portal module registry", () => {
       "价格表",
       "使用记录",
       "用量分析",
-      "审计与风控",
+      "网关审计",
       "风控中心",
       "公告管理",
       "敏感信息保护",
@@ -377,7 +377,7 @@ describe("portal module registry", () => {
       },
       { id: "admin-usage", label: "使用记录", active: false },
       { id: "admin-usage-analytics", label: "用量分析", active: false },
-      { id: "admin-security-workspace", label: "审计与风控", active: false },
+      { id: "admin-gateway-audit", label: "网关审计", active: false },
       { id: "admin-risk-control", label: "风控中心", active: false }
     ]);
   });
@@ -396,7 +396,7 @@ describe("portal module registry", () => {
   it("exposes usage records separately from security controls", () => {
     const usageMenu = leavesFor(1, "/admin/ai/usage/request-1").find((item) => item.id === "admin-usage");
     const analyticsMenu = leavesFor(1, "/admin/ai/analytics").find((item) => item.id === "admin-usage-analytics");
-    const security = portalModules.find((module) => module.id === "admin-security-workspace");
+    const gatewayAudit = portalModules.find((module) => module.id === "admin-gateway-audit");
 
     expect(usageMenu).toMatchObject({
       label: "使用记录",
@@ -410,7 +410,7 @@ describe("portal module registry", () => {
       icon: "bar-chart-3",
       active: true
     });
-    expect(security?.tabs?.map((tab) => tab.id)).toEqual(["audit"]);
+    expect(gatewayAudit?.path).toBe("/admin/ai/audit");
     expect(portalModules.find((module) => module.id === "admin-risk-control")?.path).toBe("/admin/ai/risk-control");
   });
 
