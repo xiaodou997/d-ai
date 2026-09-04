@@ -96,10 +96,10 @@ const insertContentModerationLog = `-- name: InsertContentModerationLog :one
 INSERT INTO ai_content_moderation_logs (
   request_id, tenant_id, user_id, api_key_id, model_code, capability_type,
   mode, action, flagged, matched_keyword, highest_category, highest_score,
-  category_scores, threshold_snapshot, input_excerpt, upstream_latency_ms, error,
+  category_scores, threshold_snapshot, input_excerpt, input_hash, upstream_latency_ms, error,
   hit_layer
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 ) RETURNING id, created_at
 `
 
@@ -119,6 +119,7 @@ type InsertContentModerationLogParams struct {
 	CategoryScores    []byte         `json:"category_scores"`
 	ThresholdSnapshot []byte         `json:"threshold_snapshot"`
 	InputExcerpt      pgtype.Text    `json:"input_excerpt"`
+	InputHash         string         `json:"input_hash"`
 	UpstreamLatencyMs pgtype.Int4    `json:"upstream_latency_ms"`
 	Error             pgtype.Text    `json:"error"`
 	HitLayer          pgtype.Text    `json:"hit_layer"`
@@ -150,6 +151,7 @@ func (q *Queries) InsertContentModerationLog(ctx context.Context, arg InsertCont
 		arg.CategoryScores,
 		arg.ThresholdSnapshot,
 		arg.InputExcerpt,
+		arg.InputHash,
 		arg.UpstreamLatencyMs,
 		arg.Error,
 		arg.HitLayer,
@@ -201,7 +203,7 @@ const listContentModerationLogs = `-- name: ListContentModerationLogs :many
 SELECT
   id, request_id, tenant_id, user_id, api_key_id, model_code, capability_type,
   mode, action, flagged, matched_keyword, highest_category, highest_score,
-  category_scores, threshold_snapshot, input_excerpt, upstream_latency_ms, error,
+  category_scores, threshold_snapshot, input_excerpt, input_hash, upstream_latency_ms, error,
   hit_layer, created_at
 FROM ai_content_moderation_logs
 WHERE ($1::text IS NULL OR tenant_id = $1::text)
@@ -266,6 +268,7 @@ func (q *Queries) ListContentModerationLogs(ctx context.Context, arg ListContent
 			&i.CategoryScores,
 			&i.ThresholdSnapshot,
 			&i.InputExcerpt,
+			&i.InputHash,
 			&i.UpstreamLatencyMs,
 			&i.Error,
 			&i.HitLayer,

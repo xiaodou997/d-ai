@@ -4,11 +4,23 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"xiaodou/dai/internal/ai/domain"
 )
+
+func TestExcerptTextIsNotRecoverable(t *testing.T) {
+	if got := excerptText("short confidential"); got != "***" {
+		t.Fatalf("short excerpt = %q", got)
+	}
+	secret := "alice@example.com token: abcdefghijklmnop this is a sufficiently long confidential moderation input"
+	got := excerptText(secret)
+	if strings.Contains(got, "alice@example.com") || strings.Contains(got, "abcdefghijklmnop") {
+		t.Fatalf("secret leaked in excerpt %q", got)
+	}
+}
 
 // ---- fakes ----
 
@@ -214,6 +226,9 @@ func TestRecord_NonHitOnlyLoggedWhenConfigured(t *testing.T) {
 	c.Record(context.Background(), domain.RiskControlConfig{RecordNonHits: true}, CheckInput{Text: "hi"}, DetectResult{}, domain.RiskControlModeObserve)
 	if len(logs.logs) != 1 || logs.logs[0].Action != domain.RiskControlActionAllow {
 		t.Fatalf("expected one allow log, got %#v", logs.logs)
+	}
+	if logs.logs[0].InputExcerpt != "***" || logs.logs[0].InputHash != sha256Hex("hi") {
+		t.Fatalf("privacy metadata = excerpt %q hash %q", logs.logs[0].InputExcerpt, logs.logs[0].InputHash)
 	}
 }
 

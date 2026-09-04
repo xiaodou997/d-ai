@@ -14,6 +14,7 @@ import { DsTabs } from '@/shared/ui'
 import RiskControlConfigPanel from './RiskControlConfigPanel.vue'
 import RiskControlEventsPanel from './RiskControlEventsPanel.vue'
 import RiskControlLogsPanel from './RiskControlLogsPanel.vue'
+import { PromptAuditPanel } from '../../prompt-audit'
 
 const activeTab = shallowRef('logs')
 // 与原 el-tab-pane 行为一致:风险事件面板首次激活时才挂载(触发 fetchEvents)
@@ -22,7 +23,8 @@ const openEventCount = shallowRef(0)
 
 const tabs = computed(() => [
   { key: 'logs', label: '审核日志' },
-  { key: 'events', label: '风险事件', count: openEventCount.value || undefined }
+  { key: 'events', label: '风险事件', count: openEventCount.value || undefined },
+  { key: 'prompt-audit', label: '提示词审计' }
 ])
 
 watch(activeTab, (key) => {
@@ -51,6 +53,7 @@ watch(activeTab, (key) => {
             v-show="activeTab === 'events'"
             @open-event-count="openEventCount = $event"
           />
+          <PromptAuditPanel v-if="activeTab === 'prompt-audit'" />
         </div>
       </div>
     </PortalPagePanel>

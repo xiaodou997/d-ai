@@ -38,6 +38,7 @@ import (
 	aimetrics "xiaodou/dai/internal/ai/observability/metrics"
 	"xiaodou/dai/internal/ai/observabilitycontrol"
 	"xiaodou/dai/internal/ai/privacy"
+	"xiaodou/dai/internal/ai/promptaudit"
 	"xiaodou/dai/internal/ai/proxy"
 	"xiaodou/dai/internal/ai/riskcontrol"
 	"xiaodou/dai/internal/ai/routing"
@@ -76,6 +77,7 @@ type aiModules struct {
 	runtimeBinder      *coreruntime.CachedBindingResolver
 	subscriptionSvc    *subscription.Service
 	riskControlWorker  *riskcontrol.Worker
+	promptAuditEngine  *promptaudit.Engine
 	auditWorker        *audit.Worker
 	refresher          *tokenrefresh.Refresher
 	settlementConsumer *billingoutbox.Consumer
@@ -157,6 +159,14 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		Logger:          appLogger,
 	}
 	riskControlWorker := riskcontrol.NewWorker(riskControlChecker, appLogger)
+	promptAuditConfigSvc := promptaudit.NewConfigService(riskControlRepo)
+	promptAuditEngine := promptaudit.NewEngine(
+		promptAuditConfigSvc,
+		promptaudit.NewOpenAICompatibleScanner(),
+		aiadapters.NewPromptAuditRepo(pool),
+		providerSecrets.Decrypt,
+		appLogger,
+	)
 
 	auditStore := aiadapters.NewAuditStore(pool)
 	blobStore := blobstore.NewPGStore(pool)
@@ -232,6 +242,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 	usageLogger.WithAPIKeyCacheInvalidator(apiKeyCache)
 
 	contentModerationStep := &serving.ContentModerationStep{Checker: riskControlChecker, Worker: riskControlWorker}
+	promptAuditStep := &serving.PromptAuditStep{Checker: promptAuditEngine}
 	quotaCheckStep := &serving.QuotaCheckStep{}
 	subscriptionGateStep := &serving.SubscriptionGateStep{Subs: subsPort(subsSvc), Logger: appLogger}
 	balanceGateStep := &serving.BalanceGateStep{Resolver: aiadapters.NewRuntimeBalanceResolver(pool)}
@@ -270,6 +281,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 
 	pipeline := serving.NewPipeline(
 		&serving.AuthNStep{Resolver: aiadapters.NewAPIKeyResolver(q)},
+		promptAuditStep,
 		contentModerationStep,
 		quotaCheckStep,
 		subscriptionGateStep,
@@ -381,6 +393,10 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 				RiskControlDetector: riskControlChecker,
 				RiskControlLogs:     riskControlLogSvc,
 				RiskEvents:          riskControlEventSvc,
+				PromptAuditConfig:   promptAuditConfigSvc,
+				PromptAuditProbe:    promptAuditEngine,
+				PromptAuditEvents:   aiadapters.NewPromptAuditRepo(pool),
+				PromptAuditRuntime:  promptAuditEngine,
 				BanChecker:          banChecker,
 			},
 			AuditLog: transport.AIAuditLogHTTPDeps{
@@ -528,6 +544,7 @@ func buildAIModules(cfg *config.Config, pool, billingPool *pgxpool.Pool, redisCl
 		runtimeBinder:      runtimeBinder,
 		subscriptionSvc:    subsSvc,
 		riskControlWorker:  riskControlWorker,
+		promptAuditEngine:  promptAuditEngine,
 		auditWorker:        auditWorker,
 		refresher:          refresher,
 		settlementConsumer: billingoutbox.NewConsumer(billingPool, appLogger),
@@ -569,6 +586,9 @@ func validateAIAssembly(m *aiModules) error {
 	}
 	if m.riskControlWorker == nil {
 		missing = append(missing, "risk_control_worker")
+	}
+	if m.promptAuditEngine == nil {
+		missing = append(missing, "prompt_audit_engine")
 	}
 	if m.auditWorker == nil {
 		missing = append(missing, "audit_worker")
@@ -624,6 +644,9 @@ func (m *aiModules) Start(ctx context.Context) {
 		}
 		if m.riskControlWorker != nil {
 			m.riskControlWorker.Start(workerCtx, 0)
+		}
+		if m.promptAuditEngine != nil {
+			m.promptAuditEngine.Start(workerCtx)
 		}
 		if m.auditWorker != nil {
 			m.auditWorker.Start(workerCtx)
@@ -713,6 +736,11 @@ func (m *aiModules) Stop(ctx context.Context) error {
 				m.logger.Warn("risk control worker shutdown incomplete", zap.Error(err))
 			}
 			errs = append(errs, fmt.Errorf("stop risk control worker: %w", err))
+		}
+	}
+	if m.promptAuditEngine != nil {
+		if err := m.promptAuditEngine.Stop(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("stop prompt audit engine: %w", err))
 		}
 	}
 	if m.auditWorker != nil {

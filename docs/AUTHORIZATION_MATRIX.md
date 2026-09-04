@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `805703f29c6b1febd6f9fe7b8c5617cb3fa273bba0aa648ea1980433340b3962`
+Contract SHA-256: `61638951788fa167357e15eb0c890521f4a7fbc629b891d70dd53a1529180b03`
 
-Coverage: **328/328 operations (100%)**
+Coverage: **334/334 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 13 | `authenticated` | `actor.user` |
 | `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 159 | `platform_admin` | `actor.user` |
+| `platform_admin` | 165 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -148,6 +148,12 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `PUT` | `/api/v1/price-books/{bookID}/entries/{modelCode}` | `ai-upsert-price-book-entry` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/price-books/{bookID}/import-litellm` | `ai-import-price-book-litellm` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/price-books/{bookID}/sync-common` | `ai-sync-common-price-book-models` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/prompt-audit/config` | `ai-get-prompt-audit-config` | `platform_admin` | `global/resource` |
+| `PUT` | `/api/v1/prompt-audit/config` | `ai-update-prompt-audit-config` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v1/prompt-audit/endpoints/probe` | `ai-probe-prompt-audit-endpoint` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/prompt-audit/events` | `ai-list-prompt-audit-events` | `platform_admin` | `global/resource` |
+| `DELETE` | `/api/v1/prompt-audit/events/{eventID}` | `ai-delete-prompt-audit-event` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/prompt-audit/runtime` | `ai-get-prompt-audit-runtime` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/public/invitations/{code}` | `public-get-invitation` | `public` | `none` |
 | `POST` | `/api/v1/public/invitations/{code}/registrations` | `public-register-invitation-user` | `public` | `none` |
 | `POST` | `/api/v1/recharges` | `admin-recharge` | `platform_or_tenant` | `actor.tenant/resource` |

@@ -942,7 +942,9 @@ func (s *Service) countTarget(ctx context.Context, target string, cutoff time.Ti
 	case TargetNotifications:
 		query = `SELECT COUNT(*) FROM sys_notification_deliveries WHERE created_at < $1 AND status IN ('sent', 'failed')`
 	case TargetModerationLogs:
-		query = `SELECT COUNT(*) FROM ai_content_moderation_logs WHERE created_at < $1 AND flagged = FALSE`
+		query = `SELECT
+			(SELECT COUNT(*) FROM ai_content_moderation_logs WHERE created_at < $1 AND flagged = FALSE) +
+			(SELECT COUNT(*) FROM ai_prompt_audit_events WHERE created_at < $1)`
 	case TargetRiskEvents:
 		query = `SELECT COUNT(*) FROM ai_risk_events WHERE created_at < $1 AND status IN ('resolved', 'dismissed')`
 	case TargetAdminAuditLogs:
@@ -1025,7 +1027,30 @@ func (s *Service) deleteNotifications(ctx context.Context, cutoff time.Time, bat
 }
 
 func (s *Service) deleteModerationLogs(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {
-	return s.deleteInBatches(ctx, func() (int64, error) {
+	var total int64
+	for {
+		result, err := s.pool.Exec(ctx, `
+			DELETE FROM ai_prompt_audit_events
+			WHERE id IN (
+				SELECT id FROM ai_prompt_audit_events
+				WHERE created_at < $1
+				ORDER BY created_at
+				LIMIT $2
+			)
+		`, cutoff, batchSize)
+		if err != nil {
+			return total, err
+		}
+		changed := result.RowsAffected()
+		total += changed
+		if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+			return total, err
+		}
+		if changed < int64(batchSize) {
+			break
+		}
+	}
+	moderation, err := s.deleteInBatches(ctx, func() (int64, error) {
 		result, err := s.pool.Exec(ctx, `
 			DELETE FROM ai_content_moderation_logs
 			WHERE id IN (
@@ -1036,7 +1061,15 @@ func (s *Service) deleteModerationLogs(ctx context.Context, cutoff time.Time, ba
 			)
 		`, cutoff, batchSize)
 		return result.RowsAffected(), err
-	}, progress...)
+	})
+	if err != nil {
+		return total, err
+	}
+	total += moderation
+	if err := reportCleanupProgress(progress, total, "clearing"); err != nil {
+		return total, err
+	}
+	return total, nil
 }
 
 func (s *Service) deleteRiskEvents(ctx context.Context, cutoff time.Time, batchSize int, progress ...cleanupProgressReporter) (int64, error) {

@@ -210,6 +210,7 @@ type AiContentModerationLog struct {
 	CategoryScores    []byte             `json:"category_scores"`
 	ThresholdSnapshot []byte             `json:"threshold_snapshot"`
 	InputExcerpt      pgtype.Text        `json:"input_excerpt"`
+	InputHash         string             `json:"input_hash"`
 	UpstreamLatencyMs pgtype.Int4        `json:"upstream_latency_ms"`
 	Error             pgtype.Text        `json:"error"`
 	HitLayer          pgtype.Text        `json:"hit_layer"`
@@ -323,6 +324,37 @@ type AiPriceBookEntry struct {
 	ManuallyEdited    bool               `json:"manually_edited"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AiPromptAuditEvent struct {
+	ID                pgtype.UUID        `json:"id"`
+	RequestID         pgtype.Text        `json:"request_id"`
+	TenantID          pgtype.Text        `json:"tenant_id"`
+	UserID            pgtype.Text        `json:"user_id"`
+	ApiKeyID          pgtype.UUID        `json:"api_key_id"`
+	ModelCode         pgtype.Text        `json:"model_code"`
+	CapabilityType    pgtype.Text        `json:"capability_type"`
+	Protocol          pgtype.Text        `json:"protocol"`
+	PromptHash        string             `json:"prompt_hash"`
+	RedactedPreview   string             `json:"redacted_preview"`
+	PromptLength      int32              `json:"prompt_length"`
+	MessageCount      int32              `json:"message_count"`
+	Decision          string             `json:"decision"`
+	RiskLevel         string             `json:"risk_level"`
+	Action            string             `json:"action"`
+	Safety            pgtype.Text        `json:"safety"`
+	Categories        []byte             `json:"categories"`
+	MatchedScanners   []byte             `json:"matched_scanners"`
+	ScannerScores     []byte             `json:"scanner_scores"`
+	UnknownCategories []byte             `json:"unknown_categories"`
+	ScannerBackend    string             `json:"scanner_backend"`
+	ScannerVersion    pgtype.Text        `json:"scanner_version"`
+	GuardEndpointID   pgtype.Text        `json:"guard_endpoint_id"`
+	ConfigRevision    int64              `json:"config_revision"`
+	ChunkTotal        int32              `json:"chunk_total"`
+	LatencyMs         int32              `json:"latency_ms"`
+	ErrorCode         pgtype.Text        `json:"error_code"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type AiProviderOauthCredential struct {

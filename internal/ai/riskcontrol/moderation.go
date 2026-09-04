@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"xiaodou/dai/internal/ai/domain"
+	"xiaodou/dai/internal/ai/privacy"
 	"xiaodou/dai/internal/ai/secret"
 )
 
@@ -239,6 +240,7 @@ func (c *Checker) Record(ctx context.Context, cfg domain.RiskControlConfig, in C
 		HighestCategory:   det.HighestCategory,
 		HighestScore:      det.HighestScore,
 		InputExcerpt:      excerptText(in.Text),
+		InputHash:         sha256Hex(in.Text),
 		UpstreamLatencyMs: det.UpstreamLatencyMs,
 		Error:             det.APIError,
 		HitLayer:          det.HitLayer,
@@ -351,11 +353,7 @@ func evaluateScores(scores, thresholds map[string]float64) (flagged bool, highes
 }
 
 func excerptText(s string) string {
-	r := []rune(s)
-	if len(r) <= excerptMaxRunes {
-		return s
-	}
-	return string(r[:excerptMaxRunes]) + "…"
+	return privacy.AuditPreview(s, excerptMaxRunes)
 }
 
 func sha256Hex(s string) string {

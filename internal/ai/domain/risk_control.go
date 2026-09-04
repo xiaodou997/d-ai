@@ -159,6 +159,7 @@ type ContentModerationLog struct {
 	CategoryScores    []byte // raw JSON
 	ThresholdSnapshot []byte // raw JSON
 	InputExcerpt      string
+	InputHash         string
 	UpstreamLatencyMs *int32
 	Error             string
 	HitLayer          string // cache | keyword | pinyin | api

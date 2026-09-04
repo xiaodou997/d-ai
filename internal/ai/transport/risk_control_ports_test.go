@@ -192,6 +192,7 @@ func TestRiskControlRoutesUsePorts(t *testing.T) {
 func TestRiskControlRoutesRequirePorts(t *testing.T) {
 	router, api := server.New(server.Options{Title: "test", Version: "test"})
 	registerRiskControl(api, RiskControlHTTPDeps{})
+	registerPromptAudit(api, RiskControlHTTPDeps{})
 
 	requests := []struct {
 		method string
@@ -202,6 +203,11 @@ func TestRiskControlRoutesRequirePorts(t *testing.T) {
 		{http.MethodPost, "/api/v1/risk-control/test", `{"text":"test"}`},
 		{http.MethodGet, "/api/v1/risk-control/logs", ""},
 		{http.MethodGet, "/api/v1/risk-control/events", ""},
+		{http.MethodGet, "/api/v1/prompt-audit/config", ""},
+		{http.MethodGet, "/api/v1/prompt-audit/events", ""},
+		{http.MethodGet, "/api/v1/prompt-audit/runtime", ""},
+		{http.MethodDelete, "/api/v1/prompt-audit/events/11111111-1111-1111-1111-111111111111", ""},
+		{http.MethodPost, "/api/v1/prompt-audit/endpoints/probe", `{"id":"guard-1","name":"guard","base_url":"https://guard.example","model":"sileader/qwen3guard:0.6b","timeout_ms":3000,"input_limit":4000,"enabled":true}`},
 	}
 	for _, request := range requests {
 		recorder := performRiskControlRequest(router, request.method, request.path, request.body)

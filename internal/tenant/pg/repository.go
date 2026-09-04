@@ -288,6 +288,7 @@ func (r *TenantRepository) DeleteTenant(ctx context.Context, tenantID string) (b
 		`DELETE FROM ai_usage_rollups_hourly WHERE tenant_id = $1`,
 		`DELETE FROM ai_usage_logs WHERE tenant_id = $1`,
 		`DELETE FROM ai_content_moderation_logs WHERE tenant_id = $1`,
+		`DELETE FROM ai_prompt_audit_events WHERE tenant_id = $1`,
 		`DELETE FROM ai_risk_events WHERE tenant_id = $1`,
 		`DELETE FROM ai_audit_inbox WHERE payload->>'tenant_id' = $1`,
 		`DELETE FROM bill_charge_outbox WHERE tenant_id = $1`,
@@ -395,7 +396,7 @@ func (r *TenantRepository) deleteTenantLargeTables(ctx context.Context, tenantID
 			break
 		}
 	}
-	for _, table := range []string{"ai_usage_rollups_hourly", "ai_content_moderation_logs", "ai_risk_events", "sys_notification_deliveries"} {
+	for _, table := range []string{"ai_usage_rollups_hourly", "ai_content_moderation_logs", "ai_prompt_audit_events", "ai_risk_events", "sys_notification_deliveries"} {
 		for {
 			tx, err := r.pool.Begin(ctx)
 			if err != nil {

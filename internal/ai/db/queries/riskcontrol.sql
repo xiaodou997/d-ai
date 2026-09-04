@@ -7,17 +7,17 @@
 INSERT INTO ai_content_moderation_logs (
   request_id, tenant_id, user_id, api_key_id, model_code, capability_type,
   mode, action, flagged, matched_keyword, highest_category, highest_score,
-  category_scores, threshold_snapshot, input_excerpt, upstream_latency_ms, error,
+  category_scores, threshold_snapshot, input_excerpt, input_hash, upstream_latency_ms, error,
   hit_layer
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 ) RETURNING id, created_at;
 
 -- name: ListContentModerationLogs :many
 SELECT
   id, request_id, tenant_id, user_id, api_key_id, model_code, capability_type,
   mode, action, flagged, matched_keyword, highest_category, highest_score,
-  category_scores, threshold_snapshot, input_excerpt, upstream_latency_ms, error,
+  category_scores, threshold_snapshot, input_excerpt, input_hash, upstream_latency_ms, error,
   hit_layer, created_at
 FROM ai_content_moderation_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id')::text)

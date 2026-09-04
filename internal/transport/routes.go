@@ -240,6 +240,10 @@ type AIRiskControlHTTPDeps struct {
 	RiskControlDetector aitransport.RiskControlDetector
 	RiskControlLogs     aitransport.RiskControlLogReader
 	RiskEvents          aitransport.RiskEventManager
+	PromptAuditConfig   aitransport.PromptAuditConfigStore
+	PromptAuditProbe    aitransport.PromptAuditProber
+	PromptAuditEvents   aitransport.PromptAuditEventReader
+	PromptAuditRuntime  aitransport.PromptAuditRuntimeReader
 	BanChecker          aitransport.HumaBanChecker
 }
 
@@ -704,6 +708,10 @@ func buildRiskControlHTTPDeps(platform aiPlatformDeps, d AIRiskControlHTTPDeps) 
 		RiskControlDetector: d.RiskControlDetector,
 		RiskControlLogs:     d.RiskControlLogs,
 		RiskEvents:          d.RiskEvents,
+		PromptAuditConfig:   d.PromptAuditConfig,
+		PromptAuditProbe:    d.PromptAuditProbe,
+		PromptAuditEvents:   d.PromptAuditEvents,
+		PromptAuditRuntime:  d.PromptAuditRuntime,
 	}
 }
 

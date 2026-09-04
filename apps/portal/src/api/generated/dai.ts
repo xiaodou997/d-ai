@@ -1754,6 +1754,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/prompt-audit/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 提示词审计配置 */
+        get: operations["ai-get-prompt-audit-config"];
+        /** 更新提示词审计配置 */
+        put: operations["ai-update-prompt-audit-config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/prompt-audit/endpoints/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 探测提示词审计节点 */
+        post: operations["ai-probe-prompt-audit-endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/prompt-audit/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 提示词审计事件 */
+        get: operations["ai-list-prompt-audit-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/prompt-audit/events/{eventID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除提示词审计事件 */
+        delete: operations["ai-delete-prompt-audit-event"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/prompt-audit/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 提示词审计运行状态 */
+        get: operations["ai-get-prompt-audit-runtime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/invitations/{code}": {
         parameters: {
             query?: never;
@@ -6374,6 +6460,15 @@ export interface components {
             /** @description 是否已删除 */
             deleted: boolean;
         };
+        DeletePromptAuditEventOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeletePromptAuditEventOutputBody.json
+             */
+            readonly $schema?: string;
+            deleted: boolean;
+        };
         DeleteUpstreamModelBindingOutputBody: {
             /**
              * Format: uri
@@ -6481,6 +6576,17 @@ export interface components {
             tenantName?: string;
             userId: string;
             username: string;
+        };
+        EventPage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/EventPage.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["StoredEvent"][] | null;
+            /** Format: int64 */
+            total: number;
         };
         FailedTxAlert: {
             /** Format: int64 */
@@ -8026,6 +8132,90 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        PromptAuditConfigDTO: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PromptAuditConfigDTO.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            config_revision: number;
+            enabled: boolean;
+            endpoints: components["schemas"]["PromptAuditEndpointDTO"][] | null;
+            latest_turn_only: boolean;
+            mode: string;
+            /** Format: int64 */
+            queue_capacity: number;
+            scanners: string[] | null;
+            store_pass_events: boolean;
+            tenant_ids: string[] | null;
+            /** Format: int64 */
+            worker_count: number;
+        };
+        PromptAuditConfigWriteDTO: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PromptAuditConfigWriteDTO.json
+             */
+            readonly $schema?: string;
+            enabled: boolean;
+            endpoints: components["schemas"]["PromptAuditEndpointWriteDTO"][] | null;
+            /** Format: int64 */
+            expected_config_revision: number;
+            latest_turn_only: boolean;
+            /** @enum {string} */
+            mode: "off" | "observe" | "blocking";
+            /** Format: int64 */
+            queue_capacity: number;
+            scanners: string[] | null;
+            store_pass_events: boolean;
+            tenant_ids: string[] | null;
+            /** Format: int64 */
+            worker_count: number;
+        };
+        PromptAuditEndpointDTO: {
+            base_url: string;
+            enabled: boolean;
+            has_api_key: boolean;
+            id: string;
+            /** Format: int64 */
+            input_limit: number;
+            model: string;
+            name: string;
+            /** Format: int64 */
+            timeout_ms: number;
+        };
+        PromptAuditEndpointWriteDTO: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PromptAuditEndpointWriteDTO.json
+             */
+            readonly $schema?: string;
+            api_key?: string;
+            base_url: string;
+            enabled: boolean;
+            id: string;
+            /** Format: int64 */
+            input_limit: number;
+            model: string;
+            name: string;
+            /** Format: int64 */
+            timeout_ms: number;
+        };
+        PromptAuditProbeOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/PromptAuditProbeOutputBody.json
+             */
+            readonly $schema?: string;
+            error_code?: string;
+            ok: boolean;
+            result?: components["schemas"]["Result"];
+        };
         ProxyNodeBody: {
             /**
              * Format: uri
@@ -8304,6 +8494,24 @@ export interface components {
             readonly $schema?: string;
             resources: components["schemas"]["ResourceStatItem"][] | null;
         };
+        Result: {
+            action: string;
+            categories: string[] | null;
+            /** Format: int64 */
+            chunk_total: number;
+            decision: string;
+            endpoint_id: string;
+            /** Format: int64 */
+            latency_ms: number;
+            matched_scanners: string[] | null;
+            risk_level: string;
+            safety: string;
+            scanner_scores: {
+                [key: string]: number;
+            };
+            scanner_version: string;
+            unknown_categories?: string[] | null;
+        };
         ReverseAdminRechargeOrderInputBody: {
             /**
              * Format: uri
@@ -8560,6 +8768,37 @@ export interface components {
             /** Format: int64 */
             totalRows: number;
         };
+        Runtime: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/Runtime.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            allowed: number;
+            /** Format: int64 */
+            blocked: number;
+            /** Format: int64 */
+            dropped: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            flagged: number;
+            /** Format: int64 */
+            invalid: number;
+            mode: string;
+            /** Format: int64 */
+            processed: number;
+            /** Format: int64 */
+            queue_capacity: number;
+            /** Format: int64 */
+            queue_depth: number;
+            /** Format: int64 */
+            submitted: number;
+            /** Format: int64 */
+            unavailable: number;
+        };
         RuntimeAPIError: {
             code: string;
             message: string;
@@ -8643,6 +8882,21 @@ export interface components {
              */
             status?: "active" | "disabled";
         };
+        Snapshot: {
+            api_key_id: string;
+            capability_type: string;
+            /** Format: int64 */
+            message_count: number;
+            model_code: string;
+            prompt_hash: string;
+            /** Format: int64 */
+            prompt_length: number;
+            protocol: string;
+            redacted_preview: string;
+            request_id: string;
+            tenant_id: string;
+            user_id: string;
+        };
         Status: {
             /**
              * Format: uri
@@ -8673,6 +8927,30 @@ export interface components {
             readonly $schema?: string;
             /** @enum {string} */
             status: "active" | "disabled";
+        };
+        StoredEvent: {
+            action: string;
+            categories: string[] | null;
+            /** Format: int64 */
+            chunk_total: number;
+            /** Format: int64 */
+            config_revision: number;
+            /** Format: date-time */
+            created_at: string;
+            decision: string;
+            endpoint_id: string;
+            error_code: string;
+            id: string;
+            /** Format: int64 */
+            latency_ms: number;
+            matched_scanners: string[] | null;
+            risk_level: string;
+            safety: string;
+            scanner_scores: {
+                [key: string]: number;
+            };
+            scanner_version: string;
+            snapshot: components["schemas"]["Snapshot"];
         };
         SubOrderDTO: {
             /**
@@ -15456,6 +15734,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SyncResult"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-get-prompt-audit-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptAuditConfigDTO"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-update-prompt-audit-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptAuditConfigWriteDTO"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptAuditConfigDTO"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-probe-prompt-audit-endpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptAuditEndpointWriteDTO"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptAuditProbeOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-list-prompt-audit-events": {
+        parameters: {
+            query?: {
+                tenant_id?: string;
+                user_id?: string;
+                decision?: "" | "pass" | "flag" | "critical" | "error";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventPage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-delete-prompt-audit-event": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePromptAuditEventOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-get-prompt-audit-runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Runtime"];
                 };
             };
             /** @description Error */
