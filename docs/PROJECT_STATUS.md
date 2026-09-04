@@ -11,7 +11,7 @@ D-AI 已统一为“单后端 + 单 Portal”工程结构。P0 安全与生产�
 - 身份、权限、计费和 AI 能力运行在同一个 Go 进程、PostgreSQL 数据库和二进制入口中。
 - 数据库使用 `internal/db/init.sql` schema v31 完整基线；应用只校验 `dai_schema_metadata.version`，不执行生产迁移。
 - `internal/db/changes/` 保存 v1→v31 的 forward-only 人工升级链，`cmd/checkschema` 校验连续版本、来源 guard、事务和基线版本，并在 CI 校验生成清单。
-- 平台管理端及 AI 管理端的状态变更、密钥/支付/Provider/路由/风控配置写操作统一要求 10 分钟内近期密码或 MFA 认证；只读查询保持可用。
+- 平台管理端及 AI 管理端的状态变更、密钥/支付/Provider/路由/风控配置写操作统一要求 30 分钟内近期密码或 MFA 认证；只读查询保持可用。
 - `gateway` 角色只注册 runtime/file/console 路由，Portal 仅由 `all` 和 `control-api` 提供；账户统计和租户收入统计统一读取 schema v25 只读投影视图，分组路由策略由 schema v29 提供，数据清理进度由 schema v30 持久化，公告删除审计事件由 schema v31 提供。
 - `make dev` 负责本地配置、PostgreSQL、Redis、空库初始化和后端启动，不升级已有数据库。
 - Portal 已从多端/多包结构合并为 `apps/portal` 一个项目；仓库不再有 `packages/*` workspace 包。

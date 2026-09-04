@@ -8,7 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const recentAuthTTL = 10 * time.Minute
+const recentAuthTTL = 30 * time.Minute
 
 type RecentAuthService struct {
 	redis *redis.Client

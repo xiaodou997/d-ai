@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -26,10 +27,15 @@ func TestRecentAuthExpiresAndFailsClosed(t *testing.T) {
 	if err != nil || !valid {
 		t.Fatalf("recent auth immediately after mark = valid:%v err:%v", valid, err)
 	}
-	mini.FastForward(recentAuthTTL)
+	mini.FastForward(10 * time.Minute)
+	valid, err = service.Check(ctx, "admin-1")
+	if err != nil || !valid {
+		t.Fatalf("recent auth after 10 minutes = valid:%v err:%v, want valid", valid, err)
+	}
+	mini.FastForward(20 * time.Minute)
 	valid, err = service.Check(ctx, "admin-1")
 	if err != nil || valid {
-		t.Fatalf("recent auth after expiry = valid:%v err:%v", valid, err)
+		t.Fatalf("recent auth after 30 minutes = valid:%v err:%v, want expired", valid, err)
 	}
 
 	valid, err = NewRecentAuthService(nil).Check(ctx, "admin-1")

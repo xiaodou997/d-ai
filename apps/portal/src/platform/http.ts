@@ -174,7 +174,7 @@ async function promptRecentAuth(authStore: PortalAuthLike): Promise<RequestRecov
 
   try {
     const passwordPrompt = await ElMessageBox.prompt(
-      "该操作需要近期重新认证，请输入当前账号密码。认证成功后 10 分钟内有效。",
+      "该操作需要近期重新认证，请输入当前账号密码。认证成功后 30 分钟内有效。",
       "需要重新认证",
       {
         confirmButtonText: "验证",
