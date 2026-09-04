@@ -397,6 +397,20 @@ func queryCurrentUserSnapshot(ctx context.Context, d authModule, claims *auth.Cl
 	if claims.UserType < 1 || claims.UserType > 4 {
 		return currentUserSnapshot{}, httpx.ErrBadRequest.WithDetail("无效的用户类型")
 	}
+	if claims.TenantOperations {
+		projected, err := d.AuthAccountReader.GetCurrentUserSnapshot(ctx, claims.OperatorID, claims.OperatorUserType)
+		if err != nil {
+			if errors.Is(err, authports.ErrAccountNotFound) {
+				return currentUserSnapshot{}, httpx.ErrNotFound.WithDetail("代运维管理员不存在")
+			}
+			return currentUserSnapshot{}, httpx.ErrInternal.WithCause(err)
+		}
+		return currentUserSnapshot{
+			userID: projected.UserID, username: projected.Username, userType: int(auth.UserTypeTenant),
+			tenantID: claims.TenantID, tenantName: claims.TenantName,
+			mfaEnabled: projected.MFAEnabled, status: projected.Status,
+		}, nil
+	}
 	projected, err := d.AuthAccountReader.GetCurrentUserSnapshot(ctx, claims.UserID, claims.UserType)
 	if err != nil {
 		if errors.Is(err, authports.ErrAccountNotFound) {

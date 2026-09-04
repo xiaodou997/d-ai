@@ -36,6 +36,7 @@ const props = withDefaults(
     nav: AppShellNavItem[];
     user: AppShellUser;
     userMenu?: AppShellUserMenuItem[];
+    logoutLabel?: string;
   }>(),
   {
     brand: "豆栈 DouStack"
@@ -75,6 +76,7 @@ watch(sidebarCollapsed, (value) => {
       :brand-icon-url="brandIconUrl"
       :user="user"
       :user-menu="userMenu"
+      :logout-label="logoutLabel"
       :navigation-open="mobileNavigationOpen"
       :sidebar-collapsed="sidebarCollapsed"
       @logout="emit('logout')"

@@ -19,6 +19,7 @@ const props = defineProps<{
   brandIconUrl?: string;
   user: TopbarUser;
   userMenu?: TopbarUserMenuItem[];
+  logoutLabel?: string;
   navigationOpen?: boolean;
   /** 侧栏折叠态;传入时品牌区右端渲染折叠按钮,品牌区宽度与侧栏同步(232px/64px) */
   sidebarCollapsed?: boolean;
@@ -114,7 +115,7 @@ const initial = computed(() => props.user.name.slice(0, 1) || "U");
           </RouterLink>
           <div v-if="(userMenu ?? []).length" class="ds-topbar__menu-divider" />
           <button type="button" class="ds-topbar__menu-item is-danger" role="menuitem" @click="onLogout">
-            退出登录
+            {{ logoutLabel || "退出登录" }}
           </button>
         </div>
       </template>

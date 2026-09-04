@@ -733,6 +733,15 @@ export const platformAdminApi = {
       clientIds: []
     }));
   },
+  enterTenantOperations(id: string) {
+    return typedRequest<"admin-enter-tenant-operations">({
+      method: "POST",
+      path: `/api/v1/tenants/${encodeURIComponent(id)}/operations-token`,
+      pathParams: { id },
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    });
+  },
   createTenant(body: OperationBody<"admin-create-tenant">) {
     return typedRequest<"admin-create-tenant">({
       method: "POST",

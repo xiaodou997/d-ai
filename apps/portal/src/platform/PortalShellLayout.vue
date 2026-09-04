@@ -18,6 +18,7 @@ defineSlots<{ "topbar-actions"(): unknown }>();
     :nav="nav"
     :user="user"
     :user-menu="userMenu"
+    :logout-label="logoutLabel"
     @logout="emit('logout')"
   >
     <template v-if="$slots['topbar-actions']" #topbar-actions>

@@ -16,6 +16,7 @@ import (
 // adminHandlers 承载 /api/v1 管理资源端点（JWT + 用户类型守卫）。沿用 v1 admin
 // handler 的逻辑（部分内联 SQL + 已搬 repo），输出强类型 DTO、错误 problem+json。
 type adminHandlers struct {
+	jwt              *auth.JWTService
 	tenantReader     tenantports.AdminTenantReader
 	tenantLifecycle  tenantports.AdminTenantLifecycle
 	tenantWriter     tenantports.AdminTenantWriter
@@ -48,6 +49,7 @@ func setActivationOutput(out *activationCredentialOutput, result userports.Activ
 
 func newAdminTenantHandlers(d adminTenantModule) *adminHandlers {
 	return &adminHandlers{
+		jwt:             d.JWT,
 		tenantReader:    d.TenantReader,
 		tenantLifecycle: d.TenantLifecycle,
 		tenantWriter:    d.TenantWriter,

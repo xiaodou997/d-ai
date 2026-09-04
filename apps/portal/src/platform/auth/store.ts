@@ -21,6 +21,20 @@ export interface EnsureSessionOptions {
   force?: boolean;
 }
 
+export interface TenantOperationsToken {
+  accessToken: string;
+  expiresIn: number;
+  tenantId: string;
+  tenantName: string;
+}
+
+interface RestorableAuthState {
+  accessToken: string;
+  expiresIn: number;
+  userInfo: UserInfoResponse | null;
+  sessionValidatedAt: number;
+}
+
 const SESSION_VALIDATION_TTL_MS = 60 * 1000;
 
 export function createPortalAuthStore(options: AuthStoreOptions) {
@@ -32,17 +46,25 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     const userInfo = ref<UserInfoResponse | null>(readUserInfo(options.storagePrefix));
     const mfaChallengeToken = ref("");
     const sessionValidatedAt = ref(0);
+    const tenantOperations = ref<{ tenantId: string; tenantName: string } | null>(null);
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let tenantOperationsTimer: ReturnType<typeof setTimeout> | null = null;
     let refreshInFlight: Promise<AuthTokenResponse> | null = null;
     let sessionValidationInFlight: Promise<UserInfoResponse> | null = null;
     let storageListenerInstalled = false;
+    let operatorState: RestorableAuthState | null = null;
 
     const isAuthenticated = computed(() => Boolean(accessToken.value && userInfo.value));
     const username = computed(() => userInfo.value?.username || "");
     const userType = computed(() => Number(userInfo.value?.userType || 0));
     const tenantName = computed(() => userInfo.value?.tenantName || "");
+    const isTenantOperations = computed(() => tenantOperations.value !== null);
 
     function persist() {
+      // Tenant operations is deliberately tab-local. Publishing its effective
+      // user info would make other tabs show tenant menus while they still hold
+      // the platform administrator access token.
+      if (isTenantOperations.value) return;
       if (userInfo.value) {
         localStorage.setItem(`${options.storagePrefix}:userInfo`, JSON.stringify(userInfo.value));
       }
@@ -54,9 +76,12 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       userInfo.value = null;
       mfaChallengeToken.value = "";
       sessionValidatedAt.value = 0;
+      tenantOperations.value = null;
+      operatorState = null;
       refreshInFlight = null;
       sessionValidationInFlight = null;
       stopAutoRefresh();
+      stopTenantOperationsTimer();
     }
 
     function clear() {
@@ -66,6 +91,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
 
     function startAutoRefresh() {
       stopAutoRefresh();
+      if (isTenantOperations.value) return;
       if (!expiresIn.value || !accessToken.value) return;
       const delay = Math.max(1000, (expiresIn.value - 300) * 1000);
       refreshTimer = setTimeout(() => {
@@ -78,6 +104,63 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
         clearTimeout(refreshTimer);
         refreshTimer = null;
       }
+    }
+
+    function stopTenantOperationsTimer() {
+      if (tenantOperationsTimer) {
+        clearTimeout(tenantOperationsTimer);
+        tenantOperationsTimer = null;
+      }
+    }
+
+    function restoreOperatorState() {
+      if (!operatorState) return false;
+      accessToken.value = operatorState.accessToken;
+      expiresIn.value = operatorState.expiresIn;
+      userInfo.value = operatorState.userInfo;
+      sessionValidatedAt.value = operatorState.sessionValidatedAt;
+      tenantOperations.value = null;
+      operatorState = null;
+      stopTenantOperationsTimer();
+      persist();
+      startAutoRefresh();
+      return true;
+    }
+
+    async function enterTenantOperations(token: TenantOperationsToken) {
+      if (isTenantOperations.value) {
+        throw new Error("请先退出当前租户代运维");
+      }
+      operatorState = {
+        accessToken: accessToken.value,
+        expiresIn: expiresIn.value,
+        userInfo: userInfo.value,
+        sessionValidatedAt: sessionValidatedAt.value
+      };
+      stopAutoRefresh();
+      accessToken.value = token.accessToken;
+      expiresIn.value = token.expiresIn;
+      tenantOperations.value = { tenantId: token.tenantId, tenantName: token.tenantName };
+      userInfo.value = null;
+      sessionValidatedAt.value = 0;
+      try {
+        await fetchUserInfo();
+      } catch (error) {
+        restoreOperatorState();
+        throw error;
+      }
+
+      stopTenantOperationsTimer();
+      tenantOperationsTimer = setTimeout(() => {
+        restoreOperatorState();
+        if (typeof window !== "undefined") {
+          window.location.assign("/admin/organization/tenants");
+        }
+      }, Math.max(1000, token.expiresIn * 1000));
+    }
+
+    function exitTenantOperations() {
+      return restoreOperatorState();
     }
 
     async function fetchUserInfo() {
@@ -191,6 +274,10 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
     }
 
     async function logout() {
+      if (isTenantOperations.value) {
+        restoreOperatorState();
+        return false;
+      }
       const redirectUrl = resolveLogoutRedirectUrl(options.logoutRedirectUrl);
       try {
         if (!accessToken.value) {
@@ -224,6 +311,7 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
             clearState();
             return;
           }
+          if (isTenantOperations.value) return;
           let next: UserInfoResponse;
           try {
             next = JSON.parse(event.newValue) as UserInfoResponse;
@@ -250,12 +338,16 @@ export function createPortalAuthStore(options: AuthStoreOptions) {
       username,
       userType,
       tenantName,
+      tenantOperations,
+      isTenantOperations,
       isAuthenticated,
       init,
       clear,
       login,
       verifyMFA,
       reauthenticate,
+      enterTenantOperations,
+      exitTenantOperations,
       logout,
       fetchUserInfo,
       ensureSession,

@@ -8,14 +8,17 @@ const api = vi.hoisted(() => ({
   createRecharge: vi.fn(),
   createTenant: vi.fn(),
   deleteTenant: vi.fn(),
+  enterTenantOperations: vi.fn(),
   listTenants: vi.fn(),
   updateTenant: vi.fn(),
   updateTenantStatus: vi.fn()
 }));
 const router = vi.hoisted(() => ({ push: vi.fn() }));
+const authStore = vi.hoisted(() => ({ enterTenantOperations: vi.fn() }));
 
 vi.mock("@/api/platformAdmin", () => ({ platformAdminApi: api }));
 vi.mock("vue-router", () => ({ useRouter: () => router }));
+vi.mock("@/stores/auth", () => ({ useAuthStore: () => authStore }));
 vi.mock("element-plus", () => ({
   ElMessage: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
   ElMessageBox: { confirm: vi.fn(), prompt: vi.fn() }
@@ -55,6 +58,12 @@ describe("AdminTenantsWorkspace", () => {
     api.createRecharge.mockResolvedValue({});
     api.createTenant.mockResolvedValue({ tenantId: "tenant-1" });
     api.deleteTenant.mockResolvedValue({});
+    api.enterTenantOperations.mockResolvedValue({
+      accessToken: "tenant-operations-token",
+      expiresIn: 3600,
+      tenantId: "tenant-1",
+      tenantName: "Tenant One"
+    });
     api.updateTenant.mockResolvedValue({});
     api.updateTenantStatus.mockResolvedValue({});
   });
@@ -92,6 +101,24 @@ describe("AdminTenantsWorkspace", () => {
       size: 20
     });
 
+    wrapper.unmount();
+  });
+
+  it("enters tenant operations and opens the tenant overview", async () => {
+    const wrapper = shallowMount(AdminTenantsWorkspace, { global });
+    await flushPromises();
+
+    const vm = wrapper.vm as unknown as {
+      handleTenantOperations: (row: { tenantId: string; tenantName: string; status: number }) => Promise<void>;
+    };
+    await vm.handleTenantOperations({ tenantId: "tenant-1", tenantName: "Tenant One", status: 1 });
+
+    expect(api.enterTenantOperations).toHaveBeenCalledWith("tenant-1");
+    expect(authStore.enterTenantOperations).toHaveBeenCalledWith(expect.objectContaining({
+      accessToken: "tenant-operations-token",
+      tenantId: "tenant-1"
+    }));
+    expect(router.push).toHaveBeenCalledWith("/tenant/overview/business");
     wrapper.unmount();
   });
 });

@@ -8297,6 +8297,31 @@ components:
         - balanceUsd
         - userCount
       type: object
+    TenantOperationsTokenOutputBody:
+      additionalProperties: false
+      properties:
+        $schema:
+          description: A URL to the JSON Schema for this object.
+          examples:
+            - https://example.com/schemas/TenantOperationsTokenOutputBody.json
+          format: uri
+          readOnly: true
+          type: string
+        accessToken:
+          type: string
+        expiresIn:
+          format: int64
+          type: integer
+        tenantId:
+          type: string
+        tenantName:
+          type: string
+      required:
+        - accessToken
+        - expiresIn
+        - tenantId
+        - tenantName
+      type: object
     TenantOverviewStats:
       additionalProperties: false
       properties:
@@ -19555,6 +19580,32 @@ paths:
                 $ref: "#/components/schemas/AppError"
           description: Error
       summary: 取消租户删除
+      tags:
+        - admin-tenants
+  /api/v1/tenants/{id}/operations-token:
+    post:
+      description: 为当前平台管理员签发不改变 Refresh Cookie 的短期租户视角 Access Token。
+      operationId: admin-enter-tenant-operations
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TenantOperationsTokenOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/AppError"
+          description: Error
+      summary: 进入租户代运维
       tags:
         - admin-tenants
   /api/v1/tenants/{id}/status:

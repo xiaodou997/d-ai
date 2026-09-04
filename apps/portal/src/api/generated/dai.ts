@@ -3435,6 +3435,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenants/{id}/operations-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 进入租户代运维
+         * @description 为当前平台管理员签发不改变 Refresh Cookie 的短期租户视角 Access Token。
+         */
+        post: operations["admin-enter-tenant-operations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenants/{id}/status": {
         parameters: {
             query?: never;
@@ -9058,6 +9078,19 @@ export interface components {
             tenantName: string;
             /** Format: int64 */
             userCount: number;
+        };
+        TenantOperationsTokenOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/TenantOperationsTokenOutputBody.json
+             */
+            readonly $schema?: string;
+            accessToken: string;
+            /** Format: int64 */
+            expiresIn: number;
+            tenantId: string;
+            tenantName: string;
         };
         TenantOverviewStats: {
             /**
@@ -19481,6 +19514,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SuccessOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "admin-enter-tenant-operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOperationsTokenOutputBody"];
                 };
             };
             /** @description Error */

@@ -31,6 +31,10 @@ type Claims struct {
 	TenantID          string `json:"tenant_id,omitempty"`
 	UserType          int    `json:"user_type,omitempty"`
 	UserTypeDisplay   string `json:"user_type_display,omitempty"`
+	TenantOperations  bool   `json:"tenant_operations,omitempty"`
+	TenantName        string `json:"tenant_name,omitempty"`
+	OperatorID        string `json:"operator_id,omitempty"`
+	OperatorUserType  int    `json:"operator_user_type,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -96,6 +100,7 @@ type JWTService struct {
 }
 
 const accessSessionValidationTimeout = 2 * time.Second
+const TenantOperationsAccessTokenExpiration = time.Hour
 
 // NewJWTService 创建 JWT 服务
 // 从数据库加载密钥，若无则自动生成并写入数据库
@@ -235,14 +240,6 @@ func (s *JWTService) reloadKeys(ctx context.Context) error {
 
 // GenerateAccessToken creates a session-bound access token.
 func (s *JWTService) GenerateAccessToken(principal Principal, sessionID string) (string, error) {
-	s.mu.RLock()
-	activeKey := s.activeKey
-	s.mu.RUnlock()
-
-	if activeKey == nil {
-		return "", fmt.Errorf("no active signing key")
-	}
-
 	now := time.Now()
 	claims := Claims{
 		PrincipalType:     "user",
@@ -261,6 +258,55 @@ func (s *JWTService) GenerateAccessToken(principal Principal, sessionID string) 
 			ID:        uuid.New().String(),
 			Subject:   principal.UserID,
 		},
+	}
+	return s.signClaims(claims)
+}
+
+// GenerateTenantOperationsAccessToken creates a short-lived tenant-scoped
+// access token without replacing the platform administrator's refresh
+// session. The effective role is tenant, while OperatorID keeps the real
+// administrator identity available to validation and audit logs.
+func (s *JWTService) GenerateTenantOperationsAccessToken(operator *Claims, tenantID, tenantName string) (string, error) {
+	if operator == nil || operator.TenantOperations || !ActorFromClaims(operator).Has(CapabilityPlatformAdmin) {
+		return "", fmt.Errorf("platform administrator access token required")
+	}
+	if operator.SessionID == "" || operator.UserID == "" || operator.CredentialVersion <= 0 || tenantID == "" {
+		return "", fmt.Errorf("invalid tenant operations token input")
+	}
+
+	now := time.Now()
+	claims := Claims{
+		PrincipalType:     "user",
+		TokenUse:          "access",
+		SessionID:         operator.SessionID,
+		CredentialVersion: operator.CredentialVersion,
+		UserID:            operator.UserID,
+		Username:          operator.Username,
+		TenantID:          tenantID,
+		UserType:          int(UserTypeTenant),
+		UserTypeDisplay:   "租户（代运维）",
+		TenantOperations:  true,
+		TenantName:        tenantName,
+		OperatorID:        operator.UserID,
+		OperatorUserType:  operator.UserType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(now.Add(TenantOperationsAccessTokenExpiration)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Issuer:    s.issuer,
+			ID:        uuid.New().String(),
+			Subject:   operator.UserID,
+		},
+	}
+	return s.signClaims(claims)
+}
+
+func (s *JWTService) signClaims(claims Claims) (string, error) {
+	s.mu.RLock()
+	activeKey := s.activeKey
+	s.mu.RUnlock()
+
+	if activeKey == nil {
+		return "", fmt.Errorf("no active signing key")
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = activeKey.kid
@@ -322,6 +368,9 @@ func (s *JWTService) validateAccessSession(ctx context.Context, claims *Claims) 
 	if claims.SessionID == "" || claims.CredentialVersion <= 0 {
 		return ErrSessionInactive
 	}
+	if claims.TenantOperations {
+		return s.validateTenantOperationsSession(ctx, claims)
+	}
 	ctx, cancel := context.WithTimeout(ctx, accessSessionValidationTimeout)
 	defer cancel()
 	var valid bool
@@ -346,6 +395,44 @@ func (s *JWTService) validateAccessSession(ctx context.Context, claims *Claims) 
 	`, claims.SessionID, claims.UserID, claims.CredentialVersion, claims.UserType, claims.TenantID).Scan(&valid)
 	if err != nil {
 		return fmt.Errorf("validate access session: %w", err)
+	}
+	if !valid {
+		return ErrSessionInactive
+	}
+	return nil
+}
+
+func (s *JWTService) validateTenantOperationsSession(ctx context.Context, claims *Claims) error {
+	if claims.OperatorID == "" || claims.OperatorID != claims.UserID ||
+		(claims.OperatorUserType != int(UserTypeSuperAdmin) && claims.OperatorUserType != int(UserTypePlatformAdmin)) ||
+		claims.UserType != int(UserTypeTenant) || claims.TenantID == "" {
+		return ErrSessionInactive
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, accessSessionValidationTimeout)
+	defer cancel()
+	var valid bool
+	err := s.database.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM auth_sessions s
+			JOIN iam_accounts a ON a.user_id = s.user_id
+			JOIN iam_tenants t ON t.tenant_id = $5
+			WHERE s.session_id = $1
+			  AND s.user_id = $2
+			  AND s.status = 'active'
+			  AND s.expires_at > now()
+			  AND s.credential_version = $3
+			  AND a.credential_version = $3
+			  AND a.user_type = $4
+			  AND COALESCE(a.tenant_id, '') = ''
+			  AND a.status = 'active'
+			  AND a.credential_state = 'active'
+			  AND t.status = 'active'
+		)
+	`, claims.SessionID, claims.OperatorID, claims.CredentialVersion, claims.OperatorUserType, claims.TenantID).Scan(&valid)
+	if err != nil {
+		return fmt.Errorf("validate tenant operations session: %w", err)
 	}
 	if !valid {
 		return ErrSessionInactive

@@ -81,6 +81,15 @@ type tenantDetailOutput struct {
 }
 type tenantDeletionOutput struct{ Body tenantports.TenantDeletionJob }
 
+type tenantOperationsTokenOutput struct {
+	Body struct {
+		AccessToken string `json:"accessToken"`
+		ExpiresIn   int64  `json:"expiresIn"`
+		TenantID    string `json:"tenantId"`
+		TenantName  string `json:"tenantName"`
+	}
+}
+
 type updateTenantInput struct {
 	ID   string `path:"id"`
 	Body struct {
@@ -122,6 +131,12 @@ func registerAdminTenants(api huma.API, d adminTenantModule) {
 	}, h.getTenant)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "admin-enter-tenant-operations", Method: http.MethodPost, Path: "/api/v1/tenants/{id}/operations-token",
+		Summary: "进入租户代运维", Description: "为当前平台管理员签发不改变 Refresh Cookie 的短期租户视角 Access Token。",
+		Tags: []string{"admin-tenants"}, Middlewares: sysUser,
+	}, h.enterTenantOperations)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "admin-update-tenant", Method: http.MethodPut, Path: "/api/v1/tenants/{id}",
 		Summary: "更新租户", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.updateTenant)
@@ -137,6 +152,36 @@ func registerAdminTenants(api huma.API, d adminTenantModule) {
 		OperationID: "admin-update-tenant-status", Method: http.MethodPatch, Path: "/api/v1/tenants/{id}/status",
 		Summary: "启用/停用租户（级联）", Tags: []string{"admin-tenants"}, Middlewares: sysUserSensitive,
 	}, h.updateTenantStatus)
+}
+
+func (h *adminHandlers) enterTenantOperations(ctx context.Context, in *tenantIDInput) (*tenantOperationsTokenOutput, error) {
+	claims := userClaimsFromCtx(ctx)
+	if claims == nil {
+		return nil, httpx.ErrUnauthorized
+	}
+	if h.jwt == nil || h.tenantReader == nil {
+		return nil, httpx.ErrUnavailable.WithDetail("租户代运维服务不可用")
+	}
+	details, err := h.tenantReader.GetTenantDetails(ctx, strings.TrimSpace(in.ID))
+	if err != nil {
+		if errors.Is(err, tenantports.ErrTenantNotFound) || errors.Is(err, pgx.ErrNoRows) {
+			return nil, httpx.ErrNotFound.WithDetail("租户不存在")
+		}
+		return nil, httpx.ErrInternal.WithCause(err)
+	}
+	if details.Status != "active" {
+		return nil, httpx.ErrForbidden.WithDetail("只能代运维正常启用的租户")
+	}
+	token, err := h.jwt.GenerateTenantOperationsAccessToken(claims, details.TenantID, details.TenantName)
+	if err != nil {
+		return nil, httpx.ErrForbidden.WithDetail("当前账号无法进入租户代运维").WithCause(err)
+	}
+	out := &tenantOperationsTokenOutput{}
+	out.Body.AccessToken = token
+	out.Body.ExpiresIn = int64(auth.TenantOperationsAccessTokenExpiration.Seconds())
+	out.Body.TenantID = details.TenantID
+	out.Body.TenantName = details.TenantName
+	return out, nil
 }
 
 func (h *adminHandlers) listTenants(ctx context.Context, in *tenantListInput) (*tenantListOutput, error) {

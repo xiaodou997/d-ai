@@ -11,6 +11,22 @@ const user = {
   tenantName: "Tenant"
 };
 
+const adminUser = {
+  sub: "admin-1",
+  username: "operator",
+  userType: 2,
+  tenantId: "",
+  tenantName: ""
+};
+
+const tenantOperationsUser = {
+  sub: "admin-1",
+  username: "operator",
+  userType: 3,
+  tenantId: "tenant-ops",
+  tenantName: "Operations Tenant"
+};
+
 function makeOptions(prefix: string, overrides: Partial<Parameters<typeof createPortalAuthStore>[0]> = {}) {
   return {
     storeId: `auth-${prefix}`,
@@ -91,6 +107,38 @@ describe("Portal auth memory and cookie session", () => {
 
     expect(recentAuth).toHaveBeenCalledWith("current-password", "123456");
     expect(store.accessToken).toBe("access-1");
+    store.stopAutoRefresh();
+  });
+
+  it("enters and exits tenant operations without persisting either access token", async () => {
+    const getCurrentUser = vi.fn()
+      .mockResolvedValueOnce(adminUser)
+      .mockResolvedValueOnce(tenantOperationsUser);
+    const options = makeOptions("tenant-operations", {
+      expectedUserTypes: [2, 3],
+      getCurrentUser
+    });
+    const store = createPortalAuthStore(options)();
+    await store.login("operator", "password");
+
+    await store.enterTenantOperations({
+      accessToken: "tenant-operations-token",
+      expiresIn: 3600,
+      tenantId: "tenant-ops",
+      tenantName: "Operations Tenant"
+    });
+
+    expect(store.accessToken).toBe("tenant-operations-token");
+    expect(store.userType).toBe(3);
+    expect(store.tenantName).toBe("Operations Tenant");
+    expect(store.isTenantOperations).toBe(true);
+    expect(localStorage.getItem(`${options.storagePrefix}:accessToken`)).toBeNull();
+    expect(JSON.parse(localStorage.getItem(`${options.storagePrefix}:userInfo`) || "{}").userType).toBe(2);
+
+    expect(store.exitTenantOperations()).toBe(true);
+    expect(store.accessToken).toBe("access-1");
+    expect(store.userType).toBe(2);
+    expect(store.isTenantOperations).toBe(false);
     store.stopAutoRefresh();
   });
 });

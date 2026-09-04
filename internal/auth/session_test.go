@@ -308,6 +308,56 @@ func TestRoleAndTenantScopeChangesInvalidateExistingAccessToken(t *testing.T) {
 	}
 }
 
+func TestTenantOperationsAccessTokenUsesOperatorSessionAndTenantScope(t *testing.T) {
+	ctx := context.Background()
+	pool, cleanup, err := dbtest.OpenIsolatedSchemaPool(ctx, dbtest.PoolOptions{MaxConns: 4})
+	if err != nil {
+		t.Skipf("database unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = cleanup(context.Background()) })
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO iam_tenants (tenant_id, tenant_name, status)
+		VALUES ('tenant-operations', 'Operations Tenant', 'active')
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	principal := seedSessionAccount(t, ctx, pool, "tenant-operations-admin")
+	service := newTestSessionService(pool)
+	pair, err := service.Create(ctx, principal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operator, err := service.jwt.ParseToken(ctx, pair.AccessToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := service.jwt.GenerateTenantOperationsAccessToken(operator, "tenant-operations", "Operations Tenant")
+	if err != nil {
+		t.Fatalf("generate tenant operations token: %v", err)
+	}
+	claims, err := service.jwt.ParseToken(ctx, raw)
+	if err != nil {
+		t.Fatalf("parse tenant operations token: %v", err)
+	}
+	if !claims.TenantOperations || claims.TenantID != "tenant-operations" || claims.TenantName != "Operations Tenant" {
+		t.Fatalf("tenant operations scope = %#v", claims)
+	}
+	if claims.UserID != principal.UserID || claims.OperatorID != principal.UserID || claims.OperatorUserType != principal.UserType {
+		t.Fatalf("operator identity = %#v, want %#v", claims, principal)
+	}
+	if actor := ActorFromClaims(claims); !actor.Has(CapabilityTenantSelf) || actor.Has(CapabilityPlatformAdmin) {
+		t.Fatalf("tenant operations actor has unexpected capabilities: %#v", actor)
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE iam_tenants SET status = 'disabled' WHERE tenant_id = 'tenant-operations'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.jwt.ParseToken(ctx, raw); !errors.Is(err, ErrSessionInactive) {
+		t.Fatalf("token after tenant disable = %v, want ErrSessionInactive", err)
+	}
+}
+
 func newTestSessionService(pool *pgxpool.Pool) *SessionService {
 	if err := clientsecret.Configure("0123456789abcdef0123456789abcdef"); err != nil {
 		panic(err)

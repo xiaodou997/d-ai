@@ -106,6 +106,13 @@
           <span class="tenants-time">{{ formatTime(row.createdTime) }}</span>
         </template>
         <template #cell-actions="{ row }">
+          <el-button
+            link
+            type="warning"
+            :loading="tenantOperationsLoadingId === row.tenantId"
+            :disabled="row.status !== 1 || Boolean(tenantOperationsLoadingId)"
+            @click="handleTenantOperations(row)"
+          >代运维</el-button>
           <el-button link type="primary" @click="openAccount(row)">账户</el-button>
           <el-button link type="primary" @click="goTenantPolicy(row.tenantId)">策略</el-button>
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
@@ -216,8 +223,10 @@ import { showActivationCredential } from '@/platform/auth/activation'
 import type { TenantListItem } from '@/api/types/admin'
 import { formatDisplayUSD } from '@/shared/currency'
 import type { OperationBody } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const columns: DsTableColumn[] = [
   { key: 'tenantId', title: '租户 ID', width: 150, mono: true },
@@ -228,7 +237,7 @@ const columns: DsTableColumn[] = [
   { key: 'balance', title: '余额', align: 'right' },
   { key: 'userCount', title: '用户数', align: 'center' },
   { key: 'createdTime', title: '入驻时间' },
-  { key: 'actions', title: '操作', width: 260 }
+  { key: 'actions', title: '操作', width: 320 }
 ]
 
 const {
@@ -271,6 +280,7 @@ const rechargeSubmitting = ref(false)
 const rechargeTarget = ref<TenantListItem | null>(null)
 const accountDrawerVisible = ref(false)
 const accountTarget = ref<TenantListItem | null>(null)
+const tenantOperationsLoadingId = ref('')
 const formRef = ref<FormInstance>()
 const form = reactive({
   tenantId: '',
@@ -311,6 +321,31 @@ const handleRecharge = (row: TenantListItem) => {
 const openAccount = (row: TenantListItem) => {
   accountTarget.value = row
   accountDrawerVisible.value = true
+}
+
+const handleTenantOperations = async (row: TenantListItem) => {
+  if (row.status !== 1 || tenantOperationsLoadingId.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将进入租户「${row.tenantName}」的管理视角，是否继续？`,
+      '进入租户代运维',
+      { confirmButtonText: '进入', cancelButtonText: '取消', type: 'warning', roundButton: true }
+    )
+  } catch {
+    return
+  }
+
+  tenantOperationsLoadingId.value = row.tenantId
+  try {
+    const token = await platformAdminApi.enterTenantOperations(row.tenantId)
+    await authStore.enterTenantOperations(token)
+    ElMessage.success(`已进入「${row.tenantName}」代运维`)
+    await router.push('/tenant/overview/business')
+  } catch (error) {
+    ElMessage.error(error instanceof Error && error.message ? error.message : '进入租户代运维失败')
+  } finally {
+    tenantOperationsLoadingId.value = ''
+  }
 }
 
 const submitTenantRecharge = async (payload: RechargeFormPayload) => {

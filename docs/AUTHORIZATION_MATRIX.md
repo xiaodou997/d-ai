@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `ba1477a460e9f0f9e29679fbe3de1343b63b7d1f802564eea7d54b9d0e3fea94`
+Contract SHA-256: `85799059936717e73f64f38f39e8f41ec7fa9b0c6bb55f9a5e9abb37cf1aa2ee`
 
-Coverage: **321/321 operations (100%)**
+Coverage: **324/324 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 13 | `authenticated` | `actor.user` |
 | `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 152 | `platform_admin` | `actor.user` |
+| `platform_admin` | 155 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -271,6 +271,9 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `DELETE` | `/api/v1/tenants/{id}` | `admin-delete-tenant` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/tenants/{id}` | `admin-get-tenant` | `platform_admin` | `global/resource` |
 | `PUT` | `/api/v1/tenants/{id}` | `admin-update-tenant` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/tenants/{id}/deletion` | `admin-get-tenant-deletion` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v1/tenants/{id}/deletion/cancel` | `admin-cancel-tenant-deletion` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v1/tenants/{id}/operations-token` | `admin-enter-tenant-operations` | `platform_admin` | `global/resource` |
 | `PATCH` | `/api/v1/tenants/{id}/status` | `admin-update-tenant-status` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/tenants/{tenantID}/api-keys` | `ai-list-tenant-api-keys` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/tenants/{tenantID}/api-keys` | `ai-create-tenant-api-key` | `platform_admin` | `global/resource` |
