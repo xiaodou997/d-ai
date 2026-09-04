@@ -34,7 +34,7 @@ export function createStandardPortalEnv(options: StandardPortalEnvOptions): Port
   return createPortalEnv({
     portal: options.portal || "unified",
     title: options.title || "D-AI 统一平台",
-    appVersion: buildEnv.VITE_APP_VERSION?.trim() || "0.3.8",
+    appVersion: buildEnv.VITE_APP_VERSION?.trim() || "0.3.9",
     theme: options.theme || "admin",
     storagePrefix: options.storagePrefix || "dai:portal",
     apiBaseUrl: "/"
