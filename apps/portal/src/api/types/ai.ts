@@ -19,6 +19,10 @@ export type {
   AccountDTO,
   AccountsOutputBody,
   AccountWriteRequest,
+  UpstreamAccountEndpointDTO,
+  UpstreamAccountEndpointWriteRequest,
+  UpstreamAPIFormat,
+  UpstreamEndpointAuthScheme,
   UpstreamAccountExportOutputBody,
   UpstreamAccountExportRequest,
   UpstreamAccountImportOutputBody,
@@ -142,7 +146,6 @@ export interface UpstreamModelBindingDTO {
   id: string;
   model_code: string;
   capability_type: string;
-  api_format: string;
   upstream_model_name: string;
   status: string;
   image_stream_mode?: string;
@@ -162,7 +165,6 @@ export interface UpstreamModelBindingsOutputBody {
 export interface UpstreamModelBindingWriteRequest {
   model_code?: string;
   capability_type?: string;
-  api_format?: string;
   upstream_model_name?: string;
   status?: string;
   image_stream_mode?: string;
@@ -176,23 +178,22 @@ export interface DiscoveredUpstreamModelDTO {
   id: string;
   name: string;
   capability_type: string;
-  api_format: string;
+  api_formats: string[];
   exists: boolean;
 }
 
 export interface ImportUpstreamModelsRequest {
   models: string[];
-  api_format?: string;
 }
 
 export interface ModelCapabilityInferResult {
   capability_type: string;
-  api_format: string;
   source: "external" | "heuristic";
 }
 
 export interface UpstreamAccountTestRequest {
   model_code: string;
+  api_format: string;
   prompt?: string;
   image_edit?: boolean;
   image?: UpstreamAccountTestImage;

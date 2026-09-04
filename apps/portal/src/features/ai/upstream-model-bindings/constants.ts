@@ -1,11 +1,9 @@
-// 显式模型绑定的能力与上游协议选择器。
+// 显式模型绑定只维护模型能力；协议选项仅用于展示模型发现来源端点。
 
 export interface CapabilityOption {
   label: string;
   value: string;
 }
-
-export const DEFAULT_OPENAI_BINDING_PROTOCOL = "openai_responses";
 
 export const statusOptions: CapabilityOption[] = [
   { label: "启用", value: "active" },
@@ -31,53 +29,3 @@ export const protocolOptions: CapabilityOption[] = [
   { label: "Gemini Generate", value: "gemini_generate" },
   { label: "Gemini Embeddings", value: "gemini_embeddings" }
 ];
-
-export interface BindingFormatOption {
-  value: string;
-  capability_type: string;
-  api_format: string;
-  label: string;
-}
-
-export interface BindingFormatGroup {
-  label: string;
-  capability_type: string;
-  options: BindingFormatOption[];
-}
-
-export const OTHER_CAPABILITIES_VALUE = "__other__";
-
-export const OTHER_CAPABILITY_TYPES = ["video", "audio_tts", "audio_stt", "rerank"];
-
-export const bindingFormatGroups: BindingFormatGroup[] = [
-  {
-    label: "文本对话",
-    capability_type: "chat",
-    options: [
-      { value: "chat:openai_chat", capability_type: "chat", api_format: "openai_chat", label: "OpenAI Chat" },
-      { value: "chat:openai_responses", capability_type: "chat", api_format: "openai_responses", label: "OpenAI Responses" },
-      { value: "chat:anthropic_messages", capability_type: "chat", api_format: "anthropic_messages", label: "Anthropic Messages" },
-      { value: "chat:gemini_generate", capability_type: "chat", api_format: "gemini_generate", label: "Gemini Generate" }
-    ]
-  },
-  {
-    label: "生图",
-    capability_type: "image",
-    options: [
-      { value: "image:openai_images", capability_type: "image", api_format: "openai_images", label: "OpenAI Images" },
-      { value: "image:gemini_generate", capability_type: "image", api_format: "gemini_generate", label: "Gemini Generate（原生生图）" }
-    ]
-  },
-  {
-    label: "Embedding",
-    capability_type: "embedding",
-    options: [
-      { value: "embedding:openai_embeddings", capability_type: "embedding", api_format: "openai_embeddings", label: "OpenAI Embeddings" },
-      { value: "embedding:gemini_embeddings", capability_type: "embedding", api_format: "gemini_embeddings", label: "Gemini Embeddings" }
-    ]
-  }
-];
-
-export function bindingFormatValue(capabilityType: string, apiFormat: string): string {
-  return `${capabilityType}:${apiFormat}`;
-}

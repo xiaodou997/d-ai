@@ -226,9 +226,7 @@ export interface AccountDTO {
   name: string;
   tenant_display_name: string;
   tenant_access_mode: "public" | "restricted";
-  base_url: string;
-  extra_headers?: unknown;
-  default_provider_family: string;
+  endpoints: UpstreamAccountEndpointDTO[];
   concurrency_limit?: number;
   price_book_id?: string;
   tenant_multiplier?: number;
@@ -248,19 +246,45 @@ export interface AccountWriteRequest {
   name: string;
   tenant_display_name?: string;
   tenant_access_mode?: "public" | "restricted";
-  base_url: string;
   api_key?: string;
-  extra_headers?: unknown;
-  default_provider_family?: string;
+  endpoints?: UpstreamAccountEndpointWriteRequest[];
   concurrency_limit?: number | null;
   price_book_id?: string;
   tenant_multiplier?: number;
 }
 
+export type UpstreamAPIFormat =
+  | "openai_chat" | "openai_responses" | "openai_embeddings" | "openai_images"
+  | "anthropic_messages" | "gemini_generate" | "gemini_embeddings";
+
+export type UpstreamEndpointAuthScheme =
+  | "format_default" | "bearer" | "anthropic_api_key" | "gemini_api_key" | "custom_header";
+
+export interface UpstreamAccountEndpointWriteRequest {
+  api_format: UpstreamAPIFormat;
+  base_url: string;
+  path_override?: string;
+  auth_scheme?: UpstreamEndpointAuthScheme;
+  auth_header?: string;
+  extra_headers?: unknown;
+  status?: "active" | "disabled";
+}
+
+export interface UpstreamAccountEndpointDTO extends UpstreamAccountEndpointWriteRequest {
+  id: string;
+  account_id: string;
+  auth_scheme: UpstreamEndpointAuthScheme;
+  status: "active" | "disabled";
+  health_status: "unknown" | "healthy" | "unhealthy";
+  last_error?: string;
+  last_checked_at?: number;
+  created_at?: number;
+  updated_at?: number;
+}
+
 export interface UpstreamAccountTransferBindingDTO {
   model_code: string;
   capability_type: string;
-  api_format: string;
   upstream_model_name: string;
   status: string;
   image_stream_mode?: string;
@@ -270,16 +294,24 @@ export interface UpstreamAccountTransferBindingDTO {
   image_edit_max_output_count?: number;
 }
 
+export interface UpstreamAccountTransferEndpointDTO {
+  api_format: string;
+  base_url: string;
+  path_override?: string;
+  auth_scheme?: string;
+  auth_header?: string;
+  extra_headers?: unknown;
+  status: string;
+}
+
 export interface UpstreamAccountTransferAccountDTO {
   name: string;
   tenant_display_name: string;
   tenant_access_mode: "public" | "restricted";
-  base_url: string;
   api_key: string;
-  default_provider_family: string;
   concurrency_limit?: number;
   status: string;
-  extra_headers?: unknown;
+  endpoints: UpstreamAccountTransferEndpointDTO[];
   model_bindings?: UpstreamAccountTransferBindingDTO[];
 }
 
@@ -305,7 +337,7 @@ export interface UpstreamAccountImportRequest {
 
 export interface UpstreamAccountImportPreviewItemDTO {
   name: string;
-  base_url: string;
+  endpoint_count: number;
   action: "create" | "skip" | "error";
   reason?: string;
   model_binding_count: number;

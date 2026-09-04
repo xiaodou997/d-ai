@@ -60,7 +60,7 @@ export interface TenantAiGroupTarget {
   target_type: "account" | "pool";
   account_name?: string;
   pool_name?: string;
-  default_provider_family?: string;
+  api_formats: string[];
   fixed_provider_type?: string;
   status: "active" | "disabled";
   // 该绑定的上游资源当前是否仍可被本租户路由。管理员把资源转 restricted、撤销授权或
@@ -163,7 +163,6 @@ export interface TenantAiPriceBookTransferBundle {
 export interface TenantAiUpstreamModel {
   model_code: string;
   capability_type: string;
-  api_format: string;
   availability: "available" | "no_price_configured";
   price?: TenantAiPriceBookEntry;
 }
@@ -176,6 +175,7 @@ export interface TenantAiUpstreamResource {
   price_book_id?: string;
   price_book_name?: string;
   price_book_revision?: number;
+  api_formats: string[];
   models: TenantAiUpstreamModel[];
 }
 

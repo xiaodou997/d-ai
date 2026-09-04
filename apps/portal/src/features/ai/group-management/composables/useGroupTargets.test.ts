@@ -15,21 +15,24 @@ const resources: TenantAiUpstreamResource[] = [
     resource_kind: "direct_upstream",
     name: "主 API",
     tenant_multiplier: 0.8,
-    models: [{ model_code: "chat-1", capability_type: "chat", api_format: "openai_chat", availability: "available" }]
+    api_formats: ["openai_chat"],
+    models: [{ model_code: "chat-1", capability_type: "chat", availability: "available" }]
   },
   {
     id: "pool-1",
     resource_kind: "oauth_pool",
     name: "OAuth 池",
     tenant_multiplier: 1.2,
-    models: [{ model_code: "chat-2", capability_type: "chat", api_format: "openai_chat", availability: "available" }]
+    api_formats: ["openai_responses"],
+    models: [{ model_code: "chat-2", capability_type: "chat", availability: "available" }]
   },
   {
     id: "account-unpriced",
     resource_kind: "direct_upstream",
     name: "无价格 API",
     tenant_multiplier: 1,
-    models: [{ model_code: "missing", capability_type: "chat", api_format: "openai_chat", availability: "no_price_configured" }]
+    api_formats: ["openai_chat"],
+    models: [{ model_code: "missing", capability_type: "chat", availability: "no_price_configured" }]
   }
 ];
 
@@ -40,6 +43,7 @@ function target(id = "binding-1"): TenantAiGroupTarget {
     account_id: "account-1",
     target_type: "account",
     account_name: "主 API",
+    api_formats: ["openai_chat"],
     status: "active"
   };
 }
@@ -56,6 +60,7 @@ function createApi(initial: TenantAiGroupTarget[] = [target()]) {
         account_id: body.account_id,
         credential_pool_id: body.credential_pool_id,
         target_type: body.account_id ? "account" : "pool",
+        api_formats: [],
         status: body.status ?? "active"
       };
       stored = [...stored, saved];
@@ -120,6 +125,7 @@ describe("useGroupTargets", () => {
           credential_pool_id: body.targets.find((item) => item.credential_pool_id)?.credential_pool_id,
           target_type: "pool" as const,
           pool_name: "OAuth 池",
+          api_formats: ["openai_responses"],
           status: "active" as const
         }
       ],

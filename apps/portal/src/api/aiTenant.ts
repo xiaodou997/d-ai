@@ -156,7 +156,13 @@ function toGroupTarget(value: OperationResponse<"ai-add-group-target">): TenantA
   if (unavailableReason !== undefined && unavailableReason !== "inactive" && unavailableReason !== "access_revoked" && unavailableReason !== "missing") {
     throw new Error(`Unexpected group target availability reason: ${unavailableReason}`);
   }
-  return { ...stripSchema(value), target_type: value.target_type, status: value.status, unavailable_reason: unavailableReason };
+  return {
+    ...stripSchema(value),
+    target_type: value.target_type,
+    status: value.status,
+    api_formats: value.api_formats ?? [],
+    unavailable_reason: unavailableReason
+  };
 }
 
 function toApiKeyPage(value: ApiKeyPageTransport): TenantAiApiKeysOutputBody {
@@ -300,6 +306,7 @@ function toUpstreamResources(value: UpstreamResourcesTransport): { items: Tenant
         price_book_id: resource.price_book_id,
         price_book_name: resource.price_book_name,
         price_book_revision: resource.price_book_revision,
+        api_formats: resource.api_formats ?? [],
         models: resource.models?.map((model) => {
           if (model.availability !== "available" && model.availability !== "no_price_configured") {
             throw new Error(`Unexpected upstream model availability: ${model.availability}`);
@@ -307,7 +314,6 @@ function toUpstreamResources(value: UpstreamResourcesTransport): { items: Tenant
           return {
             model_code: model.model_code,
             capability_type: model.capability_type,
-            api_format: model.api_format,
             availability: model.availability,
             price: model.price ? toPriceBookEntry(model.price) : undefined
           };

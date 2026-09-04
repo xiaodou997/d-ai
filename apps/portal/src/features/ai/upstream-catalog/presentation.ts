@@ -45,18 +45,18 @@ export function formatMultiplier(value: number) {
 }
 
 const protocolLabels: Record<string, string> = {
-  openai_chat: "OpenAI",
-  openai_responses: "OpenAI",
-  openai_embeddings: "OpenAI",
-  openai_images: "OpenAI",
+  openai_chat: "OpenAI Chat",
+  openai_responses: "OpenAI Responses",
+  openai_embeddings: "OpenAI Embeddings",
+  openai_images: "OpenAI Images",
   openai_compatible: "OpenAI",
   anthropic: "Anthropic",
-  anthropic_messages: "Anthropic",
+  anthropic_messages: "Anthropic Messages",
   gemini: "Gemini",
   google: "Gemini",
   gemini_text: "Gemini",
-  gemini_generate: "Gemini",
-  gemini_embeddings: "Gemini",
+  gemini_generate: "Gemini Generate",
+  gemini_embeddings: "Gemini Embeddings",
   gemini_images: "Gemini"
 };
 
@@ -66,14 +66,14 @@ export function protocolLabel(format: string) {
 
 export function protocolTagTone(value: string): ProtocolTagTone {
   const label = protocolLabel(value);
-  if (label === "OpenAI") return "positive";
-  if (label === "Anthropic") return "warning";
-  if (label === "Gemini") return "info";
+  if (label.startsWith("OpenAI")) return "positive";
+  if (label.startsWith("Anthropic")) return "warning";
+  if (label.startsWith("Gemini")) return "info";
   return "neutral";
 }
 
 export function resourceProtocolLabels(resource: TenantAiUpstreamResource) {
-  return [...new Set(resource.models.map((model) => protocolLabel(model.api_format)))];
+  return [...new Set((resource.api_formats || []).map(protocolLabel))];
 }
 
 export function buildPricingCards(resource: TenantAiUpstreamResource | null): UpstreamPricingCard[] {

@@ -39,7 +39,6 @@ const bindings = [
     id: '00000000-0000-0000-0000-000000000101',
     model_code: 'gpt-5',
     capability_type: 'chat',
-    api_format: 'openai_responses',
     upstream_model_name: 'gpt-5',
     status: 'active'
   },
@@ -47,7 +46,6 @@ const bindings = [
     id: '00000000-0000-0000-0000-000000000102',
     model_code: 'gpt-image-1',
     capability_type: 'image',
-    api_format: 'openai_images',
     upstream_model_name: 'gpt-image-1',
     status: 'active'
   }

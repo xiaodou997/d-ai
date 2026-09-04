@@ -149,14 +149,15 @@ describe('UpstreamAccountsWorkspace', () => {
     await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
     const dialog = wrapper.get('[data-dialog-title="新增上游账号"]')
     await dialog.get('input[placeholder="如 OpenAI 官方 / 某中转"]').setValue('OpenAI 官方')
-    await dialog.get('input[placeholder="https://api.openai.com"]').setValue('https://api.openai.com')
+    await dialog.get('input[placeholder="https://api.example.com"]').setValue('https://api.openai.com')
     await dialog.get('input[placeholder="输入上游 API Key（密文存储）"]').setValue('secret')
     await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
     await flushPromises()
 
     expect(api.createUpstreamAccount).toHaveBeenCalledWith(expect.objectContaining({
       name: 'OpenAI 官方',
-      price_book_id: 'active-oldest'
+      price_book_id: 'active-oldest',
+      endpoints: [expect.objectContaining({ api_format: 'openai_responses', base_url: 'https://api.openai.com' })]
     }))
   })
 
@@ -165,8 +166,7 @@ describe('UpstreamAccountsWorkspace', () => {
       items: [{
         id: 'account-existing',
         name: 'Existing',
-        base_url: 'https://existing.example.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://existing.example.com', status: 'active' }],
         status: 'active'
       }]
     })
@@ -180,34 +180,32 @@ describe('UpstreamAccountsWorkspace', () => {
     expect(dialog.find('[label="租户展示名称"]').exists()).toBe(false)
     expect(dialog.get('[label="API Key"]')).toBeTruthy()
     expect(dialog.get('input[placeholder="留空不改；密文存储"]')).toBeTruthy()
-    expect(dialog.get('[label="协议"]')).toBeTruthy()
+    expect(dialog.get('el-alert-stub').attributes('title')).toContain('请求端点在账号详情页单独管理')
     expect(dialog.find('[label="权重"]').exists()).toBe(false)
     expect(dialog.get('[label="价格表"]')).toBeTruthy()
     expect(dialog.get('[label="租户倍率"]')).toBeTruthy()
     expect(dialog.find('[label="结算价格表"]').exists()).toBe(false)
     expect(dialog.find('[label="租户扣费倍率"]').exists()).toBe(false)
-    expect(dialog.findAll('el-option-stub').slice(0, 3).map((option) => option.attributes('label')))
-      .toEqual(['OpenAI', 'Anthropic', 'Gemini'])
 
     await dialog.findAll('button').find((button) => button.text() === '保存')!.trigger('click')
     await flushPromises()
     expect(api.updateUpstreamAccount.mock.calls[0]![1]).not.toHaveProperty('weight')
   })
 
-  it('defaults OpenAI-compatible model bindings to Responses', async () => {
+  it('defaults a new account endpoint to OpenAI Responses', async () => {
     api.listUpstreamAccounts.mockResolvedValue({
       items: [{
         id: 'account-openai',
         name: 'OpenAI Compatible',
-        base_url: 'https://api.example.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }],
         status: 'active'
       }]
     })
     const wrapper = mount(AccountsView, { global })
     await flushPromises()
 
-    expect(wrapper.getComponent(UpstreamModelBindingsPanelStub).props('defaultBindingProtocol')).toBe('openai_responses')
+    await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
+    expect(wrapper.get('[data-dialog-title="新增上游账号"]').find('[modelvalue="openai_responses"]').exists()).toBe(true)
   })
 
   it('uses one switch instead of separate status and stop controls for an active account', async () => {
@@ -215,8 +213,7 @@ describe('UpstreamAccountsWorkspace', () => {
       items: [{
         id: 'account-active',
         name: 'Active account',
-        base_url: 'https://api.example.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }],
         status: 'active'
       }]
     })
@@ -232,8 +229,7 @@ describe('UpstreamAccountsWorkspace', () => {
       items: [{
         id: 'account-1',
         name: 'OpenAI 官方',
-        base_url: 'https://api.openai.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://api.openai.com', status: 'active' }],
         status: 'active'
       }]
     })
@@ -251,7 +247,7 @@ describe('UpstreamAccountsWorkspace', () => {
     await wrapper.findAll('button').find((button) => button.text() === '导入')!.trigger('click')
     const dialog = wrapper.get('[data-dialog-title="导入上游账号"]')
     const file = new File([
-      JSON.stringify({ accounts: [{ name: 'Imported', base_url: 'https://api.example.com', api_key: 'secret' }] })
+      JSON.stringify({ accounts: [{ name: 'Imported', api_key: 'secret', endpoints: [{ api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }] }] })
     ], 'accounts.json', { type: 'application/json' })
     const input = dialog.get('input[type="file"]')
     Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
@@ -268,8 +264,7 @@ describe('UpstreamAccountsWorkspace', () => {
       items: [{
         id: 'account-existing',
         name: 'Existing',
-        base_url: 'https://existing.example.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://existing.example.com', status: 'active' }],
         price_book_id: 'active-newer',
         status: 'active'
       }]
@@ -295,8 +290,7 @@ describe('UpstreamAccountsWorkspace', () => {
         name: 'Invalid account',
         tenant_display_name: 'Invalid account',
         tenant_access_mode: 'public',
-        base_url: 'https://invalid.example.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'endpoint-1', api_format: 'openai_responses', base_url: 'https://invalid.example.com', status: 'active' }],
         price_book_id: 'active-oldest',
         status: 'invalid',
         invalid_reason: 'upstream returned HTTP 401'
@@ -340,7 +334,7 @@ describe('UpstreamAccountsWorkspace', () => {
     await wrapper.findAll('button').find((button) => button.text().includes('新增账号'))!.trigger('click')
     const dialog = wrapper.get('[data-dialog-title="新增上游账号"]')
     await dialog.get('input[placeholder="如 OpenAI 官方 / 某中转"]').setValue('慢加载账号')
-    await dialog.get('input[placeholder="https://api.openai.com"]').setValue('https://slow.example.com')
+    await dialog.get('input[placeholder="https://api.example.com"]').setValue('https://slow.example.com')
     await dialog.get('input[placeholder="输入上游 API Key（密文存储）"]').setValue('secret')
 
     resolvePriceBooks({
@@ -364,7 +358,7 @@ describe('UpstreamAccountsWorkspace', () => {
     await wrapper.findAll('button').find((button) => button.text() === '导入')!.trigger('click')
     const dialog = wrapper.get('[data-dialog-title="导入上游账号"]')
     const file = new File([
-      JSON.stringify({ accounts: [{ name: 'Imported', base_url: 'https://api.example.com', api_key: 'secret' }] })
+      JSON.stringify({ accounts: [{ name: 'Imported', api_key: 'secret', endpoints: [{ api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }] }] })
     ], 'accounts.json', { type: 'application/json' })
     const input = dialog.get('input[type="file"]')
     Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
@@ -395,7 +389,7 @@ describe('UpstreamAccountsWorkspace', () => {
     await wrapper.findAll('button').find((button) => button.text() === '导入')!.trigger('click')
     const dialog = wrapper.get('[data-dialog-title="导入上游账号"]')
     const file = new File([
-      JSON.stringify({ accounts: [{ name: 'Imported', base_url: 'https://api.example.com', api_key: 'secret' }] })
+      JSON.stringify({ accounts: [{ name: 'Imported', api_key: 'secret', endpoints: [{ api_format: 'openai_responses', base_url: 'https://api.example.com', status: 'active' }] }] })
     ], 'accounts.json', { type: 'application/json' })
     const input = dialog.get('input[type="file"]')
     Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
@@ -437,16 +431,14 @@ describe('UpstreamAccountsWorkspace', () => {
       items: [{
         id: 'image-account',
         name: 'Image upstream',
-        base_url: 'https://images.example.com',
-        default_provider_family: 'openai_compatible',
+        endpoints: [{ id: 'image-endpoint', api_format: 'openai_images', base_url: 'https://images.example.com', status: 'active' }],
         status: 'active'
       }]
     })
     api.listAccountModelBindings.mockResolvedValue({
       items: [{
         model_code: 'gpt-image-2',
-        capability_type: 'image',
-        api_format: 'openai_images'
+        capability_type: 'image'
       }],
       total: 1
     })
@@ -469,6 +461,7 @@ describe('UpstreamAccountsWorkspace', () => {
 
     expect(api.testUpstreamAccount).toHaveBeenCalledWith('image-account', {
       model_code: 'gpt-image-2',
+      api_format: 'openai_images',
       prompt: undefined,
       image_edit: true,
       image: {

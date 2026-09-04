@@ -17,10 +17,10 @@ function resource(id: string, name: string, apiFormat: string): TenantAiUpstream
     name,
     resource_kind: "direct_upstream",
     tenant_multiplier: 1,
+    api_formats: [apiFormat],
     models: [{
       model_code: `${id}-model`,
       capability_type: "chat",
-      api_format: apiFormat,
       availability: "available"
     }]
   };
@@ -44,7 +44,7 @@ describe("UpstreamAccountRail", () => {
     });
 
     const tags = wrapper.findAll(".account-option__protocol");
-    expect(tags.map((tag) => tag.text())).toEqual(["OpenAI", "Anthropic", "Gemini"]);
+    expect(tags.map((tag) => tag.text())).toEqual(["OpenAI Responses", "Anthropic Messages", "Gemini Generate"]);
     expect(tags[0].classes()).toContain("ds-tag--positive");
     expect(tags[1].classes()).toContain("ds-tag--warning");
     expect(tags[2].classes()).toContain("ds-tag--info");

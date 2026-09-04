@@ -16,13 +16,18 @@ import { DsEmpty, DsNumberInput, DsTable, DsTag, type DsTableColumn } from '@/sh
 import { formatMultiplier } from '@/platform/ai/utils'
 import { aiAdminApi } from '@/api/aiAdmin'
 import type {
+  AccountDTO,
+  AccountWriteRequest,
   UpstreamAccountImportPreviewOutputBody,
   UpstreamAccountImportRequest,
+  UpstreamAccountEndpointDTO,
+  UpstreamAccountEndpointWriteRequest,
   UpstreamAccountTransferAccountDTO,
   UpstreamAccountTestImage,
-  UpstreamAccountTestResult
+  UpstreamAccountTestResult,
+  UpstreamModelBindingDTO
 } from '@/api/types/ai'
-import { defaultBindingProtocolForProviderFamily, endpointProtocolOptions } from './constants'
+import { endpointAuthSchemeOptions, upstreamAPIFormatLabel, upstreamAPIFormatOptions } from './constants'
 import { firstActivePriceBookId } from '@/features/ai/price-books/priceBookSelection'
 import type { PriceBookRecord } from '@/features/ai/price-books/pricingTypes'
 import KeyValueEditor from './components/KeyValueEditor.vue'
@@ -35,7 +40,7 @@ import {
 } from './components/status'
 
 const loading = shallowRef(false)
-const accounts = shallowRef<any[]>([])
+const accounts = shallowRef<AccountDTO[]>([])
 const priceBooks = shallowRef<PriceBookRecord[]>([])
 const selectedAccountId = shallowRef('')
 const selectedExportAccountIds = shallowRef<string[]>([])
@@ -43,8 +48,8 @@ const updatingAccountStatusId = shallowRef('')
 const accountContentScroll = ref<HTMLElement | null>(null)
 
 const activePriceBookId = computed(() => firstActivePriceBookId(priceBooks.value))
-const selectedAccount = computed(() => accounts.value.find((a: any) => a.id === selectedAccountId.value))
-const selectedExportAccounts = computed(() => accounts.value.filter((a: any) => selectedExportAccountIds.value.includes(a.id)))
+const selectedAccount = computed(() => accounts.value.find((account) => account.id === selectedAccountId.value))
+const selectedExportAccounts = computed(() => accounts.value.filter((account) => selectedExportAccountIds.value.includes(account.id)))
 const priceBookName = (id?: string) => priceBooks.value.find((priceBook) => priceBook.id === id)?.name || '-'
 // 列表只显示 base_url 的 host:名称虽然唯一,但「某中转 A / B」这类近似命名很常见,
 // 去掉地址后无法分辨是哪个上游;host 不含路径与查询串,不暴露完整上游地址。
@@ -56,92 +61,169 @@ function accountHost(baseUrl?: string) {
     return baseUrl.replace(/^https?:\/\//, '').split('/')[0]
   }
 }
+function accountEndpointHosts(account: AccountDTO) {
+  return [...new Set(account.endpoints.map((endpoint) => accountHost(endpoint.base_url)).filter(Boolean))].join(' · ')
+}
+function accountAPIFormats(account: AccountDTO) {
+  return account.endpoints.map((endpoint) => upstreamAPIFormatLabel(endpoint.api_format)).join('、') || '-'
+}
 // 展示名与名称一致时不重复渲染,只留倍率。
 // formatMultiplier 返回纯数字,列表里没有 label 承载语义,故补 × 前缀;未设置时留空不占位。
-function accountSubtitle(account: any) {
+function accountSubtitle(account: AccountDTO) {
   const raw = formatMultiplier(account.tenant_multiplier)
   const multiplier = raw === '-' ? '' : `×${raw}`
   const displayName = account.tenant_display_name || ''
   if (!displayName || displayName === account.name) return multiplier
   return multiplier ? `对外:${displayName} · ${multiplier}` : `对外:${displayName}`
 }
-const providerFamilyLabel = (v: string) => endpointProtocolOptions.find((o) => o.value === v)?.label || v || '-'
 // ── 账号 CRUD ────────────────────────────────────────────────────────────────
 const accountDialog = shallowRef(false)
 const editingAccountId = shallowRef('')
 const submittingAccount = shallowRef(false)
-const accountAdvancedSections = shallowRef<string[]>([])
-const accountForm = reactive<any>({
-  name: '',
-  tenant_display_name: '',
-  tenant_access_mode: 'public',
-  base_url: '',
-  api_key: '',
-  default_provider_family: 'openai_compatible',
-  concurrency_limit: null,
-  price_book_id: '',
-  tenant_multiplier: 1,
-  extra_headers: {}
-})
 const isEditingAccount = computed(() => Boolean(editingAccountId.value))
 
-function blankAccount() {
+type EndpointDraft = Omit<UpstreamAccountEndpointWriteRequest, 'extra_headers'> & {
+  id?: string
+  extra_headers?: Record<string, unknown>
+}
+
+interface AccountForm {
+  name: string
+  tenant_display_name: string
+  tenant_access_mode: 'public' | 'restricted'
+  api_key: string
+  endpoints: EndpointDraft[]
+  concurrency_limit: number | null
+  price_book_id: string
+  tenant_multiplier: number | null
+}
+
+function blankEndpoint(): EndpointDraft {
   return {
-    name: '', tenant_display_name: '', tenant_access_mode: 'public', base_url: '', api_key: '', default_provider_family: 'openai_compatible',
-    concurrency_limit: null, price_book_id: '', tenant_multiplier: 1,
-    extra_headers: {}
+    api_format: 'openai_responses',
+    base_url: '',
+    path_override: '',
+    auth_scheme: 'format_default',
+    auth_header: '',
+    extra_headers: {},
+    status: 'active'
+  }
+}
+
+const accountForm = reactive<AccountForm>({
+  name: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
+  endpoints: [], concurrency_limit: null, price_book_id: '', tenant_multiplier: 1
+})
+
+function endpointPayload(endpoint: EndpointDraft): UpstreamAccountEndpointWriteRequest {
+  return {
+    api_format: endpoint.api_format,
+    base_url: endpoint.base_url.trim(),
+    path_override: endpoint.path_override?.trim() || undefined,
+    auth_scheme: endpoint.auth_scheme || 'format_default',
+    auth_header: endpoint.auth_scheme === 'custom_header' ? endpoint.auth_header?.trim() : undefined,
+    extra_headers: endpoint.extra_headers && Object.keys(endpoint.extra_headers as object).length ? endpoint.extra_headers : undefined,
+    status: endpoint.status || 'active'
+  }
+}
+
+function validateEndpointDrafts(endpoints: EndpointDraft[]) {
+  if (!endpoints.length) {
+    ElMessage.warning('至少配置一个请求端点')
+    return false
+  }
+  const formats = new Set<string>()
+  for (const endpoint of endpoints) {
+    if (!endpoint.base_url.trim()) {
+      ElMessage.warning(`请填写 ${upstreamAPIFormatLabel(endpoint.api_format)} 的 Base URL`)
+      return false
+    }
+    if (formats.has(endpoint.api_format)) {
+      ElMessage.warning(`API 格式不能重复：${upstreamAPIFormatLabel(endpoint.api_format)}`)
+      return false
+    }
+    if (endpoint.auth_scheme === 'custom_header' && !endpoint.auth_header?.trim()) {
+      ElMessage.warning('自定义认证方式必须填写请求头名称')
+      return false
+    }
+    formats.add(endpoint.api_format)
+  }
+  return true
+}
+
+function addAccountEndpointDraft() {
+  const used = new Set(accountForm.endpoints.map((endpoint: EndpointDraft) => endpoint.api_format))
+  const next = upstreamAPIFormatOptions.find((option) => !used.has(option.value))
+  if (!next) {
+    ElMessage.info('所有 API 格式都已配置')
+    return
+  }
+  accountForm.endpoints.push({ ...blankEndpoint(), api_format: next.value })
+}
+
+function removeAccountEndpointDraft(index: string | number) {
+  if (accountForm.endpoints.length <= 1) {
+    ElMessage.warning('账号至少需要一个请求端点')
+    return
+  }
+  accountForm.endpoints.splice(Number(index), 1)
+}
+
+function draftFormatDisabled(format: string, index: string | number) {
+  return accountForm.endpoints.some((endpoint: EndpointDraft, candidateIndex: number) =>
+    candidateIndex !== Number(index) && endpoint.api_format === format
+  )
+}
+
+function blankAccount(): AccountForm {
+  return {
+    name: '', tenant_display_name: '', tenant_access_mode: 'public', api_key: '',
+    endpoints: [blankEndpoint()], concurrency_limit: null, price_book_id: '', tenant_multiplier: 1
   }
 }
 
 function resetAccountForm() {
   editingAccountId.value = ''
-  accountAdvancedSections.value = []
   Object.assign(accountForm, blankAccount(), {
     price_book_id: activePriceBookId.value
   })
 }
 
 function openAccountCreate() { resetAccountForm(); accountDialog.value = true }
-function openAccountEdit(row: any) {
+function openAccountEdit(row: AccountDTO) {
   editingAccountId.value = row.id
-  accountAdvancedSections.value = row.extra_headers && Object.keys(row.extra_headers || {}).length ? ['headers'] : []
   Object.assign(accountForm, {
     ...blankAccount(),
     name: row.name,
     tenant_display_name: row.tenant_display_name || row.name,
     tenant_access_mode: row.tenant_access_mode || 'public',
-    base_url: row.base_url,
     api_key: '',
-    default_provider_family: row.default_provider_family || 'openai_compatible',
+    endpoints: [],
     concurrency_limit: row.concurrency_limit ?? null,
     price_book_id: row.price_book_id || '',
-    tenant_multiplier: row.tenant_multiplier ?? null,
-    status: row.status || 'active',
-    extra_headers: row.extra_headers && typeof row.extra_headers === 'object' ? { ...row.extra_headers } : {}
+    tenant_multiplier: row.tenant_multiplier ?? null
   })
   accountDialog.value = true
 }
 
-function buildAccountPayload() {
-  const p: any = {
+function buildAccountPayload(): AccountWriteRequest {
+  const p: AccountWriteRequest = {
     name: accountForm.name.trim(),
     tenant_display_name: accountForm.tenant_display_name.trim() || accountForm.name.trim(),
     tenant_access_mode: accountForm.tenant_access_mode,
-    base_url: accountForm.base_url.trim(),
-    default_provider_family: accountForm.default_provider_family,
     concurrency_limit: accountForm.concurrency_limit ?? null,
     price_book_id: accountForm.price_book_id || undefined,
-    tenant_multiplier: accountForm.tenant_multiplier ?? undefined,
-    extra_headers: accountForm.extra_headers && Object.keys(accountForm.extra_headers).length ? accountForm.extra_headers : undefined
+    tenant_multiplier: accountForm.tenant_multiplier ?? undefined
   }
+  if (!isEditingAccount.value) p.endpoints = accountForm.endpoints.map(endpointPayload)
   if (accountForm.api_key.trim()) p.api_key = accountForm.api_key.trim()
   return p
 }
 
 async function submitAccount() {
   if (!accountForm.name.trim()) { ElMessage.warning('请填写账号名称'); return }
-  if (!accountForm.base_url.trim()) { ElMessage.warning('请填写 base_url'); return }
   if (!isEditingAccount.value && !accountForm.api_key.trim()) { ElMessage.warning('请填写上游 API key'); return }
+  if (!isEditingAccount.value && !validateEndpointDrafts(accountForm.endpoints)) return
   submittingAccount.value = true
   try {
     if (isEditingAccount.value) {
@@ -161,7 +243,7 @@ async function submitAccount() {
   }
 }
 
-async function changeAccountStatus(row: any, status: "active" | "disabled") {
+async function changeAccountStatus(row: AccountDTO, status: "active" | "disabled") {
   updatingAccountStatusId.value = row.id
   try {
     await aiAdminApi.updateUpstreamAccountStatus(row.id, status)
@@ -174,7 +256,7 @@ async function changeAccountStatus(row: any, status: "active" | "disabled") {
   }
 }
 
-async function removeAccount(row: any) {
+async function removeAccount(row: AccountDTO) {
   try {
     await ElMessageBox.confirm(`删除上游账号「${row.name}」？分组对它的关联会一并解除。`, '确认删除', { type: 'warning' })
   } catch { return }
@@ -185,6 +267,87 @@ async function removeAccount(row: any) {
     await fetchAccounts()
   } catch (e: any) {
     ElMessage.error(e?.message || '删除失败')
+  }
+}
+
+// ── 请求端点 CRUD ────────────────────────────────────────────────────────────
+const endpointDialog = shallowRef(false)
+const editingEndpointId = shallowRef('')
+const submittingEndpoint = shallowRef(false)
+const endpointForm = reactive<EndpointDraft>(blankEndpoint())
+const isEditingEndpoint = computed(() => Boolean(editingEndpointId.value))
+
+function openEndpointCreate() {
+  if (!selectedAccount.value) return
+  const used = new Set((selectedAccount.value.endpoints || []).map((endpoint: UpstreamAccountEndpointDTO) => endpoint.api_format))
+  const next = upstreamAPIFormatOptions.find((option) => !used.has(option.value))
+  if (!next) {
+    ElMessage.info('该账号已配置全部 API 格式')
+    return
+  }
+  editingEndpointId.value = ''
+  Object.assign(endpointForm, blankEndpoint(), { api_format: next.value })
+  endpointDialog.value = true
+}
+
+function openEndpointEdit(endpoint: UpstreamAccountEndpointDTO) {
+  editingEndpointId.value = endpoint.id
+  Object.assign(endpointForm, blankEndpoint(), {
+    ...endpoint,
+    extra_headers: endpoint.extra_headers && typeof endpoint.extra_headers === 'object' ? { ...endpoint.extra_headers as object } : {}
+  })
+  endpointDialog.value = true
+}
+
+function endpointFormatDisabled(format: string) {
+  return (selectedAccount.value?.endpoints || []).some((endpoint: UpstreamAccountEndpointDTO) =>
+    endpoint.api_format === format && endpoint.id !== editingEndpointId.value
+  )
+}
+
+async function submitEndpoint() {
+  if (!selectedAccount.value || !validateEndpointDrafts([endpointForm])) return
+  submittingEndpoint.value = true
+  try {
+    if (isEditingEndpoint.value) {
+      await aiAdminApi.updateUpstreamAccountEndpoint(selectedAccount.value.id, editingEndpointId.value, endpointPayload(endpointForm))
+    } else {
+      await aiAdminApi.createUpstreamAccountEndpoint(selectedAccount.value.id, endpointPayload(endpointForm))
+    }
+    endpointDialog.value = false
+    ElMessage.success(isEditingEndpoint.value ? '请求端点已更新' : '请求端点已添加')
+    await fetchAccounts()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '保存请求端点失败')
+  } finally {
+    submittingEndpoint.value = false
+  }
+}
+
+async function removeEndpoint(endpoint: UpstreamAccountEndpointDTO) {
+  if (!selectedAccount.value) return
+  const endpoints = selectedAccount.value.endpoints || []
+  if (endpoints.length <= 1) {
+    ElMessage.warning('账号至少需要一个请求端点')
+    return
+  }
+  if (
+    selectedAccount.value.status === 'active' &&
+    endpoint.status === 'active' &&
+    endpoints.filter((item: UpstreamAccountEndpointDTO) => item.status === 'active').length <= 1
+  ) {
+    ElMessage.warning('启用账号至少需要一个启用中的请求端点')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`删除请求端点「${upstreamAPIFormatLabel(endpoint.api_format)}」？`, '确认删除', { type: 'warning' })
+  } catch { return }
+  try {
+    await aiAdminApi.deleteUpstreamAccountEndpoint(selectedAccount.value.id, endpoint.id)
+    ElMessage.success('请求端点已删除')
+    await fetchAccounts()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '删除请求端点失败')
   }
 }
 
@@ -296,6 +459,9 @@ async function handleImportFileSelected(event: Event) {
 }
 
 function parseImportAccounts(parsed: any): UpstreamAccountTransferAccountDTO[] {
+  if (!Array.isArray(parsed) && parsed?.schema_version !== undefined && parsed.schema_version !== 5) {
+    throw new Error(`不支持的上游账号导入版本：${parsed.schema_version}；当前需要 schema_version 5`)
+  }
   const accountsToImport = Array.isArray(parsed) ? parsed : parsed?.accounts
   if (!Array.isArray(accountsToImport) || accountsToImport.length === 0) {
     throw new Error('导入文件缺少 accounts 数组')
@@ -377,7 +543,7 @@ function statusTone(status: string): 'positive' | 'danger' | 'info' {
 
 const importPreviewColumns: DsTableColumn[] = [
   { key: 'name', title: '账号' },
-  { key: 'base_url', title: 'Base URL' },
+  { key: 'endpoint_count', title: '请求端点', width: 96, align: 'right' },
   { key: 'action', title: '动作', width: 86 },
   { key: 'model_binding_count', title: '模型绑定', width: 96, align: 'right' },
   { key: 'reason', title: '说明' }
@@ -389,10 +555,10 @@ async function fetchAccounts() {
   try {
     const res = await aiAdminApi.listUpstreamAccounts()
     accounts.value = res.items || []
-    if (!accounts.value.some((a: any) => a.id === selectedAccountId.value)) {
+    if (!accounts.value.some((account) => account.id === selectedAccountId.value)) {
       selectedAccountId.value = accounts.value[0]?.id || ''
     }
-    const validIds = new Set(accounts.value.map((a: any) => a.id))
+    const validIds = new Set(accounts.value.map((account) => account.id))
     selectedExportAccountIds.value = selectedExportAccountIds.value.filter((id) => validIds.has(id))
   } catch (e: any) {
     ElMessage.error(e?.message || '加载账号失败')
@@ -454,10 +620,10 @@ function setupListObserver() {
 
 // ── 连通性测试 ───────────────────────────────────────────────────────────────
 const testDialog = shallowRef(false)
-const testAccount = shallowRef<any>(null)
-const testModels = ref<{ model_code: string; capability_type: string; api_format: string }[]>([])
+const testAccount = shallowRef<AccountDTO | null>(null)
+const testModels = ref<{ model_code: string; capability_type: string }[]>([])
 const testModelsLoading = shallowRef(false)
-const testForm = reactive({ modelCode: '', prompt: '', imageEdit: false })
+const testForm = reactive({ modelCode: '', apiFormat: '', prompt: '', imageEdit: false })
 const testImage = shallowRef<UpstreamAccountTestImage | null>(null)
 const testing = shallowRef(false)
 const testResult = shallowRef<UpstreamAccountTestResult | null>(null)
@@ -466,8 +632,29 @@ const testError = shallowRef('')
 const testSelectedBinding = computed(() => testModels.value.find((m) => m.model_code === testForm.modelCode))
 const testSelectedCapability = computed(() => testSelectedBinding.value?.capability_type ?? '')
 const testIsImage = computed(() => testSelectedCapability.value === 'image')
-const testSupportsImageEdit = computed(() => testIsImage.value && testSelectedBinding.value?.api_format === 'openai_images')
-const testCanRun = computed(() => Boolean(testForm.modelCode) && (!testForm.imageEdit || Boolean(testImage.value)))
+const testEndpoints = computed<UpstreamAccountEndpointDTO[]>(() => {
+  const endpoints = (testAccount.value?.endpoints || []).filter((endpoint: UpstreamAccountEndpointDTO) => endpoint.status === 'active')
+  if (testSelectedCapability.value === 'image') {
+    return endpoints.filter((endpoint: UpstreamAccountEndpointDTO) => ['openai_images', 'gemini_generate'].includes(endpoint.api_format))
+  }
+  if (testSelectedCapability.value === 'embedding') {
+    return endpoints.filter((endpoint: UpstreamAccountEndpointDTO) => ['openai_embeddings', 'gemini_embeddings'].includes(endpoint.api_format))
+  }
+  if (testSelectedCapability.value === 'chat') {
+    return endpoints.filter((endpoint: UpstreamAccountEndpointDTO) =>
+      ['openai_chat', 'openai_responses', 'anthropic_messages', 'gemini_generate'].includes(endpoint.api_format)
+    )
+  }
+  return []
+})
+const testSupportsImageEdit = computed(() => testIsImage.value && testForm.apiFormat === 'openai_images')
+const testCanRun = computed(() => Boolean(testForm.modelCode && testForm.apiFormat) && (!testForm.imageEdit || Boolean(testImage.value)))
+
+watch([() => testForm.modelCode, testEndpoints], () => {
+  if (!testEndpoints.value.some((endpoint) => endpoint.api_format === testForm.apiFormat)) {
+    testForm.apiFormat = testEndpoints.value[0]?.api_format || ''
+  }
+})
 
 watch(testSupportsImageEdit, (supported) => {
   if (!supported) testForm.imageEdit = false
@@ -477,10 +664,11 @@ watch(() => testForm.imageEdit, (imageEdit) => {
   if (!imageEdit) testImage.value = null
 })
 
-async function openTestDialog(account: any) {
+async function openTestDialog(account: AccountDTO) {
   if (!account) return
   testAccount.value = account
   testForm.modelCode = ''
+  testForm.apiFormat = ''
   testForm.prompt = ''
   testForm.imageEdit = false
   testImage.value = null
@@ -490,10 +678,9 @@ async function openTestDialog(account: any) {
   testModelsLoading.value = true
   try {
     const data = await aiAdminApi.listAccountModelBindings(account.id)
-    testModels.value = (data.items ?? []).map((b: any) => ({
-      model_code: b.model_code,
-      capability_type: b.capability_type,
-      api_format: b.api_format
+    testModels.value = (data.items ?? []).map((binding: UpstreamModelBindingDTO) => ({
+      model_code: binding.model_code,
+      capability_type: binding.capability_type
     }))
     if (testModels.value.length) testForm.modelCode = testModels.value[0].model_code
   } catch (e: any) {
@@ -516,6 +703,7 @@ async function runAccountTest() {
     const previousStatus = testAccount.value.status
     testResult.value = await aiAdminApi.testUpstreamAccount(testAccount.value.id, {
       model_code: testForm.modelCode,
+      api_format: testForm.apiFormat,
       prompt: testForm.prompt.trim() || undefined,
       image_edit: testIsImage.value && testForm.imageEdit,
       image: testIsImage.value && testForm.imageEdit ? testImage.value || undefined : undefined
@@ -525,7 +713,7 @@ async function runAccountTest() {
     }
     if (testResult.value.ok || [401, 403].includes(testResult.value.http_status)) {
       await fetchAccounts()
-      testAccount.value = accounts.value.find((account: any) => account.id === testAccount.value?.id) || testAccount.value
+      testAccount.value = accounts.value.find((account) => account.id === testAccount.value?.id) || testAccount.value
       if (testResult.value.ok && previousStatus === 'invalid') {
         ElMessage.success('验证成功，账号已恢复启用')
       }
@@ -617,7 +805,7 @@ onBeforeUnmount(() => {
                 />
               </div>
               <div class="account-item-subtitle truncate">{{ accountSubtitle(a) }}</div>
-              <div class="account-item-host truncate">{{ accountHost(a.base_url) }}</div>
+              <div class="account-item-host truncate">{{ accountEndpointHosts(a) }}</div>
             </div>
             <div ref="listSentinelEl" class="account-list-sentinel" aria-hidden="true">
               <span v-if="hasMoreAccounts">加载中…</span>
@@ -653,8 +841,10 @@ onBeforeUnmount(() => {
                 <el-button size="small" type="danger" plain :icon="Delete" @click="removeAccount(selectedAccount)">删除</el-button>
               </template>
               <el-descriptions :key="selectedAccountId" :column="2" size="small" border>
-                <el-descriptions-item label="Base URL">{{ selectedAccount.base_url }}</el-descriptions-item>
-                <el-descriptions-item label="协议">{{ providerFamilyLabel(selectedAccount.default_provider_family) }}</el-descriptions-item>
+                <el-descriptions-item label="请求端点">{{ selectedAccount.endpoints?.length || 0 }} 个</el-descriptions-item>
+                <el-descriptions-item label="API 格式">
+                  {{ accountAPIFormats(selectedAccount) }}
+                </el-descriptions-item>
                 <el-descriptions-item label="最大并发">{{ selectedAccount.concurrency_limit ? `${selectedAccount.concurrency_limit} 并发` : '不限制' }}</el-descriptions-item>
                 <el-descriptions-item label="运行状态">
                   <DsTag :tone="statusTone(selectedAccount.status)">
@@ -670,12 +860,39 @@ onBeforeUnmount(() => {
               </el-descriptions>
             </PortalContentCard>
 
+            <PortalContentCard title="请求端点" description="声明该账号真正支持的请求格式。每种 API 格式只能配置一个 Base URL。">
+              <template #actions>
+                <el-button size="small" type="primary" :icon="Plus" @click="openEndpointCreate">添加端点</el-button>
+              </template>
+              <el-table :data="selectedAccount.endpoints || []" border stripe>
+                <el-table-column label="API 格式" min-width="190">
+                  <template #default="{ row }">{{ upstreamAPIFormatLabel(row.api_format) }}</template>
+                </el-table-column>
+                <el-table-column prop="base_url" label="Base URL" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="path_override" label="路径覆盖" min-width="150" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.path_override || '使用格式默认路径' }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="105">
+                  <template #default="{ row }">
+                    <DsTag :tone="row.status === 'active' ? (row.health_status === 'unhealthy' ? 'danger' : 'positive') : 'info'">
+                      {{ row.status === 'active' ? (row.health_status === 'unhealthy' ? '异常' : '启用') : '停用' }}
+                    </DsTag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="130" fixed="right">
+                  <template #default="{ row }">
+                    <el-button link type="primary" @click="openEndpointEdit(row)">编辑</el-button>
+                    <el-button link type="danger" @click="removeEndpoint(row)">删除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </PortalContentCard>
+
             <UpstreamModelBindingsPanel
               target-kind="account"
               :target-id="selectedAccount.id"
-              :default-binding-protocol="defaultBindingProtocolForProviderFamily(selectedAccount?.default_provider_family)"
               title="上游账号显式模型绑定"
-              description="用显式绑定声明这个上游账号实际可用的模型、API 格式和模型配置。"
+              description="声明这个账号可用的模型；API 格式由上方请求端点统一提供。"
               empty-text="当前账号暂无显式模型绑定。可先从上游发现模型，再补充精细化编辑。"
               import-button-label="发现上游模型"
               import-dialog-title="发现上游模型"
@@ -722,7 +939,21 @@ onBeforeUnmount(() => {
             </p>
           </el-form-item>
 
-          <el-form-item :label="testIsImage ? '生图提示词' : '对话提示词'">
+          <el-form-item label="选择请求端点" required>
+            <el-select v-model="testForm.apiFormat" placeholder="选择与模型能力兼容的请求格式" style="width: 100%">
+              <el-option
+                v-for="endpoint in testEndpoints"
+                :key="endpoint.id"
+                :label="`${upstreamAPIFormatLabel(endpoint.api_format)} · ${accountHost(endpoint.base_url)}`"
+                :value="endpoint.api_format"
+              />
+            </el-select>
+            <p v-if="testForm.modelCode && !testEndpoints.length" class="test-empty-hint">
+              当前账号没有与该模型能力兼容的启用端点。
+            </p>
+          </el-form-item>
+
+          <el-form-item :label="testIsImage ? '生图提示词' : testSelectedCapability === 'embedding' ? '向量输入文本' : '对话提示词'">
             <el-input
               v-model="testForm.prompt"
               type="textarea"
@@ -734,7 +965,9 @@ onBeforeUnmount(() => {
             <p class="test-hint">
               {{ testIsImage
                 ? '选择图片模型后，这里会直接发起生图测试，并在下方展示返回图片。'
-                : '选择对话模型后，这里会发送一条对话测试，并在下方展示返回文本。' }}
+                : testSelectedCapability === 'embedding'
+                  ? '选择向量模型后，这里会发送一段输入文本并验证返回向量。'
+                  : '选择对话模型后，这里会发送一条对话测试，并在下方展示返回文本。' }}
             </p>
           </el-form-item>
           <el-form-item v-if="testIsImage" label="测试类型">
@@ -820,9 +1053,6 @@ onBeforeUnmount(() => {
             inactive-text="关闭"
           />
         </el-form-item>
-        <el-form-item label="Base URL" required>
-          <el-input v-model="accountForm.base_url" placeholder="https://api.openai.com" />
-        </el-form-item>
         <el-form-item label="API Key" :required="!isEditingAccount">
           <el-input
             v-model="accountForm.api_key"
@@ -831,11 +1061,50 @@ onBeforeUnmount(() => {
             :placeholder="isEditingAccount ? '留空不改；密文存储' : '输入上游 API Key（密文存储）'"
           />
         </el-form-item>
-        <el-form-item label="协议">
-          <el-select v-model="accountForm.default_provider_family" class="w-full">
-            <el-option v-for="o in endpointProtocolOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
+        <div v-if="!isEditingAccount" class="endpoint-drafts">
+          <div class="endpoint-drafts-head">
+            <div>
+              <strong>请求端点</strong>
+              <p>一个账号可支持多种 API 格式；同一种格式不能重复配置。</p>
+            </div>
+            <el-button size="small" :icon="Plus" @click="addAccountEndpointDraft">添加格式</el-button>
+          </div>
+          <div v-for="(endpoint, index) in accountForm.endpoints" :key="index" class="endpoint-draft-card">
+            <div class="endpoint-draft-title">
+              <span>端点 {{ Number(index) + 1 }}</span>
+              <el-button link type="danger" :disabled="accountForm.endpoints.length <= 1" @click="removeAccountEndpointDraft(index)">移除</el-button>
+            </div>
+            <el-form-item label="API 格式" required>
+              <el-select v-model="endpoint.api_format" class="w-full">
+                <el-option
+                  v-for="option in upstreamAPIFormatOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                  :disabled="draftFormatDisabled(option.value, index)"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Base URL" required>
+              <el-input v-model="endpoint.base_url" placeholder="https://api.example.com" />
+            </el-form-item>
+            <el-form-item label="路径覆盖">
+              <el-input v-model="endpoint.path_override" placeholder="留空使用该 API 格式的默认路径" />
+            </el-form-item>
+            <el-form-item label="认证方式">
+              <el-select v-model="endpoint.auth_scheme" class="w-full">
+                <el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="endpoint.auth_scheme === 'custom_header'" label="认证请求头" required>
+              <el-input v-model="endpoint.auth_header" placeholder="如 X-API-Key" />
+            </el-form-item>
+            <el-form-item label="附加请求头">
+              <KeyValueEditor v-model="endpoint.extra_headers" />
+            </el-form-item>
+          </div>
+        </div>
+        <el-alert v-else type="info" :closable="false" title="请求端点在账号详情页单独管理，修改账号资料不会覆盖端点配置。" />
         <el-form-item label="最大并发数">
           <DsNumberInput v-model="accountForm.concurrency_limit" :min="1" :step="1" />
           <span class="hint">
@@ -857,18 +1126,54 @@ onBeforeUnmount(() => {
           <DsNumberInput v-model="accountForm.tenant_multiplier" :min="0" :step="0.1" :precision="4" />
           <span class="hint">租户扣费=价格表 USD × 默认倍率；默认 1</span>
         </el-form-item>
-        <el-collapse v-model="accountAdvancedSections" class="advanced-sections">
-          <el-collapse-item name="headers" title="高级设置：附加请求头">
-            <p class="advanced-hint">默认无需填写，仅当某些上游要求固定额外 Header 时再配置。</p>
-            <el-form-item label="附加请求头">
-              <KeyValueEditor v-model="accountForm.extra_headers" />
-            </el-form-item>
-          </el-collapse-item>
-        </el-collapse>
       </el-form>
       <template #footer>
         <el-button @click="accountDialog = false">取消</el-button>
         <el-button type="primary" :loading="submittingAccount" @click="submitAccount">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="endpointDialog" :title="isEditingEndpoint ? '编辑请求端点' : '添加请求端点'" width="640px">
+      <el-form label-width="120px">
+        <el-form-item label="API 格式" required>
+          <el-select v-model="endpointForm.api_format" class="w-full">
+            <el-option
+              v-for="option in upstreamAPIFormatOptions"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+              :disabled="endpointFormatDisabled(option.value)"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="Base URL" required>
+          <el-input v-model="endpointForm.base_url" placeholder="https://api.example.com" />
+        </el-form-item>
+        <el-form-item label="路径覆盖">
+          <el-input v-model="endpointForm.path_override" placeholder="留空使用该 API 格式的默认路径" />
+        </el-form-item>
+        <el-form-item label="认证方式">
+          <el-select v-model="endpointForm.auth_scheme" class="w-full">
+            <el-option v-for="option in endpointAuthSchemeOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="endpointForm.auth_scheme === 'custom_header'" label="认证请求头" required>
+          <el-input v-model="endpointForm.auth_header" placeholder="如 X-API-Key" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-radio-group v-model="endpointForm.status">
+            <el-radio value="active">启用</el-radio>
+            <el-radio value="disabled">停用</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="附加请求头">
+          <KeyValueEditor v-model="endpointForm.extra_headers" />
+          <span class="hint">敏感值显示为 ***REDACTED***；保持该值会保留原配置，删除该项才会移除请求头。</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="endpointDialog = false">取消</el-button>
+        <el-button type="primary" :loading="submittingEndpoint" @click="submitEndpoint">保存</el-button>
       </template>
     </el-dialog>
 
@@ -1013,8 +1318,11 @@ onBeforeUnmount(() => {
 }
 .account-content-stack { display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
 .hint { color: var(--ds-faint); font-size: 12px; margin-left: 8px; }
-.advanced-sections { margin-bottom: 18px; }
-.advanced-hint { margin: 0 0 12px; color: var(--ds-faint); font-size: 12px; line-height: 1.4; }
+.endpoint-drafts { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
+.endpoint-drafts-head, .endpoint-draft-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.endpoint-drafts-head p { margin: 4px 0 0; color: var(--ds-muted); font-size: 12px; }
+.endpoint-draft-card { padding: 14px 14px 2px; border: 1px solid var(--ds-line); border-radius: var(--ds-radius-control); background: var(--ds-panel-muted); }
+.endpoint-draft-title { margin-bottom: 10px; color: var(--ds-ink); font-weight: 700; }
 .transfer-panel { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
 .transfer-summary { display: inline-flex; align-items: baseline; gap: 6px; color: var(--ds-muted); }
 .transfer-summary strong { color: var(--ds-ink); font-size: 20px; line-height: 1; }

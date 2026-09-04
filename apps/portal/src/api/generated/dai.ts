@@ -1509,8 +1509,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 推断模型能力与协议
-         * @description 优先查 models.dev 缓存目录，按模态结构判断 image/audio_tts/audio_stt；未命中或模态无法区分 chat/embedding/rerank 时回退本地模型名规则。仅用于表单默认值建议，不做任何写入，也不影响提交时的合法性校验。
+         * 推断模型能力
+         * @description 优先查 models.dev 缓存目录，未命中时按模型名建议能力类型。API 格式由账号请求端点显式声明，绝不从模型名推断。
          */
         get: operations["ai-infer-model-capability"];
         put?: never;
@@ -3712,7 +3712,7 @@ export interface paths {
         put?: never;
         /**
          * 创建上游账号
-         * @description 创建上游账号；可服务模型和上游协议由显式上游模型绑定维护。
+         * @description 创建一个供应商账号和一把 API Key；可支持多个不同 API 格式的请求端点。
          */
         post: operations["ai-create-upstream-account"];
         delete?: never;
@@ -3794,9 +3794,45 @@ export interface paths {
         head?: never;
         /**
          * 更新上游账号
-         * @description 更新上游账号；可服务模型和上游协议由显式上游模型绑定维护。
+         * @description 更新上游账号元数据或 API Key；请求端点通过独立 Endpoint API 管理。
          */
         patch: operations["ai-update-upstream-account"];
+        trace?: never;
+    };
+    "/api/v1/upstream-accounts/{accountID}/endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 上游账号请求端点列表 */
+        get: operations["ai-list-upstream-account-endpoints"];
+        put?: never;
+        /** 创建上游账号请求端点 */
+        post: operations["ai-create-upstream-account-endpoint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/upstream-accounts/{accountID}/endpoints/{endpointID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删除上游账号请求端点 */
+        delete: operations["ai-delete-upstream-account-endpoint"];
+        options?: never;
+        head?: never;
+        /** 更新上游账号请求端点 */
+        patch: operations["ai-update-upstream-account-endpoint"];
         trace?: never;
     };
     "/api/v1/upstream-accounts/{accountID}/import-upstream-models": {
@@ -3930,7 +3966,7 @@ export interface paths {
         };
         /**
          * 拉取上游账号模型列表
-         * @description 调用上游 /v1/models 并推断能力与协议，不落库。
+         * @description 调用账号所有启用请求端点的模型目录并按模型 ID 合并，不落库。
          */
         get: operations["ai-fetch-account-upstream-models"];
         put?: never;
@@ -4681,8 +4717,6 @@ export interface components {
              * @example https://example.com/schemas/AccountDTO.json
              */
             readonly $schema?: string;
-            /** @description 上游基础 URL */
-            base_url: string;
             /**
              * Format: int32
              * @description 最大并发请求数；为空表示不限制
@@ -4693,10 +4727,8 @@ export interface components {
              * @description 创建时间，Unix 毫秒
              */
             created_at?: number;
-            /** @description 默认上游家族 */
-            default_provider_family: string;
-            /** @description 附加请求头 JSON */
-            extra_headers: unknown;
+            /** @description 账号支持的请求端点；同一 API 格式至多一个 */
+            endpoints: components["schemas"]["AccountEndpointDTO"][] | null;
             /** @description 上游账号 ID */
             id: string;
             /**
@@ -4732,6 +4764,86 @@ export interface components {
              * @description 更新时间，Unix 毫秒
              */
             updated_at?: number;
+        };
+        AccountEndpointDTO: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AccountEndpointDTO.json
+             */
+            readonly $schema?: string;
+            /** @description 上游账号 ID */
+            account_id: string;
+            /**
+             * @description 精确 API 格式
+             * @enum {string}
+             */
+            api_format: "openai_chat" | "openai_responses" | "openai_embeddings" | "openai_images" | "anthropic_messages" | "gemini_generate" | "gemini_embeddings";
+            /** @description custom_header 使用的请求头名称 */
+            auth_header?: string;
+            /**
+             * @description API Key 注入方式
+             * @enum {string}
+             */
+            auth_scheme: "format_default" | "bearer" | "anthropic_api_key" | "gemini_api_key" | "custom_header";
+            /** @description 端点基础 URL */
+            base_url: string;
+            /**
+             * Format: int64
+             * @description 创建时间，Unix 毫秒
+             */
+            created_at?: number;
+            /** @description 端点附加请求头 JSON；敏感值返回 ***REDACTED*** */
+            extra_headers: unknown;
+            /** @enum {string} */
+            health_status: "unknown" | "healthy" | "unhealthy";
+            /** @description 请求端点 ID */
+            id: string;
+            /**
+             * Format: int64
+             * @description 最后检查时间，Unix 毫秒
+             */
+            last_checked_at?: number;
+            last_error?: string;
+            /** @description 自定义请求路径；为空使用格式默认路径 */
+            path_override?: string;
+            /** @enum {string} */
+            status: "active" | "disabled";
+            /**
+             * Format: int64
+             * @description 更新时间，Unix 毫秒
+             */
+            updated_at?: number;
+        };
+        AccountEndpointWriteRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AccountEndpointWriteRequest.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            api_format: "openai_chat" | "openai_responses" | "openai_embeddings" | "openai_images" | "anthropic_messages" | "gemini_generate" | "gemini_embeddings";
+            auth_header?: string;
+            /** @enum {string} */
+            auth_scheme?: "format_default" | "bearer" | "anthropic_api_key" | "gemini_api_key" | "custom_header";
+            base_url: string;
+            /** @description 端点附加请求头；编辑时敏感字段值为 ***REDACTED*** 表示保留原值，删除字段表示删除请求头 */
+            extra_headers?: unknown;
+            path_override?: string;
+            /** @enum {string} */
+            status?: "active" | "disabled";
+        };
+        AccountEndpointsOutputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AccountEndpointsOutputBody.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["AccountEndpointDTO"][] | null;
+            /** Format: int64 */
+            total: number;
         };
         AccountStatsResult: {
             /**
@@ -5614,20 +5726,13 @@ export interface components {
             readonly $schema?: string;
             /** @description 上游 API key 明文；仅写入时接收，响应不返回 */
             api_key: string;
-            /** @description 上游基础 URL */
-            base_url: string;
             /**
              * Format: int32
              * @description 最大并发请求数；为空表示不限制
              */
             concurrency_limit?: number;
-            /**
-             * @description 默认上游家族；为空默认 openai_compatible
-             * @enum {string}
-             */
-            default_provider_family?: "openai_compatible" | "anthropic" | "gemini";
-            /** @description 附加请求头 JSON；为空默认 {} */
-            extra_headers?: unknown;
+            /** @description 账号支持的请求端点；同一 API 格式至多一个 */
+            endpoints: components["schemas"]["AccountEndpointWriteRequest"][] | null;
             /** @description 账号名称 */
             name: string;
             /** @description 租户结算价格表 ID；为空不绑定 */
@@ -6317,8 +6422,8 @@ export interface components {
             title: string;
         };
         DiscoveredModelDTO: {
-            /** @description 推断的上游 API 格式 */
-            api_format: string;
+            /** @description 成功发现该模型的请求端点格式 */
+            api_formats: string[] | null;
             /** @description 推断的能力类型 */
             capability_type: string;
             /** @description 是否已存在部署 */
@@ -6704,11 +6809,11 @@ export interface components {
             readonly $schema?: string;
             account_id?: string;
             account_name?: string;
+            api_formats?: string[] | null;
             available: boolean;
             /** Format: int64 */
             created_at?: number;
             credential_pool_id?: string;
-            default_provider_family?: string;
             fixed_provider_type?: string;
             group_id: string;
             id: string;
@@ -6867,7 +6972,7 @@ export interface components {
              * @description 目标类型
              * @enum {string}
              */
-            kind: "account" | "pool" | "unknown";
+            kind: "account" | "endpoint" | "pool" | "unknown";
             /**
              * Format: int64
              * @description 下次探测时间，Unix 毫秒
@@ -6932,11 +7037,6 @@ export interface components {
              * @example https://example.com/schemas/ImportEndpointUpstreamModelsInputBody.json
              */
             readonly $schema?: string;
-            /**
-             * @description 导入时使用的上游 API 格式；为空按模型和账号默认家族推断
-             * @enum {string}
-             */
-            api_format?: "openai_chat" | "openai_responses" | "openai_embeddings" | "openai_images" | "anthropic_messages" | "gemini_generate" | "gemini_embeddings";
             /** @description 待导入的对外 model_code 列表 */
             models: string[] | null;
         };
@@ -7012,8 +7112,6 @@ export interface components {
              * @example https://example.com/schemas/InferModelCapabilityOutputBody.json
              */
             readonly $schema?: string;
-            /** @description 推断的上游 API 格式 */
-            api_format: string;
             /** @description 推断的能力类型 */
             capability_type: string;
             /**
@@ -9182,7 +9280,6 @@ export interface components {
             total: number;
         };
         TenantUpstreamModelDTO: {
-            api_format: string;
             /** @enum {string} */
             availability: "available" | "no_price_configured";
             capability_type: string;
@@ -9190,6 +9287,7 @@ export interface components {
             price?: components["schemas"]["PriceBookEntryDTO"];
         };
         TenantUpstreamResourceDTO: {
+            api_formats: string[] | null;
             id: string;
             models: components["schemas"]["TenantUpstreamModelDTO"][] | null;
             name: string;
@@ -9566,20 +9664,11 @@ export interface components {
             readonly $schema?: string;
             /** @description 上游 API key 明文；为空保留原密文 */
             api_key?: string;
-            /** @description 上游基础 URL */
-            base_url: string;
             /**
              * Format: int32
              * @description 最大并发请求数；为空表示不限制
              */
             concurrency_limit?: number;
-            /**
-             * @description 默认上游家族；为空保留原值
-             * @enum {string}
-             */
-            default_provider_family?: "openai_compatible" | "anthropic" | "gemini";
-            /** @description 附加请求头 JSON；为空默认 {} */
-            extra_headers?: unknown;
             /** @description 账号名称 */
             name: string;
             /** @description 租户结算价格表 ID；为空不绑定 */
@@ -9844,9 +9933,10 @@ export interface components {
         };
         UpstreamAccountImportPreviewItemDTO: {
             action: string;
-            base_url: string;
             /** Format: int64 */
             duplicate_model_bindings?: number;
+            /** Format: int64 */
+            endpoint_count: number;
             /** Format: int64 */
             model_binding_count: number;
             name: string;
@@ -9910,6 +10000,8 @@ export interface components {
              * @example https://example.com/schemas/UpstreamAccountTestInputBody.json
              */
             readonly $schema?: string;
+            /** @description 要测试的账号端点 API 格式 */
+            api_format: string;
             /** @description 图片编辑测试使用的真实参考图片；image_edit=true 时必填 */
             image?: components["schemas"]["UpstreamAccountTestImageInput"];
             /** @description 仅 OpenAI Images 生图模型：执行图片编辑测试 */
@@ -9930,7 +10022,7 @@ export interface components {
             actual_image_format?: string;
             /** @description 使用的上游 API 格式 */
             api_format: string;
-            /** @description 测试能力：chat / image */
+            /** @description 测试能力：chat / image / embedding */
             capability: string;
             /** @description 失败原因(上游报错/解析失败) */
             error?: string;
@@ -9980,11 +10072,9 @@ export interface components {
         };
         UpstreamAccountTransferAccountDTO: {
             api_key: string;
-            base_url: string;
             /** Format: int32 */
             concurrency_limit?: number;
-            default_provider_family: string;
-            extra_headers?: unknown;
+            endpoints: components["schemas"]["UpstreamAccountTransferEndpointDTO"][] | null;
             model_bindings?: components["schemas"]["UpstreamAccountTransferBindingDTO"][] | null;
             name: string;
             status: string;
@@ -9992,7 +10082,6 @@ export interface components {
             tenant_display_name: string;
         };
         UpstreamAccountTransferBindingDTO: {
-            api_format: string;
             capability_type: string;
             /** Format: int64 */
             image_edit_max_output_count?: number;
@@ -10005,6 +10094,15 @@ export interface components {
             status: string;
             upstream_model_name: string;
         };
+        UpstreamAccountTransferEndpointDTO: {
+            api_format: string;
+            auth_header?: string;
+            auth_scheme?: string;
+            base_url: string;
+            extra_headers?: unknown;
+            path_override?: string;
+            status: string;
+        };
         UpstreamModelBindingDTO: {
             /**
              * Format: uri
@@ -10012,8 +10110,6 @@ export interface components {
              * @example https://example.com/schemas/UpstreamModelBindingDTO.json
              */
             readonly $schema?: string;
-            /** @description 上游 API 格式 */
-            api_format: string;
             /** @description 能力类型 */
             capability_type: string;
             /**
@@ -10067,11 +10163,6 @@ export interface components {
              * @example https://example.com/schemas/UpstreamModelBindingWriteRequest.json
              */
             readonly $schema?: string;
-            /**
-             * @description 上游 API 格式
-             * @enum {string}
-             */
-            api_format?: "openai_chat" | "openai_responses" | "openai_embeddings" | "openai_images" | "anthropic_messages" | "gemini_generate" | "gemini_embeddings";
             /**
              * @description 能力类型；为空时按 model_code 推断
              * @enum {string}
@@ -10333,6 +10424,8 @@ export interface components {
             total_tokens: number;
             /** @description Trace ID */
             trace_id?: string;
+            /** @description 命中的上游账号 ID */
+            upstream_account_id?: string;
             /** @description 上游模型 */
             upstream_model?: string;
             /** @description 是否发生了上游模型名映射 */
@@ -10409,6 +10502,7 @@ export interface components {
             created_at?: number;
             /** Format: double */
             effective_user_multiplier_snapshot?: number;
+            endpoint_id?: string;
             error_code?: string;
             error_message?: string;
             external_user_id?: string;
@@ -10495,6 +10589,7 @@ export interface components {
             /** Format: int32 */
             total_tokens: number;
             trace_id?: string;
+            upstream_account_id?: string;
             /** @description 上游模型 */
             upstream_model?: string;
             upstream_model_mapping_applied: boolean;
@@ -14792,10 +14887,8 @@ export interface operations {
     "ai-infer-model-capability": {
         parameters: {
             query?: {
-                /** @description 对外/上游模型名，用于推断能力与协议 */
+                /** @description 对外/上游模型名，用于建议能力类型 */
                 model_code?: string;
-                /** @description 账号默认上游家族；留空按 openai_compatible 处理 */
-                endpoint_protocol?: "openai_compatible" | "anthropic" | "gemini";
             };
             header?: never;
             path?: never;
@@ -20383,6 +20476,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountDTO"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-list-upstream-account-endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上游账号 ID */
+                accountID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountEndpointsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-create-upstream-account-endpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上游账号 ID */
+                accountID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountEndpointWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountEndpointDTO"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-delete-upstream-account-endpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上游账号 ID */
+                accountID: string;
+                /** @description 请求端点 ID */
+                endpointID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["AppError"];
+                };
+            };
+        };
+    };
+    "ai-update-upstream-account-endpoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上游账号 ID */
+                accountID: string;
+                /** @description 请求端点 ID */
+                endpointID: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountEndpointWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountEndpointDTO"];
                 };
             };
             /** @description Error */

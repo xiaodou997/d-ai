@@ -35,11 +35,11 @@ function upstream(price?: TenantAiPriceBookEntry): TenantAiUpstreamResource {
     resource_kind: "direct_upstream",
     name: "Claude 长期稳定",
     tenant_multiplier: 0.8,
+    api_formats: ["anthropic_messages"],
     models: [
       {
         model_code: "claude-test",
         capability_type: "chat",
-        api_format: "anthropic",
         availability: price ? "available" : "no_price_configured",
         price
       }
@@ -66,12 +66,12 @@ describe("upstream pricing presentation", () => {
 
   it("formats resource metadata consistently", () => {
     expect(formatMultiplier(0.15749)).toBe("×0.1575");
-    expect(protocolLabel("openai_chat")).toBe("OpenAI");
+    expect(protocolLabel("openai_chat")).toBe("OpenAI Chat");
     expect(protocolLabel("gemini_images")).toBe("Gemini");
     expect(protocolTagTone("openai_chat")).toBe("positive");
     expect(protocolTagTone("Anthropic")).toBe("warning");
     expect(protocolTagTone("gemini_images")).toBe("info");
     expect(protocolTagTone("custom_protocol")).toBe("neutral");
-    expect(resourceProtocolLabels(upstream())).toEqual(["Anthropic"]);
+    expect(resourceProtocolLabels(upstream())).toEqual(["Anthropic Messages"]);
   });
 });

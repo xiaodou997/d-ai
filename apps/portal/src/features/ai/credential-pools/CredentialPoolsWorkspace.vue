@@ -194,20 +194,6 @@ const submitPool = async () => {
   }
 }
 
-const defaultBindingProtocolForPool = (pool: any) => {
-  switch (pool?.fixed_provider_type) {
-    case 'claude_oauth':
-      return 'anthropic_messages'
-    case 'gemini_cli':
-    case 'antigravity':
-      return 'gemini_generate'
-    case 'codex':
-      return 'openai_responses'
-    default:
-      return 'openai_chat'
-  }
-}
-
 const handleDeletePool = async (pool: any) => {
   await ElMessageBox.confirm(`确认删除账号池「${pool.name}」？所有凭据将一并删除。`, '危险操作', {
     type: 'error', confirmButtonText: '确认删除', cancelButtonText: '取消',
@@ -505,10 +491,8 @@ const expiryTone = (ms: any) => {
           <UpstreamModelBindingsPanel
             target-kind="pool"
             :target-id="selectedPool.id"
-            :default-binding-protocol="defaultBindingProtocolForPool(selectedPool)"
-            :locked-api-format="defaultBindingProtocolForPool(selectedPool)"
             title="凭证池显式模型绑定"
-            description="显式绑定直接落到 ai_upstream_models。池元数据编辑与模型绑定编辑已彻底分离。"
+            description="模型在凭证池下只维护一次；API 格式由固定供应商运行时决定。"
             empty-text="当前凭证池暂无显式模型绑定。可从预设模型导入后再手工细调。"
             import-button-label="导入预设模型"
             import-dialog-title="导入预设模型"

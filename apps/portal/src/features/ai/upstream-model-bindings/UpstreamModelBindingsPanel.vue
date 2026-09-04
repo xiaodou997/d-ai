@@ -6,12 +6,7 @@ import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
 import { aiAdminApi } from '@/api/aiAdmin'
 import { useModelBindingBatchDelete } from '@/features/ai/upstream-model-bindings'
 import {
-  bindingFormatGroups,
-  bindingFormatValue,
   capabilityOptions,
-  DEFAULT_OPENAI_BINDING_PROTOCOL,
-  OTHER_CAPABILITIES_VALUE,
-  OTHER_CAPABILITY_TYPES,
   protocolOptions,
   statusOptions
 } from './constants'
@@ -25,7 +20,7 @@ interface ImportOption {
   id: string
   label: string
   capabilityType?: string
-  apiFormat?: string
+  apiFormats?: string[]
   exists: boolean
 }
 
@@ -34,8 +29,6 @@ type BindingForm = Required<UpstreamModelBindingWriteRequest>
 const props = withDefaults(defineProps<{
   targetKind: 'account' | 'pool'
   targetId: string
-  defaultBindingProtocol?: string
-  lockedApiFormat?: string
   title?: string
   description?: string
   emptyText?: string
@@ -43,14 +36,12 @@ const props = withDefaults(defineProps<{
   importDialogTitle?: string
   importAlertTitle?: string
 }>(), {
-  defaultBindingProtocol: DEFAULT_OPENAI_BINDING_PROTOCOL,
-  lockedApiFormat: undefined,
   title: '显式模型绑定',
-  description: '显式绑定直接落到 ai_upstream_models，可独立控制 API 格式和上游模型 ID。',
+  description: '模型在账号或凭证池下只维护一次；可用 API 格式由账号端点或凭证池类型决定。',
   emptyText: '暂无显式模型绑定。',
   importButtonLabel: '导入模型',
   importDialogTitle: '导入模型',
-  importAlertTitle: '从预设或上游发现列表里勾选后创建显式绑定，导入协议按模型自动推断。'
+  importAlertTitle: '从预设或上游发现列表里勾选后创建账号级模型绑定。'
 })
 
 const loading = shallowRef(false)
@@ -83,7 +74,6 @@ const {
 const form = reactive<BindingForm>({
   model_code: '',
   capability_type: 'chat',
-  api_format: props.defaultBindingProtocol,
   upstream_model_name: '',
   status: 'active',
   image_stream_mode: 'force_sync',
@@ -92,65 +82,20 @@ const form = reactive<BindingForm>({
   image_max_output_count: 1,
   image_edit_max_output_count: 1
 })
-// comboTouched=true 后，模型标识变化不再触发自动推断覆盖用户已手选的 API 格式。
-const comboTouched = shallowRef(false)
+const capabilityTouched = shallowRef(false)
 const inferringCapability = shallowRef(false)
 
 const isEditing = computed(() => Boolean(editingBindingId.value))
 
-// ── 能力类型 + API 格式合并选择器 ──────────────────────────────────────────────
-// chat/image/embedding 这三个能力用一份"选一项即合法"的分组下拉；video/audio_tts/
-// audio_stt/rerank 目前后端不限制协议，走"其它能力"入口展开原始双选兜底。
-const otherCapabilityOptions = capabilityOptions.filter((item) => OTHER_CAPABILITY_TYPES.includes(item.value))
-const isOtherCapability = computed(() => OTHER_CAPABILITY_TYPES.includes(form.capability_type))
-const filteredBindingFormatGroups = computed(() => {
-  if (!props.lockedApiFormat) return bindingFormatGroups
-  return bindingFormatGroups
-    .map((group) => ({ ...group, options: group.options.filter((o) => o.api_format === props.lockedApiFormat) }))
-    .filter((group) => group.options.length > 0)
-})
-const bindingFormatModel = computed<string>({
-  get() {
-    if (isOtherCapability.value) return OTHER_CAPABILITIES_VALUE
-    return bindingFormatValue(form.capability_type, form.api_format)
-  },
-  set(value: string) {
-    comboTouched.value = true
-    if (value === OTHER_CAPABILITIES_VALUE) {
-      if (!isOtherCapability.value) {
-        form.capability_type = OTHER_CAPABILITY_TYPES[0]
-        form.api_format = protocolOptions[0].value
-      }
-      return
-    }
-    const option = filteredBindingFormatGroups.value.flatMap((group) => group.options).find((o) => o.value === value)
-    if (!option) return
-    form.capability_type = option.capability_type
-    form.api_format = option.api_format
-  }
-})
-
-function endpointProtocolForInfer(): string {
-  switch (props.defaultBindingProtocol) {
-    case 'anthropic_messages':
-      return 'anthropic'
-    case 'gemini_generate':
-      return 'gemini'
-    default:
-      return 'openai_compatible'
-  }
-}
-
 async function handleModelCodeBlur() {
-  if (isEditing.value || comboTouched.value) return
+  if (isEditing.value || capabilityTouched.value) return
   const modelCode = form.model_code.trim()
   if (!modelCode) return
   inferringCapability.value = true
   try {
-    const result = await aiAdminApi.inferModelCapability(modelCode, endpointProtocolForInfer())
-    if (comboTouched.value) return // 推断请求期间用户已手动选择，不覆盖
+    const result = await aiAdminApi.inferModelCapability(modelCode)
+    if (capabilityTouched.value) return
     form.capability_type = result.capability_type
-    form.api_format = result.api_format
   } catch {
     // 推断只是默认值建议，失败静默忽略，不影响手动选择
   } finally {
@@ -162,19 +107,19 @@ const filteredImportItems = computed(() => {
   return importItems.value.filter((item) => {
     if (importOnlyAvailable.value && item.exists) return false
     if (importCapabilityFilter.value && item.capabilityType !== importCapabilityFilter.value) return false
-    if (importSourceProtocolFilter.value && item.apiFormat !== importSourceProtocolFilter.value) return false
+    if (importSourceProtocolFilter.value && !item.apiFormats?.includes(importSourceProtocolFilter.value)) return false
     if (!keyword) return true
     return [
       item.id,
       item.label,
       item.capabilityType || '',
-      item.apiFormat || ''
+      ...(item.apiFormats || [])
     ].some((value) => value.toLowerCase().includes(keyword))
   })
 })
 const importableFilteredItems = computed(() => filteredImportItems.value.filter((item) => !item.exists))
 const importSourceProtocolOptions = computed(() => {
-  const protocols = new Set(importItems.value.map((item) => item.apiFormat).filter(Boolean) as string[])
+  const protocols = new Set(importItems.value.flatMap((item) => item.apiFormats || []))
   return [...protocols].sort().map((value) => ({ value, label: protocolLabel(value) }))
 })
 const importSelectedCount = computed(() => importSelected.value.length)
@@ -247,7 +192,6 @@ async function toggleBindingStatus(row: UpstreamModelBindingDTO) {
   const payload: UpstreamModelBindingWriteRequest = {
     model_code: row.model_code,
     capability_type: row.capability_type,
-    api_format: row.api_format,
     upstream_model_name: row.upstream_model_name || undefined,
     status: next,
     image_stream_mode: row.image_stream_mode || 'force_sync',
@@ -298,11 +242,10 @@ function clearImportSelected() {
 
 function resetForm() {
   editingBindingId.value = ''
-  comboTouched.value = false
+  capabilityTouched.value = false
   inferringCapability.value = false
   form.model_code = ''
   form.capability_type = 'chat'
-  form.api_format = props.defaultBindingProtocol
   form.upstream_model_name = ''
   form.status = 'active'
   form.image_stream_mode = 'force_sync'
@@ -319,11 +262,10 @@ function openCreate() {
 
 function openEdit(row: UpstreamModelBindingDTO) {
   editingBindingId.value = row.id
-  comboTouched.value = true // 编辑态不触发 model_code blur 自动推断覆盖
+  capabilityTouched.value = true
   inferringCapability.value = false
   form.model_code = row.model_code
   form.capability_type = row.capability_type
-  form.api_format = row.api_format
   form.upstream_model_name = row.upstream_model_name
   form.status = row.status
   form.image_stream_mode = row.image_stream_mode || 'force_sync'
@@ -338,7 +280,6 @@ function buildPayload(): UpstreamModelBindingWriteRequest {
   return {
     model_code: form.model_code.trim(),
     capability_type: form.capability_type,
-    api_format: form.api_format,
     upstream_model_name: form.upstream_model_name.trim() || undefined,
     status: form.status,
     image_stream_mode: form.image_stream_mode,
@@ -429,7 +370,7 @@ function mapAccountImportItem(item: DiscoveredUpstreamModelDTO): ImportOption {
     id: item.id,
     label: item.name || item.id,
     capabilityType: item.capability_type,
-    apiFormat: item.api_format,
+    apiFormats: item.api_formats,
     exists: item.exists
   }
 }
@@ -516,7 +457,7 @@ watch(
           <p class="panel-table-label">当前绑定</p>
           <p class="panel-table-value">{{ bindingCountLabel }}</p>
         </div>
-        <p class="panel-table-hint">每条绑定单独声明对外模型、上游格式与调度权重。</p>
+        <p class="panel-table-hint">每个模型只维护一次，上游格式由请求端点决定。</p>
       </div>
 
       <div v-if="selectedCount" class="batch-action-bar">
@@ -554,9 +495,6 @@ watch(
         <el-table-column label="能力" width="110">
           <template #default="{ row }">{{ capabilityLabel(row.capability_type) }}</template>
         </el-table-column>
-        <el-table-column label="API 格式" min-width="170" show-overflow-tooltip>
-          <template #default="{ row }">{{ protocolLabel(row.api_format) }}</template>
-        </el-table-column>
         <el-table-column prop="upstream_model_name" label="上游模型 ID" min-width="180" show-overflow-tooltip />
         <el-table-column label="生图策略" min-width="210" show-overflow-tooltip>
           <template #default="{ row }">
@@ -592,29 +530,14 @@ watch(
       <el-form label-width="128px">
         <el-form-item label="模型标识" required>
           <el-input v-model="form.model_code" placeholder="如 gpt-5.4 / claude-opus-4-1" @blur="handleModelCodeBlur" />
-          <p v-if="inferringCapability" class="field-hint">正在按模型标识推断能力与 API 格式…</p>
+          <p v-if="inferringCapability" class="field-hint">正在按模型标识推断能力…</p>
         </el-form-item>
-        <el-form-item label="API 格式" required>
-          <el-select v-model="bindingFormatModel" class="w-full">
-            <el-option-group v-for="group in filteredBindingFormatGroups" :key="group.capability_type" :label="group.label">
-              <el-option v-for="opt in group.options" :key="opt.value" :label="opt.label" :value="opt.value" />
-            </el-option-group>
-            <el-option v-if="!lockedApiFormat" :value="OTHER_CAPABILITIES_VALUE" label="其它能力（视频/语音合成/语音识别/重排）" />
+        <el-form-item label="能力类型" required>
+          <el-select v-model="form.capability_type" class="w-full" @change="capabilityTouched = true">
+            <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
-          <p class="field-hint">输入模型标识后会自动带出建议组合，仍可在此改选其它合法组合。</p>
+          <p class="field-hint">输入模型标识后会自动建议能力；请求格式在账号端点中维护。</p>
         </el-form-item>
-        <template v-if="isOtherCapability">
-          <el-form-item label="能力类型" required>
-            <el-select v-model="form.capability_type" class="w-full">
-              <el-option v-for="item in otherCapabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="API 格式" required>
-            <el-select v-model="form.api_format" class="w-full">
-              <el-option v-for="item in protocolOptions" :key="item.value" :label="item.label" :value="item.value" />
-            </el-select>
-          </el-form-item>
-        </template>
         <el-form-item label="上游模型 ID">
           <el-input v-model="form.upstream_model_name" placeholder="留空时默认同模型标识" />
         </el-form-item>
@@ -658,7 +581,7 @@ watch(
       <div v-loading="importLoading">
         <el-alert type="info" :closable="false" class="mb-2" :title="importAlertTitle" />
         <div class="import-toolbar">
-          <el-input v-model="importKeyword" clearable placeholder="搜索模型名 / 能力 / API 格式" />
+          <el-input v-model="importKeyword" clearable placeholder="搜索模型名 / 能力 / 来源格式" />
           <el-select v-model="importCapabilityFilter" clearable placeholder="全部能力">
             <el-option v-for="item in capabilityOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
@@ -692,7 +615,7 @@ watch(
               <span class="import-model">{{ item.id }}</span>
               <span class="import-meta">
                 <el-tag v-if="item.capabilityType" size="small" effect="plain">{{ capabilityLabel(item.capabilityType) }}</el-tag>
-                <el-tag v-if="item.apiFormat" size="small" type="info" effect="plain">{{ protocolLabel(item.apiFormat) }}</el-tag>
+                <el-tag v-for="format in item.apiFormats || []" :key="format" size="small" type="info" effect="plain">{{ protocolLabel(format) }}</el-tag>
                 <el-tag v-if="item.exists" size="small" type="warning" effect="plain">已存在</el-tag>
               </span>
             </span>

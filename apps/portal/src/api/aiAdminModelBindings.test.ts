@@ -16,7 +16,6 @@ const binding = {
   id: "binding-1",
   model_code: "gpt-4o",
   capability_type: "chat",
-  api_format: "openai_chat",
   upstream_model_name: "gpt-4o-2024-08-06",
   status: "active",
   image_stream_mode: "force_sync",
@@ -76,7 +75,6 @@ describe("AI admin generated model binding facade", () => {
     const writeBody = {
       model_code: "gpt-4o",
       capability_type: "chat",
-      api_format: "openai_chat",
       upstream_model_name: "gpt-4o-2024-08-06",
       status: "active",
       image_stream_mode: "force_sync",
@@ -91,17 +89,17 @@ describe("AI admin generated model binding facade", () => {
     await expect(aiAdminApi.deleteAccountModelBinding("account/1", "binding/1")).resolves.toEqual({ deleted: true });
     await expect(aiAdminApi.testUpstreamAccount("account/1", {
       model_code: "gpt-4o",
+      api_format: "openai_chat",
       prompt: "hello",
       image_edit: false
     })).resolves.toMatchObject({ ok: true, upstream_model: "gpt-4o-2024-08-06" });
     await expect(aiAdminApi.importAccountUpstreamModels("account/1", {
-      models: ["gpt-4o"],
-      api_format: "openai_chat"
+      models: ["gpt-4o"]
     })).resolves.toEqual({ created: [], skipped: ["gpt-4o"] });
 
     expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({
       pathParams: { accountID: "account/1" },
-      body: { capability_type: "chat", api_format: "openai_chat", image_upstream_response_format: "" }
+      body: { capability_type: "chat", image_upstream_response_format: "" }
     });
     expect(mocks.request.mock.calls[1]?.[0]).toMatchObject({
       path: "/api/v1/upstream-accounts/account%2F1/model-bindings/binding%2F1",
@@ -109,16 +107,16 @@ describe("AI admin generated model binding facade", () => {
     });
     expect(mocks.request.mock.calls[3]?.[0]).toMatchObject({
       pathParams: { accountID: "account/1" },
-      body: { model_code: "gpt-4o", prompt: "hello" }
+      body: { model_code: "gpt-4o", api_format: "openai_chat", prompt: "hello" }
     });
     expect(mocks.request.mock.calls[4]?.[0]).toMatchObject({
-      body: { models: ["gpt-4o"], api_format: "openai_chat" }
+      body: { models: ["gpt-4o"] }
     });
   });
 
   it("maps capability inference and pool model operations with nullable collections", async () => {
     mocks.request
-      .mockResolvedValueOnce({ capability_type: "image", api_format: "openai_images", source: "heuristic", $schema: "ignored" })
+      .mockResolvedValueOnce({ capability_type: "image", source: "heuristic", $schema: "ignored" })
       .mockResolvedValueOnce({
         pool_id: "pool-1",
         fixed_provider_type: "codex",
@@ -134,9 +132,8 @@ describe("AI admin generated model binding facade", () => {
       .mockResolvedValueOnce({ deleted: true })
       .mockResolvedValueOnce({ created: null, skipped: null });
 
-    await expect(aiAdminApi.inferModelCapability("image-1", "openai_compatible")).resolves.toEqual({
+    await expect(aiAdminApi.inferModelCapability("image-1")).resolves.toEqual({
       capability_type: "image",
-      api_format: "openai_images",
       source: "heuristic"
     });
     await expect(aiAdminApi.getPoolAvailableModels("pool/1")).resolves.toMatchObject({ pool_id: "pool-1", models: [], source: "cache" });
@@ -147,7 +144,7 @@ describe("AI admin generated model binding facade", () => {
     await expect(aiAdminApi.importPoolAvailableModels("pool/1", { models: ["gpt-4o"] })).resolves.toEqual({ created: [], skipped: [] });
 
     expect(mocks.request.mock.calls[0]?.[0]).toMatchObject({
-      query: { model_code: "image-1", endpoint_protocol: "openai_compatible" }
+      query: { model_code: "image-1" }
     });
     expect(mocks.request.mock.calls[1]?.[0]).toMatchObject({
       path: "/api/v1/credential-pools/pool%2F1/available-models",
@@ -162,11 +159,10 @@ describe("AI admin generated model binding facade", () => {
     expect(() => aiAdminApi.createAccountModelBinding("account-1", { capability_type: "unknown" })).toThrow(
       "Unexpected upstream capability type"
     );
-    expect(() => aiAdminApi.inferModelCapability("gpt-4o", "azure")).toThrow("Unexpected endpoint protocol");
     expect(mocks.request).not.toHaveBeenCalled();
 
     mocks.request.mockResolvedValueOnce({ ...testResult, image_upstream_response_format: "xml" });
-    await expect(aiAdminApi.testUpstreamAccount("account-1", { model_code: "gpt-4o" })).rejects.toThrow(
+    await expect(aiAdminApi.testUpstreamAccount("account-1", { model_code: "gpt-4o", api_format: "openai_chat" })).rejects.toThrow(
       "Unexpected image upstream response format"
     );
   });

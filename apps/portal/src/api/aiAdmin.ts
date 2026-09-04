@@ -10,6 +10,8 @@ import type {
   AccountDTO,
   AccountsOutputBody,
   AccountWriteRequest,
+  UpstreamAccountEndpointDTO,
+  UpstreamAccountEndpointWriteRequest,
   UpstreamAccountTransferBindingDTO,
   UpstreamAccountTransferAccountDTO,
   UpstreamAccountExportOutputBody,
@@ -78,12 +80,15 @@ type PriceBookEntryTransport = components["schemas"]["PriceBookEntryDTO"];
 type PriceBookPageTransport = OperationResponse<"ai-list-price-books">;
 type PriceBookEntriesPageTransport = OperationResponse<"ai-list-price-book-entries">;
 type AccountTransport = components["schemas"]["AccountDTO"];
+type AccountEndpointTransport = components["schemas"]["AccountEndpointDTO"];
+type AccountEndpointsTransport = OperationResponse<"ai-list-upstream-account-endpoints">;
 type AccountsPageTransport = OperationResponse<"ai-list-upstream-accounts">;
 type AccountExportTransport = OperationResponse<"ai-export-upstream-accounts">;
 type AccountImportPreviewTransport = OperationResponse<"ai-preview-import-upstream-accounts">;
 type AccountImportTransport = OperationResponse<"ai-import-upstream-accounts">;
 type AccountTransferTransport = components["schemas"]["UpstreamAccountTransferAccountDTO"];
 type AccountTransferBindingTransport = components["schemas"]["UpstreamAccountTransferBindingDTO"];
+type AccountTransferEndpointTransport = components["schemas"]["UpstreamAccountTransferEndpointDTO"];
 type DiscoveredModelsTransport = OperationResponse<"ai-fetch-account-upstream-models">;
 type UpstreamModelBindingTransport = components["schemas"]["UpstreamModelBindingDTO"];
 type UpstreamModelBindingsTransport = OperationResponse<"ai-list-account-model-bindings">;
@@ -131,11 +136,9 @@ type RiskEventResolutionStatus = RiskEventResolutionBody["status"];
 type RiskTestTransport = OperationResponse<"ai-test-risk-control-moderation">;
 type SystemStatusTransport = OperationResponse<"ai-get-system-status">;
 type BindingWriteBody = OperationBody<"ai-create-account-model-binding">;
-type BindingApiFormat = NonNullable<BindingWriteBody["api_format"]>;
 type BindingCapabilityType = NonNullable<BindingWriteBody["capability_type"]>;
 type BindingImageStreamMode = NonNullable<BindingWriteBody["image_stream_mode"]>;
 type BindingStatus = NonNullable<BindingWriteBody["status"]>;
-type InferEndpointProtocol = NonNullable<OperationQuery<"ai-infer-model-capability">["endpoint_protocol"]>;
 
 function stripSchema<T>(value: T): Omit<T, "$schema"> {
   const { $schema: _schema, ...rest } = value as T & { $schema?: string };
@@ -186,20 +189,11 @@ function toPriceBookEntryBody(value: PriceBookEntryWriteRequest): OperationBody<
   };
 }
 
-function toProviderFamily(value: string | undefined): "openai_compatible" | "anthropic" | "gemini" | undefined {
-  if (value === undefined || value === "openai_compatible" || value === "anthropic" || value === "gemini") return value;
-  throw new Error(`Unexpected upstream provider family: ${value}`);
-}
-
 function toAccountBodyFields(value: AccountWriteRequest) {
-  const providerFamily = toProviderFamily(value.default_provider_family);
   return {
     name: value.name,
     tenant_display_name: value.tenant_display_name,
     tenant_access_mode: value.tenant_access_mode,
-    base_url: value.base_url,
-    extra_headers: value.extra_headers,
-    default_provider_family: providerFamily,
     concurrency_limit: value.concurrency_limit ?? undefined,
     price_book_id: value.price_book_id,
     tenant_multiplier: value.tenant_multiplier
@@ -208,7 +202,8 @@ function toAccountBodyFields(value: AccountWriteRequest) {
 
 function toCreateAccountBody(value: AccountWriteRequest): OperationBody<"ai-create-upstream-account"> {
   if (typeof value.api_key !== "string") throw new Error("upstream API key is required");
-  return { ...toAccountBodyFields(value), api_key: value.api_key };
+  if (!value.endpoints?.length) throw new Error("at least one upstream endpoint is required");
+  return { ...toAccountBodyFields(value), api_key: value.api_key, endpoints: value.endpoints };
 }
 
 function toUpdateAccountBody(value: AccountWriteRequest): OperationBody<"ai-update-upstream-account"> {
@@ -227,9 +222,7 @@ function toAccount(value: AccountTransport): AccountDTO {
     name: value.name,
     tenant_display_name: value.tenant_display_name,
     tenant_access_mode: value.tenant_access_mode,
-    base_url: value.base_url,
-    extra_headers: value.extra_headers,
-    default_provider_family: value.default_provider_family,
+    endpoints: value.endpoints?.map(toAccountEndpoint) ?? [],
     concurrency_limit: value.concurrency_limit,
     price_book_id: value.price_book_id,
     tenant_multiplier: value.tenant_multiplier,
@@ -239,6 +232,29 @@ function toAccount(value: AccountTransport): AccountDTO {
     created_at: value.created_at,
     updated_at: value.updated_at
   };
+}
+
+function toAccountEndpoint(value: AccountEndpointTransport): UpstreamAccountEndpointDTO {
+  return {
+    id: value.id,
+    account_id: value.account_id,
+    api_format: value.api_format,
+    base_url: value.base_url,
+    path_override: value.path_override,
+    auth_scheme: value.auth_scheme,
+    auth_header: value.auth_header,
+    extra_headers: value.extra_headers,
+    status: value.status,
+    health_status: value.health_status,
+    last_error: value.last_error,
+    last_checked_at: value.last_checked_at,
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  };
+}
+
+function toAccountEndpoints(value: AccountEndpointsTransport) {
+  return { items: value.items?.map(toAccountEndpoint) ?? [], total: value.total };
 }
 
 function toAccounts(value: AccountsPageTransport): AccountsOutputBody {
@@ -255,7 +271,6 @@ function toTransferBinding(value: AccountTransferBindingTransport): UpstreamAcco
   return {
     model_code: value.model_code,
     capability_type: value.capability_type,
-    api_format: value.api_format,
     upstream_model_name: value.upstream_model_name,
     status: value.status,
     image_stream_mode: value.image_stream_mode,
@@ -263,6 +278,18 @@ function toTransferBinding(value: AccountTransferBindingTransport): UpstreamAcco
     image_upstream_response_format: value.image_upstream_response_format,
     image_max_output_count: value.image_max_output_count,
     image_edit_max_output_count: value.image_edit_max_output_count
+  };
+}
+
+function toTransferEndpoint(value: AccountTransferEndpointTransport) {
+  return {
+    api_format: value.api_format,
+    base_url: value.base_url,
+    path_override: value.path_override,
+    auth_scheme: value.auth_scheme,
+    auth_header: value.auth_header,
+    extra_headers: value.extra_headers,
+    status: value.status
   };
 }
 
@@ -274,12 +301,10 @@ function toTransferAccount(value: AccountTransferTransport): UpstreamAccountTran
     name: value.name,
     tenant_display_name: value.tenant_display_name,
     tenant_access_mode: value.tenant_access_mode,
-    base_url: value.base_url,
     api_key: value.api_key,
-    default_provider_family: value.default_provider_family,
     concurrency_limit: value.concurrency_limit,
     status: value.status,
-    extra_headers: value.extra_headers,
+    endpoints: value.endpoints?.map(toTransferEndpoint) ?? [],
     model_bindings: value.model_bindings?.map(toTransferBinding) ?? []
   };
 }
@@ -304,12 +329,10 @@ function toAccountImportRequest(value: UpstreamAccountImportRequest): OperationB
       name: account.name,
       tenant_display_name: account.tenant_display_name,
       tenant_access_mode: account.tenant_access_mode,
-      base_url: account.base_url,
       api_key: account.api_key,
-      default_provider_family: account.default_provider_family,
       concurrency_limit: account.concurrency_limit,
       status: account.status,
-      extra_headers: account.extra_headers,
+      endpoints: account.endpoints.map((endpoint) => ({ ...endpoint })),
       model_bindings: account.model_bindings?.map((binding) => ({ ...binding })) ?? []
     })),
     default_price_book_id: value.default_price_book_id,
@@ -323,7 +346,7 @@ function toAccountImportPreview(value: AccountImportPreviewTransport): UpstreamA
   return {
     items: value.items?.map((item) => ({
       name: item.name,
-      base_url: item.base_url,
+      endpoint_count: item.endpoint_count,
       action: toImportAction(item.action),
       reason: item.reason,
       model_binding_count: item.model_binding_count,
@@ -342,20 +365,6 @@ function toAccountImport(value: AccountImportTransport): UpstreamAccountImportOu
     skipped_model_bindings: value.skipped_model_bindings?.map((item) => ({ ...item })) ?? [],
     summary: value.summary
   };
-}
-
-function toBindingApiFormat(value: string | undefined): BindingApiFormat | undefined {
-  if (
-    value === undefined ||
-    value === "openai_chat" ||
-    value === "openai_responses" ||
-    value === "openai_embeddings" ||
-    value === "openai_images" ||
-    value === "anthropic_messages" ||
-    value === "gemini_generate" ||
-    value === "gemini_embeddings"
-  ) return value;
-  throw new Error(`Unexpected upstream API format: ${value}`);
 }
 
 function toBindingCapabilityType(value: string | undefined): BindingCapabilityType | undefined {
@@ -391,7 +400,6 @@ function toAccountModelBindingBody(value: UpstreamModelBindingWriteRequest): Bin
   return {
     model_code: value.model_code,
     capability_type: toBindingCapabilityType(value.capability_type),
-    api_format: toBindingApiFormat(value.api_format),
     upstream_model_name: value.upstream_model_name,
     status: toBindingStatus(value.status),
     image_stream_mode: toBindingImageStreamMode(value.image_stream_mode),
@@ -403,7 +411,7 @@ function toAccountModelBindingBody(value: UpstreamModelBindingWriteRequest): Bin
 }
 
 function toDiscoveredModels(value: DiscoveredModelsTransport): { items: DiscoveredUpstreamModelDTO[] } {
-  return { items: value.items?.map((item) => stripSchema(item)) ?? [] };
+  return { items: value.items?.map((item) => ({ ...stripSchema(item), api_formats: item.api_formats ?? [] })) ?? [] };
 }
 
 function toUpstreamModelBinding(value: UpstreamModelBindingTransport): UpstreamModelBindingDTO {
@@ -417,6 +425,7 @@ function toUpstreamModelBindings(value: UpstreamModelBindingsTransport): Upstrea
 function toAccountTestBody(value: UpstreamAccountTestRequest): OperationBody<"ai-test-account-upstream"> {
   return {
     model_code: value.model_code,
+    api_format: value.api_format,
     prompt: value.prompt,
     image_edit: value.image_edit,
     image: value.image ? { ...value.image } : undefined
@@ -461,10 +470,7 @@ function toImportedModels(value: AccountModelImportTransport | PoolModelImportTr
 }
 
 function toAccountModelImportBody(value: ImportUpstreamModelsRequest): OperationBody<"ai-import-account-upstream-models"> {
-  return {
-    models: value.models,
-    api_format: toBindingApiFormat(value.api_format)
-  };
+  return { models: value.models };
 }
 
 function toPoolModelImportBody(value: { models: string[] }): OperationBody<"ai-import-pool-available-models"> {
@@ -480,15 +486,9 @@ function toPoolAvailableModels(value: PoolAvailableModelsTransport): PoolAvailab
   };
 }
 
-function toInferEndpointProtocol(value: string | undefined): InferEndpointProtocol | undefined {
-  if (value === undefined || value === "openai_compatible" || value === "anthropic" || value === "gemini") return value;
-  throw new Error(`Unexpected endpoint protocol: ${value}`);
-}
-
 function toModelCapability(value: OperationResponse<"ai-infer-model-capability">): ModelCapabilityInferResult {
   return {
     capability_type: value.capability_type,
-    api_format: value.api_format,
     source: value.source
   };
 }
@@ -947,6 +947,44 @@ export const aiAdminApi = {
       baseUrl: apiBaseUrl
     }).then(toAccount);
   },
+  listUpstreamAccountEndpoints(accountId: string) {
+    return typedRequest<"ai-list-upstream-account-endpoints">({
+      method: "GET",
+      path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/endpoints`,
+      pathParams: { accountID: accountId },
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    }).then(toAccountEndpoints);
+  },
+  createUpstreamAccountEndpoint(accountId: string, body: UpstreamAccountEndpointWriteRequest) {
+    return typedRequest<"ai-create-upstream-account-endpoint">({
+      method: "POST",
+      path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/endpoints`,
+      pathParams: { accountID: accountId },
+      headers: apiHeaders,
+      body,
+      baseUrl: apiBaseUrl
+    }).then(toAccountEndpoint);
+  },
+  updateUpstreamAccountEndpoint(accountId: string, endpointId: string, body: UpstreamAccountEndpointWriteRequest) {
+    return typedRequest<"ai-update-upstream-account-endpoint">({
+      method: "PATCH",
+      path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/endpoints/${encodeURIComponent(endpointId)}`,
+      pathParams: { accountID: accountId, endpointID: endpointId },
+      headers: apiHeaders,
+      body,
+      baseUrl: apiBaseUrl
+    }).then(toAccountEndpoint);
+  },
+  deleteUpstreamAccountEndpoint(accountId: string, endpointId: string) {
+    return typedRequest<"ai-delete-upstream-account-endpoint">({
+      method: "DELETE",
+      path: `/api/v1/upstream-accounts/${encodeURIComponent(accountId)}/endpoints/${encodeURIComponent(endpointId)}`,
+      pathParams: { accountID: accountId, endpointID: endpointId },
+      headers: apiHeaders,
+      baseUrl: apiBaseUrl
+    }).then((value) => ({ deleted: value.deleted }));
+  },
   updateUpstreamAccountStatus(accountId: string, status: "active" | "disabled") {
     return typedRequest<"ai-update-upstream-account-status">({
       method: "PATCH",
@@ -1061,12 +1099,12 @@ export const aiAdminApi = {
       baseUrl: apiBaseUrl
     }).then(toImportedModels);
   },
-  inferModelCapability(modelCode: string, endpointProtocol?: string) {
+  inferModelCapability(modelCode: string) {
     return typedRequest<"ai-infer-model-capability">({
       method: "GET",
       path: "/api/v1/model-capability/infer",
       headers: apiHeaders,
-      query: { model_code: modelCode, endpoint_protocol: toInferEndpointProtocol(endpointProtocol || undefined) },
+      query: { model_code: modelCode },
       baseUrl: apiBaseUrl
     }).then(toModelCapability);
   },
