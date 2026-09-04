@@ -3,9 +3,9 @@
 
 Source: `contracts/openapi.yaml`
 
-Contract SHA-256: `85799059936717e73f64f38f39e8f41ec7fa9b0c6bb55f9a5e9abb37cf1aa2ee`
+Contract SHA-256: `805703f29c6b1febd6f9fe7b8c5617cb3fa273bba0aa648ea1980433340b3962`
 
-Coverage: **324/324 operations (100%)**
+Coverage: **328/328 operations (100%)**
 
 The matrix is a review artifact and a generation gate. Middleware and application services remain the enforcement points; `ownership` describes the second authorization check required after capability admission.
 
@@ -16,7 +16,7 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `api_key_or_session` | 4 | `api_key_or_session` | `resource` |
 | `authenticated` | 13 | `authenticated` | `actor.user` |
 | `customer_self` | 28 | `customer_self` | `actor.user` |
-| `platform_admin` | 155 | `platform_admin` | `actor.user` |
+| `platform_admin` | 159 | `platform_admin` | `actor.user` |
 | `platform_or_tenant` | 8 | `platform_or_tenant` | `actor.tenant/resource` |
 | `public` | 9 | `public` | `none` |
 | `super_admin` | 2 | `super_admin` | `global` |
@@ -298,6 +298,10 @@ The matrix is a review artifact and a generation gate. Middleware and applicatio
 | `POST` | `/api/v1/upstream-accounts/import/preview` | `ai-preview-import-upstream-accounts` | `platform_admin` | `global/resource` |
 | `DELETE` | `/api/v1/upstream-accounts/{accountID}` | `ai-delete-upstream-account` | `platform_admin` | `global/resource` |
 | `PATCH` | `/api/v1/upstream-accounts/{accountID}` | `ai-update-upstream-account` | `platform_admin` | `global/resource` |
+| `GET` | `/api/v1/upstream-accounts/{accountID}/endpoints` | `ai-list-upstream-account-endpoints` | `platform_admin` | `global/resource` |
+| `POST` | `/api/v1/upstream-accounts/{accountID}/endpoints` | `ai-create-upstream-account-endpoint` | `platform_admin` | `global/resource` |
+| `DELETE` | `/api/v1/upstream-accounts/{accountID}/endpoints/{endpointID}` | `ai-delete-upstream-account-endpoint` | `platform_admin` | `global/resource` |
+| `PATCH` | `/api/v1/upstream-accounts/{accountID}/endpoints/{endpointID}` | `ai-update-upstream-account-endpoint` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/upstream-accounts/{accountID}/import-upstream-models` | `ai-import-account-upstream-models` | `platform_admin` | `global/resource` |
 | `GET` | `/api/v1/upstream-accounts/{accountID}/model-bindings` | `ai-list-account-model-bindings` | `platform_admin` | `global/resource` |
 | `POST` | `/api/v1/upstream-accounts/{accountID}/model-bindings` | `ai-create-account-model-binding` | `platform_admin` | `global/resource` |
