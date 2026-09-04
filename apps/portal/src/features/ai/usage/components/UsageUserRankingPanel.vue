@@ -9,9 +9,9 @@ import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRankingRow, UsageFilterChip } from "../model";
 import {
-  formatNumber,
+  formatCompactNumber, formatNumber,
   formatTimestamp,
-  formatUSD
+  formatUSD2
 } from "../format";
 
 const props = defineProps<{
@@ -132,11 +132,11 @@ function handleTableClick(event: MouseEvent) {
         </template>
 
         <template #cell-total_tokens="{ row }">
-          {{ formatNumber(row.total_tokens) }}
+          {{ formatCompactNumber(row.total_tokens) }}
         </template>
 
         <template #cell-charged="{ row }">
-          <span class="ranking-cost">{{ formatUSD(row.total_user_charged_usd) }}</span>
+          <span class="ranking-cost">{{ formatUSD2(row.total_user_charged_usd) }}</span>
         </template>
 
         <template #cell-outcome="{ row }">

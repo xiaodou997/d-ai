@@ -39,9 +39,23 @@ export function formatNumber(value: number | string | null | undefined): string 
   });
 }
 
+export function formatCompactNumber(value: number | string | null | undefined): string {
+  const n = Number(value) || 0;
+  const abs = Math.abs(n);
+  if (abs < 1000) return n.toFixed(2).replace(/\.00$/, "");
+  const unit = abs >= 1e9 ? "B" : abs >= 1e6 ? "M" : "K";
+  const divisor = unit === "B" ? 1e9 : unit === "M" ? 1e6 : 1e3;
+  return `${(n / divisor).toFixed(2)}${unit}`;
+}
+
 export function formatUSD(value: number | string | null | undefined): string {
   const numeric = Number(value) || 0;
   return `$${numeric.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+}
+
+export function formatUSD2(value: number | string | null | undefined): string {
+  const numeric = Number(value) || 0;
+  return `$${numeric.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatPercent(value: number, digits = 1): string {

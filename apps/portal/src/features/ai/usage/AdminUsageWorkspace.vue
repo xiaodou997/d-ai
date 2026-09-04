@@ -33,6 +33,7 @@ const {
   changePage,
   changePageSize,
   changeRange,
+  customRange,
   changeTab,
   errorPagination,
   errorRows,
@@ -101,6 +102,8 @@ function switchToRecords() {
         <UsageRangeSelector
           :model-value="selectedRangeId"
           :options="WORKBENCH_RANGE_OPTIONS"
+          v-model:custom-range="customRange"
+          @update:custom-range="() => { if (customRange) void changeRange('custom') }"
           @update:model-value="changeRange"
         />
       </template>

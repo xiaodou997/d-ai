@@ -7,7 +7,7 @@ import { computed } from "vue";
 import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 
 import type { UsageFilterChip, UsageUpstreamSummaryRowDTO } from "../model";
-import { formatNumber, formatUSD } from "../format";
+import { formatCompactNumber, formatNumber, formatUSD2 } from "../format";
 
 const props = defineProps<{
   filterChips: UsageFilterChip[];
@@ -105,15 +105,15 @@ function successRate(row: UsageUpstreamSummaryRowDTO) {
       </template>
 
       <template #cell-prompt_tokens="{ row }">
-        {{ formatNumber(row.total_prompt_tokens) }}
+        {{ formatCompactNumber(row.total_prompt_tokens) }}
       </template>
 
       <template #cell-completion_tokens="{ row }">
-        {{ formatNumber(row.total_completion_tokens) }}
+        {{ formatCompactNumber(row.total_completion_tokens) }}
       </template>
 
       <template #cell-total_tokens="{ row }">
-        {{ formatNumber(row.total_tokens) }}
+        {{ formatCompactNumber(row.total_tokens) }}
       </template>
 
       <template #cell-image_units="{ row }">
@@ -121,7 +121,7 @@ function successRate(row: UsageUpstreamSummaryRowDTO) {
       </template>
 
       <template #cell-payable="{ row }">
-        <span class="upstream-payable">{{ formatUSD(row.tenant_payable_usd) }}</span>
+        <span class="upstream-payable">{{ formatUSD2(row.tenant_payable_usd) }}</span>
       </template>
     </DsTable>
   </section>

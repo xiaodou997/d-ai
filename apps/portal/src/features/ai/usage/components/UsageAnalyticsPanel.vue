@@ -9,7 +9,7 @@ import {
 
 import type { AdminUsageRow, DailyTrendRowDTO, UsageMetric } from "../model";
 import type { UsageDistributionItem } from "../format";
-import { formatNumber, formatPercent, formatTimestamp, formatUSD, resolveRequestTotalMs } from "../format";
+import { formatCompactNumber, formatNumber, formatPercent, formatTimestamp, formatUSD2, resolveRequestTotalMs } from "../format";
 import UsageTrendChart from "./UsageTrendChart.vue";
 
 interface TrendSeries {
@@ -60,7 +60,7 @@ const emit = defineEmits<{
               <div class="usage-dist-row__fill" :style="{ width: `${item.percent}%` }"></div>
             </div>
             <div class="usage-dist-row__meta">
-              <span>{{ formatUSD(item.amountUSD) }}</span>
+              <span>{{ formatUSD2(item.amountUSD) }}</span>
               <span>{{ formatNumber(item.requests) }} 次</span>
             </div>
           </article>
@@ -79,8 +79,8 @@ const emit = defineEmits<{
               <div class="usage-dist-row__fill usage-dist-row__fill--info" :style="{ width: `${item.percent}%` }"></div>
             </div>
             <div class="usage-dist-row__meta">
-              <span>{{ formatUSD(item.amountUSD) }}</span>
-              <span>{{ formatNumber(item.units || 0) }} 计费量</span>
+              <span>{{ formatUSD2(item.amountUSD) }}</span>
+              <span>{{ formatCompactNumber(item.units || 0) }} 计费量</span>
             </div>
           </article>
           <p v-if="!unitDistribution.length" class="usage-empty">暂无计费单位结构数据</p>

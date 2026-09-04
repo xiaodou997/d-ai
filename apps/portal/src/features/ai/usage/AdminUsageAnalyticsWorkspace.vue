@@ -30,6 +30,7 @@ const {
   WORKBENCH_RANGE_OPTIONS,
   analyticsMetrics,
   changeRange,
+  customRange,
   failedLogs,
   isPlatformAdmin,
   loadRanking,
@@ -109,6 +110,8 @@ function handleSelectUser(userId: string) {
         <UsageRangeSelector
           :model-value="selectedRangeId"
           :options="WORKBENCH_RANGE_OPTIONS"
+          v-model:custom-range="customRange"
+          @update:custom-range="() => { if (customRange) void changeRange('custom') }"
           @update:model-value="handleRangeChange"
         />
       </template>

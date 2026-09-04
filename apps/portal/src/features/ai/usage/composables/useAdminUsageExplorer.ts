@@ -34,7 +34,7 @@ import {
   buildSummaryTotals,
   buildTokenTrendSeries,
   buildUnitDistribution,
-  formatNumber,
+  formatCompactNumber, formatNumber, formatUSD2,
   formatPercent,
   formatUSD,
   resolveRequestTotalMs
@@ -76,6 +76,7 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
 
   const activeTab = shallowRef<UsageWorkbenchTab>("records");
   const selectedRangeId = shallowRef<WorkbenchRangeId>(DEFAULT_WORKBENCH_RANGE_ID);
+  const customRange = shallowRef<[number, number] | null>(null);
   const filters = reactive<UsageFilters>({
     tenant_id: "",
     tenant_name: "",
@@ -185,7 +186,7 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
     { label: "命中请求", value: formatNumber(totalRequests.value), hint: `分页总数 ${formatNumber(pagination.total)}` },
     { label: "成功率", value: formatPercent(successRate.value), hint: `失败 ${formatNumber(logStats.value.failed_count)}` },
     { label: "用户实际扣款", value: formatUSD(summaryTotals.value.userCharged), hint: `Key 配额 ${formatUSD(summaryTotals.value.quotaCost)}` },
-    { label: "Token 总量", value: formatNumber(summaryTotals.value.totalTokens), hint: `输入 ${formatNumber(summaryTotals.value.promptTokens)} · 输出 ${formatNumber(summaryTotals.value.completionTokens)}` },
+    { label: "Token 总量", value: formatCompactNumber(summaryTotals.value.totalTokens), hint: `输入 ${formatCompactNumber(summaryTotals.value.promptTokens)} · 输出 ${formatCompactNumber(summaryTotals.value.completionTokens)}` },
     {
       label: "平均总耗时",
       value: `${Math.round(Number(logStats.value.avg_request_total_ms) || 0)} ms`,
@@ -195,9 +196,9 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
 
   const analyticsMetrics = computed<UsageMetric[]>(() => [
     { label: "请求总量", value: formatNumber(totalRequests.value), hint: `成功 ${formatNumber(logStats.value.success_count)} · 失败 ${formatNumber(logStats.value.failed_count)}` },
-    { label: "用户实际扣款", value: formatUSD(summaryTotals.value.userCharged), hint: "租户零售视角" },
-    { label: "租户结算应收", value: formatUSD(summaryTotals.value.tenantPayable), hint: `目录基准价 ${formatUSD(summaryTotals.value.catalogBase)}` },
-    { label: "Key 配额", value: formatUSD(summaryTotals.value.quotaCost), hint: "可用于识别 key 消耗结构" },
+    { label: "用户实际扣款", value: formatUSD2(summaryTotals.value.userCharged), hint: "租户零售视角" },
+    { label: "租户结算应收", value: formatUSD2(summaryTotals.value.tenantPayable), hint: `目录基准价 ${formatUSD2(summaryTotals.value.catalogBase)}` },
+    { label: "Key 配额", value: formatUSD2(summaryTotals.value.quotaCost), hint: "可用于识别 key 消耗结构" },
     { label: "平均总耗时", value: `${Math.round(Number(logStats.value.avg_request_total_ms) || 0)} ms`, hint: `平均首响 ${Math.round(Number(logStats.value.avg_first_response_byte_ms) || 0)} ms` },
     { label: "主来源", value: topSource.value?.key || "—", hint: topSource.value ? `当前页 ${formatNumber(topSource.value.count)} 次` : "当前页暂无来源样本" }
   ]);
@@ -228,7 +229,10 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   }
 
   function syncRangeWindow() {
-    rangeWindow.value = buildWorkbenchRangeWindow(selectedRange.value);
+    if (selectedRangeId.value === "custom" && customRange.value) {
+      const [start, end] = customRange.value;
+      rangeWindow.value = { startAt: new Date(start), endAt: new Date(end), startTime: start, endTime: end, date_from: new Date(start).toISOString(), date_to: new Date(end).toISOString() };
+    } else rangeWindow.value = buildWorkbenchRangeWindow(selectedRange.value);
   }
 
   async function fetchSummaries(params = { ...usageParams.value }) {
@@ -421,6 +425,7 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
 
   async function changeRange(rangeId: WorkbenchRangeId) {
     selectedRangeId.value = rangeId;
+    if (rangeId !== "custom") customRange.value = null;
     if (scope === "records" && activeTab.value === "errors") {
       syncRangeWindow();
       await loadErrors({ resetPage: true });
@@ -483,6 +488,7 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
     changePage,
     changePageSize,
     changeRange,
+    customRange,
     changeRankingLimit,
     changeTab,
     closeDetail,

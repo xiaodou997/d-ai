@@ -8,7 +8,14 @@ defineProps<{
 
 const emit = defineEmits<{
   "update:modelValue": [value: WorkbenchRangeId];
+  "update:customRange": [value: [number, number]];
 }>();
+
+const customRange = defineModel<[number, number] | null>("customRange", { default: null });
+
+function choose(option: WorkbenchRangeOption) {
+  emit("update:modelValue", option.id);
+}
 </script>
 
 <template>
@@ -19,10 +26,21 @@ const emit = defineEmits<{
       type="button"
       class="usage-range-selector__option"
       :class="{ 'is-active': modelValue === option.id }"
-      @click="emit('update:modelValue', option.id)"
+      @click="choose(option)"
     >
       {{ option.label }}
     </button>
+    <el-date-picker
+      v-if="modelValue === 'custom'"
+      v-model="customRange"
+      type="datetimerange"
+      value-format="x"
+      range-separator="至"
+      start-placeholder="开始"
+      end-placeholder="结束"
+      size="small"
+      @change="(value: [number, number] | null) => value && emit('update:customRange', value)"
+    />
   </div>
 </template>
 
