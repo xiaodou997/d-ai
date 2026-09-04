@@ -64,9 +64,9 @@ function successRate(row: UsageUpstreamSummaryRowDTO) {
   <section class="usage-upstream-panel">
     <div class="usage-panel-toolbar">
       <div class="usage-panel-context">
-        <p class="usage-panel-context__title">当前口径</p>
+        <p class="usage-panel-context__title">筛选范围</p>
         <div class="usage-panel-context__chips">
-          <DsTag v-if="!props.filterChips.length" tone="neutral">未附加字段筛选</DsTag>
+          <DsTag v-if="!props.filterChips.length" tone="neutral">全部资源（当前时间范围）</DsTag>
           <DsTag v-for="chip in props.filterChips" :key="chip.key" tone="accent">
             {{ chip.label }} · {{ chip.value }}
           </DsTag>

@@ -10,7 +10,7 @@ import { DsTable, DsTag, type DsTableColumn } from "@/shared/ui";
 import type { AdminUsageRankingRow, UsageFilterChip } from "../model";
 import {
   formatCompactNumber, formatNumber,
-  formatTimestamp,
+  formatUsageTime,
   formatUSD2
 } from "../format";
 
@@ -76,9 +76,9 @@ function handleTableClick(event: MouseEvent) {
   <section class="usage-ranking-panel">
     <div class="usage-panel-toolbar">
       <div class="usage-panel-context">
-        <p class="usage-panel-context__title">当前口径</p>
+        <p class="usage-panel-context__title">筛选范围</p>
         <div class="usage-panel-context__chips">
-          <DsTag v-if="!filterChips.length" tone="neutral">未附加字段筛选</DsTag>
+          <DsTag v-if="!filterChips.length" tone="neutral">全部用户（当前时间范围）</DsTag>
           <DsTag v-for="chip in filterChips" :key="chip.key" tone="accent">
             {{ chip.label }} · {{ chip.value }}
           </DsTag>
@@ -113,17 +113,13 @@ function handleTableClick(event: MouseEvent) {
         <template #cell-user="{ row }">
           <div class="stack-cell">
             <span class="stack-cell__main">{{ userLabel(row) }}</span>
-            <span class="stack-cell__sub">
-              {{ formatTimestamp(row.last_requested_at) || "暂无请求时间" }}
-              <template v-if="userLabel(row) !== row.user_id"> · {{ row.user_id }}</template>
-            </span>
+            <span class="stack-cell__sub">{{ formatUsageTime(row.last_requested_at).date || "暂无请求时间" }} {{ formatUsageTime(row.last_requested_at).time }}</span>
           </div>
         </template>
 
         <template #cell-tenant="{ row }">
           <div class="stack-cell">
             <span class="stack-cell__main">{{ tenantLabel(row) }}</span>
-            <span v-if="tenantLabel(row) !== row.tenant_id" class="stack-cell__sub">{{ row.tenant_id }}</span>
           </div>
         </template>
 
