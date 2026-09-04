@@ -238,14 +238,14 @@ awaitLoop:
 	req.HTTPStatus = http.StatusOK
 	dc.firstByte()
 	req.MarkFirstResponseByte(time.Now())
-	req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+	firstByteMs, _ := req.FirstResponseByteDurationMs()
 	zap.L().Info("stream started",
 		requestLogFields(req,
 			zap.String("model_code", req.ModelCode),
 			zap.String("upstream_model", req.Candidate.UpstreamModel),
 			zap.String("provider_code", req.Candidate.ProviderCode),
 			zap.String("route_id", req.Candidate.RouteID),
-			zap.Int("first_byte_ms", req.FirstTokenMs),
+			zap.Int("first_byte_ms", firstByteMs),
 		)...,
 	)
 
@@ -270,6 +270,9 @@ awaitLoop:
 		unwrapped := s.Bridge.NormalizeResponseBody(req, data)
 		unwrapped = s.restorePII(req, unwrapped)
 		finalData := publicSanitizer.SanitizeSSEData(unwrapped)
+		if req.FirstTokenMs == 0 && streamChunkStartsToken(string(finalData), evt, req.Candidate.Protocol) {
+			req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+		}
 		auditAcc.AddChunk(finalData)
 		if bytes.Equal(finalData, data) {
 			if _, err := w.Write(line); err != nil {
@@ -605,14 +608,14 @@ awaitLoop:
 	req.HTTPStatus = http.StatusOK
 	dc.firstByte()
 	req.MarkFirstResponseByte(time.Now())
-	req.FirstTokenMs = int(time.Since(startTime).Milliseconds())
+	firstByteMs, _ := req.FirstResponseByteDurationMs()
 	zap.L().Info("stream started (convert)",
 		requestLogFields(req,
 			zap.String("model_code", req.ModelCode),
 			zap.String("client_protocol", string(req.ClientProtocol)),
 			zap.String("provider_protocol", string(req.Candidate.Protocol)),
 			zap.String("route_id", req.Candidate.RouteID),
-			zap.Int("first_byte_ms", req.FirstTokenMs),
+			zap.Int("first_byte_ms", firstByteMs),
 		)...,
 	)
 

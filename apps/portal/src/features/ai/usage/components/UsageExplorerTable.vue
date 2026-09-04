@@ -19,7 +19,7 @@ import {
   formatUSD,
   formatTimestamp,
   modelRouteLabel,
-  resolveFirstResponseByteMs,
+  resolveFirstTokenMs,
   resolveRequestTotalMs,
   unitLabel
 } from "../format";
@@ -81,7 +81,7 @@ function modelChainMeta(row: AdminUsageRow) {
 }
 
 function firstResponseText(row: AdminUsageRow) {
-  return formatMs(resolveFirstResponseByteMs(row) || null);
+  return formatMs(resolveFirstTokenMs(row) || null);
 }
 
 function totalDurationText(row: AdminUsageRow) {
@@ -191,7 +191,7 @@ function billingStatusLabel(status?: string) {
 
       <template #cell-timing="{ row }">
         <div class="usage-metric usage-metric--timing">
-          <span class="usage-metric__top mono">首响 {{ firstResponseText(row) }}</span>
+          <span class="usage-metric__top mono">首 Token {{ firstResponseText(row) }}</span>
           <span class="usage-metric__bottom mono">总耗时 {{ totalDurationText(row) }}</span>
         </div>
       </template>

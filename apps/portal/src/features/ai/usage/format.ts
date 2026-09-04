@@ -112,6 +112,10 @@ export function resolveFirstResponseByteMs(
   return Number(row.first_response_byte_ms ?? row.first_token_latency_ms ?? 0) || 0;
 }
 
+export function resolveFirstTokenMs(row: Pick<UsageLogDTO, "first_token_latency_ms">): number {
+  return Number(row.first_token_latency_ms ?? 0) || 0;
+}
+
 export function resolveHeaderMs(
   row: Pick<UsageLogDTO, "final_attempt_header_ms" | "latency_ms">
 ): number {
