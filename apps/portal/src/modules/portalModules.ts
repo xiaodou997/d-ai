@@ -282,9 +282,18 @@ export const portalModules: PortalModule[] = [
     navGroup: adminAi,
     order: 50,
     tabs: [
-      { id: "audit", label: "网关审计", path: "audit", component: () => import("@/views/admin/ai/gateway/AuditView.vue") },
-      { id: "risk", label: "风控中心", path: "risk", component: () => import("@/views/admin/ai/gateway/RiskControlView.vue") }
+      { id: "audit", label: "网关审计", path: "audit", component: () => import("@/views/admin/ai/gateway/AuditView.vue") }
     ]
+  },
+  {
+    id: "admin-risk-control",
+    label: "风控中心",
+    path: "/admin/ai/risk-control",
+    icon: "shield-alert",
+    capability: "admin.ai.security",
+    navGroup: adminAi,
+    order: 55,
+    component: () => import("@/views/admin/ai/gateway/RiskControlView.vue")
   },
   {
     id: "admin-announcements",

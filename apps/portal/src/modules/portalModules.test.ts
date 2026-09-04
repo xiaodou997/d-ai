@@ -14,8 +14,8 @@ function leavesFor(userType: number, path = defaultPortalPathForUserType(userTyp
 
 describe("portal module registry", () => {
   it("keeps the destructive V2 navigation within the agreed role budgets", () => {
-    expect(leavesFor(1)).toHaveLength(19);
-    expect(leavesFor(2)).toHaveLength(18);
+    expect(leavesFor(1)).toHaveLength(20);
+    expect(leavesFor(2)).toHaveLength(19);
     expect(leavesFor(3)).toHaveLength(17);
     expect(leavesFor(4)).toHaveLength(9);
   });
@@ -37,6 +37,7 @@ describe("portal module registry", () => {
       "使用记录",
       "用量分析",
       "审计与风控",
+      "风控中心",
       "公告管理",
       "敏感信息保护",
       "代理出口",
@@ -376,7 +377,8 @@ describe("portal module registry", () => {
       },
       { id: "admin-usage", label: "使用记录", active: false },
       { id: "admin-usage-analytics", label: "用量分析", active: false },
-      { id: "admin-security-workspace", label: "审计与风控", active: false }
+      { id: "admin-security-workspace", label: "审计与风控", active: false },
+      { id: "admin-risk-control", label: "风控中心", active: false }
     ]);
   });
 
@@ -408,7 +410,8 @@ describe("portal module registry", () => {
       icon: "bar-chart-3",
       active: true
     });
-    expect(security?.tabs?.map((tab) => tab.id)).toEqual(["audit", "risk"]);
+    expect(security?.tabs?.map((tab) => tab.id)).toEqual(["audit"]);
+    expect(portalModules.find((module) => module.id === "admin-risk-control")?.path).toBe("/admin/ai/risk-control");
   });
 
   it("uses capabilities as the role access source", () => {

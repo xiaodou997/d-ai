@@ -11,6 +11,8 @@ import type {
   RiskEventsOutputBody
 } from './types'
 
+export type { RiskControlConfigDTO, RiskControlTestResultDTO } from './types'
+
 export interface RiskControlApi {
   getRiskControlConfig(): Promise<RiskControlConfigDTO>
   updateRiskControlConfig(body: RiskControlConfigWriteRequest): Promise<RiskControlConfigDTO>
