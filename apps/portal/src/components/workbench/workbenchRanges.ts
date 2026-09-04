@@ -1,4 +1,4 @@
-export type WorkbenchRangeId = "24h" | "3d" | "7d" | "30d" | "90d";
+export type WorkbenchRangeId = "24h" | "today" | "yesterday" | "3d" | "7d" | "30d" | "90d";
 
 export interface WorkbenchRangeOption {
   id: WorkbenchRangeId;
@@ -21,6 +21,8 @@ export const DEFAULT_WORKBENCH_RANGE_ID: WorkbenchRangeId = "30d";
 
 export const WORKBENCH_RANGE_OPTIONS: WorkbenchRangeOption[] = [
   { id: "24h", label: "最近24小时", caption: "盯突发波动与即时稳定性", hours: 24, sampleLimit: 120 },
+  { id: "today", label: "今天", caption: "从今天 00:00 起的自然日用量", hours: 24, sampleLimit: 120 },
+  { id: "yesterday", label: "昨天", caption: "完整查看昨天自然日用量", hours: 24, sampleLimit: 120 },
   { id: "3d", label: "最近三天", caption: "看短期爬升与异常反复", hours: 72, sampleLimit: 180 },
   { id: "7d", label: "最近七天", caption: "观察周内调用节奏", hours: 168, sampleLimit: 240 },
   { id: "30d", label: "近30天", caption: "判断月度结构与主力模型", hours: 720, sampleLimit: 360 },
@@ -36,8 +38,18 @@ export const getWorkbenchRangeOption = (id: string): WorkbenchRangeOption =>
   WORKBENCH_RANGE_OPTIONS[0];
 
 export const buildWorkbenchRangeWindow = (range: WorkbenchRangeOption): WorkbenchRangeWindow => {
-  const endAt = new Date();
-  const startAt = new Date(endAt.getTime() - range.hours * 60 * 60 * 1000);
+  const now = new Date();
+  const startAt = new Date(now);
+  const endAt = new Date(now);
+  if (range.id === "today") {
+    startAt.setHours(0, 0, 0, 0);
+  } else if (range.id === "yesterday") {
+    startAt.setDate(startAt.getDate() - 1);
+    startAt.setHours(0, 0, 0, 0);
+    endAt.setHours(0, 0, 0, 0);
+  } else {
+    startAt.setTime(endAt.getTime() - range.hours * 60 * 60 * 1000);
+  }
 
   return {
     startAt,

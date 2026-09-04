@@ -83,12 +83,12 @@ function selectRecord(row: AdminUsageRow) {
           <DsFilterBar>
             <el-input
               v-if="isPlatformAdmin"
-              v-model="filters.tenant_id"
+              v-model="filters.tenant_name"
               clearable
-              placeholder="租户 ID"
+              placeholder="租户名称（模糊）"
               class="usage-filter"
             />
-            <el-input v-model="filters.user_id" clearable placeholder="用户 ID" class="usage-filter" />
+            <el-input v-model="filters.user_name" clearable placeholder="用户名（模糊）" class="usage-filter" />
             <el-input v-model="filters.model_code" clearable placeholder="模型编码" class="usage-filter" />
             <el-select v-model="filters.request_status" clearable placeholder="状态" class="usage-filter">
               <el-option label="成功" value="success" />

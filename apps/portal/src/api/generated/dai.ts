@@ -21418,8 +21418,12 @@ export interface operations {
             query?: {
                 /** @description 租户 ID；为空表示全部租户 */
                 tenant_id?: string;
+                /** @description 租户名称模糊过滤 */
+                tenant_name?: string;
                 /** @description 用户 ID；为空表示全部用户 */
                 user_id?: string;
+                /** @description 用户名模糊过滤 */
+                user_name?: string;
                 /** @description 模型编码过滤 */
                 model_code?: string;
                 /** @description 请求状态过滤 */

@@ -80,7 +80,7 @@ function modelChainMeta(row: AdminUsageRow) {
   return row.group_name_snapshot || "上游信息已隐藏";
 }
 
-function firstTokenText(row: AdminUsageRow) {
+function firstResponseText(row: AdminUsageRow) {
   return formatMs(resolveFirstResponseByteMs(row) || null);
 }
 
@@ -191,7 +191,7 @@ function billingStatusLabel(status?: string) {
 
       <template #cell-timing="{ row }">
         <div class="usage-metric usage-metric--timing">
-          <span class="usage-metric__top mono">首 Token {{ firstTokenText(row) }}</span>
+          <span class="usage-metric__top mono">首响 {{ firstResponseText(row) }}</span>
           <span class="usage-metric__bottom mono">总耗时 {{ totalDurationText(row) }}</span>
         </div>
       </template>

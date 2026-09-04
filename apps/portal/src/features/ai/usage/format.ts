@@ -107,6 +107,8 @@ export function resolveRequestTotalMs(
 export function resolveFirstResponseByteMs(
   row: Pick<UsageLogDTO, "first_response_byte_ms" | "first_token_latency_ms">
 ): number {
+  // Admin records currently persist the gateway's first response byte milestone;
+  // keep this distinct from first-token latency to avoid presenting it as a token metric.
   return Number(row.first_response_byte_ms ?? row.first_token_latency_ms ?? 0) || 0;
 }
 

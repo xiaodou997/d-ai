@@ -21628,12 +21628,26 @@ paths:
           schema:
             description: 租户 ID；为空表示全部租户
             type: string
+        - description: 租户名称模糊过滤
+          explode: false
+          in: query
+          name: tenant_name
+          schema:
+            description: 租户名称模糊过滤
+            type: string
         - description: 用户 ID；为空表示全部用户
           explode: false
           in: query
           name: user_id
           schema:
             description: 用户 ID；为空表示全部用户
+            type: string
+        - description: 用户名模糊过滤
+          explode: false
+          in: query
+          name: user_name
+          schema:
+            description: 用户名模糊过滤
             type: string
         - description: 模型编码过滤
           explode: false

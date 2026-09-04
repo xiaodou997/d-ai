@@ -56,7 +56,9 @@ export type AdminUsageRankingRow = UsageUserRankingRowDTO & { identity: UsageRow
 
 export interface UsageFilters {
   tenant_id: string;
+  tenant_name: string;
   user_id: string;
+  user_name: string;
   model_code: string;
   request_status: string;
   request_source: string;

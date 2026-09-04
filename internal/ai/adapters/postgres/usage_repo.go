@@ -29,7 +29,9 @@ var _ observabilitycontrol.UsageRepository = (*UsageRepo)(nil)
 func (r *UsageRepo) CountLogs(ctx context.Context, f domain.UsageFilter) (int64, error) {
 	return r.q.CountUsageLogs(ctx, dbgen.CountUsageLogsParams{
 		TenantID:      akText(f.TenantID),
+		TenantName:    akText(f.TenantName),
 		UserID:        akText(f.UserID),
+		UserName:      akText(f.UserName),
 		ModelCode:     akText(f.ModelCode),
 		RequestStatus: akText(f.RequestStatus),
 		RequestSource: akText(f.RequestSource),
@@ -52,18 +54,22 @@ const usageStatsSQL = `
 		COALESCE(AVG(first_response_byte_ms) FILTER (WHERE request_status = 'success' AND first_response_byte_ms IS NOT NULL), 0)::float8 AS avg_first_response_byte_ms
 	FROM ai_usage_logs
 	WHERE ($1::text IS NULL OR tenant_id = $1::text)
-	  AND ($2::text IS NULL OR user_id = $2::text)
-	  AND ($3::text IS NULL OR model_code = $3::text)
-	  AND ($4::text IS NULL OR request_status = $4::text)
-	  AND ($5::text IS NULL OR request_source = $5::text)
-		  AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
-		  AND ($7::timestamptz IS NULL OR created_at < $7::timestamptz)
+	  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
+	  AND ($3::text IS NULL OR user_id = $3::text)
+	  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
+	  AND ($5::text IS NULL OR model_code = $5::text)
+	  AND ($6::text IS NULL OR request_status = $6::text)
+	  AND ($7::text IS NULL OR request_source = $7::text)
+	  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
+	  AND ($9::timestamptz IS NULL OR created_at < $9::timestamptz)
 	`
 
 func (r *UsageRepo) StatsFor(ctx context.Context, f domain.UsageFilter) (domain.UsageStats, error) {
 	row := r.pool.QueryRow(ctx, usageStatsSQL,
 		akText(f.TenantID),
+		akText(f.TenantName),
 		akText(f.UserID),
+		akText(f.UserName),
 		akText(f.ModelCode),
 		akText(f.RequestStatus),
 		akText(f.RequestSource),
@@ -91,9 +97,11 @@ func (r *UsageRepo) StatsFor(ctx context.Context, f domain.UsageFilter) (domain.
 func (r *UsageRepo) ListLogs(ctx context.Context, f domain.UsageFilter, limit, offset int32) ([]domain.UsageLog, error) {
 	rows, err := r.q.ListUsageLogs(ctx, dbgen.ListUsageLogsParams{
 		TenantID:      akText(f.TenantID),
+		TenantName:    akText(f.TenantName),
 		Limit:         limit,
 		Offset:        offset,
 		UserID:        akText(f.UserID),
+		UserName:      akText(f.UserName),
 		ModelCode:     akText(f.ModelCode),
 		RequestStatus: akText(f.RequestStatus),
 		RequestSource: akText(f.RequestSource),

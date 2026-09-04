@@ -154,17 +154,21 @@ const countUsageLogs = `-- name: CountUsageLogs :one
 SELECT COUNT(*) AS count
 FROM ai_usage_logs
 WHERE ($1::text IS NULL OR tenant_id = $1::text)
-  AND ($2::text IS NULL OR user_id = $2::text)
-  AND ($3::text IS NULL OR model_code = $3::text)
-  AND ($4::text IS NULL OR request_status = $4::text)
-  AND ($5::text IS NULL OR request_source = $5::text)
-  AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
-  AND ($7::timestamptz IS NULL OR created_at < $7::timestamptz)
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
+  AND ($3::text IS NULL OR user_id = $3::text)
+  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
+  AND ($5::text IS NULL OR model_code = $5::text)
+  AND ($6::text IS NULL OR request_status = $6::text)
+  AND ($7::text IS NULL OR request_source = $7::text)
+  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR created_at < $9::timestamptz)
 `
 
 type CountUsageLogsParams struct {
 	TenantID      pgtype.Text        `json:"tenant_id"`
+	TenantName    pgtype.Text        `json:"tenant_name"`
 	UserID        pgtype.Text        `json:"user_id"`
+	UserName      pgtype.Text        `json:"user_name"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
 	RequestSource pgtype.Text        `json:"request_source"`
@@ -175,7 +179,9 @@ type CountUsageLogsParams struct {
 func (q *Queries) CountUsageLogs(ctx context.Context, arg CountUsageLogsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUsageLogs,
 		arg.TenantID,
+		arg.TenantName,
 		arg.UserID,
+		arg.UserName,
 		arg.ModelCode,
 		arg.RequestStatus,
 		arg.RequestSource,
@@ -2237,19 +2243,23 @@ SELECT
 	  created_at
 FROM ai_usage_logs
 WHERE ($1::text IS NULL OR tenant_id = $1::text)
-  AND ($2::text IS NULL OR user_id = $2::text)
-  AND ($3::text IS NULL OR model_code = $3::text)
-  AND ($4::text IS NULL OR request_status = $4::text)
-  AND ($5::text IS NULL OR request_source = $5::text)
-  AND ($6::timestamptz IS NULL OR created_at >= $6::timestamptz)
-  AND ($7::timestamptz IS NULL OR created_at < $7::timestamptz)
+  AND ($2::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || $2::text || '%'))
+  AND ($3::text IS NULL OR user_id = $3::text)
+  AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || $4::text || '%' OR u.nickname ILIKE '%' || $4::text || '%')))
+  AND ($5::text IS NULL OR model_code = $5::text)
+  AND ($6::text IS NULL OR request_status = $6::text)
+  AND ($7::text IS NULL OR request_source = $7::text)
+  AND ($8::timestamptz IS NULL OR created_at >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR created_at < $9::timestamptz)
 ORDER BY created_at DESC
-LIMIT $9 OFFSET $8
+LIMIT $11 OFFSET $10
 `
 
 type ListUsageLogsParams struct {
 	TenantID      pgtype.Text        `json:"tenant_id"`
+	TenantName    pgtype.Text        `json:"tenant_name"`
 	UserID        pgtype.Text        `json:"user_id"`
+	UserName      pgtype.Text        `json:"user_name"`
 	ModelCode     pgtype.Text        `json:"model_code"`
 	RequestStatus pgtype.Text        `json:"request_status"`
 	RequestSource pgtype.Text        `json:"request_source"`
@@ -2349,7 +2359,9 @@ type ListUsageLogsRow struct {
 func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([]ListUsageLogsRow, error) {
 	rows, err := q.db.Query(ctx, listUsageLogs,
 		arg.TenantID,
+		arg.TenantName,
 		arg.UserID,
+		arg.UserName,
 		arg.ModelCode,
 		arg.RequestStatus,
 		arg.RequestSource,

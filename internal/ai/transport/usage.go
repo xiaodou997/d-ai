@@ -25,7 +25,9 @@ type usageSummaryInput struct {
 
 type usageLogsInput struct {
 	TenantID      string `query:"tenant_id" doc:"租户 ID；为空表示全部租户"`
+	TenantName    string `query:"tenant_name" doc:"租户名称模糊过滤"`
 	UserID        string `query:"user_id" doc:"用户 ID；为空表示全部用户"`
+	UserName      string `query:"user_name" doc:"用户名模糊过滤"`
 	ModelCode     string `query:"model_code" doc:"模型编码过滤"`
 	RequestStatus string `query:"request_status" doc:"请求状态过滤"`
 	RequestSource string `query:"request_source" doc:"请求来源过滤"`
@@ -694,7 +696,9 @@ func usageLogFilterFromInput(in *usageLogsInput) (domain.UsageFilter, error) {
 	}
 	return domain.UsageFilter{
 		TenantID:      in.TenantID,
+		TenantName:    in.TenantName,
 		UserID:        in.UserID,
+		UserName:      in.UserName,
 		ModelCode:     in.ModelCode,
 		RequestStatus: in.RequestStatus,
 		RequestSource: in.RequestSource,

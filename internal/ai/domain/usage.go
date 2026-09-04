@@ -235,7 +235,9 @@ type DailyTrendRow struct {
 // UsageFilter scopes usage queries. Empty strings / nil times mean "no filter".
 type UsageFilter struct {
 	TenantID      string
+	TenantName    string
 	UserID        string
+	UserName      string
 	ModelCode     string
 	RequestStatus string
 	RequestSource string
@@ -248,7 +250,9 @@ type UsageFilter struct {
 // independently.
 type UsageSummaryFilter struct {
 	TenantID      string
+	TenantName    string
 	UserID        string
+	UserName      string
 	ModelCode     string
 	RequestStatus string
 	RequestSource string

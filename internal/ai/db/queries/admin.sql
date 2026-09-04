@@ -628,7 +628,9 @@ SELECT
 	  created_at
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id')::text)
+  AND (sqlc.narg('tenant_name')::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || sqlc.narg('tenant_name')::text || '%'))
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
+  AND (sqlc.narg('user_name')::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || sqlc.narg('user_name')::text || '%' OR u.nickname ILIKE '%' || sqlc.narg('user_name')::text || '%')))
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
   AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source')::text)
@@ -641,7 +643,9 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 SELECT COUNT(*) AS count
 FROM ai_usage_logs
 WHERE (sqlc.narg('tenant_id')::text IS NULL OR tenant_id = sqlc.narg('tenant_id')::text)
+  AND (sqlc.narg('tenant_name')::text IS NULL OR EXISTS (SELECT 1 FROM iam_tenants t WHERE t.tenant_id = ai_usage_logs.tenant_id AND t.tenant_name ILIKE '%' || sqlc.narg('tenant_name')::text || '%'))
   AND (sqlc.narg('user_id')::text IS NULL OR user_id = sqlc.narg('user_id')::text)
+  AND (sqlc.narg('user_name')::text IS NULL OR EXISTS (SELECT 1 FROM iam_accounts u WHERE u.user_id = ai_usage_logs.user_id AND u.tenant_id = ai_usage_logs.tenant_id AND u.user_type = 4 AND (u.username ILIKE '%' || sqlc.narg('user_name')::text || '%' OR u.nickname ILIKE '%' || sqlc.narg('user_name')::text || '%')))
   AND (sqlc.narg('model_code')::text IS NULL OR model_code = sqlc.narg('model_code')::text)
   AND (sqlc.narg('request_status')::text IS NULL OR request_status = sqlc.narg('request_status')::text)
   AND (sqlc.narg('request_source')::text IS NULL OR request_source = sqlc.narg('request_source')::text)

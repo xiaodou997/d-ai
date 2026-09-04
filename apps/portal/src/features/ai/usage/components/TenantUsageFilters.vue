@@ -35,6 +35,17 @@ const dateShortcuts = [
     }
   },
   {
+    text: "昨天",
+    value: () => {
+      const from = new Date();
+      from.setDate(from.getDate() - 1);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(from);
+      to.setHours(23, 59, 59, 999);
+      return [from, to];
+    }
+  },
+  {
     text: "近 7 天",
     value: () => rangeFromDays(6)
   },
@@ -69,7 +80,7 @@ function rangeFromDays(days: number) {
       />
     </DsFilterField>
     <DsFilterField v-if="showUser !== false" label="用户">
-      <el-select v-model="filters.userId" placeholder="全部用户" clearable class="usage-filter">
+      <el-select v-model="filters.userId" placeholder="全部用户" clearable filterable class="usage-filter">
         <el-option
           v-for="user in users"
           :key="user.userId"

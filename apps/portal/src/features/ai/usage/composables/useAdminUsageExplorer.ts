@@ -78,7 +78,9 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   const selectedRangeId = shallowRef<WorkbenchRangeId>(DEFAULT_WORKBENCH_RANGE_ID);
   const filters = reactive<UsageFilters>({
     tenant_id: "",
+    tenant_name: "",
     user_id: "",
+    user_name: "",
     model_code: "",
     request_status: "",
     request_source: ""
@@ -117,7 +119,9 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
 
   const usageParams = computed(() => ({
     tenant_id: isPlatformAdmin.value ? filters.tenant_id || undefined : selfTenantId.value || undefined,
+    tenant_name: isPlatformAdmin.value ? filters.tenant_name || undefined : undefined,
     user_id: filters.user_id || undefined,
+    user_name: filters.user_name || undefined,
     model_code: filters.model_code || undefined,
     request_status: filters.request_status || undefined,
     request_source: filters.request_source || undefined,
@@ -147,8 +151,8 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
 
   const filterChips = computed<UsageFilterChip[]>(() => {
     const chips: UsageFilterChip[] = [];
-    if (isPlatformAdmin.value && filters.tenant_id) chips.push({ key: "tenant_id", label: "租户", value: filters.tenant_id });
-    if (filters.user_id) chips.push({ key: "user_id", label: "用户", value: filters.user_id });
+    if (isPlatformAdmin.value && filters.tenant_name) chips.push({ key: "tenant_name", label: "租户", value: filters.tenant_name });
+    if (filters.user_name) chips.push({ key: "user_name", label: "用户", value: filters.user_name });
     if (filters.model_code) chips.push({ key: "model_code", label: "模型", value: filters.model_code });
     if (filters.request_status) chips.push({ key: "request_status", label: "状态", value: filters.request_status });
     if (filters.request_source) chips.push({ key: "request_source", label: "来源", value: filters.request_source });
@@ -383,7 +387,7 @@ export function useAdminUsageExplorer(options: UseAdminUsageExplorerOptions) {
   }
 
   async function resetFilters() {
-    Object.assign(filters, { tenant_id: "", user_id: "", model_code: "", request_status: "", request_source: "" });
+    Object.assign(filters, { tenant_id: "", tenant_name: "", user_id: "", user_name: "", model_code: "", request_status: "", request_source: "" });
     await refreshRecords({ resetPage: true });
   }
 
