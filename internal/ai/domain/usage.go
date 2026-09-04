@@ -36,6 +36,8 @@ type UsageLog struct {
 	CapabilityType                     string
 	GroupTargetID                      string
 	UpstreamAccountID                  string
+	UpstreamAccountName                string
+	UpstreamTenantDisplayName          string
 	EndpointID                         string
 	CredentialPoolID                   string
 	ProviderCode                       string

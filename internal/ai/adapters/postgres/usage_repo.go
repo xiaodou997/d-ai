@@ -488,6 +488,8 @@ func usageLogFromRow(row dbgen.ListUsageLogsRow) domain.UsageLog {
 		CapabilityType:                     row.CapabilityType,
 		GroupTargetID:                      uuidToString(row.GroupTargetID),
 		UpstreamAccountID:                  uuidToString(row.UpstreamAccountID),
+		UpstreamAccountName:                row.UpstreamAccountName,
+		UpstreamTenantDisplayName:          row.UpstreamTenantDisplayName,
 		EndpointID:                         uuidToString(row.EndpointID),
 		CredentialPoolID:                   uuidToString(row.CredentialPoolID),
 		ProviderCode:                       row.ProviderCode.String,

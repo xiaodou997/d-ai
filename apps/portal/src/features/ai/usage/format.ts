@@ -54,6 +54,21 @@ export function formatTimestamp(value: number | string | null | undefined): stri
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
 }
 
+export function formatUsageTime(value: number | string | null | undefined): { time: string; date: string } {
+  if (!value) return { time: "—", date: "" };
+  const date = new Date(value);
+  const dateText = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part, index) => index === 0 ? String(part) : String(part).padStart(2, "0"))
+    .join("-");
+  return { time: date.toLocaleTimeString("zh-CN", { hour12: false }), date: dateText };
+}
+
+export function formatCompactToken(value: number | null | undefined): string {
+  const amount = Number(value) || 0;
+  if (Math.abs(amount) < 1000) return String(Math.round(amount));
+  return `${(amount / 1000).toFixed(2)}K`;
+}
+
 export function formatShortDate(value: string): string {
   if (!value) return "—";
   return value.slice(5);

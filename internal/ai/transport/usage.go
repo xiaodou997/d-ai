@@ -82,6 +82,8 @@ type usageLogDTO struct {
 	CapabilityType                     string   `json:"capability_type" doc:"能力类型"`
 	GroupTargetID                      string   `json:"group_target_id,omitempty" doc:"命中的分组上游目标 ID"`
 	UpstreamAccountID                  string   `json:"upstream_account_id,omitempty" doc:"命中的上游账号 ID"`
+	UpstreamAccountName                string   `json:"upstream_account_name,omitempty" doc:"命中的上游账号名称"`
+	UpstreamTenantDisplayName          string   `json:"upstream_tenant_display_name,omitempty" doc:"上游账号租户侧展示名称"`
 	EndpointID                         string   `json:"endpoint_id,omitempty" doc:"供应商端点 ID"`
 	ProviderCode                       *string  `json:"provider_code,omitempty" doc:"供应商编码"`
 	UpstreamModel                      *string  `json:"upstream_model,omitempty" doc:"上游模型"`
@@ -804,6 +806,8 @@ func usageLogToDTO(log domain.UsageLog) usageLogDTO {
 		CapabilityType:                     log.CapabilityType,
 		GroupTargetID:                      log.GroupTargetID,
 		UpstreamAccountID:                  log.UpstreamAccountID,
+		UpstreamAccountName:                log.UpstreamAccountName,
+		UpstreamTenantDisplayName:          log.UpstreamTenantDisplayName,
 		EndpointID:                         log.EndpointID,
 		ProviderCode:                       stringPtrOrNil(log.ProviderCode),
 		UpstreamModel:                      stringPtrOrNil(log.UpstreamModel),

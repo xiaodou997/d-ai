@@ -1008,6 +1008,8 @@ SELECT
   capability_type,
   group_target_id,
   upstream_account_id,
+  COALESCE((SELECT a.name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_account_name,
+  COALESCE((SELECT a.tenant_display_name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_tenant_display_name,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -1093,6 +1095,8 @@ type GetUsageLogByRequestIDRow struct {
 	CapabilityType                     string             `json:"capability_type"`
 	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
 	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
+	UpstreamAccountName                string             `json:"upstream_account_name"`
+	UpstreamTenantDisplayName          string             `json:"upstream_tenant_display_name"`
 	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
 	CredentialPoolID                   pgtype.UUID        `json:"credential_pool_id"`
 	ProviderCode                       pgtype.Text        `json:"provider_code"`
@@ -1179,6 +1183,8 @@ func (q *Queries) GetUsageLogByRequestID(ctx context.Context, requestID string) 
 		&i.CapabilityType,
 		&i.GroupTargetID,
 		&i.UpstreamAccountID,
+		&i.UpstreamAccountName,
+		&i.UpstreamTenantDisplayName,
 		&i.EndpointID,
 		&i.CredentialPoolID,
 		&i.ProviderCode,
@@ -2189,6 +2195,8 @@ SELECT
   capability_type,
   group_target_id,
   upstream_account_id,
+  COALESCE((SELECT a.name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_account_name,
+  COALESCE((SELECT a.tenant_display_name::text FROM ai_upstream_accounts a WHERE a.id = ai_usage_logs.upstream_account_id), '')::text AS upstream_tenant_display_name,
   endpoint_id,
   credential_pool_id,
   provider_code,
@@ -2299,6 +2307,8 @@ type ListUsageLogsRow struct {
 	CapabilityType                     string             `json:"capability_type"`
 	GroupTargetID                      pgtype.UUID        `json:"group_target_id"`
 	UpstreamAccountID                  pgtype.UUID        `json:"upstream_account_id"`
+	UpstreamAccountName                string             `json:"upstream_account_name"`
+	UpstreamTenantDisplayName          string             `json:"upstream_tenant_display_name"`
 	EndpointID                         pgtype.UUID        `json:"endpoint_id"`
 	CredentialPoolID                   pgtype.UUID        `json:"credential_pool_id"`
 	ProviderCode                       pgtype.Text        `json:"provider_code"`
@@ -2407,6 +2417,8 @@ func (q *Queries) ListUsageLogs(ctx context.Context, arg ListUsageLogsParams) ([
 			&i.CapabilityType,
 			&i.GroupTargetID,
 			&i.UpstreamAccountID,
+			&i.UpstreamAccountName,
+			&i.UpstreamTenantDisplayName,
 			&i.EndpointID,
 			&i.CredentialPoolID,
 			&i.ProviderCode,

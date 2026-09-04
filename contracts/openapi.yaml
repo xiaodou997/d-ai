@@ -10977,6 +10977,12 @@ components:
         upstream_account_id:
           description: 命中的上游账号 ID
           type: string
+        upstream_account_name:
+          description: 命中的上游账号名称
+          type: string
+        upstream_tenant_display_name:
+          description: 上游账号租户侧展示名称
+          type: string
         upstream_model:
           description: 上游模型
           type: string

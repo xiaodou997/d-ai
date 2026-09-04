@@ -4,24 +4,16 @@
   迁移后不再保留选中行高亮。
 -->
 <script setup lang="ts">
-import { UserFilled, Wallet } from "@element-plus/icons-vue";
-
-import {
-  formatMs,
-  formatTokenCount,
-  UsageTag
-} from "@/platform/ai/usage";
-import { PortalIdentityCell } from "@/platform/ai/identity";
+import { formatMs, UsageTag } from "@/platform/ai/usage";
 import { DsTable, type DsTableColumn } from "@/shared/ui";
 
 import type { AdminUsageRow } from "../model";
 import {
   formatUSD,
-  formatTimestamp,
-  modelRouteLabel,
+  formatUsageTime,
+  formatCompactToken,
   resolveFirstTokenMs,
-  resolveRequestTotalMs,
-  unitLabel
+  resolveRequestTotalMs
 } from "../format";
 
 const props = defineProps<{
@@ -35,14 +27,15 @@ const emit = defineEmits<{
 }>();
 
 const columns: DsTableColumn[] = [
-  { key: "created_at", title: "时间", width: 148 },
+  { key: "created_at", title: "时间", width: 106 },
   { key: "subject", title: "调用主体" },
-  { key: "chain", title: "模型链路", width: 220 },
-  { key: "profile", title: "请求画像", width: 210 },
+  { key: "upstream", title: "上游账号", width: 150 },
+  { key: "chain", title: "模型", width: 190 },
+  { key: "profile", title: "请求画像", width: 190 },
   { key: "cost", title: "消耗", width: 116, align: "right" },
-  { key: "token", title: "Token", width: 216 },
+  { key: "token", title: "Token", width: 170 },
   { key: "timing", title: "耗时", width: 128, align: "right" },
-  { key: "result", title: "结果摘要", width: 320 }
+  { key: "result", title: "结果", width: 250 }
 ];
 
 // DsTable 行按 props.rows 顺序渲染,用事件委托把行索引映射回行数据
@@ -65,19 +58,12 @@ function statusToneClass(status?: number | null) {
 }
 
 function requestProfileTitle(row: AdminUsageRow) {
-  return row.billing_group_label_snapshot || row.auth_method;
+  return row.group_name_snapshot || row.billing_group_label_snapshot || row.auth_method;
 }
 
 function requestProfileResolution(row: AdminUsageRow) {
   if (row.billable_unit_type !== "image") return "";
   return row.resolution || "";
-}
-
-function modelChainMeta(row: AdminUsageRow) {
-  if (props.showUpstreamDetails !== false) {
-    return [row.provider_code, row.upstream_model].filter(Boolean).join(" · ") || row.group_name_snapshot || "未命中路由摘要";
-  }
-  return row.group_name_snapshot || "上游信息已隐藏";
 }
 
 function firstResponseText(row: AdminUsageRow) {
@@ -88,17 +74,10 @@ function totalDurationText(row: AdminUsageRow) {
   return formatMs(resolveRequestTotalMs(row) || null);
 }
 
-function subjectMeta(row: AdminUsageRow) {
-  return [row.identity.user.label, row.identity.user.meta].filter(Boolean).join(" · ");
-}
-
-function billingStatusLabel(status?: string) {
-  return {
-    free: "免费",
-    pending: "待结算",
-    settled: "已结算",
-    failed: "结算失败"
-  }[status || ""] || status || "—";
+function upstreamNames(row: AdminUsageRow) {
+  const management = row.upstream_account_name || row.provider_code || "—";
+  const tenant = row.upstream_tenant_display_name;
+  return { management, tenant: tenant && tenant !== management ? tenant : "" };
 }
 </script>
 
@@ -115,20 +94,32 @@ function billingStatusLabel(status?: string) {
     >
       <template #cell-created_at="{ row }">
         <div class="time-cell">
-          <span class="time-cell__main">{{ formatTimestamp(row.created_at) }}</span>
+          <template v-for="part in [formatUsageTime(row.created_at)]" :key="part.date">
+            <span class="time-cell__main">{{ part.time }}</span>
+            <span class="time-cell__sub">{{ part.date }}</span>
+          </template>
         </div>
       </template>
 
       <template #cell-subject="{ row }">
-        <PortalIdentityCell :label="row.identity.tenant.label" :meta="subjectMeta(row)" />
+        <div class="stack-cell">
+          <span class="stack-cell__main">{{ row.identity.tenant.label }}</span>
+          <span class="stack-cell__sub">{{ row.identity.user.label }}</span>
+        </div>
+      </template>
+
+      <template #cell-upstream="{ row }">
+        <div class="stack-cell">
+          <span class="stack-cell__main">{{ upstreamNames(row).management }}</span>
+          <span v-if="upstreamNames(row).tenant" class="stack-cell__sub">{{ upstreamNames(row).tenant }}</span>
+        </div>
       </template>
 
       <template #cell-chain="{ row }">
         <div class="stack-cell">
-          <span class="stack-cell__main">{{ modelRouteLabel(row) }}</span>
-          <span class="stack-cell__sub">
-            {{ modelChainMeta(row) }}
-          </span>
+          <span class="stack-cell__main">{{ row.requested_model || row.model_code }}</span>
+          <span v-if="row.requested_model && (row.resolved_logical_model || row.model_code) !== row.requested_model" class="stack-cell__sub">{{ row.resolved_logical_model || row.model_code }}</span>
+          <UsageTag v-if="row.reasoning_effort" kind="effort" :value="row.reasoning_effort" />
         </div>
       </template>
 
@@ -140,10 +131,11 @@ function billingStatusLabel(status?: string) {
               {{ requestProfileResolution(row) }}
             </span>
           </span>
+          <span v-if="row.api_key_name" class="stack-cell__sub">API · {{ row.api_key_name }}</span>
           <span class="stack-cell__sub stack-cell__sub--inline">
             <UsageTag kind="source" :value="row.request_source" />
             <UsageTag kind="stream" :value="row.stream" />
-            <span class="profile-chip">{{ unitLabel(row.billable_unit_type) }}</span>
+            <span v-if="row.group_default_user_multiplier_snapshot" class="profile-chip">×{{ row.group_default_user_multiplier_snapshot }}</span>
           </span>
         </div>
       </template>
@@ -151,12 +143,10 @@ function billingStatusLabel(status?: string) {
       <template #cell-cost="{ row }">
         <div class="stack-cell stack-cell--right stack-cell--compact">
           <span v-if="Number(row.tenant_payable_usd)" class="cost-line cost-line--tenant" title="平台向租户结算">
-            <el-icon class="cost-line__icon"><Wallet /></el-icon>
-            <span class="mono">{{ formatUSD(row.tenant_payable_usd) }}</span>
+            <span class="mono">租户 {{ formatUSD(row.tenant_payable_usd) }}</span>
           </span>
           <span v-if="Number(row.user_charged_usd)" class="cost-line cost-line--user" title="用户实际扣款">
-            <el-icon class="cost-line__icon"><UserFilled /></el-icon>
-            <span class="mono">{{ formatUSD(row.user_charged_usd) }}</span>
+            <span class="mono">用户 {{ formatUSD(row.user_charged_usd) }}</span>
           </span>
           <span v-if="!Number(row.tenant_payable_usd) && !Number(row.user_charged_usd)" class="stack-cell__sub">—</span>
         </div>
@@ -166,25 +156,19 @@ function billingStatusLabel(status?: string) {
         <div class="token-breakdown">
           <span class="token-stat token-stat--input">
             <span class="token-stat__label">输入</span>
-            <span class="token-stat__value mono">{{ formatTokenCount(row.prompt_tokens) }}</span>
+            <span class="token-stat__value mono">{{ formatCompactToken(row.prompt_tokens) }}</span>
           </span>
           <span class="token-stat token-stat--output">
             <span class="token-stat__label">输出</span>
-            <span class="token-stat__value mono">{{ formatTokenCount(row.completion_tokens) }}</span>
+            <span class="token-stat__value mono">{{ formatCompactToken(row.completion_tokens) }}</span>
           </span>
-          <template v-if="row.cache_read_tokens || row.cache_write_tokens">
-            <span class="token-stat token-stat--cache">
-              <span class="token-stat__label">缓存读</span>
-              <span class="token-stat__value mono">{{ formatTokenCount(row.cache_read_tokens) }}</span>
-            </span>
-            <span class="token-stat token-stat--cache">
-              <span class="token-stat__label">缓存写</span>
-              <span class="token-stat__value mono">{{ formatTokenCount(row.cache_write_tokens) }}</span>
-            </span>
-          </template>
-          <span v-if="row.reasoning_tokens" class="token-stat token-stat--reasoning">
-            <span class="token-stat__label">推理</span>
-            <span class="token-stat__value mono">{{ formatTokenCount(row.reasoning_tokens) }}</span>
+          <span v-if="row.cache_read_tokens" class="token-stat token-stat--cache">
+            <span class="token-stat__label">缓存读</span>
+            <span class="token-stat__value mono">{{ formatCompactToken(row.cache_read_tokens) }}</span>
+          </span>
+          <span v-if="row.cache_write_tokens" class="token-stat token-stat--cache">
+            <span class="token-stat__label">缓存写</span>
+            <span class="token-stat__value mono">{{ formatCompactToken(row.cache_write_tokens) }}</span>
           </span>
         </div>
       </template>
@@ -207,10 +191,7 @@ function billingStatusLabel(status?: string) {
             class="stack-cell__sub"
             :class="{ 'stack-cell__sub--danger': Boolean(row.error_message || row.error_code) }"
           >
-            {{ row.error_message || row.error_code || row.trace_id || "点击整行查看完整链路与载荷" }}
-          </span>
-          <span class="stack-cell__sub settlement-state">
-            结算：{{ billingStatusLabel(row.billing_status) }}<template v-if="row.refund_status === 'refunded'"> · 已退款</template>
+            {{ row.error_message || row.error_code || "—" }}
           </span>
         </div>
       </template>

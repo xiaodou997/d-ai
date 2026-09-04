@@ -10704,6 +10704,10 @@ export interface components {
             trace_id?: string;
             /** @description 命中的上游账号 ID */
             upstream_account_id?: string;
+            /** @description 命中的上游账号名称 */
+            upstream_account_name?: string;
+            /** @description 上游账号租户侧展示名称 */
+            upstream_tenant_display_name?: string;
             /** @description 上游模型 */
             upstream_model?: string;
             /** @description 是否发生了上游模型名映射 */
