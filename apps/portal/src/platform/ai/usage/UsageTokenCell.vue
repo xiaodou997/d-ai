@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { formatTokenCount } from "./format";
+import { formatCompactToken, formatTokenCount } from "./format";
 
 const props = withDefaults(
   defineProps<{
@@ -32,15 +32,15 @@ const tooltipContent = computed(() =>
 <template>
   <el-tooltip v-if="dense" :content="tooltipContent" placement="top">
     <span class="usage-token-cell usage-token-cell--dense mono">
-      <span class="usage-token-cell__in">↓{{ formatTokenCount(prompt) }}</span>
-      <span class="usage-token-cell__out">↑{{ formatTokenCount(completion) }}</span>
+      <span class="usage-token-cell__in">↓{{ formatCompactToken(prompt) }}</span>
+      <span class="usage-token-cell__out">↑{{ formatCompactToken(completion) }}</span>
       <span v-if="extraParts.length" class="usage-token-cell__more">+</span>
     </span>
   </el-tooltip>
   <span v-else class="usage-token-cell mono">
     <span class="usage-token-cell__main">
-      <span class="usage-token-cell__in">↓{{ formatTokenCount(prompt) }}</span>
-      <span class="usage-token-cell__out">↑{{ formatTokenCount(completion) }}</span>
+      <span class="usage-token-cell__in">↓{{ formatCompactToken(prompt) }}</span>
+      <span class="usage-token-cell__out">↑{{ formatCompactToken(completion) }}</span>
     </span>
     <span v-if="extraParts.length" class="usage-token-cell__extra">{{ extraParts.join(" · ") }}</span>
   </span>

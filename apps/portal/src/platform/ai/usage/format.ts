@@ -10,6 +10,11 @@ export function formatTokenCount(n?: number | null): string {
   return Number(n || 0).toLocaleString("zh-CN");
 }
 
+export function formatCompactToken(n?: number | null): string {
+  const value = Number(n || 0);
+  return Math.abs(value) < 1000 ? String(Math.round(value)) : `${(value / 1000).toFixed(2)}K`;
+}
+
 /** 表格时间列：月-日 时:分:秒。 */
 export function formatUsageTimestamp(t?: number | string | null): string {
   if (!t) return "-";
